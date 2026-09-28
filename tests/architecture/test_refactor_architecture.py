@@ -197,6 +197,8 @@ class RefactorArchitectureTests(unittest.TestCase):
             pending = json.loads(output.getvalue())["pending"]
             self.assertIn("arena.006", pending["player_db"])
             self.assertNotIn("arena.006", pending["game_db"])
+            self.assertIn("world_events.002", pending["player_db"])
+            self.assertNotIn("world_events.002", pending["game_db"])
 
     def test_trace_context_redacts_scope_and_restores_values(self) -> None:
         self.assertEqual(current_context()["operation_id"], "")

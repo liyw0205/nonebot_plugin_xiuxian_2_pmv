@@ -2759,16 +2759,20 @@ class SourceQualityTests(unittest.TestCase):
         self.assertIn("demon_claim_application.claim(", handler)
         self.assertNotIn("demon_claim_service.claim(", handler)
 
-    def test_demon_attack_uses_lazy_settlement_service(self) -> None:
+    def test_demon_attack_uses_feature_owned_settlement(self) -> None:
         root = SOURCE_ROOT / "xiuxian" / "xiuxian_world_events"
         source = (root / "__init__.py").read_text(encoding="utf-8")
         start = source.index("async def attack_demon_invasion_")
         handler = source[start:source.index("async def claim_demon_reward_", start)]
-        self.assertIn("_demon_attack_settlement_service().get_result(", handler)
+        self.assertIn("demon_attack_application.get_result(", handler)
         self.assertIn("demon_attack_application.settle(", handler)
-        self.assertIn("_demon_attack_settlement_service_instance = None", source)
-        self.assertIn("def _demon_attack_settlement_service(", source)
-        self.assertNotIn("demon_attack_settlement_service.settle(", handler)
+        self.assertNotIn("_demon_attack_settlement_service", source)
+        self.assertNotIn("DemonAttackSettlementService", source)
+        app = (SOURCE_ROOT / "features" / "world_events" / "attack_application.py").read_text(encoding="utf-8")
+        repository = (SOURCE_ROOT / "features" / "world_events" / "attack_repository.py").read_text(encoding="utf-8")
+        self.assertIn("DemonAttackSettlementSqlRepository", app)
+        self.assertIn("class DemonAttackSettlementSqlRepository", repository)
+        self.assertIn("DatabaseUnitOfWork(self.player_database, immediate=True)", repository)
 
     def test_demon_event_lifecycle_uses_lazy_service(self) -> None:
         root = SOURCE_ROOT / "xiuxian" / "xiuxian_world_events"

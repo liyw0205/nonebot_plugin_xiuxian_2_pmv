@@ -5,6 +5,19 @@ from typing import Any, Mapping, Sequence
 
 
 @dataclass(frozen=True)
+class DemonAttackSettlementResult:
+    status: str
+    real_damage: int = 0
+    boss_now_hp: int = 0
+    boss_all_hp: int = 1
+    killed: bool = False
+    pursuit_mode: bool = False
+    contribution_ratio: float = 0.0
+    reward_multiplier: float = 1.0
+    total_contribution: float = 0.0
+
+
+@dataclass(frozen=True)
 class DemonClaimRequest:
     operation_id: str
     event_key: str
@@ -57,4 +70,4 @@ def normalize_items(items: Sequence[Mapping[str, Any]]) -> tuple[dict[str, Any],
     )
 
 
-__all__ = ["DemonClaimRequest", "normalize_items"]
+__all__ = ["DemonAttackSettlementResult", "DemonClaimRequest", "normalize_items"]

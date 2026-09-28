@@ -212,6 +212,11 @@ class RefactorProgressTests(unittest.TestCase):
         self.assertTrue(natal["legacy_awaken_disabled"])
         world_events = slices["world_events"]
         self.assertTrue(world_events["claim_application_owned"])
+        self.assertTrue(world_events["attack_application_owned"])
+        self.assertTrue(world_events["attack_legacy_settlement_disconnected"])
+        self.assertTrue(world_events["attack_request_path_has_no_ddl"])
+        self.assertTrue(world_events["attack_player_migration_registered"])
+        self.assertTrue(world_events["attack_player_migration_routed"])
         self.assertTrue(world_events["legacy_claim_disabled"])
         rift = slices["rift"]
         self.assertTrue(rift["entry_application_owned"])

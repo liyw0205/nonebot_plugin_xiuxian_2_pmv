@@ -115,7 +115,7 @@ from .features.tower.migrations import apply_tower, apply_tower_purchase, apply_
 from .features.sect_fairyland.manifest import FEATURE as SECT_FAIRYLAND_FEATURE
 from .features.sect_fairyland.migrations import apply_sect_fairyland, apply_sect_fairyland_player
 from .features.world_events.manifest import FEATURE as WORLD_EVENTS_FEATURE
-from .features.world_events.migrations import apply_world_events
+from .features.world_events.migrations import apply_world_events, apply_world_events_player
 from .features.work.manifest import FEATURE as WORK_FEATURE
 from .features.work.migrations import (
     apply_work,
@@ -348,6 +348,7 @@ def build_migrations() -> tuple[Migration, ...]:
         Migration("work.003", "work_item_use_operations", apply_work_item_use),
         Migration("work.004", "work_offer_snapshots", apply_work_offer_snapshots),
         Migration("world_events.001", "world_events_feature_migrations", apply_world_events),
+        Migration("world_events.002", "world_events_player_attack_settlement", apply_world_events_player),
     )
 
 
@@ -393,6 +394,7 @@ _GAME_DATABASE_EXCLUDED_MIGRATION_VERSIONS = frozenset(
         "tasks.001",
         "tasks.004",
         "training.002",
+        "world_events.002",
     }
 )
 _PLAYER_DATABASE_MIGRATION_VERSIONS = frozenset(
@@ -433,6 +435,7 @@ _PLAYER_DATABASE_MIGRATION_VERSIONS = frozenset(
         "tasks.001",
         "tasks.004",
         "training.002",
+        "world_events.002",
     }
 )
 _TRADE_DATABASE_MIGRATION_VERSIONS = frozenset({"platform.001", "trade.003", "trade.005", "trade.006", "trade.007", "trade.008", "auction.004"})

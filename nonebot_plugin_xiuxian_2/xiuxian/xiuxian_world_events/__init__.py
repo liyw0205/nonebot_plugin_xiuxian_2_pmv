@@ -37,7 +37,6 @@ from ..xiuxian_utils.numeric_bind import percent_exp_reward
 from ...features.world_events.application import DemonClaimApplication
 from ...features.world_events.attack_application import DemonAttackApplication
 from ...features.world_events.repository import WorldEventClaimSqlRepository
-from .transaction_service import DemonAttackSettlementService
 from .transaction_service import DemonClaimService
 from .transaction_service import DemonEventLifecycleService
 from .transaction_service import DemonWaveRefreshService
@@ -64,19 +63,9 @@ def _demon_claim_service():
         )
     return _demon_claim_service_instance
 demon_attack_application = DemonAttackApplication(get_paths().player_db)
-_demon_attack_settlement_service_instance = None
 _demon_event_lifecycle_service_instance = None
 _demon_wave_refresh_service_instance = None
 _spirit_vein_lifecycle_service_instance = None
-
-
-def _demon_attack_settlement_service():
-    global _demon_attack_settlement_service_instance
-    if _demon_attack_settlement_service_instance is None:
-        _demon_attack_settlement_service_instance = DemonAttackSettlementService(
-            get_paths().player_db
-        )
-    return _demon_attack_settlement_service_instance
 
 
 def _demon_event_lifecycle_service():
@@ -1412,7 +1401,7 @@ async def attack_demon_invasion_(bot: Bot, event: GroupMessageEvent | PrivateMes
         if event_message_id
         else f"demon-attack:{event_snapshot.get('event_id')}:{user_id}:{runtime_ids.new_id()}"
     )
-    prior_attack = _demon_attack_settlement_service().get_result(operation_id)
+    prior_attack = demon_attack_application.get_result(operation_id)
     if prior_attack is not None and prior_attack.status in {"applied", "duplicate"}:
         msg = (
             f"讨伐已结算（重放）。\n"
