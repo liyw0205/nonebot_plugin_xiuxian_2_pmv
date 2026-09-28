@@ -2353,6 +2353,16 @@ class SourceQualityTests(unittest.TestCase):
         self.assertIn("BEGIN IMMEDIATE", service)
         self.assertIn("fusion_operations", service)
 
+    def test_fusion_facade_does_not_construct_legacy_service_or_item_catalog(self) -> None:
+        source = (
+            SOURCE_ROOT / "xiuxian" / "xiuxian_fusion" / "__init__.py"
+        ).read_text(encoding="utf-8")
+        self.assertNotIn("from .fusion_service import FusionService", source)
+        self.assertNotIn("def _fusion_service(", source)
+        self.assertIn("_items_instance = None", source)
+        self.assertIn("def _items(", source)
+        self.assertNotIn("items = Items()", source)
+
     def test_mixelixir_recipe_uses_transactional_settlement(self) -> None:
         mixelixir_root = SOURCE_ROOT / "xiuxian" / "xiuxian_mixelixir"
         source = (mixelixir_root / "__init__.py").read_text(encoding="utf-8")

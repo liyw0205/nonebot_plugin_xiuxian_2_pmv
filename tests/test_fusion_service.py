@@ -16,7 +16,12 @@ class FusionServiceTests(unittest.TestCase):
     def test_fusion_facade_defers_service_construction(self) -> None:
         from nonebot_plugin_xiuxian_2.xiuxian import xiuxian_fusion
 
-        self.assertIsNone(xiuxian_fusion._fusion_service_instance)
+        self.assertFalse(hasattr(xiuxian_fusion, "_fusion_service_instance"))
+
+    def test_fusion_facade_defers_item_catalog_construction(self) -> None:
+        from nonebot_plugin_xiuxian_2.xiuxian import xiuxian_fusion
+
+        self.assertIsNone(xiuxian_fusion._items_instance)
 
     def test_fusion_facade_defers_sql_manager_construction(self) -> None:
         from pathlib import Path

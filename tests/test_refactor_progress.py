@@ -353,6 +353,8 @@ class RefactorProgressTests(unittest.TestCase):
         self.assertTrue(fusion["legacy_single_disabled"])
         self.assertTrue(fusion["batch_application_owned"])
         self.assertTrue(fusion["legacy_batch_disabled"])
+        self.assertTrue(fusion["item_catalog_lazy"])
+        self.assertTrue(fusion["legacy_service_factory_removed"])
         title = slices["title"]
         self.assertTrue(title["equip_replay_application_owned"])
         self.assertTrue(title["legacy_equip_replay_disabled"])

@@ -23,13 +23,11 @@ from ...paths import get_paths
 from ...features.fusion.application import FusionApplication
 from ...infrastructure.ids import UUIDGenerator
 from ...infrastructure.random_source import SystemRandom
-from .fusion_service import FusionService
 import random
 import time
 
-items = Items()
+_items_instance = None
 _sql_message_instance = None
-_fusion_service_instance = None
 fusion_application = FusionApplication(get_paths().game_db)
 runtime_ids = UUIDGenerator()
 runtime_random = SystemRandom()
@@ -42,25 +40,12 @@ def _sql_message():
     return _sql_message_instance
 
 
-def _fusion_service():
-    global _fusion_service_instance
-    if _fusion_service_instance is None:
-        _fusion_service_instance = FusionService(get_paths().game_db)
-    return _fusion_service_instance
-
-
-def _run_fusion_action(action, operation_id, user_id, call, **payload):
-    outcome = fusion_application.execute_legacy_call(
-        operation_id=operation_id,
-        user_id=str(user_id),
-        action=action,
-        payload=payload,
-        call=call,
-    )
-    data = dict(outcome.data or {})
-    data.setdefault("status", outcome.status)
-    data["succeeded"] = outcome.ok
-    return SimpleNamespace(**data)
+def _items():
+    """Load the shared item catalog only when a fusion command needs it."""
+    global _items_instance
+    if _items_instance is None:
+        _items_instance = Items()
+    return _items_instance
 
 # 合成必定成功ID列表
 FIXED_SUCCESS_IDS = [7084]
@@ -107,7 +92,7 @@ async def fusion_item_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
         await handle_send(bot, event, "合成数量必须是正整数！", md_type="合成")
         await fusion_item.finish()
     
-    equipment_id, equipment = items.get_data_by_item_name(item_name)
+    equipment_id, equipment = _items().get_data_by_item_name(item_name)
     if equipment is None:
         msg = f"未找到可合成的物品：{item_name}"
         await handle_send(bot, event, msg, md_type="合成", k1="查看", v1="查看可合成物品", k2="合成", v2="合成", k3="背包", v3="我的背包")
@@ -149,7 +134,7 @@ async def force_fusion_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         await handle_send(bot, event, "合成数量必须是正整数！", md_type="合成")
         await force_fusion.finish()
     
-    equipment_id, equipment = items.get_data_by_item_name(item_name)
+    equipment_id, equipment = _items().get_data_by_item_name(item_name)
     if equipment is None:
         msg = f"未找到可合成的物品：{item_name}"
         await handle_send(bot, event, msg, md_type="合成", k1="查看", v1="查看可合成物品", k2="合成", v2="合成", k3="背包", v3="我的背包")
@@ -256,7 +241,7 @@ async def general_fusion(user_id, equipment_id, equipment, operation_id, quantit
     if missing_items:
         missing_names = []
         for item_id, amount_needed in missing_items:
-            material_info = items.get_data_by_item_id(int(item_id))
+            material_info = _items().get_data_by_item_id(int(item_id))
             if material_info:
                 actual_missing = amount_needed
                 for back in back_msg:
@@ -365,7 +350,7 @@ async def available_fusion_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     
     # 获取所有可合成物品
     all_fusion_items = []
-    for item_id, item_info in items.items.items():
+    for item_id, item_info in _items().items.items():
         if 'fusion' in item_info:
             all_fusion_items.append({
                 'id': item_id,
@@ -494,7 +479,7 @@ async def available_fusion_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     if need_items:
         msg_parts.append("\n【所需材料】")
         for material_id, amount in need_items.items():
-            material_info = items.get_data_by_item_id(int(material_id))
+            material_info = _items().get_data_by_item_id(int(material_id))
             if material_info:
                 msg_parts.append(f"• {material_info['name']} x{amount}")
     

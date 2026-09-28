@@ -1196,6 +1196,13 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "legacy_single_disabled": "_fusion_service().apply(" not in fusion_facade,
             "batch_application_owned": "fusion_application.apply_batch(" in fusion_facade,
             "legacy_batch_disabled": "_fusion_service().apply_batch(" not in fusion_facade,
+            "item_catalog_lazy": (
+                "_items_instance = None" in fusion_facade
+                and "def _items(" in fusion_facade
+                and "items = Items()" not in fusion_facade
+                and "_items().get_data_by_item_name(" in fusion_facade
+            ),
+            "legacy_service_factory_removed": "def _fusion_service(" not in fusion_facade,
             "status": "single_batch_fusion_cutover",
         },
         "title": {
