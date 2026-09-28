@@ -22,7 +22,7 @@ from ...features.past_life.application import PastLifeApplication
 from ..xiuxian_utils.numeric_bind import percent_exp_reward
 
 _sql_message_instance = None
-items = Items()
+_items_instance = None
 _paths = get_paths()
 _past_life_final_settlement_service_instance = None
 _past_life_application = PastLifeApplication(_paths.game_db, _paths.player_db)
@@ -35,6 +35,14 @@ def _sql_message():
     if _sql_message_instance is None:
         _sql_message_instance = XiuxianDateManage()
     return _sql_message_instance
+
+
+def _items():
+    """Load the shared item catalog only when a terminal reward needs it."""
+    global _items_instance
+    if _items_instance is None:
+        _items_instance = Items()
+    return _items_instance
 
 
 def _past_life_start_service():
@@ -711,11 +719,11 @@ class PastLifeEngine:
             item_rank = rng.randint(min_rank, min_rank + 20)
             item_types = ["功法", "神通", "药材"]
             item_type = rng.choice(item_types)
-            item_id_list = items.get_random_id_list_by_rank_and_item_type(item_rank, item_type)
+            item_id_list = _items().get_random_id_list_by_rank_and_item_type(item_rank, item_type)
 
             if item_id_list:
                 item_id = rng.choice(item_id_list)
-                item_info = items.get_data_by_item_id(item_id)
+                item_info = _items().get_data_by_item_id(item_id)
                 item_reward = {
                     "id": item_id, "name": item_info["name"], "type": item_info["type"],
                     "level": item_info["level"], "num": 1,

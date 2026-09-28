@@ -914,6 +914,15 @@ class SourceQualityTests(unittest.TestCase):
         self.assertIn("def _sql_message(", source)
         self.assertNotIn("sql_message = XiuxianDateManage()", source)
 
+    def test_past_life_events_defers_item_catalog_construction(self) -> None:
+        source = (
+            SOURCE_ROOT / "xiuxian" / "xiuxian_past_life" / "past_life_events.py"
+        ).read_text(encoding="utf-8")
+        self.assertIn("_items_instance = None", source)
+        self.assertIn("def _items(", source)
+        self.assertNotIn("items = Items()", source)
+        self.assertIn("_items().get_random_id_list_by_rank_and_item_type(", source)
+
     def test_rift_facade_reads_cooldown_through_application(self) -> None:
         source = (SOURCE_ROOT / "xiuxian" / "xiuxian_rift" / "__init__.py").read_text(
             encoding="utf-8"

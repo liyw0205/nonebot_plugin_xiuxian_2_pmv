@@ -340,6 +340,7 @@ class RefactorProgressTests(unittest.TestCase):
         self.assertTrue(partner_cultivation["migration_owned"])
         self.assertTrue(partner_cultivation["request_path_has_no_ddl"])
         past_life = slices["past_life"]
+        self.assertTrue(past_life["item_catalog_lazy"])
         self.assertTrue(past_life["reset_one_application_owned"])
         self.assertTrue(past_life["legacy_reset_one_disabled"])
         self.assertTrue(past_life["reset_all_application_owned"])

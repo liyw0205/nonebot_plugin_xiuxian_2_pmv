@@ -51,6 +51,8 @@
 
 `work daily-reset compatibility isolation`：`WorkDailyRefreshResetService/Result` 已从 `xiuxian_work/transaction_service.py` 移至 `compatibility/legacy_work_daily_refresh_reset.py`，历史 transaction import 保持对象身份 re-export；默认 scheduler 继续由 `WorkDailyRefreshResetApplication -> WorkDailyRefreshResetRepository` 使用 `work.002` 启动 schema，旧 service 不在默认执行图中。新增 progress/source-quality/identity 门禁，daily reset 行为回归覆盖分块、删除用户、冲突、重放和晚失败回滚。测试与编译产物使用专用临时目录并已清理；下一片审计仍可达的 `xiuxian2_handle`/legacy transaction 调用链，避免重复迁移已完成 work 边界。全局旧 transaction services、`xiuxian2_handle`、真实发布迁移/P7 仍未完成 blocker。
 
+2026-09-28 past-life item catalog lazy boundary：`past_life_events` 删除 module-level `Items()` 构造，改为 `_items()` 按需加载共享物品目录，仅终局奖励生成会触发全量 JSON 读取，避免插件导入阶段额外占用 RAM；不复制或主动清空进程级 `ITEMS_CACHE`，保持共享目录与既有奖励行为不变。新增 source/progress 门禁；前尘聚焦回归 `39 passed`，目标目录 compileall、inventory freshness、架构 CLI（隔离数据目录 `ok=true`）和 `git diff --check` 通过。无 migration、无数据库写入；全局旧 transaction services、`xiuxian2_handle`、真实发布迁移/P7 仍未完成 blocker。
+
 `work settlement transaction ownership`：悬赏结算默认入口已切到 `WorkSettlementApplication -> WorkSettlementSqlRepository`；`work.008` 启动迁移预建 operation 表并补齐历史 `result_json`，请求路径只读校验 schema。仓储在单一 game-db immediate UoW 中校验 operation payload、冷却快照和用户，按真实 `id/name/type` 写奖励并校验背包上限，原子更新修为、背包和 `user_cd` 清理，同时保存 replay metadata；旧 `WorkSettlementService` 已移至 compatibility-only 模块并由历史 shim 保持 import identity。聚焦回归 `76 passed`、source-quality `8 passed`、progress `1 passed`，隔离 architecture/inventory/recovery/reconcile/diff check 通过。下一片审计 `WorkItemUseService` 请求期 DDL 与 compatibility 可达性；全局旧 transaction services、`xiuxian2_handle`、真实发布迁移/P7 仍未完成。
 
 一个切片只有同时满足以下条件才计入完成：

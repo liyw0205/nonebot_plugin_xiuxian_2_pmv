@@ -1166,6 +1166,12 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "final_settlement_application_owned": "_past_life_application.final_settle(" in past_life_events_facade,
             "choice_application_owned": "_past_life_application.choice(" in past_life_events_facade,
             "start_application_owned": "_past_life_application.start(" in past_life_events_facade,
+            "item_catalog_lazy": (
+                "_items_instance = None" in past_life_events_facade
+                and "def _items(" in past_life_events_facade
+                and "items = Items()" not in past_life_events_facade
+                and "_items().get_random_id_list_by_rank_and_item_type(" in past_life_events_facade
+            ),
             "reset_one_application_owned": "past_life_application.reset_one(" in past_life_command_facade,
             "legacy_reset_one_disabled": "_past_life_reset_service().reset_one(" not in past_life_command_facade,
             "reset_all_application_owned": (

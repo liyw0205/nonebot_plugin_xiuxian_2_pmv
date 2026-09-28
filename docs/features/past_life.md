@@ -15,6 +15,8 @@ Migration `legacy.past_life.001` records the slice in `game_db`; the feature-own
 ## 事务与失败回滚
 Mutating calls carry an `operation_id` and are recorded in the operation ledger. Disable the feature flag or restore the pre-migration backup to roll back.
 
+奖励物品目录只在实际生成终局奖励时按需构造，导入前尘模块不会预加载全量 `Items` 缓存；共享目录不在 feature 内复制或主动清空。
+
 ## 定时任务
 No new scheduled jobs. Legacy jobs stay registered through the compatibility scheduler.
 
