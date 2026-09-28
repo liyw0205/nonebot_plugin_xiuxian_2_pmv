@@ -49,4 +49,21 @@ def apply_world_events_player(uow: DatabaseUnitOfWork) -> None:
             uow.execute(f'ALTER TABLE statistics ADD COLUMN "{name}" INTEGER')
 
 
-__all__ = ["apply_world_events", "apply_world_events_player"]
+def apply_world_events_claim(uow: DatabaseUnitOfWork) -> None:
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS demon_claim_operations ("
+        "operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,"
+        "stone INTEGER NOT NULL DEFAULT 0,exp INTEGER NOT NULL DEFAULT 0,"
+        "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+    )
+    columns = {
+        str(row[1]) for row in uow.execute("PRAGMA table_info(demon_claim_operations)").fetchall()
+    }
+    for name in ("stone", "exp"):
+        if name not in columns:
+            uow.execute(
+                f'ALTER TABLE demon_claim_operations ADD COLUMN "{name}" INTEGER NOT NULL DEFAULT 0'
+            )
+
+
+__all__ = ["apply_world_events", "apply_world_events_player", "apply_world_events_claim"]

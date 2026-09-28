@@ -132,6 +132,38 @@ class DemonClaimApplication:
                 self.ledger.record_failure(self.game_database, request.operation_id, self.action, payload, str(exc))
                 raise
 
+    def get_result(self, operation_id: str) -> OperationOutcome[dict[str, Any]] | None:
+        operation_id = str(operation_id).strip()
+        if not operation_id:
+            return None
+        with DatabaseUnitOfWork(self.game_database) as uow:
+            record = self.ledger.get(uow, operation_id, self.action)
+        if record is not None and record.status in {"applied", "rejected"}:
+            outcome = record.outcome()
+            if outcome is not None:
+                return outcome
+
+        previous = (self.repository or WorldEventClaimSqlRepository(
+            self.game_database, self.player_database
+        )).get_result(operation_id)
+        if previous is None:
+            return None
+        data = {
+            "status": previous.status,
+            "operation_id": operation_id,
+            "stone": previous.stone,
+            "exp": previous.exp,
+            "items": [],
+        }
+        return OperationOutcome.applied(
+            operation_id,
+            self.action,
+            data=data,
+            granted={"stone": previous.stone, "exp": previous.exp, "items": []},
+            after={"claimed": True},
+            audit_category="world_events",
+        ).replay()
+
     def reply(self, **kwargs: Any) -> ReplyPlan:
         outcome = self.claim(**kwargs)
         return ReplyPlan(outcome.message or outcome.data, reference=True)

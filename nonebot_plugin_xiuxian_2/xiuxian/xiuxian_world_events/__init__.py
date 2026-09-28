@@ -37,7 +37,6 @@ from ..xiuxian_utils.numeric_bind import percent_exp_reward
 from ...features.world_events.application import DemonClaimApplication
 from ...features.world_events.attack_application import DemonAttackApplication
 from ...features.world_events.repository import WorldEventClaimSqlRepository
-from .transaction_service import DemonClaimService
 from .transaction_service import DemonEventLifecycleService
 from .transaction_service import DemonWaveRefreshService
 from .transaction_service import SpiritVeinLifecycleService
@@ -47,7 +46,6 @@ scheduler = require("nonebot_plugin_apscheduler").scheduler
 _sql_message_instance = None
 _player_data_manager_instance = None
 items = Items()
-_demon_claim_service_instance = None
 demon_claim_application = DemonClaimApplication(
     get_paths().game_db,
     get_paths().player_db,
@@ -55,13 +53,6 @@ demon_claim_application = DemonClaimApplication(
 )
 
 
-def _demon_claim_service():
-    global _demon_claim_service_instance
-    if _demon_claim_service_instance is None:
-        _demon_claim_service_instance = DemonClaimService(
-            get_paths().game_db, get_paths().player_db
-        )
-    return _demon_claim_service_instance
 demon_attack_application = DemonAttackApplication(get_paths().player_db)
 _demon_event_lifecycle_service_instance = None
 _demon_wave_refresh_service_instance = None
@@ -1521,7 +1512,7 @@ async def claim_demon_reward_(bot: Bot, event: GroupMessageEvent | PrivateMessag
 
     user_id = str(user_info["user_id"])
     event_message_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
-    # claim op_id needs event_id; after load state we get_result first
+    # claim op_id needs event_id; replay lookup happens before reward generation.
     with _state_lock:
         state = _ensure_daily_state()
         preferred_realm = _normalize_realm(user_info.get("level", ""))
@@ -1542,16 +1533,10 @@ async def claim_demon_reward_(bot: Bot, event: GroupMessageEvent | PrivateMessag
             if event_message_id
             else ""
         )
-        prior_claim = _demon_claim_service().get_result(claim_op_preview) if claim_op_preview else None
+        prior_claim = demon_claim_application.get_result(claim_op_preview) if claim_op_preview else None
         already_claimed = _has_user_claimed(claimed, user_id, claim_key) if not no_reward_event else False
-        if prior_claim is not None and prior_claim.succeeded:
-            # force fallthrough to replay path by clearing already_claimed gate via marker
-            already_claimed = False
-            reward_pending = False
-            no_reward_event = False
-            no_contribution = False
 
-        if not (reward_pending or no_reward_event or no_contribution or already_claimed):
+        if prior_claim is None and not (reward_pending or no_reward_event or no_contribution or already_claimed):
             contribution = _reward_contribution(raw_contribution)
             stone_reward = min(int(DEMON_STONE_REWARD_CAP * contribution), DEMON_STONE_REWARD_CAP)
             # 最高约 5%×贡献，再按境界 rank 压制（与双修/塔一致）
@@ -1568,6 +1553,22 @@ async def claim_demon_reward_(bot: Bot, event: GroupMessageEvent | PrivateMessag
 
             expected_claimed = dict(claimed)
             claim_event_id = str(state.get("event_id", ""))
+
+    if prior_claim is not None:
+        if prior_claim.ok:
+            claim_data = prior_claim.data or {}
+            claim_result_stone = int(claim_data.get("stone", 0) or 0)
+            claim_result_exp = int(claim_data.get("exp", 0) or 0)
+            msg = (
+                f"领取魔修入侵奖励成功！\n"
+                f"获得灵石：{number_to(claim_result_stone)}\n"
+                f"获得修为：{number_to(claim_result_exp)}\n"
+                f"该领奖请求已经处理，无需重复提交。"
+            )
+        else:
+            msg = prior_claim.message or "魔修入侵奖励暂时无法领取。"
+        await handle_send(bot, event, msg, md_type="世界事件", k1="状态", v1="魔修入侵状态")
+        await claim_demon_reward.finish()
 
     if reward_pending:
         msg = f"你参与的{realm}魔修尚未被击退，暂不能领取奖励。"

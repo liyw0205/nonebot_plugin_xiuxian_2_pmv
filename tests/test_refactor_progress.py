@@ -217,6 +217,11 @@ class RefactorProgressTests(unittest.TestCase):
         self.assertTrue(world_events["attack_request_path_has_no_ddl"])
         self.assertTrue(world_events["attack_player_migration_registered"])
         self.assertTrue(world_events["attack_player_migration_routed"])
+        self.assertTrue(world_events["claim_repository_owned"])
+        self.assertTrue(world_events["claim_request_path_has_no_ddl"])
+        self.assertTrue(world_events["claim_game_migration_registered"])
+        self.assertTrue(world_events["claim_game_migration_routed"])
+        self.assertTrue(world_events["legacy_claim_service_isolated"])
         self.assertTrue(world_events["legacy_claim_disabled"])
         rift = slices["rift"]
         self.assertTrue(rift["entry_application_owned"])

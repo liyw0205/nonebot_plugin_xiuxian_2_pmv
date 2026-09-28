@@ -4,16 +4,27 @@ from pathlib import Path
 import nonebot
 nonebot.init()
 from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_world_events.transaction_service import DemonClaimService
+from nonebot_plugin_xiuxian_2.compatibility.legacy_demon_claim import (
+    DemonClaimResult as CompatibilityDemonClaimResult,
+    DemonClaimService as CompatibilityDemonClaimService,
+)
 from tests.test_db_backend import db_backend
 
 class DemonClaimServiceTests(unittest.TestCase):
-    def test_world_events_facade_defers_claim_service_construction(self):
+    def test_transaction_module_reexports_compatibility_objects_by_identity(self):
+        from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_world_events.transaction_service import DemonClaimResult
+
+        self.assertIs(DemonClaimService, CompatibilityDemonClaimService)
+        self.assertIs(DemonClaimResult, CompatibilityDemonClaimResult)
+
+    def test_world_events_facade_has_no_default_legacy_claim_factory(self):
         import importlib
 
         world_events = importlib.import_module(
             "nonebot_plugin_xiuxian_2.xiuxian.xiuxian_world_events"
         )
-        self.assertIsNone(world_events._demon_claim_service_instance)
+        self.assertFalse(hasattr(world_events, "_demon_claim_service_instance"))
+        self.assertFalse(hasattr(world_events, "_demon_claim_service"))
 
     def setUp(self):
         self.tmp=tempfile.TemporaryDirectory(); root=Path(self.tmp.name); self.g=root/'g.db'; self.p=root/'p.db'; self.claimed={}

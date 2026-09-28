@@ -18,6 +18,17 @@ class DemonAttackSettlementResult:
 
 
 @dataclass(frozen=True)
+class WorldEventClaimResult:
+    status: str
+    stone: int = 0
+    exp: int = 0
+
+    @property
+    def succeeded(self) -> bool:
+        return self.status in {"applied", "duplicate"}
+
+
+@dataclass(frozen=True)
 class DemonClaimRequest:
     operation_id: str
     event_key: str
@@ -70,4 +81,9 @@ def normalize_items(items: Sequence[Mapping[str, Any]]) -> tuple[dict[str, Any],
     )
 
 
-__all__ = ["DemonAttackSettlementResult", "DemonClaimRequest", "normalize_items"]
+__all__ = [
+    "DemonAttackSettlementResult",
+    "DemonClaimRequest",
+    "WorldEventClaimResult",
+    "normalize_items",
+]

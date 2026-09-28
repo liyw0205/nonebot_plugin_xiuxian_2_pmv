@@ -1616,7 +1616,9 @@ class SourceQualityTests(unittest.TestCase):
         sect_root = SOURCE_ROOT / "xiuxian" / "xiuxian_sect"
         command_source = (sect_root / "__init__.py").read_text(encoding="utf-8")
         self.assertIn("sect_application.transfer_owner(", command_source)
-        service_source = (sect_root / "transaction_service.py").read_text(encoding="utf-8")
+        service_source = (SOURCE_ROOT / "compatibility" / "legacy_sect_membership.py").read_text(
+            encoding="utf-8"
+        )
         self.assertIn("BEGIN IMMEDIATE", service_source)
         self.assertIn("sect_operations", service_source)
 
@@ -2746,16 +2748,16 @@ class SourceQualityTests(unittest.TestCase):
         source = (root / "__init__.py").read_text(encoding="utf-8")
         start = source.index("@claim_demon_reward.handle")
         handler = source[start:]
-        self.assertIn("_demon_claim_service().get_result(", handler)
+        self.assertIn("demon_claim_application.get_result(", handler)
         self.assertNotIn("claimed[claim_key] = True", handler)
         self.assertNotIn("sql_message.update_ls(", handler)
         self.assertNotIn("sql_message.update_exp(", handler)
         self.assertNotIn("sql_message.send_back(", handler)
-        service = (root / "demon_claim_service.py").read_text(encoding="utf-8")
+        service = (SOURCE_ROOT / "compatibility" / "legacy_demon_claim.py").read_text(encoding="utf-8")
         self.assertIn("ATTACH DATABASE", service)
         self.assertIn("BEGIN IMMEDIATE", service)
-        self.assertIn("_demon_claim_service_instance = None", source)
-        self.assertIn("def _demon_claim_service(", source)
+        self.assertNotIn("_demon_claim_service_instance", source)
+        self.assertNotIn("def _demon_claim_service(", source)
         self.assertIn("demon_claim_application.claim(", handler)
         self.assertNotIn("demon_claim_service.claim(", handler)
 

@@ -5,9 +5,12 @@ from pathlib import Path
 from typing import Any, Mapping, Protocol, Sequence
 
 from ...infrastructure.database import DatabaseUnitOfWork
+from .domain import WorldEventClaimResult
 
 
 class WorldEventClaimRepository(Protocol):
+    def get_result(self, operation_id: str) -> WorldEventClaimResult | None: ...
+
     def claim(self, operation_id: str, event_key: str, event_id: str, user_id: str, expected_claimed: Mapping[str, Any], stone: int, exp: int, items: Sequence[Mapping[str, Any]], max_goods_num: int) -> Any: ...
 
 
@@ -17,22 +20,45 @@ class WorldEventClaimSqlRepository:
         self.player_database = str(player_database)
 
     @staticmethod
-    def _result(status: str, stone: int = 0, exp: int = 0) -> dict[str, Any]:
-        return {"status": status, "stone": int(stone), "exp": int(exp)}
+    def _result(status: str, stone: int = 0, exp: int = 0) -> WorldEventClaimResult:
+        return WorldEventClaimResult(status, int(stone), int(exp))
 
-    def claim(self, operation_id: str, event_key: str, event_id: str, user_id: str, expected_claimed: Mapping[str, Any], stone: int, exp: int, items: Sequence[Mapping[str, Any]], max_goods_num: int) -> dict[str, Any]:
+    @staticmethod
+    def _sqlite_integer(value: int) -> int | str:
+        value = int(value)
+        return value if -(2**63) <= value <= 2**63 - 1 else str(value)
+
+    @staticmethod
+    def _integer(value: Any) -> int:
+        try:
+            return int(value)
+        except (TypeError, ValueError, OverflowError):
+            return 0
+
+    def get_result(self, operation_id: str) -> WorldEventClaimResult | None:
+        operation_id = str(operation_id).strip()
+        if not operation_id:
+            return None
+        with DatabaseUnitOfWork(self.game_database) as uow:
+            row = uow.query_one(
+                "SELECT stone,exp FROM demon_claim_operations WHERE operation_id=?",
+                (operation_id,),
+            )
+        return self._result("duplicate", self._integer(row["stone"]), self._integer(row["exp"])) if row else None
+
+    def claim(self, operation_id: str, event_key: str, event_id: str, user_id: str, expected_claimed: Mapping[str, Any], stone: int, exp: int, items: Sequence[Mapping[str, Any]], max_goods_num: int) -> WorldEventClaimResult:
         operation_id, event_key, event_id, user_id = map(str, (operation_id, event_key, event_id, user_id))
         stone, exp, max_goods_num = max(0, int(stone)), max(0, int(exp)), int(max_goods_num)
+        stone_param, exp_param = self._sqlite_integer(stone), self._sqlite_integer(exp)
         rewards = tuple((int(item["id"]), str(item.get("name", "")), str(item.get("type", item.get("item_type", ""))), int(item["amount"])) for item in items if int(item.get("amount", 0)) > 0)
         payload = json.dumps([event_key, event_id, user_id], ensure_ascii=True, separators=(",", ":"))
         with DatabaseUnitOfWork(self.game_database, immediate=True) as uow:
             uow.attach_database(self.player_database, "player_data")
-            uow.execute("CREATE TABLE IF NOT EXISTS demon_claim_operations(operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,stone INTEGER NOT NULL DEFAULT 0,exp INTEGER NOT NULL DEFAULT 0,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
             previous = uow.query_one("SELECT payload,stone,exp FROM demon_claim_operations WHERE operation_id=?", (operation_id,))
             if previous is not None:
                 if str(previous["payload"]) != payload:
                     return self._result("state_changed")
-                return self._result("duplicate", previous["stone"], previous["exp"])
+                return self._result("duplicate", self._integer(previous["stone"]), self._integer(previous["exp"]))
             user = uow.query_one("SELECT 1 AS present FROM user_xiuxian WHERE user_id=?", (user_id,))
             if user is None:
                 return self._result("user_missing")
@@ -53,10 +79,10 @@ class WorldEventClaimSqlRepository:
                     return self._result("inventory_full")
             current[user_id] = True
             uow.execute("UPDATE player_data.world_event_state SET claimed=? WHERE user_id=?", (json.dumps(current, ensure_ascii=False), event_key))
-            uow.execute("UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)+CAST(? AS REAL), exp=CAST(COALESCE(exp,0) AS REAL)+CAST(? AS REAL) WHERE user_id=?", (stone, exp, user_id))
+            uow.execute("UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)+CAST(? AS REAL), exp=CAST(COALESCE(exp,0) AS REAL)+CAST(? AS REAL) WHERE user_id=?", (stone_param, exp_param, user_id))
             for item_id, name, item_type, amount in rewards:
                 uow.execute("INSERT INTO back(user_id,goods_id,goods_name,goods_type,goods_num,create_time,update_time,bind_num) VALUES(?,?,?,?,?,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP,?) ON CONFLICT(user_id,goods_id) DO UPDATE SET goods_num=back.goods_num+excluded.goods_num,bind_num=COALESCE(back.bind_num,0)+excluded.goods_num,update_time=excluded.update_time", (user_id, item_id, name, item_type, amount, amount))
-            uow.execute("INSERT INTO demon_claim_operations(operation_id,payload,stone,exp) VALUES(?,?,?,?)", (operation_id, payload, stone, exp))
+            uow.execute("INSERT INTO demon_claim_operations(operation_id,payload,stone,exp) VALUES(?,?,?,?)", (operation_id, payload, stone_param, exp_param))
             return self._result("applied", stone, exp)
 
 
@@ -67,8 +93,14 @@ class LegacyWorldEventClaimRepository:
         self.game_database = str(game_database)
         self.player_database = str(player_database)
 
+    def get_result(self, operation_id: str) -> WorldEventClaimResult | None:
+        from ...compatibility.legacy_demon_claim import DemonClaimService
+
+        result = DemonClaimService(self.game_database, self.player_database).get_result(operation_id)
+        return WorldEventClaimResult(result.status, result.stone, result.exp) if result else None
+
     def claim(self, operation_id: str, event_key: str, event_id: str, user_id: str, expected_claimed: Mapping[str, Any], stone: int, exp: int, items: Sequence[Mapping[str, Any]], max_goods_num: int) -> Any:
-        from ...xiuxian.xiuxian_world_events.transaction_service import DemonClaimService
+        from ...compatibility.legacy_demon_claim import DemonClaimService
         return DemonClaimService(self.game_database, self.player_database).claim(operation_id, event_key, event_id, user_id, expected_claimed, stone, exp, items, max_goods_num)
 
 

@@ -14,11 +14,11 @@
 
 ## 数据模型与迁移
 
-`world_events.001` 写入 `world_events_feature_migrations`。应用层的 operation ledger 位于 `game_db`；旧跨库服务仍维护 `demon_claim_operations`，以兼容历史请求。
+`world_events.001` 写入 `world_events_feature_migrations`；`world_events.002` 只在 `player_db` 建立/扩展事件状态、讨伐结算和统计 schema；`world_events.003` 只在 `game_db` 建立或扩展 `demon_claim_operations`，迁移旧表时保留记录并为缺失的 `stone`、`exp` 列补默认值。领奖 SQL repository 不在请求中执行 DDL。
 
 ## 事务与失败回滚
 
-应用层先记录 `operation_ledger`，兼容仓储随后使用 `ATTACH DATABASE` 与 `BEGIN IMMEDIATE` 在 `game_db`、`player_db` 中原子更新领奖标记、灵石、修为和物品。业务拒绝不改变资产，异常由旧事务回滚并由应用层记录 failed ledger。
+应用层先记录 `operation_ledger`，feature-owned SQL repository 随后使用 `ATTACH DATABASE` 与 `BEGIN IMMEDIATE` 在 `game_db`、`player_db` 中原子更新领奖标记、灵石、修为、物品和领奖 operation。业务拒绝不改变资产，异常由 repository 事务回滚并由应用层记录 failed ledger。超出 SQLite 64 位整数范围的修为/灵石以安全文本参数绑定，并在 SQL 中按历史规则进行数值累加。
 
 ## 定时任务
 
@@ -40,4 +40,4 @@
 
 ## 灰度开关、回滚和已知限制
 
-关闭 `world_events_enabled` 可切回旧入口。奖励随机池和贡献计算暂未迁移到新 domain，仍由兼容命令提供；满足完整发布周期、历史迁移和运行命中证据后再删除旧服务。
+关闭 `world_events_enabled` 可切回旧入口。旧 `DemonClaimService` 保留在 `compatibility/legacy_demon_claim.py` 并由原 transaction module 身份一致地 re-export；奖励随机池和贡献计算暂未迁移到新 domain，仍由兼容命令提供。live migration/recovery 与完整发布周期证据仍未完成，不能据此关闭整个 world-events 切片。
