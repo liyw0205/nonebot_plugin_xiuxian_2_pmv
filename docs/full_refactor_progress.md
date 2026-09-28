@@ -47,6 +47,8 @@
 
 ### 当前切片摘要
 
+`work item-use compatibility isolation`：`WorkItemUseService/Result` 已从 `xiuxian_work/transaction_service.py` 移至 `compatibility/legacy_work_item_use.py`，历史 transaction import 保持对象身份 re-export；默认 `20014/20015` matcher 继续由 `WorkItemUseApplication -> WorkItemUseSqlRepository` 承担，旧 service 不在默认执行图中。进度门禁与 source-quality 新增 compatibility isolation 断言，物品 service 行为测试仍覆盖加速、捕获、幂等冲突和晚失败回滚。源码修改前后均使用专用临时目录，收尾清理 pytest/pyc/compile 缓存，不触碰 `.venv`、`.git`、运行数据或用户 `boss_info.json`。下一片审计 daily refresh reset 的旧 service 可达性与请求期 schema；全局旧 transaction services、`xiuxian2_handle`、真实发布迁移/P7 仍未完成 blocker。
+
 `work settlement transaction ownership`：悬赏结算默认入口已切到 `WorkSettlementApplication -> WorkSettlementSqlRepository`；`work.008` 启动迁移预建 operation 表并补齐历史 `result_json`，请求路径只读校验 schema。仓储在单一 game-db immediate UoW 中校验 operation payload、冷却快照和用户，按真实 `id/name/type` 写奖励并校验背包上限，原子更新修为、背包和 `user_cd` 清理，同时保存 replay metadata；旧 `WorkSettlementService` 已移至 compatibility-only 模块并由历史 shim 保持 import identity。聚焦回归 `76 passed`、source-quality `8 passed`、progress `1 passed`，隔离 architecture/inventory/recovery/reconcile/diff check 通过。下一片审计 `WorkItemUseService` 请求期 DDL 与 compatibility 可达性；全局旧 transaction services、`xiuxian2_handle`、真实发布迁移/P7 仍未完成。
 
 一个切片只有同时满足以下条件才计入完成：

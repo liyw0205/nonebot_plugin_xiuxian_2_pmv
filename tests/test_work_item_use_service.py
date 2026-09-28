@@ -9,10 +9,16 @@ import nonebot
 nonebot.init()
 
 from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_work.transaction_service import WorkItemUseService
+from nonebot_plugin_xiuxian_2.compatibility.legacy_work_item_use import (
+    WorkItemUseService as LegacyWorkItemUseService,
+)
 from tests.test_db_backend import db_backend
 
 
 class WorkItemUseServiceTests(unittest.TestCase):
+    def test_transaction_module_reexports_legacy_service_identity(self):
+        self.assertIs(WorkItemUseService, LegacyWorkItemUseService)
+
     def test_work_facade_no_longer_wires_legacy_item_use_service(self):
         from nonebot_plugin_xiuxian_2.xiuxian import xiuxian_work
 

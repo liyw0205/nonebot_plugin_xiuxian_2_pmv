@@ -23,7 +23,7 @@
 
 ## 事务与失败回滚
 
-接取、结算 application 在 `game_db.operation_ledger` 记录请求；接取 repository 以一个 `BEGIN IMMEDIATE` 事务校验用户、冷却和 offer，更新 active snapshot 并写接取回执；`work.007` 缺失时返回 `schema_missing`，请求路径不建表。结算 repository 只在 `work.008` 已迁移时执行，缺 schema 返回 `schema_missing`；校验工作快照、冷却时间和 operation payload，按真实奖励 `id/name/type` 写入背包，校验容量后原子更新修为、背包和 `user_cd` 清理，并持久化 `success_kind/item_msg/scheduled_time` 供 replay；历史 `result_json` 列由启动迁移补齐。旧 `WorkSettlementService` 仅保留在 compatibility 模块作为显式回滚路径。物品 repository 以一个 `BEGIN IMMEDIATE` 事务校验用户、道具库存和工作状态，再原子更新背包、`user_cd.create_time` 或 offer 快照及 operation 结果。刷新由 `WorkRefreshApplication -> WorkRefreshSqlRepository` 在一个 `BEGIN IMMEDIATE` 事务中校验刷新次数、冷却和旧 offer，原子更新次数、固定快照与刷新回执；`work.005` 缺失时返回 `schema_missing`，请求路径不建表。终止/过期清理/重置由 `WorkAbortCleanupApplication -> WorkAbortCleanupSqlRepository` 在 game DB 的 `BEGIN IMMEDIATE` 中校验冷却、offer 和灵石快照，再原子应用惩罚、清除 cooldown/active/offer projection 并写清理回执；`work.006` 缺失时返回 `schema_missing`，请求路径不建表。惩罚不超过当前灵石，重复操作重放首次结果，状态冲突不改资产，晚期 SQL 错误完整回滚。追捕令随机结果与倍率只在首次请求持久化，随机重抽不破坏同 operation 重放；随后仅更新旧 JSON 展示投影。`reward_data_source` 不再请求期创建 `work_offer_snapshots`；有 schema 时可将历史 JSON 导入数据库，无 schema 时只读旧 JSON，写入需先完成迁移。
+接取、结算 application 在 `game_db.operation_ledger` 记录请求；接取 repository 以一个 `BEGIN IMMEDIATE` 事务校验用户、冷却和 offer，更新 active snapshot 并写接取回执；`work.007` 缺失时返回 `schema_missing`，请求路径不建表。结算 repository 只在 `work.008` 已迁移时执行，缺 schema 返回 `schema_missing`；校验工作快照、冷却时间和 operation payload，按真实奖励 `id/name/type` 写入背包，校验容量后原子更新修为、背包和 `user_cd` 清理，并持久化 `success_kind/item_msg/scheduled_time` 供 replay；历史 `result_json` 列由启动迁移补齐。旧 `WorkSettlementService` 仅保留在 compatibility 模块作为显式回滚路径。物品 repository 以一个 `BEGIN IMMEDIATE` 事务校验用户、道具库存和工作状态，再原子更新背包、`user_cd.create_time` 或 offer 快照及 operation 结果；旧 `WorkItemUseService` 已移至 compatibility 模块，历史 transaction import 仅作对象身份转发，默认 matcher 不可达。刷新由 `WorkRefreshApplication -> WorkRefreshSqlRepository` 在一个 `BEGIN IMMEDIATE` 事务中校验刷新次数、冷却和旧 offer，原子更新次数、固定快照与刷新回执；`work.005` 缺失时返回 `schema_missing`，请求路径不建表。终止/过期清理/重置由 `WorkAbortCleanupApplication -> WorkAbortCleanupSqlRepository` 在 game DB 的 `BEGIN IMMEDIATE` 中校验冷却、offer 和灵石快照，再原子应用惩罚、清除 cooldown/active/offer projection 并写清理回执；`work.006` 缺失时返回 `schema_missing`，请求路径不建表。惩罚不超过当前灵石，重复操作重放首次结果，状态冲突不改资产，晚期 SQL 错误完整回滚。追捕令随机结果与倍率只在首次请求持久化，随机重抽不破坏同 operation 重放；随后仅更新旧 JSON 展示投影。`reward_data_source` 不再请求期创建 `work_offer_snapshots`；有 schema 时可将历史 JSON 导入数据库，无 schema 时只读旧 JSON，写入需先完成迁移。
 
 ## 定时任务
 
@@ -48,7 +48,7 @@
 
 ## 灰度开关、回滚和已知限制
 
-关闭 `work_claim_enabled` 可恢复旧 claim/settlement 命令实现。普通/强制刷新、abort/reset cleanup、claim 和 settlement 已由 feature 边界承担；旧 refresh/cleanup/settlement service 仅通过 compatibility shim 保留。删除旧服务前需满足完整发布周期、真实数据备份恢复和 reconcile 演练要求。
+关闭 `work_claim_enabled` 可恢复旧 claim/settlement 命令实现。普通/强制刷新、abort/reset cleanup、claim、settlement 和 item-use 默认路径已由 feature 边界承担；旧 refresh/cleanup/settlement/item-use service 仅通过 compatibility shim 保留。删除旧服务前需满足完整发布周期、真实数据备份恢复和 reconcile 演练要求。
 
 ## 缓存与资源
 
