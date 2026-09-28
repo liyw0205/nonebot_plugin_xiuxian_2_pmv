@@ -12,6 +12,7 @@ from .domain import (
     DemonClaimRequest,
     DemonEventLifecycleResult,
     DemonWaveRefreshResult,
+    SpiritVeinLifecycleResult,
     normalize_items,
 )
 from .wave_refresh_repository import (
@@ -22,6 +23,8 @@ from .repository import WorldEventClaimRepository, WorldEventClaimSqlRepository
 from .lifecycle_repository import (
     DemonEventLifecycleRepository,
     DemonEventLifecycleSqlRepository,
+    SpiritVeinLifecycleRepository,
+    SpiritVeinLifecycleSqlRepository,
 )
 
 
@@ -244,8 +247,40 @@ class DemonWaveRefreshApplication:
         )
 
 
+class SpiritVeinLifecycleApplication:
+    """Feature boundary for replayable spirit vein lifecycle transitions."""
+
+    def __init__(
+        self,
+        player_database: str | Path,
+        *,
+        repository: SpiritVeinLifecycleRepository | None = None,
+    ) -> None:
+        self.repository = repository or SpiritVeinLifecycleSqlRepository(player_database)
+
+    def replay(self, operation_id: str) -> SpiritVeinLifecycleResult | None:
+        return self.repository.replay(operation_id)
+
+    def transition(
+        self,
+        operation_id: str,
+        event_key: str,
+        action: str,
+        expected_state: Mapping[str, Any] | None,
+        target_state: Mapping[str, Any],
+    ) -> SpiritVeinLifecycleResult:
+        return self.repository.transition(
+            operation_id,
+            event_key,
+            action,
+            expected_state,
+            target_state,
+        )
+
+
 __all__ = [
     "DemonClaimApplication",
     "DemonEventLifecycleApplication",
     "DemonWaveRefreshApplication",
+    "SpiritVeinLifecycleApplication",
 ]

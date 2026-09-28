@@ -36,10 +36,10 @@ from ..xiuxian_config import XiuConfig
 from ..xiuxian_utils.numeric_bind import percent_exp_reward
 from ...features.world_events.application import DemonClaimApplication
 from ...features.world_events.application import DemonWaveRefreshApplication
+from ...features.world_events.application import SpiritVeinLifecycleApplication
 from ...features.world_events.attack_application import DemonAttackApplication
 from ...features.world_events.application import DemonEventLifecycleApplication
 from ...features.world_events.repository import WorldEventClaimSqlRepository
-from .transaction_service import SpiritVeinLifecycleService
 
 
 scheduler = require("nonebot_plugin_apscheduler").scheduler
@@ -56,16 +56,7 @@ demon_claim_application = DemonClaimApplication(
 demon_attack_application = DemonAttackApplication(get_paths().player_db)
 demon_event_lifecycle_application = DemonEventLifecycleApplication(get_paths().player_db)
 demon_wave_refresh_application = DemonWaveRefreshApplication(get_paths().player_db)
-_spirit_vein_lifecycle_service_instance = None
-
-
-def _spirit_vein_lifecycle_service():
-    global _spirit_vein_lifecycle_service_instance
-    if _spirit_vein_lifecycle_service_instance is None:
-        _spirit_vein_lifecycle_service_instance = SpiritVeinLifecycleService(
-            get_paths().player_db
-        )
-    return _spirit_vein_lifecycle_service_instance
+spirit_vein_lifecycle_application = SpiritVeinLifecycleApplication(get_paths().player_db)
 runtime_ids = UUIDGenerator()
 runtime_clock = SystemClock()
 runtime_random = SystemRandom()
@@ -524,14 +515,14 @@ def _ensure_spirit_vein_state(now: datetime | None = None) -> dict:
             f"spirit-vein:expire:{state.get('event_id')}:"
             f"{ends_at.strftime('%Y%m%d%H%M%S')}"
         )
-        replay = _spirit_vein_lifecycle_service().replay(operation_id)
+        replay = spirit_vein_lifecycle_application.replay(operation_id)
         if replay is not None:
             return replay.state or state
         target = dict(state)
         target["active"] = 0
         target["status"] = "finished"
         target["last_result"] = f"天降灵脉已于{ends_at.strftime('%H:%M')}消散。"
-        result = _spirit_vein_lifecycle_service().transition(
+        result = spirit_vein_lifecycle_application.transition(
             operation_id,
             SPIRIT_VEIN_EVENT_KEY,
             "expire",
@@ -597,7 +588,7 @@ def _try_start_auto_spirit_vein() -> tuple[dict, str]:
     state = _ensure_spirit_vein_state(now)
     slot = now.strftime("%Y%m%d%H30")
     operation_id = f"spirit-vein:auto-trigger:{slot}"
-    replay = _spirit_vein_lifecycle_service().replay(operation_id)
+    replay = spirit_vein_lifecycle_application.replay(operation_id)
     if replay is not None:
         state = replay.state or state
         if replay.action == "auto_skip":
@@ -618,7 +609,7 @@ def _try_start_auto_spirit_vein() -> tuple[dict, str]:
             now=now,
             event_id=f"spirit_vein:{operation_id}",
         )
-    result = _spirit_vein_lifecycle_service().transition(
+    result = spirit_vein_lifecycle_application.transition(
         operation_id,
         SPIRIT_VEIN_EVENT_KEY,
         action,
@@ -641,7 +632,7 @@ def _start_spirit_vein_manual(
 ):
     now = _now()
     state = _ensure_spirit_vein_state(now)
-    replay = _spirit_vein_lifecycle_service().replay(operation_id)
+    replay = spirit_vein_lifecycle_application.replay(operation_id)
     if replay is not None:
         return replay
     if state.get("status") == "active":
@@ -655,7 +646,7 @@ def _start_spirit_vein_manual(
             now=now,
             event_id=f"spirit_vein:{operation_id}",
         )
-    return _spirit_vein_lifecycle_service().transition(
+    return spirit_vein_lifecycle_application.transition(
         operation_id,
         SPIRIT_VEIN_EVENT_KEY,
         action,
@@ -666,7 +657,7 @@ def _start_spirit_vein_manual(
 
 def _close_spirit_vein_manual(operation_id: str):
     state = _ensure_spirit_vein_state()
-    replay = _spirit_vein_lifecycle_service().replay(operation_id)
+    replay = spirit_vein_lifecycle_application.replay(operation_id)
     if replay is not None:
         return replay
     if state.get("status") == "active":
@@ -679,7 +670,7 @@ def _close_spirit_vein_manual(operation_id: str):
     else:
         action = "manual_finish_skip"
         target = state
-    return _spirit_vein_lifecycle_service().transition(
+    return spirit_vein_lifecycle_application.transition(
         operation_id,
         SPIRIT_VEIN_EVENT_KEY,
         action,

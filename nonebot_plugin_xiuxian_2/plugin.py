@@ -120,6 +120,7 @@ from .features.world_events.migrations import (
     apply_world_events_claim,
     apply_world_events_lifecycle,
     apply_world_events_player,
+    apply_world_events_spirit_vein_lifecycle,
     apply_world_events_wave_refresh,
 )
 from .features.work.manifest import FEATURE as WORK_FEATURE
@@ -358,6 +359,7 @@ def build_migrations() -> tuple[Migration, ...]:
         Migration("world_events.003", "demon_claim_operations", apply_world_events_claim),
         Migration("world_events.004", "demon_event_lifecycle_operations", apply_world_events_lifecycle),
         Migration("world_events.005", "demon_wave_refresh_operations", apply_world_events_wave_refresh),
+        Migration("world_events.006", "spirit_vein_lifecycle_operations", apply_world_events_spirit_vein_lifecycle),
     )
 
 
@@ -406,6 +408,7 @@ _GAME_DATABASE_EXCLUDED_MIGRATION_VERSIONS = frozenset(
         "world_events.002",
         "world_events.004",
         "world_events.005",
+        "world_events.006",
     }
 )
 _PLAYER_DATABASE_MIGRATION_VERSIONS = frozenset(
@@ -449,6 +452,7 @@ _PLAYER_DATABASE_MIGRATION_VERSIONS = frozenset(
         "world_events.002",
         "world_events.004",
         "world_events.005",
+        "world_events.006",
     }
 )
 _TRADE_DATABASE_MIGRATION_VERSIONS = frozenset({"platform.001", "trade.003", "trade.005", "trade.006", "trade.007", "trade.008", "auction.004"})

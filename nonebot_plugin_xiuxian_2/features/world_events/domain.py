@@ -32,6 +32,22 @@ class DemonWaveRefreshResult:
 
 
 @dataclass(frozen=True)
+class SpiritVeinLifecycleResult:
+    status: str
+    action: str = ""
+    state: dict[str, Any] | None = None
+
+    @property
+    def succeeded(self) -> bool:
+        return self.status not in {
+            "schema_missing",
+            "operation_conflict",
+            "state_changed",
+            "invalid_transition",
+        }
+
+
+@dataclass(frozen=True)
 class WorldEventClaimResult:
     status: str
     stone: int = 0
@@ -99,6 +115,7 @@ __all__ = [
     "DemonAttackSettlementResult",
     "DemonEventLifecycleResult",
     "DemonWaveRefreshResult",
+    "SpiritVeinLifecycleResult",
     "DemonClaimRequest",
     "WorldEventClaimResult",
     "normalize_items",

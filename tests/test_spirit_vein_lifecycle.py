@@ -13,16 +13,42 @@ nonebot.init()
 from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_world_events.transaction_service import (
     STATE_FIELDS,
 )
+from nonebot_plugin_xiuxian_2.compatibility.legacy_spirit_vein_lifecycle import (
+    SpiritVeinLifecycleResult as LegacySpiritVeinLifecycleResult,
+    SpiritVeinLifecycleService as LegacySpiritVeinLifecycleService,
+)
+from nonebot_plugin_xiuxian_2.features.world_events.application import (
+    SpiritVeinLifecycleApplication,
+)
+from nonebot_plugin_xiuxian_2.infrastructure.database import (
+    DatabaseUnitOfWork,
+    MigrationRunner,
+)
+from nonebot_plugin_xiuxian_2.plugin import build_migrations, migrations_for_database
 from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_world_events.transaction_service import (
     SpiritVeinLifecycleService,
 )
 
 
-def test_world_events_facade_defers_spirit_vein_lifecycle_service_construction():
+def test_world_events_facade_uses_spirit_vein_feature_application():
     world_events = importlib.import_module(
         "nonebot_plugin_xiuxian_2.xiuxian.xiuxian_world_events"
     )
-    assert world_events._spirit_vein_lifecycle_service_instance is None
+    assert isinstance(
+        world_events.spirit_vein_lifecycle_application,
+        SpiritVeinLifecycleApplication,
+    )
+    assert not hasattr(world_events, "_spirit_vein_lifecycle_service")
+    assert SpiritVeinLifecycleService is LegacySpiritVeinLifecycleService
+
+
+def test_legacy_lifecycle_imports_keep_identity():
+    from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_world_events.transaction_service import (
+        SpiritVeinLifecycleResult,
+    )
+
+    assert SpiritVeinLifecycleService is LegacySpiritVeinLifecycleService
+    assert SpiritVeinLifecycleResult is LegacySpiritVeinLifecycleResult
 
 
 def idle():
@@ -78,6 +104,12 @@ def create_db(path, snapshot):
                 f"({','.join('?' for _ in range(len(STATE_FIELDS) + 1))})",
                 ("spirit_vein", *values),
             )
+    migrations = build_migrations()
+    migration = next(item for item in migrations if item.version == "world_events.006")
+    assert migration in migrations_for_database(migrations, "player_db")
+    assert migration not in migrations_for_database(migrations, "game_db")
+    with DatabaseUnitOfWork(path) as uow:
+        MigrationRunner((migration,)).apply(uow)
 
 
 def read_state(path):
@@ -94,7 +126,7 @@ def test_start_replay_fixes_time_window_and_rejects_payload_conflict(tmp_path):
     expected = idle()
     target = active()
     create_db(database, expected)
-    service = SpiritVeinLifecycleService(database)
+    service = SpiritVeinLifecycleApplication(database)
 
     result = service.transition(
         "auto-slot",
@@ -126,11 +158,28 @@ def test_start_replay_fixes_time_window_and_rejects_payload_conflict(tmp_path):
     )
 
 
+def test_feature_application_replays_legacy_spirit_vein_operation(tmp_path):
+    database = tmp_path / "player.db"
+    expected = idle()
+    target = active(manual=1)
+    create_db(database, expected)
+
+    legacy_result = LegacySpiritVeinLifecycleService(database).transition(
+        "legacy-start", "spirit_vein", "manual_start", expected, target
+    )
+    application = SpiritVeinLifecycleApplication(database)
+
+    assert application.replay("legacy-start") == legacy_result
+    assert application.transition(
+        "legacy-start", "spirit_vein", "manual_start", expected, target
+    ) == legacy_result
+
+
 def test_miss_and_active_skip_are_persisted_without_changing_state(tmp_path):
     database = tmp_path / "player.db"
     expected = idle()
     create_db(database, expected)
-    service = SpiritVeinLifecycleService(database)
+    service = SpiritVeinLifecycleApplication(database)
 
     missed = service.transition(
         "miss-slot",
@@ -176,7 +225,7 @@ def test_expire_and_manual_finish_preserve_original_event_window(tmp_path):
     database = tmp_path / "player.db"
     expected = active()
     create_db(database, expected)
-    service = SpiritVeinLifecycleService(database)
+    service = SpiritVeinLifecycleApplication(database)
 
     expired = dict(expected, active=0, status="finished", last_result="expired")
     result = service.transition(
@@ -207,16 +256,35 @@ def test_expire_and_manual_finish_preserve_original_event_window(tmp_path):
     assert skipped.status == "already_finished"
 
 
+def test_manual_finish_preserves_original_event_window(tmp_path):
+    database = tmp_path / "player.db"
+    expected = active(manual=1)
+    create_db(database, expected)
+    result = SpiritVeinLifecycleApplication(database).transition(
+        "manual-finish",
+        "spirit_vein",
+        "manual_finish",
+        expected,
+        dict(
+            expected,
+            active=0,
+            status="finished",
+            manual=1,
+            last_result="天降灵脉已手动关闭。",
+        ),
+    )
+
+    assert result.status == "applied"
+    assert result.state["event_id"] == expected["event_id"]
+    assert result.state["started_at"] == expected["started_at"]
+    assert result.state["ends_at"] == expected["ends_at"]
+
+
 def test_operation_write_failure_rolls_back_state_transition(tmp_path):
     database = tmp_path / "player.db"
     expected = idle()
     create_db(database, expected)
     with sqlite3.connect(database) as conn:
-        conn.execute(
-            "CREATE TABLE spirit_vein_lifecycle_operations("
-            "operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,"
-            "result_json TEXT NOT NULL,created_at TEXT NOT NULL)"
-        )
         conn.execute(
             "CREATE TRIGGER reject_spirit_lifecycle BEFORE INSERT "
             "ON spirit_vein_lifecycle_operations "
@@ -224,7 +292,7 @@ def test_operation_write_failure_rolls_back_state_transition(tmp_path):
         )
 
     with pytest.raises(Exception, match="reject lifecycle"):
-        SpiritVeinLifecycleService(database).transition(
+        SpiritVeinLifecycleApplication(database).transition(
             "failed-start",
             "spirit_vein",
             "manual_start",
@@ -240,7 +308,7 @@ def test_invalid_time_window_is_rejected(tmp_path):
     create_db(database, expected)
     invalid = active()
     invalid["ends_at"] = invalid["started_at"]
-    result = SpiritVeinLifecycleService(database).transition(
+    result = SpiritVeinLifecycleApplication(database).transition(
         "invalid-window",
         "spirit_vein",
         "auto_start",
@@ -265,11 +333,10 @@ def test_all_production_entries_use_lifecycle_operations():
         ("def _close_spirit_vein_manual", "def _ensure_daily_state"),
     ):
         section = source[source.index(start) : source.index(end, source.index(start))]
-        assert "_spirit_vein_lifecycle_service()" in section
+        assert "spirit_vein_lifecycle_application." in section
 
-    assert "_spirit_vein_lifecycle_service_instance = None" in source
-    assert "def _spirit_vein_lifecycle_service(" in source
-    assert "spirit_vein_lifecycle_service.transition(" not in source
+    assert "spirit_vein_lifecycle_application = SpiritVeinLifecycleApplication(" in source
+    assert "SpiritVeinLifecycleService" not in source
 
     start_handler = source[
         source.index("async def start_spirit_vein_") : source.index(
