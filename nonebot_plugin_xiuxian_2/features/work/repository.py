@@ -47,6 +47,19 @@ class WorkRefreshRepository(Protocol):
     ) -> Any: ...
 
 
+class WorkAbortCleanupRepository(Protocol):
+    def cleanup(
+        self,
+        operation_id: str,
+        user_id: str,
+        reason: str,
+        expected_cd: Mapping[str, Any],
+        expected_offer: Mapping[str, Any] | None = None,
+        expected_stone: int | None = None,
+        penalty: int = 0,
+    ) -> Any: ...
+
+
 class LegacyWorkClaimRepository:
     def __init__(self, database: str | Path) -> None:
         self.database = str(database)
@@ -119,6 +132,7 @@ __all__ = [
     "LegacyWorkClaimRepository",
     "LegacyWorkSettlementRepository",
     "LegacyWorkRefreshRepository",
+    "WorkAbortCleanupRepository",
     "WorkClaimRepository",
     "WorkSettlementRepository",
     "WorkRefreshRepository",

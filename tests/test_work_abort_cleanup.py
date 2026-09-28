@@ -12,14 +12,21 @@ nonebot.init()
 from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_work.transaction_service import (
     WorkAbortCleanupService,
 )
+from nonebot_plugin_xiuxian_2.compatibility.legacy_work_abort_cleanup import (
+    WorkAbortCleanupService as LegacyWorkAbortCleanupService,
+)
 from tests.test_db_backend import db_backend
 
 
 class WorkAbortCleanupTests(unittest.TestCase):
-    def test_work_facade_defers_abort_cleanup_service_construction(self):
+    def test_transaction_module_reexports_legacy_service_identity(self):
+        self.assertIs(WorkAbortCleanupService, LegacyWorkAbortCleanupService)
+
+    def test_work_facade_uses_feature_application_without_legacy_service_factory(self):
         from nonebot_plugin_xiuxian_2.xiuxian import xiuxian_work
 
-        self.assertIsNone(xiuxian_work._work_abort_cleanup_service_instance)
+        self.assertTrue(hasattr(xiuxian_work, "work_abort_cleanup_application"))
+        self.assertFalse(hasattr(xiuxian_work, "_work_abort_cleanup_service"))
 
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()

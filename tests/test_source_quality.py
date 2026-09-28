@@ -948,6 +948,27 @@ class SourceQualityTests(unittest.TestCase):
         self.assertNotIn("CREATE TABLE", projection)
         self.assertNotIn("ALTER TABLE", projection)
 
+    def test_work_abort_cleanup_defaults_to_feature_repository_without_request_ddl(self) -> None:
+        facade = (SOURCE_ROOT / "xiuxian" / "xiuxian_work" / "__init__.py").read_text(
+            encoding="utf-8"
+        )
+        repository = (SOURCE_ROOT / "features" / "work" / "abort_cleanup_repository.py").read_text(
+            encoding="utf-8"
+        )
+        transaction = (SOURCE_ROOT / "xiuxian" / "xiuxian_work" / "transaction_service.py").read_text(
+            encoding="utf-8"
+        )
+        legacy = (SOURCE_ROOT / "compatibility" / "legacy_work_abort_cleanup.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertEqual(facade.count("work_abort_cleanup_application.cleanup("), 3)
+        self.assertNotIn("WorkAbortCleanupService", facade)
+        self.assertNotIn("_work_abort_cleanup_service", facade)
+        self.assertNotIn("CREATE TABLE", repository)
+        self.assertNotIn("ALTER TABLE", repository)
+        self.assertNotIn("class WorkAbortCleanupService", transaction)
+        self.assertIn("class WorkAbortCleanupService", legacy)
+
     def test_impart_facade_defers_sql_manager_construction(self) -> None:
         source = (SOURCE_ROOT / "xiuxian" / "xiuxian_impart" / "__init__.py").read_text(
             encoding="utf-8"

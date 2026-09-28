@@ -34,12 +34,10 @@ from ...infrastructure.clock import SystemClock
 from ...infrastructure.random_source import SystemRandom
 from ...infrastructure.ids import UUIDGenerator
 from ...features.work.application import WorkClaimApplication, WorkSettlementApplication
+from ...features.work.abort_cleanup_application import WorkAbortCleanupApplication
 from ...features.work.refresh_application import WorkRefreshApplication
 from ...features.work.work_item_use_application import WorkItemUseApplication
 from ...features.work.maintenance_application import WorkDailyRefreshResetApplication
-
-from .transaction_service import WorkAbortCleanupService
-
 
 work_claim_application = WorkClaimApplication(
     get_paths().game_db,
@@ -48,8 +46,8 @@ work_settlement_application = WorkSettlementApplication(
     get_paths().game_db,
 )
 work_refresh_application = WorkRefreshApplication(get_paths().game_db)
+work_abort_cleanup_application = WorkAbortCleanupApplication(get_paths().game_db)
 work_item_use_application = WorkItemUseApplication(get_paths().game_db)
-_work_abort_cleanup_service_instance = None
 runtime_clock = SystemClock()
 runtime_random = SystemRandom()
 runtime_ids = UUIDGenerator()
@@ -69,13 +67,6 @@ def _sql_message():
         _sql_message_instance = XiuxianDateManage()
     return _sql_message_instance
 
-
-
-def _work_abort_cleanup_service():
-    global _work_abort_cleanup_service_instance
-    if _work_abort_cleanup_service_instance is None:
-        _work_abort_cleanup_service_instance = WorkAbortCleanupService(get_paths().game_db)
-    return _work_abort_cleanup_service_instance
 
 
 def format_reward_item(item_id: int) -> str:
@@ -737,7 +728,7 @@ async def do_work_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
             await do_work.finish()
         elif status == 1:  # 进行中的悬赏，终止并惩罚
             stone = 4000000
-            result = _work_abort_cleanup_service().cleanup(
+            result = work_abort_cleanup_application.cleanup(
                 _work_operation_id(event, "abort", user_id),
                 user_id,
                 "active_abort",
@@ -746,6 +737,9 @@ async def do_work_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
                 int(user_info["stone"]),
                 stone,
             )
+            if result.status == "schema_missing":
+                await handle_send(bot, event, "悬赏数据结构尚未完成升级，请联系管理员。")
+                await do_work.finish()
             if not result.succeeded:
                 await handle_send(bot, event, result_card("悬赏令", kind="warn", summary="悬赏加速未完成：灵石或悬赏进度已更新，请重新查看悬赏。"), **nav_kwargs("work", md_type="悬赏令"))
                 await do_work.finish()
@@ -756,13 +750,16 @@ async def do_work_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
             )
         elif status == 3 or status == 4:  # 有未接取的悬赏
             reason = "offer_abort" if status == 3 else "expired"
-            result = _work_abort_cleanup_service().cleanup(
+            result = work_abort_cleanup_application.cleanup(
                 _work_operation_id(event, reason, user_id),
                 user_id,
                 reason,
                 _work_cd_snapshot(user_id),
                 work_data,
             )
+            if result.status == "schema_missing":
+                await handle_send(bot, event, "悬赏数据结构尚未完成升级，请联系管理员。")
+                await do_work.finish()
             if not result.succeeded:
                 await handle_send(bot, event, result_card("悬赏令", kind="warn", summary="悬赏信息已更新，请先发送【悬赏令】再操作。"), **nav_kwargs("work", md_type="悬赏令"))
                 await do_work.finish()
@@ -860,13 +857,16 @@ async def do_work_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
         await do_work.finish()
 
     elif mode == "重置":
-        result = _work_abort_cleanup_service().cleanup(
+        result = work_abort_cleanup_application.cleanup(
             _work_operation_id(event, "reset", user_id),
             user_id,
             "reset",
             _work_cd_snapshot(user_id),
             readf(user_id),
         )
+        if result.status == "schema_missing":
+            await handle_send(bot, event, "悬赏数据结构尚未完成升级，请联系管理员。")
+            await do_work.finish()
         if not result.succeeded:
             await handle_send(bot, event, result_card("悬赏令", kind="warn", summary="悬赏信息已更新，请先发送【悬赏令】再操作。"), **nav_kwargs("work", md_type="悬赏令"))
             await do_work.finish()

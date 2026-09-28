@@ -91,4 +91,34 @@ class WorkRefreshRequest:
             raise ValueError("new_offer with tasks is required")
 
 
-__all__ = ["WorkClaimRequest", "WorkSettlementRequest", "WorkRefreshRequest"]
+@dataclass(frozen=True)
+class WorkAbortCleanupRequest:
+    operation_id: str
+    user_id: str
+    reason: str
+    expected_cd: Mapping[str, Any]
+    expected_offer: Mapping[str, Any] | None = None
+    expected_stone: int | None = None
+    penalty: int = 0
+
+    def validate(self) -> None:
+        if not self.operation_id or not self.user_id:
+            raise ValueError("operation_id and user_id are required")
+        if self.reason not in {"active_abort", "offer_abort", "expired", "reset"}:
+            raise ValueError("invalid work cleanup reason")
+        if not isinstance(self.expected_cd, Mapping):
+            raise ValueError("expected_cd must be an object")
+        if self.expected_offer is not None and not isinstance(self.expected_offer, Mapping):
+            raise ValueError("expected_offer must be an object or None")
+        if self.reason == "active_abort" and self.expected_stone is None:
+            raise ValueError("active abort requires a stone snapshot")
+        if self.penalty < 0:
+            raise ValueError("penalty must not be negative")
+
+
+__all__ = [
+    "WorkAbortCleanupRequest",
+    "WorkClaimRequest",
+    "WorkSettlementRequest",
+    "WorkRefreshRequest",
+]

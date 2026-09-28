@@ -47,8 +47,23 @@ def apply_work_refresh_operations(uow: DatabaseUnitOfWork) -> None:
     )
 
 
+def apply_work_abort_cleanup(uow: DatabaseUnitOfWork) -> None:
+    """Prepare abort/reset snapshots and replay receipts before requests."""
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS work_active_snapshots("
+        "user_id TEXT PRIMARY KEY,snapshot TEXT NOT NULL,updated_at TEXT NOT NULL)"
+    )
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS work_abort_cleanup_operations("
+        "operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,reason TEXT NOT NULL,"
+        "penalty INTEGER NOT NULL,stone_remaining INTEGER NOT NULL,"
+        "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+    )
+
+
 __all__ = [
     "apply_work",
+    "apply_work_abort_cleanup",
     "apply_work_daily_refresh_reset",
     "apply_work_item_use",
     "apply_work_offer_snapshots",

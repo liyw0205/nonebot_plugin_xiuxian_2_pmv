@@ -123,7 +123,9 @@ def _slice_status() -> dict[str, dict[str, object]]:
     workmake_source = (PACKAGE / "xiuxian" / "xiuxian_work" / "workmake.py").read_text(encoding="utf-8")
     work_reward_source = (PACKAGE / "xiuxian" / "xiuxian_work" / "reward_data_source.py").read_text(encoding="utf-8")
     work_refresh_repository = (PACKAGE / "features" / "work" / "refresh_repository.py").read_text(encoding="utf-8")
+    work_abort_repository = (PACKAGE / "features" / "work" / "abort_cleanup_repository.py").read_text(encoding="utf-8")
     work_migrations = (PACKAGE / "features" / "work" / "migrations.py").read_text(encoding="utf-8")
+    work_abort_legacy = (PACKAGE / "compatibility" / "legacy_work_abort_cleanup.py").read_text(encoding="utf-8")
     work_legacy_refresh = (PACKAGE / "compatibility" / "legacy_work_refresh.py").read_text(encoding="utf-8")
     work_transaction_shim = (PACKAGE / "xiuxian" / "xiuxian_work" / "transaction_service.py").read_text(encoding="utf-8")
     work_accelerate_handler = work_facade[
@@ -536,11 +538,25 @@ def _slice_status() -> dict[str, dict[str, object]]:
                 and "class WorkRefreshSettlementService" not in work_transaction_shim
                 and "legacy_work_refresh import" in work_transaction_shim
             ),
+            "abort_cleanup_application_owned": work_facade.count("work_abort_cleanup_application.cleanup(") == 3,
+            "legacy_abort_cleanup_default_path_disabled": (
+                "WorkAbortCleanupService" not in work_facade and "_work_abort_cleanup_service" not in work_facade
+            ),
+            "abort_cleanup_repository_has_no_request_ddl": "CREATE TABLE" not in work_abort_repository and "ALTER TABLE" not in work_abort_repository,
+            "abort_cleanup_migration_registered": (
+                'Migration("work.006", "work_abort_cleanup_operations", apply_work_abort_cleanup)' in plugin
+                and "def apply_work_abort_cleanup(" in work_migrations
+            ),
+            "legacy_abort_cleanup_isolated_with_compatibility_export": (
+                "class WorkAbortCleanupService" in work_abort_legacy
+                and "class WorkAbortCleanupService" not in work_transaction_shim
+                and "legacy_work_abort_cleanup import" in work_transaction_shim
+            ),
             "item_use_migrations_registered": (
                 'Migration("work.003", "work_item_use_operations", apply_work_item_use)' in plugin
                 and 'Migration("work.004", "work_offer_snapshots", apply_work_offer_snapshots)' in plugin
             ),
-            "status": "daily_refresh_accelerate_capture_and_offer_refresh_cutover_with_abort_compatibility",
+            "status": "daily_refresh_accelerate_capture_offer_refresh_and_abort_cleanup_cutover",
         },
         "activity_reward": {
             "claim_all_application_owned": "activity_claim_all_application.run(" in activity_service,
