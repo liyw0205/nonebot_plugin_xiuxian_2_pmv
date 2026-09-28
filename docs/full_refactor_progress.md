@@ -2866,7 +2866,13 @@
 - Bank 本轮完成 legacy `savef` 隔离和 `bank.002` 请求期 schema 拒绝；progress CLI 的
   deposit/withdrawal/upgrade/interest application、legacy receipt/account read、writer
   compatibility 和 startup schema 项均为 true。Bank 不因此宣称整体切片或 live migration
-  完成，旧命令 facade 与显式 fallback 仍需按默认调用图继续审计。
+  完成，旧命令 facade 与显式 fallback 仍需按默认调用图继续审计。真实 Flask bank v2
+  upgrade/interest 路由已覆盖 application 写入与 replay，重复请求不重复写钱包或回执；
+  upgrade replay 的费用现在取与原回执 payload 校验一致的请求费用，不再从始终为 0 的
+  deposited 字段推导。Bank、progress/inventory 与 architecture contract 共 99 passed，
+  隔离测试未访问运行库；独立 architecture CLI 也已验证 ok=true。仅清理本轮
+  pytest basetemp、编译字节码与临时清单，未触碰运行数据、数据库或用户改动；
+  复核磁盘剩余约 23 GiB、可用 RAM 约 1.3 GiB。
 - 已切换的功能仍可能保留显式 compatibility/rollback adapter；只有默认真实
   handler/route/scheduler 已改走 feature-owned application，且旧实现不再承载该
   用例，才可逐项从遗留服务移除。
@@ -2913,8 +2919,8 @@
 
 ### 6.2 当前推进队列（2026-09-29）
 
-1. **闭合 bank 首用与兼容 fallback 行为**：`savef` 已无仓库生产调用点，`readf` 只用于五个 handler 的 legacy fallback，回执查询为只读，`bank.002` 缺失会被拒绝。下一步用真实 handler/Web 入口覆盖 account missing、legacy-invalid、首次升级/结息和 replay，明确默认等级何时落库；在语义和幂等证据齐备前，不将所有 bank compatibility 分支标为删除。
-2. **回到 player/economy/inventory 主序**：从实际 matcher、route、scheduler 调用图中挑下一个仍经旧 `transaction_service` 或 `xiuxian2_handle` 承载资产变化的单一纵向流程，完成 application/repository、schema migration、幂等/回滚测试和真实入口切换。不要按目录批量迁移，也不要重复处理已通过 progress gate 的 work/fusion/bank 边界。
+1. **核实 bank 遗留收尾与正式迁移**：真实 Flask 路由已覆盖旧账户导入、无效旧账户、存款 replay、缺 `bank.002` 的 503，以及升级/结息的写入与 replay；`savef` 已无仓库生产调用点，`readf` 仅在五个 legacy fallback 中可达。继续核实首次升级/结息前账户默认等级的落库时机和每个显式 fallback 的生产可达性；保留未验证分支，不把隔离测试当作真实数据迁移。
+2. **回到 player/economy/inventory 主序**：源码调用图确认 Web `/api/v1/activity/rewards/claim` 经 `plugin.py` 默认注入的 `ActivityRewardApplication -> LegacyActivityRewardRepository -> xiuxian_activity.service.claim_activity_rewards`；Web 未注入服务时的默认 application、NoneBot `活动领取` 的 `ActivityApplication -> ActivityRepository` 也会调用同一旧 coordinator。下一片先用隔离真实入口回归确认资产写入、子操作 replay/失败恢复和 `activity_reward.002` schema 所有权，再逐步改由 feature-owned repository 承载；不能只搬迁兼容类或重复已过门禁的切片。
 3. **按风险顺序推进剩余领域**：cultivation/breakthrough/training；combat/map/dungeon/arena/tower/boss；sect/impart/pet/trade/auction；最后处理 scheduler、Web、批处理、JSON/外部状态兼容。每项先证明默认真实入口和依赖，再隔离旧 service/handle。
 4. **收敛全局基础依赖**：持续降低旧 service import（75 个文件）、`xiuxian2_handle` import（72 个文件）、`db_backend.connect`（139 个文件）、`sqlite3.connect`（34 个文件）、系统时间/全局随机命中；以 progress CLI 同口径计数并逐项附真实调用证据。
 5. **最后补齐发布证据**：针对真实数据目录执行备份、migration dry-run/执行、恢复、reconcile、远端冒烟和至少一次正式发布周期；完成这些前 P7 与全面重构均保持未完成。

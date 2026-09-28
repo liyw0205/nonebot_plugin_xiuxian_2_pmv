@@ -26,7 +26,7 @@ class BankUpgradeApplication:
             if previous is not None:
                 if previous["payload"] != payload:
                     return {"status": "operation_conflict", "operation_id": operation_id}
-                return {"status": "duplicate", "operation_id": operation_id, "cost": abs(int(previous["deposited"])), "wallet_stone": previous["wallet_after"], "bank_level": str(next_level)}
+                return {"status": "duplicate", "operation_id": operation_id, "cost": int(cost), "wallet_stone": previous["wallet_after"], "bank_level": str(next_level)}
             wallet = uow.query_one("SELECT stone FROM user_xiuxian WHERE user_id=?", (user_id,))
             account = self.repository.account(uow, user_id)
             if wallet is None or account is None:

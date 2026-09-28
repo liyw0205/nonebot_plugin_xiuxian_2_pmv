@@ -31,6 +31,7 @@ class BankUpgradeTests(unittest.TestCase):
             duplicate = app.upgrade(operation_id="u1", user_id="u1", expected_level="1", next_level="2", cost=200000, settled_at="t2")
             self.assertEqual(first["status"], "applied")
             self.assertEqual(duplicate["status"], "duplicate")
+            self.assertEqual(duplicate["cost"], 200000)
             with sqlite3.connect(database) as connection:
                 self.assertEqual(connection.execute("SELECT stone FROM user_xiuxian").fetchone()[0], 299900)
                 self.assertEqual(connection.execute("SELECT bank_level FROM bank_accounts").fetchone()[0], "2")
