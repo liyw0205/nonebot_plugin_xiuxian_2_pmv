@@ -380,7 +380,8 @@ DATABASE = get_paths().game_db
 IMPART_DB = get_paths().impart_db
 PLAYER_DB = get_paths().player_db
 TRADE_DB = get_paths().trade_db
-ACTIVITY_DB = get_paths().data / "activity" / "activity.db"
+ACTIVITY_DB = DATABASE
+ACTIVITY_CONFIG_DB = get_paths().data / "activity" / "activity.db"
 ADMIN_IDS = get_driver().config.superusers
 
 # 管理面板监听：host 复用 NoneBot HOST，端口通过环境变量 XIUXIAN_WEB_PORT 配置；缺失时补入默认值 5888。
@@ -592,6 +593,10 @@ def get_config_tables():
         "活动数据库": {
             "path": ACTIVITY_DB,
             "tables": get_dynamic_activity_tables()
+        },
+        "活动配置事件数据库": {
+            "path": ACTIVITY_CONFIG_DB,
+            "tables": get_dynamic_activity_config_tables()
         }
     }
     return tables
@@ -674,14 +679,15 @@ def get_dynamic_trade_tables():
         return {}
 
 
-def get_dynamic_activity_tables():
-    """动态获取 activity.db 中所有活动运营表。"""
-    if not db_backend.database_exists(ACTIVITY_DB):
+def _get_dynamic_tables(database_path, table_prefix, database_label):
+    if not db_backend.database_exists(database_path):
         return {}
 
     try:
-        with db_backend.connection(ACTIVITY_DB) as conn:
-            table_names = conn.list_tables()
+        with db_backend.connection(database_path) as conn:
+            table_names = [
+                name for name in conn.list_tables() if name.startswith(table_prefix)
+            ]
 
             result = {}
             for table_name in table_names:
@@ -702,8 +708,18 @@ def get_dynamic_activity_tables():
         return result
 
     except Exception as e:
-        logger.error(f"获取 activity.db 表结构失败: {e}")
+        logger.error(f"获取 {database_label} 表结构失败: {e}")
         return {}
+
+
+def get_dynamic_activity_tables():
+    """动态获取 game DB 中的活动状态和活动账本表。"""
+    return _get_dynamic_tables(ACTIVITY_DB, "activity_", "活动")
+
+
+def get_dynamic_activity_config_tables():
+    """动态获取旧 activity.db 中仍保留的活动配置事件表。"""
+    return _get_dynamic_tables(ACTIVITY_CONFIG_DB, "activity_config_", "活动配置事件")
 
 def get_config_table_structure(config):
     """从XiuConfig获取表结构"""

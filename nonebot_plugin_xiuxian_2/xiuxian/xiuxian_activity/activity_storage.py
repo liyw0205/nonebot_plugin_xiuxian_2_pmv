@@ -4,6 +4,7 @@ from pathlib import Path
 
 from nonebot.log import logger
 from ...paths import get_paths
+from ...infrastructure.database import DatabaseUnitOfWork
 
 from ..xiuxian_utils import db_backend
 from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage
@@ -22,7 +23,8 @@ def _sql_message():
 
 BASE_DIR = get_paths().data / "activity"
 CONFIG_PATH = BASE_DIR / "activity_config.json"
-DB_PATH = BASE_DIR / "activity.db"
+LEGACY_DB_PATH = BASE_DIR / "activity.db"
+DB_PATH = get_paths().game_db
 
 DEFAULT_COLLECT_DROP_EVENTS = [
     "sign_in",
@@ -68,191 +70,25 @@ def ensure_activity_files():
 
 
 def init_db():
-    conn = db_backend.connect(DB_PATH)
-    try:
-        cur = conn.cursor()
-        cur.execute("""
-            CREATE TABLE IF NOT EXISTS activity_user (
-                user_id TEXT PRIMARY KEY,
-                sign_days INTEGER NOT NULL DEFAULT 0,
-                last_sign_date TEXT DEFAULT '',
-                total_sign_days INTEGER NOT NULL DEFAULT 0,
-                create_time TEXT DEFAULT '',
-                update_time TEXT DEFAULT ''
-            )
-        """)
-        columns = set(conn.column_names("activity_user"))
-        if "sign_days" not in columns:
-            cur.execute("ALTER TABLE activity_user ADD COLUMN sign_days INTEGER NOT NULL DEFAULT 0")
-        if "last_sign_date" not in columns:
-            cur.execute("ALTER TABLE activity_user ADD COLUMN last_sign_date TEXT DEFAULT ''")
-        if "total_sign_days" not in columns:
-            cur.execute("ALTER TABLE activity_user ADD COLUMN total_sign_days INTEGER NOT NULL DEFAULT 0")
-            cur.execute("UPDATE activity_user SET total_sign_days = sign_days")
-        if "create_time" not in columns:
-            cur.execute("ALTER TABLE activity_user ADD COLUMN create_time TEXT DEFAULT ''")
-        if "update_time" not in columns:
-            cur.execute("ALTER TABLE activity_user ADD COLUMN update_time TEXT DEFAULT ''")
-
-        cur.execute("""
-            CREATE TABLE IF NOT EXISTS activity_sign_log (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id TEXT NOT NULL,
-                sign_date TEXT NOT NULL,
-                day_index INTEGER NOT NULL DEFAULT 0,
-                reward TEXT DEFAULT '',
-                milestone_reward TEXT DEFAULT '',
-                reward_status TEXT DEFAULT '',
-                reward_message TEXT DEFAULT '',
-                create_time TEXT DEFAULT '',
-                finish_time TEXT DEFAULT '',
-                UNIQUE(user_id, sign_date)
-            )
-        """)
-        log_columns = set(conn.column_names("activity_sign_log"))
-        if "reward_status" not in log_columns:
-            cur.execute("ALTER TABLE activity_sign_log ADD COLUMN reward_status TEXT DEFAULT ''")
-        if "reward_message" not in log_columns:
-            cur.execute("ALTER TABLE activity_sign_log ADD COLUMN reward_message TEXT DEFAULT ''")
-        if "finish_time" not in log_columns:
-            cur.execute("ALTER TABLE activity_sign_log ADD COLUMN finish_time TEXT DEFAULT ''")
-
-        cur.execute("""
-            CREATE TABLE IF NOT EXISTS activity_collect_inventory (
-                activity_key TEXT NOT NULL,
-                user_id TEXT NOT NULL,
-                word_char TEXT NOT NULL,
-                count INTEGER NOT NULL DEFAULT 0,
-                update_time TEXT DEFAULT '',
-                PRIMARY KEY(activity_key, user_id, word_char)
-            )
-        """)
-        cur.execute("""
-            CREATE TABLE IF NOT EXISTS activity_collect_claim (
-                activity_key TEXT NOT NULL,
-                user_id TEXT NOT NULL,
-                phrase TEXT NOT NULL,
-                count INTEGER NOT NULL DEFAULT 0,
-                update_time TEXT DEFAULT '',
-                PRIMARY KEY(activity_key, user_id, phrase)
-            )
-        """)
-        cur.execute("""
-            CREATE TABLE IF NOT EXISTS activity_collect_drop_log (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                activity_key TEXT NOT NULL,
-                user_id TEXT NOT NULL,
-                event_key TEXT NOT NULL,
-                word_char TEXT NOT NULL,
-                drop_date TEXT DEFAULT '',
-                create_time TEXT DEFAULT ''
-            )
-        """)
-        cur.execute("""
-            CREATE TABLE IF NOT EXISTS activity_collect_pity_state (
-                activity_key TEXT NOT NULL,
-                user_id TEXT NOT NULL,
-                event_key TEXT NOT NULL,
-                miss_count INTEGER NOT NULL DEFAULT 0,
-                update_time TEXT DEFAULT '',
-                PRIMARY KEY(activity_key, user_id, event_key)
-            )
-        """)
-        cur.execute("""
-            CREATE TABLE IF NOT EXISTS activity_point_balance (
-                activity_key TEXT NOT NULL,
-                user_id TEXT NOT NULL,
-                points INTEGER NOT NULL DEFAULT 0,
-                total_points INTEGER NOT NULL DEFAULT 0,
-                update_time TEXT DEFAULT '',
-                PRIMARY KEY(activity_key, user_id)
-            )
-        """)
-        cur.execute("""
-            CREATE TABLE IF NOT EXISTS activity_point_event_log (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                activity_key TEXT NOT NULL,
-                user_id TEXT NOT NULL,
-                event_key TEXT NOT NULL,
-                points INTEGER NOT NULL DEFAULT 0,
-                record_date TEXT DEFAULT '',
-                create_time TEXT DEFAULT ''
-            )
-        """)
-        cur.execute("""
-            CREATE TABLE IF NOT EXISTS activity_point_purchase (
-                activity_key TEXT NOT NULL,
-                user_id TEXT NOT NULL,
-                item_key TEXT NOT NULL,
-                count INTEGER NOT NULL DEFAULT 0,
-                update_time TEXT DEFAULT '',
-                PRIMARY KEY(activity_key, user_id, item_key)
-            )
-        """)
-        cur.execute("""
-            CREATE TABLE IF NOT EXISTS activity_task_progress (
-                activity_key TEXT NOT NULL,
-                user_id TEXT NOT NULL,
-                scope_type TEXT NOT NULL,
-                scope_key TEXT NOT NULL,
-                task_key TEXT NOT NULL,
-                progress INTEGER NOT NULL DEFAULT 0,
-                target INTEGER NOT NULL DEFAULT 1,
-                claimed INTEGER NOT NULL DEFAULT 0,
-                claim_time TEXT DEFAULT '',
-                update_time TEXT DEFAULT '',
-                PRIMARY KEY(activity_key, user_id, scope_type, scope_key, task_key)
-            )
-        """)
-        cur.execute("""
-            CREATE TABLE IF NOT EXISTS activity_task_claim_log (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                activity_key TEXT NOT NULL,
-                user_id TEXT NOT NULL,
-                scope_type TEXT NOT NULL,
-                scope_key TEXT NOT NULL,
-                task_key TEXT NOT NULL,
-                reward TEXT DEFAULT '',
-                create_time TEXT DEFAULT ''
-            )
-        """)
-        cur.execute("""
-            CREATE TABLE IF NOT EXISTS activity_pass_balance (
-                activity_key TEXT NOT NULL,
-                user_id TEXT NOT NULL,
-                exp INTEGER NOT NULL DEFAULT 0,
-                total_exp INTEGER NOT NULL DEFAULT 0,
-                level INTEGER NOT NULL DEFAULT 0,
-                update_time TEXT DEFAULT '',
-                PRIMARY KEY(activity_key, user_id)
-            )
-        """)
-        cur.execute("""
-            CREATE TABLE IF NOT EXISTS activity_pass_event_log (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                activity_key TEXT NOT NULL,
-                user_id TEXT NOT NULL,
-                event_key TEXT NOT NULL,
-                exp INTEGER NOT NULL DEFAULT 0,
-                record_date TEXT DEFAULT '',
-                create_time TEXT DEFAULT ''
-            )
-        """)
-        cur.execute("""
-            CREATE TABLE IF NOT EXISTS activity_pass_reward_claim (
-                activity_key TEXT NOT NULL,
-                user_id TEXT NOT NULL,
-                level INTEGER NOT NULL,
-                create_time TEXT DEFAULT '',
-                PRIMARY KEY(activity_key, user_id, level)
-            )
-        """)
-        from .activity_boss import init_boss_tables
-
-        init_boss_tables(conn)
-        conn.commit()
-    finally:
-        conn.close()
+    required = {
+        table for table in (
+            "activity_user", "activity_sign_log", "activity_collect_inventory",
+            "activity_collect_claim", "activity_collect_drop_log", "activity_collect_pity_state",
+            "activity_point_balance", "activity_point_event_log", "activity_point_purchase",
+            "activity_task_progress", "activity_task_claim_log", "activity_pass_balance",
+            "activity_pass_event_log", "activity_pass_reward_claim", "activity_item_inventory",
+            "activity_boss_state", "activity_boss_damage", "activity_boss_fight_log",
+            "activity_boss_milestone", "activity_boss_milestone_claim", "activity_boss_rank_claim",
+        )
+    }
+    with DatabaseUnitOfWork(DB_PATH, read_only=True) as uow:
+        existing = {
+            str(row["name"])
+            for row in uow.query_all("SELECT name FROM sqlite_master WHERE type='table'")
+        }
+    missing = sorted(required - existing)
+    if missing:
+        raise RuntimeError(f"activity_state.001 schema_missing: {', '.join(missing)}")
 
 
 def resolve_daohao(user_id: str) -> str:

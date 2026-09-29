@@ -106,7 +106,7 @@ def _activity_task_claim_application():
 
         paths = get_paths()
         _activity_task_claim_application_instance = ActivityTaskClaimApplication(
-            paths.game_db, paths.data / "activity" / "activity.db"
+            paths.game_db, paths.game_db
         )
     return _activity_task_claim_application_instance
 
@@ -123,7 +123,7 @@ def _activity_pass_claim_application():
 
         paths = get_paths()
         _activity_pass_claim_application_instance = ActivityPassClaimApplication(
-            paths.game_db, paths.data / "activity" / "activity.db"
+            paths.game_db, paths.game_db
         )
     return _activity_pass_claim_application_instance
 
@@ -2386,6 +2386,3 @@ def set_enabled(
     if not changed:
         return commit(f"未找到活动：{target_text}")
     return commit(f"已{action_text}{target_text}")
-
-
-ensure_activity_files()

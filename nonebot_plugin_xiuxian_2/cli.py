@@ -105,16 +105,16 @@ def main(argv: list[str] | None = None) -> int:
                 effects=LegacyAuctionSettlementEffects(player_db),
             )
             activity_task_claim = ActivityTaskClaimApplication(
-                game_db, context.paths.data / "activity" / "activity.db", clock=context.clock
+                game_db, game_db, clock=context.clock
             )
             activity_pass_claim = ActivityPassClaimApplication(
-                game_db, context.paths.data / "activity" / "activity.db", clock=context.clock
+                game_db, game_db, clock=context.clock
             )
             activity_boss_milestone_claim = ActivityBossMilestoneClaimApplication(
-                game_db, context.paths.data / "activity" / "activity.db", clock=context.clock
+                game_db, game_db, clock=context.clock
             )
             activity_boss_rank_claim = ActivityBossRankClaimApplication(
-                game_db, context.paths.data / "activity" / "activity.db", clock=context.clock
+                game_db, game_db, clock=context.clock
             )
             report = ReconcileService().run(
                 uow,

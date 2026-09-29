@@ -34,6 +34,11 @@ class ActivityCollectExchangeTests(unittest.TestCase):
                 "CREATE TABLE activity_collect_claim(activity_key TEXT,user_id TEXT,phrase TEXT,"
                 "count INTEGER,update_time TEXT,PRIMARY KEY(activity_key,user_id,phrase))"
             )
+            conn.execute(
+                "CREATE TABLE activity_collect_exchange_operations("
+                "operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,result_json TEXT NOT NULL,"
+                "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+            )
             conn.executemany(
                 "INSERT INTO activity_collect_inventory VALUES('festival','u',%s,%s,'')",
                 (("端", 2), ("午", 2), ("安", 1), ("康", 1)),
@@ -58,7 +63,7 @@ class ActivityCollectExchangeTests(unittest.TestCase):
     def tearDown(self) -> None:
         self.temp_dir.cleanup()
 
-    def exchange(self, operation_id="exchange", **overrides):
+    def exchange(self, operation_id="exchange", *, service=None, **overrides):
         arguments = {
             "operation_id": operation_id,
             "user_id": "u",
@@ -70,7 +75,7 @@ class ActivityCollectExchangeTests(unittest.TestCase):
             "max_goods_num": 100,
         }
         arguments.update(overrides)
-        return self.service.exchange(**arguments)
+        return (service or self.service).exchange(**arguments)
 
     def test_atomic_exchange_and_idempotent_replay(self) -> None:
         result = self.exchange()
@@ -90,6 +95,23 @@ class ActivityCollectExchangeTests(unittest.TestCase):
                 "SELECT count FROM activity_collect_claim"
             ).fetchone()[0])
         with db_backend.connection(self.game_database) as conn:
+            self.assertEqual(60, conn.execute("SELECT stone FROM user_xiuxian").fetchone()[0])
+            self.assertEqual(2, conn.execute("SELECT goods_num FROM back").fetchone()[0])
+
+    def test_same_database_exchange_updates_tokens_and_player_assets(self) -> None:
+        with db_backend.transaction(self.activity_database) as conn:
+            conn.execute("CREATE TABLE user_xiuxian(user_id TEXT PRIMARY KEY,stone INTEGER)")
+            conn.execute("INSERT INTO user_xiuxian VALUES('u',10)")
+            conn.execute("CREATE TABLE back(user_id TEXT,goods_id INTEGER,goods_name TEXT,goods_type TEXT,goods_num INTEGER,create_time TEXT,update_time TEXT,bind_num INTEGER,UNIQUE(user_id,goods_id))")
+        service = ActivityCollectExchangeService(self.activity_database, self.activity_database)
+
+        result = self.exchange("same-db", service=service)
+
+        self.assertEqual("applied", result.status)
+        with db_backend.connection(self.activity_database) as conn:
+            self.assertEqual(2, conn.execute(
+                "SELECT SUM(count) FROM activity_collect_inventory"
+            ).fetchone()[0])
             self.assertEqual(60, conn.execute("SELECT stone FROM user_xiuxian").fetchone()[0])
             self.assertEqual(2, conn.execute("SELECT goods_num FROM back").fetchone()[0])
 
@@ -130,10 +152,6 @@ class ActivityCollectExchangeTests(unittest.TestCase):
 
     def test_operation_failure_rolls_back_activity_and_game_databases(self) -> None:
         with db_backend.transaction(self.activity_database) as conn:
-            conn.execute(
-                "CREATE TABLE activity_collect_exchange_operations(operation_id TEXT PRIMARY KEY,"
-                "payload TEXT,result_json TEXT,created_at TEXT)"
-            )
             conn.execute(
                 "CREATE TRIGGER fail_collect_exchange BEFORE INSERT ON activity_collect_exchange_operations "
                 "BEGIN SELECT RAISE(ABORT,'forced failure'); END"

@@ -387,7 +387,7 @@ def create_app(
         boss = (context.services or {}).get("boss") or BossApplication(
             str(context.database.path("game_db")),
             str(context.database.path("player_db")),
-            activity_database=context.paths.data / "activity" / "activity.db",
+            activity_database=str(context.database.path("game_db")),
         )
         app.register_blueprint(boss_blueprint(boss, permission=has_permission))
     if any(feature.key == "dungeon" for feature in registry.features):

@@ -133,6 +133,36 @@ def test_single_transaction_updates_full_battle_lifecycle(tmp_path):
     conn.close()
 
 
+def test_activity_boss_state_uses_game_database_when_co_located(tmp_path):
+    game, player, _activity = create_databases(tmp_path)
+    conn = sqlite3.connect(game)
+    conn.executescript(
+        """
+        CREATE TABLE activity_boss_state(activity_key TEXT PRIMARY KEY,hp_left INTEGER NOT NULL,max_hp INTEGER NOT NULL,update_time TEXT DEFAULT '');
+        CREATE TABLE activity_boss_damage(activity_key TEXT NOT NULL,user_id TEXT NOT NULL,total_damage INTEGER NOT NULL DEFAULT 0,update_time TEXT DEFAULT '',PRIMARY KEY(activity_key,user_id));
+        CREATE TABLE activity_boss_fight_log(id INTEGER PRIMARY KEY AUTOINCREMENT,activity_key TEXT NOT NULL,user_id TEXT NOT NULL,damage INTEGER NOT NULL DEFAULT 0,fight_date TEXT DEFAULT '',source TEXT DEFAULT '',create_time TEXT DEFAULT '');
+        CREATE TABLE activity_boss_milestone(activity_key TEXT NOT NULL,milestone_key TEXT NOT NULL,unlocked_time TEXT DEFAULT '',PRIMARY KEY(activity_key,milestone_key));
+        """
+    )
+    conn.commit()
+    conn.close()
+    service = WorldBossBattleSettlementService(game, player, game)
+    activities = [{
+        "key": "summer", "boss_name": "炎君", "max_hp": 1000, "daily_fight_limit": 3,
+        "hit_hp_cap_ratio": 0.2, "multiplier": 1.0,
+        "server_milestones": [{"key": "p80", "hp_percent": 80}],
+    }]
+
+    result = settle(service, activities=activities)
+
+    assert result.status == "applied"
+    conn = sqlite3.connect(game)
+    assert conn.execute("SELECT hp_left FROM activity_boss_state WHERE activity_key='summer'").fetchone()[0] == 800
+    assert conn.execute("SELECT total_damage FROM activity_boss_damage WHERE activity_key='summer'").fetchone()[0] == 200
+    assert conn.execute("SELECT milestone_key FROM activity_boss_milestone WHERE activity_key='summer'").fetchone()[0] == "p80"
+    conn.close()
+
+
 def test_operation_replay_is_idempotent_and_conflict_is_rejected(tmp_path):
     game, player, activity = create_databases(tmp_path)
     service = WorldBossBattleSettlementService(game, player, activity)

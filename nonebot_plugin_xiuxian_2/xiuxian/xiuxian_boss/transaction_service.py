@@ -311,7 +311,9 @@ class WorldBossBattleSettlementService:
         )
 
     @classmethod
-    def _apply_activity_damage(cls, conn, user_id: str, raw_damage: int, activities: list[dict]) -> list[str]:
+    def _apply_activity_damage(
+        cls, conn, user_id: str, raw_damage: int, activities: list[dict], table_prefix: str = "activity."
+    ) -> list[str]:
         if not activities:
             return []
         # SQLite INTEGER is signed 64-bit; activity max_hp derived from eternal-realm
@@ -327,23 +329,28 @@ class WorldBossBattleSettlementService:
                 return 0
             return min(number, sqlite_max)
 
-        conn.execute(
-            "CREATE TABLE IF NOT EXISTS activity.activity_boss_state(activity_key TEXT PRIMARY KEY,"
-            "hp_left INTEGER NOT NULL,max_hp INTEGER NOT NULL,update_time TEXT DEFAULT '')"
-        )
-        conn.execute(
-            "CREATE TABLE IF NOT EXISTS activity.activity_boss_damage(activity_key TEXT NOT NULL,user_id TEXT NOT NULL,"
-            "total_damage INTEGER NOT NULL DEFAULT 0,update_time TEXT DEFAULT '',PRIMARY KEY(activity_key,user_id))"
-        )
-        conn.execute(
-            "CREATE TABLE IF NOT EXISTS activity.activity_boss_fight_log(id INTEGER PRIMARY KEY AUTOINCREMENT,"
-            "activity_key TEXT NOT NULL,user_id TEXT NOT NULL,damage INTEGER NOT NULL DEFAULT 0,"
-            "fight_date TEXT DEFAULT '',source TEXT DEFAULT '',create_time TEXT DEFAULT '')"
-        )
-        conn.execute(
-            "CREATE TABLE IF NOT EXISTS activity.activity_boss_milestone(activity_key TEXT NOT NULL,"
-            "milestone_key TEXT NOT NULL,unlocked_time TEXT DEFAULT '',PRIMARY KEY(activity_key,milestone_key))"
-        )
+        state_table = f"{table_prefix}activity_boss_state"
+        damage_table = f"{table_prefix}activity_boss_damage"
+        fight_table = f"{table_prefix}activity_boss_fight_log"
+        milestone_table = f"{table_prefix}activity_boss_milestone"
+        if table_prefix:
+            conn.execute(
+                "CREATE TABLE IF NOT EXISTS activity.activity_boss_state(activity_key TEXT PRIMARY KEY,"
+                "hp_left INTEGER NOT NULL,max_hp INTEGER NOT NULL,update_time TEXT DEFAULT '')"
+            )
+            conn.execute(
+                "CREATE TABLE IF NOT EXISTS activity.activity_boss_damage(activity_key TEXT NOT NULL,user_id TEXT NOT NULL,"
+                "total_damage INTEGER NOT NULL DEFAULT 0,update_time TEXT DEFAULT '',PRIMARY KEY(activity_key,user_id))"
+            )
+            conn.execute(
+                "CREATE TABLE IF NOT EXISTS activity.activity_boss_fight_log(id INTEGER PRIMARY KEY AUTOINCREMENT,"
+                "activity_key TEXT NOT NULL,user_id TEXT NOT NULL,damage INTEGER NOT NULL DEFAULT 0,"
+                "fight_date TEXT DEFAULT '',source TEXT DEFAULT '',create_time TEXT DEFAULT '')"
+            )
+            conn.execute(
+                "CREATE TABLE IF NOT EXISTS activity.activity_boss_milestone(activity_key TEXT NOT NULL,"
+                "milestone_key TEXT NOT NULL,unlocked_time TEXT DEFAULT '',PRIMARY KEY(activity_key,milestone_key))"
+            )
         now = datetime.now()
         now_text = now.strftime("%Y-%m-%d %H:%M:%S")
         today = now.strftime("%Y-%m-%d")
@@ -352,7 +359,7 @@ class WorldBossBattleSettlementService:
             key = str(activity["key"])
             limit = max(1, int(activity.get("daily_fight_limit", 3)))
             used = conn.execute(
-                "SELECT COUNT(*) FROM activity.activity_boss_fight_log WHERE activity_key=%s AND user_id=%s "
+                f"SELECT COUNT(*) FROM {fight_table} WHERE activity_key=%s AND user_id=%s "
                 "AND fight_date=%s AND source IN ('coop','world_boss')",
                 (key, user_id, today),
             ).fetchone()[0]
@@ -360,12 +367,12 @@ class WorldBossBattleSettlementService:
                 continue
             max_hp = max(1, _safe_int(activity.get("max_hp"), 1))
             row = conn.execute(
-                "SELECT hp_left,max_hp FROM activity.activity_boss_state WHERE activity_key=%s", (key,)
+                f"SELECT hp_left,max_hp FROM {state_table} WHERE activity_key=%s", (key,)
             ).fetchone()
             hp_left = max_hp if row is None else max(0, _safe_int(row[0], 0))
             if row is None:
                 conn.execute(
-                    "INSERT INTO activity.activity_boss_state(activity_key,hp_left,max_hp,update_time) VALUES (%s,%s,%s,%s)",
+                    f"INSERT INTO {state_table}(activity_key,hp_left,max_hp,update_time) VALUES (%s,%s,%s,%s)",
                     (key, max_hp, max_hp, now_text),
                 )
             multiplier = max(0.0, float(activity.get("multiplier", 1.0)))
@@ -376,18 +383,18 @@ class WorldBossBattleSettlementService:
                 continue
             new_hp = max(0, hp_left - damage)
             conn.execute(
-                "UPDATE activity.activity_boss_state SET hp_left=%s,max_hp=%s,update_time=%s WHERE activity_key=%s",
+                f"UPDATE {state_table} SET hp_left=%s,max_hp=%s,update_time=%s WHERE activity_key=%s",
                 (new_hp, max_hp, now_text, key),
             )
             conn.execute(
-                "INSERT INTO activity.activity_boss_damage(activity_key,user_id,total_damage,update_time) "
+                f"INSERT INTO {damage_table}(activity_key,user_id,total_damage,update_time) "
                 "VALUES (%s,%s,%s,%s) ON CONFLICT(activity_key,user_id) DO UPDATE SET "
                 "total_damage=MIN(%s, COALESCE(activity_boss_damage.total_damage,0)+excluded.total_damage),"
                 "update_time=excluded.update_time",
                 (key, user_id, damage, now_text, sqlite_max),
             )
             conn.execute(
-                "INSERT INTO activity.activity_boss_fight_log(activity_key,user_id,damage,fight_date,source,create_time) "
+                f"INSERT INTO {fight_table}(activity_key,user_id,damage,fight_date,source,create_time) "
                 "VALUES (%s,%s,%s,%s,'world_boss',%s)",
                 (key, user_id, damage, today, now_text),
             )
@@ -396,7 +403,7 @@ class WorldBossBattleSettlementService:
                 threshold = float(milestone.get("hp_percent", 0))
                 if percent_left <= threshold:
                     conn.execute(
-                        "INSERT OR IGNORE INTO activity.activity_boss_milestone(activity_key,milestone_key,unlocked_time) "
+                        f"INSERT OR IGNORE INTO {milestone_table}(activity_key,milestone_key,unlocked_time) "
                         "VALUES (%s,%s,%s)",
                         (key, str(milestone.get("key") or f"p{threshold}"), now_text),
                     )
@@ -468,14 +475,19 @@ class WorldBossBattleSettlementService:
             )
 
         with self._lock, closing(db_backend.connect(self._game_database)) as conn:
-            attached_player = attached_activity = False
+            attached_player = attached_activity = attached_activity_schema = False
+            activity_table_prefix = "activity."
             try:
                 conn.execute("ATTACH DATABASE %s AS player_data", (str(self._player_database),))
                 attached_player = True
                 if self._activity_database and activity_bosses:
-                    self._activity_database.parent.mkdir(parents=True, exist_ok=True)
-                    conn.execute("ATTACH DATABASE %s AS activity", (str(self._activity_database),))
-                    attached_activity = True
+                    if self._activity_database.resolve() == self._game_database.resolve():
+                        attached_activity = True
+                        activity_table_prefix = ""
+                    else:
+                        conn.execute("ATTACH DATABASE %s AS activity", (str(self._activity_database),))
+                        attached_activity = True
+                        attached_activity_schema = True
                 conn.execute("BEGIN IMMEDIATE")
                 conn.execute(
                     "CREATE TABLE IF NOT EXISTS world_boss_battle_operations(operation_id TEXT PRIMARY KEY,"
@@ -600,7 +612,12 @@ class WorldBossBattleSettlementService:
                 if killed:
                     self._increment_stat(conn, user_id, "击败世界BOSS")
                 self._record_tasks(conn, user_id, str(daily_period), str(weekly_period))
-                lines = self._apply_activity_damage(conn, user_id, int(actual_damage), activity_bosses) if attached_activity else []
+                lines = (
+                    self._apply_activity_damage(
+                        conn, user_id, int(actual_damage), activity_bosses, activity_table_prefix
+                    )
+                    if attached_activity else []
+                )
                 boss_hp = (
                     int(settled_bosses[boss_index].get("气血", 0))
                     if 0 <= boss_index < len(settled_bosses) else 0
@@ -616,7 +633,7 @@ class WorldBossBattleSettlementService:
                 conn.rollback()
                 raise
             finally:
-                if attached_activity:
+                if attached_activity_schema:
                     conn.execute("DETACH DATABASE activity")
                 if attached_player:
                     conn.execute("DETACH DATABASE player_data")

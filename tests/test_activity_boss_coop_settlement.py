@@ -25,6 +25,7 @@ def create_database(tmp_path):
         CREATE TABLE activity_boss_damage(activity_key TEXT,user_id TEXT,total_damage INTEGER,update_time TEXT,PRIMARY KEY(activity_key,user_id));
         CREATE TABLE activity_boss_fight_log(id INTEGER PRIMARY KEY AUTOINCREMENT,activity_key TEXT,user_id TEXT,damage INTEGER,fight_date TEXT,source TEXT,create_time TEXT);
         CREATE TABLE activity_boss_milestone(activity_key TEXT,milestone_key TEXT,unlocked_time TEXT,PRIMARY KEY(activity_key,milestone_key));
+        CREATE TABLE activity_boss_settlement_operations(operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,damage INTEGER NOT NULL,hp_left INTEGER NOT NULL,max_hp INTEGER NOT NULL,fight_count INTEGER NOT NULL,inventory INTEGER,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);
         INSERT INTO activity_boss_state VALUES('boss',1000,1000,'');
         """
     )
@@ -69,10 +70,6 @@ def test_replay_conflict_and_snapshot_checks(tmp_path):
 def test_operation_failure_rolls_back_all_boss_writes(tmp_path):
     database = create_database(tmp_path)
     conn = sqlite3.connect(database)
-    conn.execute(
-        "CREATE TABLE activity_boss_settlement_operations(operation_id TEXT PRIMARY KEY,payload TEXT,damage INTEGER,"
-        "hp_left INTEGER,max_hp INTEGER,fight_count INTEGER,inventory INTEGER,created_at TEXT)"
-    )
     conn.execute(
         "CREATE TRIGGER reject_boss_operation BEFORE INSERT ON activity_boss_settlement_operations "
         "BEGIN SELECT RAISE(ABORT,'reject operation'); END"

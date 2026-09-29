@@ -157,74 +157,6 @@ def normalize_activity_boss(raw: dict, index: int, key: str) -> dict:
     }
 
 
-def init_boss_tables(conn) -> None:
-    cur = conn.cursor()
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS activity_item_inventory (
-            activity_key TEXT NOT NULL,
-            user_id TEXT NOT NULL,
-            item_id TEXT NOT NULL,
-            count INTEGER NOT NULL DEFAULT 0,
-            update_time TEXT DEFAULT '',
-            PRIMARY KEY(activity_key, user_id, item_id)
-        )
-    """)
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS activity_boss_state (
-            activity_key TEXT PRIMARY KEY,
-            hp_left INTEGER NOT NULL,
-            max_hp INTEGER NOT NULL,
-            update_time TEXT DEFAULT ''
-        )
-    """)
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS activity_boss_damage (
-            activity_key TEXT NOT NULL,
-            user_id TEXT NOT NULL,
-            total_damage INTEGER NOT NULL DEFAULT 0,
-            update_time TEXT DEFAULT '',
-            PRIMARY KEY(activity_key, user_id)
-        )
-    """)
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS activity_boss_fight_log (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            activity_key TEXT NOT NULL,
-            user_id TEXT NOT NULL,
-            damage INTEGER NOT NULL DEFAULT 0,
-            fight_date TEXT DEFAULT '',
-            source TEXT DEFAULT '',
-            create_time TEXT DEFAULT ''
-        )
-    """)
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS activity_boss_milestone (
-            activity_key TEXT NOT NULL,
-            milestone_key TEXT NOT NULL,
-            unlocked_time TEXT DEFAULT '',
-            PRIMARY KEY(activity_key, milestone_key)
-        )
-    """)
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS activity_boss_milestone_claim (
-            activity_key TEXT NOT NULL,
-            user_id TEXT NOT NULL,
-            milestone_key TEXT NOT NULL,
-            create_time TEXT DEFAULT '',
-            PRIMARY KEY(activity_key, user_id, milestone_key)
-        )
-    """)
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS activity_boss_rank_claim (
-            activity_key TEXT NOT NULL,
-            user_id TEXT NOT NULL,
-            tier_key TEXT NOT NULL,
-            create_time TEXT DEFAULT '',
-            PRIMARY KEY(activity_key, user_id, tier_key)
-        )
-    """)
-
-
 def _active_boss_activities(config=None):
     from .service import activity_state
 
@@ -666,7 +598,7 @@ def _boss_milestone_claim_application():
 
         paths = get_paths()
         _activity_boss_milestone_claim_application_instance = ActivityBossMilestoneClaimApplication(
-            paths.game_db, paths.data / "activity" / "activity.db"
+            paths.game_db, paths.game_db
         )
     return _activity_boss_milestone_claim_application_instance
 
@@ -683,7 +615,7 @@ def _boss_rank_claim_application():
 
         paths = get_paths()
         _activity_boss_rank_claim_application_instance = ActivityBossRankClaimApplication(
-            paths.game_db, paths.data / "activity" / "activity.db"
+            paths.game_db, paths.game_db
         )
     return _activity_boss_rank_claim_application_instance
 

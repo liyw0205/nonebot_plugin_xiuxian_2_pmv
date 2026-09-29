@@ -72,11 +72,11 @@ _sql_message_instance = None
 boss_application = BossApplication(
     get_paths().game_db,
     get_paths().player_db,
-    activity_database=get_paths().data / "activity" / "activity.db",
+    activity_database=get_paths().game_db,
     repository=BossPurchaseSqlRepository(
         get_paths().game_db,
         get_paths().player_db,
-        get_paths().data / "activity" / "activity.db",
+        get_paths().game_db,
     ),
 )
 boss_ids = UUIDGenerator()
@@ -106,7 +106,7 @@ def _world_boss_battle_settlement_service():
         _world_boss_battle_settlement_service_instance = WorldBossBattleSettlementService(
             get_paths().game_db,
             get_paths().player_db,
-            get_paths().data / "activity" / "activity.db",
+            get_paths().game_db,
         )
     return _world_boss_battle_settlement_service_instance
 

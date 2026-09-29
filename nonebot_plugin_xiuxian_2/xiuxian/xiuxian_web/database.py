@@ -1,11 +1,13 @@
 from .core import (
     ACTIVITY_DB,
+    ACTIVITY_CONFIG_DB,
     PLAYER_DB,
     TRADE_DB,
     app,
     execute_sql,
     get_db_connection,
     get_dynamic_activity_tables,
+    get_dynamic_activity_config_tables,
     get_dynamic_player_tables,
     get_dynamic_trade_tables,
     get_table_data,
@@ -47,6 +49,7 @@ def _find_dynamic_table(table_name):
         (PLAYER_DB, get_dynamic_player_tables()),
         (TRADE_DB, get_dynamic_trade_tables()),
         (ACTIVITY_DB, get_dynamic_activity_tables()),
+        (ACTIVITY_CONFIG_DB, get_dynamic_activity_config_tables()),
     ):
         if table_name in dynamic_tables:
             return db_path, dynamic_tables[table_name]

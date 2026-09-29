@@ -2921,15 +2921,16 @@
 
 ### 6.2 当前推进队列（2026-09-30）
 
-1. **迁移活动旧状态 projection**：任务进度/领取标记、战令经验/等级/领取标记、首领血量/伤害/战斗次数/里程碑/排行领取标记仍由 `activity/activity.db` 承载；签到、集字、积分与活动道具也是同库中的独立业务状态，不能因未列入首批切片而误当缓存。首批按 `tasks/pass`、`boss`、其余活动状态分片；每片都要先把完整读写调用图切到 feature-owned repository，再从只读旧库按稳定主键/`rowid` 分块回填，目标冲突或历史 schema 不完整时 fail closed。领奖资产回执已在 game DB 的 operation ledger 与 feature ledger；状态回执只有在资产已 `granted` 后才可确认，恢复/reconcile 必须沿用同一 operation snapshot，禁止在两个库间假定 WAL/ATTACH 具备崩溃原子性。旧 `activity.db` 保留为只读回滚来源，直至备份、分块校验、重试/reconcile 和发布周期证据通过；不删除旧库或业务日志。
+1. **收口 bank 历史账户生命周期**：v1 Web 和命令默认资产操作已归 game DB application；下一步核对自动结息 scheduler、未访问账户的 `bankinfo` 惰性导入覆盖率和显式兼容 writer/rollback 的真实调用，明确何时可停止读取旧 player projection。正式发布前执行隔离迁移/恢复与余额对账。
+2. **审计其余真实旧执行路径**：按 player/economy、cultivation/training、combat/dungeon/boss、sect/pet/trade 风险顺序逐个核对 handler、route、scheduler 和批处理；优先处理仍由旧 transaction service 或 `xiuxian2_handle` 承载的资产状态，兼容 shim 本身不计完成。
+3. **收敛全局基础依赖**：持续降低旧 service import、`xiuxian2_handle` import、`db_backend.connect`、`sqlite3.connect`、系统时间/全局随机命中；以 progress CLI 同口径计数并逐项附真实调用证据。
+4. **最后补齐发布证据**：针对真实数据目录执行备份、migration dry-run/执行、恢复、reconcile、远端冒烟和至少一次正式发布周期；完成这些前 P7 与全面重构均保持未完成。
 
-   活动中的若干日志表不是可清缓存：`activity_point_event_log`、`activity_pass_event_log` 用于每日积分/经验上限，`activity_collect_drop_log` 用于每日掉落上限，`activity_boss_fight_log` 用于每日挑战次数及历史排行审计；里程碑/领取表也决定奖励资格。只有经证明无业务读者且可从权威状态重建的临时产物，才允许作为缓存清理。
-2. **收口 bank 历史账户生命周期**：v1 Web 和命令默认资产操作已归 game DB application；下一步核对自动结息 scheduler、未访问账户的 `bankinfo` 惰性导入覆盖率和显式兼容 writer/rollback 的真实调用，明确何时可停止读取旧 player projection。正式发布前执行隔离迁移/恢复与余额对账。
-3. **审计其余真实旧执行路径**：按 player/economy、cultivation/training、combat/dungeon/boss、sect/pet/trade 风险顺序逐个核对 handler、route、scheduler 和批处理；优先处理仍由旧 transaction service 或 `xiuxian2_handle` 承载的资产状态，兼容 shim 本身不计完成。
-4. **收敛全局基础依赖**：持续降低旧 service import（75 个文件）、`xiuxian2_handle` import（72 个文件）、`db_backend.connect`（139 个文件）、`sqlite3.connect`（34 个文件）、系统时间/全局随机命中；以 progress CLI 同口径计数并逐项附真实调用证据。
-5. **最后补齐发布证据**：针对真实数据目录执行备份、migration dry-run/执行、恢复、reconcile、远端冒烟和至少一次正式发布周期；完成这些前 P7 与全面重构均保持未完成。
+活动状态迁移切片已完成：任务/战令、首领、签到、集字、积分和活动道具等玩法表由 `activity_state.001/.002` 在启动时迁入 `game_db`，从旧库以只读连接分批回填且冲突/空间不足时 fail closed。旧 `activity.db` 仍承载配置事件并保留备份，不删除；积分、战令、掉落及首领日志是业务状态，不是可清缓存。
 
 2026-09-30 bank v1 Web cutover 收尾：game DB feature applications 成为生产默认写路径；真实 Flask route 覆盖四种资产操作、历史账户导入、快照拒绝、重复提交、首次账户、损坏 schema fail closed、总账中断后账户回执恢复。聚焦 bank/progress/source-quality/architecture 合计 `127 passed`；inventory freshness、progress 指标、目标文件 compileall 与 diff check 通过。无新 migration、业务库写入或运行数据访问；pytest、字节码和架构临时产物仅在专用 `/tmp` 目录生成且已清理。复核磁盘可用 `23G`、RAM 可用约 `1.2GiB`。下一目标按上列队列转向活动状态 projection。
+
+2026-09-30 activity gameplay state game-db cutover：默认活动玩法状态表切换到 `game_db`，新增 `activity_state.001/.002` 在启动阶段预建 schema，并从旧 `data/activity/activity.db` 以只读、最多每批 200 行的方式回填；历史必需列缺失、目标主键冲突或磁盘预检不足时拒绝迁移。签到、集字、积分、任务、战令、道具和活动首领状态及相关有业务语义的日志都保留并迁移；活动 Web 数据管理切到 `game_db`，配置事件表继续留在旧库。旧库不删除，也不整体标记为只读。移除 activity service 导入期 schema 检查，确保 startup migration 可先于首个玩法调用创建目标表。空白隔离数据目录下迁移/活动行为/progress 聚焦回归 `41 passed`；progress 活动指标全绿但整体 `exit_ready=false`，inventory freshness、目标文件 compileall 与 `git diff --check` 通过。测试数据、pytest basetemp 和字节码缓存专属放在 `/tmp`，本轮收尾清理；全局 legacy transaction services、`xiuxian2_handle`、bank 历史账户生命周期和正式发布 migration/P7 仍未完成。
 
 ### 6.3 既有优先事项详录
 

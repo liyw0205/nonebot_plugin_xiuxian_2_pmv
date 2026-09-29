@@ -27,6 +27,7 @@ def create_database(tmp_path, inventory=4):
         CREATE TABLE activity_boss_damage(activity_key TEXT,user_id TEXT,total_damage INTEGER,update_time TEXT,PRIMARY KEY(activity_key,user_id));
         CREATE TABLE activity_boss_fight_log(id INTEGER PRIMARY KEY AUTOINCREMENT,activity_key TEXT,user_id TEXT,damage INTEGER,fight_date TEXT,source TEXT,create_time TEXT);
         CREATE TABLE activity_boss_milestone(activity_key TEXT,milestone_key TEXT,unlocked_time TEXT,PRIMARY KEY(activity_key,milestone_key));
+        CREATE TABLE activity_boss_settlement_operations(operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,damage INTEGER NOT NULL,hp_left INTEGER NOT NULL,max_hp INTEGER NOT NULL,fight_count INTEGER NOT NULL,inventory INTEGER,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);
         INSERT INTO activity_boss_state VALUES('boss',500,500,'');
         """
     )
@@ -75,10 +76,6 @@ def test_insufficient_inventory_and_operation_failure_roll_back(tmp_path):
     service = ActivityBossItemRaidSettlementService(database)
     assert settle(service, expected_inventory=1).status == "item_insufficient"
     conn = sqlite3.connect(database)
-    conn.execute(
-        "CREATE TABLE activity_boss_settlement_operations(operation_id TEXT PRIMARY KEY,payload TEXT,damage INTEGER,"
-        "hp_left INTEGER,max_hp INTEGER,fight_count INTEGER,inventory INTEGER,created_at TEXT)"
-    )
     conn.execute("UPDATE activity_item_inventory SET count=4")
     conn.execute(
         "CREATE TRIGGER reject_item_operation BEFORE INSERT ON activity_boss_settlement_operations "

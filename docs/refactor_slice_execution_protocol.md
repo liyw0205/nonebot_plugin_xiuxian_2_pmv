@@ -36,6 +36,8 @@
 
 ## 最近完成切片
 
+`activity gameplay state game-db cutover`：默认活动玩法状态表改由 `game_db` 承载；新增 `activity_state.001/.002` 启动迁移预建 schema，并从旧 `activity.db` 只读、每批最多 200 行回填，冲突、旧 schema 不完整或磁盘空间不足时拒绝继续。移除 service 导入期 schema 校验，使 startup migration 能先于玩法调用执行。活动 Web 数据管理指向 `game_db`；旧文件保留配置事件数据及备份用途，不删除，也不描述为整库只读。活动日志和领取状态参与上限/资格/审计，不得作为缓存清理。空白隔离数据目录下迁移/活动行为/progress 回归 `41 passed`；activity progress 指标全绿，整体 `exit_ready=false`；inventory freshness、目标 Python 文件 compileall、diff check 通过。专属测试、字节码和 inventory 对照产物在收尾清理，未访问运行数据库。
+
 `activity boss milestone child reward ledger cutover`：默认入口和兼容 facade 改经 feature application/repository；game DB 原子准备 operation ledger、feature receipt 和 reservation，另一个事务原子发放资产并标记 `granted`，随后幂等确认旧活动 projection。首次请求固定可领子集，显式 child ID 恢复原快照，普通请求用新 ID 支持后续解锁与失败后新尝试。game-only `.008/.009` 预建 schema 并分块回填历史回执，pass `.007` 回填保持独立；CLI 注册 pass/milestone reconcile。聚焦及架构/库存合同 `97 passed`，architecture CLI `ok=true`，隔离五库恢复覆盖 207 项迁移并确认 milestone 仅路由 game DB。Rank 及 legacy activity state 尚未迁移，真实发布/P7 证据仍缺；测试串行执行，专用临时产物在收尾删除，不清理运行数据或幂等账本。
 
 `work item-use compatibility isolation`：`WorkItemUseService/Result` 已从 `xiuxian_work/transaction_service.py` 移至 `compatibility/legacy_work_item_use.py`，历史 transaction import 保持对象身份 re-export；默认 `20014/20015` matcher 继续由 `WorkItemUseApplication -> WorkItemUseSqlRepository` 承担，旧 service 不在默认执行图中。进度门禁与 source-quality 新增 compatibility isolation 断言，物品 service 行为测试覆盖加速、捕获、幂等冲突和晚失败回滚。测试/compileall/recovery 只使用专用临时目录并在收尾清理 pytest、pyc 和字节码缓存，未触碰 `.venv`、`.git`、运行数据库或用户 `boss_info.json`。下一片审计 daily refresh reset 的旧 service 可达性与请求期 schema；全局旧 transaction services、`xiuxian2_handle`、真实发布迁移/P7 仍开放。
@@ -173,7 +175,7 @@ compileall、architecture、inventory、diff check 与五库 recovery 通过；�
 
 ## 当前切片与下一切片选择
 
-当前执行基线（2026-09-30）：活动 `tasks`、`pass`、`boss_milestone`、`boss_rank` 子领奖现由 game DB feature repositories、幂等账本和 reservations 管理奖励；migration `.004` 至 `.011` 负责相关 schema 与历史回执，旧 `activity.db` 仍是领奖状态 projection，尚未迁移其拥有者。下一片处理 bank v1 Web 中由 `plugin.py` 注入的 `LegacyBankRepository`，随后继续审计仍可达的 `xiuxian2_handle`/legacy transaction 路径。历史 ATTACH 版本的跨库崩溃仍需真实数据备份/P7 资产核验；活动状态迁移和正式发布 recovery/reconcile 是退出 blocker，不能以隔离测试替代。
+当前执行基线（2026-09-30）：活动 `tasks`、`pass`、`boss_milestone`、`boss_rank` 子领奖由 game DB feature repositories、幂等账本和 reservations 管理奖励；`activity_state.001/.002` 已将玩法状态 schema 与旧数据回填到 `game_db`。旧 `activity.db` 仍保留配置事件数据和备份用途；不得删除，也不能把其中参与上限、资格和审计的历史日志当缓存。下一片收口 bank 历史账户生命周期，随后继续审计仍可达的 `xiuxian2_handle`/legacy transaction 路径。历史 ATTACH 版本的跨库崩溃仍需真实数据备份/P7 资产核验；正式发布 recovery/reconcile 与全局 legacy blockers 仍未完成。
 
 最近完成 `work abort cleanup application cutover`：终止、未接/过期悬赏清理与重置改经 `WorkAbortCleanupApplication -> WorkAbortCleanupSqlRepository`；旧 service 移至 compatibility 模块并保留 transaction API re-export。game-only `work.006` 预建 active snapshot 与 cleanup ledger，缺 migration 时拒绝写入且不在请求期建表。聚焦回归 `68 passed`、source-quality `5 passed`、progress `1 passed`；compileall、inventory、progress、隔离 architecture (`ok=true`) 与 diff check 通过。五库 recovery 覆盖 197 项 migration，全部 applied、pending 为空，`work.006` 仅路由 game DB，reconcile clean。pytest、字节码、recovery 和 architecture 临时产物收尾时清理，未触碰仓库 `data/`、运行数据库或用户 `boss_info.json`。下一片迁移 `WorkClaimSqlRepository` 的 claim/active-snapshot 请求期 schema 到启动 migration；settlement schema、全局 legacy transaction services、`xiuxian2_handle` 与真实发布迁移/P7 仍开放。
 

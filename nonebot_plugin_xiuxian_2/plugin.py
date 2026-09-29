@@ -113,6 +113,7 @@ from .features.activity_reward.migrations import (
     apply_activity_boss_rank_claim,
     apply_activity_boss_rank_legacy_receipts,
 )
+from .features.activity.migrations import apply_activity_state_schema, apply_activity_state_legacy
 from .features.combat_settlement.manifest import FEATURE as COMBAT_SETTLEMENT_FEATURE
 from .features.combat_settlement.migrations import apply_combat_settlement, apply_combat_settlement_operations, apply_dao_battle_operations, apply_dao_battle_record
 from .features.admin_asset.manifest import FEATURE as ADMIN_ASSET_FEATURE
@@ -211,6 +212,8 @@ def build_migrations() -> tuple[Migration, ...]:
         Migration("activity_reward.009", "activity_boss_milestone_legacy_receipts", apply_activity_boss_milestone_legacy_receipts),
         Migration("activity_reward.010", "activity_boss_rank_reward_claims", apply_activity_boss_rank_claim),
         Migration("activity_reward.011", "activity_boss_rank_legacy_receipts", apply_activity_boss_rank_legacy_receipts),
+        Migration("activity_state.001", "activity_state_schema", apply_activity_state_schema),
+        Migration("activity_state.002", "activity_state_legacy_backfill", apply_activity_state_legacy),
         Migration("admin_asset.001", "admin_asset_feature_migrations", apply_admin_asset),
         Migration("arena.001", "arena_feature_migrations", apply_arena),
         Migration("arena.002", "arena_challenge_purchase_operations", apply_arena_challenge_purchase),
@@ -857,22 +860,22 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
             ),
             "activity_task_claim": ActivityTaskClaimApplication(
                 str(context.database.path("game_db")),
-                context.paths.data / "activity" / "activity.db",
+                str(context.database.path("game_db")),
                 clock=context.clock,
             ),
             "activity_pass_claim": ActivityPassClaimApplication(
                 str(context.database.path("game_db")),
-                context.paths.data / "activity" / "activity.db",
+                str(context.database.path("game_db")),
                 clock=context.clock,
             ),
             "activity_boss_milestone_claim": ActivityBossMilestoneClaimApplication(
                 str(context.database.path("game_db")),
-                context.paths.data / "activity" / "activity.db",
+                str(context.database.path("game_db")),
                 clock=context.clock,
             ),
             "activity_boss_rank_claim": ActivityBossRankClaimApplication(
                 str(context.database.path("game_db")),
-                context.paths.data / "activity" / "activity.db",
+                str(context.database.path("game_db")),
                 clock=context.clock,
             ),
             "combat_settlement": CombatSettlementApplication(
@@ -933,7 +936,7 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
             "boss": BossApplication(
                 str(context.database.path("game_db")),
                 str(context.database.path("player_db")),
-                activity_database=context.paths.data / "activity" / "activity.db",
+                activity_database=str(context.database.path("game_db")),
                 clock=context.clock,
             ),
             "dungeon": DungeonApplication(

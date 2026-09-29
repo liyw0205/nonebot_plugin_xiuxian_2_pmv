@@ -41,12 +41,10 @@ class ActivityBossSettlementService:
 
     @classmethod
     def _ensure_schema(cls, conn) -> None:
-        conn.execute(
-            f"CREATE TABLE IF NOT EXISTS {cls.operation_table}("
-            "operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,damage INTEGER NOT NULL,"
-            "hp_left INTEGER NOT NULL,max_hp INTEGER NOT NULL,fight_count INTEGER NOT NULL,"
-            "inventory INTEGER,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
-        )
+        columns = {str(row[1]) for row in conn.execute(f"PRAGMA table_info({cls.operation_table})")}
+        required = {"operation_id", "payload", "damage", "hp_left", "max_hp", "fight_count", "inventory"}
+        if not required.issubset(columns):
+            raise RuntimeError(f"activity_state.001 schema_missing: {cls.operation_table}")
 
     @staticmethod
     def _fight_count(conn, activity_key: str, user_id: str, fight_date: str) -> int:
@@ -307,16 +305,18 @@ class ActivitySignSettlementService:
             for item_id, values in sorted(items.items())
         )
 
+    @staticmethod
+    def _assert_operation_schema(conn) -> None:
+        columns = {str(row[1]) for row in conn.execute("PRAGMA table_info(activity_sign_settlement_operations)")}
+        if not {"operation_id", "payload", "sign_days", "total_sign_days"}.issubset(columns):
+            raise RuntimeError("activity_state.001 schema_missing: activity_sign_settlement_operations")
+
     def get_result(self, operation_id: str) -> ActivitySignSettlementResult | None:
         operation_id = str(operation_id).strip()
         if not operation_id:
             return None
         with self._lock, closing(db_backend.connect(self._activity_database)) as conn:
-            conn.execute(
-                "CREATE TABLE IF NOT EXISTS activity_sign_settlement_operations("
-                "operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,sign_days INTEGER NOT NULL,"
-                "total_sign_days INTEGER NOT NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
-            )
+            self._assert_operation_schema(conn)
             previous = conn.execute(
                 "SELECT sign_days,total_sign_days FROM activity_sign_settlement_operations "
                 "WHERE operation_id=%s",
@@ -368,15 +368,14 @@ class ActivitySignSettlementService:
             separators=(",", ":"),
         )
 
+        same_database = self._activity_database.resolve() == self._game_database.resolve()
         with self._lock, closing(db_backend.connect(self._activity_database)) as conn:
             try:
-                conn.execute("ATTACH DATABASE %s AS game_data", (str(self._game_database),))
+                if not same_database:
+                    conn.execute("ATTACH DATABASE %s AS game_data", (str(self._game_database),))
+                game_prefix = "" if same_database else "game_data."
                 conn.execute("BEGIN IMMEDIATE")
-                conn.execute(
-                    "CREATE TABLE IF NOT EXISTS activity_sign_settlement_operations("
-                    "operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,sign_days INTEGER NOT NULL,"
-                    "total_sign_days INTEGER NOT NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
-                )
+                self._assert_operation_schema(conn)
                 previous = conn.execute(
                     "SELECT payload,sign_days,total_sign_days "
                     "FROM activity_sign_settlement_operations WHERE operation_id=%s",
@@ -415,13 +414,13 @@ class ActivitySignSettlementService:
                         "state_changed", current_sign_days, current_total_sign_days
                     )
                 if conn.execute(
-                    "SELECT 1 FROM game_data.user_xiuxian WHERE user_id=%s", (user_id,)
+                    f"SELECT 1 FROM {game_prefix}user_xiuxian WHERE user_id=%s", (user_id,)
                 ).fetchone() is None:
                     conn.rollback()
                     return ActivitySignSettlementResult("user_missing")
                 for item_id, _, _, quantity in item_rows:
                     item = conn.execute(
-                        "SELECT COALESCE(goods_num,0) FROM game_data.back "
+                        f"SELECT COALESCE(goods_num,0) FROM {game_prefix}back "
                         "WHERE user_id=%s AND goods_id=%s",
                         (user_id, item_id),
                     ).fetchone()
@@ -463,13 +462,13 @@ class ActivitySignSettlementService:
                 )
                 if stone:
                     conn.execute(
-                        "UPDATE game_data.user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)+CAST(%s AS REAL) "
+                        f"UPDATE {game_prefix}user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)+CAST(%s AS REAL) "
                         "WHERE user_id=%s",
                         (stone, user_id),
                     )
                 for item_id, name, item_type, quantity in item_rows:
                     conn.execute(
-                        "INSERT INTO game_data.back("
+                        f"INSERT INTO {game_prefix}back("
                         "user_id,goods_id,goods_name,goods_type,goods_num,create_time,update_time,bind_num) "
                         "VALUES(%s,%s,%s,%s,%s,%s,%s,%s) "
                         "ON CONFLICT(user_id,goods_id) DO UPDATE SET "
@@ -607,6 +606,12 @@ class ActivityPointShopPurchaseService:
         self._lock = lock or RLock()
 
     @staticmethod
+    def _assert_operation_schema(conn) -> None:
+        columns = {str(row[1]) for row in conn.execute("PRAGMA table_info(activity_point_purchase_operations)")}
+        if not {"operation_id", "payload", "quantity", "cost", "points", "personal_count", "total_count"}.issubset(columns):
+            raise RuntimeError("activity_state.001 schema_missing: activity_point_purchase_operations")
+
+    @staticmethod
     def _reward_rows(rewards) -> tuple[int, tuple[tuple[int, str, str, int], ...]]:
         stone = 0
         items: dict[int, list] = {}
@@ -654,15 +659,13 @@ class ActivityPointShopPurchaseService:
         with self._lock, closing(db_backend.connect(self._activity_database)) as conn:
             attached = False
             try:
-                conn.execute("ATTACH DATABASE %s AS game_data", (str(self._game_database),))
-                attached = True
+                same_database = self._activity_database.resolve() == self._game_database.resolve()
+                if not same_database:
+                    conn.execute("ATTACH DATABASE %s AS game_data", (str(self._game_database),))
+                    attached = True
+                game_prefix = "" if same_database else "game_data."
                 conn.execute("BEGIN IMMEDIATE")
-                conn.execute(
-                    "CREATE TABLE IF NOT EXISTS activity_point_purchase_operations ("
-                    "operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,quantity INTEGER NOT NULL,"
-                    "cost INTEGER NOT NULL,points INTEGER NOT NULL,personal_count INTEGER NOT NULL,"
-                    "total_count INTEGER NOT NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
-                )
+                self._assert_operation_schema(conn)
                 previous = conn.execute(
                     "SELECT payload,quantity,cost,points,personal_count,total_count "
                     "FROM activity_point_purchase_operations WHERE operation_id=%s", (operation_id,),
@@ -696,12 +699,12 @@ class ActivityPointShopPurchaseService:
                 if stock_limit > 0 and total_count + quantity > stock_limit:
                     conn.rollback()
                     return ActivityPointShopPurchaseResult("stock_insufficient", points=int(balance[0]), personal_count=personal_count, total_count=total_count)
-                if conn.execute("SELECT 1 FROM game_data.user_xiuxian WHERE user_id=%s", (user_id,)).fetchone() is None:
+                if conn.execute(f"SELECT 1 FROM {game_prefix}user_xiuxian WHERE user_id=%s", (user_id,)).fetchone() is None:
                     conn.rollback()
                     return ActivityPointShopPurchaseResult("user_missing")
                 for item_id, _, _, amount in item_rows:
                     current = conn.execute(
-                        "SELECT COALESCE(goods_num,0) FROM game_data.back WHERE user_id=%s AND goods_id=%s",
+                        f"SELECT COALESCE(goods_num,0) FROM {game_prefix}back WHERE user_id=%s AND goods_id=%s",
                         (user_id, item_id),
                     ).fetchone()
                     if (int(current[0]) if current else 0) + amount > max_goods_num:
@@ -727,10 +730,10 @@ class ActivityPointShopPurchaseService:
                     (activity_key, user_id, item_key, quantity, now),
                 )
                 if stone:
-                    conn.execute("UPDATE game_data.user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)+CAST(%s AS REAL) WHERE user_id=%s", (stone, user_id))
+                    conn.execute(f"UPDATE {game_prefix}user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)+CAST(%s AS REAL) WHERE user_id=%s", (stone, user_id))
                 for item_id, name, item_type, amount in item_rows:
                     conn.execute(
-                        "INSERT INTO game_data.back(user_id,goods_id,goods_name,goods_type,goods_num,create_time,update_time,bind_num) "
+                        f"INSERT INTO {game_prefix}back(user_id,goods_id,goods_name,goods_type,goods_num,create_time,update_time,bind_num) "
                         "VALUES (%s,%s,%s,%s,%s,%s,%s,%s) ON CONFLICT(user_id,goods_id) DO UPDATE SET "
                         "goods_name=excluded.goods_name,goods_type=excluded.goods_type,goods_num=back.goods_num+excluded.goods_num,"
                         "bind_num=COALESCE(back.bind_num,0)+excluded.bind_num,update_time=excluded.update_time",
@@ -773,6 +776,12 @@ class ActivityCollectExchangeService:
         self._activity_database = Path(activity_database)
         self._game_database = Path(game_database)
         self._lock = lock or RLock()
+
+    @staticmethod
+    def _assert_operation_schema(conn) -> None:
+        columns = {str(row[1]) for row in conn.execute("PRAGMA table_info(activity_collect_exchange_operations)")}
+        if not {"operation_id", "payload", "result_json"}.issubset(columns):
+            raise RuntimeError("activity_state.001 schema_missing: activity_collect_exchange_operations")
 
     @staticmethod
     def _reward_rows(rewards) -> tuple[int, tuple[tuple[int, str, str, int], ...], tuple[str, ...]]:
@@ -840,13 +849,12 @@ class ActivityCollectExchangeService:
 
         with self._lock, closing(db_backend.connect(self._activity_database)) as conn:
             try:
-                conn.execute("ATTACH DATABASE %s AS game_data", (str(self._game_database),))
+                same_database = self._activity_database.resolve() == self._game_database.resolve()
+                if not same_database:
+                    conn.execute("ATTACH DATABASE %s AS game_data", (str(self._game_database),))
+                game_prefix = "" if same_database else "game_data."
                 conn.execute("BEGIN IMMEDIATE")
-                conn.execute(
-                    "CREATE TABLE IF NOT EXISTS activity_collect_exchange_operations("
-                    "operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,result_json TEXT NOT NULL,"
-                    "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
-                )
+                self._assert_operation_schema(conn)
                 previous = conn.execute(
                     "SELECT payload,result_json FROM activity_collect_exchange_operations WHERE operation_id=%s",
                     (operation_id,),
@@ -863,7 +871,7 @@ class ActivityCollectExchangeService:
                     )
 
                 if conn.execute(
-                    "SELECT 1 FROM game_data.user_xiuxian WHERE user_id=%s", (user_id,)
+                    f"SELECT 1 FROM {game_prefix}user_xiuxian WHERE user_id=%s", (user_id,)
                 ).fetchone() is None:
                     conn.rollback()
                     return ActivityCollectExchangeResult("user_missing")
@@ -894,7 +902,7 @@ class ActivityCollectExchangeService:
 
                 for item_id, _, _, quantity in item_rows:
                     inventory = conn.execute(
-                        "SELECT COALESCE(goods_num,0) FROM game_data.back "
+                        f"SELECT COALESCE(goods_num,0) FROM {game_prefix}back "
                         "WHERE user_id=%s AND goods_id=%s",
                         (user_id, item_id),
                     ).fetchone()
@@ -921,12 +929,12 @@ class ActivityCollectExchangeService:
 
                 if stone:
                     conn.execute(
-                        "UPDATE game_data.user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)+CAST(%s AS REAL) WHERE user_id=%s",
+                        f"UPDATE {game_prefix}user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)+CAST(%s AS REAL) WHERE user_id=%s",
                         (stone, user_id),
                     )
                 for item_id, name, item_type, quantity in item_rows:
                     conn.execute(
-                        "INSERT INTO game_data.back(user_id,goods_id,goods_name,goods_type,goods_num,"
+                        f"INSERT INTO {game_prefix}back(user_id,goods_id,goods_name,goods_type,goods_num,"
                         "create_time,update_time,bind_num) VALUES(%s,%s,%s,%s,%s,%s,%s,%s) "
                         "ON CONFLICT(user_id,goods_id) DO UPDATE SET goods_name=excluded.goods_name,"
                         "goods_type=excluded.goods_type,goods_num=back.goods_num+excluded.goods_num,"

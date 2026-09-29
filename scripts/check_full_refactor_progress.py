@@ -154,6 +154,13 @@ def _slice_status() -> dict[str, dict[str, object]]:
     activity_boss_rank_claim_application = (PACKAGE / "features" / "activity_reward" / "boss_rank_claim_application.py").read_text(encoding="utf-8")
     activity_boss_rank_claim_repository = (PACKAGE / "features" / "activity_reward" / "boss_rank_claim_repository.py").read_text(encoding="utf-8")
     activity_reward_migrations = (PACKAGE / "features" / "activity_reward" / "migrations.py").read_text(encoding="utf-8")
+    activity_state_migrations = (PACKAGE / "features" / "activity" / "migrations.py").read_text(encoding="utf-8")
+    activity_storage = (PACKAGE / "xiuxian" / "xiuxian_activity" / "activity_storage.py").read_text(encoding="utf-8")
+    activity_transaction_service = (PACKAGE / "xiuxian" / "xiuxian_activity" / "transaction_service.py").read_text(encoding="utf-8")
+    activity_web_core = (PACKAGE / "xiuxian" / "xiuxian_web" / "core.py").read_text(encoding="utf-8")
+    activity_web_database = (PACKAGE / "xiuxian" / "xiuxian_web" / "database.py").read_text(encoding="utf-8")
+    activity_boss_transaction_service = (PACKAGE / "xiuxian" / "xiuxian_boss" / "transaction_service.py").read_text(encoding="utf-8")
+    activity_boss_entry = (PACKAGE / "xiuxian" / "xiuxian_boss" / "__init__.py").read_text(encoding="utf-8")
     activity_claim_compatibility_source = (PACKAGE / "xiuxian" / "xiuxian_activity" / "transaction_service.py").read_text(encoding="utf-8")
     activity_task_claim_compatibility = activity_claim_compatibility_source[
         activity_claim_compatibility_source.index("class ActivityTaskClaimService:"):
@@ -788,11 +795,56 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "boss_rank_claim_all_child_operation_id_stable": (
                 '"boss_rank": lambda child_id: claim_boss_rank_reward(uid, operation_id=child_id)' in activity_claim_runners
             ),
-            "boss_rank_activity_state_still_legacy_projection": (
-                "activity_database" in activity_boss_rank_claim_repository
-                and "INSERT OR IGNORE INTO activity_boss_rank_claim" in activity_boss_rank_claim_repository
+            "state_migrations_registered_game_only": (
+                'Migration("activity_state.001", "activity_state_schema", apply_activity_state_schema)' in plugin
+                and 'Migration("activity_state.002", "activity_state_legacy_backfill", apply_activity_state_legacy)' in plugin
+                and "def apply_activity_state_schema(" in activity_state_migrations
+                and "def apply_activity_state_legacy(" in activity_state_migrations
             ),
-            "status": "claim_all_game_db_coordinator_and_tasks_pass_boss_milestone_boss_rank_asset_ledgers_with_legacy_activity_state_projection_remaining",
+            "state_legacy_backfill_read_only_bounded_conflict_checked": (
+                "with DatabaseUnitOfWork(legacy_database, read_only=True)" in activity_state_migrations
+                and "ORDER BY rowid LIMIT 200" in activity_state_migrations
+                and "activity state migration conflict" in activity_state_migrations
+                and "legacy activity schema incomplete" in activity_state_migrations
+            ),
+            "state_migration_disk_preflight": (
+                "shutil.disk_usage(uow.database.parent).free" in activity_state_migrations
+                and "source_size * 2 + 128 * 1024 * 1024" in activity_state_migrations
+            ),
+            "state_default_storage_is_game_db": (
+                "DB_PATH = get_paths().game_db" in activity_storage
+                and "LEGACY_DB_PATH = BASE_DIR / \"activity.db\"" in activity_storage
+                and "CREATE TABLE" not in activity_storage[activity_storage.index("def init_db():"):activity_storage.index("def resolve_daohao(")]
+            ),
+            "state_transaction_services_use_migrated_schema": all(
+                table in activity_transaction_service
+                for table in (
+                    "activity_boss_settlement_operations",
+                    "activity_sign_settlement_operations",
+                    "activity_point_purchase_operations",
+                    "activity_collect_exchange_operations",
+                )
+            ) and "activity_state.001 schema_missing" in activity_transaction_service,
+            "state_default_reward_and_boss_paths_use_game_db": (
+                "ActivityTaskClaimApplication(\n            paths.game_db, paths.game_db" in activity_service
+                and "ActivityPassClaimApplication(\n            paths.game_db, paths.game_db" in activity_service
+                and "ActivityBossMilestoneClaimApplication(\n            paths.game_db, paths.game_db" in activity_boss_source
+                and "activity_database=get_paths().game_db" in activity_boss_entry
+                and "activity_table_prefix = \"\"" in activity_boss_transaction_service
+            ),
+            "state_web_management_targets_game_db_and_keeps_config_separate": (
+                "ACTIVITY_DB = DATABASE" in activity_web_core
+                and "ACTIVITY_CONFIG_DB = get_paths().data / \"activity\" / \"activity.db\"" in activity_web_core
+                and "_get_dynamic_tables(ACTIVITY_DB, \"activity_\"" in activity_web_core
+                and "_get_dynamic_tables(ACTIVITY_CONFIG_DB, \"activity_config_\"" in activity_web_core
+                and "get_dynamic_activity_config_tables()" in activity_web_database
+            ),
+            "state_legacy_projection_cutover_complete_but_source_retained": (
+                '"activity_state.002"' in plugin
+                and "legacy_database = uow.database.parent / \"activity\" / \"activity.db\"" in activity_state_migrations
+                and "LEGACY_DB_PATH" in activity_storage
+            ),
+            "status": "claim_all_and_reward_ledgers_cut_over; activity_gameplay_state_migrated_to_game_db; legacy_activity_file_retained_for_config_events_and_backup",
         },
         "dungeon_team": {
             "team_commands_application_owned": all(

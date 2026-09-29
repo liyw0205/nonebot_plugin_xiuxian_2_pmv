@@ -36,6 +36,11 @@ class ActivitySignSettlementTests(unittest.TestCase):
                 "reward_message TEXT,create_time TEXT,finish_time TEXT,"
                 "UNIQUE(user_id,sign_date))"
             )
+            conn.execute(
+                "CREATE TABLE activity_sign_settlement_operations("
+                "operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,sign_days INTEGER NOT NULL,"
+                "total_sign_days INTEGER NOT NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+            )
             conn.execute("INSERT INTO activity_user VALUES('u',2,'2026-07-13',5,'','')")
         with db_backend.transaction(self.game) as conn:
             conn.execute("CREATE TABLE user_xiuxian(user_id TEXT PRIMARY KEY,stone INTEGER)")
@@ -59,7 +64,7 @@ class ActivitySignSettlementTests(unittest.TestCase):
     def tearDown(self):
         self.tmp.cleanup()
 
-    def settle(self, operation_id="op", **changes):
+    def settle(self, operation_id="op", *, service=None, **changes):
         args = {
             "operation_id": operation_id,
             "user_id": "u",
@@ -73,7 +78,7 @@ class ActivitySignSettlementTests(unittest.TestCase):
             "milestone_reward_text": "灵石x30,里程碑丹x1",
         }
         args.update(changes)
-        return self.service.settle(**args)
+        return (service or self.service).settle(**args)
 
     def test_atomic_daily_and_milestone_settlement(self):
         result = self.settle()
@@ -102,6 +107,25 @@ class ActivitySignSettlementTests(unittest.TestCase):
                 [(101, 2), (102, 1)],
                 [tuple(row) for row in conn.execute("SELECT goods_id,goods_num FROM back ORDER BY goods_id")],
             )
+
+    def test_same_database_settlement_updates_activity_and_player_state(self):
+        with db_backend.transaction(self.activity) as conn:
+            conn.execute("CREATE TABLE user_xiuxian(user_id TEXT PRIMARY KEY,stone INTEGER)")
+            conn.execute("INSERT INTO user_xiuxian VALUES('u',10)")
+            conn.execute(
+                "CREATE TABLE back(user_id TEXT,goods_id INTEGER,goods_name TEXT,goods_type TEXT,"
+                "goods_num INTEGER,create_time TEXT,update_time TEXT,bind_num INTEGER,"
+                "UNIQUE(user_id,goods_id))"
+            )
+        service = ActivitySignSettlementService(self.activity, self.activity)
+
+        result = self.settle("same-db", service=service)
+
+        self.assertEqual("applied", result.status)
+        with db_backend.connection(self.activity) as conn:
+            self.assertEqual(90, conn.execute("SELECT stone FROM user_xiuxian").fetchone()[0])
+            self.assertEqual(3, conn.execute("SELECT sign_days FROM activity_user").fetchone()[0])
+            self.assertEqual(2, conn.execute("SELECT COUNT(*) FROM back").fetchone()[0])
 
     def test_operation_idempotency_and_conflict(self):
         self.assertEqual("applied", self.settle().status)
@@ -133,11 +157,6 @@ class ActivitySignSettlementTests(unittest.TestCase):
 
     def test_operation_failure_rolls_back_activity_and_game_databases(self):
         with db_backend.transaction(self.activity) as conn:
-            conn.execute(
-                "CREATE TABLE activity_sign_settlement_operations("
-                "operation_id TEXT PRIMARY KEY,payload TEXT,sign_days INTEGER,"
-                "total_sign_days INTEGER,created_at TEXT)"
-            )
             conn.execute(
                 "CREATE TRIGGER fail_sign_operation BEFORE INSERT "
                 "ON activity_sign_settlement_operations BEGIN SELECT RAISE(ABORT,'x'); END"
