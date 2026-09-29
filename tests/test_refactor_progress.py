@@ -95,6 +95,11 @@ class RefactorProgressTests(unittest.TestCase):
         activity = slices["activity_reward"]
         self.assertTrue(activity["claim_all_application_owned"])
         self.assertTrue(activity["legacy_claim_all_disabled"])
+        self.assertTrue(activity["claim_all_startup_schema_owned"])
+        self.assertTrue(activity["claim_all_legacy_receipts_imported"])
+        self.assertTrue(activity["claim_all_game_db_default"])
+        self.assertTrue(activity["claim_all_web_default_owned"])
+        self.assertTrue(activity["claim_all_command_default_owned"])
         dungeon_team = slices["dungeon_team"]
         self.assertTrue(dungeon_team["team_commands_application_owned"])
         self.assertTrue(dungeon_team["legacy_team_service_factories_removed"])

@@ -23,8 +23,17 @@ class ActivityRepository(ServicePort):
         self.database = str(database)
 
     def _claim_all(self, **kwargs: Any):
-        from ...xiuxian.xiuxian_activity.service import claim_activity_rewards
-        return claim_activity_rewards(str(kwargs.get("user_id", "")), str(kwargs.get("operation_id", "")))
+        from ...compatibility.legacy_activity_claim_steps import build_legacy_activity_claim_runners
+        from ..activity_reward.claim_all_application import ActivityClaimAllApplication
+
+        user_id = str(kwargs.get("user_id", ""))
+        result = ActivityClaimAllApplication(self.database).run(
+            str(kwargs.get("operation_id", "")), user_id,
+            build_legacy_activity_claim_runners(user_id),
+        )
+        if result.status == "retryable_failure":
+            raise RuntimeError(result.text)
+        return result.ok, result.text
 
     def _claim_tasks(self, **kwargs: Any):
         from ...xiuxian.xiuxian_activity.service import claim_activity_tasks

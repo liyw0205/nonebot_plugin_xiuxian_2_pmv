@@ -49,13 +49,20 @@ class ActivityClaimAllRepository:
             tuple(ActivityClaimAllStepResult(str(row["name"]), bool(row["ok"]), str(row["text"])) for row in data.get("steps") or ()),
         )
 
-    def _ensure(self, uow: DatabaseUnitOfWork) -> None:
-        uow.execute("CREATE TABLE IF NOT EXISTS activity_claim_all_operations(operation_id TEXT PRIMARY KEY,user_id TEXT NOT NULL,status TEXT NOT NULL,result_json TEXT NOT NULL DEFAULT '',created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
-        uow.execute("CREATE TABLE IF NOT EXISTS activity_claim_all_steps(operation_id TEXT NOT NULL,step_name TEXT NOT NULL,ordinal INTEGER NOT NULL,status TEXT NOT NULL DEFAULT 'pending',attempts INTEGER NOT NULL DEFAULT 0,ok INTEGER,result_text TEXT NOT NULL DEFAULT '',error_text TEXT NOT NULL DEFAULT '',updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,PRIMARY KEY(operation_id,step_name))")
+    @staticmethod
+    def _assert_schema_ready(uow: DatabaseUnitOfWork) -> None:
+        required_columns = {
+            "activity_claim_all_operations": {"operation_id", "user_id", "status", "result_json"},
+            "activity_claim_all_steps": {"operation_id", "step_name", "ordinal", "status", "attempts", "ok", "result_text", "error_text"},
+        }
+        for table, required in required_columns.items():
+            columns = {str(row["name"]) for row in uow.query_all(f"PRAGMA table_info({table})")}
+            if not required.issubset(columns):
+                raise RuntimeError(f"activity_reward.002 schema_missing: {table}")
 
     def prepare(self, operation_id: str, user_id: str) -> ActivityClaimAllResult | None:
         with DatabaseUnitOfWork(self.database, immediate=True) as uow:
-            self._ensure(uow)
+            self._assert_schema_ready(uow)
             row = uow.query_one("SELECT user_id,status,result_json FROM activity_claim_all_operations WHERE operation_id=?", (operation_id,))
             if row is None:
                 uow.execute("INSERT INTO activity_claim_all_operations(operation_id,user_id,status) VALUES(?,?,?)", (operation_id,user_id,"pending"))
@@ -72,7 +79,7 @@ class ActivityClaimAllRepository:
 
     def completed_steps(self, operation_id: str) -> tuple[ActivityClaimAllStepResult, ...]:
         with DatabaseUnitOfWork(self.database) as uow:
-            self._ensure(uow)
+            self._assert_schema_ready(uow)
             return tuple(ActivityClaimAllStepResult(str(row["step_name"]), bool(row["ok"]), str(row["result_text"])) for row in uow.query_all("SELECT step_name,ok,result_text FROM activity_claim_all_steps WHERE operation_id=? AND status='completed' ORDER BY ordinal", (operation_id,)))
 
     def start_step(self, operation_id: str, name: str) -> None:

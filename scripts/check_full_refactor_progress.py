@@ -142,6 +142,9 @@ def _slice_status() -> dict[str, dict[str, object]]:
         work_facade.index("async def use_work_capture_order") :
     ]
     activity_service = (PACKAGE / "xiuxian" / "xiuxian_activity" / "service.py").read_text(encoding="utf-8")
+    activity_reward_application = (PACKAGE / "features" / "activity_reward" / "application.py").read_text(encoding="utf-8")
+    activity_claim_repository = (PACKAGE / "features" / "activity_reward" / "claim_all_repository.py").read_text(encoding="utf-8")
+    activity_command_repository = (PACKAGE / "features" / "activity" / "repository.py").read_text(encoding="utf-8")
     dungeon_facade = (PACKAGE / "xiuxian" / "xiuxian_dungeon" / "__init__.py").read_text(encoding="utf-8")
     dungeon_team_manager = (PACKAGE / "xiuxian" / "xiuxian_dungeon" / "team_manager.py").read_text(encoding="utf-8")
     dungeon_invite_compatibility = (PACKAGE / "compatibility" / "legacy_dungeon_team_invite_mapping.py").read_text(encoding="utf-8")
@@ -614,7 +617,26 @@ def _slice_status() -> dict[str, dict[str, object]]:
         "activity_reward": {
             "claim_all_application_owned": "activity_claim_all_application.run(" in activity_service,
             "legacy_claim_all_disabled": "_activity_claim_all_service().run(" not in activity_service,
-            "status": "claim_all_cutover_with_legacy_service_retained_for_compatibility",
+            "claim_all_startup_schema_owned": (
+                "CREATE TABLE" not in activity_claim_repository
+                and "_assert_schema_ready(uow)" in activity_claim_repository
+                and 'Migration("activity_reward.003", "activity_claim_all_legacy_receipts"' in plugin
+            ),
+            "claim_all_legacy_receipts_imported": (
+                "apply_activity_claim_all_legacy_receipts" in plugin
+                and "with DatabaseUnitOfWork(legacy_database, read_only=True)" in
+                (PACKAGE / "features" / "activity_reward" / "migrations.py").read_text(encoding="utf-8")
+            ),
+            "claim_all_game_db_default": "activity_claim_all_application = ActivityClaimAllApplication(get_paths().game_db)" in activity_service,
+            "claim_all_web_default_owned": (
+                "ActivityClaimAllApplication(self.database).run(" in activity_reward_application
+                and "repository=LegacyActivityRewardRepository" not in plugin
+            ),
+            "claim_all_command_default_owned": (
+                "ActivityClaimAllApplication(self.database).run(" in activity_command_repository
+                and "service import claim_activity_rewards" not in activity_command_repository
+            ),
+            "status": "claim_all_game_db_schema_backfill_and_web_command_feature_coordinator_with_legacy_child_claims",
         },
         "dungeon_team": {
             "team_commands_application_owned": all(

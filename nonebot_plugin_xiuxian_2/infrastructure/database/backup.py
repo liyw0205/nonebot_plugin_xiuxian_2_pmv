@@ -18,6 +18,9 @@ class BackupService:
     def __init__(self, catalog: DatabaseCatalog, *, extra_files: Mapping[str, str | Path] | None = None, clock: Any | None = None) -> None:
         self.catalog = catalog
         self.extra_files = {str(key): Path(value) for key, value in (extra_files or {}).items()}
+        self.extra_files.setdefault(
+            "legacy_activity", catalog.path("game_db").parent / "activity" / "activity.db"
+        )
         self.clock = clock or SystemClock()
 
     @staticmethod
@@ -58,7 +61,16 @@ class BackupService:
                     continue
                 destination_file = directory / source.name
                 temporary = destination_file.with_suffix(destination_file.suffix + ".tmp")
-                shutil.copy2(source, temporary)
+                if key == "legacy_activity":
+                    source_connection = sqlite3.connect(f"{source.resolve().as_uri()}?mode=ro", uri=True)
+                    target_connection = sqlite3.connect(temporary)
+                    try:
+                        source_connection.backup(target_connection)
+                    finally:
+                        target_connection.close()
+                        source_connection.close()
+                else:
+                    shutil.copy2(source, temporary)
                 with temporary.open("rb") as stream:
                     os.fsync(stream.fileno())
                 temporary.replace(destination_file)

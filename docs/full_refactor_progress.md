@@ -2873,6 +2873,14 @@
   隔离测试未访问运行库；独立 architecture CLI 也已验证 ok=true。仅清理本轮
   pytest basetemp、编译字节码与临时清单，未触碰运行数据、数据库或用户改动；
   复核磁盘剩余约 23 GiB、可用 RAM 约 1.3 GiB。
+- 活动一键领奖此前的 `activity_reward.002` 只在 game DB 启动建表，而旧 NoneBot
+  协调器仍写 `activity/activity.db`、feature repository 仍请求期 DDL；历史记录中的
+  `无请求时间 DDL` 不能证明此边界已关闭。本轮已将默认 Web/NoneBot 入口统一到
+  game DB 的 feature-owned 四步协调器，`activity_reward.003` 启动迁移只读、分块回填
+  旧 DB 的完成/未完成回执，遇冲突拒绝迁移而不覆盖；缺 `.002` schema 的请求不再建表。
+  新备份链路对旧 `activity.db` 使用 SQLite 在线备份，隔离恢复确认先恢复旧库、再导入
+  回执并续跑。四个子步骤的资产发放仍经 compatibility adapter 调用旧任务、战令和首领奖励
+  函数，不能视为活动奖励全域迁完，更不能替代真实发布数据/P7 证据。
 - 已切换的功能仍可能保留显式 compatibility/rollback adapter；只有默认真实
   handler/route/scheduler 已改走 feature-owned application，且旧实现不再承载该
   用例，才可逐项从遗留服务移除。
@@ -2920,7 +2928,7 @@
 ### 6.2 当前推进队列（2026-09-29）
 
 1. **核实 bank 遗留收尾与正式迁移**：真实 Flask 路由已覆盖旧账户导入、无效旧账户、存款 replay、缺 `bank.002` 的 503，以及升级/结息的写入与 replay；`savef` 已无仓库生产调用点，`readf` 仅在五个 legacy fallback 中可达。继续核实首次升级/结息前账户默认等级的落库时机和每个显式 fallback 的生产可达性；保留未验证分支，不把隔离测试当作真实数据迁移。
-2. **回到 player/economy/inventory 主序**：源码调用图确认 Web `/api/v1/activity/rewards/claim` 经 `plugin.py` 默认注入的 `ActivityRewardApplication -> LegacyActivityRewardRepository -> xiuxian_activity.service.claim_activity_rewards`；Web 未注入服务时的默认 application、NoneBot `活动领取` 的 `ActivityApplication -> ActivityRepository` 也会调用同一旧 coordinator。下一片先用隔离真实入口回归确认资产写入、子操作 replay/失败恢复和 `activity_reward.002` schema 所有权，再逐步改由 feature-owned repository 承载；不能只搬迁兼容类或重复已过门禁的切片。
+2. **继续 player/economy/inventory 的活动子领奖**：Web/NoneBot 默认总领奖已共用 game DB feature 协调器与启动 schema，旧回执可由 `activity_reward.003` 导入。下一片按真实调用图分别审计并迁移 `tasks`、`pass`、`boss_milestone`、`boss_rank` 的旧资产写入，优先验证 tasks 子步骤的幂等回执、失败恢复与物品/灵石事务；不要将总领奖协调器的完成误判为四个子奖励已迁移。
 3. **按风险顺序推进剩余领域**：cultivation/breakthrough/training；combat/map/dungeon/arena/tower/boss；sect/impart/pet/trade/auction；最后处理 scheduler、Web、批处理、JSON/外部状态兼容。每项先证明默认真实入口和依赖，再隔离旧 service/handle。
 4. **收敛全局基础依赖**：持续降低旧 service import（75 个文件）、`xiuxian2_handle` import（72 个文件）、`db_backend.connect`（139 个文件）、`sqlite3.connect`（34 个文件）、系统时间/全局随机命中；以 progress CLI 同口径计数并逐项附真实调用证据。
 5. **最后补齐发布证据**：针对真实数据目录执行备份、migration dry-run/执行、恢复、reconcile、远端冒烟和至少一次正式发布周期；完成这些前 P7 与全面重构均保持未完成。
@@ -4770,3 +4778,4 @@ Boss 通过 `get_rift_battle_final_attributes` 注入 `get_rift_battle_impart_da
 2026-09-28 work abort cleanup application cutover：真实终止、未接/过期 offer 清理和管理员重置入口改走 `WorkAbortCleanupApplication -> WorkAbortCleanupSqlRepository`；旧 `WorkAbortCleanupResult/Service` 移入 `compatibility/legacy_work_abort_cleanup.py`，历史 transaction module 保持对象身份 re-export。game-only `work.006` 启动迁移预建 `work_active_snapshots` 与 `work_abort_cleanup_operations`，保留已有快照/回执，请求路径不建表；缺 schema 时默认 handler 明确提示升级。repository 在一个 game DB immediate UoW 内校验 cooldown、offer、stone 快照，惩罚封顶于现有灵石，并原子清空状态/快照和写回执。Work claim/refresh/settlement/abort/reset/item-use 聚焦回归 `68 passed`，work source-quality `5 passed`，progress contract `1 passed`；compileall、inventory freshness、progress gate、隔离 architecture (`ok=true`) 和 diff check 通过。五库 recovery 覆盖 197 项 migration，197/197 applied、pending 为空，`work.006` 仅路由 game DB，reconcile clean（operations/outbox/dead events 均为 0）。测试缓存关闭，专属 pytest/recovery/architecture/字节码产物已清理；未触碰仓库 `data/`、运行数据库或用户 `boss_info.json`。下一片迁移 `WorkClaimSqlRepository` 的请求期 claim/active-snapshot schema 到启动 migration；work settlement schema 与全局 legacy transaction services、`xiuxian2_handle`、真实发布迁移/P7 仍未完成。
 2026-09-28 work claim startup-schema boundary：`WorkClaimApplication -> WorkClaimSqlRepository` 保持默认接取路径，repository 不再请求期创建 `work_claim_operations` 或 `work_active_snapshots`；新增 game-only `work.007` 启动迁移并保留已有接取回执，缺 schema 返回 `schema_missing`。补充缺 migration 拒绝、历史回执重放和应用层 no-DDL 回归。Work claim/refresh/settlement/abort/reset/item-use 聚焦回归 `71 passed`，work source-quality `6 passed`，progress contract `1 passed`；compileall、inventory freshness、progress gate、隔离 architecture (`ok=true`) 和 diff check 通过。五库 recovery 覆盖 198 项 migration，198/198 applied、pending 为空，`work.007` 仅路由 game DB，五库 backup/restore 与 reconcile clean（operations/outbox/dead events 均为 0）。测试缓存关闭，专属 pytest/recovery/architecture/字节码产物待本轮收尾后清理；未触碰仓库 `data/`、运行数据库或用户 `boss_info.json`。下一片审计 `WorkSettlementSqlRepository` 请求期结算 schema/历史列补齐；全局 legacy transaction services、`xiuxian2_handle` 和真实发布迁移/P7 仍未完成。
 2026-09-28 work settlement startup-schema boundary：新增 game-only `work.008`，启动阶段预建 `work_settlement_operations` 并为历史表补齐 `result_json`；`WorkSettlementSqlRepository` 请求路径不再建表/补列，缺 schema 返回 `schema_missing`。本片只完成回执 schema 所有权，明确保留奖励字段映射、结果 DTO 和完整结算事务 semantics 作为下一独立切片。Work claim/refresh/settlement/abort/reset/item-use 聚焦回归 `73 passed`，work source-quality `7 passed`，progress contract `1 passed`；compileall、inventory freshness、progress gate、隔离 architecture (`ok=true`) 和 diff check 通过。五库 recovery 覆盖 199 项 migration，199/199 applied、pending 为空，`work.008` 仅路由 game DB，五库 backup/restore 与 reconcile clean（operations/outbox/dead events 均为 0）。测试缓存关闭，专属 pytest/recovery/architecture/字节码产物待本轮收尾后清理；未触碰仓库 `data/`、运行数据库或用户 `boss_info.json`。下一片迁移结算奖励字段/结果 DTO 与事务 ownership；全局 legacy transaction services、`xiuxian2_handle` 和真实发布迁移/P7 仍未完成。
+2026-09-29 activity claim-all game-db cutover：默认 Web 与 NoneBot `活动领取` 统一使用 game DB 的 `ActivityClaimAllApplication/ActivityClaimAllRepository`，不再由 `plugin.py` 注入 `LegacyActivityRewardRepository`；`activity_reward.002` schema 只在启动迁移创建，请求缺 schema 明确拒绝。新增 `activity_reward.003` 只读分块回填旧 `activity/activity.db` 的完成/未完成回执，冲突时拒绝覆盖；`BackupService` 对旧库使用 SQLite 在线备份，恢复演练验证先恢复旧库、再回填并续跑未完成步骤。活动聚焦、平台迁移、progress/inventory、architecture contract 共 `99 passed`，architecture CLI `ok=true`，compileall 和 diff check 通过。旧任务/战令/首领奖励资产写入仍是 compatibility adapter，活动全域迁移、真实发布数据/P7 和全局 legacy blockers 仍未完成；本轮 pytest/recovery/architecture/pyc 临时产物已清理，磁盘约 23 GiB 可用、RAM 约 1.3 GiB 可用。

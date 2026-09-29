@@ -77,7 +77,7 @@ _activity_sign_settlement_service_instance = None
 _activity_pass_claim_service_instance = None
 _activity_collect_exchange_service_instance = None
 _activity_claim_all_service_instance = None
-activity_claim_all_application = ActivityClaimAllApplication(DB_PATH)
+activity_claim_all_application = ActivityClaimAllApplication(get_paths().game_db)
 
 
 def _activity_claim_all_service():
@@ -974,19 +974,12 @@ def claim_activity_pass_rewards(user_id: str, query: str = "", operation_id: str
 def claim_activity_rewards(user_id: str, operation_id: str | None = None) -> tuple[bool, str]:
     uid = str(user_id)
     operation_id = operation_id or f"activity:claim-all:{uid}:{runtime_ids.new_id()}"
-    from .activity_boss import claim_boss_milestone_reward, claim_boss_rank_reward
+    from ...compatibility.legacy_activity_claim_steps import build_legacy_activity_claim_runners
 
     result = activity_claim_all_application.run(
         operation_id,
         uid,
-        {
-            "tasks": lambda child_id: claim_activity_tasks(uid, operation_id=child_id),
-            "pass": lambda child_id: claim_activity_pass_rewards(uid, operation_id=child_id),
-            "boss_milestone": lambda child_id: claim_boss_milestone_reward(
-                uid, operation_id=child_id
-            ),
-            "boss_rank": lambda child_id: claim_boss_rank_reward(uid, operation_id=child_id),
-        },
+        build_legacy_activity_claim_runners(uid),
     )
     if result.status == "retryable_failure":
         logger.warning(

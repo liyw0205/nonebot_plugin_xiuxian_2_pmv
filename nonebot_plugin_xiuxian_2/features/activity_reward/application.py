@@ -1,14 +1,14 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable, Mapping
 
 from ...core.errors import ConflictError, DomainError, ValidationError
 from ...core.result import OperationOutcome, ReplyPlan
 from ...infrastructure.database import DatabaseUnitOfWork, OperationLedger
 from ...infrastructure.observability import trace_context
 from .domain import ActivityClaimRequest
-from .repository import ActivityRewardRepository, LegacyActivityRewardRepository
+from .repository import ActivityRewardRepository
 from .schemas import ActivityClaimResult
 from .claim_all_application import ActivityClaimAllApplication
 
@@ -16,10 +16,11 @@ from .claim_all_application import ActivityClaimAllApplication
 class ActivityRewardApplication:
     action = "activity.claim_all"
 
-    def __init__(self, database: str | Path, *, repository: ActivityRewardRepository | None = None, ledger: OperationLedger | None = None) -> None:
+    def __init__(self, database: str | Path, *, repository: ActivityRewardRepository | None = None, ledger: OperationLedger | None = None, runners_factory: Callable[[str], Mapping[str, Any]] | None = None) -> None:
         self.database = str(database)
         self.repository = repository
         self.ledger = ledger or OperationLedger()
+        self.runners_factory = runners_factory
 
     def claim_all(self, *, operation_id: str, user_id: str) -> OperationOutcome[dict[str, Any]]:
         request = ActivityClaimRequest(str(operation_id).strip(), str(user_id).strip())
@@ -36,22 +37,33 @@ class ActivityRewardApplication:
                         previous = existing.outcome()
                         if previous is not None:
                             return previous.replay()
-                        raise ConflictError("操作正在处理中")
+                        if self.repository is not None:
+                            raise ConflictError("操作正在处理中")
+                        # The feature coordinator reserves its own durable plan
+                        # before invoking a child, so a stranded outer receipt
+                        # can safely resume the same operation ID.
                 if self.repository is None:
-                    from ...xiuxian.xiuxian_activity.service import claim_activity_tasks, claim_activity_pass_rewards
-                    from ...xiuxian.xiuxian_activity.activity_boss import claim_boss_milestone_reward, claim_boss_rank_reward
+                    from ...compatibility.legacy_activity_claim_steps import build_legacy_activity_claim_runners
+
+                    runners = (self.runners_factory or build_legacy_activity_claim_runners)(request.user_id)
                     raw = ActivityClaimAllApplication(self.database).run(
                         request.operation_id,
                         request.user_id,
-                        {
-                            "tasks": lambda child_id: claim_activity_tasks(request.user_id, operation_id=child_id),
-                            "pass": lambda child_id: claim_activity_pass_rewards(request.user_id, operation_id=child_id),
-                            "boss_milestone": lambda child_id: claim_boss_milestone_reward(request.user_id, operation_id=child_id),
-                            "boss_rank": lambda child_id: claim_boss_rank_reward(request.user_id, operation_id=child_id),
-                        },
+                        runners,
                     )
                 else:
                     raw = self.repository.claim_all(request.operation_id, request.user_id)
+                raw_status = raw.get("status") if isinstance(raw, dict) else getattr(raw, "status", None)
+                if raw_status == "retryable_failure":
+                    retry_message = raw.get("text") if isinstance(raw, dict) else raw.text
+                    outcome = OperationOutcome.failed(
+                        request.operation_id, self.action, str(retry_message), code="retryable_failure",
+                        data={"status": "retryable_failure", "operation_id": request.operation_id, "user_id": request.user_id},
+                        audit_category="activity_reward",
+                    )
+                    with DatabaseUnitOfWork(self.database, immediate=True) as uow:
+                        self.ledger.finish(uow, outcome)
+                    return outcome
                 if isinstance(raw, tuple):
                     ok, text = bool(raw[0]), str(raw[1] or "")
                 elif isinstance(raw, dict):
