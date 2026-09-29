@@ -37,6 +37,12 @@ class BankAccountInfoApplication:
             "banklevel": bank_level,
         }
 
+    def legacy_record_status(self, *, user_id: str) -> str:
+        if not Path(self.player_database).is_file():
+            return "missing"
+        with DatabaseUnitOfWork(self.player_database, read_only=True) as uow:
+            return self.legacy_account_reader.record_status(uow, str(user_id))
+
     def get_info(self, *, user_id: str) -> dict[str, Any]:
         user_id = str(user_id).strip()
         if not user_id:

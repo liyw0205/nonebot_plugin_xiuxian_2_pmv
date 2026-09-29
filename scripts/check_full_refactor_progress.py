@@ -176,6 +176,9 @@ def _slice_status() -> dict[str, dict[str, object]]:
         (PACKAGE / "features" / "bank" / name).read_text(encoding="utf-8")
         for name in ("account_application.py", "account_withdrawal_application.py", "account_upgrade_application.py", "account_interest_application.py")
     )
+    bank_upgrade_writer = bank_account_repository[
+        bank_account_repository.index("    def save_upgrade(") : bank_account_repository.index("    def save_interest(")
+    ]
     bank_migrations = (PACKAGE / "features" / "bank" / "migrations.py").read_text(encoding="utf-8")
     bank_legacy_account_repository = (PACKAGE / "features" / "bank" / "legacy_account_repository.py").read_text(encoding="utf-8")
     bank_legacy_receipts = (PACKAGE / "compatibility" / "legacy_bank_operation_receipts.py").read_text(encoding="utf-8")
@@ -815,6 +818,20 @@ def _slice_status() -> dict[str, dict[str, object]]:
                 and "read_only=True" in bank_account_info_application
                 and "SELECT * FROM \"bankinfo\" WHERE user_id=?" in bank_legacy_account_repository
                 and "CREATE TABLE" not in bank_legacy_account_repository
+            ),
+            "legacy_account_write_fallbacks_guarded": (
+                bank_handler.count("_legacy_account_record_status(user_id)") == 4
+                and "def legacy_record_status(" in bank_account_info_application
+                and "def record_status(" in bank_legacy_account_repository
+            ),
+            "first_upgrade_and_interest_bootstrap_owned": (
+                "initial_account: Mapping[str, Any] | None = None" in bank_account_applications
+                and "self.repository.create_account(" in bank_account_applications
+                and "def create_account(" in bank_account_repository
+            ),
+            "upgrade_preserves_interest_clock": (
+                "UPDATE bank_accounts SET bank_level=? WHERE user_id=? AND bank_level=?" in bank_upgrade_writer
+                and "updated_at" not in bank_upgrade_writer
             ),
             "legacy_account_write_compatibility_isolated": (
                 "PlayerDataManager" not in bank_facade

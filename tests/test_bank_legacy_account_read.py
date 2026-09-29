@@ -27,6 +27,7 @@ class BankLegacyAccountReadTests(unittest.TestCase):
 
         self.assertEqual(result, {"savestone": 0, "savetime": "now", "banklevel": "1"})
         self.assertFalse(self.player_database.exists())
+        self.assertEqual(self.application.legacy_record_status(user_id="u"), "missing")
 
     def test_missing_table_returns_defaults_without_creating_schema(self) -> None:
         with sqlite3.connect(self.player_database) as connection:
@@ -52,6 +53,19 @@ class BankLegacyAccountReadTests(unittest.TestCase):
         with sqlite3.connect(self.player_database) as connection:
             after = tuple(row[1] for row in connection.execute('PRAGMA table_info("bankinfo")'))
         self.assertEqual(after, before)
+        self.assertEqual(self.application.legacy_record_status(user_id="u"), "present")
+
+    def test_legacy_table_without_user_id_is_invalid_for_write_fallbacks(self) -> None:
+        with sqlite3.connect(self.player_database) as connection:
+            connection.execute("CREATE TABLE bankinfo(savestone INTEGER)")
+
+        self.assertEqual(self.application.legacy_record_status(user_id="u"), "invalid")
+
+    def test_missing_legacy_user_row_is_distinct_from_an_existing_partial_row(self) -> None:
+        with sqlite3.connect(self.player_database) as connection:
+            connection.execute("CREATE TABLE bankinfo(user_id TEXT PRIMARY KEY, savestone INTEGER)")
+
+        self.assertEqual(self.application.legacy_record_status(user_id="u"), "missing")
 
     def test_full_legacy_row_is_returned_with_normalized_values(self) -> None:
         with sqlite3.connect(self.player_database) as connection:

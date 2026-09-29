@@ -30,6 +30,12 @@ class BankAccountRepository:
         row = uow.query_one("SELECT user_id,saved_stone,bank_level,updated_at FROM bank_accounts WHERE user_id=?", (user_id,))
         return None if row is None else dict(row)
 
+    def create_account(self, uow: DatabaseUnitOfWork, *, user_id: str, saved_stone: int, bank_level: str, updated_at: str) -> None:
+        uow.execute(
+            "INSERT INTO bank_accounts(user_id,saved_stone,bank_level,updated_at) VALUES(?,?,?,?)",
+            (str(user_id), int(saved_stone), str(bank_level), str(updated_at)),
+        )
+
     def operation(self, uow: DatabaseUnitOfWork, operation_id: str) -> dict[str, Any] | None:
         row = uow.query_one("SELECT * FROM bank_account_operations WHERE operation_id=?", (operation_id,))
         return None if row is None else dict(row)
@@ -58,8 +64,8 @@ class BankAccountRepository:
         if changed.rowcount != 1:
             raise RuntimeError("wallet state changed during bank upgrade")
         upgraded = uow.execute(
-            "UPDATE bank_accounts SET bank_level=?, updated_at=? WHERE user_id=? AND bank_level=?",
-            (decision.bank_level, settled_at, user_id, expected_level),
+            "UPDATE bank_accounts SET bank_level=? WHERE user_id=? AND bank_level=?",
+            (decision.bank_level, user_id, expected_level),
         )
         if upgraded.rowcount != 1:
             raise RuntimeError("bank account state changed during bank upgrade")

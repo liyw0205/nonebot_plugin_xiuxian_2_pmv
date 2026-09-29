@@ -1,6 +1,11 @@
 # 灵庄资产结算
 
-灵庄的存入、取出、会员升级和手动结息最终写入统一的 `BankApplication`。跨库余额与 `player_db.bankinfo` 更新仍由兼容仓储调用旧事务实现，application 在 `game_db` 维护统一 operation ledger 和审计记录。
+## 当前边界
+
+- 旧 v1 Web API 仍由 `BankApplication -> LegacyBankRepository` 调用跨库 legacy transaction service；这条路径尚未完成重构。
+- 默认 `灵庄` matcher 优先读取 game DB 的 `bank_accounts` 投影。缺少投影时，完整 legacy `player_db.bankinfo` 记录由 bootstrap 导入；没有 legacy 用户记录时，存款可创建默认账户，首次升级/结息会在同一 game DB 事务中创建默认账户并结算。
+- matcher 的账户读取经 `BankAccountInfoApplication -> BankLegacyAccountReadRepository` 使用只读 player DB 查询。已有但不完整的用户记录或无效表结构不会落入写 fallback；显式 `savef` 仅作为兼容 writer 保留。
+- v2 Web route 与 first-use matcher 仅在对应 service 显式注入后启用，使用 game DB-owned account applications。
 
 ## 接口
 
@@ -13,9 +18,9 @@
 - `POST /api/v1/bank/v2/interest`（仅注入 `bank_first_use_interest` service 时启用）
 - `GET /api/v1/bank/v2/info`（仅注入 `bank_first_use_info` service 时启用）
 
-写接口需要 `user` 权限、CSRF 和幂等键；旧 `灵庄` 命令继续由兼容入口负责消息排版。
+写接口需要 `user` 权限、CSRF 和幂等键；旧 `灵庄` 命令入口保留消息排版，默认 matcher 已优先走账户投影 application。
 
-迁移版本为 `bank.001`，灰度开关为 `bank_enabled` / `XIUXIAN_BANK_ENABLED`。
+`bank.001` 登记旧 bank 功能切片；`bank.002` 在启动阶段创建 game DB-owned `bank_accounts` 与 `bank_account_operations`。账户请求只校验 schema，不执行 DDL。旧账户按用户首次读取时 bootstrap 导入，不做批量 destructive rewrite。
 
 ## 用户流程
 
@@ -23,7 +28,7 @@
 
 ## 命令与别名
 
-旧 `灵庄` 命令及其别名全部保留，由兼容命令适配器转发。
+旧 `灵庄` 命令及其别名全部保留；默认 matcher 的新账户路径由 feature application 承载，未被接管的 fallback 仍是兼容边界。
 
 ## Web API
 
@@ -31,11 +36,11 @@
 
 ## 数据模型与迁移
 
-`bank.001` 写入 `game_db.bank_feature_migrations`；余额历史表仍由兼容仓储维护。
+`bank.001` 写入 `game_db.bank_feature_migrations`。新账户与 operation receipt 由 `bank.002` 预建；历史 `bankinfo` 是只读导入来源，显式兼容 writer 与 v1 Web legacy repository 尚未移除。
 
 ## 事务与失败回滚
 
-application 先登记 operation ledger，再调用跨库仓储；异常标记失败并允许对账重试。
+`BankApplication` v1 Web wrapper 先登记 operation ledger，再调用跨库兼容仓储；game DB account applications 在同一事务中校验余额/会员状态、写账户与回执。首次升级和结息的默认账户创建与资产结算也在同一事务中完成；升级不重置 `updated_at`。
 
 ## 定时任务
 
@@ -55,7 +60,7 @@ application 先登记 operation ledger，再调用跨库仓储；异常标记失
 
 ## 灰度开关、回滚和已知限制
 
-关闭开关后旧命令继续可用；跨库历史状态待完整发布周期后再迁移。
+关闭开关后旧 Web 与命令兼容入口继续可用。待办：将 v1 Web 默认调用从 legacy transaction services 切到 feature-owned game DB applications，并补齐正式发布迁移、恢复/对账和灰度回滚证据；在完成前不能宣称 bank 全面重构。
 
 ## Manifest 清单
 - `alias: 灵庄存灵石`

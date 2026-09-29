@@ -135,6 +135,10 @@ async def bank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: 
             await handle_send(bot, event, msg, md_type="灵庄", k1="存灵石", v1="灵庄存灵石", k2="取灵石", v2="灵庄取灵石", k3="信息", v3="灵庄信息")
             await bank.finish()
 
+        if _legacy_account_record_status(user_id) != "missing":
+            await handle_send(bot, event, "历史灵庄账户数据不完整，本次存款未处理，请联系管理员核查。", md_type="灵庄")
+            await bank.finish()
+
         if int(user_info['stone']) < num:
             msg = f"道友所拥有的灵石为{user_info['stone']}枚，金额不足，请重新输入！"
             await handle_send(bot, event, msg, md_type="灵庄", k1="存灵石", v1="灵庄存灵石", k2="取灵石", v2="灵庄取灵石", k3="信息", v3="灵庄信息")
@@ -231,6 +235,10 @@ async def bank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: 
             await handle_send(bot, event, msg, md_type="灵庄", k1="存灵石", v1="灵庄存灵石", k2="取灵石", v2="灵庄取灵石", k3="信息", v3="灵庄信息")
             await bank.finish()
 
+        if _legacy_account_record_status(user_id) != "missing":
+            await handle_send(bot, event, "历史灵庄账户数据不完整，本次取款未处理，请联系管理员核查。", md_type="灵庄")
+            await bank.finish()
+
         bankinfo = _read_legacy_bankinfo(user_id)
         if int(bankinfo['savestone']) < num:
             msg = f"道友当前灵庄所存有的灵石为{bankinfo['savestone']}枚，金额不足，请重新输入！"
@@ -321,6 +329,10 @@ async def bank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: 
             await handle_send(bot, event, msg, md_type="灵庄", k1="升级", v1="灵庄升级会员", k2="信息", v2="灵庄信息", k3="帮助", v3="灵庄帮助")
             await bank.finish()
 
+        if _legacy_account_record_status(user_id) != "missing":
+            await handle_send(bot, event, "历史灵庄账户数据不完整，本次升级未处理，请联系管理员核查。", md_type="灵庄")
+            await bank.finish()
+
         bankinfo = _read_legacy_bankinfo(user_id)
         userlevel = bankinfo["banklevel"]
         if userlevel == str(len(BANKLEVEL)):
@@ -342,6 +354,11 @@ async def bank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: 
             next_level=next_level,
             cost=stonecost,
             settled_at=runtime_clock.now().isoformat(),
+            initial_account={
+                "saved_stone": int(bankinfo["savestone"]),
+                "bank_level": str(userlevel),
+                "updated_at": str(bankinfo["savetime"]),
+            },
         )
         upgrade_status = str(upgrade_data.get("status", "failed"))
         upgrade_cost = int(upgrade_data.get("cost", 0) or 0)
@@ -451,6 +468,10 @@ async def bank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: 
             await handle_send(bot, event, msg, md_type="灵庄", k1="存灵石", v1="灵庄存灵石", k2="取灵石", v2="灵庄取灵石", k3="信息", v3="灵庄信息")
             await bank.finish()
 
+        if _legacy_account_record_status(user_id) != "missing":
+            await handle_send(bot, event, "历史灵庄账户数据不完整，本次结息未处理，请联系管理员核查。", md_type="灵庄")
+            await bank.finish()
+
         bankinfo = _read_legacy_bankinfo(user_id)
         expected_saved_stone = bankinfo['savestone']
         expected_saved_at = bankinfo['savetime']
@@ -461,6 +482,11 @@ async def bank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: 
             interest=give_stone,
             bank_level=str(bankinfo['banklevel']),
             settled_at=str(bankinfo['savetime']),
+            initial_account={
+                "saved_stone": int(expected_saved_stone),
+                "bank_level": str(bankinfo["banklevel"]),
+                "updated_at": str(bankinfo["savetime"]),
+            },
         )
         settlement_status = str(settlement_data.get("status", "failed"))
         settlement_interest = int(settlement_data.get("interest", 0) or 0)
@@ -508,6 +534,15 @@ def readf(user_id):
         user_id=str(user_id),
         default_saved_at=str(runtime_clock.now().strftime('%Y-%m-%d %H:%M:%S')),
     )
+
+
+def _legacy_account_record_status(user_id):
+    from ...features.bank.account_info_application import BankAccountInfoApplication
+
+    return BankAccountInfoApplication(
+        get_paths().game_db,
+        player_database=get_paths().player_db,
+    ).legacy_record_status(user_id=str(user_id))
 
 
 def _read_legacy_bankinfo(user_id):
