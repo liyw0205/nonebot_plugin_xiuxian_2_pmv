@@ -173,7 +173,7 @@ compileall、architecture、inventory、diff check 与五库 recovery 通过；�
 
 ## 当前切片与下一切片选择
 
-当前执行基线（2026-09-29）：活动 `tasks`、`pass`、`boss_milestone` 已使用 game DB feature repositories、幂等账本和 reservations 管理奖励；migration `.004` 至 `.009` 负责对应 schema 与历史回执，旧 `activity.db` 仍是状态 projection。下一片审计 `boss_rank` 的 legacy ATTACH 写入，然后处理 bank v1 Web 的 `LegacyBankRepository` 及仍可达的 `xiuxian2_handle`/legacy transaction 路径。旧跨库崩溃仍需真实数据备份/P7 资产核验；活动状态迁移和正式发布 recovery/reconcile 是退出 blocker，不能以隔离测试替代。
+当前执行基线（2026-09-30）：活动 `tasks`、`pass`、`boss_milestone`、`boss_rank` 子领奖现由 game DB feature repositories、幂等账本和 reservations 管理奖励；migration `.004` 至 `.011` 负责相关 schema 与历史回执，旧 `activity.db` 仍是领奖状态 projection，尚未迁移其拥有者。下一片处理 bank v1 Web 中由 `plugin.py` 注入的 `LegacyBankRepository`，随后继续审计仍可达的 `xiuxian2_handle`/legacy transaction 路径。历史 ATTACH 版本的跨库崩溃仍需真实数据备份/P7 资产核验；活动状态迁移和正式发布 recovery/reconcile 是退出 blocker，不能以隔离测试替代。
 
 最近完成 `work abort cleanup application cutover`：终止、未接/过期悬赏清理与重置改经 `WorkAbortCleanupApplication -> WorkAbortCleanupSqlRepository`；旧 service 移至 compatibility 模块并保留 transaction API re-export。game-only `work.006` 预建 active snapshot 与 cleanup ledger，缺 migration 时拒绝写入且不在请求期建表。聚焦回归 `68 passed`、source-quality `5 passed`、progress `1 passed`；compileall、inventory、progress、隔离 architecture (`ok=true`) 与 diff check 通过。五库 recovery 覆盖 197 项 migration，全部 applied、pending 为空，`work.006` 仅路由 game DB，reconcile clean。pytest、字节码、recovery 和 architecture 临时产物收尾时清理，未触碰仓库 `data/`、运行数据库或用户 `boss_info.json`。下一片迁移 `WorkClaimSqlRepository` 的 claim/active-snapshot 请求期 schema 到启动 migration；settlement schema、全局 legacy transaction services、`xiuxian2_handle` 与真实发布迁移/P7 仍开放。
 

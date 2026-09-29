@@ -1221,6 +1221,7 @@ class BossRewardClaimService:
         self.lock = lock or RLock()
         self.max_goods_num = int(max_goods_num or XiuConfig().max_goods_num)
         self._milestone_application = None
+        self._rank_application = None
 
     def _get_milestone_application(self):
         if self._milestone_application is None:
@@ -1230,6 +1231,15 @@ class BossRewardClaimService:
                 self.game_database, self.activity_database
             )
         return self._milestone_application
+
+    def _get_rank_application(self):
+        if self._rank_application is None:
+            from ...features.activity_reward.boss_rank_claim_application import ActivityBossRankClaimApplication
+
+            self._rank_application = ActivityBossRankClaimApplication(
+                self.game_database, self.activity_database
+            )
+        return self._rank_application
 
     @staticmethod
     def _json(value) -> str:
@@ -1254,6 +1264,9 @@ class BossRewardClaimService:
         milestone = self._get_milestone_application().get_result(operation_id, user_id)
         if milestone is not None:
             return BossRewardClaimResult(milestone.status, milestone.names)
+        rank = self._get_rank_application().get_result(operation_id, user_id)
+        if rank is not None:
+            return BossRewardClaimResult(rank.status, ((rank.name,) if rank.name else ()), rank.rank)
         with self.lock, closing(db_backend.connect(self.activity_database)) as conn:
             self._ensure_schema(conn)
             conn.commit()
@@ -1341,61 +1354,20 @@ class BossRewardClaimService:
         return BossRewardClaimResult(result.status, result.names)
 
     def claim_rank(self, user_id, activity_key, tiers, operation_id=None):
-        user_id, activity_key = str(user_id), str(activity_key)
-        with self.lock, closing(db_backend.connect(self.activity_database)) as conn:
-            try:
-                conn.execute("ATTACH DATABASE %s AS game_data", (str(self.game_database),))
-                conn.execute("BEGIN IMMEDIATE")
-                self._ensure_schema(conn)
-                if operation_id is not None:
-                    operation_id = str(operation_id).strip()
-                    if not operation_id:
-                        raise ValueError("operation_id is required")
-                    previous = conn.execute(
-                        "SELECT payload,result_json FROM activity_boss_reward_claim_operations "
-                        "WHERE operation_id=%s",
-                        (operation_id,),
-                    ).fetchone()
-                    if previous:
-                        conn.rollback()
-                        previous_payload = json.loads(str(previous[0]))
-                        if previous_payload[:2] != [user_id, activity_key]:
-                            return BossRewardClaimResult("operation_conflict")
-                        data = json.loads(str(previous[1]))
-                        return BossRewardClaimResult(
-                            "duplicate", tuple(data["names"]), int(data["rank"])
-                        )
-                ordered = [str(row[0]) for row in conn.execute("SELECT user_id FROM activity_boss_damage WHERE activity_key=%s ORDER BY total_damage DESC", (activity_key,)).fetchall()]
-                if user_id not in ordered:
-                    conn.rollback()
-                    return BossRewardClaimResult("not_participant")
-                rank = ordered.index(user_id) + 1
-                tier = next((row for row in tiers if int(row["rank_min"]) <= rank <= int(row["rank_max"])), None)
-                if tier is None:
-                    conn.rollback()
-                    return BossRewardClaimResult("not_eligible", rank=rank)
-                tier_key = f"{tier['rank_min']}-{tier['rank_max']}"
-                if conn.execute("SELECT 1 FROM activity_boss_rank_claim WHERE activity_key=%s AND user_id=%s AND tier_key=%s", (activity_key, user_id, tier_key)).fetchone():
-                    conn.rollback()
-                    return BossRewardClaimResult("already_claimed", rank=rank)
-                payload = self._json([user_id, activity_key, rank, tier_key, tier.get("reward", "")])
-                operation_id = operation_id or self._operation_id("rank", payload)
-                previous = conn.execute("SELECT payload,result_json FROM activity_boss_reward_claim_operations WHERE operation_id=%s", (operation_id,)).fetchone()
-                if previous:
-                    conn.rollback()
-                    if not operation_payload_matches(previous[0], payload):
-                        return BossRewardClaimResult("operation_conflict", rank=rank)
-                    data = json.loads(str(previous[1]))
-                    return BossRewardClaimResult("duplicate", tuple(data["names"]), int(data["rank"]))
-                error = self._grant(conn, user_id, self._rewards([str(tier.get("reward") or "")]))
-                if error:
-                    conn.rollback()
-                    return BossRewardClaimResult(error, rank=rank)
-                conn.execute("INSERT INTO activity_boss_rank_claim(activity_key,user_id,tier_key,create_time) VALUES(%s,%s,%s,CURRENT_TIMESTAMP)", (activity_key, user_id, tier_key))
-                return self._finish(conn, operation_id, payload, [str(tier.get("name") or "排行奖励")], rank)
-            except Exception:
-                conn.rollback()
-                raise
+        normalized = []
+        for row in tiers:
+            reward_text = str(row.get("reward") or "")
+            normalized.append({
+                "rank_min": row["rank_min"],
+                "rank_max": row["rank_max"],
+                "name": row.get("name"),
+                "reward": reward_text,
+                "reward_items": get_item_list(reward_text) if reward_text.strip() else [],
+            })
+        result = self._get_rank_application().claim(
+            user_id, activity_key, normalized, self.max_goods_num, operation_id=operation_id
+        )
+        return BossRewardClaimResult(result.status, ((result.name,) if result.name else ()), result.rank)
 
 class ActivityBossCoopSettlementService(ActivityBossSettlementService):
     def settle(

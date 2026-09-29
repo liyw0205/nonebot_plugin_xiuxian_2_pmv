@@ -116,6 +116,13 @@ class RefactorProgressTests(unittest.TestCase):
         self.assertTrue(activity["boss_milestone_legacy_state_projection_retryable"])
         self.assertTrue(activity["boss_milestone_compatibility_facade_isolated"])
         self.assertTrue(activity["boss_milestone_claim_all_child_operation_id_stable"])
+        self.assertTrue(activity["boss_rank_game_reward_application_owned"])
+        self.assertTrue(activity["boss_rank_started_operation_recoverable"])
+        self.assertTrue(activity["boss_rank_startup_schema_and_receipt_backfill"])
+        self.assertTrue(activity["boss_rank_legacy_state_projection_retryable"])
+        self.assertTrue(activity["boss_rank_compatibility_facade_isolated"])
+        self.assertTrue(activity["boss_rank_claim_all_child_operation_id_stable"])
+        self.assertTrue(activity["boss_rank_activity_state_still_legacy_projection"])
         dungeon_team = slices["dungeon_team"]
         self.assertTrue(dungeon_team["team_commands_application_owned"])
         self.assertTrue(dungeon_team["legacy_team_service_factories_removed"])

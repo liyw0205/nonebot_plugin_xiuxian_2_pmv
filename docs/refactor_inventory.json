@@ -2591,6 +2591,8 @@
     "activity_boss_milestone_claim_operations",
     "activity_boss_milestone_claim_reservations",
     "activity_boss_rank_claim",
+    "activity_boss_rank_claim_operations",
+    "activity_boss_rank_claim_reservations",
     "activity_boss_reward_claim_operations",
     "activity_boss_state",
     "activity_claim_all_operations",

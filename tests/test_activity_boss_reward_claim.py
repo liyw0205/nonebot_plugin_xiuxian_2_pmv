@@ -12,8 +12,12 @@ import nonebot
 nonebot.init()
 
 from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_activity.transaction_service import BossRewardClaimService
-from nonebot_plugin_xiuxian_2.features.activity_reward.migrations import apply_activity_boss_milestone_claim
+from nonebot_plugin_xiuxian_2.features.activity_reward.migrations import (
+    apply_activity_boss_milestone_claim,
+    apply_activity_boss_rank_claim,
+)
 from nonebot_plugin_xiuxian_2.features.activity_reward.boss_milestone_claim_application import ActivityBossMilestoneClaimApplication
+from nonebot_plugin_xiuxian_2.features.activity_reward.boss_rank_claim_application import ActivityBossRankClaimApplication
 from nonebot_plugin_xiuxian_2.infrastructure.database import DatabaseUnitOfWork, ReconcileService
 from nonebot_plugin_xiuxian_2.plugin import apply_platform_schema
 from tests.test_db_backend import db_backend
@@ -31,6 +35,7 @@ class ActivityBossRewardClaimTests(unittest.TestCase):
             conn.execute("CREATE TABLE activity_boss_rank_claim(activity_key TEXT,user_id TEXT,tier_key TEXT,create_time TEXT,PRIMARY KEY(activity_key,user_id,tier_key))")
             conn.execute("INSERT INTO activity_boss_milestone VALUES('a','m1','')")
             conn.execute("INSERT INTO activity_boss_damage VALUES('a','u',100,'')")
+            conn.execute("INSERT INTO activity_boss_damage VALUES('a','v',50,'')")
         with db_backend.transaction(self.game) as conn:
             conn.execute("CREATE TABLE user_xiuxian(user_id TEXT PRIMARY KEY,stone INTEGER)")
             conn.execute("INSERT INTO user_xiuxian VALUES('u',0)")
@@ -38,7 +43,9 @@ class ActivityBossRewardClaimTests(unittest.TestCase):
         with DatabaseUnitOfWork(self.game) as uow:
             apply_platform_schema(uow)
             apply_activity_boss_milestone_claim(uow)
+            apply_activity_boss_rank_claim(uow)
         self.application = ActivityBossMilestoneClaimApplication(self.game, self.activity)
+        self.rank_application = ActivityBossRankClaimApplication(self.game, self.activity)
         self.service = BossRewardClaimService(self.activity, self.game, max_goods_num=100)
 
     def tearDown(self): self.tmp.cleanup()
@@ -282,13 +289,158 @@ class ActivityBossRewardClaimTests(unittest.TestCase):
 
     def test_rank_claim_and_failure_rollback(self):
         tiers = [{"rank_min": 1, "rank_max": 1, "name": "第一名", "reward": "灵石x80"}]
-        self.assertEqual("applied", self.service.claim_rank("u", "a", tiers).status)
         with db_backend.transaction(self.activity) as conn:
-            conn.execute("DELETE FROM activity_boss_rank_claim"); conn.execute("DELETE FROM activity_boss_reward_claim_operations")
-            conn.execute("CREATE TRIGGER fail_rank BEFORE INSERT ON activity_boss_rank_claim BEGIN SELECT RAISE(ABORT,'x'); END")
-        with db_backend.transaction(self.game) as conn: conn.execute("UPDATE user_xiuxian SET stone=0")
-        with self.assertRaises(Exception): self.service.claim_rank("u", "a", tiers)
-        with db_backend.connection(self.game) as conn: self.assertEqual(0, conn.execute("SELECT stone FROM user_xiuxian").fetchone()[0])
+            conn.execute("CREATE TRIGGER fail_rank BEFORE INSERT ON activity_boss_rank_claim BEGIN SELECT RAISE(ABORT,'projection unavailable'); END")
+        with self.assertRaisesRegex(Exception, "projection unavailable"):
+            self.service.claim_rank("u", "a", tiers, "rank-projection")
+        with db_backend.connection(self.game) as conn:
+            self.assertEqual(80, conn.execute("SELECT stone FROM user_xiuxian").fetchone()[0])
+            self.assertEqual("granted", conn.execute(
+                "SELECT status FROM activity_boss_rank_claim_operations WHERE operation_id='rank-projection'"
+            ).fetchone()[0])
+        with db_backend.transaction(self.activity) as conn:
+            conn.execute("DROP TRIGGER fail_rank")
+        self.assertEqual("duplicate", self.rank_application.resume_pending("rank-projection", "u").status)
+        with db_backend.connection(self.activity) as conn:
+            self.assertEqual(1, conn.execute("SELECT COUNT(*) FROM activity_boss_rank_claim WHERE tier_key='1-1'").fetchone()[0])
+        with db_backend.connection(self.game) as conn:
+            self.assertEqual(80, conn.execute("SELECT stone FROM user_xiuxian").fetchone()[0])
+
+    def test_rank_claim_preserves_tier_reclaim_after_rank_changes(self):
+        tiers = [
+            {"rank_min": 1, "rank_max": 1, "name": "第一名", "reward": "灵石x80"},
+            {"rank_min": 2, "rank_max": 2, "name": "第二名", "reward": "灵石x40"},
+        ]
+        first = self.service.claim_rank("u", "a", tiers, "rank-first")
+        self.assertEqual(("applied", 1, ("第一名",)), (first.status, first.rank, first.names))
+        with db_backend.transaction(self.activity) as conn:
+            conn.execute("UPDATE activity_boss_damage SET total_damage=40 WHERE activity_key='a' AND user_id='u'")
+        second = self.service.claim_rank("u", "a", tiers, "rank-second")
+        self.assertEqual(("applied", 2, ("第二名",)), (second.status, second.rank, second.names))
+        with db_backend.connection(self.game) as conn:
+            self.assertEqual(120, conn.execute("SELECT stone FROM user_xiuxian").fetchone()[0])
+        with db_backend.connection(self.activity) as conn:
+            self.assertEqual(["1-1", "2-2"], [row[0] for row in conn.execute(
+                "SELECT tier_key FROM activity_boss_rank_claim ORDER BY tier_key"
+            )])
+
+    def test_rank_snapshots_reject_rank_changes_before_asset_grant(self):
+        tiers = [{"rank_min": 1, "rank_max": 1, "name": "第一名", "reward": "灵石x80"}]
+        claim = self.rank_application.repository.claim
+
+        def change_rank_then_claim(*args, **kwargs):
+            with db_backend.transaction(self.activity) as conn:
+                conn.execute("UPDATE activity_boss_damage SET total_damage=10 WHERE activity_key='a' AND user_id='u'")
+            return claim(*args, **kwargs)
+
+        with patch.object(self.rank_application.repository, "claim", side_effect=change_rank_then_claim):
+            result = self.rank_application.claim("u", "a", tiers, 100, "rank-state-changed")
+        self.assertEqual("state_changed", result.status)
+        with db_backend.connection(self.game) as conn:
+            self.assertEqual(0, conn.execute("SELECT stone FROM user_xiuxian").fetchone()[0])
+
+    def test_rank_inventory_and_asset_failures_do_not_partially_grant(self):
+        tier = [{"rank_min": 1, "rank_max": 1, "name": "第一名", "reward": "令牌x2"}]
+        limited = ActivityBossRankClaimApplication(self.game, self.activity)
+        self.assertEqual("inventory_full", limited.claim("u", "a", [
+            {**tier[0], "reward_items": [{"id": 101, "name": "令牌", "type": "道具", "quantity": 2}]},
+        ], 1, "rank-limited").status)
+        with db_backend.transaction(self.game) as conn:
+            conn.execute("CREATE TRIGGER fail_rank_item BEFORE INSERT ON back BEGIN SELECT RAISE(ABORT,'item unavailable'); END")
+        with self.assertRaisesRegex(Exception, "item unavailable"):
+            limited.claim("u", "a", [
+                {**tier[0], "reward_items": [
+                    {"type": "stone", "quantity": 50},
+                    {"id": 101, "name": "令牌", "type": "道具", "quantity": 2},
+                ]},
+            ], 100, "rank-asset-failure")
+        with db_backend.connection(self.game) as conn:
+            self.assertEqual(0, conn.execute("SELECT stone FROM user_xiuxian").fetchone()[0])
+            self.assertEqual("started", conn.execute(
+                "SELECT status FROM activity_boss_rank_claim_operations WHERE operation_id='rank-asset-failure'"
+            ).fetchone()[0])
+        with db_backend.transaction(self.game) as conn:
+            conn.execute("DROP TRIGGER fail_rank_item")
+        self.assertTrue(self.rank_application.resume_pending("rank-asset-failure", "u").succeeded)
+        with db_backend.connection(self.game) as conn:
+            self.assertEqual(50, conn.execute("SELECT stone FROM user_xiuxian").fetchone()[0])
+            self.assertEqual(2, conn.execute("SELECT goods_num FROM back WHERE goods_id=101").fetchone()[0])
+
+    def test_default_rank_command_resumes_stable_child_id(self):
+        from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_activity import activity_boss
+
+        finalize = self.rank_application.repository._finalize_legacy_state
+
+        def finalize_then_lose_acknowledgement(request, uow=None):
+            finalize(request, uow)
+            raise RuntimeError("lost projection acknowledgement")
+
+        self.rank_application.repository._finalize_legacy_state = finalize_then_lose_acknowledgement
+        with (
+            patch.object(activity_boss, "_boss_rank_claim_application", return_value=self.rank_application),
+            patch.object(activity_boss, "_runtime_gate", return_value=(True, "", None)),
+            patch.object(activity_boss, "_find_boss_activity", return_value={
+                "key": "a", "rank_rewards": [{"rank_min": 1, "rank_max": 1, "name": "第一名", "reward": "灵石x80"}],
+            }),
+            patch.object(activity_boss, "ensure_activity_files"),
+            patch.object(activity_boss, "parse_reward", return_value=[{"type": "stone", "quantity": 80}]),
+            patch.object(activity_boss, "XiuConfig", return_value=SimpleNamespace(max_goods_num=100)),
+            patch.object(activity_boss, "resolve_daohao", return_value="道号"),
+        ):
+            with self.assertRaisesRegex(RuntimeError, "lost projection acknowledgement"):
+                activity_boss.claim_boss_rank_reward("u", operation_id="claim-all:boss-rank-child")
+            self.rank_application.repository._finalize_legacy_state = finalize
+            ok, message = activity_boss.claim_boss_rank_reward("u", operation_id="claim-all:boss-rank-child")
+        self.assertTrue(ok)
+        self.assertIn("第一名", message)
+        with db_backend.connection(self.game) as conn:
+            self.assertEqual(80, conn.execute("SELECT stone FROM user_xiuxian").fetchone()[0])
+
+    def test_rank_result_recovers_from_cli_reconcile(self):
+        from nonebot_plugin_xiuxian_2 import cli
+
+        finalize = self.rank_application.repository._finalize_legacy_state
+        def finalize_then_fail(request, uow=None):
+            finalize(request, uow)
+            raise RuntimeError("projection unavailable")
+        self.rank_application.repository._finalize_legacy_state = finalize_then_fail
+        with self.assertRaisesRegex(RuntimeError, "projection unavailable"):
+            self.rank_application.claim("u", "a", [{"rank_min": 1, "rank_max": 1, "name": "第一名", "reward_items": [
+                {"type": "stone", "quantity": 80},
+            ]}], 100, "rank-cli-retry")
+        self.rank_application.repository._finalize_legacy_state = finalize
+        root = Path(self.tmp.name)
+        context = SimpleNamespace(
+            paths=SimpleNamespace(data=root), clock=self.rank_application.clock,
+            database=SimpleNamespace(path=lambda key: self.game if key == "game_db" else root / "player.db"),
+        )
+        with patch.object(cli, "build_runtime_context", return_value=context), redirect_stdout(StringIO()):
+            self.assertEqual(0, cli.main(["reconcile", "--apply", "--data-dir", str(root)]))
+        with db_backend.connection(self.game) as conn:
+            self.assertEqual("applied", conn.execute("SELECT status FROM operation_ledger WHERE operation_id='rank-cli-retry'").fetchone()[0])
+            self.assertEqual(80, conn.execute("SELECT stone FROM user_xiuxian").fetchone()[0])
+
+    def test_rank_result_recovers_failed_ledger_finish_via_cli_reconcile(self):
+        from nonebot_plugin_xiuxian_2 import cli
+
+        tiers = [{"rank_min": 1, "rank_max": 1, "name": "第一名", "reward_items": [
+            {"type": "stone", "quantity": 80},
+        ]}]
+        with patch.object(self.rank_application.ledger, "finish", side_effect=RuntimeError("ledger unavailable")):
+            with self.assertRaisesRegex(RuntimeError, "ledger unavailable"):
+                self.rank_application.claim("u", "a", tiers, 100, "rank-ledger-retry")
+        root = Path(self.tmp.name)
+        context = SimpleNamespace(
+            paths=SimpleNamespace(data=root), clock=self.rank_application.clock,
+            database=SimpleNamespace(path=lambda key: self.game if key == "game_db" else root / "player.db"),
+        )
+        with patch.object(cli, "build_runtime_context", return_value=context), redirect_stdout(StringIO()):
+            self.assertEqual(0, cli.main(["reconcile", "--apply", "--data-dir", str(root)]))
+        with db_backend.connection(self.game) as conn:
+            self.assertEqual("applied", conn.execute(
+                "SELECT status FROM operation_ledger WHERE operation_id='rank-ledger-retry'"
+            ).fetchone()[0])
+            self.assertEqual(80, conn.execute("SELECT stone FROM user_xiuxian WHERE user_id='u'").fetchone()[0])
 
 
 if __name__ == "__main__": unittest.main()

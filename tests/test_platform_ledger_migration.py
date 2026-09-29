@@ -244,6 +244,8 @@ class PlatformLedgerMigrationTests(unittest.TestCase):
                         pass_receipts = uow.query_one("SELECT version FROM schema_migrations WHERE version='activity_reward.007'")
                         boss_milestone_claim = uow.query_one("SELECT version FROM schema_migrations WHERE version='activity_reward.008'")
                         boss_milestone_receipts = uow.query_one("SELECT version FROM schema_migrations WHERE version='activity_reward.009'")
+                        boss_rank_claim = uow.query_one("SELECT version FROM schema_migrations WHERE version='activity_reward.010'")
+                        boss_rank_receipts = uow.query_one("SELECT version FROM schema_migrations WHERE version='activity_reward.011'")
                         pass_operations = uow.query_one(
                             "SELECT name FROM sqlite_master WHERE type='table' AND name='activity_pass_reward_claim_operations'"
                         )
@@ -255,6 +257,12 @@ class PlatformLedgerMigrationTests(unittest.TestCase):
                         )
                         boss_milestone_reservations = uow.query_one(
                             "SELECT name FROM sqlite_master WHERE type='table' AND name='activity_boss_milestone_claim_reservations'"
+                        )
+                        boss_rank_operations = uow.query_one(
+                            "SELECT name FROM sqlite_master WHERE type='table' AND name='activity_boss_rank_claim_operations'"
+                        )
+                        boss_rank_reservations = uow.query_one(
+                            "SELECT name FROM sqlite_master WHERE type='table' AND name='activity_boss_rank_claim_reservations'"
                         )
                     if spec.key == "game_db":
                         self.assertIsNotNone(operations)
@@ -270,6 +278,10 @@ class PlatformLedgerMigrationTests(unittest.TestCase):
                         self.assertIsNotNone(boss_milestone_receipts)
                         self.assertIsNotNone(boss_milestone_operations)
                         self.assertIsNotNone(boss_milestone_reservations)
+                        self.assertIsNotNone(boss_rank_claim)
+                        self.assertIsNotNone(boss_rank_receipts)
+                        self.assertIsNotNone(boss_rank_operations)
+                        self.assertIsNotNone(boss_rank_reservations)
                         self.assertIsNone(context.services["activity_reward"].repository)
                     else:
                         self.assertIsNone(operations)
@@ -285,6 +297,10 @@ class PlatformLedgerMigrationTests(unittest.TestCase):
                         self.assertIsNone(boss_milestone_receipts)
                         self.assertIsNone(boss_milestone_operations)
                         self.assertIsNone(boss_milestone_reservations)
+                        self.assertIsNone(boss_rank_claim)
+                        self.assertIsNone(boss_rank_receipts)
+                        self.assertIsNone(boss_rank_operations)
+                        self.assertIsNone(boss_rank_reservations)
             finally:
                 asyncio.run(lifecycle.shutdown())
 

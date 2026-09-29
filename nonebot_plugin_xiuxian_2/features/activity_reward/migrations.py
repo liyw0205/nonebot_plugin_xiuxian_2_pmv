@@ -570,6 +570,179 @@ def apply_activity_boss_milestone_legacy_receipts(uow: DatabaseUnitOfWork) -> No
             last_rowid = int(rows[-1]["legacy_rowid"])
 
 
+def apply_activity_boss_rank_claim(uow: DatabaseUnitOfWork) -> None:
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS activity_boss_rank_claim_operations("
+        "operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,request_json TEXT NOT NULL,"
+        "result_json TEXT NOT NULL DEFAULT '{}',result_status TEXT NOT NULL DEFAULT 'started',"
+        "status TEXT NOT NULL DEFAULT 'started',created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,"
+        "updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)"
+    )
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS activity_boss_rank_claim_reservations("
+        "activity_key TEXT NOT NULL,user_id TEXT NOT NULL,tier_key TEXT NOT NULL,operation_id TEXT NOT NULL,"
+        "created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,"
+        "PRIMARY KEY(activity_key,user_id,tier_key),UNIQUE(operation_id,tier_key))"
+    )
+    uow.execute(
+        "CREATE INDEX IF NOT EXISTS idx_activity_boss_rank_reservations_operation "
+        "ON activity_boss_rank_claim_reservations(operation_id)"
+    )
+
+
+def apply_activity_boss_rank_legacy_receipts(uow: DatabaseUnitOfWork) -> None:
+    legacy_database = uow.database.parent / "activity" / "activity.db"
+    if not legacy_database.is_file():
+        return
+
+    with DatabaseUnitOfWork(legacy_database, read_only=True) as legacy:
+        receipt_columns = {str(row["name"]) for row in legacy.query_all(
+            "PRAGMA table_info(activity_boss_reward_claim_operations)"
+        )}
+        receipt_required = {"operation_id", "payload", "result_json", "created_at"}
+        if receipt_columns and not receipt_required.issubset(receipt_columns):
+            raise RuntimeError("legacy activity boss reward claim schema incomplete")
+
+        last_rowid = 0
+        while receipt_columns:
+            rows = legacy.query_all(
+                "SELECT rowid AS legacy_rowid,operation_id,payload,result_json,created_at "
+                "FROM activity_boss_reward_claim_operations WHERE rowid>? ORDER BY rowid LIMIT 200",
+                (last_rowid,),
+            )
+            if not rows:
+                break
+            for row in rows:
+                operation_id = str(row["operation_id"])
+                try:
+                    payload = json.loads(str(row["payload"]))
+                    result = json.loads(str(row["result_json"]))
+                except (TypeError, ValueError, json.JSONDecodeError) as exc:
+                    raise RuntimeError(f"invalid legacy activity boss rank receipt: {operation_id}") from exc
+                if not isinstance(payload, list):
+                    raise RuntimeError(f"invalid legacy activity boss rank payload: {operation_id}")
+                if len(payload) == 3:
+                    last_rowid = int(row["legacy_rowid"])
+                    continue
+                if len(payload) != 5:
+                    raise RuntimeError(f"invalid legacy activity boss rank payload: {operation_id}")
+                try:
+                    user_id, activity_key = str(payload[0]).strip(), str(payload[1]).strip()
+                    rank, tier_key, reward = int(payload[2]), str(payload[3]), str(payload[4])
+                    names = result.get("names") if isinstance(result, dict) else None
+                    result_rank = result.get("rank") if isinstance(result, dict) else None
+                except (TypeError, ValueError, OverflowError) as exc:
+                    raise RuntimeError(f"invalid legacy activity boss rank receipt: {operation_id}") from exc
+                if (
+                    not operation_id.strip() or not user_id or not activity_key or rank <= 0 or not tier_key
+                    or not isinstance(names, list) or len(names) != 1 or not isinstance(names[0], str)
+                    or not names[0] or result_rank != rank
+                ):
+                    raise RuntimeError(f"legacy activity boss rank result mismatch: {operation_id}")
+                request = {
+                    "user_id": user_id,
+                    "activity_key": activity_key,
+                    "tiers": [],
+                    "max_goods_num": 0,
+                    "rank": rank,
+                    "tier_key": tier_key,
+                    "name": names[0],
+                    "reward": reward,
+                    "reward_items": [],
+                    "legacy_import": True,
+                }
+                existing = uow.query_one(
+                    "SELECT payload,request_json,result_json,result_status,status,created_at "
+                    "FROM activity_boss_rank_claim_operations WHERE operation_id=?",
+                    (operation_id,),
+                )
+                request_json = json.dumps(request, ensure_ascii=True, separators=(",", ":"))
+                if existing is None:
+                    uow.execute(
+                        "INSERT INTO activity_boss_rank_claim_operations"
+                        "(operation_id,payload,request_json,result_json,result_status,status,created_at) "
+                        "VALUES(?,?,?,?, 'applied','applied',?)",
+                        (operation_id, row["payload"], request_json, row["result_json"], row["created_at"]),
+                    )
+                elif (
+                    str(existing["payload"]) != str(row["payload"])
+                    or str(existing["request_json"]) != request_json
+                    or str(existing["result_json"]) != str(row["result_json"])
+                    or str(existing["result_status"]) != "applied"
+                    or str(existing["status"]) != "applied"
+                    or str(existing["created_at"]) != str(row["created_at"])
+                ):
+                    raise RuntimeError(f"activity boss rank receipt conflict: {operation_id}")
+                identity = (activity_key, user_id, tier_key)
+                reservation = uow.query_one(
+                    "SELECT operation_id FROM activity_boss_rank_claim_reservations "
+                    "WHERE activity_key=? AND user_id=? AND tier_key=?",
+                    identity,
+                )
+                if reservation is not None and str(reservation["operation_id"]) != operation_id:
+                    raise RuntimeError(f"activity boss rank reservation conflict: {operation_id}")
+                uow.execute(
+                    "INSERT OR IGNORE INTO activity_boss_rank_claim_reservations"
+                    "(activity_key,user_id,tier_key,operation_id) VALUES(?,?,?,?)",
+                    (*identity, operation_id),
+                )
+            last_rowid = int(rows[-1]["legacy_rowid"])
+
+        claim_columns = {str(row["name"]) for row in legacy.query_all(
+            "PRAGMA table_info(activity_boss_rank_claim)"
+        )}
+        claim_required = {"activity_key", "user_id", "tier_key"}
+        if claim_columns and not claim_required.issubset(claim_columns):
+            raise RuntimeError("legacy activity boss rank claim schema incomplete")
+        last_rowid = 0
+        while claim_columns:
+            rows = legacy.query_all(
+                "SELECT rowid AS legacy_rowid,activity_key,user_id,tier_key "
+                "FROM activity_boss_rank_claim WHERE rowid>? ORDER BY rowid LIMIT 200",
+                (last_rowid,),
+            )
+            if not rows:
+                break
+            for row in rows:
+                activity_key, user_id, tier_key = str(row["activity_key"]), str(row["user_id"]), str(row["tier_key"])
+                identity = (activity_key, user_id, tier_key)
+                reservation = uow.query_one(
+                    "SELECT operation_id FROM activity_boss_rank_claim_reservations "
+                    "WHERE activity_key=? AND user_id=? AND tier_key=?",
+                    identity,
+                )
+                if reservation is not None:
+                    owner = str(reservation["operation_id"])
+                    if owner.startswith("legacy-claimed:"):
+                        continue
+                    operation = uow.query_one(
+                        "SELECT payload,result_json,status FROM activity_boss_rank_claim_operations "
+                        "WHERE operation_id=?",
+                        (owner,),
+                    )
+                    if operation is None or str(operation["status"]) != "applied":
+                        raise RuntimeError(f"activity boss rank reservation state conflict: {owner}")
+                    receipt_payload = json.loads(str(operation["payload"]))
+                    receipt_result = json.loads(str(operation["result_json"]))
+                    if (
+                        len(receipt_payload) != 5
+                        or (str(receipt_payload[0]), str(receipt_payload[1]), str(receipt_payload[3]))
+                        != (user_id, activity_key, tier_key)
+                        or int(receipt_result.get("rank", 0)) <= 0
+                    ):
+                        raise RuntimeError(f"activity boss rank claimed-tier conflict: {owner}")
+                    continue
+                sentinel = "legacy-claimed:" + hashlib.sha256(
+                    json.dumps(identity, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
+                ).hexdigest()
+                uow.execute(
+                    "INSERT INTO activity_boss_rank_claim_reservations"
+                    "(activity_key,user_id,tier_key,operation_id) VALUES(?,?,?,?)",
+                    (*identity, sentinel),
+                )
+            last_rowid = int(rows[-1]["legacy_rowid"])
+
+
 __all__ = [
     "apply_activity_claim_all",
     "apply_activity_claim_all_legacy_receipts",
@@ -580,4 +753,6 @@ __all__ = [
     "apply_activity_pass_claim_legacy_receipts",
     "apply_activity_boss_milestone_claim",
     "apply_activity_boss_milestone_legacy_receipts",
+    "apply_activity_boss_rank_claim",
+    "apply_activity_boss_rank_legacy_receipts",
 ]

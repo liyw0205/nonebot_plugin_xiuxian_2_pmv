@@ -151,6 +151,8 @@ def _slice_status() -> dict[str, dict[str, object]]:
     activity_pass_claim_repository = (PACKAGE / "features" / "activity_reward" / "pass_claim_repository.py").read_text(encoding="utf-8")
     activity_boss_milestone_claim_application = (PACKAGE / "features" / "activity_reward" / "boss_milestone_claim_application.py").read_text(encoding="utf-8")
     activity_boss_milestone_claim_repository = (PACKAGE / "features" / "activity_reward" / "boss_milestone_claim_repository.py").read_text(encoding="utf-8")
+    activity_boss_rank_claim_application = (PACKAGE / "features" / "activity_reward" / "boss_rank_claim_application.py").read_text(encoding="utf-8")
+    activity_boss_rank_claim_repository = (PACKAGE / "features" / "activity_reward" / "boss_rank_claim_repository.py").read_text(encoding="utf-8")
     activity_reward_migrations = (PACKAGE / "features" / "activity_reward" / "migrations.py").read_text(encoding="utf-8")
     activity_claim_compatibility_source = (PACKAGE / "xiuxian" / "xiuxian_activity" / "transaction_service.py").read_text(encoding="utf-8")
     activity_task_claim_compatibility = activity_claim_compatibility_source[
@@ -169,10 +171,17 @@ def _slice_status() -> dict[str, dict[str, object]]:
         boss_reward_claim_compatibility.index("    def claim_milestones("):
         boss_reward_claim_compatibility.index("    def claim_rank(")
     ]
+    boss_rank_claim_compatibility = boss_reward_claim_compatibility[
+        boss_reward_claim_compatibility.index("    def claim_rank("):
+    ]
     activity_boss_source = (PACKAGE / "xiuxian" / "xiuxian_activity" / "activity_boss.py").read_text(encoding="utf-8")
     activity_boss_milestone_claim_entry = activity_boss_source[
         activity_boss_source.index("def claim_boss_milestone_reward("):
         activity_boss_source.index("def claim_boss_rank_reward(")
+    ]
+    activity_boss_rank_claim_entry = activity_boss_source[
+        activity_boss_source.index("def claim_boss_rank_reward("):
+        activity_boss_source.index("def claim_boss_rewards(")
     ]
     activity_claim_runners = (PACKAGE / "compatibility" / "legacy_activity_claim_steps.py").read_text(encoding="utf-8")
     activity_command_repository = (PACKAGE / "features" / "activity" / "repository.py").read_text(encoding="utf-8")
@@ -748,7 +757,41 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "boss_milestone_claim_all_child_operation_id_stable": (
                 '"boss_milestone": lambda child_id: claim_boss_milestone_reward(uid, operation_id=child_id)' in activity_claim_runners
             ),
-            "status": "claim_all_game_db_coordinator_and_tasks_pass_boss_milestone_asset_ledgers_with_legacy_state_projection_remaining_boss_rank",
+            "boss_rank_game_reward_application_owned": (
+                "application.claim(" in activity_boss_rank_claim_entry
+                and "ActivityBossRankClaimRepository" in activity_boss_rank_claim_application
+                and "ATTACH DATABASE" not in activity_boss_rank_claim_repository
+            ),
+            "boss_rank_started_operation_recoverable": (
+                "def prepare_operation(" in activity_boss_rank_claim_repository
+                and "self.repository.prepare_operation(" in activity_boss_rank_claim_application
+                and '"activity_reward.boss_rank.claim": context.services["activity_boss_rank_claim"].reconcile' in plugin
+                and '"activity_reward.boss_rank.claim": activity_boss_rank_claim.reconcile' in activity_cli
+                and "application.resume_pending(operation_id, user_id)" in activity_boss_rank_claim_entry
+            ),
+            "boss_rank_startup_schema_and_receipt_backfill": (
+                'Migration("activity_reward.010", "activity_boss_rank_reward_claims"' in plugin
+                and 'Migration("activity_reward.011", "activity_boss_rank_legacy_receipts"' in plugin
+                and "apply_activity_boss_rank_legacy_receipts" in activity_reward_migrations
+            ),
+            "boss_rank_legacy_state_projection_retryable": (
+                "_finalize_legacy_state" in activity_boss_rank_claim_repository
+                and "activity_boss_rank_claim_reservations" in activity_boss_rank_claim_repository
+                and "status='granted'" in activity_boss_rank_claim_repository
+            ),
+            "boss_rank_compatibility_facade_isolated": (
+                "self._get_rank_application().claim(" in boss_rank_claim_compatibility
+                and "ATTACH DATABASE" not in boss_rank_claim_compatibility
+                and "CREATE TABLE" not in boss_rank_claim_compatibility
+            ),
+            "boss_rank_claim_all_child_operation_id_stable": (
+                '"boss_rank": lambda child_id: claim_boss_rank_reward(uid, operation_id=child_id)' in activity_claim_runners
+            ),
+            "boss_rank_activity_state_still_legacy_projection": (
+                "activity_database" in activity_boss_rank_claim_repository
+                and "INSERT OR IGNORE INTO activity_boss_rank_claim" in activity_boss_rank_claim_repository
+            ),
+            "status": "claim_all_game_db_coordinator_and_tasks_pass_boss_milestone_boss_rank_asset_ledgers_with_legacy_activity_state_projection_remaining",
         },
         "dungeon_team": {
             "team_commands_application_owned": all(

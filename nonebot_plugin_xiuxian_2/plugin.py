@@ -110,6 +110,8 @@ from .features.activity_reward.migrations import (
     apply_activity_pass_claim_legacy_receipts,
     apply_activity_boss_milestone_claim,
     apply_activity_boss_milestone_legacy_receipts,
+    apply_activity_boss_rank_claim,
+    apply_activity_boss_rank_legacy_receipts,
 )
 from .features.combat_settlement.manifest import FEATURE as COMBAT_SETTLEMENT_FEATURE
 from .features.combat_settlement.migrations import apply_combat_settlement, apply_combat_settlement_operations, apply_dao_battle_operations, apply_dao_battle_record
@@ -207,6 +209,8 @@ def build_migrations() -> tuple[Migration, ...]:
         Migration("activity_reward.007", "activity_pass_reward_legacy_receipts", apply_activity_pass_claim_legacy_receipts),
         Migration("activity_reward.008", "activity_boss_milestone_reward_claims", apply_activity_boss_milestone_claim),
         Migration("activity_reward.009", "activity_boss_milestone_legacy_receipts", apply_activity_boss_milestone_legacy_receipts),
+        Migration("activity_reward.010", "activity_boss_rank_reward_claims", apply_activity_boss_rank_claim),
+        Migration("activity_reward.011", "activity_boss_rank_legacy_receipts", apply_activity_boss_rank_legacy_receipts),
         Migration("admin_asset.001", "admin_asset_feature_migrations", apply_admin_asset),
         Migration("arena.001", "arena_feature_migrations", apply_arena),
         Migration("arena.002", "arena_challenge_purchase_operations", apply_arena_challenge_purchase),
@@ -729,6 +733,7 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
         from .features.activity_reward.task_claim_application import ActivityTaskClaimApplication
         from .features.activity_reward.pass_claim_application import ActivityPassClaimApplication
         from .features.activity_reward.boss_milestone_claim_application import ActivityBossMilestoneClaimApplication
+        from .features.activity_reward.boss_rank_claim_application import ActivityBossRankClaimApplication
         from .features.combat_settlement.application import CombatSettlementApplication
         from .features.admin_asset.application import AdminAssetApplication
         from .features.admin_asset.repository import LegacyAdminStoneRepository
@@ -870,6 +875,11 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
                 context.paths.data / "activity" / "activity.db",
                 clock=context.clock,
             ),
+            "activity_boss_rank_claim": ActivityBossRankClaimApplication(
+                str(context.database.path("game_db")),
+                context.paths.data / "activity" / "activity.db",
+                clock=context.clock,
+            ),
             "combat_settlement": CombatSettlementApplication(
                 str(context.database.path("game_db")),
                 str(context.database.path("player_db")),
@@ -1007,7 +1017,10 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
                 configure_activity_pass_claim_application,
                 configure_activity_task_claim_application,
             )
-            from .xiuxian.xiuxian_activity.activity_boss import configure_activity_boss_milestone_claim_application
+            from .xiuxian.xiuxian_activity.activity_boss import (
+                configure_activity_boss_milestone_claim_application,
+                configure_activity_boss_rank_claim_application,
+            )
 
             configure_sign_in_application(context.services["sign_in"])
             configure_back_application(context.services["back"])
@@ -1016,6 +1029,7 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
             configure_activity_task_claim_application(context.services["activity_task_claim"])
             configure_activity_pass_claim_application(context.services["activity_pass_claim"])
             configure_activity_boss_milestone_claim_application(context.services["activity_boss_milestone_claim"])
+            configure_activity_boss_rank_claim_application(context.services["activity_boss_rank_claim"])
             configure_training_application(context.services["training"])
             if lottery_application_type is not None and lottery_service is not None and isinstance(lottery_service, lottery_application_type):
                 configure_lottery_application(lottery_service)
@@ -1025,6 +1039,7 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
             "activity_reward.tasks.claim": context.services["activity_task_claim"].reconcile,
             "activity_reward.pass.claim": context.services["activity_pass_claim"].reconcile,
             "activity_reward.boss_milestone.claim": context.services["activity_boss_milestone_claim"].reconcile,
+            "activity_reward.boss_rank.claim": context.services["activity_boss_rank_claim"].reconcile,
         }
         context.outbox_handlers = {
             "accessory_package.open": context.services["accessory_package"].reconcile,
