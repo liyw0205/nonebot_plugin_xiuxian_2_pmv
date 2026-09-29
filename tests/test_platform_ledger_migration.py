@@ -240,12 +240,24 @@ class PlatformLedgerMigrationTests(unittest.TestCase):
                         backfill = uow.query_one("SELECT version FROM schema_migrations WHERE version='activity_reward.003'")
                         task_claim = uow.query_one("SELECT version FROM schema_migrations WHERE version='activity_reward.004'")
                         task_receipts = uow.query_one("SELECT version FROM schema_migrations WHERE version='activity_reward.005'")
+                        pass_claim = uow.query_one("SELECT version FROM schema_migrations WHERE version='activity_reward.006'")
+                        pass_receipts = uow.query_one("SELECT version FROM schema_migrations WHERE version='activity_reward.007'")
+                        pass_operations = uow.query_one(
+                            "SELECT name FROM sqlite_master WHERE type='table' AND name='activity_pass_reward_claim_operations'"
+                        )
+                        pass_reservations = uow.query_one(
+                            "SELECT name FROM sqlite_master WHERE type='table' AND name='activity_pass_reward_claim_reservations'"
+                        )
                     if spec.key == "game_db":
                         self.assertIsNotNone(operations)
                         self.assertIsNotNone(steps)
                         self.assertIsNotNone(backfill)
                         self.assertIsNotNone(task_claim)
                         self.assertIsNotNone(task_receipts)
+                        self.assertIsNotNone(pass_claim)
+                        self.assertIsNotNone(pass_receipts)
+                        self.assertIsNotNone(pass_operations)
+                        self.assertIsNotNone(pass_reservations)
                         self.assertIsNone(context.services["activity_reward"].repository)
                     else:
                         self.assertIsNone(operations)
@@ -253,6 +265,10 @@ class PlatformLedgerMigrationTests(unittest.TestCase):
                         self.assertIsNone(backfill)
                         self.assertIsNone(task_claim)
                         self.assertIsNone(task_receipts)
+                        self.assertIsNone(pass_claim)
+                        self.assertIsNone(pass_receipts)
+                        self.assertIsNone(pass_operations)
+                        self.assertIsNone(pass_reservations)
             finally:
                 asyncio.run(lifecycle.shutdown())
 

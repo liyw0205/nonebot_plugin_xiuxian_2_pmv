@@ -64,7 +64,6 @@ from .activity_pass import *
 from .activity_progress import *
 from .transaction_service import ActivityPointShopPurchaseService
 from .transaction_service import ActivitySignSettlementService
-from .transaction_service import ActivityPassClaimService
 from .transaction_service import ActivityCollectExchangeService
 from .transaction_service import ActivityClaimAllService
 from ...features.activity_reward.claim_all_application import ActivityClaimAllApplication
@@ -73,7 +72,7 @@ from ...features.activity_reward.claim_all_application import ActivityClaimAllAp
 _point_shop_purchase_service_instance = None
 _activity_task_claim_application_instance = None
 _activity_sign_settlement_service_instance = None
-_activity_pass_claim_service_instance = None
+_activity_pass_claim_application_instance = None
 _activity_collect_exchange_service_instance = None
 _activity_claim_all_service_instance = None
 activity_claim_all_application = ActivityClaimAllApplication(get_paths().game_db)
@@ -117,11 +116,21 @@ def configure_activity_task_claim_application(application) -> None:
     _activity_task_claim_application_instance = application
 
 
-def _activity_pass_claim_service():
-    global _activity_pass_claim_service_instance
-    if _activity_pass_claim_service_instance is None:
-        _activity_pass_claim_service_instance = ActivityPassClaimService(DB_PATH, get_paths().game_db)
-    return _activity_pass_claim_service_instance
+def _activity_pass_claim_application():
+    global _activity_pass_claim_application_instance
+    if _activity_pass_claim_application_instance is None:
+        from ...features.activity_reward.pass_claim_application import ActivityPassClaimApplication
+
+        paths = get_paths()
+        _activity_pass_claim_application_instance = ActivityPassClaimApplication(
+            paths.game_db, paths.data / "activity" / "activity.db"
+        )
+    return _activity_pass_claim_application_instance
+
+
+def configure_activity_pass_claim_application(application) -> None:
+    global _activity_pass_claim_application_instance
+    _activity_pass_claim_application_instance = application
 
 
 def _activity_sign_settlement_service():
@@ -908,11 +917,21 @@ def build_activity_pass_text(user_id: str) -> str:
 
 def claim_activity_pass_rewards(user_id: str, query: str = "", operation_id: str | None = None) -> tuple[bool, str]:
     uid = str(user_id)
+    claim_application = _activity_pass_claim_application()
     if operation_id:
-        previous = _activity_pass_claim_service().get_result(operation_id, uid)
+        previous = claim_application.resume_pending(operation_id, uid)
+        if previous is None:
+            previous = claim_application.get_result(operation_id, uid)
         if previous is not None:
             if not previous.succeeded:
-                return False, "领取请求冲突，请重新发送"
+                messages = {
+                    "inventory_full": "背包空间不足，奖励未领取",
+                    "user_missing": "角色不存在",
+                    "state_changed": "战令领奖未完成：战令进度已更新，请重新查询战令",
+                    "claim_in_progress": "战令奖励正在处理中，请稍后重试",
+                    "operation_conflict": "领取请求冲突，请重新发送",
+                }
+                return False, messages.get(previous.status, "当前没有可领取的活动战令奖励")
             lines = ["活动战令奖励领取成功："]
             for level, name, reward_text in previous.rewards:
                 lines.append(f"- Lv.{level} {name}：{reward_text or '暂无奖励'}")
@@ -969,7 +988,7 @@ def claim_activity_pass_rewards(user_id: str, query: str = "", operation_id: str
     finally:
         conn.close()
 
-    result = _activity_pass_claim_service().claim(
+    result = claim_application.claim(
         operation_id or f"activity-pass:{uid}:{runtime_ids.new_id()}", uid, activity_key,
         balance["level"], reward_jobs, XiuConfig().max_goods_num,
     )

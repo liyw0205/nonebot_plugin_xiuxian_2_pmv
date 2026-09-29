@@ -2606,6 +2606,8 @@
     "activity_pass_claim_operations",
     "activity_pass_event_log",
     "activity_pass_reward_claim",
+    "activity_pass_reward_claim_operations",
+    "activity_pass_reward_claim_reservations",
     "activity_point_balance",
     "activity_point_event_log",
     "activity_point_purchase",

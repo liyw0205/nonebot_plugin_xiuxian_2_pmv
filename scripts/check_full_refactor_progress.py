@@ -146,12 +146,19 @@ def _slice_status() -> dict[str, dict[str, object]]:
     activity_claim_repository = (PACKAGE / "features" / "activity_reward" / "claim_all_repository.py").read_text(encoding="utf-8")
     activity_task_claim_application = (PACKAGE / "features" / "activity_reward" / "task_claim_application.py").read_text(encoding="utf-8")
     activity_task_claim_repository = (PACKAGE / "features" / "activity_reward" / "task_claim_repository.py").read_text(encoding="utf-8")
+    activity_pass_claim_application = (PACKAGE / "features" / "activity_reward" / "pass_claim_application.py").read_text(encoding="utf-8")
+    activity_pass_claim_repository = (PACKAGE / "features" / "activity_reward" / "pass_claim_repository.py").read_text(encoding="utf-8")
     activity_reward_migrations = (PACKAGE / "features" / "activity_reward" / "migrations.py").read_text(encoding="utf-8")
-    activity_task_claim_compatibility = (PACKAGE / "xiuxian" / "xiuxian_activity" / "transaction_service.py").read_text(encoding="utf-8")
-    activity_task_claim_compatibility = activity_task_claim_compatibility[
-        activity_task_claim_compatibility.index("class ActivityTaskClaimService:"):
-        activity_task_claim_compatibility.index("class ActivityPassClaimService:")
+    activity_claim_compatibility_source = (PACKAGE / "xiuxian" / "xiuxian_activity" / "transaction_service.py").read_text(encoding="utf-8")
+    activity_task_claim_compatibility = activity_claim_compatibility_source[
+        activity_claim_compatibility_source.index("class ActivityTaskClaimService:"):
+        activity_claim_compatibility_source.index("class ActivityPassClaimService:")
     ]
+    activity_pass_claim_compatibility = activity_claim_compatibility_source[
+        activity_claim_compatibility_source.index("class ActivityPassClaimService:"):
+        activity_claim_compatibility_source.index("class ActivityPointShopPurchaseResult:")
+    ]
+    activity_claim_runners = (PACKAGE / "compatibility" / "legacy_activity_claim_steps.py").read_text(encoding="utf-8")
     activity_command_repository = (PACKAGE / "features" / "activity" / "repository.py").read_text(encoding="utf-8")
     dungeon_facade = (PACKAGE / "xiuxian" / "xiuxian_dungeon" / "__init__.py").read_text(encoding="utf-8")
     dungeon_team_manager = (PACKAGE / "xiuxian" / "xiuxian_dungeon" / "team_manager.py").read_text(encoding="utf-8")
@@ -666,7 +673,36 @@ def _slice_status() -> dict[str, dict[str, object]]:
                 "_finalize_legacy_state" in activity_task_claim_repository
                 and "activity_task_reward_claim_reservations" in activity_task_claim_repository
             ),
-            "status": "claim_all_game_db_coordinator_and_tasks_asset_ledger_with_legacy_progress_projection_remaining_pass_and_boss_claims",
+            "pass_game_reward_application_owned": (
+                "claim_application = _activity_pass_claim_application()" in activity_service
+                and "claim_application.claim(" in activity_service
+                and "ActivityPassClaimRepository" in activity_pass_claim_repository
+                and "ATTACH DATABASE" not in activity_pass_claim_compatibility
+            ),
+            "pass_started_operation_recoverable": (
+                "def prepare_operation(" in activity_pass_claim_repository
+                and "self.repository.prepare_operation(" in activity_pass_claim_application
+                and '"activity_reward.pass.claim": context.services["activity_pass_claim"].reconcile' in plugin
+                and "claim_application.resume_pending(operation_id, uid)" in activity_service
+            ),
+            "pass_startup_schema_and_receipt_backfill": (
+                'Migration("activity_reward.006", "activity_pass_reward_claims"' in plugin
+                and 'Migration("activity_reward.007", "activity_pass_reward_legacy_receipts"' in plugin
+                and "apply_activity_pass_claim_legacy_receipts" in activity_reward_migrations
+            ),
+            "pass_legacy_state_projection_retryable": (
+                "_finalize_legacy_state" in activity_pass_claim_repository
+                and "activity_pass_reward_claim_reservations" in activity_pass_claim_repository
+            ),
+            "pass_compatibility_facade_isolated": (
+                "ActivityPassClaimApplication" in activity_pass_claim_compatibility
+                and "ATTACH DATABASE" not in activity_pass_claim_compatibility
+                and "CREATE TABLE" not in activity_pass_claim_compatibility
+            ),
+            "pass_claim_all_child_operation_id_stable": (
+                '"pass": lambda child_id: claim_activity_pass_rewards(uid, operation_id=child_id)' in activity_claim_runners
+            ),
+            "status": "claim_all_game_db_coordinator_and_tasks_pass_asset_ledgers_with_legacy_state_projection_remaining_boss_claims",
         },
         "dungeon_team": {
             "team_commands_application_owned": all(
