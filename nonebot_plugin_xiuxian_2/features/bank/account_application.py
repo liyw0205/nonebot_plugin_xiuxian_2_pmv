@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, Mapping
 
 from ...infrastructure.database import DatabaseUnitOfWork
 from .account_repository import BankAccountRepository
@@ -16,7 +16,20 @@ class BankDepositApplication:
         self.database = str(database)
         self.repository = repository or BankAccountRepository()
 
-    def deposit(self, *, operation_id: str, user_id: str, amount: int, interest: int, limit: int, bank_level: str, settled_at: str) -> dict[str, Any]:
+    def deposit(
+        self,
+        *,
+        operation_id: str,
+        user_id: str,
+        amount: int,
+        interest: int,
+        limit: int,
+        bank_level: str,
+        settled_at: str,
+        expected_saved_stone: int | None = None,
+        expected_saved_at: str | None = None,
+        initial_account: Mapping[str, Any] | None = None,
+    ) -> dict[str, Any]:
         operation_id = str(operation_id).strip()
         user_id = str(user_id).strip()
         if not operation_id or not user_id:
@@ -33,7 +46,17 @@ class BankDepositApplication:
             if wallet is None:
                 return {"status": "user_missing", "operation_id": operation_id}
             account = self.repository.account(uow, user_id)
-            saved = 0 if account is None else int(account["saved_stone"])
+            snapshot = account or initial_account
+            if expected_saved_stone is not None:
+                if snapshot is None:
+                    return {"status": "state_changed", "operation_id": operation_id}
+                if (
+                    int(snapshot.get("saved_stone", 0)) != int(expected_saved_stone)
+                    or str(snapshot.get("updated_at", "")) != str(expected_saved_at or "")
+                    or str(snapshot.get("bank_level", "")) != str(bank_level)
+                ):
+                    return {"status": "state_changed", "operation_id": operation_id}
+            saved = 0 if snapshot is None else int(snapshot["saved_stone"])
             try:
                 decision = decide_deposit(wallet=int(wallet["stone"] or 0), saved=saved, amount=int(amount), interest=int(interest), limit=int(limit))
             except ValueError as exc:

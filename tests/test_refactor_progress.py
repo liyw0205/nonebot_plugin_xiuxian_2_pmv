@@ -136,6 +136,10 @@ class RefactorProgressTests(unittest.TestCase):
         self.assertTrue(dungeon_team["team_presentation_legacy_identity_preserved"])
         bank = slices["bank"]
         self.assertTrue(bank["deposit_application_owned"])
+        self.assertTrue(bank["v1_web_game_db_owned"])
+        self.assertTrue(bank["v1_web_started_operation_recoverable"])
+        self.assertTrue(bank["v1_web_snapshots_checked"])
+        self.assertTrue(bank["legacy_bootstrap_does_not_create_missing_player_db"])
         self.assertTrue(bank["withdrawal_application_owned"])
         self.assertTrue(bank["upgrade_application_owned"])
         self.assertTrue(bank["interest_application_owned"])

@@ -728,7 +728,6 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
         from .compatibility.auction_settlement_effects import LegacyAuctionSettlementEffects
         from .features.auction.settlement import AuctionSettlementApplication
         from .features.bank.application import BankApplication
-        from .features.bank.repository import LegacyBankRepository
         from .features.activity_reward.application import ActivityRewardApplication
         from .features.activity_reward.task_claim_application import ActivityTaskClaimApplication
         from .features.activity_reward.pass_claim_application import ActivityPassClaimApplication
@@ -852,10 +851,6 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
             "bank": BankApplication(
                 str(context.database.path("game_db")),
                 str(context.database.path("player_db")),
-                repository=LegacyBankRepository(
-                    str(context.database.path("game_db")),
-                    str(context.database.path("player_db")),
-                ),
             ),
             "activity_reward": ActivityRewardApplication(
                 str(context.database.path("game_db")),

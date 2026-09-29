@@ -22,6 +22,8 @@ class BankInterestApplication:
         interest: int,
         bank_level: str,
         settled_at: str,
+        expected_saved_stone: int | None = None,
+        expected_saved_at: str | None = None,
         initial_account: Mapping[str, Any] | None = None,
     ) -> dict[str, Any]:
         operation_id = str(operation_id).strip()
@@ -45,13 +47,18 @@ class BankInterestApplication:
                     return {"status": "user_missing", "operation_id": operation_id}
                 current_level = str(initial_account.get("bank_level", ""))
                 saved_stone = int(initial_account.get("saved_stone", 0) or 0)
-                initial_updated_at = str(initial_account.get("updated_at") or settled_at)
+                initial_updated_at = str(initial_account.get("updated_at", settled_at))
                 if current_level != str(bank_level):
                     return {"status": "state_changed", "operation_id": operation_id}
             else:
                 current_level = str(account["bank_level"])
                 saved_stone = int(account["saved_stone"])
                 initial_updated_at = str(account["updated_at"])
+            if expected_saved_stone is not None and (
+                saved_stone != int(expected_saved_stone)
+                or initial_updated_at != str(expected_saved_at or "")
+            ):
+                return {"status": "state_changed", "operation_id": operation_id}
             if current_level != str(bank_level):
                 return {"status": "state_changed", "operation_id": operation_id}
             decision = decide_interest(wallet=int(wallet["stone"] or 0), interest=int(interest), settled_at=str(settled_at))

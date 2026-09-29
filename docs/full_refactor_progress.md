@@ -2846,7 +2846,7 @@
 
 ## 6. 下一步
 
-### 6.1 当前权威状态（2026-09-29）
+### 6.1 当前权威状态（2026-09-30）
 
 本节以 `scripts/refactor_completion_audit.py` 和
 `scripts/check_full_refactor_progress.py` 的当前输出为准；前文及下方的日期记录仅保留当时的实施证据，不应被当作当前待办状态。
@@ -2854,33 +2854,27 @@
 - 架构/交付基础门禁 P0-P6 已就绪；P7 仍未就绪，缺少一次真实发布周期的
   `--data-dir`、当前 release 和发布证据。隔离 recovery smoke 不能替代 P7。
 - 全面底层重构尚未达到退出条件：仍有 33 个
-  `xiuxian/*/transaction_service.py`（23,774 行）以及
+  `xiuxian/*/transaction_service.py`（23,444 行）以及
   `xiuxian2_handle.py`（181,666 bytes）的旧执行路径。它们不能因已有 facade、
   application 或静态标记而计作完成。
-- 2026-09-29 progress CLI 静态计数：Python 文件 1,656 个；
-  `transaction_service.py` 33 个/23,774 行，旧服务 import 文件 75 个，
+- 2026-09-30 progress CLI 静态计数：Python 文件 1,665 个；
+  `transaction_service.py` 33 个/23,444 行，旧服务 import 文件 75 个，
   `xiuxian2_handle` import 文件 72 个，直接 `db_backend.connect` 命中 139 个，
   `sqlite3.connect` 命中 34 个，直接全局 random 命中 67 个，`datetime.now` 命中
-  73 个，`time.time` 命中 26 个。与早期快照相比，行数/命中数变化只代表静态计数变化；
+  73 个，`time.time` 命中 26 个；`xiuxian2_handle.py` 为 181,666 bytes。与早期快照相比，行数/命中数变化只代表静态计数变化；
   每项仍须核对生产调用图，不能用减少计数代替执行路径证据。
-- Bank 本轮完成 legacy `savef` 隔离和 `bank.002` 请求期 schema 拒绝；progress CLI 的
-  deposit/withdrawal/upgrade/interest application、legacy receipt/account read、writer
-  compatibility 和 startup schema 项均为 true。Bank 不因此宣称整体切片或 live migration
-  完成，旧命令 facade 与显式 fallback 仍需按默认调用图继续审计。真实 Flask bank v2
-  upgrade/interest 路由已覆盖 application 写入与 replay，重复请求不重复写钱包或回执；
-  upgrade replay 的费用现在取与原回执 payload 校验一致的请求费用，不再从始终为 0 的
-  deposited 字段推导。Bank、progress/inventory 与 architecture contract 共 99 passed，
-  隔离测试未访问运行库；独立 architecture CLI 也已验证 ok=true。仅清理本轮
-  pytest basetemp、编译字节码与临时清单，未触碰运行数据、数据库或用户改动；
-  复核磁盘剩余约 23 GiB、可用 RAM 约 1.3 GiB。
-- 活动一键领奖此前的 `activity_reward.002` 只在 game DB 启动建表，而旧 NoneBot
-  协调器仍写 `activity/activity.db`、feature repository 仍请求期 DDL；历史记录中的
-  `无请求时间 DDL` 不能证明此边界已关闭。本轮已将默认 Web/NoneBot 入口统一到
-  game DB 的 feature-owned 四步协调器，`activity_reward.003` 启动迁移只读、分块回填
-  旧 DB 的完成/未完成回执，遇冲突拒绝迁移而不覆盖；缺 `.002` schema 的请求不再建表。
-  新备份链路对旧 `activity.db` 使用 SQLite 在线备份，隔离恢复确认先恢复旧库、再导入
-  回执并续跑。四个子步骤的资产发放仍经 compatibility adapter 调用旧任务、战令和首领奖励
-  函数，不能视为活动奖励全域迁完，更不能替代真实发布数据/P7 证据。
+- Bank v1 Web 生产组合根已不再注入 `LegacyBankRepository`；存入/取出/升级/结息默认
+  进入 game DB account applications。存/取/结息校验旧余额、更新时间和等级快照，完整
+  `player_db.bankinfo` 仍按用户首次写操作惰性导入；缺失的 player DB 不会被请求创建，
+  不完整历史 schema fail closed。game DB feature receipt 可在总账停留 `started` 时安全
+  重试，避免重复变更资产。Bank 全套、progress、bank source-quality 与 architecture
+  contract `127 passed`；inventory freshness、progress gate、目标 compileall 与 diff check
+  通过。bank v1 默认路径切换完成，但账户历史数据生命周期、显式兼容边界和真实发布迁移/P7
+  仍未完成；隔离测试未访问运行库，用户 `boss_info.json` 修改保留。
+- 活动 tasks/pass/boss milestone/boss rank 子领奖均由 game DB ledger/repository 持有奖励资产
+  和回执，历史回执分块迁移；领取失败可用同 operation 重试或 reconcile 续跑。活动 `tasks`、
+  `pass`、`boss_milestone`、`boss_rank` 的进度/领取状态仍在旧 `activity.db` projection，
+  因此活动状态迁移和真实历史数据/P7 审计仍未完成。
 - 已切换的功能仍可能保留显式 compatibility/rollback adapter；只有默认真实
   handler/route/scheduler 已改走 feature-owned application，且旧实现不再承载该
   用例，才可逐项从遗留服务移除。
@@ -2925,15 +2919,15 @@
   facade 不再导入未调用的旧 service/getter。显式 `LegacyPetRepository` 仍可作为回滚入口，
   所以这只关闭实现归属与默认 facade 依赖，不代表所有宠物数据读取/JSON projection 已迁完。
 
-### 6.2 当前推进队列（2026-09-29）
+### 6.2 当前推进队列（2026-09-30）
 
-1. **完成活动 `boss_rank` 子领奖**：总领奖协调器、tasks、pass、boss milestone 已有 game DB 账本与历史回执迁移；下一片迁移排行领奖的旧 ATTACH 资产写入，验收排行快照、并发去重、稳定 child ID 重试、CLI reconcile 与历史回执回填。
-2. **收口 bank v1 Web 默认旧路径**：`plugin.py` 仍向 `BankApplication` 注入 `LegacyBankRepository`；此前账户 bootstrap、首次升级/结息及 fallback 完整性回归不等于整个 bank 边界完成。继续核实真实 Web 调用后迁移默认事务 owner，保留必要的显式兼容回滚入口。
-3. **迁移遗留状态并审计其余领域**：活动进度与领取日志仍在 `activity.db` projection，不能标记活动全域完成；其余领域按 cultivation/training、combat/dungeon/boss、sect/pet/trade 等风险顺序审计真实入口，最后收口 scheduler、Web、批处理和 JSON/外部状态兼容，避免重复重构已经不可达的旧实现。
+1. **迁移活动旧状态 projection**：任务进度、战令状态、首领里程碑和排行状态仍留在 `activity/activity.db`。明确 game DB ledger 与状态 projection 的恢复顺序，备份后按块迁移并验证历史领取冲突、重试和 reconcile；不要再把奖励账本完成等同活动状态完成。
+2. **收口 bank 历史账户生命周期**：v1 Web 和命令默认资产操作已归 game DB application；下一步核对自动结息 scheduler、未访问账户的 `bankinfo` 惰性导入覆盖率和显式兼容 writer/rollback 的真实调用，明确何时可停止读取旧 player projection。正式发布前执行隔离迁移/恢复与余额对账。
+3. **审计其余真实旧执行路径**：按 player/economy、cultivation/training、combat/dungeon/boss、sect/pet/trade 风险顺序逐个核对 handler、route、scheduler 和批处理；优先处理仍由旧 transaction service 或 `xiuxian2_handle` 承载的资产状态，兼容 shim 本身不计完成。
 4. **收敛全局基础依赖**：持续降低旧 service import（75 个文件）、`xiuxian2_handle` import（72 个文件）、`db_backend.connect`（139 个文件）、`sqlite3.connect`（34 个文件）、系统时间/全局随机命中；以 progress CLI 同口径计数并逐项附真实调用证据。
 5. **最后补齐发布证据**：针对真实数据目录执行备份、migration dry-run/执行、恢复、reconcile、远端冒烟和至少一次正式发布周期；完成这些前 P7 与全面重构均保持未完成。
 
-本轮 milestone 收尾：97 项聚焦回归通过；隔离恢复后的五库 pending migrations 全空、readiness 六项通过、reconcile clean，compileall、inventory freshness、architecture 与 diff check 通过。专用 pytest/编译/架构/恢复目录已删除，源码缓存检查为空；磁盘可用约 23G、RAM 可用约 1.0GiB，仓库约 478M。保留 `.venv`、`.git`、运行数据与用户 `boss_info.json` 修改；按阶段验收流程独立提交推送后进入 `boss_rank`。
+2026-09-30 bank v1 Web cutover 收尾：game DB feature applications 成为生产默认写路径；真实 Flask route 覆盖四种资产操作、历史账户导入、快照拒绝、重复提交、首次账户、损坏 schema fail closed、总账中断后账户回执恢复。聚焦 bank/progress/source-quality/architecture 合计 `127 passed`；inventory freshness、progress 指标、目标文件 compileall 与 diff check 通过。无新 migration、业务库写入或运行数据访问；pytest、字节码和架构临时产物仅在专用 `/tmp` 目录生成且已清理。复核磁盘可用 `23G`、RAM 可用约 `1.2GiB`。下一目标按上列队列转向活动状态 projection。
 
 ### 6.3 既有优先事项详录
 
@@ -4788,3 +4782,5 @@ Boss 通过 `get_rift_battle_final_attributes` 注入 `get_rift_battle_impart_da
 
 2026-09-30 activity boss rank reward ledger cutover：默认首领排行领奖与 `BossRewardClaimService.claim_rank` 兼容 façade 改经 `ActivityBossRankClaimApplication -> ActivityBossRankClaimRepository`；game DB 内持久化稳定请求快照、operation ledger、tier reservation 与发奖回执，旧 `activity.db` 仅保留幂等排行 claim-state projection。排名/档位在领奖事务中复核，期间排名变化返回 `state_changed`；投影失败留下 `granted`，CLI reconcile 或同 child operation ID 可恢复且不会重复发奖。新增 game-only `activity_reward.010/.011`，启动时分块导入旧排行回执及已领取档位；rank 表仍在 `activity.db`，因此活动状态 projection 迁移尚未完成。活动领奖、旧回执迁移、claim-all、平台 migration、progress 与主 architecture contract 聚焦 `97 passed`；同次额外运行的通用 `test_legacy_application_contract` 有一项既有 Rift false-positive（把 `replay_termination` 当普通操作，fake repository 返回 `None`），本切片未修改该无关路径。progress rank 指标全部为真、inventory freshness、隔离 architecture CLI (`ok=true`)、compileall 与 diff check 通过。隔离 recovery 成功完成五库 backup/restore dry-run/restore、209 项 migrations 全部 applied 且 pending 为空，路由计数 `165/40/7/1/1`，`.010/.011` 仅 game DB，reconcile clean；隔离 CLI dry-run/apply、初始化静态数据后的 readiness 六项和 reconcile 也通过。专用 pytest、recovery、架构数据和字节码目录在收尾清理；`boss_info.json` 用户修改保留。下一片审计 bank v1 Web 注入的 `LegacyBankRepository`；整体仍有 legacy transaction services、`xiuxian2_handle`、正式发布 migration/P7 证据和活动旧状态投影等未完成项。
 2026-09-29 activity boss milestone child reward ledger cutover：默认首领进度领奖与兼容 facade 改经 feature application/repository。game DB 在准备事务中同时写入 operation ledger、feature receipt 和 milestone reservations；后续发奖事务同时提交灵石/物品与 `granted` 回执，最后幂等更新旧 `activity.db` projection 并完成全局 ledger。首次请求固定已解锁且未领取的奖励子集；显式 child ID 重试复用快照，普通新请求生成新 ID，避免拒绝或后续解锁被旧请求永久阻塞。新增 game-only `activity_reward.008/.009`，历史回执按 200 行分块回填；pass 回填仍由 `.007` 独立负责。补齐 pass/milestone 的 CLI reconcile 注册，覆盖资产回滚、并发同 ID、投影确认丢失、ledger finish 中断、空配置和无 schema 拒绝。活动、平台迁移、progress、inventory 与 architecture contract 合计 `97 passed`，2 条既有兼容弃用警告；architecture CLI `ok=true`，隔离五库 backup/restore 覆盖 207 项迁移，`.008/.009` 仅 game DB，reconcile clean。Rank 仍是旧 ATTACH 写入，活动状态仍是 legacy projection；历史跨库崩溃不能仅由旧回执判定资产结果，真实发布前仍需备份/P7 审计。本轮仅使用专用 `/tmp` 验证目录并禁用 pytest/导入字节码缓存；用户 `boss_info.json` 修改保留。下一片为 `boss_rank`，全局 legacy transaction services、`xiuxian2_handle` 与正式发布 migration/P7 仍未完成。
+
+2026-09-30 bank v1 Web game-db cutover：`plugin.py` 不再为生产 `BankApplication` 注入 `LegacyBankRepository`；存入、取出、升级、结息改由 game DB account applications 执行。完整 player DB `bankinfo` 按用户首次写操作惰性导入，旧余额/更新时间/等级快照不匹配时拒绝存取/结息；缺失 player DB 不会被请求创建，不完整旧 schema fail closed。若账户回执已提交但全局 ledger 留在 `started`，相同 operation retry 由 feature receipt 恢复，不重复变更资产。新增真实 Flask v1 route 用例覆盖四种操作、回放、首次账户、legacy import、陈旧快照、损坏 schema 和 ledger 中断恢复；bank、progress、source-quality、architecture 聚焦合计 `127 passed`。inventory freshness、progress 所有 bank 指标、目标文件 compileall 与 diff check 通过；无新 migration、运行数据或业务库访问。pytest 与 compileall cache 使用专用 `/tmp`，已在本轮收尾清理；用户 `boss_info.json` 修改保留。bank v1 默认路径完成，但 legacy account 生命周期、全局 33 个旧 transaction service/`xiuxian2_handle` 路径、activity.db 状态 projection 和 P7 正式发布证据仍未完成；下一目标是迁移活动旧状态 projection。

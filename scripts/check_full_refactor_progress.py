@@ -201,6 +201,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
     dungeon_manager = (PACKAGE / "xiuxian" / "xiuxian_dungeon" / "dungeon_manager.py").read_text(encoding="utf-8")
     bank_facade = (PACKAGE / "xiuxian" / "xiuxian_bank" / "__init__.py").read_text(encoding="utf-8")
     bank_handler = bank_facade[bank_facade.index("async def bank_") : bank_facade.index("def get_give_stone")]
+    bank_web_application = (PACKAGE / "features" / "bank" / "application.py").read_text(encoding="utf-8")
     bank_account_info_application = (PACKAGE / "features" / "bank" / "account_info_application.py").read_text(encoding="utf-8")
     bank_account_bootstrap = (PACKAGE / "features" / "bank" / "account_bootstrap_application.py").read_text(encoding="utf-8")
     bank_account_repository = (PACKAGE / "features" / "bank" / "account_repository.py").read_text(encoding="utf-8")
@@ -912,6 +913,35 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "status": "team_commands_and_reads_application_owned_with_invite_projection_compatibility_retained",
         },
         "bank": {
+            "v1_web_game_db_owned": (
+                '"bank": BankApplication(' in plugin
+                and "LegacyBankRepository" not in plugin
+                and all(
+                    token in bank_web_application
+                    for token in (
+                        "BankDepositApplication(self.game_database)",
+                        "BankWithdrawalApplication(self.game_database)",
+                        "BankUpgradeApplication(self.game_database)",
+                        "BankInterestApplication(self.game_database)",
+                        "BankAccountBootstrapApplication(",
+                    )
+                )
+                and "expected_saved_at=request.expected_saved_at" in bank_web_application
+            ),
+            "v1_web_started_operation_recoverable": (
+                "previous.replay()" in bank_web_application
+                and "Feature receipts make a retry safe" in bank_web_application
+                and "raise ConflictError(\"操作正在处理中\")" not in bank_web_application
+            ),
+            "v1_web_snapshots_checked": all(
+                token in bank_account_applications
+                for token in (
+                    "expected_saved_stone",
+                    "expected_saved_at",
+                    'str(account["bank_level"]) != str(bank_level)',
+                )
+            ),
+            "legacy_bootstrap_does_not_create_missing_player_db": "not Path(self.player_database).is_file()" in bank_web_application,
             "deposit_application_owned": "BankDepositApplication" in bank_facade and "bank_application.deposit(" not in bank_facade,
             "withdrawal_application_owned": "BankWithdrawalApplication" in bank_facade and "bank_application.withdraw(" not in bank_facade,
             "upgrade_application_owned": "BankUpgradeApplication" in bank_facade and "bank_application.upgrade(" not in bank_facade,
@@ -976,7 +1006,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
                 bank_account_applications.count("self.repository.assert_schema_ready(uow)") == 4
                 and "CREATE TABLE" not in bank_account_applications
             ),
-            "status": "bank_legacy_reads_and_writer_isolated_with_account_schema_startup_owned",
+            "status": "v1_web_and_commands_game_db_owned; legacy_account_import_and_explicit_rollback_retained",
         },
         "map": {
             "interactive_application_owned": "map_application.interactive_settlement(" in map_facade and "map_application.interactive_start(" in map_facade,

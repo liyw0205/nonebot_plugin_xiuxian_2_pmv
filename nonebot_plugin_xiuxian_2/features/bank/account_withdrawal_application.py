@@ -14,7 +14,18 @@ class BankWithdrawalApplication:
         self.database = str(database)
         self.repository = repository or BankAccountRepository()
 
-    def withdraw(self, *, operation_id: str, user_id: str, amount: int, interest: int, bank_level: str, settled_at: str) -> dict[str, Any]:
+    def withdraw(
+        self,
+        *,
+        operation_id: str,
+        user_id: str,
+        amount: int,
+        interest: int,
+        bank_level: str,
+        settled_at: str,
+        expected_saved_stone: int | None = None,
+        expected_saved_at: str | None = None,
+    ) -> dict[str, Any]:
         operation_id = str(operation_id).strip()
         user_id = str(user_id).strip()
         if not operation_id or not user_id:
@@ -29,8 +40,17 @@ class BankWithdrawalApplication:
                 return {"status": "duplicate", "operation_id": operation_id, "withdrawn": abs(int(previous["deposited"])), "interest": previous["interest"], "wallet_stone": previous["wallet_after"], "saved_stone": previous["saved_after"]}
             wallet = uow.query_one("SELECT stone FROM user_xiuxian WHERE user_id=?", (user_id,))
             account = self.repository.account(uow, user_id)
-            if wallet is None or account is None:
+            if wallet is None:
                 return {"status": "user_missing", "operation_id": operation_id}
+            if account is None:
+                status = "state_changed" if expected_saved_stone is not None else "user_missing"
+                return {"status": status, "operation_id": operation_id}
+            if expected_saved_stone is not None and (
+                int(account["saved_stone"]) != int(expected_saved_stone)
+                or str(account["updated_at"]) != str(expected_saved_at or "")
+                or str(account["bank_level"]) != str(bank_level)
+            ):
+                return {"status": "state_changed", "operation_id": operation_id}
             try:
                 decision = decide_withdraw(wallet=int(wallet["stone"] or 0), saved=int(account["saved_stone"]), amount=int(amount), interest=int(interest))
             except ValueError as exc:

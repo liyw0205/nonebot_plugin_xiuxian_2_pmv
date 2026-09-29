@@ -2735,9 +2735,12 @@ class SourceQualityTests(unittest.TestCase):
 
     def test_bank_default_application_does_not_construct_legacy_repository(self) -> None:
         source = (SOURCE_ROOT / "xiuxian" / "xiuxian_bank" / "__init__.py").read_text(encoding="utf-8")
+        plugin = (SOURCE_ROOT / "plugin.py").read_text(encoding="utf-8")
         self.assertNotIn("LegacyBankRepository", source)
         self.assertIn("bank_application = BankApplication(", source)
         self.assertNotIn("repository=LegacyBankRepository", source)
+        self.assertIn('"bank": BankApplication(', plugin)
+        self.assertNotIn("LegacyBankRepository", plugin)
 
     def test_bank_account_info_bootstrap_receives_legacy_player_database(self) -> None:
         source = (SOURCE_ROOT / "xiuxian" / "xiuxian_bank" / "__init__.py").read_text(encoding="utf-8")
