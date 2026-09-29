@@ -614,7 +614,7 @@ PR 描述必须包含：影响 feature、数据迁移、兼容入口、权限变
 - `nonebot_plugin_xiuxian_2/features/sign_in/`：第二个完整资产垂直切片，包含签到领域模型、Unit of Work、operation ledger、兼容投影、命令/Web adapter、manifest、迁移和事务测试；旧 `修仙签到` 入口通过 `compatibility/sign_in.py` 转发。
 - `nonebot_plugin_xiuxian_2/features/stone_gift/`：灵石赠送高风险资产切片，包含手续费规则、同事务扣款/入账/日额度、operation ledger、审计、幂等重放、CSRF Web API、旧命令 facade、迁移和失败回滚测试；旧 `送灵石` 入口通过 `compatibility/stone_gift.py` 转发，首次使用当天会把旧 `player.db` 额度作为一次性基线导入。仙缘次数仍属于旧 `stone_limit` 投影，随仙缘切片迁移。
 - `nonebot_plugin_xiuxian_2/features/beg/`：新手仙途奇缘与新手礼包切片，包含每日灵石和礼包物品的 domain result、Unit of Work 仓储、operation ledger、状态拒绝、失败回滚、幂等回放、`beg.001` 迁移和灰度配置；旧 `xiuxian_beg.transaction_service` 只保留兼容 facade，历史操作表继续作为回放投影。
-- `nonebot_plugin_xiuxian_2/features/activity_reward/`：活动一键领奖的 Web/命令入口共用 game DB 中的 feature-owned 四步协调器；`activity_reward.002` 预建 schema，`.003` 从旧 `activity.db` 分块回填回执，默认请求不建表。备份链路包含旧库的 SQLite 在线快照；四个子奖励的资产事务仍通过 compatibility adapter 调用旧服务，须分别迁移。
+- `nonebot_plugin_xiuxian_2/features/activity_reward/`：活动一键领奖的 Web/命令入口共用 game DB 中的 feature-owned 四步协调器；`.002/.003` 预建并回填总领奖回执，`.004/.005` 预建 tasks 子领奖账本并导入历史任务回执。tasks 的 operation ledger、领取请求与周期任务预留在同一 game DB 事务中初始化，消除 started ledger 找不到 feature 回执的恢复窗口；灵石/物品随后在 game DB 幂等事务内发放，再幂等确认旧 `activity.db` 进度与日志。旧库通过 SQLite 在线快照纳入备份。战令和两个 Boss 子奖励仍经 compatibility adapter 写旧状态，须分别迁移。
 - `nonebot_plugin_xiuxian_2/features/bank/`：灵庄存入、取出、会员升级和结息切片，统一跨库 application、operation ledger、审计、幂等重放、Web/命令契约、迁移标记和灰度开关；旧 `Bank*Service` 仅作为惰性仓储适配器。
 - `nonebot_plugin_xiuxian_2/features/combat_settlement/`：地图战斗结算切片，包装旧附加数据库事务，统一战斗快照、每日额度、背包容量的拒绝结果、operation ledger、审计和 Web 契约；旧地图 handler 已转发到应用层。
 - `nonebot_plugin_xiuxian_2/features/admin_asset/`：管理员单人灵石调整切片，统一 admin 权限、条件余额更新、operation ledger、审计、幂等和 Web API；全服、物品、修为等其他管理员动作仍保留兼容服务。

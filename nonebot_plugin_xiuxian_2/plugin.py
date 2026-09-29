@@ -100,7 +100,13 @@ from .features.auction.jobs import settle as auction_settle_job
 from .features.bank.manifest import FEATURE as BANK_FEATURE
 from .features.bank.migrations import apply_bank, apply_bank_accounts
 from .features.activity_reward.manifest import FEATURE as ACTIVITY_REWARD_FEATURE
-from .features.activity_reward.migrations import apply_activity_claim_all, apply_activity_claim_all_legacy_receipts, apply_activity_reward
+from .features.activity_reward.migrations import (
+    apply_activity_claim_all,
+    apply_activity_claim_all_legacy_receipts,
+    apply_activity_reward,
+    apply_activity_task_claim,
+    apply_activity_task_claim_legacy_receipts,
+)
 from .features.combat_settlement.manifest import FEATURE as COMBAT_SETTLEMENT_FEATURE
 from .features.combat_settlement.migrations import apply_combat_settlement, apply_combat_settlement_operations, apply_dao_battle_operations, apply_dao_battle_record
 from .features.admin_asset.manifest import FEATURE as ADMIN_ASSET_FEATURE
@@ -191,6 +197,8 @@ def build_migrations() -> tuple[Migration, ...]:
         Migration("activity_reward.001", "activity_reward_feature_migrations", apply_activity_reward),
         Migration("activity_reward.002", "activity_claim_all_operations", apply_activity_claim_all),
         Migration("activity_reward.003", "activity_claim_all_legacy_receipts", apply_activity_claim_all_legacy_receipts),
+        Migration("activity_reward.004", "activity_task_reward_claims", apply_activity_task_claim),
+        Migration("activity_reward.005", "activity_task_reward_legacy_receipts", apply_activity_task_claim_legacy_receipts),
         Migration("admin_asset.001", "admin_asset_feature_migrations", apply_admin_asset),
         Migration("arena.001", "arena_feature_migrations", apply_arena),
         Migration("arena.002", "arena_challenge_purchase_operations", apply_arena_challenge_purchase),
@@ -710,6 +718,7 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
         from .features.bank.application import BankApplication
         from .features.bank.repository import LegacyBankRepository
         from .features.activity_reward.application import ActivityRewardApplication
+        from .features.activity_reward.task_claim_application import ActivityTaskClaimApplication
         from .features.combat_settlement.application import CombatSettlementApplication
         from .features.admin_asset.application import AdminAssetApplication
         from .features.admin_asset.repository import LegacyAdminStoneRepository
@@ -835,6 +844,11 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
             ),
             "activity_reward": ActivityRewardApplication(
                 str(context.database.path("game_db")),
+            ),
+            "activity_task_claim": ActivityTaskClaimApplication(
+                str(context.database.path("game_db")),
+                context.paths.data / "activity" / "activity.db",
+                clock=context.clock,
             ),
             "combat_settlement": CombatSettlementApplication(
                 str(context.database.path("game_db")),
@@ -969,17 +983,20 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
             from .xiuxian.xiuxian_back import configure_back_application, configure_package_reward_application
             from .xiuxian.xiuxian_tasks.task_data import configure_task_claim_application
             from .xiuxian.xiuxian_training import configure_training_application
+            from .xiuxian.xiuxian_activity.service import configure_activity_task_claim_application
 
             configure_sign_in_application(context.services["sign_in"])
             configure_back_application(context.services["back"])
             configure_package_reward_application(context.services["package_reward"])
             configure_task_claim_application(context.services["task_claim"])
+            configure_activity_task_claim_application(context.services["activity_task_claim"])
             configure_training_application(context.services["training"])
             if lottery_application_type is not None and lottery_service is not None and isinstance(lottery_service, lottery_application_type):
                 configure_lottery_application(lottery_service)
         context.reconcile_handlers = {
             "accessory_package.open": context.services["accessory_package"].reconcile,
             "tasks.claim_rewards": context.services["task_claim"].reconcile,
+            "activity_reward.tasks.claim": context.services["activity_task_claim"].reconcile,
         }
         context.outbox_handlers = {
             "accessory_package.open": context.services["accessory_package"].reconcile,

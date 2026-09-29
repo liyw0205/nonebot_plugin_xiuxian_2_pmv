@@ -238,15 +238,21 @@ class PlatformLedgerMigrationTests(unittest.TestCase):
                         operations = uow.query_one("SELECT name FROM sqlite_master WHERE type='table' AND name='activity_claim_all_operations'")
                         steps = uow.query_one("SELECT name FROM sqlite_master WHERE type='table' AND name='activity_claim_all_steps'")
                         backfill = uow.query_one("SELECT version FROM schema_migrations WHERE version='activity_reward.003'")
+                        task_claim = uow.query_one("SELECT version FROM schema_migrations WHERE version='activity_reward.004'")
+                        task_receipts = uow.query_one("SELECT version FROM schema_migrations WHERE version='activity_reward.005'")
                     if spec.key == "game_db":
                         self.assertIsNotNone(operations)
                         self.assertIsNotNone(steps)
                         self.assertIsNotNone(backfill)
+                        self.assertIsNotNone(task_claim)
+                        self.assertIsNotNone(task_receipts)
                         self.assertIsNone(context.services["activity_reward"].repository)
                     else:
                         self.assertIsNone(operations)
                         self.assertIsNone(steps)
                         self.assertIsNone(backfill)
+                        self.assertIsNone(task_claim)
+                        self.assertIsNone(task_receipts)
             finally:
                 asyncio.run(lifecycle.shutdown())
 

@@ -2616,6 +2616,8 @@
     "activity_task_claim_log",
     "activity_task_claim_operations",
     "activity_task_progress",
+    "activity_task_reward_claim_operations",
+    "activity_task_reward_claim_reservations",
     "activity_user",
     "admin_accessory_batch_operations",
     "admin_accessory_batch_progress",

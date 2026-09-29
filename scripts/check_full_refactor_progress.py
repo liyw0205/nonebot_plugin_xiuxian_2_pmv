@@ -144,6 +144,14 @@ def _slice_status() -> dict[str, dict[str, object]]:
     activity_service = (PACKAGE / "xiuxian" / "xiuxian_activity" / "service.py").read_text(encoding="utf-8")
     activity_reward_application = (PACKAGE / "features" / "activity_reward" / "application.py").read_text(encoding="utf-8")
     activity_claim_repository = (PACKAGE / "features" / "activity_reward" / "claim_all_repository.py").read_text(encoding="utf-8")
+    activity_task_claim_application = (PACKAGE / "features" / "activity_reward" / "task_claim_application.py").read_text(encoding="utf-8")
+    activity_task_claim_repository = (PACKAGE / "features" / "activity_reward" / "task_claim_repository.py").read_text(encoding="utf-8")
+    activity_reward_migrations = (PACKAGE / "features" / "activity_reward" / "migrations.py").read_text(encoding="utf-8")
+    activity_task_claim_compatibility = (PACKAGE / "xiuxian" / "xiuxian_activity" / "transaction_service.py").read_text(encoding="utf-8")
+    activity_task_claim_compatibility = activity_task_claim_compatibility[
+        activity_task_claim_compatibility.index("class ActivityTaskClaimService:"):
+        activity_task_claim_compatibility.index("class ActivityPassClaimService:")
+    ]
     activity_command_repository = (PACKAGE / "features" / "activity" / "repository.py").read_text(encoding="utf-8")
     dungeon_facade = (PACKAGE / "xiuxian" / "xiuxian_dungeon" / "__init__.py").read_text(encoding="utf-8")
     dungeon_team_manager = (PACKAGE / "xiuxian" / "xiuxian_dungeon" / "team_manager.py").read_text(encoding="utf-8")
@@ -636,7 +644,26 @@ def _slice_status() -> dict[str, dict[str, object]]:
                 "ActivityClaimAllApplication(self.database).run(" in activity_command_repository
                 and "service import claim_activity_rewards" not in activity_command_repository
             ),
-            "status": "claim_all_game_db_schema_backfill_and_web_command_feature_coordinator_with_legacy_child_claims",
+            "tasks_game_reward_application_owned": (
+                "_activity_task_claim_application().claim(" in activity_service
+                and "ActivityTaskClaimRepository" in activity_task_claim_repository
+                and "ATTACH DATABASE" not in activity_task_claim_compatibility
+            ),
+            "tasks_started_operation_recoverable": (
+                "def prepare_operation(" in activity_task_claim_repository
+                and "self.repository.prepare_operation(" in activity_task_claim_application
+                and '"activity_reward.tasks.claim": context.services["activity_task_claim"].reconcile' in plugin
+            ),
+            "tasks_startup_schema_and_receipt_backfill": (
+                'Migration("activity_reward.004", "activity_task_reward_claims"' in plugin
+                and 'Migration("activity_reward.005", "activity_task_reward_legacy_receipts"' in plugin
+                and "apply_activity_task_claim_legacy_receipts" in activity_reward_migrations
+            ),
+            "tasks_legacy_state_projection_retryable": (
+                "_finalize_legacy_state" in activity_task_claim_repository
+                and "activity_task_reward_claim_reservations" in activity_task_claim_repository
+            ),
+            "status": "claim_all_game_db_coordinator_and_tasks_asset_ledger_with_legacy_progress_projection_remaining_pass_and_boss_claims",
         },
         "dungeon_team": {
             "team_commands_application_owned": all(

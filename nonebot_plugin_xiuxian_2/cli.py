@@ -87,6 +87,7 @@ def main(argv: list[str] | None = None) -> int:
             from .features.accessory_package.application import AccessoryPackageApplication
             from .features.auction.application import AuctionBidApplication
             from .features.auction.settlement import AuctionSettlementApplication
+            from .features.activity_reward.task_claim_application import ActivityTaskClaimApplication
             from .compatibility.auction_settlement_effects import LegacyAuctionSettlementEffects
 
             game_db = context.database.path("game_db")
@@ -100,6 +101,9 @@ def main(argv: list[str] | None = None) -> int:
                 game_db,
                 effects=LegacyAuctionSettlementEffects(player_db),
             )
+            activity_task_claim = ActivityTaskClaimApplication(
+                game_db, context.paths.data / "activity" / "activity.db", clock=context.clock
+            )
             report = ReconcileService().run(
                 uow,
                 handlers={
@@ -107,7 +111,10 @@ def main(argv: list[str] | None = None) -> int:
                     "auction.bid.effects": auction.reconcile_outbox_event,
                     "auction.settlement.effects": settlement.reconcile_outbox_event,
                 },
-                operation_handlers={"accessory_package.open": accessory.reconcile},
+                operation_handlers={
+                    "accessory_package.open": accessory.reconcile,
+                    "activity_reward.tasks.claim": activity_task_claim.reconcile,
+                },
             )
         else:
             report = ReconcileService().inspect(uow)

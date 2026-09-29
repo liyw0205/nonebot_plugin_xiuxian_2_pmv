@@ -63,7 +63,6 @@ from .activity_rules import *
 from .activity_pass import *
 from .activity_progress import *
 from .transaction_service import ActivityPointShopPurchaseService
-from .transaction_service import ActivityTaskClaimService
 from .transaction_service import ActivitySignSettlementService
 from .transaction_service import ActivityPassClaimService
 from .transaction_service import ActivityCollectExchangeService
@@ -72,7 +71,7 @@ from ...features.activity_reward.claim_all_application import ActivityClaimAllAp
 
 
 _point_shop_purchase_service_instance = None
-_activity_task_claim_service_instance = None
+_activity_task_claim_application_instance = None
 _activity_sign_settlement_service_instance = None
 _activity_pass_claim_service_instance = None
 _activity_collect_exchange_service_instance = None
@@ -101,11 +100,21 @@ def _activity_collect_exchange_service():
     return _activity_collect_exchange_service_instance
 
 
-def _activity_task_claim_service():
-    global _activity_task_claim_service_instance
-    if _activity_task_claim_service_instance is None:
-        _activity_task_claim_service_instance = ActivityTaskClaimService(DB_PATH, get_paths().game_db)
-    return _activity_task_claim_service_instance
+def _activity_task_claim_application():
+    global _activity_task_claim_application_instance
+    if _activity_task_claim_application_instance is None:
+        from ...features.activity_reward.task_claim_application import ActivityTaskClaimApplication
+
+        paths = get_paths()
+        _activity_task_claim_application_instance = ActivityTaskClaimApplication(
+            paths.game_db, paths.data / "activity" / "activity.db"
+        )
+    return _activity_task_claim_application_instance
+
+
+def configure_activity_task_claim_application(application) -> None:
+    global _activity_task_claim_application_instance
+    _activity_task_claim_application_instance = application
 
 
 def _activity_pass_claim_service():
@@ -775,7 +784,7 @@ def _select_claimable_tasks(cur, config: dict, user_id: str, query: str = "") ->
 def claim_activity_tasks(user_id: str, query: str = "", operation_id: str | None = None) -> tuple[bool, str]:
     uid = str(user_id)
     if operation_id:
-        previous = _activity_task_claim_service().get_result(operation_id, uid)
+        previous = _activity_task_claim_application().get_result(operation_id, uid)
         if previous is not None:
             if not previous.succeeded:
                 return False, "领取请求冲突，请重新发送"
@@ -809,7 +818,7 @@ def claim_activity_tasks(user_id: str, query: str = "", operation_id: str | None
     finally:
         conn.close()
 
-    result = _activity_task_claim_service().claim(
+    result = _activity_task_claim_application().claim(
         operation_id or f"activity-task:{uid}:{runtime_ids.new_id()}", uid, activity_key, tasks, XiuConfig().max_goods_num
     )
     if not result.succeeded:
@@ -817,6 +826,7 @@ def claim_activity_tasks(user_id: str, query: str = "", operation_id: str | None
             "inventory_full": "背包空间不足，奖励未领取",
             "user_missing": "角色不存在",
             "state_changed": "任务领取未完成：任务进度已更新，请重新查询任务",
+            "claim_in_progress": "任务奖励正在处理中，请稍后重试",
             "operation_conflict": "领取请求冲突，请重新发送",
         }
         return False, messages.get(result.status, "当前没有可领取的活动任务奖励")
