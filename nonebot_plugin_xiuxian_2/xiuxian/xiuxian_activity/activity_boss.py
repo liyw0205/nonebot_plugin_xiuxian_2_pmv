@@ -26,7 +26,9 @@ from .service import (
     resolve_daohao,
     today_str,
     runtime_ids,
+    parse_reward,
 )
+from ..xiuxian_config import XiuConfig
 from .transaction_service import BossRewardClaimService
 from .transaction_service import ActivityBossCoopSettlementService
 from .transaction_service import ActivityBossItemRaidSettlementService
@@ -35,6 +37,7 @@ BOSS_MODES = {"item_raid", "cooperative", "both"}
 
 _activity_boss_coop_settlement_service_instance = None
 _activity_boss_item_raid_settlement_service_instance = None
+_activity_boss_milestone_claim_application_instance = None
 
 
 def _activity_boss_coop_settlement_service():
@@ -660,18 +663,46 @@ def _boss_reward_claim_service() -> BossRewardClaimService:
     return BossRewardClaimService(DB_PATH, get_paths().game_db)
 
 
+def _boss_milestone_claim_application():
+    global _activity_boss_milestone_claim_application_instance
+    if _activity_boss_milestone_claim_application_instance is None:
+        from ...features.activity_reward.boss_milestone_claim_application import ActivityBossMilestoneClaimApplication
+
+        paths = get_paths()
+        _activity_boss_milestone_claim_application_instance = ActivityBossMilestoneClaimApplication(
+            paths.game_db, paths.data / "activity" / "activity.db"
+        )
+    return _activity_boss_milestone_claim_application_instance
+
+
+def configure_activity_boss_milestone_claim_application(application) -> None:
+    global _activity_boss_milestone_claim_application_instance
+    _activity_boss_milestone_claim_application_instance = application
+
+
 def claim_boss_milestone_reward(
     user_id: str,
     query: str = "",
     operation_id: str | None = None,
 ) -> tuple[bool, str]:
-    service = _boss_reward_claim_service()
+    application = _boss_milestone_claim_application()
     if operation_id:
-        previous = service.get_result(operation_id, user_id)
+        previous = application.resume_pending(operation_id, user_id)
+        if previous is None:
+            previous = application.get_result(operation_id, user_id)
         if previous is not None:
             if previous.succeeded:
                 return True, "已领取：" + "、".join(previous.names)
-            return False, "领取请求冲突，请重新发送"
+            messages = {
+                "not_unlocked": "全服进度奖励尚未解锁",
+                "already_claimed": "没有可领取的全服进度奖励（可能已领过）",
+                "inventory_full": "背包空间不足，奖励未领取",
+                "user_missing": "角色不存在",
+                "claim_in_progress": "首领进度奖励正在处理中，请稍后重试",
+                "state_changed": "首领进度领奖状态已变化，请重新查询",
+                "operation_conflict": "领取请求冲突，请重新发送",
+            }
+            return False, messages.get(previous.status, f"领取失败（{previous.status}）")
     allowed, reason, _ = _runtime_gate("claim")
     if not allowed:
         return False, reason
@@ -679,16 +710,29 @@ def claim_boss_milestone_reward(
     if not activity:
         return False, "未找到活动首领"
     ensure_activity_files()
-    milestones = [
-        {"key": ms.get("key") or f"p{ms.get('hp_percent')}", "name": ms.get("name"), "reward": ms.get("reward", "")}
-        for ms in activity.get("server_milestones") or []
-    ]
-    result = service.claim_milestones(
-        user_id, activity["key"], milestones, operation_id=operation_id
+    milestones = []
+    for milestone in activity.get("server_milestones") or []:
+        reward_text = str(milestone.get("reward") or "")
+        milestones.append({
+            "key": milestone.get("key") or f"p{milestone.get('hp_percent')}",
+            "name": milestone.get("name"),
+            "reward": reward_text,
+            "reward_items": parse_reward(reward_text),
+        })
+    result = application.claim(
+        str(user_id), activity["key"], milestones, XiuConfig().max_goods_num, operation_id=operation_id
     )
     if result.succeeded:
         return True, "已领取：" + "、".join(result.names)
-    messages = {"not_unlocked": "全服进度奖励尚未解锁", "already_claimed": "没有可领取的全服进度奖励（可能已领过）", "inventory_full": "背包空间不足，奖励未领取", "user_missing": "角色不存在", "operation_conflict": "领取请求冲突，请重新发送"}
+    messages = {
+        "not_unlocked": "全服进度奖励尚未解锁",
+        "already_claimed": "没有可领取的全服进度奖励（可能已领过）",
+        "inventory_full": "背包空间不足，奖励未领取",
+        "user_missing": "角色不存在",
+        "claim_in_progress": "首领进度奖励正在处理中，请稍后重试",
+        "state_changed": "首领进度领奖状态已变化，请重新查询",
+        "operation_conflict": "领取请求冲突，请重新发送",
+    }
     return False, messages.get(result.status, f"领取失败（{result.status}）")
 
 

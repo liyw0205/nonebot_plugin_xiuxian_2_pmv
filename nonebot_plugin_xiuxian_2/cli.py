@@ -88,6 +88,8 @@ def main(argv: list[str] | None = None) -> int:
             from .features.auction.application import AuctionBidApplication
             from .features.auction.settlement import AuctionSettlementApplication
             from .features.activity_reward.task_claim_application import ActivityTaskClaimApplication
+            from .features.activity_reward.pass_claim_application import ActivityPassClaimApplication
+            from .features.activity_reward.boss_milestone_claim_application import ActivityBossMilestoneClaimApplication
             from .compatibility.auction_settlement_effects import LegacyAuctionSettlementEffects
 
             game_db = context.database.path("game_db")
@@ -104,6 +106,12 @@ def main(argv: list[str] | None = None) -> int:
             activity_task_claim = ActivityTaskClaimApplication(
                 game_db, context.paths.data / "activity" / "activity.db", clock=context.clock
             )
+            activity_pass_claim = ActivityPassClaimApplication(
+                game_db, context.paths.data / "activity" / "activity.db", clock=context.clock
+            )
+            activity_boss_milestone_claim = ActivityBossMilestoneClaimApplication(
+                game_db, context.paths.data / "activity" / "activity.db", clock=context.clock
+            )
             report = ReconcileService().run(
                 uow,
                 handlers={
@@ -114,6 +122,8 @@ def main(argv: list[str] | None = None) -> int:
                 operation_handlers={
                     "accessory_package.open": accessory.reconcile,
                     "activity_reward.tasks.claim": activity_task_claim.reconcile,
+                    "activity_reward.pass.claim": activity_pass_claim.reconcile,
+                    "activity_reward.boss_milestone.claim": activity_boss_milestone_claim.reconcile,
                 },
             )
         else:

@@ -1220,6 +1220,16 @@ class BossRewardClaimService:
         self.game_database = Path(game_database)
         self.lock = lock or RLock()
         self.max_goods_num = int(max_goods_num or XiuConfig().max_goods_num)
+        self._milestone_application = None
+
+    def _get_milestone_application(self):
+        if self._milestone_application is None:
+            from ...features.activity_reward.boss_milestone_claim_application import ActivityBossMilestoneClaimApplication
+
+            self._milestone_application = ActivityBossMilestoneClaimApplication(
+                self.game_database, self.activity_database
+            )
+        return self._milestone_application
 
     @staticmethod
     def _json(value) -> str:
@@ -1241,6 +1251,9 @@ class BossRewardClaimService:
         operation_id = str(operation_id).strip()
         if not operation_id:
             raise ValueError("operation_id is required")
+        milestone = self._get_milestone_application().get_result(operation_id, user_id)
+        if milestone is not None:
+            return BossRewardClaimResult(milestone.status, milestone.names)
         with self.lock, closing(db_backend.connect(self.activity_database)) as conn:
             self._ensure_schema(conn)
             conn.commit()
@@ -1309,57 +1322,23 @@ class BossRewardClaimService:
         return BossRewardClaimResult("applied", tuple(names), rank)
 
     def claim_milestones(self, user_id, activity_key, milestones, operation_id=None):
-        user_id, activity_key = str(user_id), str(activity_key)
-        with self.lock, closing(db_backend.connect(self.activity_database)) as conn:
-            try:
-                conn.execute("ATTACH DATABASE %s AS game_data", (str(self.game_database),))
-                conn.execute("BEGIN IMMEDIATE")
-                self._ensure_schema(conn)
-                if operation_id is not None:
-                    operation_id = str(operation_id).strip()
-                    if not operation_id:
-                        raise ValueError("operation_id is required")
-                    previous = conn.execute(
-                        "SELECT payload,result_json FROM activity_boss_reward_claim_operations "
-                        "WHERE operation_id=%s",
-                        (operation_id,),
-                    ).fetchone()
-                    if previous:
-                        conn.rollback()
-                        previous_payload = json.loads(str(previous[0]))
-                        if previous_payload[:2] != [user_id, activity_key]:
-                            return BossRewardClaimResult("operation_conflict")
-                        data = json.loads(str(previous[1]))
-                        return BossRewardClaimResult(
-                            "duplicate", tuple(data["names"]), int(data["rank"])
-                        )
-                unlocked = {str(row[0]) for row in conn.execute("SELECT milestone_key FROM activity_boss_milestone WHERE activity_key=%s", (activity_key,)).fetchall()}
-                if not unlocked:
-                    conn.rollback()
-                    return BossRewardClaimResult("not_unlocked")
-                claimed = {str(row[0]) for row in conn.execute("SELECT milestone_key FROM activity_boss_milestone_claim WHERE activity_key=%s AND user_id=%s", (activity_key, user_id)).fetchall()}
-                pending = [(str(row["key"]), str(row.get("name") or row["key"]), str(row.get("reward") or "")) for row in milestones if str(row["key"]) in unlocked and str(row["key"]) not in claimed]
-                if not pending:
-                    conn.rollback()
-                    return BossRewardClaimResult("already_claimed")
-                payload = self._json([user_id, activity_key, pending])
-                operation_id = operation_id or self._operation_id("milestone", payload)
-                previous = conn.execute("SELECT payload,result_json FROM activity_boss_reward_claim_operations WHERE operation_id=%s", (operation_id,)).fetchone()
-                if previous:
-                    conn.rollback()
-                    if not operation_payload_matches(previous[0], payload):
-                        return BossRewardClaimResult("operation_conflict")
-                    data = json.loads(str(previous[1]))
-                    return BossRewardClaimResult("duplicate", tuple(data["names"]), int(data["rank"]))
-                error = self._grant(conn, user_id, self._rewards([row[2] for row in pending]))
-                if error:
-                    conn.rollback()
-                    return BossRewardClaimResult(error)
-                conn.executemany("INSERT INTO activity_boss_milestone_claim(activity_key,user_id,milestone_key,create_time) VALUES(%s,%s,%s,CURRENT_TIMESTAMP)", [(activity_key, user_id, row[0]) for row in pending])
-                return self._finish(conn, operation_id, payload, [row[1] for row in pending])
-            except Exception:
-                conn.rollback()
-                raise
+        normalized = []
+        for row in milestones:
+            reward_text = str(row.get("reward") or "")
+            normalized.append({
+                "key": row.get("key"),
+                "name": row.get("name"),
+                "reward": reward_text,
+                "reward_items": get_item_list(reward_text) if reward_text.strip() else [],
+            })
+        result = self._get_milestone_application().claim(
+            user_id,
+            activity_key,
+            normalized,
+            self.max_goods_num,
+            operation_id=operation_id,
+        )
+        return BossRewardClaimResult(result.status, result.names)
 
     def claim_rank(self, user_id, activity_key, tiers, operation_id=None):
         user_id, activity_key = str(user_id), str(activity_key)
