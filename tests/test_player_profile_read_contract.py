@@ -24,6 +24,13 @@ class PlayerProfileReadContractTest(unittest.TestCase):
         self.assertNotIn("_sql_message().get_user_info_with_id", source)
         self.assertNotIn("_sql_message().get_user_info_with_name", source)
 
+    def test_info_projection_uses_profile_reader_for_identity_fields(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        source = (root / "nonebot_plugin_xiuxian_2" / "xiuxian" / "xiuxian_info" / "user_info.py").read_text(encoding="utf-8")
+        self.assertGreaterEqual(source.count("get_user_profile("), 4)
+        self.assertNotIn("_sql_message().get_user_real_info", source)
+        self.assertIn("get_final_attributes(user_id)", source)
+
 
 if __name__ == "__main__":
     unittest.main()

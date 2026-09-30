@@ -9,7 +9,7 @@ from ..adapter_compat import (
     is_group_event,
 )
 from ..xiuxian_utils.utils import (
-    check_user, get_msg_pic, handle_send, number_to,
+    check_user, get_user_profile, get_msg_pic, handle_send, number_to,
     handle_pic_send, handle_pic_msg_send,
 )
 from ..xiuxian_utils.lay_out import assign_bot, Cooldown
@@ -43,7 +43,7 @@ def _sql_message():
 
 async def get_user_xiuxian_info(user_id):
     """获取用户修仙信息的公共函数"""
-    user_info = _sql_message().get_user_real_info(user_id)
+    user_info = get_user_profile(user_id)
     user_name = user_info['user_name']
 
     user_num = user_info['id']
@@ -89,7 +89,7 @@ async def get_user_xiuxian_info(user_id):
     else:
         partner_user_id = partner_data["partner_id"]
         affection = partner_data["affection"]
-        partner_info_data = _sql_message().get_user_real_info(partner_user_id)
+        partner_info_data = get_user_profile(partner_user_id)
         if affection >= 10000:
             affection_level = "💖 深情厚谊"
         elif affection >= 5000:
@@ -103,7 +103,7 @@ async def get_user_xiuxian_info(user_id):
     mentor_data = load_mentor(user_id)
     mentor_id = mentor_data.get("mentor_id")
     if mentor_id:
-        mentor_info_data = _sql_message().get_user_real_info(mentor_id)
+        mentor_info_data = get_user_profile(mentor_id)
         mentor_info = mentor_info_data["user_name"] if mentor_info_data else "数据异常"
     else:
         mentor_info = "无"
@@ -113,7 +113,7 @@ async def get_user_xiuxian_info(user_id):
         apprentice_data = load_mentor(apprentice_id)
         if str(apprentice_data.get("mentor_id")) != str(user_id):
             continue
-        apprentice_info_data = _sql_message().get_user_real_info(apprentice_id)
+        apprentice_info_data = get_user_profile(apprentice_id)
         if apprentice_info_data:
             apprentice_names.append(apprentice_info_data["user_name"])
     apprentice_info = "、".join(apprentice_names[:3]) if apprentice_names else "无"
