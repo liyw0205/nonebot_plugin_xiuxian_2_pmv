@@ -14,6 +14,8 @@
 
 `创造力量` 普通单人物品发放经 admin asset application；回执 schema 在 game DB 启动期预建，未就绪时拒绝并记录 operation ledger 结果。
 
+`创造力量` 和 `毁灭力量` 的单人饰品发放/扣除由 `AdminAssetApplication` 与 feature-owned repository 承担；全服饰品批次仍保留在旧批量服务中，不属于本切片。
+
 ## Web API
 
 `POST /api/v1/admin/assets/stone`，权限 `admin`，需要 CSRF 和 `Idempotency-Key`（或请求体 `operation_id`）。请求字段：`operator_id`、`user_id`、`expected_stone`、`requested_delta`、可选 `target_name`。余额不足时旧规则仍将余额下限限制为 0；统一响应包含操作号和前后余额。
@@ -22,7 +24,7 @@
 
 ## 数据模型与迁移
 
-`admin_asset.001` 创建 feature migration 标记；`admin_asset.002` 在启动阶段预建单人灵石调整回执和 `economy_log.trace_id`；`admin_asset.003` 预建全服灵石批次回执与逐用户进度，并用部分唯一索引限制同一管理员/增量最多一个 running 批次；`admin_asset.004` 预建单人修为调整回执；`admin_asset.005` 预建单人物品扣除回执；`admin_asset.006` 预建单人物品发放回执；`admin_asset.007` 预建境界与灵根调整回执；`admin_asset.008` 预建单人传承石回执。这些默认路径不在请求期执行 DDL，缺少启动 schema 时 fail closed。传承石余额仍由 legacy `impart_db.xiuxian_impart.stone_num` 持有，feature 仓储只校验既有 schema，不创建或补列。全服进度行保存冻结的目标集、执行前后余额和实际增量，是操作审计数据而非缓存；删除前必须制定独立保留策略。启动新批次前按用户数预估所需磁盘空间，不足时 fail closed。
+`admin_asset.001` 创建 feature migration 标记；`admin_asset.002` 在启动阶段预建单人灵石调整回执和 `economy_log.trace_id`；`admin_asset.003` 预建全服灵石批次回执与逐用户进度，并用部分唯一索引限制同一管理员/增量最多一个 running 批次；`admin_asset.004` 预建单人修为调整回执；`admin_asset.005` 预建单人物品扣除回执；`admin_asset.006` 预建单人物品发放回执；`admin_asset.007` 预建境界与灵根调整回执；`admin_asset.008` 预建单人传承石回执；`admin_asset.009` 预建单人饰品调整回执。这些默认路径不在请求期执行 DDL，缺少启动 schema 时 fail closed。玩家饰品表由 `accessory_package.player_data.001` 启动迁移管理；`.009` 只路由到 game DB。传承石余额仍由 legacy `impart_db.xiuxian_impart.stone_num` 持有，feature 仓储只校验既有 schema，不创建或补列。全服进度行和 operation receipts 是持久审计/幂等记录，不是可随意清理的缓存；删除前必须制定独立保留策略。启动新批次前按用户数预估所需磁盘空间，不足时 fail closed。
 
 ## 事务与失败回滚
 
@@ -31,6 +33,7 @@ feature 单人 exp repository 在一个 game DB immediate UoW 中校验 `.002/.0
 单人物品扣除 repository 在 immediate UoW 中校验 `.002/.005` schema，再校验物品快照并原子提交背包扣减、绑定数量更新、receipt 和 `economy_log`；缺表/缺列返回 `schema_missing`，不执行扣减。
 普通物品发放 repository 在 immediate UoW 中校验 `.006` 与 `back` schema，再按物品数量快照提交背包增量和 receipt。缺 schema 返回 `schema_missing`；应用将 rejected operation 写入 ledger，同一 operation 重试得到稳定拒绝，不会误报成功或改库存。
 单人传承石 repository 从 `impart_db.xiuxian_impart.stone_num` 读取并 CAS 更新余额，在 attached UoW 中将旧格式兼容回执和 `economy_log` 写入 game DB。快照读取使用只读连接；缺数据库/表/列返回未就绪，重复用户行拒绝修改；扣减仍封顶至 0 并记录实际 delta。`.008` 只路由 game DB，因为 impart 余额表仍归 legacy schema owner 管理。
+单人饰品 repository 使用只读快照和 attached UoW 校验 `player_accessory` CAS，在一次请求事务中更新 bag、写入 game DB 的兼容格式 operation receipt 与 `economy_log`；发放校验品质、容量、UID 与 factory 产物，扣除只从 bag 移除并允许按实际持有量部分扣除。请求期不建表，旧格式回执可直接重放。SQLite attached 多文件事务的 late-SQL rollback 有测试覆盖，但 WAL 下跨文件崩溃原子性不作保证，真实发布前仍须完成备份及 P7 恢复核验。
 
 ## 定时任务
 
@@ -46,8 +49,8 @@ feature 单人 exp repository 在一个 game DB immediate UoW 中校验 `.002/.0
 
 ## 测试与手工验收
 
-执行 admin asset application、stone repository/batch repository、source contract、progress 和架构/migration tests；Flask client 覆盖匿名拒绝、CSRF 失败、管理员成功、重复操作重放和快照变化拒绝。全服批次回归覆盖冻结目标集、分块恢复、冲突、不同 operation ID 的重复活动请求、晚期失败回滚和磁盘空间不足。
+执行 admin asset application、stone/impart/accessory repository 与 batch repository、source contract、progress 和架构/migration tests；饰品回归覆盖单人 grant/destroy、回执重放/冲突、CAS、容量、无效 UID、缺 schema 和晚 SQL rollback。Flask client 覆盖匿名拒绝、CSRF 失败、管理员成功、重复操作重放和快照变化拒绝。全服批次回归覆盖冻结目标集、分块恢复、冲突、不同 operation ID 的重复活动请求、晚期失败回滚和磁盘空间不足。
 
 ## 灰度开关、回滚和已知限制
 
-单人及全服灵石、单人修为、单人物品发放/扣除、境界和灵根调整默认路径已由 feature repositories 承担；境界/灵根使用 game-only `.007`，单人传承石回执使用 game-only `.008`，真实余额仍在既有 impart DB 表。全服传承石批次继续走显式 legacy service，不随本次单人切片迁移。显式 legacy single-user stone repository 保留作回滚；批次回执及逐用户进度属于持久审计记录，不随测试缓存清理。全服物品和其余管理员资产仍有各自兼容边界。
+单人及全服灵石、单人修为、单人物品发放/扣除、境界和灵根调整，以及单人饰品发放/扣除默认路径已由 feature repositories 承担；饰品使用 game-only `.009` 和既有 player-side accessory migration。全服传承石、全服饰品批次继续走 legacy service，不随本次单人切片迁移。显式 legacy services 保留作兼容/回滚边界；operation receipts、批次进度属于持久审计记录，不随测试缓存清理。全服物品和其余管理员资产仍有各自兼容边界。

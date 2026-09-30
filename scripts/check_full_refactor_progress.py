@@ -569,8 +569,12 @@ def _slice_status() -> dict[str, dict[str, object]]:
     admin_level_repository = (PACKAGE / "features" / "admin_asset" / "level_repository.py").read_text(encoding="utf-8")
     admin_root_repository = (PACKAGE / "features" / "admin_asset" / "root_repository.py").read_text(encoding="utf-8")
     admin_impart_stone_repository = (PACKAGE / "features" / "admin_asset" / "impart_stone_repository.py").read_text(encoding="utf-8")
+    admin_accessory_repository = (PACKAGE / "features" / "admin_asset" / "accessory_repository.py").read_text(encoding="utf-8")
     admin_asset_migrations = (PACKAGE / "features" / "admin_asset" / "migrations.py").read_text(encoding="utf-8")
     admin_asset_manifest = (PACKAGE / "features" / "admin_asset" / "manifest.py").read_text(encoding="utf-8")
+    admin_accessory_adjustment = admin_asset_application[
+        admin_asset_application.index("    def adjust_accessory(") : admin_asset_application.index("    def grant_item(")
+    ]
     return {
         "stone_gift": {
             "default_legacy_handler_disabled": '"送灵石" if _legacy_stone_gift_enabled' in base,
@@ -1952,7 +1956,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
             ),
             "stone_startup_migration_registered": (
                 'Migration("admin_asset.002", "admin_stone_adjustment_operations", apply_admin_stone_adjustment)' in plugin
-                and 'migration_version="admin_asset.008"' in admin_asset_manifest
+                and 'migration_version="admin_asset.009"' in admin_asset_manifest
             ),
             "stone_started_operation_recoverable": (
                 "The repository receipt can recover a commit whose" in admin_asset_stone_application
@@ -1987,12 +1991,12 @@ def _slice_status() -> dict[str, dict[str, object]]:
             ),
             "global_stone_batch_startup_migration_registered": (
                 'Migration("admin_asset.003", "admin_stone_batch_adjustment_operations", apply_admin_stone_batch)' in plugin
-                and 'migration_version="admin_asset.008"' in admin_asset_manifest
+                and 'migration_version="admin_asset.009"' in admin_asset_manifest
             ),
             "exp_request_path_has_no_ddl": "CREATE TABLE" not in admin_exp_repository,
             "exp_startup_migration_registered": (
                 'Migration("admin_asset.004", "admin_exp_adjustment_operations", apply_admin_exp_adjustment)' in plugin
-                and 'migration_version="admin_asset.008"' in admin_asset_manifest
+                and 'migration_version="admin_asset.009"' in admin_asset_manifest
                 and "def apply_admin_exp_adjustment(" in admin_asset_migrations
             ),
             "item_destroy_request_path_has_no_ddl": (
@@ -2002,7 +2006,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
             ),
             "item_destroy_startup_migration_registered": (
                 'Migration("admin_asset.005", "admin_item_destroy_operations", apply_admin_item_destroy)' in plugin
-                and 'migration_version="admin_asset.008"' in admin_asset_manifest
+                and 'migration_version="admin_asset.009"' in admin_asset_manifest
                 and "def apply_admin_item_destroy(" in admin_asset_migrations
             ),
             "item_destroy_missing_schema_reported": (
@@ -2029,7 +2033,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
             ),
             "item_grant_startup_migration_registered": (
                 'Migration("admin_asset.006", "admin_item_grant_operations", apply_admin_item_grant)' in plugin
-                and 'migration_version="admin_asset.008"' in admin_asset_manifest
+                and 'migration_version="admin_asset.009"' in admin_asset_manifest
                 and "def apply_admin_item_grant(" in admin_asset_migrations
             ),
             "item_grant_schema_missing_reported": (
@@ -2058,7 +2062,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
             ),
             "realm_change_startup_migration_registered": (
                 'Migration("admin_asset.007", "admin_level_root_change_operations", apply_admin_realm_changes)' in plugin
-                and 'migration_version="admin_asset.008"' in admin_asset_manifest
+                and 'migration_version="admin_asset.009"' in admin_asset_manifest
                 and "def apply_admin_realm_changes(" in admin_asset_migrations
             ),
             "realm_change_schema_missing_reported": (
@@ -2101,7 +2105,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
             ),
             "impart_stone_startup_migration_registered": (
                 'Migration("admin_asset.008", "admin_impart_stone_operations", apply_admin_impart_stone_operations)' in plugin
-                and 'migration_version="admin_asset.008"' in admin_asset_manifest
+                and 'migration_version="admin_asset.009"' in admin_asset_manifest
                 and "def apply_admin_impart_stone_operations(" in admin_asset_migrations
             ),
             "impart_stone_schema_missing_reported": (
@@ -2118,6 +2122,41 @@ def _slice_status() -> dict[str, dict[str, object]]:
                     plugin.index("_TRADE_DATABASE_MIGRATION_VERSIONS")
                 ]
                 and '"admin_asset.008"' not in plugin[
+                    plugin.index("_TRADE_DATABASE_MIGRATION_VERSIONS"):
+                    plugin.index("def migrations_for_database")
+                ]
+            ),
+            "accessory_single_repository_owned": (
+                "AdminAccessorySqlRepository" in admin_accessory_adjustment
+                and "AdminAccessoryAdjustmentService" not in admin_accessory_adjustment
+                and "quality=quality" in admin_facade
+                and "create_accessory=lambda: create_accessory_instance(item_id, quality)" in admin_facade
+            ),
+            "accessory_single_request_path_has_no_ddl": (
+                "CREATE TABLE" not in admin_accessory_repository
+                and "ALTER TABLE" not in admin_accessory_repository
+                and "_schema_ready" in admin_accessory_repository
+            ),
+            "accessory_single_startup_migration_registered": (
+                'Migration("admin_asset.009", "admin_accessory_operations", apply_admin_accessory_operations)' in plugin
+                and 'migration_version="admin_asset.009"' in admin_asset_manifest
+                and "def apply_admin_accessory_operations(" in admin_asset_migrations
+                and "apply_attached_player_accessory_operations" in plugin
+            ),
+            "accessory_single_schema_missing_reported": (
+                admin_facade.count('result.status == "schema_missing"') >= 4
+                and "snapshot.status != \"ok\"" in admin_accessory_adjustment
+            ),
+            "accessory_single_migration_game_only": (
+                '"admin_asset.009"' not in plugin[
+                    plugin.index("_GAME_DATABASE_EXCLUDED_MIGRATION_VERSIONS"):
+                    plugin.index("_PLAYER_DATABASE_MIGRATION_VERSIONS")
+                ]
+                and '"admin_asset.009"' not in plugin[
+                    plugin.index("_PLAYER_DATABASE_MIGRATION_VERSIONS"):
+                    plugin.index("_TRADE_DATABASE_MIGRATION_VERSIONS")
+                ]
+                and '"admin_asset.009"' not in plugin[
                     plugin.index("_TRADE_DATABASE_MIGRATION_VERSIONS"):
                     plugin.index("def migrations_for_database")
                 ]

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import asdict, is_dataclass
 from pathlib import Path
 from typing import Any
@@ -19,6 +20,7 @@ from .item_destroy_repository import AdminItemDestroySqlRepository
 from .exp_repository import AdminExpAdjustmentSqlRepository
 from .level_repository import AdminLevelChangeSqlRepository
 from .root_repository import AdminRootChangeSqlRepository
+from .accessory_repository import AdminAccessoryAdjustmentResult, AdminAccessorySqlRepository
 
 
 class AdminAssetApplication:
@@ -156,15 +158,31 @@ class AdminAssetApplication:
     def adjust_accessory(
         self, *, operation_id: str, operator_id: str, user_id: str, action: str,
         item_id: int, item_name: str, quantity: int, target_name: str = "",
-        player_database: str | Path,
+        player_database: str | Path, quality: int | None = None,
+        max_accessories: int | None = None,
+        create_accessory: Callable[[], dict[str, Any]] | None = None,
     ):
-        from ...xiuxian.xiuxian_admin.transaction_service import AdminAccessoryAdjustmentService
-        service = AdminAccessoryAdjustmentService(self.database, player_database)
-        equipped, bag = service.snapshot(user_id)
-        if action == "grant":
-            raw = service.grant(operation_id, operator_id, user_id, item_id, item_name, quantity, equipped, bag, target_name=target_name)
+        if action not in {"grant", "destroy"}:
+            raise ValueError("accessory action must be grant or destroy")
+        repository = AdminAccessorySqlRepository(self.database, player_database)
+        snapshot = repository.snapshot(user_id)
+        if snapshot.status != "ok":
+            raw = AdminAccessoryAdjustmentResult(
+                snapshot.status, action, str(user_id), int(quantity)
+            )
+        elif action == "grant":
+            if quality is None or max_accessories is None or create_accessory is None:
+                raise ValueError("grant requires quality, inventory limit and accessory factory")
+            raw = repository.grant(
+                operation_id, operator_id, user_id, item_id, item_name, quality,
+                quantity, snapshot.equipped, snapshot.bag, max_accessories,
+                create_accessory, target_name=target_name,
+            )
         else:
-            raw = service.destroy(operation_id, operator_id, user_id, item_id, item_name, quantity, equipped, bag, target_name=target_name)
+            raw = repository.destroy(
+                operation_id, operator_id, user_id, item_id, item_name, quantity,
+                snapshot.equipped, snapshot.bag, target_name=target_name,
+            )
         data = asdict(raw) if is_dataclass(raw) else dict(vars(raw))
         return type("AdminAccessoryOutcome", (), {"data": data, "status": raw.status, "ok": raw.succeeded})()
 

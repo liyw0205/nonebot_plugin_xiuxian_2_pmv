@@ -70,6 +70,7 @@ class LegacyApplicationContractTests(unittest.TestCase):
                 for method, value in inspect.getmembers(application, inspect.isfunction)
                 if not method.startswith("_")
                 and method not in {"reply", "snapshot"}
+                and not method.startswith("replay_")
                 and not method.endswith("_replay")
                 and {"operation_id", "user_id"}.issubset(
                     inspect.signature(value).parameters

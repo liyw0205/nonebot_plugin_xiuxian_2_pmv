@@ -185,7 +185,7 @@ domain_outbox(
 | 数据库 | 只能由谁写 |
 |:--|:--|
 | `game_db` | 核心玩家、玩法仓储 |
-| `player_db` | 旧玩家资料兼容仓储；迁移后只读 |
+| `player_db` | 按表迁移的玩家资料/状态仓储与过渡期兼容投影；迁出完成前不可整体视为只读 |
 | `trade_db` | 交易、拍卖仓储 |
 | `impart_db` | 传承玩法仓储 |
 | `message_db` | 消息记录仓储 |
@@ -198,6 +198,8 @@ domain_outbox(
 4. Web 管理页提供“待对账”数量、操作号、失败原因和人工重试入口。
 
 若未来合并数据库，保留仓储接口和 operation ledger，迁移只替换 infrastructure 实现。
+
+少数既有 SQLite `ATTACH` 路径可在单连接内保证普通 SQL 异常时一起 rollback，但 WAL 下多文件事务不具备崩溃原子性；不得把这类回滚测试表述为 crash-safe。真实发布仍须备份、恢复演练及 P7 资产核验，后续逐步迁往 outbox/reconcile。
 
 ### 4.3 消息与适配器
 
@@ -617,7 +619,7 @@ PR 描述必须包含：影响 feature、数据迁移、兼容入口、权限变
 - `nonebot_plugin_xiuxian_2/features/activity_reward/`：活动一键领奖的 Web/命令入口共用 game DB 中的 feature-owned 四步协调器；`.002/.003` 预建并回填总领奖回执，`.004/.005` 预建 tasks 子领奖账本并导入历史任务回执。tasks 的 operation ledger、领取请求与周期任务预留在同一 game DB 事务中初始化，消除 started ledger 找不到 feature 回执的恢复窗口；灵石/物品随后在 game DB 幂等事务内发放，再幂等确认旧 `activity.db` 进度与日志。旧库通过 SQLite 在线快照纳入备份。战令和两个 Boss 子奖励仍经 compatibility adapter 写旧状态，须分别迁移。
 - `nonebot_plugin_xiuxian_2/features/bank/`：灵庄存入、取出、会员升级和结息切片，统一跨库 application、operation ledger、审计、幂等重放、Web/命令契约、迁移标记和灰度开关；旧 `Bank*Service` 仅作为惰性仓储适配器。
 - `nonebot_plugin_xiuxian_2/features/combat_settlement/`：地图战斗结算切片，包装旧附加数据库事务，统一战斗快照、每日额度、背包容量的拒绝结果、operation ledger、审计和 Web 契约；旧地图 handler 已转发到应用层。
-- `nonebot_plugin_xiuxian_2/features/admin_asset/`：管理员单人/全服灵石、修为、境界/灵根及单人物品发放/扣除由 feature-owned repository 承担；单人路径使用资产快照校验与 operation receipt，全服路径冻结目标集、按有界 chunk 更新并保留逐用户回执。物品扣除写经济审计，单人传承石余额 CAS 写 legacy impart DB、审计/回执写 game DB；启动 migrations 负责 feature schema，批次创建事务按目标规模做磁盘预检。全服传承石、全服物品和其余管理员资产仍有兼容服务。
+- `nonebot_plugin_xiuxian_2/features/admin_asset/`：管理员单人/全服灵石、修为、境界/灵根、单人物品发放/扣除及单人饰品发放/扣除由 feature-owned repository 承担；单人路径使用资产快照校验与 operation receipt，全服路径冻结目标集、按有界 chunk 更新并保留逐用户回执。单人传承石余额 CAS 写 legacy impart DB；单人饰品写既有 player-side `player_accessory` 表，game DB 保存兼容回执和经济审计。启动 migrations 负责 feature schema，批次创建事务按目标规模做磁盘预检。全服传承石、全服饰品、全服物品和其余管理员资产仍有兼容服务。
 - `nonebot_plugin_xiuxian_2/features/tianti_settlement/`：炼体按时间结算气血切片，统一 operation ledger、审计、幂等重放、Web/命令契约、迁移标记和灰度开关；profile 持久化使用共享 Tianti writer，药浴/窍穴/宗门收益规则复用 training presentation，但事务由 settlement repository 在同一 player UoW 内拥有；旧 `TiantiSettlementService` 只保留为显式惰性兼容 adapter。
 - `nonebot_plugin_xiuxian_2/features/tianti_training/`：灵石炼体、药浴、炼体突破和冲窍切片，统一 application、operation ledger、审计、幂等重放、四个 Web API、迁移标记和灰度开关；Tianti Training、Settlement 与宗门炼体堂领取共用事务内 profile writer，业务 UoW 仍归各自 feature repository；药浴时点、窍穴收益、宗门加成、收益预览与状态页气血上限由 feature presentation/profile reader 持有，默认 Tianti facade 不导入旧 `transaction_service.py`，显式 legacy training adapter 每次只构造对应操作的旧 service。
 - `nonebot_plugin_xiuxian_2/features/tower/`：通天塔积分兑换、单层挑战和连续挑战结算切片，统一 application、operation ledger、审计、幂等重放、Web/命令契约、迁移标记和灰度开关；战斗算法与读模型仍由兼容命令适配器提供，旧跨库事务服务仅作为惰性仓储适配器。

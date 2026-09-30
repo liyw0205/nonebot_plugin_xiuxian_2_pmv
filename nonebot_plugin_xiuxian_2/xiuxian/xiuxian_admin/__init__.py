@@ -274,7 +274,9 @@ def _grant_admin_accessory(
     outcome = admin_asset_application.adjust_accessory(
         operation_id=_admin_operation_id(event, "accessory-grant", user_id), operator_id=str(get_user_id(event) or "unknown"),
         user_id=user_id, action="grant", item_id=item_id, item_name=item_name, quantity=quantity,
-        target_name=target_name, player_database=get_paths().player_db,
+        target_name=target_name, player_database=get_paths().player_db, quality=quality,
+        max_accessories=ACCESSORY_BAG_LIMIT,
+        create_accessory=lambda: create_accessory_instance(item_id, quality),
     )
     return SimpleNamespace(**dict(outcome.data or {}))
 
@@ -1125,6 +1127,8 @@ async def cz_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Me
                 msg = "调整未结算：玩家饰品当前状态已更新，请重新执行。"
             elif result.status == "operation_conflict":
                 msg = "本次管理员饰品操作与已记录事件冲突"
+            elif result.status == "schema_missing":
+                msg = "管理员饰品服务尚未就绪，请检查启动迁移。"
             elif result.status == "user_missing":
                 msg = f"玩家 {target} 已不存在！"
             elif result.status == "invalid_plan":
@@ -1183,6 +1187,8 @@ async def cz_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Me
             msg = "操作未结算：您的饰品当前状态已更新，请重新执行。"
         elif result.status == "operation_conflict":
             msg = "本次管理员饰品操作与已记录事件冲突"
+        elif result.status == "schema_missing":
+            msg = "管理员饰品服务尚未就绪，请检查启动迁移。"
         elif result.status == "user_missing":
             msg = "您的修仙数据已不存在！"
         elif result.status == "invalid_plan":
@@ -1365,6 +1371,8 @@ async def hmll_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: 
                 msg = "调整未结算：玩家饰品当前状态已更新，请重新执行。"
             elif result.status == "operation_conflict":
                 msg = "本次管理员饰品操作与已记录事件冲突"
+            elif result.status == "schema_missing":
+                msg = "管理员饰品服务尚未就绪，请检查启动迁移。"
             elif result.status == "user_missing":
                 msg = f"玩家 {target} 已不存在！"
             elif result.status == "item_missing":
@@ -1425,6 +1433,8 @@ async def hmll_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: 
             msg = "操作未结算：您的饰品当前状态已更新，请重新执行。"
         elif result.status == "operation_conflict":
             msg = "本次管理员饰品操作与已记录事件冲突"
+        elif result.status == "schema_missing":
+            msg = "管理员饰品服务尚未就绪，请检查启动迁移。"
         elif result.status == "user_missing":
             msg = "您的修仙数据已不存在！"
         elif result.status == "item_missing":

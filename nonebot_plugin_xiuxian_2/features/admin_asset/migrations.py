@@ -112,8 +112,17 @@ def apply_admin_impart_stone_operations(uow: DatabaseUnitOfWork) -> None:
     )
 
 
+def apply_admin_accessory_operations(uow: DatabaseUnitOfWork) -> None:
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS admin_accessory_operations("
+        "operation_id TEXT PRIMARY KEY,action TEXT NOT NULL,payload TEXT NOT NULL,"
+        "result_json TEXT NOT NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+    )
+
+
 __all__ = [
     "apply_admin_asset",
+    "apply_admin_accessory_operations",
     "apply_admin_exp_adjustment",
     "apply_admin_item_destroy",
     "apply_admin_item_grant",

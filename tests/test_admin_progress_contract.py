@@ -17,5 +17,10 @@ class AdminProgressContractTests(unittest.TestCase):
             "impart_stone_startup_migration_registered",
             "impart_stone_schema_missing_reported",
             "impart_stone_migration_game_only",
+            "accessory_single_repository_owned",
+            "accessory_single_request_path_has_no_ddl",
+            "accessory_single_startup_migration_registered",
+            "accessory_single_schema_missing_reported",
+            "accessory_single_migration_game_only",
         ):
             self.assertTrue(admin[key], key)
