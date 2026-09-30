@@ -143,9 +143,15 @@ class AdminAssetApplication:
         expected_stone: int | None, requested_delta: int, target_name: str = "",
         impart_database: str | Path,
     ):
-        raw = AdminImpartStoneSqlRepository(self.database, impart_database).adjust(operation_id, operator_id, user_id, int(expected_stone or 0), requested_delta, target_name=target_name)
+        raw = AdminImpartStoneSqlRepository(self.database, impart_database).adjust(
+            operation_id, operator_id, user_id, expected_stone, requested_delta,
+            target_name=target_name,
+        )
         data = asdict(raw) if is_dataclass(raw) else dict(vars(raw))
         return type("AdminImpartStoneOutcome", (), {"data": data, "status": raw.status, "ok": raw.succeeded})()
+
+    def snapshot_impart_stone(self, user_id: str, *, impart_database: str | Path):
+        return AdminImpartStoneSqlRepository(self.database, impart_database).snapshot(user_id)
 
     def adjust_accessory(
         self, *, operation_id: str, operator_id: str, user_id: str, action: str,

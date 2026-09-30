@@ -103,11 +103,21 @@ def apply_admin_realm_changes(uow: DatabaseUnitOfWork) -> None:
     )
 
 
+def apply_admin_impart_stone_operations(uow: DatabaseUnitOfWork) -> None:
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS admin_impart_stone_operations("
+        "operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,"
+        "previous_stone INTEGER NOT NULL,final_stone INTEGER NOT NULL,"
+        "applied_delta INTEGER NOT NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+    )
+
+
 __all__ = [
     "apply_admin_asset",
     "apply_admin_exp_adjustment",
     "apply_admin_item_destroy",
     "apply_admin_item_grant",
+    "apply_admin_impart_stone_operations",
     "apply_admin_realm_changes",
     "apply_admin_stone_adjustment",
     "apply_admin_stone_batch",

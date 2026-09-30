@@ -682,11 +682,19 @@ async def ccll_command_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         if amount == 0:
             await handle_send(bot, event, "单人思恋结晶调整数量不能为 0")
             return
-        expected_stone = _admin_impart_stone_adjustment_service().snapshot(user_id)
+        snapshot = admin_asset_application.snapshot_impart_stone(
+            user_id, impart_database=get_paths().impart_db
+        )
+        if snapshot.status == "schema_missing":
+            await handle_send(bot, event, "管理员传承石服务尚未就绪，请检查传承数据库和启动迁移。")
+            return
+        if snapshot.status == "invalid_state":
+            await handle_send(bot, event, "该玩家的传承数据异常，请先修复数据。")
+            return
         outcome = admin_asset_application.adjust_impart_stone(
             operation_id=_admin_operation_id(event, "impart-stone-adjust", str(user_id)),
             operator_id=str(get_user_id(event) or "unknown"), user_id=user_id,
-            expected_stone=expected_stone, requested_delta=amount, target_name=target_name,
+            expected_stone=snapshot.stone, requested_delta=amount, target_name=target_name,
             impart_database=get_paths().impart_db,
         )
         result = SimpleNamespace(**dict(outcome.data or {})); result.status = outcome.status; result.succeeded = outcome.ok
@@ -697,6 +705,8 @@ async def ccll_command_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
             msg = "本次管理员传承操作与已记录事件冲突"
         elif result.status == "user_missing":
             msg = "该玩家已不存在"
+        elif result.status == "schema_missing":
+            msg = "管理员传承石服务尚未就绪，请检查传承数据库和启动迁移。"
         elif result.status == "invalid_state":
             msg = "该玩家的传承数据异常，请先修复数据"
         else:

@@ -175,11 +175,11 @@ compileall、architecture、inventory、diff check 与五库 recovery 通过；�
 
 ## 当前切片与下一切片选择
 
-管理员资产队列：`.005/.006` 已分别为 item-destroy/item-grant 预建 game DB 回执；`.007` 完成境界/灵根回执 schema。境界/灵根仓储只读校验启动 schema，缺失时 fail closed，不做请求期 DDL；真实命令明确提示未就绪。境界与灵根的旧 service getter 已从 facade 移除，灵根编号映射改用 feature repository 的纯函数；跨库 impart stone 仍是下一项 schema/兼容边界审计。
+管理员资产队列：`.005/.006` 已分别为 item-destroy/item-grant 预建 game DB 回执；`.007` 完成境界/灵根回执 schema；`.008` 预建单人传承石回执。传承石真实余额仍在 legacy `impart_db.xiuxian_impart`，feature 仓储只读校验该既有 schema，并通过 attached UoW 更新 `stone_num`，不对 legacy 表建表或补列；game DB 保存兼容操作回执和经济审计。单人默认命令不再使用 legacy service 读取快照，缺 DB/schema 和重复用户行均 fail closed；全服传承石路径仍保持 legacy batch 实现。
 
 本片验收：admin asset repositories/application/source/progress `33 passed`，architecture/inventory contracts `17 passed`；progress item-destroy/item-grant no-DDL/startup-schema/game-only 门禁均为 true。五库 recovery backup/restore dry-run/restore 成功，`.006` 仅 game DB applied，reconcile clean；隔离 architecture CLI `ok=true`，compileall 与 diff check 通过。item-destroy 前片专属产物已清理；本片 pytest、recovery、architecture 和 pycache 临时目录在本次验收后清理并复核。用户 `boss_info.json` 改动保留。
 
-本片验收：管理员资产 repositories/application/source/progress 合并回归 `51 passed`，覆盖 `.007` 缺 schema 无 DDL、旧回执保留、replay、快照冲突和境界/灵根 receipt 失败回滚；progress realm gates 全绿，inventory freshness、NoneBot 初始化后的 architecture CLI (`ok=true`)、compileall 和 diff check 通过。五库 recovery backup/restore dry-run/restore 成功，全部 migration applied 且 pending 为空，`.007` 仅路由 game DB，reconcile clean。专用测试、recovery、architecture 与字节码目录在验收后清理，保留用户 `boss_info.json` 修改。下一项单独审计传承灵石的跨库 schema/回执边界。
+本片验收：管理员资产 repositories/application/source/progress 合并回归 `78 passed`，覆盖 `.008` game-only 路由、已有回执兼容、实际 impart 余额变化、`None` 缺行快照、CAS、重复用户行、无请求期 DDL 和跨库晚失败回滚；progress impart gates 全绿，inventory freshness、NoneBot 初始化后的 architecture CLI、compileall 和 diff check 通过。五库 recovery backup/restore dry-run/restore 成功，全部 migration applied 且 pending 为空，`.008` 仅路由 game DB、`impart_db` 不增加迁移，reconcile clean。专用测试、recovery、architecture 与字节码产物在验收后清理，保留用户 `boss_info.json` 修改。下一项审计管理员饰品单人调整默认路径仍调用的 legacy transaction service 及其请求期 schema；全服传承石批次仍是独立兼容边界。
 
 当前执行基线（2026-09-30）：活动 `tasks`、`pass`、`boss_milestone`、`boss_rank` 子领奖由 game DB feature repositories、幂等账本和 reservations 管理奖励；`activity_state.001/.002` 已将玩法状态 schema 与旧数据回填到 `game_db`。旧 `activity.db` 仍保留配置事件数据和备份用途；不得删除，也不能把其中参与上限、资格和审计的历史日志当缓存。bank 历史账户生命周期审计已收口：`bank.003` 是唯一 startup legacy projection 回填，默认读写不再访问旧账户；兼容 writer/rollback 保留但生产不可达，自动结息 jobs 为空。下一片按 progress 6.2 审计仍可达的 `xiuxian2_handle`/legacy transaction 路径。历史 ATTACH 版本的跨库崩溃仍需真实数据备份/P7 资产核验；正式发布 recovery/reconcile 与全局 legacy blockers 仍未完成。
 
