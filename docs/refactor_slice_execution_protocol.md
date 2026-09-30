@@ -3,7 +3,7 @@
 状态：执行中
 适用范围：全面底层重构第二阶段
 
-2026-10-01 本轮切片：连续爬塔的前置体力退款改由 `restore_player_stamina -> PlayerStaminaApplication -> PlayerStaminaSqlRepository` 承担。单用户返还按首个 `user_xiuxian` 行做封顶 CAS；缺数据库、schema 或用户时 fail closed，不执行请求期 DDL。无 migration、无运行数据访问；验收后只清理本轮测试/pyc/临时目录，保留运行数据库、WAL/SHM、`.venv`、`.git`、`data/` 和用户 `boss_info.json` 修改。
+2026-10-01 本轮切片：连续爬塔、世界首领训练入口和突破入口的前置体力退款改由 `restore_player_stamina -> PlayerStaminaApplication -> PlayerStaminaSqlRepository` 承担。单用户返还按首个 `user_xiuxian` 行做封顶 CAS；缺数据库、schema 或用户时 fail closed，不执行请求期 DDL。无 migration、无运行数据访问；验收后只清理本轮测试/pyc/临时目录，保留运行数据库、WAL/SHM、`.venv`、`.git`、`data/` 和用户 `boss_info.json` 修改。
 
 2026-10-01 normal pvp dynamic attribute read boundary：普通切磋 handler 的动态属性存在性读取统一经 `get_player_attributes -> PlayerAttributeApplication`，不再直接调用 `get_user_real_info`；原始 HP/MP/体力/修为快照仍由 profile 查询供结算 CAS 使用，战斗计算与结算语义不变。新增 source/progress 门禁，未新增 schema/migration；本片只触及默认读取入口，旧动态属性公式和资产事务保持兼容边界。
 

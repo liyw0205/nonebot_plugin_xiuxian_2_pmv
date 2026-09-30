@@ -20,7 +20,7 @@ from ..xiuxian_utils.lay_out import assign_bot, Cooldown
 from ..xiuxian_utils.player_fight import Boss_fight
 from ..xiuxian_utils.utils import (
     check_user, handle_send, number_to, send_msg_handler,
-    log_message, update_statistics_value
+    log_message, update_statistics_value, restore_player_stamina
 )
 from ..xiuxian_utils.xiuxian2_handle import OtherSet, UserBuffDate, XiuxianDateManage
 from ..xiuxian_title.title_data import check_and_unlock_titles
@@ -1018,7 +1018,7 @@ async def level_up_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         if cd < XiuConfig().level_up_cd * 60:
             # 如果cd小于配置的cd，返回等待时间
             msg = f"**突破**\n---\n⏳ 冷却中，还需{XiuConfig().level_up_cd - (cd // 60)}分钟"
-            _sql_message().update_user_stamina(user_id, 12, 1)
+            restore_player_stamina(user_id, 12, XiuConfig().max_stamina)
             await handle_send(bot, event, msg, md_type="修仙", k1="直接突破", v1="直接突破", k2="渡厄", v2="渡厄突破", k3="修为", v3="我的修为")
             await level_up.finish()
     else:
@@ -1077,7 +1077,7 @@ async def level_up_zj_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
         if cd < XiuConfig().level_up_cd * 60:
             # 如果cd小于配置的cd，返回等待时间
             msg = f"**突破**\n---\n⏳ 冷却中，还需{XiuConfig().level_up_cd - (cd // 60)}分钟"
-            _sql_message().update_user_stamina(user_id, 6, 1)
+            restore_player_stamina(user_id, 6, XiuConfig().max_stamina)
             await handle_send(bot, event, msg, md_type="修仙", k1="直接突破", v1="直接突破", k2="渡厄", v2="渡厄突破", k3="修为", v3="我的修为")
             await level_up_zj.finish()
     else:
@@ -1185,7 +1185,7 @@ async def level_up_lx_continuous(bot: Bot, event: GroupMessageEvent | PrivateMes
         cd = OtherSet().date_diff(time_now, level_cd)
         if cd < XiuConfig().level_up_cd * 60:
             msg = f"**突破**\n---\n⏳ 冷却中，还需{XiuConfig().level_up_cd - (cd // 60)}分钟"
-            _sql_message().update_user_stamina(user_id, 6, 1)
+            restore_player_stamina(user_id, 6, XiuConfig().max_stamina)
             await handle_send(bot, event, msg, md_type="修仙", k1="直接突破", v1="直接突破", k2="渡厄", v2="渡厄突破", k3="修为", v3="我的修为")
             await level_up_lx.finish()
 
@@ -1308,7 +1308,7 @@ async def level_up_drjd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         if cd < XiuConfig().level_up_cd * 60:
             # 如果cd小于配置的cd，返回等待时间
             msg = f"**突破**\n---\n⏳ 冷却中，还需{XiuConfig().level_up_cd - (cd // 60)}分钟"
-            _sql_message().update_user_stamina(user_id, 4, 1)
+            restore_player_stamina(user_id, 4, XiuConfig().max_stamina)
             await handle_send(bot, event, msg, md_type="修仙", k1="直接突破", v1="直接突破", k2="渡厄", v2="渡厄突破", k3="修为", v3="我的修为")
             await level_up_drjd.finish()
     else:
@@ -1341,7 +1341,7 @@ async def level_up_drjd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
 
     if not pause_flag:
         msg = f"道友突破需要使用{elixir_name}，但您的背包中没有该丹药！"
-        _sql_message().update_user_stamina(user_id, 4, 1)
+        restore_player_stamina(user_id, 4, XiuConfig().max_stamina)
         await handle_send(bot, event, msg, md_type="修仙", k1="直接突破", v1="直接突破", k2="渡厄", v2="渡厄突破", k3="修为", v3="我的修为")
         await level_up_drjd.finish()
 
@@ -1431,7 +1431,7 @@ async def level_up_dr_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
         if cd < XiuConfig().level_up_cd * 60:
             # 如果cd小于配置的cd，返回等待时间
             msg = f"**突破**\n---\n⏳ 冷却中，还需{XiuConfig().level_up_cd - (cd // 60)}分钟"
-            _sql_message().update_user_stamina(user_id, 8, 1)
+            restore_player_stamina(user_id, 8, XiuConfig().max_stamina)
             await handle_send(bot, event, msg, md_type="修仙", k1="直接突破", v1="直接突破", k2="渡厄", v2="渡厄突破", k3="修为", v3="我的修为")
             await level_up_dr.finish()
     else:
@@ -1464,7 +1464,7 @@ async def level_up_dr_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
     
     if not pause_flag:
         msg = f"道友突破需要使用{elixir_name}，但您的背包中没有该丹药！"
-        _sql_message().update_user_stamina(user_id, 8, 1)
+        restore_player_stamina(user_id, 8, XiuConfig().max_stamina)
         await handle_send(bot, event, msg, md_type="修仙", k1="直接突破", v1="直接突破", k2="渡厄", v2="渡厄突破", k3="修为", v3="我的修为")
         await level_up_dr.finish()
 
@@ -1550,7 +1550,7 @@ async def level_up_dr_lx_continuous(bot: Bot, event: GroupMessageEvent | Private
         cd = OtherSet().date_diff(time_now, level_cd)
         if cd < XiuConfig().level_up_cd * 60:
             msg = f"**突破**\n---\n⏳ 冷却中，还需{XiuConfig().level_up_cd - (cd // 60)}分钟"
-            _sql_message().update_user_stamina(user_id, 15, 1)
+            restore_player_stamina(user_id, 15, XiuConfig().max_stamina)
             await handle_send(bot, event, msg, md_type="修仙", k1="直接突破", v1="直接突破", k2="渡厄", v2="渡厄突破", k3="修为", v3="我的修为")
             await level_up_dr_lx.finish()
 
@@ -1697,7 +1697,7 @@ async def level_up_drjd_lx_continuous(bot: Bot, event: GroupMessageEvent | Priva
         cd = OtherSet().date_diff(time_now, level_cd)
         if cd < XiuConfig().level_up_cd * 60:
             msg = f"**突破**\n---\n⏳ 冷却中，还需{XiuConfig().level_up_cd - (cd // 60)}分钟"
-            _sql_message().update_user_stamina(user_id, 15, 1)
+            restore_player_stamina(user_id, 15, XiuConfig().max_stamina)
             await handle_send(bot, event, msg, md_type="修仙", k1="直接突破", v1="直接突破", k2="渡厄", v2="渡厄突破", k3="修为", v3="我的修为")
             await level_up_drjd_lx.finish()
 

@@ -105,6 +105,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
     base_stamina_application = (PACKAGE / "features" / "base" / "stamina_application.py").read_text(encoding="utf-8")
     base_stamina_repository = (PACKAGE / "features" / "base" / "stamina_repository.py").read_text(encoding="utf-8")
     layout_source = (PACKAGE / "xiuxian" / "xiuxian_utils" / "lay_out.py").read_text(encoding="utf-8")
+    breakthrough_facade = (PACKAGE / "xiuxian" / "xiuxian_base" / "breakthrough_tribulation.py").read_text(encoding="utf-8")
     xiangyuan_facade = (PACKAGE / "xiuxian" / "xiuxian_base" / "xiangyuan.py").read_text(encoding="utf-8")
     base_migrations = (PACKAGE / "features" / "base" / "migrations.py").read_text(encoding="utf-8")
     base_manifest = (PACKAGE / "features" / "base" / "manifest.py").read_text(encoding="utf-8")
@@ -1756,6 +1757,12 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "status": "dynamic_attribute_read_boundary_owned_with_legacy_formula_adapter",
         },
         "base": {
+            "refund_stamina_application_owned": (
+                all("restore_player_stamina(" in source for source in (tower_facade, breakthrough_facade, activity_boss_entry))
+                and all("_sql_message().update_user_stamina(" not in source for source in (tower_facade, breakthrough_facade, activity_boss_entry))
+                and "def restore(" in base_stamina_application
+                and "def restore(" in base_stamina_repository
+            ),
             "cooldown_stamina_application_owned": (
                 "consume_player_stamina(" in layout_source
                 and "_sql_message().update_user_stamina(" not in layout_source

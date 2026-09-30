@@ -2,7 +2,7 @@
 
 状态：进行中。`v1.1.0` 的 P0-P7 发布证据继续保留，但不作为底层全面重构完成证明。
 
-2026-10-01 tower stamina refund ownership：连续爬塔在 Cooldown 已预扣体力、但因重伤提前结束时，返还路径改由 `restore_player_stamina -> PlayerStaminaApplication -> PlayerStaminaSqlRepository` 承担；按首个 `user_xiuxian` 行做封顶 CAS，缺数据库、schema 或用户时 fail closed，不执行请求期 DDL。新增单用户返还的封顶、重复 user_id、缺 schema 回归与 tower source/progress 门禁；无 migration、无运行数据访问。本轮测试/字节码缓存使用专用临时目录并清理，用户 `boss_info.json` 修改保留。连续爬塔的战斗结算仍由 `TowerApplication` 承担；其他突破、首领、塔外旧体力写入仍未迁移。
+2026-10-01 stamina refund ownership：连续爬塔、世界首领训练入口和突破入口在 Cooldown 已预扣体力、但因重伤/冷却/缺少丹药提前结束时，返还路径统一改由 `restore_player_stamina -> PlayerStaminaApplication -> PlayerStaminaSqlRepository` 承担；按首个 `user_xiuxian` 行做封顶 CAS，缺数据库、schema 或用户时 fail closed，不执行请求期 DDL。新增单用户返还的封顶、重复 user_id、缺 schema 回归与 base/tower source-progress 门禁；无 migration、无运行数据访问。本轮测试/字节码缓存使用专用临时目录并清理，用户 `boss_info.json` 修改保留。战斗/突破结算仍由各自 application 或显式 compatibility service 承担，其他旧体力写入仍未迁移。
 
 2026-10-01 normal pvp dynamic attribute read boundary：普通切磋 handler 的动态属性存在性读取统一经 `get_player_attributes -> PlayerAttributeApplication`，不再直接调用 `get_user_real_info`；原始 HP/MP/体力/修为快照仍由 profile 查询供结算 CAS 使用，战斗计算与结算语义不变。新增 source/progress 门禁，无新增 schema/migration；全局 legacy transaction services、`xiuxian2_handle` 与正式发布/P7 仍未完成。
 

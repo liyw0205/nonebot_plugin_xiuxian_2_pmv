@@ -43,7 +43,8 @@ from ..xiuxian_utils.utils import (
     number_to, check_user, check_user_type,
     get_msg_pic,
     send_msg_handler, log_message, handle_send,
-    send_help_message, update_last_check_info_time, get_last_check_info_time
+    send_help_message, update_last_check_info_time, get_last_check_info_time,
+    restore_player_stamina,
 )
 from ..xiuxian_title.title_data import check_and_unlock_titles
 from .boss_limit import boss_limit, player_data_manager, DAILY_BATTLE_COUNT
@@ -1000,7 +1001,7 @@ async def challenge_scarecrow_(bot: Bot, event: GroupMessageEvent | PrivateMessa
         time = leave_harm_time(user_id)
         msg = f"重伤未愈，动弹不得！距离脱离危险还需要{time}分钟！\n"
         msg += f"请道友进行闭关，或者使用药品恢复气血，不要干等，没有自动回血！！！"
-        _sql_message().update_user_stamina(user_id, 20, 1)
+        restore_player_stamina(user_id, 20, XiuConfig().max_stamina)
         await handle_send(bot, event, msg, md_type="世界BOSS", k1="闭关", v1="闭关", k2="丹药", v2="丹药背包", k3="状态", v3="我的状态")
         await challenge_scarecrow.finish()
 
@@ -1060,7 +1061,7 @@ async def challenge_training_puppet_(bot: Bot, event: GroupMessageEvent | Privat
         time = leave_harm_time(user_id)
         msg = f"重伤未愈，动弹不得！距离脱离危险还需要{time}分钟！\n"
         msg += f"请道友进行闭关，或者使用药品恢复气血，不要干等，没有自动回血！！！"
-        _sql_message().update_user_stamina(user_id, 20, 1)
+        restore_player_stamina(user_id, 20, XiuConfig().max_stamina)
         await handle_send(bot, event, msg, md_type="世界BOSS", k1="闭关", v1="闭关", k2="丹药", v2="丹药背包", k3="状态", v3="我的状态")
         await challenge_training_puppet.finish()
 
