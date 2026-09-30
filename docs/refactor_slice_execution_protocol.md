@@ -175,9 +175,9 @@ compileall、architecture、inventory、diff check 与五库 recovery 通过；�
 
 ## 当前切片与下一切片选择
 
-管理员资产后续队列：本轮将单人 item-destroy 的 game DB 回执迁到 `admin_asset.005`，请求路径 fail-closed 且不建表；下一项审计普通 item grant 的 operation/schema 生命周期，再看境界和灵根仓储，跨库 impart stone 单独评估。旧境界、修为、批量发放、销毁 getter 无命令调用；root getter 只用于纯映射，impart getter 仍参与默认读快照。其余 getter/DDL 不按静态 grep 直接删除，需保留真实调用图证据。
+管理员资产后续队列：单人 item-destroy 与普通 item-grant 的 game DB 回执已分别由 `admin_asset.005/.006` 启动迁移预建；两个请求仓储均 fail-closed、不做 DDL。下一项审计境界/灵根命令与 `AdminLevelChangeService`/`AdminRootChangeService` getter 的真实可达性，再单独评估跨库 impart stone。旧境界、修为、批量发放、销毁 getter 无命令调用；root getter 只用于纯映射，impart getter 仍参与默认读快照。其余 getter/DDL 不按静态 grep 直接删除，需保留真实调用图证据。
 
-本片验收：admin asset repositories/source/progress `24 passed`，architecture/inventory contracts `17 passed`，独立 source/progress 最终复核 `6 passed`；progress item-destroy no-DDL/startup-schema/game-only 三项均为 true。五库 recovery backup/restore dry-run/restore 成功，`.005` 仅 game DB applied，reconcile clean；隔离 architecture CLI `ok=true`，compileall 与 diff check 通过。专属 pytest、recovery、architecture 和 pycache 临时目录已清理，磁盘可用 23 GB、inode 可用 3.3M、RAM available 1.3 GiB；用户 `boss_info.json` 改动保留。
+本片验收：admin asset repositories/application/source/progress `33 passed`，architecture/inventory contracts `17 passed`；progress item-destroy/item-grant no-DDL/startup-schema/game-only 门禁均为 true。五库 recovery backup/restore dry-run/restore 成功，`.006` 仅 game DB applied，reconcile clean；隔离 architecture CLI `ok=true`，compileall 与 diff check 通过。item-destroy 前片专属产物已清理；本片 pytest、recovery、architecture 和 pycache 临时目录在本次验收后清理并复核。用户 `boss_info.json` 改动保留。
 
 当前执行基线（2026-09-30）：活动 `tasks`、`pass`、`boss_milestone`、`boss_rank` 子领奖由 game DB feature repositories、幂等账本和 reservations 管理奖励；`activity_state.001/.002` 已将玩法状态 schema 与旧数据回填到 `game_db`。旧 `activity.db` 仍保留配置事件数据和备份用途；不得删除，也不能把其中参与上限、资格和审计的历史日志当缓存。bank 历史账户生命周期审计已收口：`bank.003` 是唯一 startup legacy projection 回填，默认读写不再访问旧账户；兼容 writer/rollback 保留但生产不可达，自动结息 jobs 为空。下一片按 progress 6.2 审计仍可达的 `xiuxian2_handle`/legacy transaction 路径。历史 ATTACH 版本的跨库崩溃仍需真实数据备份/P7 资产核验；正式发布 recovery/reconcile 与全局 legacy blockers 仍未完成。
 

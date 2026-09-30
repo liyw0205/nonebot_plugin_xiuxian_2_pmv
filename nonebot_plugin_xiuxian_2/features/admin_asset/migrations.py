@@ -80,10 +80,21 @@ def apply_admin_item_destroy(uow: DatabaseUnitOfWork) -> None:
     )
 
 
+def apply_admin_item_grant(uow: DatabaseUnitOfWork) -> None:
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS admin_item_grant_operations("
+        "operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,user_id TEXT NOT NULL,"
+        "item_id INTEGER NOT NULL,previous_quantity INTEGER NOT NULL,"
+        "final_quantity INTEGER NOT NULL,granted_quantity INTEGER NOT NULL,"
+        "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+    )
+
+
 __all__ = [
     "apply_admin_asset",
     "apply_admin_exp_adjustment",
     "apply_admin_item_destroy",
+    "apply_admin_item_grant",
     "apply_admin_stone_adjustment",
     "apply_admin_stone_batch",
 ]

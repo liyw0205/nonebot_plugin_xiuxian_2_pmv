@@ -18,12 +18,44 @@ class AdminItemResult:
 
 class AdminItemSqlRepository:
     def __init__(self, database: str | Path) -> None:
-        self.database = str(database)
+        self.database = Path(database)
+
+    @staticmethod
+    def _schema_ready(uow: DatabaseUnitOfWork) -> bool:
+        tables = {
+            str(row["name"])
+            for row in uow.query_all(
+                "SELECT name FROM sqlite_master WHERE type='table' "
+                "AND name IN (?,?)",
+                ("admin_item_grant_operations", "back"),
+            )
+        }
+        if tables != {"admin_item_grant_operations", "back"}:
+            return False
+
+        required_columns = {
+            "admin_item_grant_operations": {
+                "operation_id", "payload", "user_id", "item_id", "previous_quantity",
+                "final_quantity", "granted_quantity",
+            },
+            "back": {"user_id", "goods_id", "goods_name", "goods_type", "goods_num", "bind_num"},
+        }
+        for table, required in required_columns.items():
+            columns = {
+                str(row["name"]).casefold()
+                for row in uow.query_all(f'PRAGMA table_info("{table}")')
+            }
+            if not required.issubset(columns):
+                return False
+        return True
 
     def grant(self, operation_id: str, operator_id: str, user_id: str, item_id: int, item_name: str, item_type: str, quantity: int, expected_quantity: int, max_goods_num: int, **kwargs) -> AdminItemResult:
         payload = json.dumps([operator_id, user_id, int(item_id), int(quantity)], separators=(",", ":"))
+        if not self.database.is_file():
+            return AdminItemResult("schema_missing", user_id, int(item_id))
         with DatabaseUnitOfWork(self.database, immediate=True) as uow:
-            uow.execute("CREATE TABLE IF NOT EXISTS admin_item_grant_operations(operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,user_id TEXT NOT NULL,item_id INTEGER NOT NULL,previous_quantity INTEGER NOT NULL,final_quantity INTEGER NOT NULL,granted_quantity INTEGER NOT NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
+            if not self._schema_ready(uow):
+                return AdminItemResult("schema_missing", user_id, int(item_id))
             previous = uow.query_one("SELECT payload,user_id,item_id,previous_quantity,final_quantity,granted_quantity FROM admin_item_grant_operations WHERE operation_id=?", (operation_id,))
             if previous is not None:
                 if str(previous["payload"]) != payload:

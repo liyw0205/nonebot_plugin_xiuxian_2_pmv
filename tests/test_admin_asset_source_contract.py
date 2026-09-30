@@ -30,7 +30,7 @@ def test_global_stone_command_uses_resumable_feature_batch():
     assert "admin_asset_application.adjust_stone_batch(" in handler
     assert "run_chunked_until_done" in handler
     assert 'Migration("admin_asset.003", "admin_stone_batch_adjustment_operations", apply_admin_stone_batch)' in plugin
-    assert 'migration_version="admin_asset.005"' in manifest
+    assert 'migration_version="admin_asset.006"' in manifest
     assert "CREATE TABLE" not in repository
     assert "shutil.disk_usage" in repository
 
@@ -44,7 +44,7 @@ def test_admin_exp_repository_has_no_request_time_ddl():
     admin = (root / "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py").read_text(encoding="utf-8")
     handler = admin[admin.index("@adjust_exp_command.handle") : admin.index("@zaohua_xiuxian.handle")]
     assert 'Migration("admin_asset.004", "admin_exp_adjustment_operations", apply_admin_exp_adjustment)' in plugin
-    assert 'migration_version="admin_asset.005"' in manifest
+    assert 'migration_version="admin_asset.006"' in manifest
     assert "CREATE TABLE" not in repository
     assert "def apply_admin_exp_adjustment(" in migrations
     assert 'result.status == "schema_missing"' in handler
@@ -59,7 +59,22 @@ def test_admin_item_destroy_repository_has_no_request_time_ddl():
     admin = (root / "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py").read_text(encoding="utf-8")
     handler = admin[admin.index("@hmll.handle") : admin.index("@restate.handle")]
     assert 'Migration("admin_asset.005", "admin_item_destroy_operations", apply_admin_item_destroy)' in plugin
-    assert 'migration_version="admin_asset.005"' in manifest
+    assert 'migration_version="admin_asset.006"' in manifest
     assert "CREATE TABLE" not in repository
     assert "def apply_admin_item_destroy(" in migrations
+    assert 'result.status == "schema_missing"' in handler
+
+
+def test_admin_item_grant_repository_has_no_request_time_ddl():
+    root = Path(__file__).parents[1]
+    plugin = (root / "nonebot_plugin_xiuxian_2/plugin.py").read_text(encoding="utf-8")
+    manifest = (root / "nonebot_plugin_xiuxian_2/features/admin_asset/manifest.py").read_text(encoding="utf-8")
+    repository = (root / "nonebot_plugin_xiuxian_2/features/admin_asset/item_repository.py").read_text(encoding="utf-8")
+    migrations = (root / "nonebot_plugin_xiuxian_2/features/admin_asset/migrations.py").read_text(encoding="utf-8")
+    admin = (root / "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py").read_text(encoding="utf-8")
+    handler = admin[admin.index("@cz.handle") : admin.index("@hmll.handle")]
+    assert 'Migration("admin_asset.006", "admin_item_grant_operations", apply_admin_item_grant)' in plugin
+    assert 'migration_version="admin_asset.006"' in manifest
+    assert "CREATE TABLE" not in repository
+    assert "def apply_admin_item_grant(" in migrations
     assert 'result.status == "schema_missing"' in handler

@@ -190,6 +190,40 @@ class AdminAssetApplicationTests(unittest.TestCase):
                 audit = uow.query_one("SELECT category FROM operation_audit WHERE operation_id=? AND action=?", ("item-1", "admin.item_grant"))
             self.assertEqual(audit["category"], "admin_asset")
 
+    def test_default_item_repository_missing_migration_rejects_and_finishes_ledger(self):
+        with tempfile.TemporaryDirectory() as directory:
+            app = self._application(directory)
+            database = Path(directory) / "game.db"
+            with DatabaseUnitOfWork(database) as uow:
+                uow.execute(
+                    "CREATE TABLE back(user_id TEXT,goods_id INTEGER,goods_name TEXT,"
+                    "goods_type TEXT,goods_num INTEGER,bind_num INTEGER,PRIMARY KEY(user_id,goods_id))"
+                )
+                uow.execute("INSERT INTO back VALUES('user-1',9,'丹药','丹药',3,0)")
+
+            kwargs = {
+                "operation_id": "item-missing-schema", "operator_id": "operator-1", "user_id": "user-1",
+                "item_id": 9, "item_name": "丹药", "item_type": "丹药", "quantity": 2,
+                "expected_quantity": 3, "max_goods_num": 99,
+            }
+            first = app.grant_item(**kwargs)
+            replay = app.grant_item(**kwargs)
+            self.assertFalse(first.ok)
+            self.assertEqual(first.code, "schema_missing")
+            self.assertTrue(replay.replayed)
+            with DatabaseUnitOfWork(database) as uow:
+                quantity = uow.query_one("SELECT goods_num FROM back WHERE user_id='user-1'")
+                receipt = uow.query_one(
+                    "SELECT 1 FROM sqlite_master WHERE type='table' AND name='admin_item_grant_operations'"
+                )
+                ledger = uow.query_one(
+                    "SELECT status FROM operation_ledger WHERE operation_id=? AND action=?",
+                    ("item-missing-schema", "admin.item_grant"),
+                )
+            self.assertEqual(quantity["goods_num"], 3)
+            self.assertIsNone(receipt)
+            self.assertEqual(ledger["status"], "rejected")
+
 
 if __name__ == "__main__":
     unittest.main()

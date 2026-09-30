@@ -226,6 +226,7 @@ class AdminAssetApplication:
                         "state_changed": "玩家背包数量已更新，请重新执行。",
                         "user_missing": "该玩家已不存在。",
                         "operation_conflict": "本次管理员操作与已记录事件冲突。",
+                        "schema_missing": "管理员物品服务尚未就绪，请检查启动迁移。",
                         "not_ready": "管理员资产服务尚未就绪。",
                     }
                     outcome = OperationOutcome.rejected(
