@@ -545,6 +545,9 @@ def _slice_status() -> dict[str, dict[str, object]]:
     admin_stone_batch_handler = admin_facade[
         admin_facade.index("@gm_command.handle") : admin_facade.index("# GM加思恋结晶")
     ]
+    admin_item_destroy_handler = admin_facade[
+        admin_facade.index("@hmll.handle") : admin_facade.index("@restate.handle")
+    ]
     admin_asset_application = (PACKAGE / "features" / "admin_asset" / "application.py").read_text(encoding="utf-8")
     admin_asset_stone_application = admin_asset_application[
         admin_asset_application.index("    def adjust_stone(") : admin_asset_application.index("    def adjust_impart_stone(")
@@ -552,6 +555,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
     admin_stone_repository = (PACKAGE / "features" / "admin_asset" / "stone_repository.py").read_text(encoding="utf-8")
     admin_stone_batch_repository = (PACKAGE / "features" / "admin_asset" / "stone_batch_repository.py").read_text(encoding="utf-8")
     admin_exp_repository = (PACKAGE / "features" / "admin_asset" / "exp_repository.py").read_text(encoding="utf-8")
+    admin_item_destroy_repository = (PACKAGE / "features" / "admin_asset" / "item_destroy_repository.py").read_text(encoding="utf-8")
     admin_asset_migrations = (PACKAGE / "features" / "admin_asset" / "migrations.py").read_text(encoding="utf-8")
     admin_asset_manifest = (PACKAGE / "features" / "admin_asset" / "manifest.py").read_text(encoding="utf-8")
     return {
@@ -1935,7 +1939,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
             ),
             "stone_startup_migration_registered": (
                 'Migration("admin_asset.002", "admin_stone_adjustment_operations", apply_admin_stone_adjustment)' in plugin
-                and 'migration_version="admin_asset.004"' in admin_asset_manifest
+                and 'migration_version="admin_asset.005"' in admin_asset_manifest
             ),
             "stone_started_operation_recoverable": (
                 "The repository receipt can recover a commit whose" in admin_asset_stone_application
@@ -1970,13 +1974,40 @@ def _slice_status() -> dict[str, dict[str, object]]:
             ),
             "global_stone_batch_startup_migration_registered": (
                 'Migration("admin_asset.003", "admin_stone_batch_adjustment_operations", apply_admin_stone_batch)' in plugin
-                and 'migration_version="admin_asset.004"' in admin_asset_manifest
+                and 'migration_version="admin_asset.005"' in admin_asset_manifest
             ),
             "exp_request_path_has_no_ddl": "CREATE TABLE" not in admin_exp_repository,
             "exp_startup_migration_registered": (
                 'Migration("admin_asset.004", "admin_exp_adjustment_operations", apply_admin_exp_adjustment)' in plugin
-                and 'migration_version="admin_asset.004"' in admin_asset_manifest
+                and 'migration_version="admin_asset.005"' in admin_asset_manifest
                 and "def apply_admin_exp_adjustment(" in admin_asset_migrations
+            ),
+            "item_destroy_request_path_has_no_ddl": (
+                "CREATE TABLE" not in admin_item_destroy_repository
+                and "ALTER TABLE" not in admin_item_destroy_repository
+                and "_schema_ready" in admin_item_destroy_repository
+            ),
+            "item_destroy_startup_migration_registered": (
+                'Migration("admin_asset.005", "admin_item_destroy_operations", apply_admin_item_destroy)' in plugin
+                and 'migration_version="admin_asset.005"' in admin_asset_manifest
+                and "def apply_admin_item_destroy(" in admin_asset_migrations
+            ),
+            "item_destroy_missing_schema_reported": (
+                'result.status == "schema_missing"' in admin_item_destroy_handler
+            ),
+            "item_destroy_migration_game_only": (
+                '"admin_asset.005"' not in plugin[
+                    plugin.index("_GAME_DATABASE_EXCLUDED_MIGRATION_VERSIONS"):
+                    plugin.index("_PLAYER_DATABASE_MIGRATION_VERSIONS")
+                ]
+                and '"admin_asset.005"' not in plugin[
+                    plugin.index("_PLAYER_DATABASE_MIGRATION_VERSIONS"):
+                    plugin.index("_TRADE_DATABASE_MIGRATION_VERSIONS")
+                ]
+                and '"admin_asset.005"' not in plugin[
+                    plugin.index("_TRADE_DATABASE_MIGRATION_VERSIONS"):
+                    plugin.index("def migrations_for_database")
+                ]
             ),
             "item_destroy_application_owned": "admin_asset_application.destroy_item(" in admin_facade,
             "exp_adjust_application_owned": "admin_asset_application.adjust_exp(" in admin_facade,

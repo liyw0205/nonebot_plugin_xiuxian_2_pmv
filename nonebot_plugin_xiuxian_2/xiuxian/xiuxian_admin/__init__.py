@@ -1390,6 +1390,8 @@ async def hmll_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: 
                 msg = "调整未完成：玩家背包数量已更新，请重新执行。"
             elif result.status == "operation_conflict":
                 msg = "本次管理员操作与已记录事件冲突"
+            elif result.status == "schema_missing":
+                msg = "管理员物品服务尚未就绪，请检查启动迁移。"
             elif result.status == "user_missing":
                 msg = f"玩家 {target} 已不存在！"
             elif result.status == "item_missing":
@@ -1448,6 +1450,8 @@ async def hmll_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: 
             msg = "操作未完成：背包数量已更新，请重新执行。"
         elif result.status == "operation_conflict":
             msg = "本次管理员操作与已记录事件冲突"
+        elif result.status == "schema_missing":
+            msg = "管理员物品服务尚未就绪，请检查启动迁移。"
         elif result.status == "user_missing":
             msg = "您的修仙数据已不存在！"
         elif result.status == "item_missing":

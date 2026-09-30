@@ -10,6 +10,8 @@
 
 `修为调整` 命令调用同一 feature 的 exp repository；操作回执由 game DB 启动迁移预建。
 
+`毁灭力量` 单人物品扣除由 feature repository 提交；回执和经济审计 schema 在启动期预建，未就绪时拒绝扣除。
+
 ## Web API
 
 `POST /api/v1/admin/assets/stone`，权限 `admin`，需要 CSRF 和 `Idempotency-Key`（或请求体 `operation_id`）。请求字段：`operator_id`、`user_id`、`expected_stone`、`requested_delta`、可选 `target_name`。余额不足时旧规则仍将余额下限限制为 0；统一响应包含操作号和前后余额。
@@ -18,12 +20,13 @@
 
 ## 数据模型与迁移
 
-`admin_asset.001` 创建 feature migration 标记；`admin_asset.002` 在启动阶段预建单人灵石调整回执和 `economy_log.trace_id`；`admin_asset.003` 预建全服灵石批次回执与逐用户进度，并用部分唯一索引限制同一管理员/增量最多一个 running 批次；`admin_asset.004` 预建单人修为调整回执。相关请求路径不执行 DDL。全服进度行保存冻结的目标集、执行前后余额和实际增量，是操作审计数据而非缓存；删除前必须制定独立保留策略。启动新批次前按用户数预估所需磁盘空间，不足时 fail closed。
+`admin_asset.001` 创建 feature migration 标记；`admin_asset.002` 在启动阶段预建单人灵石调整回执和 `economy_log.trace_id`；`admin_asset.003` 预建全服灵石批次回执与逐用户进度，并用部分唯一索引限制同一管理员/增量最多一个 running 批次；`admin_asset.004` 预建单人修为调整回执；`admin_asset.005` 预建单人物品扣除回执。这些默认路径不在请求期执行 DDL；普通物品发放、境界/灵根与传承资产还有未迁移 schema 边界。全服进度行保存冻结的目标集、执行前后余额和实际增量，是操作审计数据而非缓存；删除前必须制定独立保留策略。启动新批次前按用户数预估所需磁盘空间，不足时 fail closed。
 
 ## 事务与失败回滚
 
 feature 单人 stone repository 在一个 game DB immediate UoW 中提交余额 CAS、旧格式 operation receipt、`economy_log` 和 trace ID；用户不存在、快照变化、操作号冲突都不会改资产。扣减仍封顶至 0，审计记录实际 delta。统一 operation ledger 若停在 `started`，相同请求可借 repository receipt 安全恢复；晚期 SQL 异常同时回滚余额、receipt 和经济审计。全服调整将首次目标集冻结在 game DB，随后每次最多处理 100 人；每个 chunk 的余额更新与前后值/结果同事务提交。新用户不加入已开始的操作，处理前被删除的用户记为 skipped；增减不封顶，保持旧 SQL 算术。批次创建在 `BEGIN IMMEDIATE` 内检查相同管理员/增量的活动操作；若另一个 operation ID 已有运行批次则返回 `in_progress`，不会再执行一个批次，部分唯一索引提供数据库级兜底。显式注入 `LegacyAdminStoneRepository` 仍可供回滚使用，但不由默认 composition root 创建。
 feature 单人 exp repository 在一个 game DB immediate UoW 中校验 `.002/.004` 启动 schema，再提交修为快照 CAS、exp receipt 和 `economy_log.trace_id`；缺表/缺列返回 `schema_missing`，不在请求时建表。扣减仍封顶至 0，operation replay 不重复记账。
+单人物品扣除 repository 在 immediate UoW 中校验 `.002/.005` schema，再校验物品快照并原子提交背包扣减、绑定数量更新、receipt 和 `economy_log`；缺表/缺列返回 `schema_missing`，不执行扣减。
 
 ## 定时任务
 
@@ -43,4 +46,4 @@ feature 单人 exp repository 在一个 game DB immediate UoW 中校验 `.002/.0
 
 ## 灰度开关、回滚和已知限制
 
-单人及全服灵石、单人修为默认路径已由 feature repositories 承担，显式 legacy single-user stone repository 保留作回滚；批次回执及逐用户进度属于持久业务记录，不随测试缓存清理。普通物品发放、全服物品、物品扣除和传承资产仍有各自兼容边界。
+单人及全服灵石、单人修为、单人物品扣除默认路径已由 feature repositories 承担，显式 legacy single-user stone repository 保留作回滚；批次回执及逐用户进度属于持久业务记录，不随测试缓存清理。普通物品发放、全服物品、境界/灵根调整和传承资产仍有各自兼容边界。

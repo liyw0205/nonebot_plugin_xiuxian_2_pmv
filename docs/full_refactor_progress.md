@@ -2879,7 +2879,9 @@
   冻结目标集和逐用户回执。启动前按目标数量做磁盘预检；同管理员/增量的第二个活动请求在
   `BEGIN IMMEDIATE` 中返回 `in_progress`，部分唯一索引兜底，避免不同 operation ID 重复应用。
   单人修为调整由 feature-owned repository 承担，`admin_asset.004` 预建回执；请求路径只校验
-  `.002/.004` schema，不建表。普通物品发放及其余管理员资产仍有兼容实现；这不代表 admin
+  `.002/.004` schema，不建表。单人物品扣除亦由 feature-owned repository 承担，`admin_asset.005`
+  预建回执并在请求期只读校验 schema。此 slice 回归 `24 passed`，architecture/inventory contracts
+  `17 passed`，另有 source/progress `6 passed`；`.005` 五库 recovery 只路由 game DB、backup/restore 和 reconcile clean，隔离 architecture CLI `ok=true`。测试/恢复/字节码临时目录已清理并复核磁盘与 RAM。普通物品发放及其余管理员资产仍有兼容实现；这不代表 admin
   全域完成，也没有替代 P7 真实数据验证。
 - 活动 tasks/pass/boss milestone/boss rank 子领奖均由 game DB ledger/repository 持有奖励资产
   和回执，历史回执分块迁移；领取失败可用同 operation 重试或 reconcile 续跑。活动 `tasks`、
@@ -4805,3 +4807,4 @@ Boss 通过 `get_rift_battle_final_attributes` 注入 `get_rift_battle_impart_da
 2026-09-30 admin global stone batch cutover：`神秘力量 数量 all` 由 `AdminStoneBatchSqlRepository` 在后台按块更新，首次事务冻结目标用户并逐用户记录前后余额/实际 delta；`admin_asset.003` 只路由 game DB，请求路径不建表，并在启动前按用户数预检可用磁盘。修复不同 operation ID 的同管理员/同增量并发：`BEGIN IMMEDIATE` 内检查活动批次并返回 `in_progress`，部分唯一索引做数据库兜底，避免重复创建/应用。admin asset/application/source/progress 窄回归 `16 passed`，合并 admin asset、额外管理员批次、inventory、architecture contracts 与 progress 回归 `48 passed`；五库 recovery 共应用 214 项迁移，`.003` 仅路由 game DB，五库 backup/restore dry-run/restore 成功，reconcile clean。初始化 NoneBot 后 architecture CLI `ok=true`；compileall、inventory freshness、progress gates 和 diff check 通过。专用测试、编译、架构和 recovery 临时目录已清理并复核磁盘/RAM；批次回执和逐用户进度是持久审计记录，不作缓存清理。普通物品及其他管理员资产、全局旧 transaction services、`xiuxian2_handle` 与 P7 仍未完成。
 
 2026-09-30 admin exp startup-schema boundary：`修为调整` 默认 command 仍通过 `AdminAssetApplication -> AdminExpAdjustmentSqlRepository`，新增 game-only `admin_asset.004` 预建 `admin_exp_adjustment_operations`；repository 不再请求期创建 operation/economy 表，改为只读校验 `.002/.004` 所需 schema，缺失时返回 `schema_missing` 且资产不变。保留 exp 快照 CAS、扣减下限、receipt replay 与 `economy_log.trace_id`。admin asset repositories/application/source、额外管理员批次、inventory、architecture contracts 与 progress 回归 `50 passed`；progress CLI 中修为及单人/全服灵石 migration/no-DDL 门禁为 `true`，整体仍因旧 transaction services 和 `xiuxian2_handle` 保持 `exit_ready=false`。隔离五库 recovery 应用 215 项迁移，`.004` 仅路由 game DB，五库 backup/restore dry-run/restore 成功、reconcile clean；NoneBot 初始化后的 architecture CLI `ok=true`，inventory freshness、目标 compileall 和 diff check 通过。专用 `/tmp` 测试、编译、架构和 recovery 目录验收后清理并复核资源；未访问运行数据库，用户 `boss_info.json` 修改保留。下一片继续审计管理员资产剩余的请求期 DDL/旧兼容调用，不宣称 admin 全域完成。
+2026-09-30 admin item-destroy startup-schema boundary：调用图确认 `毁灭力量` 两个单人命令分支默认经 `AdminAssetApplication.destroy_item -> AdminItemDestroySqlRepository`；新增 game-only `admin_asset.005` 预建扣除回执，仓储只读校验 `.002/.005` 与用户/背包必需列，缺失时返回 `schema_missing`，不建表、不扣减。保留数量快照校验、绑定数量更新、receipt replay 和 `economy_log.trace_id`。另外确认 item grant、level、root 默认 feature 仓储仍有请求期 DDL；impart-stone 还在 game 与 legacy impart DB 建表。修为/境界/批量发放/销毁 legacy getter 无命令调用，root getter 仅用于纯 root mapping，impart getter 仍为默认命令读快照。后续分别审计这些边界；admin 全域、旧 transaction services、`xiuxian2_handle` 与 P7 仍未完成。

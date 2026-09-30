@@ -22,7 +22,45 @@ class AdminItemDestroyResult:
 
 class AdminItemDestroySqlRepository:
     def __init__(self, database: str | Path) -> None:
-        self.database = str(database)
+        self.database = Path(database)
+
+    @staticmethod
+    def _schema_ready(uow: DatabaseUnitOfWork) -> bool:
+        required_tables = {
+            "admin_item_destroy_operations",
+            "economy_log",
+            "user_xiuxian",
+            "back",
+        }
+        tables = {
+            str(row["name"])
+            for row in uow.query_all(
+                "SELECT name FROM sqlite_master WHERE type='table' "
+                "AND name IN (?,?,?,?)",
+                tuple(required_tables),
+            )
+        }
+        if tables != required_tables:
+            return False
+
+        required_columns = {
+            "admin_item_destroy_operations": {
+                "operation_id", "payload", "previous_quantity", "final_quantity", "removed_quantity",
+            },
+            "economy_log": {
+                "user_id", "source", "action", "item_delta", "detail", "trace_id", "created_at",
+            },
+            "user_xiuxian": {"user_id"},
+            "back": {"user_id", "goods_id", "goods_num", "update_time"},
+        }
+        for table, required in required_columns.items():
+            columns = {
+                str(row["name"]).casefold()
+                for row in uow.query_all(f'PRAGMA table_info("{table}")')
+            }
+            if not required.issubset(columns):
+                return False
+        return True
 
     def destroy(self, operation_id: str, operator_id: str, user_id: str, item_id: int, item_name: str, item_type: str, quantity: int, expected_quantity: int, *, target_name: str = "") -> AdminItemDestroyResult:
         operation_id, operator_id, user_id = str(operation_id).strip(), str(operator_id).strip(), str(user_id).strip()
@@ -30,9 +68,11 @@ class AdminItemDestroySqlRepository:
         if not operation_id or not operator_id or not user_id or item_id <= 0 or quantity <= 0 or expected_quantity < 0:
             raise ValueError("valid admin item destroy request is required")
         payload = json.dumps([operator_id, user_id, item_id, str(item_name), str(item_type), quantity, str(target_name)], ensure_ascii=True, separators=(",", ":"))
+        if not self.database.is_file():
+            return AdminItemDestroyResult("schema_missing")
         with DatabaseUnitOfWork(self.database, immediate=True) as uow:
-            uow.execute("CREATE TABLE IF NOT EXISTS admin_item_destroy_operations(operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,previous_quantity INTEGER NOT NULL,final_quantity INTEGER NOT NULL,removed_quantity INTEGER NOT NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
-            uow.execute("CREATE TABLE IF NOT EXISTS economy_log(id INTEGER PRIMARY KEY AUTOINCREMENT,user_id TEXT,sect_id INTEGER,source TEXT NOT NULL,action TEXT NOT NULL,stone_delta INTEGER NOT NULL DEFAULT 0,exp_delta INTEGER NOT NULL DEFAULT 0,sect_contribution_delta INTEGER NOT NULL DEFAULT 0,sect_scale_delta INTEGER NOT NULL DEFAULT 0,sect_materials_delta INTEGER NOT NULL DEFAULT 0,item_delta TEXT NOT NULL DEFAULT '[]',detail TEXT NOT NULL DEFAULT '{}',trace_id TEXT,created_at TEXT NOT NULL)")
+            if not self._schema_ready(uow):
+                return AdminItemDestroyResult("schema_missing")
             previous = uow.query_one("SELECT payload,previous_quantity,final_quantity,removed_quantity FROM admin_item_destroy_operations WHERE operation_id=?", (operation_id,))
             if previous is not None:
                 if str(previous["payload"]) != payload:
