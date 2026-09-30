@@ -61,4 +61,19 @@ def apply_admin_stone_batch(uow: DatabaseUnitOfWork) -> None:
     )
 
 
-__all__ = ["apply_admin_asset", "apply_admin_stone_adjustment", "apply_admin_stone_batch"]
+def apply_admin_exp_adjustment(uow: DatabaseUnitOfWork) -> None:
+    # economy_log and its trace_id column are owned by admin_asset.002.
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS admin_exp_adjustment_operations("
+        "operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,"
+        "previous_exp INTEGER NOT NULL,final_exp INTEGER NOT NULL,"
+        "applied_delta INTEGER NOT NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+    )
+
+
+__all__ = [
+    "apply_admin_asset",
+    "apply_admin_exp_adjustment",
+    "apply_admin_stone_adjustment",
+    "apply_admin_stone_batch",
+]

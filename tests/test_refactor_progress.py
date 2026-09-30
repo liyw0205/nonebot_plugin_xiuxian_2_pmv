@@ -574,6 +574,8 @@ class RefactorProgressTests(unittest.TestCase):
         self.assertTrue(slices["admin"]["global_stone_batch_request_path_has_no_ddl"])
         self.assertTrue(slices["admin"]["global_stone_batch_disk_preflight"])
         self.assertTrue(slices["admin"]["global_stone_batch_startup_migration_registered"])
+        self.assertTrue(slices["admin"]["exp_request_path_has_no_ddl"])
+        self.assertTrue(slices["admin"]["exp_startup_migration_registered"])
         self.assertTrue(slices["impart"]["prayer_application_owned"])
         self.assertTrue(slices["rift"]["speedup_application_owned"])
         self.assertTrue(slices["rift"]["settlement_application_owned"])

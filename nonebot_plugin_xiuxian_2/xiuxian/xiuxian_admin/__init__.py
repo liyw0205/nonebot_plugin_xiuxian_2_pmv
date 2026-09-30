@@ -773,6 +773,8 @@ async def adjust_exp_command_(bot: Bot, event: GroupMessageEvent | PrivateMessag
                 msg = "调整未结算：玩家修为刚被其他操作改动，请重新执行。"
             elif result.status == "operation_conflict":
                 msg = "本次管理员操作与已记录事件冲突"
+            elif result.status == "schema_missing":
+                msg = "管理员修为服务尚未就绪，请检查启动迁移。"
             elif result.status == "user_missing":
                 msg = "对方未踏入修仙界，不可操作！"
             elif result.applied_delta > 0:

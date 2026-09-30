@@ -2878,8 +2878,9 @@
   全服灵石也已切到 feature-owned 后台分块批次，由 `admin_asset.003` 在 game DB 预建
   冻结目标集和逐用户回执。启动前按目标数量做磁盘预检；同管理员/增量的第二个活动请求在
   `BEGIN IMMEDIATE` 中返回 `in_progress`，部分唯一索引兜底，避免不同 operation ID 重复应用。
-  普通物品发放及其余管理员资产仍有兼容实现；这不代表 admin 全域完成，也没有替代 P7
-  真实数据验证。
+  单人修为调整由 feature-owned repository 承担，`admin_asset.004` 预建回执；请求路径只校验
+  `.002/.004` schema，不建表。普通物品发放及其余管理员资产仍有兼容实现；这不代表 admin
+  全域完成，也没有替代 P7 真实数据验证。
 - 活动 tasks/pass/boss milestone/boss rank 子领奖均由 game DB ledger/repository 持有奖励资产
   和回执，历史回执分块迁移；领取失败可用同 operation 重试或 reconcile 续跑。活动 `tasks`、
   `pass`、`boss_milestone`、`boss_rank` 的进度/领取状态仍在旧 `activity.db` projection，
@@ -4802,3 +4803,5 @@ Boss 通过 `get_rift_battle_final_attributes` 注入 `get_rift_battle_impart_da
 2026-09-30 bank legacy account lifecycle startup backfill：新增 game-only `bank.003`，启动时从 `player.db.bankinfo` 只读分批导入 game DB 账户，每批最多 200 行；迁移按目标行数与 payload 预估磁盘需求，低于预留空间时拒绝继续。相同账户保留，已有 game DB 操作回执证明状态已前进时保留新状态，无回执且与旧快照冲突则整项回滚；旧 `bankinfo` 不写入。默认 matcher 移除请求期 legacy account bootstrap/read，显式 `同步灵庄` 改为只导入缺失 game 账户、不覆盖已有账户。bank、progress、source-quality、architecture contract 聚焦回归 `359 passed`；inventory freshness、bank progress gates、目标源码/文档检查与 `git diff --check` 通过。完整 architecture 脚本在 NoneBot 初始化后只报 Activity 文档未提 manifest 历史标记 `legacy.activity.001`，已补齐文档说明；该文档门禁单独复验通过。验证使用禁用 pytest cache/字节码的单进程运行，仓库（不含保留的 `.venv`）无 pytest/pyc 缓存；专用 `/tmp` 目录收尾清理。未执行 migration、未访问或写入运行数据库；用户 `boss_info.json` 修改保留。后续独立审计确认默认旧 projection reader 无调用、银行自动结息 jobs 为空、旧 `savef` 与 `LegacyBankRepository` 不在生产组合图。活动状态 projection 随后的 `activity_state.001/.002` 切片已完成。整体仍为 `exit_ready=false`；下一阶段按 6.2 审计其余真实旧执行路径。
 
 2026-09-30 admin global stone batch cutover：`神秘力量 数量 all` 由 `AdminStoneBatchSqlRepository` 在后台按块更新，首次事务冻结目标用户并逐用户记录前后余额/实际 delta；`admin_asset.003` 只路由 game DB，请求路径不建表，并在启动前按用户数预检可用磁盘。修复不同 operation ID 的同管理员/同增量并发：`BEGIN IMMEDIATE` 内检查活动批次并返回 `in_progress`，部分唯一索引做数据库兜底，避免重复创建/应用。admin asset/application/source/progress 窄回归 `16 passed`，合并 admin asset、额外管理员批次、inventory、architecture contracts 与 progress 回归 `48 passed`；五库 recovery 共应用 214 项迁移，`.003` 仅路由 game DB，五库 backup/restore dry-run/restore 成功，reconcile clean。初始化 NoneBot 后 architecture CLI `ok=true`；compileall、inventory freshness、progress gates 和 diff check 通过。专用测试、编译、架构和 recovery 临时目录已清理并复核磁盘/RAM；批次回执和逐用户进度是持久审计记录，不作缓存清理。普通物品及其他管理员资产、全局旧 transaction services、`xiuxian2_handle` 与 P7 仍未完成。
+
+2026-09-30 admin exp startup-schema boundary：`修为调整` 默认 command 仍通过 `AdminAssetApplication -> AdminExpAdjustmentSqlRepository`，新增 game-only `admin_asset.004` 预建 `admin_exp_adjustment_operations`；repository 不再请求期创建 operation/economy 表，改为只读校验 `.002/.004` 所需 schema，缺失时返回 `schema_missing` 且资产不变。保留 exp 快照 CAS、扣减下限、receipt replay 与 `economy_log.trace_id`。admin asset repositories/application/source、额外管理员批次、inventory、architecture contracts 与 progress 回归 `50 passed`；progress CLI 中修为及单人/全服灵石 migration/no-DDL 门禁为 `true`，整体仍因旧 transaction services 和 `xiuxian2_handle` 保持 `exit_ready=false`。隔离五库 recovery 应用 215 项迁移，`.004` 仅路由 game DB，五库 backup/restore dry-run/restore 成功、reconcile clean；NoneBot 初始化后的 architecture CLI `ok=true`，inventory freshness、目标 compileall 和 diff check 通过。专用 `/tmp` 测试、编译、架构和 recovery 目录验收后清理并复核资源；未访问运行数据库，用户 `boss_info.json` 修改保留。下一片继续审计管理员资产剩余的请求期 DDL/旧兼容调用，不宣称 admin 全域完成。
