@@ -1973,6 +1973,10 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "status": "blessed_spot_open_rename_upgrade_stone_training_lifecycle_closing_settlement_pvp_partner_token_partner_cultivation_cutover_with_other_buff_compatibility",
         },
         "partner_cultivation": {
+            "identity_reads_application_owned": (
+                "get_user_profile(" in partner_facade
+                and "_sql_message().get_user_real_info(" not in partner_facade
+            ),
             "application_owned": (
                 "_partner_cultivation_application().apply(" in partner_facade
                 and "class PartnerCultivationApplication" in partner_cultivation_application
@@ -1991,7 +1995,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
                 and "def apply_partner_cultivation_player_schema(" in buff_migrations
             ),
             "request_path_has_no_ddl": "CREATE TABLE" not in partner_cultivation_repository,
-            "status": "cultivation_settlement_cutover_with_legacy_transaction_service_retained_as_compatibility_reference",
+            "status": "cultivation_settlement_cutover_with_profile_identity_reads_and_legacy_transaction_service_retained_as_compatibility_reference",
         },
         "impart": {
             "love_sand_application_owned": "impart_application.love_sand(" in impart_facade,

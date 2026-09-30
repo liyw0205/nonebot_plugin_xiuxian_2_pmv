@@ -19,7 +19,7 @@ from ..xiuxian_config import XiuConfig, convert_rank
 from ..xiuxian_utils.data_source import jsondata
 from ..xiuxian_utils.lay_out import assign_bot, Cooldown
 from ..xiuxian_utils.player_fight import Player_fight
-from ..xiuxian_utils.utils import check_user, check_user_type, get_msg_pic, handle_send, log_message, number_to, send_msg_handler, update_statistics_value, send_help_message
+from ..xiuxian_utils.utils import check_user, check_user_type, get_msg_pic, get_user_profile, handle_send, log_message, number_to, send_msg_handler, update_statistics_value, send_help_message
 from ..xiuxian_utils.xiuxian2_handle import (
     XIUXIAN_IMPART_BUFF,
     OtherSet,
@@ -399,7 +399,7 @@ async def two_exp_invite_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
     existing_invite = _partner_invite_service().pending_for_user(user_id)
     if existing_invite is not None:
         other_id = existing_invite.target_id if existing_invite.inviter_id == str(user_id) else existing_invite.inviter_id
-        target_info = _sql_message().get_user_real_info(other_id)
+        target_info = get_user_profile(other_id)
         remaining_time = existing_invite.expires_at - runtime_clock.now().timestamp()
         msg = f"你已经向{target_info['user_name']}发送了双修邀请，请等待{int(remaining_time)}秒后邀请过期或对方回应后再发送新邀请！"
         await handle_send(bot, event, msg, md_type="buff", k1="同意", v1="同意双修", k2="拒绝", v2="拒绝双修", k3="双修", v3="双修")
@@ -431,7 +431,7 @@ async def two_exp_invite_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
         await handle_send(bot, event, msg, md_type="buff", k1="双修", v1="双修", k2="次数", v2="我的双修次数", k3="修为", v3="我的修为")
         await two_exp_invite.finish()
 
-    user_2_info = _sql_message().get_user_real_info(two_qq)
+    user_2_info = get_user_profile(two_qq)
     if not user_2_info:
         msg = "未找到指定道友，对方可能尚未踏入修仙界。"
         await handle_send(bot, event, msg, md_type="buff", k1="双修", v1="双修", k2="次数", v2="我的双修次数", k3="修为", v3="我的修为")
@@ -717,8 +717,8 @@ async def direct_two_exp(
             k3="修为", v3="我的修为",
         )
         return
-    user_1_info = _sql_message().get_user_real_info(user_id_1)
-    user_2_info = _sql_message().get_user_real_info(user_id_2)
+    user_1_info = get_user_profile(user_id_1)
+    user_2_info = get_user_profile(user_id_2)
 
     log_message(
         user_id_1,
@@ -773,8 +773,8 @@ async def process_two_exp(
     user_id_1 = str(user_id_1)
     user_id_2 = str(user_id_2)
 
-    user_1 = _sql_message().get_user_real_info(user_id_1)
-    user_2 = _sql_message().get_user_real_info(user_id_2)
+    user_1 = get_user_profile(user_id_1)
+    user_2 = get_user_profile(user_id_2)
 
     if not user_1 or not user_2:
         return 0, 0, "无法获取玩家信息，无法进行双修。"
@@ -972,7 +972,7 @@ async def two_exp_reject_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
         
     inviter_id = invite.inviter_id
     
-    inviter_info = _sql_message().get_user_real_info(inviter_id)
+    inviter_info = get_user_profile(inviter_id)
     msg = f"你拒绝了{inviter_info['user_name']}的双修邀请！"
     
     _partner_invite_service().resolve(invite.invite_id, user_id, "rejected")
@@ -1188,7 +1188,7 @@ async def bind_partner_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     # 检查是否已经有未处理的邀请（作为被邀请者）
     if str(user_id) in partner_invite_cache:
         inviter_id = partner_invite_cache[str(user_id)]['inviter']
-        inviter_info = _sql_message().get_user_real_info(inviter_id)
+        inviter_info = get_user_profile(inviter_id)
         remaining_time = 60 - (runtime_clock.now().timestamp() - partner_invite_cache[str(user_id)]['timestamp'])
         msg = f"你已有来自{inviter_info['user_name']}的道侣绑定邀请（剩余{int(remaining_time)}秒），请先处理！"
         await handle_send(bot, event, msg, md_type="buff", k1="同意", v1="同意道侣", k2="绑定", v2="绑定道侣", k3="道侣", v3="我的道侣")
@@ -1202,7 +1202,7 @@ async def bind_partner_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
             break
     
     if existing_invite is not None:
-        target_info = _sql_message().get_user_real_info(existing_invite)
+        target_info = get_user_profile(existing_invite)
         remaining_time = 60 - (runtime_clock.now().timestamp() - partner_invite_cache[existing_invite]['timestamp'])
         msg = f"你已经向{target_info['user_name']}发送了道侣绑定邀请，请等待{int(remaining_time)}秒后邀请过期或对方回应后再发送新邀请！"
         await handle_send(bot, event, msg, md_type="buff", k1="同意", v1="同意道侣", k2="绑定", v2="绑定道侣", k3="道侣", v3="我的道侣")
@@ -1219,7 +1219,7 @@ async def bind_partner_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     # 设置60秒过期
     asyncio.create_task(expire_partner_invite(partner_user_id, invite_id, bot, event))
     
-    partner_info = _sql_message().get_user_real_info(partner_user_id)
+    partner_info = get_user_profile(partner_user_id)
     msg = f"已向{partner_info['user_name']}发送道侣绑定邀请，等待对方回应..."
     await handle_send(bot, event, msg, md_type="buff", k1="同意", v1="同意道侣", k2="绑定", v2="绑定道侣", k3="道侣", v3="我的道侣")
     await bind_partner.finish()
@@ -1350,7 +1350,7 @@ async def my_partner_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await my_partner.finish()
     
     partner_user_id = partner_data["partner_id"]
-    partner_info = _sql_message().get_user_real_info(partner_user_id)
+    partner_info = get_user_profile(partner_user_id)
     
     bind_time = partner_data["bind_time"]
     affection = partner_data["affection"]
@@ -1426,7 +1426,7 @@ def _format_mentor_applicant_ids(apprentice_ids, limit=5):
     names = []
     apprentice_ids = list(apprentice_ids)
     for apprentice_id in apprentice_ids[:limit]:
-        apprentice_info = _sql_message().get_user_real_info(apprentice_id)
+        apprentice_info = get_user_profile(apprentice_id)
         names.append(apprentice_info["user_name"] if apprentice_info else str(apprentice_id))
     if len(apprentice_ids) > limit:
         names.append(f"等{len(apprentice_ids)}人")
@@ -1591,8 +1591,8 @@ def _get_bind_wait_remaining(apprentice_id):
 
 def _grant_graduation_rewards(mentor_id, apprentice_id):
     reward_lines = []
-    mentor_info = _sql_message().get_user_real_info(mentor_id)
-    apprentice_info = _sql_message().get_user_real_info(apprentice_id)
+    mentor_info = get_user_profile(mentor_id)
+    apprentice_info = get_user_profile(apprentice_id)
 
     if MENTOR_GRADUATE_APPRENTICE_STONE_REWARD > 0:
         _sql_message().update_ls(apprentice_id, MENTOR_GRADUATE_APPRENTICE_STONE_REWARD, 1)
@@ -1745,8 +1745,8 @@ def _bind_mentor_relation(mentor_id, apprentice_id):
     apprentice_data["bind_time"] = now
     save_mentor(apprentice_id, apprentice_data)
 
-    mentor_info = _sql_message().get_user_real_info(mentor_id)
-    apprentice_info = _sql_message().get_user_real_info(apprentice_id)
+    mentor_info = get_user_profile(mentor_id)
+    apprentice_info = get_user_profile(apprentice_id)
     mentor_name = mentor_info["user_name"] if mentor_info else str(mentor_id)
     apprentice_name = apprentice_info["user_name"] if apprentice_info else str(apprentice_id)
 
@@ -1813,13 +1813,13 @@ def _mentor_application_result_message(result, requested_mentor_id):
         return "该事件已用于其他拜师申请。"
     application = result.application
     if result.status == "already_pending" and application is not None:
-        mentor_info = _sql_message().get_user_real_info(application.mentor_id)
+        mentor_info = get_user_profile(application.mentor_id)
         mentor_name = (
             mentor_info["user_name"] if mentor_info else application.mentor_id
         )
         return f"你已有向{mentor_name}发出的待处理拜师申请。"
     if result.status == "duplicate" and application is not None:
-        mentor_info = _sql_message().get_user_real_info(application.mentor_id)
+        mentor_info = get_user_profile(application.mentor_id)
         mentor_name = (
             mentor_info["user_name"] if mentor_info else application.mentor_id
         )
@@ -1833,7 +1833,7 @@ def _mentor_application_result_message(result, requested_mentor_id):
         return status_messages.get(
             application.status, "这条拜师申请已经处理。"
         )
-    mentor_info = _sql_message().get_user_real_info(requested_mentor_id)
+    mentor_info = get_user_profile(requested_mentor_id)
     mentor_name = mentor_info["user_name"] if mentor_info else str(requested_mentor_id)
     return f"向{mentor_name}拜师未成功：双方当前状态已更新，请稍后重试。"
 
@@ -1878,7 +1878,7 @@ async def apply_mentor_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
 
     apply_remaining, apply_target = _get_mentor_apply_remaining(user_id)
     if apply_remaining > 0 and str(apply_target) != str(mentor_id):
-        target_info = _sql_message().get_user_real_info(apply_target) if apply_target else None
+        target_info = get_user_profile(apply_target) if apply_target else None
         target_name = target_info["user_name"] if target_info else "其他道友"
         await handle_send(
             bot,
@@ -1889,7 +1889,7 @@ async def apply_mentor_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         )
         await apply_mentor.finish()
 
-    mentor_info = _sql_message().get_user_real_info(mentor_id)
+    mentor_info = get_user_profile(mentor_id)
     created = _mentor_application_service().create(invite_id, mentor_id, user_id)
     if not created.succeeded:
         await handle_send(
@@ -1993,7 +1993,7 @@ async def agree_mentor_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
             if not replayed.succeeded:
                 await handle_send(bot, event, "该事件已用于其他拜师确认。", **buttons)
                 await agree_mentor.finish()
-            apprentice_info = _sql_message().get_user_real_info(apprentice_id)
+            apprentice_info = get_user_profile(apprentice_id)
             await _send_mentor_bind_success(
                 bot, event, mentor_id, user_info, apprentice_id,
                 apprentice_info, replayed,
@@ -2027,7 +2027,7 @@ async def agree_mentor_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         await agree_mentor.finish()
 
     invite_data = pending_invites[apprentice_id]
-    apprentice_info = _sql_message().get_user_real_info(apprentice_id)
+    apprentice_info = get_user_profile(apprentice_id)
     bind_time = runtime_clock.now().strftime("%Y-%m-%d %H:%M:%S")
     result = _mentor_bind_service().apply(
         operation_id, mentor_id, apprentice_id,
@@ -2082,7 +2082,7 @@ async def reject_mentor_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
             if replayed.status == "operation_conflict":
                 await handle_send(bot, event, "该事件已用于其他拜师申请处理。", **buttons)
             elif replayed.succeeded:
-                apprentice_info = _sql_message().get_user_real_info(apprentice_id)
+                apprentice_info = get_user_profile(apprentice_id)
                 apprentice_name = (
                     apprentice_info["user_name"] if apprentice_info else apprentice_id
                 )
@@ -2117,7 +2117,7 @@ async def reject_mentor_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         await handle_send(bot, event, "该道友没有向你发起待处理的拜师申请。", **buttons)
         await reject_mentor.finish()
 
-    apprentice_info = _sql_message().get_user_real_info(apprentice_id)
+    apprentice_info = get_user_profile(apprentice_id)
     apprentice_name = apprentice_info["user_name"] if apprentice_info else apprentice_id
     rejected = _mentor_application_service().resolve(
         pending_invites[apprentice_id]["invite_id"],
@@ -2152,7 +2152,7 @@ async def my_mentor_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, c
     mentor_id = mentor_data.get("mentor_id")
 
     if mentor_id:
-        mentor_info = _sql_message().get_user_real_info(mentor_id)
+        mentor_info = get_user_profile(mentor_id)
         bind_time = mentor_data.get("bind_time") or "未知"
         mentor_line = f"{mentor_info['user_name']}（{mentor_info['level']}，拜师时间：{bind_time}）" if mentor_info else "数据异常"
     else:
@@ -2160,7 +2160,7 @@ async def my_mentor_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, c
 
     apprentice_lines = []
     for apprentice_id in get_valid_apprentices(user_id):
-        apprentice_info = _sql_message().get_user_real_info(apprentice_id)
+        apprentice_info = get_user_profile(apprentice_id)
         if apprentice_info:
             apprentice_lines.append(f"- {apprentice_info['user_name']}（{apprentice_info['level']}）")
 
@@ -2271,7 +2271,7 @@ async def mentor_rank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
         user_id = str(stats.get("user_id", ""))
         if not user_id:
             continue
-        user_real_info = _sql_message().get_user_real_info(user_id)
+        user_real_info = get_user_profile(user_id)
         if not user_real_info:
             continue
         apprentice_count = len(get_valid_apprentices(user_id))
@@ -2333,7 +2333,7 @@ async def unbind_mentor_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
             await handle_send(bot, event, "对方不是你的徒弟，无法逐出师门。", **buttons)
             await unbind_mentor.finish()
 
-        target_info = _sql_message().get_user_real_info(target_id)
+        target_info = get_user_profile(target_id)
         mentor_name = user_info["user_name"]
         target_name = target_info["user_name"] if target_info else str(target_id)
         now = runtime_clock.now()
@@ -2371,7 +2371,7 @@ async def unbind_mentor_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
             await handle_send(bot, event, "你当前没有师徒关系。", **buttons)
         await unbind_mentor.finish()
 
-    mentor_info = _sql_message().get_user_real_info(mentor_id)
+    mentor_info = get_user_profile(mentor_id)
     mentor_name = mentor_info["user_name"] if mentor_info else str(mentor_id)
     if is_wujie_or_above(user_info["level"]):
         mentor_stats = _player_data_manager().get_fields(mentor_id, "statistics") or {}
