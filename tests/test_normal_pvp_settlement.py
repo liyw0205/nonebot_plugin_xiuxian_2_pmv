@@ -31,6 +31,8 @@ def test_buff_pvp_handler_uses_lazy_dual_database_service():
     assert "buff_application.pvp_replay(" in handler
     assert "calculate_battle(" in handler
     assert "buff_application.pvp_settle(" in handler
+    assert "get_player_attributes(" in handler
+    assert "get_user_real_info(" not in handler
     assert "NormalPvpSqlRepository" in Path(
         "nonebot_plugin_xiuxian_2/features/buff/pvp_repository.py"
     ).read_text(encoding="utf-8")

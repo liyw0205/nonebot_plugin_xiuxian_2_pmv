@@ -4,14 +4,13 @@ import sqlite3
 from ...infrastructure.database import DatabaseUnitOfWork
 from ...paths import get_paths
 from .riftconfig import get_rift_config
-from ..xiuxian_utils.utils import number_to
+from ..xiuxian_utils.utils import get_player_attributes, number_to
 from .jsondata import read_f
 from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage, OtherSet
 from ..xiuxian_utils.player_fight import (
     Boss_fight,
     generate_boss_buff,
     generate_boss_skill,
-    get_final_attributes,
     get_boss_attributes,
     get_players_attributes,
     get_user_pet_for_battle,
@@ -43,6 +42,9 @@ class _LazyItemsProxy:
 
 
 items = _LazyItemsProxy()
+# Keep the provider name used by the Rift compatibility tests and adapters while
+# sourcing the calculation through the shared dynamic-attribute boundary.
+get_final_attributes = get_player_attributes
 skill_data = read_f()
 
 _RIFT_BATTLE_ITEM_SOURCES = (

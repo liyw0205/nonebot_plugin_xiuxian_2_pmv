@@ -434,16 +434,16 @@ async def qc_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Me
         give_info = _sql_message().get_user_info_with_name(str(arg))
         give_qq = give_info['user_id'] if give_info else None
 
-    # raw DB rows for concurrency checks; real_info is buff-amplified and must not seed expected_*.
+    # Raw profile rows seed CAS values; dynamic attributes are only an availability check.
     base1 = _sql_message().get_user_info_with_id(user_id)
     base2 = _sql_message().get_user_info_with_id(give_qq) if give_qq else None
-    user1 = _sql_message().get_user_real_info(user_id)
-    user2 = _sql_message().get_user_real_info(give_qq) if give_qq else None
+    user1 = get_player_attributes(user_id)
+    user2 = get_player_attributes(give_qq) if give_qq else None
 
     if base1 and (base1['hp'] is None or base1['hp'] == 0):
         _sql_message().update_user_hp(user_id)
         base1 = _sql_message().get_user_info_with_id(user_id)
-        user1 = _sql_message().get_user_real_info(user_id)
+        user1 = get_player_attributes(user_id)
 
     if not base1 or not base2 or not user1 or not user2:
         msg = "修仙界没有对方的信息，快邀请对方加入修仙界吧！"

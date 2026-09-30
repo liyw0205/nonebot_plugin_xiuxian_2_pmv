@@ -1710,6 +1710,8 @@ def _slice_status() -> dict[str, dict[str, object]]:
                 and "get_final_attributes" not in buff_handler
                 and "get_final_attributes" not in player_fight
                 and "get_final_attributes" not in json_config
+                and "get_user_real_info(" not in buff_handler
+                and "get_player_attributes(" in buff_handler
             ),
             "dynamic_attribute_compatibility_explicit": (
                 "legacy_player_attributes" in info_attribute_application

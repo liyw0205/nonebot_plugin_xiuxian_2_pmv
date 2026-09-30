@@ -62,7 +62,7 @@ def test_player_attribute_builder_uses_explicit_item_provider():
         return {"name": "本命法宝"}
 
     with patch.object(player_fight, "UserBuffDate", Buffs), patch.object(
-        player_fight, "get_final_attributes", return_value=final
+        player_fight, "get_player_attributes", return_value=final
     ), patch.object(player_fight, "NatalTreasure", Natal), patch.object(
         player_fight, "get_user_pet_for_battle", return_value=None
     ):

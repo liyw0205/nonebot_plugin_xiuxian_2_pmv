@@ -18,7 +18,7 @@
 ## 测试与手工验收
 覆盖 fake repository 成功、拒绝、重复和异常路径。
 ## 灰度开关、回滚和已知限制
-关闭开关后使用旧功法入口；双修令牌默认经 `PartnerTokenUseApplication` 原子消费库存并更新次数。双修结算默认经 `PartnerCultivationApplication`，把修为、属性、次数、统计、亲密度和邀请状态置于同一 attached UoW；随机计算仍由领域 handler 预滚。普通切磋默认经 `BuffApplication -> NormalPvpSqlRepository`，在 attached UoW 内完成双方 HP/MP/体力 CAS、胜负统计和回执，缺 schema、用户或快照冲突时 fail closed；请求路径不执行 DDL。旧 `NormalPvpSettlementService` 仅保留显式兼容用途，`pvp_battle` 只承载纯战斗计算适配。双修/师徒默认 handler 的姓名、境界、修为和存在性读取统一经 `PlayerProfileApplication`；信息页、功法状态和默认玩家战斗辅助的动态属性读取统一经 `PlayerAttributeApplication`，旧 `get_final_attributes` 仅作为显式兼容公式 provider。
+关闭开关后使用旧功法入口；双修令牌默认经 `PartnerTokenUseApplication` 原子消费库存并更新次数。双修结算默认经 `PartnerCultivationApplication`，把修为、属性、次数、统计、亲密度和邀请状态置于同一 attached UoW；随机计算仍由领域 handler 预滚。普通切磋默认经 `BuffApplication -> NormalPvpSqlRepository`，在 attached UoW 内完成双方 HP/MP/体力 CAS、胜负统计和回执，缺 schema、用户或快照冲突时 fail closed；请求路径不执行 DDL。切磋 handler 的动态属性读取也经 `PlayerAttributeApplication`，不再直接读取 `get_user_real_info`。旧 `NormalPvpSettlementService` 仅保留显式兼容用途，`pvp_battle` 只承载纯战斗计算适配。双修/师徒默认 handler 的姓名、境界、修为和存在性读取统一经 `PlayerProfileApplication`；信息页、功法状态和默认玩家战斗辅助的动态属性读取统一经 `PlayerAttributeApplication`，旧 `get_final_attributes` 仅作为显式兼容公式 provider。
 
 ## Manifest 清单
 - `route: POST /api/v1/buff/open`

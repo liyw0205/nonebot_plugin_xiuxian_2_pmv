@@ -2,7 +2,9 @@
 
 状态：进行中。`v1.1.0` 的 P0-P7 发布证据继续保留，但不作为底层全面重构完成证明。
 
-2026-10-01 dynamic attribute read boundary：新增 `PlayerAttributeApplication`，并将信息页、功法状态、默认玩家战斗辅助和 JSON 战斗 helper 的 `get_final_attributes` 调用统一切到该 application；保留 `ratio`、`include_current` 与 provider 注入契约。旧公式移至显式 `compatibility/legacy_player_attributes.py`，不改公式、资产写入或数据库 schema。新增 application/provider/source/progress 回归，三项 info 动态属性门禁全绿。`InfoApplication` 原有通用幂等测试在临时库缺少 `operation_ledger` 时仍失败，记录为既有独立问题；动态属性切片不改变该 schema 责任。本轮缓存和临时产物验收后清理；下一片继续按 6.2 审计 player/economy 真实写入路径。
+2026-10-01 normal pvp dynamic attribute read boundary：普通切磋 handler 的动态属性存在性读取统一经 `get_player_attributes -> PlayerAttributeApplication`，不再直接调用 `get_user_real_info`；原始 HP/MP/体力/修为快照仍由 profile 查询供结算 CAS 使用，战斗计算与结算语义不变。新增 source/progress 门禁，无新增 schema/migration；全局 legacy transaction services、`xiuxian2_handle` 与正式发布/P7 仍未完成。
+
+2026-10-01 dynamic attribute read boundary：新增 `PlayerAttributeApplication`，并将信息页、功法状态、默认玩家战斗辅助和 JSON 战斗 helper 的 `get_final_attributes` 调用统一切到该 application；保留 `ratio`、`include_current` 与 provider 注入契约。旧公式移至显式 `compatibility/legacy_player_attributes.py`，不改公式、资产写入或数据库 schema。新增 application/provider/source/progress 回归，三项 info 动态属性门禁全绿；并补齐 Info/Buff 幂等测试的通用 `operation_ledger` 夹具。本轮缓存和临时产物验收后清理；下一片继续按 6.2 审计 player/economy 真实写入路径。
 
 2026-10-01 base scheduled stamina recovery cutover：每分钟恢复任务改经 `recover_player_stamina -> PlayerStaminaApplication -> PlayerStaminaSqlRepository`，按 `XIUXIAN_STAMINA_RECOVERY_BATCH_SIZE` 分批更新并使用 `MIN` 封顶；`0` 恢复点直接 no-op，缺数据库/schema fail closed，请求/任务路径不执行 DDL，也不加载完整用户列表。新增多批、上限、零点数、缺 schema 与有界查询回归；进度门禁新增 `stamina_recovery_application_owned`、`stamina_recovery_request_path_has_no_ddl`。本轮缓存和临时产物在验收后清理；动态属性、经济写入、全局 legacy transaction services、`xiuxian2_handle` 及正式发布/P7 仍未完成。
 

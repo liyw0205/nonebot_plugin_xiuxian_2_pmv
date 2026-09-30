@@ -12,6 +12,7 @@ No new HTTP route is exposed in this migration slice. Existing URLs remain serve
 ## 数据模型与迁移
 Migration `legacy.info.001` records the slice in `game_db`; the feature-owned repository and explicit service port now own the operation boundary while legacy tables remain the compatibility data source. Shared player profile reads, including ID/道号 lookups used by base commands and identity fields in the info projection, now use `PlayerProfileApplication -> PlayerProfileSqlRepository` in read-only mode; missing database/schema is fail-closed and never creates tables during a request.
 Dynamic attribute reads used by the info projection, status display, and default player-fight helper now pass through `PlayerAttributeApplication`. The legacy `get_final_attributes` formula remains an explicit compatibility provider so buff/impart/accessory/tianti projections can be migrated one at a time; the application preserves `ratio`, `include_current`, and provider injection ports.
+The normal PVP handler uses the same application boundary for dynamic-attribute availability checks; its raw profile snapshot remains the CAS input for settlement.
 
 ## 事务与失败回滚
 Mutating calls carry an `operation_id` and are recorded in the operation ledger. Disable the feature flag or restore the pre-migration backup to roll back.

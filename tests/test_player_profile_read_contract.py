@@ -43,6 +43,8 @@ class PlayerProfileReadContractTest(unittest.TestCase):
             source = path.read_text(encoding="utf-8")
             self.assertIn("get_player_attributes", source)
             self.assertNotIn("get_final_attributes", source)
+        buff_source = sources[1].read_text(encoding="utf-8")
+        self.assertNotIn("get_user_real_info(", buff_source)
 
         application = (
             root / "nonebot_plugin_xiuxian_2" / "features" / "info" / "attribute_application.py"
