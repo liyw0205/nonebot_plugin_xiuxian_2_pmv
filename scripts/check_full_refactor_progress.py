@@ -102,6 +102,9 @@ def _slice_status() -> dict[str, dict[str, object]]:
     base_robbery_repository = (PACKAGE / "features" / "base" / "robbery_repository.py").read_text(encoding="utf-8")
     base_xiangyuan_repository = (PACKAGE / "features" / "base" / "xiangyuan_repository.py").read_text(encoding="utf-8")
     base_xiangyuan_application = (PACKAGE / "features" / "base" / "xiangyuan_application.py").read_text(encoding="utf-8")
+    base_stamina_application = (PACKAGE / "features" / "base" / "stamina_application.py").read_text(encoding="utf-8")
+    base_stamina_repository = (PACKAGE / "features" / "base" / "stamina_repository.py").read_text(encoding="utf-8")
+    layout_source = (PACKAGE / "xiuxian" / "xiuxian_utils" / "lay_out.py").read_text(encoding="utf-8")
     xiangyuan_facade = (PACKAGE / "xiuxian" / "xiuxian_base" / "xiangyuan.py").read_text(encoding="utf-8")
     base_migrations = (PACKAGE / "features" / "base" / "migrations.py").read_text(encoding="utf-8")
     base_manifest = (PACKAGE / "features" / "base" / "manifest.py").read_text(encoding="utf-8")
@@ -1691,6 +1694,19 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "status": "equip_unequip_unlock_cutover",
         },
         "base": {
+            "cooldown_stamina_application_owned": (
+                "consume_player_stamina(" in layout_source
+                and "_sql_message().update_user_stamina(" not in layout_source
+                and "class PlayerStaminaApplication" in base_stamina_application
+            ),
+            "cooldown_stamina_request_path_has_no_ddl": (
+                "CREATE TABLE" not in base_stamina_repository
+                and "ALTER TABLE" not in base_stamina_repository
+            ),
+            "cooldown_stamina_runtime_wired": (
+                '"player_stamina": PlayerStaminaApplication' in plugin
+                and "configure_player_stamina_application" in plugin
+            ),
             "rename_application_owned": "base_application.rename(" in base_facade,
             "legacy_rename_disabled": "_player_rename_service().rename_user(" not in base_facade and "_player_rename_service().rename_root(" not in base_facade,
             "rename_replay_read_application_owned": "base_application.get_rename_result(" in base_facade and "def get_rename_result(" in base_application_source and "_player_rename_service" not in base_facade,
@@ -1810,7 +1826,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "heart_devil_tribulation_service_isolated": "class HeartDevilTribulationService" not in base_transaction and "class HeartDevilTribulationService" in heart_devil_tribulation_compatibility and "heart_devil_tribulation_operations" in heart_devil_tribulation_compatibility,
             "pill_fusion_service_isolated": "class PillFusionService" not in base_transaction and "class PillFusionService" in pill_fusion_compatibility and "pill_fusion_operations" in pill_fusion_compatibility,
             "tribulation_state_migration_service_isolated": "class TribulationStateMigrationService" not in base_transaction and "class TribulationStateMigrationService" in tribulation_state_migration_compatibility and "tribulation_state_migration_operations" in tribulation_state_migration_compatibility,
-            "status": "stone_theft_and_robbery_settlement_with_rename_replay_owned_and_remaining_base_compatibility_isolation",
+            "status": "cooldown_stamina_consumption_and_stone_theft_robbery_settlement_with_rename_replay_owned_and_remaining_base_compatibility_isolation",
         },
         "puppet": {
             "harvest_application_owned": "puppet_application.harvest(" in puppet_facade,

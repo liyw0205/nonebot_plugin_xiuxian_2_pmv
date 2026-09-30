@@ -14,6 +14,7 @@ from nonebot.log import logger
 from ...paths import get_paths
 from ...features.info.profile_application import PlayerProfileApplication
 from ...features.info.activity_application import PlayerActivityApplication
+from ...features.base.stamina_application import PlayerStaminaApplication
 from base64 import b64encode
 from io import BytesIO
 from pathlib import Path
@@ -71,6 +72,7 @@ _sql_message_instance = None
 _player_data_manager_instance = None
 _player_profile_application: PlayerProfileApplication | None = None
 _player_activity_application: PlayerActivityApplication | None = None
+_player_stamina_application: PlayerStaminaApplication | None = None
 boss_img_path = get_paths().data / "boss_img"
 PLAYERSDATA = get_paths().players
 
@@ -122,6 +124,32 @@ def update_last_check_info_time(user_id: int | str) -> int:
 
 def get_last_check_info_time(user_id: int | str):
     return _player_activity().get_last_check_info_time(user_id)
+
+
+def configure_player_stamina_application(application: PlayerStaminaApplication) -> None:
+    """Bind the lifecycle-owned stamina write boundary used by Cooldown."""
+    global _player_stamina_application
+    _player_stamina_application = application
+
+
+def _player_stamina() -> PlayerStaminaApplication:
+    global _player_stamina_application
+    if _player_stamina_application is None:
+        _player_stamina_application = PlayerStaminaApplication(get_paths().game_db)
+    return _player_stamina_application
+
+
+def consume_player_stamina(
+    user_id: int | str,
+    amount: int,
+    *,
+    expected_stamina: int | None = None,
+):
+    return _player_stamina().consume(
+        str(user_id),
+        int(amount),
+        expected_stamina=expected_stamina,
+    )
 
 
 def _player_data_manager():

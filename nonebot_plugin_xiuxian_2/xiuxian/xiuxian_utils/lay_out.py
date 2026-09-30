@@ -23,7 +23,7 @@ from ..adapter_compat import (
 from ..messaging.delivery import delivery_service
 from ..xiuxian_config import XiuConfig, JsonConfig
 from .xiuxian2_handle import XiuxianDateManage
-from .utils import get_msg_pic, check_user, handle_send
+from .utils import check_user, consume_player_stamina, get_msg_pic, get_user_profile, handle_send
 
 
 _sql_message_instance = None
@@ -381,7 +381,7 @@ def Cooldown(
                 logger.warning(f"获取当前体力身份失败，回退到真实ID {user_id}: {e}")
 
             if user_data is None and not checked_user:
-                user_data = _sql_message().get_user_info_with_id(stamina_user_id)
+                user_data = get_user_profile(stamina_user_id)
 
             if user_data:
                 current_stamina = int(user_data.get("user_stamina") or 0)
@@ -389,7 +389,18 @@ def Cooldown(
                     msg = "你没有足够的体力，请等待体力恢复后再试！"
                     await handle_send(bot, event, msg)
                     await matcher.finish()
-                _sql_message().update_user_stamina(stamina_user_id, stamina_cost, 2)  # 减少体力
+                stamina_result = consume_player_stamina(
+                    stamina_user_id,
+                    stamina_cost,
+                    expected_stamina=current_stamina,
+                )
+                if stamina_result.get("status") != "applied":
+                    if stamina_result.get("status") == "stamina_insufficient":
+                        msg = "你没有足够的体力，请等待体力恢复后再试！"
+                    else:
+                        msg = "体力状态已更新，请稍后重试。"
+                    await handle_send(bot, event, msg)
+                    await matcher.finish()
         if cd_time <= 0:
             return
         if running[key] <= 0:

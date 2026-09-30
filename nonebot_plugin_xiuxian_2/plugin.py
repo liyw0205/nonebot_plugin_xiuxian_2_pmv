@@ -800,6 +800,7 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
         from .features.rift.application import RiftApplication
         from .features.info.profile_application import PlayerProfileApplication
         from .features.info.activity_application import PlayerActivityApplication
+        from .features.base.stamina_application import PlayerStaminaApplication
 
         settings = context.settings
         from .features.bank.feature_flag import bank_first_use_enabled
@@ -850,6 +851,9 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
             "player_profile": PlayerProfileApplication(str(context.database.path("game_db"))),
             "player_activity": PlayerActivityApplication(
                 str(context.database.path("game_db")), clock=context.clock
+            ),
+            "player_stamina": PlayerStaminaApplication(
+                str(context.database.path("game_db"))
             ),
             "task_claim": TaskClaimApplication(
                 str(context.database.path("game_db")),
@@ -1047,6 +1051,7 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
             from .xiuxian.xiuxian_base import configure_lottery_application, configure_sign_in_application
             from .xiuxian.xiuxian_utils.utils import configure_player_profile_application
             from .xiuxian.xiuxian_utils.utils import configure_player_activity_application
+            from .xiuxian.xiuxian_utils.utils import configure_player_stamina_application
             from .xiuxian.xiuxian_back import configure_back_application, configure_package_reward_application
             from .xiuxian.xiuxian_tasks.task_data import configure_task_claim_application
             from .xiuxian.xiuxian_training import configure_training_application
@@ -1062,6 +1067,7 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
             configure_sign_in_application(context.services["sign_in"])
             configure_player_profile_application(context.services["player_profile"])
             configure_player_activity_application(context.services["player_activity"])
+            configure_player_stamina_application(context.services["player_stamina"])
             configure_back_application(context.services["back"])
             configure_package_reward_application(context.services["package_reward"])
             configure_task_claim_application(context.services["task_claim"])

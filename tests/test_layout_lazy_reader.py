@@ -12,8 +12,9 @@ class LayoutLazyReaderTests(unittest.TestCase):
         self.assertIn("def _sql_message(", source)
         self.assertNotIn("sql_message = XiuxianDateManage()", source)
         self.assertIn("_sql_message().update_all_users_stamina(", source)
-        self.assertIn("_sql_message().get_user_info_with_id(", source)
-        self.assertIn("_sql_message().update_user_stamina(", source)
+        self.assertIn("get_user_profile(", source)
+        self.assertIn("consume_player_stamina(", source)
+        self.assertNotIn("_sql_message().update_user_stamina(", source)
 
 
 if __name__ == "__main__":
