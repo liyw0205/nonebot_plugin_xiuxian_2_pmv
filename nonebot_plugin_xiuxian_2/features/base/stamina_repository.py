@@ -68,5 +68,48 @@ class PlayerStaminaSqlRepository:
                 return self._result("state_changed", current)
             return self._result("applied", current - amount)
 
+    def recover(
+        self,
+        max_stamina: int,
+        points: int,
+        *,
+        batch_size: int = 1000,
+    ) -> dict[str, Any]:
+        max_stamina = int(max_stamina)
+        points = int(points)
+        batch_size = max(1, int(batch_size))
+        if max_stamina < 0 or points < 0:
+            return {"status": "invalid", "updated": 0}
+        if points == 0:
+            return {"status": "applied", "updated": 0}
+        if not self.database.is_file():
+            return {"status": "schema_missing", "updated": 0}
+
+        total = 0
+        last_rowid = 0
+        while True:
+            with DatabaseUnitOfWork(self.database, immediate=True) as uow:
+                if not self._schema_ready(uow):
+                    return {"status": "schema_missing", "updated": total}
+                rows = uow.query_all(
+                    "SELECT rowid AS _rowid FROM user_xiuxian "
+                    "WHERE rowid>? AND COALESCE(user_stamina,0)<? "
+                    "ORDER BY rowid LIMIT ?",
+                    (last_rowid, max_stamina, batch_size),
+                )
+                if not rows:
+                    break
+                first_rowid = int(rows[0]["_rowid"])
+                last_rowid = int(rows[-1]["_rowid"])
+                changed = uow.execute(
+                    "UPDATE user_xiuxian SET user_stamina=MIN(COALESCE(user_stamina,0)+?,?) "
+                    "WHERE rowid BETWEEN ? AND ? "
+                    "AND COALESCE(user_stamina,0)<?",
+                    (points, max_stamina, first_rowid, last_rowid, max_stamina),
+                )
+                updated = max(int(changed.rowcount), 0)
+            total += updated
+        return {"status": "applied", "updated": total}
+
 
 __all__ = ["PlayerStaminaSqlRepository"]

@@ -152,6 +152,19 @@ def consume_player_stamina(
     )
 
 
+def recover_player_stamina(
+    max_stamina: int,
+    points: int,
+    *,
+    batch_size: int = 1000,
+):
+    return _player_stamina().recover(
+        int(max_stamina),
+        int(points),
+        batch_size=batch_size,
+    )
+
+
 def _player_data_manager():
     global _player_data_manager_instance
     if _player_data_manager_instance is None:

@@ -30,5 +30,18 @@ class PlayerStaminaApplication:
             expected_stamina=expected_stamina,
         )
 
+    def recover(
+        self,
+        max_stamina: int,
+        points: int,
+        *,
+        batch_size: int = 1000,
+    ) -> dict[str, Any]:
+        return self.repository.recover(
+            max_stamina,
+            points,
+            batch_size=batch_size,
+        )
+
 
 __all__ = ["PlayerStaminaApplication"]

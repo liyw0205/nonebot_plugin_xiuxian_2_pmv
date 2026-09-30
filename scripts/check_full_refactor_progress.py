@@ -1707,6 +1707,19 @@ def _slice_status() -> dict[str, dict[str, object]]:
                 '"player_stamina": PlayerStaminaApplication' in plugin
                 and "configure_player_stamina_application" in plugin
             ),
+            "stamina_recovery_application_owned": (
+                "recover_player_stamina(" in layout_source
+                and "def recover(" in base_stamina_application
+                and "def recover(" in base_stamina_repository
+                and "update_all_users_stamina(" not in layout_source
+                and "XiuxianDateManage" not in layout_source
+            ),
+            "stamina_recovery_request_path_has_no_ddl": (
+                "CREATE TABLE" not in base_stamina_repository
+                and "ALTER TABLE" not in base_stamina_repository
+                and "ORDER BY rowid LIMIT ?" in base_stamina_repository
+                and "batch_size" in base_stamina_repository
+            ),
             "rename_application_owned": "base_application.rename(" in base_facade,
             "legacy_rename_disabled": "_player_rename_service().rename_user(" not in base_facade and "_player_rename_service().rename_root(" not in base_facade,
             "rename_replay_read_application_owned": "base_application.get_rename_result(" in base_facade and "def get_rename_result(" in base_application_source and "_player_rename_service" not in base_facade,
@@ -1826,7 +1839,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "heart_devil_tribulation_service_isolated": "class HeartDevilTribulationService" not in base_transaction and "class HeartDevilTribulationService" in heart_devil_tribulation_compatibility and "heart_devil_tribulation_operations" in heart_devil_tribulation_compatibility,
             "pill_fusion_service_isolated": "class PillFusionService" not in base_transaction and "class PillFusionService" in pill_fusion_compatibility and "pill_fusion_operations" in pill_fusion_compatibility,
             "tribulation_state_migration_service_isolated": "class TribulationStateMigrationService" not in base_transaction and "class TribulationStateMigrationService" in tribulation_state_migration_compatibility and "tribulation_state_migration_operations" in tribulation_state_migration_compatibility,
-            "status": "cooldown_stamina_consumption_and_stone_theft_robbery_settlement_with_rename_replay_owned_and_remaining_base_compatibility_isolation",
+            "status": "cooldown_and_scheduled_stamina_recovery_owned_with_stone_theft_robbery_settlement_rename_replay_and_remaining_base_compatibility_isolation",
         },
         "puppet": {
             "harvest_application_owned": "puppet_application.harvest(" in puppet_facade,

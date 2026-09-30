@@ -1,3 +1,4 @@
+import os
 import random
 import time
 from nonebot.log import logger
@@ -22,11 +23,9 @@ from ..adapter_compat import (
 )
 from ..messaging.delivery import delivery_service
 from ..xiuxian_config import XiuConfig, JsonConfig
-from .xiuxian2_handle import XiuxianDateManage
-from .utils import check_user, consume_player_stamina, get_msg_pic, get_user_profile, handle_send
+from .utils import check_user, consume_player_stamina, get_msg_pic, get_user_profile, handle_send, recover_player_stamina
 
 
-_sql_message_instance = None
 ADMIN_IDS = get_driver().config.superusers
 limit_all_message = require("nonebot_plugin_apscheduler").scheduler
 limit_all_stamina = require("nonebot_plugin_apscheduler").scheduler
@@ -34,12 +33,6 @@ limit_all_stamina = require("nonebot_plugin_apscheduler").scheduler
 limit_all_data: Dict[str, Any] = {}
 limit_num = 99999
 
-
-def _sql_message():
-    global _sql_message_instance
-    if _sql_message_instance is None:
-        _sql_message_instance = XiuxianDateManage()
-    return _sql_message_instance
 
 @limit_all_message.scheduled_job(
     "interval",
@@ -67,12 +60,14 @@ def limit_all_stamina_():
     # 恢复体力
     started_at = time.monotonic()
     try:
-        updated = _sql_message().update_all_users_stamina(
+        result = recover_player_stamina(
             XiuConfig().max_stamina,
             XiuConfig().stamina_recovery_points,
+            batch_size=max(1, int(os.getenv("XIUXIAN_STAMINA_RECOVERY_BATCH_SIZE", "1000"))),
         )
+        updated = int(result.get("updated", 0) or 0)
     except Exception as e:
-        logger.opt(exception=e).warning("体力恢复定时任务执行失败，已回滚本轮恢复")
+        logger.opt(exception=e).warning("体力恢复定时任务执行失败，当前批次已回滚，后续恢复已停止")
         return
 
     elapsed = time.monotonic() - started_at

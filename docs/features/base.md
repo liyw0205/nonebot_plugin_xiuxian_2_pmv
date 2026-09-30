@@ -12,13 +12,13 @@
 改名写入与回执由 `BaseApplication -> BaseRenameSqlRepository` 承担；重放查询也经 application 使用只读 repository。旧回执缺少 `payload` 时仍作为已完成操作返回，不改动玩家或背包数据。请求路径不创建表或补列，缺少 `base.002` 时拒绝写入。
 `偷灵石` 的查重与结算由 `BaseApplication -> BaseStoneTheftSqlRepository` 承担，在 game DB 的单一 immediate UoW 中更新灵石、体力并写回执；缺少 `base.003` 或所需玩家 schema 时 fail closed。`抢劫` 的默认 handler 由 `BaseApplication -> BaseStoneRobberySqlRepository` 承担，在 game DB ATTACH player DB 的单一事务中完成快照校验、双玩家 CAS、统计和回执；资产 CAS 失败通过 savepoint 回滚，缺少 `base.004`/`base.005` 或所需 schema 时 fail closed。普通 stone-contest 由 `BaseApplication -> BaseStoneContestSqlRepository` 承担，在 `base.003` 回执表上执行单事务余额 CAS；重复 operation 只读回首次结果，缺少迁移或玩家字段时 fail closed，不在请求期建表。通用命令 `Cooldown` 的体力扣除由 `PlayerStaminaApplication -> PlayerStaminaSqlRepository` 按 profile 首行 `rowid` 做原子 CAS；缺 schema、用户或快照变化时拒绝继续，不在请求期建表。旧 `StoneContestService` 仅保留显式兼容/回滚调用。
 ## 定时任务
-无。
+每分钟恢复未满体力。任务通过 `recover_player_stamina -> PlayerStaminaApplication -> PlayerStaminaSqlRepository` 执行，按 `XIUXIAN_STAMINA_RECOVERY_BATCH_SIZE` 分批更新并用 `MIN` 封顶；不读取完整用户列表、不在请求或任务路径建表。缺少数据库/schema 时 fail closed，`stamina_recovery_points=0` 直接返回，避免空转。
 ## 配置项
 `base_enabled`。
 ## 适配器差异
 NoneBot 和 Web 只负责输入输出转换。
 ## 测试与手工验收
-覆盖余额不足、状态冲突、重复操作和异常回滚。
+覆盖余额不足、状态冲突、重复操作和异常回滚；体力恢复覆盖多批更新、上限封顶、零恢复点、缺 schema fail closed，以及有界查询约束。
 ## 灰度开关、回滚和已知限制
 关闭开关可回退旧基础玩法；旧数值算法暂不复制。
 
