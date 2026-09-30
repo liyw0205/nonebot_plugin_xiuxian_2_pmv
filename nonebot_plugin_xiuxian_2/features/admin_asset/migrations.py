@@ -186,6 +186,42 @@ def apply_admin_impart_stone_batch(uow: DatabaseUnitOfWork) -> None:
     )
 
 
+def apply_admin_item_batch(uow: DatabaseUnitOfWork) -> None:
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS admin_item_batch_grant_operations("
+        "operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,total INTEGER NOT NULL,"
+        "completed INTEGER NOT NULL DEFAULT 0,added INTEGER NOT NULL DEFAULT 0,"
+        "status TEXT NOT NULL DEFAULT 'running',created_at TEXT NOT NULL,updated_at TEXT NOT NULL)"
+    )
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS admin_item_batch_grant_progress("
+        "operation_id TEXT NOT NULL,user_id TEXT NOT NULL,added INTEGER NOT NULL,"
+        "PRIMARY KEY(operation_id,user_id))"
+    )
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS admin_item_batch_operations("
+        "operation_id TEXT PRIMARY KEY,action TEXT NOT NULL,payload TEXT NOT NULL,total INTEGER NOT NULL,"
+        "status TEXT NOT NULL DEFAULT 'running',"
+        "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+    )
+    uow.execute(
+        "CREATE INDEX IF NOT EXISTS admin_item_batch_running_idx "
+        "ON admin_item_batch_operations(action,status,created_at)"
+    )
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS admin_item_batch_targets("
+        "operation_id TEXT NOT NULL,user_id TEXT NOT NULL,status TEXT NOT NULL DEFAULT 'pending',"
+        "added_quantity INTEGER NOT NULL DEFAULT 0,removed_quantity INTEGER NOT NULL DEFAULT 0,"
+        "result_json TEXT NOT NULL DEFAULT '{}',created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,"
+        "PRIMARY KEY(operation_id,user_id),"
+        "FOREIGN KEY(operation_id) REFERENCES admin_item_batch_operations(operation_id))"
+    )
+    uow.execute(
+        "CREATE INDEX IF NOT EXISTS admin_item_batch_targets_pending_idx "
+        "ON admin_item_batch_targets(operation_id,status,user_id)"
+    )
+
+
 __all__ = [
     "apply_admin_asset",
     "apply_admin_accessory_operations",
@@ -195,6 +231,7 @@ __all__ = [
     "apply_admin_item_grant",
     "apply_admin_impart_stone_operations",
     "apply_admin_impart_stone_batch",
+    "apply_admin_item_batch",
     "apply_admin_realm_changes",
     "apply_admin_stone_adjustment",
     "apply_admin_stone_batch",

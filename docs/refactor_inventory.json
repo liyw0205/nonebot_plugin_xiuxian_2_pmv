@@ -2641,6 +2641,8 @@
     "admin_impart_stone_operations",
     "admin_item_batch_grant_operations",
     "admin_item_batch_grant_progress",
+    "admin_item_batch_operations",
+    "admin_item_batch_targets",
     "admin_item_destroy_operations",
     "admin_item_grant_operations",
     "admin_level_change_operations",

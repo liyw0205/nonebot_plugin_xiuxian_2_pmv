@@ -18,6 +18,7 @@ from .item_repository import AdminItemSqlRepository
 from .impart_stone_repository import AdminImpartStoneSqlRepository
 from .impart_stone_batch_repository import AdminImpartStoneBatchSqlRepository
 from .item_destroy_repository import AdminItemDestroySqlRepository
+from .item_batch_repository import AdminItemBatchSqlRepository
 from .exp_repository import AdminExpAdjustmentSqlRepository
 from .level_repository import AdminLevelChangeSqlRepository
 from .root_repository import AdminRootChangeSqlRepository
@@ -284,6 +285,52 @@ class AdminAssetApplication:
             item_id,
             item_name,
             quantity,
+            chunk_size=chunk_size,
+        )
+
+    def find_running_item_batch(
+        self,
+        *,
+        action: str,
+        operator_id: str,
+        item_id: int,
+        item_name: str,
+        item_type: str,
+        quantity: int,
+        max_goods_num: int = 0,
+    ) -> str | None:
+        return AdminItemBatchSqlRepository(self.database).find_running(
+            action,
+            operator_id,
+            item_id,
+            item_name,
+            item_type,
+            quantity,
+            max_goods_num,
+        )
+
+    def adjust_item_batch(
+        self,
+        *,
+        action: str,
+        operation_id: str,
+        operator_id: str,
+        item_id: int,
+        item_name: str,
+        item_type: str,
+        quantity: int,
+        max_goods_num: int = 0,
+        chunk_size: int = 100,
+    ):
+        return AdminItemBatchSqlRepository(self.database).adjust(
+            action,
+            operation_id,
+            operator_id,
+            item_id,
+            item_name,
+            item_type,
+            quantity,
+            max_goods_num,
             chunk_size=chunk_size,
         )
 

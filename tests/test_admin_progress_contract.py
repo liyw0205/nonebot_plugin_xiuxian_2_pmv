@@ -27,5 +27,10 @@ class AdminProgressContractTests(unittest.TestCase):
             "accessory_batch_disk_preflight_and_bounded_targets",
             "accessory_batch_startup_migration_registered",
             "accessory_batch_migration_game_only",
+            "item_batch_application_owned",
+            "item_batch_request_path_has_no_ddl",
+            "item_batch_disk_preflight_and_bounded_roster",
+            "item_batch_startup_migration_registered",
+            "item_batch_migration_game_only",
         ):
             self.assertTrue(admin[key], key)

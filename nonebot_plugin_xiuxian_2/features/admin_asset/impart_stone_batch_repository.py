@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import shutil
-import sqlite3
 from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
@@ -204,7 +203,7 @@ class AdminImpartStoneBatchSqlRepository:
                 for row in rows:
                     if self._matches_request(str(row["payload_prefix"]), request):
                         return str(row["operation_id"])
-        except (OSError, ValueError, sqlite3.Error):
+        except Exception:
             return None
         return None
 

@@ -62,7 +62,21 @@ class AdminItemDestroySqlRepository:
                 return False
         return True
 
-    def destroy(self, operation_id: str, operator_id: str, user_id: str, item_id: int, item_name: str, item_type: str, quantity: int, expected_quantity: int, *, target_name: str = "") -> AdminItemDestroyResult:
+    def destroy(
+        self,
+        operation_id: str,
+        operator_id: str,
+        user_id: str,
+        item_id: int,
+        item_name: str,
+        item_type: str,
+        quantity: int,
+        expected_quantity: int,
+        *,
+        target_name: str = "",
+        audit_action: str = "admin_item_cost",
+        audit_trace_id: str | None = None,
+    ) -> AdminItemDestroyResult:
         operation_id, operator_id, user_id = str(operation_id).strip(), str(operator_id).strip(), str(user_id).strip()
         item_id, quantity, expected_quantity = int(item_id), int(quantity), int(expected_quantity)
         if not operation_id or not operator_id or not user_id or item_id <= 0 or quantity <= 0 or expected_quantity < 0:
@@ -100,7 +114,11 @@ class AdminItemDestroySqlRepository:
                 return AdminItemDestroyResult("state_changed")
             item_delta = json.dumps([{"id": item_id, "name": str(item_name), "type": str(item_type), "amount": -removed}], ensure_ascii=True, separators=(",", ":"))
             detail = json.dumps({"operator_id": operator_id, "target_name": str(target_name), "requested_quantity": quantity, "previous_quantity": expected_quantity, "final_quantity": final}, ensure_ascii=True, sort_keys=True, separators=(",", ":"))
-            uow.execute("INSERT INTO economy_log(user_id,source,action,item_delta,detail,trace_id,created_at) VALUES(?,'admin','admin_item_cost',?,?,?,CURRENT_TIMESTAMP)", (user_id, item_delta, detail, operation_id))
+            uow.execute(
+                "INSERT INTO economy_log(user_id,source,action,item_delta,detail,trace_id,created_at) "
+                "VALUES(?,'admin',?,?,?,?,CURRENT_TIMESTAMP)",
+                (user_id, audit_action, item_delta, detail, str(audit_trace_id or operation_id)),
+            )
             uow.execute("INSERT INTO admin_item_destroy_operations(operation_id,payload,previous_quantity,final_quantity,removed_quantity) VALUES(?,?,?,?,?)", (operation_id, payload, expected_quantity, final, removed))
             return AdminItemDestroyResult("destroyed", expected_quantity, final, removed)
 

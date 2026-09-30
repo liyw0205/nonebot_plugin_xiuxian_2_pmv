@@ -71,7 +71,6 @@ from .admin_helpers import (
 )
 from .transaction_service import AdminExpAdjustmentService
 from .transaction_service import AdminItemDestroyService
-from .transaction_service import AdminItemBatchGrantService
 from .transaction_service import AdminPlayerStatusResetService
 from .transaction_service import AdminPlayerStatusBatchResetService
 from .transaction_service import AdminBlackhouseStatusService
@@ -86,7 +85,6 @@ _admin_exp_adjustment_service_instance = None
 admin_asset_application = AdminAssetApplication(get_paths().game_db)
 admin_application = AdminApplication(get_paths().game_db)
 _admin_item_destroy_service_instance = None
-_admin_item_batch_grant_service_instance = None
 _admin_player_status_reset_service_instance = None
 _admin_player_status_batch_reset_service_instance = None
 _admin_blackhouse_status_service_instance = None
@@ -132,13 +130,6 @@ def _admin_exp_adjustment_service():
     if _admin_exp_adjustment_service_instance is None:
         _admin_exp_adjustment_service_instance = AdminExpAdjustmentService(get_paths().game_db)
     return _admin_exp_adjustment_service_instance
-
-
-def _admin_item_batch_grant_service():
-    global _admin_item_batch_grant_service_instance
-    if _admin_item_batch_grant_service_instance is None:
-        _admin_item_batch_grant_service_instance = AdminItemBatchGrantService(get_paths().game_db)
-    return _admin_item_batch_grant_service_instance
 
 
 def _admin_item_destroy_service():
@@ -964,14 +955,12 @@ async def cz_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Me
 
     # ===== 全服发放 =====
     if target and str(target).lower() == "all":
-        all_users = _sql_message().get_all_user_id()
-        if not all_users:
-            await handle_send(bot, event, "当前没有可发放的用户。")
-            await cz.finish()
-
-        users = all_users
         operator_id = str(get_user_id(event) or "unknown")
         if is_accessory:
+            users = _sql_message().get_all_user_id()
+            if not users:
+                await handle_send(bot, event, "当前没有可发放的用户。")
+                await cz.finish()
             operation_id = admin_asset_application.find_running_accessory_batch(
                 player_database=get_paths().player_db,
                 action="grant",
@@ -1028,25 +1017,48 @@ async def cz_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Me
                 fail_prefix="全服饰品发放失败",
             )
         else:
-            operation_id = _admin_operation_id(event, "item-add-all", str(goods_id))
+            max_goods_num = int(XiuConfig().max_goods_num)
+            operation_id = admin_asset_application.find_running_item_batch(
+                action="grant",
+                operator_id=operator_id,
+                item_id=goods_id,
+                item_name=item_info["name"],
+                item_type=goods_type,
+                quantity=quantity,
+                max_goods_num=max_goods_num,
+            ) or _admin_operation_id(event, "item-add-all", str(goods_id))
 
             def _work():
                 return run_chunked_until_done(
-                    lambda: admin_application.grant_item_batch(
-                        operation_id,
-                        operator_id,
-                        users,
-                        goods_id,
-                        item_info["name"],
-                        goods_type,
-                        quantity,
-                        int(XiuConfig().max_goods_num),
+                    lambda: admin_asset_application.adjust_item_batch(
+                        action="grant",
+                        operation_id=operation_id,
+                        operator_id=operator_id,
+                        item_id=goods_id,
+                        item_name=item_info["name"],
+                        item_type=goods_type,
+                        quantity=quantity,
+                        max_goods_num=max_goods_num,
                     )
                 )
 
             def _done(result):
                 if result.status == "operation_conflict":
                     return "本次全服物品发放与已记录事件冲突"
+                if result.status == "in_progress":
+                    return "相同的全服物品发放批次正在执行，请稍后再试。"
+                if result.status == "insufficient_space":
+                    return "可用磁盘空间不足，未启动全服物品发放。"
+                if result.status == "not_ready":
+                    return "全服物品发放服务尚未就绪，请检查启动迁移和物品数据。"
+                if result.status == "no_targets":
+                    return "当前没有可发放的用户。"
+                if result.status == "invalid_schema":
+                    return "玩家名单数据异常，未启动全服物品发放。"
+                if result.status == "legacy_payload_too_large":
+                    return "旧全服发放任务数据过大，已保留原进度，需人工检查。"
+                if result.status == "progress_corrupt":
+                    return "全服物品发放进度数据异常，已停止执行。"
                 return (
                     f"全服发放完成！已处理 {result.completed}/{result.total} 名玩家，"
                     f"实际向 {result.granted_users} 名玩家发放 {item_info['name']} x{quantity}，"
@@ -1058,8 +1070,7 @@ async def cz_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Me
                 event,
                 job_key=f"item-grant-all:{goods_id}:{quantity}",
                 start_msg=(
-                    f"🔄 全服物品【{item_info['name']}】发放已在后台开始"
-                    f"（共 {len(users)} 人），完成后另行通知。"
+                    f"🔄 全服物品【{item_info['name']}】发放已在后台开始，完成后另行通知。"
                 ),
                 work=_work,
                 done_msg=_done,
@@ -1230,13 +1241,12 @@ async def hmll_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: 
 
     # ===== 全服扣除 =====
     if target and str(target).lower() == "all":
-        all_users = _sql_message().get_all_user_id()
-        if not all_users:
-            await handle_send(bot, event, "当前没有可扣除的用户。")
-            await hmll.finish()
-
+        operator_id = str(get_user_id(event) or "unknown")
         if is_accessory:
-            operator_id = str(get_user_id(event) or "unknown")
+            users = _sql_message().get_all_user_id()
+            if not users:
+                await handle_send(bot, event, "当前没有可扣除的用户。")
+                await hmll.finish()
             operation_id = admin_asset_application.find_running_accessory_batch(
                 player_database=get_paths().player_db,
                 action="destroy",
@@ -1247,7 +1257,6 @@ async def hmll_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: 
                 quantity=quantity,
                 max_accessories=0,
             ) or _admin_operation_id(event, "accessory-destroy-all", str(goods_id))
-            users = all_users
 
             def _work():
                 return run_chunked_until_done(
@@ -1292,36 +1301,61 @@ async def hmll_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: 
             )
             await hmll.finish()
         else:
-            success_user_count = 0
-            total_removed = 0
-            log_context = _admin_economy_context(
-                event,
-                "admin_item_cost_all",
+            operation_id = admin_asset_application.find_running_item_batch(
+                action="destroy",
+                operator_id=operator_id,
                 item_id=goods_id,
                 item_name=item_info["name"],
-                target="all",
-            )
-            for uid in all_users:
-                uid_str = str(uid)
-                try:
-                    # 普通物品：先检查数量再扣
-                    have = _sql_message().goods_num(uid_str, goods_id)
-                    if have > 0:
-                        deduct = min(quantity, have)
-                        _sql_message().update_back_j(
-                            uid_str,
-                            goods_id,
-                            num=deduct,
-                            log_context=log_context,
-                        )
-                        success_user_count += 1
-                        total_removed += deduct
-                except Exception as e:
-                    logger.error(f"毁灭力量全服扣除失败 user_id={uid}: {e}")
-            msg = f"全服扣除完成！共影响 {success_user_count} 名玩家，累计扣除 {item_info['name']} x{total_removed}"
+                item_type=item_info.get("type", ""),
+                quantity=quantity,
+            ) or _admin_operation_id(event, "item-cost-all", str(goods_id))
 
-        await handle_send(bot, event, msg)
-        await hmll.finish()
+            def _work():
+                return run_chunked_until_done(
+                    lambda: admin_asset_application.adjust_item_batch(
+                        action="destroy",
+                        operation_id=operation_id,
+                        operator_id=operator_id,
+                        item_id=goods_id,
+                        item_name=item_info["name"],
+                        item_type=item_info.get("type", ""),
+                        quantity=quantity,
+                    )
+                )
+
+            def _done(result):
+                if result.status == "operation_conflict":
+                    return "本次全服物品扣除与已记录事件冲突"
+                if result.status == "in_progress":
+                    return "相同的全服物品扣除批次正在执行，请稍后再试。"
+                if result.status == "insufficient_space":
+                    return "可用磁盘空间不足，未启动全服物品扣除。"
+                if result.status == "not_ready":
+                    return "全服物品扣除服务尚未就绪，请检查启动迁移和物品数据。"
+                if result.status == "no_targets":
+                    return "当前没有可扣除的用户。"
+                if result.status == "invalid_schema":
+                    return "玩家名单数据异常，未启动全服物品扣除。"
+                if result.status == "legacy_payload_too_large":
+                    return "旧全服发放任务数据过大，已保留原进度，需人工检查。"
+                if result.status == "progress_corrupt":
+                    return "全服物品扣除进度数据异常，已停止执行。"
+                return (
+                    f"全服扣除完成！已处理 {result.completed}/{result.total} 名玩家，"
+                    f"共影响 {result.affected_users} 名玩家，累计扣除"
+                    f"【{item_info['name']}】{result.removed} 件，跳过 {result.skipped_users} 名"
+                )
+
+            await spawn_admin_job(
+                bot,
+                event,
+                job_key=f"item-destroy-all:{goods_id}:{quantity}",
+                start_msg=f"🔄 全服物品【{item_info['name']}】扣除已在后台开始，完成后另行通知。",
+                work=_work,
+                done_msg=_done,
+                fail_prefix="全服物品扣除失败",
+            )
+            await hmll.finish()
 
     # ===== 指定玩家扣除 =====
     if target:

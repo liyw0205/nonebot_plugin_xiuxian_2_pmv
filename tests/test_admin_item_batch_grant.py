@@ -5,16 +5,19 @@ import nonebot
 nonebot.init()
 
 
-def test_admin_facade_defers_item_batch_grant_service_construction():
+def test_admin_facade_no_longer_constructs_legacy_item_batch_service():
     from nonebot_plugin_xiuxian_2.xiuxian import xiuxian_admin
 
-    assert xiuxian_admin._admin_item_batch_grant_service_instance is None
+    assert not hasattr(xiuxian_admin, "_admin_item_batch_grant_service_instance")
+    assert "AdminItemBatchGrantService" not in xiuxian_admin.__dict__
 
 def test_admin_item_batch_entry_uses_application():
     source = open("nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py", encoding="utf-8").read()
     start = source.index("async def cz_")
     handler = source[start:source.index("@hmll.handle", start)]
-    assert "admin_application.grant_item_batch(" in handler
+    assert "admin_asset_application.find_running_item_batch(" in handler
+    assert "admin_asset_application.adjust_item_batch(" in handler
+    assert "admin_application.grant_item_batch(" not in handler
 
 from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_admin.transaction_service import AdminItemBatchGrantService
 
