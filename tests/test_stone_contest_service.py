@@ -13,23 +13,22 @@ from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_base.transaction_service import St
 from tests.test_db_backend import db_backend
 
 
-def test_base_facade_defers_stone_contest_service_construction():
+def test_base_facade_does_not_construct_theft_compatibility_service():
     base = importlib.import_module(
         "nonebot_plugin_xiuxian_2.xiuxian.xiuxian_base"
     )
-    assert base._stone_contest_service_instance is None
+    assert not hasattr(base, "_stone_contest_service_instance")
 
 
-def test_stone_theft_handler_uses_lazy_contest_service():
+def test_stone_theft_handler_uses_base_application():
     source = Path(
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_base/__init__.py"
     ).read_text(encoding="utf-8")
     handler = source[source.index("@steal_stone.handle"):source.index("@rob_stone.handle")]
-    assert "_stone_contest_service().replay_theft(" in handler
-    assert "_stone_contest_service().settle_theft(" in handler
-    assert "_stone_contest_service_instance = None" in source
-    assert "def _stone_contest_service(" in source
-    assert "stone_contest_service.replay_theft(" not in source
+    assert "base_application.get_stone_theft_result(" in handler
+    assert "base_application.settle_stone_theft(" in handler
+    assert "StoneContestService" not in source
+    assert "_stone_contest_service(" not in source
 
 
 class StoneContestServiceTests(unittest.TestCase):

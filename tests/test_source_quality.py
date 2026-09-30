@@ -2278,30 +2278,30 @@ class SourceQualityTests(unittest.TestCase):
         self.assertIn('"修仙签到" if _legacy_sign_in_enabled', source)
         self.assertIn("handle_sign_in", adapter_source)
 
-    def test_stone_theft_uses_transactional_transfer_service(self) -> None:
+    def test_stone_theft_uses_feature_owned_application(self) -> None:
         base_root = SOURCE_ROOT / "xiuxian" / "xiuxian_base"
         source = (base_root / "__init__.py").read_text(encoding="utf-8")
         handler = source[source.index("@steal_stone.handle"):source.index("@rob_stone.handle")]
-        self.assertIn("_stone_contest_service().replay_theft(", handler)
-        self.assertIn("_stone_contest_service().settle_theft(", handler)
-        self.assertIn("_stone_contest_service_instance = None", source)
-        self.assertIn("def _stone_contest_service(", source)
-        self.assertNotIn("stone_contest_service.replay_theft(", handler)
-        self.assertNotIn("stone_contest_service.transfer(", handler)
+        self.assertIn("base_application.get_stone_theft_result(", handler)
+        self.assertIn("base_application.settle_stone_theft(", handler)
+        self.assertNotIn("StoneContestService", source)
+        self.assertNotIn("_stone_contest_service(", source)
         self.assertLess(
-            handler.index("_stone_contest_service().replay_theft("),
+            handler.index("base_application.get_stone_theft_result("),
             handler.index("random.randint("),
         )
         self.assertNotIn("sql_message.update_ls(", handler)
         self.assertNotIn("sql_message.update_user_stamina(", handler)
         self.assertNotIn("Cooldown(stamina_cost=10", handler)
         service_source = (base_root / "stone_contest_service.py").read_text(encoding="utf-8")
-        implementation_source = (
-            SOURCE_ROOT / "compatibility" / "legacy_base_stone_contest.py"
-        ).read_text(encoding="utf-8")
         self.assertIn("legacy_base_stone_contest", service_source)
-        self.assertIn("BEGIN IMMEDIATE", implementation_source)
-        self.assertIn("stone_contest_operations", implementation_source)
+        feature_repository = (
+            SOURCE_ROOT / "features" / "base" / "theft_repository.py"
+        ).read_text(encoding="utf-8")
+        self.assertIn("immediate=True", feature_repository)
+        self.assertIn("stone_contest_operations", feature_repository)
+        self.assertNotIn("CREATE TABLE", feature_repository)
+        self.assertNotIn("ALTER TABLE", feature_repository)
 
     def test_stone_robbery_uses_transactional_transfer_service(self) -> None:
         base_root = SOURCE_ROOT / "xiuxian" / "xiuxian_base"

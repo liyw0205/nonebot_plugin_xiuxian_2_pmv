@@ -54,7 +54,6 @@ from .stone_limit import stone_limit
 from ...features.sign_in.application import SignInApplication
 from ...features.sign_in.lottery_application import LotteryApplication
 from ...features.sign_in.effects import NullSignInEffects
-from .transaction_service import StoneContestService
 from .transaction_service import StoneRobberySettlementService
 from .registration_batch import RegistrationBatcher, RegistrationRequest
 from .breakthrough_tribulation import *  # noqa: F401,F403
@@ -90,7 +89,6 @@ def _lottery_application() -> LotteryApplication:
 
 base_application = BaseApplication(get_paths().game_db, get_paths().player_db)
 _stone_gift_service_instance = None
-_stone_contest_service_instance = None
 _stone_robbery_service_instance = None
 runtime_clock = SystemClock()
 runtime_random = SystemRandom()
@@ -111,13 +109,6 @@ def _stone_gift_service():
 
         _stone_gift_service_instance = StoneGiftService(get_paths().game_db)
     return _stone_gift_service_instance
-
-
-def _stone_contest_service():
-    global _stone_contest_service_instance
-    if _stone_contest_service_instance is None:
-        _stone_contest_service_instance = StoneContestService(get_paths().game_db)
-    return _stone_contest_service_instance
 
 
 def _stone_robbery_service():
@@ -1372,7 +1363,7 @@ async def steal_stone_(bot: Bot, event: GroupMessageEvent, args: Message = Comma
         await steal_stone.finish()
 
     operation_id = _stone_theft_operation_id(event, user_id)
-    previous = _stone_contest_service().replay_theft(operation_id, user_id, steal_qq)
+    previous = base_application.get_stone_theft_result(operation_id, user_id, steal_qq)
     if previous is not None:
         if not previous.succeeded:
             await handle_send(bot, event, "本次偷窃与首次请求目标不一致，未重复结算。")
@@ -1406,16 +1397,18 @@ async def steal_stone_(bot: Bot, event: GroupMessageEvent, args: Message = Comma
         requested_amount = min(runtime_random.randint(lower, upper), 1000000)
         outcome = "success"
 
-    settlement = _stone_contest_service().settle_theft(
-        operation_id,
-        user_id,
-        steal_qq,
+    settlement = base_application.settle_stone_theft(
+        operation_id=operation_id,
+        thief_id=user_id,
+        victim_id=steal_qq,
         outcome=outcome,
         requested_amount=requested_amount,
         penalty_amount=coststone_num,
         stamina_cost=10,
     )
-    if settlement.status == "stamina_insufficient":
+    if settlement.status == "schema_missing":
+        msg = "偷窃服务尚未就绪，请检查启动迁移。"
+    elif settlement.status == "stamina_insufficient":
         msg = "你没有足够的体力，请等待体力恢复后再试！"
     elif settlement.status == "stone_insufficient":
         msg = "道友的偷窃准备(灵石)不足，请打工之后再切格瓦拉！"

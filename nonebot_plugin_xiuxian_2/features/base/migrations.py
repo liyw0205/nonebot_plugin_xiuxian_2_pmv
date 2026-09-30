@@ -24,4 +24,45 @@ def apply_base_player_rename_operations(uow: DatabaseUnitOfWork) -> None:
         uow.execute("ALTER TABLE player_rename_operations ADD COLUMN payload TEXT")
 
 
-__all__ = ["apply_base", "apply_base_player_rename_operations"]
+def apply_base_stone_contest_operations(uow: DatabaseUnitOfWork) -> None:
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS stone_contest_operations("
+        "operation_id TEXT PRIMARY KEY,payer_id TEXT NOT NULL,receiver_id TEXT NOT NULL,"
+        "requested_amount INTEGER NOT NULL,transferred_amount INTEGER NOT NULL,"
+        "payer_balance INTEGER NOT NULL,operation_type TEXT NOT NULL DEFAULT 'transfer',"
+        "thief_id TEXT NOT NULL DEFAULT '',victim_id TEXT NOT NULL DEFAULT '',"
+        "outcome TEXT NOT NULL DEFAULT '',penalty_amount INTEGER NOT NULL DEFAULT 0,"
+        "stamina_cost INTEGER NOT NULL DEFAULT 0,thief_stamina INTEGER NOT NULL DEFAULT 0,"
+        "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+    )
+    additions = {
+        "operation_type": "TEXT NOT NULL DEFAULT 'transfer'",
+        "thief_id": "TEXT NOT NULL DEFAULT ''",
+        "victim_id": "TEXT NOT NULL DEFAULT ''",
+        "outcome": "TEXT NOT NULL DEFAULT ''",
+        "penalty_amount": "INTEGER NOT NULL DEFAULT 0",
+        "stamina_cost": "INTEGER NOT NULL DEFAULT 0",
+        "thief_stamina": "INTEGER NOT NULL DEFAULT 0",
+    }
+    columns = {
+        str(row["name"]).casefold()
+        for row in uow.query_all('PRAGMA table_info("stone_contest_operations")')
+    }
+    required = {
+        "operation_id", "payer_id", "receiver_id", "requested_amount",
+        "transferred_amount", "payer_balance",
+    }
+    if not required.issubset(columns):
+        raise RuntimeError("stone_contest_operations has an unsupported legacy schema")
+    for name, definition in additions.items():
+        if name not in columns:
+            uow.execute(
+                f"ALTER TABLE stone_contest_operations ADD COLUMN {name} {definition}"
+            )
+
+
+__all__ = [
+    "apply_base",
+    "apply_base_player_rename_operations",
+    "apply_base_stone_contest_operations",
+]

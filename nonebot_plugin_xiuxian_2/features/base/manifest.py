@@ -6,7 +6,7 @@ FEATURE = FeatureManifest(
     commands=(CommandSpec("修炼", aliases=("突破",), permission="user"),),
     routes=tuple(RouteSpec(f"/api/v1/base/{action}", methods=("POST",), permission="user") for action in _ACTIONS),
     config=(ConfigSpec("base_enabled", "bool", default=True, reloadable=True, description="基础修炼事务灰度开关"),),
-    migration_version="base.002", test_tag="base",
+    migration_version="base.003", test_tag="base",
 )
 
 __all__ = ["FEATURE"]

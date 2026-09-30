@@ -6,9 +6,10 @@
 ## Web API
 `POST /api/v1/base/{breakthrough,tribulation,rename,stone_contest,stone_robbery,sign}`，权限 `user`，要求幂等键。
 ## 数据模型与迁移
-迁移 `base.001` 创建 feature 标记，`base.002` 在 game DB 启动时预建改名回执表并为旧表补充可空 `payload` 列；历史玩家/修炼表仍由既有 schema owner 持有。
+迁移 `base.001` 创建 feature 标记，`base.002` 在 game DB 启动时预建改名回执表并为旧表补充可空 `payload` 列；`base.003` 预建灵石争夺回执表，并为旧表补齐 theft 字段。历史玩家/修炼表仍由既有 schema owner 持有。
 ## 事务与失败回滚
 改名写入与回执由 `BaseApplication -> BaseRenameSqlRepository` 承担；重放查询也经 application 使用只读 repository。旧回执缺少 `payload` 时仍作为已完成操作返回，不改动玩家或背包数据。请求路径不创建表或补列，缺少 `base.002` 时拒绝写入。
+`偷灵石` 的查重与结算由 `BaseApplication -> BaseStoneTheftSqlRepository` 承担，在 game DB 的单一 immediate UoW 中更新灵石、体力并写回执；缺少 `base.003` 或所需玩家 schema 时 fail closed。`抢劫` 与普通 stone-contest 兼容动作仍保留旧 service 路径。
 ## 定时任务
 无。
 ## 配置项

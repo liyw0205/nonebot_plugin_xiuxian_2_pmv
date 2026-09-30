@@ -68,7 +68,11 @@ from .features.buff.migrations import (
     apply_partner_token_usage,
 )
 from .features.base.manifest import FEATURE as BASE_FEATURE
-from .features.base.migrations import apply_base, apply_base_player_rename_operations
+from .features.base.migrations import (
+    apply_base,
+    apply_base_player_rename_operations,
+    apply_base_stone_contest_operations,
+)
 from .features.back.manifest import FEATURE as BACK_FEATURE
 from .features.back.migrations import apply_accessory_affix_operations, apply_alchemy, apply_back, apply_backpack_repair, apply_blessed_flag_replace, apply_breakthrough_rate_item, apply_cultivation_item, apply_equipment, apply_item_use, apply_lottery_talisman, apply_permanent_atk_item, apply_pet_egg_use, apply_recovery_item, apply_skill_learning, apply_stone_reward, apply_three_cultivation_pill, apply_unbind
 from .features.trade.manifest import FEATURE as TRADE_FEATURE
@@ -265,6 +269,7 @@ def build_migrations() -> tuple[Migration, ...]:
         Migration("bank.003", "bank_legacy_account_backfill", apply_bank_legacy_accounts),
         Migration("base.001", "base_feature_migrations", apply_base),
         Migration("base.002", "player_rename_operations", apply_base_player_rename_operations),
+        Migration("base.003", "stone_contest_operations", apply_base_stone_contest_operations),
         Migration("beg.001", "beg_feature_migrations", apply_beg),
         Migration("boss.001", "boss_feature_migrations", apply_boss),
         Migration("boss.002", "boss_purchase_operations", apply_boss_purchase),
