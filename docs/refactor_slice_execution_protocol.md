@@ -175,7 +175,7 @@ compileall、architecture、inventory、diff check 与五库 recovery 通过；�
 
 ## 当前切片与下一切片选择
 
-当前执行基线（2026-09-30）：活动 `tasks`、`pass`、`boss_milestone`、`boss_rank` 子领奖由 game DB feature repositories、幂等账本和 reservations 管理奖励；`activity_state.001/.002` 已将玩法状态 schema 与旧数据回填到 `game_db`。旧 `activity.db` 仍保留配置事件数据和备份用途；不得删除，也不能把其中参与上限、资格和审计的历史日志当缓存。下一片收口 bank 历史账户生命周期，随后继续审计仍可达的 `xiuxian2_handle`/legacy transaction 路径。历史 ATTACH 版本的跨库崩溃仍需真实数据备份/P7 资产核验；正式发布 recovery/reconcile 与全局 legacy blockers 仍未完成。
+当前执行基线（2026-09-30）：活动 `tasks`、`pass`、`boss_milestone`、`boss_rank` 子领奖由 game DB feature repositories、幂等账本和 reservations 管理奖励；`activity_state.001/.002` 已将玩法状态 schema 与旧数据回填到 `game_db`。旧 `activity.db` 仍保留配置事件数据和备份用途；不得删除，也不能把其中参与上限、资格和审计的历史日志当缓存。bank 历史账户生命周期审计已收口：`bank.003` 是唯一 startup legacy projection 回填，默认读写不再访问旧账户；兼容 writer/rollback 保留但生产不可达，自动结息 jobs 为空。下一片按 progress 6.2 审计仍可达的 `xiuxian2_handle`/legacy transaction 路径。历史 ATTACH 版本的跨库崩溃仍需真实数据备份/P7 资产核验；正式发布 recovery/reconcile 与全局 legacy blockers 仍未完成。
 
 最近完成 `work abort cleanup application cutover`：终止、未接/过期悬赏清理与重置改经 `WorkAbortCleanupApplication -> WorkAbortCleanupSqlRepository`；旧 service 移至 compatibility 模块并保留 transaction API re-export。game-only `work.006` 预建 active snapshot 与 cleanup ledger，缺 migration 时拒绝写入且不在请求期建表。聚焦回归 `68 passed`、source-quality `5 passed`、progress `1 passed`；compileall、inventory、progress、隔离 architecture (`ok=true`) 与 diff check 通过。五库 recovery 覆盖 197 项 migration，全部 applied、pending 为空，`work.006` 仅路由 game DB，reconcile clean。pytest、字节码、recovery 和 architecture 临时产物收尾时清理，未触碰仓库 `data/`、运行数据库或用户 `boss_info.json`。下一片迁移 `WorkClaimSqlRepository` 的 claim/active-snapshot 请求期 schema 到启动 migration；settlement schema、全局 legacy transaction services、`xiuxian2_handle` 与真实发布迁移/P7 仍开放。
 

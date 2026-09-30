@@ -8,6 +8,7 @@ of the old implementation.  It is a progress instrument, not a completion gate.
 from __future__ import annotations
 
 import argparse
+import ast
 import json
 import re
 from pathlib import Path
@@ -43,6 +44,52 @@ def _counts() -> dict[str, int]:
     handle = PACKAGE / "xiuxian" / "xiuxian_utils" / "xiuxian2_handle.py"
     counts["xiuxian2_handle_bytes"] = handle.stat().st_size if handle.is_file() else 0
     return counts
+
+
+def _has_production_call(*names: str, excluding: set[Path] | None = None) -> bool:
+    excluded = excluding or set()
+    for path in _py_files():
+        if path in excluded:
+            continue
+        try:
+            tree = ast.parse(path.read_text(encoding="utf-8", errors="ignore"))
+        except SyntaxError:
+            continue
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+            target = node.func.id if isinstance(node.func, ast.Name) else (
+                node.func.attr if isinstance(node.func, ast.Attribute) else ""
+            )
+            if target in names:
+                return True
+    return False
+
+
+def _has_production_bank_savef_import() -> bool:
+    facade = PACKAGE / "xiuxian" / "xiuxian_bank" / "__init__.py"
+    writer = PACKAGE / "compatibility" / "legacy_bank_account_storage.py"
+    for path in _py_files():
+        if path in {facade, writer}:
+            continue
+        try:
+            tree = ast.parse(path.read_text(encoding="utf-8", errors="ignore"))
+        except SyntaxError:
+            continue
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ImportFrom) and node.module:
+                if node.module.endswith("xiuxian_bank") or node.module.endswith("legacy_bank_account_storage"):
+                    if any(alias.name == "savef" for alias in node.names):
+                        return True
+                if node.module.endswith("compatibility") and any(
+                    alias.name == "legacy_bank_account_storage" for alias in node.names
+                ):
+                    return True
+            elif isinstance(node, ast.Import):
+                for alias in node.names:
+                    if alias.name.endswith("xiuxian_bank") or alias.name.endswith("legacy_bank_account_storage"):
+                        return True
+    return False
 
 
 def _slice_status() -> dict[str, dict[str, object]]:
@@ -223,6 +270,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
     bank_legacy_account_repository = (PACKAGE / "features" / "bank" / "legacy_account_repository.py").read_text(encoding="utf-8")
     bank_legacy_receipts = (PACKAGE / "compatibility" / "legacy_bank_operation_receipts.py").read_text(encoding="utf-8")
     bank_legacy_account_storage = (PACKAGE / "compatibility" / "legacy_bank_account_storage.py").read_text(encoding="utf-8")
+    bank_jobs = (PACKAGE / "features" / "bank" / "jobs.py").read_text(encoding="utf-8")
     map_facade = (PACKAGE / "xiuxian" / "xiuxian_map" / "__init__.py").read_text(encoding="utf-8")
     map_application = (PACKAGE / "features" / "map" / "application.py").read_text(encoding="utf-8")
     map_reward_resolver = (PACKAGE / "features" / "map" / "rewards.py").read_text(encoding="utf-8")
@@ -1047,6 +1095,22 @@ def _slice_status() -> dict[str, dict[str, object]]:
                 and "legacy_bank_account_storage" in bank_facade
                 and "def savef(" in bank_legacy_account_storage
                 and "update_or_write_data(" in bank_legacy_account_storage
+            ),
+            "legacy_account_writer_has_no_production_callers": (
+                not _has_production_bank_savef_import()
+                and "return legacy_savef(user_id, data)" in bank_facade
+            ),
+            "legacy_account_reader_has_no_production_callers": not _has_production_call(
+                "get_legacy_info",
+                "legacy_record_status",
+            ),
+            "bank_interest_scheduler_absent": "JOBS = ()" in bank_jobs,
+            "legacy_bank_rollback_not_default_composed": (
+                "LegacyBankRepository" not in plugin
+                and not _has_production_call(
+                    "LegacyBankRepository",
+                    excluding={PACKAGE / "features" / "bank" / "repository.py"},
+                )
             ),
             "account_schema_migration_required": (
                 "self.repository.assert_schema_ready(uow)" in bank_account_info_application
