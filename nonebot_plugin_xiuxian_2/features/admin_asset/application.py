@@ -16,6 +16,7 @@ from .stone_repository import AdminStoneSqlRepository
 from .stone_batch_repository import AdminStoneBatchSqlRepository
 from .item_repository import AdminItemSqlRepository
 from .impart_stone_repository import AdminImpartStoneSqlRepository
+from .impart_stone_batch_repository import AdminImpartStoneBatchSqlRepository
 from .item_destroy_repository import AdminItemDestroySqlRepository
 from .exp_repository import AdminExpAdjustmentSqlRepository
 from .level_repository import AdminLevelChangeSqlRepository
@@ -155,6 +156,27 @@ class AdminAssetApplication:
 
     def snapshot_impart_stone(self, user_id: str, *, impart_database: str | Path):
         return AdminImpartStoneSqlRepository(self.database, impart_database).snapshot(user_id)
+
+    def find_running_impart_stone_batch(
+        self, *, operator_id: str, requested_delta: int,
+        impart_database: str | Path,
+    ) -> str | None:
+        return AdminImpartStoneBatchSqlRepository(
+            self.database, impart_database
+        ).find_running(operator_id, requested_delta)
+
+    def adjust_impart_stone_batch(
+        self, *, operation_id: str, operator_id: str, requested_delta: int,
+        impart_database: str | Path, chunk_size: int = 100,
+    ):
+        return AdminImpartStoneBatchSqlRepository(
+            self.database, impart_database
+        ).adjust(
+            operation_id,
+            operator_id,
+            requested_delta,
+            chunk_size=chunk_size,
+        )
 
     def adjust_accessory(
         self, *, operation_id: str, operator_id: str, user_id: str, action: str,

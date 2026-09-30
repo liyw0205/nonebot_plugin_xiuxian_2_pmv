@@ -153,6 +153,39 @@ def apply_admin_accessory_batch(uow: DatabaseUnitOfWork) -> None:
     )
 
 
+def apply_admin_impart_stone_batch(uow: DatabaseUnitOfWork) -> None:
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS admin_impart_stone_batch_operations("
+        "operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,total INTEGER NOT NULL,"
+        "status TEXT NOT NULL DEFAULT 'running',"
+        "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,"
+        "updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+    )
+    uow.execute(
+        "CREATE INDEX IF NOT EXISTS admin_impart_stone_batch_running_idx "
+        "ON admin_impart_stone_batch_operations(status,created_at)"
+    )
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS admin_impart_stone_batch_progress("
+        "operation_id TEXT NOT NULL,user_id TEXT NOT NULL,status TEXT NOT NULL,"
+        "applied_delta INTEGER NOT NULL,result_json TEXT NOT NULL,"
+        "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,"
+        "PRIMARY KEY(operation_id,user_id))"
+    )
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS admin_impart_stone_batch_targets("
+        "operation_id TEXT NOT NULL,user_id TEXT NOT NULL,status TEXT NOT NULL DEFAULT 'pending',"
+        "applied_delta INTEGER NOT NULL DEFAULT 0,result_json TEXT NOT NULL DEFAULT '{}',"
+        "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,"
+        "PRIMARY KEY(operation_id,user_id),"
+        "FOREIGN KEY(operation_id) REFERENCES admin_impart_stone_batch_operations(operation_id))"
+    )
+    uow.execute(
+        "CREATE INDEX IF NOT EXISTS admin_impart_stone_batch_targets_pending_idx "
+        "ON admin_impart_stone_batch_targets(operation_id,status,user_id)"
+    )
+
+
 __all__ = [
     "apply_admin_asset",
     "apply_admin_accessory_operations",
@@ -161,6 +194,7 @@ __all__ = [
     "apply_admin_item_destroy",
     "apply_admin_item_grant",
     "apply_admin_impart_stone_operations",
+    "apply_admin_impart_stone_batch",
     "apply_admin_realm_changes",
     "apply_admin_stone_adjustment",
     "apply_admin_stone_batch",

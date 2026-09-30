@@ -175,7 +175,7 @@ compileall、architecture、inventory、diff check 与五库 recovery 通过；�
 
 ## 当前切片与下一切片选择
 
-管理员资产队列：`.005/.006` 已分别为 item-destroy/item-grant 预建 game DB 回执；`.007` 完成境界/灵根回执 schema；`.008` 预建单人传承石回执；`.009` 预建单人饰品回执。传承石真实余额仍在 legacy `impart_db.xiuxian_impart`，饰品 bag 仍归 player-side `player_accessory` 表；feature 仓储只校验既有 schema，不在请求期建表或补列，game DB 保存兼容操作回执和经济审计。单人默认命令不再通过 legacy service 读写饰品，缺 DB/schema fail closed；全服传承石和全服饰品路径仍保持 legacy batch 实现。
+管理员资产队列：`.005/.006` 已分别为 item-destroy/item-grant 预建 game DB 回执；`.007` 完成境界/灵根回执 schema；`.008` 预建单人传承石回执；`.009` 预建单人饰品回执；`.010` 预建全服饰品批次；`.011` 预建全服传承石批次。传承石真实余额仍在 legacy `impart_db.xiuxian_impart`，饰品 bag 仍归 player-side `player_accessory` 表；feature 仓储只校验既有资产 schema，不在请求期建表或补列，game DB 保存兼容操作回执和经济审计。管理员单人资产、全服饰品和全服传承石命令均走 feature application，缺 DB/schema fail closed；全服普通物品批次和其他管理员边界仍待迁移。
 
 本片验收：admin asset repositories/application/source/progress `33 passed`，architecture/inventory contracts `17 passed`；progress item-destroy/item-grant no-DDL/startup-schema/game-only 门禁均为 true。五库 recovery backup/restore dry-run/restore 成功，`.006` 仅 game DB applied，reconcile clean；隔离 architecture CLI `ok=true`，compileall 与 diff check 通过。item-destroy 前片专属产物已清理；本片 pytest、recovery、architecture 和 pycache 临时目录在本次验收后清理并复核。用户 `boss_info.json` 改动保留。
 
@@ -184,6 +184,8 @@ compileall、architecture、inventory、diff check 与五库 recovery 通过；�
 上一片完成：单人饰品默认路径改由 `AdminAssetApplication -> AdminAccessorySqlRepository` 承担；game-only `admin_asset.009` 预建兼容 operation receipt，player-side 饰品表沿用既有启动迁移。保留旧回执回放、容量/品质/UID 校验、CAS、部分扣除和经济审计；请求路径不建表，缺 schema fail closed。
 
 本片范围：全服饰品 grant/destroy 从旧 transaction service 切到 `AdminAssetApplication -> AdminAccessoryBatchSqlRepository`；新增 game-only `admin_asset.010` 预建批次、legacy progress 和规范化 targets schema。新任务不将全量用户列表塞入 payload，冻结名单和进度分离并限制单块读取；旧内嵌名单及 progress 在恢复时兼容导入。child receipt 幂等恢复、双数据库磁盘空间预检和 production command ownership 有回归覆盖。全服传承石、普通全服物品和其他管理员边界不在本片范围。测试使用 `PYTHONDONTWRITEBYTECODE=1` 与 `-p no:cacheprovider`；不得清理持久进度/receipt、运行数据库/WAL/SHM、备份、`.venv` 或 `.git`。WAL 下 attached 多库崩溃原子性和正式发布 P7 恢复仍为开放风险。
+
+最近完成 `admin global impart-stone batch cutover`：`传承力量 <数量> all` 改走 `AdminAssetApplication -> AdminImpartStoneBatchSqlRepository`，新增 game-only `admin_asset.011` 预建批次 operation、legacy progress 和规范化 targets。新任务在 game DB 内用 `INSERT ... SELECT` 冻结玩家名单，不再由命令层读取/复制完整 ID 列表；每次最多加载 100 个目标，impart 余额仍由单人 feature repository 经 child receipt 更新。旧运行 payload 及已完成 progress 可恢复导入，旧完成任务保留原摘要；旧名单以流式解析、每 500 条写入，超 64 Mi 字符则 fail closed 并保留历史进度；child receipt 已提交但批次进度写入失败时可幂等重放。建批前按 game/impart 所在磁盘可用空间预检，空间不足不创建 operation；缺 migration/schema 不触发请求期 DDL。回归覆盖冻结名单、分块与重放、低磁盘、缺 schema、旧任务恢复、过大 payload 拒绝、进度故障和 migration 幂等。全服普通物品批次是下一片。测试/pyc/pytest cache 使用禁用或专用临时目录并在验收后清理；不得清理持久 receipt/progress、运行 DB/WAL/SHM、备份、`.venv`、`.git` 或用户工作树改动。跨库 WAL 崩溃原子性与正式发布 P7 仍为开放风险。
 
 当前执行基线（2026-09-30）：活动 `tasks`、`pass`、`boss_milestone`、`boss_rank` 子领奖由 game DB feature repositories、幂等账本和 reservations 管理奖励；`activity_state.001/.002` 已将玩法状态 schema 与旧数据回填到 `game_db`。旧 `activity.db` 仍保留配置事件数据和备份用途；不得删除，也不能把其中参与上限、资格和审计的历史日志当缓存。bank 历史账户生命周期审计已收口：`bank.003` 是唯一 startup legacy projection 回填，默认读写不再访问旧账户；兼容 writer/rollback 保留但生产不可达，自动结息 jobs 为空。下一片按 progress 6.2 审计仍可达的 `xiuxian2_handle`/legacy transaction 路径。历史 ATTACH 版本的跨库崩溃仍需真实数据备份/P7 资产核验；正式发布 recovery/reconcile 与全局 legacy blockers 仍未完成。
 

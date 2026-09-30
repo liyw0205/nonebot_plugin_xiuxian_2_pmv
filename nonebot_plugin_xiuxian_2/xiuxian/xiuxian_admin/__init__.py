@@ -72,10 +72,6 @@ from .admin_helpers import (
 from .transaction_service import AdminExpAdjustmentService
 from .transaction_service import AdminItemDestroyService
 from .transaction_service import AdminItemBatchGrantService
-from .transaction_service import AdminImpartStoneAdjustmentService
-from .transaction_service import (
-    AdminImpartStoneBatchAdjustmentService,
-)
 from .transaction_service import AdminPlayerStatusResetService
 from .transaction_service import AdminPlayerStatusBatchResetService
 from .transaction_service import AdminBlackhouseStatusService
@@ -91,8 +87,6 @@ admin_asset_application = AdminAssetApplication(get_paths().game_db)
 admin_application = AdminApplication(get_paths().game_db)
 _admin_item_destroy_service_instance = None
 _admin_item_batch_grant_service_instance = None
-_admin_impart_stone_adjustment_service_instance = None
-_admin_impart_stone_batch_adjustment_service_instance = None
 _admin_player_status_reset_service_instance = None
 _admin_player_status_batch_reset_service_instance = None
 _admin_blackhouse_status_service_instance = None
@@ -103,26 +97,6 @@ def _sql_message():
     if _sql_message_instance is None:
         _sql_message_instance = XiuxianDateManage()
     return _sql_message_instance
-
-
-def _admin_impart_stone_adjustment_service():
-    global _admin_impart_stone_adjustment_service_instance
-    if _admin_impart_stone_adjustment_service_instance is None:
-        _admin_impart_stone_adjustment_service_instance = AdminImpartStoneAdjustmentService(
-            get_paths().game_db, get_paths().impart_db
-        )
-    return _admin_impart_stone_adjustment_service_instance
-
-
-def _admin_impart_stone_batch_adjustment_service():
-    global _admin_impart_stone_batch_adjustment_service_instance
-    if _admin_impart_stone_batch_adjustment_service_instance is None:
-        _admin_impart_stone_batch_adjustment_service_instance = AdminImpartStoneBatchAdjustmentService(
-            get_paths().game_db,
-            get_paths().impart_db,
-            _admin_impart_stone_adjustment_service(),
-        )
-    return _admin_impart_stone_batch_adjustment_service_instance
 
 
 def _admin_player_status_reset_service():
@@ -615,25 +589,35 @@ async def ccll_command_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         if amount == 0:
             await handle_send(bot, event, "全服思恋结晶调整数量不能为 0")
             return
-        all_users = _sql_message().get_all_user_id()
-        if not all_users:
-            await handle_send(bot, event, "当前没有可调整的用户")
-            return
         operator_id = str(get_user_id(event) or "unknown")
-        operation_id = _admin_impart_stone_batch_adjustment_service().find_running(
-            operator_id, amount
+        operation_id = admin_asset_application.find_running_impart_stone_batch(
+            operator_id=operator_id,
+            requested_delta=amount,
+            impart_database=get_paths().impart_db,
         ) or _admin_operation_id(event, "impart-stone-adjust-all", "all")
         action = "增加" if amount > 0 else "扣除"
-        users = list(all_users)
 
         def _work():
             return run_chunked_until_done(
-                lambda: admin_application.adjust_impart_stone_batch(
-                    operation_id, operator_id, users, amount
+                lambda: admin_asset_application.adjust_impart_stone_batch(
+                    operation_id=operation_id,
+                    operator_id=operator_id,
+                    requested_delta=amount,
+                    impart_database=get_paths().impart_db,
                 )
             )
 
         def _done(result):
+            if result.status == "no_targets":
+                return "当前没有可调整的用户"
+            if result.status == "insufficient_space":
+                return "磁盘空间不足，未创建全服传承石调整任务"
+            if result.status == "not_ready":
+                return "管理员传承石服务尚未就绪，请检查传承数据库和启动迁移。"
+            if result.status in {"invalid_schema", "progress_corrupt"}:
+                return "全服传承石调整未执行：用户名单或任务进度数据无效，请检查数据库。"
+            if result.status == "legacy_payload_too_large":
+                return "历史全服传承石任务名单超出安全恢复大小限制，原进度已保留，请联系维护人员处理。"
             if result.status == "operation_conflict":
                 return "本次全服思恋结晶调整与已记录计划冲突"
             return (
@@ -648,7 +632,7 @@ async def ccll_command_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
             bot,
             event,
             job_key=f"impart-stone-all:{operator_id}:{amount}",
-            start_msg=f"🔄 全服思恋结晶{action}已在后台开始（共 {len(users)} 人），完成后另行通知。",
+            start_msg=f"🔄 全服思恋结晶{action}已在后台检查名单并开始，完成后另行通知。",
             work=_work,
             done_msg=_done,
             fail_prefix="全服思恋结晶调整失败",

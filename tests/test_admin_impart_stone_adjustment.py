@@ -16,28 +16,29 @@ from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_admin.transaction_service import (
 from tests.test_db_backend import db_backend
 
 
-def test_admin_facade_defers_impart_stone_service_construction():
+def test_admin_facade_no_longer_constructs_legacy_impart_stone_services():
     admin = importlib.import_module(
         "nonebot_plugin_xiuxian_2.xiuxian.xiuxian_admin"
     )
-    assert admin._admin_impart_stone_adjustment_service_instance is None
-    assert admin._admin_impart_stone_batch_adjustment_service_instance is None
+    assert not hasattr(admin, "_admin_impart_stone_adjustment_service_instance")
+    assert not hasattr(admin, "_admin_impart_stone_batch_adjustment_service_instance")
 
 
-def test_admin_impart_stone_helpers_use_lazy_dual_database_services():
+def test_admin_impart_stone_commands_use_feature_application():
     source = Path(
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py"
     ).read_text(encoding="utf-8")
-    assert "_admin_impart_stone_adjustment_service_instance = None" in source
-    assert "_admin_impart_stone_batch_adjustment_service_instance = None" in source
-    assert "def _admin_impart_stone_adjustment_service(" in source
-    assert "def _admin_impart_stone_batch_adjustment_service(" in source
-    assert "get_paths().game_db" in source
+    assert "_admin_impart_stone_adjustment_service_instance" not in source
+    assert "_admin_impart_stone_batch_adjustment_service_instance" not in source
+    assert "def _admin_impart_stone_adjustment_service(" not in source
+    assert "def _admin_impart_stone_batch_adjustment_service(" not in source
     assert "get_paths().impart_db" in source
     assert "admin_asset_application.adjust_impart_stone(" in source
-    assert "admin_application.adjust_impart_stone_batch(" in source
-    assert "admin_impart_stone_adjustment_service.adjust(" not in source
-    assert "admin_impart_stone_batch_adjustment_service.adjust(" not in source
+    assert "admin_asset_application.adjust_impart_stone_batch(" in source
+    batch_handler = source[
+        source.index("async def ccll_command_") : source.index("@adjust_exp_command.handle")
+    ]
+    assert "get_all_user_id()" not in batch_handler
 
 
 class AdminImpartStoneAdjustmentTests(unittest.TestCase):
@@ -183,8 +184,8 @@ class AdminImpartStoneAdjustmentTests(unittest.TestCase):
         handler = source[start:source.index("@adjust_exp_command.handle", start)]
         self.assertIn("admin_asset_application.adjust_impart_stone(", handler)
         self.assertNotIn("xiuxian_impart.update_stone_num(", handler)
-        self.assertIn("admin_application.adjust_impart_stone_batch(", handler)
-        self.assertIn("admin_application.adjust_impart_stone_batch(", handler)
+        self.assertIn("admin_asset_application.adjust_impart_stone_batch(", handler)
+        self.assertNotIn("admin_application.adjust_impart_stone_batch(", handler)
 
 
 if __name__ == "__main__":

@@ -2637,6 +2637,7 @@
     "admin_feature_migrations",
     "admin_impart_stone_batch_operations",
     "admin_impart_stone_batch_progress",
+    "admin_impart_stone_batch_targets",
     "admin_impart_stone_operations",
     "admin_item_batch_grant_operations",
     "admin_item_batch_grant_progress",
