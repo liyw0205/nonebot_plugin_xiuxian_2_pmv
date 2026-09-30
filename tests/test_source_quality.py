@@ -1077,7 +1077,7 @@ class SourceQualityTests(unittest.TestCase):
         )
         self.assertIn("_sql_message_instance = None", source)
         self.assertIn("def _sql_message(", source)
-        self.assertIn("_sql_message().update_ls(", source)
+        self.assertIn("_economy_application().grant_stone(", source)
         self.assertIn("_sql_message().send_back(", source)
         self.assertNotIn("sql_message = XiuxianDateManage()", source)
 

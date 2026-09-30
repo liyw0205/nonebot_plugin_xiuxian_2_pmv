@@ -13,6 +13,7 @@ from ...infrastructure.clock import SystemClock
 from ...infrastructure.random_source import SystemRandom
 from ...infrastructure.ids import UUIDGenerator
 from ...features.compensation.application import CompensationApplication
+from ...features.base.economy_application import PlayerEconomyApplication
 
 from ..adapter_compat import Bot, MessageEvent, GroupMessageEvent, PrivateMessageEvent
 from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage
@@ -31,6 +32,7 @@ from ..xiuxian_utils.utils import (
 items = Items()
 _sql_message_instance = None
 _reward_claim_service_instance = None
+_economy_application_instance = None
 
 
 def _sql_message():
@@ -48,6 +50,17 @@ def _reward_claim_service():
             max_goods_num=XiuConfig().max_goods_num,
         )
     return _reward_claim_service_instance
+
+
+def _economy_application(database=None):
+    global _economy_application_instance
+    database = database or get_paths().game_db
+    if (
+        _economy_application_instance is None
+        or str(_economy_application_instance.repository.database) != str(database)
+    ):
+        _economy_application_instance = PlayerEconomyApplication(database)
+    return _economy_application_instance
 
 DATA_PATH = Path(__file__).parent / "compensation_data"
 
@@ -390,7 +403,9 @@ def send_reward_to_user(user_id: str, reward_items: List[Dict[str, Any]]) -> Lis
 
     for item in reward_items:
         if item["type"] == "stone":
-            _sql_message().update_ls(user_id, item["quantity"], 1)
+            result = _economy_application().grant_stone(user_id, item["quantity"])
+            if not result.succeeded:
+                continue
             msg_parts.append(f"获得灵石 {number_to(item['quantity'])} 枚")
             continue
 

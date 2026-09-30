@@ -8,6 +8,8 @@ except Exception:  # pragma: no cover
     logger = None
 
 from ..xiuxian_config import XiuConfig
+from ...features.base.economy_application import PlayerEconomyApplication
+from ...paths import get_paths
 from .economy_log import safe_log_economy_change
 from .item_json import Items
 from .utils import number_to
@@ -23,10 +25,13 @@ def _to_int(value: Any, default: int = 0) -> int:
 
 
 class RewardService:
-    def __init__(self):
+    def __init__(self, *, economy_application: PlayerEconomyApplication | None = None):
         self.sql_message = XiuxianDateManage()
         self.player_data_manager = PlayerDataManager()
         self.items = Items()
+        self.economy_application = economy_application or PlayerEconomyApplication(
+            get_paths().game_db
+        )
 
     def _grant_exp(self, user_id: str, exp: int) -> int:
         user_info = self.sql_message.get_user_info_with_id(user_id)
@@ -40,9 +45,16 @@ class RewardService:
         if grant_exp <= 0:
             return 0
 
-        self.sql_message.update_exp(user_id, grant_exp)
+        result = self.economy_application.grant_experience(
+            user_id,
+            grant_exp,
+            max_exp=max_exp,
+            expected_exp=current_exp,
+        )
+        if not result.succeeded:
+            return 0
         self.sql_message.update_power2(user_id)
-        return grant_exp
+        return result.applied
 
     def _grant_items(self, user_id: str, reward: dict[str, Any]) -> list[dict[str, Any]]:
         granted: list[dict[str, Any]] = []
@@ -79,11 +91,12 @@ class RewardService:
         amount = max(0, as_int_like(amount))
         if amount <= 0:
             return 0
-        self.sql_message.update_user_sect_contribution(
+        result = self.economy_application.grant_sect_contribution(
             user_id,
-            self._current_sect_contribution(user_id) + amount,
+            amount,
+            expected_value=self._current_sect_contribution(user_id),
         )
-        return amount
+        return result.applied if result.succeeded else 0
 
     def _current_sect_contribution(self, user_id: str) -> int:
         user_info = self.sql_message.get_user_info_with_id(user_id) or {}
@@ -166,8 +179,9 @@ class RewardService:
 
         stone = max(0, _to_int(reward.get("stone"), 0))
         if stone > 0:
-            self.sql_message.update_ls(user_id, stone, 1)
-            granted["stone"] = stone
+            result = self.economy_application.grant_stone(user_id, stone)
+            if result.succeeded:
+                granted["stone"] = result.applied
 
         exp = max(0, _to_int(reward.get("exp"), 0))
         if exp > 0:

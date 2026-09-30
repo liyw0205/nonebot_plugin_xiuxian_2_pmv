@@ -39,6 +39,7 @@ from .transaction_service import PartnerBreakthroughService
 from .transaction_service import PartnerInviteService
 from .transaction_service import PartnerProtectionService
 from ...features.buff.partner_token_application import PartnerTokenUseApplication
+from ...features.base.economy_application import PlayerEconomyApplication
 from ...features.buff.partner_cultivation_application import PartnerCultivationApplication
 from .transaction_service import PartnerBindService
 from .transaction_service import PartnerUnbindService
@@ -84,6 +85,7 @@ _partner_invite_service_instance = None
 _partner_protection_service_instance = None
 _mentor_expel_service_instance = None
 _mentor_breakthrough_reward_service_instance = None
+_player_economy_application_instance = None
 _apprentice_leave_service_instance = None
 _mentor_graduation_service_instance = None
 _mentor_transmission_service_instance = None
@@ -243,6 +245,15 @@ def _mentor_breakthrough_reward_service():
             get_paths().game_db, get_paths().player_db
         )
     return _mentor_breakthrough_reward_service_instance
+
+
+def _player_economy_application():
+    global _player_economy_application_instance
+    if _player_economy_application_instance is None:
+        _player_economy_application_instance = PlayerEconomyApplication(
+            get_paths().game_db
+        )
+    return _player_economy_application_instance
 
 
 def _apprentice_leave_service():
@@ -1595,14 +1606,20 @@ def _grant_graduation_rewards(mentor_id, apprentice_id):
     apprentice_info = get_user_profile(apprentice_id)
 
     if MENTOR_GRADUATE_APPRENTICE_STONE_REWARD > 0:
-        _sql_message().update_ls(apprentice_id, MENTOR_GRADUATE_APPRENTICE_STONE_REWARD, 1)
-        update_statistics_value(apprentice_id, "灵石获取", increment=MENTOR_GRADUATE_APPRENTICE_STONE_REWARD)
-        reward_lines.append(f"徒弟获得灵石{number_to(MENTOR_GRADUATE_APPRENTICE_STONE_REWARD)}")
+        result = _player_economy_application().grant_stone(
+            apprentice_id, MENTOR_GRADUATE_APPRENTICE_STONE_REWARD
+        )
+        if result.succeeded:
+            update_statistics_value(apprentice_id, "灵石获取", increment=result.applied)
+            reward_lines.append(f"徒弟获得灵石{number_to(result.applied)}")
 
     if MENTOR_GRADUATE_MENTOR_STONE_REWARD > 0:
-        _sql_message().update_ls(mentor_id, MENTOR_GRADUATE_MENTOR_STONE_REWARD, 1)
-        update_statistics_value(mentor_id, "灵石获取", increment=MENTOR_GRADUATE_MENTOR_STONE_REWARD)
-        reward_lines.append(f"师父获得灵石{number_to(MENTOR_GRADUATE_MENTOR_STONE_REWARD)}")
+        result = _player_economy_application().grant_stone(
+            mentor_id, MENTOR_GRADUATE_MENTOR_STONE_REWARD
+        )
+        if result.succeeded:
+            update_statistics_value(mentor_id, "灵石获取", increment=result.applied)
+            reward_lines.append(f"师父获得灵石{number_to(result.applied)}")
 
     update_statistics_value(apprentice_id, "正常出师次数", increment=1)
     update_statistics_value(mentor_id, "培养出师徒弟", increment=1)
