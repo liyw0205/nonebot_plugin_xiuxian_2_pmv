@@ -18,6 +18,7 @@ def test_compensation_claim_schema_is_registered_as_followup_legacy_migration():
     versions = [migration.version for migration in build_migrations()]
     assert "legacy.compensation.001" in versions
     assert "legacy.compensation.002" in versions
+    assert "legacy.compensation.003" in versions
     assert versions == sorted(set(versions))
 
 
@@ -47,3 +48,7 @@ def test_progress_gate_covers_compensation_request_schema_boundary():
     assert status["claim_request_path_has_no_ddl"]
     assert status["claim_schema_checked_read_only"]
     assert status["redeem_entry_handles_schema_missing"]
+    assert status["invitation_application_owned"]
+    assert status["invitation_request_path_has_no_ddl"]
+    assert status["invitation_schema_migration_owned"]
+    assert status["invitation_schema_checked"]

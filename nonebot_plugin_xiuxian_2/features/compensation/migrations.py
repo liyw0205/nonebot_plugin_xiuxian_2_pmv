@@ -22,4 +22,29 @@ def apply_compensation_reward_claim_schema(uow: DatabaseUnitOfWork) -> None:
     )
 
 
-__all__ = ["apply_compensation", "apply_compensation_reward_claim_schema"]
+def apply_compensation_invitation_reward_schema(uow: DatabaseUnitOfWork) -> None:
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS invitation_reward_invites("
+        "inviter_id TEXT NOT NULL,invited_id TEXT NOT NULL,source TEXT NOT NULL,"
+        "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,"
+        "PRIMARY KEY(inviter_id,invited_id))"
+    )
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS invitation_reward_claims("
+        "user_id TEXT NOT NULL,threshold INTEGER NOT NULL,source TEXT NOT NULL,"
+        "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,"
+        "PRIMARY KEY(user_id,threshold))"
+    )
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS invitation_reward_operations("
+        "operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,"
+        "thresholds_json TEXT NOT NULL,invitation_count INTEGER NOT NULL,"
+        "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+    )
+
+
+__all__ = [
+    "apply_compensation",
+    "apply_compensation_reward_claim_schema",
+    "apply_compensation_invitation_reward_schema",
+]

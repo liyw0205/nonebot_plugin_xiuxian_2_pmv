@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from .._service_port import ServicePort
+from .invitation_repository import InvitationRewardClaimSqlRepository
 from .reward_claim_repository import CompensationRewardClaimSqlRepository
 
 
@@ -42,6 +43,32 @@ class CompensationRepository(ServicePort):
     def get_used_count(self, reward_type, record_id, legacy_used_count=0) -> int:
         return CompensationRewardClaimSqlRepository(self.database, 0).get_used_count(
             reward_type, record_id, legacy_used_count
+        )
+
+    def invitation_claimed_thresholds(self, user_id):
+        return InvitationRewardClaimSqlRepository(self.database).claimed_thresholds(user_id)
+
+    def invitation_get_result(self, operation_id):
+        return InvitationRewardClaimSqlRepository(self.database).get_result(operation_id)
+
+    def invitation_claim(
+        self,
+        operation_id,
+        user_id,
+        invited_user_ids,
+        rewards_by_threshold,
+        requested_thresholds,
+        legacy_claimed_thresholds,
+        max_goods_num,
+    ):
+        return InvitationRewardClaimSqlRepository(self.database).claim(
+            operation_id,
+            user_id,
+            invited_user_ids,
+            rewards_by_threshold,
+            requested_thresholds,
+            legacy_claimed_thresholds,
+            max_goods_num,
         )
 
 

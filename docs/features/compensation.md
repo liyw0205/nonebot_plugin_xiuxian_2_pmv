@@ -10,7 +10,7 @@ The historical package owns command names during the compatibility release. New 
 No new HTTP route is exposed in this migration slice. Existing URLs remain served by the legacy web adapter.
 
 ## 数据模型与迁移
-Migrations `legacy.compensation.001` and `legacy.compensation.002` record the slice in `game_db`; the latter pre-creates `reward_claims` and `reward_claim_counters` while preserving existing rows. The feature-owned repository and explicit service port own the operation boundary while legacy JSON remains a compatibility data source. Claim, duplicate, and usage-count requests only inspect the schema; they never create tables. A missing migration returns `schema_missing` for claims and does not mutate the database.
+Migrations `legacy.compensation.001`, `legacy.compensation.002` and `legacy.compensation.003` record the slice in `game_db`; the latter two pre-create the claim and invitation reward ledgers while preserving existing rows. The feature-owned repositories and explicit service port own the operation boundary while legacy JSON remains a compatibility data source. Claim, duplicate, usage-count, invitation replay and invitation threshold requests only inspect the schema; they never create tables. A missing migration returns `schema_missing` for mutations and does not mutate the database.
 
 ## 事务与失败回滚
 Mutating calls carry an `operation_id` and are recorded in the operation ledger. Disable the feature flag or restore the pre-migration backup to roll back.

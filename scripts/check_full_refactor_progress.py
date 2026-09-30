@@ -151,9 +151,11 @@ def _slice_status() -> dict[str, dict[str, object]]:
     tasks_progress = (PACKAGE / "features" / "tasks" / "progress.py").read_text(encoding="utf-8")
     tasks_migrations = (PACKAGE / "features" / "tasks" / "migrations.py").read_text(encoding="utf-8")
     compensation_repository = (PACKAGE / "features" / "compensation" / "reward_claim_repository.py").read_text(encoding="utf-8")
+    compensation_invitation_repository = (PACKAGE / "features" / "compensation" / "invitation_repository.py").read_text(encoding="utf-8")
     compensation_migrations = (PACKAGE / "features" / "compensation" / "migrations.py").read_text(encoding="utf-8")
     compensation_legacy_migrated = (PACKAGE / "features" / "_legacy_migrated.py").read_text(encoding="utf-8")
     compensation_redeem_code = (PACKAGE / "xiuxian" / "xiuxian_compensation" / "redeem_code.py").read_text(encoding="utf-8")
+    compensation_invitation = (PACKAGE / "xiuxian" / "xiuxian_compensation" / "invitation.py").read_text(encoding="utf-8")
     plugin = (PACKAGE / "plugin.py").read_text(encoding="utf-8")
     info_attribute_application = (PACKAGE / "features" / "info" / "attribute_application.py").read_text(encoding="utf-8")
     info_attribute_compatibility = (PACKAGE / "compatibility" / "legacy_player_attributes.py").read_text(encoding="utf-8")
@@ -610,7 +612,11 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "claim_request_path_has_no_ddl": "CREATE TABLE" not in compensation_repository and "ALTER TABLE" not in compensation_repository,
             "claim_schema_checked_read_only": "def _schema_ready" in compensation_repository and "read_only=True" in compensation_repository,
             "redeem_entry_handles_schema_missing": 'result.status == "schema_missing"' in compensation_redeem_code,
-            "status": "claim-ledger startup migration; request path fails closed without DDL",
+            "invitation_application_owned": "invitation_claim(" in compensation_invitation and "InvitationRewardClaimService" not in compensation_invitation,
+            "invitation_request_path_has_no_ddl": "CREATE TABLE" not in compensation_invitation_repository and "ALTER TABLE" not in compensation_invitation_repository,
+            "invitation_schema_migration_owned": "def apply_compensation_invitation_reward_schema" in compensation_migrations and "legacy.compensation.003" in compensation_legacy_migrated,
+            "invitation_schema_checked": "def _schema_ready" in compensation_invitation_repository and "schema_missing" in compensation_invitation_repository,
+            "status": "claim and invitation ledgers startup-migrated; request paths fail closed without DDL",
         },
         "stone_gift": {
             "default_legacy_handler_disabled": '"送灵石" if _legacy_stone_gift_enabled' in base,

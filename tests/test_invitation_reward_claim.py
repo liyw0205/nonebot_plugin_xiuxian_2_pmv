@@ -13,25 +13,22 @@ from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_compensation.transaction_service i
 from tests.test_db_backend import db_backend
 
 
-def test_invitation_facade_defers_reward_claim_service_construction():
+def test_invitation_facade_uses_feature_application_without_legacy_service_construction():
     invitation = importlib.import_module(
         "nonebot_plugin_xiuxian_2.xiuxian.xiuxian_compensation.invitation"
     )
-    assert invitation._invitation_reward_service_instance is None
+    assert not hasattr(invitation, "_invitation_reward_service_instance")
 
 
 def test_invitation_facade_uses_lazy_game_database_service():
     source = Path(
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/invitation.py"
     ).read_text(encoding="utf-8")
-    assert "_invitation_reward_service_instance = None" in source
-    assert "def _invitation_reward_service(" in source
-    assert "InvitationRewardClaimService(\n            get_paths().game_db" in source
-    assert "_invitation_reward_service().claimed_thresholds(" in source
-    assert "_invitation_reward_service().get_result(" in source
-    assert "_invitation_reward_service().claim(" in source
-    assert "getattr(_invitation_reward_service(), \"_database\", None)" in source
-    assert "invitation_reward_service.claim(" not in source
+    assert "_compensation_application().invitation_claimed_thresholds(" in source
+    assert "_compensation_application().invitation_get_result(" in source
+    assert "_compensation_application().invitation_claim(" in source
+    assert "InvitationRewardClaimService" not in source
+    assert "getattr(_invitation_reward_service()," not in source
 
 
 class InvitationRewardClaimTests(unittest.TestCase):

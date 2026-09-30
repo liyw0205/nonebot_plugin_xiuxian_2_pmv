@@ -21,5 +21,32 @@ class CompensationApplication(MigratedFeatureApplication):
             reward_type, record_id, legacy_used_count
         )
 
+    def invitation_claimed_thresholds(self, user_id):
+        return self.repository.invitation_claimed_thresholds(user_id)
+
+    def invitation_get_result(self, operation_id):
+        return self.repository.invitation_get_result(operation_id)
+
+    def invitation_claim(
+        self,
+        *,
+        operation_id,
+        user_id,
+        invited_user_ids,
+        rewards_by_threshold,
+        requested_thresholds,
+        legacy_claimed_thresholds,
+        max_goods_num,
+    ):
+        return self.repository.invitation_claim(
+            operation_id,
+            user_id,
+            invited_user_ids,
+            rewards_by_threshold,
+            requested_thresholds,
+            legacy_claimed_thresholds,
+            max_goods_num,
+        )
+
 
 __all__ = ["CompensationApplication"]
