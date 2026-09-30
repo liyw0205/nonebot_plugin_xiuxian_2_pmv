@@ -17,7 +17,7 @@ from ..xiuxian_utils.lay_out import assign_bot, Cooldown
 from ..xiuxian_utils.utils import (
     check_user, check_user_type, 
     get_msg_pic, log_message, handle_send, 
-    number_to, send_msg_handler, send_help_message
+    number_to, send_msg_handler, send_help_message, restore_player_stamina
 )
 from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage, PlayerDataManager, leave_harm_time
 from ..xiuxian_utils.item_json import Items
@@ -250,7 +250,11 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         time = leave_harm_time(user_id)
         msg = f"重伤未愈，动弹不得！距离脱离危险还需要{time}分钟！\n"
         msg += f"请道友进行闭关，或者使用药品恢复气血，不要干等，没有自动回血！！！"
-        _sql_message().update_user_stamina(user_id, tower_data.config["体力消耗"]["连续爬塔"], 1)
+        restore_player_stamina(
+            user_id,
+            tower_data.config["体力消耗"]["连续爬塔"],
+            XiuConfig().max_stamina,
+        )
         await handle_send(bot, event, msg, md_type="通天塔", k1="闭关", v1="闭关", k2="丹药", v2="丹药背包", k3="状态", v3="我的状态")
         await tower_continuous.finish()
     

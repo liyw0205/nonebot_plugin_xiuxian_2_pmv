@@ -13,6 +13,7 @@
 `偷灵石` 的查重与结算由 `BaseApplication -> BaseStoneTheftSqlRepository` 承担，在 game DB 的单一 immediate UoW 中更新灵石、体力并写回执；缺少 `base.003` 或所需玩家 schema 时 fail closed。`抢劫` 的默认 handler 由 `BaseApplication -> BaseStoneRobberySqlRepository` 承担，在 game DB ATTACH player DB 的单一事务中完成快照校验、双玩家 CAS、统计和回执；资产 CAS 失败通过 savepoint 回滚，缺少 `base.004`/`base.005` 或所需 schema 时 fail closed。普通 stone-contest 由 `BaseApplication -> BaseStoneContestSqlRepository` 承担，在 `base.003` 回执表上执行单事务余额 CAS；重复 operation 只读回首次结果，缺少迁移或玩家字段时 fail closed，不在请求期建表。通用命令 `Cooldown` 的体力扣除由 `PlayerStaminaApplication -> PlayerStaminaSqlRepository` 按 profile 首行 `rowid` 做原子 CAS；缺 schema、用户或快照变化时拒绝继续，不在请求期建表。旧 `StoneContestService` 仅保留显式兼容/回滚调用。
 ## 定时任务
 每分钟恢复未满体力。任务通过 `recover_player_stamina -> PlayerStaminaApplication -> PlayerStaminaSqlRepository` 执行，按 `XIUXIAN_STAMINA_RECOVERY_BATCH_SIZE` 分批更新并用 `MIN` 封顶；不读取完整用户列表、不在请求或任务路径建表。缺少数据库/schema 时 fail closed，`stamina_recovery_points=0` 直接返回，避免空转。
+连续爬塔在前置体力扣除后因重伤提前结束时，使用同一 application 的 `restore` 单用户返还；按首个 `user_xiuxian` 行做封顶 CAS，缺 schema 或用户时不写入。
 ## 配置项
 `base_enabled`。
 ## 适配器差异

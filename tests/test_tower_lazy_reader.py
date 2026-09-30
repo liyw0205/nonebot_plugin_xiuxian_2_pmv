@@ -12,7 +12,7 @@ class TowerLazyReaderTests(unittest.TestCase):
         self.assertIn("def _sql_message(", source)
         self.assertNotIn("sql_message = XiuxianDateManage()", source)
         self.assertIn("_sql_message().update_user_hp(", source)
-        self.assertIn("_sql_message().update_user_stamina(", source)
+        self.assertIn("restore_player_stamina(", source)
         self.assertIn("_sql_message().get_user_info_with_id(", source)
 
 

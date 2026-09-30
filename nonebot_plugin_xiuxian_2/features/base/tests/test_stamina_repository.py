@@ -81,6 +81,25 @@ class PlayerStaminaRepositoryTests(unittest.TestCase):
         self.assertEqual((result["status"], result["updated"]), ("applied", 0))
         self.assertEqual(self._stamina(), 10)
 
+    def test_restore_single_user_caps_at_maximum_and_preserves_duplicates(self):
+        with DatabaseUnitOfWork(self.database, immediate=True) as uow:
+            uow.execute("UPDATE user_xiuxian SET user_stamina=9 WHERE user_id='u'")
+            uow.execute("INSERT INTO user_xiuxian VALUES('u',0)")
+        result = self.repository.restore("u", 5, 10)
+        self.assertEqual((result["status"], result["stamina"]), ("applied", 10))
+        with DatabaseUnitOfWork(self.database, read_only=True) as uow:
+            rows = uow.query_all(
+                "SELECT user_stamina FROM user_xiuxian WHERE user_id='u' ORDER BY rowid"
+            )
+        self.assertEqual([int(row["user_stamina"]) for row in rows], [10, 0])
+
+    def test_restore_missing_schema_fails_closed_without_creating_database(self):
+        with tempfile.TemporaryDirectory() as temp:
+            missing = Path(temp) / "missing.sqlite3"
+            result = PlayerStaminaSqlRepository(missing).restore("u", 1, 10)
+            self.assertEqual(result["status"], "schema_missing")
+            self.assertFalse(missing.exists())
+
     def test_recover_missing_schema_fails_closed_without_creating_database(self):
         with tempfile.TemporaryDirectory() as temp:
             missing = Path(temp) / "missing.sqlite3"

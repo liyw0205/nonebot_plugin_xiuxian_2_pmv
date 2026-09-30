@@ -195,6 +195,14 @@ def recover_player_stamina(
     )
 
 
+def restore_player_stamina(
+    user_id: int | str,
+    points: int,
+    max_stamina: int,
+):
+    return _player_stamina().restore(str(user_id), int(points), int(max_stamina))
+
+
 def _player_data_manager():
     global _player_data_manager_instance
     if _player_data_manager_instance is None:

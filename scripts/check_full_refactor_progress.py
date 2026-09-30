@@ -182,6 +182,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
     arena_legacy_transaction_service = (PACKAGE / "compatibility" / "legacy_arena_transactions.py").read_text(encoding="utf-8")
     arena_repository = (PACKAGE / "features" / "arena" / "repository.py").read_text(encoding="utf-8")
     arena_limit = (PACKAGE / "xiuxian" / "xiuxian_arena" / "arena_limit.py").read_text(encoding="utf-8")
+    tower_facade = (PACKAGE / "xiuxian" / "xiuxian_tower" / "__init__.py").read_text(encoding="utf-8")
     tower_limit = (PACKAGE / "xiuxian" / "xiuxian_tower" / "tower_limit.py").read_text(encoding="utf-8")
     training_limit = (PACKAGE / "xiuxian" / "xiuxian_training" / "training_limit.py").read_text(encoding="utf-8")
     training_facade = (PACKAGE / "xiuxian" / "xiuxian_training" / "__init__.py").read_text(encoding="utf-8")
@@ -682,6 +683,12 @@ def _slice_status() -> dict[str, dict[str, object]]:
         "tower": {
             "state_application_owned": "TowerStateApplication" in tower_limit,
             "legacy_state_owner_disabled": "TowerStateService" not in tower_limit,
+            "stamina_refund_application_owned": (
+                "restore_player_stamina(" in tower_facade
+                and "_sql_message().update_user_stamina(" not in tower_facade
+                and "def restore(" in base_stamina_application
+                and "def restore(" in base_stamina_repository
+            ),
             "status": "state_cutover_with_legacy_service_retained_for_compatibility",
         },
         "training": {

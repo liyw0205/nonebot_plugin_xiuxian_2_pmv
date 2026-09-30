@@ -2,14 +2,14 @@
 
 ## 用户流程
 
-通天塔的战斗算法、随机 Boss 和奖励计算继续由兼容命令适配器负责；积分兑换、单层挑战和连续挑战的最终资产变更统一经过 `TowerApplication`。
+通天塔的战斗算法、随机 Boss 和奖励计算继续由兼容命令适配器负责；积分兑换、单层挑战和连续挑战的最终资产变更统一经过 `TowerApplication`。连续爬塔在前置体力扣除后因重伤提前结束时，体力返还经 `PlayerStaminaApplication.restore` 完成。
 
 ## Web API
 
 - `POST /api/v1/tower/purchase`：积分兑换物品，支持每周限购和背包容量校验。
 - `POST /api/v1/tower/settle`：提交塔状态、战斗结果、体力和奖励快照。
 
-两者均要求 `user` 权限、CSRF 和 `Idempotency-Key`，返回统一 JSON envelope。
+两者均要求 `user` 权限、CSRF 和 `Idempotency-Key`，返回统一 JSON envelope。体力返还使用既有 `user_xiuxian.user_stamina` 投影，不创建请求期 schema；缺失 schema 或用户时不写入。
 
 ## 数据与事务
 

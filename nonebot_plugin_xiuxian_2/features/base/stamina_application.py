@@ -43,5 +43,14 @@ class PlayerStaminaApplication:
             batch_size=batch_size,
         )
 
+    def restore(
+        self,
+        user_id: str,
+        points: int,
+        max_stamina: int,
+    ) -> dict[str, Any]:
+        """Restore one user's stamina after a pre-handler charge is refunded."""
+        return self.repository.restore(user_id, points, max_stamina)
+
 
 __all__ = ["PlayerStaminaApplication"]

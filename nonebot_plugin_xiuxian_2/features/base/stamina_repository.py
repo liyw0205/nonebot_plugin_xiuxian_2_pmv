@@ -111,5 +111,42 @@ class PlayerStaminaSqlRepository:
             total += updated
         return {"status": "applied", "updated": total}
 
+    def restore(
+        self,
+        user_id: str,
+        points: int,
+        max_stamina: int,
+    ) -> dict[str, Any]:
+        """Restore one user's stamina without creating a schema or user row."""
+        user_id = str(user_id).strip()
+        points, max_stamina = int(points), int(max_stamina)
+        if not user_id or points < 0 or max_stamina < 0:
+            return self._result("invalid")
+        if points == 0:
+            return self._result("applied")
+        if not self.database.is_file():
+            return self._result("schema_missing")
+
+        with DatabaseUnitOfWork(self.database, immediate=True) as uow:
+            if not self._schema_ready(uow):
+                return self._result("schema_missing")
+            row = uow.query_one(
+                "SELECT rowid AS _rowid,COALESCE(user_stamina,0) AS user_stamina "
+                "FROM user_xiuxian WHERE user_id=? ORDER BY rowid ASC LIMIT 1",
+                (user_id,),
+            )
+            if row is None:
+                return self._result("user_missing")
+            current = int(row["user_stamina"] or 0)
+            restored = min(current + points, max_stamina)
+            changed = uow.execute(
+                "UPDATE user_xiuxian SET user_stamina=? WHERE rowid=? "
+                "AND user_id=? AND COALESCE(user_stamina,0)=?",
+                (restored, row["_rowid"], user_id, current),
+            )
+            if changed.rowcount != 1:
+                return self._result("state_changed", current)
+            return self._result("applied", restored)
+
 
 __all__ = ["PlayerStaminaSqlRepository"]
