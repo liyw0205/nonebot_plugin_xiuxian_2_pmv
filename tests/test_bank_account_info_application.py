@@ -56,7 +56,7 @@ class BankAccountInfoApplicationTests(unittest.TestCase):
             connection.execute("INSERT INTO user_xiuxian VALUES ('u2', 10)")
         self.assertEqual(BankAccountInfoApplication(self.database).get_info(user_id="u2")["status"], "account_missing")
 
-    def test_legacy_player_account_is_bootstrapped_into_game_projection(self) -> None:
+    def test_legacy_player_account_is_not_read_during_account_query(self) -> None:
         with sqlite3.connect(self.database) as connection:
             connection.execute("INSERT INTO user_xiuxian VALUES ('u3', 80)")
         legacy = Path(self.temp.name) / "legacy-player.db"
@@ -66,7 +66,7 @@ class BankAccountInfoApplicationTests(unittest.TestCase):
             )
             connection.execute("INSERT INTO bankinfo VALUES ('u3', 40, '2026-09-22 10:00:00', '2')")
         result = BankAccountInfoApplication(self.database, player_database=legacy).get_info(user_id="u3")
-        self.assertEqual((result["status"], result["saved_stone"], result["bank_level"]), ("ok", 40, "2"))
+        self.assertEqual(result["status"], "account_missing")
 
 
 if __name__ == "__main__":

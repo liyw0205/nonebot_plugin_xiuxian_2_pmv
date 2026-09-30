@@ -18,9 +18,10 @@ class BankInterestServiceTests(unittest.TestCase):
 
         source = Path(xiuxian_bank.__file__).read_text(encoding="utf-8")
         start = source.index("elif mode == '结算'")
-        handler = source[start:source.index("def get_give_stone", start)]
+        handler = source[start:source.index("def savef", start)]
         self.assertIn("BankInterestApplication", handler)
         self.assertNotIn("bank_application.settle_interest(", handler)
+        self.assertNotIn("get_legacy_info(", handler)
 
     def setUp(self) -> None:
         self.temp_dir = tempfile.TemporaryDirectory()

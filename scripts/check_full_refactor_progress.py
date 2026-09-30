@@ -207,10 +207,9 @@ def _slice_status() -> dict[str, dict[str, object]]:
     dungeon_repository = (PACKAGE / "features" / "dungeon" / "repository.py").read_text(encoding="utf-8")
     dungeon_manager = (PACKAGE / "xiuxian" / "xiuxian_dungeon" / "dungeon_manager.py").read_text(encoding="utf-8")
     bank_facade = (PACKAGE / "xiuxian" / "xiuxian_bank" / "__init__.py").read_text(encoding="utf-8")
-    bank_handler = bank_facade[bank_facade.index("async def bank_") : bank_facade.index("def get_give_stone")]
+    bank_handler = bank_facade[bank_facade.index("async def bank_") : bank_facade.index("def savef")]
     bank_web_application = (PACKAGE / "features" / "bank" / "application.py").read_text(encoding="utf-8")
     bank_account_info_application = (PACKAGE / "features" / "bank" / "account_info_application.py").read_text(encoding="utf-8")
-    bank_account_bootstrap = (PACKAGE / "features" / "bank" / "account_bootstrap_application.py").read_text(encoding="utf-8")
     bank_account_repository = (PACKAGE / "features" / "bank" / "account_repository.py").read_text(encoding="utf-8")
     bank_account_applications = "\n".join(
         (PACKAGE / "features" / "bank" / name).read_text(encoding="utf-8")
@@ -220,6 +219,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
         bank_account_repository.index("    def save_upgrade(") : bank_account_repository.index("    def save_interest(")
     ]
     bank_migrations = (PACKAGE / "features" / "bank" / "migrations.py").read_text(encoding="utf-8")
+    bank_import_application = (PACKAGE / "features" / "bank" / "account_import_application.py").read_text(encoding="utf-8")
     bank_legacy_account_repository = (PACKAGE / "features" / "bank" / "legacy_account_repository.py").read_text(encoding="utf-8")
     bank_legacy_receipts = (PACKAGE / "compatibility" / "legacy_bank_operation_receipts.py").read_text(encoding="utf-8")
     bank_legacy_account_storage = (PACKAGE / "compatibility" / "legacy_bank_account_storage.py").read_text(encoding="utf-8")
@@ -975,7 +975,6 @@ def _slice_status() -> dict[str, dict[str, object]]:
                         "BankWithdrawalApplication(self.game_database)",
                         "BankUpgradeApplication(self.game_database)",
                         "BankInterestApplication(self.game_database)",
-                        "BankAccountBootstrapApplication(",
                     )
                 )
                 and "expected_saved_at=request.expected_saved_at" in bank_web_application
@@ -993,7 +992,11 @@ def _slice_status() -> dict[str, dict[str, object]]:
                     'str(account["bank_level"]) != str(bank_level)',
                 )
             ),
-            "legacy_bootstrap_does_not_create_missing_player_db": "not Path(self.player_database).is_file()" in bank_web_application,
+            "request_time_legacy_bootstrap_removed": (
+                "BankAccountBootstrapApplication" not in bank_web_application
+                and "BankAccountBootstrapApplication" not in bank_facade
+                and 'return "account_missing"' in bank_web_application
+            ),
             "deposit_application_owned": "BankDepositApplication" in bank_facade and "bank_application.deposit(" not in bank_facade,
             "withdrawal_application_owned": "BankWithdrawalApplication" in bank_facade and "bank_application.withdraw(" not in bank_facade,
             "upgrade_application_owned": "BankUpgradeApplication" in bank_facade and "bank_application.upgrade(" not in bank_facade,
@@ -1014,22 +1017,21 @@ def _slice_status() -> dict[str, dict[str, object]]:
                 and "mode=ro" in bank_legacy_receipts
                 and "CREATE TABLE" not in bank_legacy_receipts
             ),
-            "legacy_account_read_deferred": (
-                "bankinfo = readf(user_id)" not in bank_facade
-                and bank_handler.count("_read_legacy_bankinfo(user_id)") == 5
+            "legacy_account_reads_removed_from_matcher": (
+                "_read_legacy_bankinfo" not in bank_handler
+                and "_legacy_account_record_status" not in bank_handler
+                and "get_legacy_info(" not in bank_handler
             ),
-            "legacy_account_read_feature_owned": (
-                "_player_data_manager().get_fields(" not in bank_facade
-                and "get_legacy_info(" in bank_facade
+            "legacy_account_reader_is_explicit_read_only_compatibility": (
+                "get_legacy_info(" in bank_account_info_application
                 and "BankLegacyAccountReadRepository" in bank_account_info_application
                 and "read_only=True" in bank_account_info_application
                 and "SELECT * FROM \"bankinfo\" WHERE user_id=?" in bank_legacy_account_repository
                 and "CREATE TABLE" not in bank_legacy_account_repository
             ),
-            "legacy_account_write_fallbacks_guarded": (
-                bank_handler.count("_legacy_account_record_status(user_id)") == 4
-                and "def legacy_record_status(" in bank_account_info_application
-                and "def record_status(" in bank_legacy_account_repository
+            "legacy_account_request_fallbacks_removed": (
+                "_legacy_account_record_status" not in bank_handler
+                and "_read_legacy_bankinfo" not in bank_handler
             ),
             "first_upgrade_and_interest_bootstrap_owned": (
                 "initial_account: Mapping[str, Any] | None = None" in bank_account_applications
@@ -1047,18 +1049,31 @@ def _slice_status() -> dict[str, dict[str, object]]:
                 and "update_or_write_data(" in bank_legacy_account_storage
             ),
             "account_schema_migration_required": (
-                "self.repository.assert_schema_ready(uow)" in bank_account_bootstrap
-                and "self.repository.assert_schema_ready(uow)" in bank_account_info_application
+                "self.repository.assert_schema_ready(uow)" in bank_account_info_application
                 and "def assert_schema_ready(" in bank_account_repository
                 and "CREATE TABLE" not in bank_account_repository
                 and 'Migration("bank.002", "bank_accounts", apply_bank_accounts)' in plugin
+                and 'Migration("bank.003", "bank_legacy_account_backfill", apply_bank_legacy_accounts)' in plugin
                 and all(table in bank_migrations for table in ("bank_accounts", "bank_account_operations"))
+            ),
+            "legacy_account_backfill_is_bounded_conflict_checked_and_space_preflighted": (
+                '"bankinfo" WHERE rowid>? ORDER BY rowid LIMIT 200' in bank_migrations
+                and "_assert_legacy_account_migration_space(" in bank_migrations
+                and "bank_account_operations WHERE user_id=? LIMIT 1" in bank_migrations
+                and "bank account migration conflict" in bank_migrations
+            ),
+            "legacy_json_sync_imports_only_missing_game_accounts": (
+                "BankAccountImportApplication" in bank_import_application
+                and "importer.import_if_missing(" in (PACKAGE / "xiuxian" / "xiuxian_buff" / "__init__.py").read_text(encoding="utf-8")
+                and "self.repository.existing_account(uow, user_id) is not None" in bank_import_application
+                and "self.repository.create_account(" in bank_import_application
+                and "update_or_write_data(" not in (PACKAGE / "xiuxian" / "xiuxian_buff" / "__init__.py").read_text(encoding="utf-8").split("def _migrate_bank_data_sync", 1)[1].split("@migrate_bank_data.handle", 1)[0]
             ),
             "account_writes_require_startup_schema": (
                 bank_account_applications.count("self.repository.assert_schema_ready(uow)") == 4
                 and "CREATE TABLE" not in bank_account_applications
             ),
-            "status": "v1_web_and_commands_game_db_owned; legacy_account_import_and_explicit_rollback_retained",
+            "status": "v1_web_and_commands_game_db_owned; startup_backfill_and_explicit_rollback_compatibility_retained",
         },
         "map": {
             "interactive_application_owned": "map_application.interactive_settlement(" in map_facade and "map_application.interactive_start(" in map_facade,

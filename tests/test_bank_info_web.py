@@ -25,7 +25,7 @@ class BankInfoWebTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(application.get_info.call_args.kwargs["user_id"], "u1")
 
-    def test_info_route_imports_real_legacy_account(self) -> None:
+    def test_info_route_does_not_import_legacy_account(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             game = root / "game.db"
@@ -48,10 +48,10 @@ class BankInfoWebTests(unittest.TestCase):
                 )
             )
             response = app.test_client().get("/api/v1/bank/v2/info?user_id=u1")
-            self.assertEqual(response.status_code, 200)
-            self.assertEqual(response.get_json()["data"]["saved_stone"], 20)
+            self.assertEqual(response.status_code, 404)
+            self.assertEqual(response.get_json()["data"]["status"], "account_missing")
             with sqlite3.connect(game) as connection:
-                self.assertEqual(connection.execute("SELECT bank_level FROM bank_accounts WHERE user_id='u1'").fetchone()[0], "2")
+                self.assertIsNone(connection.execute("SELECT bank_level FROM bank_accounts WHERE user_id='u1'").fetchone())
 
     def test_info_route_returns_not_found_for_invalid_legacy_account(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

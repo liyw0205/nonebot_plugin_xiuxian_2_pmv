@@ -284,7 +284,7 @@ def create_app(
         from ...features.bank.application import BankApplication
 
         bank = (context.services or {}).get("bank") or BankApplication(
-            str(context.database.path("game_db")), str(context.database.path("player_db"))
+            str(context.database.path("game_db"))
         )
         app.register_blueprint(bank_blueprint(bank, permission=has_permission))
         first_use_bank = (context.services or {}).get("bank_first_use")

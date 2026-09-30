@@ -10,7 +10,6 @@ from ...infrastructure.database import DatabaseUnitOfWork, OperationLedger
 from ...infrastructure.observability import trace_context
 from .domain import BankDepositRequest, BankInterestRequest, BankUpgradeRequest, BankWithdrawalRequest
 from .repository import BankRepository
-from .account_bootstrap_application import BankAccountBootstrapApplication
 from .account_repository import BankAccountRepository
 from .account_application import BankDepositApplication
 from .account_withdrawal_application import BankWithdrawalApplication
@@ -27,9 +26,9 @@ def _data(raw: Any) -> dict[str, Any]:
 
 
 class BankApplication:
-    def __init__(self, game_database: str | Path, player_database: str | Path, *, repository: BankRepository | None = None, ledger: OperationLedger | None = None) -> None:
+    def __init__(self, game_database: str | Path, player_database: str | Path | None = None, *, repository: BankRepository | None = None, ledger: OperationLedger | None = None) -> None:
         self.game_database = str(game_database)
-        self.player_database = str(player_database)
+        # Keep the old constructor argument for integrations; default requests never read player_db.
         self.repository = repository
         self.ledger = ledger or OperationLedger()
         self.account_repository = BankAccountRepository()
@@ -44,14 +43,7 @@ class BankApplication:
                 return "user_missing"
             if self.account_repository.existing_account(uow, user_id) is not None:
                 return "existing"
-        if Path(self.player_database).resolve() == Path(self.game_database).resolve() or not Path(self.player_database).is_file():
-            return "legacy_missing"
-        result = BankAccountBootstrapApplication(
-            self.game_database,
-            self.player_database,
-            repository=self.account_repository,
-        ).ensure_account(user_id=user_id, default_level="1")
-        return str(result.get("status", "legacy_invalid"))
+        return "account_missing"
 
     @staticmethod
     def _setup_failure(status: str, operation_id: str) -> dict[str, str]:
@@ -93,11 +85,11 @@ class BankApplication:
         if self.repository is None:
             def call():
                 setup = self._prepare_account(request.user_id)
-                if setup not in {"existing", "imported", "legacy_missing"}:
+                if setup not in {"existing", "account_missing"}:
                     return self._setup_failure(setup, request.operation_id)
                 initial_account = (
                     {"saved_stone": 0, "updated_at": request.expected_saved_at, "bank_level": "1"}
-                    if setup == "legacy_missing"
+                    if setup == "account_missing"
                     else None
                 )
                 return BankDepositApplication(self.game_database).deposit(
@@ -122,7 +114,7 @@ class BankApplication:
         if self.repository is None:
             def call():
                 setup = self._prepare_account(request.user_id)
-                if setup not in {"existing", "imported", "legacy_missing"}:
+                if setup not in {"existing", "account_missing"}:
                     return self._setup_failure(setup, request.operation_id)
                 return BankWithdrawalApplication(self.game_database).withdraw(
                     operation_id=request.operation_id, user_id=request.user_id,
@@ -145,11 +137,11 @@ class BankApplication:
         if self.repository is None:
             def call():
                 setup = self._prepare_account(request.user_id)
-                if setup not in {"existing", "imported", "legacy_missing"}:
+                if setup not in {"existing", "account_missing"}:
                     return self._setup_failure(setup, request.operation_id)
                 initial_account = (
                     {"saved_stone": 0, "bank_level": "1", "updated_at": ""}
-                    if setup == "legacy_missing"
+                    if setup == "account_missing"
                     else None
                 )
                 return BankUpgradeApplication(self.game_database).upgrade(
@@ -171,7 +163,7 @@ class BankApplication:
         if self.repository is None:
             def call():
                 setup = self._prepare_account(request.user_id)
-                if setup not in {"existing", "imported", "legacy_missing"}:
+                if setup not in {"existing", "account_missing"}:
                     return self._setup_failure(setup, request.operation_id)
                 initial_account = (
                     {
@@ -179,7 +171,7 @@ class BankApplication:
                         "bank_level": "1",
                         "updated_at": request.expected_saved_at,
                     }
-                    if setup == "legacy_missing"
+                    if setup == "account_missing"
                     else None
                 )
                 return BankInterestApplication(self.game_database).settle_interest(

@@ -2698,7 +2698,7 @@ class SourceQualityTests(unittest.TestCase):
         bank_root = SOURCE_ROOT / "xiuxian" / "xiuxian_bank"
         source = (bank_root / "__init__.py").read_text(encoding="utf-8")
         start = source.index("elif mode == '结算'")
-        handler = source[start:source.index("def get_give_stone", start)]
+        handler = source[start:source.index("def savef", start)]
         self.assertIn("BankInterestApplication", handler)
         self.assertNotIn("bank_application.settle_interest(", handler)
         self.assertNotIn("sql_message.update_ls(", handler)
@@ -2738,23 +2738,30 @@ class SourceQualityTests(unittest.TestCase):
         plugin = (SOURCE_ROOT / "plugin.py").read_text(encoding="utf-8")
         self.assertNotIn("LegacyBankRepository", source)
         self.assertIn("bank_application = BankApplication(", source)
+        self.assertNotIn("get_paths().player_db", source)
         self.assertNotIn("repository=LegacyBankRepository", source)
         self.assertIn('"bank": BankApplication(', plugin)
+        bank_start = plugin.index('"bank": BankApplication(')
+        bank_wiring = plugin[bank_start:plugin.index('"activity_reward":', bank_start)]
+        self.assertNotIn('context.database.path("player_db")', bank_wiring)
         self.assertNotIn("LegacyBankRepository", plugin)
 
-    def test_bank_account_info_bootstrap_receives_legacy_player_database(self) -> None:
+    def test_bank_matcher_does_not_read_legacy_player_accounts(self) -> None:
         source = (SOURCE_ROOT / "xiuxian" / "xiuxian_bank" / "__init__.py").read_text(encoding="utf-8")
-        self.assertEqual(source.count("BankAccountInfoApplication(get_paths().game_db, player_database=get_paths().player_db)"), 5)
+        self.assertNotIn("player_database=get_paths().player_db", source)
+        self.assertNotIn("get_paths().player_db", source)
+        self.assertNotIn("get_legacy_info(", source)
+        self.assertNotIn("_read_legacy_bankinfo", source)
 
-    def test_bank_request_bootstrap_requires_startup_schema(self) -> None:
-        bootstrap = (SOURCE_ROOT / "features" / "bank" / "account_bootstrap_application.py").read_text(
+    def test_bank_legacy_import_requires_startup_schema(self) -> None:
+        importer = (SOURCE_ROOT / "features" / "bank" / "account_import_application.py").read_text(
             encoding="utf-8"
         )
         repository = (SOURCE_ROOT / "features" / "bank" / "account_repository.py").read_text(
             encoding="utf-8"
         )
-        self.assertIn("assert_schema_ready(uow)", bootstrap)
-        self.assertNotIn("CREATE TABLE", bootstrap)
+        self.assertIn("assert_schema_ready(uow)", importer)
+        self.assertNotIn("CREATE TABLE", importer)
         self.assertNotIn("CREATE TABLE", repository)
         self.assertIn("bank.002 schema_missing", repository)
 

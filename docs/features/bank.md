@@ -3,10 +3,11 @@
 ## 当前边界
 
 - v1 Web API 默认由 `BankApplication` 调用 game DB-owned 的存入、取出、升级与结息 application；生产组合根不再注入 `LegacyBankRepository`。该 repository 仍可显式注入供回滚/兼容调用，不进入默认执行图。
-- 默认 `灵庄` matcher 优先读取 game DB 的 `bank_accounts` 投影。缺少投影时，完整 legacy `player_db.bankinfo` 记录由 bootstrap 导入；没有 legacy 用户记录时，存款可创建默认账户，首次升级/结息会在同一 game DB 事务中创建默认账户并结算。
+- 默认 `灵庄` matcher 与 Web application 只读取 game DB 的 `bank_accounts`。缺少投影表示新账户：存款、首次升级和结息可在同一 game DB 事务中以 L1/零余额默认账户初始化；取款对未开户账户拒绝。
 - v1 存款、取款与结息在 game DB 内核对请求中的存款额、更新时间和会员等级快照；旧账户导入后若快照过期则拒绝结算。空旧账户只接受默认零余额/L1 首次存款；已有但不完整或 schema 无效的旧账户 fail closed，不覆盖历史记录。
 - v1 全局 operation ledger 与账户 application 回执分开提交时，重试会由账户回执防止重复资产变更，并补完 ledger 结果。
-- matcher 的账户读取经 `BankAccountInfoApplication -> BankLegacyAccountReadRepository` 使用只读 player DB 查询。已有但不完整的用户记录或无效表结构不会落入写 fallback；显式 `savef` 仅作为兼容 writer 保留。
+- `bank.003` 在启动阶段从 `player_db.bankinfo` 只读分批回填 game DB，每批最多 200 行；相同账户保留，已有 game DB 操作回执时保留已前进状态，无回执且冲突则中止迁移并回滚。该迁移预估目标表所需空间，低于预留值时拒绝启动，不改写旧表。
+- matcher 不再按请求读取旧账户，也没有针对旧账户的写 fallback。管理员 `同步灵庄` 仅将 JSON 快照插入 game DB 中缺少的账户，已有账户绝不覆盖；显式 `savef` 仅作为兼容 writer 保留。
 - v2 Web route 与 first-use matcher 仅在对应 service 显式注入后启用，使用 game DB-owned account applications。
 
 ## 接口
@@ -22,7 +23,7 @@
 
 写接口需要 `user` 权限、CSRF 和幂等键；旧 `灵庄` 命令入口保留消息排版，默认 matcher 已优先走账户投影 application。
 
-`bank.001` 登记旧 bank 功能切片；`bank.002` 在启动阶段创建 game DB-owned `bank_accounts` 与 `bank_account_operations`。账户请求只校验 schema，不执行 DDL。旧账户按用户首次读取/操作时 bootstrap 导入，不做批量 destructive rewrite。
+`bank.001` 登记旧 bank 功能切片；`bank.002` 在启动阶段创建 game DB-owned `bank_accounts` 与 `bank_account_operations`；`bank.003` 一次性导入旧账户。账户请求只校验 schema，不执行 DDL，也不访问旧账户存储。
 
 ## 用户流程
 
@@ -46,7 +47,7 @@
 
 ## 定时任务
 
-自动结息仍由兼容调度器统一注册，禁止导入期重复注册。
+银行没有自动结息 scheduler；结息只由用户命令或显式 Web 操作触发。`features/bank/jobs.py` 保持空任务表。
 
 ## 配置项
 
@@ -62,7 +63,7 @@
 
 ## 灰度开关、回滚和已知限制
 
-关闭新功能开关后旧 Web 与命令兼容入口继续可用。v1 Web 默认执行切换已完成；待办：补齐正式发布迁移、恢复/对账和灰度回滚证据，并审计 legacy 命令 writer/自动结息是否仍可能与 game DB 投影并行。完成前不能宣称 bank 全面重构。
+关闭新功能开关后兼容 Web 与命令入口仍保留；显式 `savef` 仅供兼容写入。v1 Web 默认执行切换和历史账户启动回填仍需正式发布迁移、恢复/对账与灰度回滚证据；这些证据完成前不能宣称 bank 全面重构。
 
 ## Manifest 清单
 - `alias: 灵庄存灵石`

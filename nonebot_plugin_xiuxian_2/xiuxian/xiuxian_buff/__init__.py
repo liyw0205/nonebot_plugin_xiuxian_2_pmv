@@ -1630,13 +1630,17 @@ async def migrate_data4_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
 migrate_bank_data = on_command("同步灵庄", permission=SUPERUSER, priority=25, block=True)
 
 
-def _migrate_bank_data_sync(players_dir):
+def _migrate_bank_data_sync(players_dir, game_database=None):
     user_num = 0
     sync_num = 0
     fail_num = 0
 
     if not players_dir.exists():
         return user_num, sync_num, fail_num
+
+    from ...features.bank.account_import_application import BankAccountImportApplication
+
+    importer = BankAccountImportApplication(game_database or get_paths().game_db)
 
     for user_dir in players_dir.iterdir():
         if not user_dir.is_dir():
@@ -1653,16 +1657,24 @@ def _migrate_bank_data_sync(players_dir):
             if not content:
                 continue
             data = json.loads(content)
+            if not isinstance(data, dict):
+                raise ValueError("bankinfo must be a JSON object")
             savestone = int(data.get("savestone", 0))
             savetime = str(data.get("savetime", runtime_clock.now().strftime('%Y-%m-%d %H:%M:%S')))
             banklevel = str(data.get("banklevel", "1"))
-
-            _player_data_manager().update_or_write_data(user_id, "bankinfo", "savestone", savestone, data_type="INTEGER")
-            _player_data_manager().update_or_write_data(user_id, "bankinfo", "savetime", savetime, data_type="TEXT")
-            _player_data_manager().update_or_write_data(user_id, "bankinfo", "banklevel", banklevel, data_type="TEXT")
+            status = importer.import_if_missing(
+                user_id=user_id,
+                saved_stone=savestone,
+                updated_at=savetime,
+                bank_level=banklevel,
+            )
+            if status == "user_missing":
+                fail_num += 1
+                logger.warning(f"灵庄同步跳过不存在的修仙账户: {user_id}")
+                continue
             sync_num += 1
-            logger.info(f"更新灵庄数据: {user_id}")
-        except (OSError, json.JSONDecodeError, TypeError, ValueError) as exc:
+            logger.info(f"灵庄同步完成 {user_id}: {status}")
+        except (OSError, json.JSONDecodeError, TypeError, ValueError, RuntimeError, sqlite3.DatabaseError) as exc:
             fail_num += 1
             logger.error(f"灵庄同步失败 {user_id}: {exc}")
 
@@ -1679,7 +1691,7 @@ async def migrate_bank_data_(bot: Bot, event: GroupMessageEvent | PrivateMessage
         return
 
     user_num, sync_num, fail_num = await asyncio.to_thread(
-        _migrate_bank_data_sync, players_dir
+        _migrate_bank_data_sync, players_dir, get_paths().game_db
     )
 
     await handle_send(bot, event, f"灵庄同步完成！扫描用户:{user_num}，成功:{sync_num}，失败:{fail_num}")

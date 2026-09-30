@@ -1,13 +1,6 @@
-try:
-    import ujson as json
-except ImportError:
-    import json
-import os
-import time
 from typing import Any, Tuple
 
 from ...paths import get_paths
-from ...infrastructure.clock import SystemClock
 from ...infrastructure.ids import UUIDGenerator
 from ..on_compat import on_regex
 from nonebot.log import logger
@@ -20,7 +13,6 @@ from ..adapter_compat import (
     MessageSegment,
 )
 from ..xiuxian_utils.lay_out import assign_bot, Cooldown
-from datetime import datetime
 from .bankconfig import get_config
 from ..xiuxian_utils.utils import check_user, get_msg_pic, handle_send, send_help_message
 from ..xiuxian_config import XiuConfig
@@ -29,11 +21,7 @@ from ...features.bank.application import BankApplication
 
 config = get_config()
 BANKLEVEL = config["BANKLEVEL"]
-bank_application = BankApplication(
-    get_paths().game_db,
-    get_paths().player_db,
-)
-runtime_clock = SystemClock()
+bank_application = BankApplication(get_paths().game_db)
 runtime_ids = UUIDGenerator()
 PLAYERSDATA = get_paths().players
 
@@ -101,28 +89,6 @@ async def bank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: 
         from ...features.bank.account_application import BankDepositApplication
         from ...features.bank.clock import bank_clock
 
-        migrated_account = BankAccountInfoApplication(get_paths().game_db, player_database=get_paths().player_db).get_info(user_id=user_id)
-        if migrated_account.get("status") == "ok":
-            result = BankDepositApplication(get_paths().game_db).deposit(
-                operation_id=operation_id,
-                user_id=user_id,
-                amount=num,
-                interest=0,
-                limit=int(BANKLEVEL[migrated_account["bank_level"]]["savemax"]),
-                bank_level=migrated_account["bank_level"],
-                settled_at=bank_clock().now().isoformat(),
-            )
-            messages = {
-                "applied": f"新灵庄存款成功：存入 {result['deposited']} 枚，当前存款 {result['saved_stone']} 枚。",
-                "duplicate": "该存款请求已经处理，无需重复提交。",
-                "stone_insufficient": "灵石不足，存款未结算。",
-                "limit_exceeded": "超过灵庄存储上限，存款未结算。",
-                "operation_conflict": "请求冲突，存款未结算。",
-                "user_missing": "未找到修仙数据。",
-            }
-            await handle_send(bot, event, messages.get(str(result.get("status")), "新存款未结算。"), md_type="灵庄", k1="存灵石", v1="灵庄存灵石", k2="取灵石", v2="灵庄取灵石", k3="信息", v3="灵庄信息")
-            await bank.finish()
-        # 先回放：成功后余额/额度变化会挡住“灵石不足/额度不足”前置检查。
         from ...compatibility.legacy_bank_operation_receipts import LegacyBankOperationReceiptRepository
 
         prior = LegacyBankOperationReceiptRepository(get_paths().game_db).get_deposit_result(operation_id)
@@ -135,66 +101,40 @@ async def bank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: 
             await handle_send(bot, event, msg, md_type="灵庄", k1="存灵石", v1="灵庄存灵石", k2="取灵石", v2="灵庄取灵石", k3="信息", v3="灵庄信息")
             await bank.finish()
 
-        if _legacy_account_record_status(user_id) != "missing":
-            await handle_send(bot, event, "历史灵庄账户数据不完整，本次存款未处理，请联系管理员核查。", md_type="灵庄")
+        migrated_account = BankAccountInfoApplication(get_paths().game_db).get_info(user_id=user_id)
+        account_status = str(migrated_account.get("status"))
+        if account_status not in {"ok", "account_missing"}:
+            message = "未找到修仙数据，本次存款未结算。" if account_status == "user_missing" else "灵庄账户暂不可用。"
+            await handle_send(bot, event, message, md_type="灵庄")
             await bank.finish()
 
-        if int(user_info['stone']) < num:
-            msg = f"道友所拥有的灵石为{user_info['stone']}枚，金额不足，请重新输入！"
-            await handle_send(bot, event, msg, md_type="灵庄", k1="存灵石", v1="灵庄存灵石", k2="取灵石", v2="灵庄取灵石", k3="信息", v3="灵庄信息")
-            await bank.finish()
-
-        bankinfo = _read_legacy_bankinfo(user_id)
-        max = BANKLEVEL[bankinfo['banklevel']]['savemax']
-        nowmax = max - bankinfo['savestone']
-
-        if num > nowmax:
-            msg = f"道友当前灵庄会员等级为{BANKLEVEL[bankinfo['banklevel']]['level']}，可存储的最大灵石为{max}枚,当前已存{bankinfo['savestone']}枚灵石，可以继续存{nowmax}枚灵石！"
-            await handle_send(bot, event, msg, md_type="灵庄", k1="存灵石", v1="灵庄存灵石", k2="取灵石", v2="灵庄取灵石", k3="信息", v3="灵庄信息")
-            await bank.finish()
-
-        expected_saved_stone = bankinfo['savestone']
-        expected_saved_at = bankinfo['savetime']
-        bankinfo, give_stone, timedeff = get_give_stone(bankinfo)
-        deposit_data = BankDepositApplication(get_paths().game_db).deposit(
+        bank_level = str(migrated_account.get("bank_level", "1"))
+        now = bank_clock().now()
+        initial_account = None if account_status == "ok" else {
+            "saved_stone": 0,
+            "bank_level": "1",
+            "updated_at": now.isoformat(),
+        }
+        result = BankDepositApplication(get_paths().game_db).deposit(
             operation_id=operation_id,
             user_id=user_id,
             amount=num,
-            interest=give_stone,
-            limit=int(max),
-            bank_level=str(bankinfo['banklevel']),
-            settled_at=str(bankinfo['savetime']),
+            interest=0,
+            limit=int(BANKLEVEL[bank_level]["savemax"]),
+            bank_level=bank_level,
+            settled_at=now.isoformat(),
+            initial_account=initial_account,
         )
-        deposit_status = str(deposit_data.get("status", "failed"))
-        deposit_interest = int(deposit_data.get("interest", 0) or 0)
-        deposit_amount = int(deposit_data.get("deposited", 0) or 0)
-        deposit_wallet = int(deposit_data.get("wallet_stone", 0) or 0)
-        deposit_saved = int(deposit_data.get("saved_stone", 0) or 0)
-        if deposit_status == "duplicate":
-            msg = (
-                f"道友本次结息时间为：{timedeff}小时，获得灵石：{deposit_interest}枚!\n"
-                f"道友存入灵石{deposit_amount}枚，当前所拥有灵石{deposit_wallet}枚，灵庄存有灵石{deposit_saved}枚\n"
-                "该存款请求已经处理，无需重复提交。"
-            )
-            await handle_send(bot, event, msg, md_type="灵庄", k1="存灵石", v1="灵庄存灵石", k2="取灵石", v2="灵庄取灵石", k3="信息", v3="灵庄信息")
-            await bank.finish()
-        if deposit_status == "stone_insufficient":
-            msg = "灵石不足，存款未结算。"
-            await handle_send(bot, event, msg, md_type="灵庄", k1="存灵石", v1="灵庄存灵石", k2="取灵石", v2="灵庄取灵石", k3="信息", v3="灵庄信息")
-            await bank.finish()
-        if deposit_status == "limit_exceeded":
-            msg = "超过灵庄存储上限，存款未结算。"
-            await handle_send(bot, event, msg, md_type="灵庄", k1="存灵石", v1="灵庄存灵石", k2="取灵石", v2="灵庄取灵石", k3="信息", v3="灵庄信息")
-            await bank.finish()
-        if deposit_status == "state_changed":
-            msg = "灵庄操作失败：账户当前状态已更新，本次未结算。"
-            await handle_send(bot, event, msg, md_type="灵庄", k1="存灵石", v1="灵庄存灵石", k2="取灵石", v2="灵庄取灵石", k3="信息", v3="灵庄信息")
-            await bank.finish()
-        if deposit_status == "user_missing":
-            await handle_send(bot, event, "未找到修仙数据，本次存款未结算。", md_type="我要修仙")
-            await bank.finish()
-        msg = f"**灵庄存入**\n---\n✅ 存款成功\n结息时间\n> {timedeff}小时\n获得灵石\n> {deposit_interest}枚\n本次存入\n> {deposit_amount}枚\n当前灵石\n> {deposit_wallet}枚\n灵庄存款\n> {deposit_saved}枚"
-        await handle_send(bot, event, msg, md_type="灵庄", k1="存灵石", v1="灵庄存灵石", k2="取灵石", v2="灵庄取灵石", k3="信息", v3="灵庄信息")
+        messages = {
+            "applied": f"灵庄存款成功：存入 {result['deposited']} 枚，当前存款 {result['saved_stone']} 枚。",
+            "duplicate": "该存款请求已经处理，无需重复提交。",
+            "stone_insufficient": "灵石不足，存款未结算。",
+            "limit_exceeded": "超过灵庄存储上限，存款未结算。",
+            "state_changed": "灵庄操作失败：账户当前状态已更新，本次未结算。",
+            "operation_conflict": "请求冲突，存款未结算。",
+            "user_missing": "未找到修仙数据。",
+        }
+        await handle_send(bot, event, messages.get(str(result.get("status")), "灵庄存款未结算。"), md_type="灵庄", k1="存灵石", v1="灵庄存灵石", k2="取灵石", v2="灵庄取灵石", k3="信息", v3="灵庄信息")
         await bank.finish()
 
     elif mode == '取灵石':  # 取灵石逻辑
@@ -204,25 +144,6 @@ async def bank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: 
         from ...features.bank.account_withdrawal_application import BankWithdrawalApplication
         from ...features.bank.clock import bank_clock
 
-        migrated_account = BankAccountInfoApplication(get_paths().game_db, player_database=get_paths().player_db).get_info(user_id=user_id)
-        if migrated_account.get("status") == "ok":
-            result = BankWithdrawalApplication(get_paths().game_db).withdraw(
-                operation_id=operation_id,
-                user_id=user_id,
-                amount=num,
-                interest=0,
-                bank_level=migrated_account["bank_level"],
-                settled_at=bank_clock().now().isoformat(),
-            )
-            messages = {
-                "applied": f"新灵庄取款成功：取出 {result['withdrawn']} 枚，当前存款 {result['saved_stone']} 枚。",
-                "duplicate": "该取款请求已经处理，无需重复提交。",
-                "saved_stone_insufficient": "灵庄存款不足，取款未结算。",
-                "operation_conflict": "请求冲突，取款未结算。",
-                "user_missing": "未找到修仙数据。",
-            }
-            await handle_send(bot, event, messages.get(str(result.get("status")), "新取款未结算。"), md_type="灵庄", k1="存灵石", v1="灵庄存灵石", k2="取灵石", v2="灵庄取灵石", k3="信息", v3="灵庄信息")
-            await bank.finish()
         from ...compatibility.legacy_bank_operation_receipts import LegacyBankOperationReceiptRepository
 
         prior = LegacyBankOperationReceiptRepository(get_paths().game_db).get_withdrawal_result(operation_id)
@@ -235,53 +156,30 @@ async def bank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: 
             await handle_send(bot, event, msg, md_type="灵庄", k1="存灵石", v1="灵庄存灵石", k2="取灵石", v2="灵庄取灵石", k3="信息", v3="灵庄信息")
             await bank.finish()
 
-        if _legacy_account_record_status(user_id) != "missing":
-            await handle_send(bot, event, "历史灵庄账户数据不完整，本次取款未处理，请联系管理员核查。", md_type="灵庄")
+        migrated_account = BankAccountInfoApplication(get_paths().game_db).get_info(user_id=user_id)
+        account_status = str(migrated_account.get("status"))
+        if account_status != "ok":
+            message = "灵庄暂无存款，无法取款。" if account_status == "account_missing" else "未找到修仙数据，本次取款未结算。"
+            await handle_send(bot, event, message, md_type="灵庄")
             await bank.finish()
 
-        bankinfo = _read_legacy_bankinfo(user_id)
-        if int(bankinfo['savestone']) < num:
-            msg = f"道友当前灵庄所存有的灵石为{bankinfo['savestone']}枚，金额不足，请重新输入！"
-            await handle_send(bot, event, msg, md_type="灵庄", k1="存灵石", v1="灵庄存灵石", k2="取灵石", v2="灵庄取灵石", k3="信息", v3="灵庄信息")
-            await bank.finish()
-
-        expected_saved_stone = bankinfo['savestone']
-        expected_saved_at = bankinfo['savetime']
-        bankinfo, give_stone, timedeff = get_give_stone(bankinfo)
-        withdrawal_data = BankWithdrawalApplication(get_paths().game_db).withdraw(
+        result = BankWithdrawalApplication(get_paths().game_db).withdraw(
             operation_id=operation_id,
             user_id=user_id,
             amount=num,
-            interest=give_stone,
-            bank_level=str(bankinfo['banklevel']),
-            settled_at=str(bankinfo['savetime']),
+            interest=0,
+            bank_level=str(migrated_account["bank_level"]),
+            settled_at=bank_clock().now().isoformat(),
         )
-        withdrawal_status = str(withdrawal_data.get("status", "failed"))
-        withdrawal_interest = int(withdrawal_data.get("interest", 0) or 0)
-        withdrawal_amount = int(withdrawal_data.get("withdrawn", 0) or 0)
-        withdrawal_wallet = int(withdrawal_data.get("wallet_stone", 0) or 0)
-        withdrawal_saved = int(withdrawal_data.get("saved_stone", 0) or 0)
-        if withdrawal_status == "duplicate":
-            msg = (
-                f"道友本次结息时间为：{timedeff}小时，获得灵石：{withdrawal_interest}枚!\n"
-                f"取出灵石{withdrawal_amount}枚，当前所拥有灵石{withdrawal_wallet}枚，灵庄存有灵石{withdrawal_saved}枚!\n"
-                "该取款请求已经处理，无需重复提交。"
-            )
-            await handle_send(bot, event, msg, md_type="灵庄", k1="存灵石", v1="灵庄存灵石", k2="取灵石", v2="灵庄取灵石", k3="信息", v3="灵庄信息")
-            await bank.finish()
-        if withdrawal_status == "saved_stone_insufficient":
-            msg = "灵庄存款不足，取款未结算。"
-            await handle_send(bot, event, msg, md_type="灵庄", k1="存灵石", v1="灵庄存灵石", k2="取灵石", v2="灵庄取灵石", k3="信息", v3="灵庄信息")
-            await bank.finish()
-        if withdrawal_status == "state_changed":
-            msg = "灵庄操作失败：账户当前状态已更新，本次未结算。"
-            await handle_send(bot, event, msg, md_type="灵庄", k1="存灵石", v1="灵庄存灵石", k2="取灵石", v2="灵庄取灵石", k3="信息", v3="灵庄信息")
-            await bank.finish()
-        if withdrawal_status == "user_missing":
-            await handle_send(bot, event, "未找到修仙数据，本次取款未结算。", md_type="我要修仙")
-            await bank.finish()
-        msg = f"**灵庄取出**\n---\n✅ 取款成功\n结息时间\n> {timedeff}小时\n获得灵石\n> {withdrawal_interest}枚\n本次取出\n> {withdrawal_amount}枚\n当前灵石\n> {withdrawal_wallet}枚\n灵庄存款\n> {withdrawal_saved}枚"
-        await handle_send(bot, event, msg, md_type="灵庄", k1="存灵石", v1="灵庄存灵石", k2="取灵石", v2="灵庄取灵石", k3="信息", v3="灵庄信息")
+        messages = {
+            "applied": f"灵庄取款成功：取出 {result['withdrawn']} 枚，当前存款 {result['saved_stone']} 枚。",
+            "duplicate": "该取款请求已经处理，无需重复提交。",
+            "saved_stone_insufficient": "灵庄存款不足，取款未结算。",
+            "state_changed": "灵庄操作失败：账户当前状态已更新，本次未结算。",
+            "operation_conflict": "请求冲突，取款未结算。",
+            "user_missing": "未找到修仙数据。",
+        }
+        await handle_send(bot, event, messages.get(str(result.get("status")), "灵庄取款未结算。"), md_type="灵庄", k1="存灵石", v1="灵庄存灵石", k2="取灵石", v2="灵庄取灵石", k3="信息", v3="灵庄信息")
         await bank.finish()
 
     elif mode == '升级会员':  # 升级会员逻辑
@@ -291,98 +189,58 @@ async def bank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: 
         from ...features.bank.account_upgrade_application import BankUpgradeApplication
         from ...features.bank.clock import bank_clock
 
-        migrated_account = BankAccountInfoApplication(get_paths().game_db, player_database=get_paths().player_db).get_info(user_id=user_id)
-        if migrated_account.get("status") == "ok":
-            userlevel = str(migrated_account["bank_level"])
-            if userlevel == str(len(BANKLEVEL)):
-                await handle_send(bot, event, "道友已经是本灵庄最大的会员啦！", md_type="灵庄", k1="存灵石", v1="灵庄存灵石", k2="取灵石", v2="灵庄取灵石", k3="信息", v3="灵庄信息")
-                await bank.finish()
-            next_level = f"{int(userlevel) + 1}"
-            stonecost = BANKLEVEL[userlevel]["levelup"]
-            result = BankUpgradeApplication(get_paths().game_db).upgrade(
-                operation_id=operation_id,
-                user_id=user_id,
-                expected_level=userlevel,
-                next_level=next_level,
-                cost=stonecost,
-                settled_at=bank_clock().now().isoformat(),
-            )
-            messages = {
-                "applied": f"道友成功升级灵庄会员等级，消耗灵石{result['cost']}枚，当前为：{BANKLEVEL[result['bank_level']]['level']}，灵庄可存有灵石上限{BANKLEVEL[result['bank_level']]['savemax']}枚",
-                "duplicate": "该升级请求已经处理，无需重复提交。",
-                "stone_insufficient": "灵石不足，会员升级未结算。",
-                "state_changed": "灵庄会员升级失败：账户当前状态已更新。",
-                "operation_conflict": "请求冲突，会员升级未结算。",
-                "user_missing": "未找到修仙数据。",
-            }
-            await handle_send(bot, event, messages.get(str(result.get("status")), "会员升级未结算。"), md_type="灵庄", k1="升级", v1="灵庄升级会员", k2="信息", v2="灵庄信息", k3="帮助", v3="灵庄帮助")
-            await bank.finish()
         from ...compatibility.legacy_bank_operation_receipts import LegacyBankOperationReceiptRepository
 
-        prior = LegacyBankOperationReceiptRepository(get_paths().game_db).get_upgrade_result(operation_id)
-        if prior is not None:
-            msg = (
-                f"道友成功升级灵庄会员等级，消耗灵石{prior['cost']}枚，当前为：{BANKLEVEL[prior['bank_level']]['level']}，"
-                f"灵庄可存有灵石上限{BANKLEVEL[prior['bank_level']]['savemax']}枚\n"
-                "该升级请求已经处理，无需重复提交。"
-            )
-            await handle_send(bot, event, msg, md_type="灵庄", k1="升级", v1="灵庄升级会员", k2="信息", v2="灵庄信息", k3="帮助", v3="灵庄帮助")
+        migrated_account = BankAccountInfoApplication(get_paths().game_db).get_info(user_id=user_id)
+        account_status = str(migrated_account.get("status"))
+        if account_status not in {"ok", "account_missing"}:
+            message = "未找到修仙数据，本次会员升级未结算。" if account_status == "user_missing" else "灵庄账户暂不可用。"
+            await handle_send(bot, event, message, md_type="灵庄")
             await bank.finish()
 
-        if _legacy_account_record_status(user_id) != "missing":
-            await handle_send(bot, event, "历史灵庄账户数据不完整，本次升级未处理，请联系管理员核查。", md_type="灵庄")
-            await bank.finish()
+        initial_account = None
+        if account_status == "account_missing":
+            prior = LegacyBankOperationReceiptRepository(get_paths().game_db).get_upgrade_result(operation_id)
+            if prior is not None:
+                msg = (
+                    f"道友成功升级灵庄会员等级，消耗灵石{prior['cost']}枚，当前为：{BANKLEVEL[prior['bank_level']]['level']}，"
+                    f"灵庄可存有灵石上限{BANKLEVEL[prior['bank_level']]['savemax']}枚\n"
+                    "该升级请求已经处理，无需重复提交。"
+                )
+                await handle_send(bot, event, msg, md_type="灵庄", k1="升级", v1="灵庄升级会员", k2="信息", v2="灵庄信息", k3="帮助", v3="灵庄帮助")
+                await bank.finish()
+            initial_account = {"saved_stone": 0, "bank_level": "1", "updated_at": ""}
 
-        bankinfo = _read_legacy_bankinfo(user_id)
-        userlevel = bankinfo["banklevel"]
+        userlevel = str(migrated_account.get("bank_level", "1"))
         if userlevel == str(len(BANKLEVEL)):
             msg = f"道友已经是本灵庄最大的会员啦！"
             await handle_send(bot, event, msg, md_type="灵庄", k1="存灵石", v1="灵庄存灵石", k2="取灵石", v2="灵庄取灵石", k3="信息", v3="灵庄信息")
             await bank.finish()
 
         stonecost = BANKLEVEL[f"{int(userlevel)}"]['levelup']
-        if int(user_info['stone']) < stonecost:
-            msg = f"道友所拥有的灵石为{user_info['stone']}枚，当前升级会员等级需求灵石{stonecost}枚金额不足，请重新输入！"
-            await handle_send(bot, event, msg, md_type="灵庄", k1="升级", v1="灵庄升级会员", k2="信息", v2="灵庄信息", k3="帮助", v3="灵庄帮助")
-            await bank.finish()
-
         next_level = f"{int(userlevel) + 1}"
-        upgrade_data = BankUpgradeApplication(get_paths().game_db).upgrade(
+        result = BankUpgradeApplication(get_paths().game_db).upgrade(
             operation_id=operation_id,
             user_id=user_id,
             expected_level=userlevel,
             next_level=next_level,
             cost=stonecost,
-            settled_at=runtime_clock.now().isoformat(),
-            initial_account={
-                "saved_stone": int(bankinfo["savestone"]),
-                "bank_level": str(userlevel),
-                "updated_at": str(bankinfo["savetime"]),
-            },
+            settled_at=bank_clock().now().isoformat(),
+            initial_account=initial_account,
         )
-        upgrade_status = str(upgrade_data.get("status", "failed"))
-        upgrade_cost = int(upgrade_data.get("cost", 0) or 0)
-        upgrade_level = str(upgrade_data.get("bank_level", userlevel))
-        if upgrade_status == "duplicate":
-            msg = (
-                f"道友成功升级灵庄会员等级，消耗灵石{upgrade_cost}枚，当前为：{BANKLEVEL[upgrade_level]['level']}，"
-                f"灵庄可存有灵石上限{BANKLEVEL[upgrade_level]['savemax']}枚\n"
-                "该升级请求已经处理，无需重复提交。"
-            )
-            await handle_send(bot, event, msg, md_type="灵庄", k1="升级", v1="灵庄升级会员", k2="信息", v2="灵庄信息", k3="帮助", v3="灵庄帮助")
-            await bank.finish()
-        if upgrade_status == "stone_insufficient":
+        status = str(result.get("status", "failed"))
+        if status == "applied":
+            msg = f"道友成功升级灵庄会员等级，消耗灵石{result['cost']}枚，当前为：{BANKLEVEL[result['bank_level']]['level']}，灵庄可存有灵石上限{BANKLEVEL[result['bank_level']]['savemax']}枚"
+        elif status == "duplicate":
+            msg = "该升级请求已经处理，无需重复提交。"
+        elif status == "stone_insufficient":
             msg = "灵石不足，会员升级未结算。"
-            await handle_send(bot, event, msg, md_type="灵庄", k1="升级", v1="灵庄升级会员", k2="信息", v2="灵庄信息", k3="帮助", v3="灵庄帮助")
-            await bank.finish()
-        if upgrade_status == "state_changed":
-            msg = "灵庄会员升级失败：账户当前状态已更新，本次未结算，请重新【灵庄】查看后再试。"
-            await handle_send(bot, event, msg, md_type="灵庄", k1="升级", v1="灵庄升级会员", k2="信息", v2="灵庄信息", k3="帮助", v3="灵庄帮助")
-            await bank.finish()
-        if upgrade_status == "user_missing":
-            await handle_send(bot, event, "未找到修仙数据，本次会员升级未结算。", md_type="我要修仙")
-            await bank.finish()
-        msg = f"道友成功升级灵庄会员等级，消耗灵石{upgrade_cost}枚，当前为：{BANKLEVEL[upgrade_level]['level']}，灵庄可存有灵石上限{BANKLEVEL[upgrade_level]['savemax']}枚"
+        elif status in {"state_changed", "operation_conflict"}:
+            msg = "灵庄会员升级失败：账户当前状态已更新，本次未结算。"
+        elif status == "user_missing":
+            msg = "未找到修仙数据，本次会员升级未结算。"
+        else:
+            msg = "灵庄会员升级未完成，请刷新账户状态后重试。"
 
         await handle_send(bot, event, msg, md_type="灵庄", k1="升级", v1="灵庄升级会员", k2="信息", v2="灵庄信息", k3="帮助", v3="灵庄帮助")
         await bank.finish()
@@ -390,36 +248,25 @@ async def bank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: 
     elif mode == '信息':  # 查询灵庄信息
         from ...features.bank.account_info_application import BankAccountInfoApplication
 
-        new_info = BankAccountInfoApplication(get_paths().game_db, player_database=get_paths().player_db).get_info(user_id=user_id)
-        if new_info.get("status") == "ok":
-            msg = f'''**灵庄信息**
----
-已存
-> {new_info['saved_stone']}灵石
-存入时间
-> {new_info['updated_at']}
-会员等级
-> {BANKLEVEL[new_info['bank_level']]['level']}
-当前灵石
-> {new_info['wallet_stone']}
-存储上限
-> {BANKLEVEL[new_info['bank_level']]['savemax']}枚
-'''
-            await handle_send(bot, event, msg, md_type="灵庄", k1="存灵石", v1="灵庄存灵石", k2="取灵石", v2="灵庄取灵石", k3="结算", v3="灵庄结算")
+        new_info = BankAccountInfoApplication(get_paths().game_db).get_info(user_id=user_id)
+        if new_info.get("status") == "user_missing":
+            await handle_send(bot, event, "未找到修仙数据。", md_type="我要修仙")
             await bank.finish()
-        bankinfo = _read_legacy_bankinfo(user_id)
+        bank_level = str(new_info.get("bank_level", "1"))
+        saved_stone = int(new_info.get("saved_stone", 0) or 0)
+        updated_at = str(new_info.get("updated_at") or "尚未存入")
         msg = f'''**灵庄信息**
 ---
 已存
-> {bankinfo['savestone']}灵石
+> {saved_stone}灵石
 存入时间
-> {bankinfo['savetime']}
+> {updated_at}
 会员等级
-> {BANKLEVEL[bankinfo['banklevel']]['level']}
+> {BANKLEVEL[bank_level]['level']}
 当前灵石
-> {user_info['stone']}
+> {new_info['wallet_stone']}
 存储上限
-> {BANKLEVEL[bankinfo['banklevel']]['savemax']}枚
+> {BANKLEVEL[bank_level]['savemax']}枚
 '''
         await handle_send(bot, event, msg, md_type="灵庄", k1="存灵石", v1="灵庄存灵石", k2="取灵石", v2="灵庄取灵石", k3="结算", v3="灵庄结算")
         await bank.finish()
@@ -432,128 +279,57 @@ async def bank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: 
         from ...features.bank.interest_rules import calculate_interest
         from ...features.bank.clock import bank_clock
 
-        migrated_account = BankAccountInfoApplication(get_paths().game_db, player_database=get_paths().player_db).get_info(user_id=user_id)
-        if migrated_account.get("status") == "ok":
-            now = bank_clock().now()
-            level = str(migrated_account["bank_level"])
-            interest, hours = calculate_interest(
-                saved_stone=int(migrated_account["saved_stone"]),
-                saved_at=str(migrated_account["updated_at"]),
-                settled_at=now,
-                rate=float(BANKLEVEL[level]["interest"]),
-            )
-            result = BankInterestApplication(get_paths().game_db).settle_interest(
-                operation_id=operation_id,
-                user_id=user_id,
-                interest=interest,
-                bank_level=level,
-                settled_at=now.strftime("%Y-%m-%d %H:%M:%S"),
-            )
-            status = str(result.get("status"))
-            if status == "duplicate":
-                msg = "**灵庄结息**\n---\n✅ 结息成功\n该结息请求已经处理，无需重复提交。"
-            elif status == "applied":
-                msg = f"**灵庄结息**\n---\n✅ 结息成功\n结息时间\n> {hours}小时\n获得灵石\n> {result['interest']}枚"
-            elif status == "state_changed":
-                msg = "⚠️ 灵庄结息失败：账户当前状态已更新，本次未处理。"
-            else:
-                msg = "灵庄结息未完成。"
-            await handle_send(bot, event, msg, md_type="灵庄", k1="存灵石", v1="灵庄存灵石", k2="取灵石", v2="灵庄取灵石", k3="信息", v3="灵庄信息")
-            await bank.finish()
         from ...compatibility.legacy_bank_operation_receipts import LegacyBankOperationReceiptRepository
 
-        prior = LegacyBankOperationReceiptRepository(get_paths().game_db).get_interest_result(operation_id)
-        if prior is not None:
-            msg = f"**灵庄结息**\n---\n✅ 结息成功\n获得灵石\n> {prior['interest']}枚\n该结息请求已经处理，无需重复提交。"
-            await handle_send(bot, event, msg, md_type="灵庄", k1="存灵石", v1="灵庄存灵石", k2="取灵石", v2="灵庄取灵石", k3="信息", v3="灵庄信息")
+        migrated_account = BankAccountInfoApplication(get_paths().game_db).get_info(user_id=user_id)
+        account_status = str(migrated_account.get("status"))
+        if account_status not in {"ok", "account_missing"}:
+            message = "未找到修仙数据，本次结息未处理。" if account_status == "user_missing" else "灵庄账户暂不可用。"
+            await handle_send(bot, event, message, md_type="灵庄")
             await bank.finish()
 
-        if _legacy_account_record_status(user_id) != "missing":
-            await handle_send(bot, event, "历史灵庄账户数据不完整，本次结息未处理，请联系管理员核查。", md_type="灵庄")
-            await bank.finish()
-
-        bankinfo = _read_legacy_bankinfo(user_id)
-        expected_saved_stone = bankinfo['savestone']
-        expected_saved_at = bankinfo['savetime']
-        bankinfo, give_stone, timedeff = get_give_stone(bankinfo)
-        settlement_data = BankInterestApplication(get_paths().game_db).settle_interest(
+        now = bank_clock().now()
+        level = str(migrated_account.get("bank_level", "1"))
+        saved_stone = int(migrated_account.get("saved_stone", 0) or 0)
+        saved_at = str(migrated_account.get("updated_at") or now.isoformat())
+        initial_account = None if account_status == "ok" else {
+            "saved_stone": 0,
+            "bank_level": "1",
+            "updated_at": saved_at,
+        }
+        if account_status == "account_missing":
+            prior = LegacyBankOperationReceiptRepository(get_paths().game_db).get_interest_result(operation_id)
+            if prior is not None:
+                msg = f"**灵庄结息**\n---\n✅ 结息成功\n获得灵石\n> {prior['interest']}枚\n该结息请求已经处理，无需重复提交。"
+                await handle_send(bot, event, msg, md_type="灵庄", k1="存灵石", v1="灵庄存灵石", k2="取灵石", v2="灵庄取灵石", k3="信息", v3="灵庄信息")
+                await bank.finish()
+        interest, hours = calculate_interest(
+            saved_stone=saved_stone,
+            saved_at=saved_at,
+            settled_at=now,
+            rate=float(BANKLEVEL[level]["interest"]),
+        )
+        result = BankInterestApplication(get_paths().game_db).settle_interest(
             operation_id=operation_id,
             user_id=user_id,
-            interest=give_stone,
-            bank_level=str(bankinfo['banklevel']),
-            settled_at=str(bankinfo['savetime']),
-            initial_account={
-                "saved_stone": int(expected_saved_stone),
-                "bank_level": str(bankinfo["banklevel"]),
-                "updated_at": str(bankinfo["savetime"]),
-            },
+            interest=interest,
+            bank_level=level,
+            settled_at=now.strftime("%Y-%m-%d %H:%M:%S"),
+            initial_account=initial_account,
         )
-        settlement_status = str(settlement_data.get("status", "failed"))
-        settlement_interest = int(settlement_data.get("interest", 0) or 0)
-        if settlement_status == "duplicate":
-            msg = f"**灵庄结息**\n---\n✅ 结息成功\n结息时间\n> {timedeff}小时\n获得灵石\n> {settlement_interest}枚\n该结息请求已经处理，无需重复提交。"
-            await handle_send(bot, event, msg, md_type="灵庄", k1="存灵石", v1="灵庄存灵石", k2="取灵石", v2="灵庄取灵石", k3="信息", v3="灵庄信息")
-            await bank.finish()
-        if settlement_status == "state_changed":
-            msg = "⚠️ 灵庄结息失败：账户当前状态已更新，本次未处理，请重新【灵庄】查看后再试。"
-            await handle_send(bot, event, msg, md_type="灵庄", k1="存灵石", v1="灵庄存灵石", k2="取灵石", v2="灵庄取灵石", k3="信息", v3="灵庄信息")
-            await bank.finish()
-        if settlement_status == "user_missing":
-            await handle_send(bot, event, "❌ 未找到修仙数据，本次结息未处理。", md_type="我要修仙")
-            await bank.finish()
-        msg = f"**灵庄结息**\n---\n✅ 结息成功\n结息时间\n> {timedeff}小时\n获得灵石\n> {settlement_interest}枚"
+        status = str(result.get("status", "failed"))
+        if status == "applied":
+            msg = f"**灵庄结息**\n---\n✅ 结息成功\n结息时间\n> {hours}小时\n获得灵石\n> {result['interest']}枚"
+        elif status == "duplicate":
+            msg = "**灵庄结息**\n---\n✅ 结息成功\n该结息请求已经处理，无需重复提交。"
+        elif status in {"state_changed", "operation_conflict"}:
+            msg = "灵庄结息失败：账户当前状态已更新，本次未处理。"
+        elif status == "user_missing":
+            msg = "未找到修仙数据，本次结息未处理。"
+        else:
+            msg = "灵庄结息未完成，请刷新账户状态后重试。"
         await handle_send(bot, event, msg, md_type="灵庄", k1="存灵石", v1="灵庄存灵石", k2="取灵石", v2="灵庄取灵石", k3="信息", v3="灵庄信息")
         await bank.finish()
-
-
-def get_give_stone(bankinfo):
-    """获取利息：利息=give_stone,结算时间=timedeff"""
-    from ...features.bank.interest_rules import calculate_interest
-
-    savetime = bankinfo['savetime']  # str
-    nowtime = runtime_clock.now().strftime('%Y-%m-%d %H:%M:%S')  # str
-    give_stone, timedeff = calculate_interest(
-        saved_stone=bankinfo['savestone'],
-        saved_at=savetime,
-        settled_at=datetime.strptime(nowtime, '%Y-%m-%d %H:%M:%S'),
-        rate=BANKLEVEL[bankinfo['banklevel']]['interest'],
-    )
-    bankinfo['savetime'] = nowtime
-
-    return bankinfo, give_stone, timedeff
-
-
-def readf(user_id):
-    """Read legacy bank data without the old manager's request-time schema creation."""
-    from ...features.bank.account_info_application import BankAccountInfoApplication
-
-    return BankAccountInfoApplication(
-        get_paths().game_db,
-        player_database=get_paths().player_db,
-    ).get_legacy_info(
-        user_id=str(user_id),
-        default_saved_at=str(runtime_clock.now().strftime('%Y-%m-%d %H:%M:%S')),
-    )
-
-
-def _legacy_account_record_status(user_id):
-    from ...features.bank.account_info_application import BankAccountInfoApplication
-
-    return BankAccountInfoApplication(
-        get_paths().game_db,
-        player_database=get_paths().player_db,
-    ).legacy_record_status(user_id=str(user_id))
-
-
-def _read_legacy_bankinfo(user_id):
-    try:
-        return readf(user_id)
-    except Exception:
-        return {
-            'savestone': 0,
-            'savetime': str(runtime_clock.now().strftime('%Y-%m-%d %H:%M:%S')),
-            'banklevel': '1',
-        }
 
 
 def savef(user_id, data):

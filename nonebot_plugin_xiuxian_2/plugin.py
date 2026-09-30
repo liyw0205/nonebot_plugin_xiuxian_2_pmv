@@ -98,7 +98,7 @@ from .features.arena.migrations import apply_arena, apply_arena_challenge_purcha
 from .features.auction.manifest import FEATURE as AUCTION_FEATURE
 from .features.auction.jobs import settle as auction_settle_job
 from .features.bank.manifest import FEATURE as BANK_FEATURE
-from .features.bank.migrations import apply_bank, apply_bank_accounts
+from .features.bank.migrations import apply_bank, apply_bank_accounts, apply_bank_legacy_accounts
 from .features.activity_reward.manifest import FEATURE as ACTIVITY_REWARD_FEATURE
 from .features.activity_reward.migrations import (
     apply_activity_claim_all,
@@ -251,6 +251,7 @@ def build_migrations() -> tuple[Migration, ...]:
         Migration("back.017", "accessory_transaction_operations", apply_accessory_affix_operations),
         Migration("bank.001", "bank_feature_migrations", apply_bank),
         Migration("bank.002", "bank_accounts", apply_bank_accounts),
+        Migration("bank.003", "bank_legacy_account_backfill", apply_bank_legacy_accounts),
         Migration("base.001", "base_feature_migrations", apply_base),
         Migration("beg.001", "beg_feature_migrations", apply_beg),
         Migration("boss.001", "boss_feature_migrations", apply_boss),
@@ -853,7 +854,6 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
             ),
             "bank": BankApplication(
                 str(context.database.path("game_db")),
-                str(context.database.path("player_db")),
             ),
             "activity_reward": ActivityRewardApplication(
                 str(context.database.path("game_db")),

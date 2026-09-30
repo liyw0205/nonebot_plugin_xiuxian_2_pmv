@@ -11,7 +11,7 @@ from nonebot_plugin_xiuxian_2.adapters.web.blueprints.bank import create_bluepri
 from nonebot_plugin_xiuxian_2.features.bank.account_application import BankDepositApplication
 from nonebot_plugin_xiuxian_2.features.bank.application import BankApplication
 from nonebot_plugin_xiuxian_2.features.bank.domain import BankDepositRequest
-from nonebot_plugin_xiuxian_2.features.bank.migrations import apply_bank_accounts
+from nonebot_plugin_xiuxian_2.features.bank.migrations import apply_bank_accounts, apply_bank_legacy_accounts
 from nonebot_plugin_xiuxian_2.infrastructure.database import DatabaseUnitOfWork, OperationLedger
 from nonebot_plugin_xiuxian_2.plugin import apply_platform_schema
 
@@ -52,6 +52,8 @@ class BankV1WebCutoverTests(unittest.TestCase):
         )
 
     def test_all_v1_writes_use_imported_game_account_and_replay(self) -> None:
+        with DatabaseUnitOfWork(self.game) as uow:
+            apply_bank_legacy_accounts(uow)
         deposit_payload = {
             "amount": 50, "expected_saved_stone": 100, "expected_saved_at": "legacy-time",
             "bank_level": "1", "interest": 0, "settled_at": "deposit-time", "save_limit": 1000,
@@ -148,18 +150,14 @@ class BankV1WebCutoverTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertFalse(self.player.exists())
 
-    def test_invalid_legacy_schema_fails_closed(self) -> None:
+    def test_invalid_legacy_schema_blocks_startup_backfill_without_asset_changes(self) -> None:
         with sqlite3.connect(self.player) as connection:
             connection.execute("DROP TABLE bankinfo")
             connection.execute("CREATE TABLE bankinfo(user_id TEXT PRIMARY KEY, savestone INTEGER)")
             connection.execute("INSERT INTO bankinfo VALUES ('u1', 900)")
-        response = self.post(
-            "deposit", "invalid-legacy", amount=25, expected_saved_stone=900,
-            expected_saved_at="legacy-time", bank_level="1", interest=0,
-            settled_at="deposit-time", save_limit=1000,
-        )
-        self.assertEqual(response.status_code, 409)
-        self.assertEqual(response.get_json()["data"]["data"]["status"], "account_invalid")
+        with self.assertRaisesRegex(RuntimeError, "legacy bankinfo schema incomplete"):
+            with DatabaseUnitOfWork(self.game) as uow:
+                apply_bank_legacy_accounts(uow)
         with sqlite3.connect(self.game) as connection:
             wallet = connection.execute("SELECT stone FROM user_xiuxian WHERE user_id='u1'").fetchone()[0]
             account = connection.execute("SELECT 1 FROM bank_accounts WHERE user_id='u1'").fetchone()
@@ -172,6 +170,8 @@ class BankV1WebCutoverTests(unittest.TestCase):
             "expected_saved_stone": 100, "expected_saved_at": "legacy-time",
             "bank_level": "1", "interest": 0, "settled_at": "recovered-time", "save_limit": 1000,
         }
+        with DatabaseUnitOfWork(self.game) as uow:
+            apply_bank_legacy_accounts(uow)
         BankDepositApplication(self.game).deposit(
             operation_id=request["operation_id"], user_id=request["user_id"],
             amount=request["amount"], interest=request["interest"], limit=request["save_limit"],
@@ -191,7 +191,7 @@ class BankV1WebCutoverTests(unittest.TestCase):
         with sqlite3.connect(self.game) as connection:
             wallet = connection.execute("SELECT stone FROM user_xiuxian WHERE user_id='u1'").fetchone()[0]
             saved = connection.execute("SELECT saved_stone FROM bank_accounts WHERE user_id='u1'").fetchone()[0]
-        self.assertEqual((wallet, saved), (975, 25))
+        self.assertEqual((wallet, saved), (975, 125))
 
 
 if __name__ == "__main__":
