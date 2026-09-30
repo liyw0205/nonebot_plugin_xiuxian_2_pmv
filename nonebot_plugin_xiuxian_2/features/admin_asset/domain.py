@@ -31,6 +31,19 @@ class StoneAdjustmentRequest:
 
 
 @dataclass(frozen=True)
+class StoneBatchAdjustmentRequest:
+    operation_id: str
+    operator_id: str
+    requested_delta: int
+
+    def validate(self) -> None:
+        if not self.operation_id or not self.operator_id:
+            raise ValueError("operation_id and operator_id are required")
+        if self.requested_delta == 0:
+            raise ValueError("requested_delta must not be zero")
+
+
+@dataclass(frozen=True)
 class ItemGrantRequest:
     operation_id: str
     operator_id: str
@@ -65,4 +78,4 @@ class ItemGrantRequest:
         }
 
 
-__all__ = ["ItemGrantRequest", "StoneAdjustmentRequest"]
+__all__ = ["ItemGrantRequest", "StoneAdjustmentRequest", "StoneBatchAdjustmentRequest"]

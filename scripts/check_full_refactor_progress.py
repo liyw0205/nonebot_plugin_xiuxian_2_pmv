@@ -542,11 +542,15 @@ def _slice_status() -> dict[str, dict[str, object]]:
     ]
     impart_pk_facade = (PACKAGE / "xiuxian" / "xiuxian_impart_pk" / "__init__.py").read_text(encoding="utf-8")
     admin_facade = (PACKAGE / "xiuxian" / "xiuxian_admin" / "__init__.py").read_text(encoding="utf-8")
+    admin_stone_batch_handler = admin_facade[
+        admin_facade.index("@gm_command.handle") : admin_facade.index("# GM加思恋结晶")
+    ]
     admin_asset_application = (PACKAGE / "features" / "admin_asset" / "application.py").read_text(encoding="utf-8")
     admin_asset_stone_application = admin_asset_application[
         admin_asset_application.index("    def adjust_stone(") : admin_asset_application.index("    def adjust_impart_stone(")
     ]
     admin_stone_repository = (PACKAGE / "features" / "admin_asset" / "stone_repository.py").read_text(encoding="utf-8")
+    admin_stone_batch_repository = (PACKAGE / "features" / "admin_asset" / "stone_batch_repository.py").read_text(encoding="utf-8")
     admin_asset_migrations = (PACKAGE / "features" / "admin_asset" / "migrations.py").read_text(encoding="utf-8")
     admin_asset_manifest = (PACKAGE / "features" / "admin_asset" / "manifest.py").read_text(encoding="utf-8")
     return {
@@ -1930,11 +1934,42 @@ def _slice_status() -> dict[str, dict[str, object]]:
             ),
             "stone_startup_migration_registered": (
                 'Migration("admin_asset.002", "admin_stone_adjustment_operations", apply_admin_stone_adjustment)' in plugin
-                and 'migration_version="admin_asset.002"' in admin_asset_manifest
+                and 'migration_version="admin_asset.003"' in admin_asset_manifest
             ),
             "stone_started_operation_recoverable": (
                 "The repository receipt can recover a commit whose" in admin_asset_stone_application
                 and 'raise ConflictError("操作正在处理中")' not in admin_asset_stone_application
+            ),
+            "global_stone_batch_application_owned": (
+                "admin_asset_application.adjust_stone_batch(" in admin_stone_batch_handler
+                and "AdminStoneBatchSqlRepository" in admin_asset_application
+            ),
+            "global_stone_batch_legacy_update_removed": (
+                "update_ls_all(" not in admin_stone_batch_handler
+                and "find_running_stone_batch(" in admin_stone_batch_handler
+            ),
+            "global_stone_batch_async_and_resumable": (
+                "spawn_admin_job(" in admin_stone_batch_handler
+                and "run_chunked_until_done" in admin_stone_batch_handler
+                and "def find_running(" in admin_stone_batch_repository
+                and "status='pending'" in admin_stone_batch_repository
+            ),
+            "global_stone_batch_duplicate_request_guarded": (
+                '"in_progress"' in admin_stone_batch_repository
+                and "admin_stone_batch_single_running_idx" in admin_asset_migrations
+                and '"in_progress":' in admin_stone_batch_handler
+            ),
+            "global_stone_batch_request_path_has_no_ddl": (
+                "CREATE TABLE" not in admin_stone_batch_repository
+                and "admin_stone_batch_progress" in admin_asset_migrations
+            ),
+            "global_stone_batch_disk_preflight": (
+                "shutil.disk_usage" in admin_stone_batch_repository
+                and "bytes_per_target" in admin_stone_batch_repository
+            ),
+            "global_stone_batch_startup_migration_registered": (
+                'Migration("admin_asset.003", "admin_stone_batch_adjustment_operations", apply_admin_stone_batch)' in plugin
+                and 'migration_version="admin_asset.003"' in admin_asset_manifest
             ),
             "item_destroy_application_owned": "admin_asset_application.destroy_item(" in admin_facade,
             "exp_adjust_application_owned": "admin_asset_application.adjust_exp(" in admin_facade,
@@ -1948,7 +1983,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "impart_stone_batch_application_owned": "admin_application.adjust_impart_stone_batch(" in admin_facade,
             "blackhouse_application_owned": "admin_application.set_blackhouse_status(" in admin_facade,
             "player_status_application_owned": "admin_application.reset_player_status(" in admin_facade,
-            "status": "stone_single_user_default_feature_owned_with_admin_batch_and_other_admin_compatibility",
+            "status": "single_and_global_stone_feature_owned_with_other_admin_compatibility",
         },
     }
 

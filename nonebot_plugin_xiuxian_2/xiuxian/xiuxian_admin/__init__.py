@@ -222,6 +222,22 @@ def _admin_operation_id(event, action: str, user_id: str) -> str:
     return f"admin-{action}:{event_id or __import__('time').time_ns()}:{user_id}"
 
 
+async def _broadcast_admin_announcement(bot, event, message: str) -> None:
+    enabled_groups = JsonConfig().get_enabled_groups()
+    current_group = str(getattr(event, "group_id", ""))
+    for group_id in enabled_groups:
+        if str(group_id) == current_group:
+            continue
+        try:
+            if XiuConfig().img:
+                picture = await get_msg_pic(message)
+                await delivery_service.send_to_group(bot, group_id, MessageSegment.image(picture))
+            else:
+                await delivery_service.send_to_group(bot, group_id, message)
+        except Exception as exc:
+            logger.debug(f"全服灵石广播到群 {group_id} 失败：{exc}")
+
+
 def _destroy_admin_item(event, user_id, goods_id, item_info, quantity, expected_quantity, target_name):
     operation_id = _admin_operation_id(event, "item-destroy", user_id)
     outcome = admin_asset_application.destroy_item(
@@ -518,23 +534,51 @@ async def gm_command_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
 
     # 执行发放/扣除
     if user_id is None:  # 全服
-        _sql_message().update_ls_all(amount)
         action = "增加" if amount > 0 else "扣除"
         msg = f"全服通告：{action}{number_to(abs(amount))}枚灵石，请注意查收！"
-        await handle_send(bot, event, msg)
-        # 全服广播（原有逻辑）
-        enabled_groups = JsonConfig().get_enabled_groups()
-        for gid in enabled_groups:
-            if str(gid) == str(event.group_id):
-                continue
-            try:
-                if XiuConfig().img:
-                    pic = await get_msg_pic(msg)
-                    await delivery_service.send_to_group(bot, gid, MessageSegment.image(pic))
-                else:
-                    await delivery_service.send_to_group(bot, gid, msg)
-            except Exception as e:
-                logger.debug(f"全服灵石广播到群 {gid} 失败：{e}")
+        if amount == 0:
+            await handle_send(bot, event, msg)
+            await _broadcast_admin_announcement(bot, event, msg)
+            return
+
+        operator_id = str(get_user_id(event) or "unknown")
+        operation_id = admin_asset_application.find_running_stone_batch(
+            operator_id=operator_id, requested_delta=amount
+        ) or _admin_operation_id(event, "stone-adjust-all", "all")
+
+        async def _work():
+            result = await asyncio.to_thread(
+                run_chunked_until_done,
+                lambda: admin_asset_application.adjust_stone_batch(
+                    operation_id=operation_id,
+                    operator_id=operator_id,
+                    requested_delta=amount,
+                ),
+            )
+            if result.status in {"applied", "duplicate"}:
+                await _broadcast_admin_announcement(bot, event, msg)
+            return result
+
+        def _done(result):
+            messages = {
+                "in_progress": "同一管理员的相同全服灵石调整已有批次正在执行，请稍后再试。",
+                "operation_conflict": "本次全服灵石调整与已记录计划冲突",
+                "not_ready": "全服灵石调整服务尚未就绪，请检查启动迁移。",
+                "invalid_schema": "玩家灵石数据结构异常，未执行全服调整。",
+                "insufficient_space": "可用磁盘空间不足，未启动全服灵石调整。",
+                "progress_corrupt": "全服灵石调整进度记录异常，操作已停止。",
+            }
+            return messages.get(result.status, msg)
+
+        await spawn_admin_job(
+            bot,
+            event,
+            job_key=f"stone-all:{operation_id}",
+            start_msg="全服灵石调整已在后台开始，完成后将发送通告。",
+            work=_work,
+            done_msg=_done,
+            fail_prefix="全服灵石调整失败",
+        )
     else:  # 单人
         if amount == 0:
             await handle_send(bot, event, "单人灵石调整数量不能为 0")

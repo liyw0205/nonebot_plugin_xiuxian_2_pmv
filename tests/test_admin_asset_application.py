@@ -5,7 +5,7 @@ import unittest
 from pathlib import Path
 
 from nonebot_plugin_xiuxian_2.features.admin_asset.application import AdminAssetApplication
-from nonebot_plugin_xiuxian_2.features.admin_asset.migrations import apply_admin_stone_adjustment
+from nonebot_plugin_xiuxian_2.features.admin_asset.migrations import apply_admin_stone_adjustment, apply_admin_stone_batch
 from nonebot_plugin_xiuxian_2.features.admin_asset.stone_repository import AdminStoneSqlRepository
 from nonebot_plugin_xiuxian_2.infrastructure.database import DatabaseUnitOfWork
 from nonebot_plugin_xiuxian_2.plugin import apply_platform_schema
@@ -128,6 +128,41 @@ class AdminAssetApplicationTests(unittest.TestCase):
             self.assertEqual(first.code, "state_changed")
             self.assertEqual(second.code, "state_changed")
             self.assertEqual(repository.calls, 1)
+
+    def test_global_stone_batch_application_resumes_from_operation_receipt(self):
+        with tempfile.TemporaryDirectory() as directory:
+            app = self._application(directory)
+            database = Path(directory) / "game.db"
+            with DatabaseUnitOfWork(database) as uow:
+                uow.execute("CREATE TABLE user_xiuxian(user_id TEXT PRIMARY KEY,stone INTEGER)")
+                uow.executemany(
+                    "INSERT INTO user_xiuxian(user_id,stone) VALUES(?,?)",
+                    (("a", 10), ("b", 20)),
+                )
+                apply_admin_stone_batch(uow)
+
+            first = app.adjust_stone_batch(
+                operation_id="global-stone", operator_id="operator-1", requested_delta=5, chunk_size=1
+            )
+            self.assertEqual(first.completed, 1)
+            self.assertEqual(
+                app.find_running_stone_batch(operator_id="operator-1", requested_delta=5),
+                "global-stone",
+            )
+            resumed = app.adjust_stone_batch(
+                operation_id="global-stone", operator_id="operator-1", requested_delta=5, chunk_size=1
+            )
+            duplicate = app.adjust_stone_batch(
+                operation_id="global-stone", operator_id="operator-1", requested_delta=5, chunk_size=1
+            )
+            self.assertEqual((resumed.completed, resumed.applied_delta), (2, 10))
+            self.assertEqual(duplicate.status, "duplicate")
+            with DatabaseUnitOfWork(database) as uow:
+                balances = [
+                    row["stone"]
+                    for row in uow.query_all("SELECT stone FROM user_xiuxian ORDER BY user_id")
+                ]
+            self.assertEqual(balances, [15, 25])
 
     def test_zero_delta_is_rejected_before_repository(self):
         with tempfile.TemporaryDirectory() as directory:

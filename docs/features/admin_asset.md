@@ -16,15 +16,15 @@
 
 ## 数据模型与迁移
 
-`admin_asset.001` 创建 feature migration 标记；`admin_asset.002` 在启动阶段预建单人灵石调整回执和 `economy_log.trace_id`，请求路径不执行 DDL。单人灵石调整复用 `admin_stone_adjustment_operations` 以延续旧回执，普通物品发放仍由其各自 feature repository 管理；`admin_item_grant_operations` 保留为兼容数据。`operation_ledger`/`operation_audit` 是应用级流水。
+`admin_asset.001` 创建 feature migration 标记；`admin_asset.002` 在启动阶段预建单人灵石调整回执和 `economy_log.trace_id`；`admin_asset.003` 预建全服灵石批次回执与逐用户进度，并用部分唯一索引限制同一管理员/增量最多一个 running 批次。请求路径不执行 DDL。全服进度行保存冻结的目标集、执行前后余额和实际增量，是操作审计数据而非缓存；删除前必须制定独立保留策略。启动新批次前按用户数预估所需磁盘空间，不足时 fail closed。
 
 ## 事务与失败回滚
 
-feature stone repository 在一个 game DB immediate UoW 中提交余额 CAS、旧格式 operation receipt、`economy_log` 和 trace ID；用户不存在、快照变化、操作号冲突都不会改资产。扣减仍封顶至 0，审计记录实际 delta。统一 operation ledger 若停在 `started`，相同请求可借 repository receipt 安全恢复；晚期 SQL 异常同时回滚余额、receipt 和经济审计。显式注入 `LegacyAdminStoneRepository` 仍可供回滚使用，但不由默认 composition root 创建。
+feature 单人 stone repository 在一个 game DB immediate UoW 中提交余额 CAS、旧格式 operation receipt、`economy_log` 和 trace ID；用户不存在、快照变化、操作号冲突都不会改资产。扣减仍封顶至 0，审计记录实际 delta。统一 operation ledger 若停在 `started`，相同请求可借 repository receipt 安全恢复；晚期 SQL 异常同时回滚余额、receipt 和经济审计。全服调整将首次目标集冻结在 game DB，随后每次最多处理 100 人；每个 chunk 的余额更新与前后值/结果同事务提交。新用户不加入已开始的操作，处理前被删除的用户记为 skipped；增减不封顶，保持旧 SQL 算术。批次创建在 `BEGIN IMMEDIATE` 内检查相同管理员/增量的活动操作；若另一个 operation ID 已有运行批次则返回 `in_progress`，不会再执行一个批次，部分唯一索引提供数据库级兜底。显式注入 `LegacyAdminStoneRepository` 仍可供回滚使用，但不由默认 composition root 创建。
 
 ## 定时任务
 
-无。管理员调整是显式请求，不自动重试或后台批量执行。
+单人调整是显式请求。全服灵石命令使用后台分块执行；进程中断后，相同管理员和增量可恢复仍在运行的冻结批次。
 
 ## 配置项
 
@@ -32,12 +32,12 @@ feature stone repository 在一个 game DB immediate UoW 中提交余额 CAS、�
 
 ## 适配器差异
 
-核心应用不导入 NoneBot、Flask 或 SQLite 驱动。命令和 Web adapter 只负责解析上下文、权限和响应；默认灵石仓储通过 feature-owned UoW 写入，显式 rollback 仓储才惰性调用旧管理员事务 service。
+核心应用不导入 NoneBot、Flask 或 SQLite 驱动。命令和 Web adapter 只负责解析上下文、权限和响应；单人及全服灵石仓储通过 feature-owned UoW 写入，显式 rollback 仓储才惰性调用旧管理员事务 service。
 
 ## 测试与手工验收
 
-执行 `python -m unittest tests.test_admin_asset_application tests.test_admin_stone_adjustment_transaction -q`，并运行 admin asset repository/source/progress tests；Flask client 覆盖匿名拒绝、CSRF 失败、管理员成功、重复操作重放和快照变化拒绝。
+执行 admin asset application、stone repository/batch repository、source contract、progress 和架构/migration tests；Flask client 覆盖匿名拒绝、CSRF 失败、管理员成功、重复操作重放和快照变化拒绝。全服批次回归覆盖冻结目标集、分块恢复、冲突、不同 operation ID 的重复活动请求、晚期失败回滚和磁盘空间不足。
 
 ## 灰度开关、回滚和已知限制
 
-设置 `XIUXIAN_ADMIN_ASSET_ENABLED=false` 后重启可停用新 adapter；不删除旧流水。单人灵石默认路径已由 feature repository 承担，显式 legacy repository 保留作回滚。普通物品发放、全服灵石、全服物品、物品扣除、修为和传承资产仍有各自兼容边界。
+单人及全服灵石默认路径已由 feature repositories 承担，显式 legacy single-user repository 保留作回滚；批次回执及逐用户进度属于持久业务记录，不随测试缓存清理。普通物品发放、全服物品、物品扣除、修为和传承资产仍有各自兼容边界。

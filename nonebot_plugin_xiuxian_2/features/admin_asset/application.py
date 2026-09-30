@@ -8,10 +8,11 @@ from ...core.errors import ConflictError, DomainError, ValidationError
 from ...core.result import OperationOutcome, ReplyPlan
 from ...infrastructure.database import DatabaseUnitOfWork, OperationLedger
 from ...infrastructure.observability import trace_context
-from .domain import ItemGrantRequest, StoneAdjustmentRequest
+from .domain import ItemGrantRequest, StoneAdjustmentRequest, StoneBatchAdjustmentRequest
 from .repository import AdminItemRepository, AdminStoneRepository, LegacyAdminItemRepository, LegacyAdminStoneRepository
 from .schemas import ItemGrantResult, StoneAdjustmentResult
 from .stone_repository import AdminStoneSqlRepository
+from .stone_batch_repository import AdminStoneBatchSqlRepository
 from .item_repository import AdminItemSqlRepository
 from .impart_stone_repository import AdminImpartStoneSqlRepository
 from .item_destroy_repository import AdminItemDestroySqlRepository
@@ -105,6 +106,37 @@ class AdminAssetApplication:
             except Exception as exc:
                 self.ledger.record_failure(self.database, request.operation_id, self.action, payload, str(exc))
                 raise
+
+    def find_running_stone_batch(
+        self, *, operator_id: str, requested_delta: int
+    ) -> str | None:
+        return AdminStoneBatchSqlRepository(self.database).find_running(
+            operator_id, requested_delta
+        )
+
+    def adjust_stone_batch(
+        self,
+        *,
+        operation_id: str,
+        operator_id: str,
+        requested_delta: int,
+        chunk_size: int = 100,
+    ):
+        try:
+            request = StoneBatchAdjustmentRequest(
+                str(operation_id).strip(),
+                str(operator_id).strip(),
+                int(requested_delta),
+            )
+            request.validate()
+        except (TypeError, ValueError) as exc:
+            raise ValidationError(str(exc)) from exc
+        return AdminStoneBatchSqlRepository(self.database).adjust(
+            request.operation_id,
+            request.operator_id,
+            request.requested_delta,
+            chunk_size=chunk_size,
+        )
 
     def adjust_impart_stone(
         self, *, operation_id: str, operator_id: str, user_id: str,
