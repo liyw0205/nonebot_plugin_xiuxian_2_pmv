@@ -14,6 +14,7 @@ import nonebot
 nonebot.init()
 
 import nonebot_plugin_xiuxian_2.xiuxian.xiuxian_rift as rift_module
+import nonebot_plugin_xiuxian_2.xiuxian.xiuxian_rift.riftmake as riftmake
 from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_rift import jsondata
 from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_rift.transaction_service import (
     RiftEntryService,
@@ -50,15 +51,57 @@ def test_rift_entry_reader_falls_back_to_legacy_json_when_projection_is_empty():
             assert jsondata.read_rift_data("u") == expected
 
 
-def test_rift_make_defers_legacy_writer_construction():
+def test_rift_make_uses_lazy_feature_owned_economy_writer():
     source = Path(
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_rift/riftmake.py"
     ).read_text(encoding="utf-8")
-    assert "_sql_message_instance = None" in source
-    assert "def _sql_message(" in source
-    assert "_sql_message().update_exp(" in source
-    assert "_sql_message().update_ls(" in source
-    assert "sql_message = XiuxianDateManage()" not in source
+    assert "_economy_application_instance = None" in source
+    assert "def _economy_application(" in source
+    assert "PlayerEconomyApplication" in source
+    assert ".grant_experience(" in source
+    assert ".grant_stone(" in source
+    assert "XiuxianDateManage" not in source
+    assert ".update_exp(" not in source
+    assert ".update_ls(" not in source
+
+
+def test_rift_boss_compatibility_adapter_persists_through_economy_application():
+    class Resolver:
+        async def roll(self, *_args, **kwargs):
+            assert kwargs["battle_mode"] == 2
+            return SimpleNamespace(
+                battle_result="battle",
+                message="victory",
+                outcome={"delta": {"exp": 7, "stone": 11}},
+                victory=True,
+            )
+
+    class Economy:
+        def __init__(self):
+            self.experience = []
+            self.stones = []
+
+        def grant_experience(self, *args, **kwargs):
+            self.experience.append((args, kwargs))
+
+        def grant_stone(self, *args, **kwargs):
+            self.stones.append((args, kwargs))
+
+    async def run():
+        economy = Economy()
+        with patch.object(riftmake, "_boss_battle_resolver", return_value=Resolver()), patch.object(
+            riftmake, "_economy_application", return_value=economy
+        ):
+            result = await riftmake.get_boss_battle_info(
+                {"user_id": "u", "exp": 100}, 2, "bot", persist=True
+            )
+        assert result == ("battle", "victory")
+        assert economy.experience == [
+            (("u", 7), {"max_exp": 107, "expected_exp": 100})
+        ]
+        assert economy.stones == [(("u", 11), {})]
+
+    asyncio.run(run())
 
 
 def test_rift_entry_handlers_use_feature_application():

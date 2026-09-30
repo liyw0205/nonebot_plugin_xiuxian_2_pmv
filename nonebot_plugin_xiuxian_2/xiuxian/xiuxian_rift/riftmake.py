@@ -2,11 +2,12 @@ import json
 import random
 import sqlite3
 from ...infrastructure.database import DatabaseUnitOfWork
+from ...features.base.economy_application import PlayerEconomyApplication
 from ...paths import get_paths
 from .riftconfig import get_rift_config
 from ..xiuxian_utils.utils import get_player_attributes, number_to
 from .jsondata import read_f
-from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage, OtherSet
+from ..xiuxian_utils.xiuxian2_handle import OtherSet
 from ..xiuxian_utils.player_fight import (
     Boss_fight,
     generate_boss_buff,
@@ -25,7 +26,7 @@ from ...features.rift.domain import (
     RiftTreasureResolver,
 )
 
-_sql_message_instance = None
+_economy_application_instance = None
 _items_instance = None
 
 
@@ -58,11 +59,15 @@ _RIFT_BATTLE_ITEM_SOURCES = (
 )
 
 
-def _sql_message():
-    global _sql_message_instance
-    if _sql_message_instance is None:
-        _sql_message_instance = XiuxianDateManage()
-    return _sql_message_instance
+def _economy_application() -> PlayerEconomyApplication:
+    global _economy_application_instance
+    database = get_paths().game_db
+    if (
+        _economy_application_instance is None
+        or str(_economy_application_instance.repository.database) != str(database)
+    ):
+        _economy_application_instance = PlayerEconomyApplication(database)
+    return _economy_application_instance
 
 
 def get_rift_battle_item_data(item_id):
@@ -565,8 +570,21 @@ async def get_boss_battle_info(user_info, rift_rank, bot_id, persist=True):
     )
     if persist and event.victory:
         delta = event.outcome["delta"]
-        _sql_message().update_exp(user_info['user_id'], delta.get("exp", 0))
-        _sql_message().update_ls(user_info['user_id'], delta.get("stone", 0), 1)
+        user_id = str(user_info["user_id"])
+        current_exp = int(user_info.get("exp", 0) or 0)
+        exp_delta = max(0, int(delta.get("exp", 0) or 0))
+        stone_delta = max(0, int(delta.get("stone", 0) or 0))
+        if exp_delta or stone_delta:
+            economy = _economy_application()
+            if exp_delta:
+                economy.grant_experience(
+                    user_id,
+                    exp_delta,
+                    max_exp=current_exp + exp_delta,
+                    expected_exp=current_exp,
+                )
+            if stone_delta:
+                economy.grant_stone(user_id, stone_delta)
     if persist:
         return event.battle_result, event.message
     return event.battle_result, event.message, event.outcome

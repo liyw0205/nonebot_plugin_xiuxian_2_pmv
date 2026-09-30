@@ -2,7 +2,7 @@
 
 状态：进行中。`v1.1.0` 的 P0-P7 发布证据继续保留，但不作为底层全面重构完成证明。
 
-2026-10-01 player economy reward write boundary：`RewardService` 的灵石、修为、宗门贡献写入统一经 `features/base/economy_application.py -> economy_repository.py`，补偿兼容奖励和师徒历史奖励的直接 `update_ls` 也改走同一 application。仓储在既有 `user_xiuxian` 表上做首行 rowid/CAS 更新，修为按上限封顶；缺数据库、表、字段或用户时 fail closed，不执行请求期 DDL。新增成功、封顶、状态冲突、重复用户、缺 schema/用户和来源静态门禁回归；无新增 migration，旧 Rift 战斗兼容适配仍保留为显式边界。缓存与字节码在验收后清理，用户 `boss_info.json` 修改保留。全局旧 transaction services、`xiuxian2_handle`、正式发布/P7 仍未完成 blocker。
+2026-10-01 player economy reward write boundary：`RewardService` 的灵石、修为、宗门贡献写入统一经 `features/base/economy_application.py -> economy_repository.py`，补偿兼容奖励、师徒历史奖励和 Rift Boss 兼容适配器的直接经济写入也改走同一 application。仓储在既有 `user_xiuxian` 表上做首行 rowid/CAS 更新，修为按上限封顶；缺数据库、表、字段或用户时 fail closed，不执行请求期 DDL。新增成功、封顶、状态冲突、重复用户、缺 schema/用户和来源静态门禁回归；无新增 migration。缓存与字节码在验收后清理，用户 `boss_info.json` 修改保留。全局旧 transaction services、`xiuxian2_handle`、正式发布/P7 仍未完成 blocker。
 
 2026-10-01 stamina refund ownership：连续爬塔、世界首领训练入口和突破入口在 Cooldown 已预扣体力、但因重伤/冷却/缺少丹药提前结束时，返还路径统一改由 `restore_player_stamina -> PlayerStaminaApplication -> PlayerStaminaSqlRepository` 承担；按首个 `user_xiuxian` 行做封顶 CAS，缺数据库、schema 或用户时 fail closed，不执行请求期 DDL。新增单用户返还的封顶、重复 user_id、缺 schema 回归与 base/tower source-progress 门禁；无 migration、无运行数据访问。本轮测试/字节码缓存使用专用临时目录并清理，用户 `boss_info.json` 修改保留。战斗/突破结算仍由各自 application 或显式 compatibility service 承担，其他旧体力写入仍未迁移。
 

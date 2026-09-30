@@ -103,6 +103,7 @@ def test_reward_and_compatibility_sources_no_longer_write_player_economy_directl
         (root / "xiuxian_utils/reward_service.py").read_text(encoding="utf-8"),
         (root / "xiuxian_compensation/common.py").read_text(encoding="utf-8"),
         (root / "xiuxian_buff/partner.py").read_text(encoding="utf-8"),
+        (root / "xiuxian_rift/riftmake.py").read_text(encoding="utf-8"),
     ]
     for source in sources:
         assert ".update_ls(" not in source
