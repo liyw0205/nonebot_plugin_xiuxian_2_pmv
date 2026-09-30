@@ -14,10 +14,11 @@ from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_admin.transaction_service import (
 OLD = ("练气境初期", 6000, 3000, 6000, 600, 22800, "混沌灵根", 0)
 
 
-def test_admin_facade_defers_level_change_service_construction():
+def test_admin_facade_no_longer_constructs_legacy_level_change_service():
     from nonebot_plugin_xiuxian_2.xiuxian import xiuxian_admin
 
-    assert xiuxian_admin._admin_level_change_service_instance is None
+    assert not hasattr(xiuxian_admin, "_admin_level_change_service")
+    assert not hasattr(xiuxian_admin, "_admin_level_change_service_instance")
 
 def test_admin_level_change_uses_feature_application(tmp_path):
     source = Path(__file__).parents[1] / "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py"

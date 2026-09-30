@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any, Dict, List
 from ...paths import get_paths
 from ...features.admin_asset.application import AdminAssetApplication
+from ...features.admin_asset.root_repository import AdminRootChangeSqlRepository
 from ...features.admin.application import AdminApplication
 from nonebot.typing import T_State
 from nonebot.permission import SUPERUSER
@@ -68,8 +69,6 @@ from .admin_helpers import (
     parse_broadcast_duration_and_content,
     parse_clear_broadcast_kind,
 )
-from .transaction_service import AdminLevelChangeService
-from .transaction_service import AdminRootChangeService
 from .transaction_service import AdminExpAdjustmentService
 from .transaction_service import AdminItemDestroyService
 from .transaction_service import AdminItemBatchGrantService
@@ -91,8 +90,6 @@ from . import group_welcome as _group_welcome  # noqa: F401
 
 items = Items()
 _sql_message_instance = None
-_admin_level_change_service_instance = None
-_admin_root_change_service_instance = None
 _admin_exp_adjustment_service_instance = None
 admin_asset_application = AdminAssetApplication(get_paths().game_db)
 admin_application = AdminApplication(get_paths().game_db)
@@ -182,25 +179,11 @@ def _admin_blackhouse_status_service():
     return _admin_blackhouse_status_service_instance
 
 
-def _admin_level_change_service():
-    global _admin_level_change_service_instance
-    if _admin_level_change_service_instance is None:
-        _admin_level_change_service_instance = AdminLevelChangeService(get_paths().game_db)
-    return _admin_level_change_service_instance
-
-
 def _admin_exp_adjustment_service():
     global _admin_exp_adjustment_service_instance
     if _admin_exp_adjustment_service_instance is None:
         _admin_exp_adjustment_service_instance = AdminExpAdjustmentService(get_paths().game_db)
     return _admin_exp_adjustment_service_instance
-
-
-def _admin_root_change_service():
-    global _admin_root_change_service_instance
-    if _admin_root_change_service_instance is None:
-        _admin_root_change_service_instance = AdminRootChangeService(get_paths().game_db)
-    return _admin_root_change_service_instance
 
 
 def _admin_item_batch_grant_service():
@@ -859,6 +842,8 @@ async def zaohua_xiuxian_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
         msg = "本次管理员境界操作与已记录事件冲突"
     elif result.status == "user_missing":
         msg = "目标玩家已不存在"
+    elif result.status == "schema_missing":
+        msg = "管理员境界服务尚未就绪，请检查启动迁移。"
     else:
         msg = f"已将 {target_user['user_name']} 的境界变更为 【{result.level}】！"
     await handle_send(bot, event, msg)
@@ -916,7 +901,7 @@ async def gmm_command_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
         await handle_send(bot, event, "未找到目标用户（或对方未踏入修仙界）")
         return
 
-    _, new_root_type = _admin_root_change_service().root_values(root_id, target_user["user_name"])
+    _, new_root_type = AdminRootChangeSqlRepository.root_values(root_id, target_user["user_name"])
     root_config = jsondata.root_data()
     if new_root_type == "命运道果":
         new_root_rate = float(root_config["永恒道果"]["type_speeds"])
@@ -943,6 +928,8 @@ async def gmm_command_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
         msg = "本次管理员灵根操作与已记录事件冲突"
     elif result.status == "user_missing":
         msg = "目标玩家已不存在"
+    elif result.status == "schema_missing":
+        msg = "管理员灵根服务尚未就绪，请检查启动迁移。"
     else:
         msg = f"已将 {target_user['user_name']} 的灵根变更为 【{result.root_type}】！"
     await handle_send(bot, event, msg)

@@ -90,11 +90,25 @@ def apply_admin_item_grant(uow: DatabaseUnitOfWork) -> None:
     )
 
 
+def apply_admin_realm_changes(uow: DatabaseUnitOfWork) -> None:
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS admin_level_change_operations("
+        "operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,result_json TEXT NOT NULL,"
+        "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+    )
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS admin_root_change_operations("
+        "operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,result_json TEXT NOT NULL,"
+        "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+    )
+
+
 __all__ = [
     "apply_admin_asset",
     "apply_admin_exp_adjustment",
     "apply_admin_item_destroy",
     "apply_admin_item_grant",
+    "apply_admin_realm_changes",
     "apply_admin_stone_adjustment",
     "apply_admin_stone_batch",
 ]

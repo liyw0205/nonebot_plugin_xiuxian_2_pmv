@@ -24,7 +24,32 @@ class AdminLevelChangeResult:
 
 class AdminLevelChangeSqlRepository:
     def __init__(self, database: str | Path) -> None:
-        self.database = str(database)
+        self.database = Path(database)
+
+    @staticmethod
+    def _schema_ready(uow: DatabaseUnitOfWork) -> bool:
+        required_columns = {
+            "admin_level_change_operations": {"operation_id", "payload", "result_json", "created_at"},
+            "user_xiuxian": {"user_id", "level", "exp", "hp", "mp", "atk", "power", "root_type", "root_level"},
+        }
+        tables = {
+            str(row["name"])
+            for row in uow.query_all(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name IN (?,?)",
+                tuple(required_columns),
+            )
+        }
+        if tables != set(required_columns):
+            return False
+        return all(
+            required.issubset(
+                {
+                    str(row["name"]).casefold()
+                    for row in uow.query_all(f'PRAGMA table_info("{table}")')
+                }
+            )
+            for table, required in required_columns.items()
+        )
 
     @staticmethod
     def _snapshot(row) -> tuple:
@@ -37,8 +62,11 @@ class AdminLevelChangeSqlRepository:
             raise ValueError("invalid realm change snapshot or configuration")
         expected = (str(expected[0] or ""), *[int(value or 0) for value in expected[1:6]], str(expected[6] or ""), int(expected[7] or 0))
         payload = json.dumps([operator_id, user_id, new_level, int(new_exp), float(level_spend), float(root_rate)], ensure_ascii=True, separators=(",", ":"))
+        if not self.database.is_file():
+            return AdminLevelChangeResult("schema_missing")
         with DatabaseUnitOfWork(self.database, immediate=True) as uow:
-            uow.execute("CREATE TABLE IF NOT EXISTS admin_level_change_operations(operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,result_json TEXT NOT NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
+            if not self._schema_ready(uow):
+                return AdminLevelChangeResult("schema_missing")
             previous = uow.query_one("SELECT payload,result_json FROM admin_level_change_operations WHERE operation_id=?", (operation_id,))
             if previous is not None:
                 if str(previous["payload"]) != payload:

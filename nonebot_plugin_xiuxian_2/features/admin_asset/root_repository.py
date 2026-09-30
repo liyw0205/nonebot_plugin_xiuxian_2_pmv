@@ -24,7 +24,32 @@ class AdminRootChangeResult:
 
 class AdminRootChangeSqlRepository:
     def __init__(self, database: str | Path) -> None:
-        self.database = str(database)
+        self.database = Path(database)
+
+    @staticmethod
+    def _schema_ready(uow: DatabaseUnitOfWork) -> bool:
+        required_columns = {
+            "admin_root_change_operations": {"operation_id", "payload", "result_json", "created_at"},
+            "user_xiuxian": {"user_id", "root", "root_type", "root_level", "level", "exp", "power", "user_name"},
+        }
+        tables = {
+            str(row["name"])
+            for row in uow.query_all(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name IN (?,?)",
+                tuple(required_columns),
+            )
+        }
+        if tables != set(required_columns):
+            return False
+        return all(
+            required.issubset(
+                {
+                    str(row["name"]).casefold()
+                    for row in uow.query_all(f'PRAGMA table_info("{table}")')
+                }
+            )
+            for table, required in required_columns.items()
+        )
 
     @staticmethod
     def root_values(root_id: int, user_name: str) -> tuple[str, str]:
@@ -41,8 +66,11 @@ class AdminRootChangeSqlRepository:
             raise ValueError("invalid root change snapshot or configuration")
         expected = (str(expected[0] or ""), str(expected[1] or ""), int(expected[2] or 0), str(expected[3] or ""), int(expected[4] or 0), int(expected[5] or 0), str(expected[6] or ""))
         payload = json.dumps([operator_id, user_id, int(root_id), float(level_spend), float(new_root_rate)], ensure_ascii=True, separators=(",", ":"))
+        if not self.database.is_file():
+            return AdminRootChangeResult("schema_missing")
         with DatabaseUnitOfWork(self.database, immediate=True) as uow:
-            uow.execute("CREATE TABLE IF NOT EXISTS admin_root_change_operations(operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,result_json TEXT NOT NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
+            if not self._schema_ready(uow):
+                return AdminRootChangeResult("schema_missing")
             previous = uow.query_one("SELECT payload,result_json FROM admin_root_change_operations WHERE operation_id=?", (operation_id,))
             if previous is not None:
                 if str(previous["payload"]) != payload:

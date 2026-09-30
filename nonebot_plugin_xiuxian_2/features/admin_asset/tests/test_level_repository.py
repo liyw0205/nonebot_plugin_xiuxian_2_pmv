@@ -2,7 +2,9 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from ....infrastructure.database import DatabaseUnitOfWork
 from ..level_repository import AdminLevelChangeSqlRepository
+from ..migrations import apply_admin_realm_changes
 from tests.test_db_backend import db_backend
 
 
@@ -13,6 +15,8 @@ class AdminLevelChangeRepositoryTests(unittest.TestCase):
             with db_backend.transaction(db) as conn:
                 conn.execute("CREATE TABLE user_xiuxian(user_id TEXT PRIMARY KEY,level TEXT,exp INTEGER,hp INTEGER,mp INTEGER,atk INTEGER,power INTEGER,root_type TEXT,root_level INTEGER)")
                 conn.execute("INSERT INTO user_xiuxian VALUES('u','练气',10,2,3,1,4,'金',1)")
+            with DatabaseUnitOfWork(db) as uow:
+                apply_admin_realm_changes(uow)
             repo = AdminLevelChangeSqlRepository(db)
             snapshot = ("练气",10,2,3,1,4,"金",1)
             first = repo.change("l1", "admin", "u", snapshot, "筑基", 20, 2, 1.5)

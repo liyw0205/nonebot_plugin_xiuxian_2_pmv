@@ -11,11 +11,12 @@ from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_admin.transaction_service import (
 )
 
 
-def test_admin_facade_defers_root_change_service_construction():
+def test_admin_facade_no_longer_constructs_legacy_root_change_service():
     admin = importlib.import_module(
         "nonebot_plugin_xiuxian_2.xiuxian.xiuxian_admin"
     )
-    assert admin._admin_root_change_service_instance is None
+    assert not hasattr(admin, "_admin_root_change_service")
+    assert not hasattr(admin, "_admin_root_change_service_instance")
 
 def test_admin_root_change_uses_feature_application():
     from pathlib import Path
@@ -99,15 +100,15 @@ def test_fate_root_uses_snapshot_name_and_operation_failure_rolls_back(tmp_path)
     conn.close()
 
 
-def test_admin_root_change_entry_uses_lazy_service():
+def test_admin_root_change_entry_uses_feature_mapping_and_application():
     source = open(
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py",
         encoding="utf-8",
     ).read()
     handler = source[source.index("async def gmm_command_"):source.index("@cz.handle", source.index("async def gmm_command_"))]
-    assert "_admin_root_change_service().root_values(" in handler
+    assert "AdminRootChangeSqlRepository.root_values(" in handler
     assert "_adjust_admin_root(" in handler
-    assert "_admin_root_change_service_instance = None" in source
-    assert "def _admin_root_change_service(" in source
-    assert handler.index("_admin_root_change_service().root_values(") < handler.index("_adjust_admin_root(")
+    assert "_admin_root_change_service_instance = None" not in source
+    assert "def _admin_root_change_service(" not in source
+    assert handler.index("AdminRootChangeSqlRepository.root_values(") < handler.index("_adjust_admin_root(")
     assert "_admin_operation_id(event, \"root-change\", str(user_id))" in source
