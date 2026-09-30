@@ -48,6 +48,24 @@ class CompensationRepository(ServicePort):
     def invitation_claimed_thresholds(self, user_id):
         return InvitationRewardClaimSqlRepository(self.database).claimed_thresholds(user_id)
 
+    def invitation_count(self, inviter_id, legacy_records=None):
+        return InvitationRewardClaimSqlRepository(self.database).invitation_count(inviter_id, legacy_records)
+
+    def invitation_inviter_id(self, user_id, legacy_records=None):
+        return InvitationRewardClaimSqlRepository(self.database).inviter_id(user_id, legacy_records)
+
+    def invitation_has_code(self, user_id, legacy_records=None):
+        return InvitationRewardClaimSqlRepository(self.database).has_invitation_code(user_id, legacy_records)
+
+    def invitation_bind(self, inviter_id, invited_id, legacy_records=None):
+        return InvitationRewardClaimSqlRepository(self.database).bind(inviter_id, invited_id, legacy_records)
+
+    def invitation_rewards(self, legacy_rewards=None):
+        return InvitationRewardClaimSqlRepository(self.database).reward_definitions(legacy_rewards)
+
+    def invitation_set_reward(self, threshold, reward_items, legacy_rewards=None):
+        return InvitationRewardClaimSqlRepository(self.database).set_reward_definition(threshold, reward_items, legacy_rewards)
+
     def invitation_get_result(self, operation_id):
         return InvitationRewardClaimSqlRepository(self.database).get_result(operation_id)
 

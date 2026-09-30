@@ -616,7 +616,12 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "invitation_request_path_has_no_ddl": "CREATE TABLE" not in compensation_invitation_repository and "ALTER TABLE" not in compensation_invitation_repository,
             "invitation_schema_migration_owned": "def apply_compensation_invitation_reward_schema" in compensation_migrations and "legacy.compensation.003" in compensation_legacy_migrated,
             "invitation_schema_checked": "def _schema_ready" in compensation_invitation_repository and "schema_missing" in compensation_invitation_repository,
-            "status": "claim and invitation ledgers startup-migrated; request paths fail closed without DDL",
+            "invitation_binding_application_owned": "invitation_bind(" in compensation_invitation and "add_invitation_record(inviter_id, user_id)" not in compensation_invitation,
+            "invitation_binding_projection_owned": "def bind(" in compensation_invitation_repository and "invitation_bind(" in compensation_invitation,
+            "invitation_definition_migration_owned": "def apply_compensation_invitation_definition_schema" in compensation_migrations and "legacy.compensation.004" in compensation_legacy_migrated,
+            "invitation_definition_application_owned": "invitation_set_reward(" in compensation_invitation and "save_invitation_rewards(rewards)" not in compensation_invitation,
+            "invitation_definition_schema_checked": "def _definition_schema_ready" in compensation_invitation_repository and '"status": "schema_missing"' in compensation_invitation_repository,
+            "status": "claim, invitation binding and reward catalog ledgers startup-migrated; request paths fail closed without DDL",
         },
         "stone_gift": {
             "default_legacy_handler_disabled": '"送灵石" if _legacy_stone_gift_enabled' in base,

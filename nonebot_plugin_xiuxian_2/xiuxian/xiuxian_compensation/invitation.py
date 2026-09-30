@@ -68,8 +68,9 @@ def load_claimed_records():
 
 
 def get_user_invitation_count(inviter_id):
-    records = load_invitation_records()
-    return len(records.get(str(inviter_id), []))
+    return _compensation_application().invitation_count(
+        inviter_id, load_invitation_records()
+    )
 
 
 def add_invitation_record(inviter_id, invited_id):
@@ -91,23 +92,20 @@ def add_invitation_record(inviter_id, invited_id):
 
 
 def has_invitation_code(user_id):
-    records = load_invitation_records()
-
-    for _, invited_list in records.items():
-        if str(user_id) in invited_list:
-            return True
-
-    return False
+    return _compensation_application().invitation_has_code(
+        user_id, load_invitation_records()
+    )
 
 
 def get_inviter_id(user_id):
-    records = load_invitation_records()
+    return _compensation_application().invitation_inviter_id(
+        user_id, load_invitation_records()
+    )
 
-    for inviter_id, invited_list in records.items():
-        if str(user_id) in invited_list:
-            return inviter_id
 
-    return None
+def _invitation_rewards():
+    """Read the feature catalog, falling back to the legacy JSON snapshot."""
+    return _compensation_application().invitation_rewards(load_invitation_rewards())
 
 
 invitation_use_cmd = on_command("邀请码", priority=5, block=True)
@@ -160,15 +158,24 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         return
 
     operation_id = f"compensation:invitation_bind:{getattr(event, 'message_id', '') or getattr(event, 'id', '') or runtime_ids.new_id()}:{user_id}"
+    legacy_records = load_invitation_records()
     result = _run_compensation_action(
         "invitation_bind",
         operation_id,
         user_id,
-        lambda: add_invitation_record(inviter_id, user_id),
+        lambda: _compensation_application().invitation_bind(
+            inviter_id, user_id, legacy_records
+        ),
         database=get_paths().game_db,
         inviter_id=inviter_id,
         invited_id=user_id,
     )
+    if result.status == "schema_missing":
+        await handle_send(bot, event, "邀请系统尚未完成数据库迁移，请稍后重试。")
+        return
+    if result.status == "already_bound":
+        await handle_send(bot, event, "该用户已经绑定其他邀请人。")
+        return
     success = bool(result.succeeded)
 
     if not success:
@@ -223,7 +230,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 
     user_id = str(user_info["user_id"])
     count = get_user_invitation_count(user_id)
-    rewards = load_invitation_rewards()
+    rewards = _invitation_rewards()
     claimed = {
         str(value) for value in load_claimed_records().get(user_id, [])
     } | {
@@ -261,7 +268,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     # 先回放：成功后门槛已领会变 no_available，挡住同事件幂等。
     prior = _compensation_application().invitation_get_result(operation_id)
     if prior is not None and prior.succeeded:
-        rewards = load_invitation_rewards()
+        rewards = _invitation_rewards()
         claimed_msgs = [
             f"邀请{threshold}人奖励："
             f"{', '.join(create_item_message(rewards[str(threshold)]))}"
@@ -278,7 +285,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
 
     invitation_records = load_invitation_records()
     invited_user_ids = invitation_records.get(user_id, [])
-    rewards = load_invitation_rewards()
+    rewards = _invitation_rewards()
 
     if not rewards:
         await handle_send(bot, event, "目前没有设置邀请奖励")
@@ -327,6 +334,9 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
             f"邀请奖励领取成功\n{body}\n该邀请奖励请求已经处理，无需重复提交。",
         )
         return
+    if result.status == "schema_missing":
+        await handle_send(bot, event, "邀请系统尚未完成数据库迁移，请稍后重试。")
+        return
     if not result.succeeded:
         await handle_send(bot, event, "没有可领取的邀请奖励")
         return
@@ -369,17 +379,21 @@ async def _(bot: Bot, event: MessageEvent, args: Message = CommandArg()):
 
     reward_items = get_item_list(parts[1])
 
-    rewards = load_invitation_rewards()
-    rewards[str(threshold)] = reward_items
+    legacy_rewards = load_invitation_rewards()
     operation_id = f"compensation:invitation_reward_set:{getattr(event, 'message_id', '') or getattr(event, 'id', '') or runtime_ids.new_id()}:{threshold}"
     result = _run_compensation_action(
         "invitation_reward_set",
         operation_id,
         str(event.get_user_id()),
-        lambda: save_invitation_rewards(rewards),
+        lambda: _compensation_application().invitation_set_reward(
+            threshold, reward_items, legacy_rewards
+        ),
         database=get_paths().game_db,
         threshold=threshold,
     )
+    if result.status == "schema_missing":
+        await handle_send(bot, event, "邀请系统尚未完成数据库迁移，请稍后重试。")
+        return
     if not result.succeeded:
         await handle_send(bot, event, "邀请奖励设置失败，请稍后重试")
         return
@@ -395,7 +409,7 @@ async def _(bot: Bot, event: MessageEvent, args: Message = CommandArg()):
 async def _(bot: Bot, event: MessageEvent):
     await assign_bot(bot=bot, event=event)
 
-    rewards = load_invitation_rewards()
+    rewards = _invitation_rewards()
 
     if not rewards:
         await handle_send(bot, event, "当前没有设置邀请奖励")

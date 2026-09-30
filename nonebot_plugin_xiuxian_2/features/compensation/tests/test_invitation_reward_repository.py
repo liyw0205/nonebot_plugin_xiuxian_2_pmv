@@ -6,7 +6,10 @@ from pathlib import Path
 
 from ....infrastructure.database import DatabaseUnitOfWork
 from ..invitation_repository import InvitationRewardClaimSqlRepository
-from ..migrations import apply_compensation_invitation_reward_schema
+from ..migrations import (
+    apply_compensation_invitation_definition_schema,
+    apply_compensation_invitation_reward_schema,
+)
 from tests.test_db_backend import db_backend
 
 
@@ -24,6 +27,7 @@ class InvitationRewardRepositoryTests(unittest.TestCase):
             )
         with DatabaseUnitOfWork(self.database) as uow:
             apply_compensation_invitation_reward_schema(uow)
+            apply_compensation_invitation_definition_schema(uow)
         self.repository = InvitationRewardClaimSqlRepository(self.database)
         self.rewards = {
             "1": [{"type": "stone", "id": "stone", "name": "灵石", "quantity": 50}],
@@ -76,6 +80,43 @@ class InvitationRewardRepositoryTests(unittest.TestCase):
         with db_backend.connection(self.database) as conn:
             self.assertEqual(10, conn.execute("SELECT stone FROM user_xiuxian WHERE user_id='u1'").fetchone()[0])
             self.assertEqual(0, conn.execute("SELECT COUNT(*) FROM invitation_reward_claims").fetchone()[0])
+
+    def test_binding_imports_legacy_snapshot_and_is_idempotent(self) -> None:
+        first = self.repository.bind("u1", "a", {"u1": ["b"]})
+        duplicate = self.repository.bind("u1", "a", {"u1": ["a"]})
+        conflict = self.repository.bind("u2", "a", {})
+
+        self.assertEqual("applied", first.status)
+        self.assertEqual("duplicate", duplicate.status)
+        self.assertEqual("already_bound", conflict.status)
+        self.assertEqual(2, self.repository.invitation_count("u1"))
+        self.assertEqual("u1", self.repository.inviter_id("a"))
+        self.assertTrue(self.repository.has_invitation_code("b"))
+
+    def test_reward_definition_import_and_update_are_sql_owned(self) -> None:
+        legacy = {"1": [{"type": "stone", "id": "stone", "name": "灵石", "quantity": 1}]}
+        created = self.repository.set_reward_definition(
+            3,
+            [{"type": "道具", "id": 101, "name": "邀请令", "quantity": 2}],
+            legacy,
+        )
+        self.assertEqual("applied", created["status"])
+        self.assertEqual({"1", "3"}, set(self.repository.reward_definitions()))
+        self.repository.set_reward_definition(3, [{"type": "stone", "id": "stone", "name": "灵石", "quantity": 9}])
+        self.assertEqual(9, self.repository.reward_definitions()["3"][0]["quantity"])
+
+    def test_binding_and_definition_writes_fail_closed_without_migration(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            database = Path(temp) / "game.db"
+            with db_backend.transaction(database) as conn:
+                conn.execute("CREATE TABLE user_xiuxian(user_id TEXT PRIMARY KEY,stone INTEGER)")
+            repository = InvitationRewardClaimSqlRepository(database)
+            self.assertEqual("schema_missing", repository.bind("u1", "a").status)
+            self.assertEqual("schema_missing", repository.set_reward_definition(1, [{"type": "stone", "quantity": 1}])["status"])
+            with db_backend.connection(database) as conn:
+                tables = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
+            self.assertNotIn("invitation_reward_definitions", tables)
+            self.assertNotIn("invitation_reward_invites", tables)
 
 
 if __name__ == "__main__":

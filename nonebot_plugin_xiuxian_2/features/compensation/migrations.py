@@ -43,8 +43,19 @@ def apply_compensation_invitation_reward_schema(uow: DatabaseUnitOfWork) -> None
     )
 
 
+def apply_compensation_invitation_definition_schema(uow: DatabaseUnitOfWork) -> None:
+    """Prepare the invitation reward catalog before admin writes can run."""
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS invitation_reward_definitions("
+        "threshold INTEGER PRIMARY KEY,rewards_json TEXT NOT NULL,"
+        "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,"
+        "updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+    )
+
+
 __all__ = [
     "apply_compensation",
     "apply_compensation_reward_claim_schema",
     "apply_compensation_invitation_reward_schema",
+    "apply_compensation_invitation_definition_schema",
 ]

@@ -20,8 +20,19 @@ class InvitationRewardClaimResult:
         return self.status in {"applied", "duplicate"}
 
 
+@dataclass(frozen=True)
+class InvitationBindingResult:
+    status: str
+    inviter_id: str = ""
+    invited_id: str = ""
+
+    @property
+    def succeeded(self) -> bool:
+        return self.status in {"applied", "duplicate"}
+
+
 class InvitationRewardClaimSqlRepository:
-    """Own invitation reward receipts while preserving legacy JSON inputs."""
+    """Own invitation projections and receipts while preserving JSON inputs."""
 
     _TABLES = frozenset(
         {
@@ -30,6 +41,7 @@ class InvitationRewardClaimSqlRepository:
             "invitation_reward_operations",
         }
     )
+    _DEFINITION_TABLE = "invitation_reward_definitions"
 
     def __init__(self, database: str | Path) -> None:
         self.database = Path(database)
@@ -45,6 +57,188 @@ class InvitationRewardClaimSqlRepository:
             )
         }
         return tables == cls._TABLES
+
+    @classmethod
+    def _definition_schema_ready(cls, uow: DatabaseUnitOfWork) -> bool:
+        row = uow.query_one(
+            "SELECT 1 AS present FROM sqlite_master WHERE type='table' AND name=?",
+            (cls._DEFINITION_TABLE,),
+        )
+        return row is not None
+
+    @staticmethod
+    def _legacy_invites(legacy_records: Mapping[Any, Iterable[Any]] | None):
+        for raw_inviter, raw_invited in (legacy_records or {}).items():
+            inviter_id = str(raw_inviter).strip()
+            if not inviter_id or not isinstance(raw_invited, (list, tuple, set)):
+                continue
+            for raw_invited_id in raw_invited:
+                invited_id = str(raw_invited_id).strip()
+                if invited_id and invited_id != inviter_id:
+                    yield inviter_id, invited_id
+
+    @staticmethod
+    def _legacy_rewards(legacy_rewards: Mapping[Any, Iterable[Mapping[str, Any]]] | None):
+        result: dict[str, list[dict[str, Any]]] = {}
+        for raw_threshold, raw_items in (legacy_rewards or {}).items():
+            try:
+                threshold_value = int(raw_threshold)
+            except (TypeError, ValueError):
+                continue
+            if threshold_value <= 0 or not isinstance(raw_items, (list, tuple)):
+                continue
+            items = [dict(item) for item in raw_items if isinstance(item, Mapping)]
+            if items:
+                result[str(threshold_value)] = items
+        return result
+
+    def invitation_count(
+        self,
+        inviter_id: str,
+        legacy_records: Mapping[Any, Iterable[Any]] | None = None,
+    ) -> int:
+        inviter_id = str(inviter_id).strip()
+        legacy_ids = {
+            invited_id
+            for legacy_inviter, invited_id in self._legacy_invites(legacy_records)
+            if legacy_inviter == inviter_id
+        }
+        if not inviter_id or not self.database.is_file():
+            return len(legacy_ids)
+        with DatabaseUnitOfWork(self.database, read_only=True) as uow:
+            if not self._schema_ready(uow):
+                return len(legacy_ids)
+            rows = uow.query_all(
+                "SELECT invited_id FROM invitation_reward_invites WHERE inviter_id=?",
+                (inviter_id,),
+            )
+            return len(legacy_ids | {str(row["invited_id"]) for row in rows})
+
+    def inviter_id(
+        self,
+        user_id: str,
+        legacy_records: Mapping[Any, Iterable[Any]] | None = None,
+    ) -> str | None:
+        user_id = str(user_id).strip()
+        if not user_id:
+            return None
+        if self.database.is_file():
+            with DatabaseUnitOfWork(self.database, read_only=True) as uow:
+                if self._schema_ready(uow):
+                    row = uow.query_one(
+                        "SELECT inviter_id FROM invitation_reward_invites "
+                        "WHERE invited_id=? ORDER BY created_at LIMIT 1",
+                        (user_id,),
+                    )
+                    if row is not None:
+                        return str(row["inviter_id"])
+        for inviter_id, invited_id in self._legacy_invites(legacy_records):
+            if invited_id == user_id:
+                return inviter_id
+        return None
+
+    def has_invitation_code(
+        self,
+        user_id: str,
+        legacy_records: Mapping[Any, Iterable[Any]] | None = None,
+    ) -> bool:
+        return self.inviter_id(user_id, legacy_records) is not None
+
+    def bind(
+        self,
+        inviter_id: str,
+        invited_id: str,
+        legacy_records: Mapping[Any, Iterable[Any]] | None = None,
+    ) -> InvitationBindingResult:
+        inviter_id, invited_id = str(inviter_id).strip(), str(invited_id).strip()
+        if not inviter_id or not invited_id or inviter_id == invited_id:
+            raise ValueError("valid invitation binding is required")
+        if not self.database.is_file():
+            return InvitationBindingResult("schema_missing", inviter_id, invited_id)
+        with DatabaseUnitOfWork(self.database, immediate=True) as uow:
+            if not self._schema_ready(uow):
+                return InvitationBindingResult("schema_missing", inviter_id, invited_id)
+            for legacy_inviter, legacy_invited in self._legacy_invites(legacy_records):
+                uow.execute(
+                    "INSERT INTO invitation_reward_invites(inviter_id,invited_id,source) "
+                    "VALUES(?,?,?) ON CONFLICT(inviter_id,invited_id) DO NOTHING",
+                    (legacy_inviter, legacy_invited, "legacy_json"),
+                )
+            existing = uow.query_one(
+                "SELECT inviter_id FROM invitation_reward_invites WHERE invited_id=? "
+                "ORDER BY created_at LIMIT 1",
+                (invited_id,),
+            )
+            if existing is not None:
+                status = "duplicate" if str(existing["inviter_id"]) == inviter_id else "already_bound"
+                return InvitationBindingResult(status, inviter_id, invited_id)
+            uow.execute(
+                "INSERT INTO invitation_reward_invites(inviter_id,invited_id,source) "
+                "VALUES(?,?,?)",
+                (inviter_id, invited_id, "binding"),
+            )
+            return InvitationBindingResult("applied", inviter_id, invited_id)
+
+    def reward_definitions(
+        self,
+        legacy_rewards: Mapping[Any, Iterable[Mapping[str, Any]]] | None = None,
+    ) -> dict[str, list[dict[str, Any]]]:
+        fallback = self._legacy_rewards(legacy_rewards)
+        if not self.database.is_file():
+            return fallback
+        with DatabaseUnitOfWork(self.database, read_only=True) as uow:
+            if not self._definition_schema_ready(uow):
+                return fallback
+            rows = uow.query_all(
+                "SELECT threshold,rewards_json FROM invitation_reward_definitions "
+                "ORDER BY threshold"
+            )
+        result: dict[str, list[dict[str, Any]]] = {}
+        for row in rows:
+            try:
+                items = json.loads(str(row["rewards_json"]))
+            except (TypeError, ValueError):
+                continue
+            if isinstance(items, list):
+                result[str(int(row["threshold"]))] = [
+                    dict(item) for item in items if isinstance(item, Mapping)
+                ]
+        return result or fallback
+
+    def set_reward_definition(
+        self,
+        threshold: int,
+        reward_items: Iterable[Mapping[str, Any]],
+        legacy_rewards: Mapping[Any, Iterable[Mapping[str, Any]]] | None = None,
+    ) -> dict[str, Any]:
+        threshold = int(threshold)
+        if threshold <= 0:
+            raise ValueError("invitation threshold must be positive")
+        items = [dict(item) for item in reward_items if isinstance(item, Mapping)]
+        if not items:
+            raise ValueError("invitation reward items are required")
+        if not self.database.is_file():
+            return {"status": "schema_missing", "threshold": threshold}
+        with DatabaseUnitOfWork(self.database, immediate=True) as uow:
+            if not self._definition_schema_ready(uow):
+                return {"status": "schema_missing", "threshold": threshold}
+            for raw_threshold, raw_items in self._legacy_rewards(legacy_rewards).items():
+                uow.execute(
+                    "INSERT INTO invitation_reward_definitions(threshold,rewards_json) "
+                    "VALUES(?,?) ON CONFLICT(threshold) DO NOTHING",
+                    (
+                        int(raw_threshold),
+                        json.dumps(raw_items, ensure_ascii=False, sort_keys=True, separators=(",", ":")),
+                    ),
+                )
+            encoded = json.dumps(items, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+            changed = uow.execute(
+                "INSERT INTO invitation_reward_definitions(threshold,rewards_json) "
+                "VALUES(?,?) ON CONFLICT(threshold) DO UPDATE SET rewards_json=excluded.rewards_json,"
+                "updated_at=CURRENT_TIMESTAMP",
+                (threshold, encoded),
+            )
+            return {"status": "applied", "threshold": threshold, "changed": changed.rowcount}
 
     @staticmethod
     def _inventory_type(item_type: str) -> str:
@@ -274,4 +468,8 @@ class InvitationRewardClaimSqlRepository:
             return InvitationRewardClaimResult("applied", eligible, invitation_count)
 
 
-__all__ = ["InvitationRewardClaimResult", "InvitationRewardClaimSqlRepository"]
+__all__ = [
+    "InvitationBindingResult",
+    "InvitationRewardClaimResult",
+    "InvitationRewardClaimSqlRepository",
+]

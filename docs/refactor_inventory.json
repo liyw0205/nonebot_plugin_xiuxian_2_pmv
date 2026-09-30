@@ -2844,6 +2844,7 @@
     "interactive_stone_daily_claims",
     "interactive_stone_daily_reward_operations",
     "invitation_reward_claims",
+    "invitation_reward_definitions",
     "invitation_reward_invites",
     "invitation_reward_operations",
     "io",

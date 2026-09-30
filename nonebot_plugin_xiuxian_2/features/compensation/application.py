@@ -24,6 +24,24 @@ class CompensationApplication(MigratedFeatureApplication):
     def invitation_claimed_thresholds(self, user_id):
         return self.repository.invitation_claimed_thresholds(user_id)
 
+    def invitation_count(self, inviter_id, legacy_records=None):
+        return self.repository.invitation_count(inviter_id, legacy_records)
+
+    def invitation_inviter_id(self, user_id, legacy_records=None):
+        return self.repository.invitation_inviter_id(user_id, legacy_records)
+
+    def invitation_has_code(self, user_id, legacy_records=None):
+        return self.repository.invitation_has_code(user_id, legacy_records)
+
+    def invitation_bind(self, inviter_id, invited_id, legacy_records=None):
+        return self.repository.invitation_bind(inviter_id, invited_id, legacy_records)
+
+    def invitation_rewards(self, legacy_rewards=None):
+        return self.repository.invitation_rewards(legacy_rewards)
+
+    def invitation_set_reward(self, threshold, reward_items, legacy_rewards=None):
+        return self.repository.invitation_set_reward(threshold, reward_items, legacy_rewards)
+
     def invitation_get_result(self, operation_id):
         return self.repository.invitation_get_result(operation_id)
 
