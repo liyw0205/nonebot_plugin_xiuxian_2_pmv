@@ -16,8 +16,10 @@ class CompensationApplication(MigratedFeatureApplication):
     def has_claimed(self, reward_type, record_id, user_id):
         return self.repository.has_claimed(reward_type, record_id, user_id)
 
-    def get_used_count(self, reward_type, record_id):
-        return self.repository.get_used_count(reward_type, record_id)
+    def get_used_count(self, reward_type, record_id, legacy_used_count=0):
+        return self.repository.get_used_count(
+            reward_type, record_id, legacy_used_count
+        )
 
 
 __all__ = ["CompensationApplication"]

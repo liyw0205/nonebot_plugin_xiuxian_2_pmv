@@ -56,7 +56,10 @@ from .tianti.manifest import FEATURE as TIANTI
 from .training.manifest import FEATURE as TRAINING
 from .activity.migrations import apply_activity
 from .admin.migrations import apply_admin
-from .compensation.migrations import apply_compensation
+from .compensation.migrations import (
+    apply_compensation,
+    apply_compensation_reward_claim_schema,
+)
 from .dongfu.migrations import apply_dongfu
 from .dufang.migrations import apply_dufang
 from .entertainment.migrations import apply_entertainment
@@ -101,6 +104,7 @@ _MIGRATION_BY_KEY = {
 MIGRATIONS = tuple(
     sorted(
         (*((feature.migration_version, _MIGRATION_BY_KEY[feature.key]) for feature in FEATURES),
+         ("legacy.compensation.002", apply_compensation_reward_claim_schema),
          ("legacy.illusion.001", apply_illusion)),
         key=lambda item: item[0],
     )

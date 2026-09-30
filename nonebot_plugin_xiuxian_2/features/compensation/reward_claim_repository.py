@@ -35,23 +35,25 @@ class CompensationRewardClaimSqlRepository:
         return goods_type
 
     @staticmethod
-    def _ensure_schema(uow: DatabaseUnitOfWork) -> None:
-        uow.execute(
-            "CREATE TABLE IF NOT EXISTS reward_claims("
-            "reward_type TEXT NOT NULL,record_id TEXT NOT NULL,user_id TEXT NOT NULL,"
-            "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,"
-            "PRIMARY KEY(reward_type,record_id,user_id))"
-        )
-        uow.execute(
-            "CREATE TABLE IF NOT EXISTS reward_claim_counters("
-            "reward_type TEXT NOT NULL,record_id TEXT NOT NULL,"
-            "baseline_count INTEGER NOT NULL DEFAULT 0,"
-            "PRIMARY KEY(reward_type,record_id))"
-        )
+    def _schema_ready(uow: DatabaseUnitOfWork) -> bool:
+        tables = {
+            str(row["name"])
+            for row in uow.query_all(
+                "SELECT name FROM sqlite_master WHERE type='table' "
+                "AND name IN ('reward_claims','reward_claim_counters')"
+            )
+        }
+        return tables == {"reward_claims", "reward_claim_counters"}
 
-    def get_used_count(self, reward_type: str, record_id: str) -> int:
-        with DatabaseUnitOfWork(self.database) as uow:
-            self._ensure_schema(uow)
+    def get_used_count(
+        self, reward_type: str, record_id: str, legacy_used_count: int = 0
+    ) -> int:
+        legacy_used_count = max(int(legacy_used_count or 0), 0)
+        if not Path(self.database).is_file():
+            return legacy_used_count
+        with DatabaseUnitOfWork(self.database, read_only=True) as uow:
+            if not self._schema_ready(uow):
+                return legacy_used_count
             counter = uow.query_one(
                 "SELECT baseline_count FROM reward_claim_counters "
                 "WHERE reward_type=? AND record_id=?",
@@ -63,11 +65,15 @@ class CompensationRewardClaimSqlRepository:
                     (str(reward_type), str(record_id)),
                 ).fetchone()[0]
             )
-            return (0 if counter is None else int(counter["baseline_count"])) + claimed
+            baseline = 0 if counter is None else int(counter["baseline_count"])
+            return max(baseline, legacy_used_count) + claimed
 
     def has_claimed(self, reward_type: str, record_id: str, user_id: str) -> bool:
-        with DatabaseUnitOfWork(self.database) as uow:
-            self._ensure_schema(uow)
+        if not Path(self.database).is_file():
+            return False
+        with DatabaseUnitOfWork(self.database, read_only=True) as uow:
+            if not self._schema_ready(uow):
+                return False
             return (
                 uow.query_one(
                     "SELECT 1 AS found FROM reward_claims "
@@ -101,8 +107,16 @@ class CompensationRewardClaimSqlRepository:
             else int(expected_definition_version)
         )
 
+        if not Path(self.database).is_file():
+            return CompensationRewardClaimResult(
+                "schema_missing", reward_type, record_id, user_id
+            )
+
         with DatabaseUnitOfWork(self.database, immediate=True) as uow:
-            self._ensure_schema(uow)
+            if not self._schema_ready(uow):
+                return CompensationRewardClaimResult(
+                    "schema_missing", reward_type, record_id, user_id
+                )
             if expected_version is not None:
                 definition = uow.query_one(
                     "SELECT version FROM compensation_definitions WHERE record_id=?",

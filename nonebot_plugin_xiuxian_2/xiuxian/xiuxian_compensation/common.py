@@ -626,7 +626,7 @@ async def claim_normal_reward(
 
     if not record:
         # 已领后定义被删时仍允许服务层 duplicate 回放（若 claim 表有记录）
-        if _reward_claim_service().has_claimed(config["type_key"], record_id, user_id):
+        if _compensation_application().has_claimed(config["type_key"], record_id, user_id):
             await handle_send(
                 bot,
                 event,
@@ -637,7 +637,7 @@ async def claim_normal_reward(
         return
 
     if is_expired(record):
-        if _reward_claim_service().has_claimed(config["type_key"], record_id, user_id):
+        if _compensation_application().has_claimed(config["type_key"], record_id, user_id):
             await handle_send(
                 bot,
                 event,
@@ -685,6 +685,9 @@ async def claim_normal_reward(
         return
     if result.status in {"record_missing", "definition_changed"}:
         await handle_send(bot, event, "补偿定义已变更，请重新查询后领取")
+        return
+    if result.status == "schema_missing":
+        await handle_send(bot, event, "补偿数据尚未就绪，请稍后重试")
         return
     if result.status != "claimed":
         await handle_send(bot, event, f"你已经领取过该{config['type_key']}了")

@@ -39,9 +39,9 @@ class CompensationRepository(ServicePort):
             reward_type, record_id, user_id
         )
 
-    def get_used_count(self, reward_type, record_id) -> int:
+    def get_used_count(self, reward_type, record_id, legacy_used_count=0) -> int:
         return CompensationRewardClaimSqlRepository(self.database, 0).get_used_count(
-            reward_type, record_id
+            reward_type, record_id, legacy_used_count
         )
 
 

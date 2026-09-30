@@ -156,6 +156,9 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     if result.status == "exhausted":
         await handle_send(bot, event, "该兑换码已被使用完")
         return
+    if result.status == "schema_missing":
+        await handle_send(bot, event, "兑换数据尚未就绪，请稍后重试")
+        return
     if result.status != "claimed":
         await handle_send(bot, event, f"你已经使用过兑换码 {code}")
         return
@@ -229,7 +232,7 @@ async def send_redeem_code_list(bot: Bot, event: MessageEvent):
         for code, info in codes:
             item_msg = create_item_message(info["items"])
             usage_limit = info.get("usage_limit", 0)
-            used_count = _reward_claim_service().get_used_count(
+            used_count = _compensation_application().get_used_count(
                 config["type_key"], code, info.get("used_count", 0)
             )
 
