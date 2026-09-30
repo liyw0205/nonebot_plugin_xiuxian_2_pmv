@@ -44,6 +44,16 @@ class PlayerProfileReadTest(unittest.TestCase):
             profile = PlayerProfileSqlRepository(database).get_user_profile("u")
             self.assertEqual(profile["user_name"], "first")
 
+    def test_duplicate_names_keep_legacy_first_row_semantics(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            database = Path(directory) / "game.db"
+            with sqlite3.connect(database) as connection:
+                connection.execute("CREATE TABLE user_xiuxian (user_id TEXT,user_name TEXT)")
+                connection.execute("INSERT INTO user_xiuxian VALUES ('u1','same')")
+                connection.execute("INSERT INTO user_xiuxian VALUES ('u2','same')")
+            profile = PlayerProfileApplication(database).get_user_profile_by_name("same")
+            self.assertEqual(profile["user_id"], "u1")
+
 
 if __name__ == "__main__":
     unittest.main()

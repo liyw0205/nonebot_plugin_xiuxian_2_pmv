@@ -93,6 +93,14 @@ def _player_profile():
     return _player_profile_application
 
 
+def get_user_profile(user_id: int | str):
+    return _player_profile().get_user_profile(user_id)
+
+
+def get_user_profile_by_name(user_name: str):
+    return _player_profile().get_user_profile_by_name(user_name)
+
+
 def _player_data_manager():
     global _player_data_manager_instance
     if _player_data_manager_instance is None:
@@ -282,7 +290,7 @@ def check_user(event_or_user_id: Union[GroupMessageEvent, PrivateMessageEvent, s
     else:
         return False, None, "传入参数类型错误！请提供event对象或用户QQ号字符串。"
 
-    user_info = _player_profile().get_user_profile(user_id_to_check)
+    user_info = get_user_profile(user_id_to_check)
 
     if user_info is None:
         msg = "修仙界没有道友的信息，请输入【我要修仙】加入！"

@@ -36,6 +36,7 @@ from ..xiuxian_utils.xiuxian2_handle import (
 from ..xiuxian_config import XiuConfig, JsonConfig, convert_rank
 from ..xiuxian_utils.utils import (
     check_user, check_user_type,
+    get_user_profile, get_user_profile_by_name,
     get_msg_pic, number_to,
     Txt2Img, send_msg_handler, handle_send, get_logs, log_message, get_statistics_data, update_statistics_value,
     send_help_message
@@ -669,7 +670,7 @@ async def remaname_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, ar
         # 生成不重复的道号
         while True:
             user_name = generate_daohao()
-            if not _sql_message().get_user_info_with_name(user_name):
+            if not get_user_profile_by_name(user_name):
                 break
         outcome = base_application.rename(operation_id=operation_id, user_id=user_id, rename_kind="user", new_name=user_name, stone_cost=XiuConfig().remaname)
         result = SimpleNamespace(**dict(outcome.data or {})); result.status = outcome.status; result.succeeded = outcome.ok
@@ -785,7 +786,7 @@ async def run_xiuxian_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
         pass
 
     # 再查一次目标 ID：避免 check_user 读到重复行/缓存竞态时重复建档
-    if _sql_message().get_user_info_with_id(user_id):
+    if get_user_profile(user_id):
         await handle_send(
             bot,
             event,
@@ -819,7 +820,7 @@ async def run_xiuxian_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
 
     if is_new_user:
         # 补全初始气血
-        new_user_info = _sql_message().get_user_info_with_id(user_id)
+        new_user_info = get_user_profile(user_id)
         if new_user_info and (new_user_info.get('hp') is None or new_user_info.get('hp') == 0):
             _sql_message().update_user_hp(user_id)
 
@@ -1251,8 +1252,8 @@ async def give_stone_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
     # 群聊可@；私聊无@时走道号
     give_qq = get_at_user_id(args) if isinstance(event, GroupMessageEvent) else None
     give_user = (
-        _sql_message().get_user_info_with_id(give_qq)
-        if give_qq else _sql_message().get_user_info_with_name(nick_name)
+        get_user_profile(give_qq)
+        if give_qq else get_user_profile_by_name(nick_name)
     )
     if not give_user:
         msg = "对方未踏入修仙界，不可赠送！"
@@ -1333,7 +1334,7 @@ async def steal_stone_(bot: Bot, event: GroupMessageEvent, args: Message = Comma
     steal_qq = get_at_user_id(args)
     nick_name = args.extract_plain_text().split()[0] if args.extract_plain_text().split() else None
     if nick_name:
-        give_message = _sql_message().get_user_info_with_name(nick_name)
+        give_message = get_user_profile_by_name(nick_name)
         if give_message:
             steal_qq = give_message['user_id']
         else:
@@ -1346,7 +1347,7 @@ async def steal_stone_(bot: Bot, event: GroupMessageEvent, args: Message = Comma
     if steal_qq == user_id:
         await handle_send(bot, event, "请不要偷自己刷成就！")
         await steal_stone.finish()
-    steal_user = _sql_message().get_user_info_with_id(steal_qq)
+    steal_user = get_user_profile(steal_qq)
     if not steal_user:
         await handle_send(bot, event, "对方未踏入修仙界，不要对杂修出手！")
         await steal_stone.finish()
@@ -1427,11 +1428,11 @@ async def rob_stone_(bot: Bot, event: GroupMessageEvent, args: Message = Command
         await rob_stone.finish()
     
     user_id = str(user_info["user_id"])
-    user_mes = _sql_message().get_user_info_with_id(user_id)
+    user_mes = get_user_profile(user_id)
     give_qq = get_at_user_id(args)
     nick_name = args.extract_plain_text().split()[0] if args.extract_plain_text().split() else None
     if nick_name:
-        give_message = _sql_message().get_user_info_with_name(nick_name)
+        give_message = get_user_profile_by_name(nick_name)
         if give_message:
             give_qq = give_message['user_id']
         else:
@@ -1441,7 +1442,7 @@ async def rob_stone_(bot: Bot, event: GroupMessageEvent, args: Message = Command
         await handle_send(bot, event, "对方未踏入修仙界，不可抢劫！")
         await rob_stone.finish()
     give_qq = str(give_qq)
-    user_2 = _sql_message().get_user_info_with_id(give_qq)
+    user_2 = get_user_profile(give_qq)
     if not user_mes or not user_2:
         await handle_send(bot, event, "对方未踏入修仙界，不可抢劫！")
         await rob_stone.finish()

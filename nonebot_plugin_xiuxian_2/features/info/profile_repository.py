@@ -29,5 +29,17 @@ class PlayerProfileSqlRepository:
             return None
         return normalize_user_row(row)
 
+    def get_user_profile_by_name(self, user_name: str) -> dict[str, Any] | None:
+        try:
+            with DatabaseUnitOfWork(self.database, read_only=True) as uow:
+                row = uow.query_one(
+                    "SELECT * FROM user_xiuxian WHERE user_name=? "
+                    "ORDER BY rowid ASC LIMIT 1",
+                    (str(user_name),),
+                )
+        except Exception:
+            return None
+        return normalize_user_row(row)
+
 
 __all__ = ["PlayerProfileSqlRepository"]

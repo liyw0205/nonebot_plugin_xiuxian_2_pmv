@@ -11,10 +11,18 @@ class PlayerProfileReadContractTest(unittest.TestCase):
         start = source.index("def check_user(")
         end = source.index("def get_impersonating_target", start)
         boundary = source[start:end]
-        self.assertIn("_player_profile().get_user_profile", boundary)
+        self.assertIn("get_user_profile(user_id_to_check)", boundary)
         self.assertNotIn("_sql_message().get_user_info_with_id", boundary)
         repository = (root / "nonebot_plugin_xiuxian_2" / "features" / "info" / "profile_repository.py").read_text(encoding="utf-8")
         self.assertIn("read_only=True", repository)
+
+    def test_base_handlers_use_profile_reader_for_lookup_only(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        source = (root / "nonebot_plugin_xiuxian_2" / "xiuxian" / "xiuxian_base" / "__init__.py").read_text(encoding="utf-8")
+        self.assertIn("get_user_profile_by_name", source)
+        self.assertIn("get_user_profile(give_qq)", source)
+        self.assertNotIn("_sql_message().get_user_info_with_id", source)
+        self.assertNotIn("_sql_message().get_user_info_with_name", source)
 
 
 if __name__ == "__main__":

@@ -10,7 +10,7 @@ The historical package owns command names during the compatibility release. New 
 No new HTTP route is exposed in this migration slice. Existing URLs remain served by the legacy web adapter.
 
 ## 数据模型与迁移
-Migration `legacy.info.001` records the slice in `game_db`; the feature-owned repository and explicit service port now own the operation boundary while legacy tables remain the compatibility data source. Shared player profile reads now use `PlayerProfileApplication -> PlayerProfileSqlRepository` in read-only mode; missing database/schema is fail-closed and never creates tables during a request.
+Migration `legacy.info.001` records the slice in `game_db`; the feature-owned repository and explicit service port now own the operation boundary while legacy tables remain the compatibility data source. Shared player profile reads, including ID and道号 lookups used by base commands, now use `PlayerProfileApplication -> PlayerProfileSqlRepository` in read-only mode; missing database/schema is fail-closed and never creates tables during a request.
 
 ## 事务与失败回滚
 Mutating calls carry an `operation_id` and are recorded in the operation ledger. Disable the feature flag or restore the pre-migration backup to roll back.
