@@ -12,6 +12,7 @@ import unicodedata
 from functools import lru_cache
 from nonebot.log import logger
 from ...paths import get_paths
+from ...features.info.profile_application import PlayerProfileApplication
 from base64 import b64encode
 from io import BytesIO
 from pathlib import Path
@@ -67,6 +68,7 @@ from urllib.parse import quote, unquote
 
 _sql_message_instance = None
 _player_data_manager_instance = None
+_player_profile_application: PlayerProfileApplication | None = None
 boss_img_path = get_paths().data / "boss_img"
 PLAYERSDATA = get_paths().players
 
@@ -76,6 +78,19 @@ def _sql_message():
     if _sql_message_instance is None:
         _sql_message_instance = XiuxianDateManage()
     return _sql_message_instance
+
+
+def configure_player_profile_application(application: PlayerProfileApplication) -> None:
+    """Bind the lifecycle-owned read boundary used by ``check_user``."""
+    global _player_profile_application
+    _player_profile_application = application
+
+
+def _player_profile():
+    global _player_profile_application
+    if _player_profile_application is None:
+        _player_profile_application = PlayerProfileApplication(get_paths().game_db)
+    return _player_profile_application
 
 
 def _player_data_manager():
@@ -267,7 +282,7 @@ def check_user(event_or_user_id: Union[GroupMessageEvent, PrivateMessageEvent, s
     else:
         return False, None, "传入参数类型错误！请提供event对象或用户QQ号字符串。"
 
-    user_info = _sql_message().get_user_info_with_id(user_id_to_check)
+    user_info = _player_profile().get_user_profile(user_id_to_check)
 
     if user_info is None:
         msg = "修仙界没有道友的信息，请输入【我要修仙】加入！"

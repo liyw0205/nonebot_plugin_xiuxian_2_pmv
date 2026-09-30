@@ -10,7 +10,7 @@ The historical package owns command names during the compatibility release. New 
 No new HTTP route is exposed in this migration slice. Existing URLs remain served by the legacy web adapter.
 
 ## 数据模型与迁移
-Migration `legacy.info.001` records the slice in `game_db`; the feature-owned repository and explicit service port now own the operation boundary while legacy tables remain the compatibility data source.
+Migration `legacy.info.001` records the slice in `game_db`; the feature-owned repository and explicit service port now own the operation boundary while legacy tables remain the compatibility data source. Shared player profile reads now use `PlayerProfileApplication -> PlayerProfileSqlRepository` in read-only mode; missing database/schema is fail-closed and never creates tables during a request.
 
 ## 事务与失败回滚
 Mutating calls carry an `operation_id` and are recorded in the operation ledger. Disable the feature flag or restore the pre-migration backup to roll back.
@@ -25,7 +25,7 @@ No new scheduled jobs. Legacy jobs stay registered through the compatibility sch
 Command and web adapters translate transport input into the application DTO; business code does not import NoneBot or Flask.
 
 ## 测试与手工验收
-Run the feature application test and the full architecture gate. Repeat the same operation ID to verify replay.
+Run the feature application/profile-read tests and the full architecture gate. Repeat the same operation ID to verify replay; verify a missing profile database remains absent after a read.
 
 ## 灰度开关、回滚和已知限制
 Legacy algorithms and schemas remain behind the repository adapter for one complete release cycle; the compatibility hit counter determines when removal is safe.
