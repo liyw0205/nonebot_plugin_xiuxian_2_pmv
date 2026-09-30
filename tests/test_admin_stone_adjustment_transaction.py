@@ -9,6 +9,7 @@ nonebot.init()
 from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_admin.transaction_service import (
     AdminStoneAdjustmentService,
 )
+from nonebot_plugin_xiuxian_2.features.admin_asset.stone_repository import AdminStoneSqlRepository
 from tests.test_db_backend import db_backend
 
 
@@ -50,6 +51,17 @@ class AdminStoneAdjustmentTransactionTests(unittest.TestCase):
             self.assertEqual(
                 conn.execute("SELECT COUNT(*) FROM admin_stone_adjustment_operations").fetchone()[0], 1
             )
+
+    def test_feature_repository_replays_existing_legacy_receipt(self):
+        legacy = self.adjust()
+        feature = AdminStoneSqlRepository(self.database).adjust(
+            "stone-op", "admin-1", "u1", 50, 25, target_name="测试道友"
+        )
+        self.assertEqual(legacy.status, "adjusted")
+        self.assertEqual((feature.status, feature.final_stone, feature.applied_delta), ("duplicate", 75, 25))
+        with db_backend.connection(self.database) as conn:
+            self.assertEqual(conn.execute("SELECT stone FROM user_xiuxian").fetchone()[0], 75)
+            self.assertEqual(conn.execute("SELECT COUNT(*) FROM economy_log").fetchone()[0], 1)
 
     def test_snapshot_conflict_and_operation_conflict_do_not_mutate(self):
         self.assertEqual(self.adjust(expected=49).status, "state_changed")

@@ -5,6 +5,8 @@ import unittest
 from pathlib import Path
 
 from nonebot_plugin_xiuxian_2.features.admin_asset.application import AdminAssetApplication
+from nonebot_plugin_xiuxian_2.features.admin_asset.migrations import apply_admin_stone_adjustment
+from nonebot_plugin_xiuxian_2.features.admin_asset.stone_repository import AdminStoneSqlRepository
 from nonebot_plugin_xiuxian_2.infrastructure.database import DatabaseUnitOfWork
 from nonebot_plugin_xiuxian_2.plugin import apply_platform_schema
 
@@ -47,13 +49,13 @@ class AdminAssetApplicationTests(unittest.TestCase):
             apply_platform_schema(uow)
         return AdminAssetApplication(database, repository=repository, item_repository=item_repository)
 
-    def _call(self, app, operation_id="admin-1"):
+    def _call(self, app, operation_id="admin-1", *, expected_stone=100, requested_delta=25):
         return app.adjust_stone(
             operation_id=operation_id,
             operator_id="operator-1",
             user_id="user-1",
-            expected_stone=100,
-            requested_delta=25,
+            expected_stone=expected_stone,
+            requested_delta=requested_delta,
             target_name="道友",
         )
 
@@ -71,6 +73,50 @@ class AdminAssetApplicationTests(unittest.TestCase):
                 audit = uow.query_one("SELECT category FROM operation_audit WHERE operation_id=?", ("admin-1",))
             self.assertEqual(ledger["status"], "applied")
             self.assertEqual(audit["category"], "admin_asset")
+
+    def test_default_stone_repository_and_started_ledger_recovery(self):
+        with tempfile.TemporaryDirectory() as directory:
+            app = self._application(directory)
+            database = Path(directory) / "game.db"
+            with DatabaseUnitOfWork(database) as uow:
+                apply_admin_stone_adjustment(uow)
+                uow.execute("CREATE TABLE user_xiuxian(user_id TEXT PRIMARY KEY,stone INTEGER)")
+                uow.execute("INSERT INTO user_xiuxian(user_id,stone) VALUES(?,?)", ("user-1", 100))
+
+            first = self._call(app, "admin-default")
+            replay = self._call(app, "admin-default")
+            self.assertTrue(first.ok)
+            self.assertEqual(first.data["status"], "adjusted")
+            self.assertTrue(replay.replayed)
+
+            payload = {
+                "operator_id": "operator-1",
+                "user_id": "user-1",
+                "expected_stone": 125,
+                "requested_delta": 25,
+                "target_name": "道友",
+            }
+            AdminStoneSqlRepository(database).adjust(
+                "admin-started", "operator-1", "user-1", 125, 25, target_name="道友"
+            )
+            with DatabaseUnitOfWork(database, immediate=True) as uow:
+                app.ledger.begin(uow, "admin-started", "admin.stone_adjust", payload)
+
+            recovered = self._call(app, "admin-started", expected_stone=125)
+            self.assertTrue(recovered.ok)
+            self.assertEqual(recovered.data["status"], "duplicate")
+            with DatabaseUnitOfWork(database) as uow:
+                stone = uow.query_one("SELECT stone FROM user_xiuxian WHERE user_id=?", ("user-1",))
+                audit_count = uow.query_one(
+                    "SELECT COUNT(*) AS count FROM economy_log WHERE user_id=?", ("user-1",)
+                )
+                ledger = uow.query_one(
+                    "SELECT status FROM operation_ledger WHERE operation_id=? AND action=?",
+                    ("admin-started", "admin.stone_adjust"),
+                )
+            self.assertEqual(int(stone["stone"]), 150)
+            self.assertEqual(int(audit_count["count"]), 2)
+            self.assertEqual(ledger["status"], "applied")
 
     def test_state_rejection_is_stable(self):
         with tempfile.TemporaryDirectory() as directory:

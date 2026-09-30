@@ -117,7 +117,7 @@ from .features.activity.migrations import apply_activity_state_schema, apply_act
 from .features.combat_settlement.manifest import FEATURE as COMBAT_SETTLEMENT_FEATURE
 from .features.combat_settlement.migrations import apply_combat_settlement, apply_combat_settlement_operations, apply_dao_battle_operations, apply_dao_battle_record
 from .features.admin_asset.manifest import FEATURE as ADMIN_ASSET_FEATURE
-from .features.admin_asset.migrations import apply_admin_asset
+from .features.admin_asset.migrations import apply_admin_asset, apply_admin_stone_adjustment
 from .features.tianti_settlement.manifest import FEATURE as TIANTI_SETTLEMENT_FEATURE
 from .features.tianti_settlement.migrations import apply_tianti_settlement, apply_tianti_settlement_operations
 from .features.tianti_training.manifest import FEATURE as TIANTI_TRAINING_FEATURE
@@ -215,6 +215,7 @@ def build_migrations() -> tuple[Migration, ...]:
         Migration("activity_state.001", "activity_state_schema", apply_activity_state_schema),
         Migration("activity_state.002", "activity_state_legacy_backfill", apply_activity_state_legacy),
         Migration("admin_asset.001", "admin_asset_feature_migrations", apply_admin_asset),
+        Migration("admin_asset.002", "admin_stone_adjustment_operations", apply_admin_stone_adjustment),
         Migration("arena.001", "arena_feature_migrations", apply_arena),
         Migration("arena.002", "arena_challenge_purchase_operations", apply_arena_challenge_purchase),
         Migration("arena.003", "arena_purchase_operations", apply_arena_purchase),
@@ -739,7 +740,6 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
         from .features.activity_reward.boss_rank_claim_application import ActivityBossRankClaimApplication
         from .features.combat_settlement.application import CombatSettlementApplication
         from .features.admin_asset.application import AdminAssetApplication
-        from .features.admin_asset.repository import LegacyAdminStoneRepository
         from .features.tianti_settlement.application import TiantiSettlementApplication
         from .features.tianti_training.application import TiantiTrainingApplication
         from .features.training.application import TrainingApplication
@@ -882,10 +882,7 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
                 str(context.database.path("game_db")),
                 str(context.database.path("player_db")),
             ),
-            "admin_asset": AdminAssetApplication(
-                str(context.database.path("game_db")),
-                repository=LegacyAdminStoneRepository(str(context.database.path("game_db"))),
-            ),
+            "admin_asset": AdminAssetApplication(str(context.database.path("game_db"))),
             "tianti_settlement": TiantiSettlementApplication(
                 str(context.database.path("player_db")),
                 spirit_vein_multiplier=spirit_vein_tianti_multiplier,

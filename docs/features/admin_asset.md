@@ -16,11 +16,11 @@
 
 ## 数据模型与迁移
 
-`admin_asset.001` 创建 `admin_asset_feature_migrations` 标记。`operation_ledger`/`operation_audit` 是新边界的统一流水；旧 `admin_stone_adjustment_operations`、`admin_item_grant_operations` 与 `economy_log` 继续由兼容仓储维护。
+`admin_asset.001` 创建 feature migration 标记；`admin_asset.002` 在启动阶段预建单人灵石调整回执和 `economy_log.trace_id`，请求路径不执行 DDL。单人灵石调整复用 `admin_stone_adjustment_operations` 以延续旧回执，普通物品发放仍由其各自 feature repository 管理；`admin_item_grant_operations` 保留为兼容数据。`operation_ledger`/`operation_audit` 是应用级流水。
 
 ## 事务与失败回滚
 
-旧仓储使用 `BEGIN IMMEDIATE` 和条件更新 `WHERE stone = expected_stone`，用户不存在、快照变化、操作号冲突均不改变资产。应用层在旧事务成功后写统一审计；应用异常会写 `failed` 记录，允许同操作号重试。
+feature stone repository 在一个 game DB immediate UoW 中提交余额 CAS、旧格式 operation receipt、`economy_log` 和 trace ID；用户不存在、快照变化、操作号冲突都不会改资产。扣减仍封顶至 0，审计记录实际 delta。统一 operation ledger 若停在 `started`，相同请求可借 repository receipt 安全恢复；晚期 SQL 异常同时回滚余额、receipt 和经济审计。显式注入 `LegacyAdminStoneRepository` 仍可供回滚使用，但不由默认 composition root 创建。
 
 ## 定时任务
 
@@ -32,12 +32,12 @@
 
 ## 适配器差异
 
-核心应用不导入 NoneBot、Flask 或 SQLite 驱动。命令和 Web adapter 只负责解析上下文、权限和响应；仓储通过惰性导入连接现有管理员事务服务。
+核心应用不导入 NoneBot、Flask 或 SQLite 驱动。命令和 Web adapter 只负责解析上下文、权限和响应；默认灵石仓储通过 feature-owned UoW 写入，显式 rollback 仓储才惰性调用旧管理员事务 service。
 
 ## 测试与手工验收
 
-执行 `python -m unittest tests.test_admin_asset_application tests.test_admin_stone_adjustment_transaction -q`，并用 Flask client 验证匿名拒绝、CSRF 失败、管理员成功、重复操作重放和快照变化拒绝。
+执行 `python -m unittest tests.test_admin_asset_application tests.test_admin_stone_adjustment_transaction -q`，并运行 admin asset repository/source/progress tests；Flask client 覆盖匿名拒绝、CSRF 失败、管理员成功、重复操作重放和快照变化拒绝。
 
 ## 灰度开关、回滚和已知限制
 
-设置 `XIUXIAN_ADMIN_ASSET_ENABLED=false` 后重启可回退；不删除旧流水。当前迁移单人灵石和普通物品发放；全服灵石、全服物品、物品扣除、修为和传承资产仍由兼容服务处理。
+设置 `XIUXIAN_ADMIN_ASSET_ENABLED=false` 后重启可停用新 adapter；不删除旧流水。单人灵石默认路径已由 feature repository 承担，显式 legacy repository 保留作回滚。普通物品发放、全服灵石、全服物品、物品扣除、修为和传承资产仍有各自兼容边界。

@@ -2859,7 +2859,7 @@
   application 或静态标记而计作完成。
 - 2026-09-30 progress CLI 静态计数：Python 文件 1,664 个；
   `transaction_service.py` 33 个/23,469 行，旧服务 import 文件 75 个，
-  `xiuxian2_handle` import 文件 72 个，直接 `db_backend.connect` 命中 138 个，
+  `xiuxian2_handle` import 文件 72 个，直接 `db_backend.connect` 命中 139 个，
   `sqlite3.connect` 命中 34 个，直接全局 random 命中 67 个，`datetime.now` 命中
   73 个，`time.time` 命中 26 个；`xiuxian2_handle.py` 为 181,666 bytes。与早期快照相比，行数/命中数变化只代表静态计数变化；
   每项仍须核对生产调用图，不能用减少计数代替执行路径证据。
@@ -2871,6 +2871,13 @@
   生产 `savef` 调用点或 `LegacyBankRepository` 构造点，也没有自动结息 scheduler；旧
   reader/writer/rollback API 仅保留显式兼容入口。真实发布前仍须按 P7 对真实数据目录做
   备份、迁移、恢复及余额对账；隔离测试不替代该证据，用户 `boss_info.json` 修改保留。
+- 管理员单人灵石调整已切换到默认 feature-owned repository：`admin_asset.002` 在
+  game DB 启动阶段预建旧格式 operation receipt 与带 `trace_id` 的 `economy_log`；余额
+  CAS、回执和经济审计在同一事务提交，保留扣减至 0、旧回执 replay 和 `started` ledger
+  恢复语义。默认 composition 不再注入 `LegacyAdminStoneRepository`，显式兼容入口仍保留。
+  隔离五库 recovery 确认新迁移仅路由到 game DB，backup/restore dry-run/restore 覆盖五库且
+  reconcile clean。管理员批量灵石、普通物品发放及其余资产仍由兼容实现承载；这不代表
+  admin 全域完成，也没有替代 P7 真实数据验证。
 - 活动 tasks/pass/boss milestone/boss rank 子领奖均由 game DB ledger/repository 持有奖励资产
   和回执，历史回执分块迁移；领取失败可用同 operation 重试或 reconcile 续跑。活动 `tasks`、
   `pass`、`boss_milestone`、`boss_rank` 的进度/领取状态仍在旧 `activity.db` projection，

@@ -58,7 +58,8 @@ class AdminAssetApplication:
                         previous = existing.outcome()
                         if previous is not None:
                             return previous.replay()
-                        raise ConflictError("操作正在处理中")
+                        # The repository receipt can recover a commit whose
+                        # operation-ledger finish was interrupted.
                 repository = self.repository or AdminStoneSqlRepository(self.database)
                 raw = repository.adjust(
                     request.operation_id, request.operator_id, request.user_id,
@@ -75,7 +76,7 @@ class AdminAssetApplication:
                     int(values["previous_stone"] or 0), int(values["final_stone"] or 0), int(values["applied_delta"] or 0),
                 )
                 data = result.to_dict()
-                if status in {"adjusted", "duplicate"}:
+                if status in {"adjusted", "applied", "duplicate"}:
                     outcome = OperationOutcome.applied(
                         request.operation_id,
                         self.action,
