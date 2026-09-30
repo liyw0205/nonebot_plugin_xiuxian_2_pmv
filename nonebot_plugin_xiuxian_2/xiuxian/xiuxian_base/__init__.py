@@ -40,7 +40,6 @@ from ..xiuxian_utils.utils import (
     Txt2Img, send_msg_handler, handle_send, get_logs, log_message, get_statistics_data, update_statistics_value,
     send_help_message
 )
-from ..xiuxian_utils.item_json import Items
 from ..xiuxian_utils.season_service import get_current_season
 from ..xiuxian_utils.season_rank_service import (
     DEFAULT_SEASON_RANK_TYPES,
@@ -58,7 +57,6 @@ from .registration_batch import RegistrationBatcher, RegistrationRequest
 from .breakthrough_tribulation import *  # noqa: F401,F403
 from .xiangyuan import clear_all_xiangyuan, reset_xiangyuan_daily  # noqa: F401
 
-items = Items()
 _sql_message_instance = None
 sign_in_application = SignInApplication(get_paths().game_db)
 lottery_application: Any | None = None

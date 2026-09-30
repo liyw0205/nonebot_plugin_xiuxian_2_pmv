@@ -20,6 +20,7 @@ def test_xiangyuan_facade_defers_settlement_service_construction():
         "nonebot_plugin_xiuxian_2.xiuxian.xiuxian_base.xiangyuan"
     )
     assert xiangyuan._xiangyuan_settlement_service_instance is None
+    assert xiangyuan._items_instance is None
 
 
 def test_xiangyuan_facade_uses_lazy_dual_database_service():
@@ -36,6 +37,17 @@ def test_xiangyuan_facade_uses_lazy_dual_database_service():
     assert "_xiangyuan_settlement_service().clear_all(" in source
     assert "xiangyuan_settlement_service.create(" not in source
     assert "xiangyuan_settlement_service.claim(" not in source
+    assert "items = Items()" not in source
+    assert "def _items(" in source
+    assert "_items().get_data_by_item_name(" in source
+
+
+def test_base_facade_does_not_construct_unused_item_catalog_at_import():
+    source = Path(
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_base/__init__.py"
+    ).read_text(encoding="utf-8")
+    assert "from ..xiuxian_utils.item_json import Items" not in source
+    assert "items = Items()" not in source
 
 
 def test_xiangyuan_facade_defers_sql_manager_construction():

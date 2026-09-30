@@ -19,11 +19,19 @@ from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage
 from .stone_limit import stone_limit
 from ...compatibility.legacy_base_xiangyuan import XiangyuanSettlementService
 
-items = Items()
+_items_instance = None
 _sql_message_instance = None
 _xiangyuan_settlement_service_instance = None
 runtime_random = SystemRandom()
 runtime_ids = UUIDGenerator()
+
+
+def _items():
+    """Load the shared item catalog only when a gift names an item."""
+    global _items_instance
+    if _items_instance is None:
+        _items_instance = Items()
+    return _items_instance
 
 
 def _sql_message():
@@ -169,7 +177,7 @@ def parse_xiangyuan_content(content_str: str, user_id: int):
                 continue
 
             # 其它物品
-            goods_id, goods_info = items.get_data_by_item_name(name)
+            goods_id, goods_info = _items().get_data_by_item_name(name)
             if not goods_id:
                 error_msg = f"物品不存在：{name}"
                 continue
