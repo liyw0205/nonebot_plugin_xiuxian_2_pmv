@@ -13,9 +13,25 @@ def create_blueprint(*, application, permission) -> Blueprint:
     router = create_legacy_blueprint(
         "base",
         application,
-        ("breakthrough", "tribulation", "rename", "stone_contest", "stone_robbery", "sign"),
+        ("breakthrough", "tribulation", "rename", "stone_robbery", "sign"),
         permission,
     )
+
+    @router.post("/api/v1/base/stone_contest")
+    @guard("user", permission, write=True)
+    def stone_contest():
+        payload = request.get_json(silent=True) or {}
+        payer_id = str(payload.get("payer_id") or payload.get("user_id") or "")
+        receiver_id = str(payload.get("receiver_id") or payload.get("recipient_id") or "")
+        requested_amount = payload.get("requested_amount", payload.get("amount", 0))
+        result = application.stone_contest(
+            operation_id=request.headers.get("Idempotency-Key") or payload.get("operation_id", ""),
+            user_id=payer_id,
+            payer_id=payer_id,
+            receiver_id=receiver_id,
+            requested_amount=requested_amount,
+        )
+        return api_success(result.to_dict(), status=200 if result.succeeded else 409)
 
     @router.post("/api/v1/base/xiangyuan/create")
     @guard("user", permission, write=True)

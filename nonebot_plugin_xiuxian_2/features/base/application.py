@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Any
 
 from .._legacy_application import LegacyApplication
+from .contest_repository import BaseStoneContestSqlRepository
 from .repository import BaseRepository
 from .rename_repository import BaseRenameSqlRepository
 from .robbery_repository import BaseStoneRobberySqlRepository
@@ -14,6 +15,7 @@ from .xiangyuan_application import XiangyuanApplication
 class BaseApplication(LegacyApplication):
     def __init__(self, game_database: str | Path, player_database: str | Path, *, repository: BaseRepository | None = None) -> None:
         super().__init__(game_database, repository=repository, feature="base")
+        self._stone_contest_repository = BaseStoneContestSqlRepository(game_database)
         self._xiangyuan_application = XiangyuanApplication(game_database, player_database)
 
     def _action(self, action: str, *, operation_id: str, user_id: str, **kwargs: Any):
@@ -35,7 +37,15 @@ class BaseApplication(LegacyApplication):
         return BaseStoneRobberySqlRepository(self.database, self.player_database).get_result(operation_id, robber_id, victim_id)
     def settle_stone_robbery(self, *, operation_id: str, robber_id: str, victim_id: str, **kwargs: Any):
         return BaseStoneRobberySqlRepository(self.database, self.player_database).settle(operation_id, robber_id, victim_id, **kwargs)
-    def stone_contest(self, *, operation_id: str, user_id: str, **kwargs: Any): return self._action("stone_contest", operation_id=operation_id, user_id=user_id, **kwargs)
+    def get_stone_contest_result(self, operation_id: str, payer_id: str, receiver_id: str, requested_amount: int | None = None):
+        return self._stone_contest_repository.get_result(operation_id, payer_id, receiver_id, requested_amount)
+    def stone_contest(self, *, operation_id: str, user_id: str, **kwargs: Any):
+        payer_id = kwargs.get("payer_id", user_id)
+        receiver_id = kwargs.get("receiver_id", kwargs.get("recipient_id", ""))
+        requested_amount = kwargs.get("requested_amount", kwargs.get("amount", 0))
+        return self._stone_contest_repository.transfer(
+            operation_id, payer_id, receiver_id, requested_amount
+        )
     def stone_robbery(self, *, operation_id: str, user_id: str, **kwargs: Any): return self._action("stone_robbery", operation_id=operation_id, user_id=user_id, **kwargs)
     def sign(self, *, operation_id: str, user_id: str, **kwargs: Any): return self._action("sign", operation_id=operation_id, user_id=user_id, **kwargs)
     def xiangyuan_create(self, *, operation_id: str, user_id: str, group_id: str, giver_name: str, stone: int, items: Any, receiver_count: int, send_limit: int = 3, legacy_data: Any = None):

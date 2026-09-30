@@ -98,6 +98,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
     base_application_source = (PACKAGE / "features" / "base" / "application.py").read_text(encoding="utf-8")
     base_rename_repository = (PACKAGE / "features" / "base" / "rename_repository.py").read_text(encoding="utf-8")
     base_theft_repository = (PACKAGE / "features" / "base" / "theft_repository.py").read_text(encoding="utf-8")
+    base_contest_repository = (PACKAGE / "features" / "base" / "contest_repository.py").read_text(encoding="utf-8")
     base_robbery_repository = (PACKAGE / "features" / "base" / "robbery_repository.py").read_text(encoding="utf-8")
     base_xiangyuan_repository = (PACKAGE / "features" / "base" / "xiangyuan_repository.py").read_text(encoding="utf-8")
     base_xiangyuan_application = (PACKAGE / "features" / "base" / "xiangyuan_application.py").read_text(encoding="utf-8")
@@ -1710,6 +1711,23 @@ def _slice_status() -> dict[str, dict[str, object]]:
             ),
             "rename_service_isolated": "class PlayerRenameService" not in legacy_transaction and (PACKAGE / "compatibility" / "legacy_base_player_rename.py").is_file(),
             "stone_contest_service_isolated": "class StoneContestService" not in base_transaction and "class StoneContestService" in stone_contest_compatibility and "stone_contest_operations" in stone_contest_compatibility,
+            "stone_contest_default_application_owned": (
+                "BaseStoneContestSqlRepository" in base_application_source
+                and "self._stone_contest_repository.transfer(" in base_application_source
+                and "StoneContestService" not in base_application_source
+            ),
+            "stone_contest_web_route_application_owned": (
+                "@router.post(\"/api/v1/base/stone_contest\")" in (PACKAGE / "adapters" / "web" / "blueprints" / "base.py").read_text(encoding="utf-8")
+                and "application.stone_contest(" in (PACKAGE / "adapters" / "web" / "blueprints" / "base.py").read_text(encoding="utf-8")
+            ),
+            "stone_contest_request_path_has_no_ddl": (
+                "CREATE TABLE" not in base_contest_repository
+                and "ALTER TABLE" not in base_contest_repository
+            ),
+            "stone_contest_startup_migration_registered": (
+                'Migration("base.003", "stone_contest_operations", apply_base_stone_contest_operations)' in plugin
+                and "def apply_base_stone_contest_operations(" in base_migrations
+            ),
             "stone_theft_default_application_owned": (
                 "base_application.get_stone_theft_result(" in base
                 and "base_application.settle_stone_theft(" in base
