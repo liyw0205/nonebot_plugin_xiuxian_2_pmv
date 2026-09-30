@@ -72,10 +72,6 @@ from .admin_helpers import (
 from .transaction_service import AdminExpAdjustmentService
 from .transaction_service import AdminItemDestroyService
 from .transaction_service import AdminItemBatchGrantService
-from .transaction_service import AdminAccessoryAdjustmentService
-from .transaction_service import (
-    AdminAccessoryBatchAdjustmentService,
-)
 from .transaction_service import AdminImpartStoneAdjustmentService
 from .transaction_service import (
     AdminImpartStoneBatchAdjustmentService,
@@ -95,8 +91,6 @@ admin_asset_application = AdminAssetApplication(get_paths().game_db)
 admin_application = AdminApplication(get_paths().game_db)
 _admin_item_destroy_service_instance = None
 _admin_item_batch_grant_service_instance = None
-_admin_accessory_adjustment_service_instance = None
-_admin_accessory_batch_adjustment_service_instance = None
 _admin_impart_stone_adjustment_service_instance = None
 _admin_impart_stone_batch_adjustment_service_instance = None
 _admin_player_status_reset_service_instance = None
@@ -109,26 +103,6 @@ def _sql_message():
     if _sql_message_instance is None:
         _sql_message_instance = XiuxianDateManage()
     return _sql_message_instance
-
-
-def _admin_accessory_adjustment_service():
-    global _admin_accessory_adjustment_service_instance
-    if _admin_accessory_adjustment_service_instance is None:
-        _admin_accessory_adjustment_service_instance = AdminAccessoryAdjustmentService(
-            get_paths().game_db, get_paths().player_db
-        )
-    return _admin_accessory_adjustment_service_instance
-
-
-def _admin_accessory_batch_adjustment_service():
-    global _admin_accessory_batch_adjustment_service_instance
-    if _admin_accessory_batch_adjustment_service_instance is None:
-        _admin_accessory_batch_adjustment_service_instance = AdminAccessoryBatchAdjustmentService(
-            get_paths().game_db,
-            get_paths().player_db,
-            _admin_accessory_adjustment_service(),
-        )
-    return _admin_accessory_batch_adjustment_service_instance
 
 
 def _admin_impart_stone_adjustment_service():
@@ -1011,22 +985,23 @@ async def cz_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Me
             await handle_send(bot, event, "当前没有可发放的用户。")
             await cz.finish()
 
-        users = list(all_users)
+        users = all_users
         operator_id = str(get_user_id(event) or "unknown")
         if is_accessory:
-            operation_id = _admin_accessory_batch_adjustment_service().find_running(
-                "grant",
-                operator_id,
-                goods_id,
-                item_info["name"],
-                quality,
-                quantity,
-                ACCESSORY_BAG_LIMIT,
+            operation_id = admin_asset_application.find_running_accessory_batch(
+                player_database=get_paths().player_db,
+                action="grant",
+                operator_id=operator_id,
+                item_id=goods_id,
+                item_name=item_info["name"],
+                quality=quality,
+                quantity=quantity,
+                max_accessories=ACCESSORY_BAG_LIMIT,
             ) or _admin_operation_id(event, "accessory-grant-all", str(goods_id))
 
             def _work():
                 return run_chunked_until_done(
-                    lambda: admin_application.grant_accessory_batch(
+                    lambda: admin_asset_application.grant_accessory_batch(
                         operation_id,
                         operator_id,
                         users,
@@ -1036,12 +1011,19 @@ async def cz_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Me
                         quantity,
                         ACCESSORY_BAG_LIMIT,
                         lambda _user_id: create_accessory_instance(goods_id, quality),
+                        player_database=get_paths().player_db,
                     )
                 )
 
             def _done(result):
                 if result.status == "operation_conflict":
                     return "本次全服饰品发放与已记录计划冲突"
+                if result.status == "in_progress":
+                    return "相同的全服饰品发放批次正在执行，请稍后再试。"
+                if result.status == "insufficient_space":
+                    return "可用磁盘空间不足，未启动全服饰品发放。"
+                if result.status == "not_ready":
+                    return "全服饰品发放服务尚未就绪，请检查启动迁移和玩家饰品数据。"
                 return (
                     f"全服饰品发放完成！已处理 {result.completed}/{result.total} 名玩家，"
                     f"实际向 {result.affected_users} 名玩家发放 "
@@ -1271,32 +1253,40 @@ async def hmll_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: 
 
         if is_accessory:
             operator_id = str(get_user_id(event) or "unknown")
-            operation_id = _admin_accessory_batch_adjustment_service().find_running(
-                "destroy",
-                operator_id,
-                goods_id,
-                item_info["name"],
-                0,
-                quantity,
-                0,
+            operation_id = admin_asset_application.find_running_accessory_batch(
+                player_database=get_paths().player_db,
+                action="destroy",
+                operator_id=operator_id,
+                item_id=goods_id,
+                item_name=item_info["name"],
+                quality=0,
+                quantity=quantity,
+                max_accessories=0,
             ) or _admin_operation_id(event, "accessory-destroy-all", str(goods_id))
-            users = list(all_users)
+            users = all_users
 
             def _work():
                 return run_chunked_until_done(
-                    lambda: admin_application.destroy_accessory_batch(
+                    lambda: admin_asset_application.destroy_accessory_batch(
                         operation_id,
                         operator_id,
                         users,
                         goods_id,
                         item_info["name"],
                         quantity,
+                        player_database=get_paths().player_db,
                     )
                 )
 
             def _done(result):
                 if result.status == "operation_conflict":
                     return "本次全服饰品扣除与已记录计划冲突"
+                if result.status == "in_progress":
+                    return "相同的全服饰品扣除批次正在执行，请稍后再试。"
+                if result.status == "insufficient_space":
+                    return "可用磁盘空间不足，未启动全服饰品扣除。"
+                if result.status == "not_ready":
+                    return "全服饰品扣除服务尚未就绪，请检查启动迁移和玩家饰品数据。"
                 return (
                     f"全服饰品扣除完成！已处理 {result.completed}/{result.total} 名玩家，"
                     f"共影响 {result.affected_users} 名玩家，累计扣除"

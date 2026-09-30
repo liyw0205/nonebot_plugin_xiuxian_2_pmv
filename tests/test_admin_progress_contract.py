@@ -22,5 +22,10 @@ class AdminProgressContractTests(unittest.TestCase):
             "accessory_single_startup_migration_registered",
             "accessory_single_schema_missing_reported",
             "accessory_single_migration_game_only",
+            "accessory_batch_application_owned",
+            "accessory_batch_request_path_has_no_ddl",
+            "accessory_batch_disk_preflight_and_bounded_targets",
+            "accessory_batch_startup_migration_registered",
+            "accessory_batch_migration_game_only",
         ):
             self.assertTrue(admin[key], key)

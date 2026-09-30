@@ -117,7 +117,7 @@ from .features.activity.migrations import apply_activity_state_schema, apply_act
 from .features.combat_settlement.manifest import FEATURE as COMBAT_SETTLEMENT_FEATURE
 from .features.combat_settlement.migrations import apply_combat_settlement, apply_combat_settlement_operations, apply_dao_battle_operations, apply_dao_battle_record
 from .features.admin_asset.manifest import FEATURE as ADMIN_ASSET_FEATURE
-from .features.admin_asset.migrations import apply_admin_accessory_operations, apply_admin_asset, apply_admin_exp_adjustment, apply_admin_impart_stone_operations, apply_admin_item_destroy, apply_admin_item_grant, apply_admin_realm_changes, apply_admin_stone_adjustment, apply_admin_stone_batch
+from .features.admin_asset.migrations import apply_admin_accessory_batch, apply_admin_accessory_operations, apply_admin_asset, apply_admin_exp_adjustment, apply_admin_impart_stone_operations, apply_admin_item_destroy, apply_admin_item_grant, apply_admin_realm_changes, apply_admin_stone_adjustment, apply_admin_stone_batch
 from .features.tianti_settlement.manifest import FEATURE as TIANTI_SETTLEMENT_FEATURE
 from .features.tianti_settlement.migrations import apply_tianti_settlement, apply_tianti_settlement_operations
 from .features.tianti_training.manifest import FEATURE as TIANTI_TRAINING_FEATURE
@@ -223,6 +223,7 @@ def build_migrations() -> tuple[Migration, ...]:
         Migration("admin_asset.007", "admin_level_root_change_operations", apply_admin_realm_changes),
         Migration("admin_asset.008", "admin_impart_stone_operations", apply_admin_impart_stone_operations),
         Migration("admin_asset.009", "admin_accessory_operations", apply_admin_accessory_operations),
+        Migration("admin_asset.010", "admin_accessory_batch_operations", apply_admin_accessory_batch),
         Migration("arena.001", "arena_feature_migrations", apply_arena),
         Migration("arena.002", "arena_challenge_purchase_operations", apply_arena_challenge_purchase),
         Migration("arena.003", "arena_purchase_operations", apply_arena_purchase),

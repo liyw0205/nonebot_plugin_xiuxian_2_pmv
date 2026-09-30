@@ -21,6 +21,7 @@ from .exp_repository import AdminExpAdjustmentSqlRepository
 from .level_repository import AdminLevelChangeSqlRepository
 from .root_repository import AdminRootChangeSqlRepository
 from .accessory_repository import AdminAccessoryAdjustmentResult, AdminAccessorySqlRepository
+from .accessory_batch_repository import AdminAccessoryBatchSqlRepository
 
 
 class AdminAssetApplication:
@@ -185,6 +186,84 @@ class AdminAssetApplication:
             )
         data = asdict(raw) if is_dataclass(raw) else dict(vars(raw))
         return type("AdminAccessoryOutcome", (), {"data": data, "status": raw.status, "ok": raw.succeeded})()
+
+    def find_running_accessory_batch(
+        self,
+        *,
+        player_database: str | Path,
+        action: str,
+        operator_id: str,
+        item_id: int,
+        item_name: str,
+        quality: int,
+        quantity: int,
+        max_accessories: int,
+    ) -> str | None:
+        return AdminAccessoryBatchSqlRepository(
+            self.database, player_database
+        ).find_running(
+            action,
+            operator_id,
+            item_id,
+            item_name,
+            quality,
+            quantity,
+            max_accessories,
+        )
+
+    def grant_accessory_batch(
+        self,
+        operation_id: str,
+        operator_id: str,
+        user_ids,
+        item_id: int,
+        item_name: str,
+        quality: int,
+        quantity: int,
+        max_accessories: int,
+        create_accessory: Callable[[str], dict[str, Any]],
+        *,
+        player_database: str | Path,
+        chunk_size: int = 100,
+    ):
+        return AdminAccessoryBatchSqlRepository(
+            self.database, player_database
+        ).grant(
+            operation_id,
+            operator_id,
+            user_ids,
+            item_id,
+            item_name,
+            quality,
+            quantity,
+            max_accessories,
+            create_accessory,
+            chunk_size=chunk_size,
+        )
+
+    def destroy_accessory_batch(
+        self,
+        operation_id: str,
+        operator_id: str,
+        user_ids,
+        item_id: int,
+        item_name: str,
+        quantity: int,
+        *,
+        player_database: str | Path,
+        chunk_size: int = 100,
+    ):
+        return AdminAccessoryBatchSqlRepository(
+            self.database, player_database
+        ).destroy(
+            operation_id,
+            operator_id,
+            user_ids,
+            item_id,
+            item_name,
+            quantity,
+            chunk_size=chunk_size,
+        )
 
     def grant_item(
         self,

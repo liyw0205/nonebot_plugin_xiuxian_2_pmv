@@ -230,12 +230,12 @@ class AdminAccessoryBatchAdjustmentTests(unittest.TestCase):
             Path(__file__).parents[1]
             / "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py"
         ).read_text(encoding="utf-8")
-        self.assertIn("admin_application.grant_accessory_batch(", source)
-        self.assertIn("admin_application.destroy_accessory_batch(", source)
-        self.assertIn("admin_application.destroy_accessory_batch(", source)
+        self.assertIn("admin_asset_application.grant_accessory_batch(", source)
+        self.assertIn("admin_asset_application.destroy_accessory_batch(", source)
         self.assertGreaterEqual(
-            source.count("_admin_accessory_batch_adjustment_service().find_running("), 2
+            source.count("admin_asset_application.find_running_accessory_batch("), 2
         )
+        self.assertNotIn("_admin_accessory_batch_adjustment_service(", source)
 
 
 if __name__ == "__main__":

@@ -2629,6 +2629,7 @@
     "activity_user",
     "admin_accessory_batch_operations",
     "admin_accessory_batch_progress",
+    "admin_accessory_batch_targets",
     "admin_accessory_operations",
     "admin_asset_feature_migrations",
     "admin_blackhouse_status_operations",

@@ -20,22 +20,20 @@ def test_admin_facade_defers_accessory_service_construction():
     admin = importlib.import_module(
         "nonebot_plugin_xiuxian_2.xiuxian.xiuxian_admin"
     )
-    assert admin._admin_accessory_adjustment_service_instance is None
-    assert admin._admin_accessory_batch_adjustment_service_instance is None
+    assert admin.admin_asset_application is not None
+    assert "_admin_accessory_adjustment_service_instance" not in vars(admin)
+    assert "_admin_accessory_batch_adjustment_service_instance" not in vars(admin)
 
 
-def test_admin_accessory_helpers_use_lazy_dual_database_services():
+def test_admin_accessory_commands_use_feature_owned_dual_database_services():
     source = Path(
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py"
     ).read_text(encoding="utf-8")
-    assert "_admin_accessory_adjustment_service_instance = None" in source
-    assert "_admin_accessory_batch_adjustment_service_instance = None" in source
-    assert "def _admin_accessory_adjustment_service(" in source
-    assert "def _admin_accessory_batch_adjustment_service(" in source
     assert "get_paths().game_db" in source
     assert "get_paths().player_db" in source
     assert "admin_asset_application.adjust_accessory(" in source
-    assert "admin_application.grant_accessory_batch(" in source
+    assert "admin_asset_application.grant_accessory_batch(" in source
+    assert "admin_asset_application.destroy_accessory_batch(" in source
     assert "admin_accessory_adjustment_service.grant(" not in source
     assert "admin_accessory_adjustment_service.destroy(" not in source
 

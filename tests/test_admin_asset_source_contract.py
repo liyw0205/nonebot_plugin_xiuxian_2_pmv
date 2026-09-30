@@ -30,7 +30,7 @@ def test_global_stone_command_uses_resumable_feature_batch():
     assert "admin_asset_application.adjust_stone_batch(" in handler
     assert "run_chunked_until_done" in handler
     assert 'Migration("admin_asset.003", "admin_stone_batch_adjustment_operations", apply_admin_stone_batch)' in plugin
-    assert 'migration_version="admin_asset.009"' in manifest
+    assert 'migration_version="admin_asset.010"' in manifest
     assert "CREATE TABLE" not in repository
     assert "shutil.disk_usage" in repository
 
@@ -44,7 +44,7 @@ def test_admin_exp_repository_has_no_request_time_ddl():
     admin = (root / "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py").read_text(encoding="utf-8")
     handler = admin[admin.index("@adjust_exp_command.handle") : admin.index("@zaohua_xiuxian.handle")]
     assert 'Migration("admin_asset.004", "admin_exp_adjustment_operations", apply_admin_exp_adjustment)' in plugin
-    assert 'migration_version="admin_asset.009"' in manifest
+    assert 'migration_version="admin_asset.010"' in manifest
     assert "CREATE TABLE" not in repository
     assert "def apply_admin_exp_adjustment(" in migrations
     assert 'result.status == "schema_missing"' in handler
@@ -59,7 +59,7 @@ def test_admin_item_destroy_repository_has_no_request_time_ddl():
     admin = (root / "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py").read_text(encoding="utf-8")
     handler = admin[admin.index("@hmll.handle") : admin.index("@restate.handle")]
     assert 'Migration("admin_asset.005", "admin_item_destroy_operations", apply_admin_item_destroy)' in plugin
-    assert 'migration_version="admin_asset.009"' in manifest
+    assert 'migration_version="admin_asset.010"' in manifest
     assert "CREATE TABLE" not in repository
     assert "def apply_admin_item_destroy(" in migrations
     assert 'result.status == "schema_missing"' in handler
@@ -74,7 +74,7 @@ def test_admin_item_grant_repository_has_no_request_time_ddl():
     admin = (root / "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py").read_text(encoding="utf-8")
     handler = admin[admin.index("@cz.handle") : admin.index("@hmll.handle")]
     assert 'Migration("admin_asset.006", "admin_item_grant_operations", apply_admin_item_grant)' in plugin
-    assert 'migration_version="admin_asset.009"' in manifest
+    assert 'migration_version="admin_asset.010"' in manifest
     assert "CREATE TABLE" not in repository
     assert "def apply_admin_item_grant(" in migrations
     assert 'result.status == "schema_missing"' in handler
@@ -91,7 +91,7 @@ def test_admin_realm_changes_use_game_startup_schema_and_no_legacy_getters():
     level_handler = admin[admin.index("async def zaohua_xiuxian_"):admin.index("@gmm_command.handle")]
     root_handler = admin[admin.index("async def gmm_command_"):admin.index("@cz.handle")]
     assert 'Migration("admin_asset.007", "admin_level_root_change_operations", apply_admin_realm_changes)' in plugin
-    assert 'migration_version="admin_asset.009"' in manifest
+    assert 'migration_version="admin_asset.010"' in manifest
     assert "def apply_admin_realm_changes(" in migrations
     assert "CREATE TABLE" not in level_repository
     assert "CREATE TABLE" not in root_repository
@@ -111,7 +111,7 @@ def test_admin_impart_stone_uses_impart_balance_with_game_startup_receipt():
     admin = (root / "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py").read_text(encoding="utf-8")
     handler = admin[admin.index("# GM加思恋结晶"):admin.index("@adjust_exp_command.handle")]
     assert 'Migration("admin_asset.008", "admin_impart_stone_operations", apply_admin_impart_stone_operations)' in plugin
-    assert 'migration_version="admin_asset.009"' in manifest
+    assert 'migration_version="admin_asset.010"' in manifest
     assert "def apply_admin_impart_stone_operations(" in migrations
     assert "impart_data.xiuxian_impart" in repository
     assert "user_xiuxian SET stone" not in repository
@@ -132,7 +132,7 @@ def test_admin_accessory_single_adjustment_is_feature_owned_and_migrated():
     application = (root / "nonebot_plugin_xiuxian_2/features/admin_asset/application.py").read_text(encoding="utf-8")
     admin = (root / "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py").read_text(encoding="utf-8")
     assert 'Migration("admin_asset.009", "admin_accessory_operations", apply_admin_accessory_operations)' in plugin
-    assert 'migration_version="admin_asset.009"' in manifest
+    assert 'migration_version="admin_asset.010"' in manifest
     assert "def apply_admin_accessory_operations(" in migrations
     assert "AdminAccessorySqlRepository" in application
     assert "AdminAccessoryAdjustmentService" not in application
@@ -142,3 +142,23 @@ def test_admin_accessory_single_adjustment_is_feature_owned_and_migrated():
     assert "admin_accessory_operations" in repository
     assert 'result.status == "schema_missing"' in admin
     assert "create_accessory=lambda: create_accessory_instance(item_id, quality)" in admin
+
+
+def test_admin_accessory_batch_is_feature_owned_and_disk_preflighted():
+    root = Path(__file__).parents[1]
+    plugin = (root / "nonebot_plugin_xiuxian_2/plugin.py").read_text(encoding="utf-8")
+    manifest = (root / "nonebot_plugin_xiuxian_2/features/admin_asset/manifest.py").read_text(encoding="utf-8")
+    migrations = (root / "nonebot_plugin_xiuxian_2/features/admin_asset/migrations.py").read_text(encoding="utf-8")
+    repository = (root / "nonebot_plugin_xiuxian_2/features/admin_asset/accessory_batch_repository.py").read_text(encoding="utf-8")
+    application = (root / "nonebot_plugin_xiuxian_2/features/admin_asset/application.py").read_text(encoding="utf-8")
+    admin = (root / "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py").read_text(encoding="utf-8")
+    assert 'Migration("admin_asset.010", "admin_accessory_batch_operations", apply_admin_accessory_batch)' in plugin
+    assert 'migration_version="admin_asset.010"' in manifest
+    assert "def apply_admin_accessory_batch(" in migrations
+    assert "CREATE TABLE" not in repository
+    assert "shutil.disk_usage" in repository
+    assert "bytes_per_accessory" in repository
+    assert "admin_accessory_batch_targets" in repository
+    assert "AdminAccessoryBatchSqlRepository" in application
+    assert "admin_asset_application.grant_accessory_batch(" in admin
+    assert "admin_asset_application.destroy_accessory_batch(" in admin

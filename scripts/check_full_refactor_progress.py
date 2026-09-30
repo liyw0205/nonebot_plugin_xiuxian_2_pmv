@@ -570,6 +570,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
     admin_root_repository = (PACKAGE / "features" / "admin_asset" / "root_repository.py").read_text(encoding="utf-8")
     admin_impart_stone_repository = (PACKAGE / "features" / "admin_asset" / "impart_stone_repository.py").read_text(encoding="utf-8")
     admin_accessory_repository = (PACKAGE / "features" / "admin_asset" / "accessory_repository.py").read_text(encoding="utf-8")
+    admin_accessory_batch_repository = (PACKAGE / "features" / "admin_asset" / "accessory_batch_repository.py").read_text(encoding="utf-8")
     admin_asset_migrations = (PACKAGE / "features" / "admin_asset" / "migrations.py").read_text(encoding="utf-8")
     admin_asset_manifest = (PACKAGE / "features" / "admin_asset" / "manifest.py").read_text(encoding="utf-8")
     admin_accessory_adjustment = admin_asset_application[
@@ -1956,7 +1957,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
             ),
             "stone_startup_migration_registered": (
                 'Migration("admin_asset.002", "admin_stone_adjustment_operations", apply_admin_stone_adjustment)' in plugin
-                and 'migration_version="admin_asset.009"' in admin_asset_manifest
+                and 'migration_version="admin_asset.010"' in admin_asset_manifest
             ),
             "stone_started_operation_recoverable": (
                 "The repository receipt can recover a commit whose" in admin_asset_stone_application
@@ -1991,12 +1992,12 @@ def _slice_status() -> dict[str, dict[str, object]]:
             ),
             "global_stone_batch_startup_migration_registered": (
                 'Migration("admin_asset.003", "admin_stone_batch_adjustment_operations", apply_admin_stone_batch)' in plugin
-                and 'migration_version="admin_asset.009"' in admin_asset_manifest
+                and 'migration_version="admin_asset.010"' in admin_asset_manifest
             ),
             "exp_request_path_has_no_ddl": "CREATE TABLE" not in admin_exp_repository,
             "exp_startup_migration_registered": (
                 'Migration("admin_asset.004", "admin_exp_adjustment_operations", apply_admin_exp_adjustment)' in plugin
-                and 'migration_version="admin_asset.009"' in admin_asset_manifest
+                and 'migration_version="admin_asset.010"' in admin_asset_manifest
                 and "def apply_admin_exp_adjustment(" in admin_asset_migrations
             ),
             "item_destroy_request_path_has_no_ddl": (
@@ -2006,7 +2007,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
             ),
             "item_destroy_startup_migration_registered": (
                 'Migration("admin_asset.005", "admin_item_destroy_operations", apply_admin_item_destroy)' in plugin
-                and 'migration_version="admin_asset.009"' in admin_asset_manifest
+                and 'migration_version="admin_asset.010"' in admin_asset_manifest
                 and "def apply_admin_item_destroy(" in admin_asset_migrations
             ),
             "item_destroy_missing_schema_reported": (
@@ -2033,7 +2034,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
             ),
             "item_grant_startup_migration_registered": (
                 'Migration("admin_asset.006", "admin_item_grant_operations", apply_admin_item_grant)' in plugin
-                and 'migration_version="admin_asset.009"' in admin_asset_manifest
+                and 'migration_version="admin_asset.010"' in admin_asset_manifest
                 and "def apply_admin_item_grant(" in admin_asset_migrations
             ),
             "item_grant_schema_missing_reported": (
@@ -2062,7 +2063,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
             ),
             "realm_change_startup_migration_registered": (
                 'Migration("admin_asset.007", "admin_level_root_change_operations", apply_admin_realm_changes)' in plugin
-                and 'migration_version="admin_asset.009"' in admin_asset_manifest
+                and 'migration_version="admin_asset.010"' in admin_asset_manifest
                 and "def apply_admin_realm_changes(" in admin_asset_migrations
             ),
             "realm_change_schema_missing_reported": (
@@ -2105,7 +2106,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
             ),
             "impart_stone_startup_migration_registered": (
                 'Migration("admin_asset.008", "admin_impart_stone_operations", apply_admin_impart_stone_operations)' in plugin
-                and 'migration_version="admin_asset.009"' in admin_asset_manifest
+                and 'migration_version="admin_asset.010"' in admin_asset_manifest
                 and "def apply_admin_impart_stone_operations(" in admin_asset_migrations
             ),
             "impart_stone_schema_missing_reported": (
@@ -2139,7 +2140,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
             ),
             "accessory_single_startup_migration_registered": (
                 'Migration("admin_asset.009", "admin_accessory_operations", apply_admin_accessory_operations)' in plugin
-                and 'migration_version="admin_asset.009"' in admin_asset_manifest
+                and 'migration_version="admin_asset.010"' in admin_asset_manifest
                 and "def apply_admin_accessory_operations(" in admin_asset_migrations
                 and "apply_attached_player_accessory_operations" in plugin
             ),
@@ -2161,6 +2162,41 @@ def _slice_status() -> dict[str, dict[str, object]]:
                     plugin.index("def migrations_for_database")
                 ]
             ),
+            "accessory_batch_application_owned": (
+                "AdminAccessoryBatchSqlRepository" in admin_asset_application
+                and "admin_asset_application.grant_accessory_batch(" in admin_facade
+                and "admin_asset_application.destroy_accessory_batch(" in admin_facade
+                and "_admin_accessory_batch_adjustment_service" not in admin_facade
+            ),
+            "accessory_batch_request_path_has_no_ddl": (
+                "CREATE TABLE" not in admin_accessory_batch_repository
+                and "status='pending'" in admin_accessory_batch_repository
+            ),
+            "accessory_batch_disk_preflight_and_bounded_targets": (
+                "shutil.disk_usage" in admin_accessory_batch_repository
+                and "bytes_per_target" in admin_accessory_batch_repository
+                and "bytes_per_accessory" in admin_accessory_batch_repository
+                and "target_insert_chunk_size" in admin_accessory_batch_repository
+            ),
+            "accessory_batch_startup_migration_registered": (
+                'Migration("admin_asset.010", "admin_accessory_batch_operations", apply_admin_accessory_batch)' in plugin
+                and 'migration_version="admin_asset.010"' in admin_asset_manifest
+                and "def apply_admin_accessory_batch(" in admin_asset_migrations
+            ),
+            "accessory_batch_migration_game_only": (
+                '"admin_asset.010"' not in plugin[
+                    plugin.index("_GAME_DATABASE_EXCLUDED_MIGRATION_VERSIONS"):
+                    plugin.index("_PLAYER_DATABASE_MIGRATION_VERSIONS")
+                ]
+                and '"admin_asset.010"' not in plugin[
+                    plugin.index("_PLAYER_DATABASE_MIGRATION_VERSIONS"):
+                    plugin.index("_TRADE_DATABASE_MIGRATION_VERSIONS")
+                ]
+                and '"admin_asset.010"' not in plugin[
+                    plugin.index("_TRADE_DATABASE_MIGRATION_VERSIONS"):
+                    plugin.index("def migrations_for_database")
+                ]
+            ),
             "item_destroy_application_owned": "admin_asset_application.destroy_item(" in admin_facade,
             "exp_adjust_application_owned": "admin_asset_application.adjust_exp(" in admin_facade,
             "level_change_application_owned": "admin_asset_application.change_level(" in admin_facade,
@@ -2169,11 +2205,10 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "accessory_application_owned": "admin_asset_application.adjust_accessory(" in admin_facade,
             "player_status_batch_application_owned": "admin_application.reset_player_status_batch(" in admin_facade,
             "item_batch_application_owned": "admin_application.grant_item_batch(" in admin_facade,
-            "accessory_batch_application_owned": "admin_application.grant_accessory_batch(" in admin_facade,
             "impart_stone_batch_application_owned": "admin_application.adjust_impart_stone_batch(" in admin_facade,
             "blackhouse_application_owned": "admin_application.set_blackhouse_status(" in admin_facade,
             "player_status_application_owned": "admin_application.reset_player_status(" in admin_facade,
-            "status": "single_and_global_stone_feature_owned_with_other_admin_compatibility",
+            "status": "stone_and_accessory_single_and_batch_feature_owned_with_other_admin_compatibility",
         },
     }
 
