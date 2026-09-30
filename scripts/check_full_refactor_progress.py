@@ -357,6 +357,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
     partner_cultivation_application = (PACKAGE / "features" / "buff" / "partner_cultivation_application.py").read_text(encoding="utf-8")
     partner_cultivation_repository = (PACKAGE / "features" / "buff" / "partner_cultivation_repository.py").read_text(encoding="utf-8")
     buff_migrations = (PACKAGE / "features" / "buff" / "migrations.py").read_text(encoding="utf-8")
+    pvp_repository = (PACKAGE / "features" / "buff" / "pvp_repository.py").read_text(encoding="utf-8")
     natal_facade = (PACKAGE / "xiuxian" / "xiuxian_natal_treasure" / "__init__.py").read_text(encoding="utf-8")
     world_events_facade = (PACKAGE / "xiuxian" / "xiuxian_world_events" / "__init__.py").read_text(encoding="utf-8")
     world_events_plugin = (PACKAGE / "plugin.py").read_text(encoding="utf-8")
@@ -1950,6 +1951,19 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "training_lifecycle_application_owned": "buff_application.training_start(" in buff_facade and "buff_application.training_complete(" in buff_facade,
             "closing_settlement_application_owned": "buff_application.closing_settle(" in buff_facade,
             "pvp_application_owned": "buff_application.pvp_settle(" in buff_facade,
+            "pvp_repository_owned": "class NormalPvpSqlRepository" in pvp_repository,
+            "pvp_request_path_has_no_ddl": "CREATE TABLE" not in pvp_repository,
+            "pvp_default_legacy_service_disconnected": (
+                "NormalPvpSettlementService" not in buff_facade
+                and "buff_application.pvp_replay(" in buff_facade
+                and "calculate_battle(" in buff_facade
+            ),
+            "pvp_migrations_game_and_player": (
+                '"buff.006"' in plugin
+                and '"buff.007"' in plugin
+                and "def apply_normal_pvp_operations(" in buff_migrations
+                and "def apply_normal_pvp_player_statistics(" in buff_migrations
+            ),
             "partner_token_application_owned": (
                 "_partner_token_application().apply(" in partner_facade
                 and "PartnerTokenUseApplication" in partner_facade

@@ -12,6 +12,7 @@ from .training_start_repository import NormalTrainingStartSqlRepository
 from .training_complete_repository import NormalTrainingCompleteSqlRepository
 from .closing_repository import ClosingSettlementSqlRepository
 from .stone_training_repository import StoneTrainingSqlRepository
+from .pvp_repository import NormalPvpSqlRepository
 
 
 class BuffApplication(LegacyApplication):
@@ -53,7 +54,30 @@ class BuffApplication(LegacyApplication):
         if self._explicit_repository is None:
             return self._execute(operation_id=operation_id, user_id=user_id, action="buff.closing_settle", payload={"user_id": user_id, **kwargs}, call=lambda: ClosingSettlementSqlRepository(self.game_database).settle(operation_id, user_id, kwargs["expected_create_time"], kwargs["exp_gain"], kwargs["stone_cost"], kwargs["new_hp"], kwargs["new_mp"], kwargs["new_atk"], kwargs["new_power"]))
         return self._action("closing_settle", operation_id=operation_id, user_id=user_id, **kwargs)
-    def pvp_settle(self, *, operation_id: str, user_id: str, **kwargs: Any): return self._action("pvp_settle", operation_id=operation_id, user_id=user_id, **kwargs)
+    def pvp_replay(self, *, operation_id: str, challenger_id: str, opponent_id: str):
+        if self._explicit_repository is not None:
+            getter = getattr(self.repository, "get_result", None)
+            return getter(operation_id, challenger_id, opponent_id) if callable(getter) else None
+        return NormalPvpSqlRepository(self.game_database, self.player_database).get_result(
+            operation_id, challenger_id, opponent_id
+        )
+
+    def pvp_settle(self, *, operation_id: str, user_id: str, **kwargs: Any):
+        if self._explicit_repository is None:
+            repository = NormalPvpSqlRepository(self.game_database, self.player_database)
+            payload = {
+                "user_id": str(user_id),
+                "opponent_id": str(kwargs["opponent_id"]),
+                "stamina_cost": int(kwargs.get("stamina_cost", 1)),
+            }
+            return self._execute(
+                operation_id=operation_id,
+                user_id=user_id,
+                action="buff.pvp_settle",
+                payload=payload,
+                call=lambda: repository.settle(operation_id, user_id, **kwargs),
+            )
+        return self._action("pvp_settle", operation_id=operation_id, user_id=user_id, **kwargs)
 
 
 __all__ = ["BuffApplication"]

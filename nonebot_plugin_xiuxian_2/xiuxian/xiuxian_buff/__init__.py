@@ -7,6 +7,7 @@ from types import SimpleNamespace
 from nonebot.log import logger
 from ...paths import get_paths
 from ...features.buff.application import BuffApplication
+from ...features.buff.pvp_battle import calculate_battle
 from ...infrastructure.clock import SystemClock
 from ...infrastructure.random_source import SystemRandom
 from ...infrastructure.ids import UUIDGenerator
@@ -55,7 +56,6 @@ from .two_exp_cd import two_exp_cd
 from .transaction_service import BlessedSpotService
 from .transaction_service import ClosingSettlementService
 from .transaction_service import NormalTrainingLifecycleService
-from .transaction_service import NormalPvpSettlementService
 from .transaction_service import StoneTrainingSettlementService
 from nonebot.permission import SUPERUSER
 from .partner import (  # noqa: F401
@@ -77,7 +77,6 @@ _player_data_manager_instance = None
 _blessed_spot_service_instance = None
 _closing_settlement_service_instance = None
 _normal_training_lifecycle_service_instance = None
-_normal_pvp_settlement_service_instance = None
 _stone_training_settlement_service_instance = None
 buff_application = BuffApplication(get_paths().game_db, get_paths().player_db)
 runtime_clock = SystemClock()
@@ -136,15 +135,6 @@ def _normal_training_lifecycle_service():
             get_paths().game_db, get_paths().player_db
         )
     return _normal_training_lifecycle_service_instance
-
-
-def _normal_pvp_settlement_service():
-    global _normal_pvp_settlement_service_instance
-    if _normal_pvp_settlement_service_instance is None:
-        _normal_pvp_settlement_service_instance = NormalPvpSettlementService(
-            get_paths().game_db, get_paths().player_db
-        )
-    return _normal_pvp_settlement_service_instance
 
 
 def _stone_training_settlement_service():
@@ -461,11 +451,15 @@ async def qc_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Me
         await qc.finish()
 
     operation_id = _normal_pvp_operation_id(event, base1['user_id'], base2['user_id'])
-    replay = _normal_pvp_settlement_service().replay(operation_id, base1['user_id'], base2['user_id'])
-    if replay is not None:
-        if replay.succeeded:
-            await send_msg_handler(bot, event, replay.battle_messages)
-            msg = f"获胜的是{replay.winner_name}" if replay.winner_id else "没有人获胜"
+    replay_data = buff_application.pvp_replay(
+        operation_id=operation_id,
+        challenger_id=base1['user_id'],
+        opponent_id=base2['user_id'],
+    )
+    if replay_data is not None:
+        if replay_data.get("status") == "duplicate":
+            await send_msg_handler(bot, event, replay_data.get("battle_messages", []))
+            msg = f"获胜的是{replay_data.get('winner_name')}" if replay_data.get("winner_id") else "没有人获胜"
             msg += "\n该切磋请求已经处理，无需重复提交。"
         else:
             msg = "本次切磋请求与已结算记录不一致，请重新发起。"
@@ -479,10 +473,10 @@ async def qc_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Me
         await handle_send(bot, event, msg, md_type="buff", k1="切磋", v1="切磋", k2="状态", v2="我的状态", k3="修为", v3="我的修为")
         await qc.finish()
 
-    result, winner_id, winner_name, final = _normal_pvp_settlement_service().calculate_battle(
+    result, winner_id, winner_name, final = calculate_battle(
         base1['user_id'], base2['user_id'], bot.self_id
     )
-    settlement = buff_application.pvp_settle(
+    settlement_outcome = buff_application.pvp_settle(
         operation_id=operation_id, user_id=str(base1['user_id']),
         opponent_id=str(base2['user_id']),
         expected_challenger_hp=base1['hp'], expected_challenger_mp=base1['mp'],
@@ -493,6 +487,12 @@ async def qc_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Me
         opponent_final_hp=final[str(base2['user_id'])][0], opponent_final_mp=final[str(base2['user_id'])][1],
         winner_id=winner_id, winner_name=winner_name, battle_messages=result,
     )
+    settlement_data = dict(settlement_outcome.data or {})
+    settlement = SimpleNamespace(**settlement_data)
+    settlement.status = str(
+        settlement_data.get("status", settlement_outcome.code or settlement_outcome.status)
+    )
+    settlement.succeeded = settlement_outcome.ok
     if settlement.succeeded:
         await send_msg_handler(bot, event, settlement.battle_messages)
         msg = f"获胜的是{settlement.winner_name}" if settlement.winner_id else "没有人获胜"

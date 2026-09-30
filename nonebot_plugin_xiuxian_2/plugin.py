@@ -66,6 +66,8 @@ from .features.buff.migrations import (
     apply_partner_cultivation_player_schema,
     apply_partner_token_operations,
     apply_partner_token_usage,
+    apply_normal_pvp_operations,
+    apply_normal_pvp_player_statistics,
 )
 from .features.base.manifest import FEATURE as BASE_FEATURE
 from .features.base.migrations import (
@@ -287,6 +289,8 @@ def build_migrations() -> tuple[Migration, ...]:
         Migration("buff.003", "partner_two_exp_usage", apply_partner_token_usage),
         Migration("buff.004", "partner_cultivation_operations", apply_partner_cultivation_operations),
         Migration("buff.005", "partner_cultivation_player_schema", apply_partner_cultivation_player_schema),
+        Migration("buff.006", "normal_pvp_operations", apply_normal_pvp_operations),
+        Migration("buff.007", "normal_pvp_player_statistics", apply_normal_pvp_player_statistics),
         Migration("combat_settlement.001", "combat_settlement_feature_migrations", apply_combat_settlement),
         Migration("combat_settlement.002", "map_combat_settlement_operations", apply_combat_settlement_operations),
         Migration("combat_settlement.003", "map_dao_battle_operations", apply_dao_battle_operations),
@@ -456,6 +460,7 @@ _GAME_DATABASE_EXCLUDED_MIGRATION_VERSIONS = frozenset(
         "pet.003",
         "buff.003",
         "buff.005",
+        "buff.007",
         "mixelixir.003",
         "impart.003",
         "impart.005",
@@ -502,6 +507,7 @@ _PLAYER_DATABASE_MIGRATION_VERSIONS = frozenset(
         "pet.003",
         "buff.003",
         "buff.005",
+        "buff.007",
         "mixelixir.003",
         "impart.003",
         "impart.005",

@@ -15,11 +15,12 @@ from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_buff.transaction_service import (
 from tests.test_db_backend import db_backend
 
 
-def test_buff_facade_defers_normal_pvp_settlement_service_construction():
-    buff = importlib.import_module(
-        "nonebot_plugin_xiuxian_2.xiuxian.xiuxian_buff"
-    )
-    assert buff._normal_pvp_settlement_service_instance is None
+def test_buff_facade_uses_feature_owned_pvp_repository():
+    buff = importlib.import_module("nonebot_plugin_xiuxian_2.xiuxian.xiuxian_buff")
+    assert "NormalPvpSettlementService" not in Path(
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_buff/__init__.py"
+    ).read_text(encoding="utf-8")
+    assert hasattr(buff.buff_application, "pvp_replay")
 
 
 def test_buff_pvp_handler_uses_lazy_dual_database_service():
@@ -27,11 +28,12 @@ def test_buff_pvp_handler_uses_lazy_dual_database_service():
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_buff/__init__.py"
     ).read_text(encoding="utf-8")
     handler = source[source.index("async def qc_"):source.index("async def reset_exp_")]
-    assert "_normal_pvp_settlement_service().replay(" in handler
-    assert "_normal_pvp_settlement_service().calculate_battle(" in handler
+    assert "buff_application.pvp_replay(" in handler
+    assert "calculate_battle(" in handler
     assert "buff_application.pvp_settle(" in handler
-    assert "_normal_pvp_settlement_service_instance = None" in source
-    assert "def _normal_pvp_settlement_service(" in source
+    assert "NormalPvpSqlRepository" in Path(
+        "nonebot_plugin_xiuxian_2/features/buff/pvp_repository.py"
+    ).read_text(encoding="utf-8")
     assert "get_paths().game_db, get_paths().player_db" in source
     assert "normal_pvp_settlement_service.settle(" not in handler
 

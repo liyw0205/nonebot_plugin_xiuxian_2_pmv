@@ -75,10 +75,28 @@ def apply_partner_cultivation_player_schema(uow: DatabaseUnitOfWork) -> None:
     )
 
 
+def apply_normal_pvp_operations(uow: DatabaseUnitOfWork) -> None:
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS normal_pvp_operations("
+        "operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,result_json TEXT NOT NULL,"
+        "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+    )
+
+
+def apply_normal_pvp_player_statistics(uow: DatabaseUnitOfWork) -> None:
+    uow.execute("CREATE TABLE IF NOT EXISTS statistics(user_id TEXT PRIMARY KEY)")
+    columns = {str(row["name"]) for row in uow.query_all("PRAGMA table_info(statistics)")}
+    for name in ("切磋胜利", "切磋失败"):
+        if name not in columns:
+            uow.execute(f'ALTER TABLE statistics ADD COLUMN "{name}" INTEGER DEFAULT 0')
+
+
 __all__ = [
     "apply_buff",
     "apply_partner_token_operations",
     "apply_partner_token_usage",
     "apply_partner_cultivation_operations",
     "apply_partner_cultivation_player_schema",
+    "apply_normal_pvp_operations",
+    "apply_normal_pvp_player_statistics",
 ]
