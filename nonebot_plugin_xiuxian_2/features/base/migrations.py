@@ -86,10 +86,70 @@ def apply_base_stone_robbery_player_statistics(uow: DatabaseUnitOfWork) -> None:
             uow.execute(f'ALTER TABLE statistics ADD COLUMN "{column}" INTEGER DEFAULT 0')
 
 
+def apply_base_xiangyuan(uow: DatabaseUnitOfWork) -> None:
+    """Create the game-owned xiangyuan projection during startup migration."""
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS xiangyuan_groups ("
+        "group_id TEXT PRIMARY KEY,next_gift_id INTEGER NOT NULL DEFAULT 1,"
+        "legacy_imported INTEGER NOT NULL DEFAULT 0)"
+    )
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS xiangyuan_gifts ("
+        "group_id TEXT NOT NULL,gift_id INTEGER NOT NULL,giver_id TEXT NOT NULL,"
+        "giver_name TEXT NOT NULL,stone_amount INTEGER NOT NULL,remaining_stone INTEGER NOT NULL,"
+        "receiver_count INTEGER NOT NULL,received INTEGER NOT NULL DEFAULT 0,create_time TEXT NOT NULL,"
+        "PRIMARY KEY(group_id,gift_id))"
+    )
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS xiangyuan_gift_items ("
+        "group_id TEXT NOT NULL,gift_id INTEGER NOT NULL,goods_id INTEGER NOT NULL,"
+        "goods_name TEXT NOT NULL,goods_type TEXT NOT NULL,quantity INTEGER NOT NULL,"
+        "PRIMARY KEY(group_id,gift_id,goods_id))"
+    )
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS xiangyuan_receivers ("
+        "group_id TEXT NOT NULL,gift_id INTEGER NOT NULL,user_id TEXT NOT NULL,"
+        "stone INTEGER NOT NULL,items TEXT NOT NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,"
+        "PRIMARY KEY(group_id,gift_id,user_id))"
+    )
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS xiangyuan_create_operations ("
+        "operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,gift_id INTEGER NOT NULL,"
+        "send_count INTEGER NOT NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+    )
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS xiangyuan_claim_operations ("
+        "operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,result TEXT NOT NULL,"
+        "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+    )
+
+
+def apply_base_xiangyuan_player(uow: DatabaseUnitOfWork) -> None:
+    """Create the player-owned daily xiangyuan counters during startup."""
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS xiangyuan_limit ("
+        "user_id TEXT PRIMARY KEY,send_count INTEGER NOT NULL DEFAULT 0,"
+        "receive_count INTEGER NOT NULL DEFAULT 0,last_reset_date TEXT NOT NULL DEFAULT '')"
+    )
+    columns = {
+        str(row["name"]).casefold()
+        for row in uow.query_all('PRAGMA table_info("xiangyuan_limit")')
+    }
+    for name, definition in (
+        ("send_count", "INTEGER NOT NULL DEFAULT 0"),
+        ("receive_count", "INTEGER NOT NULL DEFAULT 0"),
+        ("last_reset_date", "TEXT NOT NULL DEFAULT ''"),
+    ):
+        if name not in columns:
+            uow.execute(f'ALTER TABLE xiangyuan_limit ADD COLUMN "{name}" {definition}')
+
+
 __all__ = [
     "apply_base",
     "apply_base_player_rename_operations",
     "apply_base_stone_contest_operations",
     "apply_base_stone_robbery_operations",
     "apply_base_stone_robbery_player_statistics",
+    "apply_base_xiangyuan",
+    "apply_base_xiangyuan_player",
 ]

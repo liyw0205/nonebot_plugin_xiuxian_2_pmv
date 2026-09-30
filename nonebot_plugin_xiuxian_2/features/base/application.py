@@ -8,11 +8,13 @@ from .repository import BaseRepository
 from .rename_repository import BaseRenameSqlRepository
 from .robbery_repository import BaseStoneRobberySqlRepository
 from .theft_repository import BaseStoneTheftSqlRepository
+from .xiangyuan_application import XiangyuanApplication
 
 
 class BaseApplication(LegacyApplication):
     def __init__(self, game_database: str | Path, player_database: str | Path, *, repository: BaseRepository | None = None) -> None:
         super().__init__(game_database, repository=repository, feature="base")
+        self._xiangyuan_application = XiangyuanApplication(game_database, player_database)
 
     def _action(self, action: str, *, operation_id: str, user_id: str, **kwargs: Any):
         return self._execute(operation_id=operation_id, user_id=user_id, action=f"base.{action}", payload={"user_id": user_id, **kwargs}, call=lambda: self.repository.invoke(action, operation_id, user_id, **kwargs))
@@ -36,6 +38,20 @@ class BaseApplication(LegacyApplication):
     def stone_contest(self, *, operation_id: str, user_id: str, **kwargs: Any): return self._action("stone_contest", operation_id=operation_id, user_id=user_id, **kwargs)
     def stone_robbery(self, *, operation_id: str, user_id: str, **kwargs: Any): return self._action("stone_robbery", operation_id=operation_id, user_id=user_id, **kwargs)
     def sign(self, *, operation_id: str, user_id: str, **kwargs: Any): return self._action("sign", operation_id=operation_id, user_id=user_id, **kwargs)
+    def xiangyuan_create(self, *, operation_id: str, user_id: str, group_id: str, giver_name: str, stone: int, items: Any, receiver_count: int, send_limit: int = 3, legacy_data: Any = None):
+        return self._xiangyuan_application.create(
+            operation_id, group_id, user_id, giver_name, stone, items, receiver_count, send_limit,
+            legacy_data=legacy_data,
+        )
+    def xiangyuan_claim(self, *, operation_id: str, user_id: str, group_id: str, gift_id: int, stone_reward: int, item_ids: Any, receive_limit: int, max_goods_num: int, legacy_data: Any = None):
+        return self._xiangyuan_application.claim(
+            operation_id, group_id, gift_id, user_id, stone_reward, item_ids,
+            receive_limit, max_goods_num, legacy_data=legacy_data,
+        )
+    def xiangyuan_group(self, *, group_id: str, **kwargs: Any):
+        return self._xiangyuan_application.get_group(group_id, **kwargs)
+    def xiangyuan_clear(self, *, max_goods_num: int, **kwargs: Any):
+        return self._xiangyuan_application.clear_all(max_goods_num, **kwargs)
 
 
 __all__ = ["BaseApplication"]

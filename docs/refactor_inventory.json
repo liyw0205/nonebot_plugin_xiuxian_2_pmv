@@ -3146,6 +3146,7 @@
     "xiangyuan_gift_items",
     "xiangyuan_gifts",
     "xiangyuan_groups",
+    "xiangyuan_limit",
     "xiangyuan_receivers",
     "xianshi_clear_operations",
     "xianshi_item",
@@ -4798,6 +4799,30 @@
         "POST"
       ],
       "path": "/api/v1/base/tribulation",
+      "permission": "user"
+    },
+    {
+      "feature": "base",
+      "methods": [
+        "POST"
+      ],
+      "path": "/api/v1/base/xiangyuan/claim",
+      "permission": "user"
+    },
+    {
+      "feature": "base",
+      "methods": [
+        "POST"
+      ],
+      "path": "/api/v1/base/xiangyuan/create",
+      "permission": "user"
+    },
+    {
+      "feature": "base",
+      "methods": [
+        "GET"
+      ],
+      "path": "/api/v1/base/xiangyuan/group",
       "permission": "user"
     },
     {

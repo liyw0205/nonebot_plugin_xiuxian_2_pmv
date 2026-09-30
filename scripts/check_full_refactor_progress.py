@@ -99,6 +99,9 @@ def _slice_status() -> dict[str, dict[str, object]]:
     base_rename_repository = (PACKAGE / "features" / "base" / "rename_repository.py").read_text(encoding="utf-8")
     base_theft_repository = (PACKAGE / "features" / "base" / "theft_repository.py").read_text(encoding="utf-8")
     base_robbery_repository = (PACKAGE / "features" / "base" / "robbery_repository.py").read_text(encoding="utf-8")
+    base_xiangyuan_repository = (PACKAGE / "features" / "base" / "xiangyuan_repository.py").read_text(encoding="utf-8")
+    base_xiangyuan_application = (PACKAGE / "features" / "base" / "xiangyuan_application.py").read_text(encoding="utf-8")
+    xiangyuan_facade = (PACKAGE / "xiuxian" / "xiuxian_base" / "xiangyuan.py").read_text(encoding="utf-8")
     base_migrations = (PACKAGE / "features" / "base" / "migrations.py").read_text(encoding="utf-8")
     base_manifest = (PACKAGE / "features" / "base" / "manifest.py").read_text(encoding="utf-8")
     stone_contest_compatibility = (PACKAGE / "compatibility" / "legacy_base_stone_contest.py").read_text(encoding="utf-8")
@@ -1756,6 +1759,32 @@ def _slice_status() -> dict[str, dict[str, object]]:
             ),
             "stone_robbery_service_isolated": "class StoneRobberySettlementService" not in base_transaction and "class StoneRobberySettlementService" in stone_robbery_compatibility and "stone_robbery_operations" in stone_robbery_compatibility,
             "xiangyuan_service_isolated": "class XiangyuanSettlementService" not in base_transaction and "class XiangyuanSettlementService" in xiangyuan_compatibility and "xiangyuan_create_operations" in xiangyuan_compatibility and "xiangyuan_claim_operations" in xiangyuan_compatibility,
+            "xiangyuan_default_application_owned": (
+                "XiangyuanApplication" in xiangyuan_facade
+                and "_xiangyuan_settlement_service().create(" in xiangyuan_facade
+                and "XiangyuanSettlementService" not in xiangyuan_facade
+                and "stone_limit" not in xiangyuan_facade
+            ),
+            "xiangyuan_request_path_has_no_ddl": (
+                "CREATE TABLE" not in base_xiangyuan_repository
+                and "ALTER TABLE" not in base_xiangyuan_repository
+            ),
+            "xiangyuan_startup_migrations_registered": (
+                'Migration("base.006", "xiangyuan_projection", apply_base_xiangyuan)' in plugin
+                and 'Migration("base.007", "xiangyuan_player_limits", apply_base_xiangyuan_player)' in plugin
+                and "def apply_base_xiangyuan(" in base_migrations
+                and "def apply_base_xiangyuan_player(" in base_migrations
+            ),
+            "xiangyuan_migrations_routed_game_and_player": (
+                "base.006" not in plugin[plugin.index("_GAME_DATABASE_EXCLUDED_MIGRATION_VERSIONS"):plugin.index("_PLAYER_DATABASE_MIGRATION_VERSIONS")]
+                and "base.006" not in plugin[plugin.index("_PLAYER_DATABASE_MIGRATION_VERSIONS"):plugin.index("_TRADE_DATABASE_MIGRATION_VERSIONS")]
+                and "base.007" in plugin[plugin.index("_GAME_DATABASE_EXCLUDED_MIGRATION_VERSIONS"):plugin.index("_PLAYER_DATABASE_MIGRATION_VERSIONS")]
+                and "base.007" in plugin[plugin.index("_PLAYER_DATABASE_MIGRATION_VERSIONS"):plugin.index("_TRADE_DATABASE_MIGRATION_VERSIONS")]
+            ),
+            "xiangyuan_application_repository_owned": (
+                "class XiangyuanApplication" in base_xiangyuan_application
+                and "class XiangyuanSqlRepository" in base_xiangyuan_repository
+            ),
             "breakthrough_service_isolated": "class BreakthroughService" not in base_transaction and "class BreakthroughService" in breakthrough_compatibility and all(token in breakthrough_compatibility for token in ("direct_breakthrough_operations", "continuous_breakthrough_operations", "tribulation_breakthrough_operations", "continuous_tribulation_operations")),
             "ordinary_tribulation_service_isolated": "class OrdinaryTribulationService" not in base_transaction and "class OrdinaryTribulationService" in ordinary_tribulation_compatibility and "ordinary_tribulation_operations" in ordinary_tribulation_compatibility,
             "destiny_tribulation_service_isolated": "class DestinyTribulationService" not in base_transaction and "class DestinyTribulationService" in destiny_tribulation_compatibility and "destiny_tribulation_operations" in destiny_tribulation_compatibility,

@@ -16,8 +16,7 @@ from ..xiuxian_utils.lay_out import assign_bot, Cooldown
 from ..xiuxian_config import XiuConfig
 from ..xiuxian_utils.utils import check_user, handle_send, number_to, send_help_message
 from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage
-from .stone_limit import stone_limit
-from ...compatibility.legacy_base_xiangyuan import XiangyuanSettlementService
+from ...features.base.xiangyuan_application import XiangyuanApplication
 
 _items_instance = None
 _sql_message_instance = None
@@ -44,7 +43,9 @@ def _sql_message():
 def _xiangyuan_settlement_service():
     global _xiangyuan_settlement_service_instance
     if _xiangyuan_settlement_service_instance is None:
-        _xiangyuan_settlement_service_instance = XiangyuanSettlementService(
+        # compatibility/legacy_base_xiangyuan is rollback-only; the default
+        # command path is owned by the feature application below.
+        _xiangyuan_settlement_service_instance = XiangyuanApplication(
             get_paths().game_db, get_paths().player_db
         )
     return _xiangyuan_settlement_service_instance
@@ -233,13 +234,6 @@ async def give_xiangyuan_(bot: Bot, event: GroupMessageEvent, args: Message = Co
     args_text = args.extract_plain_text().strip()
     arg_list = args_text.split()
     
-    # 检查每日送仙缘次数
-    send_count = stone_limit.get_xiangyuan_send_count(user_id)
-    if send_count >= XIANGYUAN_SEND_LIMIT:
-        msg = f"道友今日已送{send_count}次仙缘，达到上限 ({XIANGYUAN_SEND_LIMIT}次/日)，明日再来吧！"
-        await handle_send(bot, event, msg, md_type="修仙", k1="抢仙缘", v1="抢仙缘", k2="仙缘列表", v2="仙缘列表", k3="帮助", v3="仙缘帮助")
-        await give_xiangyuan.finish()
-    
     # 解析参数 (最后一个是人数，前面是内容)
     if len(arg_list) < 2:
         msg = "指令格式：送仙缘 内容 人数\n示例：送仙缘 1000000 5\n或：送仙缘 灵石x1000000,精铁符剑x1 5"
@@ -328,13 +322,6 @@ async def get_xiangyuan_(bot: Bot, event: GroupMessageEvent):
     
     user_id = user_info["user_id"]
     group_id = str(event.group_id)
-    
-    # 检查每日抢仙缘次数
-    receive_count = stone_limit.get_xiangyuan_receive_count(user_id)
-    if receive_count >= XIANGYUAN_RECEIVE_LIMIT:
-        msg = f"道友今日已抢{receive_count}次仙缘，达到上限 ({XIANGYUAN_RECEIVE_LIMIT}次/日)，明日再来吧！"
-        await handle_send(bot, event, msg, md_type="修仙", k1="送仙缘", v1="送仙缘", k2="仙缘列表", v2="仙缘列表", k3="帮助", v3="仙缘帮助")
-        await get_xiangyuan.finish()
     
     # 获取仙缘数据
     xiangyuan_data = get_xiangyuan_data(group_id)
@@ -519,7 +506,7 @@ async def xiangyuan_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
 
 async def reset_xiangyuan_daily():
     """每日 0 点重置仙缘次数限制"""
-    stone_limit.reset_xiangyuan_limits()
+    _xiangyuan_settlement_service().reset_limits()
     logger.opt(colors=True).info(f"<green>每日仙缘次数限制已重置！</green>")
     
     msg = await clear_all_xiangyuan()

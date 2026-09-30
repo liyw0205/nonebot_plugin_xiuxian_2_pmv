@@ -2,6 +2,8 @@
 
 状态：进行中。`v1.1.0` 的 P0-P7 发布证据继续保留，但不作为底层全面重构完成证明。
 
+2026-09-30 base xiangyuan feature-owned cutover：仙缘默认 facade 改由 `features/base/XiangyuanApplication -> XiangyuanSqlRepository` 承载，create/claim/list/clear 与每日计数重置不再调用 `stone_limit` 或 compatibility service；真实 Flask `/api/v1/base/xiangyuan/{create,claim,group}` 路由复用 BaseApplication，NoneBot 旧 `送仙缘`/`抢仙缘` handler 通过同一 feature application。新增 game-only `base.006` 仙缘池/回执迁移与 player-only `base.007` `xiangyuan_limit` 迁移，repository 使用 `DatabaseUnitOfWork`、ATTACH 双库事务、幂等回执和只读 schema gate，请求期不执行 DDL；旧 `XiangyuanSettlementService` 保留为显式兼容/回滚路径。新增迁移路由、缺 schema fail-closed、真实 Web route replay 回归，旧仙缘行为回归保持通过。全局旧 transaction services、`xiuxian2_handle` 和真实发布/P7 仍未完成 blocker；本轮临时缓存与 WAL/SHM 将在验收后清理。
+
 2026-09-30 base stone-robbery settlement cutover：`抢劫` 默认 handler 通过 `BaseApplication -> BaseStoneRobberySqlRepository` 在 ATTACH player DB 的单一事务中完成双玩家快照/CAS、统计和 game receipt；资产部分 CAS 失败由 savepoint 回滚。新增 game-only `base.004` 与 player-only `base.005` 启动迁移，request path 只读检查 schema，缺 migration/database 时 fail closed。旧 `StoneRobberySettlementService` 仅保留为显式兼容路径。聚焦 feature/source/progress/migration 回归通过；临时测试与编译产物在验收后清理，全局 legacy transaction services、`xiuxian2_handle` 与正式发布/P7 仍未完成。
 
 记录日期：2026-09-13  
@@ -2943,6 +2945,7 @@
 ### 6.2 当前推进队列（2026-09-30）
 
 1. **bank 历史账户生命周期审计已收口（2026-09-30）**：`bank.003` 启动时只读分批回填完整旧 `bankinfo`；默认 matcher/route 不再读取旧 projection，旧 reader 无生产调用。bank `JOBS` 为空、包内无旧 `savef` 生产调用点，也无 `LegacyBankRepository` 默认构造点；兼容 writer/rollback 保留但不在默认执行图。生产旧库只在迁移尚未登记时由 startup migration 读取；正式发布仍需对真实数据做备份、migration、恢复和余额对账，不能以隔离 recovery 代替。
+- **仙缘 feature-owned cutover 已完成（2026-09-30）**：真实 `送仙缘`/`抢仙缘` handler 与 `/api/v1/base/xiangyuan/{create,claim,group}` route 统一进入 `XiangyuanApplication -> XiangyuanSqlRepository`；`base.006` 仅迁移 game 仙缘池/回执，`base.007` 仅迁移 player `xiangyuan_limit`。跨库写入使用 immediate UoW 与 replay/conflict，缺 migration/schema fail closed，默认路径不再读取 `stone_limit` 或构造 compatibility service；旧 `XiangyuanSettlementService` 仅为显式回滚保留。下一项按 player/economy 调用图审计仍由 `xiuxian2_handle` 或旧 transaction service 承载的资产路径。
 2. **审计其余真实旧执行路径**：按 player/economy、cultivation/training、combat/dungeon/boss、sect/pet/trade 风险顺序逐个核对 handler、route、scheduler 和批处理；优先处理仍由旧 transaction service 或 `xiuxian2_handle` 承载的资产状态，兼容 shim 本身不计完成。
 3. **收敛全局基础依赖**：持续降低旧 service import、`xiuxian2_handle` import、`db_backend.connect`、`sqlite3.connect`、系统时间/全局随机命中；以 progress CLI 同口径计数并逐项附真实调用证据。
 4. **最后补齐发布证据**：针对真实数据目录执行备份、migration dry-run/执行、恢复、reconcile、远端冒烟和至少一次正式发布周期；完成这些前 P7 与全面重构均保持未完成。
