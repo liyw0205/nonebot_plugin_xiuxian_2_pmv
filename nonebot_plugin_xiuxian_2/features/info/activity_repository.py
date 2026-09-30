@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import sqlite3
 from datetime import datetime
 from pathlib import Path
 
@@ -25,7 +24,7 @@ class PlayerActivitySqlRepository:
                     (str(occurred_at), str(user_id)),
                 )
                 return int(cursor.rowcount)
-        except (OSError, sqlite3.Error):
+        except Exception:
             # A missing/old projection is a closed compatibility boundary.
             return 0
 
@@ -38,7 +37,7 @@ class PlayerActivitySqlRepository:
                     "SELECT last_check_info_time FROM user_cd WHERE user_id=?",
                     (str(user_id),),
                 )
-        except (OSError, sqlite3.Error):
+        except Exception:
             return None
         if row is None or not row["last_check_info_time"]:
             return None

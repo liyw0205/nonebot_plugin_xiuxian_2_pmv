@@ -5,9 +5,9 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from nonebot_plugin_xiuxian_2.infrastructure.database import DatabaseUnitOfWork
-from nonebot_plugin_xiuxian_2.features.base.contest_repository import BaseStoneContestSqlRepository
-from nonebot_plugin_xiuxian_2.features.base.migrations import apply_base_stone_contest_operations
+from ....infrastructure.database import DatabaseUnitOfWork
+from ..contest_repository import BaseStoneContestSqlRepository
+from ..migrations import apply_base_stone_contest_operations
 
 
 class BaseStoneContestRepositoryTests(unittest.TestCase):

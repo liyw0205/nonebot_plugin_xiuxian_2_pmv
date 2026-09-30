@@ -2,6 +2,8 @@
 
 状态：进行中。`v1.1.0` 的 P0-P7 发布证据继续保留，但不作为底层全面重构完成证明。
 
+2026-10-01 dynamic attribute read boundary：新增 `PlayerAttributeApplication`，并将信息页、功法状态、默认玩家战斗辅助和 JSON 战斗 helper 的 `get_final_attributes` 调用统一切到该 application；保留 `ratio`、`include_current` 与 provider 注入契约。旧公式移至显式 `compatibility/legacy_player_attributes.py`，不改公式、资产写入或数据库 schema。新增 application/provider/source/progress 回归，三项 info 动态属性门禁全绿。`InfoApplication` 原有通用幂等测试在临时库缺少 `operation_ledger` 时仍失败，记录为既有独立问题；动态属性切片不改变该 schema 责任。本轮缓存和临时产物验收后清理；下一片继续按 6.2 审计 player/economy 真实写入路径。
+
 2026-10-01 base scheduled stamina recovery cutover：每分钟恢复任务改经 `recover_player_stamina -> PlayerStaminaApplication -> PlayerStaminaSqlRepository`，按 `XIUXIAN_STAMINA_RECOVERY_BATCH_SIZE` 分批更新并使用 `MIN` 封顶；`0` 恢复点直接 no-op，缺数据库/schema fail closed，请求/任务路径不执行 DDL，也不加载完整用户列表。新增多批、上限、零点数、缺 schema 与有界查询回归；进度门禁新增 `stamina_recovery_application_owned`、`stamina_recovery_request_path_has_no_ddl`。本轮缓存和临时产物在验收后清理；动态属性、经济写入、全局 legacy transaction services、`xiuxian2_handle` 及正式发布/P7 仍未完成。
 
 2026-10-01 base stone-contest transfer cutover：普通 `POST /api/v1/base/stone_contest` 默认路径改由 `BaseApplication -> BaseStoneContestSqlRepository` 承担；game-only `base.003` 回执表作为启动 schema，repository 在单一 immediate UoW 内执行 payer/receiver 余额 CAS、operation 幂等/冲突和回执写入，savepoint 覆盖部分 CAS 晚失败回滚。缺少数据库、迁移表或玩家字段时返回 `schema_missing`，请求期不执行 DDL；真实 Flask route 采用显式 payer/receiver/requested_amount DTO，旧 `StoneContestService` 仅保留兼容/回滚映射。新增 repository、缺 schema、回执失败、冲突/重放和 Web route replay 回归；下一项继续审计 player/economy 的真实旧执行路径。全局 legacy transaction services、`xiuxian2_handle` 与正式发布/P7 仍未完成 blocker。

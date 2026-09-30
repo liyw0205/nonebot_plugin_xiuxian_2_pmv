@@ -4,12 +4,16 @@ import tempfile
 import unittest
 
 from ..application import InfoApplication
+from ....infrastructure.database import DatabaseUnitOfWork, OperationLedger
 
 
 class InfoApplicationTest(unittest.TestCase):
     def test_execute_is_idempotent(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            app = InfoApplication(f"{directory}/game.db")
+            database = f"{directory}/game.db"
+            with DatabaseUnitOfWork(database, immediate=True) as uow:
+                OperationLedger().ensure_schema(uow)
+            app = InfoApplication(database)
             first = app.execute(operation_id="op-1", user_id="u")
             second = app.execute(operation_id="op-1", user_id="u")
             self.assertEqual(first.operation_id, second.operation_id)

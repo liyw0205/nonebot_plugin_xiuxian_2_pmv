@@ -6,7 +6,6 @@ from ...paths import get_paths
 from .xiuxian2_handle import (
     XiuxianDateManage, UserBuffDate,
     calc_realm_base_speed,
-    get_final_attributes
 )
 from .pet_system import (
     PET_SKILL_ATTACK,
@@ -32,7 +31,7 @@ from .fight_effects import (
 )
 from .fight_models import Entity, Skill, StatusEffect
 from ..xiuxian_config import convert_rank
-from .utils import number_to
+from .utils import get_player_attributes, number_to
 from .item_json import Items
 
 # 本命法宝相关导入
@@ -239,7 +238,7 @@ def get_players_attributes(
 ):
     item_provider = item_provider or items.get_data_by_item_id
     pet_provider = pet_provider or get_user_pet_for_battle
-    attribute_provider = attribute_provider or get_final_attributes
+    attribute_provider = attribute_provider or get_player_attributes
     natal_provider = natal_provider or get_natal_data_for_battle
     buff_info_provider = buff_info_provider or (lambda current_user_id: UserBuffDate(current_user_id).BuffInfo)
     buff_data_info = buff_info_provider(user_id) or {}

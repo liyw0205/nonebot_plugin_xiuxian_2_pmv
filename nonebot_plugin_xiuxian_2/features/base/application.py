@@ -40,6 +40,8 @@ class BaseApplication(LegacyApplication):
     def get_stone_contest_result(self, operation_id: str, payer_id: str, receiver_id: str, requested_amount: int | None = None):
         return self._stone_contest_repository.get_result(operation_id, payer_id, receiver_id, requested_amount)
     def stone_contest(self, *, operation_id: str, user_id: str, **kwargs: Any):
+        if self.repository is not None:
+            return self._action("stone_contest", operation_id=operation_id, user_id=user_id, **kwargs)
         payer_id = kwargs.get("payer_id", user_id)
         receiver_id = kwargs.get("receiver_id", kwargs.get("recipient_id", ""))
         requested_amount = kwargs.get("requested_amount", kwargs.get("amount", 0))

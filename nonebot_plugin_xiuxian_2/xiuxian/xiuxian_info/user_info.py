@@ -9,11 +9,11 @@ from ..adapter_compat import (
     is_group_event,
 )
 from ..xiuxian_utils.utils import (
-    check_user, get_user_profile, get_msg_pic, handle_send, number_to,
+    check_user, get_user_profile, get_player_attributes, get_msg_pic, handle_send, number_to,
     handle_pic_send, handle_pic_msg_send, update_last_check_info_time,
 )
 from ..xiuxian_utils.lay_out import assign_bot, Cooldown
-from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage, OtherSet, UserBuffDate, get_final_attributes
+from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage, OtherSet, UserBuffDate
 from ..xiuxian_utils.data_source import jsondata
 from .draw_user_info import draw_user_info_img, draw_user_info_img_with_default_bg
 from ..xiuxian_config import XiuConfig
@@ -56,7 +56,7 @@ async def get_user_xiuxian_info(user_id):
         user_name = f"无名氏(发送修仙改名+道号更新)"
 
     # 统一属性口径
-    final_attr = get_final_attributes(user_id)
+    final_attr = get_player_attributes(user_id)
     final_atk = final_attr["final_atk"] if final_attr else user_info['atk']
 
     level_rate = _sql_message().get_root_rate(user_info['root_type'], user_id)

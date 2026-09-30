@@ -14,6 +14,7 @@ from nonebot.log import logger
 from ...paths import get_paths
 from ...features.info.profile_application import PlayerProfileApplication
 from ...features.info.activity_application import PlayerActivityApplication
+from ...features.info.attribute_application import PlayerAttributeApplication
 from ...features.base.stamina_application import PlayerStaminaApplication
 from base64 import b64encode
 from io import BytesIO
@@ -72,6 +73,7 @@ _sql_message_instance = None
 _player_data_manager_instance = None
 _player_profile_application: PlayerProfileApplication | None = None
 _player_activity_application: PlayerActivityApplication | None = None
+_player_attribute_application: PlayerAttributeApplication | None = None
 _player_stamina_application: PlayerStaminaApplication | None = None
 boss_img_path = get_paths().data / "boss_img"
 PLAYERSDATA = get_paths().players
@@ -103,6 +105,34 @@ def get_user_profile(user_id: int | str):
 
 def get_user_profile_by_name(user_name: str):
     return _player_profile().get_user_profile_by_name(user_name)
+
+
+def configure_player_attribute_application(application: PlayerAttributeApplication) -> None:
+    """Bind the lifecycle-owned dynamic attribute read boundary."""
+    global _player_attribute_application
+    _player_attribute_application = application
+
+
+def _player_attributes() -> PlayerAttributeApplication:
+    global _player_attribute_application
+    if _player_attribute_application is None:
+        _player_attribute_application = PlayerAttributeApplication()
+    return _player_attribute_application
+
+
+def get_player_attributes(
+    user_id: int | str,
+    *,
+    ratio: float = 1.0,
+    include_current: bool = True,
+    **providers: Any,
+):
+    return _player_attributes().get_final_attributes(
+        user_id,
+        ratio=ratio,
+        include_current=include_current,
+        **providers,
+    )
 
 
 def configure_player_activity_application(application: PlayerActivityApplication) -> None:

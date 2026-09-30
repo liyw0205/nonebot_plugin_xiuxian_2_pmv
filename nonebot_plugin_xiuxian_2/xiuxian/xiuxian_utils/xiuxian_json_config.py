@@ -149,7 +149,7 @@ class OtherSet(XiuConfig):
 
     def player_fight(self, player1: dict, player2: dict):
         """Purely calculate a round-based fight and return both final states."""
-        from .xiuxian2_handle import get_final_attributes
+        from .utils import get_player_attributes
 
         msg1 = "{}发起攻击，造成了{}伤害\n"
         msg2 = "{}发起攻击，造成了{}伤害\n"
@@ -162,7 +162,7 @@ class OtherSet(XiuConfig):
             if "速度" in player:
                 return float(player.get("速度", 0) or 0)
             user_id = player.get("user_id")
-            final_attr = get_final_attributes(user_id, include_current=True) if user_id else None
+            final_attr = get_player_attributes(user_id, include_current=True) if user_id else None
             return float(final_attr.get("speed", 0)) if final_attr else 0
 
         def calc_damage(attacker: dict, defender: dict):

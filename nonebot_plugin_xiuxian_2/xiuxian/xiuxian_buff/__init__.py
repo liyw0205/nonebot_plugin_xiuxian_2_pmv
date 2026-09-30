@@ -27,13 +27,13 @@ from ..xiuxian_utils.xiuxian2_handle import (
     UserBuffDate, get_main_info_msg,
     get_user_buff, get_sec_msg, get_sub_info_msg, get_effect_info_msg,
     XIUXIAN_IMPART_BUFF, leave_harm_time, PlayerDataManager,
-    get_base_attributes, get_final_attributes
+    get_base_attributes
 )
 from ..xiuxian_config import XiuConfig, convert_rank
 from ..xiuxian_utils.data_source import jsondata
 from nonebot.params import CommandArg
 from ..xiuxian_utils.utils import (
-    number_to, check_user, send_msg_handler,
+    number_to, check_user, get_player_attributes, send_msg_handler,
     check_user_type, get_msg_pic, handle_send, log_message, update_statistics_value,
     send_help_message, update_last_check_info_time
 )
@@ -841,7 +841,7 @@ async def mind_state_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     current_status = load_player_user(user_id)
 
     base_attr = get_base_attributes(user_id)
-    final_attr = get_final_attributes(user_id)
+    final_attr = get_player_attributes(user_id)
 
     if not base_attr or not final_attr:
         msg = "属性读取失败，请稍后再试。"

@@ -5,7 +5,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from nonebot_plugin_xiuxian_2.features.buff.pvp_repository import NormalPvpSqlRepository
+from ..pvp_repository import NormalPvpSqlRepository
 
 
 class NormalPvpRepositoryTest(unittest.TestCase):

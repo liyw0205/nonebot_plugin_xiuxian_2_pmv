@@ -29,7 +29,29 @@ class PlayerProfileReadContractTest(unittest.TestCase):
         source = (root / "nonebot_plugin_xiuxian_2" / "xiuxian" / "xiuxian_info" / "user_info.py").read_text(encoding="utf-8")
         self.assertGreaterEqual(source.count("get_user_profile("), 4)
         self.assertNotIn("_sql_message().get_user_real_info", source)
-        self.assertIn("get_final_attributes(user_id)", source)
+        self.assertIn("get_player_attributes(user_id)", source)
+
+    def test_dynamic_attribute_reads_use_feature_application_boundary(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        sources = [
+            root / "nonebot_plugin_xiuxian_2" / "xiuxian" / "xiuxian_info" / "user_info.py",
+            root / "nonebot_plugin_xiuxian_2" / "xiuxian" / "xiuxian_buff" / "__init__.py",
+            root / "nonebot_plugin_xiuxian_2" / "xiuxian" / "xiuxian_utils" / "player_fight.py",
+            root / "nonebot_plugin_xiuxian_2" / "xiuxian" / "xiuxian_utils" / "xiuxian_json_config.py",
+        ]
+        for path in sources:
+            source = path.read_text(encoding="utf-8")
+            self.assertIn("get_player_attributes", source)
+            self.assertNotIn("get_final_attributes", source)
+
+        application = (
+            root / "nonebot_plugin_xiuxian_2" / "features" / "info" / "attribute_application.py"
+        ).read_text(encoding="utf-8")
+        compatibility = (
+            root / "nonebot_plugin_xiuxian_2" / "compatibility" / "legacy_player_attributes.py"
+        ).read_text(encoding="utf-8")
+        self.assertIn("PlayerAttributeApplication", application)
+        self.assertIn("legacy_get_final_attributes", compatibility)
 
     def test_activity_timestamp_uses_feature_owned_application(self) -> None:
         root = Path(__file__).resolve().parents[1]

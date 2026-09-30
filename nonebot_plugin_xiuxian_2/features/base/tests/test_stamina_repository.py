@@ -2,9 +2,9 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from nonebot_plugin_xiuxian_2.infrastructure.database import DatabaseUnitOfWork
-from nonebot_plugin_xiuxian_2.features.base.stamina_application import PlayerStaminaApplication
-from nonebot_plugin_xiuxian_2.features.base.stamina_repository import PlayerStaminaSqlRepository
+from ....infrastructure.database import DatabaseUnitOfWork
+from ..stamina_application import PlayerStaminaApplication
+from ..stamina_repository import PlayerStaminaSqlRepository
 
 
 class PlayerStaminaRepositoryTests(unittest.TestCase):

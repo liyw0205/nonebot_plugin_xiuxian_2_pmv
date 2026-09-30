@@ -10,6 +10,10 @@ class Repo:
     def invoke(self, action, *args, **kwargs): return {"status": "rejected", "message": "state changed"}
 
 
+class SuccessRepo:
+    def invoke(self, action, *args, **kwargs): return {"status": "applied", "action": action}
+
+
 class BaseApplicationTest(unittest.TestCase):
     def test_rejection_is_non_success(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -20,6 +24,15 @@ class BaseApplicationTest(unittest.TestCase):
             result = app.breakthrough(operation_id="base-1", user_id="u")
             self.assertFalse(result.ok)
             self.assertEqual(result.code, "rejected")
+
+    def test_injected_repository_owns_stone_contest_contract(self):
+        with tempfile.TemporaryDirectory() as directory:
+            database = Path(directory) / "game.db"
+            with DatabaseUnitOfWork(database, immediate=True) as uow:
+                OperationLedger().ensure_schema(uow)
+            app = BaseApplication(database, Path(directory) / "player.db", repository=SuccessRepo())
+            result = app.stone_contest(operation_id="base-contest-1", user_id="u")
+            self.assertTrue(result.ok)
 
     def test_stone_theft_uses_feature_repository_by_default(self):
         with tempfile.TemporaryDirectory() as directory:

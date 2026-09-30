@@ -151,6 +151,13 @@ def _slice_status() -> dict[str, dict[str, object]]:
     tasks_progress = (PACKAGE / "features" / "tasks" / "progress.py").read_text(encoding="utf-8")
     tasks_migrations = (PACKAGE / "features" / "tasks" / "migrations.py").read_text(encoding="utf-8")
     plugin = (PACKAGE / "plugin.py").read_text(encoding="utf-8")
+    info_attribute_application = (PACKAGE / "features" / "info" / "attribute_application.py").read_text(encoding="utf-8")
+    info_attribute_compatibility = (PACKAGE / "compatibility" / "legacy_player_attributes.py").read_text(encoding="utf-8")
+    info_utils = (PACKAGE / "xiuxian" / "xiuxian_utils" / "utils.py").read_text(encoding="utf-8")
+    info_user_handler = (PACKAGE / "xiuxian" / "xiuxian_info" / "user_info.py").read_text(encoding="utf-8")
+    buff_handler = (PACKAGE / "xiuxian" / "xiuxian_buff" / "__init__.py").read_text(encoding="utf-8")
+    player_fight = (PACKAGE / "xiuxian" / "xiuxian_utils" / "player_fight.py").read_text(encoding="utf-8")
+    json_config = (PACKAGE / "xiuxian" / "xiuxian_utils" / "xiuxian_json_config.py").read_text(encoding="utf-8")
     title_data_source = (PACKAGE / "xiuxian" / "xiuxian_title" / "title_data.py").read_text(encoding="utf-8")
     title_application_source = (PACKAGE / "features" / "title" / "application.py").read_text(encoding="utf-8")
     title_repository_source = (PACKAGE / "features" / "title" / "repository.py").read_text(encoding="utf-8")
@@ -1692,6 +1699,30 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "title_state_read_legacy_disabled": "xiuxian2_handle" not in title_state_readers and "player_data_manager" not in title_state_readers,
             "title_state_read_has_no_ddl": "CREATE TABLE" not in title_repository_state_reader and "ALTER TABLE" not in title_repository_state_reader,
             "status": "equip_unequip_unlock_cutover",
+        },
+        "info": {
+            "dynamic_attribute_application_owned": (
+                "class PlayerAttributeApplication" in info_attribute_application
+                and "get_player_attributes(" in info_utils
+                and "configure_player_attribute_application" in plugin
+                and "player_attributes" in plugin
+                and "get_final_attributes" not in info_user_handler
+                and "get_final_attributes" not in buff_handler
+                and "get_final_attributes" not in player_fight
+                and "get_final_attributes" not in json_config
+            ),
+            "dynamic_attribute_compatibility_explicit": (
+                "legacy_player_attributes" in info_attribute_application
+                and "legacy_get_final_attributes" in info_attribute_compatibility
+                and "CREATE TABLE" not in info_attribute_compatibility
+                and "ALTER TABLE" not in info_attribute_compatibility
+            ),
+            "dynamic_attribute_provider_ports_preserved": (
+                "**providers: Any" in info_attribute_application
+                and "ratio=ratio" in info_attribute_application
+                and "include_current=include_current" in info_attribute_application
+            ),
+            "status": "dynamic_attribute_read_boundary_owned_with_legacy_formula_adapter",
         },
         "base": {
             "cooldown_stamina_application_owned": (

@@ -3,6 +3,8 @@
 状态：执行中
 适用范围：全面底层重构第二阶段
 
+2026-10-01 dynamic attribute read boundary：信息页、功法状态、默认玩家战斗辅助和 JSON 战斗 helper 的动态属性读取统一经 `PlayerAttributeApplication`；应用保留 `ratio`、`include_current` 和 buff/impart/accessory/tianti provider 注入端口。旧 `get_final_attributes` 移至显式 `compatibility/legacy_player_attributes.py`，本片不改公式或资产写入。专项属性/profile/provider 回归通过；`InfoApplication` 原有临时库幂等测试仍因未预建通用 `operation_ledger` 单独失败，未纳入本片修复范围。
+
 2026-10-01 本轮切片：定时体力恢复已纳入 `PlayerStaminaApplication`。恢复使用 SQLite `MIN` 上限和 `rowid` 有界批处理，不创建用户列表、不在运行时建表；`0` 恢复点直接 no-op，缺 schema 返回 `schema_missing`。验收后只清理本轮 pytest/pyc/`__pycache__` 与专用临时目录，保留 `.venv`、`.git`、`data/`、数据库和 WAL/SHM。
 
 ## 目标
