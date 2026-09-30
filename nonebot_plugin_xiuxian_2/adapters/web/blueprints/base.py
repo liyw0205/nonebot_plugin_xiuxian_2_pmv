@@ -21,6 +21,8 @@ def create_blueprint(*, application, permission) -> Blueprint:
     @guard("user", permission, write=True)
     def stone_contest():
         payload = request.get_json(silent=True) or {}
+        if not isinstance(payload, dict):
+            return api_error("validation_error", "请求体必须是 JSON 对象", status=400)
         payer_id = str(payload.get("payer_id") or payload.get("user_id") or "")
         receiver_id = str(payload.get("receiver_id") or payload.get("recipient_id") or "")
         requested_amount = payload.get("requested_amount", payload.get("amount", 0))
