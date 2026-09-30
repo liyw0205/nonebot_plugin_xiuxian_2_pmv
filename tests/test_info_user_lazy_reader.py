@@ -10,8 +10,9 @@ class UserInfoLazyReaderTests(unittest.TestCase):
         ).read_text(encoding="utf-8")
         self.assertIn("_sql_message_instance = None", source)
         self.assertIn("def _sql_message(", source)
-        self.assertIn("_sql_message().get_user_real_info(", source)
-        self.assertIn("_sql_message().update_last_check_info_time(", source)
+        self.assertIn("_sql_message().get_exp_rank(", source)
+        self.assertIn("update_last_check_info_time(", source)
+        self.assertNotIn("_sql_message().update_last_check_info_time(", source)
         self.assertNotIn("sql_message = XiuxianDateManage()", source)
 
 

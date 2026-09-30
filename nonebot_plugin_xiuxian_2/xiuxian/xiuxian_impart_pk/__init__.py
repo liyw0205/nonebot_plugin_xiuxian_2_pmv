@@ -28,7 +28,7 @@ from nonebot.log import logger
 from datetime import datetime
 from ..xiuxian_utils.utils import (
     check_user, get_msg_pic, send_msg_handler, handle_send, check_user_type, number_to,
-    update_statistics_value, log_message
+    update_statistics_value, log_message, update_last_check_info_time
 )
 from ..xiuxian_utils.spirit_vein import apply_spirit_vein_exp_bonus as _apply_spirit_vein_exp_bonus
 from .impart_pk_uitls import impart_pk_check
@@ -336,7 +336,7 @@ async def impart_pk_now_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         await impart_pk_now.finish()
     
     user_id = user_info['user_id']
-    _sql_message().update_last_check_info_time(user_id)  # 更新查看修仙信息时间
+    update_last_check_info_time(user_id)
     impart_data_draw = await impart_pk_check(user_id)
     if impart_data_draw is None:
         msg = f"发生未知错误！"

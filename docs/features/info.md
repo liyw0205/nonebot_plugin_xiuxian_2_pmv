@@ -44,3 +44,13 @@ Legacy algorithms and schemas remain behind the repository adapter for one compl
 - `command: 更新日志`
 - `alias: 更新记录`
 - `command: 身外化身`
+
+## 活动时间边界
+普通入口对 `user_cd.last_check_info_time` 的更新时间和读取统一通过
+`PlayerActivityApplication -> PlayerActivitySqlRepository`。仓储只操作已存在的
+`user_cd` 行，缺少数据库、表、列或用户时 fail-closed，不在请求路径创建数据库、表或
+执行 DDL；时间仍保存为旧 reader 兼容的本地无时区字符串。运行时通过 `Clock` 注入，
+测试不会依赖系统时间，也不会保留额外的进程级缓存。
+
+宗门闲置判定继续由 `SectActivitySqlRepository` 负责，Boss 旧结算事务中的活动时间写入
+继续和战斗 CAS 共用同一事务；这两处不是本切片的普通活动边界，待各自结算 owner 明确后再迁移。

@@ -12,7 +12,8 @@ class WorkFacadeLazyReaderTests(unittest.TestCase):
         self.assertIn("def _sql_message(", source)
         self.assertIn("_sql_message().get_user_cd(", source)
         self.assertIn("_sql_message().get_work_num(", source)
-        self.assertIn("_sql_message().update_last_check_info_time(", source)
+        self.assertIn("update_last_check_info_time(", source)
+        self.assertNotIn("_sql_message().update_last_check_info_time(", source)
         self.assertNotIn("sql_message = XiuxianDateManage()", source)
 
 

@@ -13,6 +13,7 @@ from functools import lru_cache
 from nonebot.log import logger
 from ...paths import get_paths
 from ...features.info.profile_application import PlayerProfileApplication
+from ...features.info.activity_application import PlayerActivityApplication
 from base64 import b64encode
 from io import BytesIO
 from pathlib import Path
@@ -69,6 +70,7 @@ from urllib.parse import quote, unquote
 _sql_message_instance = None
 _player_data_manager_instance = None
 _player_profile_application: PlayerProfileApplication | None = None
+_player_activity_application: PlayerActivityApplication | None = None
 boss_img_path = get_paths().data / "boss_img"
 PLAYERSDATA = get_paths().players
 
@@ -99,6 +101,27 @@ def get_user_profile(user_id: int | str):
 
 def get_user_profile_by_name(user_name: str):
     return _player_profile().get_user_profile_by_name(user_name)
+
+
+def configure_player_activity_application(application: PlayerActivityApplication) -> None:
+    """Bind the lifecycle-owned information-view activity boundary."""
+    global _player_activity_application
+    _player_activity_application = application
+
+
+def _player_activity() -> PlayerActivityApplication:
+    global _player_activity_application
+    if _player_activity_application is None:
+        _player_activity_application = PlayerActivityApplication(get_paths().game_db)
+    return _player_activity_application
+
+
+def update_last_check_info_time(user_id: int | str) -> int:
+    return _player_activity().update_last_check_info_time(user_id)
+
+
+def get_last_check_info_time(user_id: int | str):
+    return _player_activity().get_last_check_info_time(user_id)
 
 
 def _player_data_manager():

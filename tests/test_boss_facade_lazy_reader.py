@@ -11,7 +11,8 @@ class BossFacadeLazyReaderTests(unittest.TestCase):
         self.assertIn("_sql_message_instance = None", source)
         self.assertIn("def _sql_message(", source)
         self.assertIn("_sql_message().update_user_hp(", source)
-        self.assertIn("_sql_message().get_last_check_info_time(", source)
+        self.assertIn("get_last_check_info_time(", source)
+        self.assertNotIn("_sql_message().get_last_check_info_time(", source)
         self.assertIn("_sql_message().get_player_data(", source)
         self.assertNotIn("sql_message = XiuxianDateManage()", source)
 

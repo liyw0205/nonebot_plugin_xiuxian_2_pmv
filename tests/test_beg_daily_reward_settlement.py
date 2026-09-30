@@ -57,7 +57,8 @@ class BegDailyRewardServiceTests(unittest.TestCase):
         self.assertIn("_sql_message_instance = None", source)
         self.assertIn("def _sql_message(", source)
         self.assertIn("_sql_message().get_user_info_with_id(", source)
-        self.assertIn("_sql_message().update_last_check_info_time(", source)
+        self.assertIn("update_last_check_info_time(", source)
+        self.assertNotIn("_sql_message().update_last_check_info_time(", source)
         self.assertNotIn("sql_message = XiuxianDateManage()", source)
 
     def test_atomic_settlement_records_fixed_reward_and_operation(self):

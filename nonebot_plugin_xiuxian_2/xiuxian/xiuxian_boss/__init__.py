@@ -43,7 +43,7 @@ from ..xiuxian_utils.utils import (
     number_to, check_user, check_user_type,
     get_msg_pic,
     send_msg_handler, log_message, handle_send,
-    send_help_message
+    send_help_message, update_last_check_info_time, get_last_check_info_time
 )
 from ..xiuxian_title.title_data import check_and_unlock_titles
 from .boss_limit import boss_limit, player_data_manager, DAILY_BATTLE_COUNT
@@ -647,7 +647,7 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
         await handle_send(bot, event, "你没有足够的体力，请等待体力恢复后再试！")
         await battle.finish()
 
-    checked_at = _sql_message().get_last_check_info_time(user_id)
+    checked_at = get_last_check_info_time(user_id)
 
     battle_flag[GLOBAL_BOSS_KEY] = True
 
@@ -991,7 +991,7 @@ async def challenge_scarecrow_(bot: Bot, event: GroupMessageEvent | PrivateMessa
         await challenge_scarecrow.finish()
 
     user_id = user_info['user_id']
-    _sql_message().update_last_check_info_time(user_id)
+    update_last_check_info_time(user_id)
 
     # 检查用户状态
     if user_info['hp'] is None or user_info['hp'] == 0:
@@ -1051,7 +1051,7 @@ async def challenge_training_puppet_(bot: Bot, event: GroupMessageEvent | Privat
         await challenge_training_puppet.finish()
 
     user_id = user_info['user_id']
-    _sql_message().update_last_check_info_time(user_id)
+    update_last_check_info_time(user_id)
 
     # 检查用户状态
     if user_info['hp'] is None or user_info['hp'] == 0:

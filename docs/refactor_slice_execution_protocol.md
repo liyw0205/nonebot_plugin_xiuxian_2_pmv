@@ -175,6 +175,8 @@ compileall、architecture、inventory、diff check 与五库 recovery 通过；�
 
 ## 当前切片与下一切片选择
 
+本轮完成 `player activity timestamp read/write ownership`：普通 work、impart、world-events、info、beg、buff 和 Boss facade 的 `user_cd.last_check_info_time` 读写统一经 `PlayerActivityApplication -> PlayerActivitySqlRepository`，运行时注入 `Clock`。仓储只更新既有用户行；缺数据库/表/列/用户返回空结果，不创建数据库、表或执行请求期 DDL，并保留旧本地无时区字符串格式。Sect 闲置判定仍由 `SectActivitySqlRepository` 负责，Boss 旧结算 transaction 内写入仍和战斗 CAS 共事务。新增 activity 行为/source 回归；无 migration、无运行数据访问。验收后只删除仓库 `__pycache__`、`*.pyc`、`.pytest_cache` 和本轮临时目录，保留 `.venv`、`.git`、`data/`、数据库/WAL/SHM、持久回执及用户修改。
+
 管理员资产队列：`.005/.006` 已分别为 item-destroy/item-grant 预建 game DB 回执；`.007` 完成境界/灵根回执 schema；`.008` 预建单人传承石回执；`.009` 预建单人饰品回执；`.010` 预建全服饰品批次；`.011` 预建全服传承石批次；`.012` 预建普通全服物品批次。传承石真实余额仍在 legacy `impart_db.xiuxian_impart`，饰品 bag 仍归 player-side `player_accessory` 表；feature 仓储只校验既有资产 schema，不在请求期建表或补列，game DB 保存兼容操作回执、批次进度和经济审计。管理员单人资产、全服饰品、全服传承石和全服普通物品命令均走 feature application，缺 DB/schema fail closed；其他管理员边界仍待迁移。
 
 本片验收：admin asset repositories/application/source/progress `33 passed`，architecture/inventory contracts `17 passed`；progress item-destroy/item-grant no-DDL/startup-schema/game-only 门禁均为 true。五库 recovery backup/restore dry-run/restore 成功，`.006` 仅 game DB applied，reconcile clean；隔离 architecture CLI `ok=true`，compileall 与 diff check 通过。item-destroy 前片专属产物已清理；本片 pytest、recovery、architecture 和 pycache 临时目录在本次验收后清理并复核。用户 `boss_info.json` 改动保留。

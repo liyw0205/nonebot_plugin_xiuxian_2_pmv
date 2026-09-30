@@ -21,7 +21,7 @@ from .work_handle import workhandle
 from datetime import datetime, timedelta
 from urllib.parse import quote
 from ..xiuxian_utils.xiuxian_opertion import do_is_work
-from ..xiuxian_utils.utils import check_user, check_user_type, get_msg_pic, handle_send, number_to, log_message, update_statistics_value, send_help_message
+from ..xiuxian_utils.utils import check_user, check_user_type, get_msg_pic, handle_send, number_to, log_message, update_statistics_value, send_help_message, update_last_check_info_time
 from ..xiuxian_utils.status_card import nav_kwargs, result_card
 from ..xiuxian_tasks.task_data import record_task_progress
 from nonebot.log import logger
@@ -497,7 +497,7 @@ async def do_work_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
     user_level = user_info['level']
     user_id = user_info['user_id']
     user_rank = convert_rank(user_info['level'])[0]
-    _sql_message().update_last_check_info_time(user_id)  # 更新查看修仙信息时间
+    update_last_check_info_time(user_id)
     
     if user_rank == 0:
         msg = "道友实力通天彻地，悬赏令已经不能满足道友的需求了！"

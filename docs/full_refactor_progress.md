@@ -2852,7 +2852,14 @@
 
 ## 6. 下一步
 
-### 6.1 当前权威状态（2026-09-30）
+### 6.1 当前权威状态（2026-10-01）
+
+最近切片补充：普通入口的 `user_cd.last_check_info_time` 读写已由
+`PlayerActivityApplication -> PlayerActivitySqlRepository` 统一承载，runtime 注入
+`Clock`，只更新既有行并在缺 schema 时 fail-closed，不执行请求期 DDL。Sect 闲置判定和
+Boss 旧 settlement transaction 的同事务时间戳写入仍是独立未迁移边界。该切片无 migration、
+无运行数据访问；验收后清理仓库 `__pycache__`、`*.pyc`、`.pytest_cache` 和本轮临时目录，
+保留 `.venv`、`.git`、`data/`、数据库/WAL/SHM、持久业务回执及用户修改。
 
 本节以 `scripts/refactor_completion_audit.py` 和
 `scripts/check_full_refactor_progress.py` 的当前输出为准；前文及下方的日期记录仅保留当时的实施证据，不应被当作当前待办状态。

@@ -31,6 +31,16 @@ class PlayerProfileReadContractTest(unittest.TestCase):
         self.assertNotIn("_sql_message().get_user_real_info", source)
         self.assertIn("get_final_attributes(user_id)", source)
 
+    def test_activity_timestamp_uses_feature_owned_application(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        source = (root / "nonebot_plugin_xiuxian_2" / "xiuxian" / "xiuxian_utils" / "utils.py").read_text(encoding="utf-8")
+        start = source.index("def update_last_check_info_time(")
+        end = source.index("def _player_data_manager", start)
+        boundary = source[start:end]
+        self.assertIn("_player_activity().update_last_check_info_time", boundary)
+        self.assertIn("_player_activity().get_last_check_info_time", boundary)
+        self.assertNotIn("_sql_message().update_last_check_info_time", boundary)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -34,7 +34,7 @@ from nonebot.params import CommandArg
 from ..xiuxian_utils.utils import (
     number_to, check_user, send_msg_handler,
     check_user_type, get_msg_pic, handle_send, log_message, update_statistics_value,
-    send_help_message
+    send_help_message, update_last_check_info_time
 )
 from ..xiuxian_utils.spirit_vein import apply_spirit_vein_exp_bonus as _apply_spirit_vein_exp_bonus
 from ..xiuxian_tasks.task_data import record_task_progress
@@ -829,7 +829,7 @@ async def mind_state_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await mind_state.finish()
 
     user_id = user_msg['user_id']
-    _sql_message().update_last_check_info_time(user_id)
+    update_last_check_info_time(user_id)
 
     player_data = _sql_message().get_player_data(user_id)
     if not player_data:

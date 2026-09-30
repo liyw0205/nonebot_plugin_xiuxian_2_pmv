@@ -25,7 +25,8 @@ def test_impart_facade_defers_sql_manager_construction():
     assert "def _sql_message(" in source
     assert "_sql_message().get_user_cd(" in source
     assert "_sql_message().get_user_info_with_id(" in source
-    assert "_sql_message().update_last_check_info_time(" in source
+    assert "update_last_check_info_time(" in source
+    assert "_sql_message().update_last_check_info_time(" not in source
     assert "sql_message = XiuxianDateManage()" not in source
 
 

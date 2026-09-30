@@ -10,7 +10,7 @@ from ..adapter_compat import (
 )
 from ..xiuxian_utils.utils import (
     check_user, get_user_profile, get_msg_pic, handle_send, number_to,
-    handle_pic_send, handle_pic_msg_send,
+    handle_pic_send, handle_pic_msg_send, update_last_check_info_time,
 )
 from ..xiuxian_utils.lay_out import assign_bot, Cooldown
 from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage, OtherSet, UserBuffDate, get_final_attributes
@@ -154,7 +154,7 @@ async def get_user_xiuxian_info(user_id):
         armor_name = f"{user_armor_data['name']}({user_armor_data['level']})"
 
     main_rate_buff = UserBuffDate(user_id).get_user_main_buff_data()
-    _sql_message().update_last_check_info_time(user_id)
+    update_last_check_info_time(user_id)
     leveluprate = int(user_info['level_up_rate'])
     number = main_rate_buff["number"] if main_rate_buff is not None else 0
 

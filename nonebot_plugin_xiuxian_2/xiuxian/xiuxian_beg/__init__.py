@@ -28,7 +28,7 @@ from ..xiuxian_utils.utils import (
     check_user,Txt2Img,
     get_msg_pic,
     handle_send,
-    send_help_message
+    send_help_message, update_last_check_info_time
 )
 
 items = Items()
@@ -121,7 +121,7 @@ async def beg_stone_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     diff_time = now_time - create_time
     diff_days = diff_time.days # 距离创建账号时间的天数
     
-    _sql_message().update_last_check_info_time(user_id) # 更新查看修仙信息时间
+    update_last_check_info_time(user_id)
     if sect != None and user_root == "伪灵根":
         msg = f"道友已有宗门庇佑，又何必来此寻求机缘呢？"
         await handle_send(bot, event, msg)

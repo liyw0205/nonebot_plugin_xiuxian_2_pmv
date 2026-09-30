@@ -21,6 +21,7 @@ from ..xiuxian_utils.utils import (
     send_help_message,
     send_msg_handler,
     update_statistics_value,
+    update_last_check_info_time,
 )
 from ..xiuxian_utils.item_json import Items
 from ..xiuxian_utils.xiuxian2_handle import (
@@ -1307,7 +1308,7 @@ async def attack_demon_invasion_(bot: Bot, event: GroupMessageEvent | PrivateMes
         await handle_send(bot, event, msg, md_type="世界事件", k1="帮助", v1="世界事件帮助")
         await attack_demon_invasion.finish()
 
-    _sql_message().update_last_check_info_time(user_id)
+    update_last_check_info_time(user_id)
     if user_info["hp"] is None or user_info["hp"] == 0:
         _sql_message().update_user_hp(user_id)
         user_info = _sql_message().get_user_info_with_id(user_id)
