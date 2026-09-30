@@ -2,6 +2,8 @@
 
 状态：进行中。`v1.1.0` 的 P0-P7 发布证据继续保留，但不作为底层全面重构完成证明。
 
+2026-09-30 base stone-robbery settlement cutover：`抢劫` 默认 handler 通过 `BaseApplication -> BaseStoneRobberySqlRepository` 在 ATTACH player DB 的单一事务中完成双玩家快照/CAS、统计和 game receipt；资产部分 CAS 失败由 savepoint 回滚。新增 game-only `base.004` 与 player-only `base.005` 启动迁移，request path 只读检查 schema，缺 migration/database 时 fail closed。旧 `StoneRobberySettlementService` 仅保留为显式兼容路径。聚焦 feature/source/progress/migration 回归通过；临时测试与编译产物在验收后清理，全局 legacy transaction services、`xiuxian2_handle` 与正式发布/P7 仍未完成。
+
 记录日期：2026-09-13  
 基线提交：`4083da4` (`v1.1.0`)
 

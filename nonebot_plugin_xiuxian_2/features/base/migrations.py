@@ -61,8 +61,35 @@ def apply_base_stone_contest_operations(uow: DatabaseUnitOfWork) -> None:
             )
 
 
+def apply_base_stone_robbery_operations(uow: DatabaseUnitOfWork) -> None:
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS stone_robbery_operations("
+        "operation_id TEXT PRIMARY KEY,robber_id TEXT NOT NULL,victim_id TEXT NOT NULL,"
+        "result_json TEXT NOT NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+    )
+    columns = {
+        str(row["name"]).casefold()
+        for row in uow.query_all('PRAGMA table_info("stone_robbery_operations")')
+    }
+    if not {"operation_id", "robber_id", "victim_id", "result_json"}.issubset(columns):
+        raise RuntimeError("stone_robbery_operations has an unsupported legacy schema")
+
+
+def apply_base_stone_robbery_player_statistics(uow: DatabaseUnitOfWork) -> None:
+    uow.execute("CREATE TABLE IF NOT EXISTS statistics(user_id TEXT PRIMARY KEY)")
+    columns = {
+        str(row["name"]).casefold()
+        for row in uow.query_all('PRAGMA table_info("statistics")')
+    }
+    for column in ("抢灵石成功", "抢灵石失败"):
+        if column.casefold() not in columns:
+            uow.execute(f'ALTER TABLE statistics ADD COLUMN "{column}" INTEGER DEFAULT 0')
+
+
 __all__ = [
     "apply_base",
     "apply_base_player_rename_operations",
     "apply_base_stone_contest_operations",
+    "apply_base_stone_robbery_operations",
+    "apply_base_stone_robbery_player_statistics",
 ]

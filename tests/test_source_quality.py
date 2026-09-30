@@ -2303,15 +2303,15 @@ class SourceQualityTests(unittest.TestCase):
         self.assertNotIn("CREATE TABLE", feature_repository)
         self.assertNotIn("ALTER TABLE", feature_repository)
 
-    def test_stone_robbery_uses_transactional_transfer_service(self) -> None:
+    def test_stone_robbery_uses_feature_owned_application(self) -> None:
         base_root = SOURCE_ROOT / "xiuxian" / "xiuxian_base"
         source = (base_root / "__init__.py").read_text(encoding="utf-8")
         start = source.index("@rob_stone.handle")
         handler = source[start:source.index("@view_logs.handle", start)]
-        self.assertIn("_stone_robbery_service().replay(", handler)
-        self.assertIn("_stone_robbery_service().settle(", handler)
-        self.assertIn("_stone_robbery_service_instance = None", source)
-        self.assertIn("def _stone_robbery_service(", source)
+        self.assertIn("base_application.get_stone_robbery_result(", handler)
+        self.assertIn("base_application.settle_stone_robbery(", handler)
+        self.assertNotIn("StoneRobberySettlementService", source)
+        self.assertNotIn("_stone_robbery_service(", source)
         self.assertNotIn("stone_robbery_service.settle(", handler)
         self.assertNotIn("stone_contest_service.transfer(", handler)
         self.assertNotIn("sql_message.update_ls(", handler)
@@ -2320,7 +2320,7 @@ class SourceQualityTests(unittest.TestCase):
         self.assertNotIn("update_statistics_value(", handler)
         self.assertNotIn("Cooldown(stamina_cost=15", handler)
         self.assertLess(
-            handler.index("_stone_robbery_service().replay("),
+            handler.index("base_application.get_stone_robbery_result("),
             handler.index("OtherSet().player_fight("),
         )
         service = (base_root / "stone_robbery_service.py").read_text(encoding="utf-8")
@@ -2328,9 +2328,14 @@ class SourceQualityTests(unittest.TestCase):
             SOURCE_ROOT / "compatibility" / "legacy_base_stone_robbery.py"
         ).read_text(encoding="utf-8")
         self.assertIn("legacy_base_stone_robbery", service)
-        self.assertIn("BEGIN IMMEDIATE", implementation)
-        self.assertIn("ATTACH DATABASE", implementation)
-        self.assertIn("stone_robbery_operations", implementation)
+        feature_repository = (
+            SOURCE_ROOT / "features" / "base" / "robbery_repository.py"
+        ).read_text(encoding="utf-8")
+        self.assertIn("immediate=True", feature_repository)
+        self.assertIn("AttachedDatabaseUnitOfWork", feature_repository)
+        self.assertIn("stone_robbery_operations", feature_repository)
+        self.assertNotIn("CREATE TABLE", feature_repository)
+        self.assertNotIn("ALTER TABLE", feature_repository)
         fight_source = (
             SOURCE_ROOT / "xiuxian" / "xiuxian_utils" / "xiuxian_json_config.py"
         ).read_text(encoding="utf-8")
@@ -3027,14 +3032,12 @@ class SourceQualityTests(unittest.TestCase):
         self.assertIn("_activity_config_event_service().replace(", source)
         self.assertNotIn("activity_config_event_service.replace(", source)
 
-    def test_admin_root_change_uses_lazy_service(self) -> None:
+    def test_admin_root_change_uses_feature_repository(self) -> None:
         root = SOURCE_ROOT / "xiuxian" / "xiuxian_admin"
         source = (root / "__init__.py").read_text(encoding="utf-8")
-        self.assertIn("_admin_root_change_service_instance = None", source)
-        self.assertIn("def _admin_root_change_service(", source)
-        self.assertIn("_admin_root_change_service().root_values(", source)
+        self.assertIn("AdminRootChangeSqlRepository.root_values(", source)
         self.assertIn("admin_asset_application.change_root(", source)
-        self.assertNotIn("admin_root_change_service.change(", source)
+        self.assertNotIn("_admin_root_change_service", source)
 
     def test_title_transaction_uses_lazy_replay_service(self) -> None:
         root = SOURCE_ROOT / "xiuxian" / "xiuxian_title"

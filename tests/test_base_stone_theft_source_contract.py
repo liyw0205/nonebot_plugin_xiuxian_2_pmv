@@ -26,7 +26,7 @@ def test_theft_repository_is_no_ddl_and_migration_is_game_only():
 
 def test_base_manifest_tracks_latest_registered_migration():
     manifest = (PACKAGE / "features/base/manifest.py").read_text(encoding="utf-8")
-    assert 'migration_version="base.003"' in manifest
+    assert 'migration_version="base.005"' in manifest
 
 
 def test_stone_contest_migration_routes_only_to_game_database():

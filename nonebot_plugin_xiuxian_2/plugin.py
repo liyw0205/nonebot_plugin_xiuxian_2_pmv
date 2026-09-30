@@ -72,6 +72,8 @@ from .features.base.migrations import (
     apply_base,
     apply_base_player_rename_operations,
     apply_base_stone_contest_operations,
+    apply_base_stone_robbery_operations,
+    apply_base_stone_robbery_player_statistics,
 )
 from .features.back.manifest import FEATURE as BACK_FEATURE
 from .features.back.migrations import apply_accessory_affix_operations, apply_alchemy, apply_back, apply_backpack_repair, apply_blessed_flag_replace, apply_breakthrough_rate_item, apply_cultivation_item, apply_equipment, apply_item_use, apply_lottery_talisman, apply_permanent_atk_item, apply_pet_egg_use, apply_recovery_item, apply_skill_learning, apply_stone_reward, apply_three_cultivation_pill, apply_unbind
@@ -270,6 +272,8 @@ def build_migrations() -> tuple[Migration, ...]:
         Migration("base.001", "base_feature_migrations", apply_base),
         Migration("base.002", "player_rename_operations", apply_base_player_rename_operations),
         Migration("base.003", "stone_contest_operations", apply_base_stone_contest_operations),
+        Migration("base.004", "stone_robbery_operations", apply_base_stone_robbery_operations),
+        Migration("base.005", "stone_robbery_player_statistics", apply_base_stone_robbery_player_statistics),
         Migration("beg.001", "beg_feature_migrations", apply_beg),
         Migration("boss.001", "boss_feature_migrations", apply_boss),
         Migration("boss.002", "boss_purchase_operations", apply_boss_purchase),
@@ -461,6 +465,7 @@ _GAME_DATABASE_EXCLUDED_MIGRATION_VERSIONS = frozenset(
         "world_events.004",
         "world_events.005",
         "world_events.006",
+        "base.005",
     }
 )
 _PLAYER_DATABASE_MIGRATION_VERSIONS = frozenset(
@@ -505,6 +510,7 @@ _PLAYER_DATABASE_MIGRATION_VERSIONS = frozenset(
         "world_events.004",
         "world_events.005",
         "world_events.006",
+        "base.005",
     }
 )
 _TRADE_DATABASE_MIGRATION_VERSIONS = frozenset({"platform.001", "trade.003", "trade.005", "trade.006", "trade.007", "trade.008", "auction.004"})

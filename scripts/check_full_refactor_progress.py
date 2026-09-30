@@ -98,6 +98,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
     base_application_source = (PACKAGE / "features" / "base" / "application.py").read_text(encoding="utf-8")
     base_rename_repository = (PACKAGE / "features" / "base" / "rename_repository.py").read_text(encoding="utf-8")
     base_theft_repository = (PACKAGE / "features" / "base" / "theft_repository.py").read_text(encoding="utf-8")
+    base_robbery_repository = (PACKAGE / "features" / "base" / "robbery_repository.py").read_text(encoding="utf-8")
     base_migrations = (PACKAGE / "features" / "base" / "migrations.py").read_text(encoding="utf-8")
     base_manifest = (PACKAGE / "features" / "base" / "manifest.py").read_text(encoding="utf-8")
     stone_contest_compatibility = (PACKAGE / "compatibility" / "legacy_base_stone_contest.py").read_text(encoding="utf-8")
@@ -1718,7 +1719,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
             ),
             "stone_theft_startup_migration_registered": (
                 'Migration("base.003", "stone_contest_operations", apply_base_stone_contest_operations)' in plugin
-                and 'migration_version="base.003"' in base_manifest
+                and 'migration_version="base.005"' in base_manifest
                 and "def apply_base_stone_contest_operations(" in base_migrations
             ),
             "stone_theft_migration_game_only": (
@@ -1731,6 +1732,28 @@ def _slice_status() -> dict[str, dict[str, object]]:
                     )
                 )
             ),
+            "stone_robbery_default_application_owned": (
+                "base_application.get_stone_robbery_result(" in base
+                and "base_application.settle_stone_robbery(" in base
+                and "_stone_robbery_service(" not in base
+                and "StoneRobberySettlementService" not in base
+            ),
+            "stone_robbery_request_path_has_no_ddl": (
+                "CREATE TABLE" not in base_robbery_repository
+                and "ALTER TABLE" not in base_robbery_repository
+            ),
+            "stone_robbery_startup_migrations_registered": (
+                'Migration("base.004", "stone_robbery_operations", apply_base_stone_robbery_operations)' in plugin
+                and 'Migration("base.005", "stone_robbery_player_statistics", apply_base_stone_robbery_player_statistics)' in plugin
+                and "def apply_base_stone_robbery_operations(" in base_migrations
+                and "def apply_base_stone_robbery_player_statistics(" in base_migrations
+            ),
+            "stone_robbery_migrations_routed_game_and_player": (
+                "base.004" not in plugin[plugin.index("_GAME_DATABASE_EXCLUDED_MIGRATION_VERSIONS"):plugin.index("_PLAYER_DATABASE_MIGRATION_VERSIONS")]
+                and "base.004" not in plugin[plugin.index("_PLAYER_DATABASE_MIGRATION_VERSIONS"):plugin.index("_TRADE_DATABASE_MIGRATION_VERSIONS")]
+                and "base.005" in plugin[plugin.index("_GAME_DATABASE_EXCLUDED_MIGRATION_VERSIONS"):plugin.index("_PLAYER_DATABASE_MIGRATION_VERSIONS")]
+                and "base.005" in plugin[plugin.index("_PLAYER_DATABASE_MIGRATION_VERSIONS"):plugin.index("_TRADE_DATABASE_MIGRATION_VERSIONS")]
+            ),
             "stone_robbery_service_isolated": "class StoneRobberySettlementService" not in base_transaction and "class StoneRobberySettlementService" in stone_robbery_compatibility and "stone_robbery_operations" in stone_robbery_compatibility,
             "xiangyuan_service_isolated": "class XiangyuanSettlementService" not in base_transaction and "class XiangyuanSettlementService" in xiangyuan_compatibility and "xiangyuan_create_operations" in xiangyuan_compatibility and "xiangyuan_claim_operations" in xiangyuan_compatibility,
             "breakthrough_service_isolated": "class BreakthroughService" not in base_transaction and "class BreakthroughService" in breakthrough_compatibility and all(token in breakthrough_compatibility for token in ("direct_breakthrough_operations", "continuous_breakthrough_operations", "tribulation_breakthrough_operations", "continuous_tribulation_operations")),
@@ -1739,7 +1762,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "heart_devil_tribulation_service_isolated": "class HeartDevilTribulationService" not in base_transaction and "class HeartDevilTribulationService" in heart_devil_tribulation_compatibility and "heart_devil_tribulation_operations" in heart_devil_tribulation_compatibility,
             "pill_fusion_service_isolated": "class PillFusionService" not in base_transaction and "class PillFusionService" in pill_fusion_compatibility and "pill_fusion_operations" in pill_fusion_compatibility,
             "tribulation_state_migration_service_isolated": "class TribulationStateMigrationService" not in base_transaction and "class TribulationStateMigrationService" in tribulation_state_migration_compatibility and "tribulation_state_migration_operations" in tribulation_state_migration_compatibility,
-            "status": "stone_theft_settlement_and_rename_replay_owned_with_remaining_base_compatibility_isolation",
+            "status": "stone_theft_and_robbery_settlement_with_rename_replay_owned_and_remaining_base_compatibility_isolation",
         },
         "puppet": {
             "harvest_application_owned": "puppet_application.harvest(" in puppet_facade,

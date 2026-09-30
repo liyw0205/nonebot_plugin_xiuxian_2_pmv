@@ -54,7 +54,6 @@ from .stone_limit import stone_limit
 from ...features.sign_in.application import SignInApplication
 from ...features.sign_in.lottery_application import LotteryApplication
 from ...features.sign_in.effects import NullSignInEffects
-from .transaction_service import StoneRobberySettlementService
 from .registration_batch import RegistrationBatcher, RegistrationRequest
 from .breakthrough_tribulation import *  # noqa: F401,F403
 from .xiangyuan import clear_all_xiangyuan, reset_xiangyuan_daily  # noqa: F401
@@ -89,7 +88,6 @@ def _lottery_application() -> LotteryApplication:
 
 base_application = BaseApplication(get_paths().game_db, get_paths().player_db)
 _stone_gift_service_instance = None
-_stone_robbery_service_instance = None
 runtime_clock = SystemClock()
 runtime_random = SystemRandom()
 runtime_ids = UUIDGenerator()
@@ -111,13 +109,6 @@ def _stone_gift_service():
     return _stone_gift_service_instance
 
 
-def _stone_robbery_service():
-    global _stone_robbery_service_instance
-    if _stone_robbery_service_instance is None:
-        _stone_robbery_service_instance = StoneRobberySettlementService(
-            get_paths().game_db, get_paths().player_db
-        )
-    return _stone_robbery_service_instance
 registration_batcher = RegistrationBatcher(_sql_message)
 _player_data_manager_instance = None
 
@@ -1461,7 +1452,7 @@ async def rob_stone_(bot: Bot, event: GroupMessageEvent, args: Message = Command
         await rob_stone.finish()
 
     operation_id = _stone_robbery_operation_id(event, user_id)
-    previous = _stone_robbery_service().replay(operation_id, user_id, give_qq)
+    previous = base_application.get_stone_robbery_result(operation_id, user_id, give_qq)
     if previous is not None:
         if not previous.succeeded:
             await handle_send(bot, event, "本次抢劫与首次请求目标不一致，未重复结算。")
@@ -1513,10 +1504,10 @@ async def rob_stone_(bot: Bot, event: GroupMessageEvent, args: Message = Command
     player1 = _stone_robbery_player(user_mes)
     player2 = _stone_robbery_player(user_2)
     battle_messages, winner_id, final = OtherSet().player_fight(player1, player2)
-    settlement = _stone_robbery_service().settle(
-        operation_id,
-        user_id,
-        give_qq,
+    settlement = base_application.settle_stone_robbery(
+        operation_id=operation_id,
+        robber_id=user_id,
+        victim_id=give_qq,
         expected_robber=expected_robber,
         expected_victim=expected_victim,
         robber_final=final[user_id],
@@ -1525,7 +1516,9 @@ async def rob_stone_(bot: Bot, event: GroupMessageEvent, args: Message = Command
         battle_messages=battle_messages,
         stamina_cost=15,
     )
-    if settlement.status == "stamina_insufficient":
+    if settlement.status == "schema_missing":
+        msg = "抢劫服务尚未就绪，请检查启动迁移。"
+    elif settlement.status == "stamina_insufficient":
         msg = "你没有足够的体力，请等待体力恢复后再试！"
     elif settlement.status == "robber_injured":
         msg = "重伤未愈，本次抢劫未结算。"
