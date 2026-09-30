@@ -15,24 +15,21 @@ from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_base.transaction_service import (
 from tests.test_db_backend import db_backend
 
 
-def test_base_facade_defers_player_rename_service_construction():
+def test_base_facade_does_not_construct_legacy_player_rename_service():
     base = importlib.import_module(
         "nonebot_plugin_xiuxian_2.xiuxian.xiuxian_base"
     )
-    assert base._player_rename_service_instance is None
+    assert not hasattr(base, "_player_rename_service_instance")
 
 
-def test_player_rename_handlers_use_lazy_service():
+def test_player_rename_replay_reads_use_feature_application():
     source = Path(
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_base/__init__.py"
     ).read_text(encoding="utf-8")
     handler = source[source.index("async def remaname_"):source.index("@run_xiuxian.handle")]
-    assert "_player_rename_service().get_result(" in handler
+    assert "base_application.get_rename_result(" in handler
     assert "base_application.rename(" in handler
-    assert "_player_rename_service().rename_user(" not in handler
-    assert "_player_rename_service().rename_root(" not in source
-    assert "_player_rename_service_instance = None" in source
-    assert "def _player_rename_service(" in source
+    assert "_player_rename_service" not in source
     assert "player_rename_service.rename_user(" not in source
 
 

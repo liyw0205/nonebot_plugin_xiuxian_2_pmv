@@ -14,10 +14,62 @@ class BaseRenameResult:
         self.new_name = new_name
         self.previous_name = previous_name
 
+    @property
+    def succeeded(self) -> bool:
+        return self.status in {"renamed", "duplicate"}
+
 
 class BaseRenameSqlRepository:
     def __init__(self, database: str | Path) -> None:
         self.database = str(database)
+
+    @staticmethod
+    def _columns(uow: DatabaseUnitOfWork, table: str) -> set[str]:
+        return {
+            str(row["name"]).casefold()
+            for row in uow.query_all(f'PRAGMA table_info("{table}")')
+        }
+
+    @classmethod
+    def _schema_ready(
+        cls,
+        uow: DatabaseUnitOfWork,
+        rename_kind: str,
+        item_id: int | None,
+    ) -> bool:
+        name_column = "user_name" if rename_kind == "user" else "root"
+        required = {
+            "player_rename_operations": {
+                "operation_id", "user_id", "rename_type", "new_name", "previous_name", "payload",
+            },
+            "user_xiuxian": {"user_id", name_column, "stone"},
+        }
+        if item_id is not None:
+            required["back"] = {"user_id", "goods_id", "goods_num", "bind_num"}
+        return all(expected.issubset(cls._columns(uow, table)) for table, expected in required.items())
+
+    def get_result(self, operation_id: str) -> BaseRenameResult | None:
+        operation_id = str(operation_id).strip()
+        if not operation_id or not Path(self.database).is_file():
+            return None
+        with DatabaseUnitOfWork(self.database, read_only=True) as uow:
+            required = {"operation_id", "user_id", "rename_type", "new_name", "previous_name"}
+            if not required.issubset(self._columns(uow, "player_rename_operations")):
+                return None
+            row = uow.query_one(
+                "SELECT user_id,rename_type,new_name,previous_name "
+                "FROM player_rename_operations WHERE operation_id=?",
+                (operation_id,),
+            )
+        if row is None:
+            return None
+        return BaseRenameResult(
+            "duplicate",
+            str(row["user_id"]),
+            str(row["rename_type"]),
+            str(row["new_name"]),
+            str(row["previous_name"] or ""),
+        )
 
     def rename(self, operation_id: str, user_id: str, rename_kind: str, new_name: str, *, item_id: int | None = None, stone_cost: int = 0) -> BaseRenameResult:
         operation_id, user_id, rename_kind, new_name = str(operation_id).strip(), str(user_id), str(rename_kind), str(new_name).strip()
@@ -26,10 +78,11 @@ class BaseRenameSqlRepository:
         column = "user_name" if rename_kind == "user" else "root"
         payload = json.dumps([user_id, rename_kind, new_name, item_id, int(stone_cost)], ensure_ascii=False, separators=(",", ":"))
         with DatabaseUnitOfWork(self.database, immediate=True) as uow:
-            uow.execute("CREATE TABLE IF NOT EXISTS player_rename_operations(operation_id TEXT PRIMARY KEY,user_id TEXT NOT NULL,rename_type TEXT NOT NULL,new_name TEXT NOT NULL,previous_name TEXT NOT NULL,payload TEXT NOT NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
+            if not self._schema_ready(uow, rename_kind, item_id):
+                return BaseRenameResult("schema_missing", user_id, rename_kind, new_name)
             previous = uow.query_one("SELECT payload,user_id,rename_type,new_name,previous_name FROM player_rename_operations WHERE operation_id=?", (operation_id,))
             if previous is not None:
-                if str(previous["payload"]) != payload:
+                if previous["payload"] is not None and str(previous["payload"]) != payload:
                     return BaseRenameResult("state_changed", user_id, rename_kind, new_name)
                 return BaseRenameResult("duplicate", str(previous["user_id"]), str(previous["rename_type"]), str(previous["new_name"]), str(previous["previous_name"]))
             row = uow.query_one(f"SELECT COALESCE({column},'') AS name,COALESCE(stone,0) AS stone FROM user_xiuxian WHERE user_id=?", (user_id,))

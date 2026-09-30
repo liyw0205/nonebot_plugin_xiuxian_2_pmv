@@ -17,6 +17,8 @@ class BaseApplication(LegacyApplication):
 
     def breakthrough(self, *, operation_id: str, user_id: str, **kwargs: Any): return self._action("breakthrough", operation_id=operation_id, user_id=user_id, **kwargs)
     def tribulation(self, *, operation_id: str, user_id: str, **kwargs: Any): return self._action("tribulation", operation_id=operation_id, user_id=user_id, **kwargs)
+    def get_rename_result(self, operation_id: str):
+        return BaseRenameSqlRepository(self.database).get_result(operation_id)
     def rename(self, *, operation_id: str, user_id: str, **kwargs: Any):
         if self.repository is None:
             return self._execute(operation_id=operation_id, user_id=user_id, action="base.rename", payload={"user_id": user_id, **kwargs}, call=lambda: BaseRenameSqlRepository(self.database).rename(operation_id, user_id, kwargs.get("rename_kind", "user"), kwargs.get("new_name", ""), item_id=kwargs.get("item_id"), stone_cost=int(kwargs.get("stone_cost", 0) or 0)))

@@ -3,6 +3,7 @@ import unittest
 from pathlib import Path
 
 from ..application import BaseApplication
+from ....infrastructure.database import DatabaseUnitOfWork, OperationLedger
 
 
 class Repo:
@@ -12,7 +13,10 @@ class Repo:
 class BaseApplicationTest(unittest.TestCase):
     def test_rejection_is_non_success(self):
         with tempfile.TemporaryDirectory() as directory:
-            app = BaseApplication(Path(directory) / "game.db", Path(directory) / "player.db", repository=Repo())
+            database = Path(directory) / "game.db"
+            with DatabaseUnitOfWork(database, immediate=True) as uow:
+                OperationLedger().ensure_schema(uow)
+            app = BaseApplication(database, Path(directory) / "player.db", repository=Repo())
             result = app.breakthrough(operation_id="base-1", user_id="u")
             self.assertFalse(result.ok)
             self.assertEqual(result.code, "rejected")

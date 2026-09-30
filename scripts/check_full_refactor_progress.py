@@ -95,6 +95,10 @@ def _has_production_bank_savef_import() -> bool:
 def _slice_status() -> dict[str, dict[str, object]]:
     base = (PACKAGE / "xiuxian" / "xiuxian_base" / "__init__.py").read_text(encoding="utf-8")
     base_transaction = (PACKAGE / "xiuxian" / "xiuxian_base" / "transaction_service.py").read_text(encoding="utf-8")
+    base_application_source = (PACKAGE / "features" / "base" / "application.py").read_text(encoding="utf-8")
+    base_rename_repository = (PACKAGE / "features" / "base" / "rename_repository.py").read_text(encoding="utf-8")
+    base_migrations = (PACKAGE / "features" / "base" / "migrations.py").read_text(encoding="utf-8")
+    base_manifest = (PACKAGE / "features" / "base" / "manifest.py").read_text(encoding="utf-8")
     stone_contest_compatibility = (PACKAGE / "compatibility" / "legacy_base_stone_contest.py").read_text(encoding="utf-8")
     stone_robbery_compatibility = (PACKAGE / "compatibility" / "legacy_base_stone_robbery.py").read_text(encoding="utf-8")
     xiangyuan_compatibility = (PACKAGE / "compatibility" / "legacy_base_xiangyuan.py").read_text(encoding="utf-8")
@@ -1682,6 +1686,23 @@ def _slice_status() -> dict[str, dict[str, object]]:
         "base": {
             "rename_application_owned": "base_application.rename(" in base_facade,
             "legacy_rename_disabled": "_player_rename_service().rename_user(" not in base_facade and "_player_rename_service().rename_root(" not in base_facade,
+            "rename_replay_read_application_owned": "base_application.get_rename_result(" in base_facade and "def get_rename_result(" in base_application_source and "_player_rename_service" not in base_facade,
+            "rename_request_path_has_no_ddl": "CREATE TABLE" not in base_rename_repository and "ALTER TABLE" not in base_rename_repository,
+            "rename_startup_migration_registered": 'Migration("base.002", "player_rename_operations", apply_base_player_rename_operations)' in plugin and 'migration_version="base.002"' in base_manifest and "def apply_base_player_rename_operations(" in base_migrations,
+            "rename_migration_game_only": (
+                "base.002" not in plugin[
+                    plugin.index("_GAME_DATABASE_EXCLUDED_MIGRATION_VERSIONS"):
+                    plugin.index("_PLAYER_DATABASE_MIGRATION_VERSIONS")
+                ]
+                and "base.002" not in plugin[
+                    plugin.index("_PLAYER_DATABASE_MIGRATION_VERSIONS"):
+                    plugin.index("_TRADE_DATABASE_MIGRATION_VERSIONS")
+                ]
+                and "base.002" not in plugin[
+                    plugin.index("_TRADE_DATABASE_MIGRATION_VERSIONS"):
+                    plugin.index("def migrations_for_database")
+                ]
+            ),
             "rename_service_isolated": "class PlayerRenameService" not in legacy_transaction and (PACKAGE / "compatibility" / "legacy_base_player_rename.py").is_file(),
             "stone_contest_service_isolated": "class StoneContestService" not in base_transaction and "class StoneContestService" in stone_contest_compatibility and "stone_contest_operations" in stone_contest_compatibility,
             "stone_robbery_service_isolated": "class StoneRobberySettlementService" not in base_transaction and "class StoneRobberySettlementService" in stone_robbery_compatibility and "stone_robbery_operations" in stone_robbery_compatibility,
@@ -1692,7 +1713,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "heart_devil_tribulation_service_isolated": "class HeartDevilTribulationService" not in base_transaction and "class HeartDevilTribulationService" in heart_devil_tribulation_compatibility and "heart_devil_tribulation_operations" in heart_devil_tribulation_compatibility,
             "pill_fusion_service_isolated": "class PillFusionService" not in base_transaction and "class PillFusionService" in pill_fusion_compatibility and "pill_fusion_operations" in pill_fusion_compatibility,
             "tribulation_state_migration_service_isolated": "class TribulationStateMigrationService" not in base_transaction and "class TribulationStateMigrationService" in tribulation_state_migration_compatibility and "tribulation_state_migration_operations" in tribulation_state_migration_compatibility,
-            "status": "rename_stone_contest_stone_robbery_xiangyuan_breakthrough_ordinary_destiny_heart_devil_pill_fusion_and_state_migration_compatibility_isolation_with_replay",
+            "status": "rename_replay_read_and_startup_schema_owned_with_legacy_receipt_compatibility_plus_remaining_base_compatibility_isolation",
         },
         "puppet": {
             "harvest_application_owned": "puppet_application.harvest(" in puppet_facade,

@@ -54,7 +54,6 @@ from .stone_limit import stone_limit
 from ...features.sign_in.application import SignInApplication
 from ...features.sign_in.lottery_application import LotteryApplication
 from ...features.sign_in.effects import NullSignInEffects
-from .transaction_service import PlayerRenameService
 from .transaction_service import StoneContestService
 from .transaction_service import StoneRobberySettlementService
 from .registration_batch import RegistrationBatcher, RegistrationRequest
@@ -89,7 +88,6 @@ def _lottery_application() -> LotteryApplication:
         )
     return lottery_application
 
-_player_rename_service_instance = None
 base_application = BaseApplication(get_paths().game_db, get_paths().player_db)
 _stone_gift_service_instance = None
 _stone_contest_service_instance = None
@@ -113,13 +111,6 @@ def _stone_gift_service():
 
         _stone_gift_service_instance = StoneGiftService(get_paths().game_db)
     return _stone_gift_service_instance
-
-
-def _player_rename_service():
-    global _player_rename_service_instance
-    if _player_rename_service_instance is None:
-        _player_rename_service_instance = PlayerRenameService(get_paths().game_db)
-    return _player_rename_service_instance
 
 
 def _stone_contest_service():
@@ -681,7 +672,7 @@ async def remaname_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, ar
         await remaname.finish()
     user_id = user_info['user_id']
     operation_id = _player_rename_operation_id(event, "user-name", user_id)
-    prior = _player_rename_service().get_result(operation_id)
+    prior = base_application.get_rename_result(operation_id)
     if prior is not None and prior.succeeded:
         msg = f"你获得了随机道号：{prior.new_name}\n" if prior.previous_name != prior.new_name else ""
         # previous random vs explicit unknown; use generic
@@ -714,6 +705,8 @@ async def remaname_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, ar
         result = SimpleNamespace(**dict(outcome.data or {})); result.status = outcome.status; result.succeeded = outcome.ok
     if result.status == "stone_insufficient":
         msg = f"修改道号需要消耗{XiuConfig().remaname}灵石，你的灵石不足！"
+    elif result.status == "schema_missing":
+        msg = "改名服务尚未就绪，请检查启动迁移。"
     elif result.status == "item_missing":
         msg = "修改道号需要消耗1个易名符！"
     elif result.status == "name_conflict":
