@@ -4,8 +4,17 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from ....infrastructure.database import DatabaseUnitOfWork
-from ..migrations import apply_dufang_bet_payout, apply_dufang_share_player
+from ..migrations import (
+    apply_dufang_bet_payout,
+    apply_dufang_player_receipts,
+    apply_dufang_resolution,
+    apply_dufang_share_player,
+)
 from ..bet_repository import DufangBetSqlRepository
+from ..player_stats_repository import DufangPlayerStatsSqlRepository
+
+
+WIN_PLAN = {"payout_outcome": "win", "gain": 50, "requested_loss": 0}
 
 
 class DufangBetRepositoryTests(unittest.TestCase):
@@ -17,14 +26,18 @@ class DufangBetRepositoryTests(unittest.TestCase):
                 uow.execute("CREATE TABLE user_xiuxian(user_id TEXT PRIMARY KEY,stone INTEGER)")
                 uow.execute("INSERT INTO user_xiuxian VALUES('u',100)")
                 apply_dufang_bet_payout(uow)
+                apply_dufang_resolution(uow)
             with DatabaseUnitOfWork(player) as uow:
                 apply_dufang_share_player(uow)
+                apply_dufang_player_receipts(uow)
                 uow.execute("INSERT INTO unseal_data(user_id,count,total_cost,last_update) VALUES('u',0,0,'')")
-            repo = DufangBetSqlRepository(game, player)
-            first = repo.place("b1", "u", 30, "now")
-            duplicate = repo.place("b1", "u", 30, "now")
-            insufficient = repo.place("b2", "u", 100, "later")
+            repo = DufangBetSqlRepository(game)
+            first = repo.place("b1", "u", 30, "now", WIN_PLAN)
+            duplicate = repo.place("b1", "u", 30, "now", WIN_PLAN)
+            insufficient = repo.place("b2", "u", 100, "later", WIN_PLAN)
             self.assertEqual((first.status, duplicate.status, insufficient.status), ("applied", "duplicate", "stone_insufficient"))
+            self.assertEqual(first.resolution, duplicate.resolution)
+            self.assertEqual(repo.total_cost("u"), 30)
 
     def test_missing_schema_fails_without_creating_player_database_or_tables(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -33,7 +46,7 @@ class DufangBetRepositoryTests(unittest.TestCase):
             with DatabaseUnitOfWork(game) as uow:
                 uow.execute("CREATE TABLE user_xiuxian(user_id TEXT PRIMARY KEY,stone INTEGER)")
                 uow.execute("INSERT INTO user_xiuxian VALUES('u',100)")
-            result = DufangBetSqlRepository(game, player).place("b1", "u", 30, "now")
+            result = DufangBetSqlRepository(game).place("b1", "u", 30, "now", WIN_PLAN)
             self.assertEqual(result.status, "schema_missing")
             self.assertFalse(player.exists())
             with DatabaseUnitOfWork(game, read_only=True) as uow:
@@ -50,13 +63,16 @@ class DufangBetRepositoryTests(unittest.TestCase):
                 uow.execute("CREATE TABLE user_xiuxian(user_id TEXT PRIMARY KEY,stone INTEGER)")
                 uow.execute("INSERT INTO user_xiuxian VALUES('u',100)")
                 apply_dufang_bet_payout(uow)
+                apply_dufang_resolution(uow)
             with DatabaseUnitOfWork(player) as uow:
                 apply_dufang_share_player(uow)
+                apply_dufang_player_receipts(uow)
                 uow.execute("INSERT INTO unseal_data(user_id,count,total_cost,last_update) VALUES('u',0,0,'')")
-            repo = DufangBetSqlRepository(game, player)
+            repo = DufangBetSqlRepository(game)
             with ThreadPoolExecutor(max_workers=2) as pool:
-                results = list(pool.map(lambda _: repo.place("same", "u", 30, "now"), range(2)))
+                results = list(pool.map(lambda _: repo.place("same", "u", 30, "now", WIN_PLAN), range(2)))
             self.assertEqual(sorted(result.status for result in results), ["applied", "duplicate"])
+            DufangPlayerStatsSqlRepository(game, player).reconcile(limit=5)
             with DatabaseUnitOfWork(game, read_only=True) as uow:
                 wallet = uow.query_one("SELECT stone FROM user_xiuxian WHERE user_id='u'")["stone"]
                 count = uow.query_one("SELECT COUNT(*) AS count FROM dufang_bets")["count"]

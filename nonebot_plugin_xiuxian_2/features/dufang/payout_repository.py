@@ -3,8 +3,10 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any, Mapping
 
 from ...infrastructure.database import DatabaseUnitOfWork
+from .player_stats_repository import append_player_outbox
 
 
 @dataclass(frozen=True)
@@ -24,11 +26,14 @@ class DufangPayoutSqlRepository:
         "dufang_bets": {"bet_id", "user_id", "cost", "status", "placed_at", "settled_at"},
         "dufang_payout_operations": {"operation_id", "payload", "wallet_stone", "gain", "loss", "created_at"},
         "user_xiuxian": {"user_id", "stone"},
+        "dufang_bet_resolutions": {"operation_id", "plan_json", "created_at"},
+        "dufang_player_outbox": {
+            "event_id", "operation_id", "event_type", "payload_json", "status", "created_at", "updated_at",
+        },
     }
-    _PLAYER_COLUMNS = {"user_id", "profit", "loss", "last_update"}
 
-    def __init__(self, game_database: str | Path, player_database: str | Path) -> None:
-        self.game_database, self.player_database = str(game_database), str(player_database)
+    def __init__(self, game_database: str | Path) -> None:
+        self.game_database = str(game_database)
 
     @staticmethod
     def _columns(uow: DatabaseUnitOfWork, table: str, schema: str = "main") -> set[str]:
@@ -42,7 +47,12 @@ class DufangPayoutSqlRepository:
     def _schema_ready(cls, uow: DatabaseUnitOfWork) -> bool:
         if any(not required.issubset(cls._columns(uow, table)) for table, required in cls._GAME_COLUMNS.items()):
             return False
-        for table, key_column in (("dufang_bets", "bet_id"), ("dufang_payout_operations", "operation_id")):
+        for table, key_column in (
+            ("dufang_bets", "bet_id"),
+            ("dufang_payout_operations", "operation_id"),
+            ("dufang_bet_resolutions", "operation_id"),
+            ("dufang_player_outbox", "event_id"),
+        ):
             primary_key = next(
                 (
                     int(row["pk"])
@@ -53,18 +63,7 @@ class DufangPayoutSqlRepository:
             )
             if primary_key != 1:
                 return False
-        player_columns = cls._columns(uow, "unseal_data", "player_data")
-        if not cls._PLAYER_COLUMNS.issubset(player_columns):
-            return False
-        player_key = next(
-            (
-                int(row["pk"])
-                for row in uow.query_all('PRAGMA player_data.table_info("unseal_data")')
-                if str(row["name"]).casefold() == "user_id"
-            ),
-            0,
-        )
-        return player_key == 1
+        return True
 
     @classmethod
     def _payout_schema_ready(cls, uow: DatabaseUnitOfWork) -> bool:
@@ -80,16 +79,15 @@ class DufangPayoutSqlRepository:
             row = uow.query_one("SELECT wallet_stone,gain,loss FROM dufang_payout_operations WHERE operation_id=?", (str(operation_id).strip(),))
             return None if row is None else DufangPayoutResult("duplicate", int(row["wallet_stone"]), int(row["gain"]), int(row["loss"]))
 
-    def settle(self, operation_id: str, bet_id: str, user_id: str, outcome: str, gain: int, requested_loss: int, settled_at: str) -> DufangPayoutResult:
-        operation_id, bet_id, user_id, outcome = str(operation_id).strip(), str(bet_id).strip(), str(user_id), str(outcome)
-        gain, requested_loss = int(gain), int(requested_loss)
-        if not operation_id or not bet_id or outcome not in {"win", "loss"} or gain < 0 or requested_loss < 0:
-            raise ValueError("valid payout request is required")
-        if not Path(self.game_database).is_file() or not Path(self.player_database).is_file():
+    def settle(self, operation_id: str, bet_id: str, user_id: str, settled_at: str) -> DufangPayoutResult:
+        operation_id, bet_id, user_id = str(operation_id).strip(), str(bet_id).strip(), str(user_id)
+        settled_at = str(settled_at).strip()
+        if not operation_id or not bet_id or not settled_at:
+            raise ValueError("valid payout operation, bet and settlement time are required")
+        if not Path(self.game_database).is_file():
             return DufangPayoutResult("schema_missing")
         payload = json.dumps([bet_id, user_id], ensure_ascii=True, separators=(",", ":"))
         with DatabaseUnitOfWork(self.game_database, immediate=True) as uow:
-            uow.execute("ATTACH DATABASE ? AS player_data", (self.player_database,))
             if not self._schema_ready(uow):
                 return DufangPayoutResult("schema_missing")
             previous = uow.query_one("SELECT payload,wallet_stone,gain,loss FROM dufang_payout_operations WHERE operation_id=?", (operation_id,))
@@ -98,7 +96,20 @@ class DufangPayoutSqlRepository:
                     return DufangPayoutResult("state_changed")
                 return DufangPayoutResult("duplicate", int(previous["wallet_stone"]), int(previous["gain"]), int(previous["loss"]))
             bet = uow.query_one("SELECT user_id,status FROM dufang_bets WHERE bet_id=?", (bet_id,))
-            if bet is None or str(bet["user_id"]) != user_id or str(bet["status"]) != "pending":
+            if bet is None or str(bet["user_id"]) != user_id:
+                return DufangPayoutResult("state_changed")
+            resolution = uow.query_one(
+                "SELECT plan_json FROM dufang_bet_resolutions WHERE operation_id=?",
+                (bet_id,),
+            )
+            if resolution is None:
+                return DufangPayoutResult("resolution_missing")
+            plan: Mapping[str, Any] = json.loads(str(resolution["plan_json"]))
+            outcome = str(plan.get("payout_outcome", ""))
+            gain, requested_loss = int(plan.get("gain", -1)), int(plan.get("requested_loss", -1))
+            if outcome not in {"win", "loss"} or gain < 0 or requested_loss < 0:
+                raise RuntimeError("dufang frozen payout plan is invalid")
+            if str(bet["status"]) != "pending":
                 return DufangPayoutResult("state_changed")
             user = uow.query_one("SELECT COALESCE(stone,0) AS stone FROM user_xiuxian WHERE user_id=?", (user_id,))
             if user is None:
@@ -110,10 +121,19 @@ class DufangPayoutSqlRepository:
                 return DufangPayoutResult("state_changed")
             if uow.execute("UPDATE user_xiuxian SET stone=? WHERE user_id=?", (wallet, user_id)).rowcount != 1:
                 raise RuntimeError("dufang payout user state changed")
-            field, amount = ("profit", actual_gain) if outcome == "win" else ("loss", actual_loss)
-            if uow.execute(f"UPDATE player_data.unseal_data SET {field}=COALESCE({field},0)+?,last_update=? WHERE user_id=?", (amount, str(settled_at), user_id)).rowcount != 1:
-                raise RuntimeError("dufang payout player statistics row is missing")
             uow.execute("INSERT INTO dufang_payout_operations VALUES(?,?,?,?,?,CURRENT_TIMESTAMP)", (operation_id, payload, wallet, actual_gain, actual_loss))
+            append_player_outbox(
+                uow,
+                operation_id=operation_id,
+                event_type="payout",
+                payload={
+                    "user_id": user_id,
+                    "gain": actual_gain,
+                    "loss": actual_loss,
+                    "occurred_at": settled_at,
+                },
+                created_at=settled_at,
+            )
             return DufangPayoutResult("applied", wallet, actual_gain, actual_loss)
 
 

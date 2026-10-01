@@ -3213,8 +3213,8 @@ focused tests、根目录 `tests/` 隔离回归、compileall、architecture/prog
 ### 6.5 后续执行方案（2026-10-02）
 
 当前鉴石共享结算 feature-owned cutover 已完成代码切换和聚焦回归，但尚未执行全量测试、正式迁移、
-备份恢复或 P7 发布演练。赌坊 bet/payout `.004` schema ownership 阶段已完成并提交；随机结果冻结、
-派彩恢复与跨库崩溃一致性作为紧接的下一阶段继续。按以下顺序推进，每次只实施一个可验证切片：
+备份恢复或 P7 发布演练。赌坊 bet/payout `.004` schema ownership 阶段已完成并提交；随机结果冻结与跨库恢复代码切片现已完成隔离回归，
+但仍未做正式迁移、备份恢复或 P7 发布演练。按以下剩余目标推进，每次只实施一个可验证切片：
 
 1. **鉴石共享结算基线（已推送）**：`27e24f03 refactor(dufang): own shared settlement` 已推送至
    `origin/refactor/full-bottom-layer`；未声称全量测试、正式迁移、备份恢复或 P7 发布演练完成。
@@ -3223,16 +3223,21 @@ focused tests、根目录 `tests/` 隔离回归、compileall、architecture/prog
    缺数据库/schema 时 fail closed。迁移路由/幂等/旧行保留、缺库不创建、下注并发幂等、不同 operation 竞争同一 pending bet、
    派彩统计缺行回滚均已覆盖；赌坊应用、repository、迁移、旧 service 兼容和 progress 聚焦集合 `38 passed`，仅有一条既存
    compatibility deprecation warning。旧 transaction service 仍是显式兼容边界，不计默认路径完成。本阶段不包含正式数据迁移或发布演练。
-3. **赌坊随机结果与跨库恢复（下一阶段）**：冻结一次鉴石事件/赔率计划，确保相同消息 replay 不重抽随机结果；定义 bet 已提交但 payout
-   未完成时的有界续跑。若仍跨 game/player 写入，必须以持久 receipt/outbox 解决 WAL 下的进程崩溃不原子问题；恢复批次有上限，
-   receipt 是耐久幂等数据，不得当缓存清理。先验证随机结果/支付状态在崩溃点前后的持久化契约，再决定是否拆分 player 统计投影。
-4. **按真实调用图清理剩余旧写路径**：优先 player/economy/inventory 等会改动资产的默认 handler，再审计
+3. **赌坊随机结果与跨库恢复（代码切片完成，待独立发布验证）**：`.005/.006` 分库迁移冻结鉴石事件/赔率计划，
+   相同消息 replay 不重抽；bet 已提交而 payout 未完成时，从计划续跑派彩/共享效果，恢复批次最多 5 笔。game 库 outbox 与
+   player 库唯一 `(operation_id,event_type)` receipt 分步投影，覆盖 WAL 下跨文件崩溃；started ledger 可重试底层幂等操作。
+   每次有效鉴石命令开头最多恢复 5 笔已有 pending bet，让无消息重投的崩溃记录也能被后续流量续跑。
+   已有 pending bet 若没有冻结计划必须 fail closed，不得补抽。隔离回归不代表正式迁移、备份恢复或 P7 演练完成。
+4. **持久回执保留与存储预算**：bet/payout/resolution、操作 ledger、已发送 outbox 和 player receipt 都是幂等/审计状态，不能
+   当缓存随手清理；后续需按业务重放窗口定义归档/压缩与磁盘预检，并证明归档后旧 operation 不会被重复执行。pending 状态不得清理。
+   临时 pytest/pyc 只在确认由本轮生成且进程退出后清理，共享缓存、运行数据库/WAL/SHM 和备份不碰。
+5. **按真实调用图清理剩余旧写路径**：优先 player/economy/inventory 等会改动资产的默认 handler，再审计
    cultivation/training、combat/dungeon/boss、sect/pet/trade 与 scheduler/Web 入口。每项记录入口、实际调用链、
    状态所有者和测试证据；只有默认调用归零后，才隔离或删除对应 legacy service。
-5. **全局依赖与完成门禁**：按同一 progress CLI 口径持续记录 `transaction_service`、`xiuxian2_handle`、
+6. **全局依赖与完成门禁**：按同一 progress CLI 口径持续记录 `transaction_service`、`xiuxian2_handle`、
    直连数据库、系统时间和全局随机依赖。兼容 shim/静态计数下降不单独算完成，退出前必须证明默认执行图已切换，
    且 architecture/progress/inventory/source-quality 门禁通过。
-6. **正式发布与 P7**：切片迁移稳定后，针对真实发布数据目录安排备份、迁移、恢复、reconcile、余额/状态对账和
+7. **正式发布与 P7**：切片迁移稳定后，针对真实发布数据目录安排备份、迁移、恢复、reconcile、余额/状态对账和
    远端冒烟，保留可审计证据。隔离 recovery smoke 不能代替真实发布周期。
 
 **子代理使用**：允许在目标相互独立时并行委派只读工作，例如一名代理追踪 handler/route/scheduler 调用图，
@@ -5084,3 +5089,5 @@ Boss 通过 `get_rift_battle_final_attributes` 注入 `get_rift_battle_impart_da
 2026-10-02 compensation gift/redeem catalog SQL cutover：新增 `legacy.compensation.006`，礼包/兑换码定义、claims、删除和清空改由 feature-owned SQL 持有；旧 JSON 仅在启动迁移中一次性导入，持久回执保留源 SHA-256 而不重复存整份快照。兑换领取校验定义版本，used-count baseline 按迁移后 SQL claims 总数校准；零 baseline 不留 counter 行。NoneBot/Web 领取预检查和 Web 领取计数改为 SQL 点查/聚合，Web 编辑保存带定义版本并经 operation ledger upsert，删除/清空检查 SQL 失败状态；`Items()` 推迟到实际物品解析时构造。损坏非空快照 fail closed；回归 `266 passed`，source-quality、progress 门禁、inventory freshness、隔离数据目录 architecture (`ok=true`)、目标 compileall 和 diff check 通过。pytest/字节码缓存禁用或隔离，临时数据库由测试自动清理，保留用户 `boss_info.json` 修改。下一片继续按 6.2 审计剩余默认旧写路径；全局 legacy transaction services、`xiuxian2_handle` 和真实发布/P7 证据仍未完成。
 
 2026-10-02 dufang shared-settlement feature-owned cutover：新增 `legacy.dufang.002` 游戏库迁移和 `legacy.dufang.003` 玩家库迁移，预建冻结共享批次/逐目标进度、兼容扩展 `unseal_data` 并增加 player-stat 唯一回执；默认共享调用改由 `DufangApplication -> DufangShareSqlRepository` 持有，旧 settlement service 保留但从 handler/repository 默认路径断开。每个目标的灵石、game progress 与 economy log 在游戏库事务内提交，玩家统计单独提交并由 `(operation_id,target_id)` 回执保护；重试扫描已应用进度，能补统计而不重复发放灵石。共享 ledger 使用稳定发起者身份，允许恢复 stale `started`，父鉴石请求重放只续跑已冻结批次；修正 application 嵌套 recipients DTO 到 handler 的属性访问。回归覆盖双库迁移路由/幂等/历史行、缺 schema 不建表、余额上限、逐目标异常回滚与续跑、并发单次结算、玩家统计失败后的回执修复、稳定 ledger 与 stale-started 恢复；dufang/inventory/architecture 聚焦回归 `36 passed`，progress 门禁聚焦回归 `24 passed`，目标文件编译和 diff check 通过。后续复核补齐部分批次 ledger 保持 `started`、settle/resume 共用稳定 action 的续跑语义，新增回归后 dufang/progress 聚焦集 `20 passed`。pytest cache/字节码关闭或隔离到 `/tmp`；未运行全量测试，未访问运行数据库，也未执行正式 migration/backup-restore/P7 演练。保留用户 `boss_info.json` 修改。后续仍需独立迁移 bet/payout 请求期 schema 建立，并继续处理全局 legacy transaction services、`xiuxian2_handle` 与真实发布证据 blockers。
+
+2026-10-02 dufang frozen-resolution and cross-database recovery：新增 game-only `legacy.dufang.005` 冻结一次 bet 的 entity/process/result/event/赔率/共享收件人计划并写 player-stat outbox，player-only `legacy.dufang.006` 预建 `(operation_id,event_type)` 唯一投影 receipt；game bet/payout 事务不再 attached 写 player DB。handler 先按消息 operation ID 读计划，只有新 bet 才抽签；相同消息继续尝试 payout/share，计划缺失的历史 pending bet fail closed。每次有效鉴石命令开头从最多 5 笔已有 pending bet 开始恢复，覆盖无消息重投的进程崩溃；started/failed ledger 能用同一 payload 重跑 repository。恢复状态将无计划 pending bet 与 outbox backlog 都纳入 pending 计数。用户累计消耗以 game bet 表的聚合值为底并和 player projection 取较大值，保证共享奖励计划在 projection 延迟时不低估 bonus。progress CLI 增加对应计划、回执、started 恢复、实际 handler 恢复入口和批次上限门禁；dufang migration/repository/application/share/source-quality 与 dufang progress 定向集合 `270 passed`，1 条既有 compatibility deprecation warning；隔离 architecture CLI `ok=true`、inventory freshness、10 个变更 Python 源码内存编译与 `git diff --check` 通过。pytest cache/pyc 禁用；专用 `/tmp/codex-dufang-*` 测试/架构目录验收后清理。一次较早的 architecture CLI 未设置 `XIUXIAN_DATA_DIR`，导入触达默认 `data/xiuxian` 路径；未删除/回滚可能的兼容标记或 SQLite sidecar，后续复验改为独立临时数据目录。未执行全量测试、正式迁移、运行数据恢复/对账或 P7；保留用户 `boss_info.json` 修改。后续目标：持久 bet/payout/ledger/outbox/receipt 的存储保留与归档预算、其余真实旧写路径、全局 `transaction_service`/`xiuxian2_handle` 门禁、正式发布/P7 证据。

@@ -15,6 +15,10 @@ class DufangBetPayoutMigrationTests(unittest.TestCase):
         player_versions = {item.version for item in migrations_for_database(migrations, "player_db")}
         self.assertIn("legacy.dufang.004", game_versions)
         self.assertNotIn("legacy.dufang.004", player_versions)
+        self.assertIn("legacy.dufang.005", game_versions)
+        self.assertNotIn("legacy.dufang.005", player_versions)
+        self.assertIn("legacy.dufang.006", player_versions)
+        self.assertNotIn("legacy.dufang.006", game_versions)
 
     def test_migration_is_idempotent_and_preserves_legacy_rows(self):
         with tempfile.TemporaryDirectory() as temp:

@@ -446,10 +446,14 @@ def _slice_status() -> dict[str, dict[str, object]]:
     past_life_events_facade = (PACKAGE / "xiuxian" / "xiuxian_past_life" / "past_life_events.py").read_text(encoding="utf-8")
     past_life_command_facade = (PACKAGE / "xiuxian" / "xiuxian_past_life" / "__init__.py").read_text(encoding="utf-8")
     dufang_facade = (PACKAGE / "xiuxian" / "xiuxian_dufang" / "__init__.py").read_text(encoding="utf-8")
+    dufang_unseal_handler = dufang_facade[
+        dufang_facade.index("async def unseal_(bot"):dufang_facade.index("# 尘封之物类型")
+    ]
     dufang_application = (PACKAGE / "features" / "dufang" / "application.py").read_text(encoding="utf-8")
     dufang_repository = (PACKAGE / "features" / "dufang" / "repository.py").read_text(encoding="utf-8")
     dufang_bet_repository = (PACKAGE / "features" / "dufang" / "bet_repository.py").read_text(encoding="utf-8")
     dufang_payout_repository = (PACKAGE / "features" / "dufang" / "payout_repository.py").read_text(encoding="utf-8")
+    dufang_player_stats_repository = (PACKAGE / "features" / "dufang" / "player_stats_repository.py").read_text(encoding="utf-8")
     dufang_share_repository = (PACKAGE / "features" / "dufang" / "share_repository.py").read_text(encoding="utf-8")
     dufang_migrations = (PACKAGE / "features" / "dufang" / "migrations.py").read_text(encoding="utf-8")
     legacy_migrated_source = (PACKAGE / "features" / "_legacy_migrated.py").read_text(encoding="utf-8")
@@ -1900,17 +1904,48 @@ def _slice_status() -> dict[str, dict[str, object]]:
                 for source in (dufang_bet_repository, dufang_payout_repository)
                 for token in ("CREATE TABLE", "ALTER TABLE")
             ),
-            "bet_payout_missing_schema_fails_closed": all(
-                "Path(self.game_database).is_file()" in source
-                and "Path(self.player_database).is_file()" in source
-                for source in (dufang_bet_repository, dufang_payout_repository)
+            "bet_payout_missing_schema_fails_closed": (
+                all("if not self.game_database.is_file()" in source or "if not Path(self.game_database).is_file()" in source
+                    for source in (dufang_bet_repository, dufang_payout_repository))
+                and "if not self.player_database.is_file()" in dufang_player_stats_repository
+                and "if not self.repository.player_projection_ready()" in dufang_application
             ),
             "bet_payout_migration_registered": (
                 "legacy.dufang.004" in legacy_migrated_source
                 and "def apply_dufang_bet_payout(" in dufang_migrations
             ),
+            "bet_resolution_migrations_registered": (
+                "legacy.dufang.005" in legacy_migrated_source
+                and "legacy.dufang.006" in legacy_migrated_source
+                and "def apply_dufang_resolution(" in dufang_migrations
+                and "def apply_dufang_player_receipts(" in dufang_migrations
+            ),
+            "bet_resolution_replay_uses_frozen_plan": (
+                "dufang_application.resolution(operation_id)" in dufang_unseal_handler
+                and "dufang_application.plan_for_bet(" in dufang_unseal_handler
+                and "dufang_bet_resolutions" in dufang_bet_repository
+                and "resolution=resolution" in dufang_unseal_handler
+                and "runtime_random." not in dufang_unseal_handler
+            ),
+            "bet_payout_player_stats_use_outbox_receipts": (
+                "append_player_outbox(" in dufang_bet_repository
+                and "append_player_outbox(" in dufang_payout_repository
+                and "dufang_player_operation_receipts" in dufang_player_stats_repository
+                and "dufang_player_operation_receipts" in dufang_migrations
+            ),
+            "bet_payout_started_ledger_recovers": (
+                'existing.status != "started"' in dufang_application
+                and "self.ledger.begin(uow, operation_id, ledger_action, ledger_request)" in dufang_application
+                and "resolution=resolution" in dufang_unseal_handler
+            ),
+            "bet_payout_pending_reconciliation_is_bounded": (
+                "limit = max(1, min(int(limit), 5))" in dufang_application
+                and "WHERE b.status='pending'" in dufang_bet_repository
+                and "LIMIT ?" in dufang_bet_repository
+                and "dufang_application.reconcile_pending(" in dufang_unseal_handler
+            ),
             "payout_result_is_read_only": "DatabaseUnitOfWork(self.game_database, read_only=True)" in dufang_payout_repository,
-            "status": "share_and_bet_payout_feature_schema_owned",
+            "status": "share_and_bet_payout_schema_owned_with_frozen_resolution_and_outbox_recovery",
         },
         "fusion": {
             "single_application_owned": "fusion_application.apply(" in fusion_facade,

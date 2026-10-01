@@ -68,6 +68,8 @@ from .dongfu.migrations import apply_dongfu
 from .dufang.migrations import (
     apply_dufang,
     apply_dufang_bet_payout,
+    apply_dufang_player_receipts,
+    apply_dufang_resolution,
     apply_dufang_share,
     apply_dufang_share_player,
 )
@@ -121,6 +123,8 @@ MIGRATIONS = tuple(
          ("legacy.dufang.002", apply_dufang_share),
          ("legacy.dufang.003", apply_dufang_share_player),
          ("legacy.dufang.004", apply_dufang_bet_payout),
+         ("legacy.dufang.005", apply_dufang_resolution),
+         ("legacy.dufang.006", apply_dufang_player_receipts),
          ("legacy.illusion.001", apply_illusion)),
         key=lambda item: item[0],
     )

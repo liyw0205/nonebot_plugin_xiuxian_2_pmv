@@ -138,9 +138,69 @@ def apply_dufang_bet_payout(uow: DatabaseUnitOfWork) -> None:
             raise RuntimeError(f"unsupported existing dufang schema: {table}")
 
 
+def apply_dufang_resolution(uow: DatabaseUnitOfWork) -> None:
+    """Persist the accepted random plan and cross-database projection work."""
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS dufang_bet_resolutions("
+        "operation_id TEXT PRIMARY KEY,plan_json TEXT NOT NULL,created_at TEXT NOT NULL)"
+    )
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS dufang_player_outbox("
+        "event_id TEXT PRIMARY KEY,operation_id TEXT NOT NULL,event_type TEXT NOT NULL,"
+        "payload_json TEXT NOT NULL,status TEXT NOT NULL DEFAULT 'pending',"
+        "created_at TEXT NOT NULL,updated_at TEXT NOT NULL,"
+        "UNIQUE(operation_id,event_type))"
+    )
+    uow.execute(
+        "CREATE INDEX IF NOT EXISTS dufang_player_outbox_pending_idx "
+        "ON dufang_player_outbox(status,created_at,event_id)"
+    )
+    uow.execute(
+        "CREATE INDEX IF NOT EXISTS dufang_bets_user_idx "
+        "ON dufang_bets(user_id,placed_at,bet_id)"
+    )
+    required = {
+        "dufang_bet_resolutions": {"operation_id", "plan_json", "created_at"},
+        "dufang_player_outbox": {
+            "event_id", "operation_id", "event_type", "payload_json", "status", "created_at", "updated_at",
+        },
+    }
+    for table, columns in required.items():
+        rows = uow.query_all(f'PRAGMA table_info("{table}")')
+        actual = {str(row["name"]).casefold() for row in rows}
+        key = "operation_id" if table == "dufang_bet_resolutions" else "event_id"
+        primary_key = next(
+            (int(row["pk"]) for row in rows if str(row["name"]).casefold() == key),
+            0,
+        )
+        if not columns.issubset(actual) or primary_key != 1:
+            raise RuntimeError(f"unsupported existing dufang schema: {table}")
+
+
+def apply_dufang_player_receipts(uow: DatabaseUnitOfWork) -> None:
+    """Prepare idempotency receipts for game-to-player stat projections."""
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS dufang_player_operation_receipts("
+        "operation_id TEXT NOT NULL,event_type TEXT NOT NULL,payload_json TEXT NOT NULL,"
+        "created_at TEXT NOT NULL,PRIMARY KEY(operation_id,event_type))"
+    )
+    rows = uow.query_all('PRAGMA table_info("dufang_player_operation_receipts")')
+    actual = {str(row["name"]).casefold() for row in rows}
+    primary_keys = {
+        str(row["name"]).casefold(): int(row["pk"])
+        for row in rows
+    }
+    if not {"operation_id", "event_type", "payload_json", "created_at"}.issubset(actual):
+        raise RuntimeError("unsupported existing dufang player receipt schema")
+    if primary_keys.get("operation_id") != 1 or primary_keys.get("event_type") != 2:
+        raise RuntimeError("unsupported existing dufang player receipt key")
+
+
 __all__ = [
     "apply_dufang",
     "apply_dufang_bet_payout",
+    "apply_dufang_player_receipts",
+    "apply_dufang_resolution",
     "apply_dufang_share",
     "apply_dufang_share_player",
 ]

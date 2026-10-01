@@ -3318,11 +3318,21 @@ class SourceQualityTests(unittest.TestCase):
         source = (
             SOURCE_ROOT / "xiuxian" / "xiuxian_dufang" / "__init__.py"
         ).read_text(encoding="utf-8")
-        handler = source[source.index("async def unseal_(bot"):]
+        start = source.index("async def unseal_(bot")
+        handler = source[start:source.index("# 尘封之物类型", start)]
         self.assertIn("dufang_application.bet(", handler)
         self.assertNotIn("dufang_bet_service.place(", handler)
         self.assertIn("dufang_application.payout(", handler)
-        self.assertIn("dufang_application.payout_result(", handler)
+        self.assertIn("dufang_application.resolution(operation_id)", handler)
+        self.assertIn("dufang_application.plan_for_bet(", handler)
+        self.assertIn("dufang_application.reconcile_pending(", handler)
+        self.assertLess(
+            handler.index("dufang_application.reconcile_pending("),
+            handler.index("current_stone = int(user_info['stone'])"),
+        )
+        self.assertIn("_settle_frozen_share(", handler)
+        self.assertNotIn("runtime_random.", handler)
+        self.assertNotIn("dufang_application.payout_result(", handler)
         self.assertNotIn("dufang_payout_service.settle(", handler)
         self.assertNotIn("dufang_payout_service.get_result(", handler)
 

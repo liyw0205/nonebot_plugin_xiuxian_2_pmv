@@ -413,6 +413,109 @@ async def unseal_message_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
     
     await handle_send(bot, event, msg, md_type="鉴石", k1="鉴石", v1="鉴石", k2="信息", v2="鉴石信息", k3="灵石", v3="灵石")
 
+def _draw_unseal_resolution(user_id, cost, previous_total_cost):
+    entity = runtime_random.choice(SEALED_ENTITIES)
+    process = runtime_random.choice(UNSEAL_PROCESS)
+    result_type = runtime_random.choices(
+        ["great_success", "success", "failure", "critical_failure"],
+        weights=[15, 50, 30, 5],
+    )[0]
+    eligible_events = [
+        item for item in UNSEAL_EVENTS[result_type]
+        if "all" in item["type"] or entity["type"] in item["type"]
+    ]
+    event = runtime_random.choice(eligible_events or UNSEAL_EVENTS[result_type])
+    ratio = event["effect"]()
+    if result_type in {"great_success", "success"}:
+        payout_outcome, gain, requested_loss = "win", int(cost * ratio), 0
+    else:
+        payout_outcome, gain, requested_loss = "loss", 0, int(cost * ratio)
+
+    sharing = None
+    if is_sharing_user(user_id):
+        should_share = (
+            result_type in {"failure", "critical_failure"} and runtime_random.random() < 0.2
+        ) or result_type == "critical_failure"
+        if not should_share:
+            should_share = (result_type == "success" and runtime_random.random() < 0.1) or result_type == "great_success"
+        if should_share:
+            sharing_users = get_random_sharing_users(user_id, runtime_random.randint(1, 3))
+            source_info = _sql_message().get_user_info_with_id(user_id)
+            if sharing_users and source_info:
+                event_type = "profit" if result_type in {"great_success", "success"} else "loss"
+                eligible = [item for item in SHARING_EVENTS if ("福泽" in item["title"]) == (event_type == "profit")]
+                share_event = runtime_random.choice(eligible)
+                recipients = []
+                for target_id in sharing_users:
+                    target_info = _sql_message().get_user_info_with_id(target_id)
+                    if target_info:
+                        recipients.append([target_id, target_info.get("user_name", "未知道友")])
+                if recipients:
+                    total_cost = int(previous_total_cost) + int(cost)
+                    bonus_percent = min(total_cost // 1000000000, 50)
+                    sharing = {
+                        "event_type": event_type,
+                        "title": share_event["title"],
+                        "desc": share_event["desc"],
+                        "effect_amount": int(int(cost * 0.1) * (1 + bonus_percent / 100)),
+                        "bonus_percent": int(bonus_percent),
+                        "recipients": recipients,
+                    }
+
+    return {
+        "entity": {"name": entity["name"], "desc": entity["desc"]},
+        "process": process,
+        "result_type": result_type,
+        "event": {"title": event["title"], "desc": event["desc"], "outcome": event["outcome"]},
+        "payout_outcome": payout_outcome,
+        "gain": gain,
+        "requested_loss": requested_loss,
+        "sharing": sharing,
+    }
+
+
+async def _settle_frozen_share(bot, event, user_id, bet_id, sharing, settled_at):
+    if not isinstance(sharing, dict) or not sharing.get("recipients"):
+        return None
+    share_operation_id = f"dufang-share:{bet_id}"
+    if dufang_application.share_exists(share_operation_id):
+        outcome = dufang_application.resume_share(
+            operation_id=share_operation_id,
+            user_id=user_id,
+            settled_at=settled_at,
+        )
+    else:
+        outcome = dufang_application.share_settle(
+            operation_id=share_operation_id,
+            user_id=user_id,
+            event_type=sharing["event_type"],
+            title=sharing["title"],
+            desc=sharing["desc"],
+            effect_amount=sharing["effect_amount"],
+            cost_bonus_percent=sharing["bonus_percent"],
+            recipients=sharing["recipients"],
+            settled_at=settled_at,
+        )
+    if not outcome.ok:
+        return None
+    settlement = _share_settlement_from_outcome(outcome)
+    source_info = _sql_message().get_user_info_with_id(user_id) or {}
+    if outcome.replayed:
+        sign = "+" if settlement.event_type == "profit" else "-"
+        affected = [
+            f"{recipient.user_name}({sign}{number_to(recipient.amount)})"
+            for recipient in settlement.recipients
+            if recipient.amount > 0
+        ]
+    else:
+        affected = _record_shared_settlement(
+            user_id,
+            source_info.get("user_name", user_id),
+            settlement,
+        )
+    return _shared_settlement_text(settlement, affected)
+
+
 # 鉴石主逻辑
 @unseal.handle(parameterless=[Cooldown(stamina_cost=20)])
 async def unseal_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
@@ -422,48 +525,88 @@ async def unseal_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
         await handle_send(bot, event, msg, md_type="我要修仙")
         return
     
-    user_id = user_info['user_id']
-    current_stone = int(user_info['stone'])
-    
-    # 灵石门槛检查
-    if current_stone < 100000000:
-        needed = 100000000 - current_stone
-        msg = f"金银阁暂不接待灵石不足的道友，还需{number_to(needed)}灵石"
-        await handle_send(bot, event, msg, md_type="鉴石", k1="鉴石", v1="鉴石", k2="信息", v2="鉴石信息", k3="灵石", v3="灵石")
-        return
-    
+    user_id = str(user_info['user_id'])
     if str(send_group_id) in BANNED_UNSEAL_IDS:
-        msg = f"本群不可鉴石！"
-        await handle_send(bot, event, msg, md_type="鉴石", k1="鉴石", v1="鉴石", k2="信息", v2="鉴石信息", k3="灵石", v3="灵石")
+        await handle_send(bot, event, "本群不可鉴石！", md_type="鉴石", k1="鉴石", v1="鉴石", k2="信息", v2="鉴石信息", k3="灵石", v3="灵石")
         return
-    
-    # 处理传入的灵石参数
-    arg = args.extract_plain_text().strip()
-    if arg.isdigit():
-        input_stone = int(arg)
-        max_stone = current_stone // 10  # 最大可传入灵石为当前灵石的10%
-        max_stone = min(max_stone, 1000000000)
-        cost = min(input_stone, max_stone) if max_stone > 0 else 0
-        if cost <= 0:
-            msg = "传入的灵石无效，将使用基础解封消耗100万灵石"
-            cost = 1000000
-    else:
-        cost = 1000000  # 基础解封消耗
-    
-    if current_stone < cost:
-        msg = f"解封需要{cost}枚灵石作为法力消耗，当前仅有{current_stone}枚！"
-        await handle_send(bot, event, msg, md_type="鉴石", k1="鉴石", v1="鉴石", k2="信息", v2="鉴石信息", k3="灵石", v3="灵石")
+
+    dufang_application.reconcile_pending(
+        limit=5,
+        settled_at=runtime_clock.now().strftime("%Y-%m-%d %H:%M:%S"),
+    )
+
+    isUser, user_info, msg = check_user(event)
+    if not isUser:
+        await handle_send(bot, event, msg, md_type="我要修仙")
         return
-    
+    user_id = str(user_info['user_id'])
+    current_stone = int(user_info['stone'])
+
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
     operation_id = f"dufang-bet:{event_id}:{user_id}" if event_id else f"dufang-bet:{user_id}:{runtime_ids.new_id()}"
     payout_operation_id = f"dufang-payout:{operation_id}"
+    frozen = dufang_application.resolution(operation_id)
+    if frozen.status == "schema_missing":
+        await handle_send(bot, event, "鉴石暂不可用：下注数据迁移尚未就绪。", md_type="鉴石")
+        return
+    if frozen.status == "resolution_missing":
+        await handle_send(bot, event, "本次鉴石记录缺少已保存结果，已停止自动结算以避免重抽。", md_type="鉴石")
+        return
+
+    if frozen.status == "not_found":
+        if current_stone < 100000000:
+            needed = 100000000 - current_stone
+            msg = f"金银阁暂不接待灵石不足的道友，还需{number_to(needed)}灵石"
+            await handle_send(bot, event, msg, md_type="鉴石", k1="鉴石", v1="鉴石", k2="信息", v2="鉴石信息", k3="灵石", v3="灵石")
+            return
+
+        arg = args.extract_plain_text().strip()
+        if arg.isdigit():
+            input_stone = int(arg)
+            max_stone = min(current_stone // 10, 1000000000)
+            cost = min(input_stone, max_stone) if max_stone > 0 else 0
+            if cost <= 0:
+                cost = 1000000
+        else:
+            cost = 1000000
+        if current_stone < cost:
+            msg = f"解封需要{cost}枚灵石作为法力消耗，当前仅有{current_stone}枚！"
+            await handle_send(bot, event, msg, md_type="鉴石", k1="鉴石", v1="鉴石", k2="信息", v2="鉴石信息", k3="灵石", v3="灵石")
+            return
+        planned = dufang_application.plan_for_bet(
+            operation_id,
+            draw=lambda: _draw_unseal_resolution(
+                user_id,
+                cost,
+                dufang_application.player_total_cost(user_id),
+            ),
+        )
+        if planned.status == "schema_missing":
+            await handle_send(bot, event, "鉴石暂不可用：下注数据迁移尚未就绪。", md_type="鉴石")
+            return
+        if planned.status == "resolution_missing":
+            await handle_send(bot, event, "本次鉴石记录缺少已保存结果，已停止自动结算以避免重抽。", md_type="鉴石")
+            return
+        if planned.status == "not_found":
+            resolution = planned.resolution
+        else:
+            cost = planned.cost
+            resolution = planned.resolution
+    else:
+        cost = frozen.cost
+        resolution = frozen.resolution
+
+    if not isinstance(resolution, dict) or not isinstance(resolution.get("event"), dict):
+        await handle_send(bot, event, "本次鉴石结果数据无效，已停止自动结算。", md_type="鉴石")
+        return
+
     placed_at = runtime_clock.now().strftime("%Y-%m-%d %H:%M:%S")
     bet_outcome = dufang_application.bet(
         operation_id=operation_id,
         user_id=user_id,
         cost=cost,
         placed_at=placed_at,
+        resolution=resolution,
     )
     bet_data = dict(bet_outcome.data or {})
     bet_data.setdefault("status", bet_outcome.status)
@@ -478,96 +621,15 @@ async def unseal_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
     if bet.status == "user_missing":
         await handle_send(bot, event, "未找到修仙数据，本次鉴石未下注。", md_type="我要修仙")
         return
-    if bet.status == "duplicate":
-        prior_pay = dufang_application.payout_result(payout_operation_id)
-        if prior_pay is not None and prior_pay.status == "schema_missing":
-            await handle_send(bot, event, "鉴石暂不可用：派彩数据迁移尚未就绪。", md_type="鉴石")
-            return
-        if prior_pay is not None and prior_pay.succeeded:
-            share_text = None
-            share_operation_id = f"dufang-share:{operation_id}"
-            if dufang_application.share_exists(share_operation_id):
-                share_outcome = dufang_application.resume_share(
-                    operation_id=share_operation_id,
-                    user_id=user_id,
-                    settled_at=runtime_clock.now().strftime("%Y-%m-%d %H:%M:%S"),
-                )
-                if share_outcome.ok and not share_outcome.replayed:
-                    source_info = _sql_message().get_user_info_with_id(user_id) or {}
-                    share_settlement = _share_settlement_from_outcome(share_outcome)
-                    if share_settlement.succeeded:
-                        affected = _record_shared_settlement(
-                            user_id,
-                            source_info.get("user_name", user_id),
-                            share_settlement,
-                        )
-                        share_text = _shared_settlement_text(share_settlement, affected)
-            if prior_pay.gain > 0:
-                effect_text = f"获得 {number_to(prior_pay.gain)} 灵石"
-            else:
-                effect_text = f"损失 {number_to(prior_pay.loss)} 灵石"
-            msg = (
-                f"鉴石已完成（重放）。\n"
-                f"消耗：{number_to(bet.cost)}灵石\n"
-                f"{effect_text}\n"
-                f"当前灵石：{prior_pay.wallet_stone}({number_to(prior_pay.wallet_stone)})\n"
-                f"该鉴石请求已经处理，无需重复提交。"
-            )
-            if share_text:
-                msg = f"{msg}\n\n{share_text}"
-            await handle_send(bot, event, msg, md_type="鉴石", k1="鉴石", v1="鉴石", k2="信息", v2="鉴石信息", k3="灵石", v3="灵石")
-            return
-        await handle_send(bot, event, "本次鉴石请求已受理，请勿重复提交。", md_type="鉴石")
-        return
     if not bet.succeeded:
         await handle_send(bot, event, "鉴石未结算：下注当前状态已更新。", md_type="鉴石")
         return
-    current_stone = bet.wallet_stone
-
-    # 获取事务内已更新的鉴石统计
-    unseal_data = get_unseal_data(user_id)
-    
-    # 随机选择封印物
-    entity = runtime_random.choice(SEALED_ENTITIES)
-    base_msg = [
-        f"【发现尘封之物】",
-        f"名称：{entity['name']}",
-        f"{entity['desc']}",
-        "你开始谨慎地解封这个尘封已久的..."
-    ]
-    
-    # 添加随机解封过程
-    base_msg.append(runtime_random.choice(UNSEAL_PROCESS))
-    
-    # 结果判定 (大成功15%, 成功50%, 失败30%, 大失败5%)
-    result = runtime_random.choices(
-        ["great_success", "success", "failure", "critical_failure"],
-        weights=[15, 50, 30, 5]
-    )[0]
-    
-    # 筛选符合当前物品类型的事件
-    eligible_events = [
-        e for e in UNSEAL_EVENTS[result] 
-        if "all" in e["type"] or entity["type"] in e["type"]
-    ]
-    events = runtime_random.choice(eligible_events) if eligible_events else runtime_random.choice(UNSEAL_EVENTS[result])
-    
-    base_ratio = events["effect"]()
-    if result in ["great_success", "success"]:
-        gain = int(cost * base_ratio)
-        requested_loss = 0
-        outcome = "win"
-    else:
-        gain = 0
-        requested_loss = int(cost * base_ratio)
-        outcome = "loss"
+    cost = int(bet.cost)
+    resolution = bet.resolution or resolution
     payout_outcome = dufang_application.payout(
         operation_id=payout_operation_id,
         user_id=user_id,
         bet_id=operation_id,
-        outcome=outcome,
-        gain=gain,
-        requested_loss=requested_loss,
         settled_at=runtime_clock.now().strftime("%Y-%m-%d %H:%M:%S"),
     )
     payout_data = dict(payout_outcome.data or {})
@@ -580,52 +642,46 @@ async def unseal_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
     if not payout.succeeded:
         await handle_send(bot, event, "鉴石派彩未入账或已处理，请稍后查看灵石余额。", md_type="鉴石")
         return
-    current_stone = payout.wallet_stone
-    unseal_data = get_unseal_data(user_id)
-    if outcome == "win":
+
+    payout_outcome_type = str(resolution["payout_outcome"])
+    if payout_outcome_type == "win":
         effect_text = f"获得 {number_to(payout.gain)} 灵石"
-        log_message(user_id, f"进行鉴石，消耗灵石：{number_to(cost)}枚\n鉴石成功！获得灵石：{number_to(payout.gain)}枚")
+        if not payout_outcome.replayed and payout.status != "duplicate":
+            log_message(user_id, f"进行鉴石，消耗灵石：{number_to(cost)}枚\n鉴石成功！获得灵石：{number_to(payout.gain)}枚")
     else:
         effect_text = f"损失 {number_to(payout.loss)} 灵石"
-        log_message(user_id, f"进行鉴石，消耗灵石：{number_to(cost)}枚\n鉴石失败！损失灵石：{number_to(payout.loss)}枚")
-    
-    # 构建完整消息
-    full_msg = [
-        "\n".join(base_msg),
-        f"\n【{events['title']}】",
-        events['desc'],
-        f"{events['outcome']}，{effect_text}",
-        f"\n消耗：{number_to(cost)}灵石",
-        f"当前灵石：{current_stone}({number_to(current_stone)})"
+        if not payout_outcome.replayed and payout.status != "duplicate":
+            log_message(user_id, f"进行鉴石，消耗灵石：{number_to(cost)}枚\n鉴石失败！损失灵石：{number_to(payout.loss)}枚")
+
+    entity = resolution["entity"]
+    result_event = resolution["event"]
+    base_msg = [
+        "【发现尘封之物】",
+        f"名称：{entity['name']}",
+        str(entity["desc"]),
+        "你开始谨慎地解封这个尘封已久的...",
+        str(resolution["process"]),
     ]
-    
-    final_msg = "\n".join(full_msg)
+    final_msg = "\n".join([
+        "\n".join(base_msg),
+        f"\n【{result_event['title']}】",
+        str(result_event["desc"]),
+        f"{result_event['outcome']}，{effect_text}",
+        f"\n消耗：{number_to(cost)}灵石",
+        f"当前灵石：{payout.wallet_stone}({number_to(payout.wallet_stone)})",
+    ])
     await handle_send(bot, event, final_msg, md_type="鉴石", k1="鉴石", v1="鉴石", k2="信息", v2="鉴石信息", k3="灵石", v3="灵石")
-    
-    # 处理共享事件
-    if is_sharing_user(user_id):
-        # 负面结果有20%概率触发共享，大失败100%触发
-        if (result in ["failure", "critical_failure"] and runtime_random.random() < 0.2) or result == "critical_failure":
-            shared_event_msg, _ = await handle_shared_event(
-                user_id=user_id,
-                current_cost=cost,          # 本次鉴石消耗
-                total_cost=unseal_data["unseal_info"]["total_cost"],  # 总消耗
-                result_type=result,
-                operation_id=f"dufang-share:{operation_id}",
-            )
-            if shared_event_msg:
-                await handle_send(bot, event, shared_event_msg, md_type="鉴石", k1="鉴石", v1="鉴石", k2="信息", v2="鉴石信息", k3="灵石", v3="灵石")
-        # 正面结果有10%概率触发共享，大成功100%触发
-        elif (result == "success" and runtime_random.random() < 0.1) or (result == "great_success"):
-            shared_event_msg, _ = await handle_shared_event(
-                user_id=user_id,
-                current_cost=cost,          # 本次鉴石消耗
-                total_cost=unseal_data["unseal_info"]["total_cost"],  # 总消耗
-                result_type=result,
-                operation_id=f"dufang-share:{operation_id}",
-            )
-            if shared_event_msg:
-                await handle_send(bot, event, shared_event_msg, md_type="鉴石", k1="鉴石", v1="鉴石", k2="信息", v2="鉴石信息", k3="灵石", v3="灵石")
+
+    share_text = await _settle_frozen_share(
+        bot,
+        event,
+        user_id,
+        operation_id,
+        resolution.get("sharing"),
+        runtime_clock.now().strftime("%Y-%m-%d %H:%M:%S"),
+    )
+    if share_text:
+        await handle_send(bot, event, share_text, md_type="鉴石", k1="鉴石", v1="鉴石", k2="信息", v2="鉴石信息", k3="灵石", v3="灵石")
 
 
 # 尘封之物类型（共20种）
