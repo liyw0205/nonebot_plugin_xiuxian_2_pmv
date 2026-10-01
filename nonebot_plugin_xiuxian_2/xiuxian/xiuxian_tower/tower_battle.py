@@ -21,7 +21,15 @@ from ...paths import get_paths
 from ..xiuxian_config import XiuConfig
 
 _sql_message_instance = None
-items = Items()
+_items_instance = None
+
+
+def _items():
+    """Load the shared item catalog only when a tower reward is generated."""
+    global _items_instance
+    if _items_instance is None:
+        _items_instance = Items()
+    return _items_instance
 tower_application = TowerApplication(
     get_paths().game_db,
     get_paths().player_db,
@@ -448,12 +456,12 @@ class TowerBattle:
         else:
             zx_rank = base_rank(user_level, 5)
         # 获取随机物品
-        item_id_list = items.get_random_id_list_by_rank_and_item_type(zx_rank, item_type)
+        item_id_list = _items().get_random_id_list_by_rank_and_item_type(zx_rank, item_type)
         if not item_id_list:
             return None, "无"
         
         item_id = rng.choice(item_id_list)
-        item_info = items.get_data_by_item_id(item_id)
+        item_info = _items().get_data_by_item_id(item_id)
         
         return {"id": item_id, "name": item_info["name"], "type": item_info["type"], "amount": 1}, f"{item_info['level']}:{item_info['name']}"
 

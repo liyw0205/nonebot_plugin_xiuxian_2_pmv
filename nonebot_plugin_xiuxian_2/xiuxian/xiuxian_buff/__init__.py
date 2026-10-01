@@ -7,6 +7,7 @@ from types import SimpleNamespace
 from nonebot.log import logger
 from ...paths import get_paths
 from ...features.buff.application import BuffApplication
+from ...features.player_state.application import PlayerStateApplication
 from ...features.buff.pvp_battle import calculate_battle
 from ...infrastructure.clock import SystemClock
 from ...infrastructure.random_source import SystemRandom
@@ -79,6 +80,7 @@ _closing_settlement_service_instance = None
 _normal_training_lifecycle_service_instance = None
 _stone_training_settlement_service_instance = None
 buff_application = BuffApplication(get_paths().game_db, get_paths().player_db)
+player_state_application = PlayerStateApplication(get_paths().player_db)
 runtime_clock = SystemClock()
 runtime_random = SystemRandom()
 runtime_ids = UUIDGenerator()
@@ -108,6 +110,17 @@ def _sql_message():
     if _sql_message_instance is None:
         _sql_message_instance = XiuxianDateManage()
     return _sql_message_instance
+
+
+def _initialize_player_state(user_id: str, profile=None):
+    # Compatibility fallback remains available as _sql_message().update_user_hp(user_id).
+    result = player_state_application.initialize_if_empty(
+        user_id,
+        fallback=lambda value: _sql_message().update_user_hp(value),
+    )
+    if profile is not None and result.hp is not None:
+        profile["hp"], profile["mp"], profile["atk"] = result.hp, result.mp, result.atk
+    return result
 
 
 def _blessed_spot_service():
@@ -441,7 +454,7 @@ async def qc_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Me
     user2 = get_player_attributes(give_qq) if give_qq else None
 
     if base1 and (base1['hp'] is None or base1['hp'] == 0):
-        _sql_message().update_user_hp(user_id)
+        _initialize_player_state(user_id, base1)
         base1 = _sql_message().get_user_info_with_id(user_id)
         user1 = get_player_attributes(user_id)
 

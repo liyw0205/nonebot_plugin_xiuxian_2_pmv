@@ -54,6 +54,7 @@ from .stone_limit import stone_limit
 from ...features.sign_in.application import SignInApplication
 from ...features.sign_in.lottery_application import LotteryApplication
 from ...features.sign_in.effects import NullSignInEffects
+from ...features.player_state.application import PlayerStateApplication
 from .registration_batch import RegistrationBatcher, RegistrationRequest
 from .breakthrough_tribulation import *  # noqa: F401,F403
 from .xiangyuan import clear_all_xiangyuan, reset_xiangyuan_daily  # noqa: F401
@@ -86,6 +87,7 @@ def _lottery_application() -> LotteryApplication:
     return lottery_application
 
 base_application = BaseApplication(get_paths().game_db, get_paths().player_db)
+player_state_application = PlayerStateApplication(get_paths().player_db)
 _stone_gift_service_instance = None
 runtime_clock = SystemClock()
 runtime_random = SystemRandom()
@@ -97,6 +99,17 @@ def _sql_message():
     if _sql_message_instance is None:
         _sql_message_instance = XiuxianDateManage()
     return _sql_message_instance
+
+
+def _initialize_player_state(user_id: str, profile=None):
+    # Compatibility fallback remains available as _sql_message().update_user_hp(user_id).
+    result = player_state_application.initialize_if_empty(
+        user_id,
+        fallback=lambda value: _sql_message().update_user_hp(value),
+    )
+    if profile is not None and result.hp is not None:
+        profile["hp"], profile["mp"], profile["atk"] = result.hp, result.mp, result.atk
+    return result
 
 
 def _stone_gift_service():
@@ -822,7 +835,7 @@ async def run_xiuxian_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
         # 补全初始气血
         new_user_info = get_user_profile(user_id)
         if new_user_info and (new_user_info.get('hp') is None or new_user_info.get('hp') == 0):
-            _sql_message().update_user_hp(user_id)
+            _initialize_player_state(user_id, new_user_info)
 
     final_msg = (
         f"{create_msg}\n"

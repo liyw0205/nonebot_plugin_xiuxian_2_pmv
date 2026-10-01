@@ -41,17 +41,19 @@ from ...features.world_events.application import SpiritVeinLifecycleApplication
 from ...features.world_events.attack_application import DemonAttackApplication
 from ...features.world_events.application import DemonEventLifecycleApplication
 from ...features.world_events.repository import WorldEventClaimSqlRepository
+from ...features.player_state.application import PlayerStateApplication
 
 
 scheduler = require("nonebot_plugin_apscheduler").scheduler
 _sql_message_instance = None
 _player_data_manager_instance = None
-items = Items()
+_items_instance = None
 demon_claim_application = DemonClaimApplication(
     get_paths().game_db,
     get_paths().player_db,
     repository=WorldEventClaimSqlRepository(get_paths().game_db, get_paths().player_db),
 )
+player_state_application = PlayerStateApplication(get_paths().player_db)
 
 
 demon_attack_application = DemonAttackApplication(get_paths().player_db)
@@ -87,6 +89,25 @@ def _sql_message():
     if _sql_message_instance is None:
         _sql_message_instance = XiuxianDateManage()
     return _sql_message_instance
+
+
+def _items():
+    """Load the shared item catalog only when an event reward needs it."""
+    global _items_instance
+    if _items_instance is None:
+        _items_instance = Items()
+    return _items_instance
+
+
+def _initialize_player_state(user_id: str, profile=None):
+    # Compatibility fallback remains available as _sql_message().update_user_hp(user_id).
+    result = player_state_application.initialize_if_empty(
+        user_id,
+        fallback=lambda value: _sql_message().update_user_hp(value),
+    )
+    if profile is not None and result.hp is not None:
+        profile["hp"], profile["mp"], profile["atk"] = result.hp, result.mp, result.atk
+    return result
 
 EVENT_TABLE = "world_event_state"
 EVENT_KEY = "global"
@@ -303,7 +324,7 @@ def _is_demon_random_reward_item(item: dict, contribution: float) -> bool:
 
 def _get_demon_random_reward_pool(contribution: float) -> list[tuple[int, dict]]:
     pool = []
-    for item_id, item in items.items.items():
+    for item_id, item in _items().items.items():
         if not _is_demon_random_reward_item(item, contribution):
             continue
         try:
@@ -1310,7 +1331,7 @@ async def attack_demon_invasion_(bot: Bot, event: GroupMessageEvent | PrivateMes
 
     update_last_check_info_time(user_id)
     if user_info["hp"] is None or user_info["hp"] == 0:
-        _sql_message().update_user_hp(user_id)
+        _initialize_player_state(user_id, user_info)
         user_info = _sql_message().get_user_info_with_id(user_id)
 
     if user_info["hp"] <= user_info["exp"] / 10:
@@ -1567,7 +1588,7 @@ async def claim_demon_reward_(bot: Bot, event: GroupMessageEvent | PrivateMessag
 
     reward_items = []
     if talisman_reward > 0:
-        talisman_info = items.get_data_by_item_id(DEMON_TALISMAN_ITEM_ID)
+        talisman_info = _items().get_data_by_item_id(DEMON_TALISMAN_ITEM_ID)
         if talisman_info:
             reward_items.append({"id": DEMON_TALISMAN_ITEM_ID, "name": talisman_info["name"], "type": talisman_info["type"], "amount": talisman_reward})
 

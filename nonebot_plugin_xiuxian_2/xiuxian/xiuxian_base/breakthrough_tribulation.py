@@ -8,6 +8,7 @@ from datetime import datetime
 
 from ...paths import get_paths
 from ...infrastructure.ids import UUIDGenerator
+from ...features.player_state.application import PlayerStateApplication
 from ..on_compat import on_command
 from nonebot.params import CommandArg
 
@@ -32,6 +33,7 @@ from ...compatibility.legacy_base_pill_fusion import PillFusionService
 from ...compatibility.legacy_base_tribulation_state_migration import TribulationStateMigrationService
 
 _sql_message_instance = None
+player_state_application = PlayerStateApplication(get_paths().player_db)
 _breakthrough_service_instance = None
 _pill_fusion_service_instance = None
 _ordinary_tribulation_service_instance = None
@@ -48,6 +50,17 @@ def _sql_message():
     if _sql_message_instance is None:
         _sql_message_instance = XiuxianDateManage()
     return _sql_message_instance
+
+
+def _initialize_player_state(user_id: str, profile=None):
+    # Compatibility fallback remains available as _sql_message().update_user_hp(user_id).
+    result = player_state_application.initialize_if_empty(
+        user_id,
+        fallback=lambda value: _sql_message().update_user_hp(value),
+    )
+    if profile is not None and result.hp is not None:
+        profile["hp"], profile["mp"], profile["atk"] = result.hp, result.mp, result.atk
+    return result
 
 
 def _breakthrough_service():
@@ -1007,7 +1020,7 @@ async def level_up_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     user_id = user_info['user_id']
     if user_info['hp'] is None:
         # 判断用户气血是否为空
-        _sql_message().update_user_hp(user_id)
+        _initialize_player_state(user_id, user_info)
     user_msg = _sql_message().get_user_info_with_id(user_id)  # 用户信息
     user_leveluprate = int(user_msg['level_up_rate'])  # 用户失败次数加成
     level_cd = user_msg['level_up_cd']
@@ -1067,7 +1080,7 @@ async def level_up_zj_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
     user_id = user_info['user_id']
     if user_info['hp'] is None:
         # 判断用户气血是否为空
-        _sql_message().update_user_hp(user_id)
+        _initialize_player_state(user_id, user_info)
     user_msg = _sql_message().get_user_info_with_id(user_id)  # 用户信息
     level_cd = user_msg['level_up_cd']
     if level_cd:
@@ -1174,7 +1187,7 @@ async def level_up_lx_continuous(bot: Bot, event: GroupMessageEvent | PrivateMes
     
     user_id = user_info['user_id']
     if user_info['hp'] is None:
-        _sql_message().update_user_hp(user_id)
+        _initialize_player_state(user_id, user_info)
     
     user_msg = _sql_message().get_user_info_with_id(user_id)
     level_cd = user_msg['level_up_cd']
@@ -1298,7 +1311,7 @@ async def level_up_drjd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     user_id = user_info['user_id']
     if user_info['hp'] is None:
         # 判断用户气血是否为空
-        _sql_message().update_user_hp(user_id)
+        _initialize_player_state(user_id, user_info)
     user_msg = _sql_message().get_user_info_with_id(user_id)  # 用户信息
     level_cd = user_msg['level_up_cd']
     if level_cd:
@@ -1421,7 +1434,7 @@ async def level_up_dr_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
     user_id = user_info['user_id']
     if user_info['hp'] is None:
         # 判断用户气血是否为空
-        _sql_message().update_user_hp(user_id)
+        _initialize_player_state(user_id, user_info)
     user_msg = _sql_message().get_user_info_with_id(user_id)  # 用户信息
     level_cd = user_msg['level_up_cd']
     if level_cd:
@@ -1539,7 +1552,7 @@ async def level_up_dr_lx_continuous(bot: Bot, event: GroupMessageEvent | Private
     
     user_id = user_info['user_id']
     if user_info['hp'] is None:
-        _sql_message().update_user_hp(user_id)
+        _initialize_player_state(user_id, user_info)
     
     user_msg = _sql_message().get_user_info_with_id(user_id)
     level_cd = user_msg['level_up_cd']
@@ -1686,7 +1699,7 @@ async def level_up_drjd_lx_continuous(bot: Bot, event: GroupMessageEvent | Priva
     
     user_id = user_info['user_id']
     if user_info['hp'] is None:
-        _sql_message().update_user_hp(user_id)
+        _initialize_player_state(user_id, user_info)
     
     user_msg = _sql_message().get_user_info_with_id(user_id)
     level_cd = user_msg['level_up_cd']

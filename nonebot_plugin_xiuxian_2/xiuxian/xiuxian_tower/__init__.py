@@ -28,19 +28,21 @@ from .transaction_service import normalize_weekly_purchases
 from .transaction_service import TowerSettlementResult
 from ...features.tower.application import TowerApplication
 from ...features.tower.repository import TowerPurchaseSqlRepository
+from ...features.player_state.application import PlayerStateApplication
 from ...infrastructure.ids import UUIDGenerator
 from ...paths import get_paths
 from ..xiuxian_config import XiuConfig
 from ..xiuxian_title.title_data import check_and_unlock_titles
 _player_data_manager_instance = None
 _sql_message_instance = None
-items = Items()
+_items_instance = None
 tower_application = TowerApplication(
     get_paths().game_db,
     get_paths().player_db,
     repository=TowerPurchaseSqlRepository(get_paths().game_db, get_paths().player_db),
 )
 tower_ids = UUIDGenerator()
+player_state_application = PlayerStateApplication(get_paths().player_db)
 
 
 def _resolve_player_data_manager():
@@ -67,6 +69,25 @@ def _sql_message():
     if _sql_message_instance is None:
         _sql_message_instance = XiuxianDateManage()
     return _sql_message_instance
+
+
+def _items():
+    """Load the shared item catalog only when the tower shop needs it."""
+    global _items_instance
+    if _items_instance is None:
+        _items_instance = Items()
+    return _items_instance
+
+
+def _initialize_player_state(user_id: str, profile=None):
+    # Compatibility fallback remains available as _sql_message().update_user_hp(user_id).
+    result = player_state_application.initialize_if_empty(
+        user_id,
+        fallback=lambda value: _sql_message().update_user_hp(value),
+    )
+    if profile is not None and result.hp is not None:
+        profile["hp"], profile["mp"], profile["atk"] = result.hp, result.mp, result.atk
+    return result
 
 
 # 定义命令
@@ -185,7 +206,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await handle_send(bot, event, msg, md_type="0", k2="修仙帮助", v2="修仙帮助", k3="通天塔帮助", v3="通天塔帮助")
         await tower_challenge.finish()
     if user_info['hp'] is None or user_info['hp'] == 0:
-        _sql_message().update_user_hp(user_id)
+        _initialize_player_state(user_id, user_info)
 
     if user_info['hp'] <= user_info['exp'] / 10:
         time = leave_harm_time(user_id)
@@ -244,7 +265,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         await tower_continuous.finish()
 
     if user_info['hp'] is None or user_info['hp'] == 0:
-        _sql_message().update_user_hp(user_id)
+        _initialize_player_state(user_id, user_info)
 
     if user_info['hp'] <= user_info['exp'] / 10:
         time = leave_harm_time(user_id)
@@ -331,7 +352,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     msg_list.append(f"════════════\n【通天塔商店】第{page}/{total_pages}页")
     
     for item_id, item_data in current_page_items:
-        item_info = items.get_data_by_item_id(item_id)
+        item_info = _items().get_data_by_item_id(item_id)
         already_purchased = tower_limit.get_weekly_purchases(user_id, item_id)
         if item_info:  # 确保物品存在
             msg_list.append(
@@ -376,7 +397,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     
     item_data = shop_items[item_id]
     # 检查物品是否存在
-    item_info = items.get_data_by_item_id(item_id)
+    item_info = _items().get_data_by_item_id(item_id)
     if not item_info:
         msg = "该物品不存在！"
         await handle_send(bot, event, msg, md_type="通天塔", k1="兑换", v1="通天塔兑换", k2="商店", v2="通天塔帮助", k3="信息", v3="通天塔信息")

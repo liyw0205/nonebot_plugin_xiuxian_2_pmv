@@ -18,6 +18,7 @@ from .training_limit import training_limit
 from .training_events import training_events
 from ...paths import get_paths
 from ...features.training.application import TrainingApplication
+from ...features.player_state.application import PlayerStateApplication
 from ...infrastructure.clock import SystemClock
 from ...infrastructure.ids import UUIDGenerator
 from ..xiuxian_config import XiuConfig, convert_rank
@@ -29,6 +30,7 @@ _player_data_manager_instance = None
 _sql_message_instance = None
 _items_instance = None
 training_application = TrainingApplication(get_paths().game_db, get_paths().player_db)
+player_state_application = PlayerStateApplication(get_paths().player_db)
 runtime_clock = SystemClock()
 runtime_ids = UUIDGenerator()
 
@@ -84,6 +86,17 @@ def _run_training_action(action: str, operation_id: str, user_id: str, **payload
     data["succeeded"] = outcome.ok
     from types import SimpleNamespace
     return SimpleNamespace(**data)
+
+
+def _initialize_player_state(user_id: str, profile=None):
+    # Compatibility fallback remains available as _sql_message().update_user_hp(user_id).
+    result = player_state_application.initialize_if_empty(
+        user_id,
+        fallback=lambda value: _sql_message().update_user_hp(value),
+    )
+    if profile is not None and result.hp is not None:
+        profile["hp"], profile["mp"], profile["atk"] = result.hp, result.mp, result.atk
+    return result
 # 定义命令
 training_start = on_command("开始历练", aliases={"历练开始"}, priority=5, block=True)
 training_status = on_command("历练状态", priority=5, block=True)
@@ -139,7 +152,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     
     # 检查气血
     if user_info['hp'] is None or user_info['hp'] == 0:
-        _sql_message().update_user_hp(user_id)
+        _initialize_player_state(user_id, user_info)
     
     if user_info['hp'] <= user_info['exp'] / 10:
         time = leave_harm_time(user_id)
