@@ -12,6 +12,8 @@ No new HTTP route is exposed in this migration slice. Existing URLs remain serve
 ## 数据模型与迁移
 Migration `legacy.admin.001` records the slice in `game_db`; the feature-owned repository and explicit service port now own the operation boundary while legacy tables remain the compatibility data source.
 
+管理员 `易名` 使用 `BaseApplication -> BaseRenameSqlRepository` 更新玩家道号，并复用 `base.002` 的操作回执；旧管理器仅用于目标查询，不再执行该写入。
+
 ## 事务与失败回滚
 Mutating calls carry an `operation_id` and are recorded in the operation ledger. Disable the feature flag or restore the pre-migration backup to roll back.
 

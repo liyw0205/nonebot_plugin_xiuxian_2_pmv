@@ -20,6 +20,15 @@ def test_base_rename_replay_and_schema_are_feature_owned():
     ).read_text(encoding="utf-8")
 
 
+def test_admin_rename_default_writer_uses_base_application():
+    root = Path(__file__).parents[1] / "nonebot_plugin_xiuxian_2"
+    facade = (root / "xiuxian/xiuxian_admin/__init__.py").read_text(encoding="utf-8")
+    handler = facade[facade.index("@admin_rename_cmd.handle") : facade.index("# GM加灵石")]
+    assert "admin_base_application.rename(" in handler
+    assert '_admin_operation_id(event, "user-rename", target_user_id)' in handler
+    assert "_sql_message().update_user_name(" not in handler
+
+
 def test_base_rename_migration_routes_only_to_game_database():
     from nonebot_plugin_xiuxian_2.plugin import build_migrations, migrations_for_database
 

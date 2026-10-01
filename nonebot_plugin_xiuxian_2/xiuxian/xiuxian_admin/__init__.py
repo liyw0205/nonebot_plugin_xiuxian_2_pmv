@@ -13,6 +13,7 @@ from ...paths import get_paths
 from ...features.admin_asset.application import AdminAssetApplication
 from ...features.admin_asset.root_repository import AdminRootChangeSqlRepository
 from ...features.admin.application import AdminApplication
+from ...features.base.application import BaseApplication
 from nonebot.typing import T_State
 from nonebot.permission import SUPERUSER
 from nonebot.log import logger
@@ -84,6 +85,7 @@ _sql_message_instance = None
 _admin_exp_adjustment_service_instance = None
 admin_asset_application = AdminAssetApplication(get_paths().game_db)
 admin_application = AdminApplication(get_paths().game_db)
+admin_base_application = BaseApplication(get_paths().game_db, get_paths().player_db)
 _admin_item_destroy_service_instance = None
 _admin_player_status_reset_service_instance = None
 _admin_player_status_batch_reset_service_instance = None
@@ -399,8 +401,27 @@ async def admin_rename_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
         await handle_send(bot, event, f"{old_name} 的道号未变化")
         return
 
-    result = _sql_message().update_user_name(target_user_id, new_name)
-    await handle_send(bot, event, f"已将 {old_name} 的道号修改为 {new_name}\n{result}")
+    outcome = admin_base_application.rename(
+        operation_id=_admin_operation_id(event, "user-rename", target_user_id),
+        user_id=target_user_id,
+        rename_kind="user",
+        new_name=new_name,
+    )
+    result = dict(outcome.data or {})
+    status = str(result.get("status") or outcome.code or outcome.status)
+    if status == "name_conflict":
+        message = "该道号已被使用，请选择其他道号！"
+    elif status == "unchanged":
+        message = f"{old_name} 的道号未变化"
+    elif status == "schema_missing":
+        message = "改名服务尚未就绪，请检查启动迁移。"
+    elif status == "user_missing":
+        message = "目标用户数据已变化，请重新查询后操作。"
+    elif outcome.ok:
+        message = "道友的道号更新成啦~"
+    else:
+        message = outcome.message or "道号修改未完成，请稍后重试。"
+    await handle_send(bot, event, f"已将 {old_name} 的道号修改为 {new_name}\n{message}")
 
 
 # GM加灵石

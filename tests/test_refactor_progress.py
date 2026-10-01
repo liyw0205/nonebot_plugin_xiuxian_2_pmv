@@ -590,6 +590,7 @@ class RefactorProgressTests(unittest.TestCase):
         self.assertTrue(slices["impart_pk"]["battle_replay_application_owned"])
         self.assertTrue(slices["impart_pk"]["legacy_battle_replay_disabled"])
         self.assertTrue(slices["admin"]["item_destroy_application_owned"])
+        self.assertTrue(slices["admin"]["rename_application_owned"])
         self.assertTrue(slices["admin"]["exp_adjust_application_owned"])
         self.assertTrue(slices["admin"]["level_change_application_owned"])
         self.assertTrue(slices["admin"]["root_change_application_owned"])

@@ -602,6 +602,9 @@ def _slice_status() -> dict[str, dict[str, object]]:
     ]
     impart_pk_facade = (PACKAGE / "xiuxian" / "xiuxian_impart_pk" / "__init__.py").read_text(encoding="utf-8")
     admin_facade = (PACKAGE / "xiuxian" / "xiuxian_admin" / "__init__.py").read_text(encoding="utf-8")
+    admin_rename_handler = admin_facade[
+        admin_facade.index("@admin_rename_cmd.handle") : admin_facade.index("# GM加灵石")
+    ]
     admin_stone_batch_handler = admin_facade[
         admin_facade.index("@gm_command.handle") : admin_facade.index("# GM加思恋结晶")
     ]
@@ -2621,6 +2624,12 @@ def _slice_status() -> dict[str, dict[str, object]]:
                 ]
             ),
             "item_destroy_application_owned": "admin_asset_application.destroy_item(" in admin_facade,
+            "rename_application_owned": (
+                "BaseApplication" in admin_facade
+                and "admin_base_application.rename(" in admin_rename_handler
+                and "_sql_message().update_user_name(" not in admin_rename_handler
+                and 'Migration("base.002", "player_rename_operations", apply_base_player_rename_operations)' in plugin
+            ),
             "exp_adjust_application_owned": "admin_asset_application.adjust_exp(" in admin_facade,
             "level_change_application_owned": "admin_asset_application.change_level(" in admin_facade,
             "root_change_application_owned": "admin_asset_application.change_root(" in admin_facade,
@@ -2658,7 +2667,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
             ),
             "blackhouse_application_owned": "admin_application.set_blackhouse_status(" in admin_facade,
             "player_status_application_owned": "admin_application.reset_player_status(" in admin_facade,
-            "status": "stone_accessory_impart_stone_and_item_single_and_batch_feature_owned_with_other_admin_compatibility",
+            "status": "player_name_stone_accessory_impart_stone_and_item_single_and_batch_feature_owned_with_other_admin_compatibility",
         },
     }
 
