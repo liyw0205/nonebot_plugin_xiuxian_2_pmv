@@ -2,6 +2,7 @@ import json
 import random
 from nonebot.log import logger
 from ...paths import get_paths
+from ...features.player_state.application import PlayerStateApplication
 
 from .xiuxian2_handle import (
     XiuxianDateManage, UserBuffDate,
@@ -86,6 +87,7 @@ class _LazyItemsProxy:
 
 items = _LazyItemsProxy()
 _sql_message_instance = None
+_player_state_application = None
 
 
 def _sql_message():
@@ -93,6 +95,20 @@ def _sql_message():
     if _sql_message_instance is None:
         _sql_message_instance = XiuxianDateManage()
     return _sql_message_instance
+
+
+def configure_player_state_application(application: PlayerStateApplication) -> None:
+    """Bind the composition-root vital-state writer used after battles."""
+    global _player_state_application
+    _player_state_application = application
+
+
+def _player_state():
+    global _player_state_application
+    if _player_state_application is None:
+        # The legacy user_xiuxian projection still lives in game_db.
+        _player_state_application = PlayerStateApplication(get_paths().game_db)
+    return _player_state_application
 
 
 async def pve_fight(user, monster, type_in=2, bot_id=0, level_ratios=None, attack_buffs=None):
@@ -514,7 +530,12 @@ def update_all_user_status(status_list, bot_id, level_ratios=None):
     for user_id, status in resolve_final_user_statuses(
         status_list, bot_id, level_ratios
     ).items():
-        _sql_message().update_user_hp_mp(user_id, status["hp"], status["mp"])
+        _player_state().update_vitals(
+            user_id,
+            status["hp"],
+            status["mp"],
+            fallback=lambda value, hp, mp: _sql_message().update_user_hp_mp(value, hp, mp),
+        )
 
 
 def is_scarecrow_boss(boss):

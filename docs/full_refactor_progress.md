@@ -2,6 +2,13 @@
 
 状态：进行中。`v1.1.0` 的 P0-P7 发布证据继续保留，但不作为底层全面重构完成证明。
 
+2026-10-01 combat vital-state write boundary：PVE、普通切磋、Boss 兼容战斗的默认 HP/MP 写回统一经
+`PlayerStateApplication -> PlayerStateRepository.update_vitals`，按 `user_xiuxian` 首个 `rowid`
+更新并支持可选 CAS；缺数据库、表或字段时不执行请求期 DDL，仅保留显式 legacy fallback。该切片
+不改变 tower、arena、world-boss 等已有 feature-owned settlement，也不新增 schema/migration；新增
+重复用户、CAS、缺 schema/fallback 与 player-fight writer 回归。测试禁用 pytest/字节码缓存并在验收后
+清理临时目录；全局 legacy transaction services、`xiuxian2_handle` 和正式发布/P7 仍是 blocker。
+
 2026-10-01 player vital-state initialization boundary：新增
 `PlayerStateApplication -> PlayerStateRepository`，统一处理注册、历练、通天塔、世界事件、
 世界BOSS、切磋和突破入口在 HP 为空/为 0 时的 `hp=exp/2, mp=exp, atk=exp/10` 初始化。

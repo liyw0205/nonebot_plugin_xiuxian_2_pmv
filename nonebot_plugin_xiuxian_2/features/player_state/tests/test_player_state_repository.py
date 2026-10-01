@@ -68,3 +68,50 @@ def test_initialized_player_is_not_overwritten(tmp_path):
 
     assert result.status == "already_initialized"
     assert (result.hp, result.mp, result.atk) == (9, 8, 7)
+
+
+def test_updates_only_the_first_duplicate_user_vital_row(tmp_path):
+    database = tmp_path / "player.db"
+    _database(database)
+    with sqlite3.connect(database) as connection:
+        connection.executemany(
+            "INSERT INTO user_xiuxian(user_id,hp,mp,atk,exp) VALUES(?,?,?,?,?)",
+            [("u", 80, 70, 8, 100), ("u", 60, 50, 6, 100)],
+        )
+
+    result = PlayerStateApplication(database).update_vitals("u", 30, 20)
+
+    assert result.status == "applied"
+    with sqlite3.connect(database) as connection:
+        assert connection.execute(
+            "SELECT hp,mp FROM user_xiuxian WHERE user_id=? ORDER BY rowid",
+            ("u",),
+        ).fetchall() == [(30, 20), (60, 50)]
+
+
+def test_vital_update_uses_cas_and_missing_schema_is_closed(tmp_path):
+    database = tmp_path / "player.db"
+    _database(database)
+    with sqlite3.connect(database) as connection:
+        connection.execute(
+            "INSERT INTO user_xiuxian(user_id,hp,mp,atk,exp) VALUES(?,?,?,?,?)",
+            ("u", 80, 70, 8, 100),
+        )
+
+    result = PlayerStateApplication(database).update_vitals(
+        "u", 30, 20, expected_hp=1, expected_mp=70
+    )
+    assert result.status == "state_changed"
+
+    missing = tmp_path / "missing.db"
+    missing.touch()
+    calls = []
+    result = PlayerStateApplication(missing).update_vitals(
+        "u", 30, 20, fallback=lambda *args: calls.append(args)
+    )
+    assert result.status == "legacy_fallback"
+    assert calls == [("u", 30, 20)]
+    with sqlite3.connect(missing) as connection:
+        assert connection.execute(
+            "SELECT name FROM sqlite_master WHERE type='table'"
+        ).fetchall() == []

@@ -808,6 +808,7 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
         from .features.info.profile_application import PlayerProfileApplication
         from .features.info.activity_application import PlayerActivityApplication
         from .features.info.attribute_application import PlayerAttributeApplication
+        from .features.player_state.application import PlayerStateApplication
         from .features.base.stamina_application import PlayerStaminaApplication
 
         settings = context.settings
@@ -861,6 +862,9 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
                 str(context.database.path("game_db")), clock=context.clock
             ),
             "player_attributes": PlayerAttributeApplication(),
+            "player_state": PlayerStateApplication(
+                str(context.database.path("game_db"))
+            ),
             "player_stamina": PlayerStaminaApplication(
                 str(context.database.path("game_db"))
             ),
@@ -1062,6 +1066,7 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
             from .xiuxian.xiuxian_utils.utils import configure_player_activity_application
             from .xiuxian.xiuxian_utils.utils import configure_player_attribute_application
             from .xiuxian.xiuxian_utils.utils import configure_player_stamina_application
+            from .xiuxian.xiuxian_utils.player_fight import configure_player_state_application
             from .xiuxian.xiuxian_back import configure_back_application, configure_package_reward_application
             from .xiuxian.xiuxian_tasks.task_data import configure_task_claim_application
             from .xiuxian.xiuxian_training import configure_training_application
@@ -1078,6 +1083,7 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
             configure_player_profile_application(context.services["player_profile"])
             configure_player_activity_application(context.services["player_activity"])
             configure_player_attribute_application(context.services["player_attributes"])
+            configure_player_state_application(context.services["player_state"])
             configure_player_stamina_application(context.services["player_stamina"])
             configure_back_application(context.services["back"])
             configure_package_reward_application(context.services["package_reward"])
