@@ -222,7 +222,8 @@ class XiuxianDateManage:
       "user_name" TEXT DEFAULT NULL,
       "level_up_cd" integer DEFAULT NULL,
       "level_up_rate" integer DEFAULT 0,
-      "mixelixir_num" integer DEFAULT 0
+      "mixelixir_num" integer DEFAULT 0,
+      "puppet_status" integer DEFAULT 0
     );""")
                 elif i == "user_cd":
                     try:

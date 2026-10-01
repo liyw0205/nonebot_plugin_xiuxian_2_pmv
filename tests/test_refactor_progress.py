@@ -471,6 +471,12 @@ class RefactorProgressTests(unittest.TestCase):
         self.assertTrue(puppet["harvest_application_owned"])
         self.assertTrue(puppet["legacy_harvest_disabled"])
         self.assertTrue(puppet["default_application_has_no_legacy_repository"])
+        self.assertTrue(puppet["status_application_owned"])
+        self.assertTrue(puppet["legacy_status_io_disabled"])
+        self.assertTrue(puppet["scheduler_enabled_users_bounded"])
+        self.assertTrue(puppet["status_schema_startup_migration_registered"])
+        self.assertTrue(puppet["status_repository_has_no_request_ddl_and_uses_ledger"])
+        self.assertTrue(puppet["status_replay_conflict_and_rollback_covered"])
         pet = slices["pet"]
         self.assertTrue(pet["active_switch_application_owned"])
         self.assertTrue(pet["skill_replace_application_owned"])

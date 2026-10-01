@@ -35,6 +35,14 @@ WorkAdminRefreshResetSqlRepository`，保留原子全服重置语义，仅更新
 同一操作号 replay 返回首次结果，payload 冲突拒绝，审计失败回滚全表更新；scheduler 按业务日冻结目标
 并分块续跑的 daily reset 语义未改。下一项继续审计其他 `xiuxian2_handle` 可达 player/economy 写入。
 
+2026-10-01 puppet status and bounded scheduler read boundary：开启/关闭与状态查询不再调用
+`XiuxianDateManage.set_puppet_status/check_puppet_status/get_all_enabled_puppets`；改由
+`PuppetApplication -> PuppetStatusSqlRepository`，新增 game-only `puppet.002` 启动迁移补齐状态列。
+状态写入复用 operation ledger/audit 原子提交；scheduler 保留初始 rowid 高水位，每次最多加载 200 条，
+不把全量启用 user ID 放入 RAM。缺迁移时 fail closed，无请求期 DDL；purchase/upgrade/harvest 未扩大范围。
+新增状态迁移、重复用户、replay/conflict、缺 schema、审计失败回滚、分页与 game-only 路由回归；下一项继续
+审计其他 `xiuxian2_handle` 可达 player/economy 写入。
+
 2026-10-01 player experience normalization boundary：`抑制黑暗动乱` 不再把读取到的旧修为交给
 `XiuxianDateManage.del_exp_decimal` 无条件覆盖；改经 `PlayerEconomyApplication.normalize_experience`，
 按首条用户 row 与当前修为快照 CAS 截断小数，重复整理无写入，缺 schema/用户或状态变化 fail closed。

@@ -3,6 +3,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
+import nonebot
+
 from nonebot_plugin_xiuxian_2.bootstrap import build_runtime_context
 from nonebot_plugin_xiuxian_2.infrastructure.database import DatabaseUnitOfWork
 from nonebot_plugin_xiuxian_2.infrastructure.database import OperationLedger, OutboxStore
@@ -42,7 +44,7 @@ class PlatformLedgerMigrationTests(unittest.TestCase):
             )
             state = asyncio.run(lifecycle.start())
             try:
-                self.assertEqual(state.phase.value, "ready")
+                self.assertEqual(state.phase.value, "ready", state.error)
                 for spec in context.database.specs():
                     with DatabaseUnitOfWork(spec.path) as uow:
                         rows = uow.query_all(
@@ -220,6 +222,35 @@ class PlatformLedgerMigrationTests(unittest.TestCase):
                     else:
                         self.assertIsNone(operations)
                         self.assertIsNone(targets)
+            finally:
+                asyncio.run(lifecycle.shutdown())
+
+    def test_startup_routes_puppet_status_column_to_game_database(self):
+        try:
+            nonebot.get_driver()
+        except ValueError:
+            nonebot.init()
+        with tempfile.TemporaryDirectory() as directory:
+            data_dir = Path(directory) / "data"
+            copy_static_data(Path(__file__).resolve().parents[1] / "data" / "xiuxian", data_dir)
+            lifecycle, _, context = build_lifecycle(
+                build_runtime_context(data_dir=data_dir, legacy_startup=False)
+            )
+            with DatabaseUnitOfWork(context.database.path("game_db"), immediate=True) as uow:
+                uow.execute("CREATE TABLE user_xiuxian(user_id TEXT PRIMARY KEY,stone INTEGER)")
+            state = asyncio.run(lifecycle.start())
+            try:
+                self.assertEqual(state.phase.value, "ready", state.error)
+                for spec in context.database.specs():
+                    with DatabaseUnitOfWork(spec.path) as uow:
+                        columns = {
+                            str(row["name"]).casefold()
+                            for row in uow.query_all('PRAGMA main.table_info("user_xiuxian")')
+                        }
+                    if spec.key == "game_db":
+                        self.assertIn("puppet_status", columns)
+                    else:
+                        self.assertNotIn("puppet_status", columns)
             finally:
                 asyncio.run(lifecycle.shutdown())
 

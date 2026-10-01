@@ -12,6 +12,7 @@ from .domain import PuppetPurchaseRequest, PuppetUpgradeRequest
 from .repository import LegacyPuppetRepository, PuppetRepository
 from .purchase_repository import PuppetPurchaseSqlRepository
 from .harvest_repository import PuppetHarvestSqlRepository
+from .status_repository import PuppetEnabledUser, PuppetStatusResult, PuppetStatusSqlRepository
 
 
 def _data(raw: Any) -> dict[str, Any]:
@@ -23,11 +24,44 @@ def _data(raw: Any) -> dict[str, Any]:
 
 
 class PuppetApplication:
-    def __init__(self, game_database: str | Path, player_database: str | Path, *, repository: PuppetRepository | None = None, ledger: OperationLedger | None = None) -> None:
+    def __init__(
+        self,
+        game_database: str | Path,
+        player_database: str | Path,
+        *,
+        repository: PuppetRepository | None = None,
+        status_repository: PuppetStatusSqlRepository | None = None,
+        ledger: OperationLedger | None = None,
+    ) -> None:
         self.game_database = str(game_database)
         self.player_database = str(player_database)
         self.repository = repository
         self.ledger = ledger or OperationLedger()
+        self.status_repository = status_repository or PuppetStatusSqlRepository(
+            self.game_database, ledger=self.ledger
+        )
+
+    def set_enabled(self, *, operation_id: str, user_id: str, enabled: int | bool) -> PuppetStatusResult:
+        return self.status_repository.set_enabled(operation_id, user_id, enabled)
+
+    def get_status(self, user_id: str) -> int:
+        return self.status_repository.get_status(user_id)
+
+    def enabled_user_high_watermark(self) -> int:
+        return self.status_repository.enabled_user_high_watermark()
+
+    def list_enabled_users(
+        self,
+        after_row_id: int,
+        through_row_id: int,
+        *,
+        limit: int = PuppetStatusSqlRepository.DEFAULT_PAGE_SIZE,
+    ) -> list[PuppetEnabledUser]:
+        return self.status_repository.list_enabled_users(
+            after_row_id,
+            through_row_id,
+            limit=limit,
+        )
 
     def _execute(self, *, operation_id: str, user_id: str, action: str, payload: Mapping[str, Any], call) -> OperationOutcome[dict[str, Any]]:
         with trace_context(operation_id=operation_id, user_scope=user_id):

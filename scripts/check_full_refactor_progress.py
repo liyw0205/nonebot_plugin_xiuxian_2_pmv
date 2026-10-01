@@ -447,6 +447,9 @@ def _slice_status() -> dict[str, dict[str, object]]:
     base_facade = (PACKAGE / "xiuxian" / "xiuxian_base" / "__init__.py").read_text(encoding="utf-8")
     puppet_facade = (PACKAGE / "xiuxian" / "xiuxian_puppet" / "__init__.py").read_text(encoding="utf-8")
     puppet_application_source = (PACKAGE / "features" / "puppet" / "application.py").read_text(encoding="utf-8")
+    puppet_status_repository_source = (PACKAGE / "features" / "puppet" / "status_repository.py").read_text(encoding="utf-8")
+    puppet_migrations_source = (PACKAGE / "features" / "puppet" / "migrations.py").read_text(encoding="utf-8")
+    puppet_status_tests = (PACKAGE / "features" / "puppet" / "tests" / "test_status_repository.py").read_text(encoding="utf-8")
     plugin_source = (PACKAGE / "plugin.py").read_text(encoding="utf-8")
     pet_facade = (PACKAGE / "xiuxian" / "xiuxian_pet" / "__init__.py").read_text(encoding="utf-8")
     trade_facade = (PACKAGE / "xiuxian" / "xiuxian_trade" / "__init__.py").read_text(encoding="utf-8")
@@ -2055,7 +2058,43 @@ def _slice_status() -> dict[str, dict[str, object]]:
                 "LegacyPuppetRepository" not in puppet_facade
                 and "LegacyPuppetRepository" not in plugin_source
             ),
-            "status": "purchase_upgrade_and_harvest_default_feature_owned_with_explicit_compatibility",
+            "status_application_owned": (
+                "puppet_application.set_enabled(" in puppet_facade
+                and "puppet_application.get_status(" in puppet_facade
+            ),
+            "legacy_status_io_disabled": all(
+                token not in puppet_facade
+                for token in (
+                    "_sql_message().set_puppet_status(",
+                    "_sql_message().check_puppet_status(",
+                    "_sql_message().get_all_enabled_puppets(",
+                )
+            ),
+            "scheduler_enabled_users_bounded": (
+                "puppet_application.enabled_user_high_watermark()" in puppet_facade
+                and "puppet_application.list_enabled_users(" in puppet_facade
+                and "limit=200" in puppet_facade
+                and "get_all_enabled_puppets()" not in puppet_facade
+            ),
+            "status_schema_startup_migration_registered": (
+                'Migration("puppet.002", "puppet_status_column", apply_puppet_status)' in plugin_source
+                and "def apply_puppet_status(" in puppet_migrations_source
+                and "ALTER TABLE user_xiuxian ADD COLUMN puppet_status" in puppet_migrations_source
+            ),
+            "status_repository_has_no_request_ddl_and_uses_ledger": (
+                "OperationLedger" in puppet_status_repository_source
+                and "operation_audit" in puppet_status_repository_source
+                and "DatabaseUnitOfWork(self.database, immediate=True)" in puppet_status_repository_source
+                and "CREATE TABLE" not in puppet_status_repository_source
+                and "ALTER TABLE" not in puppet_status_repository_source
+                and "LIMIT ?" in puppet_status_repository_source
+            ),
+            "status_replay_conflict_and_rollback_covered": (
+                "operation_conflict" in puppet_status_repository_source
+                and "fail_puppet_status_audit" in puppet_status_tests
+                and "apply_puppet_status(uow)" in puppet_status_tests
+            ),
+            "status": "purchase_upgrade_status_and_harvest_default_feature_owned_with_bounded_scheduler_reads",
         },
         "pet": {
             "active_switch_application_owned": "pet_application.switch(" in pet_facade,

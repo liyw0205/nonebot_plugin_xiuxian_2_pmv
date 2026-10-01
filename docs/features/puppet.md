@@ -2,7 +2,7 @@
 
 ## 用户流程
 
-购买灵田傀儡后可升级傀儡等级。开启、关闭、自动收取和灵田查询仍由旧兼容命令负责；购买与升级的灵石扣除和等级变化由 `PuppetApplication` 统一协调。
+购买灵田傀儡后可升级傀儡等级。购买、升级、开启/关闭状态写入、状态查询和 scheduler 用户分页读取由 `PuppetApplication` 承接；自动收取仍由兼容命令和现有 harvest repository 协调。
 
 ## 命令与别名
 
@@ -17,7 +17,7 @@
 
 ## 数据模型与迁移
 
-版本 `puppet.001` 写入 `game_db.puppet_feature_migrations`。历史傀儡状态仍由兼容仓储读写 `player_db.mix_elixir_info`，灵石仍由旧玩家仓储维护。
+`puppet.001` 写入 `game_db.puppet_feature_migrations`；`puppet.002` 在 game DB 启动迁移中为 `user_xiuxian.puppet_status` 补列，保留既有状态且不在请求路径执行 DDL。开关状态与 operation ledger/audit 在同一 game DB immediate UoW 提交。scheduler 先固定 `rowid` 高水位，再按最多 200 行分页读取启用用户，避免一次性将全体 user ID 装入内存；每个页面查询结束后关闭只读连接。历史傀儡等级/收取时间仍由 player DB `mix_elixir_info` 承载。
 
 ## 事务与失败回滚
 
@@ -25,7 +25,7 @@
 
 ## 定时任务
 
-自动收取任务暂留兼容调度器，拥有 `coalesce=True`、`max_instances=1` 和误触发宽限期。
+自动收取任务暂留兼容调度器，拥有 `coalesce=True`、`max_instances=1` 和误触发宽限期；启用用户分页有上界，purchase/upgrade 与 harvest 的事务边界未因本片扩展。
 
 ## 配置、灰度与回滚
 

@@ -4,6 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from ....infrastructure.database import DatabaseUnitOfWork
 from ..application import PuppetApplication
 
 
@@ -36,10 +37,17 @@ class _Repository:
 
 
 class PuppetApplicationTests(unittest.TestCase):
+    @staticmethod
+    def _application(directory: str, repository: _Repository) -> PuppetApplication:
+        app = PuppetApplication(Path(directory) / "game.db", Path(directory) / "player.db", repository=repository)
+        with DatabaseUnitOfWork(app.game_database, immediate=True) as uow:
+            app.ledger.ensure_schema(uow)
+        return app
+
     def test_purchase_is_idempotent_and_replayed(self):
         with tempfile.TemporaryDirectory() as directory:
             repository = _Repository()
-            app = PuppetApplication(Path(directory) / "game.db", Path(directory) / "player.db", repository=repository)
+            app = self._application(directory, repository)
             request = {"operation_id": "puppet-buy-1", "user_id": "u", "stone_cost": 50}
             first = app.purchase(**request)
             replay = app.purchase(**request)
@@ -51,7 +59,7 @@ class PuppetApplicationTests(unittest.TestCase):
     def test_rejected_operation_is_replayed_without_retrying_repository(self):
         with tempfile.TemporaryDirectory() as directory:
             repository = _Repository("stone_insufficient")
-            app = PuppetApplication(Path(directory) / "game.db", Path(directory) / "player.db", repository=repository)
+            app = self._application(directory, repository)
             request = {"operation_id": "puppet-buy-poor", "user_id": "u", "stone_cost": 50}
             first = app.purchase(**request)
             replay = app.purchase(**request)
@@ -63,7 +71,7 @@ class PuppetApplicationTests(unittest.TestCase):
     def test_upgrade_uses_application_contract(self):
         with tempfile.TemporaryDirectory() as directory:
             repository = _Repository()
-            app = PuppetApplication(Path(directory) / "game.db", Path(directory) / "player.db", repository=repository)
+            app = self._application(directory, repository)
             result = app.upgrade(operation_id="puppet-upgrade-1", user_id="u", upgrade_costs={1: 60, 2: 90}, max_level=3)
             self.assertTrue(result.ok)
             self.assertEqual(result.data["current_level"], 2)
@@ -73,7 +81,7 @@ class PuppetApplicationTests(unittest.TestCase):
     def test_invalid_request_is_rejected_before_repository(self):
         with tempfile.TemporaryDirectory() as directory:
             repository = _Repository()
-            app = PuppetApplication(Path(directory) / "game.db", Path(directory) / "player.db", repository=repository)
+            app = self._application(directory, repository)
             with self.assertRaises(Exception):
                 app.purchase(operation_id="", user_id="u", stone_cost=1)
             self.assertEqual(repository.calls, [])

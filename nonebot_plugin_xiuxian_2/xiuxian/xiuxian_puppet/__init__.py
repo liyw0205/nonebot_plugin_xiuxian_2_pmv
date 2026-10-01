@@ -14,12 +14,10 @@ from ..xiuxian_utils.utils import check_user, log_message, handle_send, send_hel
 from ..xiuxian_utils.xiuxian2_handle import (
     get_player_info,
     UserBuffDate,
-    XiuxianDateManage,
     XIUXIAN_IMPART_BUFF,
 )
 from .transaction_service import (
     PuppetHarvestReward,
-    PuppetHarvestService,
     PuppetOperation,
 )
 from ...features.puppet.application import PuppetApplication
@@ -27,36 +25,14 @@ from ...features.puppet.application import PuppetApplication
 from ...infrastructure.ids import UUIDGenerator
 from ...infrastructure.clock import SystemClock
 
-_sql_message_instance = None
-
-
-def _sql_message():
-    global _sql_message_instance
-    if _sql_message_instance is None:
-        _sql_message_instance = XiuxianDateManage()
-    return _sql_message_instance
-
-
 xiuxian_impart = XIUXIAN_IMPART_BUFF()
 items = Items()
-_puppet_harvest_service_instance = None
 puppet_application = PuppetApplication(
     get_paths().game_db,
     get_paths().player_db,
 )
 runtime_ids = UUIDGenerator()
 runtime_clock = SystemClock()
-
-
-def _puppet_harvest_service():
-    global _puppet_harvest_service_instance
-    if _puppet_harvest_service_instance is None:
-        _puppet_harvest_service_instance = PuppetHarvestService(
-            get_paths().game_db,
-            get_paths().player_db,
-            max_goods_num=XiuConfig().max_goods_num,
-        )
-    return _puppet_harvest_service_instance
 
 
 # 引入定时任务
@@ -191,10 +167,19 @@ async def puppet_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
 async def auto_harvest_scheduled():
     """每小时自动收取任务"""
     try:
-        enabled_users = _sql_message().get_all_enabled_puppets()
-
-        for user_id in enabled_users:
-            await check_and_harvest(user_id)
+        through_row_id = puppet_application.enabled_user_high_watermark()
+        after_row_id = 0
+        while True:
+            enabled_users = puppet_application.list_enabled_users(
+                after_row_id,
+                through_row_id,
+                limit=200,
+            )
+            if not enabled_users:
+                break
+            for enabled_user in enabled_users:
+                after_row_id = enabled_user.row_id
+                await check_and_harvest(enabled_user.user_id)
 
     except Exception as e:
         logger.warning(f"自动收取任务出错: {e}")
@@ -336,12 +321,24 @@ async def start_puppet_handler(bot: Bot, event: GroupMessageEvent | PrivateMessa
         await handle_send(bot, event, msg)
         await start_puppet.finish()
 
-    # 数据库灵田傀儡 参数设置成 1
-    _sql_message().set_puppet_status(user_id, 1)
-
     harvest_cost = PUPPET_CONFIG[puppet_level]['harvest_cost']
+    # 数据库灵田傀儡 参数设置成 1
+    result = puppet_application.set_enabled(
+        operation_id=_puppet_operation_id(event, "enable", user_id),
+        user_id=user_id,
+        enabled=True,
+    )
+    if result.status == "schema_missing":
+        msg = "傀儡状态服务尚未就绪，请检查启动迁移。"
+    elif result.status == "operation_conflict":
+        msg = "本次傀儡开启请求与已记录操作冲突。"
+    elif result.status == "user_missing":
+        msg = "傀儡状态未找到，请重新查询玩家状态。"
+    elif result.succeeded:
+        msg = f"灵田傀儡已开启！每小时将自动检测并收取灵田，每次收取消耗灵石：{harvest_cost}"
+    else:
+        msg = "灵田傀儡开启未完成，请检查服务日志。"
 
-    msg = f"灵田傀儡已开启！每小时将自动检测并收取灵田，每次收取消耗灵石：{harvest_cost}"
     await handle_send(bot, event, msg)
     await start_puppet.finish()
 
@@ -366,9 +363,21 @@ async def stop_puppet_handler(bot: Bot, event: GroupMessageEvent | PrivateMessag
         await stop_puppet.finish()
 
     # 数据库灵田傀儡 参数设置成 0 关闭
-    _sql_message().set_puppet_status(user_id, 0)
-
-    msg = "灵田傀儡已关闭！"
+    result = puppet_application.set_enabled(
+        operation_id=_puppet_operation_id(event, "disable", user_id),
+        user_id=user_id,
+        enabled=False,
+    )
+    if result.status == "schema_missing":
+        msg = "傀儡状态服务尚未就绪，请检查启动迁移。"
+    elif result.status == "operation_conflict":
+        msg = "本次傀儡关闭请求与已记录操作冲突。"
+    elif result.status == "user_missing":
+        msg = "傀儡状态未找到，请重新查询玩家状态。"
+    elif result.succeeded:
+        msg = "灵田傀儡已关闭！"
+    else:
+        msg = "灵田傀儡关闭未完成，请检查服务日志。"
     await handle_send(bot, event, msg)
     await stop_puppet.finish()
 
@@ -422,7 +431,7 @@ async def puppet_info_handler(bot: Bot, event: GroupMessageEvent | PrivateMessag
     msg += f"灵药状态：{elixir_time}\n"
     if puppet_level > 0:
         status = "关闭"
-        puppet_status = _sql_message().check_puppet_status(user_id)  # 返回 0 或 1
+        puppet_status = puppet_application.get_status(user_id)
         if puppet_status == 1:
             status = "开启"
 

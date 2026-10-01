@@ -11,7 +11,7 @@ FEATURE = FeatureManifest(
         RouteSpec("/api/v1/puppet/upgrade", methods=("POST",), permission="user"),
     ),
     config=(ConfigSpec("puppet_enabled", "bool", default=True, reloadable=True, description="灵田傀儡新资产操作灰度开关"),),
-    migration_version="puppet.001",
+    migration_version="puppet.002",
     test_tag="puppet",
 )
 
