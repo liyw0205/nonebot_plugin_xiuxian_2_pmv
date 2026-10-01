@@ -1754,7 +1754,13 @@ def _slice_status() -> dict[str, dict[str, object]]:
             ),
             "title_state_read_legacy_disabled": "xiuxian2_handle" not in title_state_readers and "player_data_manager" not in title_state_readers,
             "title_state_read_has_no_ddl": "CREATE TABLE" not in title_repository_state_reader and "ALTER TABLE" not in title_repository_state_reader,
-            "status": "equip_unequip_unlock_cutover",
+            "mentor_title_grant_application_owned": (
+                "TitleApplication" in partner_facade
+                and "_mentor_title_application().grant(" in partner_facade
+            ),
+            "mentor_title_state_read_application_owned": "_mentor_title_application().get_state(" in partner_facade,
+            "legacy_mentor_title_writer_disabled": "update_or_write_data(" not in partner_facade,
+            "status": "equip_unequip_unlock_and_mentor_grant_cutover",
         },
         "info": {
             "dynamic_attribute_application_owned": (

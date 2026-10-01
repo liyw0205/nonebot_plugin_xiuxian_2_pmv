@@ -424,6 +424,9 @@ class RefactorProgressTests(unittest.TestCase):
         self.assertTrue(title["title_state_read_application_owned"])
         self.assertTrue(title["title_state_read_legacy_disabled"])
         self.assertTrue(title["title_state_read_has_no_ddl"])
+        self.assertTrue(title["mentor_title_grant_application_owned"])
+        self.assertTrue(title["mentor_title_state_read_application_owned"])
+        self.assertTrue(title["legacy_mentor_title_writer_disabled"])
         base = slices["base"]
         self.assertTrue(base["rename_application_owned"])
         self.assertTrue(base["legacy_rename_disabled"])

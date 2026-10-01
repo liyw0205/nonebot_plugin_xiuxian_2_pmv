@@ -2,6 +2,13 @@
 
 状态：进行中。`v1.1.0` 的 P0-P7 发布证据继续保留，但不作为底层全面重构完成证明。
 
+2026-10-01 mentor title write boundary：师徒绑定/传功/出师后的统计阈值称号发放，读取和写入统一经
+`TitleApplication -> TitleRepository`，使用稳定的 `mentor-title:{user_id}:{title_id}` operation id，
+按期望 unlocked 快照做 CAS；重复调用不重复写入或日志。`partner.py` 不再直接调用
+`PlayerDataManager.update_or_write_data`。师徒毕业主事务内的称号投影仍保留在跨库兼容服务中，避免把
+灵石、关系、历史和称号拆成非原子副作用；该边界不新增 migration。新增首次/重复发放与 source/progress
+门禁回归；全局旧 transaction services、`xiuxian2_handle` 和正式发布/P7 仍是 blocker。
+
 2026-10-01 xiuxian2_handle wishing-stone writer boundary：兼容方法
 `convert_stone_to_wishing_stone` 的物品写入改经 `PlayerInventoryApplication`，使用完整发放模式；
 背包容量不足、缺 schema 或其它拒绝时不清空思恋结晶，不再直接调用 `sql_message.send_back`。

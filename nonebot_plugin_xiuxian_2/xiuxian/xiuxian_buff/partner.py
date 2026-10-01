@@ -41,6 +41,7 @@ from .transaction_service import PartnerProtectionService
 from ...features.buff.partner_token_application import PartnerTokenUseApplication
 from ...features.base.economy_application import PlayerEconomyApplication
 from ...features.buff.partner_cultivation_application import PartnerCultivationApplication
+from ...features.title.application import TitleApplication
 from .transaction_service import PartnerBindService
 from .transaction_service import PartnerUnbindService
 from .partner_storage import (
@@ -89,6 +90,7 @@ _player_economy_application_instance = None
 _apprentice_leave_service_instance = None
 _mentor_graduation_service_instance = None
 _mentor_transmission_service_instance = None
+_mentor_title_application_instance = None
 two_exp_limit = 3
 mentor_config = XiuConfig()
 mentor_transmission_limit = getattr(mentor_config, "mentor_transmission_limit", two_exp_limit)
@@ -281,6 +283,13 @@ def _mentor_transmission_service():
             get_paths().game_db, get_paths().player_db
         )
     return _mentor_transmission_service_instance
+
+
+def _mentor_title_application():
+    global _mentor_title_application_instance
+    if _mentor_title_application_instance is None:
+        _mentor_title_application_instance = TitleApplication(get_paths().player_db)
+    return _mentor_title_application_instance
 
 
 TITLE_JSONPATH = get_paths().data / "修炼物品" / "称号.json"
@@ -1489,7 +1498,8 @@ def _get_mentor_title_by_id(title_id):
 
 
 def _get_user_title_ids(user_id):
-    unlocked = _player_data_manager().get_field_data(str(user_id), "title", "unlocked")
+    state = _mentor_title_application().get_state(str(user_id)) or {}
+    unlocked = state.get("unlocked")
     if not unlocked:
         return []
     if isinstance(unlocked, list):
@@ -1509,11 +1519,15 @@ def _grant_title_to_user(user_id, title_id):
     unlocked_set = set(_get_user_title_ids(user_id))
     if str(title_id) in unlocked_set:
         return False, f"用户已拥有称号【{title_data['name']}】"
-    unlocked_set.add(str(title_id))
-    _player_data_manager().update_or_write_data(
-        str(user_id), "title", "unlocked", list(unlocked_set), data_type="TEXT"
+    outcome = _mentor_title_application().grant(
+        operation_id=f"mentor-title:{user_id}:{title_id}",
+        user_id=str(user_id),
+        expected_unlocked=unlocked_set,
+        title_id=str(title_id),
     )
-    return True, f"已赠送称号【{title_data['name']}】"
+    if outcome.ok and not outcome.replayed and (outcome.data or {}).get("status") == "applied":
+        return True, f"已赠送称号【{title_data['name']}】"
+    return False, f"用户已拥有称号【{title_data['name']}】"
 
 
 def _grant_mentor_title(user_id, title_key):
