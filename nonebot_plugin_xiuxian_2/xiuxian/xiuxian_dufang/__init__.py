@@ -26,16 +26,12 @@ from ...infrastructure.clock import SystemClock
 from ...infrastructure.random_source import SystemRandom
 from ...infrastructure.ids import UUIDGenerator
 from ...features.dufang.application import DufangApplication
-from .transaction_service import (
-    DufangShareSettlementService,
-)
 
 _sql_message_instance = None
 runtime_clock = SystemClock()
 runtime_random = SystemRandom()
 runtime_ids = UUIDGenerator()
 _player_data_manager_instance = None
-_dufang_share_service_instance = None
 dufang_application = DufangApplication(get_paths().game_db, get_paths().player_db)
 
 
@@ -65,15 +61,6 @@ def _player_data_manager():
     return player_data_manager
 
 
-def _dufang_share_service():
-    global _dufang_share_service_instance
-    if _dufang_share_service_instance is None:
-        _dufang_share_service_instance = DufangShareSettlementService(
-            get_paths().game_db, get_paths().player_db
-        )
-    return _dufang_share_service_instance
-
-
 def _run_dufang_action(action, operation_id, user_id, call, **payload):
     outcome = dufang_application.execute_legacy_call(
         operation_id=operation_id,
@@ -86,6 +73,61 @@ def _run_dufang_action(action, operation_id, user_id, call, **payload):
     data.setdefault("status", outcome.status)
     data["succeeded"] = outcome.ok
     return SimpleNamespace(**data)
+
+
+def _share_settlement_from_outcome(outcome):
+    data = dict(outcome.data or {})
+    data["recipients"] = [
+        SimpleNamespace(**recipient) if isinstance(recipient, dict) else recipient
+        for recipient in data.get("recipients", ())
+    ]
+    settlement = SimpleNamespace(**data)
+    settlement.succeeded = outcome.ok
+    settlement.status = "duplicate" if outcome.replayed else outcome.status
+    return settlement
+
+
+def _record_shared_settlement(user_id, user_name, settlement):
+    affected_users = []
+    for recipient in settlement.recipients:
+        if recipient.amount <= 0:
+            continue
+        sign = "+" if settlement.event_type == "profit" else "-"
+        affected_users.append(f"{recipient.user_name}({sign}{number_to(recipient.amount)})")
+        if recipient.status != "applied":
+            continue
+        if settlement.event_type == "profit":
+            log_message(
+                recipient.user_id,
+                f"受到道友{user_name}的鉴石福泽共享，获得灵石：{number_to(recipient.amount)}枚",
+            )
+            log_message(
+                user_id,
+                f"鉴石福泽共享给道友{recipient.user_name}，共享灵石：{number_to(recipient.amount)}枚",
+            )
+        else:
+            log_message(
+                recipient.user_id,
+                f"受到道友{user_name}的鉴石影响，损失灵石：{number_to(recipient.amount)}枚",
+            )
+            log_message(
+                user_id,
+                f"鉴石影响波及道友{recipient.user_name}，造成损失：{number_to(recipient.amount)}枚",
+            )
+    return affected_users
+
+
+def _shared_settlement_text(settlement, affected_users):
+    if not affected_users:
+        return None
+    return "\n".join(
+        (
+            f"【{settlement.event_title}】",
+            settlement.event_description,
+            f"共享倍率：+{settlement.bonus_percent}%",
+            f"受影响道友：{', '.join(affected_users)}",
+        )
+    )
 PLAYERSDATA = get_paths().players
 SHARING_DATA_PATH = Path(__file__).parent / "unseal_sharing.json"
 BANNED_UNSEAL_IDS = XiuConfig().banned_unseal_ids  # 禁止鉴石的群
@@ -335,52 +377,14 @@ async def handle_shared_event(
         recipients=recipients,
         settled_at=settled_at,
     )
-    settlement = SimpleNamespace(**dict(settlement_outcome.data or {}))
-    settlement.succeeded = settlement_outcome.ok
-    settlement.status = "duplicate" if settlement_outcome.replayed else settlement_outcome.status
+    settlement = _share_settlement_from_outcome(settlement_outcome)
     if not settlement.succeeded:
         return None, None
-
-    affected_users = []
-    for recipient in settlement.recipients:
-        if recipient.amount <= 0:
-            continue
-        sign = "+" if settlement.event_type == "profit" else "-"
-        affected_users.append(
-            f"{recipient.user_name}({sign}{number_to(recipient.amount)})"
-        )
-        if recipient.status != "applied":
-            continue
-        if settlement.event_type == "profit":
-            log_message(
-                recipient.user_id,
-                f"受到道友{user_name}的鉴石福泽共享，获得灵石：{number_to(recipient.amount)}枚",
-            )
-            log_message(
-                user_id,
-                f"鉴石福泽共享给道友{recipient.user_name}，共享灵石：{number_to(recipient.amount)}枚",
-            )
-        else:
-            log_message(
-                recipient.user_id,
-                f"受到道友{user_name}的鉴石影响，损失灵石：{number_to(recipient.amount)}枚",
-            )
-            log_message(
-                user_id,
-                f"鉴石影响波及道友{recipient.user_name}，造成损失：{number_to(recipient.amount)}枚",
-            )
-    if not affected_users:
+    affected_users = _record_shared_settlement(user_id, user_name, settlement)
+    message = _shared_settlement_text(settlement, affected_users)
+    if not message:
         return None, None
-
-    # 构建消息
-    msg = [
-        f"【{settlement.event_title}】",
-        settlement.event_description,
-        f"共享倍率：+{settlement.bonus_percent}%",
-        f"受影响道友：{', '.join(affected_users)}"
-    ]
-
-    return "\n".join(msg), settlement.total_amount
+    return message, settlement.total_amount
 
 # 鉴石信息
 @unseal_message.handle(parameterless=[Cooldown(cd_time=0)])
@@ -474,6 +478,24 @@ async def unseal_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
     if bet.status == "duplicate":
         prior_pay = dufang_application.payout_result(payout_operation_id)
         if prior_pay is not None and prior_pay.succeeded:
+            share_text = None
+            share_operation_id = f"dufang-share:{operation_id}"
+            if dufang_application.share_exists(share_operation_id):
+                share_outcome = dufang_application.resume_share(
+                    operation_id=share_operation_id,
+                    user_id=user_id,
+                    settled_at=runtime_clock.now().strftime("%Y-%m-%d %H:%M:%S"),
+                )
+                if share_outcome.ok and not share_outcome.replayed:
+                    source_info = _sql_message().get_user_info_with_id(user_id) or {}
+                    share_settlement = _share_settlement_from_outcome(share_outcome)
+                    if share_settlement.succeeded:
+                        affected = _record_shared_settlement(
+                            user_id,
+                            source_info.get("user_name", user_id),
+                            share_settlement,
+                        )
+                        share_text = _shared_settlement_text(share_settlement, affected)
             if prior_pay.gain > 0:
                 effect_text = f"获得 {number_to(prior_pay.gain)} 灵石"
             else:
@@ -485,6 +507,8 @@ async def unseal_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
                 f"当前灵石：{prior_pay.wallet_stone}({number_to(prior_pay.wallet_stone)})\n"
                 f"该鉴石请求已经处理，无需重复提交。"
             )
+            if share_text:
+                msg = f"{msg}\n\n{share_text}"
             await handle_send(bot, event, msg, md_type="鉴石", k1="鉴石", v1="鉴石", k2="信息", v2="鉴石信息", k3="灵石", v3="灵石")
             return
         await handle_send(bot, event, "本次鉴石请求已受理，请勿重复提交。", md_type="鉴石")

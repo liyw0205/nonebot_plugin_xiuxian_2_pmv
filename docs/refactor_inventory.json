@@ -2772,6 +2772,7 @@
     "dufang_feature_migrations",
     "dufang_payout_operations",
     "dufang_share_operations",
+    "dufang_share_player_receipts",
     "dufang_share_progress",
     "dungeon_explore_operations",
     "dungeon_feature_migrations",

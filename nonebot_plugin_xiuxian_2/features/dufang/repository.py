@@ -3,9 +3,11 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from ...infrastructure.database import DatabaseUnitOfWork
 from .._service_port import ServicePort
-from .payout_repository import DufangPayoutSqlRepository
 from .bet_repository import DufangBetSqlRepository
+from .payout_repository import DufangPayoutSqlRepository
+from .share_repository import DufangShareSqlRepository
 
 
 class DufangRepository(ServicePort):
@@ -13,16 +15,33 @@ class DufangRepository(ServicePort):
         super().__init__("dufang", "nonebot_plugin_xiuxian_2.xiuxian.xiuxian_dufang")
         self.database = str(database)
         self.player_database = None if player_database is None else str(player_database)
+        self.share = (
+            None
+            if self.player_database is None
+            else DufangShareSqlRepository(self.database, self.player_database)
+        )
 
     def execute(self, operation_id: str, user_id: str, action: str, payload: dict[str, Any]) -> Any:
-        if str(action).casefold() == "share_settle" and self.player_database is not None:
-            from ...xiuxian.xiuxian_dufang.transaction_service import DufangShareSettlementService
-
-            return DufangShareSettlementService(self.database, self.player_database).settle(
-                operation_id, user_id, payload["event_type"], payload["title"], payload["desc"],
-                payload["effect_amount"], payload["cost_bonus_percent"], payload["recipients"], payload["settled_at"],
+        action = str(action).casefold()
+        if action == "share_settle" and self.share is not None:
+            return self.share.settle(
+                operation_id=operation_id,
+                source_id=user_id,
+                event_type=payload["event_type"],
+                event_title=payload["title"],
+                event_description=payload["desc"],
+                effect_amount=payload["effect_amount"],
+                bonus_percent=payload["cost_bonus_percent"],
+                recipients=payload["recipients"],
+                occurred_at=payload["settled_at"],
             )
-        if str(action).casefold() == "bet" and self.player_database is not None:
+        if action == "share_resume" and self.share is not None:
+            return self.share.resume(
+                operation_id=operation_id,
+                source_id=user_id,
+                occurred_at=str(payload.get("settled_at", "")),
+            )
+        if action == "bet" and self.player_database is not None:
             return DufangBetSqlRepository(self.database, self.player_database).place(
                 operation_id,
                 user_id,
@@ -45,6 +64,9 @@ class DufangRepository(ServicePort):
         if self.player_database is None:
             return None
         return DufangPayoutSqlRepository(self.database, self.player_database).get_result(operation_id)
+
+    def share_exists(self, operation_id: str) -> bool:
+        return self.share is not None and self.share.exists(operation_id)
 
 
 __all__ = ["DufangRepository"]

@@ -446,6 +446,11 @@ def _slice_status() -> dict[str, dict[str, object]]:
     past_life_events_facade = (PACKAGE / "xiuxian" / "xiuxian_past_life" / "past_life_events.py").read_text(encoding="utf-8")
     past_life_command_facade = (PACKAGE / "xiuxian" / "xiuxian_past_life" / "__init__.py").read_text(encoding="utf-8")
     dufang_facade = (PACKAGE / "xiuxian" / "xiuxian_dufang" / "__init__.py").read_text(encoding="utf-8")
+    dufang_application = (PACKAGE / "features" / "dufang" / "application.py").read_text(encoding="utf-8")
+    dufang_repository = (PACKAGE / "features" / "dufang" / "repository.py").read_text(encoding="utf-8")
+    dufang_share_repository = (PACKAGE / "features" / "dufang" / "share_repository.py").read_text(encoding="utf-8")
+    dufang_migrations = (PACKAGE / "features" / "dufang" / "migrations.py").read_text(encoding="utf-8")
+    legacy_migrated_source = (PACKAGE / "features" / "_legacy_migrated.py").read_text(encoding="utf-8")
     fusion_facade = (PACKAGE / "xiuxian" / "xiuxian_fusion" / "__init__.py").read_text(encoding="utf-8")
     fusion_repository = (PACKAGE / "features" / "fusion" / "repository.py").read_text(encoding="utf-8")
     fusion_settlement_repository = (PACKAGE / "features" / "fusion" / "settlement_repository.py").read_text(encoding="utf-8")
@@ -1864,8 +1869,31 @@ def _slice_status() -> dict[str, dict[str, object]]:
         },
         "dufang": {
             "share_application_owned": "dufang_application.share_settle(" in dufang_facade,
-            "legacy_share_disabled": "_dufang_share_service().settle(" not in dufang_facade,
-            "status": "share_settlement_cutover_with_bet_payout_compatibility",
+            "legacy_share_disabled": (
+                "DufangShareSettlementService" not in dufang_repository
+                and "_dufang_share_service" not in dufang_facade
+            ),
+            "share_resume_reachable": "dufang_application.resume_share(" in dufang_facade,
+            "share_repository_owned": "DufangShareSqlRepository" in dufang_repository,
+            "share_legacy_settlement_disabled": (
+                "DufangShareSettlementService" not in dufang_repository
+                and "_dufang_share_service" not in dufang_facade
+            ),
+            "share_request_path_has_no_ddl": (
+                "CREATE TABLE" not in dufang_share_repository
+                and "ALTER TABLE" not in dufang_share_repository
+            ),
+            "share_ledger_identity_stable": 'identity = {"user_id": user_id}' in dufang_application,
+            "share_player_receipt_recovery_owned": (
+                "dufang_share_player_receipts" in dufang_share_repository
+                and "dufang_share_player_receipts" in dufang_migrations
+            ),
+            "share_migrations_registered_and_routed": (
+                "legacy.dufang.002" in legacy_migrated_source
+                and "legacy.dufang.003" in legacy_migrated_source
+                and '"legacy.dufang.003"' in plugin_source
+            ),
+            "status": "share_feature_repository_cutover_with_bet_payout_compatibility",
         },
         "fusion": {
             "single_application_owned": "fusion_application.apply(" in fusion_facade,

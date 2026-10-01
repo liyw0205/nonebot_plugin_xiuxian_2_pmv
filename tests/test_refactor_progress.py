@@ -6,6 +6,17 @@ from scripts.check_full_refactor_progress import _slice_status
 
 
 class RefactorProgressTests(unittest.TestCase):
+    def test_progress_report_tracks_dufang_share_repository_cutover(self) -> None:
+        dufang = _slice_status()["dufang"]
+        self.assertTrue(dufang["share_application_owned"])
+        self.assertTrue(dufang["share_resume_reachable"])
+        self.assertTrue(dufang["share_repository_owned"])
+        self.assertTrue(dufang["share_legacy_settlement_disabled"])
+        self.assertTrue(dufang["share_request_path_has_no_ddl"])
+        self.assertTrue(dufang["share_ledger_identity_stable"])
+        self.assertTrue(dufang["share_player_receipt_recovery_owned"])
+        self.assertTrue(dufang["share_migrations_registered_and_routed"])
+
     def test_progress_report_tracks_compensation_claim_cleanup_boundary(self) -> None:
         compensation = _slice_status()["compensation"]
         self.assertTrue(compensation["claim_delete_application_owned"])

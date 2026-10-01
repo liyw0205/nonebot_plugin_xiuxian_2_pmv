@@ -18,13 +18,31 @@ class DufangShareSettlementTests(unittest.TestCase):
     def test_dufang_facade_defers_share_service_construction(self):
         from nonebot_plugin_xiuxian_2.xiuxian import xiuxian_dufang
 
-        self.assertIsNone(xiuxian_dufang._dufang_share_service_instance)
+        self.assertFalse(hasattr(xiuxian_dufang, "_dufang_share_service_instance"))
+        self.assertFalse(hasattr(xiuxian_dufang, "_dufang_share_service"))
 
     def test_dufang_share_settlement_uses_feature_application(self):
         source = Path(__file__).parents[1] / "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dufang/__init__.py"
         handler = source.read_text(encoding="utf-8")
         assert "dufang_application.share_settle(" in handler
+        assert "dufang_application.resume_share(" in handler
         assert "_dufang_share_service().settle(" not in handler
+
+    def test_nested_application_recipients_are_hydrated_for_handler_use(self):
+        from nonebot_plugin_xiuxian_2.core.result import OperationOutcome
+        from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_dufang import _share_settlement_from_outcome
+
+        outcome = OperationOutcome.applied(
+            "share",
+            "dufang.share_settle",
+            data={
+                "status": "applied",
+                "event_type": "profit",
+                "recipients": [{"user_id": "u1", "user_name": "甲", "status": "applied", "amount": 3}],
+            },
+        )
+        settlement = _share_settlement_from_outcome(outcome)
+        self.assertEqual((settlement.recipients[0].user_id, settlement.recipients[0].amount), ("u1", 3))
 
     def test_dufang_facade_defers_sql_manager_construction(self):
         source = (
