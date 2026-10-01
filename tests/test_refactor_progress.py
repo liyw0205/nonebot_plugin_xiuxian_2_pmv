@@ -592,6 +592,7 @@ class RefactorProgressTests(unittest.TestCase):
         self.assertTrue(slices["dongfu"]["fertilize_application_owned"])
         self.assertTrue(slices["dongfu"]["accelerate_application_owned"])
         self.assertTrue(slices["dongfu"]["patrol_application_owned"])
+        self.assertTrue(slices["dongfu"]["inventory_facade_has_no_direct_mutator"])
         self.assertTrue(slices["dongfu"]["infiltrate_success_application_owned"])
         self.assertTrue(slices["dongfu"]["legacy_infiltrate_success_disabled"])
         self.assertTrue(slices["dongfu"]["infiltrate_failure_application_owned"])

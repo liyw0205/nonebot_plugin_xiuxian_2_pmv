@@ -3120,7 +3120,7 @@ Boss 旧 settlement transaction 的同事务时间戳写入仍是独立未迁移
 
 ### 6.2 当前推进队列（2026-10-02）
 
-2026-10-02 已收口礼包/兑换码管理员领取记录删除边界：SQLite claim/counter 删除经 feature application 和共享 operation ledger，JSON 定义/旧领取快照仍留在兼容回写边界；缺 schema 时不改 JSON。洞府背包结算的剩余可达写入与补偿其它回写仍待按真实调用图审计；全局重构继续受 legacy transaction services、`xiuxian2_handle` 和正式发布/P7 证据阻塞。
+2026-10-02 已收口礼包/兑换码管理员领取记录删除边界：SQLite claim/counter 删除经 feature application 和共享 operation ledger，JSON 定义/旧领取快照仍留在兼容回写边界；缺 schema 时不改 JSON。洞府背包默认写入已核对为 feature-owned settlement，移除了无调用点的旧 facade 直写 helper；下一项继续审计补偿其它回写路径。全局重构继续受 legacy transaction services、`xiuxian2_handle` 和正式发布/P7 证据阻塞。
 
 本轮傀儡默认执行路径收口：生命周期容器不再注入 `LegacyPuppetRepository`，购买、升级和自动收取均由
 `PuppetApplication` 的 feature-owned SQL repository 承担；旧 transaction service 仍保留为显式兼容入口。
@@ -5043,3 +5043,5 @@ Boss 通过 `get_rift_battle_final_attributes` 注入 `get_rift_battle_impart_da
 2026-10-01 compensation invitation binding/catalog projection：新增 `legacy.compensation.004` 启动迁移，预建 `invitation_reward_definitions`；邀请码绑定、邀请人/邀请人数读取和邀请奖励定义读取/设置均经 `CompensationApplication -> InvitationRewardClaimSqlRepository`，`invitation_reward_invites` 成为默认绑定投影，定义写入不再更新 `invitation_rewards.json`。保留 JSON 作为一次性快照导入和缺表读取 fallback；绑定重复/冲突、定义覆盖、缺迁移 `schema_missing` 且请求不建表均有回归测试。全局 legacy `InvitationRewardClaimService` 仍仅保留显式兼容用途；全局 `xiuxian2_handle`、经济写入、剩余 legacy transaction services 和发布迁移/P7 仍未完成。
 
 2026-10-02 compensation gift/redeem claim cleanup boundary：礼包/兑换码管理员删除指定领取记录及按类型清空改经 `CompensationApplication -> CompensationRewardClaimSqlRepository`，在 immediate UoW 中删除 claims/counters 并记录共享 operation ledger 回执；事件 ID 派生的 operation ID 支持重放和 payload 冲突识别。缺数据库/schema/ledger 时返回 `schema_missing`，JSON 定义与历史 claimed projection 均保持不变；成功后仍经既有 compatibility application 写 JSON，不新增 migration。管理员失败状态不再误报成功。补隔离 SQLite 指定删除、类型清理、重放、冲突、缺 schema 不建表/不改 JSON及兼容快照同步回归；定向回归 `268 passed`，progress compensation gates、inventory freshness、隔离数据目录 architecture CLI (`ok=true`)、目标 compileall 和 diff check 通过。临时 pytest/pyc/architecture 数据及 progress 输出在验收后清理；此前一次未隔离的 architecture `--help` 实际触发了检查，在 `data/xiuxian` 留下 compatibility marker 更新和 `xiuxian_impart.db-shm`，按运行数据保护规则未触碰。收尾磁盘可用 `21G`、RAM available `1.3GiB`，保留用户 `boss_info.json` 修改。下一片继续按 6.2 审计洞府背包剩余可达写入与补偿其它回写路径；整体 `exit_ready=false` 仍由全局 legacy transaction services、`xiuxian2_handle` 及真实发布/P7 证据阻塞。
+
+2026-10-02 dongfu inventory write-path audit：逐项核对种植/施肥/催熟/扩建/阵法消耗及收获/巡山/潜入发放，实际背包 SQL 均位于 `DongfuApplication` 对应 repository 的结算 UoW；facade `_consume_item` 是唯一直接调用 `goods_num/update_back_j` 的私有 helper，仓库无调用点，已移除并增加 progress/source 门禁。无 schema、事务、ITEMS_CACHE 或业务状态变化；洞府定向回归 `71 passed`，Dongfu progress gates、inventory freshness、目标 compileall 和 diff check 通过。专用 pytest/pyc/progress 产物随后清理；下一片审计 compensation 除礼包/兑换码删除外的定义回写与奖励发放默认路径。

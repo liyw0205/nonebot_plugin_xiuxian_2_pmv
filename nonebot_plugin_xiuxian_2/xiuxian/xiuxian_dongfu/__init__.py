@@ -423,13 +423,6 @@ def _get_slot_by_no(d: dict, slot_no: int):
     return _normalize_plant_slots(d)[slot_no - 1]
 
 
-def _consume_item(uid: str, item_id: int, item_name: str, count: int = 1):
-    if _to_int(_sql_message().goods_num(uid, item_id)) < count:
-        return False
-    _sql_message().update_back_j(uid, item_id, count)
-    return True
-
-
 def _get_dongfu(uid: str):
     d = _player_data_manager().get_fields(str(uid), DONGFU_TABLE)
     default = _default_dongfu()

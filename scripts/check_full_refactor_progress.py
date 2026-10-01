@@ -2362,6 +2362,10 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "accelerate_application_owned": "dongfu_application.accelerate(" in dongfu_facade,
             "patrol_application_owned": "dongfu_application.patrol(" in dongfu_facade,
             "array_upgrade_application_owned": "dongfu_application.array_upgrade(" in dongfu_facade,
+            "inventory_facade_has_no_direct_mutator": all(
+                token not in dongfu_facade
+                for token in ("def _consume_item(", "_sql_message().goods_num(", "_sql_message().update_back_j(")
+            ),
             "infiltrate_success_application_owned": "dongfu_application.infiltrate_success(" in dongfu_success_handler,
             "legacy_infiltrate_success_disabled": "_dongfu_infiltrate_success_service().settle(" not in dongfu_success_handler and "_run_dongfu_action(" not in dongfu_success_handler,
             "infiltrate_failure_application_owned": "dongfu_application.infiltrate_failure(" in dongfu_failure_handler,
