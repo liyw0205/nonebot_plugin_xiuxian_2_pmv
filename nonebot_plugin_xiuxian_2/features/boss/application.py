@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import asdict, is_dataclass
+from dataclasses import asdict, dataclass, is_dataclass
 from pathlib import Path
 from typing import Any, Mapping
 
@@ -16,6 +16,22 @@ from .world_boss_repository import (
     WorldBossDailyLimitResetSqlRepository,
     WorldBossManualSpawnSqlRepository,
 )
+
+
+@dataclass(frozen=True)
+class BossSettlementResult:
+    status: str
+    boss_hp: int = 0
+    stamina: int = 0
+    battle_count: int = 0
+    stone: int = 0
+    exp: int = 0
+    integral: int = 0
+    activity_lines: tuple[str, ...] = ()
+
+    @property
+    def succeeded(self) -> bool:
+        return self.status in {"applied", "duplicate"}
 
 
 def _data(raw: Any) -> dict[str, Any]:
@@ -116,6 +132,37 @@ class BossApplication:
     def settlement_result(self, *, operation_id: str) -> Any:
         return self._repository().settlement_result(operation_id)
 
+    @staticmethod
+    def _settlement_result(raw: Any, status: str | None = None) -> BossSettlementResult | None:
+        if raw is None:
+            return None
+        data = _data(raw)
+        lines = data.get("activity_lines", ())
+        if isinstance(lines, list):
+            lines = tuple(str(line) for line in lines)
+        elif not isinstance(lines, tuple):
+            lines = tuple(lines or ())
+        return BossSettlementResult(
+            status or str(data.get("status", "failed")),
+            int(data.get("boss_hp", 0) or 0),
+            int(data.get("stamina", 0) or 0),
+            int(data.get("battle_count", 0) or 0),
+            int(data.get("stone", 0) or 0),
+            int(data.get("exp", 0) or 0),
+            int(data.get("integral", 0) or 0),
+            lines,
+        )
+
+    def settlement_result_compat(self, *, operation_id: str) -> BossSettlementResult | None:
+        return self._settlement_result(self.settlement_result(operation_id=operation_id), "duplicate")
+
+    def settle_compat(self, **kwargs: Any) -> BossSettlementResult:
+        outcome = self.settle(**kwargs)
+        return self._settlement_result(
+            outcome.data,
+            "duplicate" if outcome.replayed else str((outcome.data or {}).get("status", outcome.status)),
+        ) or BossSettlementResult(str(outcome.status))
+
     def spawn_snapshot(self, *, config_loader):
         return self._manual_spawn(config_loader).snapshot()
 
@@ -145,4 +192,4 @@ class BossApplication:
         return ReplyPlan(getattr(self, action)(**kwargs).data, reference=True)
 
 
-__all__ = ["BossApplication"]
+__all__ = ["BossApplication", "BossSettlementResult"]

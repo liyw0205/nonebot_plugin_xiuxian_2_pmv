@@ -484,12 +484,7 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
     operation_key = event_id or boss_ids.new_id()
     operation_id = f"world-boss-battle:{operation_key}:{user_id}"
     # 先查 operation：同事件重放必须在限购/重伤/境界前置拦截之前回放。
-    previous_settlement_data = boss_application.settlement_result(operation_id=operation_id)
-    previous_settlement = (
-        WorldBossBattleSettlementResult(**previous_settlement_data)
-        if isinstance(previous_settlement_data, dict)
-        else previous_settlement_data
-    )
+    previous_settlement = boss_application.settlement_result_compat(operation_id=operation_id)
     if previous_settlement is not None:
         msg = (
             "该讨伐请求已经处理，无需重复提交。\n"
@@ -826,7 +821,7 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
 
     # Rewards and combat state share the composite settlement boundary.
     now = runtime_clock.now()
-    settlement = _world_boss_battle_settlement_service().settle(
+    settlement = boss_application.settle_compat(
         operation_id=operation_id,
         user_id=user_id,
         expected_bosses=expected_bosses,

@@ -18,7 +18,7 @@
 
 ## 数据模型与迁移
 
-`boss.001` 在 `game_db` 创建 `boss_feature_migrations`，`boss.004` 在 `player_db` 启动时创建世界BOSS生命周期表和限额字段。积分、背包和战斗结算仍兼容既有历史表；手动生成与每日限额重置由 `BossApplication` 的 feature-owned repository 写入，运行期只读校验 schema，缺失时 fail closed，不执行 DDL。
+`boss.001` 在 `game_db` 创建 `boss_feature_migrations`，`boss.004` 在 `player_db` 启动时创建世界BOSS生命周期表和限额字段。积分、背包和战斗结算继续复用既有跨库表，但默认通过 `BossApplication` 的 feature-owned repository 执行；手动生成与每日限额重置运行期只读校验 schema，缺失时 fail closed，不执行 DDL。
 
 ## 事务与失败回滚
 

@@ -224,7 +224,7 @@ def test_real_entry_uses_composite_service_without_segmented_side_paths():
     with open(path, encoding="utf-8") as source_file:
         text = source_file.read()
     handler = text[text.index("async def battle_"):text.index("@boss_info.handle")]
-    assert "_world_boss_battle_settlement_service().settle(" in handler
+    assert "boss_application.settle_compat(" in handler
     assert "Boss_fight(\n        user_id,\n        bossinfo,\n        type_in=1," in handler
     post_fight = handler[handler.index("result, victor, bossinfo_new, status_list"):]
     assert "boss_reward_service.grant(" not in post_fight

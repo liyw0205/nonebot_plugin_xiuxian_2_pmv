@@ -527,6 +527,8 @@ class RefactorProgressTests(unittest.TestCase):
         self.assertTrue(boss["daily_limit_repository_owned"])
         self.assertTrue(boss["world_boss_request_path_has_no_ddl"])
         self.assertTrue(boss["world_boss_player_migration_registered"])
+        self.assertTrue(boss["battle_application_owned"])
+        self.assertTrue(boss["legacy_battle_settlement_disabled"])
         buff = slices["buff"]
         self.assertTrue(buff["blessed_open_application_owned"])
         self.assertTrue(buff["legacy_blessed_open_disabled"])
