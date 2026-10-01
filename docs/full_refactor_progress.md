@@ -2,6 +2,13 @@
 
 状态：进行中。`v1.1.0` 的 P0-P7 发布证据继续保留，但不作为底层全面重构完成证明。
 
+2026-10-01 reward inventory write boundary：`RewardService._grant_items` 不再直接调用旧
+`XiuxianDateManage.send_back`，改经 `PlayerInventoryApplication -> PlayerInventorySqlRepository`；仓储
+在既有 `back` 表上按首个 `rowid` 更新、按 `max_goods_num` 封顶并保留绑定物品计数，缺数据库/表/字段时
+fail closed，不执行请求期 DDL。新增容量封顶、重复投影、缺 schema 和 application 委托回归；无新增
+migration。测试禁用 pytest/字节码缓存并在验收后清理临时目录；全局 legacy transaction services、
+`xiuxian2_handle` 和正式发布/P7 仍是 blocker。
+
 2026-10-01 combat vital-state write boundary：PVE、普通切磋、Boss 兼容战斗的默认 HP/MP 写回统一经
 `PlayerStateApplication -> PlayerStateRepository.update_vitals`，按 `user_xiuxian` 首个 `rowid`
 更新并支持可选 CAS；缺数据库、表或字段时不执行请求期 DDL，仅保留显式 legacy fallback。该切片

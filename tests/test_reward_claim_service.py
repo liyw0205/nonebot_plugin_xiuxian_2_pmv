@@ -32,6 +32,15 @@ def test_reward_facade_uses_lazy_singleton_wrapper():
     assert "reward_service = RewardService()" not in source
 
 
+def test_reward_items_use_feature_owned_inventory_writer():
+    source = Path(
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_utils/reward_service.py"
+    ).read_text(encoding="utf-8")
+    assert "PlayerInventoryApplication" in source
+    assert "self.inventory_application.grant_item(" in source
+    assert "self.sql_message.send_back(" not in source
+
+
 class RewardClaimServiceTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temp_dir = tempfile.TemporaryDirectory()

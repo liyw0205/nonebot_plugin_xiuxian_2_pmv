@@ -9,6 +9,7 @@ except Exception:  # pragma: no cover
 
 from ..xiuxian_config import XiuConfig
 from ...features.base.economy_application import PlayerEconomyApplication
+from ...features.base.inventory_application import PlayerInventoryApplication
 from ...paths import get_paths
 from .economy_log import safe_log_economy_change
 from .item_json import Items
@@ -25,11 +26,19 @@ def _to_int(value: Any, default: int = 0) -> int:
 
 
 class RewardService:
-    def __init__(self, *, economy_application: PlayerEconomyApplication | None = None):
+    def __init__(
+        self,
+        *,
+        economy_application: PlayerEconomyApplication | None = None,
+        inventory_application: PlayerInventoryApplication | None = None,
+    ):
         self.sql_message = XiuxianDateManage()
         self.player_data_manager = PlayerDataManager()
         self.items = Items()
         self.economy_application = economy_application or PlayerEconomyApplication(
+            get_paths().game_db
+        )
+        self.inventory_application = inventory_application or PlayerInventoryApplication(
             get_paths().game_db
         )
 
@@ -68,20 +77,23 @@ class RewardService:
                     logger.warning(f"奖励物品不存在：{item_id}")
                 continue
 
-            self.sql_message.send_back(
+            result = self.inventory_application.grant_item(
                 user_id,
                 int(item_id),
                 item_info["name"],
                 item_info["type"],
                 amount,
-                bind_flag,
+                bind_flag=bind_flag,
+                max_goods_num=int(XiuConfig().max_goods_num),
             )
+            if not result.succeeded or result.applied <= 0:
+                continue
             granted.append(
                 {
                     "id": int(item_id),
                     "name": item_info["name"],
                     "type": item_info["type"],
-                    "amount": amount,
+                    "amount": result.applied,
                     "bind_flag": bind_flag,
                 }
             )
