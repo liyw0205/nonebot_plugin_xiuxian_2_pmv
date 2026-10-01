@@ -1,6 +1,7 @@
 import asyncio
 import os
 import time
+from threading import RLock
 from io import BytesIO
 from pathlib import Path
 
@@ -11,7 +12,29 @@ from .http_proxy import http_client
 
 _REAL_ID_CACHE_TTL = 600
 _REAL_ID_NEGATIVE_CACHE_TTL = 30
+_REAL_ID_CACHE_MAX_ENTRIES = 2048
 _real_id_cache: dict[str, tuple[float, str | None]] = {}
+_real_id_cache_lock = RLock()
+
+
+def _prune_real_id_cache(now: float | None = None) -> None:
+    """Drop expired IDs and cap the process-local cache footprint."""
+    current = time.monotonic() if now is None else float(now)
+    with _real_id_cache_lock:
+        expired = [
+            key for key, (expires_at, _value) in _real_id_cache.items()
+            if expires_at <= current
+        ]
+        for key in expired:
+            _real_id_cache.pop(key, None)
+
+        overflow = len(_real_id_cache) - _REAL_ID_CACHE_MAX_ENTRIES
+        if overflow > 0:
+            oldest = sorted(
+                _real_id_cache.items(), key=lambda item: item[1][0]
+            )[:overflow]
+            for key, _value in oldest:
+                _real_id_cache.pop(key, None)
 
 
 def get_real_id(id_str, timeout: float = 1.5):
@@ -28,11 +51,13 @@ def get_real_id(id_str, timeout: float = 1.5):
 
     cache_key = f"{base_url}:{id_str}"
     now = time.monotonic()
-    cached = _real_id_cache.get(cache_key)
-    if cached:
-        expires_at, cached_id = cached
-        if now < expires_at:
-            return cached_id
+    _prune_real_id_cache(now)
+    with _real_id_cache_lock:
+        cached = _real_id_cache.get(cache_key)
+        if cached:
+            expires_at, cached_id = cached
+            if now < expires_at:
+                return cached_id
 
     url = f"{base_url}/getid"
     try:
@@ -44,10 +69,14 @@ def get_real_id(id_str, timeout: float = 1.5):
         real_id = data.get("id")
         real_id = str(real_id) if real_id else None
         ttl = _REAL_ID_CACHE_TTL if real_id else _REAL_ID_NEGATIVE_CACHE_TTL
-        _real_id_cache[cache_key] = (now + ttl, real_id)
+        with _real_id_cache_lock:
+            _real_id_cache[cache_key] = (now + ttl, real_id)
+        _prune_real_id_cache(now)
         return real_id
     except Exception:
-        _real_id_cache[cache_key] = (now + _REAL_ID_NEGATIVE_CACHE_TTL, None)
+        with _real_id_cache_lock:
+            _real_id_cache[cache_key] = (now + _REAL_ID_NEGATIVE_CACHE_TTL, None)
+        _prune_real_id_cache(now)
         return None
 
 

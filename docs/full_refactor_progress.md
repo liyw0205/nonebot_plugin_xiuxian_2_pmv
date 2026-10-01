@@ -2,6 +2,13 @@
 
 状态：进行中。`v1.1.0` 的 P0-P7 发布证据继续保留，但不作为底层全面重构完成证明。
 
+2026-10-01 process-local cache bound：`xiuxian_utils.external_api` 的真实 ID 缓存新增过期项清理和
+固定容量上限（2048），并使用短锁保护并发读写；正缓存与失败负缓存的 TTL/返回语义不变，避免长期运行
+因请求 key 持续增长耗尽 RAM。新增缓存回归 2 项；测试使用 `PYTHONDONTWRITEBYTECODE=1` 与
+`-p no:cacheprovider`，验收后清理 pytest 临时目录。该项只治理进程缓存，不触碰运行数据库、WAL/SHM、
+`.venv`、`.git` 或用户 `boss_info.json`。当前全面重构仍由遗留 `transaction_service`、
+`xiuxian2_handle` 真实执行路径和正式发布/P7 证据阻塞。
+
 2026-10-01 world-boss full-refresh cutover：世界BOSS全量刷新已由
 `WorldBossFullRefreshSqlRepository -> BossApplication` 承担，手动与定时入口共享同一
 operation receipt。新增 player-only `boss.005` migration，预建全量刷新回执表；请求路径只读
