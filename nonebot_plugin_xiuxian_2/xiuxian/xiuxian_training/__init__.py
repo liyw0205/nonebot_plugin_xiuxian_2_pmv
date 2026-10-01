@@ -27,7 +27,7 @@ from ..xiuxian_utils.utils import number_to
 
 _player_data_manager_instance = None
 _sql_message_instance = None
-items = Items()
+_items_instance = None
 training_application = TrainingApplication(get_paths().game_db, get_paths().player_db)
 runtime_clock = SystemClock()
 runtime_ids = UUIDGenerator()
@@ -63,6 +63,14 @@ def _sql_message():
     if _sql_message_instance is None:
         _sql_message_instance = XiuxianDateManage()
     return _sql_message_instance
+
+
+def _items():
+    """Load the shared item catalog only when training needs item metadata."""
+    global _items_instance
+    if _items_instance is None:
+        _items_instance = Items()
+    return _items_instance
 
 
 def _run_training_action(action: str, operation_id: str, user_id: str, **payload):
@@ -253,7 +261,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     
     for item_id, item_data in current_page_items:
         # 动态获取物品信息
-        item_info = items.get_data_by_item_id(item_id)
+        item_info = _items().get_data_by_item_id(item_id)
         already_purchased = training_limit.get_weekly_purchases(user_id, item_id)
         if not item_info:
             continue
@@ -299,7 +307,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         await training_buy.finish()
     
     item_data = shop_items[shop_id]
-    item_info = items.get_data_by_item_id(shop_id)
+    item_info = _items().get_data_by_item_id(shop_id)
     training_info = training_limit.get_user_training_info(user_id)
     # 检查限购
     already_purchased = training_limit.get_weekly_purchases(user_id, shop_id)
@@ -440,7 +448,7 @@ def make_choice(user_id, operation_id):
     hp_delta = int(event_result.get("amount", 0)) if isinstance(event_result, dict) and event_result.get("type") == "hp" else 0
     event_items = []
     if isinstance(event_result, dict) and event_result.get("type") == "item":
-        item_info = items.get_data_by_item_id(event_result["item_id"])
+        item_info = _items().get_data_by_item_id(event_result["item_id"])
         event_items.append({"id": event_result["item_id"], "name": event_result["item_name"], "type": item_info["type"], "amount": -1 if event_result.get("lost") else 1})
     
     # 更新进度 - 默认+1
@@ -492,11 +500,11 @@ def make_choice(user_id, operation_id):
         item_rank = random.randint(min_rank, min_rank + 20)
         item_types = ["功法", "神通", "药材"]
         item_type = random.choice(item_types)
-        item_id_list = items.get_random_id_list_by_rank_and_item_type(item_rank, item_type)
+        item_id_list = _items().get_random_id_list_by_rank_and_item_type(item_rank, item_type)
         
         if item_id_list:
             item_id = random.choice(item_id_list)
-            item_info = items.get_data_by_item_id(item_id)
+            item_info = _items().get_data_by_item_id(item_id)
             reward_items = [{"id": item_id, "name": item_info["name"], "type": item_info["type"], "amount": 1}]
             item_reward_msg = f"\n随机物品：{item_info['level']}:{item_info['name']}"
         else:

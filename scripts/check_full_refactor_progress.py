@@ -187,6 +187,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
     tower_limit = (PACKAGE / "xiuxian" / "xiuxian_tower" / "tower_limit.py").read_text(encoding="utf-8")
     training_limit = (PACKAGE / "xiuxian" / "xiuxian_training" / "training_limit.py").read_text(encoding="utf-8")
     training_facade = (PACKAGE / "xiuxian" / "xiuxian_training" / "__init__.py").read_text(encoding="utf-8")
+    training_events = (PACKAGE / "xiuxian" / "xiuxian_training" / "training_events.py").read_text(encoding="utf-8")
     training_application = (PACKAGE / "features" / "training" / "application.py").read_text(encoding="utf-8")
     training_repository = (PACKAGE / "features" / "training" / "repository.py").read_text(encoding="utf-8")
     training_event_repository = (PACKAGE / "features" / "training" / "event_repository.py").read_text(encoding="utf-8")
@@ -725,8 +726,16 @@ def _slice_status() -> dict[str, dict[str, object]]:
                 'Migration("training.004", "training_reset_operations", apply_training_reset_operations)' in plugin
                 and "def apply_training_reset_operations(" in training_migrations
             ),
+            "item_catalog_lazy": (
+                "_items_instance = None" in training_facade
+                and "def _items(" in training_facade
+                and "items = Items()" not in training_facade
+                and "_items_instance = None" in training_events
+                and "def _items(" in training_events
+                and "items = Items()" not in training_events
+            ),
             "purchase_reset_compatibility_retained": "training_purchase_service" in training_repository and "training_reset_service" in training_repository,
-            "status": "event_purchase_and_reset_cutover_with_legacy_fallback",
+            "status": "event_purchase_and_reset_cutover_with_lazy_item_catalog_and_legacy_fallback",
         },
         "work": {
             "daily_refresh_application_owned": "work_daily_refresh_application.reset(" in work_facade,

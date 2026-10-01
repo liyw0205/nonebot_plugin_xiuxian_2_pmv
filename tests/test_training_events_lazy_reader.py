@@ -14,6 +14,16 @@ class TrainingEventsLazyReaderTests(unittest.TestCase):
         self.assertIn("_sql_message().get_back_msg(", source)
         self.assertNotIn("sql_message = XiuxianDateManage()", source)
 
+    def test_training_events_defers_item_catalog_construction(self):
+        source = (
+            Path(__file__).parents[1]
+            / "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_training/training_events.py"
+        ).read_text(encoding="utf-8")
+        self.assertIn("_items_instance = None", source)
+        self.assertIn("def _items(", source)
+        self.assertNotIn("items = Items()", source)
+        self.assertIn("_items().get_data_by_item_id(", source)
+
 
 if __name__ == "__main__":
     unittest.main()

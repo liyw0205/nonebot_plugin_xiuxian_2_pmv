@@ -58,6 +58,7 @@ class RefactorProgressTests(unittest.TestCase):
         self.assertTrue(training["reset_request_path_has_no_ddl"])
         self.assertTrue(training["reset_clock_injected"])
         self.assertTrue(training["reset_migrations_registered"])
+        self.assertTrue(training["item_catalog_lazy"])
         self.assertTrue(training["purchase_reset_compatibility_retained"])
         work = slices["work"]
         self.assertTrue(work["daily_refresh_application_owned"])

@@ -8,7 +8,7 @@ from ..xiuxian_utils.data_source import jsondata
 from ..xiuxian_utils.numeric_bind import percent_exp_reward
 
 _sql_message_instance = None
-items = Items()
+_items_instance = None
 
 
 def _sql_message():
@@ -16,6 +16,14 @@ def _sql_message():
     if _sql_message_instance is None:
         _sql_message_instance = XiuxianDateManage()
     return _sql_message_instance
+
+
+def _items():
+    """Load the shared item catalog only for item-bearing events."""
+    global _items_instance
+    if _items_instance is None:
+        _items_instance = Items()
+    return _items_instance
 
 # 入世事件 - 侧重红尘历练、人际交往、宗门事务等
 # 完整入世事件组
@@ -450,11 +458,11 @@ class TrainingEvents:
                 zx_rank = base_rank(user_level, 16)
             else:
                 zx_rank = base_rank(user_level, 5, up=reward_data["rank_offset"])
-            item_id_list = items.get_random_id_list_by_rank_and_item_type(zx_rank, item_type)
+            item_id_list = _items().get_random_id_list_by_rank_and_item_type(zx_rank, item_type)
             
             if item_id_list:
                 item_id = random.choice(item_id_list)
-                item_info = items.get_data_by_item_id(item_id)
+                item_info = _items().get_data_by_item_id(item_id)
                 return {
                     "message": desc_template.format(f"{item_info['name']}"),
                     "type": "item",
@@ -525,7 +533,7 @@ class TrainingEvents:
             # 优先匹配相同物品类型且未装备的物品
             same_type_items = []
             for item in back_msg:
-                item_data = items.get_data_by_item_id(item["goods_id"])
+                item_data = _items().get_data_by_item_id(item["goods_id"])
                 if (item_data.get("type") in item_types and 
                     item["goods_num"] > 0 and
                     not (item_data.get("type") == "装备" and 
@@ -539,7 +547,7 @@ class TrainingEvents:
                 
                 valid_items = []
                 for item in same_type_items:
-                    item_data = items.get_data_by_item_id(item["goods_id"])
+                    item_data = _items().get_data_by_item_id(item["goods_id"])
                     item_rank = item_data["rank"]
                     if item_rank >= min_rank:
                         valid_items.append(item)
