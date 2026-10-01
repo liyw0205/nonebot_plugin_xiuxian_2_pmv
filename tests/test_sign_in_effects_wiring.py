@@ -23,29 +23,33 @@ class SignInEffectsWiringTests(unittest.TestCase):
         except ValueError:
             nonebot.init()
 
-    def test_legacy_runtime_wires_feature_effects_with_legacy_lottery_port(self) -> None:
+    async def _assert_runtime_effects(self, *, legacy_startup: bool, expected_type: type) -> None:
         with tempfile.TemporaryDirectory() as directory:
             data_dir = Path(directory) / "data"
             copy_static_data(Path(__file__).resolve().parents[1] / "data" / "xiuxian", data_dir)
-            context = build_runtime_context(data_dir=data_dir, legacy_startup=True)
+            context = build_runtime_context(data_dir=data_dir, legacy_startup=legacy_startup)
             lifecycle, _, context = build_lifecycle(context)
-            asyncio.run(lifecycle.start())
+            await lifecycle.start()
             try:
-                self.assertIsInstance(context.services["sign_in"].effects, SignInApplicationEffects)
+                self.assertIsInstance(context.services["sign_in"].effects, expected_type)
             finally:
-                asyncio.run(lifecycle.shutdown())
+                await lifecycle.shutdown()
+
+    def test_legacy_runtime_wires_feature_effects_with_legacy_lottery_port(self) -> None:
+        asyncio.run(
+            self._assert_runtime_effects(
+                legacy_startup=True,
+                expected_type=SignInApplicationEffects,
+            )
+        )
 
     def test_non_legacy_runtime_keeps_effects_noop(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            data_dir = Path(directory) / "data"
-            copy_static_data(Path(__file__).resolve().parents[1] / "data" / "xiuxian", data_dir)
-            context = build_runtime_context(data_dir=data_dir, legacy_startup=False)
-            lifecycle, _, context = build_lifecycle(context)
-            asyncio.run(lifecycle.start())
-            try:
-                self.assertIsInstance(context.services["sign_in"].effects, NullSignInEffects)
-            finally:
-                asyncio.run(lifecycle.shutdown())
+        asyncio.run(
+            self._assert_runtime_effects(
+                legacy_startup=False,
+                expected_type=NullSignInEffects,
+            )
+        )
 
 
 if __name__ == "__main__":
