@@ -793,7 +793,6 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
         from .features.mixelixir.application import MixelixirApplication
         from .features.mixelixir.repository import LegacyMixelixirRepository
         from .features.puppet.application import PuppetApplication
-        from .features.puppet.repository import LegacyPuppetRepository
         from .features.boss.application import BossApplication
         from .features.dungeon.application import DungeonApplication
         from .features.pet.application import PetApplication
@@ -982,10 +981,6 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
             "puppet": PuppetApplication(
                 str(context.database.path("game_db")),
                 str(context.database.path("player_db")),
-                repository=LegacyPuppetRepository(
-                    str(context.database.path("game_db")),
-                    str(context.database.path("player_db")),
-                ),
             ),
             "boss": BossApplication(
                 str(context.database.path("game_db")),

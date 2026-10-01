@@ -441,6 +441,8 @@ def _slice_status() -> dict[str, dict[str, object]]:
     title_facade = (PACKAGE / "xiuxian" / "xiuxian_title" / "__init__.py").read_text(encoding="utf-8")
     base_facade = (PACKAGE / "xiuxian" / "xiuxian_base" / "__init__.py").read_text(encoding="utf-8")
     puppet_facade = (PACKAGE / "xiuxian" / "xiuxian_puppet" / "__init__.py").read_text(encoding="utf-8")
+    puppet_application_source = (PACKAGE / "features" / "puppet" / "application.py").read_text(encoding="utf-8")
+    plugin_source = (PACKAGE / "plugin.py").read_text(encoding="utf-8")
     pet_facade = (PACKAGE / "xiuxian" / "xiuxian_pet" / "__init__.py").read_text(encoding="utf-8")
     trade_facade = (PACKAGE / "xiuxian" / "xiuxian_trade" / "__init__.py").read_text(encoding="utf-8")
     trade_application_source = (PACKAGE / "features" / "trade" / "application.py").read_text(encoding="utf-8")
@@ -1938,9 +1940,23 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "status": "cooldown_and_scheduled_stamina_recovery_owned_with_stone_theft_robbery_settlement_rename_replay_and_remaining_base_compatibility_isolation",
         },
         "puppet": {
+            "purchase_application_owned": (
+                "def purchase(" in puppet_application_source
+                and "PuppetPurchaseSqlRepository" in puppet_application_source
+                and ".purchase(request.operation_id" in puppet_application_source
+            ),
+            "upgrade_application_owned": (
+                "def upgrade(" in puppet_application_source
+                and "PuppetPurchaseSqlRepository" in puppet_application_source
+                and ".upgrade(\n                request.operation_id" in puppet_application_source
+            ),
             "harvest_application_owned": "puppet_application.harvest(" in puppet_facade,
             "legacy_harvest_disabled": "_puppet_harvest_service().harvest(" not in puppet_facade,
-            "status": "harvest_cutover_with_purchase_upgrade_compatibility",
+            "default_application_has_no_legacy_repository": (
+                "LegacyPuppetRepository" not in puppet_facade
+                and "LegacyPuppetRepository" not in plugin_source
+            ),
+            "status": "purchase_upgrade_and_harvest_default_feature_owned_with_explicit_compatibility",
         },
         "pet": {
             "active_switch_application_owned": "pet_application.switch(" in pet_facade,

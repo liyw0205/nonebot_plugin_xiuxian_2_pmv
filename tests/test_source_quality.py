@@ -204,6 +204,11 @@ class SourceQualityTests(unittest.TestCase):
         self.assertNotIn("LegacyPuppetRepository", source)
         self.assertNotIn("repository=LegacyPuppetRepository", source)
 
+        plugin_source = (SOURCE_ROOT / "plugin.py").read_text(encoding="utf-8")
+        self.assertIn('"puppet": PuppetApplication(', plugin_source)
+        self.assertNotIn("from .features.puppet.repository import LegacyPuppetRepository", plugin_source)
+        self.assertNotIn("repository=LegacyPuppetRepository", plugin_source)
+
     def test_dongfu_infiltrate_success_handler_uses_feature_repository(self) -> None:
         facade = (
             SOURCE_ROOT / "xiuxian" / "xiuxian_dongfu" / "__init__.py"

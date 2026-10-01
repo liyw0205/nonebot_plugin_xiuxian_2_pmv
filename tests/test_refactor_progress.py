@@ -449,8 +449,11 @@ class RefactorProgressTests(unittest.TestCase):
         self.assertTrue(base["pill_fusion_service_isolated"])
         self.assertTrue(base["tribulation_state_migration_service_isolated"])
         puppet = slices["puppet"]
+        self.assertTrue(puppet["purchase_application_owned"])
+        self.assertTrue(puppet["upgrade_application_owned"])
         self.assertTrue(puppet["harvest_application_owned"])
         self.assertTrue(puppet["legacy_harvest_disabled"])
+        self.assertTrue(puppet["default_application_has_no_legacy_repository"])
         pet = slices["pet"]
         self.assertTrue(pet["active_switch_application_owned"])
         self.assertTrue(pet["skill_replace_application_owned"])
