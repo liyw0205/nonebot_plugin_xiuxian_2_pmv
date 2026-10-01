@@ -562,6 +562,9 @@ def _slice_status() -> dict[str, dict[str, object]]:
     boss_world_repository = (PACKAGE / "features" / "boss" / "world_boss_repository.py").read_text(encoding="utf-8")
     boss_migrations = (PACKAGE / "features" / "boss" / "migrations.py").read_text(encoding="utf-8")
     buff_facade = (PACKAGE / "xiuxian" / "xiuxian_buff" / "__init__.py").read_text(encoding="utf-8")
+    buff_normalize_experience_handler = buff_facade[
+        buff_facade.index("@del_exp_decimal.handle") : buff_facade.index("@daily_info.handle")
+    ]
     impart_facade = (PACKAGE / "xiuxian" / "xiuxian_impart" / "__init__.py").read_text(encoding="utf-8")
     impart_prayer_repository = (PACKAGE / "features" / "impart" / "prayer_repository.py").read_text(encoding="utf-8")
     impart_migrations = (PACKAGE / "features" / "impart" / "migrations.py").read_text(encoding="utf-8")
@@ -2138,6 +2141,10 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "status": "manual_spawn_daily_limit_full_refresh_punishment_cutover_with_other_boss_compatibility",
         },
         "buff": {
+            "player_experience_normalization_owned": (
+                "player_economy_application.normalize_experience(" in buff_normalize_experience_handler
+                and "_sql_message().del_exp_decimal(" not in buff_normalize_experience_handler
+            ),
             "blessed_open_application_owned": "buff_application.open(" in buff_facade,
             "legacy_blessed_open_disabled": "_blessed_spot_service().open(" not in buff_facade,
             "blessed_rename_application_owned": "buff_application.rename(" in buff_facade,
@@ -2166,7 +2173,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
             ),
             "legacy_partner_token_disabled": "_partner_token_service().apply(" not in partner_facade,
             "legacy_blessed_upgrade_disabled": "_blessed_spot_service().upgrade_field(" not in buff_facade,
-            "status": "blessed_spot_open_rename_upgrade_stone_training_lifecycle_closing_settlement_pvp_partner_token_partner_cultivation_cutover_with_other_buff_compatibility",
+            "status": "player_exp_normalization_blessed_spot_open_rename_upgrade_stone_training_lifecycle_closing_settlement_pvp_partner_token_partner_cultivation_cutover_with_other_buff_compatibility",
         },
         "partner_cultivation": {
             "identity_reads_application_owned": (

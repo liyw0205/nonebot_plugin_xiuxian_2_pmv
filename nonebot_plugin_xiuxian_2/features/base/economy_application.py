@@ -2,11 +2,15 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from .economy_repository import EconomyMutationResult, PlayerEconomySqlRepository
+from .economy_repository import (
+    EconomyMutationResult,
+    ExperienceNormalizationResult,
+    PlayerEconomySqlRepository,
+)
 
 
 class PlayerEconomyApplication:
-    """Application boundary for positive player economy rewards."""
+    """Application boundary for player economy mutations."""
 
     def __init__(
         self,
@@ -55,5 +59,16 @@ class PlayerEconomyApplication:
             expected_value=expected_value,
         )
 
+    def normalize_experience(
+        self,
+        user_id: str,
+        expected_exp: int | float | str,
+    ) -> ExperienceNormalizationResult:
+        return self.repository.normalize_experience(user_id, expected_exp)
 
-__all__ = ["EconomyMutationResult", "PlayerEconomyApplication"]
+
+__all__ = [
+    "EconomyMutationResult",
+    "ExperienceNormalizationResult",
+    "PlayerEconomyApplication",
+]

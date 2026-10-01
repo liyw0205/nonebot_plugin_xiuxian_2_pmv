@@ -97,6 +97,51 @@ def test_player_economy_fails_closed_without_schema_or_user(tmp_path: Path) -> N
     assert absent.status == "user_missing"
 
 
+def test_player_economy_normalizes_experience_with_snapshot_cas(tmp_path: Path) -> None:
+    database = tmp_path / "game.sqlite3"
+    with sqlite3.connect(database) as connection:
+        connection.execute("CREATE TABLE user_xiuxian(user_id TEXT,exp REAL)")
+        connection.executemany(
+            "INSERT INTO user_xiuxian(user_id,exp) VALUES(?,?)",
+            [("u", 8.75), ("u", 99.5)],
+        )
+        connection.commit()
+
+    application = PlayerEconomyApplication(database)
+    normalized = application.normalize_experience("u", 8.75)
+    unchanged = application.normalize_experience("u", 8)
+    stale = application.normalize_experience("u", 8.75)
+
+    assert (normalized.status, normalized.previous_value, normalized.value) == (
+        "normalized",
+        8.75,
+        8,
+    )
+    assert unchanged.status == "unchanged"
+    assert stale.status == "state_changed"
+    with sqlite3.connect(database) as connection:
+        assert connection.execute(
+            "SELECT exp FROM user_xiuxian ORDER BY rowid"
+        ).fetchall() == [(8.0,), (99.5,)]
+
+
+def test_player_economy_experience_normalization_fails_closed(tmp_path: Path) -> None:
+    missing = tmp_path / "missing.sqlite3"
+    missing_result = PlayerEconomyApplication(missing).normalize_experience("u", 1)
+    assert missing_result.status == "schema_missing"
+    assert not missing.exists()
+
+    database = tmp_path / "game.sqlite3"
+    with sqlite3.connect(database) as connection:
+        connection.execute("CREATE TABLE user_xiuxian(user_id TEXT)")
+        connection.commit()
+    unready = PlayerEconomyApplication(database).normalize_experience("u", 1)
+    assert unready.status == "schema_missing"
+    with sqlite3.connect(database) as connection:
+        columns = [row[1] for row in connection.execute("PRAGMA table_info(user_xiuxian)")]
+    assert columns == ["user_id"]
+
+
 def test_reward_and_compatibility_sources_no_longer_write_player_economy_directly() -> None:
     root = Path(__file__).parents[1] / "nonebot_plugin_xiuxian_2/xiuxian"
     sources = [
@@ -109,3 +154,13 @@ def test_reward_and_compatibility_sources_no_longer_write_player_economy_directl
         assert ".update_ls(" not in source
         assert ".update_exp(" not in source
         assert ".update_user_sect_contribution(" not in source
+
+
+def test_experience_normalization_command_uses_player_economy_application() -> None:
+    source = (
+        Path(__file__).parents[1]
+        / "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_buff/__init__.py"
+    ).read_text(encoding="utf-8")
+    handler = source[source.index("@del_exp_decimal.handle") : source.index("@daily_info.handle")]
+    assert "player_economy_application.normalize_experience(" in handler
+    assert "_sql_message().del_exp_decimal(" not in handler

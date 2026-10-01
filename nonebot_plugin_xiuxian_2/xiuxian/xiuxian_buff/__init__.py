@@ -7,6 +7,7 @@ from types import SimpleNamespace
 from nonebot.log import logger
 from ...paths import get_paths
 from ...features.buff.application import BuffApplication
+from ...features.base.economy_application import PlayerEconomyApplication
 from ...features.player_state.application import PlayerStateApplication
 from ...features.buff.pvp_battle import calculate_battle
 from ...infrastructure.clock import SystemClock
@@ -80,6 +81,7 @@ _closing_settlement_service_instance = None
 _normal_training_lifecycle_service_instance = None
 _stone_training_settlement_service_instance = None
 buff_application = BuffApplication(get_paths().game_db, get_paths().player_db)
+player_economy_application = PlayerEconomyApplication(get_paths().game_db)
 player_state_application = PlayerStateApplication(get_paths().player_db)
 runtime_clock = SystemClock()
 runtime_random = SystemRandom()
@@ -1186,8 +1188,17 @@ async def del_exp_decimal_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
         await del_exp_decimal.finish()
     user_id = user_info['user_id']
     exp = user_info['exp']
-    _sql_message().del_exp_decimal(user_id, exp)
-    msg = f"黑暗动乱暂时抑制成功！"
+    result = player_economy_application.normalize_experience(user_id, exp)
+    if result.status == "schema_missing":
+        msg = "修为数据尚未就绪，请检查数据库。"
+    elif result.status == "user_missing":
+        msg = "未找到用户数据，请重新查询后操作。"
+    elif result.status == "state_changed":
+        msg = "修为数据已变化，请重新查询后重试。"
+    elif result.succeeded:
+        msg = "黑暗动乱暂时抑制成功！"
+    else:
+        msg = "修为整理未完成，请稍后重试。"
     await handle_send(bot, event, msg)
     await del_exp_decimal.finish()
 

@@ -636,6 +636,7 @@ class RefactorProgressTests(unittest.TestCase):
         self.assertTrue(slices["boss"]["punishment_application_owned"])
         self.assertTrue(slices["boss"]["item_catalog_lazy"])
         self.assertTrue(slices["buff"]["stone_training_application_owned"])
+        self.assertTrue(slices["buff"]["player_experience_normalization_owned"])
         self.assertTrue(slices["buff"]["training_lifecycle_application_owned"])
         self.assertTrue(slices["buff"]["closing_settlement_application_owned"])
         self.assertTrue(slices["buff"]["pvp_application_owned"])

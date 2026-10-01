@@ -18,8 +18,20 @@ class EconomyMutationResult:
         return self.status == "applied"
 
 
+@dataclass(frozen=True)
+class ExperienceNormalizationResult:
+    status: str
+    user_id: str
+    previous_value: int | float | str | None = None
+    value: int | None = None
+
+    @property
+    def succeeded(self) -> bool:
+        return self.status in {"normalized", "unchanged"}
+
+
 class PlayerEconomySqlRepository:
-    """Persist positive player rewards without creating runtime schema."""
+    """Persist player economy changes without creating runtime schema."""
 
     def __init__(self, database: str | Path) -> None:
         self.database = Path(database)
@@ -134,5 +146,60 @@ class PlayerEconomySqlRepository:
             expected_value=expected_value,
         )
 
+    def normalize_experience(
+        self,
+        user_id: str,
+        expected_exp: int | float | str,
+    ) -> ExperienceNormalizationResult:
+        user_id = str(user_id).strip()
+        try:
+            expected_numeric = float(expected_exp)
+            target = int(expected_numeric)
+        except (TypeError, ValueError, OverflowError):
+            return ExperienceNormalizationResult("invalid", user_id)
+        if not user_id:
+            return ExperienceNormalizationResult("invalid", user_id)
+        if not self.database.is_file():
+            return ExperienceNormalizationResult("schema_missing", user_id)
 
-__all__ = ["EconomyMutationResult", "PlayerEconomySqlRepository"]
+        with DatabaseUnitOfWork(self.database, immediate=True) as uow:
+            if not self._ready(uow, "exp"):
+                return ExperienceNormalizationResult("schema_missing", user_id)
+            row = uow.query_one(
+                "SELECT rowid AS _rowid,exp FROM user_xiuxian "
+                "WHERE user_id=? ORDER BY rowid ASC LIMIT 1",
+                (user_id,),
+            )
+            if row is None:
+                return ExperienceNormalizationResult("user_missing", user_id)
+            current = row["exp"]
+            try:
+                current_numeric = float(current)
+            except (TypeError, ValueError, OverflowError):
+                return ExperienceNormalizationResult("invalid", user_id)
+            if current_numeric != expected_numeric:
+                return ExperienceNormalizationResult(
+                    "state_changed", user_id, current, int(current_numeric)
+                )
+            if current == target:
+                return ExperienceNormalizationResult(
+                    "unchanged", user_id, current, target
+                )
+
+            changed = uow.execute(
+                "UPDATE user_xiuxian SET exp=? "
+                "WHERE rowid=? AND user_id=? AND exp IS ?",
+                (target, row["_rowid"], user_id, current),
+            )
+            if changed.rowcount != 1:
+                return ExperienceNormalizationResult(
+                    "state_changed", user_id, current, target
+                )
+            return ExperienceNormalizationResult("normalized", user_id, current, target)
+
+
+__all__ = [
+    "EconomyMutationResult",
+    "ExperienceNormalizationResult",
+    "PlayerEconomySqlRepository",
+]

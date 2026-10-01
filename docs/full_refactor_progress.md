@@ -2,6 +2,11 @@
 
 状态：进行中。`v1.1.0` 的 P0-P7 发布证据继续保留，但不作为底层全面重构完成证明。
 
+2026-10-01 player experience normalization boundary：`抑制黑暗动乱` 不再把读取到的旧修为交给
+`XiuxianDateManage.del_exp_decimal` 无条件覆盖；改经 `PlayerEconomyApplication.normalize_experience`，
+按首条用户 row 与当前修为快照 CAS 截断小数，重复整理无写入，缺 schema/用户或状态变化 fail closed。
+不新增迁移；回归覆盖首行语义、重复/过期快照及无请求期建表。下一片继续审计 player/economy 的剩余默认写入。
+
 2026-10-01 admin player-name writer cutover：管理员 `易名` 的道号更新改经既有
 `BaseApplication -> BaseRenameSqlRepository` 和 `base.002` 回执，保留参数校验、冲突检查及旧查询兼容，
 移除默认 handler 对 `XiuxianDateManage.update_user_name` 的写调用；progress/source 门禁覆盖默认调用图。

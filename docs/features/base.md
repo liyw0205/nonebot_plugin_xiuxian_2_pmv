@@ -15,6 +15,7 @@
 每分钟恢复未满体力。任务通过 `recover_player_stamina -> PlayerStaminaApplication -> PlayerStaminaSqlRepository` 执行，按 `XIUXIAN_STAMINA_RECOVERY_BATCH_SIZE` 分批更新并用 `MIN` 封顶；不读取完整用户列表、不在请求或任务路径建表。缺少数据库/schema 时 fail closed，`stamina_recovery_points=0` 直接返回，避免空转。
 连续爬塔、世界首领训练入口和突破入口在前置体力扣除后提前结束时，使用同一 application 的 `restore` 单用户返还；按首个 `user_xiuxian` 行做封顶 CAS，缺 schema 或用户时不写入。
 通用奖励、补偿兼容奖励、师徒历史奖励和 Rift Boss 兼容适配器的灵石、修为、宗门贡献写入使用 `PlayerEconomyApplication`；成功路径按首个用户行执行 CAS，修为按传入上限封顶，缺 schema 或状态变化时不生成奖励文本。该边界不负责物品库存、统计或经济流水，它们仍由各自 feature/兼容层负责。
+修为小数整理命令也经同一 application，在既有 `user_xiuxian.exp` 上按查询快照 CAS 截断小数；缺 schema、用户或快照变化时拒绝写入，不新增迁移。
 ## 配置项
 `base_enabled`。
 ## 适配器差异
