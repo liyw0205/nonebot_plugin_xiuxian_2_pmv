@@ -6,6 +6,13 @@ from scripts.check_full_refactor_progress import _slice_status
 
 
 class RefactorProgressTests(unittest.TestCase):
+    def test_progress_report_tracks_compensation_claim_cleanup_boundary(self) -> None:
+        compensation = _slice_status()["compensation"]
+        self.assertTrue(compensation["claim_delete_application_owned"])
+        self.assertTrue(compensation["claim_delete_request_path_has_no_ddl"])
+        self.assertTrue(compensation["claim_delete_failure_precedes_json_write"])
+        self.assertTrue(compensation["claim_delete_admin_handlers_handle_failure"])
+
     def test_progress_report_tracks_arena_cutovers_and_active_blockers(self) -> None:
         slices = _slice_status()
         arena = slices["arena"]

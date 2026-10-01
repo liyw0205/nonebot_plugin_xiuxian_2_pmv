@@ -13,6 +13,7 @@ from .common import (
     delete_record,
     clear_records,
     list_normal_rewards,
+    _compensation_operation_id,
 )
 
 config = DATA_CONFIG["礼包"]
@@ -54,7 +55,14 @@ async def _(bot: Bot, event: MessageEvent, args: Message = CommandArg()):
         await handle_send(bot, event, "请指定要删除的礼包ID")
         return
 
-    delete_record(gift_id, config)
+    result = delete_record(
+        gift_id,
+        config,
+        _compensation_operation_id(event, "delete", gift_id),
+    )
+    if not result.succeeded:
+        await handle_send(bot, event, f"删除礼包失败：领取记录存储未就绪或操作冲突（{result.status}）")
+        return
     await handle_send(bot, event, f"已删除礼包 {gift_id} 及其领取记录")
 
 
@@ -62,7 +70,13 @@ async def _(bot: Bot, event: MessageEvent, args: Message = CommandArg()):
 async def _(bot: Bot, event: MessageEvent):
     await assign_bot(bot=bot, event=event)
 
-    clear_records(config)
+    result = clear_records(
+        config,
+        _compensation_operation_id(event, "clear", config["type_key"]),
+    )
+    if not result.succeeded:
+        await handle_send(bot, event, f"清空礼包失败：领取记录存储未就绪或操作冲突（{result.status}）")
+        return
     await handle_send(bot, event, "已清空所有礼包及领取记录")
 
 

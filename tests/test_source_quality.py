@@ -1814,7 +1814,7 @@ class SourceQualityTests(unittest.TestCase):
         self.assertIn('return "database"', jobs_source)
         self.assertIn('return "filesystem"', jobs_source)
 
-    def test_normal_compensation_claim_uses_transactional_service(self) -> None:
+    def test_normal_compensation_claim_and_cleanup_use_feature_application(self) -> None:
         compensation_root = SOURCE_ROOT / "xiuxian" / "xiuxian_compensation"
         common_source = (compensation_root / "common.py").read_text(encoding="utf-8")
         service_source = (compensation_root / "transaction_service.py").read_text(
@@ -1825,10 +1825,18 @@ class SourceQualityTests(unittest.TestCase):
         )[0]
         self.assertIn("_compensation_application(", claim_body)
         self.assertIn(".claim_reward(", claim_body)
-        self.assertIn("_reward_claim_service_instance = None", common_source)
-        self.assertIn("def _reward_claim_service(", common_source)
+        self.assertNotIn("RewardClaimService", common_source)
+        delete_body = common_source.split("def delete_record", 1)[1].split(
+            "def clear_records", 1
+        )[0]
+        clear_body = common_source.split("def clear_records", 1)[1].split(
+            "async def list_normal_rewards", 1
+        )[0]
+        self.assertIn("_compensation_application().delete_reward_claims(", delete_body)
+        self.assertIn("_compensation_application().delete_reward_claims(", clear_body)
+        self.assertIn('operation_id=f"{operation_id}:claims"', delete_body)
+        self.assertIn('operation_id=f"{operation_id}:claims"', clear_body)
         self.assertNotIn("send_reward_to_user(", claim_body)
-        self.assertNotIn("_reward_claim_service().claim(", claim_body)
         self.assertIn("BEGIN IMMEDIATE", service_source)
         self.assertIn("reward_claims", service_source)
 
@@ -1847,7 +1855,7 @@ class SourceQualityTests(unittest.TestCase):
         source = (compensation_root / "redeem_code.py").read_text(encoding="utf-8")
         self.assertIn("_compensation_application().claim_reward(", source)
         self.assertIn("_compensation_application().has_claimed(", source)
-        self.assertNotIn("_reward_claim_service().claim(", source)
+        self.assertNotIn("RewardClaimService", source)
         self.assertIn("usage_limit=usage_limit", source)
         self.assertNotIn("send_reward_to_user(", source)
         self.assertNotIn("mark_claimed(", source)

@@ -13,6 +13,7 @@ from .common import (
     delete_record,
     clear_records,
     list_normal_rewards,
+    _compensation_operation_id,
 )
 
 config = DATA_CONFIG["补偿"]
@@ -54,7 +55,11 @@ async def _(bot: Bot, event: MessageEvent, args: Message = CommandArg()):
         await handle_send(bot, event, "请指定要删除的补偿ID")
         return
 
-    result = delete_record(comp_id, config)
+    result = delete_record(
+        comp_id,
+        config,
+        _compensation_operation_id(event, "delete", comp_id),
+    )
     if not result.succeeded:
         await handle_send(bot, event, "补偿定义已变化，请重新执行删除")
         return
@@ -65,7 +70,10 @@ async def _(bot: Bot, event: MessageEvent, args: Message = CommandArg()):
 async def _(bot: Bot, event: MessageEvent):
     await assign_bot(bot=bot, event=event)
 
-    result = clear_records(config)
+    result = clear_records(
+        config,
+        _compensation_operation_id(event, "clear", config["type_key"]),
+    )
     if not result.succeeded:
         await handle_send(bot, event, "补偿列表已变化，请重新执行清空")
         return

@@ -13,6 +13,11 @@ class CompensationApplication(MigratedFeatureApplication):
     def claim_reward(self, *, operation_id, reward_type, record_id, user_id, reward_items, max_goods_num, usage_limit=0, legacy_used_count=0, expected_definition_version=None):
         return self.repository.claim_reward(operation_id, reward_type, record_id, user_id, reward_items, max_goods_num, usage_limit, legacy_used_count, expected_definition_version)
 
+    def delete_reward_claims(self, *, operation_id, reward_type, record_id=None):
+        return self.repository.delete_reward_claims(
+            operation_id, reward_type, record_id
+        )
+
     def has_claimed(self, reward_type, record_id, user_id):
         return self.repository.has_claimed(reward_type, record_id, user_id)
 

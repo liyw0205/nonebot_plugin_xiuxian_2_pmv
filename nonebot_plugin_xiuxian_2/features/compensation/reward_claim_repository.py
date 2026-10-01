@@ -5,6 +5,9 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Iterable
 
+from ...core.errors import OperationConflictError
+from ...core.result import OperationOutcome
+from ...infrastructure.database import OperationLedger
 from ...infrastructure.database import DatabaseUnitOfWork
 
 
@@ -21,10 +24,30 @@ class CompensationRewardClaimResult:
         return self.status == "claimed"
 
 
+@dataclass(frozen=True)
+class CompensationRewardClaimsDeleteResult:
+    status: str
+    reward_type: str = ""
+    record_id: str | None = None
+    deleted_claims: int = 0
+    deleted_counters: int = 0
+
+    @property
+    def succeeded(self) -> bool:
+        return self.status in {"applied", "replayed"}
+
+
 class CompensationRewardClaimSqlRepository:
-    def __init__(self, database: str | Path, max_goods_num: int) -> None:
+    def __init__(
+        self,
+        database: str | Path,
+        max_goods_num: int,
+        *,
+        ledger: OperationLedger | None = None,
+    ) -> None:
         self.database = str(database)
         self.max_goods_num = int(max_goods_num)
+        self.ledger = ledger or OperationLedger()
 
     @staticmethod
     def _inventory_type(goods_type: str) -> str:
@@ -82,6 +105,108 @@ class CompensationRewardClaimSqlRepository:
                 )
                 is not None
             )
+
+    def delete_claims(
+        self,
+        operation_id: str,
+        reward_type: str,
+        record_id: str | None = None,
+    ) -> CompensationRewardClaimsDeleteResult:
+        operation_id = str(operation_id).strip()
+        reward_type = str(reward_type).strip()
+        record_id = None if record_id is None else str(record_id)
+        if not operation_id or not reward_type:
+            raise ValueError("operation_id and reward_type are required")
+        if not Path(self.database).is_file():
+            return CompensationRewardClaimsDeleteResult(
+                "schema_missing", reward_type, record_id
+            )
+
+        action = "compensation.delete_reward_claims"
+        payload = {"reward_type": reward_type, "record_id": record_id}
+        with DatabaseUnitOfWork(self.database, immediate=True) as uow:
+            tables = {
+                str(row["name"])
+                for row in uow.query_all(
+                    "SELECT name FROM sqlite_master WHERE type='table' "
+                    "AND name IN ('operation_ledger','operation_audit')"
+                )
+            }
+            if not self._schema_ready(uow) or tables != {
+                "operation_ledger",
+                "operation_audit",
+            }:
+                return CompensationRewardClaimsDeleteResult(
+                    "schema_missing", reward_type, record_id
+                )
+
+            try:
+                existing = self.ledger.begin(uow, operation_id, action, payload)
+            except OperationConflictError:
+                return CompensationRewardClaimsDeleteResult(
+                    "operation_conflict", reward_type, record_id
+                )
+            if existing is not None:
+                previous = existing.outcome()
+                if previous is None:
+                    return CompensationRewardClaimsDeleteResult(
+                        "in_progress", reward_type, record_id
+                    )
+                saved = dict(previous.data or {})
+                return CompensationRewardClaimsDeleteResult(
+                    "replayed" if previous.ok else previous.status,
+                    reward_type,
+                    record_id,
+                    int(saved.get("deleted_claims", 0)),
+                    int(saved.get("deleted_counters", 0)),
+                )
+
+            predicate = "reward_type=?"
+            params: tuple[Any, ...] = (reward_type,)
+            if record_id is not None:
+                predicate += " AND record_id=?"
+                params = (reward_type, record_id)
+            deleted_claims = int(
+                uow.execute(
+                    f"SELECT COUNT(*) FROM reward_claims WHERE {predicate}", params
+                ).fetchone()[0]
+            )
+            deleted_counters = int(
+                uow.execute(
+                    f"SELECT COUNT(*) FROM reward_claim_counters WHERE {predicate}",
+                    params,
+                ).fetchone()[0]
+            )
+            uow.execute(f"DELETE FROM reward_claims WHERE {predicate}", params)
+            uow.execute(
+                f"DELETE FROM reward_claim_counters WHERE {predicate}", params
+            )
+            result = CompensationRewardClaimsDeleteResult(
+                "applied",
+                reward_type,
+                record_id,
+                deleted_claims,
+                deleted_counters,
+            )
+            self.ledger.finish(
+                uow,
+                OperationOutcome.applied(
+                    operation_id,
+                    action,
+                    data={
+                        "reward_type": reward_type,
+                        "record_id": record_id,
+                        "deleted_claims": deleted_claims,
+                        "deleted_counters": deleted_counters,
+                    },
+                    audit_category="compensation",
+                    after={
+                        "deleted_claims": deleted_claims,
+                        "deleted_counters": deleted_counters,
+                    },
+                ),
+            )
+            return result
 
     def claim(
         self,

@@ -35,6 +35,11 @@ class CompensationRepository(ServicePort):
             expected_definition_version=expected_definition_version,
         )
 
+    def delete_reward_claims(self, operation_id, reward_type, record_id=None):
+        return CompensationRewardClaimSqlRepository(self.database, 0).delete_claims(
+            operation_id, reward_type, record_id
+        )
+
     def has_claimed(self, reward_type, record_id, user_id) -> bool:
         return CompensationRewardClaimSqlRepository(self.database, 0).has_claimed(
             reward_type, record_id, user_id

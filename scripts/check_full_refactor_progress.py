@@ -669,6 +669,14 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "claim_schema_migration_owned": "def apply_compensation_reward_claim_schema" in compensation_migrations and "legacy.compensation.002" in compensation_legacy_migrated,
             "claim_request_path_has_no_ddl": "CREATE TABLE" not in compensation_repository and "ALTER TABLE" not in compensation_repository,
             "claim_schema_checked_read_only": "def _schema_ready" in compensation_repository and "read_only=True" in compensation_repository,
+            "claim_delete_application_owned": "delete_reward_claims(" in compensation_common and "_reward_claim_service" not in compensation_common,
+            "claim_delete_request_path_has_no_ddl": "def delete_claims(" in compensation_repository and "CREATE TABLE" not in compensation_repository and "ALTER TABLE" not in compensation_repository and '"schema_missing"' in compensation_repository,
+            "claim_delete_failure_precedes_json_write": compensation_common.index("claims_result = _compensation_application().delete_reward_claims(") < compensation_common.index("data = load_data(config)", compensation_common.index("def delete_record")),
+            "claim_delete_admin_handlers_handle_failure": all(
+                "if not result.succeeded:" in (PACKAGE / "xiuxian" / "xiuxian_compensation" / name).read_text(encoding="utf-8")
+                and "_compensation_operation_id(event, \"delete\"" in (PACKAGE / "xiuxian" / "xiuxian_compensation" / name).read_text(encoding="utf-8")
+                for name in ("gift_package.py", "redeem_code.py")
+            ),
             "redeem_entry_handles_schema_missing": 'result.status == "schema_missing"' in compensation_redeem_code,
             "invitation_application_owned": "invitation_claim(" in compensation_invitation and "InvitationRewardClaimService" not in compensation_invitation,
             "invitation_request_path_has_no_ddl": "CREATE TABLE" not in compensation_invitation_repository and "ALTER TABLE" not in compensation_invitation_repository,

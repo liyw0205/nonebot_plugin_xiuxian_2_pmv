@@ -22,6 +22,7 @@ from .common import (
     create_item_message,
     _compensation_application,
     runtime_clock,
+    _compensation_operation_id,
 )
 
 config = DATA_CONFIG["兑换码"]
@@ -63,7 +64,14 @@ async def _(bot: Bot, event: MessageEvent, args: Message = CommandArg()):
         await handle_send(bot, event, "请指定要删除的兑换码")
         return
 
-    delete_record(code, config)
+    result = delete_record(
+        code,
+        config,
+        _compensation_operation_id(event, "delete", code),
+    )
+    if not result.succeeded:
+        await handle_send(bot, event, f"删除兑换码失败：使用记录存储未就绪或操作冲突（{result.status}）")
+        return
     await handle_send(bot, event, f"已删除兑换码 {code} 及其使用记录")
 
 
@@ -71,7 +79,13 @@ async def _(bot: Bot, event: MessageEvent, args: Message = CommandArg()):
 async def _(bot: Bot, event: MessageEvent):
     await assign_bot(bot=bot, event=event)
 
-    clear_records(config)
+    result = clear_records(
+        config,
+        _compensation_operation_id(event, "clear", config["type_key"]),
+    )
+    if not result.succeeded:
+        await handle_send(bot, event, f"清空兑换码失败：使用记录存储未就绪或操作冲突（{result.status}）")
+        return
     await handle_send(bot, event, "已清空所有兑换码及使用记录")
 
 

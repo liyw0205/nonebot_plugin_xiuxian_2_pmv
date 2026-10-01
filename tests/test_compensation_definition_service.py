@@ -26,8 +26,9 @@ from nonebot_plugin_xiuxian_2.infrastructure.database import DatabaseUnitOfWork
 from nonebot_plugin_xiuxian_2.plugin import apply_platform_schema
 
 
-def test_compensation_facade_defers_reward_claim_service_construction() -> None:
-    assert compensation_common._reward_claim_service_instance is None
+def test_compensation_facade_does_not_construct_legacy_reward_claim_service() -> None:
+    assert not hasattr(compensation_common, "_reward_claim_service")
+    assert not hasattr(compensation_common, "_reward_claim_service_instance")
 
 
 def test_compensation_facade_defers_definition_service_construction() -> None:
@@ -474,8 +475,14 @@ class CompensationDefinitionServiceTests(unittest.TestCase):
         self.assertIn("_compensation_definition_service().upsert(", common)
         self.assertIn("_compensation_definition_service().replay_upsert(", common)
         self.assertIn("expected_definition_version=", common)
-        self.assertIn("result = delete_record(comp_id, config)", compensation)
+        self.assertIn("result = delete_record(", compensation)
+        self.assertIn('_compensation_operation_id(event, "delete", comp_id)', compensation)
         self.assertNotIn("reward_claim_service.delete_claims", compensation_delete)
+        self.assertIn("delete_reward_claims(", delete_body)
+        self.assertLess(
+            delete_body.index("delete_reward_claims("),
+            delete_body.index("data = load_data(config)"),
+        )
 
 
 if __name__ == "__main__":

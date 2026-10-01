@@ -21,7 +21,6 @@ from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage
 from ..xiuxian_utils.item_json import Items
 from ..xiuxian_utils.json_store import load_json_file, save_json_file
 from ..xiuxian_config import XiuConfig
-from .transaction_service import RewardClaimService
 from .transaction_service import CompensationDefinitionService
 from ..xiuxian_utils.utils import (
     check_user,
@@ -32,7 +31,6 @@ from ..xiuxian_utils.utils import (
 
 items = Items()
 _sql_message_instance = None
-_reward_claim_service_instance = None
 _economy_application_instance = None
 _inventory_application_instance = None
 
@@ -42,16 +40,6 @@ def _sql_message():
     if _sql_message_instance is None:
         _sql_message_instance = XiuxianDateManage()
     return _sql_message_instance
-
-
-def _reward_claim_service():
-    global _reward_claim_service_instance
-    if _reward_claim_service_instance is None:
-        _reward_claim_service_instance = RewardClaimService(
-            get_paths().game_db,
-            max_goods_num=XiuConfig().max_goods_num,
-        )
-    return _reward_claim_service_instance
 
 
 def _economy_application(database=None):
@@ -136,8 +124,6 @@ def _run_compensation_action(
     # migrations may replace that service with one backed by a temporary or
     # alternate catalog; the idempotency ledger must follow the same store.
     database = database or getattr(_compensation_definition_service(), "_database", None)
-    if database is None:
-        database = getattr(_reward_claim_service(), "_database", None)
     compensation_application = CompensationApplication(database or get_paths().game_db)
 
     def invoke():
@@ -196,7 +182,7 @@ def load_claimed_data(config: Dict[str, Any]) -> Dict[str, List[str]]:
 
 def save_claimed_data(config: Dict[str, Any], data: Dict[str, List[str]]):
     if config["type_key"] == "补偿":
-        raise RuntimeError("compensation claims must be changed through RewardClaimService")
+        raise RuntimeError("compensation claims must be changed through CompensationApplication")
     save_json_file(config["claimed_path"], data)
 
 
@@ -734,11 +720,15 @@ async def claim_normal_reward(
     )
 
 
-def delete_record(record_id: str, config: Dict[str, Any]):
+def delete_record(
+    record_id: str,
+    config: Dict[str, Any],
+    operation_id: str | None = None,
+):
     if config["type_key"] == "补偿":
         definition = _compensation_definition_service().get(record_id)
         version = None if definition is None else definition.version
-        operation_id = f"compensation-delete:{record_id}:v{version or 'missing'}"
+        operation_id = operation_id or f"compensation-delete:{record_id}:v{version or 'missing'}"
         return _run_compensation_action(
             "definition_delete",
             operation_id,
@@ -749,42 +739,44 @@ def delete_record(record_id: str, config: Dict[str, Any]):
             expected_version=version,
         )
 
-    data = load_data(config)
+    operation_id = operation_id or f"compensation-delete:{runtime_ids.new_id()}"
+    claims_result = _compensation_application().delete_reward_claims(
+        operation_id=f"{operation_id}:claims",
+        reward_type=config["type_key"],
+        record_id=record_id,
+    )
+    if not claims_result.succeeded:
+        return claims_result
 
+    data = load_data(config)
     if record_id in data:
         del data[record_id]
-        _run_compensation_action(
-            "definition_delete",
-            f"compensation-delete:{config['type_key']}:{record_id}",
-            "system",
-            lambda: save_data(config, data),
-            database=getattr(_compensation_definition_service(), "_database", None),
-            record_id=record_id,
-        )
 
     claimed_data = load_claimed_data(config)
-
     for user_id in list(claimed_data.keys()):
         if record_id in claimed_data[user_id]:
             claimed_data[user_id].remove(record_id)
-
         if not claimed_data[user_id]:
             del claimed_data[user_id]
 
-    _run_compensation_action(
-        "claim_delete",
-        f"compensation-claim-delete:{config['type_key']}:{record_id}",
+    def save_projection():
+        save_data(config, data)
+        save_claimed_data(config, claimed_data)
+
+    return _run_compensation_action(
+        "definition_delete",
+        f"{operation_id}:definition",
         "system",
-        lambda: (save_claimed_data(config, claimed_data), _reward_claim_service().delete_claims(config["type_key"], record_id)),
-        database=getattr(_reward_claim_service(), "_database", None),
+        save_projection,
+        database=_compensation_application().database,
         record_id=record_id,
     )
 
 
-def clear_records(config: Dict[str, Any]):
+def clear_records(config: Dict[str, Any], operation_id: str | None = None):
     if config["type_key"] == "补偿":
         catalog_version = _compensation_definition_service().catalog_version()
-        operation_id = f"compensation-clear:{catalog_version}"
+        operation_id = operation_id or f"compensation-clear:{catalog_version}"
         result = _run_compensation_action(
             "definition_clear",
             operation_id,
@@ -799,15 +791,30 @@ def clear_records(config: Dict[str, Any]):
         )
         return result
 
-    _run_compensation_action(
-        "definition_clear",
-        f"compensation-clear:{config['type_key']}",
-        "system",
-        lambda: (save_data(config, {}), save_claimed_data(config, {}), _reward_claim_service().delete_claims(config["type_key"])),
-        database=getattr(_reward_claim_service(), "_database", None),
+    operation_id = operation_id or f"compensation-clear:{runtime_ids.new_id()}"
+    claims_result = _compensation_application().delete_reward_claims(
+        operation_id=f"{operation_id}:claims",
         reward_type=config["type_key"],
     )
+    if not claims_result.succeeded:
+        return claims_result
+
+    def clear_projection():
+        save_data(config, {})
+        save_claimed_data(config, {})
+
+    result = _run_compensation_action(
+        "definition_clear",
+        f"{operation_id}:definition",
+        "system",
+        clear_projection,
+        database=_compensation_application().database,
+        reward_type=config["type_key"],
+    )
+    if not result.succeeded:
+        return result
     logger.info(f"已清空所有{config['type_key']}数据")
+    return result
 
 
 async def list_normal_rewards(
