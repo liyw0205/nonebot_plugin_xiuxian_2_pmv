@@ -157,6 +157,10 @@ def _slice_status() -> dict[str, dict[str, object]]:
     compensation_legacy_migrated = (PACKAGE / "features" / "_legacy_migrated.py").read_text(encoding="utf-8")
     compensation_redeem_code = (PACKAGE / "xiuxian" / "xiuxian_compensation" / "redeem_code.py").read_text(encoding="utf-8")
     compensation_invitation = (PACKAGE / "xiuxian" / "xiuxian_compensation" / "invitation.py").read_text(encoding="utf-8")
+    compensation_common = (PACKAGE / "xiuxian" / "xiuxian_compensation" / "common.py").read_text(encoding="utf-8")
+    compensation_reward_writer = compensation_common.split("def send_reward_to_user", 1)[1].split(
+        "def format_reward_delivery", 1
+    )[0]
     plugin = (PACKAGE / "plugin.py").read_text(encoding="utf-8")
     info_attribute_application = (PACKAGE / "features" / "info" / "attribute_application.py").read_text(encoding="utf-8")
     info_attribute_compatibility = (PACKAGE / "compatibility" / "legacy_player_attributes.py").read_text(encoding="utf-8")
@@ -627,6 +631,8 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "invitation_definition_migration_owned": "def apply_compensation_invitation_definition_schema" in compensation_migrations and "legacy.compensation.004" in compensation_legacy_migrated,
             "invitation_definition_application_owned": "invitation_set_reward(" in compensation_invitation and "save_invitation_rewards(rewards)" not in compensation_invitation,
             "invitation_definition_schema_checked": "def _definition_schema_ready" in compensation_invitation_repository and '"status": "schema_missing"' in compensation_invitation_repository,
+            "reward_inventory_application_owned": "PlayerInventoryApplication" in compensation_common and "_inventory_application().grant_item(" in compensation_reward_writer,
+            "reward_inventory_legacy_writer_disabled": ".send_back(" not in compensation_reward_writer,
             "status": "claim, invitation binding and reward catalog ledgers startup-migrated; request paths fail closed without DDL",
         },
         "stone_gift": {

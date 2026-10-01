@@ -2,6 +2,12 @@
 
 状态：进行中。`v1.1.0` 的 P0-P7 发布证据继续保留，但不作为底层全面重构完成证明。
 
+2026-10-01 compensation/activity reward inventory boundary：补偿公共奖励发放与活动奖励兼容入口的物品写入统一经
+`PlayerInventoryApplication -> PlayerInventorySqlRepository`，按 `max_goods_num` 封顶、维护绑定数量，
+并依据实际写入数量生成文案；容量不足、缺表或缺字段时不再调用 `XiuxianDateManage.send_back` 或虚报已发放。
+新增补偿 writer 行为回归与 progress/source 门禁；无新增 migration。全局旧 transaction services、
+`xiuxian2_handle` 和正式发布/P7 仍是 blocker。
+
 2026-10-01 reward inventory write boundary：`RewardService._grant_items` 不再直接调用旧
 `XiuxianDateManage.send_back`，改经 `PlayerInventoryApplication -> PlayerInventorySqlRepository`；仓储
 在既有 `back` 表上按首个 `rowid` 更新、按 `max_goods_num` 封顶并保留绑定物品计数，缺数据库/表/字段时

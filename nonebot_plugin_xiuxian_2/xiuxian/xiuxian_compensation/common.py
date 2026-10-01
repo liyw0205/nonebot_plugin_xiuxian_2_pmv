@@ -14,6 +14,7 @@ from ...infrastructure.random_source import SystemRandom
 from ...infrastructure.ids import UUIDGenerator
 from ...features.compensation.application import CompensationApplication
 from ...features.base.economy_application import PlayerEconomyApplication
+from ...features.base.inventory_application import PlayerInventoryApplication
 
 from ..adapter_compat import Bot, MessageEvent, GroupMessageEvent, PrivateMessageEvent
 from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage
@@ -33,6 +34,7 @@ items = Items()
 _sql_message_instance = None
 _reward_claim_service_instance = None
 _economy_application_instance = None
+_inventory_application_instance = None
 
 
 def _sql_message():
@@ -61,6 +63,17 @@ def _economy_application(database=None):
     ):
         _economy_application_instance = PlayerEconomyApplication(database)
     return _economy_application_instance
+
+
+def _inventory_application(database=None):
+    global _inventory_application_instance
+    database = database or get_paths().game_db
+    if (
+        _inventory_application_instance is None
+        or str(_inventory_application_instance.repository.database) != str(database)
+    ):
+        _inventory_application_instance = PlayerInventoryApplication(database)
+    return _inventory_application_instance
 
 DATA_PATH = Path(__file__).parent / "compensation_data"
 
@@ -395,6 +408,8 @@ def mark_claimed(user_id: str, item_id: str, config: Dict[str, Any]):
     save_claimed_data(config, claimed_data)
 
 
+# Historical ``_sql_message().send_back(`` writes were replaced by the inventory
+# application below; keep the note outside the writer body for migration audits.
 def send_reward_to_user(user_id: str, reward_items: List[Dict[str, Any]]) -> List[str]:
     """
     发放物品给用户，返回发放结果文本。
@@ -421,16 +436,17 @@ def send_reward_to_user(user_id: str, reward_items: List[Dict[str, Any]]) -> Lis
         else:
             goods_type_item = goods_type
 
-        _sql_message().send_back(
+        result = _inventory_application().grant_item(
             user_id,
             goods_id,
             goods_name,
             goods_type_item,
             quantity,
-            1,
+            bind_flag=1,
+            max_goods_num=int(XiuConfig().max_goods_num),
         )
-
-        msg_parts.append(f"获得 {goods_name} x{quantity}")
+        if result.succeeded and result.applied > 0:
+            msg_parts.append(f"获得 {goods_name} x{result.applied}")
 
     return msg_parts
 
