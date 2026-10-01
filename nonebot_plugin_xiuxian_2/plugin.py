@@ -166,7 +166,7 @@ from .features.mixelixir.migrations import (
 from .features.puppet.manifest import FEATURE as PUPPET_FEATURE
 from .features.puppet.migrations import apply_puppet
 from .features.boss.manifest import FEATURE as BOSS_FEATURE
-from .features.boss.migrations import apply_boss, apply_boss_purchase, apply_boss_settlement
+from .features.boss.migrations import apply_boss, apply_boss_player_schema, apply_boss_purchase, apply_boss_settlement
 from .features.dungeon.manifest import FEATURE as DUNGEON_FEATURE
 from .features.dungeon.migrations import apply_dungeon, apply_dungeon_explore, apply_dungeon_purchase, apply_dungeon_session, apply_dungeon_team
 from .features.fusion.migrations import apply_fusion_operations
@@ -284,6 +284,7 @@ def build_migrations() -> tuple[Migration, ...]:
         Migration("boss.001", "boss_feature_migrations", apply_boss),
         Migration("boss.002", "boss_purchase_operations", apply_boss_purchase),
         Migration("boss.003", "world_boss_battle_operations", apply_boss_settlement),
+        Migration("boss.004", "world_boss_player_schema", apply_boss_player_schema),
         Migration("buff.001", "buff_feature_migrations", apply_buff),
         Migration("buff.002", "partner_token_operations", apply_partner_token_operations),
         Migration("buff.003", "partner_two_exp_usage", apply_partner_token_usage),
@@ -476,6 +477,7 @@ _GAME_DATABASE_EXCLUDED_MIGRATION_VERSIONS = frozenset(
         "world_events.006",
         "base.005",
         "base.007",
+        "boss.004",
     }
 )
 _PLAYER_DATABASE_MIGRATION_VERSIONS = frozenset(
@@ -523,6 +525,7 @@ _PLAYER_DATABASE_MIGRATION_VERSIONS = frozenset(
         "world_events.006",
         "base.007",
         "base.005",
+        "boss.004",
     }
 )
 _TRADE_DATABASE_MIGRATION_VERSIONS = frozenset({"platform.001", "trade.003", "trade.005", "trade.006", "trade.007", "trade.008", "auction.004"})

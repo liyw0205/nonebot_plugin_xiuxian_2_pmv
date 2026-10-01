@@ -55,10 +55,12 @@ from ...features.boss.repository import BossPurchaseSqlRepository
 from ...infrastructure.ids import UUIDGenerator
 from ...infrastructure.clock import SystemClock
 from ...infrastructure.random_source import SystemRandom
-from .transaction_service import WorldBossManualSpawnService
 from .transaction_service import WorldBossFullRefreshService
-from .transaction_service import WorldBossPunishmentService
-from .transaction_service import WorldBossDailyLimitResetService
+from ...features.boss.punishment_repository import WorldBossPunishmentSqlRepository
+from ...features.boss.world_boss_repository import (
+    WorldBossDailyLimitResetSqlRepository,
+    WorldBossManualSpawnSqlRepository,
+)
 from .. import DRIVER
 from ...bootstrap.legacy import register_legacy_shutdown, register_legacy_startup
 # boss定时任务
@@ -115,8 +117,8 @@ def _world_boss_battle_settlement_service():
 def _world_boss_daily_limit_reset_service():
     global _world_boss_daily_limit_reset_service_instance
     if _world_boss_daily_limit_reset_service_instance is None:
-        _world_boss_daily_limit_reset_service_instance = WorldBossDailyLimitResetService(
-            get_paths().player_db
+        _world_boss_daily_limit_reset_service_instance = WorldBossDailyLimitResetSqlRepository(
+            get_paths().player_db, clock=runtime_clock
         )
     return _world_boss_daily_limit_reset_service_instance
 
@@ -128,7 +130,7 @@ _world_boss_full_refresh_service_instance = None
 def _world_boss_manual_spawn_service():
     global _world_boss_manual_spawn_service_instance
     if _world_boss_manual_spawn_service_instance is None:
-        _world_boss_manual_spawn_service_instance = WorldBossManualSpawnService(
+        _world_boss_manual_spawn_service_instance = WorldBossManualSpawnSqlRepository(
             get_paths().player_db,
             get_boss_config,
         )
@@ -149,7 +151,7 @@ _world_boss_punishment_service_instance = None
 def _world_boss_punishment_service():
     global _world_boss_punishment_service_instance
     if _world_boss_punishment_service_instance is None:
-        _world_boss_punishment_service_instance = WorldBossPunishmentService(
+        _world_boss_punishment_service_instance = WorldBossPunishmentSqlRepository(
             get_paths().player_db
         )
     return _world_boss_punishment_service_instance
@@ -337,7 +339,7 @@ def _spawn_world_boss(
         operation_id=operation_id,
         expected_revision=expected_revision,
         expected_bosses=expected_bosses,
-        expected_config=WorldBossManualSpawnService.config_snapshot(get_boss_config(), boss_jj),
+        expected_config=WorldBossManualSpawnSqlRepository.config_snapshot(get_boss_config(), boss_jj),
         boss=bossinfo,
         config_loader=get_boss_config,
     )

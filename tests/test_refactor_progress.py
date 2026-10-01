@@ -523,6 +523,10 @@ class RefactorProgressTests(unittest.TestCase):
         boss = slices["boss"]
         self.assertTrue(boss["manual_spawn_application_owned"])
         self.assertTrue(boss["legacy_manual_spawn_disabled"])
+        self.assertTrue(boss["manual_spawn_repository_owned"])
+        self.assertTrue(boss["daily_limit_repository_owned"])
+        self.assertTrue(boss["world_boss_request_path_has_no_ddl"])
+        self.assertTrue(boss["world_boss_player_migration_registered"])
         buff = slices["buff"]
         self.assertTrue(buff["blessed_open_application_owned"])
         self.assertTrue(buff["legacy_blessed_open_disabled"])

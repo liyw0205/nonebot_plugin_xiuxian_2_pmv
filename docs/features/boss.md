@@ -18,15 +18,15 @@
 
 ## 数据模型与迁移
 
-`boss.001` 在 `game_db` 创建 `boss_feature_migrations`。积分、背包和世界BOSS状态继续由兼容仓储写入历史数据库表。
+`boss.001` 在 `game_db` 创建 `boss_feature_migrations`，`boss.004` 在 `player_db` 启动时创建世界BOSS生命周期表和限额字段。积分、背包和战斗结算仍兼容既有历史表；手动生成与每日限额重置由 `BossApplication` 的 feature-owned repository 写入，运行期只读校验 schema，缺失时 fail closed，不执行 DDL。
 
 ## 事务与失败回滚
 
-application 先写 `operation_ledger`，再调用旧跨库事务服务。相同 operation 重试只返回首次结果；异常记录失败流水并允许对账重试。
+资产 application 先写 `operation_ledger`，再执行结算；手动生成使用版本 CAS 与回执幂等，每日限额重置冻结目标并按 chunk 恢复。相同 operation/日期重试只返回首次结果；异常在当前事务回滚并保留可恢复进度。旧 transaction service 仅作为显式兼容/回滚路径。
 
 ## 定时任务
 
-世界BOSS刷新、天罚和每日重置仍由显式兼容生命周期注册，未在 feature 导入时重复注册。
+世界BOSS刷新和天罚仍由显式兼容生命周期注册，手动生成与每日重置的持久化由 feature-owned repository 承担；未在 feature 导入时重复注册。
 
 ## 配置项
 

@@ -12,6 +12,10 @@ from ...infrastructure.observability import trace_context
 from .domain import BossPurchaseRequest, BossSettlementRequest
 from .repository import BossPurchaseSqlRepository, BossRepository
 from .punishment_repository import WorldBossPunishmentSqlRepository
+from .world_boss_repository import (
+    WorldBossDailyLimitResetSqlRepository,
+    WorldBossManualSpawnSqlRepository,
+)
 
 
 def _data(raw: Any) -> dict[str, Any]:
@@ -23,19 +27,32 @@ def _data(raw: Any) -> dict[str, Any]:
 
 
 class BossApplication:
-    def __init__(self, game_database: str | Path, player_database: str | Path, *, activity_database: str | Path | None = None, repository: BossRepository | None = None, ledger: OperationLedger | None = None, clock=None) -> None:
+    def __init__(self, game_database: str | Path, player_database: str | Path, *, activity_database: str | Path | None = None, repository: BossRepository | None = None, world_boss_repository: Any | None = None, manual_spawn_repository: Any | None = None, ledger: OperationLedger | None = None, clock=None) -> None:
         self.game_database = str(game_database)
         self.player_database = str(player_database)
         self.activity_database = str(activity_database) if activity_database else None
         self.repository = repository
+        self.world_boss_repository = world_boss_repository
+        self.manual_spawn_repository = manual_spawn_repository
         self.ledger = ledger or OperationLedger()
         self.clock = clock or SystemClock()
 
     def reset_daily_limit(self, business_date: str, *, chunk_size: int = 500):
-        from ...xiuxian.xiuxian_boss.transaction_service import WorldBossDailyLimitResetService
-        return WorldBossDailyLimitResetService(self.player_database).reset(
-            business_date, chunk_size=chunk_size
-        )
+        return self._world_boss().reset(business_date, chunk_size=chunk_size)
+
+    def _world_boss(self):
+        if self.world_boss_repository is None:
+            self.world_boss_repository = WorldBossDailyLimitResetSqlRepository(
+                self.player_database, clock=self.clock
+            )
+        return self.world_boss_repository
+
+    def _manual_spawn(self, config_loader):
+        repository = self.manual_spawn_repository
+        if repository is None:
+            repository = WorldBossManualSpawnSqlRepository(self.player_database, config_loader)
+            self.manual_spawn_repository = repository
+        return repository
 
     def _repository(self) -> BossRepository:
         return self.repository or BossPurchaseSqlRepository(self.game_database, self.player_database, self.activity_database, clock=self.clock)
@@ -100,16 +117,13 @@ class BossApplication:
         return self._repository().settlement_result(operation_id)
 
     def spawn_snapshot(self, *, config_loader):
-        from ...xiuxian.xiuxian_boss.transaction_service import WorldBossManualSpawnService
-        return WorldBossManualSpawnService(self.player_database, config_loader).snapshot()
+        return self._manual_spawn(config_loader).snapshot()
 
     def spawn_result(self, operation_id: str, *, config_loader):
-        from ...xiuxian.xiuxian_boss.transaction_service import WorldBossManualSpawnService
-        return WorldBossManualSpawnService(self.player_database, config_loader).get_result(operation_id)
+        return self._manual_spawn(config_loader).get_result(operation_id)
 
     def spawn(self, *, operation_id: str, expected_revision: int, expected_bosses: list[dict[str, Any]], expected_config: dict[str, Any], boss: dict[str, Any], config_loader):
-        from ...xiuxian.xiuxian_boss.transaction_service import WorldBossManualSpawnService
-        return WorldBossManualSpawnService(self.player_database, config_loader).spawn(
+        return self._manual_spawn(config_loader).spawn(
             operation_id=operation_id,
             expected_revision=expected_revision,
             expected_bosses=expected_bosses,

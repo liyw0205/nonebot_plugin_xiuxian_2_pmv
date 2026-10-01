@@ -545,6 +545,9 @@ def _slice_status() -> dict[str, dict[str, object]]:
         )
     ]
     boss_facade = (PACKAGE / "xiuxian" / "xiuxian_boss" / "__init__.py").read_text(encoding="utf-8")
+    boss_application = (PACKAGE / "features" / "boss" / "application.py").read_text(encoding="utf-8")
+    boss_world_repository = (PACKAGE / "features" / "boss" / "world_boss_repository.py").read_text(encoding="utf-8")
+    boss_migrations = (PACKAGE / "features" / "boss" / "migrations.py").read_text(encoding="utf-8")
     buff_facade = (PACKAGE / "xiuxian" / "xiuxian_buff" / "__init__.py").read_text(encoding="utf-8")
     impart_facade = (PACKAGE / "xiuxian" / "xiuxian_impart" / "__init__.py").read_text(encoding="utf-8")
     impart_prayer_repository = (PACKAGE / "features" / "impart" / "prayer_repository.py").read_text(encoding="utf-8")
@@ -2029,6 +2032,10 @@ def _slice_status() -> dict[str, dict[str, object]]:
         "boss": {
             "manual_spawn_application_owned": "boss_application.spawn(" in boss_facade,
             "daily_limit_application_owned": "boss_application.reset_daily_limit(" in boss_facade,
+            "manual_spawn_repository_owned": "WorldBossManualSpawnSqlRepository" in boss_application and "transaction_service" not in boss_application,
+            "daily_limit_repository_owned": "WorldBossDailyLimitResetSqlRepository" in boss_application and "transaction_service" not in boss_application,
+            "world_boss_request_path_has_no_ddl": "CREATE TABLE" not in boss_world_repository and "ALTER TABLE" not in boss_world_repository,
+            "world_boss_player_migration_registered": "boss.004" in plugin and "apply_boss_player_schema" in boss_migrations,
             "punishment_application_owned": "boss_application.punish(" in boss_facade and "boss_application.punishment_snapshot(" in boss_facade,
             "item_catalog_lazy": (
                 "_items_instance = None" in boss_facade
