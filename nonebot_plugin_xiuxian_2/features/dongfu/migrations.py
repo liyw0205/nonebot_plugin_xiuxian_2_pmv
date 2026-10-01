@@ -1,4 +1,5 @@
 from ...infrastructure.database import DatabaseUnitOfWork
+from .operation_schema import OPERATION_TABLE_DDL
 
 
 def apply_dongfu(uow: DatabaseUnitOfWork) -> None:
@@ -22,8 +23,14 @@ def apply_dongfu_infiltrate_failure(uow: DatabaseUnitOfWork) -> None:
     )
 
 
+def apply_dongfu_operations(uow: DatabaseUnitOfWork) -> None:
+    for statement in OPERATION_TABLE_DDL:
+        uow.execute(statement)
+
+
 __all__ = [
     "apply_dongfu",
     "apply_dongfu_infiltrate_success",
     "apply_dongfu_infiltrate_failure",
+    "apply_dongfu_operations",
 ]

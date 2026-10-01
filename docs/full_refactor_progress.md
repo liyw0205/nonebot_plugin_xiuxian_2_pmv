@@ -2,6 +2,14 @@
 
 状态：进行中。`v1.1.0` 的 P0-P7 发布证据继续保留，但不作为底层全面重构完成证明。
 
+2026-10-01 dongfu operation schema startup ownership：洞府 8 个 feature-owned action repositories
+不再在请求事务中创建 operation 表；新增 game-only `dongfu.004` 预建 accelerate/array/expansion/
+fertilize/harvest/patrol/plant/visit-reward 回执 schema，`CREATE TABLE IF NOT EXISTS` 保留此前
+请求路径已经存在的回执。仓储只读校验 operation_id 主键及必需列，缺数据库或 schema 返回
+`schema_missing` 且不创建数据库/表。回归覆盖 8 条路径的缺 schema fail-closed、迁移路由、迁移
+幂等和已有回执保留。洞府只读展示和 player-data projection 仍是兼容边界；本阶段不触碰运行数据，
+下一项继续按 6.2 审计 player/economy 与 `xiuxian2_handle` 的默认真实写入路径。
+
 2026-10-01 Web/schema contract follow-up：统一 Web guard 将仓储明确的 `schema_missing` 映射为
 503；legacy feature JSON 中缺失必填字段映射为 400 `validation_error`，普通切磋入口补齐
 `opponent_id` 输入校验。`player_state` 补齐内部 feature contract：复用既有 player schema，

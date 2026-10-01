@@ -2,6 +2,7 @@ import tempfile
 import unittest
 from pathlib import Path
 from ..visit_reward_repository import DongfuVisitRewardSqlRepository
+from . import install_operation_schema
 from tests.test_db_backend import db_backend
 
 class DongfuVisitRewardRepositoryTests(unittest.TestCase):
@@ -10,4 +11,5 @@ class DongfuVisitRewardRepositoryTests(unittest.TestCase):
             game,player=Path(temp)/'game.db',Path(temp)/'player.db'
             with db_backend.transaction(game) as c: c.execute('CREATE TABLE user_xiuxian(user_id TEXT PRIMARY KEY,stone INTEGER)'); c.execute("INSERT INTO user_xiuxian VALUES('v',0)")
             with db_backend.transaction(player) as c: c.execute('CREATE TABLE dongfu_status(user_id TEXT PRIMARY KEY,built INTEGER)'); c.execute("INSERT INTO dongfu_status VALUES('v',1)"); c.execute("INSERT INTO dongfu_status VALUES('t',1)")
+            install_operation_schema(game)
             repo=DongfuVisitRewardSqlRepository(game,player); first=repo.reward('r','v','t',10); dup=repo.reward('r','v','t',10); self.assertEqual((first.status,dup.status),('rewarded','duplicate'))

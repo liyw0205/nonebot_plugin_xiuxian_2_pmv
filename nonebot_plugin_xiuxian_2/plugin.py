@@ -173,6 +173,7 @@ from .features.fusion.migrations import apply_fusion_operations
 from .features.dongfu.migrations import (
     apply_dongfu_infiltrate_failure,
     apply_dongfu_infiltrate_success,
+    apply_dongfu_operations,
 )
 from .features.auction.migrations import (
     apply_auction,
@@ -301,6 +302,7 @@ def build_migrations() -> tuple[Migration, ...]:
         Migration("daily_fortune.001", "daily_fortune_claims", apply_daily_fortune),
         Migration("dongfu.002", "dongfu_infiltrate_success_operations", apply_dongfu_infiltrate_success),
         Migration("dongfu.003", "dongfu_infiltrate_failure_operations", apply_dongfu_infiltrate_failure),
+        Migration("dongfu.004", "dongfu_action_operations", apply_dongfu_operations),
         Migration("dungeon.001", "dungeon_feature_migrations", apply_dungeon),
         Migration("dungeon.002", "dungeon_purchase_operations", apply_dungeon_purchase),
         Migration("dungeon.003", "dungeon_session_operations", apply_dungeon_session),

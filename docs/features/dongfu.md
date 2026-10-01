@@ -10,7 +10,7 @@ The historical package owns command names during the compatibility release. New 
 No new HTTP route is exposed in this migration slice. Existing URLs remain served by the legacy web adapter.
 
 ## 数据模型与迁移
-`legacy.dongfu.001` remains the original feature marker in `game_db`. `dongfu.002` and `dongfu.003` create the successful- and failed-infiltration operation ledgers. Planting, harvest, fertilizing, acceleration, patrol, expansion, visit rewards, array upgrades, and both infiltration outcomes use feature repositories. No migration was added in the transaction compatibility-isolation slice.
+`legacy.dongfu.001` remains the original feature marker in `game_db`. `dongfu.002` and `dongfu.003` create the successful- and failed-infiltration operation ledgers. `dongfu.004` creates the planting, harvest, fertilizing, acceleration, patrol, expansion, visit-reward, and array-upgrade operation ledgers in `game_db`; existing receipts are preserved. These requests only validate the startup schema and return `schema_missing` when either database file or the operation schema is absent. They do not create databases or tables at request time.
 
 ## 事务与失败回滚
 Feature repositories retain per-action operation replay and transactional rollback. Historical service classes are isolated in `compatibility/legacy_dongfu_transactions.py`; `xiuxian/xiuxian_dongfu/transaction_service.py` only re-exports their old names. The default command facade no longer imports or constructs those services. Reverting the code can restore the prior facade wiring; schema rollback is not required for this slice.
@@ -25,10 +25,10 @@ No new scheduled jobs. Legacy jobs stay registered through the compatibility sch
 Command and web adapters translate transport input into the application DTO; business code does not import NoneBot or Flask.
 
 ## 测试与手工验收
-Run the feature application test and the full architecture gate. Repeat the same operation ID to verify replay.
+Run the Dongfu repository/schema tests and the full architecture gate. Verify operation replay after startup migration and verify that requests without `dongfu.004` fail closed without creating tables.
 
 ## 灰度开关、回滚和已知限制
-Read-only cave-dwelling displays and legacy player-data projections still use compatibility managers and JSON state; they are separate migration work and are not covered by the transaction-service isolation. The legacy classes remain importable through the shim for external callers. Removing `dongfu.002` or `dongfu.003`, if ever required, needs restoration from the pre-migration database backup.
+Read-only cave-dwelling displays and legacy player-data projections still use compatibility managers and JSON state; they are separate migration work and are not covered by the transaction-service isolation. The legacy classes remain importable through the shim for external callers. Removing `dongfu.002`, `.003`, or `.004`, if ever required, needs restoration from a pre-migration database backup.
 
 ## Manifest 清单
 - `command: 我的洞府`

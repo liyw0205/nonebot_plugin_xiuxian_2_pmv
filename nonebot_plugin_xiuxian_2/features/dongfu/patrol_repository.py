@@ -3,6 +3,7 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 from ...infrastructure.database import DatabaseUnitOfWork
+from .operation_schema import operation_databases_ready, operation_schema_ready
 
 @dataclass(frozen=True)
 class DongfuPatrolResult:
@@ -14,8 +15,11 @@ class DongfuPatrolSqlRepository:
     def __init__(self,game_database:str|Path,player_database:str|Path): self.game_database,self.player_database=str(game_database),str(player_database)
     def patrol(self,operation_id,user_id,day,stamina_cost,daily_limit,stone_gain,reward=None,max_goods_num=999999999):
         operation_id,user_id,day=str(operation_id).strip(),str(user_id),str(day); stamina_cost,daily_limit,stone_gain,max_goods_num=map(int,(stamina_cost,daily_limit,stone_gain,max_goods_num)); payload=json.dumps([user_id,day],separators=(',',':'))
+        if not operation_databases_ready(self.game_database, self.player_database): return DongfuPatrolResult('schema_missing')
         with DatabaseUnitOfWork(self.game_database,immediate=True) as uow:
-            uow.attach_database(self.player_database,'player_data'); uow.execute('CREATE TABLE IF NOT EXISTS dongfu_patrol_operations(operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,patrol_count INTEGER NOT NULL,patrol_guard INTEGER NOT NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)'); old=uow.query_one('SELECT payload,patrol_count,patrol_guard FROM dongfu_patrol_operations WHERE operation_id=?',(operation_id,))
+            uow.attach_database(self.player_database,'player_data')
+            if not operation_schema_ready(uow, 'dongfu_patrol_operations'): return DongfuPatrolResult('schema_missing')
+            old=uow.query_one('SELECT payload,patrol_count,patrol_guard FROM dongfu_patrol_operations WHERE operation_id=?',(operation_id,))
             if old is not None: return DongfuPatrolResult('duplicate',int(old['patrol_count']),int(old['patrol_guard'])) if str(old['payload'])==payload else DongfuPatrolResult('state_changed')
             user=uow.query_one('SELECT user_stamina FROM user_xiuxian WHERE user_id=?',(user_id,));
             if user is None: return DongfuPatrolResult('user_missing')

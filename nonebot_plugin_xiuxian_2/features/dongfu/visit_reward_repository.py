@@ -2,6 +2,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 from ...infrastructure.database import DatabaseUnitOfWork
+from .operation_schema import operation_databases_ready, operation_schema_ready
 
 @dataclass(frozen=True)
 class DongfuVisitRewardResult:
@@ -14,8 +15,11 @@ class DongfuVisitRewardSqlRepository:
     def reward(self,operation_id,visitor_id,target_id,gain):
         operation_id,visitor_id,target_id,gain=str(operation_id).strip(),str(visitor_id),str(target_id),int(gain); payload='|'.join((visitor_id,target_id,str(gain)))
         if not operation_id or not visitor_id or not target_id or visitor_id==target_id or gain<0: raise ValueError('valid visit reward is required')
+        if not operation_databases_ready(self.game_database, self.player_database): return DongfuVisitRewardResult('schema_missing')
         with DatabaseUnitOfWork(self.game_database,immediate=True) as uow:
-            uow.attach_database(self.player_database,'player_data'); uow.execute('CREATE TABLE IF NOT EXISTS dongfu_visit_reward_operations(operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)'); old=uow.query_one('SELECT payload FROM dongfu_visit_reward_operations WHERE operation_id=?',(operation_id,))
+            uow.attach_database(self.player_database,'player_data')
+            if not operation_schema_ready(uow, 'dongfu_visit_reward_operations'): return DongfuVisitRewardResult('schema_missing')
+            old=uow.query_one('SELECT payload FROM dongfu_visit_reward_operations WHERE operation_id=?',(operation_id,))
             if old is not None: return DongfuVisitRewardResult('duplicate' if str(old['payload'])==payload else 'state_changed')
             if uow.query_one('SELECT 1 FROM user_xiuxian WHERE user_id=?',(visitor_id,)) is None: return DongfuVisitRewardResult('user_missing')
             visitor=uow.query_one('SELECT built FROM player_data.dongfu_status WHERE user_id=?',(visitor_id,)); target=uow.query_one('SELECT built FROM player_data.dongfu_status WHERE user_id=?',(target_id,))

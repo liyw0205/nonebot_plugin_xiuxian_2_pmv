@@ -577,6 +577,8 @@ class RefactorProgressTests(unittest.TestCase):
         self.assertTrue(slices["dongfu"]["legacy_infiltrate_failure_disabled"])
         self.assertTrue(slices["dongfu"]["legacy_transactions_isolated"])
         self.assertTrue(slices["dongfu"]["legacy_transaction_compatibility_preserved"])
+        self.assertTrue(slices["dongfu"]["operation_request_paths_have_no_ddl"])
+        self.assertTrue(slices["dongfu"]["operation_schema_startup_migration_owned"])
         self.assertTrue(slices["impart_pk"]["training_replay_application_owned"])
         self.assertTrue(slices["impart_pk"]["legacy_training_replay_disabled"])
         self.assertTrue(slices["impart_pk"]["closing_enter_replay_application_owned"])

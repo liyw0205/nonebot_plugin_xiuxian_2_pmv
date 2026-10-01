@@ -2,6 +2,7 @@ import tempfile
 import unittest
 from pathlib import Path
 from ..patrol_repository import DongfuPatrolSqlRepository
+from . import install_operation_schema
 from tests.test_db_backend import db_backend
 
 class DongfuPatrolRepositoryTests(unittest.TestCase):
@@ -12,4 +13,5 @@ class DongfuPatrolRepositoryTests(unittest.TestCase):
                 c.execute('CREATE TABLE user_xiuxian(user_id TEXT PRIMARY KEY,user_stamina INTEGER,stone INTEGER)'); c.execute("INSERT INTO user_xiuxian VALUES('u',10,0)"); c.execute('CREATE TABLE back(user_id TEXT,goods_id INTEGER,goods_name TEXT,goods_type TEXT,goods_num INTEGER,bind_num INTEGER,UNIQUE(user_id,goods_id))')
             with db_backend.transaction(player) as c:
                 c.execute('CREATE TABLE dongfu_status(user_id TEXT PRIMARY KEY,built INTEGER,patrol_date TEXT,patrol_count INTEGER,patrol_guard INTEGER)'); c.execute("INSERT INTO dongfu_status VALUES('u',1,'2026-01-01',0,0)")
+            install_operation_schema(game)
             repo=DongfuPatrolSqlRepository(game,player); first=repo.patrol('p','u','2026-01-01',2,1,100,None,99); duplicate=repo.patrol('p','u','2026-01-01',2,1,100,None,99); limited=repo.patrol('q','u','2026-01-01',2,1,100,None,99); self.assertEqual((first.status,duplicate.status,limited.status),('patrolled','duplicate','daily_limit'))

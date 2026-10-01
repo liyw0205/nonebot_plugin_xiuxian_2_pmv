@@ -2,6 +2,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 from ...infrastructure.database import DatabaseUnitOfWork
+from .operation_schema import operation_databases_ready, operation_schema_ready
 
 @dataclass(frozen=True)
 class DongfuExpansionResult:
@@ -13,8 +14,11 @@ class DongfuExpansionSqlRepository:
     def __init__(self,game_database:str|Path,player_database:str|Path): self.game_database,self.player_database=str(game_database),str(player_database)
     def expand(self,operation_id,user_id,deed_id,base_plot_count,max_plot_count,stone_cost_per_level):
         operation_id,user_id=str(operation_id).strip(),str(user_id); deed_id,base_plot_count,max_plot_count,stone_cost_per_level=map(int,(deed_id,base_plot_count,max_plot_count,stone_cost_per_level))
+        if not operation_databases_ready(self.game_database, self.player_database): return DongfuExpansionResult('schema_missing',user_id)
         with DatabaseUnitOfWork(self.game_database,immediate=True) as uow:
-            uow.attach_database(self.player_database,'player_data'); uow.execute('CREATE TABLE IF NOT EXISTS dongfu_expansion_operations(operation_id TEXT PRIMARY KEY,user_id TEXT NOT NULL,previous_count INTEGER NOT NULL,current_count INTEGER NOT NULL,deed_cost INTEGER NOT NULL,stone_cost INTEGER NOT NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)'); old=uow.query_one('SELECT previous_count,current_count,deed_cost,stone_cost FROM dongfu_expansion_operations WHERE operation_id=?',(operation_id,))
+            uow.attach_database(self.player_database,'player_data')
+            if not operation_schema_ready(uow, 'dongfu_expansion_operations'): return DongfuExpansionResult('schema_missing',user_id)
+            old=uow.query_one('SELECT previous_count,current_count,deed_cost,stone_cost FROM dongfu_expansion_operations WHERE operation_id=?',(operation_id,))
             if old is not None: return DongfuExpansionResult('duplicate',user_id,int(old['previous_count']),int(old['current_count']),int(old['deed_cost']),int(old['stone_cost']))
             user=uow.query_one('SELECT stone FROM user_xiuxian WHERE user_id=?',(user_id,)); row=uow.query_one('SELECT built,plot_count FROM player_data.dongfu_status WHERE user_id=?',(user_id,))
             if user is None: return DongfuExpansionResult('user_missing',user_id)

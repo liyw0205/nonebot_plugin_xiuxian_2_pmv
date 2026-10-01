@@ -574,6 +574,21 @@ def _slice_status() -> dict[str, dict[str, object]]:
     dongfu_facade = (PACKAGE / "xiuxian" / "xiuxian_dongfu" / "__init__.py").read_text(encoding="utf-8")
     dongfu_legacy_shim = (PACKAGE / "xiuxian" / "xiuxian_dongfu" / "transaction_service.py").read_text(encoding="utf-8")
     dongfu_compatibility = (PACKAGE / "compatibility" / "legacy_dongfu_transactions.py").read_text(encoding="utf-8")
+    dongfu_migrations = (PACKAGE / "features" / "dongfu" / "migrations.py").read_text(encoding="utf-8")
+    dongfu_operation_schema = (PACKAGE / "features" / "dongfu" / "operation_schema.py").read_text(encoding="utf-8")
+    dongfu_operation_repositories = tuple(
+        (PACKAGE / "features" / "dongfu" / f"{name}_repository.py").read_text(encoding="utf-8")
+        for name in (
+            "accelerate",
+            "array",
+            "expansion",
+            "fertilize",
+            "harvest",
+            "patrol",
+            "plant",
+            "visit_reward",
+        )
+    )
     dongfu_success_handler = dongfu_facade[
         dongfu_facade.index('operation_id = f"dongfu-infiltrate-success:') : dongfu_facade.index(
             'if result.status == "inventory_full":',
@@ -2238,7 +2253,27 @@ def _slice_status() -> dict[str, dict[str, object]]:
                 and "class DongfuPlantService" in dongfu_compatibility
                 and "class InfiltrateFailureService" in dongfu_compatibility
             ),
-            "status": "asset_actions_application_owned_legacy_transactions_isolated_with_dongfu_reads_legacy",
+            "operation_request_paths_have_no_ddl": all(
+                "CREATE TABLE" not in source
+                and "operation_schema_ready" in source
+                and "operation_databases_ready" in source
+                for source in dongfu_operation_repositories
+            ),
+            "operation_schema_startup_migration_owned": (
+                'Migration("dongfu.004", "dongfu_action_operations", apply_dongfu_operations)' in plugin
+                and "def apply_dongfu_operations(" in dongfu_migrations
+                and all(table in dongfu_operation_schema for table in (
+                    "dongfu_accelerate_operations",
+                    "dongfu_array_upgrade_operations",
+                    "dongfu_expansion_operations",
+                    "dongfu_fertilize_operations",
+                    "dongfu_harvest_operations",
+                    "dongfu_patrol_operations",
+                    "dongfu_plant_operations",
+                    "dongfu_visit_reward_operations",
+                ))
+            ),
+            "status": "asset_actions_application_owned_operation_schema_startup_migrated_legacy_transactions_isolated_with_dongfu_reads_legacy",
         },
         "impart_pk": {
             "project_join_application_owned": "impart_pk_application.project_join(" in impart_pk_facade,

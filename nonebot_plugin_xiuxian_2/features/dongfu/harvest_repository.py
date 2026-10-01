@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from ...infrastructure.database import DatabaseUnitOfWork
+from .operation_schema import operation_databases_ready, operation_schema_ready
 
 @dataclass(frozen=True)
 class DongfuHarvestResult:
@@ -17,8 +18,11 @@ class DongfuHarvestSqlRepository:
     def _canonical(value): return json.dumps(value,ensure_ascii=False,sort_keys=True,separators=(',',':'))
     def harvest(self,operation_id,user_id,expected_slots,slot_numbers,rewards,max_goods_num,settled_at):
         operation_id,user_id=str(operation_id).strip(),str(user_id); slot_numbers=tuple(sorted({int(v) for v in slot_numbers})); max_goods_num=int(max_goods_num); payload=self._canonical([user_id,slot_numbers]); reward_rows=[(int(x['id']),str(x['name']),str(x['type']),int(x['amount'])) for x in rewards if int(x['amount'])>0]
+        if not operation_databases_ready(self.game_database, self.player_database): return DongfuHarvestResult('schema_missing')
         with DatabaseUnitOfWork(self.game_database,immediate=True) as uow:
-            uow.attach_database(self.player_database,'player_data'); uow.execute('CREATE TABLE IF NOT EXISTS dongfu_harvest_operations(operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,rewards TEXT NOT NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)'); old=uow.query_one('SELECT payload,rewards FROM dongfu_harvest_operations WHERE operation_id=?',(operation_id,))
+            uow.attach_database(self.player_database,'player_data')
+            if not operation_schema_ready(uow, 'dongfu_harvest_operations'): return DongfuHarvestResult('schema_missing')
+            old=uow.query_one('SELECT payload,rewards FROM dongfu_harvest_operations WHERE operation_id=?',(operation_id,))
             if old is not None: return DongfuHarvestResult('duplicate' if str(old['payload'])==payload else 'state_changed',tuple(tuple(x) for x in json.loads(old['rewards'])))
             user=uow.query_one('SELECT 1 AS found FROM user_xiuxian WHERE user_id=?',(user_id,)); row=uow.query_one('SELECT built,plant_slots FROM player_data.dongfu_status WHERE user_id=?',(user_id,));
             if user is None: return DongfuHarvestResult('user_missing')

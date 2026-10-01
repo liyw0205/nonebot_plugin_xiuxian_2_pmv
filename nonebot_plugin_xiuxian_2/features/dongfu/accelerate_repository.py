@@ -3,6 +3,7 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 from ...infrastructure.database import DatabaseUnitOfWork
+from .operation_schema import operation_databases_ready, operation_schema_ready
 
 @dataclass(frozen=True)
 class DongfuAccelerateResult:
@@ -16,8 +17,11 @@ class DongfuAccelerateSqlRepository:
     def _canonical(slots): return json.dumps(slots,ensure_ascii=False,sort_keys=True,separators=(',',':'))
     def accelerate(self,operation_id,user_id,expected_slots,slot_no,item_id,now,new_finish):
         operation_id,user_id=str(operation_id).strip(),str(user_id); expected_slots=self._canonical(json.loads(expected_slots)); slot_no,item_id=int(slot_no),int(item_id); now,new_finish=str(now),str(new_finish); payload='|'.join((user_id,str(slot_no),str(item_id)))
+        if not operation_databases_ready(self.game_database, self.player_database): return DongfuAccelerateResult('schema_missing')
         with DatabaseUnitOfWork(self.game_database,immediate=True) as uow:
-            uow.attach_database(self.player_database,'player_data'); uow.execute('CREATE TABLE IF NOT EXISTS dongfu_accelerate_operations(operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)'); old=uow.query_one('SELECT payload FROM dongfu_accelerate_operations WHERE operation_id=?',(operation_id,))
+            uow.attach_database(self.player_database,'player_data')
+            if not operation_schema_ready(uow, 'dongfu_accelerate_operations'): return DongfuAccelerateResult('schema_missing')
+            old=uow.query_one('SELECT payload FROM dongfu_accelerate_operations WHERE operation_id=?',(operation_id,))
             if old is not None: return DongfuAccelerateResult('duplicate' if str(old['payload'])==payload else 'state_changed')
             row=uow.query_one('SELECT built,plant_slots FROM player_data.dongfu_status WHERE user_id=?',(user_id,));
             if row is None or int(row['built'] or 0)!=1: return DongfuAccelerateResult('dongfu_missing')
