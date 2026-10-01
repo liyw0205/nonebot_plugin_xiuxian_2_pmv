@@ -2,6 +2,12 @@
 
 状态：进行中。`v1.1.0` 的 P0-P7 发布证据继续保留，但不作为底层全面重构完成证明。
 
+2026-10-01 reward boss-integral write boundary：通用 `RewardService` 的 BOSS 积分奖励写入统一经
+`BossIntegralApplication -> BossIntegralSqlRepository`，只读校验既有 player-side `boss_limit` schema，
+在 immediate UoW 内按 rowid/CAS 更新；缺数据库、表、字段或用户时 fail closed，不执行请求期 DDL，
+奖励服务继续只统计实际写入量。新增重复 user 行、缺 schema/用户和来源门禁回归；无新增 migration。
+全局旧 transaction services、`xiuxian2_handle` 和正式发布/P7 仍是 blocker。
+
 2026-10-01 mentor title write boundary：师徒绑定/传功/出师后的统计阈值称号发放，读取和写入统一经
 `TitleApplication -> TitleRepository`，使用稳定的 `mentor-title:{user_id}:{title_id}` operation id，
 按期望 unlocked 快照做 CAS；重复调用不重复写入或日志。`partner.py` 不再直接调用

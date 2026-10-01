@@ -557,6 +557,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
         )
     ]
     boss_facade = (PACKAGE / "xiuxian" / "xiuxian_boss" / "__init__.py").read_text(encoding="utf-8")
+    reward_service_source = (PACKAGE / "xiuxian" / "xiuxian_utils" / "reward_service.py").read_text(encoding="utf-8")
     boss_application = (PACKAGE / "features" / "boss" / "application.py").read_text(encoding="utf-8")
     boss_world_repository = (PACKAGE / "features" / "boss" / "world_boss_repository.py").read_text(encoding="utf-8")
     boss_migrations = (PACKAGE / "features" / "boss" / "migrations.py").read_text(encoding="utf-8")
@@ -2078,6 +2079,11 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "status": "bid_and_settlement_effects_owned_with_outbox_reconcile; trade_web_auction_actions_application_owned; display_queue_and_scheduler_queries_application_owned; explicit_auction_rollback_adapters_feature_owned",
         },
         "boss": {
+            "reward_integral_application_owned": (
+                "BossIntegralApplication" in reward_service_source
+                and "self.boss_integral_application.grant_integral(" in reward_service_source
+            ),
+            "reward_integral_legacy_writer_disabled": "player_data_manager.update_or_write_data" not in reward_service_source,
             "manual_spawn_application_owned": "boss_application.spawn(" in boss_facade,
             "daily_limit_application_owned": "boss_application.reset_daily_limit(" in boss_facade,
             "manual_spawn_repository_owned": "WorldBossManualSpawnSqlRepository" in boss_application and "transaction_service" not in boss_application,

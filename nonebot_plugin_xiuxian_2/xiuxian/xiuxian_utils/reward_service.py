@@ -10,11 +10,12 @@ except Exception:  # pragma: no cover
 from ..xiuxian_config import XiuConfig
 from ...features.base.economy_application import PlayerEconomyApplication
 from ...features.base.inventory_application import PlayerInventoryApplication
+from ...features.boss.integral_application import BossIntegralApplication
 from ...paths import get_paths
 from .economy_log import safe_log_economy_change
 from .item_json import Items
 from .utils import number_to
-from .xiuxian2_handle import OtherSet, PlayerDataManager, XiuxianDateManage
+from .xiuxian2_handle import OtherSet, XiuxianDateManage
 from .numeric_bind import as_int_like, number_count
 
 
@@ -31,15 +32,18 @@ class RewardService:
         *,
         economy_application: PlayerEconomyApplication | None = None,
         inventory_application: PlayerInventoryApplication | None = None,
+        boss_integral_application: BossIntegralApplication | None = None,
     ):
         self.sql_message = XiuxianDateManage()
-        self.player_data_manager = PlayerDataManager()
         self.items = Items()
         self.economy_application = economy_application or PlayerEconomyApplication(
             get_paths().game_db
         )
         self.inventory_application = inventory_application or PlayerInventoryApplication(
             get_paths().game_db
+        )
+        self.boss_integral_application = boss_integral_application or BossIntegralApplication(
+            get_paths().player_db
         )
 
     def _grant_exp(self, user_id: str, exp: int) -> int:
@@ -135,15 +139,8 @@ class RewardService:
         amount = max(0, as_int_like(amount))
         if amount <= 0:
             return 0
-        current = _to_int(self.player_data_manager.get_field_data(user_id, "boss_limit", "integral"), 0)
-        self.player_data_manager.update_or_write_data(
-            user_id,
-            "boss_limit",
-            "integral",
-            current + amount,
-            data_type="INTEGER",
-        )
-        return amount
+        result = self.boss_integral_application.grant_integral(user_id, amount)
+        return result.applied if result.succeeded else 0
 
     @staticmethod
     def _format_reward(granted: dict[str, Any], requested: dict[str, Any]) -> str:
