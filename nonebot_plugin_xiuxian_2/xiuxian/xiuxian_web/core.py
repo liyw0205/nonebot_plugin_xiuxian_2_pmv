@@ -142,6 +142,7 @@ def initialize_web_storage() -> None:
     """Prepare persistent Web state during the NoneBot startup phase."""
     app.secret_key = _load_or_create_web_secret_key()
     WEB_UPLOAD_CACHE.mkdir(parents=True, exist_ok=True)
+    _cleanup_web_upload_cache()
 
 
 app.secret_key = secrets.token_urlsafe(48)
@@ -397,6 +398,39 @@ if not 1 <= PORT <= 65535:
 HOST = str(getattr(get_driver().config, "host", "127.0.0.1"))
 
 WEB_UPLOAD_CACHE = get_paths().cache / "web_uploads"
+WEB_UPLOAD_CACHE_MAX_FILES = 128
+WEB_UPLOAD_CACHE_MAX_AGE_SECONDS = 3600
+
+
+def _cleanup_web_upload_cache() -> None:
+    """Bound temporary upload storage before accepting another upload."""
+    if not WEB_UPLOAD_CACHE.exists():
+        return
+    now = time.time()
+    files = []
+    for path in WEB_UPLOAD_CACHE.iterdir():
+        if not path.is_file():
+            continue
+        try:
+            mtime = path.stat().st_mtime
+        except OSError:
+            continue
+        if mtime < now - WEB_UPLOAD_CACHE_MAX_AGE_SECONDS:
+            try:
+                path.unlink()
+            except OSError:
+                pass
+            continue
+        files.append((mtime, path))
+    target_files = max(0, WEB_UPLOAD_CACHE_MAX_FILES - 1)
+    if len(files) <= target_files:
+        return
+    files.sort(key=lambda item: item[0])
+    for _, path in files[: len(files) - target_files]:
+        try:
+            path.unlink()
+        except OSError:
+            pass
 runtime_clock = SystemClock()
 
 ALLOWED_MEDIA_TYPES = {"image", "video", "audio", "file"}
@@ -459,6 +493,8 @@ def save_uploaded_media(file_storage):
     保存上传文件到临时目录，返回 Path。
     """
     filename = secure_filename(file_storage.filename or "upload.bin")
+    WEB_UPLOAD_CACHE.mkdir(parents=True, exist_ok=True)
+    _cleanup_web_upload_cache()
     suffix = Path(filename).suffix
     save_name = f"{runtime_clock.now().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:8]}{suffix}"
     save_path = WEB_UPLOAD_CACHE / save_name

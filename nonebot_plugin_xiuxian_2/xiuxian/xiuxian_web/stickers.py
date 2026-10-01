@@ -26,6 +26,11 @@ STICKERS_MANIFEST_NAME = "stickers-manifest.json"
 _PACK_ID_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,31}$")
 _STICKER_FILE_RE = re.compile(r"^[A-Za-z0-9._-]+\.webp$")
 _STICKER_TOKEN_RE = re.compile(r"^([a-z0-9][a-z0-9_-]{0,31})/([A-Za-z0-9._-]+)$")
+MAX_STICKER_ARCHIVE_BYTES = 64 * 1024 * 1024
+MAX_MANIFEST_BYTES = 2 * 1024 * 1024
+MAX_STICKER_FILES = 2048
+MAX_STICKER_FILE_BYTES = 16 * 1024 * 1024
+MAX_STICKER_UNCOMPRESSED_BYTES = 128 * 1024 * 1024
 
 
 def stickers_root() -> Path:
@@ -84,6 +89,8 @@ def _download_bytes(
             req = Request(u, headers={"User-Agent": "xiuxian-web-stickers/1.0"})
             with urlopen(req, timeout=timeout) as resp:
                 total = int(resp.headers.get("Content-Length") or 0)
+                if total > MAX_MANIFEST_BYTES:
+                    raise RuntimeError("远端 manifest 超过大小限制")
                 chunks: list[bytes] = []
                 downloaded = 0
                 while True:
@@ -92,6 +99,8 @@ def _download_bytes(
                         break
                     chunks.append(chunk)
                     downloaded += len(chunk)
+                    if downloaded > MAX_MANIFEST_BYTES:
+                        raise RuntimeError("远端 manifest 超过大小限制")
                     if progress:
                         progress(downloaded, total)
                 data = b"".join(chunks)
@@ -103,8 +112,43 @@ def _download_bytes(
     raise RuntimeError(f"下载失败: {url}: {last_err}")
 
 
-def _sha256_bytes(data: bytes) -> str:
-    return hashlib.sha256(data).hexdigest()
+def _download_file(
+    url: str,
+    destination: Path,
+    timeout: int = 60,
+    progress: Callable[[int, int], None] | None = None,
+    max_bytes: int = MAX_STICKER_ARCHIVE_BYTES,
+) -> str:
+    urls = [url, f"https://ghproxy.net/{url}"]
+    last_err: Exception | None = None
+    for candidate in urls:
+        downloaded = 0
+        digest = hashlib.sha256()
+        try:
+            req = Request(candidate, headers={"User-Agent": "xiuxian-web-stickers/1.0"})
+            with urlopen(req, timeout=timeout) as resp, destination.open("wb") as output:
+                total = int(resp.headers.get("Content-Length") or 0)
+                if total > max_bytes:
+                    raise RuntimeError("表情包压缩文件超过大小限制")
+                while True:
+                    chunk = resp.read(64 * 1024)
+                    if not chunk:
+                        break
+                    downloaded += len(chunk)
+                    if downloaded > max_bytes:
+                        raise RuntimeError("表情包压缩文件超过大小限制")
+                    output.write(chunk)
+                    digest.update(chunk)
+                    if progress:
+                        progress(downloaded, total)
+            if downloaded:
+                return digest.hexdigest()
+            raise RuntimeError("下载内容为空")
+        except Exception as exc:  # noqa: BLE001
+            last_err = exc
+            destination.unlink(missing_ok=True)
+            logger.warning(f"stickers download failed: {candidate}: {exc}")
+    raise RuntimeError(f"下载失败: {url}: {last_err}")
 
 
 def _safe_pack_id(pack_id: str) -> str | None:
@@ -185,6 +229,8 @@ def _extract_pack_zip(zip_path: Path, pack_id: str) -> dict[str, Any]:
         shutil.rmtree(pack_dir)
     pack_dir.mkdir(parents=True, exist_ok=True)
 
+    extracted_bytes = 0
+    extracted_files = 0
     with zipfile.ZipFile(zip_path) as zf:
         for info in zf.infolist():
             if info.is_dir():
@@ -211,7 +257,22 @@ def _extract_pack_zip(zip_path: Path, pack_id: str) -> dict[str, Any]:
                 if not safe:
                     continue
                 target = pack_dir / safe
-            target.write_bytes(zf.read(info))
+            extracted_files += 1
+            if extracted_files > MAX_STICKER_FILES:
+                raise RuntimeError("表情包文件数量超过限制")
+            if info.file_size > MAX_STICKER_FILE_BYTES:
+                raise RuntimeError("表情包单文件超过大小限制")
+            if extracted_bytes + info.file_size > MAX_STICKER_UNCOMPRESSED_BYTES:
+                raise RuntimeError("表情包解压后超过大小限制")
+            with zf.open(info) as source, target.open("wb") as output:
+                while True:
+                    chunk = source.read(64 * 1024)
+                    if not chunk:
+                        break
+                    extracted_bytes += len(chunk)
+                    if extracted_bytes > MAX_STICKER_UNCOMPRESSED_BYTES:
+                        raise RuntimeError("表情包解压后超过大小限制")
+                    output.write(chunk)
 
     pack_json_path = pack_dir / "pack.json"
     webps = sorted(
@@ -323,15 +384,20 @@ def install_stickers(
         downloaded=0,
         total=0,
     )
-    data = _download_bytes(remote_asset_url(zip_name), progress=on_download)
-    report(stage="verify", percent=90, message=f"正在校验 {pack_name}")
-    got = _sha256_bytes(data)
-    if expect_sha and got != expect_sha:
-        raise RuntimeError(f"{zip_name} sha256 不匹配")
     cache_path = stickers_cache_dir() / zip_name
-    cache_path.write_bytes(data)
-    report(stage="extract", percent=95, message=f"正在安装 {pack_name}")
-    meta = _extract_pack_zip(cache_path, selected_id)
+    try:
+        got = _download_file(
+            remote_asset_url(zip_name), cache_path, progress=on_download
+        )
+        report(stage="verify", percent=90, message=f"正在校验 {pack_name}")
+        if expect_sha and got != expect_sha:
+            raise RuntimeError(f"{zip_name} sha256 不匹配")
+        report(stage="extract", percent=95, message=f"正在安装 {pack_name}")
+        meta = _extract_pack_zip(cache_path, selected_id)
+    finally:
+        # The archive is only an extraction workspace; keeping it doubles the
+        # installed pack's storage footprint and accumulates on force installs.
+        cache_path.unlink(missing_ok=True)
     installed_by_id[selected_id] = {
         "id": selected_id,
         "name": pack_name,
