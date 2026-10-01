@@ -789,9 +789,7 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
         from .features.world_events.application import DemonClaimApplication
         from .features.world_events.repository import WorldEventClaimSqlRepository
         from .features.work.application import WorkClaimApplication
-        from .features.work.repository import LegacyWorkClaimRepository
         from .features.mixelixir.application import MixelixirApplication
-        from .features.mixelixir.repository import LegacyMixelixirRepository
         from .features.puppet.application import PuppetApplication
         from .features.boss.application import BossApplication
         from .features.dungeon.application import DungeonApplication
@@ -968,15 +966,10 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
             ),
             "work": WorkClaimApplication(
                 str(context.database.path("game_db")),
-                repository=LegacyWorkClaimRepository(str(context.database.path("game_db"))),
             ),
             "mixelixir": MixelixirApplication(
                 str(context.database.path("game_db")),
                 str(context.database.path("player_db")),
-                repository=LegacyMixelixirRepository(
-                    str(context.database.path("game_db")),
-                    str(context.database.path("player_db")),
-                ),
             ),
             "puppet": PuppetApplication(
                 str(context.database.path("game_db")),

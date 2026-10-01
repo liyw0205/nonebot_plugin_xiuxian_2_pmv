@@ -1242,6 +1242,9 @@ class SourceQualityTests(unittest.TestCase):
         self.assertIn("work_settlement_application = WorkSettlementApplication(", source)
         self.assertNotIn("LegacyWorkClaimRepository", source)
         self.assertNotIn("LegacyWorkSettlementRepository", source)
+        plugin_source = (SOURCE_ROOT / "plugin.py").read_text(encoding="utf-8")
+        self.assertNotIn("from .features.work.repository import LegacyWorkClaimRepository", plugin_source)
+        self.assertNotIn("repository=LegacyWorkClaimRepository", plugin_source)
 
     def test_base_default_application_does_not_construct_legacy_repository(self) -> None:
         source = (SOURCE_ROOT / "xiuxian" / "xiuxian_base" / "__init__.py").read_text(encoding="utf-8")
@@ -2408,6 +2411,9 @@ class SourceQualityTests(unittest.TestCase):
         self.assertNotIn("LegacyMixelixirRepository", source)
         self.assertIn("mixelixir_application = MixelixirApplication(", source)
         self.assertNotIn("repository=LegacyMixelixirRepository", source)
+        plugin_source = (SOURCE_ROOT / "plugin.py").read_text(encoding="utf-8")
+        self.assertNotIn("from .features.mixelixir.repository import LegacyMixelixirRepository", plugin_source)
+        self.assertNotIn("repository=LegacyMixelixirRepository", plugin_source)
 
     def test_mixelixir_refine_claim_uses_feature_application(self) -> None:
         source = (SOURCE_ROOT / "xiuxian" / "xiuxian_mixelixir" / "__init__.py").read_text(encoding="utf-8")

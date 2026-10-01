@@ -3033,6 +3033,11 @@ Boss 旧 settlement transaction 的同事务时间戳写入仍是独立未迁移
 新增 plugin/source/progress 门禁，避免正式 NoneBot 生命周期回退旧仓储。验证使用禁用字节码与 pytest 缓存的聚焦
 回归；仓库原有的注入式 application 单元测试仍需自行初始化 `operation_ledger`，不作为本切片失败证据。
 
+同轮收口 `work` 与 `mixelixir` 的生命周期容器注入：Web/runtime service 默认构造不再绑定
+`LegacyWorkClaimRepository` 或 `LegacyMixelixirRepository`，分别回到已完成的 feature-owned claim、harvest、settle
+与炼丹任务 repository；旧仓储仍可通过显式 compatibility 注入使用。新增 runtime source/progress 门禁，确保模块级
+facade 与生命周期 service 的默认执行图一致。
+
 1. **bank 历史账户生命周期审计已收口（2026-09-30）**：`bank.003` 启动时只读分批回填完整旧 `bankinfo`；默认 matcher/route 不再读取旧 projection，旧 reader 无生产调用。bank `JOBS` 为空、包内无旧 `savef` 生产调用点，也无 `LegacyBankRepository` 默认构造点；兼容 writer/rollback 保留但不在默认执行图。生产旧库只在迁移尚未登记时由 startup migration 读取；正式发布仍需对真实数据做备份、migration、恢复和余额对账，不能以隔离 recovery 代替。
 - **仙缘 feature-owned cutover 已完成（2026-09-30）**：真实 `送仙缘`/`抢仙缘` handler 与 `/api/v1/base/xiangyuan/{create,claim,group}` route 统一进入 `XiangyuanApplication -> XiangyuanSqlRepository`；`base.006` 仅迁移 game 仙缘池/回执，`base.007` 仅迁移 player `xiangyuan_limit`。跨库写入使用 immediate UoW 与 replay/conflict，缺 migration/schema fail closed，默认路径不再读取 `stone_limit` 或构造 compatibility service；旧 `XiangyuanSettlementService` 仅为显式回滚保留。下一项按 player/economy 调用图审计仍由 `xiuxian2_handle` 或旧 transaction service 承载的资产路径。
 - **世界BOSS三库结算 feature-owned cutover 已完成（2026-10-01）**：默认 `BossApplication -> BossPurchaseSqlRepository -> WorldBossBattleSettlementSqlRepository` 不再继承旧 settlement repository；game/player/activity 写入在同一 attached UoW 中完成，operation replay/conflict、玩家/BOSS/活动快照 CAS、统计/任务/背包和晚失败回滚均有回归证据。`boss.006` 仅路由 player schema，活动投影复用 `activity_state.001`；请求期不建表，缺 schema 失败闭环。旧 `WorldBossBattleSettlementService` 只保留显式 compatibility/rollback API。下一项回到 player/economy 调用图，审计仍可达的 `xiuxian2_handle` 与旧 transaction service。

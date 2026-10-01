@@ -216,6 +216,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
     work_migrations = (PACKAGE / "features" / "work" / "migrations.py").read_text(encoding="utf-8")
     work_abort_legacy = (PACKAGE / "compatibility" / "legacy_work_abort_cleanup.py").read_text(encoding="utf-8")
     work_legacy_refresh = (PACKAGE / "compatibility" / "legacy_work_refresh.py").read_text(encoding="utf-8")
+    work_plugin_source = (PACKAGE / "plugin.py").read_text(encoding="utf-8")
     work_transaction_shim = (PACKAGE / "xiuxian" / "xiuxian_work" / "transaction_service.py").read_text(encoding="utf-8")
     work_accelerate_handler = work_facade[
         work_facade.index("async def use_work_order") : work_facade.index(
@@ -788,6 +789,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
                 and "legacy_work_abort_cleanup import" in work_transaction_shim
             ),
             "claim_default_entry_owned": "work_claim_application.claim(" in work_facade,
+            "claim_runtime_default_has_no_legacy_repository": "LegacyWorkClaimRepository" not in work_plugin_source,
             "claim_repository_has_no_request_ddl": "CREATE TABLE" not in work_claim_repository and "ALTER TABLE" not in work_claim_repository,
             "claim_migration_registered": (
                 'Migration("work.007", "work_claim_operations", apply_work_claim_operations)' in plugin
@@ -2174,7 +2176,8 @@ def _slice_status() -> dict[str, dict[str, object]]:
         "mixelixir": {
             "harvest_level_application_owned": "mixelixir_application.harvest_level_upgrade(" in mixelixir_facade,
             "legacy_harvest_level_disabled": "_mixelixir_harvest_level_upgrade_service().upgrade(" not in mixelixir_facade,
-            "status": "harvest_level_upgrade_cutover_with_other_mixelixir_compatibility",
+            "runtime_default_has_no_legacy_repository": "LegacyMixelixirRepository" not in plugin_source,
+            "status": "harvest_level_upgrade_and_runtime_default_feature_owned_with_explicit_compatibility",
         },
         "dongfu": {
             "expansion_application_owned": "dongfu_application.expand(" in dongfu_facade,

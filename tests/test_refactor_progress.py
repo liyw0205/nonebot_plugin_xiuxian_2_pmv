@@ -83,6 +83,7 @@ class RefactorProgressTests(unittest.TestCase):
         self.assertTrue(work["abort_cleanup_migration_registered"])
         self.assertTrue(work["legacy_abort_cleanup_isolated_with_compatibility_export"])
         self.assertTrue(work["claim_default_entry_owned"])
+        self.assertTrue(work["claim_runtime_default_has_no_legacy_repository"])
         self.assertTrue(work["claim_repository_has_no_request_ddl"])
         self.assertTrue(work["claim_migration_registered"])
         self.assertTrue(work["settlement_repository_has_no_request_ddl"])
@@ -556,6 +557,7 @@ class RefactorProgressTests(unittest.TestCase):
         mixelixir = slices["mixelixir"]
         self.assertTrue(mixelixir["harvest_level_application_owned"])
         self.assertTrue(mixelixir["legacy_harvest_level_disabled"])
+        self.assertTrue(mixelixir["runtime_default_has_no_legacy_repository"])
         self.assertTrue(slices["dongfu"]["plant_application_owned"])
         self.assertTrue(slices["dongfu"]["harvest_application_owned"])
         self.assertTrue(slices["dongfu"]["fertilize_application_owned"])
