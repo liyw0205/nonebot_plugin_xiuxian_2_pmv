@@ -18,6 +18,8 @@
 
 `修仙适配` 的旧境界批量转换由 `AdminAssetApplication -> AdminLegacyRealmAdaptationSqlRepository` 承担，保留境界阶段后缀映射与管理员结果文案。
 
+`重置新手礼包` 由 `AdminAssetApplication -> AdminNoviceResetSqlRepository` 承担，使用既有 game DB `operation_ledger` 做幂等回执。
+
 `创造力量 all` 与 `毁灭力量 all` 的普通物品分支也由 `AdminAssetApplication -> AdminItemBatchSqlRepository` 执行。名单在 game DB 内冻结，每轮最多处理 100 人；命令层不读取完整 user ID 列表。全服发放保留单人容量上限和经济审计，全服扣除按实际持有量部分扣除。旧运行 grant batch 会导入原冻结名单和已完成进度，超过 64 Mi 字符时拒绝恢复并保留原任务；child receipt 已提交而批次进度失败时可幂等重放恢复。
 
 ## Web API
@@ -35,6 +37,7 @@
 feature 单人 stone repository 在一个 game DB immediate UoW 中提交余额 CAS、旧格式 operation receipt、`economy_log` 和 trace ID；用户不存在、快照变化、操作号冲突都不会改资产。扣减仍封顶至 0，审计记录实际 delta。统一 operation ledger 若停在 `started`，相同请求可借 repository receipt 安全恢复；晚期 SQL 异常同时回滚余额、receipt 和经济审计。全服调整将首次目标集冻结在 game DB，随后每次最多处理 100 人；每个 chunk 的余额更新与前后值/结果同事务提交。新用户不加入已开始的操作，处理前被删除的用户记为 skipped；增减不封顶，保持旧 SQL 算术。批次创建在 `BEGIN IMMEDIATE` 内检查相同管理员/增量的活动操作；若另一个 operation ID 已有运行批次则返回 `in_progress`，不会再执行一个批次，部分唯一索引提供数据库级兜底。显式注入 `LegacyAdminStoneRepository` 仍可供回滚使用，但不由默认 composition root 创建。
 feature 单人 exp repository 在一个 game DB immediate UoW 中校验 `.002/.004` 启动 schema，再提交修为快照 CAS、exp receipt 和 `economy_log.trace_id`；缺表/缺列返回 `schema_missing`，不在请求时建表。扣减仍封顶至 0，operation replay 不重复记账。
 旧境界适配复用 `admin_asset.007` 的 operation receipt schema，在单一 game DB immediate UoW 中按首条用户行映射并更新境界；回执 replay/conflict 可恢复，晚期回执失败回滚全部等级更新，缺 schema 时不改用户数据，也不遍历或缓存完整用户 ID 列表。
+新手礼包重置在同一 immediate UoW 中统计并归零 `user_xiuxian.is_novice`，ledger/audit 写入失败会回滚状态；缺少既有 platform ledger 或玩家字段时 fail closed，不新增业务表、不执行请求期 DDL。
 单人物品扣除 repository 在 immediate UoW 中校验 `.002/.005` schema，再校验物品快照并原子提交背包扣减、绑定数量更新、receipt 和 `economy_log`；缺表/缺列返回 `schema_missing`，不执行扣减。
 普通物品发放 repository 在 immediate UoW 中校验 `.006` 与 `back` schema，再按物品数量快照提交背包增量和 receipt。缺 schema 返回 `schema_missing`；应用将 rejected operation 写入 ledger，同一 operation 重试得到稳定拒绝，不会误报成功或改库存。
 单人传承石 repository 从 `impart_db.xiuxian_impart.stone_num` 读取并 CAS 更新余额，在 attached UoW 中将旧格式兼容回执和 `economy_log` 写入 game DB。快照读取使用只读连接；缺数据库/表/列返回未就绪，重复用户行拒绝修改；扣减仍封顶至 0 并记录实际 delta。`.008` 只路由 game DB，因为 impart 余额表仍归 legacy schema owner 管理。全服批次由 `AdminImpartStoneBatchSqlRepository` 在 game DB 内以 `INSERT ... SELECT` 冻结名单，不把全服 ID 拉入 handler 内存或塞进新 payload；每次最多加载一块目标。每位用户仍经单人仓储提交 child operation，批次进度晚写失败时重试同一 child receipt 不会重复变更 impart 余额。恢复旧运行任务时先做磁盘预检，再以 500 条 SQL 写入块导入旧 payload 名单和已完成进度；仅读取固定长度 payload 前缀识别请求，旧 payload 超过 64 Mi 字符时拒绝恢复且保留历史进度，避免展开巨型 JSON 名单。已完成旧批次保留原摘要。`.011` 只路由 game DB，impart 余额表不迁移、不请求期建表。

@@ -20,6 +20,13 @@ immediate UoW 内用阶段后缀映射和首条用户行处理境界。操作回
 新增重复 user 行、阶段映射、回放/冲突、缺 schema 和晚失败回滚回归；下一项继续按 6.2 审计其余
 player/economy 旧写入（新手标志、悬赏次数及其他 `xiuxian2_handle` 真实路径）。
 
+2026-10-01 admin novice-gift reset write boundary：超级管理员 `重置新手礼包` 不再调用
+`XiuxianDateManage.novice_remake`；默认入口改经 `AdminAssetApplication ->
+AdminNoviceResetSqlRepository`，使用既有 game DB `operation_ledger/operation_audit` 在单一 immediate
+UoW 内统计并归零 `user_xiuxian.is_novice`。相同操作号 replay 返回首次重置数量，payload 冲突拒绝，
+ledger/audit 晚失败回滚全部状态，缺既有 schema fail closed，不新增业务迁移或请求期 DDL。新增回放、
+冲突、缺 schema、重复用户和审计失败回滚回归；下一项继续审计 `reset_work_num` 及其他全服 player/economy 旧写入。
+
 2026-10-01 player experience normalization boundary：`抑制黑暗动乱` 不再把读取到的旧修为交给
 `XiuxianDateManage.del_exp_decimal` 无条件覆盖；改经 `PlayerEconomyApplication.normalize_experience`，
 按首条用户 row 与当前修为快照 CAS 截断小数，重复整理无写入，缺 schema/用户或状态变化 fail closed。

@@ -1778,8 +1778,22 @@ async def clear_xiangyuan_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
 async def xiuxian_novice_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """重置新手礼包"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
-    _sql_message().novice_remake()
-    msg = "新手礼包重置成功，所有玩家可以重新领取新手礼包！"
+    operation_id = _admin_operation_id(event, "novice-reset", "all")
+    operator_id = str(get_user_id(event) or "unknown")
+    result = admin_asset_application.reset_novice_gifts(
+        operation_id=operation_id,
+        operator_id=operator_id,
+    )
+    if result.status == "schema_missing":
+        msg = "新手礼包重置服务尚未就绪，请检查启动迁移。"
+    elif result.status == "operation_conflict":
+        msg = "本次新手礼包重置请求与已记录操作冲突。"
+    elif result.status == "duplicate":
+        msg = f"该新手礼包重置请求此前已完成，共重置 {result.reset_count} 名玩家。"
+    elif result.succeeded:
+        msg = f"新手礼包重置成功，共重置 {result.reset_count} 名玩家。"
+    else:
+        msg = "新手礼包重置未完成，请检查服务日志。"
     await handle_send(bot, event, msg)
     await xiuxian_novice.finish()
 

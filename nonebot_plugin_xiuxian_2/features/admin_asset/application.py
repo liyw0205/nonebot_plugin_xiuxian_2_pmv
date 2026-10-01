@@ -22,6 +22,7 @@ from .item_batch_repository import AdminItemBatchSqlRepository
 from .exp_repository import AdminExpAdjustmentSqlRepository
 from .level_repository import AdminLevelChangeSqlRepository
 from .legacy_realm_adaptation_repository import AdminLegacyRealmAdaptationSqlRepository
+from .novice_reset_repository import AdminNoviceResetSqlRepository
 from .root_repository import AdminRootChangeSqlRepository
 from .accessory_repository import AdminAccessoryAdjustmentResult, AdminAccessorySqlRepository
 from .accessory_batch_repository import AdminAccessoryBatchSqlRepository
@@ -439,6 +440,11 @@ class AdminAssetApplication:
     ):
         return AdminLegacyRealmAdaptationSqlRepository(self.database).adapt(
             operation_id, operator_id, level_mapping
+        )
+
+    def reset_novice_gifts(self, *, operation_id: str, operator_id: str):
+        return AdminNoviceResetSqlRepository(self.database, ledger=self.ledger).reset(
+            operation_id, operator_id
         )
 
     def change_root(self, *, operation_id: str, operator_id: str, user_id: str, expected_snapshot, root_id: int, level_spend: float, new_root_rate: float, target_name: str = ""):
