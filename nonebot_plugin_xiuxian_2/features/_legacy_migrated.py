@@ -62,6 +62,7 @@ from .compensation.migrations import (
     apply_compensation_invitation_definition_schema,
     apply_compensation_invitation_reward_schema,
     apply_compensation_reward_claim_schema,
+    apply_compensation_reward_catalog_schema,
 )
 from .dongfu.migrations import apply_dongfu
 from .dufang.migrations import apply_dufang
@@ -111,6 +112,7 @@ MIGRATIONS = tuple(
          ("legacy.compensation.003", apply_compensation_invitation_reward_schema),
          ("legacy.compensation.004", apply_compensation_invitation_definition_schema),
          ("legacy.compensation.005", apply_compensation_definition_schema),
+         ("legacy.compensation.006", apply_compensation_reward_catalog_schema),
          ("legacy.illusion.001", apply_illusion)),
         key=lambda item: item[0],
     )

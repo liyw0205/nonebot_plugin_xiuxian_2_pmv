@@ -7,6 +7,35 @@ from ....infrastructure.database import DatabaseUnitOfWork
 from tests.test_db_backend import db_backend
 
 class CompensationRewardClaimRepositoryTests(unittest.TestCase):
+    def test_zero_legacy_baseline_does_not_create_counter_row(self):
+        with tempfile.TemporaryDirectory() as temp:
+            db = Path(temp) / "game.db"
+            with db_backend.transaction(db) as c:
+                c.execute("CREATE TABLE user_xiuxian(user_id TEXT PRIMARY KEY,stone INTEGER)")
+                c.execute("INSERT INTO user_xiuxian VALUES('u',10)")
+            with DatabaseUnitOfWork(db) as uow:
+                apply_compensation_reward_claim_schema(uow)
+            repo = CompensationRewardClaimSqlRepository(db, max_goods_num=99)
+
+            result = repo.claim(
+                "redeem",
+                "兑换码",
+                "R1",
+                "u",
+                [{"type": "stone", "id": "stone", "name": "灵石", "quantity": 1}],
+                usage_limit=5,
+            )
+
+            self.assertEqual(result.status, "claimed")
+            with DatabaseUnitOfWork(db, read_only=True) as uow:
+                count = int(
+                    uow.execute(
+                        "SELECT COUNT(*) FROM reward_claim_counters "
+                        "WHERE reward_type='兑换码' AND record_id='R1'"
+                    ).fetchone()[0]
+                )
+            self.assertEqual(count, 0)
+
     def test_claim_replay_version_and_inventory_are_atomic(self):
         with tempfile.TemporaryDirectory() as temp:
             db=Path(temp)/'game.db'

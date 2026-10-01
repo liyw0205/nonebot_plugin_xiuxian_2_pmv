@@ -1825,6 +1825,7 @@ class SourceQualityTests(unittest.TestCase):
         )[0]
         self.assertIn("_compensation_application(", claim_body)
         self.assertIn(".claim_reward(", claim_body)
+        self.assertIn(".reward_definition(", claim_body)
         self.assertNotIn("RewardClaimService", common_source)
         delete_body = common_source.split("def delete_record", 1)[1].split(
             "def clear_records", 1
@@ -1832,10 +1833,10 @@ class SourceQualityTests(unittest.TestCase):
         clear_body = common_source.split("def clear_records", 1)[1].split(
             "async def list_normal_rewards", 1
         )[0]
-        self.assertIn("_compensation_application().delete_reward_claims(", delete_body)
-        self.assertIn("_compensation_application().delete_reward_claims(", clear_body)
-        self.assertIn('operation_id=f"{operation_id}:claims"', delete_body)
-        self.assertIn('operation_id=f"{operation_id}:claims"', clear_body)
+        self.assertIn("_compensation_application().delete_reward_definition(", delete_body)
+        self.assertIn("_compensation_application().clear_reward_definitions(", clear_body)
+        self.assertNotIn("delete_reward_claims(", delete_body)
+        self.assertNotIn("delete_reward_claims(", clear_body)
         self.assertNotIn("send_reward_to_user(", claim_body)
         self.assertIn("BEGIN IMMEDIATE", service_source)
         self.assertIn("reward_claims", service_source)
@@ -1857,8 +1858,26 @@ class SourceQualityTests(unittest.TestCase):
         self.assertIn("_compensation_application().has_claimed(", source)
         self.assertNotIn("RewardClaimService", source)
         self.assertIn("usage_limit=usage_limit", source)
+        self.assertIn("expected_definition_version=redeem_info.get(\"_definition_version\")", source)
         self.assertNotIn("send_reward_to_user(", source)
         self.assertNotIn("mark_claimed(", source)
+
+    def test_compensation_web_reward_save_uses_versioned_application(self) -> None:
+        source = (
+            SOURCE_ROOT / "xiuxian" / "xiuxian_web" / "reward_center.py"
+        ).read_text(encoding="utf-8")
+        save_body = source.split("def api_save_reward_record", 1)[1].split(
+            '@app.route("/api/reward-center/records/<kind>/<record_id>"', 1
+        )[0]
+        self.assertIn("upsert_reward_definition(", save_body)
+        self.assertIn("_normalize_payload(payload)", save_body)
+        self.assertIn('if kind == "compensation":', save_body)
+        self.assertNotIn("save_data(config, data)", save_body.split("else:", 1)[1])
+        common_source = (
+            SOURCE_ROOT / "xiuxian" / "xiuxian_compensation" / "common.py"
+        ).read_text(encoding="utf-8")
+        self.assertIn("expected_version=record.get(\"_definition_version\")", common_source)
+        self.assertGreaterEqual(save_body.count("if not result.succeeded:"), 1)
 
     def test_dungeon_team_json_fields_use_typed_normalization(self) -> None:
         source = (

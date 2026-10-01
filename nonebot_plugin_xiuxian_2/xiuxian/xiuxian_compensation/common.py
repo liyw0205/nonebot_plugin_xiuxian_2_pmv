@@ -1,7 +1,4 @@
-import os
-import random
 import string
-import time
 from types import SimpleNamespace
 from pathlib import Path
 from datetime import datetime, timedelta
@@ -17,9 +14,7 @@ from ...features.base.economy_application import PlayerEconomyApplication
 from ...features.base.inventory_application import PlayerInventoryApplication
 
 from ..adapter_compat import Bot, MessageEvent, GroupMessageEvent, PrivateMessageEvent
-from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage
 from ..xiuxian_utils.item_json import Items
-from ..xiuxian_utils.json_store import load_json_file, save_json_file
 from ..xiuxian_config import XiuConfig
 from .transaction_service import CompensationDefinitionService
 from ..xiuxian_utils.utils import (
@@ -28,40 +23,6 @@ from ..xiuxian_utils.utils import (
     send_msg_handler,
     number_to,
 )
-
-items = Items()
-_sql_message_instance = None
-_economy_application_instance = None
-_inventory_application_instance = None
-
-
-def _sql_message():
-    global _sql_message_instance
-    if _sql_message_instance is None:
-        _sql_message_instance = XiuxianDateManage()
-    return _sql_message_instance
-
-
-def _economy_application(database=None):
-    global _economy_application_instance
-    database = database or get_paths().game_db
-    if (
-        _economy_application_instance is None
-        or str(_economy_application_instance.repository.database) != str(database)
-    ):
-        _economy_application_instance = PlayerEconomyApplication(database)
-    return _economy_application_instance
-
-
-def _inventory_application(database=None):
-    global _inventory_application_instance
-    database = database or get_paths().game_db
-    if (
-        _inventory_application_instance is None
-        or str(_inventory_application_instance.repository.database) != str(database)
-    ):
-        _inventory_application_instance = PlayerInventoryApplication(database)
-    return _inventory_application_instance
 
 DATA_PATH = Path(__file__).parent / "compensation_data"
 
@@ -89,11 +50,46 @@ DATA_CONFIG = {
 
 _compensation_definition_service_instance = None
 _compensation_application_instance = None
+_item_catalog_instance = None
+_sql_message_instance = None
+_economy_application_instance = None
+_inventory_application_instance = None
+
+
+def _sql_message():
+    global _sql_message_instance
+    if _sql_message_instance is None:
+        from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage
+
+        _sql_message_instance = XiuxianDateManage()
+    return _sql_message_instance
+
+
+def _economy_application(database=None):
+    global _economy_application_instance
+    database = database or get_paths().game_db
+    if (
+        _economy_application_instance is None
+        or str(_economy_application_instance.repository.database) != str(database)
+    ):
+        _economy_application_instance = PlayerEconomyApplication(database)
+    return _economy_application_instance
+
+
+def _inventory_application(database=None):
+    global _inventory_application_instance
+    database = database or get_paths().game_db
+    if (
+        _inventory_application_instance is None
+        or str(_inventory_application_instance.repository.database) != str(database)
+    ):
+        _inventory_application_instance = PlayerInventoryApplication(database)
+    return _inventory_application_instance
 
 
 def _compensation_application(database=None):
     global _compensation_application_instance
-    database = database or getattr(_compensation_definition_service(), "_database", None) or get_paths().game_db
+    database = database or get_paths().game_db
     if _compensation_application_instance is None or str(_compensation_application_instance.database) != str(database):
         _compensation_application_instance = CompensationApplication(database)
     return _compensation_application_instance
@@ -111,6 +107,15 @@ def _compensation_definition_service():
 runtime_clock = SystemClock()
 runtime_random = SystemRandom()
 runtime_ids = UUIDGenerator()
+
+
+def _item_catalog():
+    global _item_catalog_instance
+    if _item_catalog_instance is None:
+        _item_catalog_instance = Items()
+    return _item_catalog_instance
+
+
 def _run_compensation_action(
     action: str,
     operation_id: str,
@@ -144,46 +149,64 @@ def _run_compensation_action(
     return SimpleNamespace(**data)
 
 
-def init_data_files():
-    """初始化数据目录和文件"""
-    DATA_PATH.mkdir(exist_ok=True)
-
-    for config in DATA_CONFIG.values():
-        config["records_folder"].mkdir(parents=True, exist_ok=True)
-
-        if not config["data_path"].exists():
-            save_json_file(config["data_path"], {})
-
-        if not config["claimed_path"].exists():
-            save_json_file(config["claimed_path"], {})
-
-
-init_data_files()
-
-
 def load_data(config: Dict[str, Any]) -> Dict[str, dict]:
     if config["type_key"] == "补偿":
         return _compensation_definition_service().list()
-    return load_json_file(config["data_path"], {}, dict)
+    return _compensation_application().reward_definitions(config["type_key"])
+
+
+def get_reward_definition(config: Dict[str, Any], record_id: str):
+    if config["type_key"] == "补偿":
+        return _compensation_definition_service().list().get(record_id)
+    return _compensation_application().reward_definition(
+        config["type_key"], record_id
+    )
 
 
 def save_data(config: Dict[str, Any], data: Dict[str, dict]):
     if config["type_key"] == "补偿":
         _compensation_definition_service().sync(data)
         return
-    save_json_file(config["data_path"], data)
+    raise RuntimeError("gift and redeem definitions must be changed through CompensationApplication")
+
+
+def upsert_reward_definition(
+    config: Dict[str, Any],
+    operation_id: str,
+    request_identity: str,
+    record_id: str,
+    record: Dict[str, Any],
+):
+    return _compensation_application().upsert_reward_definition(
+        operation_id,
+        config["type_key"],
+        record_id,
+        request_identity,
+        record,
+        expected_version=record.get("_definition_version"),
+    )
 
 
 def load_claimed_data(config: Dict[str, Any]) -> Dict[str, List[str]]:
     if config["type_key"] == "补偿":
         return _compensation_definition_service().claimed_data()
-    return load_json_file(config["claimed_path"], {}, dict)
+    return _compensation_application().list_claims(config["type_key"])
+
+
+def get_claim_count(config: Dict[str, Any], record_id: str) -> int:
+    return _compensation_application().get_claim_count(
+        config["type_key"], record_id
+    )
+
+
+def get_reward_used_count(config: Dict[str, Any], record_id: str, legacy=0) -> int:
+    return _compensation_application().get_used_count(
+        config["type_key"], record_id, legacy
+    )
 
 
 def save_claimed_data(config: Dict[str, Any], data: Dict[str, List[str]]):
-    if config["type_key"] == "补偿":
-        raise RuntimeError("compensation claims must be changed through CompensationApplication")
-    save_json_file(config["claimed_path"], data)
+    raise RuntimeError("reward claims must be changed through CompensationApplication")
 
 
 def generate_unique_id(existing_ids: List[str]) -> str:
@@ -269,6 +292,7 @@ def get_item_list(items_str: str) -> List[Dict[str, Any]]:
     这里禁止直接发放饰品。
     """
     result = []
+    item_catalog = None
 
     for item_part in items_str.split(","):
         item_part = item_part.strip()
@@ -299,14 +323,16 @@ def get_item_list(items_str: str) -> List[Dict[str, Any]]:
             continue
 
         goods_id = None
+        if item_catalog is None:
+            item_catalog = _item_catalog()
 
         if item_id_or_name.isdigit():
             goods_id = int(item_id_or_name)
-            item_info = items.get_data_by_item_id(goods_id)
+            item_info = item_catalog.get_data_by_item_id(goods_id)
             if not item_info:
                 raise ValueError(f"物品 ID {goods_id} 不存在")
         else:
-            for k, v in items.items.items():
+            for k, v in item_catalog.items.items():
                 if item_id_or_name == v["name"]:
                     goods_id = k
                     break
@@ -314,7 +340,7 @@ def get_item_list(items_str: str) -> List[Dict[str, Any]]:
             if not goods_id:
                 raise ValueError(f"物品 {item_id_or_name} 不存在")
 
-            item_info = items.get_data_by_item_id(goods_id)
+            item_info = item_catalog.get_data_by_item_id(goods_id)
 
         if item_info.get("item_type") == "饰品":
             raise ValueError(
@@ -376,22 +402,9 @@ def is_not_started(item_info: Dict[str, Any]) -> bool:
 
 
 def has_claimed(user_id: str, item_id: str, config: Dict[str, Any]) -> bool:
-    claimed_data = load_claimed_data(config)
-    return item_id in claimed_data.get(str(user_id), [])
-
-
-def mark_claimed(user_id: str, item_id: str, config: Dict[str, Any]):
-    claimed_data = load_claimed_data(config)
-
-    user_id = str(user_id)
-
-    if user_id not in claimed_data:
-        claimed_data[user_id] = []
-
-    if item_id not in claimed_data[user_id]:
-        claimed_data[user_id].append(item_id)
-
-    save_claimed_data(config, claimed_data)
+    return _compensation_application().has_claimed(
+        config["type_key"], item_id, str(user_id)
+    )
 
 
 # Historical ``_sql_message().send_back(`` writes were replaced by the inventory
@@ -503,6 +516,14 @@ async def create_reward_record(
         )
         if replay is not None and replay.status == "operation_conflict":
             raise ValueError("同一消息事件不能使用不同的补偿参数")
+    else:
+        replay = _compensation_application().replay_reward_definition_upsert(
+            operation_id, config["type_key"], request_identity
+        )
+        if replay is not None and replay.status == "operation_conflict":
+            raise ValueError("同一消息事件不能使用不同的奖励参数")
+        if replay is not None and not replay.succeeded:
+            raise ValueError("奖励定义操作仍在处理中或未成功")
 
     record_id = parts[0]
     items_str = parts[1]
@@ -554,7 +575,6 @@ async def create_reward_record(
                 raise ValueError("兑换码使用上限必须是数字，0 表示无限")
 
             record["usage_limit"] = usage_limit
-            record["used_count"] = 0
         else:
             record["reason"] = third_arg
 
@@ -588,18 +608,24 @@ async def create_reward_record(
             record = dict(result.record or {})
             reward_items = list(record.get("items") or [])
         else:
-            data[record_id] = record
-            result = _run_compensation_action(
-                "definition_upsert",
+            expected_version = (
+                data[record_id].get("_definition_version")
+                if record_id in data
+                else None
+            )
+            result = _compensation_application().upsert_reward_definition(
                 operation_id,
-                str(event.get_user_id()),
-                lambda: save_data(config, data),
-                database=getattr(_compensation_definition_service(), "_database", None),
-                record_id=record_id,
+                config["type_key"],
+                record_id,
                 request_identity=request_identity,
+                record=record,
+                expected_version=expected_version,
             )
             if not result.succeeded:
-                raise ValueError(f"{config['type_key']}定义写入失败")
+                raise ValueError(f"{config['type_key']}定义写入失败：{result.status}")
+            record_id = result.record_id
+            record = dict(result.record or {})
+            reward_items = list(record.get("items") or [])
 
     items_msg = create_item_message(reward_items)
 
@@ -638,8 +664,12 @@ async def claim_normal_reward(
 
     user_id = str(user_info["user_id"])
 
-    data = load_data(config)
-    record = data.get(record_id)
+    if config["type_key"] == "补偿":
+        record = load_data(config).get(record_id)
+    else:
+        record = _compensation_application().reward_definition(
+            config["type_key"], record_id
+        )
 
     if not record:
         # 已领后定义被删时仍允许服务层 duplicate 回放（若 claim 表有记录）
@@ -671,20 +701,19 @@ async def claim_normal_reward(
     # 先 claim：成功后 has_claimed 会挡住同事件重放。
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
     operation_id = f"compensation:claim:{event_id or runtime_ids.new_id()}:{user_id}:{config['type_key']}:{record_id}"
-    result = _compensation_application(
+    database = (
         getattr(_compensation_definition_service(), "_database", None)
-    ).claim_reward(
+        if config["type_key"] == "补偿"
+        else None
+    )
+    result = _compensation_application(database).claim_reward(
         operation_id=operation_id,
         reward_type=config["type_key"],
         record_id=record_id,
         user_id=user_id,
         reward_items=record["items"],
         max_goods_num=XiuConfig().max_goods_num,
-        expected_definition_version=(
-            record.get("_definition_version")
-            if config["type_key"] == "补偿"
-            else None
-        ),
+        expected_definition_version=record.get("_definition_version"),
     )
     if result.status == "duplicate":
         reward_msg = format_reward_delivery(record["items"])
@@ -740,36 +769,8 @@ def delete_record(
         )
 
     operation_id = operation_id or f"compensation-delete:{runtime_ids.new_id()}"
-    claims_result = _compensation_application().delete_reward_claims(
-        operation_id=f"{operation_id}:claims",
-        reward_type=config["type_key"],
-        record_id=record_id,
-    )
-    if not claims_result.succeeded:
-        return claims_result
-
-    data = load_data(config)
-    if record_id in data:
-        del data[record_id]
-
-    claimed_data = load_claimed_data(config)
-    for user_id in list(claimed_data.keys()):
-        if record_id in claimed_data[user_id]:
-            claimed_data[user_id].remove(record_id)
-        if not claimed_data[user_id]:
-            del claimed_data[user_id]
-
-    def save_projection():
-        save_data(config, data)
-        save_claimed_data(config, claimed_data)
-
-    return _run_compensation_action(
-        "definition_delete",
-        f"{operation_id}:definition",
-        "system",
-        save_projection,
-        database=_compensation_application().database,
-        record_id=record_id,
+    return _compensation_application().delete_reward_definition(
+        operation_id, config["type_key"], record_id
     )
 
 
@@ -792,24 +793,8 @@ def clear_records(config: Dict[str, Any], operation_id: str | None = None):
         return result
 
     operation_id = operation_id or f"compensation-clear:{runtime_ids.new_id()}"
-    claims_result = _compensation_application().delete_reward_claims(
-        operation_id=f"{operation_id}:claims",
-        reward_type=config["type_key"],
-    )
-    if not claims_result.succeeded:
-        return claims_result
-
-    def clear_projection():
-        save_data(config, {})
-        save_claimed_data(config, {})
-
-    result = _run_compensation_action(
-        "definition_clear",
-        f"{operation_id}:definition",
-        "system",
-        clear_projection,
-        database=_compensation_application().database,
-        reward_type=config["type_key"],
+    result = _compensation_application().clear_reward_definitions(
+        operation_id, config["type_key"]
     )
     if not result.succeeded:
         return result
@@ -904,28 +889,20 @@ def clean_expired_by_config(config: Dict[str, Any]):
             logger.info(f"已自动清理过期补偿：{deleted}")
         return
 
-    claimed_data = load_claimed_data(config)
-
-    to_delete = []
-
+    deleted = []
     for record_id, info in data.items():
-        if is_expired(info):
-            to_delete.append(record_id)
-
-    for record_id in to_delete:
-        data.pop(record_id, None)
-
-        for user_id in list(claimed_data.keys()):
-            if record_id in claimed_data[user_id]:
-                claimed_data[user_id].remove(record_id)
-
-            if not claimed_data[user_id]:
-                del claimed_data[user_id]
-
-    if to_delete:
-        save_data(config, data)
-        save_claimed_data(config, claimed_data)
-        logger.info(f"已自动清理过期{config['type_key']}：{to_delete}")
+        if not is_expired(info):
+            continue
+        version = int(info["_definition_version"])
+        result = _compensation_application().delete_reward_definition(
+            f"compensation-expire:{config['type_key']}:{record_id}:v{version}",
+            config["type_key"],
+            record_id,
+        )
+        if result.succeeded:
+            deleted.append(record_id)
+    if deleted:
+        logger.info(f"已自动清理过期{config['type_key']}：{deleted}")
 
 
 def clean_all_expired():

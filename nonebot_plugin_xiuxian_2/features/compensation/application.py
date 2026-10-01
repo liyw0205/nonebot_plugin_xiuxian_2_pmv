@@ -21,10 +21,48 @@ class CompensationApplication(MigratedFeatureApplication):
     def has_claimed(self, reward_type, record_id, user_id):
         return self.repository.has_claimed(reward_type, record_id, user_id)
 
+    def list_claims(self, reward_type):
+        return self.repository.list_claims(reward_type)
+
+    def get_claim_count(self, reward_type, record_id):
+        return self.repository.get_claim_count(reward_type, record_id)
+
     def get_used_count(self, reward_type, record_id, legacy_used_count=0):
         return self.repository.get_used_count(
             reward_type, record_id, legacy_used_count
         )
+
+    def reward_definitions(self, reward_type):
+        return self.repository.list_reward_definitions(reward_type)
+
+    def reward_definition(self, reward_type, record_id):
+        return self.repository.get_reward_definition(reward_type, record_id)
+
+    def replay_reward_definition_upsert(self, operation_id, reward_type, request_identity):
+        return self.repository.replay_reward_definition_upsert(
+            operation_id, reward_type, request_identity
+        )
+
+    def upsert_reward_definition(
+        self, operation_id, reward_type, record_id, request_identity, record,
+        expected_version=None,
+    ):
+        return self.repository.upsert_reward_definition(
+            operation_id,
+            reward_type,
+            record_id,
+            request_identity,
+            record,
+            expected_version,
+        )
+
+    def delete_reward_definition(self, operation_id, reward_type, record_id):
+        return self.repository.delete_reward_definition(
+            operation_id, reward_type, record_id
+        )
+
+    def clear_reward_definitions(self, operation_id, reward_type):
+        return self.repository.clear_reward_definitions(operation_id, reward_type)
 
     def invitation_claimed_thresholds(self, user_id):
         return self.repository.invitation_claimed_thresholds(user_id)

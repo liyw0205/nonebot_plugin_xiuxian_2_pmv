@@ -118,8 +118,9 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         await handle_send(bot, event, "请指定要兑换的兑换码")
         return
 
-    data = load_data(config)
-    redeem_info = data.get(code)
+    redeem_info = _compensation_application().reward_definition(
+        config["type_key"], code
+    )
 
     if not redeem_info:
         if _compensation_application().has_claimed(config["type_key"], code, user_id):
@@ -155,6 +156,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         max_goods_num=XiuConfig().max_goods_num,
         usage_limit=usage_limit,
         legacy_used_count=legacy_used_count,
+        expected_definition_version=redeem_info.get("_definition_version"),
     )
     if result.status == "duplicate":
         reward_msg = format_reward_delivery(redeem_info["items"])

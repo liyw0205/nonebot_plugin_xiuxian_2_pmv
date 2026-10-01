@@ -243,6 +243,7 @@
 (() => {
 const rewardKinds = {{ reward_kinds|tojson }};
 let currentKind = 'gift';
+let editingVersion = null;
 
 function escapeHtml(value) {
     return String(value ?? '').replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
@@ -299,6 +300,7 @@ function setCurrentKind(kind) {
 }
 
 function resetRewardForm(clearMessage = true) {
+    editingVersion = null;
     document.getElementById('recordId').value = '';
     document.getElementById('usageLimit').value = '0';
     document.getElementById('rewardReason').value = '';
@@ -313,6 +315,7 @@ function resetRewardForm(clearMessage = true) {
 
 function fillRewardForm(record) {
     if (!record) return;
+    editingVersion = Number(record.version || 0) || null;
     document.getElementById('recordId').value = record.id || '';
     document.getElementById('usageLimit').value = record.usage_limit ?? 0;
     document.getElementById('rewardReason').value = record.reason || '';
@@ -332,6 +335,7 @@ function collectRewardPayload() {
         reward: document.getElementById('rewardValue').value,
         reason: document.getElementById('rewardReason').value,
         usage_limit: document.getElementById('usageLimit').value,
+        expected_version: editingVersion,
         start_time: document.getElementById('startNow').checked ? '0' : document.getElementById('startTime').value,
         start_special: document.getElementById('startNow').checked,
         expire_time: document.getElementById('expireUnlimited').checked ? '无限' : document.getElementById('expireTime').value,

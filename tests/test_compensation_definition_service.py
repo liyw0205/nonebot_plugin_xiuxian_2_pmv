@@ -519,6 +519,10 @@ class CompensationDefinitionServiceTests(unittest.TestCase):
         )
         common = (root / "common.py").read_text(encoding="utf-8")
         compensation = (root / "compensation.py").read_text(encoding="utf-8")
+        reward_definitions = (
+            Path(__file__).parents[1]
+            / "nonebot_plugin_xiuxian_2/features/compensation/reward_definition_repository.py"
+        ).read_text(encoding="utf-8")
         delete_body = common.split("def delete_record", 1)[1].split(
             "def clear_records", 1
         )[0]
@@ -532,10 +536,16 @@ class CompensationDefinitionServiceTests(unittest.TestCase):
         self.assertIn("result = delete_record(", compensation)
         self.assertIn('_compensation_operation_id(event, "delete", comp_id)', compensation)
         self.assertNotIn("reward_claim_service.delete_claims", compensation_delete)
-        self.assertIn("delete_reward_claims(", delete_body)
-        self.assertLess(
-            delete_body.index("delete_reward_claims("),
-            delete_body.index("data = load_data(config)"),
+        self.assertIn(
+            "_compensation_application().delete_reward_definition(", delete_body
+        )
+        self.assertIn(
+            "DELETE FROM reward_claims WHERE reward_type=? AND record_id=?",
+            reward_definitions,
+        )
+        self.assertIn(
+            "DELETE FROM reward_claim_counters WHERE reward_type=? AND record_id=?",
+            reward_definitions,
         )
 
 

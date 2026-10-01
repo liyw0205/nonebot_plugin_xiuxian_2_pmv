@@ -58,15 +58,26 @@ class CompensationRewardClaimSqlRepository:
         return goods_type
 
     @staticmethod
-    def _schema_ready(uow: DatabaseUnitOfWork) -> bool:
+    def _schema_ready(
+        uow: DatabaseUnitOfWork,
+        reward_type: str | None = None,
+        expected_definition_version: int | None = None,
+    ) -> bool:
         tables = {
             str(row["name"])
             for row in uow.query_all(
                 "SELECT name FROM sqlite_master WHERE type='table' "
-                "AND name IN ('reward_claims','reward_claim_counters')"
+                "AND name IN ('reward_claims','reward_claim_counters',"
+                "'compensation_definitions','compensation_reward_definitions')"
             )
         }
-        return tables == {"reward_claims", "reward_claim_counters"}
+        if not {"reward_claims", "reward_claim_counters"}.issubset(tables):
+            return False
+        if expected_definition_version is None:
+            return True
+        if reward_type == "补偿":
+            return "compensation_definitions" in tables
+        return "compensation_reward_definitions" in tables
 
     def get_used_count(
         self, reward_type: str, record_id: str, legacy_used_count: int = 0
@@ -104,6 +115,39 @@ class CompensationRewardClaimSqlRepository:
                     (str(reward_type), str(record_id), str(user_id)),
                 )
                 is not None
+            )
+
+    def list_claims(self, reward_type: str) -> dict[str, list[str]]:
+        reward_type = str(reward_type).strip()
+        if not Path(self.database).is_file():
+            return {}
+        with DatabaseUnitOfWork(self.database, read_only=True) as uow:
+            if not self._schema_ready(uow):
+                return {}
+            rows = uow.query_all(
+                "SELECT user_id,record_id FROM reward_claims "
+                "WHERE reward_type=? ORDER BY user_id,record_id",
+                (reward_type,),
+            )
+            result: dict[str, list[str]] = {}
+            for row in rows:
+                result.setdefault(str(row["user_id"]), []).append(
+                    str(row["record_id"])
+                )
+            return result
+
+    def get_claim_count(self, reward_type: str, record_id: str) -> int:
+        if not Path(self.database).is_file():
+            return 0
+        with DatabaseUnitOfWork(self.database, read_only=True) as uow:
+            if not self._schema_ready(uow):
+                return 0
+            return int(
+                uow.execute(
+                    "SELECT COUNT(*) FROM reward_claims "
+                    "WHERE reward_type=? AND record_id=?",
+                    (str(reward_type).strip(), str(record_id).strip()),
+                ).fetchone()[0]
             )
 
     def delete_claims(
@@ -238,15 +282,22 @@ class CompensationRewardClaimSqlRepository:
             )
 
         with DatabaseUnitOfWork(self.database, immediate=True) as uow:
-            if not self._schema_ready(uow):
+            if not self._schema_ready(uow, reward_type, expected_version):
                 return CompensationRewardClaimResult(
                     "schema_missing", reward_type, record_id, user_id
                 )
             if expected_version is not None:
-                definition = uow.query_one(
-                    "SELECT version FROM compensation_definitions WHERE record_id=?",
-                    (record_id,),
-                )
+                if reward_type == "补偿":
+                    definition = uow.query_one(
+                        "SELECT version FROM compensation_definitions WHERE record_id=?",
+                        (record_id,),
+                    )
+                else:
+                    definition = uow.query_one(
+                        "SELECT version FROM compensation_reward_definitions "
+                        "WHERE reward_type=? AND record_id=?",
+                        (reward_type, record_id),
+                    )
                 if definition is None:
                     return CompensationRewardClaimResult(
                         "record_missing", reward_type, record_id, user_id
@@ -274,11 +325,13 @@ class CompensationRewardClaimSqlRepository:
                 )
 
             if usage_limit:
-                uow.execute(
-                    "INSERT INTO reward_claim_counters(reward_type,record_id,baseline_count) "
-                    "VALUES(?,?,?) ON CONFLICT(reward_type,record_id) DO NOTHING",
-                    (reward_type, record_id, legacy_used_count),
-                )
+                if legacy_used_count:
+                    uow.execute(
+                        "INSERT INTO reward_claim_counters("
+                        "reward_type,record_id,baseline_count) VALUES(?,?,?) "
+                        "ON CONFLICT(reward_type,record_id) DO NOTHING",
+                        (reward_type, record_id, legacy_used_count),
+                    )
                 used_count = self._used_count_in_uow(uow, reward_type, record_id)
                 if used_count >= usage_limit:
                     return CompensationRewardClaimResult(

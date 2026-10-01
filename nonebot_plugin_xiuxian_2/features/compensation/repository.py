@@ -5,12 +5,14 @@ from pathlib import Path
 from .._service_port import ServicePort
 from .invitation_repository import InvitationRewardClaimSqlRepository
 from .reward_claim_repository import CompensationRewardClaimSqlRepository
+from .reward_definition_repository import CompensationRewardDefinitionSqlRepository
 
 
 class CompensationRepository(ServicePort):
     def __init__(self, database: str | Path) -> None:
         super().__init__("compensation", "nonebot_plugin_xiuxian_2.xiuxian.xiuxian_compensation")
         self.database = str(database)
+        self.reward_definitions = CompensationRewardDefinitionSqlRepository(database)
 
     def claim_reward(
         self,
@@ -45,10 +47,50 @@ class CompensationRepository(ServicePort):
             reward_type, record_id, user_id
         )
 
+    def list_claims(self, reward_type):
+        return CompensationRewardClaimSqlRepository(self.database, 0).list_claims(
+            reward_type
+        )
+
+    def get_claim_count(self, reward_type, record_id):
+        return CompensationRewardClaimSqlRepository(self.database, 0).get_claim_count(
+            reward_type, record_id
+        )
+
     def get_used_count(self, reward_type, record_id, legacy_used_count=0) -> int:
         return CompensationRewardClaimSqlRepository(self.database, 0).get_used_count(
             reward_type, record_id, legacy_used_count
         )
+
+    def list_reward_definitions(self, reward_type):
+        return self.reward_definitions.list_definitions(reward_type)
+
+    def get_reward_definition(self, reward_type, record_id):
+        return self.reward_definitions.get_definition(reward_type, record_id)
+
+    def replay_reward_definition_upsert(self, operation_id, reward_type, request_identity):
+        return self.reward_definitions.replay_upsert(
+            operation_id, reward_type, request_identity
+        )
+
+    def upsert_reward_definition(
+        self, operation_id, reward_type, record_id, request_identity, record,
+        expected_version=None,
+    ):
+        return self.reward_definitions.upsert(
+            operation_id,
+            reward_type,
+            record_id,
+            request_identity,
+            record,
+            expected_version,
+        )
+
+    def delete_reward_definition(self, operation_id, reward_type, record_id):
+        return self.reward_definitions.delete(operation_id, reward_type, record_id)
+
+    def clear_reward_definitions(self, operation_id, reward_type):
+        return self.reward_definitions.clear(operation_id, reward_type)
 
     def invitation_claimed_thresholds(self, user_id):
         return InvitationRewardClaimSqlRepository(self.database).claimed_thresholds(user_id)

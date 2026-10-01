@@ -3120,7 +3120,7 @@ Boss 旧 settlement transaction 的同事务时间戳写入仍是独立未迁移
 
 ### 6.2 当前推进队列（2026-10-02）
 
-2026-10-02 已收口礼包/兑换码管理员领取记录删除边界：SQLite claim/counter 删除经 feature application 和共享 operation ledger，JSON 定义/旧领取快照仍留在兼容回写边界；缺 schema 时不改 JSON。洞府背包默认写入已核对为 feature-owned settlement，移除了无调用点的旧 facade 直写 helper；下一项继续审计补偿其它回写路径。全局重构继续受 legacy transaction services、`xiuxian2_handle` 和正式发布/P7 证据阻塞。
+2026-10-02 已收口洞府背包写入审计及 compensation 礼包/兑换码 SQL cutover：定义、领取、删除和清空均由 feature SQL 持有，旧 JSON 只作为一次性导入源；后续按 6.2 队列继续审计其它仍可达旧写路径。全局重构仍受 legacy transaction services、`xiuxian2_handle` 和正式发布/P7 证据阻塞。
 
 本轮傀儡默认执行路径收口：生命周期容器不再注入 `LegacyPuppetRepository`，购买、升级和自动收取均由
 `PuppetApplication` 的 feature-owned SQL repository 承担；旧 transaction service 仍保留为显式兼容入口。
@@ -5047,3 +5047,4 @@ Boss 通过 `get_rift_battle_final_attributes` 注入 `get_rift_battle_impart_da
 2026-10-02 dongfu inventory write-path audit：逐项核对种植/施肥/催熟/扩建/阵法消耗及收获/巡山/潜入发放，实际背包 SQL 均位于 `DongfuApplication` 对应 repository 的结算 UoW；facade `_consume_item` 是唯一直接调用 `goods_num/update_back_j` 的私有 helper，仓库无调用点，已移除并增加 progress/source 门禁。无 schema、事务、ITEMS_CACHE 或业务状态变化；洞府定向回归 `71 passed`，Dongfu progress gates、inventory freshness、目标 compileall 和 diff check 通过。专用 pytest/pyc/progress 产物随后清理；下一片审计 compensation 除礼包/兑换码删除外的定义回写与奖励发放默认路径。
 
 2026-10-02 compensation definition startup migration：新增 `legacy.compensation.005`，将补偿定义/领取 JSON 的一次性导入及定义表创建从请求期移至启动迁移；旧 operation 表通过 `ALTER TABLE` 增加 `result_json` 并保留既有回执。定义 service 现在只读检查 schema、列和迁移回执，缺迁移 fail closed，不在请求中建表或重读 JSON。回归覆盖首次/重复导入、旧 operation 行保留及缺迁移不建表；compensation progress 的 migration/no-DDL/receipt 门禁均为 true。补偿定义/schema 定向回归 `21 passed`，source-quality 与 refactor inventory `246 passed`，目标 compileall 和 diff check 通过。pytest cache 已禁用、字节码写入隔离到临时目录并清理；未访问运行数据库，保留用户 `boss_info.json` 修改。下一片继续审计 compensation 其它 JSON 回写及奖励发放默认路径；全局 legacy transaction services、`xiuxian2_handle` 和真实发布/P7 证据仍未完成。
+2026-10-02 compensation gift/redeem catalog SQL cutover：新增 `legacy.compensation.006`，礼包/兑换码定义、claims、删除和清空改由 feature-owned SQL 持有；旧 JSON 仅在启动迁移中一次性导入，持久回执保留源 SHA-256 而不重复存整份快照。兑换领取校验定义版本，used-count baseline 按迁移后 SQL claims 总数校准；零 baseline 不留 counter 行。NoneBot/Web 领取预检查和 Web 领取计数改为 SQL 点查/聚合，Web 编辑保存带定义版本并经 operation ledger upsert，删除/清空检查 SQL 失败状态；`Items()` 推迟到实际物品解析时构造。损坏非空快照 fail closed；回归 `266 passed`，source-quality、progress 门禁、inventory freshness、隔离数据目录 architecture (`ok=true`)、目标 compileall 和 diff check 通过。pytest/字节码缓存禁用或隔离，临时数据库由测试自动清理，保留用户 `boss_info.json` 修改。下一片继续按 6.2 审计剩余默认旧写路径；全局 legacy transaction services、`xiuxian2_handle` 和真实发布/P7 证据仍未完成。

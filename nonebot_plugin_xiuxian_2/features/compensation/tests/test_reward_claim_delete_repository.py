@@ -11,7 +11,10 @@ import nonebot
 nonebot.init()
 
 from ..application import CompensationApplication
-from ..migrations import apply_compensation_reward_claim_schema
+from ..migrations import (
+    apply_compensation_reward_claim_schema,
+    apply_compensation_reward_catalog_schema,
+)
 from ..reward_claim_repository import CompensationRewardClaimSqlRepository
 from ....infrastructure.database import DatabaseUnitOfWork, OperationLedger
 from ....xiuxian.xiuxian_compensation import common as compensation_common
@@ -22,9 +25,17 @@ class CompensationRewardClaimDeleteTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory(prefix="compensation-claim-delete-")
         self.root = Path(self.temp.name)
         self.database = self.root / "game.db"
+        self.catalog_snapshots = [self.root / f"snapshot-{index}.json" for index in range(4)]
+        for path in self.catalog_snapshots:
+            path.write_text("{}", encoding="utf-8")
         with DatabaseUnitOfWork(self.database) as uow:
             apply_compensation_reward_claim_schema(uow)
             OperationLedger().ensure_schema(uow)
+            apply_compensation_reward_catalog_schema(
+                uow,
+                *self.catalog_snapshots,
+                occurred_at="2026-10-02 12:00:00",
+            )
         self.repository = CompensationRewardClaimSqlRepository(self.database, 0)
 
     def tearDown(self) -> None:
@@ -32,6 +43,12 @@ class CompensationRewardClaimDeleteTests(unittest.TestCase):
 
     def seed(self) -> None:
         with DatabaseUnitOfWork(self.database, immediate=True) as uow:
+            uow.executemany(
+                "INSERT INTO compensation_reward_definitions("
+                "reward_type,record_id,version,record_json,created_at,updated_at) "
+                "VALUES('礼包',?,1,'{}','2026-10-02','2026-10-02')",
+                (("G1",), ("G2",)),
+            )
             uow.executemany(
                 "INSERT INTO reward_claims(reward_type,record_id,user_id) VALUES(?,?,?)",
                 (
@@ -73,7 +90,7 @@ class CompensationRewardClaimDeleteTests(unittest.TestCase):
         self.assertEqual(self.scalar("SELECT COUNT(*) FROM reward_claim_counters WHERE reward_type='礼包'"), 0)
         self.assertEqual(self.scalar("SELECT COUNT(*) FROM reward_claims WHERE reward_type='兑换码'"), 1)
 
-    def test_delete_record_updates_json_compatibility_projection(self) -> None:
+    def test_delete_record_updates_sql_catalog_without_writing_json(self) -> None:
         self.seed()
         definitions_path = self.root / "gift-records.json"
         claimed_path = self.root / "claimed.json"
@@ -85,6 +102,8 @@ class CompensationRewardClaimDeleteTests(unittest.TestCase):
             json.dumps({"u1": ["G1", "G2"], "u2": ["G1"]}),
             encoding="utf-8",
         )
+        definitions_before = definitions_path.read_bytes()
+        claims_before = claimed_path.read_bytes()
         config = {
             "type_key": "礼包",
             "data_path": definitions_path,
@@ -96,17 +115,21 @@ class CompensationRewardClaimDeleteTests(unittest.TestCase):
             result = compensation_common.delete_record("G1", config, "event-delete")
 
         self.assertTrue(result.succeeded)
-        self.assertEqual(json.loads(definitions_path.read_text(encoding="utf-8")), {"G2": {"items": []}})
-        self.assertEqual(json.loads(claimed_path.read_text(encoding="utf-8")), {"u1": ["G2"]})
+        self.assertEqual(definitions_path.read_bytes(), definitions_before)
+        self.assertEqual(claimed_path.read_bytes(), claims_before)
+        self.assertEqual(self.scalar("SELECT COUNT(*) FROM compensation_reward_definitions WHERE reward_type='礼包' AND record_id='G1'"), 0)
+        self.assertEqual(self.scalar("SELECT COUNT(*) FROM compensation_reward_definitions WHERE reward_type='礼包' AND record_id='G2'"), 1)
         self.assertEqual(self.scalar("SELECT COUNT(*) FROM reward_claims WHERE reward_type='礼包' AND record_id='G1'"), 0)
         self.assertEqual(self.scalar("SELECT COUNT(*) FROM reward_claims WHERE reward_type='兑换码' AND record_id='G1'"), 1)
 
-    def test_clear_records_updates_json_compatibility_projection(self) -> None:
+    def test_clear_records_updates_sql_catalog_without_writing_json(self) -> None:
         self.seed()
         definitions_path = self.root / "gift-records.json"
         claimed_path = self.root / "claimed.json"
         definitions_path.write_text(json.dumps({"G1": {"items": []}}), encoding="utf-8")
         claimed_path.write_text(json.dumps({"u1": ["G1"]}), encoding="utf-8")
+        definitions_before = definitions_path.read_bytes()
+        claims_before = claimed_path.read_bytes()
         config = {
             "type_key": "礼包",
             "data_path": definitions_path,
@@ -118,8 +141,9 @@ class CompensationRewardClaimDeleteTests(unittest.TestCase):
             result = compensation_common.clear_records(config, "event-clear")
 
         self.assertTrue(result.succeeded)
-        self.assertEqual(json.loads(definitions_path.read_text(encoding="utf-8")), {})
-        self.assertEqual(json.loads(claimed_path.read_text(encoding="utf-8")), {})
+        self.assertEqual(definitions_path.read_bytes(), definitions_before)
+        self.assertEqual(claimed_path.read_bytes(), claims_before)
+        self.assertEqual(self.scalar("SELECT COUNT(*) FROM compensation_reward_definitions WHERE reward_type='礼包'"), 0)
         self.assertEqual(self.scalar("SELECT COUNT(*) FROM reward_claims WHERE reward_type='礼包'"), 0)
         self.assertEqual(self.scalar("SELECT COUNT(*) FROM reward_claims WHERE reward_type='兑换码'"), 1)
 

@@ -162,12 +162,14 @@ def _slice_status() -> dict[str, dict[str, object]]:
     compensation_invitation_repository = (PACKAGE / "features" / "compensation" / "invitation_repository.py").read_text(encoding="utf-8")
     compensation_migrations = (PACKAGE / "features" / "compensation" / "migrations.py").read_text(encoding="utf-8")
     compensation_legacy_migrated = (PACKAGE / "features" / "_legacy_migrated.py").read_text(encoding="utf-8")
+    compensation_reward_definition_repository = (PACKAGE / "features" / "compensation" / "reward_definition_repository.py").read_text(encoding="utf-8")
     compensation_definition_service = (
         (PACKAGE / "xiuxian" / "xiuxian_compensation" / "transaction_service.py")
         .read_text(encoding="utf-8")
         .split("class RewardClaimService", 1)[0]
     )
     compensation_redeem_code = (PACKAGE / "xiuxian" / "xiuxian_compensation" / "redeem_code.py").read_text(encoding="utf-8")
+    compensation_reward_center = (PACKAGE / "xiuxian" / "xiuxian_web" / "reward_center.py").read_text(encoding="utf-8")
     compensation_invitation = (PACKAGE / "xiuxian" / "xiuxian_compensation" / "invitation.py").read_text(encoding="utf-8")
     compensation_common = (PACKAGE / "xiuxian" / "xiuxian_compensation" / "common.py").read_text(encoding="utf-8")
     compensation_reward_writer = compensation_common.split("def send_reward_to_user", 1)[1].split(
@@ -674,9 +676,14 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "claim_schema_migration_owned": "def apply_compensation_reward_claim_schema" in compensation_migrations and "legacy.compensation.002" in compensation_legacy_migrated,
             "claim_request_path_has_no_ddl": "CREATE TABLE" not in compensation_repository and "ALTER TABLE" not in compensation_repository,
             "claim_schema_checked_read_only": "def _schema_ready" in compensation_repository and "read_only=True" in compensation_repository,
-            "claim_delete_application_owned": "delete_reward_claims(" in compensation_common and "_reward_claim_service" not in compensation_common,
+            "claim_delete_application_owned": "delete_reward_definition(" in compensation_common and "_reward_claim_service" not in compensation_common,
             "claim_delete_request_path_has_no_ddl": "def delete_claims(" in compensation_repository and "CREATE TABLE" not in compensation_repository and "ALTER TABLE" not in compensation_repository and '"schema_missing"' in compensation_repository,
-            "claim_delete_failure_precedes_json_write": compensation_common.index("claims_result = _compensation_application().delete_reward_claims(") < compensation_common.index("data = load_data(config)", compensation_common.index("def delete_record")),
+            "claim_delete_is_atomic_with_definition": (
+                "_compensation_application().delete_reward_definition(" in compensation_common
+                and "_compensation_application().clear_reward_definitions(" in compensation_common
+                and 'DELETE FROM reward_claims WHERE reward_type=? AND record_id=?' in compensation_reward_definition_repository
+                and 'DELETE FROM reward_claim_counters WHERE reward_type=? AND record_id=?' in compensation_reward_definition_repository
+            ),
             "claim_delete_admin_handlers_handle_failure": all(
                 "if not result.succeeded:" in (PACKAGE / "xiuxian" / "xiuxian_compensation" / name).read_text(encoding="utf-8")
                 and "_compensation_operation_id(event, \"delete\"" in (PACKAGE / "xiuxian" / "xiuxian_compensation" / name).read_text(encoding="utf-8")
@@ -705,9 +712,65 @@ def _slice_status() -> dict[str, dict[str, object]]:
                 "compensation_legacy_migrations" in compensation_definition_service
                 and "legacy-compensation-json-v1" in compensation_definition_service
             ),
+            "reward_catalog_migration_owned": (
+                "def apply_compensation_reward_catalog_schema" in compensation_migrations
+                and "legacy.compensation.006" in compensation_legacy_migrated
+            ),
+            "reward_definition_runtime_sql_owned": (
+                ".reward_definitions(config[\"type_key\"])" in compensation_common
+                and ".reward_definition(" in compensation_common
+                and ".reward_definition(" in compensation_redeem_code
+                and ".upsert_reward_definition(" in compensation_common
+                and ".delete_reward_definition(" in compensation_common
+                and ".clear_reward_definitions(" in compensation_common
+                and "gift and redeem definitions must be changed through CompensationApplication" in compensation_common
+            ),
+            "reward_definition_request_path_has_no_ddl": (
+                "CREATE TABLE" not in compensation_reward_definition_repository
+                and "ALTER TABLE" not in compensation_reward_definition_repository
+                and "schema_missing" in compensation_reward_definition_repository
+            ),
+            "reward_runtime_does_not_write_json": (
+                "save_json_file" not in compensation_common
+                and "load_json_file" not in compensation_common
+                and "save_claimed_data(config, claimed_data)" not in compensation_common
+            ),
+            "claim_precheck_uses_point_lookup": (
+                "def has_claimed(user_id: str, item_id: str, config: Dict[str, Any])" in compensation_common
+                and "return _compensation_application().has_claimed(" in compensation_common
+                and "claimed_data = load_claimed_data(config)" not in compensation_common
+            ),
+            "item_catalog_construction_is_deferred": (
+                "_item_catalog_instance = None" in compensation_common
+                and "def _item_catalog(" in compensation_common
+                and "items = Items()" not in compensation_common
+            ),
+            "redeem_claim_checks_definition_version": (
+                "expected_definition_version=redeem_info.get(\"_definition_version\")" in compensation_redeem_code
+            ),
+            "reward_migration_reconciles_sql_claims": (
+                "claim_count = int(" in compensation_migrations
+                and "legacy_used_count - claim_count" in compensation_migrations
+                and "DELETE FROM reward_claim_counters" in compensation_migrations
+            ),
+            "reward_web_counts_use_sql_aggregates": (
+                "return get_claim_count(config, record_id)" in compensation_reward_center
+                and "get_reward_used_count(" in compensation_reward_center
+                and "load_claimed_data" not in compensation_reward_center
+            ),
+            "reward_web_definition_saves_use_sql": (
+                "def api_save_reward_record" in compensation_reward_center
+                and "upsert_reward_definition(" in compensation_reward_center
+                and "expected_version" in compensation_reward_center
+                and 'if kind == "compensation":' in compensation_reward_center
+            ),
+            "reward_web_delete_clear_report_sql_failures": (
+                compensation_reward_center.count("if not result.succeeded:") >= 2
+                and compensation_reward_center.count('request.headers.get("Idempotency-Key")') >= 2
+            ),
             "reward_inventory_application_owned": "PlayerInventoryApplication" in compensation_common and "_inventory_application().grant_item(" in compensation_reward_writer,
             "reward_inventory_legacy_writer_disabled": ".send_back(" not in compensation_reward_writer,
-            "status": "claim, invitation and compensation definition ledgers startup-migrated; requests fail closed without DDL",
+            "status": "claim, invitation and reward definition ledgers startup-migrated; requests fail closed without DDL",
         },
         "stone_gift": {
             "default_legacy_handler_disabled": '"送灵石" if _legacy_stone_gift_enabled' in base,
