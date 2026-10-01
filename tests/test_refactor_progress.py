@@ -431,6 +431,8 @@ class RefactorProgressTests(unittest.TestCase):
         self.assertTrue(boss["reward_integral_application_owned"])
         self.assertTrue(boss["reward_integral_legacy_writer_disabled"])
         base = slices["base"]
+        self.assertTrue(base["reward_service_legacy_connection_lazy"])
+        self.assertTrue(base["reward_service_item_catalog_lazy"])
         self.assertTrue(base["rename_application_owned"])
         self.assertTrue(base["legacy_rename_disabled"])
         self.assertTrue(base["rename_service_isolated"])

@@ -2,6 +2,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from ....core.errors import ValidationError
 from ..application import BuffApplication
 from ....infrastructure.database import DatabaseUnitOfWork, OperationLedger
 
@@ -11,6 +12,11 @@ class Repo:
 
 
 class BuffApplicationTest(unittest.TestCase):
+    def test_pvp_settlement_requires_opponent(self):
+        app = BuffApplication("game.db", "player.db")
+        with self.assertRaisesRegex(ValidationError, "opponent_id is required"):
+            app.pvp_settle(operation_id="pvp-1", user_id="u")
+
     def test_operation_is_idempotent(self):
         with tempfile.TemporaryDirectory() as directory:
             database = Path(directory) / "game.db"

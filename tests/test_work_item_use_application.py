@@ -449,6 +449,7 @@ class WorkItemUseApplicationTests(unittest.TestCase):
             patch.object(work_module, "assign_bot", new=AsyncMock(return_value=(fake_bot, None))),
             patch.object(back_module, "check_user", return_value=(True, {"user_id": "u"}, "")),
             patch.object(work_module, "check_user", return_value=(True, {"user_id": "u", "level": 10, "exp": 12345}, "")),
+            patch.object(work_module, "check_user_type", return_value=(True, "")),
             patch.object(back_module, "items") as items,
             patch.object(back_module, "_sql_message", return_value=message_data),
             patch.object(work_module, "_sql_message", return_value=message_data),

@@ -3,7 +3,9 @@ from __future__ import annotations
 import tempfile
 import unittest
 import importlib
+from types import SimpleNamespace
 from pathlib import Path
+from unittest.mock import patch
 
 import nonebot
 
@@ -39,6 +41,37 @@ def test_reward_items_use_feature_owned_inventory_writer():
     assert "PlayerInventoryApplication" in source
     assert "self.inventory_application.grant_item(" in source
     assert "self.sql_message.send_back(" not in source
+
+
+def test_reward_service_defers_legacy_connection_and_item_catalog():
+    rewards = importlib.import_module(
+        "nonebot_plugin_xiuxian_2.xiuxian.xiuxian_utils.reward_service"
+    )
+    economy = SimpleNamespace(
+        grant_stone=lambda user_id, amount: SimpleNamespace(
+            succeeded=True, applied=amount
+        )
+    )
+    inventory = SimpleNamespace()
+    boss_integral = SimpleNamespace()
+
+    with patch.object(rewards, "XiuxianDateManage") as legacy_db, patch.object(
+        rewards, "Items"
+    ) as item_catalog, patch.object(
+        rewards, "safe_log_economy_change", return_value=0
+    ):
+        service = rewards.RewardService(
+            economy_application=economy,
+            inventory_application=inventory,
+            boss_integral_application=boss_integral,
+        )
+        assert legacy_db.call_count == 0
+        assert item_catalog.call_count == 0
+        result = service.grant_reward("u", {"stone": 3}, "lazy-test")
+
+    assert result["granted"]["stone"] == 3
+    assert legacy_db.call_count == 0
+    assert item_catalog.call_count == 0
 
 
 class RewardClaimServiceTests(unittest.TestCase):

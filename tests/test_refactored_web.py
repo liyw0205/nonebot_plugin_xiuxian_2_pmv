@@ -6,6 +6,7 @@ import unittest
 
 from nonebot_plugin_xiuxian_2.adapters.web.app import create_app
 from nonebot_plugin_xiuxian_2.adapters.web.auth import HostPolicy
+from nonebot_plugin_xiuxian_2.adapters.web.blueprints.legacy_feature import create_blueprint
 from nonebot_plugin_xiuxian_2.adapters.web.blueprints.pages import PAGE_ENDPOINTS
 from nonebot_plugin_xiuxian_2.bootstrap import build_runtime_context
 from nonebot_plugin_xiuxian_2.compatibility.commands import compatibility_hits
@@ -79,6 +80,32 @@ class RefactoredWebTests(unittest.TestCase):
         )
         self.assertIn(response.status_code, {200, 400})
         self.assertIn("request_id", response.get_json())
+
+    def test_legacy_feature_missing_field_is_validation_error(self) -> None:
+        class Application:
+            def claim(self, *, operation_id, user_id, **kwargs):
+                return kwargs["amount"]
+
+        self.app.register_blueprint(
+            create_blueprint(
+                "validation_probe",
+                Application(),
+                ("claim",),
+                permission=lambda _: True,
+            )
+        )
+        with self.client.session_transaction() as session:
+            session["_csrf_token"] = "test-token"
+
+        response = self.client.post(
+            "/api/v1/validation-probe/claim",
+            headers={"X-CSRF-Token": "test-token"},
+            json={"user_id": "u"},
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.get_json()["error"]["code"], "validation_error")
+        self.assertEqual(response.get_json()["error"]["details"]["field"], "amount")
 
     def test_reconcile_requires_platform_migration(self) -> None:
         response = self.client.get("/api/v1/reconcile", headers={"X-Role": "admin"})

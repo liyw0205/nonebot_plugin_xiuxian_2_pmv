@@ -29,6 +29,14 @@ def create_blueprint(
             )
         except DomainError as exc:
             return api_error(exc.code, exc.message, details=exc.details, status=400)
+        except KeyError as exc:
+            field = str(exc.args[0]) if exc.args else "unknown"
+            return api_error(
+                "validation_error",
+                "请求参数不完整",
+                details={"field": field},
+                status=400,
+            )
         return api_success(outcome.to_dict(), status=200 if outcome.ok else 409)
 
     for action in actions:

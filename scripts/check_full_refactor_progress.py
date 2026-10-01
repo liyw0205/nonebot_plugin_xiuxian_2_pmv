@@ -1790,6 +1790,17 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "status": "dynamic_attribute_read_boundary_owned_with_legacy_formula_adapter",
         },
         "base": {
+            "reward_service_legacy_connection_lazy": (
+                "self._sql_message_instance = None" in reward_service_source
+                and "self.sql_message = XiuxianDateManage()" not in reward_service_source
+                and "def _sql_message(self)" in reward_service_source
+            ),
+            "reward_service_item_catalog_lazy": (
+                "self._items_instance = None" in reward_service_source
+                and "self.items = Items()" not in reward_service_source
+                and "reward_items = reward.get(\"items\", []) or []" in reward_service_source
+                and "def _items(self)" in reward_service_source
+            ),
             "wishing_stone_inventory_application_owned": (
                 "PlayerInventoryApplication" in wishing_stone_writer
                 and "require_full=True" in wishing_stone_writer

@@ -2,6 +2,20 @@
 
 状态：进行中。`v1.1.0` 的 P0-P7 发布证据继续保留，但不作为底层全面重构完成证明。
 
+2026-10-01 Web/schema contract follow-up：统一 Web guard 将仓储明确的 `schema_missing` 映射为
+503；legacy feature JSON 中缺失必填字段映射为 400 `validation_error`，普通切磋入口补齐
+`opponent_id` 输入校验。`player_state` 补齐内部 feature contract：复用既有 player schema，
+不拥有 DDL、命令、Web 路由或 jobs；result DTO 归入 `schemas.py` 并补 feature 文档。全仓
+`unittest discover -s tests -q` 执行 2622 项，生产回归修正后只剩一条过期源码断言和一条依赖全局
+兼容 DB 单例的 matcher 夹具；两项已更新并单独通过。全量测试未在这两项测试文件调整后重跑；运行使用
+`-B`/`PYTHONDONTWRITEBYTECODE=1`，资源下载目标为自动清理的测试临时目录。
+
+2026-10-01 reward service lazy resource boundary：`RewardService` 构造不再立即打开旧
+`XiuxianDateManage` 连接或加载全量 `Items()` JSON；只有修为/宗门读写或实际物品奖励需要时才惰性创建
+对应兼容适配器，无物品奖励时不触碰共享 `ITEMS_CACHE`。奖励结果和经济写入边界不变；新增构造期资源
+惰性回归与 progress 门禁，专用测试/字节码缓存验收后清理。全局 legacy transaction services、
+`xiuxian2_handle`、正式发布/P7 仍未完成。
+
 2026-10-01 reward boss-integral write boundary：通用 `RewardService` 的 BOSS 积分奖励写入统一经
 `BossIntegralApplication -> BossIntegralSqlRepository`，只读校验既有 player-side `boss_limit` schema，
 在 immediate UoW 内按 rowid/CAS 更新；缺数据库、表、字段或用户时 fail closed，不执行请求期 DDL，

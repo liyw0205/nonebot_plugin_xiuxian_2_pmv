@@ -1,26 +1,10 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
 
 from ...infrastructure.database import DatabaseUnitOfWork
-
-
-@dataclass(frozen=True)
-class PlayerStateResult:
-    """Result of initializing a player's empty vital state."""
-
-    status: str
-    user_id: str
-    hp: Any = None
-    mp: Any = None
-    atk: Any = None
-    exp: Any = None
-
-    @property
-    def changed(self) -> bool:
-        return self.status == "applied"
+from .schemas import PlayerStateResult
 
 
 class PlayerStateRepository:

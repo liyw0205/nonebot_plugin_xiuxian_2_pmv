@@ -65,6 +65,19 @@ def test_xiangyuan_missing_startup_schema_fails_closed_without_ddl() -> None:
             ) is None
 
 
+def test_xiangyuan_group_route_reports_missing_startup_schema() -> None:
+    with tempfile.TemporaryDirectory() as directory:
+        game, player = _databases(Path(directory), migrate=False)
+        app = Flask(__name__)
+        app.secret_key = "test"
+        app.register_blueprint(blueprint(BaseApplication(game, player), permission=lambda _: True))
+
+        response = app.test_client().get("/api/v1/base/xiangyuan/group?group_id=group")
+
+        assert response.status_code == 503
+        assert response.json["error"]["code"] == "schema_missing"
+
+
 def test_real_web_route_creates_and_replays_xiangyuan() -> None:
     with tempfile.TemporaryDirectory() as directory:
         game, player = _databases(Path(directory))

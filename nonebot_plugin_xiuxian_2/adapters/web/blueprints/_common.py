@@ -29,6 +29,10 @@ def guard(permission: str, resolver: Callable[[str], bool], *, write: bool = Fal
                 # particular, calling an application method with an incomplete
                 # payload raises TypeError before its domain validator runs.
                 return api_error("validation_error", str(exc), status=400)
+            except RuntimeError as exc:
+                if "schema_missing" in str(exc):
+                    return api_error("schema_missing", str(exc), status=503)
+                return api_error("internal_error", "服务暂时不可用", status=500)
             except Exception:
                 return api_error("internal_error", "服务暂时不可用", status=500)
 

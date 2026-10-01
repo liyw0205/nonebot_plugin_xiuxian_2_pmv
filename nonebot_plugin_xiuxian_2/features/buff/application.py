@@ -64,6 +64,8 @@ class BuffApplication(LegacyApplication):
 
     def pvp_settle(self, *, operation_id: str, user_id: str, **kwargs: Any):
         if self._explicit_repository is None:
+            if not kwargs.get("opponent_id"):
+                raise ValidationError("opponent_id is required")
             repository = NormalPvpSqlRepository(self.game_database, self.player_database)
             payload = {
                 "user_id": str(user_id),

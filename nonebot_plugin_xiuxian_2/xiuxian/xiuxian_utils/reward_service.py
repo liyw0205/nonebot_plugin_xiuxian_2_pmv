@@ -34,8 +34,11 @@ class RewardService:
         inventory_application: PlayerInventoryApplication | None = None,
         boss_integral_application: BossIntegralApplication | None = None,
     ):
-        self.sql_message = XiuxianDateManage()
-        self.items = Items()
+        # Reward paths that only touch stone/exp must not open the legacy
+        # connection or load the full item catalog.  Keep both adapters lazy
+        # because this service is shared by several compatibility entrypoints.
+        self._sql_message_instance = None
+        self._items_instance = None
         self.economy_application = economy_application or PlayerEconomyApplication(
             get_paths().game_db
         )
@@ -46,8 +49,19 @@ class RewardService:
             get_paths().player_db
         )
 
+    def _sql_message(self):
+        if self._sql_message_instance is None:
+            self._sql_message_instance = XiuxianDateManage()
+        return self._sql_message_instance
+
+    def _items(self):
+        if self._items_instance is None:
+            self._items_instance = Items()
+        return self._items_instance
+
     def _grant_exp(self, user_id: str, exp: int) -> int:
-        user_info = self.sql_message.get_user_info_with_id(user_id)
+        sql_message = self._sql_message()
+        user_info = sql_message.get_user_info_with_id(user_id)
         if not user_info:
             return 0
 
@@ -66,16 +80,20 @@ class RewardService:
         )
         if not result.succeeded:
             return 0
-        self.sql_message.update_power2(user_id)
+        sql_message.update_power2(user_id)
         return result.applied
 
     def _grant_items(self, user_id: str, reward: dict[str, Any]) -> list[dict[str, Any]]:
         granted: list[dict[str, Any]] = []
-        for item in reward.get("items", []) or []:
+        reward_items = reward.get("items", []) or []
+        if not reward_items:
+            return granted
+        items = self._items()
+        for item in reward_items:
             item_id = item.get("id") or item.get("goods_id")
             amount = max(1, _to_int(item.get("amount", item.get("num", 1)), 1))
             bind_flag = _to_int(item.get("bind_flag", item.get("bind", 1)), 1)
-            item_info = self.items.get_data_by_item_id(item_id)
+            item_info = items.get_data_by_item_id(item_id)
             if not item_info:
                 if logger:
                     logger.warning(f"奖励物品不存在：{item_id}")
@@ -115,24 +133,25 @@ class RewardService:
         return result.applied if result.succeeded else 0
 
     def _current_sect_contribution(self, user_id: str) -> int:
-        user_info = self.sql_message.get_user_info_with_id(user_id) or {}
+        user_info = self._sql_message().get_user_info_with_id(user_id) or {}
         return _to_int(user_info.get("sect_contribution"), 0)
 
     def _grant_sect_resource(self, sect_id: int | None, amount: int, field: str) -> int:
         amount = max(0, as_int_like(amount))
         if not sect_id or amount <= 0:
             return 0
-        sect_info = self.sql_message.get_sect_info_by_id(sect_id) or {}
+        sql_message = self._sql_message()
+        sect_info = sql_message.get_sect_info_by_id(sect_id) or {}
         if field == "sect_scale":
             current_used_stone = _to_int(sect_info.get("sect_used_stone"), 0)
             current_scale = _to_int(sect_info.get("sect_scale"), 0)
-            self.sql_message.update_sect_scale_and_used_stone(
+            sql_message.update_sect_scale_and_used_stone(
                 sect_id,
                 current_used_stone,
                 current_scale + amount,
             )
         elif field == "sect_materials":
-            self.sql_message.update_sect_materials(sect_id, amount, 1)
+            sql_message.update_sect_materials(sect_id, amount, 1)
         return amount
 
     def _grant_boss_integral(self, user_id: str, amount: int) -> int:
