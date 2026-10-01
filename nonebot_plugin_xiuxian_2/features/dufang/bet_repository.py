@@ -20,19 +20,64 @@ class DufangBetResult:
 
 
 class DufangBetSqlRepository:
+    _GAME_COLUMNS = {
+        "dufang_bets": {"bet_id", "user_id", "cost", "status", "placed_at", "settled_at"},
+        "dufang_bet_operations": {"operation_id", "payload", "cost", "wallet_stone", "bet_id", "created_at"},
+        "user_xiuxian": {"user_id", "stone"},
+    }
+    _PLAYER_COLUMNS = {"user_id", "count", "total_cost", "last_update"}
+
     def __init__(self, game_database: str | Path, player_database: str | Path) -> None:
         self.game_database, self.player_database = str(game_database), str(player_database)
+
+    @staticmethod
+    def _columns(uow: DatabaseUnitOfWork, table: str, schema: str = "main") -> set[str]:
+        safe_schema = "player_data" if schema == "player_data" else "main"
+        return {
+            str(row["name"]).casefold()
+            for row in uow.query_all(f'PRAGMA {safe_schema}.table_info("{table}")')
+        }
+
+    @classmethod
+    def _schema_ready(cls, uow: DatabaseUnitOfWork) -> bool:
+        if any(not required.issubset(cls._columns(uow, table)) for table, required in cls._GAME_COLUMNS.items()):
+            return False
+        for table, key_column in (("dufang_bets", "bet_id"), ("dufang_bet_operations", "operation_id")):
+            primary_key = next(
+                (
+                    int(row["pk"])
+                    for row in uow.query_all(f'PRAGMA main.table_info("{table}")')
+                    if str(row["name"]).casefold() == key_column
+                ),
+                0,
+            )
+            if primary_key != 1:
+                return False
+        player_columns = cls._columns(uow, "unseal_data", "player_data")
+        if not cls._PLAYER_COLUMNS.issubset(player_columns):
+            return False
+        player_key = next(
+            (
+                int(row["pk"])
+                for row in uow.query_all('PRAGMA player_data.table_info("unseal_data")')
+                if str(row["name"]).casefold() == "user_id"
+            ),
+            0,
+        )
+        return player_key == 1
 
     def place(self, operation_id: str, user_id: str, cost: int, placed_at: str) -> DufangBetResult:
         operation_id, user_id, cost = str(operation_id).strip(), str(user_id), int(cost)
         placed_at = str(placed_at).strip()
         if not operation_id or cost <= 0 or not placed_at:
             raise ValueError("operation id, positive cost and placement time are required")
+        if not Path(self.game_database).is_file() or not Path(self.player_database).is_file():
+            return DufangBetResult("schema_missing")
         payload = json.dumps([user_id, cost], ensure_ascii=True, separators=(",", ":"))
         with DatabaseUnitOfWork(self.game_database, immediate=True) as uow:
             uow.execute("ATTACH DATABASE ? AS player_data", (self.player_database,))
-            uow.execute("CREATE TABLE IF NOT EXISTS dufang_bets(bet_id TEXT PRIMARY KEY,user_id TEXT NOT NULL,cost INTEGER NOT NULL,status TEXT NOT NULL,placed_at TEXT NOT NULL,settled_at TEXT)")
-            uow.execute("CREATE TABLE IF NOT EXISTS dufang_bet_operations(operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,cost INTEGER NOT NULL,wallet_stone INTEGER NOT NULL,bet_id TEXT NOT NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
+            if not self._schema_ready(uow):
+                return DufangBetResult("schema_missing")
             previous = uow.query_one("SELECT payload,cost,wallet_stone,bet_id FROM dufang_bet_operations WHERE operation_id=?", (operation_id,))
             if previous is not None:
                 if str(previous["payload"]) != payload:
@@ -44,7 +89,6 @@ class DufangBetSqlRepository:
             wallet = int(user["stone"])
             if wallet < cost:
                 return DufangBetResult("stone_insufficient", wallet_stone=wallet)
-            uow.execute("CREATE TABLE IF NOT EXISTS player_data.unseal_data(user_id TEXT PRIMARY KEY,count INTEGER,total_cost INTEGER,profit INTEGER,loss INTEGER,shared_profit INTEGER,shared_loss INTEGER,received_profit INTEGER,received_loss INTEGER,last_update TEXT)")
             if uow.execute("UPDATE user_xiuxian SET stone=stone-? WHERE user_id=? AND stone>=?", (cost, user_id, cost)).rowcount != 1:
                 return DufangBetResult("state_changed", wallet_stone=wallet)
             uow.execute("INSERT INTO player_data.unseal_data(user_id,count,total_cost,last_update) VALUES(?,?,?,?) ON CONFLICT(user_id) DO UPDATE SET count=COALESCE(count,0)+1,total_cost=COALESCE(total_cost,0)+excluded.total_cost,last_update=excluded.last_update", (user_id, 1, cost, placed_at))

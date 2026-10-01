@@ -448,6 +448,8 @@ def _slice_status() -> dict[str, dict[str, object]]:
     dufang_facade = (PACKAGE / "xiuxian" / "xiuxian_dufang" / "__init__.py").read_text(encoding="utf-8")
     dufang_application = (PACKAGE / "features" / "dufang" / "application.py").read_text(encoding="utf-8")
     dufang_repository = (PACKAGE / "features" / "dufang" / "repository.py").read_text(encoding="utf-8")
+    dufang_bet_repository = (PACKAGE / "features" / "dufang" / "bet_repository.py").read_text(encoding="utf-8")
+    dufang_payout_repository = (PACKAGE / "features" / "dufang" / "payout_repository.py").read_text(encoding="utf-8")
     dufang_share_repository = (PACKAGE / "features" / "dufang" / "share_repository.py").read_text(encoding="utf-8")
     dufang_migrations = (PACKAGE / "features" / "dufang" / "migrations.py").read_text(encoding="utf-8")
     legacy_migrated_source = (PACKAGE / "features" / "_legacy_migrated.py").read_text(encoding="utf-8")
@@ -1893,7 +1895,22 @@ def _slice_status() -> dict[str, dict[str, object]]:
                 and "legacy.dufang.003" in legacy_migrated_source
                 and '"legacy.dufang.003"' in plugin_source
             ),
-            "status": "share_feature_repository_cutover_with_bet_payout_compatibility",
+            "bet_payout_request_path_has_no_ddl": all(
+                token not in source
+                for source in (dufang_bet_repository, dufang_payout_repository)
+                for token in ("CREATE TABLE", "ALTER TABLE")
+            ),
+            "bet_payout_missing_schema_fails_closed": all(
+                "Path(self.game_database).is_file()" in source
+                and "Path(self.player_database).is_file()" in source
+                for source in (dufang_bet_repository, dufang_payout_repository)
+            ),
+            "bet_payout_migration_registered": (
+                "legacy.dufang.004" in legacy_migrated_source
+                and "def apply_dufang_bet_payout(" in dufang_migrations
+            ),
+            "payout_result_is_read_only": "DatabaseUnitOfWork(self.game_database, read_only=True)" in dufang_payout_repository,
+            "status": "share_and_bet_payout_feature_schema_owned",
         },
         "fusion": {
             "single_application_owned": "fusion_application.apply(" in fusion_facade,

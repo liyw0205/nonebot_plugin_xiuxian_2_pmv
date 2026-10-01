@@ -9,6 +9,7 @@ import nonebot
 nonebot.init()
 
 from nonebot_plugin_xiuxian_2.features.dufang.application import DufangApplication
+from nonebot_plugin_xiuxian_2.features.dufang.migrations import apply_dufang_bet_payout, apply_dufang_share_player
 from nonebot_plugin_xiuxian_2.infrastructure.database import DatabaseUnitOfWork
 from nonebot_plugin_xiuxian_2.plugin import apply_platform_schema
 from tests.test_db_backend import db_backend
@@ -24,6 +25,9 @@ class DufangApplicationTests(unittest.TestCase):
             uow.execute("CREATE TABLE user_xiuxian (user_id TEXT PRIMARY KEY, stone INTEGER)")
             uow.execute("INSERT INTO user_xiuxian VALUES (?, ?)", ("user", 1000))
             apply_platform_schema(uow)
+            apply_dufang_bet_payout(uow)
+        with DatabaseUnitOfWork(self.player) as uow:
+            apply_dufang_share_player(uow)
         self.application = DufangApplication(self.game, self.player)
 
     def tearDown(self) -> None:

@@ -3213,21 +3213,26 @@ focused tests、根目录 `tests/` 隔离回归、compileall、architecture/prog
 ### 6.5 后续执行方案（2026-10-02）
 
 当前鉴石共享结算 feature-owned cutover 已完成代码切换和聚焦回归，但尚未执行全量测试、正式迁移、
-备份恢复或 P7 发布演练；赌坊 bet/payout 请求期 DDL 与全局旧执行路径仍是未完成目标。按以下顺序推进，
-每次只实施一个可验证切片：
+备份恢复或 P7 发布演练。赌坊 bet/payout `.004` schema ownership 阶段已完成并提交；随机结果冻结、
+派彩恢复与跨库崩溃一致性作为紧接的下一阶段继续。按以下顺序推进，每次只实施一个可验证切片：
 
-1. **收口当前切片**：复核鉴石共享结算最新 diff、迁移路由、progress/inventory 门禁与 `git diff --check`；
-   保留用户 `boss_info.json` 修改，不触碰运行数据库。只有在切片范围和验收证据确认后，才按用户明确要求提交/推送。
-2. **赌坊 bet/payout schema 所有权**：先追踪真实 matcher/scheduler 到结算仓储，列出请求期建表/补列点；将必需 schema
-   放到按库路由的启动迁移，请求路径改为只读校验并在缺 schema 时 fail closed。保留冻结目标、逐目标幂等、分块续跑、
-   余额封顶和失败恢复；验证迁移幂等、无请求期 DDL、重复/并发、部分失败恢复及赌坊投注/派奖回归。
-3. **按真实调用图清理剩余旧写路径**：优先 player/economy/inventory 等会改动资产的默认 handler，再审计
+1. **鉴石共享结算基线（已推送）**：`27e24f03 refactor(dufang): own shared settlement` 已推送至
+   `origin/refactor/full-bottom-layer`；未声称全量测试、正式迁移、备份恢复或 P7 发布演练完成。
+2. **赌坊 bet/payout schema 所有权（完成，2026-10-02）**：新增 game-only `legacy.dufang.004` 预建 bet、bet
+   operation、payout operation 表，沿用 player-only `.003` 的 `unseal_data`；默认 feature repositories 不再执行请求期 DDL，
+   缺数据库/schema 时 fail closed。迁移路由/幂等/旧行保留、缺库不创建、下注并发幂等、不同 operation 竞争同一 pending bet、
+   派彩统计缺行回滚均已覆盖；赌坊应用、repository、迁移、旧 service 兼容和 progress 聚焦集合 `38 passed`，仅有一条既存
+   compatibility deprecation warning。旧 transaction service 仍是显式兼容边界，不计默认路径完成。本阶段不包含正式数据迁移或发布演练。
+3. **赌坊随机结果与跨库恢复（下一阶段）**：冻结一次鉴石事件/赔率计划，确保相同消息 replay 不重抽随机结果；定义 bet 已提交但 payout
+   未完成时的有界续跑。若仍跨 game/player 写入，必须以持久 receipt/outbox 解决 WAL 下的进程崩溃不原子问题；恢复批次有上限，
+   receipt 是耐久幂等数据，不得当缓存清理。先验证随机结果/支付状态在崩溃点前后的持久化契约，再决定是否拆分 player 统计投影。
+4. **按真实调用图清理剩余旧写路径**：优先 player/economy/inventory 等会改动资产的默认 handler，再审计
    cultivation/training、combat/dungeon/boss、sect/pet/trade 与 scheduler/Web 入口。每项记录入口、实际调用链、
    状态所有者和测试证据；只有默认调用归零后，才隔离或删除对应 legacy service。
-4. **全局依赖与完成门禁**：按同一 progress CLI 口径持续记录 `transaction_service`、`xiuxian2_handle`、
+5. **全局依赖与完成门禁**：按同一 progress CLI 口径持续记录 `transaction_service`、`xiuxian2_handle`、
    直连数据库、系统时间和全局随机依赖。兼容 shim/静态计数下降不单独算完成，退出前必须证明默认执行图已切换，
    且 architecture/progress/inventory/source-quality 门禁通过。
-5. **正式发布与 P7**：切片迁移稳定后，针对真实发布数据目录安排备份、迁移、恢复、reconcile、余额/状态对账和
+6. **正式发布与 P7**：切片迁移稳定后，针对真实发布数据目录安排备份、迁移、恢复、reconcile、余额/状态对账和
    远端冒烟，保留可审计证据。隔离 recovery smoke 不能代替真实发布周期。
 
 **子代理使用**：允许在目标相互独立时并行委派只读工作，例如一名代理追踪 handler/route/scheduler 调用图，

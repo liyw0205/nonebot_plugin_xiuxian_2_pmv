@@ -290,7 +290,7 @@ class DufangShareRepositoryTests(unittest.TestCase):
             runner = MigrationRunner(game_migrations)
             applied = runner.apply(uow)
             self.assertEqual(runner.apply(uow), [])
-            self.assertEqual(applied, ["legacy.dufang.001", "legacy.dufang.002"])
+            self.assertEqual(applied, ["legacy.dufang.001", "legacy.dufang.002", "legacy.dufang.004"])
             row = uow.query_one("SELECT user_id,stone_delta,trace_id FROM economy_log WHERE user_id='old'")
             self.assertEqual((row["user_id"], row["stone_delta"], row["trace_id"]), ("old", 1, None))
         with DatabaseUnitOfWork(self.player) as uow:

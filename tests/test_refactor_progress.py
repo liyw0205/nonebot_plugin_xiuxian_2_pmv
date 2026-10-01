@@ -16,6 +16,10 @@ class RefactorProgressTests(unittest.TestCase):
         self.assertTrue(dufang["share_ledger_identity_stable"])
         self.assertTrue(dufang["share_player_receipt_recovery_owned"])
         self.assertTrue(dufang["share_migrations_registered_and_routed"])
+        self.assertTrue(dufang["bet_payout_request_path_has_no_ddl"])
+        self.assertTrue(dufang["bet_payout_missing_schema_fails_closed"])
+        self.assertTrue(dufang["bet_payout_migration_registered"])
+        self.assertTrue(dufang["payout_result_is_read_only"])
 
     def test_progress_report_tracks_compensation_claim_cleanup_boundary(self) -> None:
         compensation = _slice_status()["compensation"]

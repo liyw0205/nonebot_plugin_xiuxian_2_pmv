@@ -469,6 +469,9 @@ async def unseal_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
     bet_data.setdefault("status", bet_outcome.status)
     bet_data["succeeded"] = bet_outcome.ok
     bet = SimpleNamespace(**bet_data)
+    if bet.status == "schema_missing":
+        await handle_send(bot, event, "鉴石暂不可用：下注数据迁移尚未就绪。", md_type="鉴石")
+        return
     if bet.status == "stone_insufficient":
         await handle_send(bot, event, "灵石余额已变化，本次鉴石未下注。", md_type="鉴石")
         return
@@ -477,6 +480,9 @@ async def unseal_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
         return
     if bet.status == "duplicate":
         prior_pay = dufang_application.payout_result(payout_operation_id)
+        if prior_pay is not None and prior_pay.status == "schema_missing":
+            await handle_send(bot, event, "鉴石暂不可用：派彩数据迁移尚未就绪。", md_type="鉴石")
+            return
         if prior_pay is not None and prior_pay.succeeded:
             share_text = None
             share_operation_id = f"dufang-share:{operation_id}"
@@ -568,6 +574,9 @@ async def unseal_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
     payout_data.setdefault("status", payout_outcome.status)
     payout_data["succeeded"] = payout_outcome.ok
     payout = SimpleNamespace(**payout_data)
+    if payout.status == "schema_missing":
+        await handle_send(bot, event, "鉴石暂不可用：派彩数据迁移尚未就绪。", md_type="鉴石")
+        return
     if not payout.succeeded:
         await handle_send(bot, event, "鉴石派彩未入账或已处理，请稍后查看灵石余额。", md_type="鉴石")
         return

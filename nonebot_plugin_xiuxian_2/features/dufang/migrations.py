@@ -97,4 +97,50 @@ def apply_dufang_share_player(uow: DatabaseUnitOfWork) -> None:
     )
 
 
-__all__ = ["apply_dufang", "apply_dufang_share", "apply_dufang_share_player"]
+def apply_dufang_bet_payout(uow: DatabaseUnitOfWork) -> None:
+    """Prepare bet and payout receipts before request handlers use them."""
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS dufang_bets("
+        "bet_id TEXT PRIMARY KEY,user_id TEXT NOT NULL,cost INTEGER NOT NULL,"
+        "status TEXT NOT NULL,placed_at TEXT NOT NULL,settled_at TEXT)"
+    )
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS dufang_bet_operations("
+        "operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,cost INTEGER NOT NULL,"
+        "wallet_stone INTEGER NOT NULL,bet_id TEXT NOT NULL,"
+        "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+    )
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS dufang_payout_operations("
+        "operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,wallet_stone INTEGER NOT NULL,"
+        "gain INTEGER NOT NULL,loss INTEGER NOT NULL,"
+        "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+    )
+    required = {
+        "dufang_bets": ({"bet_id", "user_id", "cost", "status", "placed_at", "settled_at"}, "bet_id"),
+        "dufang_bet_operations": (
+            {"operation_id", "payload", "cost", "wallet_stone", "bet_id", "created_at"},
+            "operation_id",
+        ),
+        "dufang_payout_operations": (
+            {"operation_id", "payload", "wallet_stone", "gain", "loss", "created_at"},
+            "operation_id",
+        ),
+    }
+    for table, (columns, key_column) in required.items():
+        rows = uow.query_all(f'PRAGMA table_info("{table}")')
+        actual = {str(row["name"]).casefold() for row in rows}
+        primary_key = next(
+            (int(row["pk"]) for row in rows if str(row["name"]).casefold() == key_column),
+            0,
+        )
+        if not columns.issubset(actual) or primary_key != 1:
+            raise RuntimeError(f"unsupported existing dufang schema: {table}")
+
+
+__all__ = [
+    "apply_dufang",
+    "apply_dufang_bet_payout",
+    "apply_dufang_share",
+    "apply_dufang_share_player",
+]
