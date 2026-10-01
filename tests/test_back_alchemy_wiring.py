@@ -20,13 +20,13 @@ class BackAlchemyWiringTests(unittest.TestCase):
         except ValueError:
             nonebot.init()
 
-    def test_lifecycle_binds_feature_back_application_to_legacy_handler(self) -> None:
+    async def _assert_lifecycle_binding(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             data_dir = Path(directory) / "data"
             copy_static_data(Path(__file__).resolve().parents[1] / "data" / "xiuxian", data_dir)
             context = build_runtime_context(data_dir=data_dir, legacy_startup=True)
             lifecycle, _, context = build_lifecycle(context)
-            asyncio.run(lifecycle.start())
+            await lifecycle.start()
             try:
                 from nonebot_plugin_xiuxian_2.xiuxian import xiuxian_back
 
@@ -48,7 +48,10 @@ class BackAlchemyWiringTests(unittest.TestCase):
                 self.assertEqual(context.services["back"].accessory_package_application.__class__.__name__, "AccessoryPackageApplication")
                 self.assertTrue(callable(context.services["back"].accessory_package))
             finally:
-                asyncio.run(lifecycle.shutdown())
+                await lifecycle.shutdown()
+
+    def test_lifecycle_binds_feature_back_application_to_legacy_handler(self) -> None:
+        asyncio.run(self._assert_lifecycle_binding())
 
 
 if __name__ == "__main__":
