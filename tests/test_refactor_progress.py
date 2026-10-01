@@ -676,5 +676,9 @@ class RefactorProgressTests(unittest.TestCase):
         self.assertTrue(slices["dongfu"]["array_upgrade_application_owned"])
         self.assertTrue(slices["base"]["refund_stamina_application_owned"])
         self.assertTrue(slices["tower"]["stamina_refund_application_owned"])
+        self.assertTrue(slices["player_state"]["battle_vital_write_application_owned"])
+        self.assertTrue(slices["player_state"]["battle_vital_legacy_writer_disabled"])
+        self.assertTrue(slices["player_state"]["battle_vital_repository_is_bounded_and_no_ddl"])
+        self.assertTrue(slices["player_state"]["battle_vital_schema_failure_is_observable"])
 if __name__ == "__main__":
     unittest.main()

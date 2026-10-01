@@ -2,6 +2,12 @@
 
 状态：进行中。`v1.1.0` 的 P0-P7 发布证据继续保留，但不作为底层全面重构完成证明。
 
+2026-10-01 player combat vital write boundary：战斗结束后的 `update_all_user_status` 继续经
+`PlayerStateApplication.update_vitals` 写入首条 `user_xiuxian` row，不再在 `schema_missing` 时回退
+`XiuxianDateManage.update_user_hp_mp`；移除 `player_fight.py` 内旧 SQL manager 惰性缓存。写回失败记录不含用户标识的
+状态告警。战斗调用没有提供战前 HP/MP 快照，因此本次写回不做快照 CAS；复用既有仓储，不新增 migration、DDL 或全量用户缓存。回归覆盖应用委托、隔离 SQLite 写回、缺库不建库、
+源码/进度门禁。下一片按 6.2 继续审计洞府背包与补偿回写路径。
+
 2026-10-01 player root-reroll write boundary：`重入仙途` 自动择优/手动选择默认写入改经
 `BaseApplication -> BaseRootRerollSqlRepository`，用 game-only `base.008` 回执与玩家快照 CAS
 原子更新灵根、战力和灵石；重复消息返回首次结果，手动选择绑定发起用户/操作 ID/初始快照。请求期
@@ -3127,7 +3133,7 @@ facade 与生命周期 service 的默认执行图一致。
 1. **bank 历史账户生命周期审计已收口（2026-09-30）**：`bank.003` 启动时只读分批回填完整旧 `bankinfo`；默认 matcher/route 不再读取旧 projection，旧 reader 无生产调用。bank `JOBS` 为空、包内无旧 `savef` 生产调用点，也无 `LegacyBankRepository` 默认构造点；兼容 writer/rollback 保留但不在默认执行图。生产旧库只在迁移尚未登记时由 startup migration 读取；正式发布仍需对真实数据做备份、migration、恢复和余额对账，不能以隔离 recovery 代替。
 - **仙缘 feature-owned cutover 已完成（2026-09-30）**：真实 `送仙缘`/`抢仙缘` handler 与 `/api/v1/base/xiangyuan/{create,claim,group}` route 统一进入 `XiangyuanApplication -> XiangyuanSqlRepository`；`base.006` 仅迁移 game 仙缘池/回执，`base.007` 仅迁移 player `xiangyuan_limit`。跨库写入使用 immediate UoW 与 replay/conflict，缺 migration/schema fail closed，默认路径不再读取 `stone_limit` 或构造 compatibility service；旧 `XiangyuanSettlementService` 仅为显式回滚保留。下一项按 player/economy 调用图审计仍由 `xiuxian2_handle` 或旧 transaction service 承载的资产路径。
 - **世界BOSS三库结算 feature-owned cutover 已完成（2026-10-01）**：默认 `BossApplication -> BossPurchaseSqlRepository -> WorldBossBattleSettlementSqlRepository` 不再继承旧 settlement repository；game/player/activity 写入在同一 attached UoW 中完成，operation replay/conflict、玩家/BOSS/活动快照 CAS、统计/任务/背包和晚失败回滚均有回归证据。`boss.006` 仅路由 player schema，活动投影复用 `activity_state.001`；请求期不建表，缺 schema 失败闭环。旧 `WorldBossBattleSettlementService` 只保留显式 compatibility/rollback API。下一项回到 player/economy 调用图，审计仍可达的 `xiuxian2_handle` 与旧 transaction service。
-- **player vital-state initialization boundary 已完成（2026-10-01）**：注册、历练、通天塔、世界事件、世界BOSS、切磋和突破入口的空 HP 初始化统一调用 `PlayerStateApplication`；仓储按首个 `rowid` + 空 HP/exp CAS 更新既有 `user_xiuxian`，缺 schema 不建表。旧 `update_user_hp` 仅保留为显式 fallback，战斗 `update_user_hp_mp` 尚未纳入本片。同步收口通天塔/世界事件的 `Items()` 延迟加载，降低导入 RAM 峰值但不清空共享缓存。下一项继续审计 player/economy 其它旧写入（战斗结算、洞府背包和补偿回写）。
+- **player vital-state writes 已切换（2026-10-01）**：注册、历练、通天塔、世界事件、世界BOSS、切磋和突破入口的空 HP 初始化，以及战斗结束后的 HP/MP 写回，均使用 `PlayerStateApplication`。空 HP 初始化按首个 `rowid` 与 exp 快照 CAS；战斗写回更新首个匹配 `rowid`，由于没有战前 HP/MP 快照，不做快照 CAS。缺 schema 不建表，战斗默认写回不再回退 `XiuxianDateManage.update_user_hp_mp`。旧 `update_user_hp` API 仍只作为显式兼容 fallback 保留。下一项继续审计 player/economy 其它旧写入（洞府背包和补偿回写）。
 2. **审计其余真实旧执行路径**：按 player/economy、cultivation/training、combat/dungeon/boss、sect/pet/trade 风险顺序逐个核对 handler、route、scheduler 和批处理；优先处理仍由旧 transaction service 或 `xiuxian2_handle` 承载的资产状态，兼容 shim 本身不计完成。
 3. **收敛全局基础依赖**：持续降低旧 service import、`xiuxian2_handle` import、`db_backend.connect`、`sqlite3.connect`、系统时间/全局随机命中；以 progress CLI 同口径计数并逐项附真实调用证据。
 4. **最后补齐发布证据**：针对真实数据目录执行备份、migration dry-run/执行、恢复、reconcile、远端冒烟和至少一次正式发布周期；完成这些前 P7 与全面重构均保持未完成。

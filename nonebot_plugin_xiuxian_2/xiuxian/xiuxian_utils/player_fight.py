@@ -5,7 +5,7 @@ from ...paths import get_paths
 from ...features.player_state.application import PlayerStateApplication
 
 from .xiuxian2_handle import (
-    XiuxianDateManage, UserBuffDate,
+    UserBuffDate,
     calc_realm_base_speed,
 )
 from .pet_system import (
@@ -86,15 +86,7 @@ class _LazyItemsProxy:
 
 
 items = _LazyItemsProxy()
-_sql_message_instance = None
 _player_state_application = None
-
-
-def _sql_message():
-    global _sql_message_instance
-    if _sql_message_instance is None:
-        _sql_message_instance = XiuxianDateManage()
-    return _sql_message_instance
 
 
 def configure_player_state_application(application: PlayerStateApplication) -> None:
@@ -530,12 +522,13 @@ def update_all_user_status(status_list, bot_id, level_ratios=None):
     for user_id, status in resolve_final_user_statuses(
         status_list, bot_id, level_ratios
     ).items():
-        _player_state().update_vitals(
+        result = _player_state().update_vitals(
             user_id,
             status["hp"],
             status["mp"],
-            fallback=lambda value, hp, mp: _sql_message().update_user_hp_mp(value, hp, mp),
         )
+        if result.status != "applied":
+            logger.warning("战斗后的玩家气血状态未更新: {}", result.status)
 
 
 def is_scarecrow_boss(boss):

@@ -187,6 +187,13 @@ compileall、architecture、inventory、diff check 与五库 recovery 通过；�
 
 ## 当前切片与下一切片选择
 
+本轮完成 `player combat vital write boundary`：战斗结束后的 HP/MP 写回统一使用既有
+`PlayerStateApplication -> PlayerStateRepository.update_vitals`，不再从 `schema_missing` 回退
+到 `XiuxianDateManage.update_user_hp_mp`，同时移除战斗辅助模块内的旧 SQL manager 缓存。
+按首条 `rowid` 更新；异常状态给出不含用户标识的告警，不存在的数据库不会被写回操作创建。
+调用没有提供战前 HP/MP 快照，因此不做快照 CAS。覆盖调用委托、隔离 SQLite 实际写回、缺库不建库、source/progress 门禁；无 migration。
+验收后清理本片 pytest/pyc/临时目录。下一片按 6.2 继续审计洞府背包和补偿回写。
+
 本轮完成 `player activity timestamp read/write ownership`：普通 work、impart、world-events、info、beg、buff 和 Boss facade 的 `user_cd.last_check_info_time` 读写统一经 `PlayerActivityApplication -> PlayerActivitySqlRepository`，运行时注入 `Clock`。仓储只更新既有用户行；缺数据库/表/列/用户返回空结果，不创建数据库、表或执行请求期 DDL，并保留旧本地无时区字符串格式。Sect 闲置判定仍由 `SectActivitySqlRepository` 负责，Boss 旧结算 transaction 内写入仍和战斗 CAS 共事务。新增 activity 行为/source 回归；无 migration、无运行数据访问。验收后只删除仓库 `__pycache__`、`*.pyc`、`.pytest_cache` 和本轮临时目录，保留 `.venv`、`.git`、`data/`、数据库/WAL/SHM、持久回执及用户修改。
 
 本轮完成 `normal pvp settlement ownership`：普通切磋默认回放和结算改经 `BuffApplication -> NormalPvpSqlRepository`；`buff.006` 在 game DB 预建 `normal_pvp_operations`，`buff.007` 在 player DB 预建 `statistics` 的切磋胜负列。attached UoW 内完成双方 HP/MP/体力 CAS、统计与回执，重复 operation 回放、payload 冲突、缺 schema/用户和快照冲突均 fail closed；请求路径不执行 DDL。`pvp_battle` 只保留旧战斗引擎的纯计算适配，旧 `NormalPvpSettlementService` 仅作显式兼容 API，不在默认 handler 执行图中。聚焦回归 `8 passed`，仓储独立 unittest `2 tests OK`；compileall、progress gates 与 diff check 通过。测试/编译缓存验收后清理，保留用户 `boss_info.json`。下一片按 6.2 审计 `get_user_real_info`、体力/经济写入及仍可达的 `xiuxian2_handle`/legacy transaction 路径。

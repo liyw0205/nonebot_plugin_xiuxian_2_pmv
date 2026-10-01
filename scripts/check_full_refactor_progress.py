@@ -110,6 +110,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
     base_xiangyuan_application = (PACKAGE / "features" / "base" / "xiangyuan_application.py").read_text(encoding="utf-8")
     base_stamina_application = (PACKAGE / "features" / "base" / "stamina_application.py").read_text(encoding="utf-8")
     base_stamina_repository = (PACKAGE / "features" / "base" / "stamina_repository.py").read_text(encoding="utf-8")
+    player_state_repository = (PACKAGE / "features" / "player_state" / "repository.py").read_text(encoding="utf-8")
     layout_source = (PACKAGE / "xiuxian" / "xiuxian_utils" / "lay_out.py").read_text(encoding="utf-8")
     breakthrough_facade = (PACKAGE / "xiuxian" / "xiuxian_base" / "breakthrough_tribulation.py").read_text(encoding="utf-8")
     xiangyuan_facade = (PACKAGE / "xiuxian" / "xiuxian_base" / "xiangyuan.py").read_text(encoding="utf-8")
@@ -1849,6 +1850,27 @@ def _slice_status() -> dict[str, dict[str, object]]:
                 and "include_current=include_current" in info_attribute_application
             ),
             "status": "dynamic_attribute_read_boundary_owned_with_legacy_formula_adapter",
+        },
+        "player_state": {
+            "battle_vital_write_application_owned": (
+                "_player_state().update_vitals(" in player_fight
+                and "def update_all_user_status(" in player_fight
+            ),
+            "battle_vital_legacy_writer_disabled": all(
+                token not in player_fight
+                for token in ("_sql_message", "XiuxianDateManage", "update_user_hp_mp(")
+            ),
+            "battle_vital_repository_is_bounded_and_no_ddl": (
+                "ORDER BY rowid ASC LIMIT 1" in player_state_repository
+                and "UPDATE user_xiuxian SET hp=?,mp=?" in player_state_repository
+                and "CREATE TABLE" not in player_state_repository
+                and "ALTER TABLE" not in player_state_repository
+            ),
+            "battle_vital_schema_failure_is_observable": (
+                'logger.warning("战斗后的玩家气血状态未更新: {}", result.status)' in player_fight
+                and "fallback=" not in player_fight
+            ),
+            "status": "battle_vital_write_application_owned_without_legacy_fallback",
         },
         "base": {
             "reward_service_legacy_connection_lazy": (
