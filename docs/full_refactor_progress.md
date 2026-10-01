@@ -9,6 +9,16 @@
 `.venv`、`.git` 或用户 `boss_info.json`。当前全面重构仍由遗留 `transaction_service`、
 `xiuxian2_handle` 真实执行路径和正式发布/P7 证据阻塞。
 
+2026-10-01 world-boss settlement ownership cutover：默认 `BossPurchaseSqlRepository` 不再继承
+`LegacyBossRepository`，世界BOSS战斗结算改由 `WorldBossBattleSettlementSqlRepository` 承担；
+`BossApplication` 的真实 runtime 现在使用 feature-owned 跨库 UoW，保留 operation replay/conflict、
+玩家/BOSS/活动快照 CAS、体力/HP/MP/修为/灵石/积分/背包/统计/任务及活动首领伤害的原子回滚语义。
+`settlement_result` 改为只读查询，缺表返回空，不在请求期建表；新增 player-only `boss.006` 启动迁移，
+预建 player-side `boss_limit`、statistics、xiuxian_tasks 所需字段，并复用既有 boss weekly schema
+检查；活动投影沿用 activity state migration。
+新增 feature-owned 默认路径和 no-DDL replay 回归。当前剩余目标按第 6.2 队列继续审计其它真实旧路径；
+全局旧 `transaction_service`、`xiuxian2_handle` 与正式发布/P7 证据仍是完成 blocker。
+
 2026-10-01 world-boss full-refresh cutover：世界BOSS全量刷新已由
 `WorldBossFullRefreshSqlRepository -> BossApplication` 承担，手动与定时入口共享同一
 operation receipt。新增 player-only `boss.005` migration，预建全量刷新回执表；请求路径只读
@@ -2979,10 +2989,11 @@ Boss 旧 settlement transaction 的同事务时间戳写入仍是独立未迁移
   closed。`StoneContestService` 仍作为显式兼容 API 承载未迁移的 transfer/Web 边界，抢劫也仍
   走原兼容 service；本切片不代表 base/economy 整域完成。
 
-### 6.2 当前推进队列（2026-09-30）
+### 6.2 当前推进队列（2026-10-01）
 
 1. **bank 历史账户生命周期审计已收口（2026-09-30）**：`bank.003` 启动时只读分批回填完整旧 `bankinfo`；默认 matcher/route 不再读取旧 projection，旧 reader 无生产调用。bank `JOBS` 为空、包内无旧 `savef` 生产调用点，也无 `LegacyBankRepository` 默认构造点；兼容 writer/rollback 保留但不在默认执行图。生产旧库只在迁移尚未登记时由 startup migration 读取；正式发布仍需对真实数据做备份、migration、恢复和余额对账，不能以隔离 recovery 代替。
 - **仙缘 feature-owned cutover 已完成（2026-09-30）**：真实 `送仙缘`/`抢仙缘` handler 与 `/api/v1/base/xiangyuan/{create,claim,group}` route 统一进入 `XiangyuanApplication -> XiangyuanSqlRepository`；`base.006` 仅迁移 game 仙缘池/回执，`base.007` 仅迁移 player `xiangyuan_limit`。跨库写入使用 immediate UoW 与 replay/conflict，缺 migration/schema fail closed，默认路径不再读取 `stone_limit` 或构造 compatibility service；旧 `XiangyuanSettlementService` 仅为显式回滚保留。下一项按 player/economy 调用图审计仍由 `xiuxian2_handle` 或旧 transaction service 承载的资产路径。
+- **世界BOSS三库结算 feature-owned cutover 已完成（2026-10-01）**：默认 `BossApplication -> BossPurchaseSqlRepository -> WorldBossBattleSettlementSqlRepository` 不再继承旧 settlement repository；game/player/activity 写入在同一 attached UoW 中完成，operation replay/conflict、玩家/BOSS/活动快照 CAS、统计/任务/背包和晚失败回滚均有回归证据。`boss.006` 仅路由 player schema，活动投影复用 `activity_state.001`；请求期不建表，缺 schema 失败闭环。旧 `WorldBossBattleSettlementService` 只保留显式 compatibility/rollback API。下一项回到 player/economy 调用图，审计仍可达的 `xiuxian2_handle` 与旧 transaction service。
 2. **审计其余真实旧执行路径**：按 player/economy、cultivation/training、combat/dungeon/boss、sect/pet/trade 风险顺序逐个核对 handler、route、scheduler 和批处理；优先处理仍由旧 transaction service 或 `xiuxian2_handle` 承载的资产状态，兼容 shim 本身不计完成。
 3. **收敛全局基础依赖**：持续降低旧 service import、`xiuxian2_handle` import、`db_backend.connect`、`sqlite3.connect`、系统时间/全局随机命中；以 progress CLI 同口径计数并逐项附真实调用证据。
 4. **最后补齐发布证据**：针对真实数据目录执行备份、migration dry-run/执行、恢复、reconcile、远端冒烟和至少一次正式发布周期；完成这些前 P7 与全面重构均保持未完成。

@@ -8,6 +8,7 @@ from datetime import date, datetime
 
 from ...infrastructure.database import DatabaseUnitOfWork
 from ...infrastructure.clock import SystemClock
+from .battle_repository import WorldBossBattleSettlementSqlRepository
 
 
 class BossRepository(Protocol):
@@ -40,37 +41,24 @@ class LegacyBossRepository:
         return self._services()[1].get_result(operation_id)
 
 
-class BossPurchaseSqlRepository(LegacyBossRepository):
+class BossPurchaseSqlRepository:
     def __init__(self, game_database: str | Path, player_database: str | Path, activity_database: str | Path | None = None, *, clock=None) -> None:
-        super().__init__(game_database, player_database, activity_database)
+        self.game_database = str(game_database)
+        self.player_database = str(player_database)
+        self.activity_database = str(activity_database) if activity_database else None
         self.clock = clock or SystemClock()
+        self._settlement = WorldBossBattleSettlementSqlRepository(
+            self.game_database,
+            self.player_database,
+            self.activity_database,
+            clock=self.clock,
+        )
+
+    def settle(self, *args: Any, **kwargs: Any) -> Any:
+        return self._settlement.settle(*args, **kwargs)
 
     def settlement_result(self, operation_id: str) -> Any:
-        operation_id = str(operation_id).strip()
-        if not operation_id:
-            return None
-        with DatabaseUnitOfWork(self.game_database) as uow:
-            row = uow.query_one(
-                "SELECT boss_hp,stamina,battle_count,stone,exp,integral,activity_lines "
-                "FROM world_boss_battle_operations WHERE operation_id=?",
-                (operation_id,),
-            )
-        if row is None:
-            return None
-        try:
-            lines = json.loads(str(row["activity_lines"] or "[]"))
-        except (TypeError, ValueError):
-            lines = []
-        return {
-            "status": "duplicate",
-            "boss_hp": int(row["boss_hp"] or 0),
-            "stamina": int(row["stamina"] or 0),
-            "battle_count": int(row["battle_count"] or 0),
-            "stone": int(row["stone"] or 0),
-            "exp": int(row["exp"] or 0),
-            "integral": int(row["integral"] or 0),
-            "activity_lines": tuple(lines) if isinstance(lines, list) else (),
-        }
+        return self._settlement.settlement_result(operation_id)
 
     @staticmethod
     def _weekly(value, today):
@@ -94,7 +82,14 @@ class BossPurchaseSqlRepository(LegacyBossRepository):
                 if str(old["payload"])!=payload:return result("state_changed")
                 return {"status":"duplicate","quantity":int(old["quantity"]),"cost":int(old["cost"]),"integral":int(old["integral"]),"purchased":int(old["purchased"]),"inventory":int(old["inventory"])}
             if uow.query_one("SELECT 1 AS ok FROM user_xiuxian WHERE user_id=?",(user_id,)) is None:return self._record(uow,operation_id,payload,result("user_missing"))
-            integral=uow.query_one("SELECT COALESCE(integral,0) AS integral FROM player_data.boss_limit WHERE user_id=?",(user_id,));boss=uow.query_one("SELECT COALESCE(weekly_purchases,'{}') AS weekly FROM player_data.boss WHERE user_id=?",(user_id,))
+            integral=uow.query_one("SELECT COALESCE(integral,0) AS integral FROM player_data.boss_limit WHERE user_id=?",(user_id));boss_columns={str(row[1]) for row in uow.execute("PRAGMA player_data.table_info(boss)").fetchall()}
+            if "weekly_purchases" in boss_columns:
+                weekly_table = "boss"
+                boss = uow.query_one("SELECT COALESCE(weekly_purchases,'{}') AS weekly FROM player_data.boss WHERE user_id=?", (user_id,))
+            else:
+                weekly_table = "boss_weekly_purchases"
+                weekly_row = uow.query_one("SELECT weekly_purchases AS weekly FROM player_data.boss_weekly_purchases WHERE user_id=?", (user_id,))
+                boss = weekly_row or {"weekly": "{}"}
             if integral is None or boss is None:return self._record(uow,operation_id,payload,result("state_changed"))
             current=self._weekly(boss["weekly"],today)
             if int(integral["integral"])!=expected_integral or current!=weekly:return self._record(uow,operation_id,payload,result("state_changed"))
@@ -104,11 +99,21 @@ class BossPurchaseSqlRepository(LegacyBossRepository):
             if expected_integral<cost:return self._record(uow,operation_id,payload,result("integral_insufficient",purchased=purchased))
             item=uow.query_one("SELECT COALESCE(goods_num,0) AS n FROM back WHERE user_id=? AND goods_id=?",(user_id,item_id));inventory=int(item["n"]) if item else 0
             if inventory+quantity>max_goods_num:return self._record(uow,operation_id,payload,result("inventory_full",purchased=purchased,inventory=inventory))
-            new_integral,new_purchased,new_inventory=expected_integral-cost,purchased+quantity,inventory+quantity;weekly[str(item_id)]=new_purchased;uow.execute("UPDATE player_data.boss_limit SET integral=? WHERE user_id=? AND COALESCE(integral,0)=?",(new_integral,user_id,expected_integral));uow.execute("UPDATE player_data.boss SET weekly_purchases=? WHERE user_id=?",(json.dumps(weekly,ensure_ascii=True),user_id));stamp=(today.date() if isinstance(today,datetime) else today).isoformat();uow.execute("INSERT INTO back(user_id,goods_id,goods_name,goods_type,goods_num,create_time,update_time,bind_num) VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(user_id,goods_id) DO UPDATE SET goods_name=excluded.goods_name,goods_type=excluded.goods_type,goods_num=back.goods_num+excluded.goods_num,bind_num=COALESCE(back.bind_num,0)+excluded.goods_num,update_time=excluded.update_time",(user_id,item_id,item_name,item_type,quantity,stamp,stamp,quantity));return self._record(uow,operation_id,payload,result("applied",new_integral,new_purchased,new_inventory))
+            new_integral,new_purchased,new_inventory=expected_integral-cost,purchased+quantity,inventory+quantity;weekly[str(item_id)]=new_purchased;uow.execute("UPDATE player_data.boss_limit SET integral=? WHERE user_id=? AND COALESCE(integral,0)=?",(new_integral,user_id,expected_integral));
+            if weekly_table == "boss":
+                uow.execute("UPDATE player_data.boss SET weekly_purchases=? WHERE user_id=?",(json.dumps(weekly,ensure_ascii=True),user_id))
+            else:
+                uow.execute("INSERT INTO player_data.boss_weekly_purchases(user_id,weekly_purchases) VALUES(?,?) ON CONFLICT(user_id) DO UPDATE SET weekly_purchases=excluded.weekly_purchases",(user_id,json.dumps(weekly,ensure_ascii=True)))
+            stamp=(today.date() if isinstance(today,datetime) else today).isoformat();uow.execute("INSERT INTO back(user_id,goods_id,goods_name,goods_type,goods_num,create_time,update_time,bind_num) VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(user_id,goods_id) DO UPDATE SET goods_name=excluded.goods_name,goods_type=excluded.goods_type,goods_num=back.goods_num+excluded.goods_num,bind_num=COALESCE(back.bind_num,0)+excluded.goods_num,update_time=excluded.update_time",(user_id,item_id,item_name,item_type,quantity,stamp,stamp,quantity));return self._record(uow,operation_id,payload,result("applied",new_integral,new_purchased,new_inventory))
 
     @staticmethod
     def _record(uow,operation_id,payload,result):
         uow.execute("INSERT INTO boss_purchase_operations(operation_id,payload,quantity,cost,integral,purchased,inventory) VALUES(?,?,?,?,?,?,?)",(operation_id,payload,result["quantity"],result["cost"],result["integral"],result["purchased"],result["inventory"]));return result
 
 
-__all__ = ["BossPurchaseSqlRepository", "BossRepository", "LegacyBossRepository"]
+__all__ = [
+    "BossPurchaseSqlRepository",
+    "BossRepository",
+    "LegacyBossRepository",
+    "WorldBossBattleSettlementSqlRepository",
+]
