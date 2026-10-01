@@ -210,6 +210,8 @@ def _slice_status() -> dict[str, dict[str, object]]:
     work_reward_source = (PACKAGE / "xiuxian" / "xiuxian_work" / "reward_data_source.py").read_text(encoding="utf-8")
     work_claim_repository = (PACKAGE / "features" / "work" / "claim_repository.py").read_text(encoding="utf-8")
     work_settlement_repository = (PACKAGE / "features" / "work" / "settlement_repository.py").read_text(encoding="utf-8")
+    work_admin_reset_repository = (PACKAGE / "features" / "work" / "admin_refresh_reset_repository.py").read_text(encoding="utf-8")
+    work_admin_reset_tests = (PACKAGE / "features" / "work" / "tests" / "test_admin_refresh_reset_repository.py").read_text(encoding="utf-8")
     work_legacy_item_use = (PACKAGE / "compatibility" / "legacy_work_item_use.py").read_text(encoding="utf-8")
     work_legacy_daily_refresh = (PACKAGE / "compatibility" / "legacy_work_daily_refresh_reset.py").read_text(encoding="utf-8")
     work_legacy_settlement = (PACKAGE / "compatibility" / "legacy_work_settlement.py").read_text(encoding="utf-8")
@@ -628,6 +630,9 @@ def _slice_status() -> dict[str, dict[str, object]]:
     admin_novice_reset_handler = admin_facade[
         admin_facade.index("@xiuxian_novice.handle") : admin_facade.index("@create_new_rift.handle")
     ]
+    admin_work_reset_handler = admin_facade[
+        admin_facade.index("@do_work_cz.handle") : admin_facade.index("@training_reset.handle")
+    ]
     admin_root_handler = admin_facade[
         admin_facade.index("async def gmm_command_") : admin_facade.index("@cz.handle")
     ]
@@ -785,6 +790,28 @@ def _slice_status() -> dict[str, dict[str, object]]:
         "work": {
             "daily_refresh_application_owned": "work_daily_refresh_application.reset(" in work_facade,
             "legacy_daily_refresh_disabled": "_work_daily_refresh_reset_service" not in work_facade,
+            "admin_global_reset_application_owned": (
+                "asyncio.to_thread(" in admin_work_reset_handler
+                and "work_admin_refresh_reset_application.reset_all," in admin_work_reset_handler
+                and "_sql_message().reset_work_num(" not in admin_work_reset_handler
+            ),
+            "admin_global_reset_reuses_platform_ledger": (
+                "class WorkAdminRefreshResetSqlRepository" in work_admin_reset_repository
+                and "OperationLedger" in work_admin_reset_repository
+                and "operation_audit" in work_admin_reset_repository
+            ),
+            "admin_global_reset_atomic_without_ddl_or_user_cache": (
+                "DatabaseUnitOfWork(self.database, immediate=True)" in work_admin_reset_repository
+                and "UPDATE user_xiuxian SET work_num=? WHERE work_num IS NOT ?" in work_admin_reset_repository
+                and "CREATE TABLE" not in work_admin_reset_repository
+                and "ALTER TABLE" not in work_admin_reset_repository
+                and "SELECT user_id" not in work_admin_reset_repository
+            ),
+            "admin_global_reset_replay_conflict_and_rollback_covered": (
+                "operation_conflict" in work_admin_reset_repository
+                and "fail_work_reset_audit" in work_admin_reset_tests
+                and "schema_missing" in work_admin_reset_tests
+            ),
             "item_accelerate_application_owned": "work_item_use_application.accelerate(" in work_accelerate_handler,
             "legacy_item_accelerate_disabled": "_work_item_use_service().accelerate(" not in work_accelerate_handler,
             "capture_application_owned": "work_item_use_application.capture(" in work_capture_handler,

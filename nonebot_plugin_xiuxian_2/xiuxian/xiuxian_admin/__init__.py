@@ -14,6 +14,7 @@ from ...features.admin_asset.application import AdminAssetApplication
 from ...features.admin_asset.root_repository import AdminRootChangeSqlRepository
 from ...features.admin.application import AdminApplication
 from ...features.base.application import BaseApplication
+from ...features.work.admin_refresh_reset_application import WorkAdminRefreshResetApplication
 from nonebot.typing import T_State
 from nonebot.permission import SUPERUSER
 from nonebot.log import logger
@@ -84,6 +85,7 @@ items = Items()
 _sql_message_instance = None
 _admin_exp_adjustment_service_instance = None
 admin_asset_application = AdminAssetApplication(get_paths().game_db)
+work_admin_refresh_reset_application = WorkAdminRefreshResetApplication(get_paths().game_db)
 admin_application = AdminApplication(get_paths().game_db)
 admin_base_application = BaseApplication(get_paths().game_db, get_paths().player_db)
 _admin_item_destroy_service_instance = None
@@ -1807,8 +1809,29 @@ async def create_new_rift_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
 async def do_work_cz_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """重置所有用户的悬赏令"""
     from ..xiuxian_work import count
-    _sql_message().reset_work_num(count)
-    msg = "用户悬赏令刷新次数重置成功"
+    operation_id = _admin_operation_id(event, "work-refresh-reset", "all")
+    operator_id = str(get_user_id(event) or "unknown")
+    try:
+        result = await asyncio.to_thread(
+            work_admin_refresh_reset_application.reset_all,
+            operation_id,
+            operator_id,
+            count,
+        )
+    except Exception as exc:
+        logger.exception(f"全服悬赏令刷新次数重置事务失败：{exc}")
+        msg = "用户悬赏令刷新次数重置失败，请检查服务日志。"
+    else:
+        if result.status == "schema_missing":
+            msg = "悬赏令刷新次数重置服务尚未就绪，请检查启动迁移。"
+        elif result.status == "operation_conflict":
+            msg = "本次悬赏令刷新次数重置与已记录操作冲突。"
+        elif result.status == "duplicate":
+            msg = "该悬赏令刷新次数重置请求此前已完成。"
+        elif result.succeeded:
+            msg = "用户悬赏令刷新次数重置成功"
+        else:
+            msg = "用户悬赏令刷新次数重置未完成，请检查服务日志。"
     await handle_send(bot, event, msg)
     await do_work_cz.finish()
 

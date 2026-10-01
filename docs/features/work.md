@@ -18,7 +18,7 @@
 
 ## 数据模型与迁移
 
-`work.001` 写入功能迁移标记；`work.003` 在 game DB 创建 `work_item_use_operations`，`work.004` 用 `CREATE TABLE IF NOT EXISTS` 建立兼容现有数据的 `work_offer_snapshots`，`work.005` 预建 `work_refresh_operations` 并保留已有刷新回执，`work.006` 预建 `work_active_snapshots` 和 `work_abort_cleanup_operations`，保留已有快照与清理回执，`work.007` 预建 `work_claim_operations` 并保留已有接取回执，`work.008` 预建 `work_settlement_operations` 并为历史表补齐 `result_json`。所有 work migration 均在启动阶段注册，结算请求只校验 schema，不在请求期建表。
+`work.001` 写入功能迁移标记；`work.003` 在 game DB 创建 `work_item_use_operations`，`work.004` 用 `CREATE TABLE IF NOT EXISTS` 建立兼容现有数据的 `work_offer_snapshots`，`work.005` 预建 `work_refresh_operations` 并保留已有刷新回执，`work.006` 预建 `work_active_snapshots` 和 `work_abort_cleanup_operations`，保留已有快照与清理回执，`work.007` 预建 `work_claim_operations` 并保留已有接取回执，`work.008` 预建 `work_settlement_operations` 并为历史表补齐 `result_json`。所有 work migration 均在启动阶段注册，结算请求只校验 schema，不在请求期建表。管理员 `重置悬赏令` 通过 `WorkAdminRefreshResetApplication -> WorkAdminRefreshResetSqlRepository` 在单一事务中扫描全表，仅更新次数与目标值不同的记录，减少无效 WAL 写入；复用 `platform.001` operation ledger/audit，不新增迁移、不加载用户 ID 列表。它与按业务日冻结用户集合的 scheduler daily reset 保持独立语义。
 悬赏令加速道具与追捕令都经 `WorkItemUseApplication -> WorkItemUseSqlRepository`；加速原子扣除一个道具并将已接取悬赏的开始时间置为立即可结算，追捕令原子扣除道具并保存随机 offer 与首次奖励倍率。两种动作都按库存快照校验，捕获令重放返回首次保存的 offer 和倍率。`work.002` 负责每日刷新重置，默认 scheduler 经 `WorkDailyRefreshResetApplication -> WorkDailyRefreshResetRepository` 分块处理冻结用户集合；旧 reset service 仅保留 compatibility rollback API。接取由 `WorkClaimApplication -> WorkClaimSqlRepository` 承担，结算由 `WorkSettlementApplication -> WorkSettlementSqlRepository` 承担，两个 repository 均以单一 immediate UoW 校验状态、更新资产和写 operation receipt；历史 JSON 仅作为兼容读取/展示投影。
 
 ## 事务与失败回滚

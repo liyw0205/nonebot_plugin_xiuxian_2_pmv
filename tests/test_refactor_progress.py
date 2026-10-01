@@ -63,6 +63,10 @@ class RefactorProgressTests(unittest.TestCase):
         work = slices["work"]
         self.assertTrue(work["daily_refresh_application_owned"])
         self.assertTrue(work["legacy_daily_refresh_disabled"])
+        self.assertTrue(work["admin_global_reset_application_owned"])
+        self.assertTrue(work["admin_global_reset_reuses_platform_ledger"])
+        self.assertTrue(work["admin_global_reset_atomic_without_ddl_or_user_cache"])
+        self.assertTrue(work["admin_global_reset_replay_conflict_and_rollback_covered"])
         self.assertTrue(work["item_accelerate_application_owned"])
         self.assertTrue(work["legacy_item_accelerate_disabled"])
         self.assertTrue(work["capture_application_owned"])
