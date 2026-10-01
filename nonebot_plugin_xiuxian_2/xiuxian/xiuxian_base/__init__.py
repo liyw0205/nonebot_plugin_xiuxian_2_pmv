@@ -211,6 +211,29 @@ def _player_rename_operation_id(event, rename_type, user_id):
     return f"player-rename:{rename_type}:{user_id}:{runtime_ids.new_id()}"
 
 
+def _root_reroll_operation_id(event, user_id):
+    event_id = str(
+        getattr(event, "message_id", "") or getattr(event, "id", "") or ""
+    ).strip()
+    if event_id:
+        return f"root-reroll:{event_id}:{user_id}"
+    return f"root-reroll:{user_id}:{runtime_ids.new_id()}"
+
+
+def _root_reroll_snapshot(user_info):
+    fields = ("root", "root_type", "root_level", "level", "exp", "power", "stone")
+    return {field: user_info.get(field) for field in fields}
+
+
+def _root_reroll_success_message(result, *, duplicate=False):
+    message = (
+        f"逆天之行，重获新生，新的灵根为：{result.root}，类型为：{result.root_type}"
+    )
+    if duplicate:
+        message += "\n该重入仙途请求已经处理，无需重复提交。"
+    return message
+
+
 def _stone_gift_operation_id(event, sender_id, recipient_id):
     event_id = str(
         getattr(event, "message_id", "") or getattr(event, "id", "") or ""
@@ -1034,12 +1057,18 @@ async def restart_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, sta
         await handle_send(bot, event, msg, md_type="我要修仙")
         await restart.finish()
 
+    user_id = user_info['user_id']
+    operation_id = _root_reroll_operation_id(event, user_id)
+    previous = base_application.get_root_reroll_result(operation_id, user_id)
+    if previous is not None and previous.succeeded:
+        await handle_send(bot, event, _root_reroll_success_message(previous, duplicate=True))
+        await restart.finish()
+
     if user_info['stone'] < XiuConfig().remake:
         msg = "你的灵石还不够呢，快去赚点灵石吧！"
         await handle_send(bot, event, msg)
         await restart.finish()
 
-    user_id = user_info['user_id']
     user_root = user_info['root_type']
   
     if user_root == '轮回道果' or user_root == '真·轮回道果' or user_root == '永恒道果' or user_root == '命运道果':
@@ -1062,12 +1091,32 @@ async def restart_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, sta
         # 按灵根倍率排序选择最佳灵根
         selected_name, selected_root_type = max(linggen_options, 
                                              key=lambda x: jsondata.root_data()[x[1]]["type_speeds"])
-        msg = _sql_message().ramaker(selected_name, selected_root_type, user_id)
+        result = base_application.reroll_root(
+            operation_id=operation_id,
+            user_id=user_id,
+            expected_snapshot=_root_reroll_snapshot(user_info),
+            root=selected_name,
+            root_type=selected_root_type,
+            stone_cost=XiuConfig().remake,
+            root_rate=_sql_message().get_root_rate(selected_root_type, user_id),
+            level_spend=jsondata.level_data()[user_info['level']]["spend"],
+        )
+        if result.succeeded:
+            msg = _root_reroll_success_message(result)
+        elif result.status == "stone_insufficient":
+            msg = "你的灵石还不够呢，快去赚点灵石吧！"
+        elif result.status == "state_changed":
+            msg = "角色状态已变化，请重新发起重入仙途。"
+        else:
+            msg = "重入仙途服务暂不可用，请检查数据库迁移后重试。"
         await handle_send(bot, event, msg)
         await restart.finish()
     else:
         # 保留原来的手动选择逻辑
         state["user_id"] = user_id
+        state["sender_id"] = str(event.get_user_id())
+        state["root_reroll_operation_id"] = operation_id
+        state["root_reroll_snapshot"] = _root_reroll_snapshot(user_info)
         msg = f"{linggen_list_msg}\n\n请从以上灵根中选择一个:\n请输入对应的数字选择 (1-10):"
         state["linggen_options"] = linggen_options
         await handle_send(bot, event, msg, md_type="修仙", k1="手动选择", v1=" ", k2="自动最好", v2="最好", k3="刷新", v3="0")
@@ -1076,8 +1125,22 @@ async def restart_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, sta
 @restart.receive()
 async def handle_user_choice(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, state: T_State):
     user_choice = event.get_plaintext().strip()
-    linggen_options = state["linggen_options"]
-    user_id = state["user_id"]  # 从状态中获取用户ID
+    linggen_options = state.get("linggen_options")
+    user_id = state.get("user_id")
+    operation_id = state.get("root_reroll_operation_id")
+    snapshot = state.get("root_reroll_snapshot")
+    if not linggen_options or not user_id or not operation_id or not snapshot:
+        await handle_send(bot, event, "选择状态已失效，请重新发起重入仙途。")
+        return
+    if str(event.get_user_id()) != str(state.get("sender_id", "")):
+        await handle_send(bot, event, "此灵根选择不属于当前道友。")
+        return
+
+    previous = base_application.get_root_reroll_result(operation_id, user_id)
+    if previous is not None and previous.succeeded:
+        await handle_send(bot, event, _root_reroll_success_message(previous, duplicate=True))
+        return
+
     selected_name, selected_root_type = max(linggen_options, key=lambda x: jsondata.root_data()[x[1]]["type_speeds"])
 
     if user_choice.isdigit(): # 判断数字
@@ -1094,7 +1157,24 @@ async def handle_user_choice(bot: Bot, event: GroupMessageEvent | PrivateMessage
         else:
             msg = "输入有误，帮你自动选择最佳灵根了嗷！\n"
    
-    msg += _sql_message().ramaker(selected_name, selected_root_type, user_id)
+    result = base_application.reroll_root(
+        operation_id=operation_id,
+        user_id=user_id,
+        expected_snapshot=snapshot,
+        root=selected_name,
+        root_type=selected_root_type,
+        stone_cost=XiuConfig().remake,
+        root_rate=_sql_message().get_root_rate(selected_root_type, user_id),
+        level_spend=jsondata.level_data()[snapshot["level"]]["spend"],
+    )
+    if result.succeeded:
+        msg += _root_reroll_success_message(result)
+    elif result.status == "stone_insufficient":
+        msg += f"重入仙途需要消耗{XiuConfig().remake}灵石，你的灵石不足！"
+    elif result.status == "state_changed":
+        msg += "角色状态已变化，请重新发起重入仙途。"
+    else:
+        msg += "重入仙途服务暂不可用，请检查数据库迁移后重试。"
 
     await handle_send(bot, event, msg)
 

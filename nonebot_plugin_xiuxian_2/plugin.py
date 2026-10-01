@@ -73,6 +73,7 @@ from .features.base.manifest import FEATURE as BASE_FEATURE
 from .features.base.migrations import (
     apply_base,
     apply_base_player_rename_operations,
+    apply_base_root_reroll_operations,
     apply_base_stone_contest_operations,
     apply_base_stone_robbery_operations,
     apply_base_stone_robbery_player_statistics,
@@ -281,6 +282,7 @@ def build_migrations() -> tuple[Migration, ...]:
         Migration("base.005", "stone_robbery_player_statistics", apply_base_stone_robbery_player_statistics),
         Migration("base.006", "xiangyuan_projection", apply_base_xiangyuan),
         Migration("base.007", "xiangyuan_player_limits", apply_base_xiangyuan_player),
+        Migration("base.008", "player_root_reroll_operations", apply_base_root_reroll_operations),
         Migration("beg.001", "beg_feature_migrations", apply_beg),
         Migration("boss.001", "boss_feature_migrations", apply_boss),
         Migration("boss.002", "boss_purchase_operations", apply_boss_purchase),

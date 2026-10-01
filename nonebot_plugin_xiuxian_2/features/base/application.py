@@ -7,6 +7,7 @@ from .._legacy_application import LegacyApplication
 from .contest_repository import BaseStoneContestSqlRepository
 from .repository import BaseRepository
 from .rename_repository import BaseRenameSqlRepository
+from .root_reroll_repository import BaseRootRerollSqlRepository
 from .robbery_repository import BaseStoneRobberySqlRepository
 from .theft_repository import BaseStoneTheftSqlRepository
 from .xiangyuan_application import XiangyuanApplication
@@ -25,6 +26,19 @@ class BaseApplication(LegacyApplication):
     def tribulation(self, *, operation_id: str, user_id: str, **kwargs: Any): return self._action("tribulation", operation_id=operation_id, user_id=user_id, **kwargs)
     def get_rename_result(self, operation_id: str):
         return BaseRenameSqlRepository(self.database).get_result(operation_id)
+    def get_root_reroll_result(self, operation_id: str, user_id: str | None = None):
+        return BaseRootRerollSqlRepository(self.database).get_result(operation_id, user_id)
+    def reroll_root(self, *, operation_id: str, user_id: str, **kwargs: Any):
+        return BaseRootRerollSqlRepository(self.database).reroll(
+            operation_id,
+            user_id,
+            kwargs.get("expected_snapshot", {}),
+            kwargs.get("root", ""),
+            kwargs.get("root_type", ""),
+            kwargs.get("stone_cost", 0),
+            kwargs.get("root_rate", 0),
+            kwargs.get("level_spend", 0),
+        )
     def rename(self, *, operation_id: str, user_id: str, **kwargs: Any):
         if self.repository is None:
             return self._execute(operation_id=operation_id, user_id=user_id, action="base.rename", payload={"user_id": user_id, **kwargs}, call=lambda: BaseRenameSqlRepository(self.database).rename(operation_id, user_id, kwargs.get("rename_kind", "user"), kwargs.get("new_name", ""), item_id=kwargs.get("item_id"), stone_cost=int(kwargs.get("stone_cost", 0) or 0)))

@@ -24,6 +24,21 @@ def apply_base_player_rename_operations(uow: DatabaseUnitOfWork) -> None:
         uow.execute("ALTER TABLE player_rename_operations ADD COLUMN payload TEXT")
 
 
+def apply_base_root_reroll_operations(uow: DatabaseUnitOfWork) -> None:
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS player_root_reroll_operations("
+        "operation_id TEXT PRIMARY KEY,user_id TEXT NOT NULL,payload TEXT NOT NULL,"
+        "result_json TEXT NOT NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+    )
+    columns = {
+        str(row["name"]).casefold()
+        for row in uow.query_all('PRAGMA table_info("player_root_reroll_operations")')
+    }
+    required = {"operation_id", "user_id", "payload", "result_json", "created_at"}
+    if not required.issubset(columns):
+        raise RuntimeError("player_root_reroll_operations has an unsupported schema")
+
+
 def apply_base_stone_contest_operations(uow: DatabaseUnitOfWork) -> None:
     uow.execute(
         "CREATE TABLE IF NOT EXISTS stone_contest_operations("
@@ -147,6 +162,7 @@ def apply_base_xiangyuan_player(uow: DatabaseUnitOfWork) -> None:
 __all__ = [
     "apply_base",
     "apply_base_player_rename_operations",
+    "apply_base_root_reroll_operations",
     "apply_base_stone_contest_operations",
     "apply_base_stone_robbery_operations",
     "apply_base_stone_robbery_player_statistics",

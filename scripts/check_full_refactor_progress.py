@@ -94,6 +94,7 @@ def _has_production_bank_savef_import() -> bool:
 
 def _slice_status() -> dict[str, dict[str, object]]:
     base = (PACKAGE / "xiuxian" / "xiuxian_base" / "__init__.py").read_text(encoding="utf-8")
+    base_root_reroll_handler = base[base.index("@restart.handle"):base.index("@rank.handle")]
     legacy_handle = (PACKAGE / "xiuxian" / "xiuxian_utils" / "xiuxian2_handle.py").read_text(encoding="utf-8")
     wishing_stone_writer = legacy_handle.split("def convert_stone_to_wishing_stone", 1)[1].split(
         "def add_impart_exp_day", 1
@@ -104,6 +105,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
     base_theft_repository = (PACKAGE / "features" / "base" / "theft_repository.py").read_text(encoding="utf-8")
     base_contest_repository = (PACKAGE / "features" / "base" / "contest_repository.py").read_text(encoding="utf-8")
     base_robbery_repository = (PACKAGE / "features" / "base" / "robbery_repository.py").read_text(encoding="utf-8")
+    base_root_reroll_repository = (PACKAGE / "features" / "base" / "root_reroll_repository.py").read_text(encoding="utf-8")
     base_xiangyuan_repository = (PACKAGE / "features" / "base" / "xiangyuan_repository.py").read_text(encoding="utf-8")
     base_xiangyuan_application = (PACKAGE / "features" / "base" / "xiangyuan_application.py").read_text(encoding="utf-8")
     base_stamina_application = (PACKAGE / "features" / "base" / "stamina_application.py").read_text(encoding="utf-8")
@@ -1909,7 +1911,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
             ),
             "stone_theft_startup_migration_registered": (
                 'Migration("base.003", "stone_contest_operations", apply_base_stone_contest_operations)' in plugin
-                and 'migration_version="base.005"' in base_manifest
+                and 'migration_version="base.008"' in base_manifest
                 and "def apply_base_stone_contest_operations(" in base_migrations
             ),
             "stone_theft_migration_game_only": (
@@ -1945,6 +1947,27 @@ def _slice_status() -> dict[str, dict[str, object]]:
                 and "base.005" in plugin[plugin.index("_PLAYER_DATABASE_MIGRATION_VERSIONS"):plugin.index("_TRADE_DATABASE_MIGRATION_VERSIONS")]
             ),
             "stone_robbery_service_isolated": "class StoneRobberySettlementService" not in base_transaction and "class StoneRobberySettlementService" in stone_robbery_compatibility and "stone_robbery_operations" in stone_robbery_compatibility,
+            "root_reroll_default_application_owned": (
+                "base_application.reroll_root(" in base_root_reroll_handler
+                and "base_application.get_root_reroll_result(" in base_root_reroll_handler
+                and "ramaker(" not in base_root_reroll_handler
+                and base_root_reroll_handler.index("get_root_reroll_result(")
+                < base_root_reroll_handler.index("if user_info['stone'] < XiuConfig().remake")
+            ),
+            "root_reroll_repository_has_no_request_ddl": (
+                "CREATE TABLE" not in base_root_reroll_repository
+                and "ALTER TABLE" not in base_root_reroll_repository
+                and "immediate=True" in base_root_reroll_repository
+            ),
+            "root_reroll_startup_migration_registered": (
+                'Migration("base.008", "player_root_reroll_operations", apply_base_root_reroll_operations)' in plugin
+                and "def apply_base_root_reroll_operations(" in base_migrations
+                and 'migration_version="base.008"' in base_manifest
+            ),
+            "root_reroll_migration_game_only": (
+                "base.008" not in plugin[plugin.index("_GAME_DATABASE_EXCLUDED_MIGRATION_VERSIONS"):plugin.index("_PLAYER_DATABASE_MIGRATION_VERSIONS")]
+                and "base.008" not in plugin[plugin.index("_PLAYER_DATABASE_MIGRATION_VERSIONS"):plugin.index("_TRADE_DATABASE_MIGRATION_VERSIONS")]
+            ),
             "xiangyuan_service_isolated": "class XiangyuanSettlementService" not in base_transaction and "class XiangyuanSettlementService" in xiangyuan_compatibility and "xiangyuan_create_operations" in xiangyuan_compatibility and "xiangyuan_claim_operations" in xiangyuan_compatibility,
             "xiangyuan_default_application_owned": (
                 "XiangyuanApplication" in xiangyuan_facade
@@ -1978,7 +2001,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "heart_devil_tribulation_service_isolated": "class HeartDevilTribulationService" not in base_transaction and "class HeartDevilTribulationService" in heart_devil_tribulation_compatibility and "heart_devil_tribulation_operations" in heart_devil_tribulation_compatibility,
             "pill_fusion_service_isolated": "class PillFusionService" not in base_transaction and "class PillFusionService" in pill_fusion_compatibility and "pill_fusion_operations" in pill_fusion_compatibility,
             "tribulation_state_migration_service_isolated": "class TribulationStateMigrationService" not in base_transaction and "class TribulationStateMigrationService" in tribulation_state_migration_compatibility and "tribulation_state_migration_operations" in tribulation_state_migration_compatibility,
-            "status": "cooldown_and_scheduled_stamina_recovery_owned_with_stone_theft_robbery_settlement_rename_replay_and_remaining_base_compatibility_isolation",
+            "status": "cooldown_and_scheduled_stamina_recovery_owned_with_stone_theft_robbery_settlement_rename_and_root_reroll_replay_with_remaining_base_compatibility_isolation",
         },
         "puppet": {
             "purchase_application_owned": (

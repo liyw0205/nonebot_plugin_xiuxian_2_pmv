@@ -2,6 +2,16 @@
 
 状态：进行中。`v1.1.0` 的 P0-P7 发布证据继续保留，但不作为底层全面重构完成证明。
 
+2026-10-01 player root-reroll write boundary：`重入仙途` 自动择优/手动选择默认写入改经
+`BaseApplication -> BaseRootRerollSqlRepository`，用 game-only `base.008` 回执与玩家快照 CAS
+原子更新灵根、战力和灵石；重复消息返回首次结果，手动选择绑定发起用户/操作 ID/初始快照。请求期
+不建表，缺迁移/schema、灵石不足或快照变化 fail closed；旧 `ramaker` 不再进入默认 handler。
+新增迁移幂等、战力计算、重放/冲突、余额不足、快照冲突、缺 schema 和路由回归；base/economy/
+progress 聚焦集 `54 passed`，末次 repository/progress `6 passed`，architecture `ok=true`，
+inventory freshness 与 `git diff --check` 通过。测试禁用 pytest/字节码缓存并清理专用 basetemp；
+用户 `boss_info.json` 修改保留。下一项继续按 6.2 审计 player/economy 剩余旧写路径；全局旧
+transaction services、`xiuxian2_handle` 和正式发布/P7 仍未完成 blocker。
+
 2026-10-01 player experience normalization boundary：`抑制黑暗动乱` 不再把读取到的旧修为交给
 `XiuxianDateManage.del_exp_decimal` 无条件覆盖；改经 `PlayerEconomyApplication.normalize_experience`，
 按首条用户 row 与当前修为快照 CAS 截断小数，重复整理无写入，缺 schema/用户或状态变化 fail closed。

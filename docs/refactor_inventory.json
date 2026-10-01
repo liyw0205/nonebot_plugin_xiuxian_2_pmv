@@ -2973,6 +2973,7 @@
     "player_pet",
     "player_pet_item",
     "player_rename_operations",
+    "player_root_reroll_operations",
     "ports",
     "production",
     "puppet_feature_migrations",
