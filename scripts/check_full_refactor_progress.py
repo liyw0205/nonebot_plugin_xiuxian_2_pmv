@@ -622,6 +622,9 @@ def _slice_status() -> dict[str, dict[str, object]]:
     admin_level_handler = admin_facade[
         admin_facade.index("async def zaohua_xiuxian_") : admin_facade.index("@gmm_command.handle")
     ]
+    admin_realm_adaptation_handler = admin_facade[
+        admin_facade.index("@xiuxian_updata_level.handle") : admin_facade.index("@clear_xiangyuan.handle")
+    ]
     admin_root_handler = admin_facade[
         admin_facade.index("async def gmm_command_") : admin_facade.index("@cz.handle")
     ]
@@ -637,6 +640,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
     admin_item_repository = (PACKAGE / "features" / "admin_asset" / "item_repository.py").read_text(encoding="utf-8")
     admin_item_batch_repository = (PACKAGE / "features" / "admin_asset" / "item_batch_repository.py").read_text(encoding="utf-8")
     admin_level_repository = (PACKAGE / "features" / "admin_asset" / "level_repository.py").read_text(encoding="utf-8")
+    admin_legacy_realm_adaptation_repository = (PACKAGE / "features" / "admin_asset" / "legacy_realm_adaptation_repository.py").read_text(encoding="utf-8")
     admin_root_repository = (PACKAGE / "features" / "admin_asset" / "root_repository.py").read_text(encoding="utf-8")
     admin_impart_stone_repository = (PACKAGE / "features" / "admin_asset" / "impart_stone_repository.py").read_text(encoding="utf-8")
     admin_impart_stone_batch_repository = (PACKAGE / "features" / "admin_asset" / "impart_stone_batch_repository.py").read_text(encoding="utf-8")
@@ -2662,6 +2666,27 @@ def _slice_status() -> dict[str, dict[str, object]]:
             ),
             "exp_adjust_application_owned": "admin_asset_application.adjust_exp(" in admin_facade,
             "level_change_application_owned": "admin_asset_application.change_level(" in admin_facade,
+            "legacy_realm_adaptation_application_owned": (
+                "admin_asset_application.adapt_legacy_realms(" in admin_realm_adaptation_handler
+                and "_sql_message().updata_level(" not in admin_realm_adaptation_handler
+                and "get_all_user_id()" not in admin_realm_adaptation_handler
+            ),
+            "legacy_realm_adaptation_repository_atomic": (
+                "class AdminLegacyRealmAdaptationSqlRepository" in admin_legacy_realm_adaptation_repository
+                and "DatabaseUnitOfWork" in admin_legacy_realm_adaptation_repository
+                and "immediate=True" in admin_legacy_realm_adaptation_repository
+                and "admin_level_change_operations" in admin_legacy_realm_adaptation_repository
+            ),
+            "legacy_realm_adaptation_request_path_has_no_ddl": (
+                "CREATE TABLE" not in admin_legacy_realm_adaptation_repository
+                and "ALTER TABLE" not in admin_legacy_realm_adaptation_repository
+                and "_schema_ready" in admin_legacy_realm_adaptation_repository
+            ),
+            "legacy_realm_adaptation_replay_and_rollback_covered": (
+                "operation_conflict" in admin_legacy_realm_adaptation_repository
+                and "result_json" in admin_legacy_realm_adaptation_repository
+                and "fail_realm_adaptation_receipt" in (PACKAGE / "features" / "admin_asset" / "tests" / "test_legacy_realm_adaptation_repository.py").read_text(encoding="utf-8")
+            ),
             "root_change_application_owned": "admin_asset_application.change_root(" in admin_facade,
             "impart_stone_application_owned": "admin_asset_application.adjust_impart_stone(" in admin_facade,
             "accessory_application_owned": "admin_asset_application.adjust_accessory(" in admin_facade,

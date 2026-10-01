@@ -1717,7 +1717,6 @@ async def set_auto_sect_name_(bot: Bot, event: GroupMessageEvent | PrivateMessag
 async def xiuxian_updata_level_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """将修仙2的境界适配到修仙2魔改"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
-    
     level_dict = {
         "搬血境": "感气境",
         "洞天境": "练气境",
@@ -1735,51 +1734,37 @@ async def xiuxian_updata_level_(bot: Bot, event: GroupMessageEvent | PrivateMess
         "仙帝境": "耀日境"
     }
     
-    # 获取所有用户
-    all_users = _sql_message().get_all_user_id()
-    adapted_count = 0
-    success_count = 0
-    failed_count = 0
-    
-    for user in all_users:
-        user_info = _sql_message().get_user_info_with_id(user)
-        user_id = user_info['user_id']
-        old_level = user_info['level']
-        try:
-            
-            if old_level.endswith(('初期', '中期', '圆满')):
-                base_level = old_level[:-2]
-                stage = old_level[-2:]
+    operation_id = _admin_operation_id(event, "realm-adaptation-all", "all")
+    operator_id = str(get_user_id(event) or "unknown")
+    try:
+        result = admin_asset_application.adapt_legacy_realms(
+            operation_id=operation_id,
+            operator_id=operator_id,
+            level_mapping=level_dict,
+        )
+    except Exception as exc:
+        logger.exception(f"全服境界适配事务失败：{exc}")
+        msg = "境界适配事务失败，未更新玩家数据，请检查服务日志。"
+    else:
+        if result.status == "schema_missing":
+            msg = "境界适配服务尚未就绪，请检查启动迁移。"
+        elif result.status == "operation_conflict":
+            msg = "本次境界适配请求与已记录操作冲突。"
+        else:
+            if result.status == "duplicate":
+                msg = "该境界适配请求此前已完成。\n"
             else:
-                base_level = old_level
-                stage = ""
-            
-            # 进行境界适配
-            if base_level in level_dict:
-                new_level = level_dict[base_level] + stage
-                _sql_message().updata_level(user_id=user_id, level_name=new_level)
-                adapted_count += 1
-                
-                # 记录适配日志
-                logger.info(f"境界适配成功：用户 {user_id} 从【{old_level}】适配为【{new_level}】")
-                
-            else:
-                # 如果不在适配字典中，跳过
-                success_count += 1
-                logger.info(f"境界无需适配：用户 {user_id} 境界【{old_level}】不在适配范围内")
-                
-        except Exception as e:
-            failed_count += 1
-            logger.error(f"境界适配失败：用户 {user_id} 错误：{str(e)}")
-    
-    # 构建结果消息
-    msg = f'境界适配完成！\n成功适配：{adapted_count} 个用户\n适配失败：{failed_count} 个用户\n无需适配：{success_count} 个用户'
-    
-    if adapted_count >= 0:
-        msg += f'\n\n适配规则：\n'
-        for old, new in level_dict.items():
-            msg += f"{old} → {new}\n"
-    
+                msg = "境界适配完成！\n"
+            msg += (
+                f"成功适配：{result.adapted_count} 个用户\n"
+                f"适配失败：{result.failed_count} 个用户\n"
+                f"无需适配：{result.success_count} 个用户"
+            )
+        if result.status in {"applied", "duplicate"}:
+            msg += "\n\n适配规则：\n"
+            for old, new in level_dict.items():
+                msg += f"{old} → {new}\n"
+
     await handle_send(bot, event, msg)
     await xiuxian_updata_level.finish()
 

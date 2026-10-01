@@ -102,6 +102,21 @@ def test_admin_realm_changes_use_game_startup_schema_and_no_legacy_getters():
     assert "AdminRootChangeSqlRepository.root_values(" in root_handler
 
 
+def test_legacy_realm_adaptation_uses_atomic_feature_repository():
+    root = Path(__file__).parents[1]
+    admin = (root / "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py").read_text(encoding="utf-8")
+    application = (root / "nonebot_plugin_xiuxian_2/features/admin_asset/application.py").read_text(encoding="utf-8")
+    repository = (root / "nonebot_plugin_xiuxian_2/features/admin_asset/legacy_realm_adaptation_repository.py").read_text(encoding="utf-8")
+    handler = admin[admin.index("@xiuxian_updata_level.handle") : admin.index("@clear_xiangyuan.handle")]
+    assert "admin_asset_application.adapt_legacy_realms(" in handler
+    assert "_sql_message().updata_level(" not in handler
+    assert "get_all_user_id()" not in handler
+    assert "AdminLegacyRealmAdaptationSqlRepository" in application
+    assert "DatabaseUnitOfWork" in repository
+    assert "CREATE TABLE" not in repository
+    assert "admin_level_change_operations" in repository
+
+
 def test_admin_impart_stone_uses_impart_balance_with_game_startup_receipt():
     root = Path(__file__).parents[1]
     plugin = (root / "nonebot_plugin_xiuxian_2/plugin.py").read_text(encoding="utf-8")
