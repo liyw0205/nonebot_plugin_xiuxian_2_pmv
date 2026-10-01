@@ -20,6 +20,7 @@ def test_compensation_claim_schema_is_registered_as_followup_legacy_migration():
     assert "legacy.compensation.002" in versions
     assert "legacy.compensation.003" in versions
     assert "legacy.compensation.004" in versions
+    assert "legacy.compensation.005" in versions
     assert versions == sorted(set(versions))
 
 
@@ -58,5 +59,8 @@ def test_progress_gate_covers_compensation_request_schema_boundary():
     assert status["invitation_definition_migration_owned"]
     assert status["invitation_definition_application_owned"]
     assert status["invitation_definition_schema_checked"]
+    assert status["definition_schema_migration_owned"]
+    assert status["definition_request_path_has_no_ddl"]
+    assert status["definition_legacy_migration_receipt_checked"]
     assert status["reward_inventory_application_owned"]
     assert status["reward_inventory_legacy_writer_disabled"]

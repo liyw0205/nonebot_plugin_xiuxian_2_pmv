@@ -45,8 +45,6 @@ class CompensationMutationResult:
 class CompensationDefinitionService:
     """Database source of truth for versioned compensation definitions."""
 
-    _MIGRATION_KEY = "legacy-compensation-json-v1"
-
     def __init__(
         self,
         database: str | Path,
@@ -89,129 +87,32 @@ class CompensationDefinitionService:
         )
         return normalized, payload
 
-    @staticmethod
-    def _load_json_dict(path: Path | None) -> dict:
-        if path is None or not path.is_file():
-            return {}
-        try:
-            with path.open("r", encoding="utf-8") as file:
-                value = json.load(file)
-        except (OSError, ValueError, TypeError):
-            return {}
-        return value if isinstance(value, dict) else {}
-
-    @staticmethod
-    def _ensure_schema(conn) -> None:
-        conn.execute(
-            "CREATE TABLE IF NOT EXISTS compensation_definition_revisions("
-            "record_id TEXT PRIMARY KEY,last_version INTEGER NOT NULL)"
-        )
-        conn.execute(
-            "CREATE TABLE IF NOT EXISTS compensation_definitions("
-            "record_id TEXT PRIMARY KEY,version INTEGER NOT NULL,record_json TEXT NOT NULL,"
-            "created_at TEXT NOT NULL,updated_at TEXT NOT NULL)"
-        )
-        conn.execute(
-            "CREATE TABLE IF NOT EXISTS compensation_definition_operations("
-            "operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,action TEXT NOT NULL,"
-            "record_id TEXT NOT NULL DEFAULT '',version INTEGER NOT NULL DEFAULT 0,"
-            "outcome TEXT NOT NULL,removed_definitions INTEGER NOT NULL DEFAULT 0,"
-            "removed_claims INTEGER NOT NULL DEFAULT 0,created_at TEXT NOT NULL,"
-            "result_json TEXT NOT NULL DEFAULT '{}')"
-        )
+    def _prepare(self, conn) -> None:
+        required_tables = {
+            "compensation_definition_revisions",
+            "compensation_definitions",
+            "compensation_definition_operations",
+            "compensation_legacy_migrations",
+            "reward_claims",
+            "reward_claim_counters",
+        }
+        tables = {
+            str(row[0])
+            for row in conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'"
+            ).fetchall()
+        }
+        if not required_tables.issubset(tables):
+            raise RuntimeError("compensation definition schema is missing; run startup migrations")
         if "result_json" not in conn.column_names(
             "compensation_definition_operations"
         ):
-            conn.execute(
-                "ALTER TABLE compensation_definition_operations ADD COLUMN "
-                "result_json TEXT NOT NULL DEFAULT '{}'"
-            )
-        conn.execute(
-            "CREATE TABLE IF NOT EXISTS compensation_legacy_migrations("
-            "migration_key TEXT PRIMARY KEY,definitions_payload TEXT NOT NULL,"
-            "claims_payload TEXT NOT NULL,migrated_at TEXT NOT NULL)"
-        )
-        conn.execute(
-            "CREATE TABLE IF NOT EXISTS reward_claims("
-            "reward_type TEXT NOT NULL,record_id TEXT NOT NULL,user_id TEXT NOT NULL,"
-            "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,"
-            "PRIMARY KEY(reward_type,record_id,user_id))"
-        )
-        conn.execute(
-            "CREATE TABLE IF NOT EXISTS reward_claim_counters("
-            "reward_type TEXT NOT NULL,record_id TEXT NOT NULL,"
-            "baseline_count INTEGER NOT NULL DEFAULT 0,"
-            "PRIMARY KEY(reward_type,record_id))"
-        )
-
-    def _migrate_legacy(self, conn, migrated_at: str) -> None:
-        migrated = conn.execute(
-            "SELECT 1 FROM compensation_legacy_migrations WHERE migration_key=%s",
-            (self._MIGRATION_KEY,),
-        ).fetchone()
-        if migrated is not None:
-            return
-
-        definitions = self._load_json_dict(self._legacy_definitions_path)
-        claims = self._load_json_dict(self._legacy_claims_path)
-        for record_id, record in definitions.items():
-            record_id = str(record_id).strip()
-            if not record_id or not isinstance(record, dict):
-                continue
-            _, payload = self._canonical_record(record)
-            conn.execute(
-                "INSERT INTO compensation_definition_revisions(record_id,last_version) "
-                "VALUES(%s,1) ON CONFLICT(record_id) DO NOTHING",
-                (record_id,),
-            )
-            conn.execute(
-                "INSERT INTO compensation_definitions("
-                "record_id,version,record_json,created_at,updated_at) "
-                "VALUES(%s,1,%s,%s,%s) ON CONFLICT(record_id) DO NOTHING",
-                (record_id, payload, migrated_at, migrated_at),
-            )
-
-        for user_id, record_ids in claims.items():
-            if not isinstance(record_ids, (list, tuple, set)):
-                continue
-            user_id = str(user_id).strip()
-            if not user_id:
-                continue
-            for record_id in dict.fromkeys(str(value).strip() for value in record_ids):
-                if not record_id:
-                    continue
-                conn.execute(
-                    "INSERT INTO reward_claims(reward_type,record_id,user_id,created_at) "
-                    "VALUES('补偿',%s,%s,%s) "
-                    "ON CONFLICT(reward_type,record_id,user_id) DO NOTHING",
-                    (record_id, user_id, migrated_at),
-                )
-
-        conn.execute(
-            "INSERT INTO compensation_legacy_migrations("
-            "migration_key,definitions_payload,claims_payload,migrated_at) "
-            "VALUES(%s,%s,%s,%s)",
-            (
-                self._MIGRATION_KEY,
-                json.dumps(
-                    definitions,
-                    ensure_ascii=True,
-                    sort_keys=True,
-                    separators=(",", ":"),
-                ),
-                json.dumps(
-                    claims,
-                    ensure_ascii=True,
-                    sort_keys=True,
-                    separators=(",", ":"),
-                ),
-                migrated_at,
-            ),
-        )
-
-    def _prepare(self, conn, occurred_at: str) -> None:
-        self._ensure_schema(conn)
-        self._migrate_legacy(conn, occurred_at)
+            raise RuntimeError("compensation definition operation schema is outdated")
+        if conn.execute(
+            "SELECT 1 FROM compensation_legacy_migrations "
+            "WHERE migration_key='legacy-compensation-json-v1'"
+        ).fetchone() is None:
+            raise RuntimeError("compensation legacy snapshot has not been migrated")
 
     @staticmethod
     def _definition(row) -> CompensationDefinition | None:
@@ -236,7 +137,7 @@ class CompensationDefinitionService:
         with self._lock, closing(db_backend.connect(self._database)) as conn:
             try:
                 conn.execute("BEGIN IMMEDIATE")
-                self._prepare(conn, occurred_at)
+                self._prepare(conn)
                 row = conn.execute(
                     "SELECT record_id,version,record_json FROM compensation_definitions "
                     "WHERE record_id=%s",
@@ -254,7 +155,7 @@ class CompensationDefinitionService:
         with self._lock, closing(db_backend.connect(self._database)) as conn:
             try:
                 conn.execute("BEGIN IMMEDIATE")
-                self._prepare(conn, occurred_at)
+                self._prepare(conn)
                 rows = conn.execute(
                     "SELECT record_id,version,record_json FROM compensation_definitions "
                     "ORDER BY record_id"
@@ -274,7 +175,7 @@ class CompensationDefinitionService:
         with self._lock, closing(db_backend.connect(self._database)) as conn:
             try:
                 conn.execute("BEGIN IMMEDIATE")
-                self._prepare(conn, occurred_at)
+                self._prepare(conn)
                 rows = conn.execute(
                     "SELECT user_id,record_id FROM reward_claims "
                     "WHERE reward_type='补偿' ORDER BY user_id,record_id"
@@ -298,7 +199,7 @@ class CompensationDefinitionService:
         with self._lock, closing(db_backend.connect(self._database)) as conn:
             try:
                 conn.execute("BEGIN IMMEDIATE")
-                self._prepare(conn, occurred_at)
+                self._prepare(conn)
                 for raw_record_id, raw_record in definitions.items():
                     record_id = str(raw_record_id).strip()
                     if not record_id or not isinstance(raw_record, Mapping):
@@ -409,7 +310,7 @@ class CompensationDefinitionService:
         with self._lock, closing(db_backend.connect(self._database)) as conn:
             try:
                 conn.execute("BEGIN IMMEDIATE")
-                self._prepare(conn, occurred_at)
+                self._prepare(conn)
                 previous = self._operation(conn, operation_id)
                 if previous is None:
                     conn.commit()
@@ -453,7 +354,7 @@ class CompensationDefinitionService:
         with self._lock, closing(db_backend.connect(self._database)) as conn:
             try:
                 conn.execute("BEGIN IMMEDIATE")
-                self._prepare(conn, occurred_at)
+                self._prepare(conn)
                 previous = self._operation(conn, operation_id)
                 if previous is not None:
                     if str(previous[1]) != payload:
@@ -572,7 +473,7 @@ class CompensationDefinitionService:
         with self._lock, closing(db_backend.connect(self._database)) as conn:
             try:
                 conn.execute("BEGIN IMMEDIATE")
-                self._prepare(conn, occurred_at)
+                self._prepare(conn)
                 rows = conn.execute(
                     "SELECT record_id,version FROM compensation_definitions ORDER BY record_id"
                 ).fetchall()
@@ -608,7 +509,7 @@ class CompensationDefinitionService:
         with self._lock, closing(db_backend.connect(self._database)) as conn:
             try:
                 conn.execute("BEGIN IMMEDIATE")
-                self._prepare(conn, occurred_at)
+                self._prepare(conn)
                 previous = self._operation(conn, operation_id)
                 if previous is not None:
                     if str(previous[1]) != payload:
@@ -723,7 +624,7 @@ class CompensationDefinitionService:
         with self._lock, closing(db_backend.connect(self._database)) as conn:
             try:
                 conn.execute("BEGIN IMMEDIATE")
-                self._prepare(conn, occurred_at)
+                self._prepare(conn)
                 previous = self._operation(conn, operation_id)
                 if previous is not None:
                     if str(previous[1]) != payload:

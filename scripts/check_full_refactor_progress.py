@@ -162,6 +162,11 @@ def _slice_status() -> dict[str, dict[str, object]]:
     compensation_invitation_repository = (PACKAGE / "features" / "compensation" / "invitation_repository.py").read_text(encoding="utf-8")
     compensation_migrations = (PACKAGE / "features" / "compensation" / "migrations.py").read_text(encoding="utf-8")
     compensation_legacy_migrated = (PACKAGE / "features" / "_legacy_migrated.py").read_text(encoding="utf-8")
+    compensation_definition_service = (
+        (PACKAGE / "xiuxian" / "xiuxian_compensation" / "transaction_service.py")
+        .read_text(encoding="utf-8")
+        .split("class RewardClaimService", 1)[0]
+    )
     compensation_redeem_code = (PACKAGE / "xiuxian" / "xiuxian_compensation" / "redeem_code.py").read_text(encoding="utf-8")
     compensation_invitation = (PACKAGE / "xiuxian" / "xiuxian_compensation" / "invitation.py").read_text(encoding="utf-8")
     compensation_common = (PACKAGE / "xiuxian" / "xiuxian_compensation" / "common.py").read_text(encoding="utf-8")
@@ -687,9 +692,22 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "invitation_definition_migration_owned": "def apply_compensation_invitation_definition_schema" in compensation_migrations and "legacy.compensation.004" in compensation_legacy_migrated,
             "invitation_definition_application_owned": "invitation_set_reward(" in compensation_invitation and "save_invitation_rewards(rewards)" not in compensation_invitation,
             "invitation_definition_schema_checked": "def _definition_schema_ready" in compensation_invitation_repository and '"status": "schema_missing"' in compensation_invitation_repository,
+            "definition_schema_migration_owned": (
+                "def apply_compensation_definition_schema" in compensation_migrations
+                and "legacy.compensation.005" in compensation_legacy_migrated
+            ),
+            "definition_request_path_has_no_ddl": (
+                "CREATE TABLE" not in compensation_definition_service
+                and "ALTER TABLE" not in compensation_definition_service
+                and "schema is missing" in compensation_definition_service
+            ),
+            "definition_legacy_migration_receipt_checked": (
+                "compensation_legacy_migrations" in compensation_definition_service
+                and "legacy-compensation-json-v1" in compensation_definition_service
+            ),
             "reward_inventory_application_owned": "PlayerInventoryApplication" in compensation_common and "_inventory_application().grant_item(" in compensation_reward_writer,
             "reward_inventory_legacy_writer_disabled": ".send_back(" not in compensation_reward_writer,
-            "status": "claim, invitation binding and reward catalog ledgers startup-migrated; request paths fail closed without DDL",
+            "status": "claim, invitation and compensation definition ledgers startup-migrated; requests fail closed without DDL",
         },
         "stone_gift": {
             "default_legacy_handler_disabled": '"送灵石" if _legacy_stone_gift_enabled' in base,

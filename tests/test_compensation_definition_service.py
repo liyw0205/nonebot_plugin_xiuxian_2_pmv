@@ -24,6 +24,10 @@ from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_compensation.transaction_service i
 from tests.test_db_backend import db_backend
 from nonebot_plugin_xiuxian_2.infrastructure.database import DatabaseUnitOfWork
 from nonebot_plugin_xiuxian_2.plugin import apply_platform_schema
+from nonebot_plugin_xiuxian_2.features.compensation.migrations import (
+    apply_compensation_definition_schema,
+    apply_compensation_reward_claim_schema,
+)
 
 
 def test_compensation_facade_does_not_construct_legacy_reward_claim_service() -> None:
@@ -77,6 +81,13 @@ class CompensationDefinitionServiceTests(unittest.TestCase):
             )
         with DatabaseUnitOfWork(self.database) as uow:
             apply_platform_schema(uow)
+            apply_compensation_reward_claim_schema(uow)
+            apply_compensation_definition_schema(
+                uow,
+                self.definitions_path,
+                self.claims_path,
+                occurred_at="2026-07-14 09:00:00",
+            )
         self.service = CompensationDefinitionService(
             self.database, self.definitions_path, self.claims_path
         )
@@ -106,6 +117,13 @@ class CompensationDefinitionServiceTests(unittest.TestCase):
         self.assertEqual(self.scalar("SELECT COUNT(*) FROM compensation_legacy_migrations"), 1)
 
         self.write_legacy({"CHANGED": {"items": []}}, {"u2": ["CHANGED"]})
+        with DatabaseUnitOfWork(self.database) as uow:
+            apply_compensation_definition_schema(
+                uow,
+                self.definitions_path,
+                self.claims_path,
+                occurred_at="2026-07-15 09:00:00",
+            )
         restarted = CompensationDefinitionService(
             self.database, self.definitions_path, self.claims_path
         )
@@ -127,22 +145,58 @@ class CompensationDefinitionServiceTests(unittest.TestCase):
         self.assertEqual(self.service.get("C1").record["reason"], "追加补偿")
 
     def test_existing_operation_table_gains_result_snapshot_column(self) -> None:
-        with db_backend.transaction(self.database) as conn:
-            conn.execute(
+        legacy_database = self.database.parent / "legacy-compensation.db"
+        with DatabaseUnitOfWork(legacy_database) as uow:
+            apply_compensation_reward_claim_schema(uow)
+            uow.execute(
                 "CREATE TABLE compensation_definition_operations("
                 "operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,action TEXT NOT NULL,"
                 "record_id TEXT NOT NULL DEFAULT '',version INTEGER NOT NULL DEFAULT 0,"
                 "outcome TEXT NOT NULL,removed_definitions INTEGER NOT NULL DEFAULT 0,"
                 "removed_claims INTEGER NOT NULL DEFAULT 0,created_at TEXT NOT NULL)"
             )
+            uow.execute(
+                "INSERT INTO compensation_definition_operations("
+                "operation_id,payload,action,outcome,created_at) "
+                "VALUES('old','{}','delete','missing','now')"
+            )
+        with DatabaseUnitOfWork(legacy_database) as uow:
+            apply_compensation_definition_schema(
+                uow, self.definitions_path, self.claims_path
+            )
 
-        self.service.list()
-
-        with db_backend.connection(self.database) as conn:
+        with db_backend.connection(legacy_database) as conn:
             self.assertIn(
                 "result_json",
                 conn.column_names("compensation_definition_operations"),
             )
+            self.assertEqual(
+                conn.execute(
+                    "SELECT result_json FROM compensation_definition_operations "
+                    "WHERE operation_id='old'"
+                ).fetchone()[0],
+                "{}",
+            )
+
+    def test_request_does_not_create_definition_schema_or_import_json(self) -> None:
+        legacy_database = self.database.parent / "unmigrated-compensation.db"
+        with DatabaseUnitOfWork(legacy_database) as uow:
+            apply_compensation_reward_claim_schema(uow)
+
+        service = CompensationDefinitionService(
+            legacy_database, self.definitions_path, self.claims_path
+        )
+        with self.assertRaisesRegex(RuntimeError, "schema is missing"):
+            service.list()
+
+        with db_backend.connection(legacy_database) as conn:
+            tables = {
+                str(row[0])
+                for row in conn.execute(
+                    "SELECT name FROM sqlite_master WHERE type='table'"
+                ).fetchall()
+            }
+        self.assertEqual(tables, {"reward_claims", "reward_claim_counters"})
 
     def test_upsert_creates_and_updates_definition_with_stable_versions(self) -> None:
         created_record = {

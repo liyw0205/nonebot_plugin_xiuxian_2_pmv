@@ -58,6 +58,7 @@ from .activity.migrations import apply_activity
 from .admin.migrations import apply_admin
 from .compensation.migrations import (
     apply_compensation,
+    apply_compensation_definition_schema,
     apply_compensation_invitation_definition_schema,
     apply_compensation_invitation_reward_schema,
     apply_compensation_reward_claim_schema,
@@ -109,6 +110,7 @@ MIGRATIONS = tuple(
          ("legacy.compensation.002", apply_compensation_reward_claim_schema),
          ("legacy.compensation.003", apply_compensation_invitation_reward_schema),
          ("legacy.compensation.004", apply_compensation_invitation_definition_schema),
+         ("legacy.compensation.005", apply_compensation_definition_schema),
          ("legacy.illusion.001", apply_illusion)),
         key=lambda item: item[0],
     )
