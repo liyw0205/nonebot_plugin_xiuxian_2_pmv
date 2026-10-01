@@ -94,6 +94,10 @@ def _has_production_bank_savef_import() -> bool:
 
 def _slice_status() -> dict[str, dict[str, object]]:
     base = (PACKAGE / "xiuxian" / "xiuxian_base" / "__init__.py").read_text(encoding="utf-8")
+    legacy_handle = (PACKAGE / "xiuxian" / "xiuxian_utils" / "xiuxian2_handle.py").read_text(encoding="utf-8")
+    wishing_stone_writer = legacy_handle.split("def convert_stone_to_wishing_stone", 1)[1].split(
+        "def add_impart_exp_day", 1
+    )[0]
     base_transaction = (PACKAGE / "xiuxian" / "xiuxian_base" / "transaction_service.py").read_text(encoding="utf-8")
     base_application_source = (PACKAGE / "features" / "base" / "application.py").read_text(encoding="utf-8")
     base_rename_repository = (PACKAGE / "features" / "base" / "rename_repository.py").read_text(encoding="utf-8")
@@ -1775,6 +1779,11 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "status": "dynamic_attribute_read_boundary_owned_with_legacy_formula_adapter",
         },
         "base": {
+            "wishing_stone_inventory_application_owned": (
+                "PlayerInventoryApplication" in wishing_stone_writer
+                and "require_full=True" in wishing_stone_writer
+            ),
+            "wishing_stone_legacy_writer_disabled": "sql_message.send_back(" not in wishing_stone_writer,
             "refund_stamina_application_owned": (
                 all("restore_player_stamina(" in source for source in (tower_facade, breakthrough_facade, activity_boss_entry))
                 and all("_sql_message().update_user_stamina(" not in source for source in (tower_facade, breakthrough_facade, activity_boss_entry))

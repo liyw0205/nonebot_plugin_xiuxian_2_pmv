@@ -4000,10 +4000,24 @@ class XIUXIAN_IMPART_BUFF:
             if stone_num < 100:
                 return
             wishing_stone_num = stone_num // 100
+            from ...features.base.inventory_application import PlayerInventoryApplication
+
+            grant = PlayerInventoryApplication(self.database_path).grant_item(
+                user_id,
+                20005,
+                "祈愿石",
+                "特殊道具",
+                wishing_stone_num,
+                bind_flag=1,
+                max_goods_num=int(XiuConfig().max_goods_num),
+                require_full=True,
+            )
+            if not grant.succeeded:
+                return grant
             sql_update = "UPDATE xiuxian_impart SET stone_num=0 WHERE user_id=%s"
             cur.execute(sql_update, (user_id,))
             self._commit_write()
-            sql_message.send_back(user_id, 20005, "祈愿石", "特殊道具", wishing_stone_num, 1)
+            return grant
 
     def add_impart_exp_day(self, impart_num, user_id):
         """add impart_exp_day"""

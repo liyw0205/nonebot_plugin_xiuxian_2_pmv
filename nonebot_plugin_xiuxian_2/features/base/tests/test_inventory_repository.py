@@ -72,6 +72,14 @@ class PlayerInventoryRepositoryTests(unittest.TestCase):
         ).grant_item("u", 8, "奖励", "材料", 2, max_goods_num=10)
         self.assertEqual((result.status, result.applied), ("applied", 2))
 
+    def test_require_full_rejects_capacity_shortfall_without_mutation(self):
+        result = self.repository.grant(
+            "u", 7, "奖励", "材料", 2, bind_flag=1, max_goods_num=10, require_full=True
+        )
+
+        self.assertEqual((result.status, result.applied, result.final_quantity), ("inventory_full", 0, 9))
+        self.assertEqual([(int(row["goods_num"]), int(row["bind_num"])) for row in self._row()], [(9, 4)])
+
 
 if __name__ == "__main__":
     unittest.main()

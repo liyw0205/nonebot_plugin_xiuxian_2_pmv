@@ -26,6 +26,7 @@ class PlayerInventoryApplication:
         *,
         bind_flag: int = 0,
         max_goods_num: int,
+        require_full: bool = False,
     ) -> InventoryGrantResult:
         return self.repository.grant(
             user_id,
@@ -35,6 +36,7 @@ class PlayerInventoryApplication:
             quantity,
             bind_flag=bind_flag,
             max_goods_num=max_goods_num,
+            require_full=require_full,
         )
 
 

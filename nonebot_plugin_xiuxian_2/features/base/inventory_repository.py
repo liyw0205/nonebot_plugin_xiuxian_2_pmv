@@ -70,12 +70,16 @@ class PlayerInventorySqlRepository:
         *,
         bind_flag: int = 0,
         max_goods_num: int,
+        require_full: bool = False,
     ) -> InventoryGrantResult:
         user_id = str(user_id).strip()
         item_id, quantity, max_goods_num = int(item_id), int(quantity), int(max_goods_num)
-        requested = min(abs(quantity), max(max_goods_num, 0))
+        raw_quantity = abs(quantity)
+        requested = min(raw_quantity, max(max_goods_num, 0))
         if not user_id or item_id < 0 or max_goods_num < 0:
             return self._result("invalid", user_id, item_id, requested)
+        if require_full and raw_quantity > max_goods_num:
+            return self._result("inventory_full", user_id, item_id, requested)
         if not self.database.is_file():
             return self._result("schema_missing", user_id, item_id, requested)
 
@@ -94,6 +98,8 @@ class PlayerInventorySqlRepository:
             current = max(int(row["goods_num"] or 0), 0) if row else 0
             final = min(current + requested, max_goods_num)
             applied = max(final - current, 0)
+            if require_full and applied < requested:
+                return self._result("inventory_full", user_id, item_id, requested, 0, current)
             bind = 1 if int(bind_flag) == 1 else 0
             updates = ["goods_name=?", "goods_type=?", "goods_num=?"]
             params: list[Any] = [str(item_name), str(item_type), final]

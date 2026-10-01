@@ -2,6 +2,12 @@
 
 状态：进行中。`v1.1.0` 的 P0-P7 发布证据继续保留，但不作为底层全面重构完成证明。
 
+2026-10-01 xiuxian2_handle wishing-stone writer boundary：兼容方法
+`convert_stone_to_wishing_stone` 的物品写入改经 `PlayerInventoryApplication`，使用完整发放模式；
+背包容量不足、缺 schema 或其它拒绝时不清空思恋结晶，不再直接调用 `sql_message.send_back`。
+普通奖励的容量封顶语义保持不变，新增完整发放回归、旧调用 source/progress 门禁；无新增 migration。
+全局旧 transaction services、`xiuxian2_handle` 其它执行路径和正式发布/P7 仍是 blocker。
+
 2026-10-01 compensation/activity reward inventory boundary：补偿公共奖励发放与活动奖励兼容入口的物品写入统一经
 `PlayerInventoryApplication -> PlayerInventorySqlRepository`，按 `max_goods_num` 封顶、维护绑定数量，
 并依据实际写入数量生成文案；容量不足、缺表或缺字段时不再调用 `XiuxianDateManage.send_back` 或虚报已发放。
