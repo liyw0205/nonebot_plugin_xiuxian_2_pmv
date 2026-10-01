@@ -18,7 +18,7 @@
 
 ## 数据模型与迁移
 
-`boss.001` 在 `game_db` 创建 `boss_feature_migrations`，`boss.004` 在 `player_db` 启动时创建世界BOSS生命周期表和限额字段。积分、背包和战斗结算继续复用既有跨库表，但默认通过 `BossApplication` 的 feature-owned repository 执行；手动生成与每日限额重置运行期只读校验 schema，缺失时 fail closed，不执行 DDL。
+`boss.001` 在 `game_db` 创建 `boss_feature_migrations`，`boss.004` 与 `boss.005` 在 `player_db` 启动时创建世界BOSS生命周期、限额和全量刷新回执表。积分、背包和战斗结算继续复用既有跨库表，但默认通过 `BossApplication` 的 feature-owned repository 执行；手动生成、全量刷新与每日限额重置运行期只读校验 schema，缺失时 fail closed，不执行 DDL。
 
 ## 事务与失败回滚
 
@@ -26,7 +26,7 @@
 
 ## 定时任务
 
-世界BOSS刷新和天罚仍由显式兼容生命周期注册，手动生成与每日重置的持久化由 feature-owned repository 承担；未在 feature 导入时重复注册。
+世界BOSS刷新和天罚仍由显式兼容生命周期注册，手动生成、全量刷新与每日重置的持久化由 feature-owned repository 承担；手动与定时全量刷新共享 operation receipt，未在 feature 导入时重复注册。
 
 ## 配置项
 

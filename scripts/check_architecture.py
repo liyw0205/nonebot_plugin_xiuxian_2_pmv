@@ -106,6 +106,7 @@ def check_no_lifecycle_hooks_outside_bootstrap() -> list[str]:
 def check_all_web_endpoints_have_permission() -> list[str]:
     """Ensure every concrete Flask route is present in a permission manifest."""
     try:
+        _ensure_nonebot_initialized()
         from nonebot_plugin_xiuxian_2.plugin import build_registry
         from nonebot_plugin_xiuxian_2.adapters.web.app import create_app
         from nonebot_plugin_xiuxian_2.bootstrap import build_runtime_context
@@ -134,6 +135,16 @@ def check_manifest_ids_are_unique() -> list[str]:
         return []
     except Exception as exc:
         return [f"manifest uniqueness failed: {type(exc).__name__}: {exc}"]
+
+
+def _ensure_nonebot_initialized() -> None:
+    """Make standalone architecture/audit invocations deterministic."""
+    import nonebot
+
+    try:
+        nonebot.get_driver()
+    except ValueError:
+        nonebot.init()
 
 
 def check_legacy_scheduler_manifest_alignment() -> list[str]:
@@ -187,7 +198,9 @@ def check_operation_id_on_asset_writes() -> list[str]:
             if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) or node.name.startswith("_"):
                 continue
             names = {argument.arg for argument in node.args.args + node.args.kwonlyargs}
-            read_only_name = node.name.startswith(("get_", "has_", "is_", "read_", "list_"))
+            read_only_name = node.name.startswith(("get_", "has_", "is_", "read_", "list_")) or node.name in {
+                "invitation_claimed_thresholds",
+            }
             if any(token in node.name.casefold() for token in ("claim", "purchase", "grant", "settle", "transfer", "withdraw", "deposit")) and not read_only_name and "operation_id" not in names:
                 errors.append(f"{path.relative_to(ROOT)}:{node.lineno} mutating method lacks operation_id: {node.name}")
     return errors
@@ -629,6 +642,7 @@ def check_refactor_inventory() -> list[str]:
 
 def check_manifest() -> list[str]:
     try:
+        _ensure_nonebot_initialized()
         from nonebot_plugin_xiuxian_2.plugin import build_registry
 
         registry = build_registry()

@@ -194,6 +194,196 @@ class WorldBossManualSpawnSqlRepository:
             return WorldBossManualSpawnResult("spawned", tuple(bosses), boss, revision)
 
 
+@dataclass(frozen=True)
+class WorldBossFullRefreshResult:
+    status: str
+    revision: int = 0
+    bosses: tuple[dict[str, Any], ...] = ()
+    trigger: str = ""
+
+    @property
+    def succeeded(self) -> bool:
+        return self.status in {"refreshed", "duplicate"}
+
+
+class WorldBossFullRefreshSqlRepository:
+    """Persist an atomic replacement of the complete world-boss session.
+
+    The request path is deliberately read-only with respect to schema.  The
+    player migration owns both tables used here, so a missing migration fails
+    closed instead of trying to repair the database while handling a command.
+    """
+
+    REQUIRED_STATE_COLUMNS = {"state_key", "bosses", "updated_at", "revision"}
+    REQUIRED_OPERATION_COLUMNS = {"operation_id", "payload", "result_json"}
+
+    def __init__(
+        self,
+        database: str | Path,
+        config_loader: Callable[[], dict[str, Any]],
+        lock: RLock | None = None,
+    ) -> None:
+        self.database = Path(database)
+        self.config_loader = config_loader
+        self.lock = lock or RLock()
+
+    @staticmethod
+    def _json(value: Any) -> str:
+        return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+
+    @staticmethod
+    def _columns(uow: DatabaseUnitOfWork, table: str) -> set[str]:
+        return {str(row["name"]).casefold() for row in uow.query_all(f'PRAGMA table_info("{table}")')}
+
+    @classmethod
+    def _schema_ready(cls, uow: DatabaseUnitOfWork) -> bool:
+        return (
+            cls.REQUIRED_STATE_COLUMNS.issubset(cls._columns(uow, "world_boss_state"))
+            and cls.REQUIRED_OPERATION_COLUMNS.issubset(
+                cls._columns(uow, "world_boss_full_refresh_operations")
+            )
+        )
+
+    @staticmethod
+    def _decode(value: Any) -> list[dict[str, Any]]:
+        try:
+            raw = json.loads(value or "[]")
+        except (TypeError, ValueError):
+            return []
+        return [dict(item) for item in raw if isinstance(item, dict)] if isinstance(raw, list) else []
+
+    @classmethod
+    def config_snapshot(cls, config: dict[str, Any], realms: list[str] | tuple[str, ...]) -> dict[str, Any]:
+        normalized_realms = [str(realm) for realm in realms]
+        stones = config.get("Boss灵石", {})
+        return {
+            "realms": normalized_realms,
+            "names": list(config.get("Boss名字", [])),
+            "stones": {realm: list(stones.get(realm, [])) for realm in normalized_realms},
+            "multipliers": dict(config.get("Boss倍率", {})),
+        }
+
+    @staticmethod
+    def _valid_bosses(bosses: list[dict[str, Any]], config: dict[str, Any]) -> bool:
+        realms = list(config.get("realms", []))
+        if [str(boss.get("jj", "")) for boss in bosses] != realms:
+            return False
+        if len(set(realms)) != len(realms):
+            return False
+        names = set(config.get("names", []))
+        stones = config.get("stones", {})
+        required = {"name", "jj", "气血", "总血量", "真元", "攻击", "max_stone", "stone"}
+        for boss in bosses:
+            realm = str(boss.get("jj", ""))
+            if not required.issubset(boss) or boss.get("name") not in names:
+                return False
+            if boss.get("max_stone") not in stones.get(realm, []):
+                return False
+            if boss.get("stone") != boss.get("max_stone"):
+                return False
+            try:
+                if any(int(boss[field]) < 0 for field in ("气血", "总血量", "真元", "攻击", "stone")):
+                    return False
+            except (TypeError, ValueError):
+                return False
+        return True
+
+    @classmethod
+    def _from_json(cls, value: Any, status: str) -> WorldBossFullRefreshResult:
+        stored = json.loads(str(value))
+        return WorldBossFullRefreshResult(
+            status,
+            int(stored.get("revision", 0)),
+            tuple(dict(boss) for boss in stored.get("bosses", ())),
+            str(stored.get("trigger", "")),
+        )
+
+    def snapshot(self) -> tuple[list[dict[str, Any]], int]:
+        if not self.database.is_file():
+            return [], 0
+        with self.lock, DatabaseUnitOfWork(self.database, read_only=True) as uow:
+            if not self._schema_ready(uow):
+                return [], 0
+            row = uow.query_one("SELECT bosses,revision FROM world_boss_state WHERE state_key='global'")
+            return (self._decode(row["bosses"]), int(row["revision"] or 0)) if row else ([], 0)
+
+    def get_result(self, operation_id: str) -> WorldBossFullRefreshResult | None:
+        operation_id = str(operation_id).strip()
+        if not operation_id or not self.database.is_file():
+            return None
+        with self.lock, DatabaseUnitOfWork(self.database, read_only=True) as uow:
+            if not self._schema_ready(uow):
+                return None
+            row = uow.query_one(
+                "SELECT result_json FROM world_boss_full_refresh_operations WHERE operation_id=?",
+                (operation_id,),
+            )
+            return self._from_json(row["result_json"], "duplicate") if row else None
+
+    def refresh(
+        self,
+        *,
+        operation_id: str,
+        trigger: str,
+        expected_revision: int,
+        expected_bosses: list[dict[str, Any]],
+        expected_config: dict[str, Any],
+        bosses: list[dict[str, Any]],
+    ) -> WorldBossFullRefreshResult:
+        operation_id = str(operation_id).strip()
+        trigger = str(trigger).strip()
+        expected_revision = int(expected_revision)
+        expected_bosses = [dict(boss) for boss in expected_bosses]
+        expected_config = dict(expected_config)
+        bosses = [dict(boss) for boss in bosses]
+        if not operation_id or trigger not in {"manual", "scheduled"}:
+            raise ValueError("valid operation and trigger are required")
+        if not self.database.is_file():
+            return WorldBossFullRefreshResult("schema_missing", trigger=trigger)
+        payload = self._json({
+            "trigger": trigger,
+            "expected_revision": expected_revision,
+            "expected_bosses": expected_bosses,
+            "expected_config": expected_config,
+            "bosses": bosses,
+        })
+        with self.lock, DatabaseUnitOfWork(self.database, immediate=True) as uow:
+            if not self._schema_ready(uow):
+                return WorldBossFullRefreshResult("schema_missing", trigger=trigger)
+            previous = uow.query_one(
+                "SELECT payload,result_json FROM world_boss_full_refresh_operations WHERE operation_id=?",
+                (operation_id,),
+            )
+            if previous is not None:
+                if str(previous["payload"]) != payload:
+                    return WorldBossFullRefreshResult("operation_conflict", trigger=trigger)
+                return self._from_json(previous["result_json"], "duplicate")
+
+            realms = list(expected_config.get("realms", []))
+            current_config = self.config_snapshot(self.config_loader(), realms)
+            if current_config != expected_config or not self._valid_bosses(bosses, current_config):
+                return WorldBossFullRefreshResult("config_changed", trigger=trigger)
+
+            row = uow.query_one("SELECT bosses,revision FROM world_boss_state WHERE state_key='global'")
+            current_bosses = self._decode(row["bosses"]) if row else []
+            current_revision = int(row["revision"] or 0) if row else 0
+            if current_revision != expected_revision or self._json(current_bosses) != self._json(expected_bosses):
+                return WorldBossFullRefreshResult("session_changed", trigger=trigger)
+
+            revision = expected_revision + 1
+            uow.execute(
+                "INSERT INTO world_boss_state(state_key,bosses,updated_at,revision) VALUES('global',?,CURRENT_TIMESTAMP,?) "
+                "ON CONFLICT(state_key) DO UPDATE SET bosses=excluded.bosses,updated_at=excluded.updated_at,revision=excluded.revision",
+                (self._json(bosses), revision),
+            )
+            result_json = self._json({"revision": revision, "bosses": bosses, "trigger": trigger})
+            uow.execute(
+                "INSERT INTO world_boss_full_refresh_operations(operation_id,payload,result_json,created_at) VALUES(?,?,?,CURRENT_TIMESTAMP)",
+                (operation_id, payload, result_json),
+            )
+            return WorldBossFullRefreshResult("refreshed", revision, tuple(bosses), trigger)
+
+
 class WorldBossDailyLimitResetSqlRepository:
     """Own resumable daily limit resets without request-time schema changes."""
 
@@ -324,6 +514,8 @@ class WorldBossDailyLimitResetSqlRepository:
 
 
 __all__ = [
+    "WorldBossFullRefreshResult",
+    "WorldBossFullRefreshSqlRepository",
     "WorldBossDailyLimitResetResult",
     "WorldBossDailyLimitResetSqlRepository",
     "WorldBossManualSpawnResult",

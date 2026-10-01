@@ -2036,6 +2036,12 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "daily_limit_repository_owned": "WorldBossDailyLimitResetSqlRepository" in boss_application and "transaction_service" not in boss_application,
             "world_boss_request_path_has_no_ddl": "CREATE TABLE" not in boss_world_repository and "ALTER TABLE" not in boss_world_repository,
             "world_boss_player_migration_registered": "boss.004" in plugin and "apply_boss_player_schema" in boss_migrations,
+            "full_refresh_application_owned": all(token in boss_application for token in ("def full_refresh_snapshot(", "def full_refresh_result(", "def full_refresh(")),
+            "full_refresh_repository_owned": "WorldBossFullRefreshSqlRepository" in boss_application and "WorldBossFullRefreshResult" in boss_world_repository,
+            "full_refresh_migration_registered": "boss.005" in plugin and "apply_boss_full_refresh_player_schema" in boss_migrations,
+            "full_refresh_request_path_has_no_ddl": "CREATE TABLE" not in boss_world_repository and "ALTER TABLE" not in boss_world_repository,
+            "full_refresh_replay_cas_and_rollback": all(token in boss_world_repository for token in ("operation_conflict", "session_changed", "CURRENT_TIMESTAMP", "world_boss_full_refresh_operations")),
+            "full_refresh_legacy_service_not_default": "WorldBossFullRefreshService" not in boss_facade,
             "battle_application_owned": "boss_application.settle_compat(" in boss_facade,
             "legacy_battle_settlement_disabled": "_world_boss_battle_settlement_service().settle(" not in boss_facade,
             "punishment_application_owned": "boss_application.punish(" in boss_facade and "boss_application.punishment_snapshot(" in boss_facade,
@@ -2046,7 +2052,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
                 and "_items().get_data_by_item_id(" in boss_facade
             ),
             "legacy_manual_spawn_disabled": "_spawn_world_boss(" not in boss_facade or "boss_application.spawn(" in boss_facade,
-            "status": "manual_spawn_daily_limit_punishment_cutover_with_other_boss_compatibility",
+            "status": "manual_spawn_daily_limit_full_refresh_punishment_cutover_with_other_boss_compatibility",
         },
         "buff": {
             "blessed_open_application_owned": "buff_application.open(" in buff_facade,

@@ -55,7 +55,6 @@ from ...features.boss.repository import BossPurchaseSqlRepository
 from ...infrastructure.ids import UUIDGenerator
 from ...infrastructure.clock import SystemClock
 from ...infrastructure.random_source import SystemRandom
-from .transaction_service import WorldBossFullRefreshService
 from ...features.boss.punishment_repository import WorldBossPunishmentSqlRepository
 from ...features.boss.world_boss_repository import (
     WorldBossDailyLimitResetSqlRepository,
@@ -81,6 +80,7 @@ boss_application = BossApplication(
         get_paths().player_db,
         get_paths().game_db,
     ),
+    full_refresh_config_loader=get_boss_config,
 )
 boss_ids = UUIDGenerator()
 runtime_clock = SystemClock()
@@ -140,10 +140,9 @@ def _world_boss_manual_spawn_service():
 def _world_boss_full_refresh_service():
     global _world_boss_full_refresh_service_instance
     if _world_boss_full_refresh_service_instance is None:
-        _world_boss_full_refresh_service_instance = WorldBossFullRefreshService(
-            get_paths().player_db,
-            get_boss_config,
-        )
+        # Keep the lazy accessor for scheduler/manual command compatibility;
+        # the actual persistence boundary is owned by BossApplication.
+        _world_boss_full_refresh_service_instance = boss_application
     return _world_boss_full_refresh_service_instance
 _world_boss_punishment_service_instance = None
 

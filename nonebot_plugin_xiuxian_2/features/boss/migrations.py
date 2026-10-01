@@ -38,6 +38,7 @@ def apply_boss_player_schema(uow: DatabaseUnitOfWork) -> None:
         "operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,result_json TEXT NOT NULL,"
         "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
     )
+    apply_boss_full_refresh_player_schema(uow)
     uow.execute(
         "CREATE TABLE IF NOT EXISTS world_boss_daily_limit_reset_operations("
         "business_date TEXT PRIMARY KEY,total INTEGER NOT NULL,completed INTEGER NOT NULL DEFAULT 0,"
@@ -52,4 +53,19 @@ def apply_boss_player_schema(uow: DatabaseUnitOfWork) -> None:
     )
 
 
-__all__ = ["apply_boss", "apply_boss_purchase", "apply_boss_settlement", "apply_boss_player_schema"]
+def apply_boss_full_refresh_player_schema(uow: DatabaseUnitOfWork) -> None:
+    """Install the operation receipt table used by full session refreshes."""
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS world_boss_full_refresh_operations("
+        "operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,result_json TEXT NOT NULL,"
+        "created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)"
+    )
+
+
+__all__ = [
+    "apply_boss",
+    "apply_boss_purchase",
+    "apply_boss_settlement",
+    "apply_boss_player_schema",
+    "apply_boss_full_refresh_player_schema",
+]

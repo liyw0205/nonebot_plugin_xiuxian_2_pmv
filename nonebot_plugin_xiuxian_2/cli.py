@@ -95,6 +95,13 @@ def main(argv: list[str] | None = None) -> int:
 
             game_db = context.database.path("game_db")
             player_db = context.database.path("player_db")
+            # Activity reward projections may still live in the explicit
+            # legacy activity database during the compatibility window.  Use
+            # it when present; migrated deployments keep the game database as
+            # the single activity state owner.
+            activity_db = context.paths.data / "activity" / "activity.db"
+            if not activity_db.is_file():
+                activity_db = game_db
             accessory = AccessoryPackageApplication(game_db, player_db)
             auction = AuctionBidApplication(
                 game_db,
@@ -105,16 +112,16 @@ def main(argv: list[str] | None = None) -> int:
                 effects=LegacyAuctionSettlementEffects(player_db),
             )
             activity_task_claim = ActivityTaskClaimApplication(
-                game_db, game_db, clock=context.clock
+                game_db, activity_db, clock=context.clock
             )
             activity_pass_claim = ActivityPassClaimApplication(
-                game_db, game_db, clock=context.clock
+                game_db, activity_db, clock=context.clock
             )
             activity_boss_milestone_claim = ActivityBossMilestoneClaimApplication(
-                game_db, game_db, clock=context.clock
+                game_db, activity_db, clock=context.clock
             )
             activity_boss_rank_claim = ActivityBossRankClaimApplication(
-                game_db, game_db, clock=context.clock
+                game_db, activity_db, clock=context.clock
             )
             report = ReconcileService().run(
                 uow,

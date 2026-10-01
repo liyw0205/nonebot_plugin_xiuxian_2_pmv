@@ -2,6 +2,15 @@
 
 状态：进行中。`v1.1.0` 的 P0-P7 发布证据继续保留，但不作为底层全面重构完成证明。
 
+2026-10-01 world-boss full-refresh cutover：世界BOSS全量刷新已由
+`WorldBossFullRefreshSqlRepository -> BossApplication` 承担，手动与定时入口共享同一
+operation receipt。新增 player-only `boss.005` migration，预建全量刷新回执表；请求路径只读
+校验 schema，缺失时返回 `schema_missing`，不执行 DDL。刷新使用配置快照、revision/boss
+快照 CAS、operation replay/conflict 和单事务回滚，旧 `WorldBossFullRefreshService` 不再是
+默认入口。新增 full-refresh progress/source 门禁和回归测试；本阶段完成后按第 6.2 顺序进入
+combat/dungeon 真实旧路径审计。全局 legacy transaction services、`xiuxian2_handle` 与正式
+发布/P7 仍未完成 blocker。
+
 2026-10-01 world-boss lifecycle repository cutover：世界BOSS手动生成、每日限额重置和战斗结算默认路径改由 `BossApplication` 承担；手动生成/限额使用 `WorldBossManualSpawnSqlRepository`、`WorldBossDailyLimitResetSqlRepository`，战斗通过 feature-owned `settle_compat` 适配旧结果字段。新增 player-only `boss.004` 启动迁移，预建 `world_boss_state`、手动生成回执、每日重置操作/目标表及限额字段。请求/任务路径只读校验 schema，缺失时返回 `schema_missing`，不再由 `transaction_service` 动态建表或执行默认写入；旧 service 保留为显式兼容/回滚实现。手动生成的配置/版本 CAS、operation replay/conflict、每日重置的冻结目标、分块恢复、战斗跨库事务和失败回滚语义保持。新增 repository、migration routing、no-DDL/schema-missing/source ownership 回归；缓存/字节码验收后清理，用户 `boss_info.json` 修改保留。世界BOSS全量刷新及全局 legacy transaction services 仍按第 6.2 队列继续审计，`xiuxian2_handle` 与正式发布/P7 仍未完成 blocker。
 
 2026-10-01 player economy reward write boundary：`RewardService` 的灵石、修为、宗门贡献写入统一经 `features/base/economy_application.py -> economy_repository.py`，补偿兼容奖励、师徒历史奖励和 Rift Boss 兼容适配器的直接经济写入也改走同一 application。仓储在既有 `user_xiuxian` 表上做首行 rowid/CAS 更新，修为按上限封顶；缺数据库、表、字段或用户时 fail closed，不执行请求期 DDL。新增成功、封顶、状态冲突、重复用户、缺 schema/用户和来源静态门禁回归；无新增 migration。缓存与字节码在验收后清理，用户 `boss_info.json` 修改保留。全局旧 transaction services、`xiuxian2_handle`、正式发布/P7 仍未完成 blocker。

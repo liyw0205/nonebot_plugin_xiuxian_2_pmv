@@ -14,6 +14,7 @@ from .repository import BossPurchaseSqlRepository, BossRepository
 from .punishment_repository import WorldBossPunishmentSqlRepository
 from .world_boss_repository import (
     WorldBossDailyLimitResetSqlRepository,
+    WorldBossFullRefreshSqlRepository,
     WorldBossManualSpawnSqlRepository,
 )
 
@@ -43,13 +44,15 @@ def _data(raw: Any) -> dict[str, Any]:
 
 
 class BossApplication:
-    def __init__(self, game_database: str | Path, player_database: str | Path, *, activity_database: str | Path | None = None, repository: BossRepository | None = None, world_boss_repository: Any | None = None, manual_spawn_repository: Any | None = None, ledger: OperationLedger | None = None, clock=None) -> None:
+    def __init__(self, game_database: str | Path, player_database: str | Path, *, activity_database: str | Path | None = None, repository: BossRepository | None = None, world_boss_repository: Any | None = None, manual_spawn_repository: Any | None = None, full_refresh_repository: Any | None = None, full_refresh_config_loader=None, ledger: OperationLedger | None = None, clock=None) -> None:
         self.game_database = str(game_database)
         self.player_database = str(player_database)
         self.activity_database = str(activity_database) if activity_database else None
         self.repository = repository
         self.world_boss_repository = world_boss_repository
         self.manual_spawn_repository = manual_spawn_repository
+        self.full_refresh_repository = full_refresh_repository
+        self.full_refresh_config_loader = full_refresh_config_loader
         self.ledger = ledger or OperationLedger()
         self.clock = clock or SystemClock()
 
@@ -69,6 +72,40 @@ class BossApplication:
             repository = WorldBossManualSpawnSqlRepository(self.player_database, config_loader)
             self.manual_spawn_repository = repository
         return repository
+
+    def _full_refresh(self, config_loader=None):
+        repository = self.full_refresh_repository
+        if repository is None:
+            loader = config_loader or self.full_refresh_config_loader
+            if loader is None:
+                raise ValueError("full refresh config loader is required")
+            repository = WorldBossFullRefreshSqlRepository(self.player_database, loader)
+            self.full_refresh_repository = repository
+        return repository
+
+    def full_refresh_snapshot(self):
+        return self._full_refresh().snapshot()
+
+    def full_refresh_result(self, operation_id: str):
+        return self._full_refresh().get_result(operation_id)
+
+    @staticmethod
+    def config_snapshot(config: dict[str, Any], realms: list[str] | tuple[str, ...]):
+        return WorldBossFullRefreshSqlRepository.config_snapshot(config, realms)
+
+    def full_refresh(self, **kwargs: Any):
+        return self._full_refresh(kwargs.pop("config_loader", None)).refresh(**kwargs)
+
+    # Compatibility names used by the legacy scheduler helper.  They still
+    # resolve through this application and never construct the old service.
+    def snapshot(self):
+        return self.full_refresh_snapshot()
+
+    def get_result(self, operation_id: str):
+        return self.full_refresh_result(operation_id)
+
+    def refresh(self, **kwargs: Any):
+        return self.full_refresh(**kwargs)
 
     def _repository(self) -> BossRepository:
         return self.repository or BossPurchaseSqlRepository(self.game_database, self.player_database, self.activity_database, clock=self.clock)
@@ -156,7 +193,9 @@ class BossApplication:
     def settlement_result_compat(self, *, operation_id: str) -> BossSettlementResult | None:
         return self._settlement_result(self.settlement_result(operation_id=operation_id), "duplicate")
 
-    def settle_compat(self, **kwargs: Any) -> BossSettlementResult:
+    def settle_compat(self, *, operation_id: str | None = None, **kwargs: Any) -> BossSettlementResult:
+        if operation_id is not None:
+            kwargs["operation_id"] = operation_id
         outcome = self.settle(**kwargs)
         return self._settlement_result(
             outcome.data,

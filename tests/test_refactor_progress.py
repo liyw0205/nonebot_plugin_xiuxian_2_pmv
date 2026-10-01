@@ -527,6 +527,12 @@ class RefactorProgressTests(unittest.TestCase):
         self.assertTrue(boss["daily_limit_repository_owned"])
         self.assertTrue(boss["world_boss_request_path_has_no_ddl"])
         self.assertTrue(boss["world_boss_player_migration_registered"])
+        self.assertTrue(boss["full_refresh_application_owned"])
+        self.assertTrue(boss["full_refresh_repository_owned"])
+        self.assertTrue(boss["full_refresh_migration_registered"])
+        self.assertTrue(boss["full_refresh_request_path_has_no_ddl"])
+        self.assertTrue(boss["full_refresh_replay_cas_and_rollback"])
+        self.assertTrue(boss["full_refresh_legacy_service_not_default"])
         self.assertTrue(boss["battle_application_owned"])
         self.assertTrue(boss["legacy_battle_settlement_disabled"])
         buff = slices["buff"]
