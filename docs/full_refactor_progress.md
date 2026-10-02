@@ -3262,25 +3262,43 @@ compatibility，不证明默认 handler 已切换。实施只覆盖该单次入�
 切换单独标作整个直接突破阶段完成。主线程复核旧 service 后将其拆为两个顺序子阶段：先切换核心结算与启动 schema 所有权，
 再冻结随机计划并实现统计/日志/关系奖励恢复；每个子阶段独立测试、提交、推送。代码、测试、progress gate、资源核对与最终验收由主线程负责。
 
-直接突破核心实现使用 `BaseApplication.settle_direct_breakthrough` 与 `BaseDirectBreakthroughSqlRepository`；只有该单次 handler
-切换，连续/渡厄/其他渡劫及通用 Web `breakthrough` 契约不变。game-only `base.009` 预建原有 receipt 表并新增请求 payload，旧行保留，
-不把旧回执当缓存删除；事务内检查快照、更新资产并写入回执，跨用户或新回执的不同 payload 拒绝复用 ID。缺库/schema 时不隐式建表。
-冷却时间维持本地无时区格式，超大修为/HP/MP 绑定兼容 SQLite。`direct_breakthrough_effects_replay_owned=false`：当前 handler
-仍先计算随机结果，核心提交后再更新统计/日志和师徒/道侣资产；这些 effects 的冻结、outbox、分库回执和 reconcile 是下一必做子阶段，
-不能通过简单重调旧奖励函数补偿。旧关系奖励函数会重抽随机数并重读玩家快照，师徒奖励还涉及跨库计数/历史，需单独证明中断恢复。
+直接突破核心实现使用 `BaseApplication` 与 `BaseDirectBreakthroughSqlRepository`；只有该单次 handler
+切换，连续/渡厄/其他渡劫及通用 Web `breakthrough` 契约不变。game-only `base.009` 保留原有 receipt 并新增请求 payload，
+`base.010` 冻结随机计划、effects intent、outbox 和回复，`base.011` 预建 player 关系预留/统计/历史字段；旧回执保留且不被当作缓存删除。
+核心与计划同一 game 事务提交，关系奖励按 player prepared -> game credit -> player finalize 的可恢复顺序执行。缺库/schema 时不隐式建表，
+冷却时间维持本地无时区格式，超大修为/HP/MP 绑定兼容 SQLite；`direct_breakthrough_effects_replay_owned=true`。
 
-**直接突破核心验收（2026-10-02）**：repository/application、handler 隔离执行、迁移路由、相邻 source contract 与全部 progress tests
-限定集合 `35 passed in 130.81s`；覆盖成功/失败、同消息延迟重放、payload/用户冲突、旧行保留和重复迁移、缺库/缺表不创建、回执失败回滚、
-超大修为绑定与本地冷却时间。handler 用 AST 提取源码注册语句和真实处理函数后注入外部端口执行，不等同于完整 NoneBot 启动。
-12 个变更 Python 文件 AST 通过；静态 core imports、feature lifecycle 和 manifest uniqueness 检查通过。全局 feature connections
+**直接突破验收（2026-10-02）**：核心、计划、关系恢复、handler、统计/日志幂等、并发、WAL 子进程提交边界、cap/换绑/同收件人、
+缺 schema、迁移路由、相邻 source contract 与 progress 聚焦集合 `48 passed`；另有 game events/来源门禁集合 `47 passed`，
+progress gate `7 passed`。handler 用 AST 提取源码注册语句和真实处理函数后注入外部端口执行，不等同于完整 NoneBot 启动。
+17 个变更 Python 文件 AST 通过；静态 core imports、feature lifecycle 和 manifest uniqueness/documentation 检查通过。全局 feature connections
 检查仍因 `features/info/avatar_repository.py:6` 的 `import sqlite3` 失败，该文件与切片基线一致，未在此阶段修改。
-组合收集旧 `tests/test_direct_breakthrough_service.py` 时遇到 `utils.get_active_user_id` 导入错误，未将该兼容用例算作通过；后续需独立复现基线/导入顺序。
-未跑全量回归、真实启动迁移、正式备份恢复或 P7。核心子阶段之外的效果恢复仍未完成，`exit_ready=false`。
+组合收集旧 `tests/test_direct_breakthrough_service.py` 仍遇到既存 `utils.get_active_user_id` 导入错误，未将该兼容用例算作通过；
+不属于本切片默认路径。隔离 recovery smoke 已执行 `257` 项迁移、五库 backup/restore dry-run/restore 和 reconcile clean；未跑全量回归、
+正式发布备份恢复或 P7，`exit_ready=false`。
 
-**接续目标顺序**：先完成直接突破随机计划和 effects recovery，再审计历史无 outbox 回执与持久回执归档窗口，继续第 5 项其他默认旧写路径，
+**接续目标顺序**：直接突破随机计划与 effects recovery 已完成；下一项审计历史无 outbox 回执与持久回执归档窗口，再继续第 5 项其他默认旧写路径，
 最后完成第 6 项全局门禁与第 7 项正式发布/P7。其中历史补回与归档不能猜测执行状态或未经审批删除；不能把幂等状态当作可清缓存。
 后续可安排一个只读子代理核对直接突破关系奖励调用图/跨库所有权，范围限于 `xiuxian_buff/partner.py` 的突破奖励函数及所调用的事务服务；
 主线程独占实现和串行测试，子代理不得访问运行库、清缓存、启动重型测试或并行修改该切片。
+
+**直接突破恢复实施方案（2026-10-02，已验收）**：复用一名只读关系奖励审计代理，检查 `partner.py`、对应旧事务服务及新增
+`features/base/breakthrough_relations.py` 和 compatibility effects；主线程负责实现、资源控制、串行测试与最终提交。
+game-only `base.010` 冻结随机结果、完整 effects intent 和回复，随核心资产、receipt、outbox 同事务提交；在冷却检查前 replay，
+并发同消息在 game 写锁内先查回执后抽样。未提交事务没有外部效果；旧无 plan/outbox 回执不补造奖励。
+
+关系恢复不使用跨文件 ATTACH 原子性：必须已有持久核心回执，然后持有 game 写锁，在独立 player 事务校验双向关系/绑定时间，
+将导师 count+1 与完整 prepared receipt 一起提交，再独立提交 game 奖励/receipt，最后 player 统计/历史/applied 同事务提交。
+已有 prepared 优先恢复，不再验证当前关系、不再次占次数；换绑或 count 重置后 finalize 不能写回旧 count。道侣先于导师，
+两者同收件人时导师冻结金额按道侣奖励后的修为计算；若对应道侣关系在预留前失效，依赖的导师奖励同样记录 skipped。
+预留后若收件人消失或当前/冻结上限不足，保留 prepared/pending 待恢复，不加爆上限、不重新抽样、不擅自退款或丢弃。
+金额冻结，power 按恢复时收件人的当前根骨/境界纯计算；锁内不得懒初始化会做迁移的旧数据库管理器。
+
+统计和日志用稳定事件 ID，导师历史用冻结时间并受既有长度上限约束；日志不在延迟恢复时重新套用当前代操作映射。
+runtime/CLI 接入 effects handler，每条有效直接突破命令最多恢复 5 笔；失败更新 attempts 并按尝试次数轮转，避免最早 5 笔长期
+cap 冲突饿死后续记录。过期重绑冷却查询不再为清一个过期字段全量回写 mentor，防止覆盖并发 count 预留。
+验收要求包括真实 WAL 子进程在 player prepare/game reward 两个提交边界直接退出、跨库重放、并发/缺 schema/回滚、同收件人、
+换绑后恢复、上限冲突、统计/日志幂等及 runtime/CLI/source/progress 门禁。上述持久回执不是缓存，禁止自动删除。
 
 **`out_closing` effects recovery（代码切片完成，2026-10-02）**：复用已完成的闭关 handler、任务/活动投影只读审计，
 不重复扫描。主线程负责冻结副作用 intent，并使闭关资产回执与 game-db outbox 同事务提交；分别为 player statistics、

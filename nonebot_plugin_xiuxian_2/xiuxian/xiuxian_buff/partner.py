@@ -1595,9 +1595,7 @@ def _get_pair_rebind_remaining(apprentice_id, mentor_id):
         return 0
     now = runtime_clock.now()
     if now >= until:
-        rebind_cd.pop(str(mentor_id), None)
-        data["mentor_rebind_cd"] = rebind_cd
-        save_mentor(apprentice_id, data)
+        # A read must not overwrite a concurrently reserved reward or new binding.
         return 0
     return int((until - now).total_seconds())
 

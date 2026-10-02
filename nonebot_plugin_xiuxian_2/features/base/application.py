@@ -1,7 +1,11 @@
 from __future__ import annotations
 
+import json
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
+
+from ...infrastructure.database import DatabaseUnitOfWork
 
 from .._legacy_application import LegacyApplication
 from .contest_repository import BaseStoneContestSqlRepository
@@ -15,10 +19,11 @@ from .xiangyuan_application import XiangyuanApplication
 
 
 class BaseApplication(LegacyApplication):
-    def __init__(self, game_database: str | Path, player_database: str | Path, *, repository: BaseRepository | None = None, clock: Any | None = None) -> None:
+    def __init__(self, game_database: str | Path, player_database: str | Path, *, repository: BaseRepository | None = None, clock: Any | None = None, direct_breakthrough_effects: Any | None = None) -> None:
         super().__init__(game_database, repository=repository, feature="base")
         self._stone_contest_repository = BaseStoneContestSqlRepository(game_database)
         self._direct_breakthrough_repository = BaseDirectBreakthroughSqlRepository(game_database, clock=clock)
+        self.direct_breakthrough_effects = direct_breakthrough_effects
         self._xiangyuan_application = XiangyuanApplication(game_database, player_database)
 
     def _action(self, action: str, *, operation_id: str, user_id: str, **kwargs: Any):
@@ -31,6 +36,84 @@ class BaseApplication(LegacyApplication):
         return self._direct_breakthrough_repository.apply(
             operation_id, user_id, **kwargs,
         )
+
+    def direct_breakthrough_replay(self, operation_id: str, user_id: str):
+        result = self._direct_breakthrough_repository.get_result(operation_id, user_id)
+        return self._apply_direct_breakthrough_effects(result) if result is not None else None
+
+    def plan_direct_breakthrough_relations(self, game, user, new_level, occurred_at):
+        if self.direct_breakthrough_effects is None:
+            raise RuntimeError("direct breakthrough effects are not configured")
+        return self.direct_breakthrough_effects.plan_relations(game, user, new_level, occurred_at)
+
+    def resolve_direct_breakthrough(self, *, operation_id, user_id, expected, plan_factory):
+        result = self._direct_breakthrough_repository.resolve(
+            operation_id, user_id, expected=expected, plan_factory=plan_factory,
+        )
+        return self._apply_direct_breakthrough_effects(result)
+
+    def _apply_direct_breakthrough_effects(self, result):
+        if not result.effects_event_id:
+            return result
+        repo = self._direct_breakthrough_repository
+        event_id = result.effects_event_id
+        try:
+            with DatabaseUnitOfWork(repo.database, read_only=True) as uow:
+                row = repo.outbox.get(uow, event_id)
+            if row is None:
+                raise RuntimeError("direct breakthrough outbox is missing")
+            payload = json.loads(row["payload_json"])
+            if row["status"] == "sent":
+                return result
+            if row["status"] == "dead":
+                raise RuntimeError("direct breakthrough effects require reconciliation")
+            if self.direct_breakthrough_effects is None:
+                raise RuntimeError("direct breakthrough effects are not configured")
+            message = self.direct_breakthrough_effects.on_settled(payload=payload, event_id=event_id)
+            with DatabaseUnitOfWork(repo.database, immediate=True) as uow:
+                uow.execute(
+                    "UPDATE direct_breakthrough_plans SET effects_message=? WHERE operation_id=?",
+                    (message, payload["operation_id"]),
+                )
+                repo.outbox.mark_sent(uow, event_id)
+            return replace(result, message=payload["message"] + message)
+        except Exception:
+            # Keep the committed core and durable reservation available to reconcile.
+            try:
+                if repo.database.is_file():
+                    with DatabaseUnitOfWork(repo.database, immediate=True) as uow:
+                        current = repo.outbox.get(uow, event_id)
+                        if current is not None and current["status"] == "pending":
+                            repo.outbox.mark_failed(uow, event_id)
+            except Exception:
+                pass
+            return replace(result, message=result.message + "\n统计或关系奖励尚未完成，已保留恢复记录。")
+
+    def resume_pending_direct_breakthroughs(self, *, limit=5):
+        repo = self._direct_breakthrough_repository
+        if not repo.database.is_file():
+            return
+        with DatabaseUnitOfWork(repo.database, read_only=True) as uow:
+            if not repo._columns(uow, "domain_outbox"):
+                return
+            pending = uow.query_all(
+                "SELECT payload_json FROM domain_outbox WHERE event_type=? AND status='pending' "
+                "ORDER BY attempts,created_at,event_id LIMIT ?", (repo.EVENT_TYPE, max(1, min(int(limit), 5))),
+            )
+        for row in pending:
+            payload = json.loads(row["payload_json"])
+            self.direct_breakthrough_replay(payload["operation_id"], payload["user_id"])
+
+    def reconcile_direct_breakthrough_event(self, record):
+        if self.direct_breakthrough_effects is None:
+            raise RuntimeError("direct breakthrough effects are not configured")
+        payload = record["payload"]
+        message = self.direct_breakthrough_effects.on_settled(payload=payload, event_id=str(record["event_id"]))
+        with DatabaseUnitOfWork(self._direct_breakthrough_repository.database, immediate=True) as uow:
+            uow.execute(
+                "UPDATE direct_breakthrough_plans SET effects_message=? WHERE operation_id=?",
+                (message, payload["operation_id"]),
+            )
     def tribulation(self, *, operation_id: str, user_id: str, **kwargs: Any): return self._action("tribulation", operation_id=operation_id, user_id=user_id, **kwargs)
     def get_rename_result(self, operation_id: str):
         return BaseRenameSqlRepository(self.database).get_result(operation_id)

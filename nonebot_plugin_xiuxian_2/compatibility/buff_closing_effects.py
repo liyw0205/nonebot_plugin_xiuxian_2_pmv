@@ -19,6 +19,7 @@ def log_closing_event_once(
     occurred_at: str,
     player_database: str | Path,
     players_dir: str | Path,
+    resolve_impersonation: bool = True,
 ) -> bool:
     if not Path(player_database).is_file():
         raise RuntimeError("player database is unavailable for closing log projection")
@@ -29,7 +30,7 @@ def log_closing_event_once(
 
     legacy_utils = sys.modules.get("nonebot_plugin_xiuxian_2.xiuxian.xiuxian_utils.utils")
     impersonating = getattr(legacy_utils, "_impersonating_users", {})
-    target_user = str(impersonating.get(str(user_id), user_id))
+    target_user = str(impersonating.get(str(user_id), user_id) if resolve_impersonation else user_id)
     root = Path(players_dir)
     logs_dir = root / target_user / "logs"
     log_file = logs_dir / f"{when.strftime('%y%m%d')}.log"

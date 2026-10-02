@@ -2081,7 +2081,10 @@ class SourceQualityTests(unittest.TestCase):
         handler = command_source[
             command_source.index("@level_up_zj.handle"):command_source.index("@level_up_lx.handle")
         ]
-        self.assertEqual(handler.count("_direct_breakthrough_application().settle_direct_breakthrough("), 2)
+        self.assertEqual(handler.count("application.resolve_direct_breakthrough("), 1)
+        self.assertLess(handler.index("application.direct_breakthrough_replay("), handler.index("level_cd ="))
+        self.assertNotIn("record_level_up_result(", handler)
+        self.assertNotIn("trigger_breakthrough_relation_rewards(", handler)
         self.assertNotIn("_breakthrough_service()", handler)
         self.assertIn('outcome="success"', handler)
         self.assertIn('outcome="failure"', handler)

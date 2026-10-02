@@ -23,7 +23,9 @@ class RefactorProgressTests(unittest.TestCase):
         self.assertTrue(base["direct_breakthrough_handler_feature_owned"])
         self.assertTrue(base["direct_breakthrough_startup_migration_registered"])
         self.assertTrue(base["direct_breakthrough_request_path_has_no_ddl"])
-        self.assertFalse(base["direct_breakthrough_effects_replay_owned"])
+        self.assertTrue(base["direct_breakthrough_effects_replay_owned"])
+        self.assertTrue(base["direct_breakthrough_effects_runtime_and_cli_owned"])
+        self.assertTrue(base["direct_breakthrough_effects_migrations_routed"])
 
     def test_progress_report_tracks_recoverable_closing_effects(self) -> None:
         buff = _slice_status()["buff"]

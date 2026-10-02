@@ -62,6 +62,42 @@ def apply_base_direct_breakthrough_operations(uow: DatabaseUnitOfWork) -> None:
         )
 
 
+def apply_base_direct_breakthrough_plans(uow: DatabaseUnitOfWork) -> None:
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS direct_breakthrough_plans("
+        "operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,effects_message TEXT NOT NULL DEFAULT '')"
+    )
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS direct_breakthrough_relation_rewards("
+        "event_id TEXT PRIMARY KEY,payload TEXT NOT NULL)"
+    )
+
+
+def apply_base_direct_breakthrough_player(uow: DatabaseUnitOfWork) -> None:
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS direct_breakthrough_relation_receipts("
+        "event_id TEXT PRIMARY KEY,intent TEXT NOT NULL,payload TEXT NOT NULL,"
+        "status TEXT NOT NULL CHECK(status IN ('prepared','applied','skipped')))"
+    )
+    for table, fields in {
+        "partner": {"partner_id": "TEXT", "affection": "INTEGER", "bind_time": "TEXT"},
+        "mentor": {
+            "mentor_id": "TEXT", "apprentice_ids": "TEXT", "bind_time": "TEXT",
+            "breakthrough_reward_count": "INTEGER", "mentor_history": "TEXT",
+        },
+        "statistics": {
+            name: "INTEGER DEFAULT 0" for name in (
+                "突破次数", "突破成功", "突破失败", "突破损失修为", "师父突破返修", "徒弟突破回馈",
+            )
+        },
+    }.items():
+        uow.execute(f'CREATE TABLE IF NOT EXISTS "{table}"(user_id TEXT PRIMARY KEY)')
+        columns = {row["name"] for row in uow.query_all(f'PRAGMA table_info("{table}")')}
+        for name, datatype in fields.items():
+            if name not in columns:
+                uow.execute(f'ALTER TABLE "{table}" ADD COLUMN "{name}" {datatype}')
+
+
 def apply_base_stone_contest_operations(uow: DatabaseUnitOfWork) -> None:
     uow.execute(
         "CREATE TABLE IF NOT EXISTS stone_contest_operations("
@@ -192,4 +228,6 @@ __all__ = [
     "apply_base_xiangyuan",
     "apply_base_xiangyuan_player",
     "apply_base_direct_breakthrough_operations",
+    "apply_base_direct_breakthrough_plans",
+    "apply_base_direct_breakthrough_player",
 ]

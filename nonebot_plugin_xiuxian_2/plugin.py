@@ -77,6 +77,8 @@ from .features.base.manifest import FEATURE as BASE_FEATURE
 from .features.base.migrations import (
     apply_base,
     apply_base_direct_breakthrough_operations,
+    apply_base_direct_breakthrough_plans,
+    apply_base_direct_breakthrough_player,
     apply_base_player_rename_operations,
     apply_base_root_reroll_operations,
     apply_base_stone_contest_operations,
@@ -212,6 +214,11 @@ def apply_platform_schema(uow: DatabaseUnitOfWork) -> None:
     """Create shared operation/outbox tables during startup migration."""
     OperationLedger().ensure_schema(uow)
     OutboxStore().ensure_schema(uow)
+    uow.execute(
+        "CREATE INDEX IF NOT EXISTS direct_breakthrough_pending_outbox "
+        "ON domain_outbox(attempts,created_at,event_id) "
+        "WHERE event_type='base.direct_breakthrough.effects' AND status='pending'"
+    )
 
 
 def build_migrations() -> tuple[Migration, ...]:
@@ -294,6 +301,8 @@ def build_migrations() -> tuple[Migration, ...]:
         Migration("base.007", "xiangyuan_player_limits", apply_base_xiangyuan_player),
         Migration("base.008", "player_root_reroll_operations", apply_base_root_reroll_operations),
         Migration("base.009", "direct_breakthrough_operations", apply_base_direct_breakthrough_operations),
+        Migration("base.010", "direct_breakthrough_plans", apply_base_direct_breakthrough_plans),
+        Migration("base.011", "direct_breakthrough_player", apply_base_direct_breakthrough_player),
         Migration("beg.001", "beg_feature_migrations", apply_beg),
         Migration("boss.001", "boss_feature_migrations", apply_boss),
         Migration("boss.002", "boss_purchase_operations", apply_boss_purchase),
@@ -504,6 +513,7 @@ _GAME_DATABASE_EXCLUDED_MIGRATION_VERSIONS = frozenset(
         "legacy.dufang.003",
         "legacy.dufang.006",
         "base.005",
+        "base.011",
         "base.007",
         "boss.004",
         "boss.006",
@@ -562,6 +572,7 @@ _PLAYER_DATABASE_MIGRATION_VERSIONS = frozenset(
         "legacy.dufang.006",
         "base.007",
         "base.005",
+        "base.011",
         "boss.004",
         "boss.006",
     }
@@ -832,6 +843,7 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
         from .features.natal_treasure.application import NatalTreasureApplication
         from .features.buff.application import BuffApplication
         from .compatibility.buff_closing_effects import LegacyBuffClosingEffects
+        from .compatibility.base_breakthrough_effects import LegacyDirectBreakthroughEffects
         from .compatibility.game_event_effects import LegacyGameEventEffects
         from .features.base.application import BaseApplication
         from .features.back.application import BackApplication
@@ -1049,7 +1061,12 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
                 closing_effects=LegacyBuffClosingEffects(context.database.path("player_db")),
                 clock=context.clock,
             ),
-            "base": BaseApplication(str(context.database.path("game_db")), str(context.database.path("player_db")), clock=context.clock),
+            "base": BaseApplication(
+                context.database.path("game_db"), context.database.path("player_db"), clock=context.clock,
+                direct_breakthrough_effects=LegacyDirectBreakthroughEffects(
+                    context.database.path("game_db"), context.database.path("player_db"), players_dir=context.paths.players,
+                ),
+            ),
             "back": BackApplication(str(context.database.path("game_db")), str(context.database.path("player_db"))),
             "trade": TradeApplication(
                 str(context.database.path("game_db")),
@@ -1161,6 +1178,7 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
         context.outbox_handlers = {
             "accessory_package.open": context.services["accessory_package"].reconcile,
             "buff.closing.effects": context.services["buff"].reconcile_outbox_event,
+            "base.direct_breakthrough.effects": context.services["base"].reconcile_direct_breakthrough_event,
             "game_event.projection": game_event_effects.on_outbox_event,
             "sign_in.effects": context.services["sign_in"].reconcile_outbox_event,
             "auction.bid.effects": context.services["auction"].reconcile_outbox_event,

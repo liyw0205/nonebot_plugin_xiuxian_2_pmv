@@ -88,6 +88,8 @@ def main(argv: list[str] | None = None) -> int:
             from .features.auction.application import AuctionBidApplication
             from .features.auction.settlement import AuctionSettlementApplication
             from .features.buff.application import BuffApplication
+            from .features.base.application import BaseApplication
+            from .compatibility.base_breakthrough_effects import LegacyDirectBreakthroughEffects
             from .compatibility.buff_closing_effects import LegacyBuffClosingEffects
             from .compatibility.game_event_effects import LegacyGameEventEffects
             from .features.map.application import MapApplication
@@ -122,6 +124,10 @@ def main(argv: list[str] | None = None) -> int:
                 closing_effects=LegacyBuffClosingEffects(player_db),
             )
             game_event_effects = LegacyGameEventEffects(game_db, player_db, clock=context.clock)
+            base = BaseApplication(
+                game_db, player_db, clock=context.clock,
+                direct_breakthrough_effects=LegacyDirectBreakthroughEffects(game_db, player_db, players_dir=context.paths.players),
+            )
             map_application = MapApplication(
                 game_db, player_db, game_event_effects=game_event_effects
             )
@@ -145,6 +151,7 @@ def main(argv: list[str] | None = None) -> int:
                 handlers={
                     "accessory_package.open": accessory.reconcile,
                     "buff.closing.effects": buff.reconcile_outbox_event,
+                    "base.direct_breakthrough.effects": base.reconcile_direct_breakthrough_event,
                     "game_event.projection": game_event_effects.on_outbox_event,
                     "auction.bid.effects": auction.reconcile_outbox_event,
                     "auction.settlement.effects": settlement.reconcile_outbox_event,

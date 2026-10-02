@@ -10,6 +10,7 @@ from ...paths import get_paths
 from ...infrastructure.ids import UUIDGenerator
 from ...features.player_state.application import PlayerStateApplication
 from ...features.base.application import BaseApplication
+from ...compatibility.base_breakthrough_effects import LegacyDirectBreakthroughEffects, direct_breakthrough_root_rate
 from ..on_compat import on_command
 from nonebot.params import CommandArg
 
@@ -83,6 +84,7 @@ def _direct_breakthrough_application() -> BaseApplication:
         _direct_breakthrough_application_instance = BaseApplication(
             get_paths().game_db,
             get_paths().player_db,
+            direct_breakthrough_effects=LegacyDirectBreakthroughEffects(get_paths().game_db, get_paths().player_db),
         )
     return _direct_breakthrough_application_instance
 
@@ -1095,6 +1097,13 @@ async def level_up_zj_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
         await handle_send(bot, event, msg, md_type="我要修仙")
         await level_up_zj.finish()
     user_id = user_info['user_id']
+    application = _direct_breakthrough_application()
+    operation_id = _breakthrough_operation_id(event, "direct", user_id)
+    application.resume_pending_direct_breakthroughs(limit=5)
+    replay = application.direct_breakthrough_replay(operation_id, user_id)
+    if replay is not None:
+        await handle_send(bot, event, replay.message or "本次突破请求已处理，不重复结算。", md_type="修仙")
+        await level_up_zj.finish()
     if user_info['hp'] is None:
         # 判断用户气血是否为空
         _initialize_player_state(user_id, user_info)
@@ -1130,71 +1139,59 @@ async def level_up_zj_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
     main_exp_buff = UserBuffDate(user_id).get_user_main_buff_data()#功法突破扣修为减少
     exp_buff = main_exp_buff['exp_buff'] if main_exp_buff is not None else 0
     number = main_rate_buff['number'] if main_rate_buff is not None else 0
-    le = OtherSet().get_type(exp, level_rate + leveluprate + number, level_name)
-    if le == "失败":
-        # 突破失败
-        # 失败惩罚，随机扣减修为
-        percentage = random.randint(
-            XiuConfig().level_punishment_floor, XiuConfig().level_punishment_limit
+    def plan_breakthrough(game, snapshot, occurred_at):
+        config = XiuConfig()
+        level_index = config.level.index(level_name)
+        if level_index == len(config.level) - 1:
+            return {"message": "道友已是最高境界，无法突破！"}
+        target = config.level[level_index + 1]
+        need_exp = jsondata.level_data()[target]["power"]
+        if exp < need_exp:
+            return {"message": f"道友的修为不足以突破！距离下次突破需要{number_to(need_exp - exp)}修为！突破境界为：{target}"}
+        core = dict(
+            expected_level=level_name, expected_exp=exp, expected_hp=user_msg["hp"],
+            expected_mp=user_msg["mp"], expected_rate=leveluprate,
         )
-        now_exp = int(int(exp) * ((percentage / 100) * (1 - exp_buff))) #功法突破扣修为减少
-        nowhp = user_msg['hp'] - (now_exp / 2) if (user_msg['hp'] - (now_exp / 2)) > 0 else 1
-        nowmp = user_msg['mp'] - now_exp if (user_msg['mp'] - now_exp) > 0 else 1
-        update_rate = 1 if int(level_rate * XiuConfig().level_up_probability) <= 1 else int(
-            level_rate * XiuConfig().level_up_probability)  # 失败增加突破几率
-        result = _direct_breakthrough_application().settle_direct_breakthrough(
-            operation_id=_breakthrough_operation_id(event, "direct", user_id),
-            user_id=user_id,
-            outcome="failure",
-            expected_level=level_name,
-            target_level=level_name,
-            expected_exp=exp,
-            expected_hp=user_msg["hp"],
-            expected_mp=user_msg["mp"],
-            expected_rate=leveluprate,
-            exp_loss=now_exp,
-            new_hp=nowhp,
-            new_mp=nowmp,
-            new_rate=leveluprate + update_rate,
+        if random.randint(0, 100) >= level_rate + leveluprate + number:
+            percentage = random.randint(config.level_punishment_floor, config.level_punishment_limit)
+            loss = int(int(exp) * ((percentage / 100) * (1 - exp_buff)))
+            update_rate = max(1, int(level_rate * config.level_up_probability))
+            core.update(
+                outcome="failure", target_level=level_name, exp_loss=loss,
+                new_hp=max(user_msg["hp"] - loss / 2, 1), new_mp=max(user_msg["mp"] - loss, 1),
+                new_rate=leveluprate + update_rate,
+            )
+            return {
+                "core": core,
+                "message": f"**突破结果**\n---\n❌ 突破失败\n境界受损，修为减少\n> {number_to(loss)}\n下次突破成功率增加\n> {update_rate}%\n道友不要放弃！",
+                "effects": {
+                    "statistics": {"突破次数": 1, "突破失败": 1, "突破损失修为": loss},
+                    "log_message": f"[直接突破] 突破失败，尝试1次，失败1次，损失修为{number_to(loss)}",
+                    "relations": [],
+                },
+            }
+        core.update(
+            outcome="success", target_level=target,
+            root_rate=direct_breakthrough_root_rate({**user_msg, **snapshot}),
+            level_spend=jsondata.level_data()[target]["spend"],
         )
-        if not result.applied:
-            await handle_send(bot, event, "突破未重复结算：本次请求已处理，或修为、境界已更新，请刷新后重试。", md_type="修仙", k1="直接突破", v1="直接突破", k2="渡厄", v2="渡厄突破", k3="修为", v3="我的修为")
-            await level_up_zj.finish()
-        msg = f"**突破结果**\n---\n❌ 突破失败\n境界受损，修为减少\n> {number_to(now_exp)}\n下次突破成功率增加\n> {update_rate}%\n道友不要放弃！"
-        record_level_up_result(user_id, "直接突破", success=False, fail_count=1, exp_loss=now_exp)
-        await handle_send(bot, event, msg, md_type="修仙", k1="直接突破", v1="直接突破", k2="渡厄", v2="渡厄突破", k3="修为", v3="我的修为")
-        await level_up_zj.finish()
+        relations = application.plan_direct_breakthrough_relations(game, {**user_msg, **snapshot}, target, occurred_at)
+        return {
+            "core": core,
+            "message": f"**突破结果**\n---\n✅ 恭喜道友突破{target}成功！",
+            "effects": {
+                "statistics": {"突破次数": 1, "突破成功": 1},
+                "log_message": f"[直接突破] 突破成功，尝试1次，目标境界：{target}",
+                "relations": relations,
+            },
+        }
 
-    elif type(le) == list:
-        # 突破成功
-        root_rate = _sql_message().get_root_rate(user_msg["root_type"], user_id)
-        level_spend = jsondata.level_data()[le[0]]["spend"]
-        result = _direct_breakthrough_application().settle_direct_breakthrough(
-            operation_id=_breakthrough_operation_id(event, "direct", user_id),
-            user_id=user_id,
-            outcome="success",
-            expected_level=level_name,
-            target_level=le[0],
-            expected_exp=exp,
-            expected_hp=user_msg["hp"],
-            expected_mp=user_msg["mp"],
-            expected_rate=leveluprate,
-            root_rate=root_rate,
-            level_spend=level_spend,
-        )
-        if not result.applied:
-            await handle_send(bot, event, "突破未重复结算：本次请求已处理，或修为、境界已更新，请刷新后重试。")
-            await level_up_zj.finish()
-        share_msg = trigger_breakthrough_relation_rewards(user_id, le[0])
-        msg = f"**突破结果**\n---\n✅ 恭喜道友突破{le[0]}成功！{share_msg}"
-        record_level_up_result(user_id, "直接突破", success=True, target_level=le[0])
-        await handle_send(bot, event, msg, md_type="修仙", k1="直接突破", v1="直接突破", k2="渡厄", v2="渡厄突破", k3="修为", v3="我的修为")
-        await level_up_zj.finish()
-    else:
-        # 最高境界
-        msg = le
-        await handle_send(bot, event, msg)
-        await level_up_zj.finish()
+    result = application.resolve_direct_breakthrough(
+        operation_id=operation_id, user_id=user_id, expected=user_msg, plan_factory=plan_breakthrough,
+    )
+    msg = result.message or "突破未重复结算：修为、境界或结算状态已更新，请刷新后重试。"
+    await handle_send(bot, event, msg, md_type="修仙", k1="直接突破", v1="直接突破", k2="渡厄", v2="渡厄突破", k3="修为", v3="我的修为")
+    await level_up_zj.finish()
 
 @level_up_lx.handle(parameterless=[Cooldown(stamina_cost=15)])  # 连续突破消耗15体力
 async def level_up_lx_continuous(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):

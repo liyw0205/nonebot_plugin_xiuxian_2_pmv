@@ -2,14 +2,15 @@ from __future__ import annotations
 
 import json
 import math
-from dataclasses import dataclass
+from contextlib import nullcontext
+from dataclasses import dataclass, replace
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 from ...core.numeric import as_int_like
 from ...infrastructure.clock import SystemClock
-from ...infrastructure.database import DatabaseUnitOfWork
+from ...infrastructure.database import DatabaseUnitOfWork, OutboxStore
 
 
 @dataclass(frozen=True)
@@ -20,6 +21,8 @@ class BaseDirectBreakthroughResult:
     from_level: str = ""
     to_level: str = ""
     exp_loss: int = 0
+    message: str = ""
+    effects_event_id: str = ""
 
     @property
     def applied(self) -> bool:
@@ -28,6 +31,8 @@ class BaseDirectBreakthroughResult:
 
 class BaseDirectBreakthroughSqlRepository:
     OPERATION_TABLE = "direct_breakthrough_operations"
+    PLAN_TABLE = "direct_breakthrough_plans"
+    EVENT_TYPE = "base.direct_breakthrough.effects"
     PLAYER_COLUMNS = {
         "user_id", "level", "exp", "hp", "mp", "atk", "power",
         "level_up_rate", "level_up_cd",
@@ -36,6 +41,87 @@ class BaseDirectBreakthroughSqlRepository:
     def __init__(self, database: str | Path, *, clock: Any | None = None) -> None:
         self.database = Path(database)
         self.clock = clock or SystemClock()
+        self.outbox = OutboxStore(clock=self.clock)
+
+    def _read_result(self, uow, operation_id, user_id):
+        row = uow.query_one(
+            f"SELECT * FROM {self.OPERATION_TABLE} WHERE operation_id=?", (operation_id,),
+        )
+        if row is None:
+            return None
+        if str(row["user_id"]) != str(user_id):
+            return self._result("operation_conflict", user_id)
+        result = self._result(
+            "duplicate", user_id, row["outcome"], row["from_level"], row["to_level"],
+            as_int_like(row["exp_loss"]),
+        )
+        if not self._columns(uow, self.PLAN_TABLE):
+            return result
+        plan = uow.query_one(f"SELECT payload,effects_message FROM {self.PLAN_TABLE} WHERE operation_id=?", (operation_id,))
+        if plan is None:
+            # Old receipts do not prove whether their effects ran. Never backfill them.
+            return result
+        payload = json.loads(plan["payload"])
+        return replace(result, message=payload["message"] + plan["effects_message"], effects_event_id=self.event_id(operation_id))
+
+    @staticmethod
+    def event_id(operation_id):
+        return f"direct-breakthrough:{operation_id}:effects"
+
+    def get_result(self, operation_id: str, user_id: str):
+        if not self.database.is_file():
+            return None
+        with DatabaseUnitOfWork(self.database, read_only=True) as uow:
+            if not self._schema_ready(uow):
+                return None
+            return self._read_result(uow, str(operation_id), str(user_id))
+
+    def resolve(self, operation_id: str, user_id: str, *, expected: dict, plan_factory):
+        operation_id, user_id = str(operation_id).strip(), str(user_id).strip()
+        if not operation_id or not user_id:
+            return self._result("invalid", user_id)
+        if not self.database.is_file():
+            return self._result("schema_missing", user_id)
+        with DatabaseUnitOfWork(self.database, immediate=True) as uow:
+            if not self._schema_ready(uow):
+                return self._result("schema_missing", user_id)
+            previous = self._read_result(uow, operation_id, user_id)
+            if previous is not None:
+                return previous
+            if not {"operation_id", "payload", "effects_message"} <= self._columns(uow, self.PLAN_TABLE) or not {
+                "event_id", "payload_json", "status", "attempts", "next_attempt_at",
+                "aggregate_type", "aggregate_id", "event_type", "created_at", "updated_at",
+            } <= self._columns(uow, "domain_outbox"):
+                return self._result("schema_missing", user_id)
+            row = uow.query_one("SELECT * FROM user_xiuxian WHERE user_id=? ORDER BY rowid LIMIT 1", (user_id,))
+            if row is None:
+                return self._result("user_missing", user_id)
+            if any(str(row[key] or "") != str(expected.get(key) or "") for key in ("level", "level_up_cd")) or any(
+                as_int_like(row[key]) != as_int_like(expected.get(key))
+                for key in ("exp", "hp", "mp", "level_up_rate")
+            ):
+                return self._result("state_changed", user_id)
+            occurred_at = self.clock.now().astimezone().replace(tzinfo=None).isoformat(sep=" ")
+            # The factory is read-only: no effects escape a rolled-back random plan.
+            plan = plan_factory(uow, dict(row), occurred_at)
+            if "core" not in plan:
+                return replace(self._result("rejected", user_id), message=str(plan["message"]))
+            result = self.apply(operation_id, user_id, occurred_at=occurred_at, _uow=uow, **plan["core"])
+            if not result.applied:
+                return result
+            payload = {
+                **plan["effects"], "operation_id": operation_id, "user_id": user_id,
+                "occurred_at": occurred_at, "message": str(plan["message"]),
+            }
+            uow.execute(
+                f"INSERT INTO {self.PLAN_TABLE}(operation_id,payload) VALUES(?,?)",
+                (operation_id, json.dumps(payload, ensure_ascii=True, separators=(",", ":"))),
+            )
+            self.outbox.append(
+                uow, event_id=self.event_id(operation_id), aggregate_type="base",
+                aggregate_id=user_id, event_type=self.EVENT_TYPE, payload=payload,
+            )
+            return replace(result, message=payload["message"], effects_event_id=self.event_id(operation_id))
 
     @staticmethod
     def _columns(uow: DatabaseUnitOfWork, table: str) -> set[str]:
@@ -91,6 +177,7 @@ class BaseDirectBreakthroughSqlRepository:
         root_rate: float = 0.0,
         level_spend: float = 0.0,
         occurred_at: datetime | str | None = None,
+        _uow: DatabaseUnitOfWork | None = None,
     ) -> BaseDirectBreakthroughResult:
         operation_id = str(operation_id).strip()
         user_id = str(user_id).strip()
@@ -125,7 +212,7 @@ class BaseDirectBreakthroughSqlRepository:
         if not self.database.is_file():
             return self._result("schema_missing", user_id, outcome)
 
-        with DatabaseUnitOfWork(self.database, immediate=True) as uow:
+        with (nullcontext(_uow) if _uow is not None else DatabaseUnitOfWork(self.database, immediate=True)) as uow:
             if not self._schema_ready(uow):
                 return self._result("schema_missing", user_id, outcome)
             previous = uow.query_one(
