@@ -6,6 +6,18 @@ from scripts.check_full_refactor_progress import _slice_status
 
 
 class RefactorProgressTests(unittest.TestCase):
+    def test_progress_report_tracks_replay_safe_map_and_pet_claim_effects(self) -> None:
+        claims = _slice_status()["game_event_claims"]
+        self.assertTrue(claims["pet_travel_claim_effects_outbox_owned"])
+        self.assertTrue(claims["pet_travel_claim_effects_dispatched_on_replay"])
+        self.assertTrue(claims["claim_projection_receipts_and_migrations_owned"])
+        self.assertTrue(claims["claim_projection_runtime_and_cli_reconcile_owned"])
+        self.assertTrue(claims["claim_operation_recovery_runtime_and_cli_owned"])
+        self.assertTrue(claims["claim_projection_migrations_routed"])
+        map_status = _slice_status()["map"]
+        self.assertTrue(map_status["mission_claim_effects_outbox_owned"])
+        self.assertTrue(map_status["mission_claim_effects_dispatched_on_replay"])
+
     def test_progress_report_tracks_recoverable_closing_effects(self) -> None:
         buff = _slice_status()["buff"]
         self.assertTrue(buff["closing_settlement_replay_application_owned"])

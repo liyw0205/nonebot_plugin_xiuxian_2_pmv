@@ -1,12 +1,14 @@
 from __future__ import annotations
 
-from dataclasses import asdict, is_dataclass
+from dataclasses import asdict, is_dataclass, replace
+import json
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
 from ...core.errors import ConflictError, DomainError, ValidationError
 from ...core.result import OperationOutcome, ReplyPlan
 from ...infrastructure.database import DatabaseUnitOfWork, OperationLedger
+from ...infrastructure.clock import SystemClock
 from ...infrastructure.observability import trace_context
 from .domain import PetFeedRequest, PetTravelClaimRequest
 from .repository import PetActiveSwitchSqlRepository, PetFeedSqlRepository, PetFusionBreakthroughSqlRepository, PetHatchSqlRepository, PetReleaseSqlRepository, PetRepository, PetSkillReplaceSqlRepository, PetSkillRerollSqlRepository, PetTravelClaimSqlRepository, PetTravelStartSqlRepository
@@ -21,12 +23,13 @@ def _data(raw: Any) -> dict[str, Any]:
 
 
 class PetApplication:
-    def __init__(self, game_database: str | Path, player_database: str | Path, *, repository: PetRepository | None = None, ledger: OperationLedger | None = None, clock: Any | None = None) -> None:
+    def __init__(self, game_database: str | Path, player_database: str | Path, *, repository: PetRepository | None = None, ledger: OperationLedger | None = None, clock: Any | None = None, game_event_effects: Any | None = None) -> None:
         self.game_database = str(game_database)
         self.player_database = str(player_database)
         self.repository = repository
         self.ledger = ledger or OperationLedger()
-        self.clock = clock
+        self.clock = clock or SystemClock()
+        self.game_event_effects = game_event_effects
 
 
     def _execute(self, *, operation_id: str, user_id: str, action: str, payload: Mapping[str, Any], call) -> OperationOutcome[dict[str, Any]]:
@@ -63,11 +66,52 @@ class PetApplication:
         except (TypeError, ValueError) as exc:
             raise ValidationError(str(exc)) from exc
         if self.repository is None:
-            repository = PetTravelClaimSqlRepository(self.game_database, self.player_database)
+            repository = PetTravelClaimSqlRepository(self.game_database, self.player_database, clock=self.clock)
             call = lambda: repository.claim(request.operation_id, request.user_id, request.expected_travel, request.stone, request.exp, request.items, request.max_goods_num)
         else:
             call = lambda: self.repository.travel_claim(request.operation_id, request.user_id, request.expected_travel, request.stone, request.exp, request.items, request.max_goods_num)
-        return self._execute(operation_id=request.operation_id, user_id=request.user_id, action="pet.travel_claim", payload=request.payload(), call=call)
+        outcome = self._execute(operation_id=request.operation_id, user_id=request.user_id, action="pet.travel_claim", payload=request.payload(), call=call)
+        if outcome.ok and isinstance(outcome.data, dict) and outcome.data.get("effects_event_id") and self.game_event_effects is not None:
+            if not self.game_event_effects.dispatch(str(outcome.data["effects_event_id"])):
+                return replace(outcome, message="游历奖励已发放，统计和进度正在补偿。")
+        return outcome
+
+    def reconcile_travel_claim_operation(self, record: dict[str, Any]) -> OperationOutcome[dict[str, Any]]:
+        operation_id = str(record["operation_id"])
+        action = str(record.get("action") or "pet.travel_claim")
+        with DatabaseUnitOfWork(self.game_database, read_only=True) as uow:
+            receipt = uow.query_one(
+                "SELECT payload FROM pet_travel_claim_operations WHERE operation_id=?",
+                (operation_id,),
+            )
+            event = uow.query_one(
+                "SELECT payload_json FROM domain_outbox WHERE event_id=?",
+                (f"pet.travel.effects:{operation_id}",),
+            )
+        if receipt is None:
+            return OperationOutcome.failed(
+                operation_id,
+                action,
+                "pet travel claim receipt is missing; request may be retried",
+                code="reconcile_receipt_missing",
+                audit_category="pet",
+            )
+        _, _, stone, exp, rewards, _ = json.loads(str(receipt["payload"]))
+        data = {
+            "status": "applied",
+            "stone": int(stone),
+            "exp": int(exp),
+            "items": tuple((int(row[0]), int(row[3])) for row in rewards),
+        }
+        if event is not None:
+            data["effects_event_id"] = f"pet.travel.effects:{operation_id}"
+        return OperationOutcome.applied(
+            operation_id,
+            action,
+            data=data,
+            granted={"stone": data["stone"], "exp": data["exp"], "items": data["items"]},
+            audit_category="pet",
+        )
 
     def start_travel(self, *, operation_id: str, user_id: str, pet_uid: str, expected_travel: Mapping[str, Any] | None, travel: Mapping[str, Any]) -> OperationOutcome[dict[str, Any]]:
         if not str(operation_id).strip() or not str(user_id).strip() or not str(pet_uid).strip() or not isinstance(travel, Mapping):

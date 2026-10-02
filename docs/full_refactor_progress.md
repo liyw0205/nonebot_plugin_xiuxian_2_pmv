@@ -3235,9 +3235,9 @@ focused tests、根目录 `tests/` 隔离回归、compileall、architecture/prog
 4. **持久回执保留与存储预算（只读基线已完成，归档策略仍未定）**：bet/payout/resolution、操作 ledger、已发送 outbox 和 player receipt 都是幂等、恢复或审计状态，不能
    当缓存随手清理。`scripts/audit_dufang_storage.py --data-dir <existing-data-dir>` 提供只读盘点：统计数据库和 WAL/SHM/journal 物理占用、SQLite 页数/空闲页、指定持久表行数及文本 payload 估算、pending/nonterminal 数量、当前备份目录总量，并估算 game/player 等 SQLite 文件的最低备份空间；SQL 仅聚合，备份目录最多扫描 50,000 个条目且不跟随符号链接，不将整表/目录树载入 RAM，不创建目录或数据库。此工具不执行归档、删除、`VACUUM`、checkpoint 或 restore。待确定旧消息 replay 窗口、审计期限及可恢复归档格式后，才另行评估终态 receipt 压缩。
    **当前不定义 TTL，也不启用自动归档/删除**：ADR-0007 要求至少覆盖对应备份保留期、reconcile clean 后由运维归档；还需先确定旧消息 replay 窗口和可恢复的归档格式。pending、started、failed、needs_reconcile、dead outbox、未完成 share progress，以及仍承担幂等 tombstone 的终态回执都不得删除。归档前必须有审批、game/player 成对且可校验的备份/恢复证据与 clean reconcile；仅有空间报告不构成归档许可。
-5. **按真实调用图清理剩余旧写路径**：优先 player/economy/inventory 等会改动资产的默认 handler；当前候选为
-   `out_closing` 的统计/日志/任务/活动副作用恢复，须先完成上述所有权与 replay 审计。随后单独审计地图委托和宠物游历
-   replay 的重复统计，再按风险处理 cultivation/training、combat/dungeon/boss、sect/trade 与 scheduler/Web 入口。
+5. **按真实调用图清理剩余旧写路径**：优先 player/economy/inventory 等会改动资产的默认 handler。`out_closing` effects recovery
+   与地图委托/宠物游历 replay 的 effects recovery 已分别完成代码切片和 focused 验证；历史缺少 outbox 的 claim receipt 不自动回填，
+   仍须单独审计。后续按风险处理 cultivation/training、combat/dungeon/boss、sect/trade 与 scheduler/Web 入口。
    每项记录真实入口、完整调用链、跨库状态所有者和中断恢复证据；只有默认调用归零且兼容/回滚边界明确后，才隔离或删除
    对应 legacy service。
 6. **全局依赖与完成门禁**：按同一 progress CLI 口径持续记录 `transaction_service`、`xiuxian2_handle`、
@@ -3252,22 +3252,25 @@ focused tests、根目录 `tests/` 隔离回归、compileall、architecture/prog
 负责；代理不得并行修改同一切片，也不得启动会争抢 RAM/磁盘的重型测试。已完成的 dufang cutover 和相邻只读审查可复用，
 不重复扫描。
 
-**当前执行切片：`out_closing` effects recovery（2026-10-02）**：复用已完成的闭关 handler、任务/活动投影只读审计，
+**`out_closing` effects recovery（代码切片完成，2026-10-02）**：复用已完成的闭关 handler、任务/活动投影只读审计，
 不重复扫描。主线程负责冻结副作用 intent，并使闭关资产回执与 game-db outbox 同事务提交；分别为 player statistics、
 JSON 日志、task progress 和 activity progress 建立稳定 ID 去重及失败后重试；移除默认 handler 的旧 replay DDL 预查，
 把 effects handler 接入 runtime 与 CLI reconcile；最后用隔离数据库覆盖 core commit 后中断、各投影部分成功、完整 replay、
 旧回执无 outbox 和缺 schema fail-closed。子代理只在出现互不重叠的新调用图、迁移路由或重放缺口问题时做只读审计，
-不参与本切片代码修改、测试或资源清理。完成并验收本切片后提交/推送，再按第 5 项进入地图委托与宠物游历 replay
-重复统计的独立审计，不把它们并入闭关实现。
+不参与闭关切片代码修改、测试或资源清理。闭关切片验收后转入了地图委托/宠物游历独立审计与实现；两者不与闭关效果合并。
 
 **本切片验收（2026-10-02）**：发现并修正 CLI reconcile imports 缩进错误和活动通行证模块重复导入。闭关 application/repository、
 projection、活动回执、任务周期与迁移选择集 `32 passed`；闭关 progress gate `1 passed`；24 个变更 Python 文件 AST 解析通过，
 `git diff --check` 通过。未跑全量测试、真实启动迁移或正式备份恢复；独立的 `activity_config_event_service` 收集失败仍按既有
 导入问题记录，不计为本切片回归。pytest cache 与字节码均禁用，专用 basetemp 已在进程退出后清理。
 
-**缓存与资源收尾**：测试前后记录 `df -h` 与可用 RAM；测试禁用 pytest cache，将字节码和数据库产物放在本轮专用
-临时目录。只清理确认由本轮创建、且进程已退出的缓存/临时产物，不清理共享 `ITEMS_CACHE`、业务数据、运行数据库
-或其 sidecar。若可用空间或内存明显下降，先停止并发/全量回归并清理本轮临时目录，再继续。
+**地图委托与宠物游历 effects replay 切片（2026-10-02）**：按方案由两名只读子代理分别完成 map/pet handler 到投影的调用图审计；主线程核对结论并负责全部代码、测试和集成。地图与宠物领奖现在都在资产/claim receipt 的 game DB 事务内追加 `game_event.projection` outbox；宠物领奖 receipt 从请求期 DDL 改为 game-only `pet.004` 启动迁移。Map/Pet application replay 会用同一 event ID 再分发，统计由 player-only `game_events.001` 的 `(event_id,event_key)` receipt 与增量更新同事务保护；任务用稳定 operation ID 和冻结事件时间，活动使用稳定 activity receipt，经济日志使用 event ID 唯一回执。运行时及 CLI 均接入 outbox handler；另为 `map.mission_claim` / `pet.travel_claim` 接入 operation reconcile：已有资产回执时还原 application ledger 结果，没有业务回执时转为可重试 failed，处理提交业务事务后进程中断的 `started` 状态。
+
+地图、宠物与 projection 聚焦测试 `28 passed`，新增 progress contract `1 passed`；进度检查器确认两条 outbox、稳定回执、迁移路由和 runtime/CLI operation/outbox reconcile 标记均为 true，`exit_ready=false`。旧版本已完成但没有 outbox 的历史 operation receipt 不自动补造统计事件，因为无法判断旧副作用是否已经执行；这些历史状态需单独审计/人工决策，不在本切片回填。未跑全量测试、真实启动迁移、正式备份恢复或 P7 发布演练。pytest cache 与字节码关闭；本轮专用临时目录在进程退出后清理，不触碰共享缓存、运行数据库/sidecar、`.venv` 或用户 `boss_info.json`。
+
+**子代理使用约束**：合理委派只读调用图、迁移归属或回放测试缺口审计，并在方案注明文件范围、只读/不运行重型测试与不清理缓存边界；实现、测试集成、progress gate、资源核对和最终验收由主线程负责。避免多个代理并行修改同一条业务切片。
+
+**缓存与资源收尾**：本轮测试关闭 pytest cache/字节码并使用独立 `/tmp/xiuxian-replay-check.*` basetemp；只在所有进程退出后清理该目录。开工时磁盘可用约 `21 GB`、RAM available `1.2 GiB`；测试中最低观察约 `1.1 GiB` available，磁盘余量无明显变化。不得清理共享 `ITEMS_CACHE`、业务数据、运行数据库或 SQLite sidecar；避免在此资源基线上运行并行/全量测试。
 
 2026-09-21 stone-gift slice verification：真实 `送灵石` 新 adapter 的用户查询补回 `level` 字段；此前缺少该字段会让非默认境界按错误的默认日限额计算，已由真实 SQLite command boundary regression 覆盖。feature/application/adapter/source 回归 `26 passed, 2 subtests passed`，独立 Web boundary `3 passed`；测试夹具统一显式执行 platform operation ledger 与 `stone_gift` schema migration，生产请求路径仍不隐式建表。compileall、architecture、inventory、`git diff --check` 通过。
 

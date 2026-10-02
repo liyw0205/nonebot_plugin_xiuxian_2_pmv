@@ -12,7 +12,6 @@ from nonebot.params import CommandArg
 
 from ..adapter_compat import Bot, Message, GroupMessageEvent, PrivateMessageEvent
 from ..xiuxian_utils.lay_out import assign_bot, Cooldown
-from ..xiuxian_utils.game_events import safe_record_game_event
 from ..xiuxian_utils.utils import (
     build_md_command_link,
     check_user,
@@ -62,6 +61,11 @@ dao_battle_application = CombatSettlementApplication(
 runtime_clock = SystemClock()
 runtime_random = SystemRandom()
 runtime_ids = UUIDGenerator()
+
+
+def configure_map_application(application: MapApplication) -> None:
+    global map_application
+    map_application = application
 
 
 class _LazyMapItemCatalog:
@@ -2485,6 +2489,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         items=reward_meta["item_delta"],
         max_goods_num=XiuConfig().max_goods_num,
         clock=runtime_clock,
+        event_meta=reward_meta,
     )
     data = result_data(outcome.data)
     result = MapMissionClaimResult(str(data.get("status", outcome.code)), int(data.get("stone", 0) or 0), tuple(data.get("rewards", ())))
@@ -2495,17 +2500,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await handle_send(bot, event, "委托未结算：委托当前状态已更新，请重新发起。")
         return
 
-    if result.status == "applied":
-        safe_record_game_event(
-            uid,
-            "map_mission_complete",
-            1,
-            {
-                "source": "map",
-                "action": "mission_complete",
-                "trace_id": operation_id,
-                **reward_meta,
-                "detail": {"mission_type": mission_type, "target": target, "progress": progress},
-            },
-        )
-    await handle_send(bot, event, f"✅ 地图委托完成！\n任务：{_get_mission_desc(mission)}\n获得奖励：{_merge_reward_text(rewards)}")
+    completion_message = f"✅ 地图委托完成！\n任务：{_get_mission_desc(mission)}\n获得奖励：{_merge_reward_text(rewards)}"
+    if outcome.message:
+        completion_message += f"\n{outcome.message}"
+    await handle_send(bot, event, completion_message)

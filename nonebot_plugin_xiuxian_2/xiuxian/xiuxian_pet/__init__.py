@@ -9,7 +9,6 @@ from ..adapter_compat import Bot, GroupMessageEvent, Message, MessageSegment, Pr
 from ..on_compat import on_command
 from ..messaging.delivery import delivery_service
 from ..xiuxian_config import XiuConfig
-from ..xiuxian_utils.game_events import safe_record_game_event
 from ..xiuxian_utils.item_json import Items
 from ..xiuxian_utils.lay_out import Cooldown
 from ..xiuxian_utils.pet_system import (
@@ -57,7 +56,6 @@ from ..xiuxian_utils.utils import (
     number_to,
     send_help_message,
     send_msg_handler,
-    update_statistics_value,
 )
 from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage
 from ...paths import get_paths
@@ -70,6 +68,11 @@ items = Items()
 _sql_message_instance = None
 pet_application = PetApplication(get_paths().game_db, get_paths().player_db)
 runtime_ids = UUIDGenerator()
+
+
+def configure_pet_application(application: PetApplication) -> None:
+    global pet_application
+    pet_application = application
 
 
 def _sql_message():
@@ -934,30 +937,6 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     if claim_result.exp > 0:
         reward_lines.append(f"修为：{number_to(claim_result.exp)}")
     reward_lines.extend(f"{reward['name']} x{reward['amount']}" for reward in reward_items)
-    update_statistics_value(user_id, "宠物游历次数")
-    update_statistics_value(user_id, "宠物游历时长", increment=int(travel.get("duration_hours", 0) or 0))
-    if claim_result.status == "applied":
-        safe_record_game_event(
-            user_id,
-            "pet_travel_claim",
-            1,
-            {
-                "source": "pet",
-                "action": "travel_claim",
-                "trace_id": operation_id,
-                "stone_delta": claim_result.stone,
-                "exp_delta": claim_result.exp,
-                "item_delta": [
-                    {"id": reward["id"], "amount": reward["amount"]}
-                    for reward in reward_items
-                ],
-                "detail": {
-                    "duration_hours": int(travel.get("duration_hours", 0) or 0),
-                    "scene": travel.get("scene"),
-                    "pet_uid": travel.get("pet_uid"),
-                },
-            },
-        )
     pet = result.get("pet", {}) or {}
     travel = result.get("travel", {}) or {}
     lines = [
@@ -970,6 +949,8 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     lines.extend(f"- {line}" for line in reward_lines)
     if not reward_lines:
         lines.append("- 无")
+    if claim_outcome.message:
+        lines.append(claim_outcome.message)
 
     await handle_send(
         bot,

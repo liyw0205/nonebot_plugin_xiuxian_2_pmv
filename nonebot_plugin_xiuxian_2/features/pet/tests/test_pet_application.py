@@ -8,6 +8,7 @@ from pathlib import Path
 from ....infrastructure.database import DatabaseUnitOfWork
 from ....plugin import apply_platform_schema
 from ..application import PetApplication
+from ..migrations import apply_pet_travel_claim
 
 
 class _Repository:
@@ -32,6 +33,15 @@ class _Repository:
 
     def hatch_result(self, *args, **kwargs):
         return None
+
+
+class _RecordingEffects:
+    def __init__(self) -> None:
+        self.event_ids: list[str] = []
+
+    def dispatch(self, event_id: str) -> bool:
+        self.event_ids.append(event_id)
+        return True
 
 
 class PetApplicationTests(unittest.TestCase):
@@ -114,6 +124,7 @@ class PetApplicationTests(unittest.TestCase):
             travel = {"pet_uid": "p", "start_at": 1, "end_at": 2}
             with DatabaseUnitOfWork(game) as uow:
                 apply_platform_schema(uow)
+                apply_pet_travel_claim(uow)
                 uow.execute("CREATE TABLE user_xiuxian(user_id TEXT PRIMARY KEY, stone INTEGER, exp INTEGER)")
                 uow.execute("INSERT INTO user_xiuxian VALUES('u',100,200)")
                 uow.execute("CREATE TABLE back(user_id TEXT, goods_id INTEGER, goods_name TEXT, goods_type TEXT, goods_num INTEGER, bind_num INTEGER, PRIMARY KEY(user_id,goods_id))")
@@ -122,11 +133,13 @@ class PetApplicationTests(unittest.TestCase):
                 uow.execute("INSERT INTO player_pet_item VALUES('u','p',0)")
                 uow.execute("CREATE TABLE player_pet(user_id TEXT PRIMARY KEY, travel TEXT)")
                 uow.execute("INSERT INTO player_pet VALUES('u',?)", (json.dumps(travel),))
-            app = PetApplication(game, player)
+            effects = _RecordingEffects()
+            app = PetApplication(game, player, game_event_effects=effects)
             rewards = ({"id": 1, "name": "item", "type": "type", "amount": 2},)
             result = app.claim_travel(operation_id="pet-claim-default", user_id="u", expected_travel=travel, stone=10, exp=20, items=rewards, max_goods_num=99)
             replay = app.claim_travel(operation_id="pet-claim-default", user_id="u", expected_travel=travel, stone=10, exp=20, items=rewards, max_goods_num=99)
             self.assertEqual((result.status, replay.status), ("applied", "replayed"))
+            self.assertEqual(["pet.travel.effects:pet-claim-default"] * 2, effects.event_ids)
 
 
 if __name__ == "__main__":

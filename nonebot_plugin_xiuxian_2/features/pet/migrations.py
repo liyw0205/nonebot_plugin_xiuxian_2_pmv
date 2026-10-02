@@ -25,4 +25,12 @@ def apply_pet_skill_replace(uow: DatabaseUnitOfWork) -> None:
     )
 
 
-__all__ = ["apply_pet", "apply_pet_hatch", "apply_pet_skill_replace"]
+def apply_pet_travel_claim(uow: DatabaseUnitOfWork) -> None:
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS pet_travel_claim_operations("
+        "operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,"
+        "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+    )
+
+
+__all__ = ["apply_pet", "apply_pet_hatch", "apply_pet_skill_replace", "apply_pet_travel_claim"]

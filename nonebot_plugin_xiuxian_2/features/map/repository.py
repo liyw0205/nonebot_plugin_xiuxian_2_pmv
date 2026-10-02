@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Protocol
 import json
-from ...infrastructure.database import DatabaseUnitOfWork
+from ...infrastructure.database import DatabaseUnitOfWork, OutboxStore
 
 
 class MapRepository(Protocol):
@@ -808,15 +808,23 @@ class MapMissionClaimSqlRepository:
     ALLOWED_PROGRESS = frozenset({"gather_count", "explore_count", "combat_count", "fish_count", "mine_count"})
     def __init__(self, game_database: str | Path, player_database: str | Path, *, clock: Any) -> None:
         self.game_database, self.player_database, self.clock = str(game_database), str(player_database), clock
-    def claim(self, operation_id: str, user_id: str, expected_mission: dict[str, Any], expected_daily: dict[str, Any], progress_key: str, stone: int, items: list[dict[str, Any]], max_goods_num: int) -> dict[str, Any]:
+        self.outbox = OutboxStore(clock=clock)
+    def claim(self, operation_id: str, user_id: str, expected_mission: dict[str, Any], expected_daily: dict[str, Any], progress_key: str, stone: int, items: list[dict[str, Any]], max_goods_num: int, event_meta: dict[str, Any] | None = None) -> dict[str, Any]:
         mission={k:str(v) for k,v in dict(expected_mission).items()};daily={k:str(v) for k,v in dict(expected_daily).items()};progress_key=str(progress_key)
+        event_meta = dict(event_meta or {})
         rewards=tuple((int(x['id']),str(x['name']),str(x['type']),int(x['amount'])) for x in items if int(x['amount'])>0);operation_id,user_id=str(operation_id).strip(),str(user_id);stone,max_goods_num=int(stone),int(max_goods_num)
         if not operation_id or not mission.get('date') or progress_key not in self.ALLOWED_PROGRESS or min(stone,max_goods_num)<0:raise ValueError('valid mission claim required')
         payload=json.dumps([user_id,mission,daily,progress_key,stone,rewards,max_goods_num],ensure_ascii=True,sort_keys=True)
+        effects_event_id = f"map.mission.effects:{operation_id}"
         with DatabaseUnitOfWork(self.game_database,immediate=True) as uow:
             uow.attach_database(self.player_database,'player_data');old=uow.query_one('SELECT payload,stone,rewards FROM map_mission_claim_operations WHERE operation_id=?',(operation_id,))
             if old:
-                return {'status':'duplicate','stone':int(old['stone']),'rewards':tuple(tuple(map(int,x)) for x in json.loads(str(old['rewards'])))} if str(old['payload'])==payload else {'status':'state_changed','stone':0,'rewards':()}
+                if str(old['payload']) != payload:
+                    return {'status':'state_changed','stone':0,'rewards':()}
+                result = {'status':'duplicate','stone':int(old['stone']),'rewards':tuple(tuple(map(int,x)) for x in json.loads(str(old['rewards'])))}
+                if self.outbox.get(uow, effects_event_id) is not None:
+                    result['effects_event_id'] = effects_event_id
+                return result
             if uow.query_one('SELECT 1 FROM user_xiuxian WHERE user_id=?',(user_id,)) is None:return {'status':'user_missing','stone':0,'rewards':()}
             row=uow.query_one('SELECT date,mission_type,target,claimed,settlement FROM player_data.map_mission WHERE user_id=?',(user_id,))
             if row is None or any(str('' if row[k] is None else row[k])!=v for k,v in mission.items()):return {'status':'state_changed','stone':0,'rewards':()}
@@ -835,7 +843,35 @@ class MapMissionClaimSqlRepository:
             for item_id,amount in totals.items():
                 name,item_type=meta[item_id];uow.execute('INSERT INTO back(user_id,goods_id,goods_name,goods_type,goods_num,create_time,update_time,bind_num) VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(user_id,goods_id) DO UPDATE SET goods_num=back.goods_num+excluded.goods_num,bind_num=COALESCE(back.bind_num,0)+excluded.bind_num,update_time=excluded.update_time',(user_id,item_id,name,item_type,amount,now,now,amount))
             compact=tuple(sorted(totals.items()));uow.execute('INSERT INTO map_mission_claim_operations(operation_id,payload,stone,rewards) VALUES(?,?,?,?)',(operation_id,payload,stone,json.dumps(compact)))
-            return {'status':'applied','stone':stone,'rewards':compact}
+            occurred_at = self.clock.now().isoformat()
+            frozen_meta = {
+                "source": "map",
+                "action": "mission_complete",
+                **event_meta,
+                "trace_id": operation_id,
+                "detail": {
+                    "mission_type": mission.get("mission_type", ""),
+                    "target": int(mission.get("target", 0)),
+                    "progress": int(daily.get(progress_key, 0)),
+                    **dict(event_meta.get("detail") or {}),
+                },
+            }
+            self.outbox.append(
+                uow,
+                event_id=effects_event_id,
+                aggregate_type="player",
+                aggregate_id=user_id,
+                event_type="game_event.projection",
+                payload={
+                    "operation_id": operation_id,
+                    "user_id": user_id,
+                    "event_key": "map_mission_complete",
+                    "amount": 1,
+                    "occurred_at": occurred_at,
+                    "meta": frozen_meta,
+                },
+            )
+            return {'status':'applied','stone':stone,'rewards':compact,'effects_event_id':effects_event_id,'occurred_at':occurred_at}
 
 
 class MapSeedPurchaseSqlRepository:

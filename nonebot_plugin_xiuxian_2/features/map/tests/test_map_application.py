@@ -2,11 +2,14 @@ import asyncio
 import json
 import tempfile
 import unittest
+from datetime import datetime, timezone
 from pathlib import Path
 
-from ....infrastructure.database import DatabaseUnitOfWork
+from ....infrastructure.database import DatabaseUnitOfWork, OperationLedger, ReconcileService
 from ....plugin import apply_platform_schema
 from ..application import MapApplication
+from ..migrations import apply_map_mission_claim
+from ..repository import MapMissionClaimSqlRepository
 
 
 class Repo:
@@ -31,7 +34,108 @@ class CombatRunner:
         return ["battle"], "群友赢了", {"群友": {"剩余气血": 100}}
 
 
+class Clock:
+    def now(self):
+        return datetime(2026, 9, 15, 12, tzinfo=timezone.utc)
+
+
+class RecordingEffects:
+    def __init__(self):
+        self.event_ids = []
+
+    def dispatch(self, event_id):
+        self.event_ids.append(event_id)
+        return True
+
+
 class MapApplicationTest(unittest.TestCase):
+    def test_mission_claim_replay_dispatches_frozen_event(self):
+        with tempfile.TemporaryDirectory() as directory:
+            game = Path(directory) / "game.db"
+            player = Path(directory) / "player.db"
+            with DatabaseUnitOfWork(game) as uow:
+                apply_platform_schema(uow)
+                apply_map_mission_claim(uow)
+                uow.execute("CREATE TABLE user_xiuxian(user_id TEXT PRIMARY KEY,stone INTEGER)")
+                uow.execute("INSERT INTO user_xiuxian VALUES('u',10)")
+                uow.execute(
+                    "CREATE TABLE back(user_id TEXT,goods_id INTEGER,goods_name TEXT,"
+                    "goods_type TEXT,goods_num INTEGER,create_time TEXT,update_time TEXT,"
+                    "bind_num INTEGER,UNIQUE(user_id,goods_id))"
+                )
+            with DatabaseUnitOfWork(player) as uow:
+                uow.execute(
+                    "CREATE TABLE map_mission(user_id TEXT PRIMARY KEY,date TEXT,"
+                    "mission_type TEXT,target INTEGER,claimed INTEGER,settlement TEXT)"
+                )
+                uow.execute("INSERT INTO map_mission VALUES('u','2026-09-15','gather',5,0,'snap')")
+                uow.execute(
+                    "CREATE TABLE map_daily_limit(user_id TEXT PRIMARY KEY,date TEXT,gather_count INTEGER)"
+                )
+                uow.execute("INSERT INTO map_daily_limit VALUES('u','2026-09-15',5)")
+
+            effects = RecordingEffects()
+            application = MapApplication(game, player, game_event_effects=effects)
+            request = {
+                "operation_id": "mission-claim",
+                "user_id": "u",
+                "expected_mission": {
+                    "date": "2026-09-15",
+                    "mission_type": "gather",
+                    "target": 5,
+                    "claimed": 0,
+                    "settlement": "snap",
+                },
+                "expected_daily": {"date": "2026-09-15", "gather_count": 5},
+                "progress_key": "gather_count",
+                "stone": 7,
+                "items": [],
+                "max_goods_num": 99,
+            }
+            request_payload = {
+                "user_id": "u",
+                **{key: value for key, value in request.items() if key != "operation_id"},
+            }
+            with DatabaseUnitOfWork(game) as uow:
+                OperationLedger().begin(
+                    uow, "mission-claim", "map.mission_claim", request_payload
+                )
+            MapMissionClaimSqlRepository(game, player, clock=Clock()).claim(
+                "mission-claim",
+                "u",
+                request["expected_mission"],
+                request["expected_daily"],
+                request["progress_key"],
+                request["stone"],
+                request["items"],
+                request["max_goods_num"],
+                {"detail": {"reward_source": "frozen"}},
+            )
+            with DatabaseUnitOfWork(game, immediate=True) as uow:
+                report = ReconcileService().run(
+                    uow,
+                    operation_handlers={
+                        "map.mission_claim": application.reconcile_mission_claim_operation,
+                    },
+                )
+            self.assertEqual((0, 1), (report.operations, report.outbox_events))
+            replay = application.mission_claim(
+                **request,
+                clock=Clock(),
+                event_meta={"detail": {"reward_source": "changed"}},
+            )
+
+            self.assertTrue(replay.replayed)
+            self.assertEqual(["map.mission.effects:mission-claim"], effects.event_ids)
+            with DatabaseUnitOfWork(game, read_only=True) as uow:
+                payload = json.loads(
+                    uow.query_one(
+                        "SELECT payload_json FROM domain_outbox WHERE event_id=?",
+                        (effects.event_ids[0],),
+                    )["payload_json"]
+                )
+                self.assertEqual("frozen", payload["meta"]["detail"]["reward_source"])
+
     def test_move_uses_operation_ledger(self):
         with tempfile.TemporaryDirectory() as directory:
             game = Path(directory) / "game.db"

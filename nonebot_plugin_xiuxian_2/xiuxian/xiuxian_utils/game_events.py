@@ -91,6 +91,8 @@ def _record_statistics(user_id: str, event_key: str, amount: int, meta: dict[str
     try:
         from .utils import update_statistics_value
     except Exception as exc:
+        if meta.get("require_effects") is True:
+            raise
         _log_warning(f"加载统计入口失败：{exc}")
         return []
 
@@ -100,6 +102,45 @@ def _record_statistics(user_id: str, event_key: str, amount: int, meta: dict[str
         stat_keys.append(extra_keys)
     elif isinstance(extra_keys, (list, tuple, set)):
         stat_keys.extend(str(key) for key in extra_keys if key)
+
+    explicit_increments = meta.get("stat_increments")
+    if isinstance(explicit_increments, dict):
+        stat_keys.extend(str(key) for key in explicit_increments if key)
+
+    if meta.get("event_id"):
+        increments = {
+            stat_key: _to_int(
+                explicit_increments.get(stat_key, amount)
+                if isinstance(explicit_increments, dict) else amount,
+                amount,
+            )
+            for stat_key in dict.fromkeys(stat_keys)
+        }
+        try:
+            from ...features.game_events.statistics import GameEventStatisticsRepository
+            from ...paths import get_paths
+            from . import utils as legacy_utils
+
+            repository = meta.get("_statistics_repository") or GameEventStatisticsRepository(
+                get_paths().player_db
+            )
+            impersonating = getattr(legacy_utils, "_impersonating_users", {})
+            statistics_user = str(impersonating.get(str(user_id), user_id))
+            changed = repository.record(
+                event_id=str(meta["event_id"]),
+                user_id=statistics_user,
+                increments=increments,
+                occurred_at=str(meta.get("occurred_at") or datetime.now().astimezone().isoformat()),
+            )
+            invalidate = getattr(legacy_utils, "invalidate_player_data_cache", None)
+            if changed and callable(invalidate):
+                invalidate("statistics", tuple(increments))
+            return list(increments)
+        except Exception as exc:
+            if meta.get("require_effects") is True:
+                raise
+            _log_warning(f"记录统计失败：user_id={user_id}, event={event_key}, error={exc}")
+            return []
 
     updated: list[str] = []
     for stat_key in dict.fromkeys(stat_keys):
@@ -115,6 +156,8 @@ def _record_task_progress(user_id: str, event_key: str, amount: int, meta: dict[
     try:
         from ..xiuxian_tasks.task_data import record_task_progress_event
     except Exception as exc:
+        if meta.get("require_effects") is True:
+            raise
         _log_warning(f"加载任务入口失败：{exc}")
         return []
 
@@ -143,8 +186,28 @@ def _record_task_progress(user_id: str, event_key: str, amount: int, meta: dict[
         f"game-event:{trace_id}:{user_id}:{event_key}" if trace_id else None
     )
     try:
+        if meta.get("event_id"):
+            from ..xiuxian_tasks.task_data import record_task_progress_event_strict
+            from ..xiuxian_activity.service import record_activity_event
+
+            completed = record_task_progress_event_strict(
+                user_id,
+                updates,
+                operation_id=operation_id or f"game-event:{meta['event_id']}:{user_id}:{event_key}",
+                occurred_at=str(meta.get("occurred_at") or datetime.now().astimezone().isoformat()),
+            )
+            record_activity_event(
+                user_id,
+                event_key,
+                amount,
+                event_id=f"{meta['event_id']}:activity:{event_key}",
+                occurred_at=str(meta.get("occurred_at") or datetime.now().astimezone().isoformat()),
+            )
+            return completed
         return record_task_progress_event(user_id, updates, operation_id)
     except Exception as exc:
+        if meta.get("require_effects") is True:
+            raise
         _log_warning(
             f"记录任务进度失败：user_id={user_id}, event={event_key}, error={exc}"
         )
@@ -182,12 +245,16 @@ def _record_sect_weekly_progress(
     try:
         from ..xiuxian_sect.sect_weekly import record_sect_weekly_event
     except Exception as exc:
+        if meta.get("require_effects") is True:
+            raise
         _log_warning(f"加载宗门周常入口失败：{exc}")
         return []
 
     try:
         return record_sect_weekly_event(user_id, event_key, amount, meta)
     except Exception as exc:
+        if meta.get("require_effects") is True:
+            raise
         _log_warning(f"记录宗门周常失败：user_id={user_id}, event={event_key}, error={exc}")
         return []
 

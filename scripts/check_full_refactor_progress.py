@@ -333,6 +333,13 @@ def _slice_status() -> dict[str, dict[str, object]]:
     map_legacy_shim = (PACKAGE / "xiuxian" / "xiuxian_map" / "transaction_service.py").read_text(encoding="utf-8")
     map_compatibility = (PACKAGE / "compatibility" / "legacy_map_transactions.py").read_text(encoding="utf-8")
     map_repository = (PACKAGE / "features" / "map" / "repository.py").read_text(encoding="utf-8")
+    map_migrations = (PACKAGE / "features" / "map" / "migrations.py").read_text(encoding="utf-8")
+    pet_application_source = (PACKAGE / "features" / "pet" / "application.py").read_text(encoding="utf-8")
+    pet_repository_source = (PACKAGE / "features" / "pet" / "repository.py").read_text(encoding="utf-8")
+    pet_migrations_source = (PACKAGE / "features" / "pet" / "migrations.py").read_text(encoding="utf-8")
+    game_event_effects_source = (PACKAGE / "compatibility" / "game_event_effects.py").read_text(encoding="utf-8")
+    game_event_statistics_source = (PACKAGE / "features" / "game_events" / "statistics.py").read_text(encoding="utf-8")
+    game_event_migrations_source = (PACKAGE / "features" / "game_events" / "migrations.py").read_text(encoding="utf-8")
     combat_settlement_repository = (PACKAGE / "features" / "combat_settlement" / "repository.py").read_text(encoding="utf-8")
     sect_facade = (PACKAGE / "xiuxian" / "xiuxian_sect" / "__init__.py").read_text(encoding="utf-8")
     sect_member_utils = (PACKAGE / "xiuxian" / "xiuxian_sect" / "sect_member_utils.py").read_text(encoding="utf-8")
@@ -1486,6 +1493,23 @@ def _slice_status() -> dict[str, dict[str, object]]:
                 and "...compatibility.legacy_map_transactions" in combat_settlement_repository
                 and "class MapInteractiveActionService" in map_compatibility
             ),
+            "mission_claim_effects_outbox_owned": (
+                "self.outbox.append(" in map_repository
+                and 'event_type="game_event.projection"' in map_repository
+                and "map_mission_claim_operations" in map_migrations
+                and "def configure_map_application(" in map_facade
+                and "configure_map_application(context.services[\"map\"])" in plugin_source
+            ),
+            "mission_claim_effects_dispatched_on_replay": (
+                "self.game_event_effects.dispatch(" in map_application
+                and "map_application.mission_claim(" in map_facade
+                and "event_meta=reward_meta" in map_facade
+                and "safe_record_game_event(" not in map_facade[
+                    map_facade.index("@map_mission_claim_cmd.handle") : map_facade.index(
+                        "@map_mission_claim_cmd.handle"
+                    ) + 4500
+                ]
+            ),
             "map_dtos_feature_owned": "features.map.schemas import" in map_facade and "class MapInteractiveActionResult" in (PACKAGE / "features" / "map" / "schemas.py").read_text(encoding="utf-8"),
             "status": "map_actions_combat_runner_and_reward_resolution_feature_owned_with_explicit_legacy_adapters",
         },
@@ -2389,6 +2413,44 @@ def _slice_status() -> dict[str, dict[str, object]]:
                 and "transaction_service" not in pet_facade
             ),
             "status": "feature_owned_pet_actions_with_legacy_transaction_services_isolated",
+        },
+        "game_event_claims": {
+            "pet_travel_claim_effects_outbox_owned": (
+                "self.outbox.append(" in pet_repository_source
+                and 'event_type="game_event.projection"' in pet_repository_source
+                and "def apply_pet_travel_claim(" in pet_migrations_source
+                and 'Migration("pet.004"' in plugin_source
+            ),
+            "pet_travel_claim_effects_dispatched_on_replay": (
+                "self.game_event_effects.dispatch(" in pet_application_source
+                and "pet_application.claim_travel(" in pet_facade
+                and "update_statistics_value(user_id, \"宠物游历次数\")" not in pet_facade
+                and "configure_pet_application(context.services[\"pet\"])" in plugin_source
+            ),
+            "claim_projection_receipts_and_migrations_owned": (
+                "PRIMARY KEY(event_id,event_key)" in game_event_migrations_source
+                and "INSERT INTO game_event_statistics_events" in game_event_statistics_source
+                and "record_task_progress_event_strict(" in (PACKAGE / "xiuxian" / "xiuxian_utils" / "game_events.py").read_text(encoding="utf-8")
+                and "activity_event_operations" in (PACKAGE / "features" / "activity" / "migrations.py").read_text(encoding="utf-8")
+            ),
+            "claim_projection_runtime_and_cli_reconcile_owned": (
+                '"game_event.projection": game_event_effects.on_outbox_event' in plugin_source
+                and '"game_event.projection": game_event_effects.on_outbox_event' in cli_source
+            ),
+            "claim_operation_recovery_runtime_and_cli_owned": (
+                '"map.mission_claim": context.services["map"].reconcile_mission_claim_operation' in plugin_source
+                and '"pet.travel_claim": context.services["pet"].reconcile_travel_claim_operation' in plugin_source
+                and '"map.mission_claim": map_application.reconcile_mission_claim_operation' in cli_source
+                and '"pet.travel_claim": pet_application.reconcile_travel_claim_operation' in cli_source
+                and "def reconcile_mission_claim_operation(" in map_application
+                and "def reconcile_travel_claim_operation(" in pet_application_source
+            ),
+            "claim_projection_migrations_routed": (
+                'Migration("game_events.001"' in plugin_source
+                and '"game_events.001"' in plugin_source
+                and '"pet.004"' in plugin_source
+            ),
+            "status": "map_and_pet_claim_effects_outbox_idempotent_and_reconcilable",
         },
         "trade": {
             "xianshi_listing_application_owned": "trade_application.xianshi_list_items(" in xianshi_listing_handler and "class XianshiListingSqlRepository" in trade_xianshi_transactions,

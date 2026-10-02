@@ -89,6 +89,9 @@ def main(argv: list[str] | None = None) -> int:
             from .features.auction.settlement import AuctionSettlementApplication
             from .features.buff.application import BuffApplication
             from .compatibility.buff_closing_effects import LegacyBuffClosingEffects
+            from .compatibility.game_event_effects import LegacyGameEventEffects
+            from .features.map.application import MapApplication
+            from .features.pet.application import PetApplication
             from .features.activity_reward.task_claim_application import ActivityTaskClaimApplication
             from .features.activity_reward.pass_claim_application import ActivityPassClaimApplication
             from .features.activity_reward.boss_milestone_claim_application import ActivityBossMilestoneClaimApplication
@@ -118,6 +121,13 @@ def main(argv: list[str] | None = None) -> int:
                 player_db,
                 closing_effects=LegacyBuffClosingEffects(player_db),
             )
+            game_event_effects = LegacyGameEventEffects(game_db, player_db, clock=context.clock)
+            map_application = MapApplication(
+                game_db, player_db, game_event_effects=game_event_effects
+            )
+            pet_application = PetApplication(
+                game_db, player_db, clock=context.clock, game_event_effects=game_event_effects
+            )
             activity_task_claim = ActivityTaskClaimApplication(
                 game_db, activity_db, clock=context.clock
             )
@@ -135,11 +145,14 @@ def main(argv: list[str] | None = None) -> int:
                 handlers={
                     "accessory_package.open": accessory.reconcile,
                     "buff.closing.effects": buff.reconcile_outbox_event,
+                    "game_event.projection": game_event_effects.on_outbox_event,
                     "auction.bid.effects": auction.reconcile_outbox_event,
                     "auction.settlement.effects": settlement.reconcile_outbox_event,
                 },
                 operation_handlers={
                     "accessory_package.open": accessory.reconcile,
+                    "map.mission_claim": map_application.reconcile_mission_claim_operation,
+                    "pet.travel_claim": pet_application.reconcile_travel_claim_operation,
                     "activity_reward.tasks.claim": activity_task_claim.reconcile,
                     "activity_reward.pass.claim": activity_pass_claim.reconcile,
                     "activity_reward.boss_milestone.claim": activity_boss_milestone_claim.reconcile,

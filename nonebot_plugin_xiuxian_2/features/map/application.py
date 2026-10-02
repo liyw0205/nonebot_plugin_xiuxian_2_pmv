@@ -1,11 +1,15 @@
 from __future__ import annotations
 
 from collections.abc import Awaitable
+from dataclasses import replace
+import json
 from pathlib import Path
 from typing import Any, Protocol
 
 from .._legacy_application import LegacyApplication
 from ..combat_settlement.application import CombatSettlementApplication
+from ...core.result import OperationOutcome
+from ...infrastructure.database import DatabaseUnitOfWork
 from .repository import LegacyMapRepository, MapCombatLifecyclePlanSqlRepository, MapCombatLifecycleQueryRepository, MapCombatLifecycleStartSqlRepository, MapDongfuBuildSqlRepository, MapDongfuSqlQueryRepository, MapExploreSettlementSqlRepository, MapExploreStartSqlRepository, MapExploreStatusSqlQueryRepository, MapExploreStatusSqlWriteRepository, MapMissionClaimSqlRepository, MapMissionSqlQueryRepository, MapMissionSqlWriteRepository, MapNearbyPlayersSqlQueryRepository, MapProjectionSqlRepository, MapProjectionSqlWriteRepository, MapSeedPurchaseSqlRepository, MapHomeReturnSqlRepository, MapInteractiveFailureSqlRepository, MapInteractiveSettlementSqlRepository, MapInteractiveSqlQueryRepository, MapInteractiveStartSqlRepository, MapMovementSqlRepository, MapResourceRewardSqlRepository, MapStatusSqlQueryRepository, MapStatusSqlWriteRepository, MapRepository
 
 class MapCombatRunner(Protocol):
@@ -26,12 +30,14 @@ class MapApplication(LegacyApplication):
         *,
         repository: MapRepository | None = None,
         combat_runner: MapCombatRunner | None = None,
+        game_event_effects: Any | None = None,
     ) -> None:
         super().__init__(game_database, repository=repository, feature="map")
         self._explicit_repository = repository
         self.game_database = str(game_database)
         self.player_database = str(player_database)
         self._combat_runner = combat_runner
+        self.game_event_effects = game_event_effects
         self._combat_settlement_application = CombatSettlementApplication(
             self.game_database,
             self.player_database,
@@ -194,8 +200,68 @@ class MapApplication(LegacyApplication):
         return self._action("resource_reward", operation_id=operation_id, user_id=user_id, **kwargs)
     def mission_claim(self, *, operation_id: str, user_id: str, clock: Any, **kwargs: Any):
         if self._explicit_repository is None:
-            return self._execute(operation_id=operation_id,user_id=user_id,action="map.mission_claim",payload={"user_id":user_id,**kwargs},call=lambda:MapMissionClaimSqlRepository(self.game_database,self.player_database,clock=clock).claim(operation_id,user_id,**kwargs))
+            request_payload = {
+                "user_id": user_id,
+                **{
+                    key: value
+                    for key, value in kwargs.items()
+                    if key not in {"clock", "event_meta"}
+                },
+            }
+            outcome = self._execute(
+                operation_id=operation_id,
+                user_id=user_id,
+                action="map.mission_claim",
+                payload=request_payload,
+                call=lambda: MapMissionClaimSqlRepository(
+                    self.game_database, self.player_database, clock=clock
+                ).claim(operation_id, user_id, **kwargs),
+            )
+            if outcome.ok and isinstance(outcome.data, dict) and outcome.data.get("effects_event_id") and self.game_event_effects is not None:
+                if not self.game_event_effects.dispatch(str(outcome.data["effects_event_id"])):
+                    return replace(outcome, message="委托奖励已发放，统计和进度正在补偿。")
+            return outcome
         return self._action("mission_claim",operation_id=operation_id,user_id=user_id,**kwargs)
+
+    def reconcile_mission_claim_operation(self, record: dict[str, Any]) -> OperationOutcome[dict[str, Any]]:
+        operation_id = str(record["operation_id"])
+        action = str(record.get("action") or "map.mission_claim")
+        with DatabaseUnitOfWork(self.game_database, read_only=True) as uow:
+            receipt = uow.query_one(
+                "SELECT stone,rewards FROM map_mission_claim_operations WHERE operation_id=?",
+                (operation_id,),
+            )
+            event = uow.query_one(
+                "SELECT payload_json FROM domain_outbox WHERE event_id=?",
+                (f"map.mission.effects:{operation_id}",),
+            )
+        if receipt is None:
+            return OperationOutcome.failed(
+                operation_id,
+                action,
+                "map mission claim receipt is missing; request may be retried",
+                code="reconcile_receipt_missing",
+                audit_category="map",
+            )
+        data = {
+            "status": "applied",
+            "stone": int(receipt["stone"]),
+            "rewards": tuple(
+                tuple(int(value) for value in row)
+                for row in json.loads(str(receipt["rewards"]))
+            ),
+        }
+        if event is not None:
+            payload = json.loads(str(event["payload_json"]))
+            data["effects_event_id"] = f"map.mission.effects:{operation_id}"
+            data["occurred_at"] = str(payload["occurred_at"])
+        return OperationOutcome.applied(
+            operation_id,
+            action,
+            data=data,
+            audit_category="map",
+        )
+
     def purchase_seed(self, *, operation_id: str, user_id: str, clock: Any, **kwargs: Any):
         if self._explicit_repository is None:
             return self._execute(operation_id=operation_id,user_id=user_id,action="map.purchase_seed",payload={"user_id":user_id,**kwargs},call=lambda:MapSeedPurchaseSqlRepository(self.game_database,clock=clock).purchase(operation_id,user_id,**kwargs))

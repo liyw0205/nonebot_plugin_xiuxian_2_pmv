@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any, Protocol
 
 from ...infrastructure.clock import SystemClock
-from ...infrastructure.database import DatabaseUnitOfWork
+from ...infrastructure.database import DatabaseUnitOfWork, OutboxStore
 
 
 @dataclass(frozen=True)
@@ -201,6 +201,7 @@ class PetTravelClaimResult:
     stone: int = 0
     exp: int = 0
     items: tuple[tuple[int, int], ...] = ()
+    effects_event_id: str | None = None
 
     @property
     def succeeded(self) -> bool:
@@ -208,9 +209,28 @@ class PetTravelClaimResult:
 
 
 class PetTravelClaimSqlRepository:
-    def __init__(self, game_database: str | Path, player_database: str | Path) -> None:
+    def __init__(self, game_database: str | Path, player_database: str | Path, *, clock: Any | None = None) -> None:
         self.game_database = str(game_database)
         self.player_database = str(player_database)
+        self.clock = clock or SystemClock()
+        self.outbox = OutboxStore(clock=self.clock)
+
+    @staticmethod
+    def _schema_ready(uow: DatabaseUnitOfWork) -> bool:
+        required = {
+            "pet_travel_claim_operations": {"operation_id", "payload", "created_at"},
+            "domain_outbox": {
+                "event_id", "aggregate_type", "aggregate_id", "event_type", "payload_json",
+                "status", "attempts", "next_attempt_at", "created_at", "updated_at",
+            },
+        }
+        return all(
+            columns <= {
+                str(row["name"])
+                for row in uow.query_all(f'PRAGMA table_info("{table}")')
+            }
+            for table, columns in required.items()
+        )
 
     def claim(self, operation_id: str, user_id: str, expected_travel: dict[str, Any], stone: int, exp: int, items: Any, max_goods_num: int) -> PetTravelClaimResult:
         operation_id, user_id = str(operation_id).strip(), str(user_id)
@@ -224,15 +244,20 @@ class PetTravelClaimSqlRepository:
             raise ValueError("valid operation, travel and rewards are required")
         travel_json = json.dumps(expected_travel, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
         payload = json.dumps([user_id, expected_travel, stone, exp, rewards, max_goods_num], ensure_ascii=True, sort_keys=True)
+        effects_event_id = f"pet.travel.effects:{operation_id}"
         with DatabaseUnitOfWork(self.game_database, immediate=True) as uow:
             uow.attach_database(self.player_database, "player_data")
-            uow.execute(
-                "CREATE TABLE IF NOT EXISTS pet_travel_claim_operations("
-                "operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
-            )
+            if not self._schema_ready(uow):
+                return PetTravelClaimResult("schema_missing")
             previous = uow.query_one("SELECT payload FROM pet_travel_claim_operations WHERE operation_id=?", (operation_id,))
             if previous is not None:
-                return PetTravelClaimResult("duplicate" if str(previous["payload"]) == payload else "state_changed", stone if str(previous["payload"]) == payload else 0, exp if str(previous["payload"]) == payload else 0, tuple((row[0], row[3]) for row in rewards) if str(previous["payload"]) == payload else ())
+                status = "duplicate" if str(previous["payload"]) == payload else "state_changed"
+                event_id = (
+                    effects_event_id
+                    if status == "duplicate" and self.outbox.get(uow, effects_event_id) is not None
+                    else None
+                )
+                return PetTravelClaimResult(status, stone if status == "duplicate" else 0, exp if status == "duplicate" else 0, tuple((row[0], row[3]) for row in rewards) if status == "duplicate" else (), event_id)
             if uow.query_one("SELECT 1 AS present FROM user_xiuxian WHERE user_id=?", (user_id,)) is None:
                 return PetTravelClaimResult("user_missing")
             meta = uow.query_one("SELECT travel FROM player_data.player_pet WHERE user_id=?", (user_id,))
@@ -258,7 +283,43 @@ class PetTravelClaimSqlRepository:
                     (user_id, item_id, name, item_type, amount, amount),
                 )
             uow.execute("INSERT INTO pet_travel_claim_operations(operation_id,payload) VALUES(?,?)", (operation_id, payload))
-            return PetTravelClaimResult("applied", stone, exp, tuple((row[0], row[3]) for row in rewards))
+            occurred_at = self.clock.now().isoformat()
+            travel = dict(expected_travel)
+            self.outbox.append(
+                uow,
+                event_id=effects_event_id,
+                aggregate_type="player",
+                aggregate_id=user_id,
+                event_type="game_event.projection",
+                payload={
+                    "operation_id": operation_id,
+                    "user_id": user_id,
+                    "event_key": "pet_travel_claim",
+                    "amount": 1,
+                    "occurred_at": occurred_at,
+                    "stat_increments": {
+                        "宠物游历次数": 1,
+                        "宠物游历时长": int(travel.get("duration_hours", 0) or 0),
+                    },
+                    "meta": {
+                        "source": "pet",
+                        "action": "travel_claim",
+                        "trace_id": operation_id,
+                        "stone_delta": stone,
+                        "exp_delta": exp,
+                        "item_delta": [
+                            {"id": item_id, "amount": amount}
+                            for item_id, _, _, amount in rewards
+                        ],
+                        "detail": {
+                            "duration_hours": int(travel.get("duration_hours", 0) or 0),
+                            "scene": travel.get("scene"),
+                            "pet_uid": travel.get("pet_uid"),
+                        },
+                    },
+                },
+            )
+            return PetTravelClaimResult("applied", stone, exp, tuple((row[0], row[3]) for row in rewards), effects_event_id)
 
 
 @dataclass(frozen=True)

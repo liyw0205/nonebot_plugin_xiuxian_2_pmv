@@ -48,7 +48,8 @@ from .features.stone_gift.migrations import apply_stone_gift, apply_stone_gift_l
 from .features.package_reward.manifest import FEATURE as PACKAGE_REWARD_FEATURE
 from .features.package_reward.migrations import apply_package_reward
 from .features.pet.manifest import FEATURE as PET_FEATURE
-from .features.pet.migrations import apply_pet, apply_pet_hatch, apply_pet_skill_replace
+from .features.pet.migrations import apply_pet, apply_pet_hatch, apply_pet_skill_replace, apply_pet_travel_claim
+from .features.game_events.migrations import apply_game_event_statistics_player
 from .features.sect.manifest import FEATURE as SECT_FEATURE
 from .features.sect.migrations import apply_sect, apply_sect_rename, apply_sect_join, apply_sect_removal, apply_sect_position, apply_sect_donation, apply_sect_shop, apply_sect_mainbuff, apply_sect_secbuff, apply_sect_elixir, apply_sect_weekly, apply_sect_weekly_player, apply_sect_manual_disband
 from .features.sect.migrations import apply_sect_fairyland_upgrade
@@ -321,6 +322,7 @@ def build_migrations() -> tuple[Migration, ...]:
         Migration("dungeon.004", "dungeon_explore_operations", apply_dungeon_explore),
         Migration("dungeon.005", "dungeon_team_operations", apply_dungeon_team),
         Migration("fusion.002", "fusion_operation_tables", apply_fusion_operations),
+        Migration("game_events.001", "game_event_statistics_projection", apply_game_event_statistics_player),
         Migration("illusion.001", "illusion_feature_migrations", apply_illusion),
         Migration("impart.002", "impart_prayer_operations", apply_impart_prayer_operations),
         Migration("impart.003", "impart_prayer_player_statistics", apply_impart_prayer_player_statistics),
@@ -356,6 +358,7 @@ def build_migrations() -> tuple[Migration, ...]:
         Migration("pet.001", "pet_feature_migrations", apply_pet),
         Migration("pet.002", "pet_hatch_operations", apply_pet_hatch),
         Migration("pet.003", "pet_skill_replace_operations", apply_pet_skill_replace),
+        Migration("pet.004", "pet_travel_claim_operations", apply_pet_travel_claim),
         Migration("platform.001", "operation_ledger_outbox", apply_platform_schema),
         Migration("puppet.001", "puppet_feature_migrations", apply_puppet),
         Migration("puppet.002", "puppet_status_column", apply_puppet_status),
@@ -503,6 +506,7 @@ _GAME_DATABASE_EXCLUDED_MIGRATION_VERSIONS = frozenset(
         "boss.004",
         "boss.006",
         "buff.009",
+        "game_events.001",
     }
 )
 _PLAYER_DATABASE_MIGRATION_VERSIONS = frozenset(
@@ -516,6 +520,7 @@ _PLAYER_DATABASE_MIGRATION_VERSIONS = frozenset(
         "info.avatar.002",
         "tower.004",
         "buff.009",
+        "game_events.001",
         "platform.001",
         "title.001",
         "title.002",
@@ -825,6 +830,7 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
         from .features.natal_treasure.application import NatalTreasureApplication
         from .features.buff.application import BuffApplication
         from .compatibility.buff_closing_effects import LegacyBuffClosingEffects
+        from .compatibility.game_event_effects import LegacyGameEventEffects
         from .features.base.application import BaseApplication
         from .features.back.application import BackApplication
         from .features.trade.application import TradeApplication
@@ -843,6 +849,11 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
         upper = int(settings.get("sign_in_upper_limit", 500000)) if settings is not None else 500000
         fee_rate = float(settings.get("stone_gift_fee_rate", 0.1)) if settings is not None else 0.1
         sign_in_effects = None
+        game_event_effects = LegacyGameEventEffects(
+            context.database.path("game_db"),
+            context.database.path("player_db"),
+            clock=context.clock,
+        )
         lottery_service = None
         lottery_application_type = None
         if context.legacy_startup:
@@ -1019,6 +1030,7 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
                 str(context.database.path("game_db")),
                 str(context.database.path("player_db")),
                 clock=context.clock,
+                game_event_effects=game_event_effects,
             ),
             "sect": SectApplication(
                 str(context.database.path("game_db")),
@@ -1045,7 +1057,11 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
                 random_source=context.random,
                 auction_settlement=context.services["auction_settlement"],
             ),
-            "map": MapApplication(str(context.database.path("game_db")), str(context.database.path("player_db"))),
+            "map": MapApplication(
+                str(context.database.path("game_db")),
+                str(context.database.path("player_db")),
+                game_event_effects=game_event_effects,
+            ),
             "rift": RiftApplication(str(context.database.path("game_db")), str(context.database.path("player_db"))),
         })
         if bank_first_use_enabled(context.settings):
@@ -1091,6 +1107,8 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
             from .xiuxian.xiuxian_utils.utils import configure_player_stamina_application
             from .xiuxian.xiuxian_utils.player_fight import configure_player_state_application
             from .xiuxian.xiuxian_buff import configure_buff_application
+            from .xiuxian.xiuxian_map import configure_map_application
+            from .xiuxian.xiuxian_pet import configure_pet_application
             from .xiuxian.xiuxian_back import configure_back_application, configure_package_reward_application
             from .xiuxian.xiuxian_tasks.task_data import configure_task_claim_application
             from .xiuxian.xiuxian_training import configure_training_application
@@ -1110,6 +1128,8 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
             configure_player_attribute_application(context.services["player_attributes"])
             configure_player_state_application(context.services["player_state"])
             configure_buff_application(context.services["buff"])
+            configure_map_application(context.services["map"])
+            configure_pet_application(context.services["pet"])
             configure_player_stamina_application(context.services["player_stamina"])
             configure_back_application(context.services["back"])
             configure_package_reward_application(context.services["package_reward"])
@@ -1123,6 +1143,8 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
                 configure_lottery_application(lottery_service)
         context.reconcile_handlers = {
             "accessory_package.open": context.services["accessory_package"].reconcile,
+            "map.mission_claim": context.services["map"].reconcile_mission_claim_operation,
+            "pet.travel_claim": context.services["pet"].reconcile_travel_claim_operation,
             "tasks.claim_rewards": context.services["task_claim"].reconcile,
             "activity_reward.tasks.claim": context.services["activity_task_claim"].reconcile,
             "activity_reward.pass.claim": context.services["activity_pass_claim"].reconcile,
@@ -1132,6 +1154,7 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
         context.outbox_handlers = {
             "accessory_package.open": context.services["accessory_package"].reconcile,
             "buff.closing.effects": context.services["buff"].reconcile_outbox_event,
+            "game_event.projection": game_event_effects.on_outbox_event,
             "sign_in.effects": context.services["sign_in"].reconcile_outbox_event,
             "auction.bid.effects": context.services["auction"].reconcile_outbox_event,
             "auction.settlement.effects": context.services["auction_settlement"].reconcile_outbox_event,
