@@ -746,6 +746,7 @@ class RefactorProgressTests(unittest.TestCase):
         self.assertTrue(slices["dongfu"]["status_read_application_owned"])
         self.assertTrue(slices["dongfu"]["status_read_has_no_legacy_writeback"])
         self.assertTrue(slices["dongfu"]["infiltration_eligibility_has_no_legacy_writeback"])
+        self.assertTrue(slices["dongfu"]["status_display_has_no_legacy_writeback"])
         self.assertTrue(slices["dongfu"]["status_schema_startup_migration_owned"])
         self.assertTrue(slices["base"]["refund_stamina_application_owned"])
         self.assertTrue(slices["tower"]["stamina_refund_application_owned"])

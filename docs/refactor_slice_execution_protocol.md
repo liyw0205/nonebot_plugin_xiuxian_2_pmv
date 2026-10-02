@@ -3,6 +3,10 @@
 状态：执行中
 适用范围：全面底层重构第二阶段
 
+2026-10-02 dongfu status display writeback removal：`我的洞府` 只在读取对象上按业务日派生计数，不再调用
+`_save_dongfu`；真实巡山/潜入事务保持负责持久化当日归零及计数更新。source 回归 `8 passed`、聚合 progress
+用例 `1 passed`，compileall/diff check 通过。下一片继续审计收获快照/扩建同步和随机目标旧读取边界。
+
 2026-10-02 dongfu infiltration eligibility writeback removal：`_can_infiltrate`/`_can_intrude` 只做
 只读资格判断，不再通过 `_save_dongfu` 写回跨日计数；成功/失败 repository 已在 operation transaction 中
 按 `day` 冻结并原子更新计数。聚焦洞府/潜入/progress 回归 `33 passed`，保留显式计数、收获快照和扩建 mutation。

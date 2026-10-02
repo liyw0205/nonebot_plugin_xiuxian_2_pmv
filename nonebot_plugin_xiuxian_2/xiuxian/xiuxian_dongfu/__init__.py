@@ -652,7 +652,6 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     d = _reset_intrude_count_if_needed(d)
     d = _reset_infiltrate_count_if_needed(d)
     d = _reset_patrol_count_if_needed(d)
-    _save_dongfu(uid, d)
     intrude_left = INFILTRATE_DAILY_LIMIT - _to_int(d.get("intrude_count"))
     active_left = _get_infiltrate_left(d, is_random=False)
     random_left = _get_infiltrate_left(d, is_random=True)

@@ -29,3 +29,14 @@ def test_infiltration_eligibility_checks_do_not_write_legacy_projection():
     for name, end in (("_can_infiltrate", "def _consume_infiltrate_count"), ("_can_intrude", "def _get_random_dongfu_target")):
         helper = source[source.index(f"def {name}"):source.index(end)]
         assert "_save_dongfu" not in helper
+
+
+def test_my_dongfu_display_does_not_persist_derived_daily_counters():
+    source = SOURCE.read_text(encoding="utf-8")
+    start = source.index("@my_dongfu.handle")
+    end = source.index("@dongfu_plant.handle", start)
+    handler = source[start:end]
+    assert "_reset_intrude_count_if_needed(d)" in handler
+    assert "_reset_infiltrate_count_if_needed(d)" in handler
+    assert "_reset_patrol_count_if_needed(d)" in handler
+    assert "_save_dongfu" not in handler

@@ -2,6 +2,12 @@
 
 状态：进行中。`v1.1.0` 的 P0-P7 发布证据继续保留，但不作为底层全面重构完成证明。
 
+2026-10-02 dongfu status display writeback removal：`我的洞府` handler 仍在内存中按业务日把潜入/被潜入/巡山
+计数派生为当日状态，但不再将读取投影整体写回 player DB；巡山与潜入的 feature repositories 已在各自真实
+mutation 事务内按日期处理归零和递增。洞府 source 回归 `8 passed`，progress 聚合用例 `1 passed`，进度门禁
+两项 dongfu read/writeback 为 true，compileall 与 diff check 通过。显式收获快照、扩建灵田同步、未使用旧计数 helper
+仍待后续审计；全局 legacy blockers 和正式 backup/restore/P7 仍开放。
+
 2026-10-02 dongfu infiltration eligibility writeback removal：潜入前置资格检查 `_can_infiltrate` 与
 `_can_intrude` 不再调用 `_save_dongfu`；跨日归零和计数递增由既有
 `DongfuInfiltrateSuccess/FailureSqlRepository` 在结算事务内按 `day` 原子完成。新增 source/progress guard，

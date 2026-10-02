@@ -2831,6 +2831,12 @@ def _slice_status() -> dict[str, dict[str, object]]:
                     ("def _can_intrude", "def _get_random_dongfu_target"),
                 )
             ),
+            "status_display_has_no_legacy_writeback": (
+                "@my_dongfu.handle" in dongfu_facade
+                and "_save_dongfu" not in dongfu_facade[
+                    dongfu_facade.index("@my_dongfu.handle") : dongfu_facade.index("@dongfu_plant.handle")
+                ]
+            ),
             "status_schema_startup_migration_owned": (
                 'Migration("map.017", "map_dongfu_status_schema", apply_map_dongfu_status_schema)' in plugin
                 and "def apply_map_dongfu_status_schema(" in map_migrations
