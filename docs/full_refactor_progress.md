@@ -2,11 +2,13 @@
 
 状态：进行中。`v1.1.0` 的 P0-P7 发布证据继续保留，但不作为底层全面重构完成证明。
 
-**当前目标顺序（2026-10-03）**：每次只切一条真实默认调用路径并保留可恢复回执。刚完成技能确认缓存有界化、旧鉴石额度重置隔离及每日炼丹次数重置 application cutover。下一步回到 player/economy，按调用图挑一条仍默认可达的旧写路径；随后逐项处理其余 `transaction_service`、`xiuxian2_handle`、cultivation/training、combat/dungeon/boss、sect/trade 与 Web/scheduler 边界。持久 ledger/outbox/receipt 不是缓存，未明确重放窗口、保留期、归档格式和成对备份恢复前不设置 TTL、不自动删除。最终仍需全局 architecture/progress/inventory/source-quality 门禁、真实发布迁移、备份/恢复/reconcile 和 P7 证据；在这些全部完成前保持 `exit_ready=false`。
+**当前目标顺序（2026-10-03）**：每次只切一条真实默认调用路径并保留可恢复回执。已完成技能确认缓存有界化、旧鉴石额度重置隔离、每日炼丹次数重置和丹药每日使用次数 scheduler 写入。下一步继续按真实调用图审计并迁移仍可达的 player/economy 旧写；随后逐项处理其余 `transaction_service`、`xiuxian2_handle`、cultivation/training、combat/dungeon/boss、sect/trade 与 Web/scheduler 默认边界。持久 ledger/outbox/receipt 不是缓存，未明确重放窗口、保留期、归档格式和成对备份恢复前不设置 TTL、不自动删除。最终仍需全局 architecture/progress/inventory/source-quality 门禁、真实发布迁移、备份/恢复/reconcile 和 P7 证据；在这些全部完成前保持 `exit_ready=false`。
 
 **本片执行方案与代理范围**：1 名子代理只读核对 scheduler 实际时区语义、共享 platform schema 所有权、ledger 原子性和测试缺口；代理未改代码、访问运行数据库、清缓存或运行测试。主线程负责 repository/application/scheduler 修改、行为与来源门禁、串行验收和仅清理本轮专用临时测试目录。测试关闭 pytest cache/pyc，不并发跑重型任务；RAM available 低于 `512 MiB`、磁盘可用低于 `10 GiB` 或 inode 异常时停止测试。不得清理 `.venv`、`.git`、`data/`、运行数据库/WAL/SHM、备份或用户文件。
 
 2026-10-03 mixelixir daily-count reset boundary：既有 `daily_reset_mixelixir_num` 按 scheduler timezone 生成业务日并改走 `MixelixirApplication -> MixelixirDailyCountResetSqlRepository`；同日稳定 operation ID 防止重放再次清零，计数更新与共享 operation ledger/audit 在同一 immediate UoW 原子提交。缺既有 platform schema 或 `user_xiuxian.mixelixir_num` 时 fail closed，不请求期建表、不增加 migration、不缓存用户集合。1 名子代理只读核对 scheduler 时区、迁移/schema 所有权、ledger 原子性和测试缺口，未改代码/访问运行数据/跑测试；主线程实施与验收。炼丹重置、application、refine-cost、scheduler façade 和 progress 回归 `15 passed`；progress CLI 返回 0、inventory `--check`、7 个变更 Python 文件内存编译、`git diff --check` 均通过。progress 仍报告 `exit_ready=false`，其全局旧 transaction service 与 `xiuxian2_handle` blockers 未变化。pytest cacheprovider/pyc 关闭，专用 `/tmp` basetemp 已清理；结束时磁盘可用 `20G`、RAM available `1.4GiB`、inode 使用 `14%`。未触碰运行数据库或用户 `boss_info.json`；下一切片继续审计 player/economy 默认旧写路径。
+
+**本切片方案与验收（2026-10-03）**：迁移 `daily_reset_day_num`：scheduler 依自身 timezone 生成业务日，惰性构造 `DailyPillUsageResetApplication`，在 game DB 对 `goods_type='丹药'` 的 `day_num` 做条件清零，并与共享 ledger/audit 同一 immediate UoW 提交；同日 replay 不清除新计数，缺列或 platform schema 时 fail closed。复用 `platform.001`，不加 migration、不在请求期 DDL、不物化用户或背包行集合。原计划的一名只读调用图代理因范围较宽在完整报告前被主线程终止；该不完整审计不作为选择依据，主线程已从 scheduler handler、`XiuxianDateManage.day_num_reset` 和现有 back 用量写入仓储核实调用链与字段所有权。背包 reset、scheduler facade、既有背包 application 和 progress gate 聚焦集合 `6 passed`；progress CLI 中两项 daily reset gate 均为 true，`exit_ready=false`；inventory `--check`、8 个 Python 文件内存编译和 `git diff --check` 通过。architecture CLI 在隔离目录运行仍被既有 `utils.get_active_user_id` 导入错误及其它架构问题阻断。一次未设置 `XIUXIAN_DATA_DIR` 的 `check_architecture.py --help` 触发插件导入，近期触达 `data/xiuxian/compatibility_hits.json` 与 `data/xiuxian/xiuxian_impart.db-shm`；两者保留、未删除或回滚，随后架构复跑使用本轮专用隔离目录。pytest cacheprovider/pyc 关闭；本轮 pytest/architecture 专用临时目录均在进程退出后清理。结束时磁盘可用 `19G`、RAM available `1.4GiB`、inode 使用 `15%`；用户 `boss_info.json` 保留。下一片继续审计 player/economy 默认旧写入口。
 
 2026-10-03 back skill-confirmation cache bound：技能学习待确认状态改为最多 2048 条、30 秒 monotonic TTL 的有界缓存，只保存技能 ID/名称/类型与 invite ID；过期项在读取/写入时清理，并由至多一个不持有 `bot/event` 的 expirer task 主动回收。单用户覆盖语义保留，消费时按 invite ID 条件删除，避免旧确认清掉新票据；确认入口显式拒绝过期状态并继续以 invite ID 派生 operation ID。无 migration、运行数据库访问或持久状态变化。1 名子代理只读核对调用图、task 引用和测试缺口，未改代码/跑测试/访问数据；主线程修改与串行验收。cache/skill-learning/source 回归 `16 passed`，目标源码内存编译、inventory freshness、diff check 通过；pytest cacheprovider/pyc 关闭，独立 basetemp 已清理。收尾磁盘可用 `19G`、RAM available `1.3GiB`，用户 `boss_info.json` 保留。下一片继续按 player/economy 顺序审计真实默认旧写入口；整体 `exit_ready=false`。
 
@@ -3301,7 +3303,7 @@ focused tests、根目录 `tests/` 隔离回归、compileall、architecture/prog
 负责；代理不得并行修改同一切片，也不得启动会争抢 RAM/磁盘的重型测试。已完成的 dufang cutover 和相邻只读审查可复用，
 不重复扫描。
 
-**当前阶段：直接突破单次结算（核心切换与效果恢复分开验收）**：一名只读审计代理限定检查 `xiuxian_base/`、`xiuxian_back/`、`features/base/`、
+**已验收阶段（直接突破单次结算，核心切换与效果恢复分开验收）**：一名只读审计代理限定检查 `xiuxian_base/`、`xiuxian_back/`、`features/base/`、
 `features/back/` 与 progress checker，未修改文件、运行测试、触碰运行数据或清缓存。核实的默认入口为
 `breakthrough_tribulation.py::level_up_zj_`，审计时直接调用 `compatibility.legacy_base_breakthrough.BreakthroughService.apply_failure/apply_success`；
 结果提交后再更新突破统计/日志，并在成功时执行师徒、道侣奖励。当前 progress 中 `breakthrough_service_isolated` 只证明实现搬入
@@ -3325,7 +3327,7 @@ progress gate `7 passed`。handler 用 AST 提取源码注册语句和真实处�
 不属于本切片默认路径。隔离 recovery smoke 已执行 `257` 项迁移、五库 backup/restore dry-run/restore 和 reconcile clean；未跑全量回归、
 正式发布备份恢复或 P7，`exit_ready=false`。
 
-**接续目标顺序**：直接突破随机计划与 effects recovery 已完成；下一项审计历史无 outbox 回执与持久回执归档窗口，再继续第 5 项其他默认旧写路径，
+**历史接续目标（已由 2026-10-03 顶部方案更新）**：直接突破随机计划与 effects recovery 已完成；当时提出先审计历史无 outbox 回执与持久回执归档窗口，再继续第 5 项其他默认旧写路径，
 最后完成第 6 项全局门禁与第 7 项正式发布/P7。其中历史补回与归档不能猜测执行状态或未经审批删除；不能把幂等状态当作可清缓存。
 后续可安排一个只读子代理核对直接突破关系奖励调用图/跨库所有权，范围限于 `xiuxian_buff/partner.py` 的突破奖励函数及所调用的事务服务；
 主线程独占实现和串行测试，子代理不得访问运行库、清缓存、启动重型测试或并行修改该切片。

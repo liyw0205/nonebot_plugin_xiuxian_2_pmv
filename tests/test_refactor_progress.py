@@ -438,6 +438,8 @@ class RefactorProgressTests(unittest.TestCase):
         self.assertTrue(rift["boss_battle_item_provider_read_only"])
         self.assertTrue(rift["boss_battle_items_lazy"])
         back = slices["back"]
+        self.assertTrue(back["daily_pill_usage_reset_application_owned"])
+        self.assertTrue(back["daily_pill_usage_reset_atomic_no_request_ddl"])
         self.assertTrue(back["cultivation_item_application_owned"])
         self.assertTrue(back["legacy_cultivation_item_disabled"])
         self.assertTrue(back["skill_learning_application_owned"])

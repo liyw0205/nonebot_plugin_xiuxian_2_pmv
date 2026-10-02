@@ -452,6 +452,8 @@ def _slice_status() -> dict[str, dict[str, object]]:
     back_accessory_facade = (PACKAGE / "xiuxian" / "xiuxian_back" / "accessory.py").read_text(encoding="utf-8")
     back_util_facade = (PACKAGE / "xiuxian" / "xiuxian_back" / "back_util.py").read_text(encoding="utf-8")
     back_application_source = (PACKAGE / "features" / "back" / "application.py").read_text(encoding="utf-8")
+    daily_pill_reset_application = (PACKAGE / "features" / "back" / "daily_pill_usage_reset_application.py").read_text(encoding="utf-8")
+    daily_pill_reset_repository = (PACKAGE / "features" / "back" / "daily_pill_usage_reset_repository.py").read_text(encoding="utf-8")
     past_life_events_facade = (PACKAGE / "xiuxian" / "xiuxian_past_life" / "past_life_events.py").read_text(encoding="utf-8")
     past_life_command_facade = (PACKAGE / "xiuxian" / "xiuxian_past_life" / "__init__.py").read_text(encoding="utf-8")
     dufang_facade = (PACKAGE / "xiuxian" / "xiuxian_dufang" / "__init__.py").read_text(encoding="utf-8")
@@ -1841,6 +1843,16 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "status": "world_generation_termination_key_event_settlement_entry_speedup_demon_token_damage_event_boss_battle_asset_boundary_engine_provider_boundary_skill_provider_boundary_buff_random_source_boundary_status_writeback_isolation_item_provider_boundary_lazy_items_boundary_treasure_cutover_with_natal_impart_buff_info_accessory_tianti_and_base_provider_boundaries_and_remaining_rift_compatibility",
         },
         "back": {
+            "daily_pill_usage_reset_application_owned": (
+                "_run_job(\"每日丹药使用次数重置\", _daily_pill_usage_reset)" in mixelixir_scheduler
+                and "_sql_message().day_num_reset" not in mixelixir_scheduler
+                and "class DailyPillUsageResetApplication" in daily_pill_reset_application
+            ),
+            "daily_pill_usage_reset_atomic_no_request_ddl": (
+                "DatabaseUnitOfWork(self.database, immediate=True)" in daily_pill_reset_repository
+                and "self.ledger.finish(uow, outcome)" in daily_pill_reset_repository
+                and "CREATE TABLE" not in daily_pill_reset_repository
+            ),
             "cultivation_item_application_owned": "back_application.cultivation_item(" in back_facade and "_cultivation_item_application().apply(" in back_util_facade,
             "legacy_cultivation_item_disabled": "_cultivation_item_service().apply(" not in back_facade and "_cultivation_item_service().apply(" not in back_util_facade,
             "skill_learning_application_owned": "back_application.learn_skill(" in back_facade,

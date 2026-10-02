@@ -44,15 +44,27 @@ def _sql_message():
     return _sql_message_instance
 
 
-def _mixelixir_daily_count_reset():
+def _scheduler_business_date():
     from datetime import datetime
 
+    return datetime.now(getattr(scheduler, "timezone", None)).date().isoformat()
+
+
+def _mixelixir_daily_count_reset():
     from ...features.mixelixir.application import MixelixirApplication
     from ...paths import get_paths
 
     paths = get_paths()
-    business_date = datetime.now(getattr(scheduler, "timezone", None)).date().isoformat()
-    return MixelixirApplication(paths.game_db, paths.player_db).reset_daily_count(business_date)
+    return MixelixirApplication(paths.game_db, paths.player_db).reset_daily_count(
+        _scheduler_business_date()
+    )
+
+
+def _daily_pill_usage_reset():
+    from ...features.back.daily_pill_usage_reset_application import DailyPillUsageResetApplication
+    from ...paths import get_paths
+
+    return DailyPillUsageResetApplication(get_paths().game_db).reset(_scheduler_business_date())
 
 
 @register_legacy_startup
@@ -138,7 +150,7 @@ async def daily_reset_beg():
 )
 async def daily_reset_day_num():
     """每日丹药使用次数重置"""
-    await _run_job("每日丹药使用次数重置", _sql_message().day_num_reset)
+    await _run_job("每日丹药使用次数重置", _daily_pill_usage_reset)
 
 
 @scheduler.scheduled_job(

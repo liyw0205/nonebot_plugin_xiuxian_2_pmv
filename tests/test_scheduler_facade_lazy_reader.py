@@ -14,8 +14,9 @@ class SchedulerFacadeLazyReaderTests(unittest.TestCase):
         self.assertNotIn("sql_message = XiuxianDateManage()", source)
         self.assertIn("_run_job(\"每日修仙签到重置\", _sql_message().sign_remake)", source)
         self.assertIn("_run_job(\"仙途奇缘重置\", _sql_message().beg_remake)", source)
-        self.assertIn("_run_job(\"每日丹药使用次数重置\", _sql_message().day_num_reset)", source)
+        self.assertIn("_run_job(\"每日丹药使用次数重置\", _daily_pill_usage_reset)", source)
         self.assertIn("_run_job(\"每日炼丹次数重置\", _mixelixir_daily_count_reset)", source)
+        self.assertIn("def _scheduler_business_date(", source)
         self.assertIn("datetime.now(getattr(scheduler, \"timezone\", None)).date().isoformat()", source)
 
     def test_stone_limit_reset_is_gated_by_legacy_handler(self):
