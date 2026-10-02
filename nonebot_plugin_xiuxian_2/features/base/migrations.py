@@ -39,6 +39,29 @@ def apply_base_root_reroll_operations(uow: DatabaseUnitOfWork) -> None:
         raise RuntimeError("player_root_reroll_operations has an unsupported schema")
 
 
+def apply_base_direct_breakthrough_operations(uow: DatabaseUnitOfWork) -> None:
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS direct_breakthrough_operations("
+        "operation_id TEXT PRIMARY KEY,user_id TEXT NOT NULL,outcome TEXT NOT NULL,"
+        "from_level TEXT NOT NULL,to_level TEXT NOT NULL,exp_loss INTEGER NOT NULL,"
+        "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,payload TEXT NOT NULL DEFAULT '')"
+    )
+    columns = {
+        str(row["name"]).casefold()
+        for row in uow.query_all('PRAGMA table_info("direct_breakthrough_operations")')
+    }
+    required = {
+        "operation_id", "user_id", "outcome", "from_level", "to_level", "exp_loss",
+        "created_at",
+    }
+    if not required.issubset(columns):
+        raise RuntimeError("direct_breakthrough_operations has an unsupported legacy schema")
+    if "payload" not in columns:
+        uow.execute(
+            "ALTER TABLE direct_breakthrough_operations ADD COLUMN payload TEXT NOT NULL DEFAULT ''"
+        )
+
+
 def apply_base_stone_contest_operations(uow: DatabaseUnitOfWork) -> None:
     uow.execute(
         "CREATE TABLE IF NOT EXISTS stone_contest_operations("
@@ -168,4 +191,5 @@ __all__ = [
     "apply_base_stone_robbery_player_statistics",
     "apply_base_xiangyuan",
     "apply_base_xiangyuan_player",
+    "apply_base_direct_breakthrough_operations",
 ]

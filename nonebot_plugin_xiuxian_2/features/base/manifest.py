@@ -11,7 +11,7 @@ FEATURE = FeatureManifest(
         RouteSpec("/api/v1/base/xiangyuan/group", methods=("GET",), permission="user"),
     ),
     config=(ConfigSpec("base_enabled", "bool", default=True, reloadable=True, description="基础修炼事务灰度开关"),),
-    migration_version="base.008", test_tag="base",
+    migration_version="base.009", test_tag="base",
 )
 
 __all__ = ["FEATURE"]

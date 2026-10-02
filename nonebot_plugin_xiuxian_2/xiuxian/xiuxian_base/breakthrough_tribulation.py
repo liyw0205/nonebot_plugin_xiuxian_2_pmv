@@ -9,6 +9,7 @@ from datetime import datetime
 from ...paths import get_paths
 from ...infrastructure.ids import UUIDGenerator
 from ...features.player_state.application import PlayerStateApplication
+from ...features.base.application import BaseApplication
 from ..on_compat import on_command
 from nonebot.params import CommandArg
 
@@ -35,6 +36,7 @@ from ...compatibility.legacy_base_tribulation_state_migration import Tribulation
 _sql_message_instance = None
 player_state_application = PlayerStateApplication(get_paths().player_db)
 _breakthrough_service_instance = None
+_direct_breakthrough_application_instance: BaseApplication | None = None
 _pill_fusion_service_instance = None
 _ordinary_tribulation_service_instance = None
 _destiny_tribulation_service_instance = None
@@ -68,6 +70,21 @@ def _breakthrough_service():
     if _breakthrough_service_instance is None:
         _breakthrough_service_instance = BreakthroughService(get_paths().game_db)
     return _breakthrough_service_instance
+
+
+def configure_direct_breakthrough_application(application: BaseApplication) -> None:
+    global _direct_breakthrough_application_instance
+    _direct_breakthrough_application_instance = application
+
+
+def _direct_breakthrough_application() -> BaseApplication:
+    global _direct_breakthrough_application_instance
+    if _direct_breakthrough_application_instance is None:
+        _direct_breakthrough_application_instance = BaseApplication(
+            get_paths().game_db,
+            get_paths().player_db,
+        )
+    return _direct_breakthrough_application_instance
 
 
 def _pill_fusion_service():
@@ -1125,18 +1142,20 @@ async def level_up_zj_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
         nowmp = user_msg['mp'] - now_exp if (user_msg['mp'] - now_exp) > 0 else 1
         update_rate = 1 if int(level_rate * XiuConfig().level_up_probability) <= 1 else int(
             level_rate * XiuConfig().level_up_probability)  # 失败增加突破几率
-        result = _breakthrough_service().apply_failure(
-            _breakthrough_operation_id(event, "direct", user_id),
-            user_id,
-            level_name,
-            exp,
-            user_msg["hp"],
-            user_msg["mp"],
-            leveluprate,
-            now_exp,
-            nowhp,
-            nowmp,
-            leveluprate + update_rate,
+        result = _direct_breakthrough_application().settle_direct_breakthrough(
+            operation_id=_breakthrough_operation_id(event, "direct", user_id),
+            user_id=user_id,
+            outcome="failure",
+            expected_level=level_name,
+            target_level=level_name,
+            expected_exp=exp,
+            expected_hp=user_msg["hp"],
+            expected_mp=user_msg["mp"],
+            expected_rate=leveluprate,
+            exp_loss=now_exp,
+            new_hp=nowhp,
+            new_mp=nowmp,
+            new_rate=leveluprate + update_rate,
         )
         if not result.applied:
             await handle_send(bot, event, "突破未重复结算：本次请求已处理，或修为、境界已更新，请刷新后重试。", md_type="修仙", k1="直接突破", v1="直接突破", k2="渡厄", v2="渡厄突破", k3="修为", v3="我的修为")
@@ -1150,17 +1169,18 @@ async def level_up_zj_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
         # 突破成功
         root_rate = _sql_message().get_root_rate(user_msg["root_type"], user_id)
         level_spend = jsondata.level_data()[le[0]]["spend"]
-        result = _breakthrough_service().apply_success(
-            _breakthrough_operation_id(event, "direct", user_id),
-            user_id,
-            level_name,
-            le[0],
-            exp,
-            user_msg["hp"],
-            user_msg["mp"],
-            leveluprate,
-            root_rate,
-            level_spend,
+        result = _direct_breakthrough_application().settle_direct_breakthrough(
+            operation_id=_breakthrough_operation_id(event, "direct", user_id),
+            user_id=user_id,
+            outcome="success",
+            expected_level=level_name,
+            target_level=le[0],
+            expected_exp=exp,
+            expected_hp=user_msg["hp"],
+            expected_mp=user_msg["mp"],
+            expected_rate=leveluprate,
+            root_rate=root_rate,
+            level_spend=level_spend,
         )
         if not result.applied:
             await handle_send(bot, event, "突破未重复结算：本次请求已处理，或修为、境界已更新，请刷新后重试。")

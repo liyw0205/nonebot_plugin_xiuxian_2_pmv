@@ -18,6 +18,13 @@ class RefactorProgressTests(unittest.TestCase):
         self.assertTrue(map_status["mission_claim_effects_outbox_owned"])
         self.assertTrue(map_status["mission_claim_effects_dispatched_on_replay"])
 
+    def test_progress_report_separates_direct_breakthrough_core_from_effect_recovery(self) -> None:
+        base = _slice_status()["base"]
+        self.assertTrue(base["direct_breakthrough_handler_feature_owned"])
+        self.assertTrue(base["direct_breakthrough_startup_migration_registered"])
+        self.assertTrue(base["direct_breakthrough_request_path_has_no_ddl"])
+        self.assertFalse(base["direct_breakthrough_effects_replay_owned"])
+
     def test_progress_report_tracks_recoverable_closing_effects(self) -> None:
         buff = _slice_status()["buff"]
         self.assertTrue(buff["closing_settlement_replay_application_owned"])

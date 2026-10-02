@@ -76,6 +76,7 @@ from .features.buff.migrations import (
 from .features.base.manifest import FEATURE as BASE_FEATURE
 from .features.base.migrations import (
     apply_base,
+    apply_base_direct_breakthrough_operations,
     apply_base_player_rename_operations,
     apply_base_root_reroll_operations,
     apply_base_stone_contest_operations,
@@ -292,6 +293,7 @@ def build_migrations() -> tuple[Migration, ...]:
         Migration("base.006", "xiangyuan_projection", apply_base_xiangyuan),
         Migration("base.007", "xiangyuan_player_limits", apply_base_xiangyuan_player),
         Migration("base.008", "player_root_reroll_operations", apply_base_root_reroll_operations),
+        Migration("base.009", "direct_breakthrough_operations", apply_base_direct_breakthrough_operations),
         Migration("beg.001", "beg_feature_migrations", apply_beg),
         Migration("boss.001", "boss_feature_migrations", apply_boss),
         Migration("boss.002", "boss_purchase_operations", apply_boss_purchase),
@@ -1047,7 +1049,7 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
                 closing_effects=LegacyBuffClosingEffects(context.database.path("player_db")),
                 clock=context.clock,
             ),
-            "base": BaseApplication(str(context.database.path("game_db")), str(context.database.path("player_db"))),
+            "base": BaseApplication(str(context.database.path("game_db")), str(context.database.path("player_db")), clock=context.clock),
             "back": BackApplication(str(context.database.path("game_db")), str(context.database.path("player_db"))),
             "trade": TradeApplication(
                 str(context.database.path("game_db")),
@@ -1100,7 +1102,11 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
         except ValueError:
             pass
         else:
-            from .xiuxian.xiuxian_base import configure_lottery_application, configure_sign_in_application
+            from .xiuxian.xiuxian_base import (
+                configure_direct_breakthrough_application,
+                configure_lottery_application,
+                configure_sign_in_application,
+            )
             from .xiuxian.xiuxian_utils.utils import configure_player_avatar_application, configure_player_profile_application
             from .xiuxian.xiuxian_utils.utils import configure_player_activity_application
             from .xiuxian.xiuxian_utils.utils import configure_player_attribute_application
@@ -1122,6 +1128,7 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
             )
 
             configure_sign_in_application(context.services["sign_in"])
+            configure_direct_breakthrough_application(context.services["base"])
             configure_player_profile_application(context.services["player_profile"])
             configure_player_avatar_application(context.services["player_avatar"])
             configure_player_activity_application(context.services["player_activity"])

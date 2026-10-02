@@ -106,6 +106,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
     base_contest_repository = (PACKAGE / "features" / "base" / "contest_repository.py").read_text(encoding="utf-8")
     base_robbery_repository = (PACKAGE / "features" / "base" / "robbery_repository.py").read_text(encoding="utf-8")
     base_root_reroll_repository = (PACKAGE / "features" / "base" / "root_reroll_repository.py").read_text(encoding="utf-8")
+    base_direct_breakthrough_repository = (PACKAGE / "features" / "base" / "breakthrough_repository.py").read_text(encoding="utf-8")
     base_xiangyuan_repository = (PACKAGE / "features" / "base" / "xiangyuan_repository.py").read_text(encoding="utf-8")
     base_xiangyuan_application = (PACKAGE / "features" / "base" / "xiangyuan_application.py").read_text(encoding="utf-8")
     base_stamina_application = (PACKAGE / "features" / "base" / "stamina_application.py").read_text(encoding="utf-8")
@@ -2255,7 +2256,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
             ),
             "stone_theft_startup_migration_registered": (
                 'Migration("base.003", "stone_contest_operations", apply_base_stone_contest_operations)' in plugin
-                and 'migration_version="base.008"' in base_manifest
+                and 'migration_version="base.009"' in base_manifest
                 and "def apply_base_stone_contest_operations(" in base_migrations
             ),
             "stone_theft_migration_game_only": (
@@ -2306,7 +2307,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "root_reroll_startup_migration_registered": (
                 'Migration("base.008", "player_root_reroll_operations", apply_base_root_reroll_operations)' in plugin
                 and "def apply_base_root_reroll_operations(" in base_migrations
-                and 'migration_version="base.008"' in base_manifest
+                and 'migration_version="base.009"' in base_manifest
             ),
             "root_reroll_migration_game_only": (
                 "base.008" not in plugin[plugin.index("_GAME_DATABASE_EXCLUDED_MIGRATION_VERSIONS"):plugin.index("_PLAYER_DATABASE_MIGRATION_VERSIONS")]
@@ -2340,12 +2341,42 @@ def _slice_status() -> dict[str, dict[str, object]]:
                 and "class XiangyuanSqlRepository" in base_xiangyuan_repository
             ),
             "breakthrough_service_isolated": "class BreakthroughService" not in base_transaction and "class BreakthroughService" in breakthrough_compatibility and all(token in breakthrough_compatibility for token in ("direct_breakthrough_operations", "continuous_breakthrough_operations", "tribulation_breakthrough_operations", "continuous_tribulation_operations")),
+            "direct_breakthrough_handler_feature_owned": (
+                "_direct_breakthrough_application().settle_direct_breakthrough(" in breakthrough_facade[
+                    breakthrough_facade.index("@level_up_zj.handle"):
+                    breakthrough_facade.index("@level_up_lx.handle")
+                ]
+                and "_breakthrough_service().apply_failure(" not in breakthrough_facade[
+                    breakthrough_facade.index("@level_up_zj.handle"):
+                    breakthrough_facade.index("@level_up_lx.handle")
+                ]
+                and "_breakthrough_service().apply_success(" not in breakthrough_facade[
+                    breakthrough_facade.index("@level_up_zj.handle"):
+                    breakthrough_facade.index("@level_up_lx.handle")
+                ]
+                and "BaseDirectBreakthroughSqlRepository" in base_direct_breakthrough_repository
+            ),
+            "direct_breakthrough_startup_migration_registered": (
+                'Migration("base.009", "direct_breakthrough_operations", apply_base_direct_breakthrough_operations)' in plugin
+                and "def apply_base_direct_breakthrough_operations(" in base_migrations
+                and 'migration_version="base.009"' in base_manifest
+                and 'configure_direct_breakthrough_application(context.services["base"])' in plugin_source
+            ),
+            "direct_breakthrough_request_path_has_no_ddl": (
+                "CREATE TABLE" not in base_direct_breakthrough_repository
+                and "ALTER TABLE" not in base_direct_breakthrough_repository
+                and "schema_missing" in base_direct_breakthrough_repository
+            ),
+            "direct_breakthrough_effects_replay_owned": (
+                "effects_event_id" in base_direct_breakthrough_repository
+                and "domain_outbox" in base_direct_breakthrough_repository
+            ),
             "ordinary_tribulation_service_isolated": "class OrdinaryTribulationService" not in base_transaction and "class OrdinaryTribulationService" in ordinary_tribulation_compatibility and "ordinary_tribulation_operations" in ordinary_tribulation_compatibility,
             "destiny_tribulation_service_isolated": "class DestinyTribulationService" not in base_transaction and "class DestinyTribulationService" in destiny_tribulation_compatibility and "destiny_tribulation_operations" in destiny_tribulation_compatibility,
             "heart_devil_tribulation_service_isolated": "class HeartDevilTribulationService" not in base_transaction and "class HeartDevilTribulationService" in heart_devil_tribulation_compatibility and "heart_devil_tribulation_operations" in heart_devil_tribulation_compatibility,
             "pill_fusion_service_isolated": "class PillFusionService" not in base_transaction and "class PillFusionService" in pill_fusion_compatibility and "pill_fusion_operations" in pill_fusion_compatibility,
             "tribulation_state_migration_service_isolated": "class TribulationStateMigrationService" not in base_transaction and "class TribulationStateMigrationService" in tribulation_state_migration_compatibility and "tribulation_state_migration_operations" in tribulation_state_migration_compatibility,
-            "status": "cooldown_and_scheduled_stamina_recovery_owned_with_stone_theft_robbery_settlement_rename_and_root_reroll_replay_with_remaining_base_compatibility_isolation",
+            "status": "cooldown_stamina_theft_robbery_rename_root_reroll_and_direct_breakthrough_core_owned_with_breakthrough_effects_and_other_base_compatibility_remaining",
         },
         "puppet": {
             "purchase_application_owned": (

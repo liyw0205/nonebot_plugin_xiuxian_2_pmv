@@ -5,6 +5,7 @@ from typing import Any
 
 from .._legacy_application import LegacyApplication
 from .contest_repository import BaseStoneContestSqlRepository
+from .breakthrough_repository import BaseDirectBreakthroughSqlRepository
 from .repository import BaseRepository
 from .rename_repository import BaseRenameSqlRepository
 from .root_reroll_repository import BaseRootRerollSqlRepository
@@ -14,15 +15,22 @@ from .xiangyuan_application import XiangyuanApplication
 
 
 class BaseApplication(LegacyApplication):
-    def __init__(self, game_database: str | Path, player_database: str | Path, *, repository: BaseRepository | None = None) -> None:
+    def __init__(self, game_database: str | Path, player_database: str | Path, *, repository: BaseRepository | None = None, clock: Any | None = None) -> None:
         super().__init__(game_database, repository=repository, feature="base")
         self._stone_contest_repository = BaseStoneContestSqlRepository(game_database)
+        self._direct_breakthrough_repository = BaseDirectBreakthroughSqlRepository(game_database, clock=clock)
         self._xiangyuan_application = XiangyuanApplication(game_database, player_database)
 
     def _action(self, action: str, *, operation_id: str, user_id: str, **kwargs: Any):
         return self._execute(operation_id=operation_id, user_id=user_id, action=f"base.{action}", payload={"user_id": user_id, **kwargs}, call=lambda: self.repository.invoke(action, operation_id, user_id, **kwargs))
 
-    def breakthrough(self, *, operation_id: str, user_id: str, **kwargs: Any): return self._action("breakthrough", operation_id=operation_id, user_id=user_id, **kwargs)
+    def breakthrough(self, *, operation_id: str, user_id: str, **kwargs: Any):
+        return self._action("breakthrough", operation_id=operation_id, user_id=user_id, **kwargs)
+
+    def settle_direct_breakthrough(self, *, operation_id: str, user_id: str, **kwargs: Any):
+        return self._direct_breakthrough_repository.apply(
+            operation_id, user_id, **kwargs,
+        )
     def tribulation(self, *, operation_id: str, user_id: str, **kwargs: Any): return self._action("tribulation", operation_id=operation_id, user_id=user_id, **kwargs)
     def get_rename_result(self, operation_id: str):
         return BaseRenameSqlRepository(self.database).get_result(operation_id)

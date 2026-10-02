@@ -2070,18 +2070,25 @@ class SourceQualityTests(unittest.TestCase):
         self.assertIn("sect_practice_operations", service_source)
         self.assertIn("BEGIN IMMEDIATE", service_source)
 
-    def test_direct_breakthrough_uses_transactional_service(self) -> None:
+    def test_direct_breakthrough_uses_feature_owned_transaction(self) -> None:
         base_root = SOURCE_ROOT / "xiuxian" / "xiuxian_base"
         command_source = (base_root / "breakthrough_tribulation.py").read_text(
             encoding="utf-8"
         )
-        service_source = (SOURCE_ROOT / "compatibility" / "legacy_base_breakthrough.py").read_text(
+        repository_source = (SOURCE_ROOT / "features" / "base" / "breakthrough_repository.py").read_text(
             encoding="utf-8"
         )
-        self.assertIn("_breakthrough_service().apply_failure(", command_source)
-        self.assertIn("_breakthrough_service().apply_success(", command_source)
-        self.assertIn("direct_breakthrough_operations", service_source)
-        self.assertIn("BEGIN IMMEDIATE", service_source)
+        handler = command_source[
+            command_source.index("@level_up_zj.handle"):command_source.index("@level_up_lx.handle")
+        ]
+        self.assertEqual(handler.count("_direct_breakthrough_application().settle_direct_breakthrough("), 2)
+        self.assertNotIn("_breakthrough_service()", handler)
+        self.assertIn('outcome="success"', handler)
+        self.assertIn('outcome="failure"', handler)
+        self.assertIn("direct_breakthrough_operations", repository_source)
+        self.assertIn("immediate=True", repository_source)
+        self.assertNotIn("CREATE TABLE", repository_source)
+        self.assertNotIn("ALTER TABLE", repository_source)
 
     def test_legacy_tribulation_state_uses_transactional_migration(self) -> None:
         base_root = SOURCE_ROOT / "xiuxian" / "xiuxian_base"

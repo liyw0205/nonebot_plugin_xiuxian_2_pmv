@@ -25,8 +25,11 @@ def test_theft_repository_is_no_ddl_and_migration_is_game_only():
 
 
 def test_base_manifest_tracks_latest_registered_migration():
-    manifest = (PACKAGE / "features/base/manifest.py").read_text(encoding="utf-8")
-    assert 'migration_version="base.005"' in manifest
+    from nonebot_plugin_xiuxian_2.features.base.manifest import FEATURE
+    from nonebot_plugin_xiuxian_2.plugin import build_migrations
+
+    versions = [migration.version for migration in build_migrations() if migration.version.startswith("base.")]
+    assert FEATURE.migration_version == max(versions, key=lambda version: int(version.split(".")[1]))
 
 
 def test_stone_contest_migration_routes_only_to_game_database():

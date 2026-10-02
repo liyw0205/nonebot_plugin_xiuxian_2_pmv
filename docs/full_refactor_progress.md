@@ -3237,7 +3237,8 @@ focused tests、根目录 `tests/` 隔离回归、compileall、architecture/prog
    **当前不定义 TTL，也不启用自动归档/删除**：ADR-0007 要求至少覆盖对应备份保留期、reconcile clean 后由运维归档；还需先确定旧消息 replay 窗口和可恢复的归档格式。pending、started、failed、needs_reconcile、dead outbox、未完成 share progress，以及仍承担幂等 tombstone 的终态回执都不得删除。归档前必须有审批、game/player 成对且可校验的备份/恢复证据与 clean reconcile；仅有空间报告不构成归档许可。
 5. **按真实调用图清理剩余旧写路径**：优先 player/economy/inventory 等会改动资产的默认 handler。`out_closing` effects recovery
    与地图委托/宠物游历 replay 的 effects recovery 已分别完成代码切片和 focused 验证；历史缺少 outbox 的 claim receipt 不自动回填，
-   仍须单独审计。后续按风险处理 cultivation/training、combat/dungeon/boss、sect/trade 与 scheduler/Web 入口。
+   仍须单独审计。下一项限定为 `直接突破` 单次成功/失败结算；不合并连续突破、渡厄/普通渡劫、丹药融合。
+   随后再按风险处理 cultivation/training、combat/dungeon/boss、sect/trade 与 scheduler/Web 入口。
    每项记录真实入口、完整调用链、跨库状态所有者和中断恢复证据；只有默认调用归零且兼容/回滚边界明确后，才隔离或删除
    对应 legacy service。
 6. **全局依赖与完成门禁**：按同一 progress CLI 口径持续记录 `transaction_service`、`xiuxian2_handle`、
@@ -3251,6 +3252,35 @@ focused tests、根目录 `tests/` 隔离回归、compileall、architecture/prog
 运行数据库、不清缓存、不启动测试。共享代码修改、跨库事务设计、运行数据操作、缓存清理、测试结果裁定与最终集成由主代理
 负责；代理不得并行修改同一切片，也不得启动会争抢 RAM/磁盘的重型测试。已完成的 dufang cutover 和相邻只读审查可复用，
 不重复扫描。
+
+**当前阶段：直接突破单次结算（核心切换与效果恢复分开验收）**：一名只读审计代理限定检查 `xiuxian_base/`、`xiuxian_back/`、`features/base/`、
+`features/back/` 与 progress checker，未修改文件、运行测试、触碰运行数据或清缓存。核实的默认入口为
+`breakthrough_tribulation.py::level_up_zj_`，审计时直接调用 `compatibility.legacy_base_breakthrough.BreakthroughService.apply_failure/apply_success`；
+结果提交后再更新突破统计/日志，并在成功时执行师徒、道侣奖励。当前 progress 中 `breakthrough_service_isolated` 只证明实现搬入
+compatibility，不证明默认 handler 已切换。实施只覆盖该单次入口与直接结算，不动同文件内其他突破/渡劫 handler。验收必须覆盖成功、失败、
+同消息 replay、状态冲突、receipt 写入回滚及缺 schema 时 fail closed；同时须明确并验证统计/日志/关系奖励的重放恢复，不能把核心资产结算
+切换单独标作整个直接突破阶段完成。主线程复核旧 service 后将其拆为两个顺序子阶段：先切换核心结算与启动 schema 所有权，
+再冻结随机计划并实现统计/日志/关系奖励恢复；每个子阶段独立测试、提交、推送。代码、测试、progress gate、资源核对与最终验收由主线程负责。
+
+直接突破核心实现使用 `BaseApplication.settle_direct_breakthrough` 与 `BaseDirectBreakthroughSqlRepository`；只有该单次 handler
+切换，连续/渡厄/其他渡劫及通用 Web `breakthrough` 契约不变。game-only `base.009` 预建原有 receipt 表并新增请求 payload，旧行保留，
+不把旧回执当缓存删除；事务内检查快照、更新资产并写入回执，跨用户或新回执的不同 payload 拒绝复用 ID。缺库/schema 时不隐式建表。
+冷却时间维持本地无时区格式，超大修为/HP/MP 绑定兼容 SQLite。`direct_breakthrough_effects_replay_owned=false`：当前 handler
+仍先计算随机结果，核心提交后再更新统计/日志和师徒/道侣资产；这些 effects 的冻结、outbox、分库回执和 reconcile 是下一必做子阶段，
+不能通过简单重调旧奖励函数补偿。旧关系奖励函数会重抽随机数并重读玩家快照，师徒奖励还涉及跨库计数/历史，需单独证明中断恢复。
+
+**直接突破核心验收（2026-10-02）**：repository/application、handler 隔离执行、迁移路由、相邻 source contract 与全部 progress tests
+限定集合 `35 passed in 130.81s`；覆盖成功/失败、同消息延迟重放、payload/用户冲突、旧行保留和重复迁移、缺库/缺表不创建、回执失败回滚、
+超大修为绑定与本地冷却时间。handler 用 AST 提取源码注册语句和真实处理函数后注入外部端口执行，不等同于完整 NoneBot 启动。
+12 个变更 Python 文件 AST 通过；静态 core imports、feature lifecycle 和 manifest uniqueness 检查通过。全局 feature connections
+检查仍因 `features/info/avatar_repository.py:6` 的 `import sqlite3` 失败，该文件与切片基线一致，未在此阶段修改。
+组合收集旧 `tests/test_direct_breakthrough_service.py` 时遇到 `utils.get_active_user_id` 导入错误，未将该兼容用例算作通过；后续需独立复现基线/导入顺序。
+未跑全量回归、真实启动迁移、正式备份恢复或 P7。核心子阶段之外的效果恢复仍未完成，`exit_ready=false`。
+
+**接续目标顺序**：先完成直接突破随机计划和 effects recovery，再审计历史无 outbox 回执与持久回执归档窗口，继续第 5 项其他默认旧写路径，
+最后完成第 6 项全局门禁与第 7 项正式发布/P7。其中历史补回与归档不能猜测执行状态或未经审批删除；不能把幂等状态当作可清缓存。
+后续可安排一个只读子代理核对直接突破关系奖励调用图/跨库所有权，范围限于 `xiuxian_buff/partner.py` 的突破奖励函数及所调用的事务服务；
+主线程独占实现和串行测试，子代理不得访问运行库、清缓存、启动重型测试或并行修改该切片。
 
 **`out_closing` effects recovery（代码切片完成，2026-10-02）**：复用已完成的闭关 handler、任务/活动投影只读审计，
 不重复扫描。主线程负责冻结副作用 intent，并使闭关资产回执与 game-db outbox 同事务提交；分别为 player statistics、
@@ -3271,6 +3301,12 @@ projection、活动回执、任务周期与迁移选择集 `32 passed`；闭关 
 **子代理使用约束**：合理委派只读调用图、迁移归属或回放测试缺口审计，并在方案注明文件范围、只读/不运行重型测试与不清理缓存边界；实现、测试集成、progress gate、资源核对和最终验收由主线程负责。避免多个代理并行修改同一条业务切片。
 
 **缓存与资源收尾**：本轮测试关闭 pytest cache/字节码并使用独立 `/tmp/xiuxian-replay-check.*` basetemp；只在所有进程退出后清理该目录。开工时磁盘可用约 `21 GB`、RAM available `1.2 GiB`；测试中最低观察约 `1.1 GiB` available，磁盘余量无明显变化。不得清理共享 `ITEMS_CACHE`、业务数据、运行数据库或 SQLite sidecar；避免在此资源基线上运行并行/全量测试。
+
+地图/宠物切片提交前复跑限定集合 `34 passed in 112.93s`，pytest cache/字节码关闭；本轮专用 basetemp 已在进程退出后清理。其后观察到磁盘可用约 `21 GB`、RAM available 约 `872 MiB`；暂缓新增测试，直到可用 RAM 恢复，再按直接突破的 focused 集合串行验证。
+
+直接突破测试在可用 RAM 恢复至约 `1.2 GiB` 后串行运行；专用 `/tmp/xiuxian-direct-breakthrough-check-20261002` 在全部进程退出后用
+`rmdir` 清理，代码/测试目录未发现 `__pycache__` 或 `.pytest_cache`。收尾磁盘可用约 `21 GB`、RAM available 约 `1.1 GiB`；
+没有删除共享缓存、运行数据库/sidecar、备份或 `.venv`，用户 `boss_info.json` 仍排除在提交外。
 
 2026-09-21 stone-gift slice verification：真实 `送灵石` 新 adapter 的用户查询补回 `level` 字段；此前缺少该字段会让非默认境界按错误的默认日限额计算，已由真实 SQLite command boundary regression 覆盖。feature/application/adapter/source 回归 `26 passed, 2 subtests passed`，独立 Web boundary `3 passed`；测试夹具统一显式执行 platform operation ledger 与 `stone_gift` schema migration，生产请求路径仍不隐式建表。compileall、architecture、inventory、`git diff --check` 通过。
 
