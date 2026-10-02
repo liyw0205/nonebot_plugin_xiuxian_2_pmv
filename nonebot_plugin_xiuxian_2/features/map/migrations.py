@@ -84,6 +84,37 @@ def apply_map_dongfu_player(uow: DatabaseUnitOfWork) -> None:
         if name not in columns:uow.execute(f'ALTER TABLE dongfu_status ADD COLUMN "{name}" TEXT')
 
 
+def apply_map_dongfu_status_schema(uow: DatabaseUnitOfWork) -> None:
+    """Complete the player-owned dongfu projection before request handling."""
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS dongfu_status ("
+        "user_id TEXT PRIMARY KEY,built INTEGER NOT NULL DEFAULT 0,"
+        "realm TEXT,heaven TEXT,node_id TEXT,node_name TEXT,node_type TEXT)"
+    )
+    definitions = {
+        "array_level": "INTEGER DEFAULT 0",
+        "planting": "INTEGER DEFAULT 0",
+        "plant_seed_id": "INTEGER DEFAULT 0",
+        "plant_start": "TEXT DEFAULT ''",
+        "harvest_settlement": "TEXT DEFAULT ''",
+        "plant_finish": "TEXT DEFAULT ''",
+        "plant_slots": "TEXT DEFAULT ''",
+        "plot_count": "INTEGER DEFAULT 3",
+        "intrude_date": "TEXT DEFAULT ''",
+        "intrude_count": "INTEGER DEFAULT 0",
+        "infiltrate_date": "TEXT DEFAULT ''",
+        "infiltrate_active_count": "INTEGER DEFAULT 0",
+        "infiltrate_random_count": "INTEGER DEFAULT 0",
+        "patrol_date": "TEXT DEFAULT ''",
+        "patrol_count": "INTEGER DEFAULT 0",
+        "patrol_guard": "INTEGER DEFAULT 0",
+    }
+    columns = {str(row["name"]) for row in uow.query_all("PRAGMA table_info(dongfu_status)")}
+    for name, definition in definitions.items():
+        if name not in columns:
+            uow.execute(f'ALTER TABLE dongfu_status ADD COLUMN "{name}" {definition}')
+
+
 def apply_map_combat_start(uow: DatabaseUnitOfWork) -> None:
     uow.execute("CREATE TABLE IF NOT EXISTS map_combat_start_operations (operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,result_status TEXT NOT NULL,stamina INTEGER NOT NULL DEFAULT 0,task_json TEXT NOT NULL DEFAULT '{}',created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)")
 
@@ -97,4 +128,4 @@ def apply_map_combat_player(uow: DatabaseUnitOfWork) -> None:
 def apply_map_combat_plan(uow: DatabaseUnitOfWork) -> None:
     uow.execute("CREATE TABLE IF NOT EXISTS map_combat_plan_operations (operation_id TEXT PRIMARY KEY,user_id TEXT NOT NULL,task_id TEXT NOT NULL,payload TEXT NOT NULL,snapshot TEXT NOT NULL,created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)")
 
-__all__ = ["apply_map", "apply_map_combat_plan", "apply_map_combat_player", "apply_map_combat_start", "apply_map_dongfu_build", "apply_map_dongfu_player", "apply_map_explore_player", "apply_map_explore_settlement", "apply_map_explore_start", "apply_map_home_return", "apply_map_interactive_player", "apply_map_interactive_start", "apply_map_mission_claim", "apply_map_movement", "apply_map_resource_reward", "apply_map_seed_purchase"]
+__all__ = ["apply_map", "apply_map_combat_plan", "apply_map_combat_player", "apply_map_combat_start", "apply_map_dongfu_build", "apply_map_dongfu_player", "apply_map_dongfu_status_schema", "apply_map_explore_player", "apply_map_explore_settlement", "apply_map_explore_start", "apply_map_home_return", "apply_map_interactive_player", "apply_map_interactive_start", "apply_map_mission_claim", "apply_map_movement", "apply_map_resource_reward", "apply_map_seed_purchase"]

@@ -2,6 +2,17 @@
 
 状态：进行中。`v1.1.0` 的 P0-P7 发布证据继续保留，但不作为底层全面重构完成证明。
 
+2026-10-02 dongfu status read boundary：洞府默认读取从 `PlayerDataManager.get_fields` 切到
+`DongfuApplication.status -> DongfuStatusSqlQueryRepository` 的只读 player-db 投影；默认值、旧灵田字段
+同步和地脉补全仅作用于返回对象，不再由查询调用 `_save_dongfu` 或 `update_or_write_data`。新增 player-only
+`map.017` 启动迁移扩展 `dongfu_status` 完整字段，保留既有数据；请求缺库/缺表只读返回缺省状态，不建库/建表。
+洞府/地图聚焦回归 `76 passed`，状态仓储、缺库行为和 source guard `10 passed`；progress 回归 `12 passed`，
+inventory 已刷新且架构检查未新增洞府错误；另有直接突破应用契约既有失败及 game_events/info/operation-id
+等全局架构问题。旧 `_save_dongfu`
+仍服务显式状态变更写入，尚未迁移，不属于本只读切片。测试使用禁用 pytest/字节码缓存和独立 basetemp；未触碰
+运行数据库或用户 `boss_info.json`。下一片审计洞府状态变更的剩余旧写边界，或转向 dungeon/training 启动 schema；
+全局旧 transaction services、`xiuxian2_handle` 与正式 backup/restore/P7 证据仍开放。
+
 2026-10-02 world-events status read boundary：世界事件状态查询只负责读取并渲染
 `_ensure_daily_state` 的 feature-owned projection，不再在展示请求末尾调用
 `PlayerDataManager.update_or_write_data` 回写同一状态或触发请求期建表。生命周期启动/结束仍由

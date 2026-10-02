@@ -336,7 +336,6 @@ def _slice_status() -> dict[str, dict[str, object]]:
     map_legacy_shim = (PACKAGE / "xiuxian" / "xiuxian_map" / "transaction_service.py").read_text(encoding="utf-8")
     map_compatibility = (PACKAGE / "compatibility" / "legacy_map_transactions.py").read_text(encoding="utf-8")
     map_repository = (PACKAGE / "features" / "map" / "repository.py").read_text(encoding="utf-8")
-    map_migrations = (PACKAGE / "features" / "map" / "migrations.py").read_text(encoding="utf-8")
     pet_application_source = (PACKAGE / "features" / "pet" / "application.py").read_text(encoding="utf-8")
     pet_repository_source = (PACKAGE / "features" / "pet" / "repository.py").read_text(encoding="utf-8")
     pet_migrations_source = (PACKAGE / "features" / "pet" / "migrations.py").read_text(encoding="utf-8")
@@ -627,6 +626,8 @@ def _slice_status() -> dict[str, dict[str, object]]:
     dongfu_legacy_shim = (PACKAGE / "xiuxian" / "xiuxian_dongfu" / "transaction_service.py").read_text(encoding="utf-8")
     dongfu_compatibility = (PACKAGE / "compatibility" / "legacy_dongfu_transactions.py").read_text(encoding="utf-8")
     dongfu_migrations = (PACKAGE / "features" / "dongfu" / "migrations.py").read_text(encoding="utf-8")
+    dongfu_status_repository = (PACKAGE / "features" / "dongfu" / "status_repository.py").read_text(encoding="utf-8")
+    map_migrations = (PACKAGE / "features" / "map" / "migrations.py").read_text(encoding="utf-8")
     dongfu_operation_schema = (PACKAGE / "features" / "dongfu" / "operation_schema.py").read_text(encoding="utf-8")
     dongfu_operation_repositories = tuple(
         (PACKAGE / "features" / "dongfu" / f"{name}_repository.py").read_text(encoding="utf-8")
@@ -2811,6 +2812,23 @@ def _slice_status() -> dict[str, dict[str, object]]:
                     "dongfu_plant_operations",
                     "dongfu_visit_reward_operations",
                 ))
+            ),
+            "status_read_application_owned": "dongfu_application.status(" in dongfu_facade
+            and "DongfuStatusSqlQueryRepository" in dongfu_status_repository,
+            "status_read_has_no_legacy_writeback": (
+                "def _get_dongfu" in dongfu_facade
+                and "_player_data_manager().get_fields" not in dongfu_facade[
+                    dongfu_facade.index("def _get_dongfu") : dongfu_facade.index("def _save_dongfu")
+                ]
+                and "update_or_write_data" not in dongfu_facade[
+                    dongfu_facade.index("def _get_dongfu") : dongfu_facade.index("def _save_dongfu")
+                ]
+            ),
+            "status_schema_startup_migration_owned": (
+                'Migration("map.017", "map_dongfu_status_schema", apply_map_dongfu_status_schema)' in plugin
+                and "def apply_map_dongfu_status_schema(" in map_migrations
+                and '"map.017"' in plugin[plugin.index("_PLAYER_DATABASE_MIGRATION_VERSIONS") : plugin.index("_TRADE_DATABASE_MIGRATION_VERSIONS")]
+                and '"map.017"' in plugin[plugin.index("_GAME_DATABASE_EXCLUDED_MIGRATION_VERSIONS") : plugin.index("_PLAYER_DATABASE_MIGRATION_VERSIONS")]
             ),
             "status": "asset_actions_application_owned_operation_schema_startup_migrated_legacy_transactions_isolated_with_dongfu_reads_legacy",
         },

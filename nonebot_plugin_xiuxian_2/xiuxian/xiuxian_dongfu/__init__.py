@@ -424,33 +424,18 @@ def _get_slot_by_no(d: dict, slot_no: int):
 
 
 def _get_dongfu(uid: str):
-    d = _player_data_manager().get_fields(str(uid), DONGFU_TABLE)
+    d = dongfu_application.status(str(uid)) or {}
     default = _default_dongfu()
-    changed = False
 
     if not d:
         d = default.copy()
-        changed = True
-        for k, v in d.items():
-            _player_data_manager().update_or_write_data(str(uid), DONGFU_TABLE, k, v)
     else:
         for k, v in default.items():
             if k not in d or d.get(k) is None:
                 d[k] = v
-                changed = True
-                _player_data_manager().update_or_write_data(str(uid), DONGFU_TABLE, k, v)
 
-    plant_before = d.get("plant_slots")
-    legacy_before = (d.get("planting"), d.get("plant_seed_id"), d.get("plant_start"), d.get("plant_finish"))
-    node_type_before = d.get("node_type")
     _get_dongfu_node_type(d)
     _sync_plant_fields(d)
-    legacy_after = (d.get("planting"), d.get("plant_seed_id"), d.get("plant_start"), d.get("plant_finish"))
-    if plant_before != d.get("plant_slots") or legacy_before != legacy_after or node_type_before != d.get("node_type"):
-        changed = True
-
-    if changed:
-        _save_dongfu(str(uid), d)
     return d
 
 

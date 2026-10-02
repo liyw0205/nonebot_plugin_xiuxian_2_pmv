@@ -106,7 +106,7 @@ from .features.trade.migrations import (
     apply_trade_xianshi_purchase,
 )
 from .features.map.manifest import FEATURE as MAP_FEATURE
-from .features.map.migrations import apply_map, apply_map_combat_plan, apply_map_combat_player, apply_map_combat_start, apply_map_dongfu_build, apply_map_dongfu_player, apply_map_explore_player, apply_map_explore_settlement, apply_map_explore_start, apply_map_home_return, apply_map_interactive_player, apply_map_interactive_start, apply_map_mission_claim, apply_map_movement, apply_map_resource_reward, apply_map_seed_purchase
+from .features.map.migrations import apply_map, apply_map_combat_plan, apply_map_combat_player, apply_map_combat_start, apply_map_dongfu_build, apply_map_dongfu_player, apply_map_dongfu_status_schema, apply_map_explore_player, apply_map_explore_settlement, apply_map_explore_start, apply_map_home_return, apply_map_interactive_player, apply_map_interactive_start, apply_map_mission_claim, apply_map_movement, apply_map_resource_reward, apply_map_seed_purchase
 from .features.rift.manifest import FEATURE as RIFT_FEATURE
 from .features.rift.migrations import apply_rift, apply_rift_demon_token_operations, apply_rift_demon_token_player_schema, apply_rift_speedup_operations, apply_rift_world_generation, apply_rift_termination_operations, apply_rift_key_event_operations, apply_rift_settlement_operations, apply_rift_entry_schema
 from .features.accessory_package.manifest import FEATURE as ACCESSORY_PACKAGE_FEATURE
@@ -361,6 +361,7 @@ def build_migrations() -> tuple[Migration, ...]:
         Migration("map.014", "map_combat_start_operations", apply_map_combat_start),
         Migration("map.015", "map_combat_player", apply_map_combat_player),
         Migration("map.016", "map_combat_plan_operations", apply_map_combat_plan),
+        Migration("map.017", "map_dongfu_status_schema", apply_map_dongfu_status_schema),
         Migration("mixelixir.001", "mixelixir_feature_migrations", apply_mixelixir),
         Migration("mixelixir.002", "mixelixir_refine_claim", apply_mixelixir_refine_claim),
         Migration("mixelixir.003", "mixelixir_refine_claim_player", apply_mixelixir_refine_claim_player),
@@ -478,6 +479,7 @@ _GAME_DATABASE_EXCLUDED_MIGRATION_VERSIONS = frozenset(
         "map.013",
         "map.015",
         "map.016",
+        "map.017",
         "tianti_settlement.002",
         "tianti_training.003",
         "tianti_training.004",
@@ -546,6 +548,7 @@ _PLAYER_DATABASE_MIGRATION_VERSIONS = frozenset(
         "map.013",
         "map.015",
         "map.016",
+        "map.017",
         "tianti_settlement.002",
         "tianti_training.003",
         "tianti_training.004",

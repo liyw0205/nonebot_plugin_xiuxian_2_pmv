@@ -3,6 +3,14 @@
 状态：执行中
 适用范围：全面底层重构第二阶段
 
+2026-10-02 dongfu status read boundary：`_get_dongfu` 改由 `DongfuApplication.status` 读取，默认值、灵田
+兼容同步及地图地脉补全都只改返回对象；只读仓储不触发动态建表/补列。player-only `map.017` 启动迁移补齐
+既有 `dongfu_status` 状态列并保留当前行数据。聚焦洞府/地图回归 `76 passed`，状态仓储/source/progress 用例
+通过；inventory 已重生成，架构检查未新增洞府错误，但全局仍有 direct-breakthrough contract、game_events/info
+和 reconcile operation-id 等既有问题。
+旧 `_save_dongfu` 仍负责多个显式变更命令，不在本片范围。下一片优先追踪这些调用是否已由 feature repository
+覆盖，再单独切断真实默认旧写；不得以移除查询写回替代 mutation 收口。
+
 2026-10-02 world-events status read boundary：世界事件状态命令的展示路径移除冗余
 `_save_state` 写回；生命周期应用已经是状态持久化 owner，查询不再通过
 `PlayerDataManager.update_or_write_data` 触发请求期 schema/写入。新增 source regression `11 passed`，
@@ -40,6 +48,7 @@
 
 - 允许合理使用子代理，但默认只分派只读调用图审计、静态门禁、单切片聚焦测试和文档证据整理；不得扫描无关用户目录、读取运行数据库/凭据或执行正式 migration。
 - 代码修改型子代理必须限定在一个小边界，先给出文件/行号和回滚点；主线程负责整合、复核 diff、运行验收并决定是否提交。最多同时运行 3 个子代理，测试任务不得并行争抢同一批 SQLite 文件。
+- 子代理不是默认步骤；仅当调用图审计、静态门禁、独立只读证据整理能与主线隔离时使用。方案/切片记录需注明子代理分工与并发数；所有代码修改、测试协调、资源监测、最终 diff 和提交由主线程统一负责。
 - RAM 可用量低于 512 MiB、磁盘可用量低于 10 GiB 或 inode 可用量异常时，停止新测试/恢复任务，只保留必要的收尾和清理；测试默认串行、禁用 pytest cacheprovider 和字节码写入，批处理/查询必须有界。
 - 每个切片使用独立 `/tmp/<slice>-*` basetemp、recovery 和 compile cache，验收后立即删除并复核 `df -hT`、`df -ih`、`free -h`。不清理 `.venv`、`.git`、仓库 `data/`、运行数据库/WAL/SHM、备份、配置或用户 `boss_info.json`。
 - 进程缓存只允许 TTL/容量有界和按需加载；`ITEMS_CACHE` 等共享缓存不复制、不主动清空。operation ledger、outbox、projection receipt、失败/死信、批次目标和审计日志是持久事实，不属于可清理缓存。
