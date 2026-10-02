@@ -173,13 +173,15 @@ def get_activity_tasks(config: dict | None = None, scope_type: str | None = None
     return tasks
 
 
-def _week_key() -> str:
-    year, week, _ = now_dt().isocalendar()
+def _week_key(when=None) -> str:
+    year, week, _ = (when or now_dt()).isocalendar()
     return f"{year}-W{week:02d}"
 
 
-def _task_scope_key(scope_type: str) -> str:
-    return today_str() if scope_type == "daily" else _week_key()
+def _task_scope_key(scope_type: str, when=None) -> str:
+    if scope_type == "daily":
+        return when.strftime("%Y-%m-%d") if when else today_str()
+    return _week_key(when)
 
 
 def _activity_pass_config(config: dict | None = None) -> dict:

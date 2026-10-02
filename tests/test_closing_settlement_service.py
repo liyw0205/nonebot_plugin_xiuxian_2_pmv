@@ -16,12 +16,13 @@ def test_buff_facade_defers_closing_settlement_service_construction():
     assert buff._closing_settlement_service_instance is None
 
 
-def test_buff_closing_handler_uses_lazy_game_database_service():
+def test_buff_closing_handler_uses_application_replay_and_settlement():
     source = Path(
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_buff/__init__.py"
     ).read_text(encoding="utf-8")
     handler = source[source.index("async def out_closing_"):]
-    assert "_closing_settlement_service().get_result(" in handler
+    assert "buff_application.closing_replay(" in handler
+    assert "_closing_settlement_service().get_result(" not in handler
     assert "buff_application.closing_settle(" in handler
     assert "expected_create_time=create_time" in handler
     assert "if not result.ok:" in handler

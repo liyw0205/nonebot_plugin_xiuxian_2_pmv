@@ -89,6 +89,8 @@ def init_db():
     missing = sorted(required - existing)
     if missing:
         raise RuntimeError(f"activity_state.001 schema_missing: {', '.join(missing)}")
+    if "activity_event_operations" not in existing:
+        raise RuntimeError("activity_state.003 schema_missing: activity_event_operations")
 
 
 def resolve_daohao(user_id: str) -> str:

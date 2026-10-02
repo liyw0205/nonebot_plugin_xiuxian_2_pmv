@@ -13,7 +13,10 @@ from nonebot_plugin_xiuxian_2.infrastructure.database import DatabaseUnitOfWork
 from nonebot_plugin_xiuxian_2.features.tasks.migrations import apply_task_progress
 from nonebot_plugin_xiuxian_2.features.tasks.progress import TasksProgressRepository
 from nonebot_plugin_xiuxian_2.features.tasks.application import TaskProgressApplication
-from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_tasks.task_data import task_manager
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_tasks.task_data import (
+    record_task_progress_event_strict,
+    task_manager,
+)
 from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_tasks.transaction_service import TaskProgressEventService
 
 
@@ -189,6 +192,28 @@ def test_period_rollover_resets_progress_and_claimed_together(tmp_path: Path) ->
     )
 
 
+def test_closing_task_projection_uses_frozen_occurrence_period(tmp_path: Path) -> None:
+    database = tmp_path / "player.db"
+    with DatabaseUnitOfWork(database, immediate=True) as uow:
+        apply_task_progress(uow)
+    previous = task_manager.progress_application
+    task_manager.progress_application = TaskProgressApplication(database)
+    try:
+        record_task_progress_event_strict(
+            "u",
+            (("out_closing", 45),),
+            operation_id="task-progress:closing-1",
+            occurred_at="2026-01-05T10:00:00+08:00",
+        )
+        with sqlite3.connect(database) as conn:
+            row = conn.execute(
+                "SELECT daily_period,weekly_period FROM xiuxian_tasks WHERE user_id='u'"
+            ).fetchone()
+        assert row == ("2026-01-05", "2026-W02")
+    finally:
+        task_manager.progress_application = previous
+
+
 def test_operation_insert_failure_rolls_back_both_cycle_updates(tmp_path: Path) -> None:
     database = tmp_path / "player.db"
     service = new_service(database)
@@ -280,6 +305,7 @@ def test_production_entries_use_batched_idempotent_task_events() -> None:
     impart_source = (root / "xiuxian_impart_pk/__init__.py").read_text(encoding="utf-8")
     work_source = (root / "xiuxian_work/__init__.py").read_text(encoding="utf-8")
     pet_source = (root / "xiuxian_pet/__init__.py").read_text(encoding="utf-8")
+    closing_effects_source = (root.parent / "compatibility/buff_closing_effects.py").read_text(encoding="utf-8")
     task_repository_source = (root.parent / "features/sign_in/tasks.py").read_text(encoding="utf-8")
     task_effects_source = (root.parent / "features/sign_in/task_effects.py").read_text(encoding="utf-8")
     progress_repository_source = (root.parent / "features/tasks/progress.py").read_text(encoding="utf-8")
@@ -294,8 +320,9 @@ def test_production_entries_use_batched_idempotent_task_events() -> None:
     assert "task_progress_event_operations" in progress_repository_source
     assert "CREATE TABLE" not in progress_repository_source
     assert "record_task_progress" not in base_source
-    for source in (buff_source, impart_source, work_source):
+    for source in (impart_source, work_source):
         assert "operation_id=f\"task-progress:" in source
+    assert 'operation_id=f"task-progress:{operation_id}"' in closing_effects_source
     assert "def _grant_pet_travel_rewards" not in pet_source
     travel_handler = pet_source[pet_source.index("@pet_travel_claim.handle"):]
     assert '"trace_id": operation_id' in travel_handler

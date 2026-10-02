@@ -597,6 +597,10 @@ def _slice_status() -> dict[str, dict[str, object]]:
     boss_world_repository = (PACKAGE / "features" / "boss" / "world_boss_repository.py").read_text(encoding="utf-8")
     boss_migrations = (PACKAGE / "features" / "boss" / "migrations.py").read_text(encoding="utf-8")
     buff_facade = (PACKAGE / "xiuxian" / "xiuxian_buff" / "__init__.py").read_text(encoding="utf-8")
+    buff_application_source = (PACKAGE / "features" / "buff" / "application.py").read_text(encoding="utf-8")
+    buff_closing_repository = (PACKAGE / "features" / "buff" / "closing_repository.py").read_text(encoding="utf-8")
+    buff_closing_effects = (PACKAGE / "compatibility" / "buff_closing_effects.py").read_text(encoding="utf-8")
+    buff_migrations = (PACKAGE / "features" / "buff" / "migrations.py").read_text(encoding="utf-8")
     buff_normalize_experience_handler = buff_facade[
         buff_facade.index("@del_exp_decimal.handle") : buff_facade.index("@daily_info.handle")
     ]
@@ -2528,6 +2532,34 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "stone_training_application_owned": "buff_application.stone_training(" in buff_facade,
             "training_lifecycle_application_owned": "buff_application.training_start(" in buff_facade and "buff_application.training_complete(" in buff_facade,
             "closing_settlement_application_owned": "buff_application.closing_settle(" in buff_facade,
+            "closing_settlement_replay_application_owned": (
+                "buff_application.closing_replay(" in buff_facade
+                and "_closing_settlement_service().get_result(" not in buff_facade
+            ),
+            "closing_settlement_request_path_has_no_ddl": (
+                "CREATE TABLE" not in buff_closing_repository
+                and "self.outbox.append(" in buff_closing_repository
+            ),
+            "closing_effects_runtime_and_cli_reconcile_owned": (
+                '"buff.closing.effects": context.services["buff"].reconcile_outbox_event' in plugin
+                and '"buff.closing.effects": buff.reconcile_outbox_event' in activity_cli
+                and "def reconcile_outbox_event(" in buff_application_source
+            ),
+            "closing_effect_projections_have_stable_receipts": (
+                "class ClosingStatisticsRepository" in (PACKAGE / "features" / "buff" / "closing_statistics.py").read_text(encoding="utf-8")
+                and '"event_id": str(event_id)' in buff_closing_effects
+                and "record_task_progress_event_strict(" in buff_closing_effects
+                and "event_id=f\"{event_id}:activity:out_closing\"" in buff_closing_effects
+                and "activity_event_operations" in activity_storage
+            ),
+            "closing_effects_migrations_routed": (
+                '"buff.008"' in plugin
+                and '"buff.009"' in plugin
+                and '"activity_state.003"' in plugin
+                and "def apply_closing_settlement_game(" in buff_migrations
+                and "def apply_closing_effects_player(" in buff_migrations
+                and "def apply_activity_event_receipts(" in activity_state_migrations
+            ),
             "pvp_application_owned": "buff_application.pvp_settle(" in buff_facade,
             "pvp_repository_owned": "class NormalPvpSqlRepository" in pvp_repository,
             "pvp_request_path_has_no_ddl": "CREATE TABLE" not in pvp_repository,

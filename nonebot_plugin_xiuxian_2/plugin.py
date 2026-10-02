@@ -69,6 +69,8 @@ from .features.buff.migrations import (
     apply_partner_token_usage,
     apply_normal_pvp_operations,
     apply_normal_pvp_player_statistics,
+    apply_closing_settlement_game,
+    apply_closing_effects_player,
 )
 from .features.base.manifest import FEATURE as BASE_FEATURE
 from .features.base.migrations import (
@@ -125,7 +127,11 @@ from .features.activity_reward.migrations import (
     apply_activity_boss_rank_claim,
     apply_activity_boss_rank_legacy_receipts,
 )
-from .features.activity.migrations import apply_activity_state_schema, apply_activity_state_legacy
+from .features.activity.migrations import (
+    apply_activity_state_schema,
+    apply_activity_state_legacy,
+    apply_activity_event_receipts,
+)
 from .features.combat_settlement.manifest import FEATURE as COMBAT_SETTLEMENT_FEATURE
 from .features.combat_settlement.migrations import apply_combat_settlement, apply_combat_settlement_operations, apply_dao_battle_operations, apply_dao_battle_record
 from .features.admin_asset.manifest import FEATURE as ADMIN_ASSET_FEATURE
@@ -227,6 +233,7 @@ def build_migrations() -> tuple[Migration, ...]:
         Migration("activity_reward.011", "activity_boss_rank_legacy_receipts", apply_activity_boss_rank_legacy_receipts),
         Migration("activity_state.001", "activity_state_schema", apply_activity_state_schema),
         Migration("activity_state.002", "activity_state_legacy_backfill", apply_activity_state_legacy),
+        Migration("activity_state.003", "activity_event_receipts", apply_activity_event_receipts),
         Migration("admin_asset.001", "admin_asset_feature_migrations", apply_admin_asset),
         Migration("admin_asset.002", "admin_stone_adjustment_operations", apply_admin_stone_adjustment),
         Migration("admin_asset.003", "admin_stone_batch_adjustment_operations", apply_admin_stone_batch),
@@ -298,6 +305,8 @@ def build_migrations() -> tuple[Migration, ...]:
         Migration("buff.005", "partner_cultivation_player_schema", apply_partner_cultivation_player_schema),
         Migration("buff.006", "normal_pvp_operations", apply_normal_pvp_operations),
         Migration("buff.007", "normal_pvp_player_statistics", apply_normal_pvp_player_statistics),
+        Migration("buff.008", "closing_settlement_outbox", apply_closing_settlement_game),
+        Migration("buff.009", "closing_effects_player_statistics", apply_closing_effects_player),
         Migration("combat_settlement.001", "combat_settlement_feature_migrations", apply_combat_settlement),
         Migration("combat_settlement.002", "map_combat_settlement_operations", apply_combat_settlement_operations),
         Migration("combat_settlement.003", "map_dao_battle_operations", apply_dao_battle_operations),
@@ -493,6 +502,7 @@ _GAME_DATABASE_EXCLUDED_MIGRATION_VERSIONS = frozenset(
         "base.007",
         "boss.004",
         "boss.006",
+        "buff.009",
     }
 )
 _PLAYER_DATABASE_MIGRATION_VERSIONS = frozenset(
@@ -505,6 +515,7 @@ _PLAYER_DATABASE_MIGRATION_VERSIONS = frozenset(
         "info.avatar.001",
         "info.avatar.002",
         "tower.004",
+        "buff.009",
         "platform.001",
         "title.001",
         "title.002",
@@ -813,6 +824,7 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
         from .features.sect.application import SectApplication
         from .features.natal_treasure.application import NatalTreasureApplication
         from .features.buff.application import BuffApplication
+        from .compatibility.buff_closing_effects import LegacyBuffClosingEffects
         from .features.base.application import BaseApplication
         from .features.back.application import BackApplication
         from .features.trade.application import TradeApplication
@@ -1017,7 +1029,12 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
         }
         context.services.update({
             "natal_treasure": NatalTreasureApplication(str(context.database.path("player_db")), str(context.database.path("game_db"))),
-            "buff": BuffApplication(str(context.database.path("game_db")), str(context.database.path("player_db"))),
+            "buff": BuffApplication(
+                str(context.database.path("game_db")),
+                str(context.database.path("player_db")),
+                closing_effects=LegacyBuffClosingEffects(context.database.path("player_db")),
+                clock=context.clock,
+            ),
             "base": BaseApplication(str(context.database.path("game_db")), str(context.database.path("player_db"))),
             "back": BackApplication(str(context.database.path("game_db")), str(context.database.path("player_db"))),
             "trade": TradeApplication(
@@ -1073,6 +1090,7 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
             from .xiuxian.xiuxian_utils.utils import configure_player_attribute_application
             from .xiuxian.xiuxian_utils.utils import configure_player_stamina_application
             from .xiuxian.xiuxian_utils.player_fight import configure_player_state_application
+            from .xiuxian.xiuxian_buff import configure_buff_application
             from .xiuxian.xiuxian_back import configure_back_application, configure_package_reward_application
             from .xiuxian.xiuxian_tasks.task_data import configure_task_claim_application
             from .xiuxian.xiuxian_training import configure_training_application
@@ -1091,6 +1109,7 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
             configure_player_activity_application(context.services["player_activity"])
             configure_player_attribute_application(context.services["player_attributes"])
             configure_player_state_application(context.services["player_state"])
+            configure_buff_application(context.services["buff"])
             configure_player_stamina_application(context.services["player_stamina"])
             configure_back_application(context.services["back"])
             configure_package_reward_application(context.services["package_reward"])
@@ -1112,6 +1131,7 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
         }
         context.outbox_handlers = {
             "accessory_package.open": context.services["accessory_package"].reconcile,
+            "buff.closing.effects": context.services["buff"].reconcile_outbox_event,
             "sign_in.effects": context.services["sign_in"].reconcile_outbox_event,
             "auction.bid.effects": context.services["auction"].reconcile_outbox_event,
             "auction.settlement.effects": context.services["auction_settlement"].reconcile_outbox_event,

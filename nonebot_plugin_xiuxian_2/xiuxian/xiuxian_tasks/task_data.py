@@ -206,8 +206,8 @@ class XiuxianTaskManager:
         return datetime.now()
 
     @classmethod
-    def _period_key(cls, cycle: str) -> str:
-        now = cls._now()
+    def _period_key(cls, cycle: str, now: datetime | None = None) -> str:
+        now = now or cls._now()
         if cycle == "weekly":
             iso_year, iso_week, _ = now.isocalendar()
             return f"{iso_year}-W{iso_week:02d}"
@@ -264,6 +264,7 @@ class XiuxianTaskManager:
         user_id: str,
         events,
         operation_id: str | None = None,
+        occurred_at: str | None = None,
     ) -> TaskProgressEventResult:
         normalized_events = _normalize_progress_events(events)
         if not normalized_events:
@@ -273,7 +274,8 @@ class XiuxianTaskManager:
             operation_id = f"task-progress:untracked:{uuid4().hex}"
         task_updates = self._task_updates(normalized_events)
         cycles = {task["cycle"] for task in task_updates}
-        periods = {cycle: self._period_key(cycle) for cycle in cycles}
+        period_time = datetime.fromisoformat(str(occurred_at)).astimezone() if occurred_at else None
+        periods = {cycle: self._period_key(cycle, period_time) for cycle in cycles}
         return self.progress_application.record(
             operation_id,
             str(user_id),
@@ -446,3 +448,21 @@ def record_task_progress(
     return record_task_progress_event(
         user_id, ((event_key, amount),), operation_id
     )
+
+
+def record_task_progress_event_strict(
+    user_id: str,
+    events,
+    *,
+    operation_id: str,
+    occurred_at: str,
+) -> list[str]:
+    result = task_manager.record_progress_event(
+        user_id,
+        events,
+        operation_id,
+        occurred_at=occurred_at,
+    )
+    if result.status not in {"applied", "duplicate", "ignored"}:
+        raise RuntimeError(f"task progress projection failed: {result.status}")
+    return list(result.completed)

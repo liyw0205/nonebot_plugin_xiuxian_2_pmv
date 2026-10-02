@@ -88,6 +88,11 @@ runtime_random = SystemRandom()
 runtime_ids = UUIDGenerator()
 
 
+def configure_buff_application(application: BuffApplication) -> None:
+    global buff_application
+    buff_application = application
+
+
 def _resolve_player_data_manager():
     global _player_data_manager_instance
     if _player_data_manager_instance is None:
@@ -740,12 +745,26 @@ async def out_closing_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
     closing_operation_id = _blessed_spot_operation_id(
         event, "closing-settle", user_id
     )
-    previous = _closing_settlement_service().get_result(closing_operation_id)
-    if previous is not None and previous.succeeded:
+    try:
+        previous = buff_application.closing_replay(closing_operation_id)
+    except Exception:
+        await handle_send(bot, event, "出关结算状态暂时无法确认，请稍后重试。")
+        await out_closing.finish()
+    if previous is not None:
+        if previous.ok:
+            data = previous.data if isinstance(previous.data, dict) else {}
+            replay_message = (
+                f"出关结算已完成：修为+{number_to(data.get('exp_gain', 0))}\n"
+                "该出关请求已经处理，无需重复提交。"
+            )
+            if previous.message:
+                replay_message += f"\n{previous.message}"
+        else:
+            replay_message = previous.message or "闭关操作未完成：闭关状态或资源已更新，请重新查看。"
         await handle_send(
             bot,
             event,
-            f"出关结算已完成：修为+{number_to(previous.exp_gain)}\n该出关请求已经处理，无需重复提交。",
+            replay_message,
             md_type="buff",
             k1="闭关",
             v1="闭关",
@@ -803,6 +822,7 @@ async def out_closing_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
             operation_id=closing_operation_id, user_id=str(user_id),
             expected_create_time=create_time, exp_gain=exp, stone_cost=stone_cost,
             new_hp=new_hp, new_mp=new_mp, new_atk=new_atk, new_power=new_power,
+            exp_time=exp_time,
         )
     except Exception:
         await handle_send(bot, event, "出关结算失败：结算过程异常。")
@@ -819,17 +839,8 @@ async def out_closing_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
     else:
         cost_msg = f"，消耗灵石{stone_cost}枚" if stone_cost else ""
         msg = f"闭关结束，共闭关{exp_time}分钟，本次闭关增加修为：{number_to(exp)}(修炼效率：{efficiency}){cost_msg}{hp_msg}{mp_msg}{spirit_vein_msg}"
-    update_statistics_value(user_id, "闭关时长", increment=exp_time)
-    update_statistics_value(user_id, "闭关修为", increment=exp)
-    if stone_cost:
-        update_statistics_value(user_id, "闭关灵石消耗", increment=stone_cost)
-    log_message(user_id, f"[出关] 闭关{exp_time}分钟，消耗灵石{number_to(stone_cost)}，获得修为{number_to(exp)}")
-    record_task_progress(
-        user_id,
-        "out_closing",
-        exp_time,
-        operation_id=f"task-progress:{closing_operation_id}",
-    )
+    if result.message:
+        msg += f"\n{result.message}"
     await handle_send(bot, event, msg, md_type="buff", k1="闭关", v1="闭关", k2="存档", v2="我的修仙信息", k3="修为", v3="我的修为")
     await out_closing.finish()
 

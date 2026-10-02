@@ -1,9 +1,12 @@
 import random
 import time
 from copy import deepcopy
+from datetime import datetime
 
 from nonebot.log import logger
 
+from ...core.errors import OperationConflictError
+from ...infrastructure.database import request_hash
 from ...paths import get_paths
 from ...infrastructure.ids import UUIDGenerator
 from ..xiuxian_compensation.common import get_item_list, send_reward_to_user
@@ -55,6 +58,7 @@ from .activity_views import (
     _stage_time_text,
     _task_status_text,
 )
+from .activity_config import DATE_FMT, TIME_FMT
 
 runtime_ids = UUIDGenerator()
 
@@ -199,12 +203,12 @@ def send_reward_items(user_id: str, reward_items: list[dict]) -> list[str]:
     return send_reward_to_user(str(user_id), reward_items)
 
 
-def _choose_collect_char(activity: dict) -> str:
+def _choose_collect_char(activity: dict, rng=random) -> str:
     letters = _collect_letters(activity, _collect_phrases(activity))
     if not letters:
         return ""
     total_weight = sum(max(1, _as_int(item.get("weight"), 1)) for item in letters)
-    needle = random.uniform(0, total_weight)
+    needle = rng.uniform(0, total_weight)
     current = 0
     for item in letters:
         current += max(1, _as_int(item.get("weight"), 1))
@@ -220,6 +224,7 @@ def _record_activity_task_progress(
     event_key: str,
     amount: int,
     messages: list[str],
+    event_time: datetime | None = None,
 ) -> None:
     runtime = activity_runtime_state(config)
     if not runtime.get("ok") or "task" not in set(runtime.get("features") or []):
@@ -229,7 +234,7 @@ def _record_activity_task_progress(
         if event_key not in task.get("events", []):
             continue
         scope_type = task["scope_type"]
-        scope_key = _task_scope_key(scope_type)
+        scope_key = _task_scope_key(scope_type, event_time)
         task_key = task["key"]
         target = max(1, _as_int(task.get("target"), 1))
         cur.execute(
@@ -247,7 +252,7 @@ def _record_activity_task_progress(
         new_progress = min(target, old_progress + max(1, amount))
         if new_progress <= old_progress and row:
             continue
-        ts = now_str()
+        ts = event_time.strftime(TIME_FMT) if event_time else now_str()
         cur.execute(
             """
             INSERT INTO activity_task_progress (
@@ -266,22 +271,41 @@ def _record_activity_task_progress(
             messages.append(f"活动任务完成：{task['name']}，发送 活动任务领取")
 
 
-def record_activity_event(user_id: str, event_key: str, amount: int = 1) -> list[str]:
+def record_activity_event(
+    user_id: str,
+    event_key: str,
+    amount: int = 1,
+    *,
+    event_id: str | None = None,
+    occurred_at: str | None = None,
+) -> list[str]:
     uid = str(user_id)
     event = str(event_key)
     times = max(0, _as_int(amount, 1))
     if times <= 0:
         return []
 
+    replayable = bool(str(event_id or "").strip())
+    event_time = datetime.fromisoformat(str(occurred_at)).astimezone() if occurred_at else None
+    if replayable and event_time is None:
+        raise ValueError("activity event ID requires occurred_at")
+    event_today = event_time.strftime(DATE_FMT) if event_time else today_str()
+    event_stamp = event_time.strftime(TIME_FMT) if event_time else now_str()
+
     cfg = load_config()
     activities = get_gameplay_activities(cfg)
-    if not activities and not get_activity_tasks(cfg) and not _activity_pass_config(cfg).get("enabled"):
+    has_activity_work = bool(
+        activities or get_activity_tasks(cfg) or _activity_pass_config(cfg).get("enabled")
+    )
+    if not replayable and not has_activity_work:
         return []
     runtime = activity_runtime_state(cfg)
-    if not runtime.get("ok") or not runtime.get("can_produce"):
+    can_produce = bool(runtime.get("ok") and runtime.get("can_produce"))
+    if not replayable and not can_produce:
         return []
     features = set(runtime.get("features") or [])
     multiplier = max(0.0, _as_float(runtime.get("multiplier"), 1.0))
+    rng = random.Random(str(event_id)) if replayable else random
 
     ensure_activity_files()
     conn = db_backend.connect(DB_PATH)
@@ -289,8 +313,34 @@ def record_activity_event(user_id: str, event_key: str, amount: int = 1) -> list
     messages: list[str] = []
     try:
         cur = conn.cursor()
-        _record_activity_task_progress(cur, cfg, uid, event, times, messages)
-        _record_activity_pass_progress(cur, cfg, uid, event, times, messages)
+        if replayable:
+            payload_hash = request_hash({
+                "user_id": uid,
+                "event_key": event,
+                "amount": times,
+                "occurred_at": str(occurred_at),
+            })
+            previous = cur.execute(
+                "SELECT payload_hash FROM activity_event_operations WHERE event_id=%s",
+                (str(event_id),),
+            ).fetchone()
+            if previous is not None:
+                if str(previous["payload_hash"]) != payload_hash:
+                    raise OperationConflictError(str(event_id), "activity.event")
+                return []
+            cur.execute(
+                "INSERT INTO activity_event_operations(event_id,payload_hash,created_at) VALUES(%s,%s,%s)",
+                (str(event_id), payload_hash, event_stamp),
+            )
+            if not has_activity_work or not can_produce:
+                conn.commit()
+                return []
+
+        _record_activity_task_progress(cur, cfg, uid, event, times, messages, event_time)
+        _record_activity_pass_progress(
+            cur, cfg, uid, event, times, messages,
+            str(occurred_at) if event_time else None,
+        )
         for activity in activities:
             ok, _ = activity_state(activity)
             if not ok:
@@ -312,7 +362,7 @@ def record_activity_event(user_id: str, event_key: str, amount: int = 1) -> list
                             FROM activity_point_event_log
                             WHERE activity_key=%s AND user_id=%s AND event_key=%s AND record_date=%s
                             """,
-                            (activity["key"], uid, event, today_str()),
+                            (activity["key"], uid, event, event_today),
                         )
                         row = cur.fetchone()
                         current_points = _as_int(row["count"] if row else 0)
@@ -322,7 +372,7 @@ def record_activity_event(user_id: str, event_key: str, amount: int = 1) -> list
                         points = min(points, remaining)
                     if points <= 0:
                         continue
-                    ts = now_str()
+                    ts = event_stamp
                     cur.execute(
                         """
                         INSERT INTO activity_point_balance (
@@ -343,7 +393,7 @@ def record_activity_event(user_id: str, event_key: str, amount: int = 1) -> list
                         )
                         VALUES (%s, %s, %s, %s, %s, %s)
                         """,
-                        (activity["key"], uid, event, points, today_str(), ts),
+                        (activity["key"], uid, event, points, event_today, ts),
                     )
                     messages.append(
                         f"活动积分：{activity['name']} 获得{points}{activity.get('point_name', '活动积分')}"
@@ -357,7 +407,7 @@ def record_activity_event(user_id: str, event_key: str, amount: int = 1) -> list
                 if event in drop_events:
                     items = activity.get("items") or []
                     if items:
-                        pick = random.choice(items)
+                        pick = rng.choice(items)
                         cur.execute(
                             """
                             INSERT INTO activity_item_inventory (activity_key, user_id, item_id, count, update_time)
@@ -366,7 +416,7 @@ def record_activity_event(user_id: str, event_key: str, amount: int = 1) -> list
                                 count = activity_item_inventory.count + excluded.count,
                                 update_time = excluded.update_time
                             """,
-                            (activity["key"], uid, pick["id"], 1, now_str()),
+                            (activity["key"], uid, pick["id"], 1, event_stamp),
                         )
                         messages.append(f"活动掉落：{activity['name']} 获得【{pick['name']}】")
                 continue
@@ -384,7 +434,7 @@ def record_activity_event(user_id: str, event_key: str, amount: int = 1) -> list
                 FROM activity_collect_drop_log
                 WHERE activity_key=%s AND user_id=%s AND drop_date=%s
                 """,
-                (activity["key"], uid, today_str()),
+                (activity["key"], uid, event_today),
             )
             row = cur.fetchone()
             current_count = _as_int(row["count"] if row else 0)
@@ -402,12 +452,12 @@ def record_activity_event(user_id: str, event_key: str, amount: int = 1) -> list
             pity_changed = False
             for _ in range(rolls):
                 guaranteed = pity_threshold > 0 and pity_count + 1 >= pity_threshold
-                if not guaranteed and random.random() > drop_rate:
+                if not guaranteed and rng.random() > drop_rate:
                     if pity_threshold > 0:
                         pity_count += 1
                         pity_changed = True
                     continue
-                word_char = _choose_collect_char(activity)
+                word_char = _choose_collect_char(activity, rng)
                 if not word_char:
                     continue
                 if pity_threshold > 0:
@@ -423,7 +473,7 @@ def record_activity_event(user_id: str, event_key: str, amount: int = 1) -> list
                         count = activity_collect_inventory.count + excluded.count,
                         update_time = excluded.update_time
                     """,
-                    (activity["key"], uid, word_char, 1, now_str()),
+                    (activity["key"], uid, word_char, 1, event_stamp),
                 )
                 cur.execute(
                     """
@@ -432,7 +482,7 @@ def record_activity_event(user_id: str, event_key: str, amount: int = 1) -> list
                     )
                     VALUES (%s, %s, %s, %s, %s, %s)
                     """,
-                    (activity["key"], uid, event, word_char, today_str(), now_str()),
+                    (activity["key"], uid, event, word_char, event_today, event_stamp),
                 )
                 drop_label = "活动保底" if guaranteed else "活动掉落"
                 messages.append(f"{drop_label}：{activity['name']} 获得字牌「{word_char}」")

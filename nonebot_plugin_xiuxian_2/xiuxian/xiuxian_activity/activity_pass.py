@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from .activity_config import _activity_config_key, _activity_elapsed_days, activity_runtime_state
 from .activity_rules import _activity_pass_config
 from .activity_storage import now_str, today_str
@@ -110,6 +112,7 @@ def _record_activity_pass_progress(
     event_key: str,
     amount: int,
     messages: list[str],
+    occurred_at: str | None = None,
 ) -> None:
     runtime = activity_runtime_state(config)
     if not runtime.get("ok") or "pass" not in set(runtime.get("features") or []):
@@ -118,6 +121,9 @@ def _record_activity_pass_progress(
     if not pass_cfg.get("enabled"):
         return
     activity_key = _activity_config_key(config)
+    event_time = datetime.fromisoformat(occurred_at).astimezone() if occurred_at else None
+    event_date = event_time.strftime("%Y-%m-%d") if event_time else today_str()
+    event_stamp = event_time.strftime("%Y-%m-%d %H:%M:%S") if event_time else now_str()
     exp_name = pass_cfg.get("exp_name") or "活跃值"
     multiplier = max(0.0, _as_float(runtime.get("multiplier"), 1.0))
     catchup = _pass_catchup_state(cur, config, activity_key, user_id, pass_cfg)
@@ -136,7 +142,7 @@ def _record_activity_pass_progress(
                 FROM activity_pass_event_log
                 WHERE activity_key=%s AND user_id=%s AND event_key=%s AND record_date=%s
                 """,
-                (activity_key, user_id, event_key, today_str()),
+                (activity_key, user_id, event_key, event_date),
             )
             row = cur.fetchone()
             current_exp = _as_int(row["count"] if row else 0)
@@ -146,7 +152,7 @@ def _record_activity_pass_progress(
             exp = min(exp, remaining)
         if exp <= 0:
             continue
-        ts = now_str()
+        ts = event_stamp
         cur.execute(
             """
             INSERT INTO activity_pass_event_log (
@@ -154,7 +160,7 @@ def _record_activity_pass_progress(
             )
             VALUES (%s, %s, %s, %s, %s, %s)
             """,
-            (activity_key, user_id, event_key, exp, today_str(), ts),
+            (activity_key, user_id, event_key, exp, event_date, ts),
         )
         before, after = _grant_pass_exp(cur, activity_key, user_id, pass_cfg, exp)
         catchup_text = "（追赶加成）" if catchup.get("active") else ""

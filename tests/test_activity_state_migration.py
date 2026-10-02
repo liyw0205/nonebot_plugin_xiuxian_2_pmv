@@ -10,6 +10,7 @@ from unittest.mock import patch
 from nonebot_plugin_xiuxian_2.features.activity.migrations import (
     apply_activity_state_legacy,
     apply_activity_state_schema,
+    apply_activity_event_receipts,
 )
 from nonebot_plugin_xiuxian_2.infrastructure.database import DatabaseUnitOfWork
 
@@ -77,6 +78,7 @@ class ActivityStateMigrationTests(unittest.TestCase):
         with DatabaseUnitOfWork(self.database) as uow:
             apply_activity_state_schema(uow)
             apply_activity_state_legacy(uow)
+            apply_activity_event_receipts(uow)
 
     def test_backfills_in_bounded_batches_with_defaults_and_stable_audit(self) -> None:
         self.create_legacy_state()
@@ -124,6 +126,9 @@ class ActivityStateMigrationTests(unittest.TestCase):
                 "total_sign_days",
                 {row[1] for row in conn.execute("PRAGMA table_info(activity_user)")},
             )
+
+        with DatabaseUnitOfWork(self.database, read_only=True) as uow:
+            self.assertIsNotNone(uow.query_one("SELECT 1 FROM sqlite_master WHERE name='activity_event_operations'"))
 
     def test_conflicting_identity_fails_and_rolls_back_backfill(self) -> None:
         self.create_legacy_state()

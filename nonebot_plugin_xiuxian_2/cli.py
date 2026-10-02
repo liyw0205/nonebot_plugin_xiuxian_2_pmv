@@ -87,6 +87,8 @@ def main(argv: list[str] | None = None) -> int:
             from .features.accessory_package.application import AccessoryPackageApplication
             from .features.auction.application import AuctionBidApplication
             from .features.auction.settlement import AuctionSettlementApplication
+            from .features.buff.application import BuffApplication
+            from .compatibility.buff_closing_effects import LegacyBuffClosingEffects
             from .features.activity_reward.task_claim_application import ActivityTaskClaimApplication
             from .features.activity_reward.pass_claim_application import ActivityPassClaimApplication
             from .features.activity_reward.boss_milestone_claim_application import ActivityBossMilestoneClaimApplication
@@ -111,6 +113,11 @@ def main(argv: list[str] | None = None) -> int:
                 game_db,
                 effects=LegacyAuctionSettlementEffects(player_db),
             )
+            buff = BuffApplication(
+                game_db,
+                player_db,
+                closing_effects=LegacyBuffClosingEffects(player_db),
+            )
             activity_task_claim = ActivityTaskClaimApplication(
                 game_db, activity_db, clock=context.clock
             )
@@ -127,6 +134,7 @@ def main(argv: list[str] | None = None) -> int:
                 uow,
                 handlers={
                     "accessory_package.open": accessory.reconcile,
+                    "buff.closing.effects": buff.reconcile_outbox_event,
                     "auction.bid.effects": auction.reconcile_outbox_event,
                     "auction.settlement.effects": settlement.reconcile_outbox_event,
                 },

@@ -91,6 +91,36 @@ def apply_normal_pvp_player_statistics(uow: DatabaseUnitOfWork) -> None:
             uow.execute(f'ALTER TABLE statistics ADD COLUMN "{name}" INTEGER DEFAULT 0')
 
 
+def apply_closing_settlement_game(uow: DatabaseUnitOfWork) -> None:
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS closing_settlement_operations("
+        "operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,result_json TEXT NOT NULL,"
+        "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+    )
+    columns = {str(row["name"]) for row in uow.query_all("PRAGMA table_info(closing_settlement_operations)")}
+    additions = {
+        "exp_time": "INTEGER NOT NULL DEFAULT 0",
+        "effects_event_id": "TEXT",
+        "occurred_at": "TEXT",
+    }
+    for field, definition in additions.items():
+        if field not in columns:
+            uow.execute(f'ALTER TABLE closing_settlement_operations ADD COLUMN "{field}" {definition}')
+
+
+def apply_closing_effects_player(uow: DatabaseUnitOfWork) -> None:
+    uow.execute("CREATE TABLE IF NOT EXISTS statistics(user_id TEXT PRIMARY KEY)")
+    columns = {str(row["name"]) for row in uow.query_all("PRAGMA table_info(statistics)")}
+    for name in ("闭关时长", "闭关修为", "闭关灵石消耗"):
+        if name not in columns:
+            uow.execute(f'ALTER TABLE statistics ADD COLUMN "{name}" INTEGER DEFAULT 0')
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS closing_statistics_events("
+        "event_id TEXT NOT NULL,event_key TEXT NOT NULL,user_id TEXT NOT NULL,"
+        "increment INTEGER NOT NULL,created_at TEXT NOT NULL,PRIMARY KEY(event_id,event_key))"
+    )
+
+
 __all__ = [
     "apply_buff",
     "apply_partner_token_operations",
@@ -99,4 +129,6 @@ __all__ = [
     "apply_partner_cultivation_player_schema",
     "apply_normal_pvp_operations",
     "apply_normal_pvp_player_statistics",
+    "apply_closing_settlement_game",
+    "apply_closing_effects_player",
 ]

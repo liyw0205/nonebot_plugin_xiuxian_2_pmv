@@ -3252,6 +3252,19 @@ focused tests、根目录 `tests/` 隔离回归、compileall、architecture/prog
 负责；代理不得并行修改同一切片，也不得启动会争抢 RAM/磁盘的重型测试。已完成的 dufang cutover 和相邻只读审查可复用，
 不重复扫描。
 
+**当前执行切片：`out_closing` effects recovery（2026-10-02）**：复用已完成的闭关 handler、任务/活动投影只读审计，
+不重复扫描。主线程负责冻结副作用 intent，并使闭关资产回执与 game-db outbox 同事务提交；分别为 player statistics、
+JSON 日志、task progress 和 activity progress 建立稳定 ID 去重及失败后重试；移除默认 handler 的旧 replay DDL 预查，
+把 effects handler 接入 runtime 与 CLI reconcile；最后用隔离数据库覆盖 core commit 后中断、各投影部分成功、完整 replay、
+旧回执无 outbox 和缺 schema fail-closed。子代理只在出现互不重叠的新调用图、迁移路由或重放缺口问题时做只读审计，
+不参与本切片代码修改、测试或资源清理。完成并验收本切片后提交/推送，再按第 5 项进入地图委托与宠物游历 replay
+重复统计的独立审计，不把它们并入闭关实现。
+
+**本切片验收（2026-10-02）**：发现并修正 CLI reconcile imports 缩进错误和活动通行证模块重复导入。闭关 application/repository、
+projection、活动回执、任务周期与迁移选择集 `32 passed`；闭关 progress gate `1 passed`；24 个变更 Python 文件 AST 解析通过，
+`git diff --check` 通过。未跑全量测试、真实启动迁移或正式备份恢复；独立的 `activity_config_event_service` 收集失败仍按既有
+导入问题记录，不计为本切片回归。pytest cache 与字节码均禁用，专用 basetemp 已在进程退出后清理。
+
 **缓存与资源收尾**：测试前后记录 `df -h` 与可用 RAM；测试禁用 pytest cache，将字节码和数据库产物放在本轮专用
 临时目录。只清理确认由本轮创建、且进程已退出的缓存/临时产物，不清理共享 `ITEMS_CACHE`、业务数据、运行数据库
 或其 sidecar。若可用空间或内存明显下降，先停止并发/全量回归并清理本轮临时目录，再继续。

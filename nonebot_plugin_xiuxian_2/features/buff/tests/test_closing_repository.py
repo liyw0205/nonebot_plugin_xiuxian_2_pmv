@@ -2,6 +2,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from ....infrastructure.database import DatabaseUnitOfWork, OperationLedger, OutboxStore
+from ..migrations import apply_closing_settlement_game
 from ..closing_repository import ClosingSettlementSqlRepository
 from tests.test_db_backend import db_backend
 
@@ -11,7 +13,91 @@ class ClosingSettlementRepositoryTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             db = Path(temp) / "game.db"
             with db_backend.transaction(db) as conn:
-                conn.execute("CREATE TABLE user_xiuxian(user_id TEXT PRIMARY KEY,stone INTEGER)")
-                conn.execute("CREATE TABLE user_cd(user_id TEXT PRIMARY KEY,type INTEGER,create_time TEXT)")
+                conn.execute("CREATE TABLE user_xiuxian(user_id TEXT PRIMARY KEY,stone INTEGER,exp INTEGER,hp INTEGER,mp INTEGER,atk INTEGER,power INTEGER)")
+                conn.execute("CREATE TABLE user_cd(user_id TEXT PRIMARY KEY,type INTEGER,create_time TEXT,scheduled_time TEXT)")
+            with DatabaseUnitOfWork(db) as uow:
+                OperationLedger().ensure_schema(uow)
+                OutboxStore().ensure_schema(uow)
+                apply_closing_settlement_game(uow)
             result = ClosingSettlementSqlRepository(db).settle("c1", "missing", "now", 1, 1, 1, 1, 1, 1)
             self.assertEqual(result.status, "user_missing")
+
+    def test_core_settlement_and_effect_event_commit_once(self):
+        with tempfile.TemporaryDirectory() as temp:
+            db = Path(temp) / "game.db"
+            with db_backend.transaction(db) as conn:
+                conn.execute("CREATE TABLE user_xiuxian(user_id TEXT PRIMARY KEY,exp INTEGER,stone INTEGER,hp INTEGER,mp INTEGER,atk INTEGER,power INTEGER)")
+                conn.execute("CREATE TABLE user_cd(user_id TEXT PRIMARY KEY,type INTEGER,create_time TEXT,scheduled_time TEXT)")
+                conn.execute("INSERT INTO user_xiuxian VALUES('u',100,50,1,2,3,4)")
+                conn.execute("INSERT INTO user_cd VALUES('u',1,'start',NULL)")
+            with DatabaseUnitOfWork(db) as uow:
+                OperationLedger().ensure_schema(uow)
+                OutboxStore().ensure_schema(uow)
+                apply_closing_settlement_game(uow)
+
+            repository = ClosingSettlementSqlRepository(db)
+            first = repository.settle("op", "u", "start", 20, 10, 30, 40, 5, 999, 45)
+            replay = repository.settle("op", "u", "start", 20, 10, 30, 40, 5, 999, 45)
+
+            self.assertEqual(("applied", "duplicate"), (first.status, replay.status))
+            self.assertEqual(first.effects_event_id, replay.effects_event_id)
+            with DatabaseUnitOfWork(db, read_only=True) as uow:
+                self.assertEqual(1, uow.query_one("SELECT COUNT(*) AS n FROM domain_outbox")["n"])
+                event = uow.query_one("SELECT event_type,payload_json FROM domain_outbox WHERE event_id=?", (first.effects_event_id,))
+                self.assertEqual("buff.closing.effects", event["event_type"])
+                self.assertEqual(45, __import__("json").loads(event["payload_json"])["exp_time"])
+                self.assertEqual(120, uow.query_one("SELECT exp FROM user_xiuxian WHERE user_id='u'")["exp"])
+
+    def test_missing_schema_fails_closed_without_request_ddl(self):
+        with tempfile.TemporaryDirectory() as temp:
+            db = Path(temp) / "game.db"
+            with db_backend.transaction(db) as conn:
+                conn.execute("CREATE TABLE user_xiuxian(user_id TEXT PRIMARY KEY,stone INTEGER)")
+                conn.execute("CREATE TABLE user_cd(user_id TEXT PRIMARY KEY,type INTEGER,create_time TEXT,scheduled_time TEXT)")
+            result = ClosingSettlementSqlRepository(db).settle("op", "u", "start", 1, 0, 1, 1, 1, 1)
+            self.assertEqual("schema_missing", result.status)
+            with DatabaseUnitOfWork(db, read_only=True) as uow:
+                self.assertIsNone(uow.query_one("SELECT 1 FROM sqlite_master WHERE name='closing_settlement_operations'"))
+
+    def test_migration_routing_assigns_projection_schema_to_owners(self):
+        from ....plugin import build_migrations, migrations_for_database
+
+        catalog = build_migrations()
+        game = {item.version for item in migrations_for_database(catalog, "game_db")}
+        player = {item.version for item in migrations_for_database(catalog, "player_db")}
+        self.assertIn("buff.008", game)
+        self.assertNotIn("buff.008", player)
+        self.assertIn("buff.009", player)
+        self.assertNotIn("buff.009", game)
+        self.assertIn("activity_state.003", game)
+        self.assertNotIn("activity_state.003", player)
+
+    def test_migration_preserves_legacy_receipts_without_inventing_effects(self):
+        with tempfile.TemporaryDirectory() as temp:
+            db = Path(temp) / "game.db"
+            with db_backend.transaction(db) as conn:
+                conn.execute(
+                    "CREATE TABLE closing_settlement_operations("
+                    "operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,result_json TEXT NOT NULL,"
+                    "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+                )
+                conn.execute(
+                    "INSERT INTO closing_settlement_operations(operation_id,payload,result_json) "
+                    "VALUES('old','legacy','[1,2,3,4,5,6]')"
+                )
+                conn.execute(
+                    "CREATE TABLE user_xiuxian(user_id TEXT PRIMARY KEY,stone INTEGER,exp INTEGER,hp INTEGER,mp INTEGER,atk INTEGER,power INTEGER)"
+                )
+                conn.execute(
+                    "CREATE TABLE user_cd(user_id TEXT PRIMARY KEY,type INTEGER,create_time TEXT,scheduled_time TEXT)"
+                )
+            with DatabaseUnitOfWork(db) as uow:
+                OutboxStore().ensure_schema(uow)
+                apply_closing_settlement_game(uow)
+
+            with DatabaseUnitOfWork(db, read_only=True) as uow:
+                legacy = uow.query_one(
+                    "SELECT effects_event_id,exp_time FROM closing_settlement_operations WHERE operation_id='old'"
+                )
+                self.assertEqual((None, 0), tuple(legacy.values()))
+                self.assertEqual(0, uow.query_one("SELECT COUNT(*) AS n FROM domain_outbox")["n"])

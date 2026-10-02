@@ -163,4 +163,16 @@ def apply_activity_state_legacy(uow: DatabaseUnitOfWork) -> None:
         )
 
 
-__all__ = ["apply_activity", "apply_activity_state_schema", "apply_activity_state_legacy"]
+def apply_activity_event_receipts(uow: DatabaseUnitOfWork) -> None:
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS activity_event_operations("
+        "event_id TEXT PRIMARY KEY,payload_hash TEXT NOT NULL,created_at TEXT NOT NULL)"
+    )
+
+
+__all__ = [
+    "apply_activity",
+    "apply_activity_state_schema",
+    "apply_activity_state_legacy",
+    "apply_activity_event_receipts",
+]
