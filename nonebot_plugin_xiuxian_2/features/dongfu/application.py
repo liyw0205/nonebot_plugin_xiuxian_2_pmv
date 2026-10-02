@@ -7,6 +7,7 @@ class DongfuApplication(MigratedFeatureApplication):
     def accelerate(self,**kwargs): return self.repository.accelerate(**kwargs)
     def fertilize(self,**kwargs): return self.repository.fertilize(**kwargs)
     def patrol(self,**kwargs): return self.repository.patrol(**kwargs)
+    def prepare_harvest_snapshot(self,**kwargs): return self.repository.prepare_harvest_snapshot(**kwargs)
     def harvest(self,**kwargs): return self.repository.harvest(**kwargs)
     def visit_reward(self,*,operation_id,user_id,visitor_id,target_id,gain): return self.repository.visit_reward(operation_id,visitor_id,target_id,gain)
     def array_upgrade(self,**kwargs): return self.repository.array_upgrade(**kwargs)

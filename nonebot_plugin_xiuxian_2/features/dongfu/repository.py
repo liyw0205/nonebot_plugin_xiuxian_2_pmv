@@ -18,6 +18,7 @@ class DongfuRepository(ServicePort):
     def accelerate(self,*a,**k): return DongfuAccelerateSqlRepository(self.database,self.player_database).accelerate(*a,**k)
     def fertilize(self,*a,**k): return DongfuFertilizeSqlRepository(self.database,self.player_database).fertilize(*a,**k)
     def patrol(self,*a,**k): return DongfuPatrolSqlRepository(self.database,self.player_database).patrol(*a,**k)
+    def prepare_harvest_snapshot(self,*a,**k): return DongfuHarvestSqlRepository(self.database,self.player_database).prepare_snapshot(*a,**k)
     def harvest(self,*a,**k): return DongfuHarvestSqlRepository(self.database,self.player_database).harvest(*a,**k)
     def visit_reward(self,operation_id,visitor_id,target_id,gain): return DongfuVisitRewardSqlRepository(self.database,self.player_database).reward(operation_id,visitor_id,target_id,gain)
     def array_upgrade(self,*a,**k): return DongfuArrayUpgradeSqlRepository(self.database,self.player_database).upgrade(*a,**k)

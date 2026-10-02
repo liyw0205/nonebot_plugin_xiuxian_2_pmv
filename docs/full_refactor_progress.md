@@ -2,6 +2,8 @@
 
 状态：进行中。`v1.1.0` 的 P0-P7 发布证据继续保留，但不作为底层全面重构完成证明。
 
+2026-10-02 dongfu harvest snapshot ownership：灵田槽位规范化抽到共享 helper，扩建和收获统一 legacy 字段恢复；随机奖励快照经 `DongfuApplication -> DongfuHarvestSqlRepository` 在 player UoW 条件写入并可重试复用。背包满不丢快照；成功收获在结算事务内清槽、同步 legacy 投影并删除快照，handler 移除 `_save_dongfu`。复用既有 `map.017` schema，无 migration。progress `7 passed`、洞府 feature/handler `38 passed`；inventory freshness、目标 compileall、diff check 通过。禁用 pytest/字节码缓存，清理专用 `/tmp` 测试和编译目录；未触碰运行数据库或用户 `boss_info.json`。下一片独立处理洞府随机目标读取：当前实现物化完整用户候选集并逐用户查询，需改为有界查询/分页，同时避免共享缓存无界增长；整体 `exit_ready=false` 仍由全局 legacy transaction services、`xiuxian2_handle` 和正式发布/P7 证据缺失阻塞。
+
 2026-10-02 dongfu status display writeback removal：`我的洞府` handler 仍在内存中按业务日把潜入/被潜入/巡山
 计数派生为当日状态，但不再将读取投影整体写回 player DB；巡山与潜入的 feature repositories 已在各自真实
 mutation 事务内按日期处理归零和递增。洞府 source 回归 `8 passed`，progress 聚合用例 `1 passed`，进度门禁

@@ -3,6 +3,8 @@
 状态：执行中
 适用范围：全面底层重构第二阶段
 
+2026-10-02 dongfu harvest snapshot ownership：灵田槽位规范化提取到共享 `plant_slots.py`，扩建与收获共用同一 legacy 字段恢复规则；`DongfuApplication.prepare_harvest_snapshot` 经 feature repository 在 player UoW 内 CAS 保存首份随机奖励快照并复用既有快照。收获 handler 不再 `_save_dongfu`；背包满保留快照，成功发奖、槽位清空、legacy 字段同步和快照删除在结算事务内完成。复用既有 `map.017` 的 `harvest_settlement` 列，无新增 migration。progress `7 passed`、洞府 feature/handler `38 passed`；inventory freshness、目标 compileall、diff check 通过。子代理分工：复用一份只读 migration/调用路径审计结论；代码修改、测试、资源检查和最终整合由主线程负责，测试串行。pytest/pyc 禁用或隔离，专用 `/tmp/dongfu-harvest-*` 与上一轮残留测试 fixture 已清理；未触碰 `.venv`、`.git`、`data/`、运行数据库/WAL/SHM 或用户 `boss_info.json`。收尾磁盘可用 `20G`、RAM available `1.4GiB`。下一片单独处理洞府随机目标全量候选读取与共享缓存容量边界；整体 `exit_ready=false` 仍由全局旧 transaction services、`xiuxian2_handle` 和正式发布/P7 证据缺失阻塞。
+
 2026-10-02 dongfu status display writeback removal：`我的洞府` 只在读取对象上按业务日派生计数，不再调用
 `_save_dongfu`；真实巡山/潜入事务保持负责持久化当日归零及计数更新。source 回归 `8 passed`、聚合 progress
 用例 `1 passed`，compileall/diff check 通过。下一片继续审计收获快照/扩建同步和随机目标旧读取边界。
@@ -48,6 +50,8 @@
 1. **恢复正确性收口**：直接突破 effects 恢复计算不得在 game 写锁内初始化旧数据库管理器；pending outbox 失败必须按到期时间退避，不能被最早 5 条坏记录永久阻塞。
 2. **player/economy 旧写路径清零**：继续按真实调用图迁移 `xiuxian2_handle`、剩余 `transaction_service` 的默认 handler、scheduler 和 Web 写入；旧实现只能作为显式 compatibility/rollback，不得由默认入口构造或调用。
 3. **其余领域边界**：按 cultivation/training、combat/dungeon/boss、sect/trade/scheduler/Web 的顺序完成真实入口、随机/时间注入、operation receipt、启动 migration、跨库恢复和缺 schema fail-closed。
+   - 当前洞府未完成项：随机潜入与同节点读取调用 `list_users_by_fields` 后完整物化候选用户，再逐个读取 profile/洞府；`PlayerDataManager._field_list_cache` 的 TTL entry 没有容量上限或主动过期清扫。单独设计有界/流式候选选择，并给共享 field-list cache 增加可证明的条目或字节上限及过期回收；不得复制或主动清空 `ITEMS_CACHE` 等其他玩法共享缓存。
+   - 下一洞府候选/缓存切片委派 1 名只读子代理梳理 field-list cache 的生产调用点、失效路径与条目体积风险；子代理不改代码、不跑 SQLite 测试，主线程负责实现、串行验收和资源收尾。
    - 当前副本未完成项：`dungeon_manager.py` 与 `features/dungeon/{reset,team}_repository.py` 仍有请求期建表/补列；探索在 `prepare` 前抽事件、怪物和战斗，需先冻结 resolved plan；队伍读取需从全表 JSON 改为成员索引/有界分页；progress gate 还要验证默认 repository 自身方法归属，而不是只看 facade 字符串。
    - 当前历练未完成项：事件/奖励仍可能在 application settle 前重抽，`training_events.py` 仍有模块级 `random` 与旧 manager 读取；排行榜全表复制需分页，状态 projection 与 `training_limit.py` 的兼容读写需继续收口。
 4. **持久状态与恢复证据**：盘点 operation ledger、outbox、projection receipt、失败/死信和 bet/payout 等历史回执的保留窗口；在有备份、checksum、dry-run、restore、reconcile 和人工决策记录前，不删除或压缩任何持久状态。

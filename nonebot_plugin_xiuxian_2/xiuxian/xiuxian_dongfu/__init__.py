@@ -9,6 +9,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from ...paths import get_paths
 from ...features.dongfu.application import DongfuApplication
+from ...features.dongfu.plant_slots import empty_plant_slot, legacy_plant_fields, normalize_plant_slots
 from ...infrastructure.ids import UUIDGenerator
 from ...infrastructure.random_source import SystemRandom
 from ...infrastructure.clock import SystemClock
@@ -235,14 +236,7 @@ def _format_geomancy(d: dict):
 
 
 def _empty_plant_slot(slot_no: int):
-    return {
-        "slot": slot_no,
-        "seed_id": 0,
-        "seed_name": "",
-        "plant_start": "",
-        "plant_finish": "",
-        "fertilizer": 0,
-    }
+    return empty_plant_slot(slot_no)
 
 
 def _default_plant_slots():
@@ -286,46 +280,13 @@ def _to_int(value, default=0):
 
 
 def _normalize_plant_slots(d: dict):
-    plot_count = min(DONGFU_PLOT_MAX, max(DONGFU_PLOT_COUNT, _to_int(d.get("plot_count"), DONGFU_PLOT_COUNT)))
-    d["plot_count"] = plot_count
-    raw_slots = d.get("plant_slots")
-    if isinstance(raw_slots, str):
-        try:
-            raw_slots = json.loads(raw_slots)
-        except Exception:
-            raw_slots = []
-    if not isinstance(raw_slots, list):
-        raw_slots = []
-
-    slots = []
-    for index in range(plot_count):
-        raw = raw_slots[index] if index < len(raw_slots) and isinstance(raw_slots[index], dict) else {}
-        seed_id = _to_int(raw.get("seed_id"))
-        seed_name = str(raw.get("seed_name") or "")
-        if seed_id and not seed_name:
-            seed_name = SEED_CONFIG.get(seed_id, {}).get("name", "")
-        slots.append({
-            "slot": index + 1,
-            "seed_id": seed_id,
-            "seed_name": seed_name,
-            "plant_start": str(raw.get("plant_start") or ""),
-            "plant_finish": str(raw.get("plant_finish") or ""),
-            "fertilizer": min(DONGFU_FERTILIZER_MAX, max(0, _to_int(raw.get("fertilizer")))),
-        })
-
-    legacy_seed_id = _to_int(d.get("plant_seed_id"))
-    if not any(_to_int(slot.get("seed_id")) for slot in slots) and _to_int(d.get("planting")) == 1 and legacy_seed_id:
-        slots[0] = {
-            "slot": 1,
-            "seed_id": legacy_seed_id,
-            "seed_name": SEED_CONFIG.get(legacy_seed_id, {}).get("name", ""),
-            "plant_start": str(d.get("plant_start") or ""),
-            "plant_finish": str(d.get("plant_finish") or ""),
-            "fertilizer": 0,
-        }
-
-    d["plant_slots"] = slots
-    return slots
+    return normalize_plant_slots(
+        d,
+        base_plot_count=DONGFU_PLOT_COUNT,
+        max_plot_count=DONGFU_PLOT_MAX,
+        fertilizer_max=DONGFU_FERTILIZER_MAX,
+        seed_names={seed_id: conf["name"] for seed_id, conf in SEED_CONFIG.items()},
+    )
 
 
 def _active_plant_slots(d: dict):
@@ -333,17 +294,9 @@ def _active_plant_slots(d: dict):
 
 
 def _sync_plant_fields(d: dict):
-    active = next(iter(_active_plant_slots(d)), None)
-    if active:
-        d["planting"] = 1
-        d["plant_seed_id"] = _to_int(active.get("seed_id"))
-        d["plant_start"] = active.get("plant_start", "")
-        d["plant_finish"] = active.get("plant_finish", "")
-    else:
-        d["planting"] = 0
-        d["plant_seed_id"] = 0
-        d["plant_start"] = ""
-        d["plant_finish"] = ""
+    d["planting"], d["plant_seed_id"], d["plant_start"], d["plant_finish"] = legacy_plant_fields(
+        _active_plant_slots(d), valid_seed_ids=set(SEED_CONFIG)
+    )
     return d
 
 
@@ -849,8 +802,23 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
             ],
             "slot_numbers": [int(slot["slot"]) for slot in harvest_slots],
         }
-        d["harvest_settlement"] = json.dumps(snapshot, ensure_ascii=False, sort_keys=True)
-        _save_dongfu(uid, d)
+        prepared = dongfu_application.prepare_harvest_snapshot(
+            user_id=uid,
+            expected_slots=slots,
+            snapshot=snapshot,
+            base_plot_count=DONGFU_PLOT_COUNT,
+            max_plot_count=DONGFU_PLOT_MAX,
+            fertilizer_max=DONGFU_FERTILIZER_MAX,
+            seed_names={seed_id: conf["name"] for seed_id, conf in SEED_CONFIG.items()},
+        )
+        if not prepared.succeeded:
+            if prepared.status == "snapshot_invalid":
+                await handle_send(bot, event, "洞府收获结算数据异常，请联系管理员处理。")
+            else:
+                await handle_send(bot, event, "洞府收获尚未结算：灵田状态已更新，请重新尝试。")
+            return
+        snapshot = prepared.snapshot
+        failed_slots = snapshot["failed_slots"]
     else:
         failed_slots = snapshot["failed_slots"]
 

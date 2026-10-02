@@ -5,6 +5,7 @@ from datetime import datetime
 from pathlib import Path
 from ...infrastructure.database import DatabaseUnitOfWork
 from .operation_schema import operation_databases_ready, operation_schema_ready
+from .plant_slots import canonical_plant_slots, legacy_plant_fields, normalize_plant_slots
 
 @dataclass(frozen=True)
 class DongfuHarvestResult:
@@ -12,10 +13,56 @@ class DongfuHarvestResult:
     @property
     def succeeded(self): return self.status in {'harvested','duplicate'}
 
+@dataclass(frozen=True)
+class DongfuHarvestSnapshotResult:
+    status:str
+    snapshot:dict|None=None
+    @property
+    def succeeded(self): return self.status in {'prepared','existing'}
+
 class DongfuHarvestSqlRepository:
     def __init__(self,game_database:str|Path,player_database:str|Path): self.game_database,self.player_database=str(game_database),str(player_database)
     @staticmethod
     def _canonical(value): return json.dumps(value,ensure_ascii=False,sort_keys=True,separators=(',',':'))
+
+    @classmethod
+    def _decode_snapshot(cls,value):
+        try: snapshot=json.loads(value) if isinstance(value,str) else value
+        except (TypeError,ValueError): return None
+        if not isinstance(snapshot,dict): return None
+        if not all(key in snapshot for key in ('expected_slots','slot_numbers','items','failed_slots')): return None
+        if not isinstance(snapshot['expected_slots'],list) or not isinstance(snapshot['slot_numbers'],list): return None
+        if not isinstance(snapshot['items'],list) or not isinstance(snapshot['failed_slots'],list): return None
+        return snapshot
+
+    def prepare_snapshot(self,user_id,expected_slots,snapshot,*,base_plot_count=3,max_plot_count=6,fertilizer_max=3,seed_names=None):
+        user_id=str(user_id); seed_names={int(key):str(value) for key,value in (seed_names or {}).items()}
+        snapshot=self._decode_snapshot(snapshot)
+        if snapshot is None or self._canonical(snapshot['expected_slots'])!=self._canonical(expected_slots): return DongfuHarvestSnapshotResult('snapshot_invalid')
+        if not operation_databases_ready(self.game_database,self.player_database): return DongfuHarvestSnapshotResult('schema_missing')
+        with DatabaseUnitOfWork(self.game_database,immediate=True) as uow:
+            uow.attach_database(self.player_database,'player_data')
+            if not operation_schema_ready(uow,'dongfu_harvest_operations'): return DongfuHarvestSnapshotResult('schema_missing')
+            if uow.query_one('SELECT 1 AS found FROM user_xiuxian WHERE user_id=?',(user_id,)) is None: return DongfuHarvestSnapshotResult('user_missing')
+            row=uow.query_one('SELECT built,plot_count,plant_slots,planting,plant_seed_id,plant_start,plant_finish,harvest_settlement FROM player_data.dongfu_status WHERE user_id=?',(user_id,))
+            if row is None or int(row['built'] or 0)!=1: return DongfuHarvestSnapshotResult('dongfu_missing')
+            if row.get('harvest_settlement'):
+                existing=self._decode_snapshot(row['harvest_settlement'])
+                return DongfuHarvestSnapshotResult('existing',existing) if existing is not None else DongfuHarvestSnapshotResult('snapshot_invalid')
+            state=dict(row)
+            slots=normalize_plant_slots(state,base_plot_count=base_plot_count,max_plot_count=max_plot_count,fertilizer_max=fertilizer_max,seed_names=seed_names)
+            if self._canonical(slots)!=self._canonical(expected_slots): return DongfuHarvestSnapshotResult('state_changed')
+            legacy=legacy_plant_fields(slots,valid_seed_ids=set(seed_names) if seed_names else None)
+            slot_json=canonical_plant_slots(slots)
+            changed=uow.execute(
+                'UPDATE player_data.dongfu_status SET plot_count=?,plant_slots=?,planting=?,plant_seed_id=?,plant_start=?,plant_finish=?,harvest_settlement=? '
+                'WHERE user_id=? AND built=1 AND plot_count IS ? AND plant_slots IS ? AND planting IS ? AND plant_seed_id IS ? '
+                'AND plant_start IS ? AND plant_finish IS ? AND harvest_settlement IS ?',
+                (state['plot_count'],slot_json,*legacy,self._canonical(snapshot),user_id,row['plot_count'],row['plant_slots'],row['planting'],row['plant_seed_id'],row['plant_start'],row['plant_finish'],row['harvest_settlement']),
+            )
+            if changed.rowcount!=1: return DongfuHarvestSnapshotResult('state_changed')
+            return DongfuHarvestSnapshotResult('prepared',snapshot)
+
     def harvest(self,operation_id,user_id,expected_slots,slot_numbers,rewards,max_goods_num,settled_at):
         operation_id,user_id=str(operation_id).strip(),str(user_id); slot_numbers=tuple(sorted({int(v) for v in slot_numbers})); max_goods_num=int(max_goods_num); payload=self._canonical([user_id,slot_numbers]); reward_rows=[(int(x['id']),str(x['name']),str(x['type']),int(x['amount'])) for x in rewards if int(x['amount'])>0]
         if not operation_databases_ready(self.game_database, self.player_database): return DongfuHarvestResult('schema_missing')

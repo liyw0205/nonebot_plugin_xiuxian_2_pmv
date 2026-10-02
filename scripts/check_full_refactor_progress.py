@@ -628,6 +628,9 @@ def _slice_status() -> dict[str, dict[str, object]]:
     dongfu_migrations = (PACKAGE / "features" / "dongfu" / "migrations.py").read_text(encoding="utf-8")
     dongfu_status_repository = (PACKAGE / "features" / "dongfu" / "status_repository.py").read_text(encoding="utf-8")
     dongfu_expansion_repository = (PACKAGE / "features" / "dongfu" / "expansion_repository.py").read_text(encoding="utf-8")
+    dongfu_plant_slots = (PACKAGE / "features" / "dongfu" / "plant_slots.py").read_text(encoding="utf-8")
+    dongfu_application = (PACKAGE / "features" / "dongfu" / "application.py").read_text(encoding="utf-8")
+    dongfu_repository = (PACKAGE / "features" / "dongfu" / "repository.py").read_text(encoding="utf-8")
     map_migrations = (PACKAGE / "features" / "map" / "migrations.py").read_text(encoding="utf-8")
     dongfu_operation_schema = (PACKAGE / "features" / "dongfu" / "operation_schema.py").read_text(encoding="utf-8")
     dongfu_operation_repositories = tuple(
@@ -2760,7 +2763,8 @@ def _slice_status() -> dict[str, dict[str, object]]:
                 "SET plot_count=?,plant_slots=?,planting=?,plant_seed_id=?,plant_start=?,plant_finish=?" in dongfu_expansion_repository
                 and "dongfu_expansion_operations" in dongfu_expansion_repository
                 and "uow.savepoint(\"dongfu_expansion\")" in dongfu_expansion_repository
-                and "seed_names.get(seed_id" in dongfu_expansion_repository
+                and "normalize_plant_slots(" in dongfu_expansion_repository
+                and "seed_names.get(seed_id" in dongfu_plant_slots
                 and "seed_names={seed_id: conf[\"name\"] for seed_id, conf in SEED_CONFIG.items()}" in dongfu_facade
             ),
             "expansion_handler_has_no_legacy_writeback": (
@@ -2773,6 +2777,21 @@ def _slice_status() -> dict[str, dict[str, object]]:
             ),
             "plant_application_owned": "dongfu_application.plant(" in dongfu_facade,
             "harvest_application_owned": "dongfu_application.harvest(" in dongfu_facade,
+            "harvest_snapshot_application_owned": (
+                "dongfu_application.prepare_harvest_snapshot(" in dongfu_facade
+                and "def prepare_harvest_snapshot(" in dongfu_application
+                and "def prepare_harvest_snapshot(" in dongfu_repository
+                and "def prepare_snapshot(" in dongfu_operation_repositories[4]
+                and "harvest_settlement=?" in dongfu_operation_repositories[4]
+            ),
+            "harvest_snapshot_handler_has_no_legacy_writeback": (
+                "@dongfu_harvest.handle" in dongfu_facade
+                and "_save_dongfu" not in dongfu_facade[
+                    dongfu_facade.index("@dongfu_harvest.handle") : dongfu_facade.index(
+                        "@dongfu_geomancy.handle", dongfu_facade.index("@dongfu_harvest.handle")
+                    )
+                ]
+            ),
             "fertilize_application_owned": "dongfu_application.fertilize(" in dongfu_facade,
             "accelerate_application_owned": "dongfu_application.accelerate(" in dongfu_facade,
             "patrol_application_owned": "dongfu_application.patrol(" in dongfu_facade,

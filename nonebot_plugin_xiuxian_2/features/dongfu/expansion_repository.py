@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any
 
 from ...infrastructure.database import DatabaseUnitOfWork
 from .operation_schema import operation_databases_ready, operation_schema_ready
+from .plant_slots import canonical_plant_slots, empty_plant_slot, legacy_plant_fields, normalize_plant_slots
 
 
 @dataclass(frozen=True)
@@ -41,62 +41,16 @@ class DongfuExpansionSqlRepository:
             return default
 
     @staticmethod
-    def _canonical(value: Any) -> str:
-        return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
-
-    @classmethod
-    def _plant_slots(
-        cls,
-        row: Mapping[str, Any],
-        plot_count: int,
-        seed_names: Mapping[int, str],
-    ) -> list[dict[str, Any]]:
-        raw_slots = row.get("plant_slots")
-        if isinstance(raw_slots, str):
-            try:
-                raw_slots = json.loads(raw_slots)
-            except (TypeError, ValueError):
-                raw_slots = []
-        if not isinstance(raw_slots, list):
-            raw_slots = []
-
-        slots = []
-        for index in range(plot_count):
-            raw = raw_slots[index] if index < len(raw_slots) and isinstance(raw_slots[index], dict) else {}
-            seed_id = cls._as_int(raw.get("seed_id"))
-            slots.append(
-                {
-                    "slot": index + 1,
-                    "seed_id": seed_id,
-                    "seed_name": str(raw.get("seed_name") or seed_names.get(seed_id, "")),
-                    "plant_start": str(raw.get("plant_start") or ""),
-                    "plant_finish": str(raw.get("plant_finish") or ""),
-                    "fertilizer": min(3, max(0, cls._as_int(raw.get("fertilizer")))),
-                }
-            )
-
-        legacy_seed_id = cls._as_int(row.get("plant_seed_id"))
-        if (
-            not any(slot["seed_id"] for slot in slots)
-            and cls._as_int(row.get("planting")) == 1
-            and legacy_seed_id
-        ):
-            slots[0].update(
-                {
-                    "seed_id": legacy_seed_id,
-                    "seed_name": str(slots[0]["seed_name"] or seed_names.get(legacy_seed_id, "")),
-                    "plant_start": str(row.get("plant_start") or ""),
-                    "plant_finish": str(row.get("plant_finish") or ""),
-                }
-            )
-        return slots
-
-    @staticmethod
-    def _legacy_fields(slots: list[dict[str, Any]]) -> tuple[int, int, str, str]:
-        active = next((slot for slot in slots if slot["seed_id"] > 0), None)
-        if active is None:
-            return 0, 0, "", ""
-        return 1, active["seed_id"], active["plant_start"], active["plant_finish"]
+    def _plant_slots(row, plot_count, base_plot_count, max_plot_count, seed_names):
+        state = dict(row)
+        state["plot_count"] = plot_count
+        return normalize_plant_slots(
+            state,
+            base_plot_count=base_plot_count,
+            max_plot_count=max_plot_count,
+            fertilizer_max=3,
+            seed_names=seed_names,
+        )
 
     @classmethod
     def _repair_projection(
@@ -110,9 +64,11 @@ class DongfuExpansionSqlRepository:
     ) -> None:
         raw_count = row.get("plot_count")
         count = min(max_plot_count, max(base_plot_count, cls._as_int(raw_count, base_plot_count)))
-        slots = cls._plant_slots(row, count, seed_names)
-        slot_json = cls._canonical(slots)
-        legacy = cls._legacy_fields(slots)
+        slots = cls._plant_slots(row, count, base_plot_count, max_plot_count, seed_names)
+        slot_json = canonical_plant_slots(slots)
+        legacy = legacy_plant_fields(
+            slots, valid_seed_ids=set(seed_names) if seed_names else None
+        )
         if (
             str(row.get("plant_slots") or "") == slot_json
             and tuple(cls._as_int(row.get(key)) for key in ("planting", "plant_seed_id")) == legacy[:2]
@@ -205,18 +161,13 @@ class DongfuExpansionSqlRepository:
                     "stone_insufficient", user_id, previous, previous, deed_cost, stone_cost
                 )
 
-            slots = self._plant_slots(row, previous, seed_names)
-            slots.append(
-                {
-                    "slot": current,
-                    "seed_id": 0,
-                    "seed_name": "",
-                    "plant_start": "",
-                    "plant_finish": "",
-                    "fertilizer": 0,
-                }
+            slots = self._plant_slots(
+                row, previous, base_plot_count, max_plot_count, seed_names
             )
-            legacy = self._legacy_fields(slots)
+            slots.append(empty_plant_slot(current))
+            legacy = legacy_plant_fields(
+                slots, valid_seed_ids=set(seed_names) if seed_names else None
+            )
             try:
                 with uow.savepoint("dongfu_expansion"):
                     if uow.execute(
@@ -234,7 +185,7 @@ class DongfuExpansionSqlRepository:
                         "UPDATE player_data.dongfu_status "
                         "SET plot_count=?,plant_slots=?,planting=?,plant_seed_id=?,plant_start=?,plant_finish=? "
                         "WHERE user_id=? AND built=1 AND plot_count IS ?",
-                        (current, self._canonical(slots), *legacy, user_id, raw_count),
+                        (current, canonical_plant_slots(slots), *legacy, user_id, raw_count),
                     ).rowcount != 1:
                         raise _ExpansionConflict("dongfu_changed")
                     uow.execute(
