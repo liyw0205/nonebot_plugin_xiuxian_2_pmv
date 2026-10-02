@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import replace
+from datetime import timedelta
 from pathlib import Path
 from typing import Any
 
@@ -19,6 +20,9 @@ from .xiangyuan_application import XiangyuanApplication
 
 
 class BaseApplication(LegacyApplication):
+    _DIRECT_BREAKTHROUGH_RETRY_BASE_SECONDS = 5
+    _DIRECT_BREAKTHROUGH_RETRY_MAX_SECONDS = 300
+
     def __init__(self, game_database: str | Path, player_database: str | Path, *, repository: BaseRepository | None = None, clock: Any | None = None, direct_breakthrough_effects: Any | None = None) -> None:
         super().__init__(game_database, repository=repository, feature="base")
         self._stone_contest_repository = BaseStoneContestSqlRepository(game_database)
@@ -84,10 +88,24 @@ class BaseApplication(LegacyApplication):
                     with DatabaseUnitOfWork(repo.database, immediate=True) as uow:
                         current = repo.outbox.get(uow, event_id)
                         if current is not None and current["status"] == "pending":
-                            repo.outbox.mark_failed(uow, event_id)
+                            repo.outbox.mark_failed(
+                                uow,
+                                event_id,
+                                next_attempt_at=self._direct_breakthrough_next_attempt_at(current),
+                            )
             except Exception:
                 pass
             return replace(result, message=result.message + "\n统计或关系奖励尚未完成，已保留恢复记录。")
+
+    def _direct_breakthrough_next_attempt_at(self, outbox_row) -> str:
+        """Back off failed projections so a capped scan can rotate to newer events."""
+        attempts = max(int(outbox_row["attempts"] or 0) + 1, 1)
+        delay = min(
+            self._DIRECT_BREAKTHROUGH_RETRY_MAX_SECONDS,
+            self._DIRECT_BREAKTHROUGH_RETRY_BASE_SECONDS * (2 ** min(attempts - 1, 6)),
+        )
+        now = self._direct_breakthrough_repository.clock.now()
+        return (now + timedelta(seconds=delay)).isoformat()
 
     def resume_pending_direct_breakthroughs(self, *, limit=5):
         repo = self._direct_breakthrough_repository
@@ -96,9 +114,12 @@ class BaseApplication(LegacyApplication):
         with DatabaseUnitOfWork(repo.database, read_only=True) as uow:
             if not repo._columns(uow, "domain_outbox"):
                 return
+            now = repo.clock.now().isoformat()
             pending = uow.query_all(
                 "SELECT payload_json FROM domain_outbox WHERE event_type=? AND status='pending' "
-                "ORDER BY attempts,created_at,event_id LIMIT ?", (repo.EVENT_TYPE, max(1, min(int(limit), 5))),
+                "AND (next_attempt_at IS NULL OR next_attempt_at <= ?) "
+                "ORDER BY attempts,created_at,event_id LIMIT ?",
+                (repo.EVENT_TYPE, now, max(1, min(int(limit), 5))),
             )
         for row in pending:
             payload = json.loads(row["payload_json"])

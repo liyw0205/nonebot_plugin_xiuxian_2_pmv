@@ -11,7 +11,7 @@ import unittest
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import closing
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
 from threading import RLock
@@ -224,7 +224,7 @@ class DirectBreakthroughRecoveryTests(unittest.TestCase):
         self.assertEqual(self.row(self.player, "mentor", "user_id='a'")["mentor_history"], "[]")
         with DatabaseUnitOfWork(self.player, immediate=True) as uow:
             uow.execute("DROP TRIGGER fail")
-        self.app.resume_pending_direct_breakthroughs()
+        self.app.direct_breakthrough_replay("root", "a")
         self.assertEqual(self.row(self.player, "statistics", "user_id='m'")["师父突破返修"], 100)
 
     def test_partner_and_mentor_same_recipient_partial_replay(self):
@@ -237,7 +237,7 @@ class DirectBreakthroughRecoveryTests(unittest.TestCase):
         with patch.object(self.effects.relations, "_grant", side_effect=fail_mentor):
             self.resolve()
         self.assertEqual(self.row(self.game, "user_xiuxian", "user_id='m'")["exp"], 10100)
-        self.app.resume_pending_direct_breakthroughs()
+        self.app.direct_breakthrough_replay("root", "a")
         self.assertEqual(self.row(self.game, "user_xiuxian", "user_id='m'")["exp"], 10200)
         self.assertEqual(self.row(self.game, "domain_outbox")["status"], "sent")
 
@@ -328,6 +328,10 @@ class DirectBreakthroughRecoveryTests(unittest.TestCase):
                 uow.execute("UPDATE user_xiuxian SET level='before',level_up_cd=NULL,level_up_rate=5 WHERE user_id='a'")
             self.assertTrue(self.resolve(repository_only=True, operation=f"op-{index}").applied)
         actual = self.effects.on_settled
+        now = [datetime(2026, 10, 2, 12, 0, tzinfo=timezone.utc)]
+        clock = SimpleNamespace(now=lambda: now[0])
+        self.repo.clock = clock
+        self.repo.outbox.clock = clock
         def deferred(*, payload, event_id):
             if payload["operation_id"] != "op-5":
                 raise RuntimeError("deferred")
@@ -336,7 +340,17 @@ class DirectBreakthroughRecoveryTests(unittest.TestCase):
             self.app.resume_pending_direct_breakthroughs(limit=500)
             self.assertEqual(effect.call_count, 5)
             self.app.resume_pending_direct_breakthroughs()
-            self.assertEqual(effect.call_count, 10)
+            self.assertEqual(effect.call_count, 6)
+            retry_at = self.row(
+                self.game,
+                "domain_outbox",
+                "event_id='direct-breakthrough:op-0:effects'",
+            )["next_attempt_at"]
+            self.assertIsNotNone(retry_at)
+            self.assertGreater(retry_at, now[0].isoformat())
+            now[0] += timedelta(seconds=5)
+            self.app.resume_pending_direct_breakthroughs()
+            self.assertEqual(effect.call_count, 11)
         self.assertEqual(self.row(self.game, "domain_outbox", "event_id='direct-breakthrough:op-5:effects'")["status"], "sent")
 
     def test_missing_player_schema_keeps_core_pending_without_ddl(self):
