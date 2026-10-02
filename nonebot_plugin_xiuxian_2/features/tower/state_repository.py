@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
 from typing import Any
@@ -9,6 +10,17 @@ from ...infrastructure.database import DatabaseUnitOfWork
 
 
 TOWER_FIELDS = ("current_floor", "max_floor", "score", "weekly_purchases")
+
+
+@dataclass(frozen=True)
+class TowerFloorResetResult:
+    status: str
+    total: int = 0
+    changed: int = 0
+
+    @property
+    def succeeded(self) -> bool:
+        return self.status in {"applied", "duplicate"}
 
 
 class TowerStateRepository:
@@ -121,5 +133,108 @@ class TowerStateRepository:
             )
             return state
 
+    def reset_all_floors(
+        self, *, operation_id: str, source: str, period_key: str
+    ) -> TowerFloorResetResult:
+        operation_id, source, period_key = (
+            str(operation_id).strip(), str(source).strip(), str(period_key).strip()
+        )
+        if not operation_id or source not in {"admin", "scheduler"} or not period_key:
+            raise ValueError("valid tower reset identity is required")
+        if not Path(self.player_database).is_file():
+            return TowerFloorResetResult("schema_missing")
 
-__all__ = ["TOWER_FIELDS", "TowerStateRepository"]
+        required = {
+            "tower": {"user_id", "current_floor"},
+            "tower_state_operations": {
+                "operation_id", "user_id", "kind", "period_key", "snapshot"
+            },
+        }
+        request = {"source": source, "period_key": period_key}
+        with DatabaseUnitOfWork(self.player_database, immediate=True) as uow:
+            for table, columns in required.items():
+                actual = {
+                    str(row["name"])
+                    for row in uow.query_all(f"PRAGMA table_info({table})")
+                }
+                if not columns <= actual:
+                    return TowerFloorResetResult("schema_missing")
+
+            previous = uow.query_one(
+                "SELECT user_id,kind,period_key,snapshot FROM tower_state_operations "
+                "WHERE operation_id=?",
+                (operation_id,),
+            )
+            if previous is not None:
+                try:
+                    saved = json.loads(str(previous["snapshot"] or "{}"))
+                except (TypeError, ValueError):
+                    return TowerFloorResetResult("operation_conflict")
+                if (
+                    not isinstance(saved, dict)
+                    or str(previous["user_id"]) != "0"
+                    or str(previous["kind"]) != "reset_all_floors"
+                    or str(previous["period_key"]) != period_key
+                    or saved.get("request") != request
+                ):
+                    return TowerFloorResetResult("operation_conflict")
+                result = saved.get("result")
+                if not isinstance(result, dict):
+                    return TowerFloorResetResult("operation_conflict")
+                total_value = result.get("total")
+                changed_value = result.get("changed")
+                if (
+                    not isinstance(total_value, int)
+                    or isinstance(total_value, bool)
+                    or not isinstance(changed_value, int)
+                    or isinstance(changed_value, bool)
+                    or total_value < 0
+                    or changed_value < 0
+                    or changed_value > total_value
+                ):
+                    return TowerFloorResetResult("operation_conflict")
+                return TowerFloorResetResult(
+                    "duplicate", total_value, changed_value
+                )
+
+            total_row = uow.query_one("SELECT COUNT(*) AS total FROM tower")
+            total = int(total_row["total"] if total_row is not None else 0)
+            changed = uow.execute(
+                "UPDATE tower SET current_floor=0 "
+                "WHERE current_floor IS NULL OR current_floor<>0"
+            ).rowcount
+            result = {"total": total, "changed": int(changed)}
+            snapshot = json.dumps(
+                {"request": request, "result": result},
+                ensure_ascii=True,
+                sort_keys=True,
+                separators=(",", ":"),
+            )
+            uow.execute(
+                "INSERT INTO tower_state_operations(operation_id,user_id,kind,period_key,snapshot) "
+                "VALUES(?,?,?,?,?)",
+                (operation_id, "0", "reset_all_floors", period_key, snapshot),
+            )
+            return TowerFloorResetResult("applied", total, int(changed))
+
+    def ranking(self, field: str, limit: int = 50) -> list[tuple[str, int]]:
+        if field not in {"current_floor", "score"}:
+            raise ValueError("unsupported tower ranking field")
+        limit = min(50, max(0, int(limit)))
+        if limit == 0 or not Path(self.player_database).is_file():
+            return []
+        with DatabaseUnitOfWork(self.player_database) as uow:
+            columns = {
+                str(row["name"]) for row in uow.query_all("PRAGMA table_info(tower)")
+            }
+            if not {"user_id", field} <= columns:
+                return []
+            rows = uow.query_all(
+                f'SELECT user_id,CAST(COALESCE("{field}",0) AS INTEGER) AS value '
+                f'FROM tower ORDER BY value DESC,user_id ASC LIMIT ?',
+                (limit,),
+            )
+        return [(str(row["user_id"]), int(row["value"] or 0)) for row in rows]
+
+
+__all__ = ["TOWER_FIELDS", "TowerFloorResetResult", "TowerStateRepository"]

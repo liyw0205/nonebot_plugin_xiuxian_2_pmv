@@ -113,6 +113,16 @@ class RefactorProgressTests(unittest.TestCase):
         tower = slices["tower"]
         self.assertTrue(tower["state_application_owned"])
         self.assertTrue(tower["legacy_state_owner_disabled"])
+        self.assertTrue(tower["global_reset_application_owned"])
+        self.assertTrue(tower["global_reset_repository_atomic"])
+        self.assertTrue(tower["global_reset_request_path_has_no_ddl"])
+        self.assertTrue(tower["global_reset_replay_protected"])
+        self.assertTrue(tower["global_reset_schema_migration_owned"])
+        self.assertTrue(tower["global_reset_scheduler_uses_stable_week_id"])
+        self.assertTrue(tower["global_reset_admin_uses_event_id"])
+        self.assertTrue(tower["ranking_application_owned"])
+        self.assertTrue(tower["ranking_query_bounded_and_stable"])
+        self.assertTrue(tower["ranking_legacy_full_scan_removed"])
         training = slices["training"]
         self.assertTrue(training["state_application_owned"])
         self.assertTrue(training["legacy_state_owner_disabled"])

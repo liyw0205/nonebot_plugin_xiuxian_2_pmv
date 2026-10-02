@@ -1871,8 +1871,22 @@ async def training_reset_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
 async def tower_reset_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """重置所有用户的通天塔层数"""
     from ..xiuxian_tower import reset_tower_floors
-    await reset_tower_floors()  # 重置通天塔层数
-    msg = "用户通天塔层数重置成功"
+    from datetime import date
+
+    iso = date.today().isocalendar()
+    period_key = f"{iso.year}-W{iso.week:02d}"
+    message_id = str(getattr(event, "message_id", "") or "").strip()
+    operator_id = str(getattr(event, "user_id", "") or "0")
+    operation_id = f"tower-reset:admin:{operator_id}:{message_id}" if message_id else None
+    result = await reset_tower_floors(
+        operation_id,
+        source="admin",
+        period_key=period_key,
+    )
+    if not result.succeeded:
+        await handle_send(bot, event, "用户通天塔层数重置失败：数据结构尚未就绪或操作状态已变化。")
+        await tower_reset.finish()
+    msg = f"用户通天塔层数重置成功：重置 {result.changed}/{result.total} 人"
     await handle_send(bot, event, msg)
     await tower_reset.finish()
 

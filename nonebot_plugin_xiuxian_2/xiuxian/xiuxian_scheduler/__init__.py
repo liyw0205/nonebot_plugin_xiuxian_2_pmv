@@ -385,7 +385,18 @@ async def weekly_reduce_impart_lv():
 )
 async def weekly_reset_tower_floors():
     """每周一重置通天塔层数"""
-    await _run_job("每周重置通天塔层数", reset_tower_floors)
+    from datetime import date
+
+    business_date = _scheduler_business_date()
+    iso = date.fromisoformat(business_date).isocalendar()
+    period_key = f"{iso.year}-W{iso.week:02d}"
+    await _run_job(
+        "每周重置通天塔层数",
+        reset_tower_floors,
+        f"tower-reset:weekly:{period_key}",
+        source="scheduler",
+        period_key=period_key,
+    )
 
 
 # =========================

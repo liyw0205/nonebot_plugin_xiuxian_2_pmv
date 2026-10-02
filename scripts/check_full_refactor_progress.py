@@ -209,6 +209,20 @@ def _slice_status() -> dict[str, dict[str, object]]:
     arena_limit = (PACKAGE / "xiuxian" / "xiuxian_arena" / "arena_limit.py").read_text(encoding="utf-8")
     tower_facade = (PACKAGE / "xiuxian" / "xiuxian_tower" / "__init__.py").read_text(encoding="utf-8")
     tower_limit = (PACKAGE / "xiuxian" / "xiuxian_tower" / "tower_limit.py").read_text(encoding="utf-8")
+    tower_state_application = (PACKAGE / "features" / "tower" / "state_application.py").read_text(encoding="utf-8")
+    tower_state_repository = (PACKAGE / "features" / "tower" / "state_repository.py").read_text(encoding="utf-8")
+    tower_migrations = (PACKAGE / "features" / "tower" / "migrations.py").read_text(encoding="utf-8")
+    tower_scheduler = (PACKAGE / "xiuxian" / "xiuxian_scheduler" / "__init__.py").read_text(encoding="utf-8")
+    tower_admin = (PACKAGE / "xiuxian" / "xiuxian_admin" / "__init__.py").read_text(encoding="utf-8")
+    tower_reset_facade = tower_facade[
+        tower_facade.index("async def reset_tower_floors(") : tower_facade.index("@tower_boss_info.handle")
+    ]
+    tower_reset_scheduler = tower_scheduler[
+        tower_scheduler.index("async def weekly_reset_tower_floors(") : tower_scheduler.index("# =========================", tower_scheduler.index("async def weekly_reset_tower_floors("))
+    ]
+    tower_reset_admin = tower_admin[
+        tower_admin.index("async def tower_reset_(") : tower_admin.index("@boss_reset.handle", tower_admin.index("async def tower_reset_("))
+    ]
     training_limit = (PACKAGE / "xiuxian" / "xiuxian_training" / "training_limit.py").read_text(encoding="utf-8")
     training_facade = (PACKAGE / "xiuxian" / "xiuxian_training" / "__init__.py").read_text(encoding="utf-8")
     training_events = (PACKAGE / "xiuxian" / "xiuxian_training" / "training_events.py").read_text(encoding="utf-8")
@@ -913,13 +927,60 @@ def _slice_status() -> dict[str, dict[str, object]]:
         "tower": {
             "state_application_owned": "TowerStateApplication" in tower_limit,
             "legacy_state_owner_disabled": "TowerStateService" not in tower_limit,
+            "global_reset_application_owned": (
+                "state_application.reset_all_floors(" in tower_limit
+                and "def reset_all_floors(" in tower_state_application
+                and "await asyncio.to_thread(" in tower_reset_facade
+            ),
+            "global_reset_repository_atomic": (
+                "DatabaseUnitOfWork(self.player_database, immediate=True)" in tower_state_repository
+                and "UPDATE tower SET current_floor=0" in tower_state_repository
+                and "INSERT INTO tower_state_operations" in tower_state_repository
+            ),
+            "global_reset_request_path_has_no_ddl": (
+                "CREATE TABLE" not in tower_state_repository
+                and "ALTER TABLE" not in tower_state_repository
+                and "update_all_records" not in tower_limit
+            ),
+            "global_reset_replay_protected": (
+                "tower_state_operations " in tower_state_repository
+                and '"WHERE operation_id=?"' in tower_state_repository
+                and '"duplicate"' in tower_state_repository
+            ),
+            "global_reset_schema_migration_owned": (
+                "tower_state_operations" in tower_migrations
+                and 'Migration("tower.004", "tower_state_operations", apply_tower_state)' in plugin
+            ),
+            "global_reset_scheduler_uses_stable_week_id": (
+                'f"tower-reset:weekly:{period_key}"' in tower_reset_scheduler
+                and "business_date = _scheduler_business_date()" in tower_reset_scheduler
+            ),
+            "global_reset_admin_uses_event_id": (
+                'f"tower-reset:admin:{operator_id}:{message_id}"' in tower_reset_admin
+                and "if not result.succeeded:" in tower_reset_admin
+            ),
+            "ranking_application_owned": (
+                "tower_limit.ranking(\"current_floor\")" in tower_facade
+                and "tower_limit.ranking(\"score\")" in tower_facade
+                and "def ranking(" in tower_state_application
+                and "def ranking(" in tower_state_repository
+            ),
+            "ranking_query_bounded_and_stable": (
+                'field not in {"current_floor", "score"}' in tower_state_repository
+                and "limit = min(50, max(0, int(limit)))" in tower_state_repository
+                and 'ORDER BY value DESC,user_id ASC LIMIT ?' in tower_state_repository
+            ),
+            "ranking_legacy_full_scan_removed": (
+                "get_all_field_data" not in tower_facade
+                and "_player_data_manager" not in tower_limit
+            ),
             "stamina_refund_application_owned": (
                 "restore_player_stamina(" in tower_facade
                 and "_sql_message().update_user_stamina(" not in tower_facade
                 and "def restore(" in base_stamina_application
                 and "def restore(" in base_stamina_repository
             ),
-            "status": "state_cutover_with_legacy_service_retained_for_compatibility",
+            "status": "state_and_global_floor_reset_cutover_with_legacy_service_removed_from_default_path",
         },
         "training": {
             "state_application_owned": "TrainingStateApplication" in training_limit,

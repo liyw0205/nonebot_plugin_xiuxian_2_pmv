@@ -221,14 +221,13 @@ def test_production_facade_has_no_per_field_write_bypass():
     assert "tower_state_operations" in repository
 
 
-def test_tower_limit_defers_legacy_manager_and_feature_state_application_construction():
+def test_tower_limit_uses_only_feature_owned_state_application():
     root = Path(__file__).parents[1] / "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_tower"
     source = (root / "tower_limit.py").read_text(encoding="utf-8")
-    assert "_player_data_manager_instance = None" in source
-    assert "def _player_data_manager(" in source
+    assert "PlayerDataManager" not in source
+    assert "update_all_records" not in source
     assert "_state_application_instance = None" in source
     assert "def _state_application(" in source
     assert "TowerStateApplication(" in source
-    assert "lock=_player_data_manager().lock" in source
+    assert "lock=_state_lock" in source
     assert "TowerStateService" not in source
-    assert "player_data_manager = PlayerDataManager()" not in source

@@ -19,7 +19,7 @@ from ..xiuxian_utils.utils import (
     get_msg_pic, log_message, handle_send, 
     number_to, send_msg_handler, send_help_message, restore_player_stamina
 )
-from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage, PlayerDataManager, leave_harm_time
+from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage, leave_harm_time
 from ..xiuxian_utils.item_json import Items
 from .tower_data import tower_data
 from .tower_battle import tower_battle
@@ -33,7 +33,6 @@ from ...infrastructure.ids import UUIDGenerator
 from ...paths import get_paths
 from ..xiuxian_config import XiuConfig
 from ..xiuxian_title.title_data import check_and_unlock_titles
-_player_data_manager_instance = None
 _sql_message_instance = None
 _items_instance = None
 tower_application = TowerApplication(
@@ -43,25 +42,6 @@ tower_application = TowerApplication(
 )
 tower_ids = UUIDGenerator()
 player_state_application = PlayerStateApplication(get_paths().player_db)
-
-
-def _resolve_player_data_manager():
-    global _player_data_manager_instance
-    if _player_data_manager_instance is None:
-        _player_data_manager_instance = PlayerDataManager()
-    return _player_data_manager_instance
-
-
-class _LazyPlayerDataManager:
-    def __getattr__(self, name):
-        return getattr(_resolve_player_data_manager(), name)
-
-
-player_data_manager = _LazyPlayerDataManager()
-
-
-def _player_data_manager():
-    return player_data_manager
 
 
 def _sql_message():
@@ -101,9 +81,30 @@ tower_buy = on_command("通天塔兑换", priority=5, block=True)
 tower_help = on_command("通天塔帮助", priority=5, block=True)
 tower_boss_info = on_command("查看通天塔BOSS", aliases={"通天塔BOSS", "查看通天塔boss", "通天塔boss"}, priority=5, block=True)
 
-async def reset_tower_floors():
-    tower_limit.reset_all_floors()
-    logger.opt(colors=True).info("<green>通天塔层数已重置</green>")
+async def reset_tower_floors(
+    operation_id: str | None = None,
+    *,
+    source: str = "admin",
+    period_key: str | None = None,
+):
+    from datetime import date
+
+    if period_key is None:
+        current = date.today().isocalendar()
+        period_key = f"{current.year}-W{current.week:02d}"
+    if operation_id is None:
+        operation_id = f"tower-reset:{source}:{tower_ids.new_id()}"
+    result = await asyncio.to_thread(
+        tower_limit.reset_all_floors,
+        operation_id=operation_id,
+        source=source,
+        period_key=period_key,
+    )
+    if result.succeeded:
+        logger.opt(colors=True).info(
+            "<green>通天塔层数已重置: {}/{} 人</green>", result.changed, result.total
+        )
+    return result
 
 @tower_boss_info.handle(parameterless=[Cooldown(cd_time=0)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
@@ -472,15 +473,9 @@ async def tower_rank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await handle_send(bot, event, msg, md_type="我要修仙")
         await tower_rank.finish()
 
-    # 获取所有用户的current_floor数据
-    all_user_integral = _player_data_manager().get_all_field_data("tower", "current_floor")
-    
-    # 排序数据
-    sorted_integral = sorted(all_user_integral, key=lambda x: x[1], reverse=True)
-    
     # 生成排行榜
     rank_msg = "【通天塔排行榜】\n"
-    for i, (user_id, integral) in enumerate(sorted_integral[:50], start=1):
+    for i, (user_id, integral) in enumerate(tower_limit.ranking("current_floor"), start=1):
         user_info = _sql_message().get_user_info_with_id(user_id)
         rank_msg += f"第{i}位 | {user_info['user_name']} | {number_to(integral)}\n"
     
@@ -496,15 +491,9 @@ async def tower_integral_rank_(bot: Bot, event: GroupMessageEvent | PrivateMessa
         await handle_send(bot, event, msg, md_type="我要修仙")
         await tower_integral_rank.finish()
 
-    # 获取所有用户的score数据
-    all_user_integral = _player_data_manager().get_all_field_data("tower", "score")
-    
-    # 排序数据
-    sorted_integral = sorted(all_user_integral, key=lambda x: x[1], reverse=True)
-    
     # 生成排行榜
     rank_msg = "【通天塔积分排行榜】\n"
-    for i, (user_id, integral) in enumerate(sorted_integral[:50], start=1):
+    for i, (user_id, integral) in enumerate(tower_limit.ranking("score"), start=1):
         user_info = _sql_message().get_user_info_with_id(user_id)
         rank_msg += f"第{i}位 | {user_info['user_name']} | {number_to(integral)}\n"
     

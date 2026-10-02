@@ -1,19 +1,13 @@
 from __future__ import annotations
 
+from threading import RLock
+
 from ...paths import get_paths
 from ...features.tower.state_application import TowerStateApplication
-from ..xiuxian_utils.xiuxian2_handle import PlayerDataManager
 
 
-_player_data_manager_instance = None
 _state_application_instance = None
-
-
-def _player_data_manager():
-    global _player_data_manager_instance
-    if _player_data_manager_instance is None:
-        _player_data_manager_instance = PlayerDataManager()
-    return _player_data_manager_instance
+_state_lock = RLock()
 
 
 def _state_application():
@@ -21,7 +15,7 @@ def _state_application():
     if _state_application_instance is None:
         _state_application_instance = TowerStateApplication(
             get_paths().player_db,
-            lock=_player_data_manager().lock,
+            lock=_state_lock,
         )
     return _state_application_instance
 
@@ -40,8 +34,15 @@ class TowerLimit:
         weekly = self.get_user_tower_info(user_id)["weekly_purchases"]
         return int(weekly.get(str(item_id), 0))
 
-    def reset_all_floors(self):
-        _player_data_manager().update_all_records("tower", "current_floor", 0)
+    def reset_all_floors(self, *, operation_id: str, source: str, period_key: str):
+        state_application = self._state_application_override or _state_application()
+        return state_application.reset_all_floors(
+            operation_id=operation_id, source=source, period_key=period_key
+        )
+
+    def ranking(self, field: str, limit: int = 50):
+        state_application = self._state_application_override or _state_application()
+        return state_application.ranking(field, limit)
 
 
 tower_limit = TowerLimit()

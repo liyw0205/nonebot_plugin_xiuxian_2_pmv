@@ -5,6 +5,8 @@ import unittest
 from pathlib import Path
 
 from ..application import TowerApplication
+from ....infrastructure.database import DatabaseUnitOfWork
+from ....plugin import apply_platform_schema
 
 
 class _Repository:
@@ -24,7 +26,11 @@ class TowerApplicationTests(unittest.TestCase):
     def test_purchase_and_settlement_replay(self):
         with tempfile.TemporaryDirectory() as directory:
             repository = _Repository()
-            app = TowerApplication(Path(directory) / "game.db", Path(directory) / "player.db", repository=repository)
+            game_database = Path(directory) / "game.db"
+            player_database = Path(directory) / "player.db"
+            with DatabaseUnitOfWork(game_database) as uow:
+                apply_platform_schema(uow)
+            app = TowerApplication(game_database, player_database, repository=repository)
             purchase = dict(operation_id="purchase-1", user_id="u", item_id=1, item_name="灵草", item_type="药材", quantity=2, unit_cost=10, weekly_limit=5, expected_score=100, expected_weekly_purchases={"_last_reset": "2026-09-12"}, max_goods_num=99)
             first = app.purchase(**purchase)
             replay = app.purchase(**purchase)
