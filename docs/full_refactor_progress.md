@@ -2,6 +2,13 @@
 
 状态：进行中。`v1.1.0` 的 P0-P7 发布证据继续保留，但不作为底层全面重构完成证明。
 
+2026-10-02 dongfu infiltration eligibility writeback removal：潜入前置资格检查 `_can_infiltrate` 与
+`_can_intrude` 不再调用 `_save_dongfu`；跨日归零和计数递增由既有
+`DongfuInfiltrateSuccess/FailureSqlRepository` 在结算事务内按 `day` 原子完成。新增 source/progress guard，
+洞府全套及潜入仓储回归 `33 passed`。显式 `_consume_*`、收获快照和扩建后的状态写入仍保留，下一片继续审计
+洞府随机目标/同节点读取及剩余 mutation 是否应转 feature projection；全局 legacy blockers、dungeon/training
+和正式 backup/restore/P7 仍开放。
+
 2026-10-02 dongfu status read boundary：洞府默认读取从 `PlayerDataManager.get_fields` 切到
 `DongfuApplication.status -> DongfuStatusSqlQueryRepository` 的只读 player-db 投影；默认值、旧灵田字段
 同步和地脉补全仅作用于返回对象，不再由查询调用 `_save_dongfu` 或 `update_or_write_data`。新增 player-only

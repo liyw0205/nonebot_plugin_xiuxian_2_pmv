@@ -22,3 +22,10 @@ def test_dongfu_status_schema_is_player_startup_migration_only():
     game = {item.version for item in migrations_for_database(migrations, "game_db")}
     assert "map.017" in player
     assert "map.017" not in game
+
+
+def test_infiltration_eligibility_checks_do_not_write_legacy_projection():
+    source = SOURCE.read_text(encoding="utf-8")
+    for name, end in (("_can_infiltrate", "def _consume_infiltrate_count"), ("_can_intrude", "def _get_random_dongfu_target")):
+        helper = source[source.index(f"def {name}"):source.index(end)]
+        assert "_save_dongfu" not in helper

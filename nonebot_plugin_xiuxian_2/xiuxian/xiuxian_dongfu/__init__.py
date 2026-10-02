@@ -543,7 +543,6 @@ def _get_infiltrate_left(d: dict, is_random: bool):
 def _can_infiltrate(uid: str, is_random: bool):
     d = _get_dongfu(uid)
     d = _reset_infiltrate_count_if_needed(d)
-    _save_dongfu(uid, d)
     return _get_infiltrate_left(d, is_random) > 0, d
 
 
@@ -567,7 +566,6 @@ def _consume_intrude_count(target_uid: str):
 def _can_intrude(target_uid: str):
     d = _get_dongfu(target_uid)
     d = _reset_intrude_count_if_needed(d)
-    _save_dongfu(target_uid, d)
     return _to_int(d.get("intrude_count")) < INFILTRATE_DAILY_LIMIT, d
 
 

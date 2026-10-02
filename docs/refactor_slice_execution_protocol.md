@@ -3,6 +3,11 @@
 状态：执行中
 适用范围：全面底层重构第二阶段
 
+2026-10-02 dongfu infiltration eligibility writeback removal：`_can_infiltrate`/`_can_intrude` 只做
+只读资格判断，不再通过 `_save_dongfu` 写回跨日计数；成功/失败 repository 已在 operation transaction 中
+按 `day` 冻结并原子更新计数。聚焦洞府/潜入/progress 回归 `33 passed`，保留显式计数、收获快照和扩建 mutation。
+下一片继续审计随机目标/同节点读取与剩余洞府写路径，不以本片通过宣称洞府 mutation 全部完成。
+
 2026-10-02 dongfu status read boundary：`_get_dongfu` 改由 `DongfuApplication.status` 读取，默认值、灵田
 兼容同步及地图地脉补全都只改返回对象；只读仓储不触发动态建表/补列。player-only `map.017` 启动迁移补齐
 既有 `dongfu_status` 状态列并保留当前行数据。聚焦洞府/地图回归 `76 passed`，状态仓储/source/progress 用例

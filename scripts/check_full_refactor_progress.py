@@ -2824,6 +2824,13 @@ def _slice_status() -> dict[str, dict[str, object]]:
                     dongfu_facade.index("def _get_dongfu") : dongfu_facade.index("def _save_dongfu")
                 ]
             ),
+            "infiltration_eligibility_has_no_legacy_writeback": all(
+                "_save_dongfu" not in dongfu_facade[dongfu_facade.index(start) : dongfu_facade.index(end)]
+                for start, end in (
+                    ("def _can_infiltrate", "def _consume_infiltrate_count"),
+                    ("def _can_intrude", "def _get_random_dongfu_target"),
+                )
+            ),
             "status_schema_startup_migration_owned": (
                 'Migration("map.017", "map_dongfu_status_schema", apply_map_dongfu_status_schema)' in plugin
                 and "def apply_map_dongfu_status_schema(" in map_migrations
