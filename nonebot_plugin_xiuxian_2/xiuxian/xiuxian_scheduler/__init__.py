@@ -1,4 +1,5 @@
 import asyncio
+import os
 
 from nonebot import require
 from nonebot.log import logger
@@ -31,6 +32,9 @@ _sql_message_instance = None
 xiuxian_impart = XIUXIAN_IMPART_BUFF()
 scheduler = require("nonebot_plugin_apscheduler").scheduler
 job_manager = SchedulerJobManager(scheduler)
+_LEGACY_STONE_GIFT_HANDLER_ENABLED = os.environ.get("XIUXIAN_STONE_GIFT_LEGACY_HANDLER", "false").strip().lower() in {
+    "1", "true", "yes", "on"
+}
 
 
 def _sql_message():
@@ -212,7 +216,10 @@ async def daily_reset_lottery():
     max_instances=1
 )
 async def daily_reset_stone_limits_job():
-    """送灵石额度重置"""
+    """重置显式 legacy 送灵石 handler 使用的兼容额度。"""
+    if not _LEGACY_STONE_GIFT_HANDLER_ENABLED:
+        logger.debug("Skip legacy stone-gift limit reset; the default application uses date-scoped limits.")
+        return
     await _run_job("送灵石额度重置", reset_stone_limits)
 
 
