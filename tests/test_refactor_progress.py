@@ -768,5 +768,14 @@ class RefactorProgressTests(unittest.TestCase):
         self.assertTrue(slices["player_state"]["battle_vital_legacy_writer_disabled"])
         self.assertTrue(slices["player_state"]["battle_vital_repository_is_bounded_and_no_ddl"])
         self.assertTrue(slices["player_state"]["battle_vital_schema_failure_is_observable"])
+
+    def test_progress_report_tracks_daily_sign_reset_ownership(self) -> None:
+        sign_in = _slice_status()["sign_in"]
+        self.assertTrue(sign_in["daily_reset_application_owned"])
+        self.assertTrue(sign_in["daily_reset_atomic_no_request_ddl"])
+        self.assertTrue(sign_in["daily_reset_replay_rollback_and_missing_schema_covered"])
+        self.assertTrue(sign_in["daily_reset_historical_date_ambiguity_documented"])
+
+
 if __name__ == "__main__":
     unittest.main()

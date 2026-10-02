@@ -147,6 +147,9 @@ def _slice_status() -> dict[str, dict[str, object]]:
     sect_fairyland_claim_repository = (PACKAGE / "features" / "sect_fairyland" / "claim_repository.py").read_text(encoding="utf-8")
     sign_effects = (PACKAGE / "features" / "sign_in" / "application_effects.py").read_text(encoding="utf-8")
     sign_application = (PACKAGE / "features" / "sign_in" / "application.py").read_text(encoding="utf-8")
+    sign_daily_reset_repository = (PACKAGE / "features" / "sign_in" / "daily_reset_repository.py").read_text(encoding="utf-8")
+    sign_daily_reset_tests = (PACKAGE / "features" / "sign_in" / "tests" / "test_daily_reset_repository.py").read_text(encoding="utf-8")
+    sign_in_docs = (ROOT / "docs" / "features" / "sign_in.md").read_text(encoding="utf-8")
     tasks_entry = (PACKAGE / "xiuxian" / "xiuxian_tasks" / "task_data.py").read_text(encoding="utf-8")
     tasks_transaction = (PACKAGE / "xiuxian" / "xiuxian_tasks" / "transaction_service.py").read_text(encoding="utf-8")
     tasks_legacy_transactions = (PACKAGE / "compatibility" / "legacy_task_transactions.py").read_text(encoding="utf-8")
@@ -839,6 +842,33 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "lottery_compatibility_fallback": "XIUXIAN_SIGN_IN_LEGACY_LOTTERY" in plugin and "LotterySettlementService" in plugin,
             "lottery_scheduler_application_owned": "_lottery_application().snapshot(" in base and "lottery_settlement_service" not in base,
             "legacy_lottery_scheduler_disabled": "lottery_settlement_service" not in base,
+            "daily_reset_application_owned": (
+                '_run_job("每日修仙签到重置", _daily_sign_reset)' in mixelixir_scheduler
+                and "_sql_message().sign_remake" not in mixelixir_scheduler
+                and "SignInApplication(get_paths().game_db).reset_daily_flags(_scheduler_business_date())" in mixelixir_scheduler
+                and "SignInDailyResetSqlRepository(" in sign_application
+            ),
+            "daily_reset_atomic_no_request_ddl": (
+                "DatabaseUnitOfWork(self.database, immediate=True)" in sign_daily_reset_repository
+                and "self.ledger.finish(uow, outcome)" in sign_daily_reset_repository
+                and '"operation_ledger"' in sign_daily_reset_repository
+                and '"operation_audit"' in sign_daily_reset_repository
+                and '"is_sign"' in sign_daily_reset_repository
+                and "CREATE TABLE" not in sign_daily_reset_repository
+            ),
+            "daily_reset_replay_rollback_and_missing_schema_covered": all(
+                marker in sign_daily_reset_tests
+                for marker in (
+                    "same_day_replay_preserves_new_signs",
+                    "daily_reset_conflict_and_missing_schema_fail_closed",
+                    "rolls_back_flag_and_ledger_when_audit_write_fails",
+                )
+            ),
+            "daily_reset_historical_date_ambiguity_documented": (
+                "迁移前的 `is_sign=1` 没有业务日期回执" in sign_in_docs
+                and "首次重置任务若延迟到用户已签到之后" in sign_in_docs
+                and "scheduler timezone 由部署配置决定" in sign_in_docs
+            ),
             "status": "cutover_with_compatibility_rollback_side_effects_retained",
         },
         "tasks": {

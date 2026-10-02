@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from dataclasses import replace
 from pathlib import Path
 from typing import Any
@@ -11,6 +11,7 @@ from ...infrastructure.database import DatabaseUnitOfWork, OperationLedger, Outb
 from ...infrastructure.observability import trace_context
 from ...infrastructure.clock import SystemClock
 from ...infrastructure.random_source import SystemRandom
+from .daily_reset_repository import SignInDailyResetSqlRepository
 from .domain import SignInRecord, validate_limits
 from .effects import NullSignInEffects, SignInEffects
 from .repository import SignInRepository
@@ -115,6 +116,16 @@ class SignInApplication:
     def lookup(self, operation_id: str) -> SignInRecord | None:
         with DatabaseUnitOfWork(self.database) as uow:
             return self.repository.operation(uow, str(operation_id).strip())
+
+    def reset_daily_flags(self, business_date: str | date):
+        try:
+            normalized_date = date.fromisoformat(str(business_date)).isoformat()
+        except (TypeError, ValueError) as exc:
+            raise ValidationError("invalid business_date") from exc
+        operation_id = f"sign-in.daily-reset:{normalized_date}"
+        return SignInDailyResetSqlRepository(
+            self.database, ledger=self.ledger
+        ).reset(operation_id, normalized_date)
 
     def claim(
         self,

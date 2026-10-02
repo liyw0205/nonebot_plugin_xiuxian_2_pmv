@@ -74,6 +74,13 @@ def _daily_beg_reset():
     return BegApplication(get_paths().game_db).reset_daily_claim_flag(_scheduler_business_date())
 
 
+def _daily_sign_reset():
+    from ...features.sign_in.application import SignInApplication
+    from ...paths import get_paths
+
+    return SignInApplication(get_paths().game_db).reset_daily_flags(_scheduler_business_date())
+
+
 @register_legacy_startup
 async def apply_scheduler_overrides_on_startup():
     job_manager.apply_persisted_overrides()
@@ -127,7 +134,7 @@ async def _run_job(job_name: str, func, *args, **kwargs):
 )
 async def daily_reset_sign():
     """每日签到重置"""
-    await _run_job("每日修仙签到重置", _sql_message().sign_remake)
+    await _run_job("每日修仙签到重置", _daily_sign_reset)
 
 
 @scheduler.scheduled_job(

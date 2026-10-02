@@ -4,8 +4,9 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from ....infrastructure.database import DatabaseUnitOfWork
+from ....infrastructure.database import DatabaseUnitOfWork, OperationLedger
 from ..application import SignInApplication
+from ..repository import SignInRepository
 
 
 class _Random:
@@ -22,6 +23,8 @@ class SignInApplicationTests(unittest.TestCase):
             uow.execute("CREATE TABLE user_xiuxian (user_id TEXT, is_sign INTEGER DEFAULT 0, stone INTEGER DEFAULT 0)")
             uow.execute("INSERT INTO user_xiuxian(user_id, is_sign, stone) VALUES (?, ?, ?)", ("u1", 0, 100))
             uow.execute("INSERT INTO user_xiuxian(user_id, is_sign, stone) VALUES (?, ?, ?)", ("u2", 1, 200))
+            OperationLedger().ensure_schema(uow)
+            SignInRepository().ensure_schema(uow)
         self.application = SignInApplication(self.database, random_source=_Random())
 
     def tearDown(self) -> None:
@@ -49,9 +52,6 @@ class SignInApplicationTests(unittest.TestCase):
 
     def test_operation_failure_rolls_back_asset_mutation(self) -> None:
         with DatabaseUnitOfWork(self.database) as uow:
-            uow.execute(
-                "CREATE TABLE sign_in_operations (operation_id TEXT PRIMARY KEY, user_id TEXT, stone INTEGER)"
-            )
             uow.execute(
                 "CREATE TRIGGER fail_sign_operation BEFORE INSERT ON sign_in_operations "
                 "BEGIN SELECT RAISE(ABORT, 'operation failed'); END"
