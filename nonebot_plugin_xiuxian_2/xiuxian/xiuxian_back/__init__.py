@@ -1,6 +1,5 @@
 import asyncio
 import random
-import time
 import re
 import os
 import json
@@ -42,6 +41,7 @@ from ..xiuxian_arena import use_arena_challenge_ticket
 
 from ..xiuxian_config import XiuConfig, convert_rank, added_ranks
 from ...features.back.application import BackApplication
+from ...features.back.skill_confirmation_cache import SkillConfirmationCache
 from ...compatibility.legacy_back_lottery_talisman import LotteryReward, LotteryTalismanService
 from ...paths import get_paths
 from ...infrastructure.ids import UUIDGenerator
@@ -242,7 +242,8 @@ def _backpack_repair_service():
 scheduler = require("nonebot_plugin_apscheduler").scheduler
 added_ranks = added_ranks()
 # 技能学习确认缓存
-confirm_use_cache = {}
+confirm_use_cache = SkillConfirmationCache(max_entries=2048, ttl_seconds=30)
+_confirm_use_cache_expiry_task: asyncio.Task | None = None
 
 
 
@@ -978,8 +979,7 @@ async def use_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: M
         await use.finish()
 
     # 清理待确认缓存
-    if str(user_id) in confirm_use_cache:
-        del confirm_use_cache[str(user_id)]
+    confirm_use_cache.discard(str(user_id))
 
     item_name = args[0]
     goods_id, goods_info = items.get_data_by_item_name(item_name)
@@ -1379,21 +1379,35 @@ async def use_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: M
 async def confirm_use_invite(bot, event, user_id, goods_id, item_name, skill_type):
     """发送确认使用"""
     invite_id = f"{user_id}_use_{runtime_ids.new_id()}"
-    confirm_use_cache[str(user_id)] = {
-        'goods_id': goods_id,
-        'item_name': item_name,
-        'skill_type': skill_type,
-        'invite_id': invite_id
-    }
-    asyncio.create_task(expire_confirm_use_invite(user_id, invite_id, bot, event))
+    confirm_use_cache.put(
+        str(user_id),
+        goods_id=goods_id,
+        item_name=item_name,
+        skill_type=skill_type,
+        invite_id=invite_id,
+    )
+    _ensure_confirm_use_cache_expiry_task()
     msg = f"道友确定要学习【{skill_type}：{item_name}】吗？\n此操作将消耗物品，请在30秒内发送【确认使用】！"
     await handle_send(bot, event, msg, md_type="背包", k1="确认", v1="确认使用", k2="背包", v2="我的背包")
 
-async def expire_confirm_use_invite(user_id, invite_id, bot, event):
-    """确认使用过期"""
-    await asyncio.sleep(30)
-    if str(user_id) in confirm_use_cache and confirm_use_cache[str(user_id)]['invite_id'] == invite_id:
-        del confirm_use_cache[str(user_id)]
+def _ensure_confirm_use_cache_expiry_task() -> None:
+    global _confirm_use_cache_expiry_task
+    if _confirm_use_cache_expiry_task is None or _confirm_use_cache_expiry_task.done():
+        _confirm_use_cache_expiry_task = asyncio.create_task(_expire_confirm_use_cache())
+
+
+async def _expire_confirm_use_cache() -> None:
+    global _confirm_use_cache_expiry_task
+    try:
+        while True:
+            delay = confirm_use_cache.seconds_until_next_expiry()
+            if delay is None:
+                return
+            if delay > 0:
+                await asyncio.sleep(delay)
+            confirm_use_cache.purge_expired()
+    finally:
+        _confirm_use_cache_expiry_task = None
 
 @confirm_use.handle(parameterless=[Cooldown(cd_time=0)])
 async def confirm_use_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
@@ -1404,14 +1418,14 @@ async def confirm_use_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
         await handle_send(bot, event, msg, md_type="我要修仙")
         await confirm_use.finish()
     user_id = user_info['user_id']
-    if str(user_id) not in confirm_use_cache:
+    data = confirm_use_cache.get(str(user_id))
+    if data is None:
         msg = "没有待处理的请求！"
         await handle_send(bot, event, msg)
         await confirm_use.finish()
-    data = confirm_use_cache[str(user_id)]
-    gid, name, s_type = data['goods_id'], data['item_name'], data['skill_type']
+    gid, name, s_type = data.goods_id, data.item_name, data.skill_type
     result = back_application.learn_skill(
-        operation_id=_skill_learning_operation_id(event, data['invite_id'], user_id, gid),
+        operation_id=_skill_learning_operation_id(event, data.invite_id, user_id, gid),
         user_id=user_id,
         skill_item_id=gid,
         skill_type=s_type,
@@ -1425,7 +1439,7 @@ async def confirm_use_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
     else:
         msg = _back_op_fail_msg(result, action="学习技能")
     await handle_send(bot, event, msg, md_type="背包", k1="背包", v1="我的背包")
-    del confirm_use_cache[str(user_id)]
+    confirm_use_cache.discard(str(user_id), expected_invite_id=data.invite_id)
     await confirm_use.finish()
 
 @use_item.handle(parameterless=[Cooldown(cd_time=0)])

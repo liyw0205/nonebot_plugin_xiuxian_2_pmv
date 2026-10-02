@@ -237,6 +237,8 @@ compileall、architecture、inventory、diff check 与五库 recovery 通过；�
 
 ## 当前切片与下一切片选择
 
+本轮完成 `back skill-confirmation cache bound`：技能确认缓存设为 30 秒 monotonic TTL、最多 2048 条，只保存标量 DTO；读写会清除过期前缀，并由单个共享 expirer task 主动清理，不再为每张邀请创建持有 `bot/event` 的 sleeper task。确认入口检查过期状态；消费按 invite ID 条件删除，保留 operation ID 和新旧票据隔离语义。cache/skill-learning/source 回归 `16 passed`，目标源码内存编译、inventory freshness 与 diff check 通过，无 migration/运行数据库访问。1 名子代理只读审计调用点和风险，未改代码、跑测试或访问数据；修改与测试由主线程串行完成。pytest cacheprovider/pyc 禁用，专用 basetemp 清理；收尾磁盘约 `19G`、RAM available `1.3GiB`。保留用户 `boss_info.json`；下一片继续审计 player/economy 真实默认旧写入口，整体 `exit_ready=false`。
+
 本轮完成 `player combat vital write boundary`：战斗结束后的 HP/MP 写回统一使用既有
 `PlayerStateApplication -> PlayerStateRepository.update_vitals`，不再从 `schema_missing` 回退
 到 `XiuxianDateManage.update_user_hp_mp`，同时移除战斗辅助模块内的旧 SQL manager 缓存。

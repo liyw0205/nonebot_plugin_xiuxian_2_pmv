@@ -1359,6 +1359,35 @@ class SourceQualityTests(unittest.TestCase):
         self.assertIn("immediate=True", repository_source)
         self.assertIn("skill_learning_operations", repository_source)
 
+    def test_skill_confirmation_cache_is_bounded_without_per_invite_tasks(self) -> None:
+        command_source = (
+            SOURCE_ROOT / "xiuxian" / "xiuxian_back" / "__init__.py"
+        ).read_text(encoding="utf-8")
+        cache_source = (
+            SOURCE_ROOT / "features" / "back" / "skill_confirmation_cache.py"
+        ).read_text(encoding="utf-8")
+        start = command_source.index("async def confirm_use_(")
+        end = command_source.index("@use_item.handle", start)
+        confirmation_handler = command_source[start:end]
+        expiry_start = command_source.index("async def _expire_confirm_use_cache()")
+        expiry_end = command_source.index("@confirm_use.handle", expiry_start)
+        expiry_task = command_source[expiry_start:expiry_end]
+
+        self.assertIn(
+            "SkillConfirmationCache(max_entries=2048, ttl_seconds=30)",
+            command_source,
+        )
+        self.assertIn("OrderedDict", cache_source)
+        self.assertIn("expires_at=now + self._ttl_seconds", cache_source)
+        self.assertIn("asyncio.create_task(_expire_confirm_use_cache())", command_source)
+        self.assertNotIn("expire_confirm_use_invite", command_source)
+        self.assertNotIn("bot", expiry_task)
+        self.assertNotIn("event", expiry_task)
+        self.assertIn("confirm_use_cache.get(str(user_id))", confirmation_handler)
+        self.assertIn(
+            "expected_invite_id=data.invite_id", confirmation_handler
+        )
+
     def test_skill_learning_compatibility_wrapper_is_isolated(self) -> None:
         back_root = SOURCE_ROOT / "xiuxian" / "xiuxian_back"
         legacy_source = (back_root / "transaction_service.py").read_text(encoding="utf-8")
