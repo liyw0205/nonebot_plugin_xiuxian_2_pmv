@@ -1167,6 +1167,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         base_plot_count=DONGFU_PLOT_COUNT,
         max_plot_count=DONGFU_PLOT_MAX,
         stone_cost_per_level=20000000,
+        seed_names={seed_id: conf["name"] for seed_id, conf in SEED_CONFIG.items()},
     )
     if result.status == "deed_insufficient":
         await handle_send(bot, event, f"扩建至{result.previous_count + 1}块灵田需要【洞府地契】x{result.deed_cost}。可通过地图探索获得。")
@@ -1181,8 +1182,6 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await handle_send(bot, event, "洞府状态或资产已发生变化，请稍后重试。")
         return
     d = _get_dongfu(uid)
-    _normalize_plant_slots(d)
-    _save_dongfu(uid, d)
     await handle_send(bot, event, f"洞府扩建成功，灵田数量提升至{result.current_count}块。\n{_format_plant_slots(d)}")
 
 

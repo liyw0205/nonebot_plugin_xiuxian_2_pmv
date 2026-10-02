@@ -627,6 +627,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
     dongfu_compatibility = (PACKAGE / "compatibility" / "legacy_dongfu_transactions.py").read_text(encoding="utf-8")
     dongfu_migrations = (PACKAGE / "features" / "dongfu" / "migrations.py").read_text(encoding="utf-8")
     dongfu_status_repository = (PACKAGE / "features" / "dongfu" / "status_repository.py").read_text(encoding="utf-8")
+    dongfu_expansion_repository = (PACKAGE / "features" / "dongfu" / "expansion_repository.py").read_text(encoding="utf-8")
     map_migrations = (PACKAGE / "features" / "map" / "migrations.py").read_text(encoding="utf-8")
     dongfu_operation_schema = (PACKAGE / "features" / "dongfu" / "operation_schema.py").read_text(encoding="utf-8")
     dongfu_operation_repositories = tuple(
@@ -2755,6 +2756,21 @@ def _slice_status() -> dict[str, dict[str, object]]:
         },
         "dongfu": {
             "expansion_application_owned": "dongfu_application.expand(" in dongfu_facade,
+            "expansion_slots_persisted_with_assets": (
+                "SET plot_count=?,plant_slots=?,planting=?,plant_seed_id=?,plant_start=?,plant_finish=?" in dongfu_expansion_repository
+                and "dongfu_expansion_operations" in dongfu_expansion_repository
+                and "uow.savepoint(\"dongfu_expansion\")" in dongfu_expansion_repository
+                and "seed_names.get(seed_id" in dongfu_expansion_repository
+                and "seed_names={seed_id: conf[\"name\"] for seed_id, conf in SEED_CONFIG.items()}" in dongfu_facade
+            ),
+            "expansion_handler_has_no_legacy_writeback": (
+                "@dongfu_expand.handle" in dongfu_facade
+                and "_save_dongfu" not in dongfu_facade[
+                    dongfu_facade.index("@dongfu_expand.handle") : dongfu_facade.index(
+                        "@visit_friend.handle", dongfu_facade.index("@dongfu_expand.handle")
+                    )
+                ]
+            ),
             "plant_application_owned": "dongfu_application.plant(" in dongfu_facade,
             "harvest_application_owned": "dongfu_application.harvest(" in dongfu_facade,
             "fertilize_application_owned": "dongfu_application.fertilize(" in dongfu_facade,

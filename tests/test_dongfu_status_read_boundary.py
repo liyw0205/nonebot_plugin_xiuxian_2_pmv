@@ -40,3 +40,11 @@ def test_my_dongfu_display_does_not_persist_derived_daily_counters():
     assert "_reset_infiltrate_count_if_needed(d)" in handler
     assert "_reset_patrol_count_if_needed(d)" in handler
     assert "_save_dongfu" not in handler
+
+
+def test_expansion_handler_does_not_write_legacy_projection_after_repository_commit():
+    source = SOURCE.read_text(encoding="utf-8")
+    start = source.index("@dongfu_expand.handle")
+    end = source.index("@visit_friend.handle", start)
+    assert "dongfu_application.expand(" in source[start:end]
+    assert "_save_dongfu" not in source[start:end]

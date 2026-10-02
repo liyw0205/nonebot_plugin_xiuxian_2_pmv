@@ -743,6 +743,8 @@ class RefactorProgressTests(unittest.TestCase):
         self.assertTrue(slices["sect"]["daily_maintenance_application_owned"])
         self.assertTrue(slices["rift"]["key_event_application_owned"])
         self.assertTrue(slices["dongfu"]["array_upgrade_application_owned"])
+        self.assertTrue(slices["dongfu"]["expansion_slots_persisted_with_assets"])
+        self.assertTrue(slices["dongfu"]["expansion_handler_has_no_legacy_writeback"])
         self.assertTrue(slices["dongfu"]["status_read_application_owned"])
         self.assertTrue(slices["dongfu"]["status_read_has_no_legacy_writeback"])
         self.assertTrue(slices["dongfu"]["infiltration_eligibility_has_no_legacy_writeback"])
