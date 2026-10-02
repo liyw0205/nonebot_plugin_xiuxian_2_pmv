@@ -1139,13 +1139,15 @@ async def level_up_zj_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
     main_exp_buff = UserBuffDate(user_id).get_user_main_buff_data()#功法突破扣修为减少
     exp_buff = main_exp_buff['exp_buff'] if main_exp_buff is not None else 0
     number = main_rate_buff['number'] if main_rate_buff is not None else 0
+    level_data_snapshot = jsondata.level_data()
+    root_data_snapshot = jsondata.root_data() if hasattr(jsondata, "root_data") else None
     def plan_breakthrough(game, snapshot, occurred_at):
         config = XiuConfig()
         level_index = config.level.index(level_name)
         if level_index == len(config.level) - 1:
             return {"message": "道友已是最高境界，无法突破！"}
         target = config.level[level_index + 1]
-        need_exp = jsondata.level_data()[target]["power"]
+        need_exp = level_data_snapshot[target]["power"]
         if exp < need_exp:
             return {"message": f"道友的修为不足以突破！距离下次突破需要{number_to(need_exp - exp)}修为！突破境界为：{target}"}
         core = dict(
@@ -1170,10 +1172,13 @@ async def level_up_zj_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
                     "relations": [],
                 },
             }
+        root_snapshot = {**user_msg, **snapshot}
+        if root_data_snapshot is not None:
+            root_snapshot["_direct_breakthrough_roots"] = root_data_snapshot
         core.update(
             outcome="success", target_level=target,
-            root_rate=direct_breakthrough_root_rate({**user_msg, **snapshot}),
-            level_spend=jsondata.level_data()[target]["spend"],
+            root_rate=direct_breakthrough_root_rate(root_snapshot),
+            level_spend=level_data_snapshot[target]["spend"],
         )
         relations = application.plan_direct_breakthrough_relations(game, {**user_msg, **snapshot}, target, occurred_at)
         return {

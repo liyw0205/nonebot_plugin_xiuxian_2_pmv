@@ -34,6 +34,8 @@
 
 关闭开关后保留旧命令和数据格式。探索的战斗规则、队伍管理和奖励计算尚未移入新 domain，待后续发布周期完成迁移。
 
+当前仍是未完成边界：副本 global/status/reset/team 主表与兼容列尚未全部纳入启动 migration，相关旧仓储仍可能在请求期执行 DDL；探索 handler 在 `prepare` 前生成事件、怪物、战斗随机值，进程中断可能重抽；队伍查询仍需改为成员索引和有界分页。现有 progress gate 不能替代上述真实调用图、缺 schema fail-closed 和恢复回归。
+
 ## 适配器差异
 
 命令适配器只组装探索快照，Web 适配器只解析 DTO；领域 application 不依赖 NoneBot、Flask 或 SQLite。

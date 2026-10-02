@@ -289,6 +289,19 @@ class DirectBreakthroughRecoveryTests(unittest.TestCase):
             self.assertEqual([plan["kind"] for plan in plans], ["mentor"])
             self.assertEqual(plans[0]["reward_exp"], 100)
 
+    def test_relation_planner_does_not_import_legacy_partner_manager(self):
+        partner_module = "nonebot_plugin_xiuxian_2.xiuxian.xiuxian_buff.partner"
+        defaults = self.effects._relation_defaults
+        defaults.update(
+            runtime_random=SimpleNamespace(randint=lambda *_: 1),
+            reward_rate=lambda _: 0.01,
+        )
+        self.effects._percent_exp_reward = lambda *args, **kwargs: 100
+        self.effects._number_to = str
+        with patch.dict(sys.modules, {partner_module: None}), DatabaseUnitOfWork(self.game, immediate=True) as uow:
+            plans = self.effects.plan_relations(uow, self.expected, "after", "2026-10-02 12:00:00")
+        self.assertEqual([plan["kind"] for plan in plans], ["partner", "mentor"])
+
     def test_default_power_and_cap_read_only_configuration_not_database_managers(self):
         prefix = "nonebot_plugin_xiuxian_2.xiuxian."
         fate = Mock(return_value=3)

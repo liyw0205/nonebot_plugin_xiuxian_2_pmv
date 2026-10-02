@@ -2,6 +2,8 @@
 
 状态：进行中。`v1.1.0` 的 P0-P7 发布证据继续保留，但不作为底层全面重构完成证明。
 
+2026-10-02 recovery/resource target consolidation：直接突破 effects 恢复补齐有界指数退避与到期扫描，失败记录不再被前 5 条坏事件永久阻塞；功率、上限和关系规则在 game 写锁外冻结配置快照，避免恢复时初始化旧数据库管理器。聚焦 recovery/repository/handler `43 passed`，测试禁用 pytest cache/字节码并清理专用临时目录。方案新增当前剩余目标：继续清零默认 `transaction_service`/`xiuxian2_handle` 写路径，补齐 dungeon/training 的启动 schema、随机计划和有界查询，完成持久回执保留/归档决策与正式 backup/restore/reconcile/P7 证据；明确只读子代理范围、最多 3 个并发、RAM/磁盘阈值和缓存清理边界。整体 `exit_ready=false` 仍保持诚实，用户 `boss_info.json` 修改保留。
+
 2026-10-02 buff closing default contract repair：补齐 `BuffApplication` 默认 repository 使用的 `game_database/player_database` 路径；修正 `out_closing` 的 `create_time`/`expected_create_time` 参数名，并按 `OperationOutcome.ok` 检查结果，避免把 repository DTO 的 `.succeeded` 契约误用于 application outcome。新增隔离 SQLite 应用成功/replay 回归和 handler source guard，闭关相关选择集最终 `7 passed`。本修复不涵盖结算后进程中断的统计/日志/任务/活动副作用补偿，也未移除旧 replay 预查的请求期 DDL；下一片仍须单独设计可恢复、按 event ID 幂等的投影。测试使用专用 `/tmp` 与禁用 pytest/字节码缓存，验收后清理；未访问运行数据库或用户 `boss_info.json`。
 
 2026-10-01 player combat vital write boundary：战斗结束后的 `update_all_user_status` 继续经

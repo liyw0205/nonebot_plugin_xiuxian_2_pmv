@@ -19,6 +19,26 @@
 
 将重构拆成边界清晰的单功能切片。一个切片完成并通过验收后，先清理本轮产生的测试缓存和临时输出，再开始下一个切片，避免多个功能和多轮测试的产物同时占用磁盘。
 
+## 当前剩余目标
+
+截至 2026-10-02，切片级进度门禁已覆盖主要 feature，但整体 `exit_ready=false`。剩余目标按以下顺序关闭，不能用局部测试通过替代：
+
+1. **恢复正确性收口**：直接突破 effects 恢复计算不得在 game 写锁内初始化旧数据库管理器；pending outbox 失败必须按到期时间退避，不能被最早 5 条坏记录永久阻塞。
+2. **player/economy 旧写路径清零**：继续按真实调用图迁移 `xiuxian2_handle`、剩余 `transaction_service` 的默认 handler、scheduler 和 Web 写入；旧实现只能作为显式 compatibility/rollback，不得由默认入口构造或调用。
+3. **其余领域边界**：按 cultivation/training、combat/dungeon/boss、sect/trade/scheduler/Web 的顺序完成真实入口、随机/时间注入、operation receipt、启动 migration、跨库恢复和缺 schema fail-closed。
+   - 当前副本未完成项：`dungeon_manager.py` 与 `features/dungeon/{reset,team}_repository.py` 仍有请求期建表/补列；探索在 `prepare` 前抽事件、怪物和战斗，需先冻结 resolved plan；队伍读取需从全表 JSON 改为成员索引/有界分页；progress gate 还要验证默认 repository 自身方法归属，而不是只看 facade 字符串。
+   - 当前历练未完成项：事件/奖励仍可能在 application settle 前重抽，`training_events.py` 仍有模块级 `random` 与旧 manager 读取；排行榜全表复制需分页，状态 projection 与 `training_limit.py` 的兼容读写需继续收口。
+4. **持久状态与恢复证据**：盘点 operation ledger、outbox、projection receipt、失败/死信和 bet/payout 等历史回执的保留窗口；在有备份、checksum、dry-run、restore、reconcile 和人工决策记录前，不删除或压缩任何持久状态。
+5. **发布退出条件**：完成正式数据备份/迁移/恢复演练、P7 发布证据、全局 legacy 门禁和真实运行 readiness；只有脚本输出 `exit_ready=true` 且证据归档后，才可声明全面重构完成。
+
+### 子代理与资源约束
+
+- 允许合理使用子代理，但默认只分派只读调用图审计、静态门禁、单切片聚焦测试和文档证据整理；不得扫描无关用户目录、读取运行数据库/凭据或执行正式 migration。
+- 代码修改型子代理必须限定在一个小边界，先给出文件/行号和回滚点；主线程负责整合、复核 diff、运行验收并决定是否提交。最多同时运行 3 个子代理，测试任务不得并行争抢同一批 SQLite 文件。
+- RAM 可用量低于 512 MiB、磁盘可用量低于 10 GiB 或 inode 可用量异常时，停止新测试/恢复任务，只保留必要的收尾和清理；测试默认串行、禁用 pytest cacheprovider 和字节码写入，批处理/查询必须有界。
+- 每个切片使用独立 `/tmp/<slice>-*` basetemp、recovery 和 compile cache，验收后立即删除并复核 `df -hT`、`df -ih`、`free -h`。不清理 `.venv`、`.git`、仓库 `data/`、运行数据库/WAL/SHM、备份、配置或用户 `boss_info.json`。
+- 进程缓存只允许 TTL/容量有界和按需加载；`ITEMS_CACHE` 等共享缓存不复制、不主动清空。operation ledger、outbox、projection receipt、失败/死信、批次目标和审计日志是持久事实，不属于可清理缓存。
+
 ## 单切片闭环
 
 1. 读取进度、架构约束、当前工作树和磁盘使用情况。

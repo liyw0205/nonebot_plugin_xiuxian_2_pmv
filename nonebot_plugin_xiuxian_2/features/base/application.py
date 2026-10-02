@@ -112,7 +112,11 @@ class BaseApplication(LegacyApplication):
         if not repo.database.is_file():
             return
         with DatabaseUnitOfWork(repo.database, read_only=True) as uow:
-            if not repo._columns(uow, "domain_outbox"):
+            outbox_columns = repo._columns(uow, "domain_outbox")
+            if not {
+                "event_id", "event_type", "payload_json", "status", "attempts",
+                "next_attempt_at", "created_at",
+            }.issubset(outbox_columns):
                 return
             now = repo.clock.now().isoformat()
             pending = uow.query_all(

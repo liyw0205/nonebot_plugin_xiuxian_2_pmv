@@ -30,6 +30,8 @@ Run the feature application, event, purchase and reset repository tests plus the
 ## 灰度开关、回滚和已知限制
 Legacy event settlement, shop exchange and administrator reset remain available only as explicit repository fallbacks when no player database is supplied. The normal composition root uses the feature repositories; the compatibility hit counter determines when the fallback can be removed.
 
+The event path is not yet a complete recovery boundary: the historical command may draw the event and reward before the application settlement intent is committed, so an interruption can redraw on retry. `training_events.py` still has module-level random/legacy-manager reads, and ranking queries need bounded pagination instead of copying the full user roster. These remain open until the resolved plan is persisted before effects and the default repository/no-DDL/source gates verify the real call graph.
+
 ## Manifest 清单
 - `command: 历练兑换`
 - `command: 历练商店`
