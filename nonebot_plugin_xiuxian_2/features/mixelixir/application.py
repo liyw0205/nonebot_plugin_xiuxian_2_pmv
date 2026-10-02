@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict, is_dataclass
+from datetime import date
 from pathlib import Path
 from typing import Any, Mapping
 
@@ -16,6 +17,7 @@ from .harvest_level_upgrade_repository import MixelixirHarvestLevelUpgradeSqlRep
 from .fire_control_upgrade_repository import MixelixirFireControlUpgradeSqlRepository
 from .refine_cost_repository import MixelixirRefineCostSqlRepository
 from .refine_reward_repository import MixelixirRefineRewardSqlRepository
+from .daily_reset_repository import MixelixirDailyCountResetSqlRepository
 
 
 def _data(raw: Any) -> dict[str, Any]:
@@ -180,6 +182,16 @@ class MixelixirApplication:
         return MixelixirRefineRewardSqlRepository(
             self.game_database, self.player_database
         ).latest_ready_task(user_id, recipe_key)
+
+    def reset_daily_count(self, business_date: str | date):
+        try:
+            normalized_date = date.fromisoformat(str(business_date)).isoformat()
+        except (TypeError, ValueError) as exc:
+            raise ValidationError("invalid business_date") from exc
+        operation_id = f"mixelixir.daily-count-reset:{normalized_date}"
+        return MixelixirDailyCountResetSqlRepository(
+            self.game_database, ledger=self.ledger
+        ).reset(operation_id, normalized_date)
 
     def reply(self, **kwargs: Any):
         action = str(kwargs.pop("action", "harvest"))

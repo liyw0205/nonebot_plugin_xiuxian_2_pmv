@@ -26,7 +26,11 @@
 
 ## 定时任务
 
-无新增任务。
+既有 `daily_reset_mixelixir_num` 仍在 scheduler 时区的每日零点执行，但重置写入改由
+`MixelixirApplication -> MixelixirDailyCountResetSqlRepository` 承担。业务日作为稳定操作号，
+同一日期的重放只返回首次数量，不会再次清除当天新产生的次数；清零、共享操作回执和审计在同一
+immediate UoW 提交。缺少既有 platform ledger/audit 或 `user_xiuxian.mixelixir_num` 时 fail closed，
+不执行请求期 DDL，也不增加业务迁移。
 
 ## 配置项
 
@@ -39,6 +43,7 @@ NoneBot 适配器继续负责随机奖励、配方文本和消息文案；Web �
 ## 测试与手工验收
 
 - `python -m unittest nonebot_plugin_xiuxian_2.features.mixelixir.tests.test_mixelixir_application -q`
+- `python -m pytest -p no:cacheprovider nonebot_plugin_xiuxian_2/features/mixelixir/tests/test_daily_reset_repository.py -q`
 - `python -m unittest nonebot_plugin_xiuxian_2.features.mixelixir.tests.test_refine_cost_repository nonebot_plugin_xiuxian_2.features.mixelixir.tests.test_refine_reward_repository -q`
 - `python -m unittest tests.test_mixelixir_refine_claim_boundary -q`
 - `python -m unittest tests.test_mixelixir_harvest_service tests.test_mixelixir_settlement_service tests.test_source_quality -q`

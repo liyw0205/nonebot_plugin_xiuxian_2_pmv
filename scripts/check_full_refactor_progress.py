@@ -622,6 +622,9 @@ def _slice_status() -> dict[str, dict[str, object]]:
         )
     ]
     mixelixir_facade = (PACKAGE / "xiuxian" / "xiuxian_mixelixir" / "__init__.py").read_text(encoding="utf-8")
+    mixelixir_application = (PACKAGE / "features" / "mixelixir" / "application.py").read_text(encoding="utf-8")
+    mixelixir_daily_reset = (PACKAGE / "features" / "mixelixir" / "daily_reset_repository.py").read_text(encoding="utf-8")
+    mixelixir_scheduler = (PACKAGE / "xiuxian" / "xiuxian_scheduler" / "__init__.py").read_text(encoding="utf-8")
     dongfu_facade = (PACKAGE / "xiuxian" / "xiuxian_dongfu" / "__init__.py").read_text(encoding="utf-8")
     dongfu_legacy_shim = (PACKAGE / "xiuxian" / "xiuxian_dongfu" / "transaction_service.py").read_text(encoding="utf-8")
     dongfu_compatibility = (PACKAGE / "compatibility" / "legacy_dongfu_transactions.py").read_text(encoding="utf-8")
@@ -2754,8 +2757,18 @@ def _slice_status() -> dict[str, dict[str, object]]:
         "mixelixir": {
             "harvest_level_application_owned": "mixelixir_application.harvest_level_upgrade(" in mixelixir_facade,
             "legacy_harvest_level_disabled": "_mixelixir_harvest_level_upgrade_service().upgrade(" not in mixelixir_facade,
+            "daily_reset_application_owned": (
+                "def reset_daily_count(" in mixelixir_application
+                and '_run_job("每日炼丹次数重置", _mixelixir_daily_count_reset)' in mixelixir_scheduler
+                and "_sql_message().mixelixir_num_reset" not in mixelixir_scheduler
+            ),
+            "daily_reset_atomic_and_no_request_ddl": (
+                "DatabaseUnitOfWork(self.database, immediate=True)" in mixelixir_daily_reset
+                and "self.ledger.finish(uow, outcome)" in mixelixir_daily_reset
+                and "CREATE TABLE" not in mixelixir_daily_reset
+            ),
             "runtime_default_has_no_legacy_repository": "LegacyMixelixirRepository" not in plugin_source,
-            "status": "harvest_level_upgrade_and_runtime_default_feature_owned_with_explicit_compatibility",
+            "status": "harvest_level_upgrade_and_daily_reset_feature_owned_with_explicit_compatibility",
         },
         "dongfu": {
             "expansion_application_owned": "dongfu_application.expand(" in dongfu_facade,

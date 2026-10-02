@@ -647,6 +647,8 @@ class RefactorProgressTests(unittest.TestCase):
         mixelixir = slices["mixelixir"]
         self.assertTrue(mixelixir["harvest_level_application_owned"])
         self.assertTrue(mixelixir["legacy_harvest_level_disabled"])
+        self.assertTrue(mixelixir["daily_reset_application_owned"])
+        self.assertTrue(mixelixir["daily_reset_atomic_and_no_request_ddl"])
         self.assertTrue(mixelixir["runtime_default_has_no_legacy_repository"])
         self.assertTrue(slices["dongfu"]["plant_application_owned"])
         self.assertTrue(slices["dongfu"]["harvest_application_owned"])

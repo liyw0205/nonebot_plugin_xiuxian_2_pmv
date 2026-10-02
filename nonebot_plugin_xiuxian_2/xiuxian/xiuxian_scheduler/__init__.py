@@ -44,6 +44,17 @@ def _sql_message():
     return _sql_message_instance
 
 
+def _mixelixir_daily_count_reset():
+    from datetime import datetime
+
+    from ...features.mixelixir.application import MixelixirApplication
+    from ...paths import get_paths
+
+    paths = get_paths()
+    business_date = datetime.now(getattr(scheduler, "timezone", None)).date().isoformat()
+    return MixelixirApplication(paths.game_db, paths.player_db).reset_daily_count(business_date)
+
+
 @register_legacy_startup
 async def apply_scheduler_overrides_on_startup():
     job_manager.apply_persisted_overrides()
@@ -142,7 +153,7 @@ async def daily_reset_day_num():
 )
 async def daily_reset_mixelixir_num():
     """每日炼丹次数重置"""
-    await _run_job("每日炼丹次数重置", _sql_message().mixelixir_num_reset)
+    await _run_job("每日炼丹次数重置", _mixelixir_daily_count_reset)
 
 
 @scheduler.scheduled_job(
