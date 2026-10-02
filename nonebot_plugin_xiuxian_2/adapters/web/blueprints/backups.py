@@ -21,23 +21,29 @@ def create_blueprint(*, context=None, permission=None) -> Blueprint:
     @guard("admin", resolver, write=True)
     def create_backup():
         from ....infrastructure.database import BackupService
+        from ....infrastructure.database.backup_capacity import BackupCapacityError
 
         paths = getattr(context, "paths", None)
         catalog = getattr(context, "database", None)
         if paths is None or catalog is None:
             from ..api import api_error
             return api_error("unavailable", "备份服务不可用", status=503)
-        directory = BackupService(
-            catalog,
-            extra_files={"config": paths.config_file},
-            clock=getattr(context, "clock", None),
-        ).create(paths.backups)
+        try:
+            directory = BackupService(
+                catalog,
+                extra_files={"config": paths.config_file},
+                clock=getattr(context, "clock", None),
+            ).create(paths.backups)
+        except BackupCapacityError as exc:
+            from ..api import api_error
+            return api_error(exc.code, str(exc), details=exc.details, status=exc.status)
         return api_success({"name": directory.name})
 
     @blueprint.post("/api/v1/backups/restore")
     @guard("admin", resolver, write=True)
     def restore_backup():
         from ....infrastructure.database import BackupService
+        from ....infrastructure.database.backup_capacity import BackupCapacityError
 
         paths = getattr(context, "paths", None)
         catalog = getattr(context, "database", None)
@@ -51,11 +57,15 @@ def create_blueprint(*, context=None, permission=None) -> Blueprint:
         if source.parent != backup_root.resolve() or not name or not source.is_dir():
             from ..api import api_error
             return api_error("validation_error", "备份名称无效", status=400)
-        result = BackupService(
-            catalog,
-            extra_files={"config": paths.config_file},
-            clock=getattr(context, "clock", None),
-        ).restore(source, dry_run=bool(payload.get("dry_run", False)))
+        try:
+            result = BackupService(
+                catalog,
+                extra_files={"config": paths.config_file},
+                clock=getattr(context, "clock", None),
+            ).restore(source, dry_run=bool(payload.get("dry_run", False)))
+        except BackupCapacityError as exc:
+            from ..api import api_error
+            return api_error(exc.code, str(exc), details=exc.details, status=exc.status)
         return api_success(result)
 
     return blueprint

@@ -456,6 +456,10 @@ def _slice_status() -> dict[str, dict[str, object]]:
     dufang_player_stats_repository = (PACKAGE / "features" / "dufang" / "player_stats_repository.py").read_text(encoding="utf-8")
     dufang_share_repository = (PACKAGE / "features" / "dufang" / "share_repository.py").read_text(encoding="utf-8")
     dufang_migrations = (PACKAGE / "features" / "dufang" / "migrations.py").read_text(encoding="utf-8")
+    dufang_storage_audit = (ROOT / "scripts" / "audit_dufang_storage.py").read_text(encoding="utf-8")
+    backup_capacity_source = (PACKAGE / "infrastructure" / "database" / "backup_capacity.py").read_text(encoding="utf-8")
+    backup_service_source = (PACKAGE / "infrastructure" / "database" / "backup.py").read_text(encoding="utf-8")
+    backup_web_source = (PACKAGE / "adapters" / "web" / "blueprints" / "backups.py").read_text(encoding="utf-8")
     legacy_migrated_source = (PACKAGE / "features" / "_legacy_migrated.py").read_text(encoding="utf-8")
     fusion_facade = (PACKAGE / "xiuxian" / "xiuxian_fusion" / "__init__.py").read_text(encoding="utf-8")
     fusion_repository = (PACKAGE / "features" / "fusion" / "repository.py").read_text(encoding="utf-8")
@@ -1944,8 +1948,31 @@ def _slice_status() -> dict[str, dict[str, object]]:
                 and "LIMIT ?" in dufang_bet_repository
                 and "dufang_application.reconcile_pending(" in dufang_unseal_handler
             ),
+            "storage_audit_is_read_only_and_bounded": (
+                "mode=ro" in dufang_storage_audit
+                and "PRAGMA query_only=ON" in dufang_storage_audit
+                and "PRAGMA page_count" in dufang_storage_audit
+                and "PRAGMA freelist_count" in dufang_storage_audit
+                and "minimum_sqlite_backup_estimate_bytes" in dufang_storage_audit
+                and "MAX_BACKUP_SCAN_ENTRIES" in dufang_storage_audit
+                and "existing_backup_inventory" in dufang_storage_audit
+                and "dufang_player_operation_receipts" in dufang_storage_audit
+                and "dufang_bet_resolutions" in dufang_storage_audit
+                and "archive_ready\": False" in dufang_storage_audit
+                and "VACUUM" not in dufang_storage_audit
+                and "wal_checkpoint" not in dufang_storage_audit
+            ),
+            "backup_capacity_preflight_is_shared_and_fail_closed": (
+                "preflight_capacity(" in backup_service_source
+                and "MINIMUM_BACKUP_RESERVE_BYTES = 64 * 1024 * 1024" in backup_capacity_source
+                and "BACKUP_RESERVE_PERCENT = 10" in backup_capacity_source
+                and "backup_reserve_bytes" in dufang_storage_audit
+                and "restore_plan" in backup_service_source
+                and "except BackupCapacityError as exc" in backup_web_source
+                and '"insufficient_storage"' in backup_capacity_source
+            ),
             "payout_result_is_read_only": "DatabaseUnitOfWork(self.game_database, read_only=True)" in dufang_payout_repository,
-            "status": "share_and_bet_payout_schema_owned_with_frozen_resolution_and_outbox_recovery",
+            "status": "share_and_bet_payout_schema_owned_with_frozen_resolution_outbox_recovery_and_storage_capacity_gate",
         },
         "fusion": {
             "single_application_owned": "fusion_application.apply(" in fusion_facade,

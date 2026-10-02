@@ -3228,9 +3228,9 @@ focused tests、根目录 `tests/` 隔离回归、compileall、architecture/prog
    player 库唯一 `(operation_id,event_type)` receipt 分步投影，覆盖 WAL 下跨文件崩溃；started ledger 可重试底层幂等操作。
    每次有效鉴石命令开头最多恢复 5 笔已有 pending bet，让无消息重投的崩溃记录也能被后续流量续跑。
    已有 pending bet 若没有冻结计划必须 fail closed，不得补抽。隔离回归不代表正式迁移、备份恢复或 P7 演练完成。
-4. **持久回执保留与存储预算**：bet/payout/resolution、操作 ledger、已发送 outbox 和 player receipt 都是幂等/审计状态，不能
-   当缓存随手清理；后续需按业务重放窗口定义归档/压缩与磁盘预检，并证明归档后旧 operation 不会被重复执行。pending 状态不得清理。
-   临时 pytest/pyc 只在确认由本轮生成且进程退出后清理，共享缓存、运行数据库/WAL/SHM 和备份不碰。
+4. **持久回执保留与存储预算（只读基线已完成，归档策略仍未定）**：bet/payout/resolution、操作 ledger、已发送 outbox 和 player receipt 都是幂等、恢复或审计状态，不能
+   当缓存随手清理。`scripts/audit_dufang_storage.py --data-dir <existing-data-dir>` 提供只读盘点：统计数据库和 WAL/SHM/journal 物理占用、SQLite 页数/空闲页、指定持久表行数及文本 payload 估算、pending/nonterminal 数量、当前备份目录总量，并估算 game/player 等 SQLite 文件的最低备份空间；SQL 仅聚合，备份目录最多扫描 50,000 个条目且不跟随符号链接，不将整表/目录树载入 RAM，不创建目录或数据库。此工具不执行归档、删除、`VACUUM`、checkpoint 或 restore。待确定旧消息 replay 窗口、审计期限及可恢复归档格式后，才另行评估终态 receipt 压缩。
+   **当前不定义 TTL，也不启用自动归档/删除**：ADR-0007 要求至少覆盖对应备份保留期、reconcile clean 后由运维归档；还需先确定旧消息 replay 窗口和可恢复的归档格式。pending、started、failed、needs_reconcile、dead outbox、未完成 share progress，以及仍承担幂等 tombstone 的终态回执都不得删除。归档前必须有审批、game/player 成对且可校验的备份/恢复证据与 clean reconcile；仅有空间报告不构成归档许可。
 5. **按真实调用图清理剩余旧写路径**：优先 player/economy/inventory 等会改动资产的默认 handler，再审计
    cultivation/training、combat/dungeon/boss、sect/pet/trade 与 scheduler/Web 入口。每项记录入口、实际调用链、
    状态所有者和测试证据；只有默认调用归零后，才隔离或删除对应 legacy service。
@@ -3240,10 +3240,11 @@ focused tests、根目录 `tests/` 隔离回归、compileall、architecture/prog
 7. **正式发布与 P7**：切片迁移稳定后，针对真实发布数据目录安排备份、迁移、恢复、reconcile、余额/状态对账和
    远端冒烟，保留可审计证据。隔离 recovery smoke 不能代替真实发布周期。
 
-**子代理使用**：允许在目标相互独立时并行委派只读工作，例如一名代理追踪 handler/route/scheduler 调用图，
-另一名代理检查迁移、并发与恢复测试缺口；交付必须包含文件位置、调用链证据和建议验证项。共享代码修改、跨库事务
-设计、运行数据操作、缓存清理、测试结果裁定与最终集成由主代理统一负责；代理不得并行修改同一切片，也不得启动
-会争抢 RAM/磁盘的重型测试。已完成的 dufang cutover 和下一切片只读审查可复用，不重复扫描。
+**子代理使用**：在目标互不重叠时允许合理并行委派；本阶段复用只读子代理分别核对 handler/route 调用图、bet/payout
+迁移与恢复测试缺口、持久回执保留分类。交付须包含文件位置、实际调用/状态依据和可验证建议；本轮审计代理不改代码、不访问
+运行数据库、不清缓存、不启动测试。共享代码修改、跨库事务设计、运行数据操作、缓存清理、测试结果裁定与最终集成由主代理
+负责；代理不得并行修改同一切片，也不得启动会争抢 RAM/磁盘的重型测试。已完成的 dufang cutover 和相邻只读审查可复用，
+不重复扫描。
 
 **缓存与资源收尾**：测试前后记录 `df -h` 与可用 RAM；测试禁用 pytest cache，将字节码和数据库产物放在本轮专用
 临时目录。只清理确认由本轮创建、且进程已退出的缓存/临时产物，不清理共享 `ITEMS_CACHE`、业务数据、运行数据库
@@ -5091,3 +5092,7 @@ Boss 通过 `get_rift_battle_final_attributes` 注入 `get_rift_battle_impart_da
 2026-10-02 dufang shared-settlement feature-owned cutover：新增 `legacy.dufang.002` 游戏库迁移和 `legacy.dufang.003` 玩家库迁移，预建冻结共享批次/逐目标进度、兼容扩展 `unseal_data` 并增加 player-stat 唯一回执；默认共享调用改由 `DufangApplication -> DufangShareSqlRepository` 持有，旧 settlement service 保留但从 handler/repository 默认路径断开。每个目标的灵石、game progress 与 economy log 在游戏库事务内提交，玩家统计单独提交并由 `(operation_id,target_id)` 回执保护；重试扫描已应用进度，能补统计而不重复发放灵石。共享 ledger 使用稳定发起者身份，允许恢复 stale `started`，父鉴石请求重放只续跑已冻结批次；修正 application 嵌套 recipients DTO 到 handler 的属性访问。回归覆盖双库迁移路由/幂等/历史行、缺 schema 不建表、余额上限、逐目标异常回滚与续跑、并发单次结算、玩家统计失败后的回执修复、稳定 ledger 与 stale-started 恢复；dufang/inventory/architecture 聚焦回归 `36 passed`，progress 门禁聚焦回归 `24 passed`，目标文件编译和 diff check 通过。后续复核补齐部分批次 ledger 保持 `started`、settle/resume 共用稳定 action 的续跑语义，新增回归后 dufang/progress 聚焦集 `20 passed`。pytest cache/字节码关闭或隔离到 `/tmp`；未运行全量测试，未访问运行数据库，也未执行正式 migration/backup-restore/P7 演练。保留用户 `boss_info.json` 修改。后续仍需独立迁移 bet/payout 请求期 schema 建立，并继续处理全局 legacy transaction services、`xiuxian2_handle` 与真实发布证据 blockers。
 
 2026-10-02 dufang frozen-resolution and cross-database recovery：新增 game-only `legacy.dufang.005` 冻结一次 bet 的 entity/process/result/event/赔率/共享收件人计划并写 player-stat outbox，player-only `legacy.dufang.006` 预建 `(operation_id,event_type)` 唯一投影 receipt；game bet/payout 事务不再 attached 写 player DB。handler 先按消息 operation ID 读计划，只有新 bet 才抽签；相同消息继续尝试 payout/share，计划缺失的历史 pending bet fail closed。每次有效鉴石命令开头从最多 5 笔已有 pending bet 开始恢复，覆盖无消息重投的进程崩溃；started/failed ledger 能用同一 payload 重跑 repository。恢复状态将无计划 pending bet 与 outbox backlog 都纳入 pending 计数。用户累计消耗以 game bet 表的聚合值为底并和 player projection 取较大值，保证共享奖励计划在 projection 延迟时不低估 bonus。progress CLI 增加对应计划、回执、started 恢复、实际 handler 恢复入口和批次上限门禁；dufang migration/repository/application/share/source-quality 与 dufang progress 定向集合 `270 passed`，1 条既有 compatibility deprecation warning；隔离 architecture CLI `ok=true`、inventory freshness、10 个变更 Python 源码内存编译与 `git diff --check` 通过。pytest cache/pyc 禁用；专用 `/tmp/codex-dufang-*` 测试/架构目录验收后清理。一次较早的 architecture CLI 未设置 `XIUXIAN_DATA_DIR`，导入触达默认 `data/xiuxian` 路径；未删除/回滚可能的兼容标记或 SQLite sidecar，后续复验改为独立临时数据目录。未执行全量测试、正式迁移、运行数据恢复/对账或 P7；保留用户 `boss_info.json` 修改。后续目标：持久 bet/payout/ledger/outbox/receipt 的存储保留与归档预算、其余真实旧写路径、全局 `transaction_service`/`xiuxian2_handle` 门禁、正式发布/P7 证据。
+
+2026-10-02 dufang receipt storage inventory：新增 `scripts/audit_dufang_storage.py`，显式指定数据目录后以 SQLite read-only/query-only 聚合 game/player、其余主库及 legacy activity 的文件/sidecar 大小、page/freelist、赌坊持久表行数与文本字节估算、pending/nonterminal 数量、现有备份目录大小，并报告最低备份空间估算。备份目录扫描有 `50,000` 条目上限且不跟随符号链接；缺 game/player 库或存在不可读 DB 时容量估算 fail closed；归档始终标记未就绪，工具无删除、VACUUM、checkpoint 或建目录路径。方案补充 ADR-0007 的保留约束、归档前置条件、RAM/缓存边界及本阶段 3 份只读子代理审计分工。合成双库只读/缺目录/损坏数据库回归 `3 passed`，dufang progress 定向门禁 `1 passed`，盘点脚本、progress 脚本和存储测试内存编译，`git diff --check` 通过；未跑全量/architecture/recovery，未访问运行数据库，测试临时目录自动清理，未删除缓存或 sidecar。收尾磁盘可用 `21G`、RAM available `1.0GiB`；保留用户 `boss_info.json` 修改。归档格式、旧消息 replay 窗口及正式 game/player 备份恢复仍待后续决策，不代表持久回执保留策略或 P7 已完成。
+
+2026-10-02 backup/restore capacity preflight：共享 `BackupService` 在创建备份目录前，按 SQLite `page_count * page_size`（包含可见 WAL 快照）和普通附加文件长度估算写入量；统一保留 `max(64 MiB, 10%)` 可用空间，容量探测失败时 fail closed。restore 先验证整份 manifest/checksum，再按目标文件系统汇总整批需求后写入；容量不足不创建目录、不替换任何一项，单文件写失败会移除残留临时文件。Web 返回明确 `507 insufficient_storage` 或探测不可用 `503`。只读盘点工具采用同一 reserve policy，补计 `config.json`，并校正 legacy activity 路径。新增低容量、探测失败、restore 无部分替换、写失败清理及 Web 状态码回归；容量/既有备份/存储盘点/progress 选择集 `14 passed`，`git diff --check` 通过。pytest cache 与字节码关闭，仓库内未发现 `.pytest_cache`、`__pycache__` 或 `.pyc`；未访问运行数据库/WAL/SHM、未运行全量或正式 recovery。下一片切入 `身外化身 active_id` player 状态写入：先覆盖 restore/toggle 的 feature-owned player UoW 和 receipt，再拆分首次 avatar 初始化；保持原始 ID 主键和 impersonation 优先级。复用只读调用图审计结论，允许另行委派迁移路由/重放测试缺口审查，代码修改、验证和集成仍由主线程负责。全局旧 transaction services、`xiuxian2_handle`、正式发布/P7 仍未完成。
