@@ -3,6 +3,11 @@
 状态：执行中
 适用范围：全面底层重构第二阶段
 
+2026-10-02 world-events status read boundary：世界事件状态命令的展示路径移除冗余
+`_save_state` 写回；生命周期应用已经是状态持久化 owner，查询不再通过
+`PlayerDataManager.update_or_write_data` 触发请求期 schema/写入。新增 source regression `11 passed`，
+无 migration、无运行数据访问。下一片继续按真实调用图审计仍可达的 player/economy 旧写入。
+
 2026-10-01 root unittest shutdown harness：`test_sign_in_effects_wiring` 原先用两次 `asyncio.run()` 分别启动和关闭 runtime，使全局后台队列 worker 绑定到已关闭的 event loop，导致 `lifecycle.shutdown()` 永久等待 drain。测试现改为在同一 coroutine/event loop 内完成 start、断言与 shutdown，符合真实 runtime 生命周期；定向 unittest `2 tests` 通过。
 
 2026-10-01 root unittest shutdown harness follow-up：全量顺序最小复现发现更早的 `test_back_alchemy_wiring` 也在两次 `asyncio.run()` 间拆分 lifecycle，遗留的全局 queue unfinished-task 使后续签到测试仍等待 drain。现改为同一 loop 启停；按 suite 顺序运行 Back/SignIn 两个模块共 `3 tests`，全部通过。

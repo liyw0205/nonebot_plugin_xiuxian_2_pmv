@@ -379,32 +379,6 @@ def _load_state(event_key: str = EVENT_KEY) -> dict:
     return state
 
 
-def _save_state(state: dict, event_key: str = EVENT_KEY) -> None:
-    fields = {
-        "active": "INTEGER",
-        "status": "TEXT",
-        "event_id": "TEXT",
-        "event_type": "TEXT",
-        "name": "TEXT",
-        "period": "TEXT",
-        "manual": "INTEGER",
-        "bosses": "TEXT",
-        "participants": "TEXT",
-        "claimed": "TEXT",
-        "started_at": "TEXT",
-        "ends_at": "TEXT",
-        "last_result": "TEXT",
-    }
-    for field, data_type in fields.items():
-        _player_data_manager().update_or_write_data(
-            event_key,
-            EVENT_TABLE,
-            field,
-            state.get(field, "" if data_type == "TEXT" else 0),
-            data_type=data_type,
-        )
-
-
 def _event_id(period: str) -> str:
     return f"demon_invasion:{period}"
 
@@ -1185,7 +1159,6 @@ async def world_event_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     with _state_lock:
         state = _ensure_daily_state()
         msg = _build_state_message(state, user_info if is_user else None)
-        _save_state(state)
     await handle_send(
         bot,
         event,

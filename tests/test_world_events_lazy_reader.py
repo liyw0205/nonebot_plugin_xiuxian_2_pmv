@@ -15,6 +15,14 @@ class WorldEventsLazyReaderTests(unittest.TestCase):
         self.assertNotIn("_sql_message().update_last_check_info_time(", source)
         self.assertIn("_sql_message().update_user_hp(", source)
 
+    def test_status_reader_does_not_write_legacy_state_projection(self):
+        source = (
+            Path(__file__).parents[1]
+            / "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_world_events/__init__.py"
+        ).read_text(encoding="utf-8")
+        self.assertNotIn("def _save_state(", source)
+        self.assertNotIn("update_or_write_data(", source)
+
 
 if __name__ == "__main__":
     unittest.main()
