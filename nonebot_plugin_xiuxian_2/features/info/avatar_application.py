@@ -19,6 +19,24 @@ class PlayerAvatarApplication:
     def get_active_user_id(self, user_id: str) -> str:
         return self.repository.get_active_id(str(user_id)) or str(user_id)
 
+    def get_avatar_info(self, user_id: str) -> dict:
+        return self.repository.get_avatar_info(str(user_id))
+
+    def initialize(
+        self,
+        *,
+        operation_id: str,
+        user_id: str,
+        proposed_avatar_id: str,
+        proposed_create_time: str,
+    ) -> AvatarStateResult:
+        return self.repository.initialize(
+            operation_id=operation_id,
+            user_id=user_id,
+            proposed_avatar_id=proposed_avatar_id,
+            proposed_create_time=proposed_create_time,
+        )
+
     def toggle_active(
         self,
         *,

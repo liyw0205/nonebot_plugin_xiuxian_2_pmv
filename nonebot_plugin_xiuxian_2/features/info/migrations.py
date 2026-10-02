@@ -31,4 +31,12 @@ def apply_avatar_identity_player(uow: DatabaseUnitOfWork) -> None:
     )
 
 
-__all__ = ["apply_avatar_identity_player", "apply_info"]
+def apply_avatar_initialization_player(uow: DatabaseUnitOfWork) -> None:
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS avatar_initialization_plans ("
+        "operation_id TEXT PRIMARY KEY, user_id TEXT NOT NULL, avatar_id TEXT NOT NULL, "
+        "create_time TEXT NOT NULL, request_hash TEXT NOT NULL, created_at TEXT NOT NULL)"
+    )
+
+
+__all__ = ["apply_avatar_identity_player", "apply_avatar_initialization_player", "apply_info"]

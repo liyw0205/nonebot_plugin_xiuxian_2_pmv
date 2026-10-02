@@ -1895,6 +1895,18 @@ def _slice_status() -> dict[str, dict[str, object]]:
                 and 'Migration("info.avatar.001"' in plugin_source
                 and "def apply_avatar_identity_player(" in avatar_migrations
             ),
+            "initialization_migration_is_player_db_only": (
+                '"info.avatar.002"' in plugin_source[
+                    plugin_source.index("_GAME_DATABASE_EXCLUDED_MIGRATION_VERSIONS"):
+                    plugin_source.index("_PLAYER_DATABASE_MIGRATION_VERSIONS")
+                ]
+                and '"info.avatar.002"' in plugin_source[
+                    plugin_source.index("_PLAYER_DATABASE_MIGRATION_VERSIONS"):
+                    plugin_source.index("_TRADE_DATABASE_MIGRATION_VERSIONS")
+                ]
+                and 'Migration("info.avatar.002"' in plugin_source
+                and "def apply_avatar_initialization_player(" in avatar_migrations
+            ),
             "legacy_avatar_rows_preserved_and_prebuilt": (
                 "CREATE TABLE IF NOT EXISTS avatar (" in avatar_migrations
                 and "ALTER TABLE avatar ADD COLUMN" in avatar_migrations
@@ -1913,6 +1925,14 @@ def _slice_status() -> dict[str, dict[str, object]]:
                 and "user_id = get_active_user_id(real_user_id)" in avatar_base_facade
                 and avatar_utils.index("_player_avatar().get_active_user_id(original_user_id)")
                 < avatar_utils.index("if original_user_id in _impersonating_users")
+            ),
+            "initialization_is_player_application_owned_and_recoverable": (
+                "_player_avatar_application().initialize(" in avatar_facade
+                and "_player_avatar_application().get_avatar_info(" in avatar_facade
+                and "_player_data_manager().update_or_write_data(" not in avatar_facade
+                and "_run_info_action(" not in avatar_facade
+                and "avatar_initialization_plans" in avatar_repository
+                and "def _complete_initialization(" in avatar_repository
             ),
             "request_path_has_no_ddl": "CREATE TABLE" not in avatar_repository and "ALTER TABLE" not in avatar_repository,
             "status": "active_avatar_restore_toggle_owned_by_player_database_with_receipts",

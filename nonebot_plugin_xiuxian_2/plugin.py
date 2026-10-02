@@ -27,7 +27,7 @@ from .features.impart.migrations import (
 )
 from .features.interactive.manifest import FEATURE as INTERACTIVE_FEATURE
 from .features.interactive.migrations import apply_interactive
-from .features.info.migrations import apply_avatar_identity_player
+from .features.info.migrations import apply_avatar_identity_player, apply_avatar_initialization_player
 from .features.beg.manifest import FEATURE as BEG_FEATURE
 from .features.beg.migrations import apply_beg
 from .features.beg.application import BegApplication
@@ -318,6 +318,7 @@ def build_migrations() -> tuple[Migration, ...]:
         Migration("impart.004", "love_sand_operations", apply_impart_love_sand_operations),
         Migration("impart.005", "love_sand_player_statistics", apply_impart_love_sand_player_statistics),
         Migration("info.avatar.001", "avatar_player_identity_and_receipts", apply_avatar_identity_player),
+        Migration("info.avatar.002", "avatar_initialization_plans", apply_avatar_initialization_player),
         Migration("interactive.001", "interactive_feature_migrations", apply_interactive),
         *(Migration(version, f"{version.replace('.', '_')}_migrations", migration) for version, migration in LEGACY_MIGRATIONS),
         Migration("lottery.001", "lottery_feature_migrations", apply_lottery),
@@ -468,6 +469,7 @@ _GAME_DATABASE_EXCLUDED_MIGRATION_VERSIONS = frozenset(
         "auction.006",
         "auction.008",
         "info.avatar.001",
+        "info.avatar.002",
         "pet.003",
         "buff.003",
         "buff.005",
@@ -501,6 +503,7 @@ _PLAYER_DATABASE_MIGRATION_VERSIONS = frozenset(
         "auction.006",
         "auction.008",
         "info.avatar.001",
+        "info.avatar.002",
         "tower.004",
         "platform.001",
         "title.001",

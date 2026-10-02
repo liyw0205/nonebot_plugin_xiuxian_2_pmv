@@ -8,9 +8,10 @@ from unittest.mock import patch
 
 from ....core.errors import OperationConflictError
 from ....infrastructure.database import DatabaseUnitOfWork
+from ....infrastructure.database import request_hash
 from ..avatar_application import PlayerAvatarApplication
 from ..avatar_repository import AvatarStateSqlRepository
-from ..migrations import apply_avatar_identity_player
+from ..migrations import apply_avatar_identity_player, apply_avatar_initialization_player
 
 
 class PlayerAvatarApplicationTests(unittest.TestCase):
@@ -18,6 +19,7 @@ class PlayerAvatarApplicationTests(unittest.TestCase):
     def _database(path: Path) -> None:
         with DatabaseUnitOfWork(path) as uow:
             apply_avatar_identity_player(uow)
+            apply_avatar_initialization_player(uow)
             uow.execute(
                 "INSERT INTO avatar(user_id, main_id, avatar_id, active_id, create_time) "
                 "VALUES('main', 'main', 'avatar', 'main', '2026-10-02 00:00:00')"
@@ -93,6 +95,165 @@ class PlayerAvatarApplicationTests(unittest.TestCase):
             )
             self.assertEqual(retried.active_id, "avatar")
 
+    def test_initialization_replays_frozen_identity(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="avatar-init-replay-") as temp_dir:
+            database = Path(temp_dir) / "player.db"
+            with DatabaseUnitOfWork(database) as uow:
+                apply_avatar_identity_player(uow)
+                apply_avatar_initialization_player(uow)
+            application = PlayerAvatarApplication(database)
+
+            first = application.initialize(
+                operation_id="init-1",
+                user_id="main",
+                proposed_avatar_id="avatar-1",
+                proposed_create_time="2026-10-02 00:00:00",
+            )
+            replayed = application.initialize(
+                operation_id="init-1",
+                user_id="main",
+                proposed_avatar_id="avatar-2",
+                proposed_create_time="2026-10-03 00:00:00",
+            )
+
+            self.assertEqual(first.status, "applied")
+            self.assertEqual((first.avatar_id, first.create_time), ("avatar-1", "2026-10-02 00:00:00"))
+            self.assertTrue(replayed.replayed)
+            self.assertEqual((replayed.avatar_id, replayed.create_time), ("avatar-1", "2026-10-02 00:00:00"))
+            with DatabaseUnitOfWork(database, read_only=True) as uow:
+                row = uow.query_one("SELECT * FROM avatar WHERE user_id='main'")
+                self.assertEqual(row["avatar_id"], "avatar-1")
+                self.assertEqual(row["create_time"], "2026-10-02 00:00:00")
+                self.assertEqual(
+                    uow.query_one("SELECT COUNT(*) AS n FROM avatar_operation_receipts")["n"], 1
+                )
+                self.assertEqual(
+                    uow.query_one("SELECT COUNT(*) AS n FROM avatar_initialization_plans")["n"], 0
+                )
+
+    def test_initialization_retry_uses_plan_after_receipt_failure(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="avatar-init-recovery-") as temp_dir:
+            database = Path(temp_dir) / "player.db"
+            with DatabaseUnitOfWork(database) as uow:
+                apply_avatar_identity_player(uow)
+                apply_avatar_initialization_player(uow)
+            repository = AvatarStateSqlRepository(database)
+            application = PlayerAvatarApplication(database, repository=repository)
+
+            with patch.object(repository, "_record_receipt", side_effect=RuntimeError("injected")):
+                with self.assertRaisesRegex(RuntimeError, "injected"):
+                    application.initialize(
+                        operation_id="init-1",
+                        user_id="main",
+                        proposed_avatar_id="avatar-1",
+                        proposed_create_time="2026-10-02 00:00:00",
+                    )
+
+            with DatabaseUnitOfWork(database, read_only=True) as uow:
+                self.assertIsNone(uow.query_one("SELECT user_id FROM avatar WHERE user_id='main'"))
+                plan = uow.query_one(
+                    "SELECT avatar_id, create_time FROM avatar_initialization_plans "
+                    "WHERE operation_id='init-1'"
+                )
+                self.assertEqual((plan["avatar_id"], plan["create_time"]), ("avatar-1", "2026-10-02 00:00:00"))
+                self.assertEqual(
+                    uow.query_one("SELECT COUNT(*) AS n FROM avatar_operation_receipts")["n"], 0
+                )
+
+            retried = application.initialize(
+                operation_id="init-1",
+                user_id="main",
+                proposed_avatar_id="avatar-2",
+                proposed_create_time="2026-10-03 00:00:00",
+            )
+            self.assertEqual((retried.avatar_id, retried.create_time), ("avatar-1", "2026-10-02 00:00:00"))
+            with DatabaseUnitOfWork(database, read_only=True) as uow:
+                self.assertEqual(
+                    uow.query_one("SELECT COUNT(*) AS n FROM avatar_initialization_plans")["n"], 0
+                )
+
+    def test_initialization_requires_prebuilt_plan_schema(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="avatar-init-no-schema-") as temp_dir:
+            database = Path(temp_dir) / "player.db"
+            with DatabaseUnitOfWork(database) as uow:
+                apply_avatar_identity_player(uow)
+
+            result = PlayerAvatarApplication(database).initialize(
+                operation_id="init-1",
+                user_id="main",
+                proposed_avatar_id="avatar-1",
+                proposed_create_time="2026-10-02 00:00:00",
+            )
+
+            self.assertEqual(result.status, "schema_missing")
+            with DatabaseUnitOfWork(database, read_only=True) as uow:
+                self.assertIsNone(
+                    uow.query_one(
+                        "SELECT name FROM sqlite_master WHERE name='avatar_initialization_plans'"
+                    )
+                )
+
+    def test_initialization_preserves_existing_legacy_avatar_identity(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="avatar-init-legacy-") as temp_dir:
+            database = Path(temp_dir) / "player.db"
+            with DatabaseUnitOfWork(database) as uow:
+                uow.execute(
+                    "CREATE TABLE avatar(user_id TEXT PRIMARY KEY, main_id TEXT, avatar_id TEXT)"
+                )
+                uow.execute(
+                    "INSERT INTO avatar(user_id,main_id,avatar_id) VALUES('main','main','legacy-avatar')"
+                )
+                apply_avatar_identity_player(uow)
+                apply_avatar_initialization_player(uow)
+
+            result = PlayerAvatarApplication(database).initialize(
+                operation_id="init-legacy",
+                user_id="main",
+                proposed_avatar_id="new-avatar",
+                proposed_create_time="2026-10-02 00:00:00",
+            )
+
+            self.assertEqual(result.avatar_id, "legacy-avatar")
+            with DatabaseUnitOfWork(database, read_only=True) as uow:
+                row = uow.query_one("SELECT main_id, avatar_id FROM avatar WHERE user_id='main'")
+                self.assertEqual((row["main_id"], row["avatar_id"]), ("main", "legacy-avatar"))
+
+    def test_distinct_initialization_operations_converge_on_first_committed_identity(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="avatar-init-race-") as temp_dir:
+            database = Path(temp_dir) / "player.db"
+            with DatabaseUnitOfWork(database) as uow:
+                apply_avatar_identity_player(uow)
+                apply_avatar_initialization_player(uow)
+            repository = AvatarStateSqlRepository(database)
+            digest = request_hash({"action": "avatar_init", "user_id": "main"})
+            first_plan = repository._reserve_initialization(
+                operation_id="init-1",
+                user_id="main",
+                proposed_avatar_id="avatar-1",
+                proposed_create_time="2026-10-02 00:00:00",
+                digest=digest,
+            )
+            second_plan = repository._reserve_initialization(
+                operation_id="init-2",
+                user_id="main",
+                proposed_avatar_id="avatar-2",
+                proposed_create_time="2026-10-03 00:00:00",
+                digest=digest,
+            )
+
+            first = repository._complete_initialization("init-1", first_plan, digest)
+            second = repository._complete_initialization("init-2", second_plan, digest)
+
+            self.assertEqual((first.status, second.status), ("applied", "applied"))
+            self.assertEqual((first.avatar_id, second.avatar_id), ("avatar-1", "avatar-1"))
+            with DatabaseUnitOfWork(database, read_only=True) as uow:
+                self.assertEqual(
+                    uow.query_one("SELECT COUNT(*) AS n FROM avatar_operation_receipts")["n"], 2
+                )
+                self.assertEqual(
+                    uow.query_one("SELECT COUNT(*) AS n FROM avatar_initialization_plans")["n"], 0
+                )
+
     def test_missing_schema_fails_closed_without_request_ddl(self) -> None:
         with tempfile.TemporaryDirectory(prefix="avatar-no-schema-") as temp_dir:
             database = Path(temp_dir) / "player.db"
@@ -126,6 +287,13 @@ class PlayerAvatarApplicationTests(unittest.TestCase):
             with DatabaseUnitOfWork(database) as uow:
                 apply_avatar_identity_player(uow)
                 apply_avatar_identity_player(uow)
+                self.assertIsNone(
+                    uow.query_one(
+                        "SELECT name FROM sqlite_master WHERE name='avatar_initialization_plans'"
+                    )
+                )
+                apply_avatar_initialization_player(uow)
+                apply_avatar_initialization_player(uow)
                 row = uow.query_one(
                     "SELECT user_id, main_id, avatar_id, active_id, create_time FROM avatar"
                 )
@@ -166,6 +334,8 @@ class PlayerAvatarApplicationTests(unittest.TestCase):
         player = {item.version for item in migrations_for_database(migrations, "player_db")}
         self.assertNotIn("info.avatar.001", game)
         self.assertIn("info.avatar.001", player)
+        self.assertNotIn("info.avatar.002", game)
+        self.assertIn("info.avatar.002", player)
 
 
 class AvatarIdentityResolutionTests(unittest.TestCase):
