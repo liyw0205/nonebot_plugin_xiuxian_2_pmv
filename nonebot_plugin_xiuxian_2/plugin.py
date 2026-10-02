@@ -27,6 +27,7 @@ from .features.impart.migrations import (
 )
 from .features.interactive.manifest import FEATURE as INTERACTIVE_FEATURE
 from .features.interactive.migrations import apply_interactive
+from .features.info.migrations import apply_avatar_identity_player
 from .features.beg.manifest import FEATURE as BEG_FEATURE
 from .features.beg.migrations import apply_beg
 from .features.beg.application import BegApplication
@@ -316,6 +317,7 @@ def build_migrations() -> tuple[Migration, ...]:
         Migration("impart.003", "impart_prayer_player_statistics", apply_impart_prayer_player_statistics),
         Migration("impart.004", "love_sand_operations", apply_impart_love_sand_operations),
         Migration("impart.005", "love_sand_player_statistics", apply_impart_love_sand_player_statistics),
+        Migration("info.avatar.001", "avatar_player_identity_and_receipts", apply_avatar_identity_player),
         Migration("interactive.001", "interactive_feature_migrations", apply_interactive),
         *(Migration(version, f"{version.replace('.', '_')}_migrations", migration) for version, migration in LEGACY_MIGRATIONS),
         Migration("lottery.001", "lottery_feature_migrations", apply_lottery),
@@ -465,6 +467,7 @@ _GAME_DATABASE_EXCLUDED_MIGRATION_VERSIONS = frozenset(
         "auction.004",
         "auction.006",
         "auction.008",
+        "info.avatar.001",
         "pet.003",
         "buff.003",
         "buff.005",
@@ -497,6 +500,7 @@ _PLAYER_DATABASE_MIGRATION_VERSIONS = frozenset(
         "arena.009",
         "auction.006",
         "auction.008",
+        "info.avatar.001",
         "tower.004",
         "platform.001",
         "title.001",
@@ -812,6 +816,7 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
         from .features.map.application import MapApplication
         from .features.rift.application import RiftApplication
         from .features.info.profile_application import PlayerProfileApplication
+        from .features.info.avatar_application import PlayerAvatarApplication
         from .features.info.activity_application import PlayerActivityApplication
         from .features.info.attribute_application import PlayerAttributeApplication
         from .features.player_state.application import PlayerStateApplication
@@ -864,6 +869,7 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
 
         context.services = {
             "player_profile": PlayerProfileApplication(str(context.database.path("game_db"))),
+            "player_avatar": PlayerAvatarApplication(str(context.database.path("player_db"))),
             "player_activity": PlayerActivityApplication(
                 str(context.database.path("game_db")), clock=context.clock
             ),
@@ -1059,7 +1065,7 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
             pass
         else:
             from .xiuxian.xiuxian_base import configure_lottery_application, configure_sign_in_application
-            from .xiuxian.xiuxian_utils.utils import configure_player_profile_application
+            from .xiuxian.xiuxian_utils.utils import configure_player_avatar_application, configure_player_profile_application
             from .xiuxian.xiuxian_utils.utils import configure_player_activity_application
             from .xiuxian.xiuxian_utils.utils import configure_player_attribute_application
             from .xiuxian.xiuxian_utils.utils import configure_player_stamina_application
@@ -1078,6 +1084,7 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
 
             configure_sign_in_application(context.services["sign_in"])
             configure_player_profile_application(context.services["player_profile"])
+            configure_player_avatar_application(context.services["player_avatar"])
             configure_player_activity_application(context.services["player_activity"])
             configure_player_attribute_application(context.services["player_attributes"])
             configure_player_state_application(context.services["player_state"])

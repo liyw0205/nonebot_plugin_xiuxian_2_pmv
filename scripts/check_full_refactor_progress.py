@@ -460,6 +460,11 @@ def _slice_status() -> dict[str, dict[str, object]]:
     backup_capacity_source = (PACKAGE / "infrastructure" / "database" / "backup_capacity.py").read_text(encoding="utf-8")
     backup_service_source = (PACKAGE / "infrastructure" / "database" / "backup.py").read_text(encoding="utf-8")
     backup_web_source = (PACKAGE / "adapters" / "web" / "blueprints" / "backups.py").read_text(encoding="utf-8")
+    avatar_facade = (PACKAGE / "xiuxian" / "xiuxian_info" / "avatar.py").read_text(encoding="utf-8")
+    avatar_utils = (PACKAGE / "xiuxian" / "xiuxian_utils" / "utils.py").read_text(encoding="utf-8")
+    avatar_base_facade = (PACKAGE / "xiuxian" / "xiuxian_base" / "__init__.py").read_text(encoding="utf-8")
+    avatar_repository = (PACKAGE / "features" / "info" / "avatar_repository.py").read_text(encoding="utf-8")
+    avatar_migrations = (PACKAGE / "features" / "info" / "migrations.py").read_text(encoding="utf-8")
     legacy_migrated_source = (PACKAGE / "features" / "_legacy_migrated.py").read_text(encoding="utf-8")
     fusion_facade = (PACKAGE / "xiuxian" / "xiuxian_fusion" / "__init__.py").read_text(encoding="utf-8")
     fusion_repository = (PACKAGE / "features" / "fusion" / "repository.py").read_text(encoding="utf-8")
@@ -1876,6 +1881,41 @@ def _slice_status() -> dict[str, dict[str, object]]:
                 and "_past_life_reset_service().find_pending_all(" not in past_life_command_facade
             ),
             "status": "reset_one_and_reset_all_cutover_with_legacy_service_retained_for_compatibility",
+        },
+        "avatar_identity": {
+            "migration_is_player_db_only": (
+                '"info.avatar.001"' in plugin_source[
+                    plugin_source.index("_GAME_DATABASE_EXCLUDED_MIGRATION_VERSIONS"):
+                    plugin_source.index("_PLAYER_DATABASE_MIGRATION_VERSIONS")
+                ]
+                and '"info.avatar.001"' in plugin_source[
+                    plugin_source.index("_PLAYER_DATABASE_MIGRATION_VERSIONS"):
+                    plugin_source.index("_TRADE_DATABASE_MIGRATION_VERSIONS")
+                ]
+                and 'Migration("info.avatar.001"' in plugin_source
+                and "def apply_avatar_identity_player(" in avatar_migrations
+            ),
+            "legacy_avatar_rows_preserved_and_prebuilt": (
+                "CREATE TABLE IF NOT EXISTS avatar (" in avatar_migrations
+                and "ALTER TABLE avatar ADD COLUMN" in avatar_migrations
+                and "avatar_operation_receipts" in avatar_migrations
+            ),
+            "active_id_writes_are_player_owned_and_atomic": (
+                "_player_avatar_application().toggle_active(" in avatar_facade
+                and "_player_avatar_application().restore_active(" in avatar_facade
+                and "_player_data_manager().update_or_write_data(main_id, \"avatar\", \"active_id\"" not in avatar_facade
+                and "DatabaseUnitOfWork(self.database, immediate=True)" in avatar_repository
+                and "UPDATE avatar SET active_id=?" in avatar_repository
+                and "avatar_operation_receipts" in avatar_repository
+            ),
+            "active_id_reads_use_application_and_preserve_priority": (
+                "_player_avatar().get_active_user_id(original_user_id)" in avatar_utils
+                and "user_id = get_active_user_id(real_user_id)" in avatar_base_facade
+                and avatar_utils.index("_player_avatar().get_active_user_id(original_user_id)")
+                < avatar_utils.index("if original_user_id in _impersonating_users")
+            ),
+            "request_path_has_no_ddl": "CREATE TABLE" not in avatar_repository and "ALTER TABLE" not in avatar_repository,
+            "status": "active_avatar_restore_toggle_owned_by_player_database_with_receipts",
         },
         "dufang": {
             "share_application_owned": "dufang_application.share_settle(" in dufang_facade,

@@ -36,7 +36,7 @@ from ..xiuxian_utils.xiuxian2_handle import (
 from ..xiuxian_config import XiuConfig, JsonConfig, convert_rank
 from ..xiuxian_utils.utils import (
     check_user, check_user_type,
-    get_user_profile, get_user_profile_by_name,
+    get_active_user_id, get_user_profile, get_user_profile_by_name,
     get_msg_pic, number_to,
     Txt2Img, send_msg_handler, handle_send, get_logs, log_message, get_statistics_data, update_statistics_value,
     send_help_message
@@ -807,8 +807,7 @@ async def run_xiuxian_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
     real_user_id = str(event.get_user_id())
 
     # 先本号/化身
-    active_id = _player_data_manager().get_field_data(real_user_id, "avatar", "active_id")
-    user_id = str(active_id) if active_id else real_user_id
+    user_id = get_active_user_id(real_user_id)
 
     # 再伪装（优先级最高）
     try:

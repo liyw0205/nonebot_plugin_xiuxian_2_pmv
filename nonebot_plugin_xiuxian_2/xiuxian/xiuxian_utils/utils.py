@@ -12,6 +12,7 @@ import unicodedata
 from functools import lru_cache
 from nonebot.log import logger
 from ...paths import get_paths
+from ...features.info.avatar_application import PlayerAvatarApplication
 from ...features.info.profile_application import PlayerProfileApplication
 from ...features.info.activity_application import PlayerActivityApplication
 from ...features.info.attribute_application import PlayerAttributeApplication
@@ -72,6 +73,7 @@ from urllib.parse import quote, unquote
 _sql_message_instance = None
 _player_data_manager_instance = None
 _player_profile_application: PlayerProfileApplication | None = None
+_player_avatar_application: PlayerAvatarApplication | None = None
 _player_activity_application: PlayerActivityApplication | None = None
 _player_attribute_application: PlayerAttributeApplication | None = None
 _player_stamina_application: PlayerStaminaApplication | None = None
@@ -90,6 +92,18 @@ def configure_player_profile_application(application: PlayerProfileApplication) 
     """Bind the lifecycle-owned read boundary used by ``check_user``."""
     global _player_profile_application
     _player_profile_application = application
+
+
+def configure_player_avatar_application(application: PlayerAvatarApplication) -> None:
+    global _player_avatar_application
+    _player_avatar_application = application
+
+
+def _player_avatar() -> PlayerAvatarApplication:
+    global _player_avatar_application
+    if _player_avatar_application is None:
+        _player_avatar_application = PlayerAvatarApplication(get_paths().player_db)
+    return _player_avatar_application
 
 
 def _player_profile():
@@ -280,8 +294,7 @@ def check_user_type(user_id, need_type):
     actual_user_id = str(user_id)
 
     # 先读取身外化身当前激活ID（如果没配置则返回本号）
-    active_id = _player_data_manager().get_field_data(actual_user_id, "avatar", "active_id")
-    user_id_to_check = str(active_id) if active_id else actual_user_id
+    user_id_to_check = _player_avatar().get_active_user_id(actual_user_id)
 
     # 兼容管理员伪装逻辑（优先级高于化身）
     if actual_user_id in _impersonating_users:
@@ -371,8 +384,7 @@ def check_user(event_or_user_id: Union[GroupMessageEvent, PrivateMessageEvent, s
         original_user_id = str(event_or_user_id.get_user_id())
 
         # 先走身外化身 active_id（没有则本号）
-        active_id = _player_data_manager().get_field_data(original_user_id, "avatar", "active_id")
-        user_id_to_check = str(active_id) if active_id else original_user_id
+        user_id_to_check = _player_avatar().get_active_user_id(original_user_id)
 
         # 兼容管理员伪装（优先级高于化身）
         if original_user_id in _impersonating_users:
@@ -382,8 +394,7 @@ def check_user(event_or_user_id: Union[GroupMessageEvent, PrivateMessageEvent, s
     elif isinstance(event_or_user_id, str):
         # 传入字符串时，也支持化身映射
         original_user_id = str(event_or_user_id)
-        active_id = _player_data_manager().get_field_data(original_user_id, "avatar", "active_id")
-        user_id_to_check = str(active_id) if active_id else original_user_id
+        user_id_to_check = _player_avatar().get_active_user_id(original_user_id)
 
         # 字符串场景也兼容伪装
         if original_user_id in _impersonating_users:

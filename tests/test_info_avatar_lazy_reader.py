@@ -15,9 +15,12 @@ class AvatarLazyReaderTests(unittest.TestCase):
         self.assertIn("_player_data_manager_instance = None", source)
         self.assertIn("def _player_data_manager(", source)
         self.assertNotIn("player_data_manager = PlayerDataManager()", source)
-        self.assertIn("_player_data_manager().get_field_data(", source)
+        self.assertIn("_player_avatar_application().get_active_user_id(", source)
         self.assertIn("_player_data_manager().get_fields(", source)
         self.assertIn("_player_data_manager().update_or_write_data(", source)
+        self.assertIn("toggle_active(", source)
+        self.assertIn("restore_active(", source)
+        self.assertNotIn('_player_data_manager().update_or_write_data(main_id, "avatar", "active_id"', source)
 
 
 if __name__ == "__main__":

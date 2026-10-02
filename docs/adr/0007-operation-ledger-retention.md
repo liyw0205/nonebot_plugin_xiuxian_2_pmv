@@ -26,6 +26,9 @@ player receipt 是防止重复统计的 tombstone；已完成 share progress 仍
 始终禁止归档/删除。`economy_log` 与 `operation_audit` 在外部消费者和审计期限得到确认
 前同样在线保留。
 
+新建的 `avatar_operation_receipts` 也是身份切换的幂等 tombstone，与 `player.db.avatar`
+同库提交；默认不设 TTL 或自动清理，归档前必须证明旧命令重放窗口已关闭。
+
 容量不足时，写入前预检应拒绝新的备份/批量迁移并报告所需空间，不得隐式删旧备份、清理
 业务回执、checkpoint 或运行 `VACUUM`。运营方应先扩容/调整备份目标；确需归档时，走本 ADR
 规定的备份、clean reconcile、审批、校验清单和恢复演练流程。

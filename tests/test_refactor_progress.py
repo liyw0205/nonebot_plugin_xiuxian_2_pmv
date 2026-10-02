@@ -6,6 +6,14 @@ from scripts.check_full_refactor_progress import _slice_status
 
 
 class RefactorProgressTests(unittest.TestCase):
+    def test_progress_report_tracks_avatar_identity_cutover(self) -> None:
+        avatar = _slice_status()["avatar_identity"]
+        self.assertTrue(avatar["migration_is_player_db_only"])
+        self.assertTrue(avatar["legacy_avatar_rows_preserved_and_prebuilt"])
+        self.assertTrue(avatar["active_id_writes_are_player_owned_and_atomic"])
+        self.assertTrue(avatar["active_id_reads_use_application_and_preserve_priority"])
+        self.assertTrue(avatar["request_path_has_no_ddl"])
+
     def test_progress_report_tracks_dufang_share_repository_cutover(self) -> None:
         dufang = _slice_status()["dufang"]
         self.assertTrue(dufang["share_application_owned"])
