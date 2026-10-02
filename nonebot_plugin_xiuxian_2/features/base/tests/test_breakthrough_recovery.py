@@ -366,6 +366,66 @@ class DirectBreakthroughRecoveryTests(unittest.TestCase):
             self.assertEqual(effect.call_count, 11)
         self.assertEqual(self.row(self.game, "domain_outbox", "event_id='direct-breakthrough:op-5:effects'")["status"], "sent")
 
+    def test_poison_outbox_records_back_off_and_does_not_block_sixth_event(self):
+        now = [datetime(2026, 10, 2, 12, 0, tzinfo=timezone.utc)]
+        clock = SimpleNamespace(now=lambda: now[0])
+        self.repo.clock = clock
+        self.repo.outbox.clock = clock
+        poison_rows = [
+            ("poison-json", "{"),
+            (self.repo.event_id("poison-missing"), "{}"),
+            (
+                self.repo.event_id("poison-operation"),
+                json.dumps({"operation_id": "other-operation", "user_id": "a"}),
+            ),
+            (
+                self.repo.event_id("poison-user"),
+                json.dumps({"operation_id": "poison-user", "user_id": "m"}),
+            ),
+            (
+                self.repo.event_id("poison-no-receipt"),
+                json.dumps({"operation_id": "poison-no-receipt", "user_id": "a"}),
+            ),
+        ]
+        with DatabaseUnitOfWork(self.game, immediate=True) as uow:
+            uow.executemany(
+                "INSERT INTO domain_outbox "
+                "(event_id,aggregate_type,aggregate_id,event_type,payload_json,status,attempts,next_attempt_at,created_at,updated_at) "
+                "VALUES(?, 'base', 'a', ?, ?, 'pending', 0, NULL, '2026-10-01T00:00:00+00:00', '2026-10-01T00:00:00+00:00')",
+                [(event_id, self.repo.EVENT_TYPE, payload) for event_id, payload in poison_rows],
+            )
+        self.assertTrue(self.resolve(repository_only=True, operation="op-5").applied)
+
+        self.app.resume_pending_direct_breakthroughs(limit=5)
+
+        for event_id, _ in poison_rows:
+            row = self.row(self.game, "domain_outbox", f"event_id='{event_id}'")
+            self.assertEqual(row["status"], "pending")
+            self.assertEqual(row["attempts"], 1)
+            self.assertGreater(row["next_attempt_at"], now[0].isoformat())
+        self.app.resume_pending_direct_breakthroughs(limit=5)
+        self.assertEqual(
+            self.row(self.game, "domain_outbox", "event_id='direct-breakthrough:op-5:effects'")["status"],
+            "sent",
+        )
+
+    def test_direct_replay_defers_payload_with_mismatched_identity(self):
+        self.assertTrue(self.resolve(repository_only=True, operation="poison-replay").applied)
+        event_id = self.repo.event_id("poison-replay")
+        with DatabaseUnitOfWork(self.game, immediate=True) as uow:
+            uow.execute(
+                "UPDATE domain_outbox SET payload_json=? WHERE event_id=?",
+                (json.dumps({"operation_id": "other-operation", "user_id": "a"}), event_id),
+            )
+
+        with patch.object(self.effects, "on_settled") as effect:
+            self.app.direct_breakthrough_replay("poison-replay", "a")
+            effect.assert_not_called()
+        row = self.row(self.game, "domain_outbox", f"event_id='{event_id}'")
+        self.assertEqual(row["status"], "pending")
+        self.assertEqual(row["attempts"], 1)
+        self.assertIsNotNone(row["next_attempt_at"])
+
     def test_missing_player_schema_keeps_core_pending_without_ddl(self):
         self.relation_plans = [self.relation()]
         with DatabaseUnitOfWork(self.player, immediate=True) as uow:

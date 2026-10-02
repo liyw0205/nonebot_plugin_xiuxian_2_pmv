@@ -45,6 +45,21 @@ class BaseApplication(LegacyApplication):
         result = self._direct_breakthrough_repository.get_result(operation_id, user_id)
         return self._apply_direct_breakthrough_effects(result) if result is not None else None
 
+    def _direct_breakthrough_outbox_payload(self, row, event_id: str) -> dict[str, Any]:
+        payload = json.loads(row["payload_json"])
+        if not isinstance(payload, dict):
+            raise ValueError("direct breakthrough payload must be an object")
+        operation_id = str(payload.get("operation_id") or "").strip()
+        user_id = str(payload.get("user_id") or "").strip()
+        if (
+            not operation_id
+            or not user_id
+            or self._direct_breakthrough_repository.event_id(operation_id) != event_id
+            or user_id != str(row["aggregate_id"])
+        ):
+            raise ValueError("direct breakthrough outbox identity mismatch")
+        return payload
+
     def plan_direct_breakthrough_relations(self, game, user, new_level, occurred_at):
         if self.direct_breakthrough_effects is None:
             raise RuntimeError("direct breakthrough effects are not configured")
@@ -66,7 +81,7 @@ class BaseApplication(LegacyApplication):
                 row = repo.outbox.get(uow, event_id)
             if row is None:
                 raise RuntimeError("direct breakthrough outbox is missing")
-            payload = json.loads(row["payload_json"])
+            payload = self._direct_breakthrough_outbox_payload(row, event_id)
             if row["status"] == "sent":
                 return result
             if row["status"] == "dead":
@@ -120,14 +135,37 @@ class BaseApplication(LegacyApplication):
                 return
             now = repo.clock.now().isoformat()
             pending = uow.query_all(
-                "SELECT payload_json FROM domain_outbox WHERE event_type=? AND status='pending' "
+                "SELECT event_id,aggregate_id,payload_json,attempts FROM domain_outbox "
+                "WHERE event_type=? AND status='pending' "
                 "AND (next_attempt_at IS NULL OR next_attempt_at <= ?) "
                 "ORDER BY attempts,created_at,event_id LIMIT ?",
                 (repo.EVENT_TYPE, now, max(1, min(int(limit), 5))),
             )
         for row in pending:
-            payload = json.loads(row["payload_json"])
-            self.direct_breakthrough_replay(payload["operation_id"], payload["user_id"])
+            event_id = str(row["event_id"])
+            try:
+                payload = self._direct_breakthrough_outbox_payload(row, event_id)
+                operation_id = str(payload.get("operation_id") or "").strip()
+                user_id = str(payload.get("user_id") or "").strip()
+                result = self.direct_breakthrough_replay(operation_id, user_id)
+                if result is None or result.effects_event_id != event_id:
+                    raise ValueError("direct breakthrough receipt does not match outbox event")
+            except Exception:
+                self._defer_direct_breakthrough_outbox(row)
+
+    def _defer_direct_breakthrough_outbox(self, outbox_row) -> None:
+        repo = self._direct_breakthrough_repository
+        try:
+            with DatabaseUnitOfWork(repo.database, immediate=True) as uow:
+                current = repo.outbox.get(uow, str(outbox_row["event_id"]))
+                if current is not None and current["status"] == "pending":
+                    repo.outbox.mark_failed(
+                        uow,
+                        str(outbox_row["event_id"]),
+                        next_attempt_at=self._direct_breakthrough_next_attempt_at(current),
+                    )
+        except Exception:
+            pass
 
     def reconcile_direct_breakthrough_event(self, record):
         if self.direct_breakthrough_effects is None:

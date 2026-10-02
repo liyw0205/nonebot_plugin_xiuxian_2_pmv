@@ -2,6 +2,8 @@
 
 状态：进行中。`v1.1.0` 的 P0-P7 发布证据继续保留，但不作为底层全面重构完成证明。
 
+2026-10-03 direct-breakthrough poison outbox recovery：恢复扫描与 handler 直接重放共用 payload identity 校验，检查 JSON、operation ID、user ID、aggregate ID 和事件 ID；坏 JSON、字段缺失、identity 错配和无回执仅递增对应 outbox 的 attempts 并按 event ID 退避，不再中止整批或挡住后续有效事件。覆盖五条 poison 后第六条有效事件恢复及 handler 错配 payload 不执行 effects；recovery/repository/handler `45 passed`、refactor progress `7 passed`、direct-breakthrough source guard `1 passed`。pytest cache/字节码关闭，测试串行；inventory freshness 通过。architecture 全量脚本仍因当前树中 `xiuxian_utils.utils.get_active_user_id` 导入缺失而失败，未扩展修复无关入口。无独立只读任务需要委派，子代理未启用；磁盘余量 `20G`、RAM available `1.4GiB`，专用临时目录验收后清理，未触碰运行数据库或用户 `boss_info.json`。恢复正确性目标关闭；player/economy 默认旧写、其他领域边界、持久状态保留决策和正式 backup/restore/P7 仍未完成，整体 `exit_ready=false`。
+
 2026-10-02 dongfu harvest snapshot ownership：灵田槽位规范化抽到共享 helper，扩建和收获统一 legacy 字段恢复；随机奖励快照经 `DongfuApplication -> DongfuHarvestSqlRepository` 在 player UoW 条件写入并可重试复用。背包满不丢快照；成功收获在结算事务内清槽、同步 legacy 投影并删除快照，handler 移除 `_save_dongfu`。复用既有 `map.017` schema，无 migration。progress `7 passed`、洞府 feature/handler `38 passed`；inventory freshness、目标 compileall、diff check 通过。禁用 pytest/字节码缓存，清理专用 `/tmp` 测试和编译目录；未触碰运行数据库或用户 `boss_info.json`。下一片独立处理洞府随机目标读取：当前实现物化完整用户候选集并逐用户查询，需改为有界查询/分页，同时避免共享缓存无界增长；整体 `exit_ready=false` 仍由全局 legacy transaction services、`xiuxian2_handle` 和正式发布/P7 证据缺失阻塞。
 
 2026-10-02 dongfu status display writeback removal：`我的洞府` handler 仍在内存中按业务日把潜入/被潜入/巡山

@@ -3,6 +3,8 @@
 状态：执行中
 适用范围：全面底层重构第二阶段
 
+2026-10-03 direct-breakthrough poison outbox recovery：恢复扫描与 handler 直接重放共用 payload identity 校验，检查 JSON、operation ID、user ID、aggregate ID 和事件 ID；坏 JSON、字段缺失、错 operation/user 或无匹配回执只对对应事件执行指数退避，单条异常不再终止批次。覆盖 5 条 poison 后第 6 条有效事件恢复及 handler 错配 payload 不执行 effects；recovery/repository/handler `45 passed`、refactor progress `7 passed`、source guard `1 passed`，inventory freshness 通过。pytest cache/字节码关闭、测试串行；本片没有需要独立只读审计的分工，未启用子代理。architecture 全量脚本因当前树中 `get_active_user_id` 导入缺失失败；未扩展修复无关代码。专用临时目录清理后磁盘余量 `20G`、RAM available `1.4GiB`；未触碰运行数据库或用户 `boss_info.json`。恢复正确性已关闭，整体 `exit_ready=false`。
+
 2026-10-02 dongfu harvest snapshot ownership：灵田槽位规范化提取到共享 `plant_slots.py`，扩建与收获共用同一 legacy 字段恢复规则；`DongfuApplication.prepare_harvest_snapshot` 经 feature repository 在 player UoW 内 CAS 保存首份随机奖励快照并复用既有快照。收获 handler 不再 `_save_dongfu`；背包满保留快照，成功发奖、槽位清空、legacy 字段同步和快照删除在结算事务内完成。复用既有 `map.017` 的 `harvest_settlement` 列，无新增 migration。progress `7 passed`、洞府 feature/handler `38 passed`；inventory freshness、目标 compileall、diff check 通过。子代理分工：复用一份只读 migration/调用路径审计结论；代码修改、测试、资源检查和最终整合由主线程负责，测试串行。pytest/pyc 禁用或隔离，专用 `/tmp/dongfu-harvest-*` 与上一轮残留测试 fixture 已清理；未触碰 `.venv`、`.git`、`data/`、运行数据库/WAL/SHM 或用户 `boss_info.json`。收尾磁盘可用 `20G`、RAM available `1.4GiB`。下一片单独处理洞府随机目标全量候选读取与共享缓存容量边界；整体 `exit_ready=false` 仍由全局旧 transaction services、`xiuxian2_handle` 和正式发布/P7 证据缺失阻塞。
 
 2026-10-02 dongfu status display writeback removal：`我的洞府` 只在读取对象上按业务日派生计数，不再调用
@@ -45,17 +47,16 @@
 
 ## 当前剩余目标
 
-截至 2026-10-02，切片级进度门禁已覆盖主要 feature，但整体 `exit_ready=false`。剩余目标按以下顺序关闭，不能用局部测试通过替代：
+截至 2026-10-03，切片级进度门禁已覆盖主要 feature，但整体 `exit_ready=false`。剩余目标按以下顺序关闭，不能用局部测试通过替代：
 
-1. **恢复正确性收口**：直接突破 effects 恢复计算不得在 game 写锁内初始化旧数据库管理器；pending outbox 失败必须按到期时间退避，不能被最早 5 条坏记录永久阻塞。
-2. **player/economy 旧写路径清零**：继续按真实调用图迁移 `xiuxian2_handle`、剩余 `transaction_service` 的默认 handler、scheduler 和 Web 写入；旧实现只能作为显式 compatibility/rollback，不得由默认入口构造或调用。
-3. **其余领域边界**：按 cultivation/training、combat/dungeon/boss、sect/trade/scheduler/Web 的顺序完成真实入口、随机/时间注入、operation receipt、启动 migration、跨库恢复和缺 schema fail-closed。
+1. **player/economy 旧写路径清零**：继续按真实调用图迁移 `xiuxian2_handle`、剩余 `transaction_service` 的默认 handler、scheduler 和 Web 写入；旧实现只能作为显式 compatibility/rollback，不得由默认入口构造或调用。
+2. **其余领域边界**：按 cultivation/training、combat/dungeon/boss、sect/trade/scheduler/Web 的顺序完成真实入口、随机/时间注入、operation receipt、启动 migration、跨库恢复和缺 schema fail-closed。
    - 当前洞府未完成项：随机潜入与同节点读取调用 `list_users_by_fields` 后完整物化候选用户，再逐个读取 profile/洞府；`PlayerDataManager._field_list_cache` 的 TTL entry 没有容量上限或主动过期清扫。单独设计有界/流式候选选择，并给共享 field-list cache 增加可证明的条目或字节上限及过期回收；不得复制或主动清空 `ITEMS_CACHE` 等其他玩法共享缓存。
    - 下一洞府候选/缓存切片委派 1 名只读子代理梳理 field-list cache 的生产调用点、失效路径与条目体积风险；子代理不改代码、不跑 SQLite 测试，主线程负责实现、串行验收和资源收尾。
    - 当前副本未完成项：`dungeon_manager.py` 与 `features/dungeon/{reset,team}_repository.py` 仍有请求期建表/补列；探索在 `prepare` 前抽事件、怪物和战斗，需先冻结 resolved plan；队伍读取需从全表 JSON 改为成员索引/有界分页；progress gate 还要验证默认 repository 自身方法归属，而不是只看 facade 字符串。
    - 当前历练未完成项：事件/奖励仍可能在 application settle 前重抽，`training_events.py` 仍有模块级 `random` 与旧 manager 读取；排行榜全表复制需分页，状态 projection 与 `training_limit.py` 的兼容读写需继续收口。
-4. **持久状态与恢复证据**：盘点 operation ledger、outbox、projection receipt、失败/死信和 bet/payout 等历史回执的保留窗口；在有备份、checksum、dry-run、restore、reconcile 和人工决策记录前，不删除或压缩任何持久状态。
-5. **发布退出条件**：完成正式数据备份/迁移/恢复演练、P7 发布证据、全局 legacy 门禁和真实运行 readiness；只有脚本输出 `exit_ready=true` 且证据归档后，才可声明全面重构完成。
+3. **持久状态与恢复证据**：盘点 operation ledger、outbox、projection receipt、失败/死信和 bet/payout 等历史回执的保留窗口；在有备份、checksum、dry-run、restore、reconcile 和人工决策记录前，不删除或压缩任何持久状态。
+4. **发布退出条件**：完成正式数据备份/迁移/恢复演练、P7 发布证据、全局 legacy 门禁和真实运行 readiness；只有脚本输出 `exit_ready=true` 且证据归档后，才可声明全面重构完成。
 
 ### 子代理与资源约束
 
