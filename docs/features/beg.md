@@ -10,13 +10,13 @@ The historical package owns command names during the compatibility release. New 
 No new HTTP route is exposed in this migration slice. Existing URLs remain served by the legacy web adapter.
 
 ## 数据模型与迁移
-Migration `beg.001` creates the operation projections in `game_db`; the historical marker is retained for upgraded installations.
+Migration `beg.001` creates the claim operation projections in `game_db`; the historical marker is retained for upgraded installations. Daily `is_beg` reset uses the existing platform operation ledger and audit tables without request-time DDL.
 
 ## 事务与失败回滚
 Mutating calls carry an `operation_id` and are recorded in the operation ledger. Disable the feature flag or restore the pre-migration backup to roll back.
 
 ## 定时任务
-No new scheduled jobs. Legacy jobs stay registered through the compatibility scheduler.
+The existing daily `daily_reset_beg` scheduler job delegates to `BegApplication`. Its business-date operation ID makes same-day replay safe, while the next business date starts a new reset.
 
 ## 配置项
 `beg_enabled` controls the application boundary and defaults to true.

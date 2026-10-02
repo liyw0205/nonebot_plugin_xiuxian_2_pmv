@@ -7,13 +7,13 @@ from pathlib import Path
 
 from ..application import BegApplication
 from ..repository import BegRepository
-from ....infrastructure.database import DatabaseUnitOfWork
+from ....infrastructure.database import DatabaseUnitOfWork, OperationLedger
 
 
 class BegApplicationTest(unittest.TestCase):
     def test_execute_is_idempotent(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            app = BegApplication(f"{directory}/game.db")
+            app = BegApplication(self._database(directory))
             first = app.execute(operation_id="op-1", user_id="u")
             second = app.execute(operation_id="op-1", user_id="u")
             self.assertEqual(first.operation_id, second.operation_id)
@@ -37,6 +37,8 @@ class BegApplicationTest(unittest.TestCase):
                 "goods_type TEXT,goods_num INTEGER,create_time TEXT,update_time TEXT,"
                 "bind_num INTEGER,UNIQUE(user_id,goods_id))"
             )
+            OperationLedger().ensure_schema(uow)
+            BegRepository.ensure_schema(uow)
         return database
 
     def test_daily_action_owns_ledger_and_replays_mutable_snapshots(self) -> None:

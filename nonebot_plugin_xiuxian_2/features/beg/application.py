@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import date
 from pathlib import Path
 from typing import Any, Mapping
 
@@ -7,6 +8,7 @@ from ...core.errors import ConflictError, DomainError, ValidationError
 from ...core.result import OperationOutcome, ReplyPlan
 from ...infrastructure.database import DatabaseUnitOfWork, OperationLedger
 from ...infrastructure.observability import trace_context
+from .daily_reset_repository import BegDailyResetSqlRepository
 from .domain import BegDailyRewardResult, NoviceGiftClaimResult
 from .repository import BegRepository
 
@@ -122,6 +124,16 @@ class BegApplication:
             except Exception as exc:
                 self.ledger.record_failure(self.database, operation_id, action, ledger_payload, str(exc))
                 raise
+
+    def reset_daily_claim_flag(self, business_date: str | date):
+        try:
+            normalized_date = date.fromisoformat(str(business_date)).isoformat()
+        except (TypeError, ValueError) as exc:
+            raise ValidationError("invalid business_date") from exc
+        operation_id = f"beg.daily-reset:{normalized_date}"
+        return BegDailyResetSqlRepository(self.database, ledger=self.ledger).reset(
+            operation_id, normalized_date
+        )
 
     def reply(self, **kwargs: Any) -> ReplyPlan:
         outcome = self.execute(**kwargs)

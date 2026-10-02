@@ -6,6 +6,12 @@ from scripts.check_full_refactor_progress import _slice_status
 
 
 class RefactorProgressTests(unittest.TestCase):
+    def test_progress_report_tracks_daily_beg_reset_ownership(self) -> None:
+        beg = _slice_status()["beg"]
+        self.assertTrue(beg["daily_reset_application_owned"])
+        self.assertTrue(beg["daily_reset_atomic_no_request_ddl"])
+        self.assertTrue(beg["daily_reset_replay_rollback_and_missing_schema_covered"])
+
     def test_progress_report_tracks_replay_safe_map_and_pet_claim_effects(self) -> None:
         claims = _slice_status()["game_event_claims"]
         self.assertTrue(claims["pet_travel_claim_effects_outbox_owned"])

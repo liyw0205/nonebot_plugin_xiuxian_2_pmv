@@ -67,6 +67,13 @@ def _daily_pill_usage_reset():
     return DailyPillUsageResetApplication(get_paths().game_db).reset(_scheduler_business_date())
 
 
+def _daily_beg_reset():
+    from ...features.beg.application import BegApplication
+    from ...paths import get_paths
+
+    return BegApplication(get_paths().game_db).reset_daily_claim_flag(_scheduler_business_date())
+
+
 @register_legacy_startup
 async def apply_scheduler_overrides_on_startup():
     job_manager.apply_persisted_overrides()
@@ -135,7 +142,7 @@ async def daily_reset_sign():
 )
 async def daily_reset_beg():
     """每日奇缘重置"""
-    await _run_job("仙途奇缘重置", _sql_message().beg_remake)
+    await _run_job("仙途奇缘重置", _daily_beg_reset)
 
 
 @scheduler.scheduled_job(

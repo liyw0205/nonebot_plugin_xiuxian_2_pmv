@@ -454,6 +454,9 @@ def _slice_status() -> dict[str, dict[str, object]]:
     back_application_source = (PACKAGE / "features" / "back" / "application.py").read_text(encoding="utf-8")
     daily_pill_reset_application = (PACKAGE / "features" / "back" / "daily_pill_usage_reset_application.py").read_text(encoding="utf-8")
     daily_pill_reset_repository = (PACKAGE / "features" / "back" / "daily_pill_usage_reset_repository.py").read_text(encoding="utf-8")
+    beg_application = (PACKAGE / "features" / "beg" / "application.py").read_text(encoding="utf-8")
+    beg_daily_reset_repository = (PACKAGE / "features" / "beg" / "daily_reset_repository.py").read_text(encoding="utf-8")
+    beg_daily_reset_tests = (PACKAGE / "features" / "beg" / "tests" / "test_daily_reset_repository.py").read_text(encoding="utf-8")
     past_life_events_facade = (PACKAGE / "xiuxian" / "xiuxian_past_life" / "past_life_events.py").read_text(encoding="utf-8")
     past_life_command_facade = (PACKAGE / "xiuxian" / "xiuxian_past_life" / "__init__.py").read_text(encoding="utf-8")
     dufang_facade = (PACKAGE / "xiuxian" / "xiuxian_dufang" / "__init__.py").read_text(encoding="utf-8")
@@ -1841,6 +1844,31 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "treasure_is_persistence_free": "update_exp" not in rift_domain and "update_ls" not in rift_domain and "update_ls" not in rift_application,
             "legacy_treasure_disabled": "get_treasure_info(" not in rift_event_handler,
             "status": "world_generation_termination_key_event_settlement_entry_speedup_demon_token_damage_event_boss_battle_asset_boundary_engine_provider_boundary_skill_provider_boundary_buff_random_source_boundary_status_writeback_isolation_item_provider_boundary_lazy_items_boundary_treasure_cutover_with_natal_impart_buff_info_accessory_tianti_and_base_provider_boundaries_and_remaining_rift_compatibility",
+        },
+        "beg": {
+            "daily_reset_application_owned": (
+                '_run_job("仙途奇缘重置", _daily_beg_reset)' in mixelixir_scheduler
+                and "_sql_message().beg_remake" not in mixelixir_scheduler
+                and "BegApplication(get_paths().game_db).reset_daily_claim_flag(_scheduler_business_date())" in mixelixir_scheduler
+                and "BegDailyResetSqlRepository(self.database, ledger=self.ledger).reset(" in beg_application
+            ),
+            "daily_reset_atomic_no_request_ddl": (
+                "DatabaseUnitOfWork(self.database, immediate=True)" in beg_daily_reset_repository
+                and "self.ledger.finish(uow, outcome)" in beg_daily_reset_repository
+                and '"operation_ledger"' in beg_daily_reset_repository
+                and '"operation_audit"' in beg_daily_reset_repository
+                and '"is_beg"' in beg_daily_reset_repository
+                and "CREATE TABLE" not in beg_daily_reset_repository
+            ),
+            "daily_reset_replay_rollback_and_missing_schema_covered": all(
+                marker in beg_daily_reset_tests
+                for marker in (
+                    "same_day_replay_preserves_new_claims",
+                    "daily_reset_conflict_and_missing_schema_fail_closed",
+                    "rolls_back_flag_and_ledger_when_audit_write_fails",
+                )
+            ),
+            "status": "daily_beg_reset_owned_by_application_with_atomic_ledger",
         },
         "back": {
             "daily_pill_usage_reset_application_owned": (
