@@ -121,6 +121,23 @@ def apply_closing_effects_player(uow: DatabaseUnitOfWork) -> None:
     )
 
 
+def apply_normal_training_game(uow: DatabaseUnitOfWork) -> None:
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS normal_training_operations("
+        "operation_id TEXT PRIMARY KEY,user_id TEXT NOT NULL,payload TEXT NOT NULL,"
+        "kind TEXT NOT NULL,create_time TEXT NOT NULL,scheduled_time TEXT NOT NULL,"
+        "status TEXT NOT NULL,result_json TEXT,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+    )
+
+
+def apply_normal_training_player(uow: DatabaseUnitOfWork) -> None:
+    uow.execute("CREATE TABLE IF NOT EXISTS statistics(user_id TEXT PRIMARY KEY)")
+    columns = {str(row["name"]) for row in uow.query_all("PRAGMA table_info(statistics)")}
+    for name in ("修炼次数", "修炼修为", "凡人挖矿次数", "灵石获取"):
+        if name not in columns:
+            uow.execute(f'ALTER TABLE statistics ADD COLUMN "{name}" INTEGER DEFAULT 0')
+
+
 __all__ = [
     "apply_buff",
     "apply_partner_token_operations",
@@ -131,4 +148,6 @@ __all__ = [
     "apply_normal_pvp_player_statistics",
     "apply_closing_settlement_game",
     "apply_closing_effects_player",
+    "apply_normal_training_game",
+    "apply_normal_training_player",
 ]

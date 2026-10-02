@@ -5,8 +5,8 @@ from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
+from ...core.errors import ConflictError, ValidationError
 from ...core.result import OperationOutcome
-from ...core.errors import ValidationError
 from ...infrastructure.clock import SystemClock
 from ...infrastructure.database import DatabaseUnitOfWork, OperationLedger, OutboxStore
 from .._legacy_application import LegacyApplication
@@ -18,6 +18,10 @@ from .training_complete_repository import NormalTrainingCompleteSqlRepository
 from .closing_repository import ClosingSettlementSqlRepository
 from .stone_training_repository import StoneTrainingSqlRepository
 from .pvp_repository import NormalPvpSqlRepository
+
+
+class _TrainingSchemaMissing(RuntimeError):
+    pass
 
 
 class BuffApplication(LegacyApplication):
@@ -64,12 +68,97 @@ class BuffApplication(LegacyApplication):
         return self._action("rename", operation_id=operation_id, user_id=user_id, **kwargs)
     def training_start(self, *, operation_id: str, user_id: str, **kwargs: Any):
         if self._explicit_repository is None:
-            return self._execute(operation_id=operation_id, user_id=user_id, action="buff.training_start", payload={"user_id": user_id, **kwargs}, call=lambda: NormalTrainingStartSqlRepository(self.game_database).start(operation_id, user_id, kwargs["kind"], kwargs["expected_exp"], kwargs["expected_stone"], kwargs["reward"], kwargs["exp_cap"], kwargs["power_multiplier"], kwargs.get("duration_seconds", 60)))
+            payload = {"user_id": user_id, **kwargs}
+            return self._training_lifecycle_execute(
+                operation_id, user_id, "buff.training_start", payload,
+                lambda uow: NormalTrainingStartSqlRepository(self.game_database).start_in_uow(
+                    uow, operation_id, user_id, kwargs["kind"], kwargs["expected_exp"],
+                    kwargs["expected_stone"], kwargs["reward"], kwargs["exp_cap"],
+                    kwargs["power_multiplier"], kwargs.get("duration_seconds", 60),
+                    kwargs.get("now") or self.clock.now(),
+                ),
+                (self.game_database,),
+            )
         return self._action("training_start", operation_id=operation_id, user_id=user_id, **kwargs)
     def training_complete(self, *, operation_id: str, user_id: str, **kwargs: Any):
         if self._explicit_repository is None:
-            return self._execute(operation_id=operation_id, user_id=user_id, action="buff.training_complete", payload={"user_id": user_id, **kwargs}, call=lambda: NormalTrainingCompleteSqlRepository(self.game_database, self.player_database).complete(operation_id, kwargs["task_period"]))
+            payload = {"user_id": user_id}
+            return self._training_lifecycle_execute(
+                operation_id, user_id, "buff.training_complete", payload,
+                lambda uow: NormalTrainingCompleteSqlRepository(
+                    self.game_database, self.player_database
+                ).complete_in_uow(
+                    uow, operation_id, kwargs["task_period"], user_id
+                ),
+                (self.game_database, self.player_database),
+            )
         return self._action("training_complete", operation_id=operation_id, user_id=user_id, **kwargs)
+
+    @staticmethod
+    def _training_result_data(result: Any) -> dict[str, Any]:
+        return {
+            name: getattr(result, name)
+            for name in (
+                "status", "kind", "create_time", "scheduled_time",
+                "exp_gain", "stone_gain", "hp_gain", "mp_gain",
+            )
+            if hasattr(result, name)
+        }
+
+    def _training_lifecycle_execute(
+        self,
+        operation_id: str,
+        user_id: str,
+        action: str,
+        payload: dict[str, Any],
+        call: Any,
+        required_databases: tuple[str, ...],
+    ) -> OperationOutcome[dict[str, Any]]:
+        operation_id, user_id = str(operation_id).strip(), str(user_id).strip()
+        if not operation_id or not user_id:
+            raise ValidationError("operation_id and user_id are required")
+        if any(not Path(database).is_file() for database in required_databases):
+            return OperationOutcome.rejected(
+                operation_id, action, "修炼数据结构尚未就绪。",
+                code="schema_missing", data={"status": "schema_missing"},
+                audit_category="buff", clock=self.clock,
+            )
+        try:
+            with DatabaseUnitOfWork(self.game_database, immediate=True) as uow:
+                existing = self.ledger.begin(uow, operation_id, action, payload)
+                if existing is not None:
+                    previous = existing.outcome()
+                    if previous is not None:
+                        return previous.replay()
+                    raise ConflictError("修炼操作正在处理中")
+                result = call(uow)
+                data = self._training_result_data(result)
+                if str(data.get("status")) == "schema_missing":
+                    raise _TrainingSchemaMissing("normal training schema is not ready")
+                if str(data.get("status")) in {"started", "applied", "duplicate"}:
+                    outcome = OperationOutcome.applied(
+                        operation_id, action, data=data, audit_category="buff",
+                        clock=self.clock,
+                    )
+                else:
+                    outcome = OperationOutcome.rejected(
+                        operation_id, action, "修炼操作未完成：状态或数据结构已更新。",
+                        code=str(data.get("status") or "rejected"), data=data,
+                        audit_category="buff", clock=self.clock,
+                    )
+                self.ledger.finish(uow, outcome)
+                return outcome
+        except _TrainingSchemaMissing:
+            return OperationOutcome.rejected(
+                operation_id, action, "修炼数据结构尚未就绪。",
+                code="schema_missing", data={"status": "schema_missing"},
+                audit_category="buff", clock=self.clock,
+            )
+        except Exception as exc:
+            self.ledger.record_failure(
+                self.game_database, operation_id, action, payload, str(exc)
+            )
+            raise
     def stone_training(self, *, operation_id: str, user_id: str, **kwargs: Any):
         if self._explicit_repository is None:
             return self._execute(operation_id=operation_id, user_id=user_id, action="buff.stone_training", payload={"user_id": user_id, **kwargs}, call=lambda: StoneTrainingSqlRepository(self.game_database, self.player_database).settle(operation_id, user_id, requested_stone=kwargs["requested_stone"], expected_exp=kwargs["expected_exp"], expected_stone=kwargs["expected_stone"], exp_cap=kwargs["exp_cap"], power_multiplier=kwargs["power_multiplier"]))

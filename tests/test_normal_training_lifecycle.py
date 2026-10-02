@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import importlib
 import tempfile
 import unittest
 from datetime import datetime
@@ -15,25 +14,31 @@ from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_buff.transaction_service import No
 from tests.test_db_backend import db_backend
 
 
-def test_buff_facade_defers_normal_training_lifecycle_service_construction():
-    buff = importlib.import_module(
-        "nonebot_plugin_xiuxian_2.xiuxian.xiuxian_buff"
-    )
-    assert buff._normal_training_lifecycle_service_instance is None
-
-
-def test_buff_training_handler_uses_lazy_dual_database_service():
+def test_buff_training_handler_uses_feature_application_for_start_and_completion():
     source = Path(
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_buff/__init__.py"
     ).read_text(encoding="utf-8")
     handler = source[source.index("async def up_exp_"):source.index("async def stone_exp_")]
     assert "buff_application.training_start(" in handler
     assert "buff_application.training_complete(" in handler
-    assert "_normal_training_lifecycle_service_instance = None" in source
-    assert "def _normal_training_lifecycle_service(" in source
-    assert "get_paths().game_db, get_paths().player_db" in source
-    assert "normal_training_lifecycle_service.start(" not in handler
-    assert "normal_training_lifecycle_service.complete(" not in handler
+    assert "_normal_training_lifecycle_service" not in handler
+    assert "_normal_training_lifecycle_service" not in source
+    assert "if not start_result.ok" in handler
+    assert 'start_result.status not in {"started", "duplicate"}' not in handler
+    assert "if not result.ok" in handler
+    assert "result.data" in handler
+
+
+def test_normal_training_migrations_are_routed_to_game_and_player_owners():
+    from nonebot_plugin_xiuxian_2.plugin import build_migrations, migrations_for_database
+
+    catalog = build_migrations()
+    game = {item.version for item in migrations_for_database(catalog, "game_db")}
+    player = {item.version for item in migrations_for_database(catalog, "player_db")}
+    assert "buff.010" in game
+    assert "buff.010" not in player
+    assert "buff.011" in player
+    assert "buff.011" not in game
 
 
 class NormalTrainingLifecycleTests(unittest.TestCase):

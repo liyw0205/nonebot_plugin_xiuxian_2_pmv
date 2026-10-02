@@ -614,7 +614,12 @@ def _slice_status() -> dict[str, dict[str, object]]:
     boss_world_repository = (PACKAGE / "features" / "boss" / "world_boss_repository.py").read_text(encoding="utf-8")
     boss_migrations = (PACKAGE / "features" / "boss" / "migrations.py").read_text(encoding="utf-8")
     buff_facade = (PACKAGE / "xiuxian" / "xiuxian_buff" / "__init__.py").read_text(encoding="utf-8")
+    buff_training_handler = buff_facade[
+        buff_facade.index("async def up_exp_") : buff_facade.index("@stone_exp.handle")
+    ]
     buff_application_source = (PACKAGE / "features" / "buff" / "application.py").read_text(encoding="utf-8")
+    buff_training_start_repository = (PACKAGE / "features" / "buff" / "training_start_repository.py").read_text(encoding="utf-8")
+    buff_training_complete_repository = (PACKAGE / "features" / "buff" / "training_complete_repository.py").read_text(encoding="utf-8")
     buff_closing_repository = (PACKAGE / "features" / "buff" / "closing_repository.py").read_text(encoding="utf-8")
     buff_closing_effects = (PACKAGE / "compatibility" / "buff_closing_effects.py").read_text(encoding="utf-8")
     buff_migrations = (PACKAGE / "features" / "buff" / "migrations.py").read_text(encoding="utf-8")
@@ -2726,7 +2731,31 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "legacy_blessed_rename_disabled": "_blessed_spot_service().rename(" not in buff_facade,
             "blessed_upgrade_application_owned": "buff_application.upgrade_field(" in buff_facade,
             "stone_training_application_owned": "buff_application.stone_training(" in buff_facade,
-            "training_lifecycle_application_owned": "buff_application.training_start(" in buff_facade and "buff_application.training_complete(" in buff_facade,
+            "training_lifecycle_application_owned": (
+                "buff_application.training_start(" in buff_training_handler
+                and "buff_application.training_complete(" in buff_training_handler
+                and "_normal_training_lifecycle_service" not in buff_training_handler
+                and "if not start_result.ok" in buff_training_handler
+                and "if not result.ok" in buff_training_handler
+                and "result.data" in buff_training_handler
+            ),
+            "training_lifecycle_request_path_has_no_ddl": all(
+                token not in buff_training_start_repository + buff_training_complete_repository
+                for token in ("CREATE TABLE", "ALTER TABLE")
+            ),
+            "training_lifecycle_startup_migrations_registered": (
+                'Migration("buff.010", "normal_training_operations", apply_normal_training_game)' in plugin
+                and 'Migration("buff.011", "normal_training_player_statistics", apply_normal_training_player)' in plugin
+                and "def apply_normal_training_game(" in buff_migrations
+                and "def apply_normal_training_player(" in buff_migrations
+            ),
+            "training_lifecycle_stats_and_weekly_task_owned": (
+                "_increment_statistics(" in buff_training_complete_repository
+                and "_increment_weekly_task(" in buff_training_complete_repository
+                and '"weekly_out_closing"' in buff_training_complete_repository
+                and "self.ledger.finish(uow, outcome)" in buff_application_source
+                and "def _training_lifecycle_execute(" in buff_application_source
+            ),
             "closing_settlement_application_owned": "buff_application.closing_settle(" in buff_facade,
             "closing_settlement_replay_application_owned": (
                 "buff_application.closing_replay(" in buff_facade

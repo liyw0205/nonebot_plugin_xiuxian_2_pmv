@@ -72,6 +72,8 @@ from .features.buff.migrations import (
     apply_normal_pvp_player_statistics,
     apply_closing_settlement_game,
     apply_closing_effects_player,
+    apply_normal_training_game,
+    apply_normal_training_player,
 )
 from .features.base.manifest import FEATURE as BASE_FEATURE
 from .features.base.migrations import (
@@ -319,6 +321,8 @@ def build_migrations() -> tuple[Migration, ...]:
         Migration("buff.007", "normal_pvp_player_statistics", apply_normal_pvp_player_statistics),
         Migration("buff.008", "closing_settlement_outbox", apply_closing_settlement_game),
         Migration("buff.009", "closing_effects_player_statistics", apply_closing_effects_player),
+        Migration("buff.010", "normal_training_operations", apply_normal_training_game),
+        Migration("buff.011", "normal_training_player_statistics", apply_normal_training_player),
         Migration("combat_settlement.001", "combat_settlement_feature_migrations", apply_combat_settlement),
         Migration("combat_settlement.002", "map_combat_settlement_operations", apply_combat_settlement_operations),
         Migration("combat_settlement.003", "map_dao_battle_operations", apply_dao_battle_operations),
@@ -520,6 +524,7 @@ _GAME_DATABASE_EXCLUDED_MIGRATION_VERSIONS = frozenset(
         "boss.004",
         "boss.006",
         "buff.009",
+        "buff.011",
         "game_events.001",
     }
 )
@@ -534,6 +539,7 @@ _PLAYER_DATABASE_MIGRATION_VERSIONS = frozenset(
         "info.avatar.002",
         "tower.004",
         "buff.009",
+        "buff.011",
         "game_events.001",
         "platform.001",
         "title.001",

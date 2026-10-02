@@ -2,7 +2,9 @@
 
 状态：进行中。`v1.1.0` 的 P0-P7 发布证据继续保留，但不作为底层全面重构完成证明。
 
-**当前目标顺序（2026-10-03）**：每次只切一条真实默认调用路径并保留可恢复回执。已完成技能确认缓存有界化、旧鉴石额度重置隔离、每日炼丹次数重置、丹药每日使用次数、仙途奇缘每日领取标志及签到每日标志 scheduler 写入。签到历史日期/迁移窗口风险仍开放；下一步继续按真实调用图审计仍可达的 player/economy 旧写，再按序处理其余 `transaction_service`、`xiuxian2_handle`、cultivation/training、combat/dungeon/boss、sect/trade 与 Web/scheduler 默认边界。持久 ledger/outbox/receipt 不是缓存，未明确重放窗口、保留期、归档格式和成对备份恢复前不设置 TTL、不自动删除。最终仍需全局 architecture/progress/inventory/source-quality 门禁、真实发布迁移、备份/恢复/reconcile 和 P7 证据；在这些全部完成前保持 `exit_ready=false`。
+**当前目标顺序（2026-10-03）**：每次只切一条经真实调用图证明的默认路径并保留可恢复回执。已完成技能确认缓存有界化、旧鉴石额度重置隔离、每日炼丹次数重置、丹药每日使用次数、仙途奇缘每日领取标志及签到每日标志 scheduler 写入。player/economy 只读审计没有证明 `RewardService._grant_exp` 有生产入口，因此不据此开切片。本轮选定普通修炼/挖矿生命周期：开始已有 feature repository，但完成仍由旧 service 承载；先补齐行为、schema、原子回执和来源门禁，再切默认入口。完成后按 combat/dungeon/boss、sect/trade 和 Web/scheduler 顺序继续审计真实旧写路径。签到历史日期/迁移窗口风险仍开放。随后逐项清理仍可达的 `transaction_service`、`xiuxian2_handle` 旧执行路径，并完成全局 architecture/progress/inventory/source-quality 门禁、真实发布迁移、备份/恢复/reconcile 和 P7 证据；在这些全部完成前保持 `exit_ready=false`。持久 ledger/outbox/receipt 不是缓存，未明确重放窗口、保留期、归档格式和成对备份恢复前不设置 TTL、不自动删除。
+
+**本轮方案与资源约束**：1 名子代理只读审计 cultivation/training 默认调用图，确认 `up_exp_` 的 completion 仍走旧 lifecycle service，并指出当前 source/progress gate 漏检；代理未改文件、跑测试、访问运行数据库/业务缓存或清理文件。主线程负责同一切片实现：为 `normal_training_operations` 增加 game startup migration，为玩家统计列增加 player migration，复用 `tasks.001` 的 weekly schema；开始/完成 repository 在单一 game UoW 中验证既有 schema、更新状态和统计/任务并写 ledger。普通修炼统计和周任务、挖矿统计都须保留，缺 schema fail closed，handler 统一使用 `OperationOutcome.ok/data`，progress/source gate 必须断言默认路径不再调用旧完成 service。SQLite ATTACH 的异常回滚可测，但不声称跨文件 WAL 崩溃原子性。测试/工具临时数据仅放本轮专用 `/tmp` 目录，关闭 pytest cacheprovider/pyc；验收后只清理本轮确认生成且进程已退出的临时目录，不碰 `.venv`、`.git`、`data/`、运行数据库/WAL/SHM、备份、持久回执或用户文件。RAM available 低于 `512 MiB`、磁盘可用低于 `10 GiB` 或 inode 异常时停止测试；重型任务串行执行。
 
 **本片执行方案与代理范围**：1 名子代理只读核对 scheduler 实际时区语义、共享 platform schema 所有权、ledger 原子性和测试缺口；代理未改代码、访问运行数据库、清缓存或运行测试。主线程负责 repository/application/scheduler 修改、行为与来源门禁、串行验收和仅清理本轮专用临时测试目录。测试关闭 pytest cache/pyc，不并发跑重型任务；RAM available 低于 `512 MiB`、磁盘可用低于 `10 GiB` 或 inode 异常时停止测试。不得清理 `.venv`、`.git`、`data/`、运行数据库/WAL/SHM、备份或用户文件。
 
@@ -3076,7 +3078,7 @@ combat/dungeon 真实旧路径审计。全局 legacy transaction services、`xiu
 
 ## 6. 下一步
 
-### 6.1 当前权威状态（2026-10-01）
+### 6.1 当前权威状态（2026-10-03）
 
 最近切片补充：普通入口的 `user_cd.last_check_info_time` 读写已由
 `PlayerActivityApplication -> PlayerActivitySqlRepository` 统一承载，runtime 注入
@@ -3094,11 +3096,13 @@ Boss 旧 settlement transaction 的同事务时间戳写入仍是独立未迁移
   `xiuxian/*/transaction_service.py`（23,469 行）以及
   `xiuxian2_handle.py`（181,666 bytes）的旧执行路径。它们不能因已有 facade、
   application 或静态标记而计作完成。
-- 2026-09-30 progress CLI 静态计数：Python 文件 1,664 个；
-  `transaction_service.py` 33 个/23,469 行，旧服务 import 文件 75 个，
-  `xiuxian2_handle` import 文件 72 个，直接 `db_backend.connect` 命中 139 个，
-  `sqlite3.connect` 命中 34 个，直接全局 random 命中 67 个，`datetime.now` 命中
-  73 个，`time.time` 命中 26 个；`xiuxian2_handle.py` 为 181,666 bytes。与早期快照相比，行数/命中数变化只代表静态计数变化；
+- 2026-10-03 progress CLI 静态计数：Python 文件 1,781 个；
+  `transaction_service.py` 33 个/23,370 行，旧服务 import 文件 69 个，
+  `xiuxian2_handle` import 文件 72 个，直接 `db_backend.connect` 命中 145 个，
+  `sqlite3.connect` 命中 42 个，直接全局 random 命中 68 个，`datetime.now` 命中
+  78 个，`time.time` 命中 26 个；`xiuxian2_handle.py` 为 182,150 bytes。进度报告的全局 blocker 仍为
+  `legacy transaction services remain` 与 `xiuxian2_handle remains in legacy execution paths`，
+  因此 `exit_ready=false`。与早期快照相比，行数/命中数变化只代表静态计数变化；
   每项仍须核对生产调用图，不能用减少计数代替执行路径证据。
 - Bank v1 Web 生产组合根已不再注入 `LegacyBankRepository`；存入/取出/升级/结息默认
   进入 game DB account applications。`bank.003` 在启动迁移中对旧 `player_db.bankinfo`
@@ -3175,9 +3179,11 @@ Boss 旧 settlement transaction 的同事务时间戳写入仍是独立未迁移
   closed。`StoneContestService` 仍作为显式兼容 API 承载未迁移的 transfer/Web 边界，抢劫也仍
   走原兼容 service；本切片不代表 base/economy 整域完成。
 
-### 6.2 当前推进队列（2026-10-02）
+### 6.2 当前推进队列（2026-10-03）
 
-2026-10-02 已收口洞府背包写入审计及 compensation 礼包/兑换码 SQL cutover：定义、领取、删除和清空均由 feature SQL 持有，旧 JSON 只作为一次性导入源；后续按 6.2 队列继续审计其它仍可达旧写路径。全局重构仍受 legacy transaction services、`xiuxian2_handle` 和正式发布/P7 证据阻塞。
+2026-10-02 已收口洞府背包写入审计及 compensation 礼包/兑换码 SQL cutover：定义、领取、删除和清空均由 feature SQL 持有，旧 JSON 只作为一次性导入源。2026-10-03 player/economy 只读审计未证明 `RewardService._grant_exp` 是真实默认入口；不可见于 production handler/route 的 helper 暂不迁移。1 名只读子代理随后确认普通「修炼」completion 是活跃旧写路径：当前 feature repository 漏掉修炼/挖矿统计和修炼周任务，并执行请求期 DDL；主线程按本轮方案补齐同 UoW 状态、统计、任务和 ledger，添加 game/player 启动 schema，修复 Outcome handler 契约并加强 source/progress gate。ATTACH 事务回滚不作为跨库 crash-atomicity 证明。全局重构仍受 legacy transaction services、`xiuxian2_handle` 和正式发布/P7 证据阻塞。
+
+2026-10-03 normal training lifecycle boundary：普通「修炼」与「挖矿」默认 start/complete 统一经 `BuffApplication`，移除 handler 的 `_normal_training_lifecycle_service` getter/call；修复开始 DTO 检查及挖矿完成 Outcome 字段误用。`NormalTrainingStart/CompleteSqlRepository` 只校验启动 schema，不再请求期创建 operation 表；game-only `buff.010` 预建生命周期 receipt，player-only `buff.011` 预建修炼/挖矿统计列，并复用 `tasks.001` 的 weekly schema。完成 UoW 原子更新玩家状态、对应统计、修炼周任务、业务 receipt 及 game operation ledger；同 operation replay 跨周不会重复写旧周任务，schema_missing 会回滚 ledger started 行并允许修复后重试。回归覆盖 cultivation/mining、统计、weekly period/replay、缺 schema 无 DDL、晚 receipt 失败全回滚与同 operation 重试，真实 handler/source/progress gate 和 migration routing；训练聚焦 `13 passed`，buff feature 全集 `25 passed`。inventory `--check`、12 个 Python 文件 AST 与 `git diff --check` 通过。测试关闭 pytest/pyc 缓存，专用 `/tmp` 测试目录验收后清理；未访问或清理运行数据库、WAL/SHM、持久业务回执或用户文件。SQLite ATTACH 异常回滚有测试，但不宣称跨文件 WAL 崩溃原子性。整体 `exit_ready=false`，旧 transaction service、`xiuxian2_handle` 与正式发布/P7 证据仍开放。
 
 当前 avatar 两阶段 player 状态切换与首次初始化均已完成。`out_closing` 默认入口的 application DB 路径、`create_time`/`expected_create_time` 参数和 `.ok`/`.succeeded` 结果契约错配已修复。剩余待办仍包括旧 `get_result` replay 预查的请求期 DDL，以及资产结算后闭关 statistics、用户 JSON 日志、任务和活动进度分开投影；结算回执 replay 会提前返回，崩溃可能漏记投影，而 statistics helper 是非原子读改写。开工前必须证明每个副作用的持久化位置、重试行为及业务所有者；不可仅加 replay 门闩或只迁 operation 表。若确认纳入，切片至少需要启动期 schema ownership、结算回执与待投影效果的可恢复关联、各 player/task/activity 投影按稳定 event/operation ID 去重，以及逐副作用失败后的重试测试。另将地图委托 replay 时重复发 game-event/statistics 与宠物游历 replay 重复加统计列为后续独立审计项，不与出关结算混成一个切片。
 
@@ -3195,7 +3201,7 @@ facade 与生命周期 service 的默认执行图一致。
 - **仙缘 feature-owned cutover 已完成（2026-09-30）**：真实 `送仙缘`/`抢仙缘` handler 与 `/api/v1/base/xiangyuan/{create,claim,group}` route 统一进入 `XiangyuanApplication -> XiangyuanSqlRepository`；`base.006` 仅迁移 game 仙缘池/回执，`base.007` 仅迁移 player `xiangyuan_limit`。跨库写入使用 immediate UoW 与 replay/conflict，缺 migration/schema fail closed，默认路径不再读取 `stone_limit` 或构造 compatibility service；旧 `XiangyuanSettlementService` 仅为显式回滚保留。下一项按 player/economy 调用图审计仍由 `xiuxian2_handle` 或旧 transaction service 承载的资产路径。
 - **世界BOSS三库结算 feature-owned cutover 已完成（2026-10-01）**：默认 `BossApplication -> BossPurchaseSqlRepository -> WorldBossBattleSettlementSqlRepository` 不再继承旧 settlement repository；game/player/activity 写入在同一 attached UoW 中完成，operation replay/conflict、玩家/BOSS/活动快照 CAS、统计/任务/背包和晚失败回滚均有回归证据。`boss.006` 仅路由 player schema，活动投影复用 `activity_state.001`；请求期不建表，缺 schema 失败闭环。旧 `WorldBossBattleSettlementService` 只保留显式 compatibility/rollback API。下一项回到 player/economy 调用图，审计仍可达的 `xiuxian2_handle` 与旧 transaction service。
 - **player vital-state writes 已切换（2026-10-01）**：注册、历练、通天塔、世界事件、世界BOSS、切磋和突破入口的空 HP 初始化，以及战斗结束后的 HP/MP 写回，均使用 `PlayerStateApplication`。空 HP 初始化按首个 `rowid` 与 exp 快照 CAS；战斗写回更新首个匹配 `rowid`，由于没有战前 HP/MP 快照，不做快照 CAS。缺 schema 不建表，战斗默认写回不再回退 `XiuxianDateManage.update_user_hp_mp`。旧 `update_user_hp` API 仍只作为显式兼容 fallback 保留。下一项继续审计 player/economy 其它旧写入（洞府背包和补偿回写）。
-2. **审计其余真实旧执行路径**：按 player/economy、cultivation/training、combat/dungeon/boss、sect/pet/trade 风险顺序逐个核对 handler、route、scheduler 和批处理；优先处理仍由旧 transaction service 或 `xiuxian2_handle` 承载的资产状态，兼容 shim 本身不计完成。
+2. **审计其余真实旧执行路径**：player/economy 审计当前未产生可证实候选；本轮先核对 cultivation/training，再按 combat/dungeon/boss、sect/pet/trade 风险顺序逐个检查 handler、route、scheduler 和批处理。优先处理仍由旧 transaction service 或 `xiuxian2_handle` 承载的资产状态，兼容 shim 本身不计完成；每次只迁移一条默认路径。
 3. **收敛全局基础依赖**：持续降低旧 service import、`xiuxian2_handle` import、`db_backend.connect`、`sqlite3.connect`、系统时间/全局随机命中；以 progress CLI 同口径计数并逐项附真实调用证据。
 4. **最后补齐发布证据**：针对真实数据目录执行备份、migration dry-run/执行、恢复、reconcile、远端冒烟和至少一次正式发布周期；完成这些前 P7 与全面重构均保持未完成。
 
