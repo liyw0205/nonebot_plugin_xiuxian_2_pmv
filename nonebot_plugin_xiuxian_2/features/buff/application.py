@@ -17,6 +17,8 @@ from .pvp_repository import NormalPvpSqlRepository
 
 class BuffApplication(LegacyApplication):
     def __init__(self, game_database: str | Path, player_database: str | Path, *, repository: BuffRepository | None = None) -> None:
+        self.game_database = str(game_database)
+        self.player_database = str(player_database)
         self._explicit_repository = repository
         super().__init__(game_database, repository=repository or LegacyBuffRepository(game_database, player_database), feature="buff")
 

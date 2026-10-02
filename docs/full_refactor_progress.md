@@ -2,6 +2,8 @@
 
 状态：进行中。`v1.1.0` 的 P0-P7 发布证据继续保留，但不作为底层全面重构完成证明。
 
+2026-10-02 buff closing default contract repair：补齐 `BuffApplication` 默认 repository 使用的 `game_database/player_database` 路径；修正 `out_closing` 的 `create_time`/`expected_create_time` 参数名，并按 `OperationOutcome.ok` 检查结果，避免把 repository DTO 的 `.succeeded` 契约误用于 application outcome。新增隔离 SQLite 应用成功/replay 回归和 handler source guard，闭关相关选择集最终 `7 passed`。本修复不涵盖结算后进程中断的统计/日志/任务/活动副作用补偿，也未移除旧 replay 预查的请求期 DDL；下一片仍须单独设计可恢复、按 event ID 幂等的投影。测试使用专用 `/tmp` 与禁用 pytest/字节码缓存，验收后清理；未访问运行数据库或用户 `boss_info.json`。
+
 2026-10-01 player combat vital write boundary：战斗结束后的 `update_all_user_status` 继续经
 `PlayerStateApplication.update_vitals` 写入首条 `user_xiuxian` row，不再在 `schema_missing` 时回退
 `XiuxianDateManage.update_user_hp_mp`；移除 `player_fight.py` 内旧 SQL manager 惰性缓存。写回失败记录不含用户标识的
@@ -3122,6 +3124,8 @@ Boss 旧 settlement transaction 的同事务时间戳写入仍是独立未迁移
 
 2026-10-02 已收口洞府背包写入审计及 compensation 礼包/兑换码 SQL cutover：定义、领取、删除和清空均由 feature SQL 持有，旧 JSON 只作为一次性导入源；后续按 6.2 队列继续审计其它仍可达旧写路径。全局重构仍受 legacy transaction services、`xiuxian2_handle` 和正式发布/P7 证据阻塞。
 
+当前 avatar 两阶段 player 状态切换与首次初始化均已完成。`out_closing` 默认入口的 application DB 路径、`create_time`/`expected_create_time` 参数和 `.ok`/`.succeeded` 结果契约错配已修复。剩余待办仍包括旧 `get_result` replay 预查的请求期 DDL，以及资产结算后闭关 statistics、用户 JSON 日志、任务和活动进度分开投影；结算回执 replay 会提前返回，崩溃可能漏记投影，而 statistics helper 是非原子读改写。开工前必须证明每个副作用的持久化位置、重试行为及业务所有者；不可仅加 replay 门闩或只迁 operation 表。若确认纳入，切片至少需要启动期 schema ownership、结算回执与待投影效果的可恢复关联、各 player/task/activity 投影按稳定 event/operation ID 去重，以及逐副作用失败后的重试测试。另将地图委托 replay 时重复发 game-event/statistics 与宠物游历 replay 重复加统计列为后续独立审计项，不与出关结算混成一个切片。
+
 本轮傀儡默认执行路径收口：生命周期容器不再注入 `LegacyPuppetRepository`，购买、升级和自动收取均由
 `PuppetApplication` 的 feature-owned SQL repository 承担；旧 transaction service 仍保留为显式兼容入口。
 新增 plugin/source/progress 门禁，避免正式 NoneBot 生命周期回退旧仓储。验证使用禁用字节码与 pytest 缓存的聚焦
@@ -3231,9 +3235,11 @@ focused tests、根目录 `tests/` 隔离回归、compileall、architecture/prog
 4. **持久回执保留与存储预算（只读基线已完成，归档策略仍未定）**：bet/payout/resolution、操作 ledger、已发送 outbox 和 player receipt 都是幂等、恢复或审计状态，不能
    当缓存随手清理。`scripts/audit_dufang_storage.py --data-dir <existing-data-dir>` 提供只读盘点：统计数据库和 WAL/SHM/journal 物理占用、SQLite 页数/空闲页、指定持久表行数及文本 payload 估算、pending/nonterminal 数量、当前备份目录总量，并估算 game/player 等 SQLite 文件的最低备份空间；SQL 仅聚合，备份目录最多扫描 50,000 个条目且不跟随符号链接，不将整表/目录树载入 RAM，不创建目录或数据库。此工具不执行归档、删除、`VACUUM`、checkpoint 或 restore。待确定旧消息 replay 窗口、审计期限及可恢复归档格式后，才另行评估终态 receipt 压缩。
    **当前不定义 TTL，也不启用自动归档/删除**：ADR-0007 要求至少覆盖对应备份保留期、reconcile clean 后由运维归档；还需先确定旧消息 replay 窗口和可恢复的归档格式。pending、started、failed、needs_reconcile、dead outbox、未完成 share progress，以及仍承担幂等 tombstone 的终态回执都不得删除。归档前必须有审批、game/player 成对且可校验的备份/恢复证据与 clean reconcile；仅有空间报告不构成归档许可。
-5. **按真实调用图清理剩余旧写路径**：优先 player/economy/inventory 等会改动资产的默认 handler，再审计
-   cultivation/training、combat/dungeon/boss、sect/pet/trade 与 scheduler/Web 入口。每项记录入口、实际调用链、
-   状态所有者和测试证据；只有默认调用归零后，才隔离或删除对应 legacy service。
+5. **按真实调用图清理剩余旧写路径**：优先 player/economy/inventory 等会改动资产的默认 handler；当前候选为
+   `out_closing` 的统计/日志/任务/活动副作用恢复，须先完成上述所有权与 replay 审计。随后单独审计地图委托和宠物游历
+   replay 的重复统计，再按风险处理 cultivation/training、combat/dungeon/boss、sect/trade 与 scheduler/Web 入口。
+   每项记录真实入口、完整调用链、跨库状态所有者和中断恢复证据；只有默认调用归零且兼容/回滚边界明确后，才隔离或删除
+   对应 legacy service。
 6. **全局依赖与完成门禁**：按同一 progress CLI 口径持续记录 `transaction_service`、`xiuxian2_handle`、
    直连数据库、系统时间和全局随机依赖。兼容 shim/静态计数下降不单独算完成，退出前必须证明默认执行图已切换，
    且 architecture/progress/inventory/source-quality 门禁通过。

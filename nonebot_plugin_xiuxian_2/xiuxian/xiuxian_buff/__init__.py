@@ -801,13 +801,13 @@ async def out_closing_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
     try:
         result = buff_application.closing_settle(
             operation_id=closing_operation_id, user_id=str(user_id),
-            create_time=create_time, exp_gain=exp, stone_cost=stone_cost,
+            expected_create_time=create_time, exp_gain=exp, stone_cost=stone_cost,
             new_hp=new_hp, new_mp=new_mp, new_atk=new_atk, new_power=new_power,
         )
     except Exception:
         await handle_send(bot, event, "出关结算失败：结算过程异常。")
         await out_closing.finish()
-    if not result.succeeded:
+    if not result.ok:
         await handle_send(bot, event, "闭关操作未完成：闭关状态或资源已更新，请重新查看。")
         await out_closing.finish()
 
