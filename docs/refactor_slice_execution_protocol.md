@@ -112,6 +112,8 @@
    - SQLite 扫描/过期使用零锁等待，锁冲突立即结束本轮并重试，逐条让出事件循环；共享 UoW 尊重显式 timeout（默认 30 秒不变），不额外创建线程或后台任务。持锁回归必须验证 heartbeat、取消和解锁后恢复，不能只证明通知限时。
 6. 先建失败回归，再验证索引/query plan、100 条上限、路由冻结、重启恢复、精确 deadline/回拨、join/reject 竞争、receipt 失败回滚、重复执行和异常隔离。所有测试与 recovery 串行，关闭 pytest/pyc 缓存并使用 `/tmp/codex-dungeon-invite-expiry-20261003`；进程退出后仅清理本轮产物并复核磁盘/RAM，保留运行库/WAL/SHM、备份、持久回执和用户 `boss_info.json`。
 
+本片执行收口：代码 `e1391cd0` 已推送，最终聚合回归 `197 passed`，静态/progress/source 聚焦 `27 passed`，额外聚合 progress/scheduler/锁补口 `7 passed`；42 项邀请边界与 UoW 合并回归 `45 passed`。隔离五库备份和 restore dry-run/restore 成功，265 项 migration 的回执路由为 `203/58/7/1/1`，`.010` 仅 player，reconcile clean。完整 architecture 仍有 17 项既有错误、整体 `exit_ready=false`；未跑全量 pytest 或正式迁移/P7。验收后专用目录已删除（收尾约 4 MiB，早期旧测试约 25 MiB 已清），磁盘 `19G`、RAM available 约 `1.4GiB`、inode `15%`。下一片复用 1 名只读代理审计 intent Web permission/manifest 的真实鉴权链；不跑测试、不访问运行库、不生成缓存，主线程写方案与实现。
+
 ## 缓存清理允许范围
 
 - 仓库内未跟踪的 `__pycache__/`、`*.pyc`、`.pytest_cache/`。
