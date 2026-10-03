@@ -133,14 +133,19 @@
       "kind": "matcher-family",
       "entry": "default old on_message/on_regex/on_startswith and other non-command matcher handlers",
       "status": "受阻",
-      "reason": "The default loader exposes these matcher kinds, but the checked-in command inventory does not enumerate them. Keep this as a blocking family; new discoveries belong in backlog until scope is explicitly reviewed.",
+      "reason": "The initialized default loader imports legacy feature modules and on_compat only suppresses explicitly migrated command keys; non-command matchers still register and can reach old handlers. This frozen family remains blocked until its handler effects are reviewed. Do not add individual discoveries to the current scope automatically; put out-of-scope findings in backlog for explicit review.",
       "call_graph": [
-        "package initialization -> load_all_plugins(plugin_modules)",
-        "legacy feature decorators -> xiuxian/on_compat.py wrappers -> NoneBot matcher registration"
+        "initialized NoneBot -> _load_legacy_plugins_if_initialized enumerates non-internal xiuxian modules -> load_all_plugins imports modules and evaluates their decorators",
+        "confirmed default call sites include xiuxian_admin.empty_fallback.on_message and xiuxian_work/xiuxian_bank.on_regex -> on_compat wrapper -> NoneBot matcher constructor -> _register_route",
+        "only on_command checks the explicit _MIGRATED_COMMAND_KEYS suppression set; the confirmed non-command registrations bypass that suppression",
+        "XiuxianOnCompatProvider selects indexed/generic routes for each event -> registered old matcher handler remains dispatchable"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
-        "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-903"
+        "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:69-82,135-139,214-227,486-537,789-971",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/empty_fallback.py:10,95-103",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_work/__init__.py:8,122-126",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_bank/__init__.py:5,29-33"
       ]
     },
     {
