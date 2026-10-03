@@ -2,17 +2,19 @@
 
 状态：进行中。`v1.1.0` 的 P0-P7 发布证据继续保留，但不作为底层全面重构完成证明。
 
-**当前目标顺序（2026-10-03）**：每次只切一条经真实调用图证明的默认路径并保留可恢复回执。技能确认缓存、已迁移的日重置/普通修炼/挖矿/通天塔及 BOSS 周限购边界保持关闭；副本 `.006/.007` 启动 schema、operation-scoped RNG、game-only `.008` crash-replay 输入冻结、player-only `.009` 队伍有界查询/投影同步和 session schema/ABA 检查，以及 reset clock/业务时区/跨午夜冻结/manual 回放已完成。本轮新增 player-only `.010` 邀请到期索引与 ID 路由，默认无界 sleeper 已切换为单个有界 worker。剩余目标如下，全部关闭前保持 `exit_ready=false`：
+**当前目标顺序（2026-10-03）**：每次只切一条经真实调用图证明的默认路径并保留可恢复回执。技能确认缓存、已迁移的日重置/普通修炼/挖矿/通天塔及 BOSS 周限购边界保持关闭；副本 `.006/.007` 启动 schema、operation-scoped RNG、game-only `.008` crash-replay 输入冻结、player-only `.009` 队伍有界查询/投影同步和 session schema/ABA 检查，以及 reset clock/业务时区/跨午夜冻结/manual 回放已完成。player-only `.010` 邀请到期索引与 ID 路由已将默认无界 sleeper 切换为单个有界 worker；本轮补齐 intent Web manifest，运行时 permission/CSRF guard 未改。剩余目标如下，全部关闭前保持 `exit_ready=false`：
 
 1. 继续按 player/economy、combat/dungeon/boss、sect/trade、Web/scheduler 的真实调用图迁移默认旧写入口；全局 `transaction_service`、`xiuxian2_handle` 门禁仍未关闭。普通修炼已走 `BuffApplication`，未证明有生产调用的 `RewardService._grant_exp` 不作为新切片依据。
-2. 副本独立切片：继续补齐 intent Web permission/manifest，并审计真实可达的其它旧写入口。邀请有界扫描已完成，但通知仍为 best-effort，坏历史行/冲突 receipt 需要受控修复，不作为缓存删除。legacy team reader、invite mapping 和旧 expiry helper 仅保留兼容实现，未证明默认 handler 可达，不重复迁移死 helper。legacy writer 回滚后需要停机受控重建投影，跨队重叠成员仍需备份后清洗，不能直接混用新旧 writer。
+2. 副本/Web 独立边界：intent manifest 已关闭，继续审计真实可达的其它旧写入口；全局 Web `user` resolver 默认允许，认证 actor 与 operation user_id 的绑定仍待单独设计，不能以操作 identity 校验替代认证。邀请有界扫描已完成，但通知仍为 best-effort，坏历史行/冲突 receipt 需要受控修复，不作为缓存删除。legacy team reader、invite mapping 和旧 expiry helper 仅保留兼容实现，未证明默认 handler 可达，不重复迁移死 helper。legacy writer 回滚后需要停机受控重建投影，跨队重叠成员仍需备份后清洗，不能直接混用新旧 writer。
 3. 缓存/RAM 独立切片：洞府候选用户有界选择、共享 field-list cache 容量/过期回收；不复制或主动清空其他玩法共享缓存。签到历史日期/迁移窗口风险继续保留。
-4. 全局验收：修补既有 architecture 问题，包括副本 intent Web permission/manifest、avatar driver import、game_events/info 和 operation-id 门禁，以及旧插件 `get_active_user_id` 导入缺失；校正既有 BOSS source-quality 断言，重跑完整门禁。
+4. 全局验收：本轮完整 architecture 的错误从 17 降至 15，副本 intent 的 permission/manifest 两项已消失。剩余 avatar driver import、game_events/info 和 operation-id 门禁，以及旧插件 `get_active_user_id` 导入缺失仍需独立处理；校正既有 BOSS source-quality 断言，重跑完整门禁，不把静态误报直接当成真实写入口。
 5. 正式发布：确定 ledger/outbox/receipt 保留窗口与归档格式，再完成真实数据成对备份、迁移、恢复/reconcile 和 P7 证据。持久回执不是缓存，本轮隔离 recovery 成功不能替代正式演练。
 
-**本片方案与子代理范围**：本轮处理副本邀请过期任务，具体闭环见 `docs/refactor_slice_execution_protocol.md` 的本轮邀请过期任务方案。允许合理使用子代理：本轮仅复用 1 名只读代理核对调用图、通知路由、schema/receipt 和锁等待风险，不访问运行数据、不运行测试；主线程统一修改、串行测试、资源监测、缓存清理、diff 复核和提交。仅在资源允许且任务独立时增加代理，最多同时 3 名，不为使用代理而重复已完成的审计。
+**本片方案与子代理范围**：本轮处理副本 intent Web manifest，具体闭环见 `docs/refactor_slice_execution_protocol.md` 的 Intent Web 声明方案。允许合理使用子代理：复用已完成的 1 名只读代理鉴权链审计，不重复启动相同任务，不访问运行数据、不运行代理测试；主线程统一修改、串行测试、资源监测、缓存清理、diff 复核和提交。仅在资源允许且任务独立时增加代理，最多同时 3 名。下一片优先只读审计洞府候选/共享 field-list cache，先写明有界方案，再实现。
 
 **缓存、资源与验收约束**：测试关闭 pytest cacheprovider 和 Python 字节码写入，使用本轮专用 `/tmp` basetemp；仅在相关进程退出后清理本轮明确生成的临时目录/日志/字节码，不清理未知或业务缓存，也不碰 `.venv`、`.git`、`data/`、运行数据库/WAL/SHM、备份、持久回执或用户文件。开始重型任务前复核 `df -h`、`df -ih`、`free -h` 与高占用进程；RAM available 低于 `512 MiB`、磁盘可用低于 `10 GiB` 或 inode 异常时停止测试，重型任务串行执行。通过定向行为测试、单个 progress gate、inventory freshness、AST 编译和 `git diff --check` 后审阅 staged diff，再提交并推送；保留未暂存的用户改动。
+
+**本片验证（2026-10-03，dungeon intent Web manifest）**：补齐 `POST /api/v1/dungeon/explore/intent` 的 `user` RouteSpec，同步 feature 文档与 inventory；没有业务逻辑或 migration 变更。新增 Web 回归修复前仅 manifest 一项失败，35 项行为测试通过；修复后的 Web/副本仓储/inventory 聚合 `97 passed`，progress/architecture 单元 `25 passed`。覆盖五项 POST 声明、permission 拒绝时零应用调用、缺失/错误/跨会话 CSRF、幂等键 header 优先/请求体 fallback，以及真实仓储同 user replay 和不同 user 的 `409/operation_conflict` 不泄露 intent/plan/结果。完整 architecture 从 17 降至 15 项既有错误，Web permission、manifest route 与文档对照均通过；默认 `user` resolver 仍允许，认证 actor 绑定未完成。隔离五库 backup、restore dry-run/restore、265 项 migration recovery 和 reconcile clean 通过，路由数 `203/58/7/1/1`；不是正式 migration/P7。inventory freshness、2 个 Python 文件内存编译和 diff check 通过。复用 1 名只读代理既有审计，无重复代理测试；主线程串行验收后已清理本片专用 `/tmp`（约 6.5 MiB），仓库保护范围外没有 pytest/pyc 缓存；磁盘 `20G`、RAM available 约 `1.4GiB`、inode `14%`，用户 `boss_info.json` 保留未暂存。整体 `exit_ready=false`，下一片优先审计洞府候选/field-list cache，不重复迁移已完成的副本边界。
 
 **本片验证（2026-10-03，dungeon team 启动 schema）**：新增迁移回归覆盖 player-only 路由、旧 `teams` 行保留、回执表预建、缺库/缺列 fail closed 且不创建数据库或请求期表；dungeon team 既有事务/退出/踢出解散/查询测试先行通过。progress CLI 新增的三项 team gate 全 true；另有 platform migration 选择集的 11 项既有导入错误（`get_active_user_id` 缺失），与本片无关，未扩大修复范围。验收使用 `PYTHONDONTWRITEBYTECODE=1`、禁用 pytest cacheprovider 和专用 `/tmp/codex-dungeon-team-20261003`，进程退出后只清理本轮明确生成的临时目录/字节码；未触碰运行数据库、WAL/SHM、备份、持久回执或用户 `boss_info.json`。磁盘可用空间低于 `10 GiB` 或 RAM available 低于 `512 MiB` 时停止重型测试；本轮保持 `exit_ready=false`，下一项按 combat/dungeon/boss 顺序审计真实旧写路径，并继续规划备份/恢复/reconcile 与 P7 证据。
 

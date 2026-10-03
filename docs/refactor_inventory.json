@@ -5000,6 +5000,14 @@
       "methods": [
         "POST"
       ],
+      "path": "/api/v1/dungeon/explore/intent",
+      "permission": "user"
+    },
+    {
+      "feature": "dungeon",
+      "methods": [
+        "POST"
+      ],
       "path": "/api/v1/dungeon/explore/prepare",
       "permission": "user"
     },

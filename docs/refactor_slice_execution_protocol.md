@@ -56,7 +56,7 @@
    - 当前洞府未完成项：随机潜入与同节点读取调用 `list_users_by_fields` 后完整物化候选用户，再逐个读取 profile/洞府；`PlayerDataManager._field_list_cache` 的 TTL entry 没有容量上限或主动过期清扫。单独设计有界/流式候选选择，并给共享 field-list cache 增加可证明的条目或字节上限及过期回收；不得复制或主动清空 `ITEMS_CACHE` 等其他玩法共享缓存。
    - 下一洞府候选/缓存切片委派 1 名只读子代理梳理 field-list cache 的生产调用点、失效路径与条目体积风险；子代理不改代码、不跑 SQLite 测试，主线程负责实现、串行验收和资源收尾。
    - 当前副本已完成项：player-only `dungeon.007`、prepared settlement schema、operation-scoped RNG、game-only `dungeon.008` 输入冻结、player-only `dungeon.009` 队伍成员索引/同事务投影同步和 session schema/ABA 检查，以及 reset clock 贯穿、scheduler 业务时区、跨午夜日期冻结与 manual 跨日回放；本轮 `.010` 到期索引/ID 路由和单 worker 关闭默认每邀请一个 sleeper 的任务资源边界。成员读取与探索结算都改为单行选择；真实 `user_xiuxian` owner 为 game DB，队伍写入仍只在 player UoW 内执行。
-   - 当前副本未完成项：intent Web route 的 permission/manifest 声明，正式 migration/recovery/P7，历史损坏邀请/冲突 receipt 的受控修复。通知不是 outbox，不能宣称持久补发。legacy team reader、`PersistentTeamInviteMapping` 无界迭代/请求期 DDL 和旧 expiry helper 仍保留兼容实现，但最新限定调用图未证明默认 handler 可达，不以 helper 存在作为迁移依据。跨队历史重叠成员尚未清洗，本片仅统一选择最小 `team_id`；清洗必须独立制定备份、冲突决策和对账方案。
+   - 当前副本未完成项：Web 认证 actor 绑定、正式 migration/recovery/P7，历史损坏邀请/冲突 receipt 的受控修复。intent Web manifest 已补齐，现有 permission/CSRF guard 未改；全局 `user` resolver 默认允许，operation identity 校验不能替代认证。通知不是 outbox，不能宣称持久补发。legacy team reader、`PersistentTeamInviteMapping` 无界迭代/请求期 DDL 和旧 expiry helper 仍保留兼容实现，但最新限定调用图未证明默认 handler 可达，不以 helper 存在作为迁移依据。跨队历史重叠成员尚未清洗，本片仅统一选择最小 `team_id`；清洗必须独立制定备份、冲突决策和对账方案。
    - 队伍回滚边界：legacy writer 不维护 `.009` 投影，不得与默认新 writer 混用。回滚期间一旦发生旧写，再回默认入口必须停机并受控重建/核验投影；migration ledger 不会自动重跑已应用的 `.009`，不能仅切换开关恢复服务。
    - 最近只读调用图审计已确认普通修炼结算切到 `BuffApplication`，没有新的 `up_exp_` 旧 service 切片证据；`RewardService._grant_exp` 的生产入口仍未证明，不据此开切片。
    - 当前历练未完成项：普通修炼生命周期默认入口已由 `BuffApplication` 承担，后续只审计事件随机计划、排行榜有界分页和 `training_limit.py` 兼容读写，不重复迁移已关闭的结算边界。
@@ -114,12 +114,14 @@
 
 本片执行收口：代码 `e1391cd0` 已推送，最终聚合回归 `197 passed`，静态/progress/source 聚焦 `27 passed`，额外聚合 progress/scheduler/锁补口 `7 passed`；42 项邀请边界与 UoW 合并回归 `45 passed`。隔离五库备份和 restore dry-run/restore 成功，265 项 migration 的回执路由为 `203/58/7/1/1`，`.010` 仅 player，reconcile clean。完整 architecture 仍有 17 项既有错误、整体 `exit_ready=false`；未跑全量 pytest 或正式迁移/P7。验收后专用目录已删除（收尾约 4 MiB，早期旧测试约 25 MiB 已清），磁盘 `19G`、RAM available 约 `1.4GiB`、inode `15%`。下一片复用 1 名只读代理审计 intent Web permission/manifest 的真实鉴权链；不跑测试、不访问运行库、不生成缓存，主线程写方案与实现。
 
-### 下一片 Intent Web 声明方案（只读审计完成）
+### 本片 Intent Web 声明方案（2026-10-03）
 
 1. 已复用 1 名只读代理核对真实路由链；`adapters/web/blueprints/dungeon.py` 的 intent 已与 replay/prepare/settle 共用 `guard("user", permission, write=True)`，先检查 permission 再检查 CSRF。architecture 的两项 intent 错误来自 manifest 路由索引漂移，不是独立证明的运行时 guard 缺失；不重复改业务 intent 持久计划。
 2. 最小实现仅在 `features/dungeon/manifest.py` 补 `POST /api/v1/dungeon/explore/intent`、permission `user`，同步 feature 文档与 inventory。主线程增加聚焦 Web 回归：五项 POST 路由声明、注入拒绝 permission 时零应用调用、缺/错/跨会话 CSRF、Idempotency-Key 优先、同 user replay 与不同 user 的 409/conflict 且不泄露原结果。
 3. 现有 Web `user` permission resolver 默认允许，operation identity 的 user_id 校验不等同于认证 actor 绑定。该通用策略保持独立未完成项，本片不扩改全部 Web auth，也不以注入拒绝 resolver 的测试宣称默认策略已加强。
 4. 子代理只负责上述静态审计，不改文件、运行测试或访问运行库；主线程串行测试、静态门禁、清理和提交。继续关闭 pytest/pyc 缓存并使用独立临时目录，复核 10 GiB 磁盘/512 MiB RAM 阈值；上一邀请切片目录已清理，不重新保留测试副本。
+
+本片执行收口：manifest、feature 文档与 inventory 已补齐 intent；运行时 guard 和全局 auth 未改，无新增 migration。新增 Web 边界回归修复前为 `1 failed, 35 passed`，唯一失败是漏声明；修复后的 Web/副本仓储/inventory 聚合 `97 passed`，progress/architecture 单元 `25 passed`。完整 architecture 两项 intent 错误消失，`web_permissions/manifest_routes/manifest_documentation` 均为空，仍有 15 项既有错误；不宣称全量门禁已通过。progress 保持 `exit_ready=false`；inventory freshness、2 个 Python 文件内存编译、diff check 通过。隔离五库 backup、restore dry-run/restore 和 265 项 migration recovery 成功，路由数 `203/58/7/1/1`，reconcile clean（operations/outbox/dead events 均为 0）；没有正式运行库迁移/P7。复用前一轮已完成的 1 名只读代理结论，不重复派相同审计；主线程实施全部修改与串行验收。进程全部退出后已删除本片专用 `/tmp/codex-dungeon-intent-web-20261003`（收尾约 6.5 MiB），仓库保护范围外未发现 pytest/pyc 缓存；磁盘可用 `20G`、RAM available 约 `1.4GiB`、inode 使用 `14%`。保留运行数据库/WAL/SHM、备份、持久回执和用户 `boss_info.json`；下一片只读审计洞府候选与共享 field-list cache 的真实资源边界。
 
 ## 缓存清理允许范围
 

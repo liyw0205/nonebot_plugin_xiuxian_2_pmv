@@ -12,7 +12,9 @@
 ## Web API
 
 - `POST /api/v1/dungeon/purchase`，权限 `user`，支持 `Idempotency-Key`。
-- `POST /api/v1/dungeon/explore/replay`、`prepare`、`settle`，权限 `user`。
+- `POST /api/v1/dungeon/explore/replay`、`intent`、`prepare`、`settle`，权限 `user`，支持 `Idempotency-Key`，优先于请求体的 `operation_id`。
+
+五项 POST 路由均先执行 permission resolver，再验证当前会话 CSRF；拒绝时不调用 application。同 user 可重放持久探索结果，不同 user 返回 `409/operation_conflict`，不返回原 intent、plan 或结果。这里的 user 是操作 identity，不是认证 actor；现有全局 `user` resolver 默认允许，认证主体绑定仍是独立未完成目标。
 
 ## 数据模型与迁移
 
@@ -38,7 +40,7 @@
 
 关闭开关后保留旧命令和数据格式。探索的战斗规则、队伍管理和奖励计算尚未移入新 domain，待后续发布周期完成迁移。
 
-当前未完成边界：intent Web route 的 permission/manifest 声明、全局 legacy 门禁和正式运行数据 migration/restore/P7 证据。legacy reader/mapping 仍保留兼容实现，但默认 handler 未证明可达，不重复迁移死 helper。旧 writer 不维护 `.009` 投影；回滚发生旧写后再回默认入口，必须停机受控重建/核验投影。历史跨队重叠未清洗，当前按最小 team_id 单行选择。
+当前未完成边界：Web 认证主体绑定、全局 legacy 门禁和正式运行数据 migration/restore/P7 证据。intent Web route 已补齐 manifest 声明，运行时 guard 保持不变。legacy reader/mapping 仍保留兼容实现，但默认 handler 未证明可达，不重复迁移死 helper。旧 writer 不维护 `.009` 投影；回滚发生旧写后再回默认入口，必须停机受控重建/核验投影。历史跨队重叠未清洗，当前按最小 team_id 单行选择。
 
 ## 适配器差异
 
@@ -46,8 +48,11 @@
 
 ## 测试与手工验收
 
-覆盖准备、结算、重放、快照冲突和库存拒绝；使用 Flask client 与恢复冒烟验证权限和幂等。
+覆盖准备、结算、重放、快照冲突和库存拒绝；`tests/test_dungeon_explore_web_boundary.py` 通过隔离 Flask client 验证五项路由声明、注入拒绝 resolver、缺失/错误/跨会话 CSRF、幂等键优先和真实仓储 identity 冲突不泄露。不以注入权限测试宣称默认认证策略已加强。
 
 ## Manifest 清单
+- `route: POST /api/v1/dungeon/purchase`
+- `route: POST /api/v1/dungeon/explore/replay`
+- `route: POST /api/v1/dungeon/explore/intent`
 - `route: POST /api/v1/dungeon/explore/prepare`
 - `route: POST /api/v1/dungeon/explore/settle`
