@@ -352,13 +352,14 @@ def test_record_missing_name_does_not_read_record():
     assert env["handle_send"].await_args.args[2] == "附近未找到道友【absent】"
 
 
-def test_nearby_display_keeps_original_list_path():
+def test_nearby_display_does_not_use_named_target_query():
     target = {"user_id": "first", "user_name": "target", "level": "level", "power": 20}
     env = load_handler("nearby_users_cmd", None)
-    env["_get_all_in_same_node"] = Mock(return_value=[target])
+    env["map_application"].nearby_display = AsyncMock(return_value=[target])
     asyncio.run(env["_"]("bot", object()))
     env["map_application"].nearby_target.assert_not_called()
-    env["_get_all_in_same_node"].assert_called_once_with("realm", "heaven", "node")
+    env["_get_all_in_same_node"].assert_not_called()
+    env["map_application"].nearby_display.assert_awaited_once()
 
 
 @pytest.mark.parametrize("drift", (False, True))

@@ -176,12 +176,21 @@
 
 本片执行收口（2026-10-03）：随机 handler/application/query 已切换，指定查询和附近展示未扩改。修复前 3 回归失败；地图/论道/progress `242 passed`、最终 random/inventory/architecture 单元 `87 passed`（random 70 项）、source 定向 `1 passed`；五项随机门禁、inventory freshness、9 文件 AST 编译和 diff check 通过。完整 architecture 保持既有 15 错、`exit_ready=false`；隔离五库 backup、restore dry-run/restore、265 项 migration/reconcile clean、路由 `203/58/7/1/1` 通过，非正式发布/P7。1 名代理仅静态审计实现/覆盖，主线程实现和串行验收；无代理测试/导入/编译/恢复/数据库访问或缓存。禁用 pytest/pyc 并隔离 prefix，进程全部退出后删除本片专用 `/tmp`（约 6.6 MiB），无仓库字节码；保留运行数据、正式备份、持久回执和用户 Boss JSON。收尾磁盘 `20G`、RAM available `1.3GiB`、inode `14%`；无 migration/cache/请求期 DDL，回滚仅恢复查询及 handler 接线。抽取 handler 是功能回归，不是 NoneBot 注册/在线验收。
 
-### 下一片附近展示有界选择方案
+### 本轮附近展示有界选择方案
 
 1. 已确认真实路径 `nearby_users_cmd -> _get_all_in_same_node -> nearby_players.list` 仍物化完整 JOIN/list，再创建 filtered list、无界 seen 集合与去重 list，超过 10 个用户才 sample。仅关闭此入口，不重做已完成的随机/指定目标选择或结算。
-2. 展示按字符串用户 ID 去重，保留每个 ID 首个 map/profile pair 的 public 展示字段；不能复用论道的重复 pair 加权。先用 focused 回归明确旧 profile 并列顺序的确定化与异常字段行为，再设计 SQL 端首 pair 识别/数值游标分页，禁止用无界 Python seen 集合换掉全量 list。
-3. 最多保留 10 份展示对象，按有效唯一用户流公平 reservoir(k=10)；不足 10 保留读取顺序，超过 10 时还需随机展示顺序。采用双高水位、短只读 UoW、固定批次协作让出和读取故障丢弃结果；明确并发非全局快照及重复/资格更新语义，不加共享缓存或请求期 DDL。
+2. 展示按 BINARY 字符串用户 ID seek，SQL 只返回一个首 map/profile pair 的 ID 和 rowid；候选点查必须带 expected ID，不能复用论道的重复 pair 加权，也不能用无界 Python `seen` 集合。单 ID 读取而非 256 个 ID 批量，避免大标识字段按页放大。
+3. 最多保留 10 份展示对象，按稳定数据下的唯一用户流公平 reservoir(k=10)；不足 10 按冻结 map pair 顺序，超过 10 再随机排列。采用双高水位、短只读 UoW、每个 ID 后协作让出和读取故障丢弃结果；明确并发非全局快照、首 pair 删除/更新和唯一性边界，不加共享缓存或请求期 DDL。
 4. 默认至多复用 1 名只读代理审计去重/首行/公平性/查询峰值，代理禁止测试/导入/编译/恢复/数据库访问/生成缓存；主线程负责实现、串行验收、专用缓存清理与提交推送。继续 10 GiB/512 MiB 阈值，SQL 工作集、单字段大小、缺索引耗时及正式发布证据仍开放。
+
+本片执行收口（2026-10-03）：`nearby_users_cmd` 改经 async feature application 与 BINARY ID seek query；一页只读一个 ID 与首 pair，候选以 expected ID 重查。稳定数据下最多保留 10 个唯一对象，不足 10 按 map rowid 顺序，超过 10 使用 reservoir(k=10) 并随机排列。地图/论道/progress 聚合 `326 passed`，附近展示专项 `83 passed`，最终 progress/inventory/architecture 单元 `33 passed`，source-quality 地图随机/附近定向 `2 passed`；五项展示 progress gate、inventory freshness、11 文件 AST 内存编译和 diff check 通过。完整 source-quality 为 `278 passed, 1 failed`，单个既有 BOSS handler source 断言仍查找旧 `boss_data=` 片段；本片未改该 handler，Boss JSON 用户改动保留。完整 architecture 仍 `15` 项错误，无新增展示错误，`exit_ready=false`。隔离五库 backup/restore dry-run/restore、265 项 migration/reconcile clean、路由 `203/58/7/1/1` 通过，非正式发布/P7。1 名只读代理指出数值游标下并发首 pair 删除可能重复计权；最终改为 ID seek，并复审无阻断。实时变化不是全局快照，唯一流公平只对稳定扫描成立；非首重复 profile 坏字段不再触发展示失败。pytest/pyc 关闭，所有进程退出后删除本轮 `/tmp/codex-map-nearby-display-20261003`（约 8.3 MiB），无仓库字节码；保留运行数据库/WAL/SHM、正式备份、持久回执、`.venv`、`.git`、`data/` 和用户 Boss JSON。收尾资源复核后提交并推送，再进入下一个真实默认旧写入口调用图审计。
+
+### 下一片默认旧写入口审计方案
+
+1. 按目标顺序优先 player/economy，再 combat/dungeon/boss；从当前 `exit_blockers`、progress 门禁和真实注册 handler/route 向下追，不按 grep 到的兼容 helper 自动开切片。
+2. 1 名只读代理审计一个真实入口的 handler/route、旧 transaction/service 调用、目标 feature 边界、启动 schema/回执契约和聚焦测试位置；不访问运行数据库/凭据，不改代码、不测试/导入/编译/恢复或生成缓存。主线程确认可达性后只关闭一个入口，先写失败回归。
+3. 每片测试及恢复串行，完整标注用户/持久状态边界；无默认替代路径的旧实现保持 compatibility/rollback，不删除回执或运行数据。超过一个领域、需历史数据清洗或认证决策的事项拆成独立方案。
+4. 继续保留本地 10 GiB/512 MiB 停止阈值、pytest/pyc 隔离、进程退出后清理专用缓存、资源复核、提交和远端 SHA 核验；整体 `exit_ready=false` 期间不得宣称全面重构完成。
 
 ## 缓存清理允许范围
 

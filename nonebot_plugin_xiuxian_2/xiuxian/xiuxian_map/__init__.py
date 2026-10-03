@@ -712,10 +712,6 @@ def _parse_map_query(map_data, text: str):
     return None, None
 
 
-def _get_all_in_same_node(realm, heaven, node_id):
-    return map_application.nearby_players(realm, heaven, node_id)
-
-
 def _is_seed_shop_node(node_type: str):
     return node_type in SEED_SHOP_TYPES
 
@@ -1225,25 +1221,15 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     map_data = _load_map_data()
     st = _get_player_map_status(uid, map_data)
 
-    users = _get_all_in_same_node(st["realm"], st["heaven"], st["node_id"])
-    filtered_users = [u for u in users if str(u.get("user_id")) != uid]
-
-    seen_ids = set()
-    unique_filtered = []
-    for u in filtered_users:
-        u_id = str(u.get("user_id"))
-        if u_id not in seen_ids:
-            seen_ids.add(u_id)
-            unique_filtered.append(u)
-
-    if not unique_filtered:
+    users = await map_application.nearby_display(
+        realm=st["realm"], heaven=st["heaven"], node_id=st["node_id"],
+        exclude_user_id=uid, random_source=runtime_random,
+    )
+    if not users:
         await handle_send(bot, event, "附近暂无其他道友。")
         return
 
-    if len(unique_filtered) > 10:
-        unique_filtered = runtime_random.sample(unique_filtered, 10)
-
-    lines = ["【附近道友】"] + [f"- {u['user_name']}（{u['level']}）" for u in unique_filtered]
+    lines = ["【附近道友】"] + [f"- {u['user_name']}（{u['level']}）" for u in users]
     await handle_send(bot, event, "\n".join(lines))
 
 

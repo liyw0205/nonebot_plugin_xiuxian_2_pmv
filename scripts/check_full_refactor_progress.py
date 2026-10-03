@@ -367,6 +367,9 @@ def _slice_status() -> dict[str, dict[str, object]]:
     map_repository = (PACKAGE / "features" / "map" / "repository.py").read_text(encoding="utf-8")
     map_random_repository = (PACKAGE / "features" / "map" / "random_target_repository.py").read_text(encoding="utf-8")
     map_random_query = (PACKAGE / "features" / "map" / "random_target_query.py").read_text(encoding="utf-8")
+    map_display_repository = (PACKAGE / "features" / "map" / "nearby_display_repository.py").read_text(encoding="utf-8")
+    map_display_query = (PACKAGE / "features" / "map" / "nearby_display_query.py").read_text(encoding="utf-8")
+    map_display_handler = map_facade[map_facade.index("@nearby_users_cmd.handle") : map_facade.index("@dao_qc.handle")]
     map_named_target_query = map_repository.split("class MapNearbyPlayersSqlQueryRepository:", 1)[-1].split("    def list(", 1)[0]
     map_qc_handler = map_facade[map_facade.index("@dao_qc.handle") : map_facade.index("@dao_view.handle")]
     map_named_qc = map_qc_handler.split("    if target_name:", 1)[-1].split("    else:", 1)[0]
@@ -1785,6 +1788,46 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "status": "v1_web_and_commands_game_db_owned; startup_backfill_and_explicit_rollback_compatibility_retained",
         },
         "map": {
+            "nearby_display_feature_owned": (
+                "await map_application.nearby_display(" in map_display_handler
+                and "exclude_user_id=uid, random_source=runtime_random" in map_display_handler
+                and "async def nearby_display(" in map_application
+                and "return await select_nearby_display(" in map_application
+                and "MapNearbyDisplaySqlQueryRepository(self.player_database, self.game_database)" in map_application
+            ),
+            "nearby_display_unique_uid_seek_and_first_pair": (
+                "class MapNearbyDisplaySqlQueryRepository(MapRandomTargetSqlQueryRepository)" in map_display_repository
+                and "earlier_map.rowid<map.rowid" in map_display_repository
+                and "earlier_map.user_id AS TEXT) COLLATE BINARY" in map_display_repository
+                and "earlier_profile.rowid<profile.rowid" in map_display_repository
+                and "CAST(map.user_id AS TEXT) COLLATE BINARY>?" in map_display_repository
+                and "ORDER BY CAST(map.user_id AS TEXT) COLLATE BINARY ASC LIMIT ?" in map_display_repository
+                and "expected_user_id=user_cursor" in map_display_query
+                and "if expected_user_id is not None:" in map_random_repository
+            ),
+            "nearby_display_bounded_short_read_only": (
+                "DISPLAY_PAGE_SIZE = 1" in map_display_repository
+                and "read_only=True" in map_display_repository
+                and "?mode=ro" in map_display_repository
+                and "DISPLAY_LIMIT = 10" in map_display_query
+                and "len(selected) < DISPLAY_LIMIT" in map_display_query
+                and "CREATE TABLE" not in map_display_repository
+                and "ALTER TABLE" not in map_display_repository
+                and "await asyncio.sleep(0)" in map_display_query
+                and "except MapCandidateReadError:\n        return []" in map_display_query
+            ),
+            "nearby_display_fair_sample_and_legacy_small_order": (
+                "random_source.randint(1, eligible_count)" in map_display_query
+                and "slot <= DISPLAY_LIMIT" in map_display_query
+                and "random_source.sample(selected, len(selected))" in map_display_query
+                and "selected.sort(key=lambda entry: entry[0])" in map_display_query
+            ),
+            "nearby_display_full_list_and_unbounded_seen_disabled": (
+                "_get_all_in_same_node" not in map_facade
+                and "map_application.nearby_players(" not in map_display_handler
+                and "seen_ids" not in map_display_handler
+                and "set()" not in map_display_query
+            ),
             "random_nearby_target_feature_owned": (
                 "await map_application.random_nearby_target(" in map_qc_handler
                 and "exclude_user_id=uid, random_source=runtime_random" in map_qc_handler

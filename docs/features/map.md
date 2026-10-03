@@ -28,7 +28,9 @@
 ## 灰度开关、回滚和已知限制
 战斗引擎、Items/配置解析和静态地图 JSON 仍由显式旧 provider/transport adapter 提供；这不把事务 service 计入默认执行图。旧 service 仍可经 shim 导入，显式 rollback repositories 保持可用。此切片无 migration；既有 `map.001` 至 `map.016` 若需回退，应先恢复代码版本，不删除迁移数据。
 
-附近道友展示仍调用完整 `nearby_players` 列表，后续独立处理最多 10 个去重用户展示；该列表查询仍是可写 UoW/attach，不能把目标选择的只读保证泛化到全部地图读取。分页限制 Python 候选元数据，不限制单字段大小、SQLite JOIN/排序临时工作集、缺索引 SQL 耗时、逐候选 I/O 或全进程 RAM。本片的固定 RNG 序列不与旧 `choice` 一致，但静态候选 pair 权重保持相同。回滚只需恢复先前 application/handler/query 接线，无新 schema 或持久状态变化。
+附近道友展示经 `await MapApplication.nearby_display -> select_nearby_display`，不再物化完整 `nearby_players` 列表或无界 `seen_ids`。展示查询按 BINARY 字符串 ID 单向 seek，每页只读取一个 ID 和首个 map/profile rowid pair，再以 expected ID 重查 public 字段；最多保留 10 个对象。稳定数据下唯一用户流保持旧语义：不足 10 人按 map rowid 顺序，超过 10 人 reservoir(k=10) 后随机排列。短只读 UoW、双高水位、连接关闭、错误丢弃和取消传播与随机论道一致；单 ID 仍可能很大，SQL 工作集/缺索引耗时/逐候选 I/O/全进程 RAM 不由页大小保证。
+
+展示使用首 map/profile pair 去重，不复用论道的重复 JOIN 权重。双高水位不是全局快照：高水位以上追加不入流，空洞/删除/更新按后续 ID seek 处理；并发变更可能减少结果或使唯一流公平性失去保证，但最终结果最多 10 人且不重复。为控制查询规模，非首重复 profile 的坏字段不会触发展示失败；首 pair 当前字段解析失败仍 fail closed。无缓存、请求期 DDL 或 migration。
 
 ## Manifest 清单
 - `route: POST /api/v1/map/move`

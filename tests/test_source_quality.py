@@ -3828,14 +3828,16 @@ class SourceQualityTests(unittest.TestCase):
         self.assertIn("map_application.dongfu(", handler)
         self.assertNotIn("get_fields(user_id, DONGFU_TABLE)", handler)
 
-    def test_map_nearby_players_reads_through_feature_application(self) -> None:
+    def test_map_nearby_display_reads_through_bounded_feature_application(self) -> None:
         source = (SOURCE_ROOT / "xiuxian/xiuxian_map/__init__.py").read_text(encoding="utf-8")
-        start = source.index("def _get_all_in_same_node")
-        end = source.index("def _is_seed_shop_node", start)
-        helper = source[start:end]
-        self.assertIn("map_application.nearby_players(", helper)
-        self.assertNotIn("list_users_by_fields", helper)
-        self.assertNotIn("_sql_message().get_user_info_with_id", helper)
+        start = source.index("@nearby_users_cmd.handle")
+        end = source.index("@dao_qc.handle", start)
+        handler = source[start:end]
+        self.assertIn("await map_application.nearby_display(", handler)
+        self.assertIn("random_source=runtime_random", handler)
+        self.assertNotIn("_get_all_in_same_node", source)
+        self.assertNotIn("seen_ids", handler)
+        self.assertNotIn("map_application.nearby_players(", handler)
 
     def test_map_node_combat_uses_persistent_start_task(self) -> None:
         root = SOURCE_ROOT / "xiuxian" / "xiuxian_map"

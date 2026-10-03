@@ -75,8 +75,13 @@ class MapRandomTargetSqlQueryRepository:
         upper_rowids: tuple[int, int],
         position: tuple[str, str, str],
         exclude_user_id: str,
+        *,
+        expected_user_id: str | None = None,
     ) -> dict[str, Any] | None:
         scope, params = self._scope(upper_rowids, position, exclude_user_id)
+        if expected_user_id is not None:
+            scope += "AND CAST(map.user_id AS TEXT) COLLATE BINARY=? "
+            params += (str(expected_user_id),)
         try:
             with DatabaseUnitOfWork(self.player_database, read_only=True) as uow:
                 uow.attach_database(f"{self.game_database.resolve().as_uri()}?mode=ro", "game_data")

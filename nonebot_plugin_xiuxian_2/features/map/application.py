@@ -11,6 +11,8 @@ from ..combat_settlement.application import CombatSettlementApplication
 from ...core.result import OperationOutcome
 from ...infrastructure.database import DatabaseUnitOfWork
 from .schemas import MapNearbyTargetResult
+from .nearby_display_query import select_nearby_display
+from .nearby_display_repository import MapNearbyDisplaySqlQueryRepository
 from .random_target_query import select_random_nearby_target
 from .random_target_repository import MapRandomTargetSqlQueryRepository
 from .repository import LegacyMapRepository, MapCombatLifecyclePlanSqlRepository, MapCombatLifecycleQueryRepository, MapCombatLifecycleStartSqlRepository, MapDongfuBuildSqlRepository, MapDongfuSqlQueryRepository, MapExploreSettlementSqlRepository, MapExploreStartSqlRepository, MapExploreStatusSqlQueryRepository, MapExploreStatusSqlWriteRepository, MapMissionClaimSqlRepository, MapMissionSqlQueryRepository, MapMissionSqlWriteRepository, MapNearbyPlayersSqlQueryRepository, MapProjectionSqlRepository, MapProjectionSqlWriteRepository, MapSeedPurchaseSqlRepository, MapHomeReturnSqlRepository, MapInteractiveFailureSqlRepository, MapInteractiveSettlementSqlRepository, MapInteractiveSqlQueryRepository, MapInteractiveStartSqlRepository, MapMovementSqlRepository, MapResourceRewardSqlRepository, MapStatusSqlQueryRepository, MapStatusSqlWriteRepository, MapRepository
@@ -139,6 +141,21 @@ class MapApplication(LegacyApplication):
     ) -> dict[str, Any] | None:
         return await select_random_nearby_target(
             MapRandomTargetSqlQueryRepository(self.player_database, self.game_database),
+            realm=realm, heaven=heaven, node_id=node_id,
+            exclude_user_id=exclude_user_id, random_source=random_source,
+        )
+
+    async def nearby_display(
+        self,
+        realm: str,
+        heaven: str,
+        node_id: str,
+        *,
+        exclude_user_id: str,
+        random_source,
+    ) -> list[dict[str, Any]]:
+        return await select_nearby_display(
+            MapNearbyDisplaySqlQueryRepository(self.player_database, self.game_database),
             realm=realm, heaven=heaven, node_id=node_id,
             exclude_user_id=exclude_user_id, random_source=random_source,
         )
