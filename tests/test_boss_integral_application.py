@@ -39,6 +39,41 @@ def test_boss_integral_fails_closed_without_schema_or_user(tmp_path: Path) -> No
     assert BossIntegralApplication(database).grant_integral("missing", 1).status == "user_missing"
 
 
+def test_boss_integral_read_reports_missing_schema_without_creating_it(tmp_path: Path) -> None:
+    missing = tmp_path / "missing.sqlite3"
+    snapshot = BossIntegralApplication(missing).get_integral("u")
+    assert (snapshot.status, snapshot.integral) == ("schema_missing", 0)
+    assert not missing.exists()
+
+    database = tmp_path / "empty.sqlite3"
+    sqlite3.connect(database).close()
+    snapshot = BossIntegralApplication(database).get_integral("u")
+    assert (snapshot.status, snapshot.integral) == ("schema_missing", 0)
+    with sqlite3.connect(database) as connection:
+        assert connection.execute(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='boss_limit'"
+        ).fetchone()[0] == 0
+
+
+def test_boss_integral_read_uses_first_duplicate_and_null_as_zero(tmp_path: Path) -> None:
+    database = tmp_path / "player.sqlite3"
+    with sqlite3.connect(database) as connection:
+        connection.execute("CREATE TABLE boss_limit(user_id TEXT, integral INTEGER)")
+        connection.executemany(
+            "INSERT INTO boss_limit VALUES(?,?)",
+            [("u", 20), ("u", 900), ("null-user", None), ("null-user", 8)],
+        )
+
+    application = BossIntegralApplication(database)
+    found = application.get_integral("u")
+    null_integral = application.get_integral("null-user")
+    missing_user = application.get_integral("missing")
+
+    assert (found.status, found.integral) == ("found", 20)
+    assert (null_integral.status, null_integral.integral) == ("found", 0)
+    assert (missing_user.status, missing_user.integral) == ("user_missing", 0)
+
+
 def test_boss_integral_rank_is_bounded_stable_and_uses_first_duplicate_row(tmp_path: Path) -> None:
     database = tmp_path / "player.sqlite3"
     with sqlite3.connect(database) as connection:
@@ -89,9 +124,23 @@ def test_boss_integral_rank_handler_uses_feature_read_model() -> None:
     )
     text = source.read_text(encoding="utf-8")
     start = text.index("@boss_integral_rank.handle")
-    end = text.index("def get_user_boss_fight_info", start)
+    end = text.index("BOSSDROPSPATH =", start)
     handler = text[start:end]
 
     assert "boss_integral_application.top_integrals(50)" in handler
     assert "player_data_manager" not in handler
     assert 'user_info.get("user_name") if user_info else None' in handler
+
+
+def test_boss_integral_read_handlers_use_feature_snapshot() -> None:
+    source = Path(__file__).parents[1] / (
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_boss/__init__.py"
+    )
+    text = source.read_text(encoding="utf-8")
+
+    assert text.count("boss_integral_application.get_integral(user_id)") == 4
+    assert "get_user_boss_fight_info" not in text
+    assert "save_user_boss_fight_info" not in text
+    assert "from .boss_limit import DAILY_BATTLE_COUNT" in text
+    assert "player_data_manager" not in text
+    assert text.count('if integral_snapshot.status == "schema_missing":') == 2

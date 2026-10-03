@@ -2,10 +2,11 @@
 
 from .application import BossApplication
 from .battle_repository import WorldBossDailyLimitSnapshot
-from .integral_application import BossIntegralApplication
+from .integral_application import BossIntegralApplication, BossIntegralSnapshot
 
 __all__ = [
     "BossApplication",
     "BossIntegralApplication",
+    "BossIntegralSnapshot",
     "WorldBossDailyLimitSnapshot",
 ]

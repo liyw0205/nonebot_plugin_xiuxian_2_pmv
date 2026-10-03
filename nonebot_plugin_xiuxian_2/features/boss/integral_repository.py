@@ -19,6 +19,13 @@ class BossIntegralMutation:
         return self.status == "applied"
 
 
+@dataclass(frozen=True)
+class BossIntegralSnapshot:
+    status: str
+    user_id: str
+    integral: int = 0
+
+
 class BossIntegralSqlRepository:
     """Update the startup-migrated player-side boss integral projection."""
 
@@ -69,6 +76,23 @@ class BossIntegralSqlRepository:
             )
         return [(str(row["user_id"]), int(row["integral"] or 0)) for row in rows]
 
+    def get_integral(self, user_id: str) -> BossIntegralSnapshot:
+        user_id = str(user_id)
+        if not self.database.is_file():
+            return BossIntegralSnapshot("schema_missing", user_id)
+
+        with DatabaseUnitOfWork(self.database, read_only=True) as uow:
+            if not self._ready(uow):
+                return BossIntegralSnapshot("schema_missing", user_id)
+            row = uow.query_one(
+                "SELECT CAST(COALESCE(integral,0) AS INTEGER) AS integral "
+                "FROM boss_limit WHERE user_id=? ORDER BY rowid ASC LIMIT 1",
+                (user_id,),
+            )
+        if row is None:
+            return BossIntegralSnapshot("user_missing", user_id)
+        return BossIntegralSnapshot("found", user_id, int(row["integral"] or 0))
+
     def grant_integral(self, user_id: str, amount: int) -> BossIntegralMutation:
         user_id = str(user_id).strip()
         amount = int(amount)
@@ -101,4 +125,4 @@ class BossIntegralSqlRepository:
             return self._result("applied", user_id, amount, amount, target)
 
 
-__all__ = ["BossIntegralMutation", "BossIntegralSqlRepository"]
+__all__ = ["BossIntegralMutation", "BossIntegralSnapshot", "BossIntegralSqlRepository"]

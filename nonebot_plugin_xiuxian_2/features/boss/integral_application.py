@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from .integral_repository import BossIntegralMutation, BossIntegralSqlRepository
+from .integral_repository import BossIntegralMutation, BossIntegralSnapshot, BossIntegralSqlRepository
 
 
 class BossIntegralApplication:
@@ -22,5 +22,8 @@ class BossIntegralApplication:
     def top_integrals(self, limit: int = 50) -> list[tuple[str, int]]:
         return self.repository.top_integrals(limit)
 
+    def get_integral(self, user_id: str) -> BossIntegralSnapshot:
+        return self.repository.get_integral(user_id)
 
-__all__ = ["BossIntegralApplication", "BossIntegralMutation"]
+
+__all__ = ["BossIntegralApplication", "BossIntegralMutation", "BossIntegralSnapshot"]

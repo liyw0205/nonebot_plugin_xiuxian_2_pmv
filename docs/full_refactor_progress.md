@@ -2,9 +2,15 @@
 
 状态：进行中。`v1.1.0` 的 P0-P7 发布证据继续保留，但不作为底层全面重构完成证明。
 
+**本片方案（2026-10-03，BOSS 长期积分单用户读取）**：仅增加 `BossIntegralApplication.get_integral(user_id)` 只读快照并接入默认战斗、积分商店、积分信息、兑换四个读取点；缺用户按 0，缺数据库/schema 返回显式状态且不创建文件/表，重复 `user_id` 取首 rowid，NULL 积分按 0。删除经调用图确认无生产调用的旧读写 helper；不改积分结算、兑换事务、迁移或运行数据。允许合理使用子代理：复用已完成的 1 名只读调用图审计，不重复派工；若遇到新的独立未知，至多再委派 1 名只读审计测试缺口/边界，不改文件、不运行测试/导入/编译、不访问数据库或生成缓存。主线程负责实现和串行验收。测试关闭 pytest/字节码缓存并使用本片独立 `/tmp`；磁盘可用低于 10 GiB 或 `MemAvailable` 低于 512 MiB 时停止重任务，只清理本片明确产生且进程已退出的临时产物，不触碰运行数据库/WAL/SHM、正式备份、持久回执、`data/`、`.git`、`.venv` 或用户文件。
+
+**最新验证（2026-10-03，BOSS 长期积分单用户读取）**：新增 `BossIntegralSnapshot` 与只读 `get_integral`，返回 `found/user_missing/schema_missing` 状态；缺用户与 NULL 按 0，重复行取首 rowid。默认战斗、商店、积分信息、兑换切换到 feature API；战斗/兑换在 schema 缺失时停止，避免后续跨库写入创建缺失 player DB。旧 helper 与 `player_data_manager` 导入移除；无 migration、缓存或运行数据变更。
+
+BOSS 积分、日限额、结算及 application 聚焦集合 `28 passed`；inventory freshness `2 passed`；5 个 Python 文件 AST 解析与 `git diff --check` 通过。未运行完整 architecture/source-quality 套件，整体 `exit_ready=false` 仍由全局 blocker 阻塞。复用 1 名只读调用图审计，无重复派工；pytest cacheprovider/字节码关闭、inventory 检查使用独立 `XIUXIAN_DATA_DIR`。本片临时目录在进程退出后确认无文件并清理；收尾磁盘可用约 `20G`、`MemAvailable` 约 `1.2GiB`、inode 使用 `14%`。保留用户 `boss_info.json`、运行库/WAL/SHM、正式备份、持久回执、`data/`、`.git` 和 `.venv`。下一片继续按真实默认调用图审计剩余 player/economy 与 combat/dungeon/boss 写入口；全局 transaction service、`xiuxian2_handle`、正式发布和 P7 仍未关闭，本切片不代表 BOSS 或整体重构完成。
+
 **最新验证（2026-10-03，世界 BOSS 积分排行榜）**：默认 `世界BOSS积分排行榜` handler 改为调用 `BossIntegralApplication.top_integrals`，只从规范 `boss_limit.integral` 投影读取；SQL 硬限制 50 项，重复 user_id 取首 rowid，与积分发放一致，并用 rowid 稳定打破积分并列。旧用户名查询缺失时回退显示 user_id；缺数据库/schema 返回空榜，不建库/表，无 migration。
 
-积分 application/handler/BOSS 结算聚焦测试 `15 passed`，库存 freshness `2 passed`，4 个改动 Python 文件 AST 检查和 `git diff --check` 通过。未运行完整 architecture/source-quality 套件；整体 `exit_ready=false`，全局 architecture 基线仍需后续复测。复用 1 名只读代理审计真实命令注册、旧表/字段、已有 application 边界及重复 ID 风险；代理未改文件、运行测试/导入/编译、访问数据库或生成缓存。测试串行运行，pytest cache 与字节码关闭，约 8 KiB 专用目录在进程退出后删除；本片无 migration/运行数据变更。收尾磁盘可用 `20G`、`MemAvailable` `1.2GiB`、inode 使用 `14%`；保留用户 `boss_info.json`、运行库/WAL/SHM、正式备份、持久回执、`data/`、`.git` 和 `.venv`。下一片审计 BOSS 长期积分单用户读取 helper 的真实调用与旧 writer 是否仍可达；本片不代表 BOSS/全局重构完成。
+积分 application/handler/BOSS 结算聚焦测试 `15 passed`，库存 freshness `2 passed`，4 个改动 Python 文件 AST 检查和 `git diff --check` 通过。未运行完整 architecture/source-quality 套件；整体 `exit_ready=false`，全局 architecture 基线仍需后续复测。复用 1 名只读代理审计真实命令注册、旧表/字段、已有 application 边界及重复 ID 风险；代理未改文件、运行测试/导入/编译、访问数据库或生成缓存。测试串行运行，pytest cache 与字节码关闭，约 8 KiB 专用目录在进程退出后删除；本片无 migration/运行数据变更。收尾磁盘可用 `20G`、`MemAvailable` `1.2GiB`、inode 使用 `14%`；保留用户 `boss_info.json`、运行库/WAL/SHM、正式备份、持久回执、`data/`、`.git` 和 `.venv`。随后单用户读取 helper 的真实调用与旧 writer 可达性按独立切片审计；本片不代表 BOSS/全局重构完成。
 
 **最新验证（2026-10-03，世界 BOSS 日限额只读快照）**：默认战斗与“世界BOSS信息”展示通过 `BossApplication.daily_limit_snapshot -> BossPurchaseSqlRepository -> WorldBossBattleSettlementSqlRepository` 读取讨伐次数、每日积分、每日灵石。查询使用只读 UoW、每次最多读取一行，不缓存；缺数据库/表/用户行/字段返回零且不插入、不补 schema。战斗复用入口处同一快照，原结算 CAS 未改；显式 `BossLimit` mutation 和每日重置保留。无 migration 或运行数据访问。
 

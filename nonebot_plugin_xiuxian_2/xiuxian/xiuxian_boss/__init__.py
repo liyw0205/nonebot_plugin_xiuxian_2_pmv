@@ -47,7 +47,7 @@ from ..xiuxian_utils.utils import (
     restore_player_stamina,
 )
 from ..xiuxian_title.title_data import check_and_unlock_titles
-from .boss_limit import player_data_manager, DAILY_BATTLE_COUNT
+from .boss_limit import DAILY_BATTLE_COUNT
 from .transaction_service import BossPurchaseResult
 from ...compatibility.boss import WorldBossBattleSettlementService
 from ...features.boss.application import BossApplication
@@ -511,6 +511,10 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
 
     # 检查每日讨伐次数限制
     daily_limits = boss_application.daily_limit_snapshot(user_id)
+    integral_snapshot = boss_integral_application.get_integral(user_id)
+    if integral_snapshot.status == "schema_missing":
+        await handle_send(bot, event, "世界积分数据未就绪，请稍后重试。")
+        await battle.finish()
     today_battle_count = daily_limits.battle_count
     battle_count = DAILY_BATTLE_COUNT
     if today_battle_count >= battle_count:
@@ -703,7 +707,7 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
 
     today_integral = daily_limits.integral
     today_stone = daily_limits.stone
-    total_integral = int(get_user_boss_fight_info(user_id)['boss_integral'])
+    total_integral = integral_snapshot.integral
 
     integral_limit = 12000
     stone_limit = 300000000
@@ -1329,7 +1333,7 @@ async def boss_integral_store_(bot: Bot, event: GroupMessageEvent | PrivateMessa
         await boss_integral_store.finish()
 
     user_id = user_info['user_id']    
-    user_boss_fight_info = get_user_boss_fight_info(user_id)
+    integral_snapshot = boss_integral_application.get_integral(user_id)
     boss_integral_shop = config['世界积分商品']
     
     # 获取页码参数
@@ -1350,7 +1354,7 @@ async def boss_integral_store_(bot: Bot, event: GroupMessageEvent | PrivateMessa
         await boss_integral_store.finish()
     
     # 构建消息
-    title = f"道友目前拥有的世界积分：{user_boss_fight_info['boss_integral']}点"
+    title = f"道友目前拥有的世界积分：{integral_snapshot.integral}点"
     l_msg = []
     l_msg.append(f"【世界积分商店】第{page}/{total_pages}页")
     
@@ -1394,7 +1398,7 @@ async def boss_integral_info_(bot: Bot, event: GroupMessageEvent | PrivateMessag
         await boss_integral_info.finish()
     
     user_id = user_info['user_id']    
-    user_boss_fight_info = get_user_boss_fight_info(user_id)
+    integral_snapshot = boss_integral_application.get_integral(user_id)
     
     # 获取今日已获得的积分和灵石和讨伐次数
     daily_limits = boss_application.daily_limit_snapshot(user_id)
@@ -1410,7 +1414,7 @@ async def boss_integral_info_(bot: Bot, event: GroupMessageEvent | PrivateMessag
     # 构建消息
     msg = (
         "【世界BOSS积分】\n"
-        f"当前世界积分：{user_boss_fight_info['boss_integral']}点\n"
+        f"当前世界积分：{integral_snapshot.integral}点\n"
         f"今日已获积分：{today_integral}/{integral_limit}点\n"
         f"今日已获灵石：{number_to(today_stone)}/{number_to(stone_limit)}枚\n"
         f"今日讨伐次数：{today_battle_count}/{battle_count}次\n"
@@ -1483,7 +1487,10 @@ async def boss_integral_use_(bot: Bot, event: GroupMessageEvent | PrivateMessage
         if request_quantity <= 0:
             request_quantity = max(1, quantity)
 
-        user_boss_fight_info = get_user_boss_fight_info(user_id)
+        integral_snapshot = boss_integral_application.get_integral(user_id)
+        if integral_snapshot.status == "schema_missing":
+            await handle_send(bot, event, "世界积分数据未就绪，请稍后重试。")
+            await boss_integral_use.finish()
         purchase_outcome = boss_application.purchase(
             operation_id=operation_id,
             user_id=user_id,
@@ -1493,7 +1500,7 @@ async def boss_integral_use_(bot: Bot, event: GroupMessageEvent | PrivateMessage
             quantity=request_quantity,
             unit_cost=cost,
             weekly_limit=weekly_limit,
-            expected_integral=user_boss_fight_info["boss_integral"],
+            expected_integral=integral_snapshot.integral,
             expected_weekly_purchases=weekly_purchases,
             max_goods_num=XiuConfig().max_goods_num,
         )
@@ -1556,17 +1563,6 @@ async def boss_integral_rank_(bot: Bot, event: GroupMessageEvent | PrivateMessag
     
     await handle_send(bot, event, rank_msg)
     await boss_integral_rank.finish()
-
-def get_user_boss_fight_info(user_id):
-    boss_integral = player_data_manager.get_field_data(str(user_id), "boss_limit", "integral")
-    if boss_integral is None:
-        boss_integral = 0
-    user_boss_fight_info = {"boss_integral": boss_integral}
-    return user_boss_fight_info
-
-def save_user_boss_fight_info(user_id, data):
-    user_id = str(user_id)
-    player_data_manager.update_or_write_data(user_id, "boss_limit", "integral", data["boss_integral"])
 
 BOSSDROPSPATH = get_paths().data / "boss掉落物" / "boss掉落物.json"
 
