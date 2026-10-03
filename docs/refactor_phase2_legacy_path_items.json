@@ -525,18 +525,19 @@
       "id": "command:entertainment:60S读世界",
       "kind": "commands",
       "entry": "entertainment:60S读世界 (aliases: 60秒读世界, 每日60S)",
-      "status": "受阻",
-      "reason": "These command rows come from compatibility.command_inventory and represent old AST command candidates for legacy feature manifests. The inventory does not bind each matcher to its handler body or terminal state effect. Keep every unresolved command in scope as blocked; do not infer migration from a feature manifest.",
-      "unknown_edge": "matcher -> handler body -> application/repository or legacy writer",
+      "status": "允许保留的兼容路径",
+      "reason": "This is a stateless external news query: the default handler performs only the existing 60s API GET through the shared http_client and blocking-I/O runner, then formats and sends text; it does not read or mutate local business state or persistent files. Retain the existing user-facing command as a compatibility adapter until the independent P7 release gate permits removal; this is not a claim that its legacy handler was migrated.",
       "call_graph": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/world_60s.py:3 aliases=60秒读世界,每日60S -> on_compat.on_command -> _nb_on_command -> legacy matcher -> unresolved handler target"
+        "initialized NoneBot -> load_all_plugins -> xiuxian_entertainment package imports mod.world_60s -> 60S读世界 matcher (aliases 每日60S/60秒读世界)",
+        "world_60s_cmd_ -> get_json_api -> run_blocking_io -> _get_json_api_sync -> shared http_client.get_json(https://api.pearapi.ai/api/60s/)",
+        "handler parses API response and sends formatted text; no game/player DB, JSON store, or file mutation -> compatibility removal remains gated by independent P7"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
-        "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
-        "nonebot_plugin_xiuxian_2/compatibility/command_inventory.py:14-18,55-89",
-        "nonebot_plugin_xiuxian_2/compatibility/feature_inventory.py:14-54",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/world_60s.py:3 aliases=60秒读世界,每日60S"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/__init__.py:28",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/world_60s.py:3-8,11-75",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/command.py:31-33,923-936,968-1040",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/io_runtime.py:36-74"
       ],
       "source_declaration_found": true,
       "source": {

@@ -256,6 +256,7 @@ def evaluate_phase2_scope(
             "Current refactor inventory differs from the frozen provenance snapshot. Review the diff into backlog; "
             "the frozen Phase 2 item set was not expanded."
         ),
+        "backlog": scope.get("backlog", []),
         "path_count": len(items),
         "status_counts": status_counts,
         "family_counts": family_counts,

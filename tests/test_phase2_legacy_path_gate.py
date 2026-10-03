@@ -37,13 +37,22 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
 
         self.assertFalse(report["ready"])
         self.assertTrue(report["frozen_membership_valid"])
-        self.assertGreater(report["path_count"], 0)
+        self.assertEqual(report["path_count"], 496)
+        self.assertEqual(
+            report["status_counts"],
+            {"不可达": 19, "允许保留的兼容路径": 41, "受阻": 429, "已迁移": 7},
+        )
         self.assertGreater(report["blocked_count"], 0)
         self.assertTrue(all(item["call_graph"] and item["evidence"] for item in report["items"]))
         self.assertIn(
             "admin.player_status.reset.single",
             {item["id"] for item in report["items"]},
         )
+        news_query = next(
+            item for item in report["items"] if item["id"] == "command:entertainment:60S读世界"
+        )
+        self.assertEqual(news_query["status"], "允许保留的兼容路径")
+        self.assertTrue(any("http_client.get_json" in edge for edge in news_query["call_graph"]))
         self.assertEqual(report["p7_gate"]["status"], "independent")
 
     def test_phase2_completes_when_every_frozen_item_is_closed(self):
@@ -128,6 +137,7 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
             "scope_id": "test-scope",
             "source_snapshot": {"fields": fields, "sha256": _snapshot_hash(frozen_inventory, fields)},
             "frozen_membership_sha256": _membership_hash(frozen_items),
+            "backlog": [{"id": "candidate", "reason": "review before scope expansion"}],
         }
 
         report = evaluate_phase2_scope(
@@ -144,6 +154,7 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
         self.assertEqual([item["id"] for item in report["items"]], ["already-closed"])
         self.assertTrue(report["source_inventory_drift_notice"])
         self.assertEqual(report["source_inventory_added"]["commands"], changed_inventory["commands"])
+        self.assertEqual(report["backlog"], scope["backlog"])
 
     def test_invalid_status_and_missing_evidence_fail_closed(self):
         inventory = {"commands": [], "legacy_jobs": [], "legacy_routes": []}
