@@ -6,11 +6,13 @@
 
 1. 继续按 player/economy、combat/dungeon/boss、sect/trade、Web/scheduler 的真实调用图迁移默认旧写入口；全局 `transaction_service`、`xiuxian2_handle` 门禁仍未关闭。普通修炼已走 `BuffApplication`，未证明有生产调用的 `RewardService._grant_exp` 不作为新切片依据。
 2. 副本/Web 独立边界：intent manifest 已关闭，继续审计真实可达的其它旧写入口；全局 Web `user` resolver 默认允许，认证 actor 与 operation user_id 的绑定仍待单独设计，不能以操作 identity 校验替代认证。邀请有界扫描已完成，但通知仍为 best-effort，坏历史行/冲突 receipt 需要受控修复，不作为缓存删除。legacy team reader、invite mapping 和旧 expiry helper 仅保留兼容实现，未证明默认 handler 可达，不重复迁移死 helper。legacy writer 回滚后需要停机受控重建投影，跨队重叠成员仍需备份后清洗，不能直接混用新旧 writer。
-3. 缓存/RAM 独立切片：洞府候选用户有界选择、共享 field-list cache 容量/过期回收；不复制或主动清空其他玩法共享缓存。签到历史日期/迁移窗口风险继续保留。
+3. 缓存/RAM 独立切片：共享 field-list cache 的容量/过期回收已完成，继续处理洞府候选用户有界选择、指定名字单行查询和地图 nearby 全量读取；缓存预算不等于一次查询或进程 RSS 上限，不复制或主动清空其他玩法共享缓存。签到历史日期/迁移窗口风险继续保留。
 4. 全局验收：本轮完整 architecture 的错误从 17 降至 15，副本 intent 的 permission/manifest 两项已消失。剩余 avatar driver import、game_events/info 和 operation-id 门禁，以及旧插件 `get_active_user_id` 导入缺失仍需独立处理；校正既有 BOSS source-quality 断言，重跑完整门禁，不把静态误报直接当成真实写入口。
 5. 正式发布：确定 ledger/outbox/receipt 保留窗口与归档格式，再完成真实数据成对备份、迁移、恢复/reconcile 和 P7 证据。持久回执不是缓存，本轮隔离 recovery 成功不能替代正式演练。
 
-**本片方案与子代理范围**：本轮处理副本 intent Web manifest，具体闭环见 `docs/refactor_slice_execution_protocol.md` 的 Intent Web 声明方案。允许合理使用子代理：复用已完成的 1 名只读代理鉴权链审计，不重复启动相同任务，不访问运行数据、不运行代理测试；主线程统一修改、串行测试、资源监测、缓存清理、diff 复核和提交。仅在资源允许且任务独立时增加代理，最多同时 3 名。下一片优先只读审计洞府候选/共享 field-list cache，先写明有界方案，再实现。
+**本片方案与子代理范围**：共享 field-list cache 按执行协议完成后进入洞府候选读取。允许合理使用子代理：默认复用 1 名只读代理，限定审计真实调用图、复制/容量/首行语义和测试缺口，不重复相同任务，不改文件、不导入代码、不访问运行数据、不运行代理测试或生成缓存；主线程统一实现、串行测试、资源监测、缓存清理、diff 复核和提交。仅在资源允许且任务独立时增加代理，最多同时 3 名；当前只启用 1 名，重型任务不并行。
+
+**最新验证（2026-10-03，共享 Field-List Cache）**：双查询入口共用最多 64 项、8 MiB charged bytes、单项 1 MiB 的缓存；计量同时覆盖 key、容器和深层 JSON，受 8192 节点/64 层约束，复制前后复检通过才淘汰/发布。过期扫描、FIFO、表/字段失效和 close/reconnect 统一释放额度；超大值仍返回查询结果，不改 SQL、返回顺序或其它缓存。cache 定向 `37 passed`；cache/DB backend/洞府状态/地图聚合 `79 passed`；progress/architecture/inventory 聚合 `28 passed`。inventory freshness、4 个 Python 文件 AST 内存编译、diff check 通过；缓存三项 progress gate 全 true，状态明确为 `retained_cache_bounded_query_materialization_open`。完整 architecture 仍有既有 15 项错误，整体 `exit_ready=false`。隔离五库 backup、restore dry-run/restore、265 项 migration recovery 和 reconcile clean 通过，路由数 `203/58/7/1/1`，无新增 migration，也不是正式发布/P7。复用 1 名只读代理做实现复核并核对下一候选片，主线程串行测试。pytest/pyc 关闭，进程退出后已删除本片专用 `/tmp/codex-field-list-cache-20261003` 的测试/恢复/日志产物；运行数据库/WAL/SHM、正式备份、持久回执、用户 `boss_info.json` 保留。收尾磁盘 `19G`、RAM available `1.3GiB`、inode `14%`。下一片处理洞府候选有界读取与公平选择，不能以缓存上限宣称 `fetchall`/profile/candidates 的 RAM 峰值已解决。
 
 **缓存、资源与验收约束**：测试关闭 pytest cacheprovider 和 Python 字节码写入，使用本轮专用 `/tmp` basetemp；仅在相关进程退出后清理本轮明确生成的临时目录/日志/字节码，不清理未知或业务缓存，也不碰 `.venv`、`.git`、`data/`、运行数据库/WAL/SHM、备份、持久回执或用户文件。开始重型任务前复核 `df -h`、`df -ih`、`free -h` 与高占用进程；RAM available 低于 `512 MiB`、磁盘可用低于 `10 GiB` 或 inode 异常时停止测试，重型任务串行执行。通过定向行为测试、单个 progress gate、inventory freshness、AST 编译和 `git diff --check` 后审阅 staged diff，再提交并推送；保留未暂存的用户改动。
 

@@ -6,6 +6,13 @@ from scripts.check_full_refactor_progress import _slice_status
 
 
 class RefactorProgressTests(unittest.TestCase):
+    def test_progress_report_separates_retained_cache_from_query_peak(self) -> None:
+        cache = _slice_status()["field_list_cache"]
+        self.assertTrue(cache["shared_entry_and_byte_budget"])
+        self.assertTrue(cache["bounded_charge_before_and_after_copy"])
+        self.assertTrue(cache["expiry_invalidation_and_lifecycle_release"])
+        self.assertEqual(cache["status"], "retained_cache_bounded_query_materialization_open")
+
     def test_progress_report_tracks_daily_beg_reset_ownership(self) -> None:
         beg = _slice_status()["beg"]
         self.assertTrue(beg["daily_reset_application_owned"])

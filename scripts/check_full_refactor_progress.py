@@ -773,7 +773,30 @@ def _slice_status() -> dict[str, dict[str, object]]:
     admin_accessory_adjustment = admin_asset_application[
         admin_asset_application.index("    def adjust_accessory(") : admin_asset_application.index("    def grant_item(")
     ]
+    field_list_source = (PACKAGE / "xiuxian" / "xiuxian_utils" / "player_data_manager.py").read_text(encoding="utf-8")
     return {
+        "field_list_cache": {
+            "shared_entry_and_byte_budget": all(token in field_list_source for token in (
+                "FIELD_LIST_CACHE_MAX_ENTRIES = 64",
+                "FIELD_LIST_CACHE_MAX_BYTES = 8 * 1024 * 1024",
+                "FIELD_LIST_CACHE_MAX_ENTRY_BYTES = 1024 * 1024",
+                "self._field_list_cache_charged_bytes + charge > FIELD_LIST_CACHE_MAX_BYTES",
+            )),
+            "bounded_charge_before_and_after_copy": all(token in field_list_source for token in (
+                "FIELD_LIST_CACHE_MAX_NODES = 8192",
+                "FIELD_LIST_CACHE_MAX_DEPTH = 64",
+                "_field_list_cache_charge(key, value)",
+                "_field_list_cache_charge(key, cached)",
+            )),
+            "expiry_invalidation_and_lifecycle_release": all(token in field_list_source for token in (
+                "def _expire_field_list_cache(",
+                "not math.isfinite(ttl)",
+                "self._drop_field_list_cache(key)",
+                "def close(self):\n        with self._conn_lock:\n            self._clear_field_list_cache()",
+                '"""恢复 player.db 后重建当前单例持有的连接。"""\n        with self._conn_lock:\n            self._clear_field_list_cache()',
+            )),
+            "status": "retained_cache_bounded_query_materialization_open",
+        },
         "compensation": {
             "claim_schema_migration_owned": "def apply_compensation_reward_claim_schema" in compensation_migrations and "legacy.compensation.002" in compensation_legacy_migrated,
             "claim_request_path_has_no_ddl": "CREATE TABLE" not in compensation_repository and "ALTER TABLE" not in compensation_repository,

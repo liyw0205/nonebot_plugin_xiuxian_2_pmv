@@ -3,6 +3,8 @@ try:
 except ImportError:
     import json
 import copy
+import math
+import sys
 import threading
 import time
 
@@ -14,6 +16,45 @@ from . import db_backend
 
 DATABASE = get_paths().data
 player_num = "123451234"
+
+FIELD_LIST_CACHE_MAX_ENTRIES = 64
+FIELD_LIST_CACHE_MAX_BYTES = 8 * 1024 * 1024
+FIELD_LIST_CACHE_MAX_ENTRY_BYTES = 1024 * 1024
+FIELD_LIST_CACHE_MAX_NODES = 8192
+FIELD_LIST_CACHE_MAX_DEPTH = 64
+
+
+def _field_list_cache_charge(key, value):
+    """Charge builtin object graphs without an unbounded walk or child list."""
+    limit = min(FIELD_LIST_CACHE_MAX_ENTRY_BYTES, FIELD_LIST_CACHE_MAX_BYTES)
+    total = sys.getsizeof((0.0, None, 0)) + sys.getsizeof(0.0) + sys.getsizeof(0)
+    nodes = 0
+    stack = [(iter((key, value)), 0)]
+    while stack:
+        children, depth = stack[-1]
+        try:
+            item = next(children)
+        except StopIteration:
+            stack.pop()
+            continue
+        nodes += 1
+        kind = type(item)
+        if (
+            nodes > FIELD_LIST_CACHE_MAX_NODES
+            or depth > FIELD_LIST_CACHE_MAX_DEPTH
+            or kind not in (str, bytes, int, float, bool, type(None), list, tuple, dict)
+        ):
+            return None
+        total += sys.getsizeof(item)
+        if total > limit:
+            return None
+        if kind in (list, tuple, dict):
+            width = len(item) * (2 if kind is dict else 1)
+            if width > FIELD_LIST_CACHE_MAX_NODES - nodes:
+                return None
+            nested = (part for pair in item.items() for part in pair) if kind is dict else iter(item)
+            stack.append((nested, depth + 1))
+    return total
 
 
 class PlayerDataManager:
@@ -39,8 +80,9 @@ class PlayerDataManager:
             self.lock = self._conn_lock
             self._ensured_tables = set()
             self._ensured_fields = set()
-            # 排行榜/同节点类全表读缓存：(key) -> (expire_mono, value)
+            # Shared query cache: key -> (monotonic deadline, copy, charged bytes).
             self._field_list_cache: dict = {}
+            self._field_list_cache_charged_bytes = 0
             logger.opt(colors=True).info(f"<green>player数据库已连接！</green>")
 
     def _get_cursor(self):
@@ -192,11 +234,9 @@ class PlayerDataManager:
         self._ensure_field_exists(table_name, field)
         cache_key = ("get_all_field_data", str(table_name), str(field))
         ttl = max(0.0, float(cache_ttl or 0))
-        if ttl > 0:
-            with self._conn_lock:
-                hit = self._field_list_cache.get(cache_key)
-                if hit and hit[0] > time.monotonic():
-                    return copy.deepcopy(hit[1])
+        cached = self._get_cached_field_list(cache_key, ttl, deep=True)
+        if cached is not None:
+            return cached
 
         with self._conn_lock:
             cursor = self._get_cursor()
@@ -214,17 +254,67 @@ class PlayerDataManager:
                         processed_results.append((user_id_str, val))
                 else:
                     processed_results.append((user_id_str, val))
-            if ttl > 0:
-                self._field_list_cache[cache_key] = (
-                    time.monotonic() + ttl,
-                    copy.deepcopy(processed_results),
-                )
+            self._store_cached_field_list(cache_key, processed_results, ttl, deep=True)
             return processed_results
+
+    def _drop_field_list_cache(self, key):
+        with self._conn_lock:
+            entry = self._field_list_cache.pop(key, None)
+            if entry is not None:
+                self._field_list_cache_charged_bytes -= entry[2]
+
+    def _clear_field_list_cache(self):
+        with self._conn_lock:
+            self._field_list_cache.clear()
+            self._field_list_cache_charged_bytes = 0
+
+    def _expire_field_list_cache(self):
+        with self._conn_lock:
+            now = time.monotonic()
+            for key, entry in tuple(self._field_list_cache.items()):
+                if entry[0] <= now:
+                    self._drop_field_list_cache(key)
+
+    def _get_cached_field_list(self, key, ttl, *, deep=False):
+        with self._conn_lock:
+            self._expire_field_list_cache()
+            if ttl <= 0 or not math.isfinite(ttl):
+                return None
+            entry = self._field_list_cache.get(key)
+            if entry is None:
+                return None
+            return copy.deepcopy(entry[1]) if deep else list(entry[1])
+
+    def _store_cached_field_list(self, key, value, ttl, *, deep=False):
+        with self._conn_lock:
+            self._expire_field_list_cache()
+            if ttl <= 0 or not math.isfinite(ttl) or FIELD_LIST_CACHE_MAX_ENTRIES < 1:
+                return False
+            if _field_list_cache_charge(key, value) is None:
+                return False
+            cached = copy.deepcopy(value) if deep else list(value)
+            charge = _field_list_cache_charge(key, cached)
+            if charge is None:
+                return False
+            deadline = time.monotonic() + ttl
+            if not math.isfinite(deadline):
+                return False
+            self._expire_field_list_cache()
+            self._drop_field_list_cache(key)
+            while self._field_list_cache and (
+                len(self._field_list_cache) >= FIELD_LIST_CACHE_MAX_ENTRIES
+                or self._field_list_cache_charged_bytes + charge > FIELD_LIST_CACHE_MAX_BYTES
+            ):
+                self._drop_field_list_cache(next(iter(self._field_list_cache)))
+            self._field_list_cache[key] = (deadline, cached, charge)
+            self._field_list_cache_charged_bytes += charge
+            return True
 
     def _invalidate_field_list_cache(self, table_name=None, field=None) -> None:
         with self._conn_lock:
+            self._expire_field_list_cache()
             if table_name is None:
-                self._field_list_cache.clear()
+                self._clear_field_list_cache()
                 return
             t = str(table_name)
             for key in list(self._field_list_cache.keys()):
@@ -233,10 +323,10 @@ class PlayerDataManager:
                 kind = key[0]
                 if kind == "get_all_field_data" and key[1] == t:
                     if field is None or (len(key) > 2 and key[2] == str(field)):
-                        self._field_list_cache.pop(key, None)
+                        self._drop_field_list_cache(key)
                 elif kind == "list_users_by_fields" and key[1] == t:
                     # 同表位置类查询整体失效
-                    self._field_list_cache.pop(key, None)
+                    self._drop_field_list_cache(key)
 
     def invalidate_field_list_cache(self, table_name=None, field=None) -> None:
         self._invalidate_field_list_cache(table_name, field)
@@ -316,6 +406,7 @@ class PlayerDataManager:
     ) -> list[str]:
         """按表字段等值筛选 user_id（地图同节点/洞府候选），带短缓存。"""
         if not equals:
+            self._expire_field_list_cache()
             return []
         self._ensure_table_exists(table_name)
         for field in equals:
@@ -329,11 +420,9 @@ class PlayerDataManager:
             str(exclude_user_id or ""),
         )
         ttl = max(0.0, float(cache_ttl or 0))
-        if ttl > 0:
-            with self._conn_lock:
-                hit = self._field_list_cache.get(cache_key)
-                if hit and hit[0] > time.monotonic():
-                    return list(hit[1])
+        cached = self._get_cached_field_list(cache_key, ttl)
+        if cached is not None:
+            return cached
 
         clauses = []
         params = []
@@ -360,8 +449,7 @@ class PlayerDataManager:
                 logger.warning(f"list_users_by_fields 失败 table={table_name}: {e}")
                 return []
             out = [str(r[0]) for r in rows if r and r[0] is not None]
-            if ttl > 0:
-                self._field_list_cache[cache_key] = (time.monotonic() + ttl, list(out))
+            self._store_cached_field_list(cache_key, out, ttl)
             return out
 
     # ===== 通用文档接口（JSON字段友好） =====
@@ -492,6 +580,7 @@ class PlayerDataManager:
 
     def close(self):
         with self._conn_lock:
+            self._clear_field_list_cache()
             if getattr(self, "conn", None):
                 self.conn.close()
                 self.conn = None
@@ -500,6 +589,7 @@ class PlayerDataManager:
     def reconnect(self):
         """恢复 player.db 后重建当前单例持有的连接。"""
         with self._conn_lock:
+            self._clear_field_list_cache()
             if getattr(self, "conn", None):
                 try:
                     self.conn.close()
