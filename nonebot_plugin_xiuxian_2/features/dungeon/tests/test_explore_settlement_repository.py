@@ -18,6 +18,7 @@ class DungeonExploreSettlementRepositoryTests(unittest.TestCase):
             with db_backend.transaction(player) as c:
                 c.execute('CREATE TABLE player_dungeon_status(user_id TEXT PRIMARY KEY,dungeon_id TEXT,dungeon_name TEXT,dungeon_status TEXT,current_layer INTEGER,total_layers INTEGER,last_reset_date TEXT,reset_generation INTEGER,reset_operation_id TEXT)')
                 c.execute("INSERT INTO player_dungeon_status VALUES('u','d','D','exploring',1,2,'2026-07-15',1,'reset-1')")
+                c.execute('CREATE TABLE teams(user_id TEXT PRIMARY KEY,leader TEXT,members TEXT)')
             repo = DungeonSessionSqlRepository(game, player)
             repo.prepare('op','u',{'expected_status':{'dungeon_id':'d','dungeon_name':'D','dungeon_status':'exploring','current_layer':1,'total_layers':2,'last_reset_date':'2026-07-15','reset_generation':1,'reset_operation_id':'reset-1'},'team':None,'members':[{'user_id':'u','expected':{'hp':100,'mp':100,'stone':10,'exp':0,'cd_type':0},'final_hp':90,'final_mp':80,'stone_delta':3,'exp_delta':5,'items':[]}],'advance':True,'complete':False,'response':{'message':'ok'}})
             first = repo.settle('op','u',99)

@@ -81,6 +81,9 @@ class DungeonApplication:
     def reset_operation_result(self, operation_id: str) -> dict[str, Any] | None:
         return DungeonResetSqlRepository(self.player_database).operation_result(operation_id)
 
+    def global_state(self) -> dict[str, Any] | None:
+        return DungeonResetSqlRepository(self.player_database).global_state()
+
     def ensure_player_status(self, user_id: str, fallback_snapshot: Mapping[str, Any] | None = None) -> dict[str, Any]:
         return DungeonResetSqlRepository(self.player_database).ensure_player_status(user_id, fallback_snapshot)
 

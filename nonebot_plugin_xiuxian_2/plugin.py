@@ -182,7 +182,7 @@ from .features.puppet.migrations import apply_puppet, apply_puppet_status
 from .features.boss.manifest import FEATURE as BOSS_FEATURE
 from .features.boss.migrations import apply_boss, apply_boss_battle_player_schema, apply_boss_full_refresh_player_schema, apply_boss_player_schema, apply_boss_purchase, apply_boss_settlement
 from .features.dungeon.manifest import FEATURE as DUNGEON_FEATURE
-from .features.dungeon.migrations import apply_dungeon, apply_dungeon_explore, apply_dungeon_purchase, apply_dungeon_session, apply_dungeon_team, apply_dungeon_team_schema
+from .features.dungeon.migrations import apply_dungeon, apply_dungeon_explore, apply_dungeon_explore_player_schema, apply_dungeon_purchase, apply_dungeon_session, apply_dungeon_team, apply_dungeon_team_schema
 from .features.fusion.migrations import apply_fusion_operations
 from .features.dongfu.migrations import (
     apply_dongfu_infiltrate_failure,
@@ -337,6 +337,7 @@ def build_migrations() -> tuple[Migration, ...]:
         Migration("dungeon.004", "dungeon_explore_operations", apply_dungeon_explore),
         Migration("dungeon.005", "dungeon_team_operations", apply_dungeon_team),
         Migration("dungeon.006", "dungeon_team_state_schema", apply_dungeon_team_schema),
+        Migration("dungeon.007", "dungeon_explore_player_state_schema", apply_dungeon_explore_player_schema),
         Migration("fusion.002", "fusion_operation_tables", apply_fusion_operations),
         Migration("game_events.001", "game_event_statistics_projection", apply_game_event_statistics_player),
         Migration("illusion.001", "illusion_feature_migrations", apply_illusion),
@@ -479,6 +480,7 @@ _GAME_DATABASE_EXCLUDED_MIGRATION_VERSIONS = frozenset(
         "dungeon.003",
         "dungeon.005",
         "dungeon.006",
+        "dungeon.007",
         "map.003",
         "map.005",
         "map.008",
@@ -551,6 +553,7 @@ _PLAYER_DATABASE_MIGRATION_VERSIONS = frozenset(
         "dungeon.003",
         "dungeon.005",
         "dungeon.006",
+        "dungeon.007",
         "map.003",
         "map.005",
         "map.008",

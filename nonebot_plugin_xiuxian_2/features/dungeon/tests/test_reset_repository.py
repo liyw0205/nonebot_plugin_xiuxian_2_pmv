@@ -2,6 +2,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from ....infrastructure.database import DatabaseUnitOfWork
+from ..migrations import apply_dungeon_explore_player_schema
 from ..reset_repository import DungeonResetSqlRepository
 from tests.test_db_backend import db_backend
 
@@ -14,6 +16,8 @@ class DungeonResetRepositoryTests(unittest.TestCase):
                 conn.execute("CREATE TABLE dungeon_global_state(user_id TEXT PRIMARY KEY,dungeon_id TEXT,dungeon_name TEXT,date TEXT,total_layers INTEGER,dungeon_type TEXT,description TEXT,reset_generation INTEGER,reset_operation_id TEXT)")
                 conn.execute("CREATE TABLE player_dungeon_status(user_id TEXT PRIMARY KEY,dungeon_id TEXT,dungeon_name TEXT,dungeon_status TEXT,current_layer INTEGER,total_layers INTEGER,last_reset_date TEXT,reset_generation INTEGER,reset_operation_id TEXT)")
                 conn.execute("INSERT INTO player_dungeon_status VALUES('u','old','Old','exploring',2,3,'2026-07-13',1,'old-op')")
+            with DatabaseUnitOfWork(database) as uow:
+                apply_dungeon_explore_player_schema(uow)
             repository = DungeonResetSqlRepository(database)
             snapshot = {"dungeon_id":"d1","dungeon_name":"D1","total_layers":3,"dungeon_type":"explore","description":""}
             first = repository.reset("op-1", "2026-07-14", "crossday", lambda: snapshot)

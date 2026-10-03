@@ -118,11 +118,93 @@ class DungeonSessionSqlRepository(DungeonPurchaseSqlRepository):
         "total_layers", "last_reset_date", "reset_generation", "reset_operation_id",
     )
 
+    @staticmethod
+    def _table_ready(
+        uow: DatabaseUnitOfWork,
+        table: str,
+        required: set[str],
+        schema: str = "main",
+    ) -> bool:
+        columns = {
+            str(row["name"])
+            for row in uow.query_all(f"PRAGMA {schema}.table_info({table})")
+        }
+        return required <= columns
+
+    @classmethod
+    def _settlement_schema_ready(cls, uow: DatabaseUnitOfWork) -> bool:
+        return all(
+            cls._table_ready(uow, table, columns, schema)
+            for schema, table, columns in (
+                (
+                    "main",
+                    "dungeon_explore_operations",
+                    {
+                        "operation_id",
+                        "request_identity",
+                        "phase",
+                        "prepared_json",
+                        "result_status",
+                        "result_json",
+                        "current_layer",
+                        "dungeon_status",
+                    },
+                ),
+                ("main", "user_xiuxian", {"user_id", "hp", "mp", "stone", "exp"}),
+                ("main", "user_cd", {"user_id", "type"}),
+                (
+                    "main",
+                    "back",
+                    {
+                        "user_id",
+                        "goods_id",
+                        "goods_name",
+                        "goods_type",
+                        "goods_num",
+                        "create_time",
+                        "update_time",
+                        "bind_num",
+                    },
+                ),
+                ("player_data", "player_dungeon_status", {"user_id", *cls._STATUS_FIELDS}),
+                ("player_data", "teams", {"user_id", "leader", "members"}),
+            )
+        )
+
+    @staticmethod
+    def _schema_missing(phase: str = "") -> dict[str, Any]:
+        return {
+            "status": "schema_missing",
+            "phase": phase,
+            "result_status": "schema_missing",
+            "response": {},
+            "plan": {},
+            "current_layer": 0,
+            "dungeon_status": "",
+        }
+
     def prepare(self, operation_id: str, user_id: str, plan: dict[str, Any]) -> dict[str, Any]:
         operation_id,user_id=str(operation_id).strip(),str(user_id);plan=dict(plan)
         if not operation_id or not plan: raise ValueError("operation and plan required")
         identity=json.dumps({"action":"explore","user_id":user_id},ensure_ascii=True,sort_keys=True);prepared=json.dumps(plan,ensure_ascii=True,sort_keys=True,separators=(",",":"))
+        if not Path(self.game_database).is_file():
+            return self._schema_missing()
         with DatabaseUnitOfWork(self.game_database,immediate=True) as uow:
+            if not self._table_ready(
+                uow,
+                "dungeon_explore_operations",
+                {
+                    "operation_id",
+                    "request_identity",
+                    "phase",
+                    "prepared_json",
+                    "result_status",
+                    "result_json",
+                    "current_layer",
+                    "dungeon_status",
+                },
+            ):
+                return self._schema_missing()
             existing=self._explore_row(uow,operation_id)
             if existing:return self._explore_result(existing,identity)
             uow.execute("INSERT INTO dungeon_explore_operations(operation_id,request_identity,phase,prepared_json,result_status,result_json,current_layer,dungeon_status) VALUES(?,?,'prepared',?,'','{}',0,'')",(operation_id,identity,prepared))
@@ -205,8 +287,24 @@ class DungeonSessionSqlRepository(DungeonPurchaseSqlRepository):
         if not operation_id or max_goods_num < 0:
             raise ValueError("valid operation and inventory limit are required")
         identity = json.dumps({"action": "explore", "user_id": user_id}, ensure_ascii=True, sort_keys=True)
+        if not Path(self.game_database).is_file():
+            return self._schema_missing()
         with DatabaseUnitOfWork(self.game_database, immediate=True) as uow:
-            uow.attach_database(self.player_database, "player_data")
+            if not self._table_ready(
+                uow,
+                "dungeon_explore_operations",
+                {
+                    "operation_id",
+                    "request_identity",
+                    "phase",
+                    "prepared_json",
+                    "result_status",
+                    "result_json",
+                    "current_layer",
+                    "dungeon_status",
+                },
+            ):
+                return self._schema_missing()
             row = self._explore_row(uow, operation_id)
             if row is None:
                 return {"status": "missing", "phase": "", "result_status": "", "response": {}, "plan": {}, "current_layer": 0, "dungeon_status": ""}
@@ -216,6 +314,11 @@ class DungeonSessionSqlRepository(DungeonPurchaseSqlRepository):
                 return self._explore_result(row, identity)
             if str(row["phase"]) != "prepared":
                 return {"status": "invalid_phase", "phase": str(row["phase"]), "result_status": "", "response": {}, "plan": {}, "current_layer": 0, "dungeon_status": ""}
+            if not Path(self.player_database).is_file():
+                return self._schema_missing("prepared")
+            uow.attach_database(self.player_database, "player_data")
+            if not self._settlement_schema_ready(uow):
+                return self._schema_missing("prepared")
             plan = json.loads(str(row["prepared_json"] or "{}"))
             if not isinstance(plan, dict) or not isinstance(plan.get("members"), list) or not plan["members"]:
                 return {"status": "invalid_plan", "phase": "prepared", "result_status": "", "response": {}, "plan": plan if isinstance(plan, dict) else {}, "current_layer": 0, "dungeon_status": ""}
@@ -291,7 +394,9 @@ class DungeonSessionSqlRepository(DungeonPurchaseSqlRepository):
 
     def replay(self, operation_id: str, user_id: str) -> dict[str, Any]:
         identity = json.dumps({"action":"explore","user_id":str(user_id)}, ensure_ascii=True, sort_keys=True)
-        with DatabaseUnitOfWork(self.game_database) as uow:
+        if not Path(self.game_database).is_file():
+            return {"status":"missing","phase":"","result_status":"","response":{},"plan":{},"current_layer":0,"dungeon_status":""}
+        with DatabaseUnitOfWork(self.game_database, read_only=True) as uow:
             row = self._explore_row(uow, str(operation_id))
         if row is None: return {"status":"missing","phase":"","result_status":"","response":{},"plan":{},"current_layer":0,"dungeon_status":""}
         return self._explore_result(row, identity)

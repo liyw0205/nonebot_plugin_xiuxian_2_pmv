@@ -55,8 +55,8 @@
 2. **其余领域边界**：按 cultivation/training、combat/dungeon/boss、sect/trade/scheduler/Web 的顺序完成真实入口、随机/时间注入、operation receipt、启动 migration、跨库恢复和缺 schema fail-closed。
    - 当前洞府未完成项：随机潜入与同节点读取调用 `list_users_by_fields` 后完整物化候选用户，再逐个读取 profile/洞府；`PlayerDataManager._field_list_cache` 的 TTL entry 没有容量上限或主动过期清扫。单独设计有界/流式候选选择，并给共享 field-list cache 增加可证明的条目或字节上限及过期回收；不得复制或主动清空 `ITEMS_CACHE` 等其他玩法共享缓存。
    - 下一洞府候选/缓存切片委派 1 名只读子代理梳理 field-list cache 的生产调用点、失效路径与条目体积风险；子代理不改代码、不跑 SQLite 测试，主线程负责实现、串行验收和资源收尾。
-   - 当前副本未完成项：`dungeon_manager.py` 与 `features/dungeon/{reset,team}_repository.py` 仍有请求期建表/补列；探索在 `prepare` 前抽事件、怪物和战斗，需先冻结 resolved plan；队伍读取需从全表 JSON 改为成员索引/有界分页；progress gate 还要验证默认 repository 自身方法归属，而不是只看 facade 字符串。
-   - 当前历练未完成项：事件/奖励仍可能在 application settle 前重抽，`training_events.py` 仍有模块级 `random` 与旧 manager 读取；排行榜全表复制需分页，状态 projection 与 `training_limit.py` 的兼容读写需继续收口。
+   - 当前副本未完成项：本轮新增 player-only `dungeon.007` 并移除了默认 `reset_repository` 请求期 DDL；prepared settlement 在缺 schema 时 fail closed 并保留 phase。后续再处理随机计划/时钟注入、队伍索引和重置/会话兼容边界。
+   - 当前历练未完成项：普通修炼生命周期默认入口已由 `BuffApplication` 承担，后续只审计事件随机计划、排行榜有界分页和 `training_limit.py` 兼容读写，不重复迁移已关闭的结算边界。
 3. **持久状态与恢复证据**：盘点 operation ledger、outbox、projection receipt、失败/死信和 bet/payout 等历史回执的保留窗口；在有备份、checksum、dry-run、restore、reconcile 和人工决策记录前，不删除或压缩任何持久状态。
 4. **发布退出条件**：完成正式数据备份/迁移/恢复演练、P7 发布证据、全局 legacy 门禁和真实运行 readiness；只有脚本输出 `exit_ready=true` 且证据归档后，才可声明全面重构完成。
 

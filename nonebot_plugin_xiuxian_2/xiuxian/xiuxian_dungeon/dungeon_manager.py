@@ -15,31 +15,10 @@ from ...infrastructure.ids import UUIDGenerator
 from ..xiuxian_utils.data_source import jsondata
 from ..xiuxian_utils.item_json import Items
 from ..xiuxian_config import convert_rank
-from ..xiuxian_utils.xiuxian2_handle import PlayerDataManager
 from ...features.dungeon.application import DungeonApplication
 from ...features.dungeon.reset_repository import DungeonResetSqlRepository
 
 item_s = Items()
-_player_data_manager_instance = None
-
-
-def _resolve_player_data_manager():
-    global _player_data_manager_instance
-    if _player_data_manager_instance is None:
-        _player_data_manager_instance = PlayerDataManager()
-    return _player_data_manager_instance
-
-
-class _LazyPlayerDataManager:
-    def __getattr__(self, name):
-        return getattr(_resolve_player_data_manager(), name)
-
-
-player_data = _LazyPlayerDataManager()
-
-
-def _player_data_manager():
-    return player_data
 
 
 # 只保留大境界（用于怪物jj）
@@ -176,8 +155,6 @@ class DungeonManager:
     _has_init = False
     _lock = threading.RLock()
 
-    DUNGEON_GLOBAL_STATE_TABLE = "dungeon_global_state"
-    PLAYER_DUNGEON_STATUS_TABLE = "player_dungeon_status"
     GLOBAL_USER_ID = "0"
 
     TYPE_EVENT_WEIGHTS = {
@@ -245,7 +222,6 @@ class DungeonManager:
             self.dungeon_data_path.mkdir(parents=True, exist_ok=True)
 
             self.dungeon_templates = self._load_dungeon_templates()
-            self._init_dungeon_tables()
             self.dungeon_application = DungeonApplication(get_paths().game_db, get_paths().player_db)
 
             self.current_dungeon: Optional[DungeonTemplate] = None
@@ -255,36 +231,6 @@ class DungeonManager:
 
     def _get_current_date(self) -> str:
         return self.clock.now().strftime("%Y-%m-%d")
-
-    def _init_dungeon_tables(self):
-        _player_data_manager()._ensure_table_exists(self.DUNGEON_GLOBAL_STATE_TABLE)
-        _player_data_manager()._ensure_table_exists(self.PLAYER_DUNGEON_STATUS_TABLE)
-
-        global_fields = {
-            "dungeon_id": "TEXT",
-            "dungeon_name": "TEXT",
-            "date": "TEXT",
-            "total_layers": "INTEGER",
-            "dungeon_type": "TEXT",
-            "description": "TEXT",
-            "reset_generation": "INTEGER",
-            "reset_operation_id": "TEXT",
-        }
-        for f, t in global_fields.items():
-            _player_data_manager()._ensure_field_exists(self.DUNGEON_GLOBAL_STATE_TABLE, f, t)
-
-        player_fields = {
-            "dungeon_id": "TEXT",
-            "dungeon_name": "TEXT",
-            "dungeon_status": "TEXT",
-            "current_layer": "INTEGER",
-            "total_layers": "INTEGER",
-            "last_reset_date": "TEXT",
-            "reset_generation": "INTEGER",
-            "reset_operation_id": "TEXT",
-        }
-        for f, t in player_fields.items():
-            _player_data_manager()._ensure_field_exists(self.PLAYER_DUNGEON_STATUS_TABLE, f, t)
 
     def _load_dungeon_templates(self) -> List[DungeonTemplate]:
         templates = []
@@ -308,7 +254,7 @@ class DungeonManager:
         return templates
 
     def _get_global_state(self) -> dict | None:
-        return _player_data_manager().get_fields(self.GLOBAL_USER_ID, self.DUNGEON_GLOBAL_STATE_TABLE)
+        return self._reset_application().global_state()
 
     def _find_template_by_id(self, dungeon_id: str) -> Optional[DungeonTemplate]:
         for template in self.dungeon_templates:

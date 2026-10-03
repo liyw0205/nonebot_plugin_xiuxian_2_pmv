@@ -29,39 +29,25 @@ class DungeonResetSqlRepository:
     AUTOMATIC_SOURCES = frozenset({"daily", "crossday"})
     SOURCES = AUTOMATIC_SOURCES | {"manual"}
 
-    GLOBAL_COLUMNS = {
-        "user_id": "TEXT",
-        "dungeon_id": "TEXT",
-        "dungeon_name": "TEXT",
-        "date": "TEXT",
-        "total_layers": "INTEGER NOT NULL DEFAULT 0",
-        "dungeon_type": "TEXT NOT NULL DEFAULT 'explore'",
-        "description": "TEXT NOT NULL DEFAULT ''",
-        "reset_generation": "INTEGER NOT NULL DEFAULT 0",
-        "reset_operation_id": "TEXT NOT NULL DEFAULT ''",
-    }
-    PLAYER_COLUMNS = {
-        "user_id": "TEXT",
-        "dungeon_id": "TEXT",
-        "dungeon_name": "TEXT",
-        "dungeon_status": "TEXT",
-        "current_layer": "INTEGER",
-        "total_layers": "INTEGER",
-        "last_reset_date": "TEXT",
-        "reset_generation": "INTEGER NOT NULL DEFAULT 0",
-        "reset_operation_id": "TEXT NOT NULL DEFAULT ''",
-    }
-    OPERATION_COLUMNS = {
-        "operation_id": "TEXT",
-        "business_date": "TEXT NOT NULL DEFAULT ''",
-        "generation": "INTEGER NOT NULL DEFAULT 0",
-        "source": "TEXT NOT NULL DEFAULT 'legacy'",
-        "dungeon_snapshot": "TEXT NOT NULL DEFAULT '{}'",
-        "result_json": "TEXT NOT NULL DEFAULT '{}'",
-        "status": "TEXT NOT NULL DEFAULT 'completed'",
-        "created_at": "TEXT NOT NULL DEFAULT ''",
-        "updated_at": "TEXT NOT NULL DEFAULT ''",
-    }
+    GLOBAL_COLUMNS = frozenset(
+        {
+            "user_id", "dungeon_id", "dungeon_name", "date", "total_layers",
+            "dungeon_type", "description", "reset_generation", "reset_operation_id",
+        }
+    )
+    PLAYER_COLUMNS = frozenset(
+        {
+            "user_id", "dungeon_id", "dungeon_name", "dungeon_status",
+            "current_layer", "total_layers", "last_reset_date", "reset_generation",
+            "reset_operation_id",
+        }
+    )
+    OPERATION_COLUMNS = frozenset(
+        {
+            "operation_id", "business_date", "generation", "source", "dungeon_snapshot",
+            "result_json", "status", "created_at", "updated_at",
+        }
+    )
 
     def __init__(self, database: str | Path, *, clock: Any | None = None) -> None:
         self.database = str(database)
@@ -108,22 +94,21 @@ class DungeonResetSqlRepository:
         return {str(row["name"]) for row in uow.query_all(f"PRAGMA table_info({table})")}
 
     @classmethod
-    def _ensure_columns(cls, uow: DatabaseUnitOfWork, table: str, columns: Mapping[str, str]) -> None:
-        existing = cls._columns(uow, table)
-        for name, definition in columns.items():
-            if name not in existing:
-                uow.execute(f'ALTER TABLE "{table}" ADD COLUMN "{name}" {definition}')
+    def schema_ready(cls, uow: DatabaseUnitOfWork) -> bool:
+        required = {
+            "dungeon_global_state": cls.GLOBAL_COLUMNS,
+            "player_dungeon_status": cls.PLAYER_COLUMNS,
+            "dungeon_reset_operations": cls.OPERATION_COLUMNS,
+        }
+        for table, columns in required.items():
+            actual = cls._columns(uow, table)
+            if not columns <= actual:
+                return False
+        return True
 
-    @classmethod
-    def ensure_schema(cls, uow: DatabaseUnitOfWork) -> None:
-        uow.execute("CREATE TABLE IF NOT EXISTS dungeon_global_state(user_id TEXT PRIMARY KEY,dungeon_id TEXT,dungeon_name TEXT,date TEXT)")
-        cls._ensure_columns(uow, "dungeon_global_state", cls.GLOBAL_COLUMNS)
-        uow.execute("CREATE TABLE IF NOT EXISTS player_dungeon_status(user_id TEXT PRIMARY KEY,dungeon_id TEXT,dungeon_name TEXT,dungeon_status TEXT,current_layer INTEGER,total_layers INTEGER,last_reset_date TEXT)")
-        cls._ensure_columns(uow, "player_dungeon_status", cls.PLAYER_COLUMNS)
-        uow.execute("CREATE TABLE IF NOT EXISTS dungeon_reset_operations(operation_id TEXT PRIMARY KEY,business_date TEXT NOT NULL,generation INTEGER NOT NULL,source TEXT NOT NULL,dungeon_snapshot TEXT NOT NULL,result_json TEXT NOT NULL,status TEXT NOT NULL,created_at TEXT NOT NULL,updated_at TEXT NOT NULL)")
-        cls._ensure_columns(uow, "dungeon_reset_operations", cls.OPERATION_COLUMNS)
-        uow.execute("CREATE UNIQUE INDEX IF NOT EXISTS dungeon_reset_operation_id_uq ON dungeon_reset_operations(operation_id)")
-        uow.execute("CREATE INDEX IF NOT EXISTS dungeon_reset_business_date_idx ON dungeon_reset_operations(business_date,generation)")
+    @staticmethod
+    def _schema_missing() -> DungeonResetResult:
+        return DungeonResetResult({"status": "schema_missing", "operation_id": ""})
 
     @staticmethod
     def _decode(value: Any) -> dict[str, Any]:
@@ -162,8 +147,11 @@ class DungeonResetSqlRepository:
         if not callable(dungeon_factory):
             raise TypeError("dungeon_factory must be callable")
         now = self.clock.now().isoformat() if hasattr(self.clock, "now") else str(self.clock())
+        if not Path(self.database).is_file():
+            return self._schema_missing()
         with DatabaseUnitOfWork(self.database, immediate=True) as uow:
-            self.ensure_schema(uow)
+            if not self.schema_ready(uow):
+                return self._schema_missing()
             previous = self._operation(uow, operation_id)
             if previous is not None:
                 same_date = str(previous["business_date"]) == business_date
@@ -189,17 +177,35 @@ class DungeonResetSqlRepository:
             return self._result(row, "applied")
 
     def operation_result(self, operation_id: str) -> dict[str, Any] | None:
-        with DatabaseUnitOfWork(self.database) as uow:
-            self.ensure_schema(uow)
+        if not Path(self.database).is_file():
+            return None
+        with DatabaseUnitOfWork(self.database, read_only=True) as uow:
+            if not self.schema_ready(uow):
+                return None
             row = self._operation(uow, str(operation_id).strip())
             return None if row is None else self._result(row, "duplicate")
+
+    def global_state(self) -> dict[str, Any] | None:
+        if not Path(self.database).is_file():
+            return None
+        with DatabaseUnitOfWork(self.database, read_only=True) as uow:
+            if not self.schema_ready(uow):
+                return None
+            return uow.query_one(
+                "SELECT user_id,dungeon_id,dungeon_name,date,total_layers,dungeon_type,"
+                "description,reset_generation,reset_operation_id "
+                "FROM dungeon_global_state WHERE user_id='0'"
+            )
 
     def ensure_player_status(self, user_id: str, fallback_snapshot: Mapping[str, Any] | None = None) -> dict[str, Any]:
         user_id = str(user_id).strip()
         if not user_id:
             raise ValueError("user_id is required")
+        if not Path(self.database).is_file():
+            raise RuntimeError("dungeon schema_missing")
         with DatabaseUnitOfWork(self.database, immediate=True) as uow:
-            self.ensure_schema(uow)
+            if not self.schema_ready(uow):
+                raise RuntimeError("dungeon schema_missing")
             global_row = uow.query_one("SELECT dungeon_id,dungeon_name,date,total_layers,dungeon_type,description,reset_generation,reset_operation_id FROM dungeon_global_state WHERE user_id='0'")
             if global_row is None:
                 raise RuntimeError("dungeon global state is missing")

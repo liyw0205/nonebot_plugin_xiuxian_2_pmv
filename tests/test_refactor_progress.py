@@ -242,6 +242,11 @@ class RefactorProgressTests(unittest.TestCase):
         self.assertTrue(dungeon_team["team_schema_startup_migrated"])
         self.assertTrue(dungeon_team["team_request_path_has_no_ddl"])
         self.assertTrue(dungeon_team["team_schema_missing_fails_closed"])
+        self.assertTrue(dungeon_team["explore_settlement_schema_startup_migrated"])
+        self.assertTrue(dungeon_team["explore_settlement_request_path_has_no_ddl"])
+        self.assertTrue(dungeon_team["explore_settlement_missing_schema_retryable"])
+        self.assertTrue(dungeon_team["dungeon_reset_request_path_has_no_ddl"])
+        self.assertTrue(dungeon_team["dungeon_global_state_read_feature_owned"])
         bank = slices["bank"]
         self.assertTrue(bank["deposit_application_owned"])
         self.assertTrue(bank["v1_web_game_db_owned"])

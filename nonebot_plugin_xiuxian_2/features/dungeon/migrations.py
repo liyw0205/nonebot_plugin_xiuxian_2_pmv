@@ -126,6 +126,77 @@ def apply_dungeon_team_schema(uow: DatabaseUnitOfWork) -> None:
     )
 
 
+def apply_dungeon_explore_player_schema(uow: DatabaseUnitOfWork) -> None:
+    """Prepare player-owned dungeon state before exploration requests run."""
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS dungeon_global_state("
+        "user_id TEXT PRIMARY KEY,dungeon_id TEXT,dungeon_name TEXT,date TEXT)"
+    )
+    _add_missing_columns(
+        uow,
+        "dungeon_global_state",
+        {
+            "dungeon_id": "TEXT DEFAULT NULL",
+            "dungeon_name": "TEXT DEFAULT NULL",
+            "date": "TEXT DEFAULT NULL",
+            "total_layers": "INTEGER NOT NULL DEFAULT 0",
+            "dungeon_type": "TEXT NOT NULL DEFAULT 'explore'",
+            "description": "TEXT NOT NULL DEFAULT ''",
+            "reset_generation": "INTEGER NOT NULL DEFAULT 0",
+            "reset_operation_id": "TEXT NOT NULL DEFAULT ''",
+        },
+    )
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS player_dungeon_status("
+        "user_id TEXT PRIMARY KEY,dungeon_id TEXT,dungeon_name TEXT,"
+        "dungeon_status TEXT,current_layer INTEGER,total_layers INTEGER,"
+        "last_reset_date TEXT)"
+    )
+    _add_missing_columns(
+        uow,
+        "player_dungeon_status",
+        {
+            "dungeon_id": "TEXT DEFAULT NULL",
+            "dungeon_name": "TEXT DEFAULT NULL",
+            "dungeon_status": "TEXT DEFAULT 'not_started'",
+            "current_layer": "INTEGER DEFAULT 0",
+            "total_layers": "INTEGER DEFAULT 0",
+            "last_reset_date": "TEXT DEFAULT NULL",
+            "reset_generation": "INTEGER NOT NULL DEFAULT 0",
+            "reset_operation_id": "TEXT NOT NULL DEFAULT ''",
+        },
+    )
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS dungeon_reset_operations("
+        "operation_id TEXT PRIMARY KEY,business_date TEXT NOT NULL,"
+        "generation INTEGER NOT NULL,source TEXT NOT NULL,"
+        "dungeon_snapshot TEXT NOT NULL,result_json TEXT NOT NULL,"
+        "status TEXT NOT NULL,created_at TEXT NOT NULL,updated_at TEXT NOT NULL)"
+    )
+    _add_missing_columns(
+        uow,
+        "dungeon_reset_operations",
+        {
+            "business_date": "TEXT NOT NULL DEFAULT ''",
+            "generation": "INTEGER NOT NULL DEFAULT 0",
+            "source": "TEXT NOT NULL DEFAULT 'legacy'",
+            "dungeon_snapshot": "TEXT NOT NULL DEFAULT '{}'",
+            "result_json": "TEXT NOT NULL DEFAULT '{}'",
+            "status": "TEXT NOT NULL DEFAULT 'completed'",
+            "created_at": "TEXT NOT NULL DEFAULT ''",
+            "updated_at": "TEXT NOT NULL DEFAULT ''",
+        },
+    )
+    uow.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS dungeon_reset_operation_id_uq "
+        "ON dungeon_reset_operations(operation_id)"
+    )
+    uow.execute(
+        "CREATE INDEX IF NOT EXISTS dungeon_reset_business_date_idx "
+        "ON dungeon_reset_operations(business_date,generation)"
+    )
+
+
 __all__ = [
     "apply_dungeon",
     "apply_dungeon_explore",
@@ -133,4 +204,5 @@ __all__ = [
     "apply_dungeon_session",
     "apply_dungeon_team",
     "apply_dungeon_team_schema",
+    "apply_dungeon_explore_player_schema",
 ]

@@ -324,6 +324,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
     dungeon_repository = (PACKAGE / "features" / "dungeon" / "repository.py").read_text(encoding="utf-8")
     dungeon_team_repository = (PACKAGE / "features" / "dungeon" / "team_repository.py").read_text(encoding="utf-8")
     dungeon_migrations = (PACKAGE / "features" / "dungeon" / "migrations.py").read_text(encoding="utf-8")
+    dungeon_reset_repository = (PACKAGE / "features" / "dungeon" / "reset_repository.py").read_text(encoding="utf-8")
     dungeon_manager = (PACKAGE / "xiuxian" / "xiuxian_dungeon" / "dungeon_manager.py").read_text(encoding="utf-8")
     bank_facade = (PACKAGE / "xiuxian" / "xiuxian_bank" / "__init__.py").read_text(encoding="utf-8")
     bank_handler = bank_facade[bank_facade.index("async def bank_") : bank_facade.index("def savef")]
@@ -1456,6 +1457,28 @@ def _slice_status() -> dict[str, dict[str, object]]:
                 and "def _database_exists(" in dungeon_team_repository
                 and 'TeamMutationResult("schema_missing"' in dungeon_team_repository
                 and 'TeamExitResult("schema_missing"' in dungeon_team_repository
+            ),
+            "explore_settlement_schema_startup_migrated": (
+                'Migration("dungeon.007", "dungeon_explore_player_state_schema", apply_dungeon_explore_player_schema)' in plugin
+                and "def apply_dungeon_explore_player_schema(" in dungeon_migrations
+                and '"dungeon.007"' in plugin[plugin.index("_PLAYER_DATABASE_MIGRATION_VERSIONS"):]
+            ),
+            "explore_settlement_request_path_has_no_ddl": all(
+                token not in dungeon_repository
+                for token in ("CREATE TABLE", "ALTER TABLE", "ensure_schema", "ensure_explore_schema")
+            ),
+            "explore_settlement_missing_schema_retryable": (
+                "def _schema_missing(" in dungeon_repository
+                and '"status": "schema_missing"' in dungeon_repository
+                and 'return self._schema_missing("prepared")' in dungeon_repository
+            ),
+            "dungeon_reset_request_path_has_no_ddl": all(
+                token not in dungeon_reset_repository
+                for token in ("CREATE TABLE", "ALTER TABLE", "ensure_schema")
+            ),
+            "dungeon_global_state_read_feature_owned": (
+                "return self._reset_application().global_state()" in dungeon_manager
+                and "_player_data_manager().get_fields(self.GLOBAL_USER_ID" not in dungeon_manager
             ),
             "status": "team_commands_and_reads_application_owned_with_startup_schema_and_invite_projection_compatibility_retained",
         },
