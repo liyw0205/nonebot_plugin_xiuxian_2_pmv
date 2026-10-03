@@ -133,19 +133,23 @@
       "kind": "matcher-family",
       "entry": "default old on_message/on_regex/on_startswith and other non-command matcher handlers",
       "status": "受阻",
-      "reason": "The initialized default loader imports legacy feature modules and on_compat only suppresses explicitly migrated command keys; non-command matchers still register and can reach old handlers. This frozen family remains blocked until its handler effects are reviewed. Do not add individual discoveries to the current scope automatically; put out-of-scope findings in backlog for explicit review.",
+      "reason": "A source inventory confirms seven default matcher registrations here: five regex, one message, and one notice matcher. Their effects are mixed: work still maintains a legacy JSON projection, bank mutations use feature applications, media parsing and fallback retain legacy callbacks, and group lifecycle notices remain a separate old event path. Keep the family blocked until all effects are classified; do not add members automatically, and put out-of-scope discoveries in backlog for explicit review.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized enumerates non-internal xiuxian modules -> load_all_plugins imports modules and evaluates their decorators",
-        "confirmed default call sites include xiuxian_admin.empty_fallback.on_message and xiuxian_work/xiuxian_bank.on_regex -> on_compat wrapper -> NoneBot matcher constructor -> _register_route",
-        "only on_command checks the explicit _MIGRATED_COMMAND_KEYS suppression set; the confirmed non-command registrations bypass that suppression",
-        "XiuxianOnCompatProvider selects indexed/generic routes for each event -> registered old matcher handler remains dispatchable"
+        "six on_compat message/regex registrations: empty_fallback.on_message; work.do_work and bank.bank on_regex; three media_parse_link on_regex handlers -> NoneBot matcher constructor -> _register_route",
+        "only on_command checks the explicit _MIGRATED_COMMAND_KEYS suppression set; the six confirmed non-command registrations bypass that suppression -> XiuxianOnCompatProvider dispatches matching indexed/generic routes",
+        "admin.group_welcome is explicitly imported by xiuxian_admin and registers direct nonebot.on_notice -> handle_group_lifecycle -> lifecycle/config/send behavior outside on_compat"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:69-82,135-139,214-227,486-537,789-971",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:80,82",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/empty_fallback.py:10,95-103",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_work/__init__.py:8,122-126",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_bank/__init__.py:5,29-33"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_work/__init__.py:8,122-126,489-495,593-614,663-685,814-849,985",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_bank/__init__.py:5,29-33,58-70,85-138",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/__init__.py:40",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/media_parse_link.py:45-126",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/group_welcome.py:13,229-270"
       ]
     },
     {
