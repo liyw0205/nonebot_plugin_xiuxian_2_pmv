@@ -365,6 +365,8 @@ def _slice_status() -> dict[str, dict[str, object]]:
     map_legacy_shim = (PACKAGE / "xiuxian" / "xiuxian_map" / "transaction_service.py").read_text(encoding="utf-8")
     map_compatibility = (PACKAGE / "compatibility" / "legacy_map_transactions.py").read_text(encoding="utf-8")
     map_repository = (PACKAGE / "features" / "map" / "repository.py").read_text(encoding="utf-8")
+    map_random_repository = (PACKAGE / "features" / "map" / "random_target_repository.py").read_text(encoding="utf-8")
+    map_random_query = (PACKAGE / "features" / "map" / "random_target_query.py").read_text(encoding="utf-8")
     map_named_target_query = map_repository.split("class MapNearbyPlayersSqlQueryRepository:", 1)[-1].split("    def list(", 1)[0]
     map_qc_handler = map_facade[map_facade.index("@dao_qc.handle") : map_facade.index("@dao_view.handle")]
     map_named_qc = map_qc_handler.split("    if target_name:", 1)[-1].split("    else:", 1)[0]
@@ -1783,6 +1785,44 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "status": "v1_web_and_commands_game_db_owned; startup_backfill_and_explicit_rollback_compatibility_retained",
         },
         "map": {
+            "random_nearby_target_feature_owned": (
+                "await map_application.random_nearby_target(" in map_qc_handler
+                and "exclude_user_id=uid, random_source=runtime_random" in map_qc_handler
+                and "async def random_nearby_target(" in map_application
+                and "return await select_random_nearby_target(" in map_application
+                and "MapRandomTargetSqlQueryRepository(self.player_database, self.game_database)" in map_application
+            ),
+            "random_nearby_target_bounded_short_read_only": (
+                "CANDIDATE_PAGE_SIZE = 256" in map_random_repository
+                and "read_only=True" in map_random_repository
+                and "?mode=ro" in map_random_repository
+                and "SELECT map.rowid AS map_cursor,profile.rowid AS profile_cursor" in map_random_repository
+                and "ORDER BY map.rowid ASC,profile.rowid ASC LIMIT ?" in map_random_repository
+                and "AND map.rowid=? AND profile.rowid=? LIMIT 1" in map_random_repository
+                and "CREATE TABLE" not in map_random_repository
+                and "ALTER TABLE" not in map_random_repository
+            ),
+            "random_nearby_target_pair_weight_and_boundaries_preserved": (
+                "MAX(rowid) FROM map_status" in map_random_repository
+                and "MAX(rowid) FROM game_data.user_xiuxian" in map_random_repository
+                and "map.rowid<=? AND profile.rowid<=?" in map_random_repository
+                and "(map.rowid,profile.rowid)>(?,?)" in map_random_repository
+                and "CAST(profile.user_id AS TEXT)=CAST(map.user_id AS TEXT)" in map_random_repository
+                and "DISTINCT" not in map_random_repository
+                and "after = None" in map_random_query
+            ),
+            "random_nearby_target_fair_cooperative_fail_closed": (
+                "random_source.randint(1, eligible_count) == 1" in map_random_query
+                and "CANDIDATE_YIELD_INTERVAL = 32" in map_random_query
+                and "await asyncio.sleep(0)" in map_random_query
+                and "except MapCandidateReadError:\n        return None" in map_random_query
+                and "CancelledError" not in map_random_query
+                and "del rows" in map_random_query
+            ),
+            "random_nearby_target_full_list_disabled": (
+                "_get_all_in_same_node" not in map_qc_handler
+                and "runtime_random.choice(" not in map_qc_handler
+            ),
             "named_nearby_target_feature_owned": (
                 "map_application.nearby_target(" in map_named_qc
                 and "map_application.nearby_target(" in map_record_handler

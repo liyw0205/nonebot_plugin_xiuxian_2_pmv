@@ -3937,7 +3937,9 @@ class SourceQualityTests(unittest.TestCase):
         start = source.index("@dao_qc.handle")
         end = source.index("@dao_view.handle", start)
         handler = source[start:end]
-        self.assertIn("runtime_random.choice(nearby)", handler)
+        self.assertIn("await map_application.random_nearby_target(", handler)
+        self.assertIn("random_source=runtime_random", handler)
+        self.assertNotIn("_get_all_in_same_node", handler)
         self.assertIn("runtime_random.random()", handler)
         self.assertNotIn("else random.choice(nearby)", handler)
         self.assertNotIn("= random.random()", handler)

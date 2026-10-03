@@ -5,6 +5,10 @@
 指定道号论道与战绩查询经 `MapApplication.nearby_target -> MapNearbyPlayersSqlQueryRepository.find` 只读查询单目标，不加载完整同节点列表。论道排除本人，指定战绩允许本人；无参数战绩直接查询本人。目标缺失时以同一短只读事务内的 `LIMIT 1` 存在性查询区分“无其他候选”和“有候选但无该道号”，缺文件/schema 或读取错误返回空结果，不创建数据库或执行修复。
 
 保留三维位置、双侧 CAST 字符串 ID 等值、地图侧输出 ID 与道号 BINARY 精确匹配。地图旧 JOIN 包含同一用户的全部 profile，因此先匹配名字，再按 map rowid 与 profile rowid 选首个命中；后一个 profile 同名仍可选中。旧顺序只保证 map rowid，新增 profile rowid 是并列顺序确定化，不清洗历史重复数据。战力继续用 Python `int(value or 0)`，不经 SQLite 整数截断；结算仍由原 application 检查当前位置和幂等回执。
+
+无道号论道经 `await MapApplication.random_nearby_target -> select_random_nearby_target`：两库各冻结一个 rowid 高水位，以 `(map.rowid, profile.rowid)` 联合游标按页读取最多 256 个纯数值元数据 pair，每个候选再用短只读 UoW 点查 public 字段并重查位置、JOIN、本人排除及双上界。所有连接在 await 前关闭，每 32 个 raw pair 及页末协作让出；只保留一个 reservoir(k=1) 目标，按实际观察到的有效 JOIN pair 等概率抽样，不按用户去重，也不改为首 profile。缺库/schema、附库/页/候选读取或战力解析故障丢弃全部 sample，取消向上传播；无缓存、请求期 DDL 或 migration。
+
+这不是跨扫描全局快照：高水位以上的追加不入流；空洞插入、rowid 复用和删除/更新按后续短读取处理。越过的是联合 pair，后续 map 行仍可读取更小的 profile rowid；已经越过的 pair 不重扫。并发变更可改变观察到的候选流，抽样保证仅针对该流。结算继续按原 CAS 拒绝位置漂移，不以读取资格代替结算检查。
 ## 命令与别名
 `地图`、`探索`、`回家`。
 ## Web API
@@ -24,7 +28,7 @@
 ## 灰度开关、回滚和已知限制
 战斗引擎、Items/配置解析和静态地图 JSON 仍由显式旧 provider/transport adapter 提供；这不把事务 service 计入默认执行图。旧 service 仍可经 shim 导入，显式 rollback repositories 保持可用。此切片无 migration；既有 `map.001` 至 `map.016` 若需回退，应先恢复代码版本，不删除迁移数据。
 
-随机论道与附近道友展示仍调用完整 `nearby_players` 列表，后续分别处理公平随机单目标和最多 10 个去重用户展示；该列表查询仍是可写 UoW/attach，不能把本片指定目标只读保证泛化到全部地图读取。单目标输出不限制单字段大小、缺索引 SQL 耗时或全进程 RAM。回滚只需恢复先前 application/handler/query 接线，无新 schema 或持久状态变化。
+附近道友展示仍调用完整 `nearby_players` 列表，后续独立处理最多 10 个去重用户展示；该列表查询仍是可写 UoW/attach，不能把目标选择的只读保证泛化到全部地图读取。分页限制 Python 候选元数据，不限制单字段大小、SQLite JOIN/排序临时工作集、缺索引 SQL 耗时、逐候选 I/O 或全进程 RAM。本片的固定 RNG 序列不与旧 `choice` 一致，但静态候选 pair 权重保持相同。回滚只需恢复先前 application/handler/query 接线，无新 schema 或持久状态变化。
 
 ## Manifest 清单
 - `route: POST /api/v1/map/move`

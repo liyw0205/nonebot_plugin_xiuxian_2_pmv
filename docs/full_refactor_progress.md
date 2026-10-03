@@ -2,15 +2,22 @@
 
 状态：进行中。`v1.1.0` 的 P0-P7 发布证据继续保留，但不作为底层全面重构完成证明。
 
+**最新验证（2026-10-03，地图随机论道有界选择）**：
+
+- 默认无道号论道改经 async application/query，双 rowid 高水位和联合 pair 游标每页最多 256 个数值元数据，逐 pair 短只读读取 public profile；排除本人/位置/JOIN 在候选读取时重查。公平 reservoir(k=1) 保留全部重复 map/profile pair 权重，每 32 raw pair 及页末让出，连接全部在 await 前关闭。缺库/schema、附库/页/候选故障或坏 power 丢弃部分 sample，取消传播；不建库、不执行 DDL、不缓存、无 migration 或运行数据变更。指定道号查询不重做，附近展示仍开放。
+- 修复前 3 条 application/handler 回归失败；地图/论道/progress 聚合 `242 passed`。最终 random/inventory/architecture 单元 `87 passed`（random 70 项），source-quality 定向 `1 passed`；五项随机门禁全 true，inventory freshness、9 文件 AST 内存编译和 diff check 通过。inventory 初次检查将 import/docstring/test-only 表误收入清单，改用普通 import/说明和原表重建夹具后恢复 freshness，不改扫描器或清单。抽取真实 handler 函数并连接真实查询/结算验证 replay 和位置漂移，不是 NoneBot 注册或在线 smoke。
+- 完整 architecture 仍为既有 15 错，整体 `exit_ready=false`。隔离五库 backup、restore dry-run/restore、265 项 migration/reconcile clean 通过，路由 `203/58/7/1/1`，不替代正式发布/P7。双高水位不是全局快照；空洞插入/复用/更新按前向 pair 观察，后续 map 行可访问较小 profile rowid。固定 RNG 序列不与旧 choice 一致；单大字段、SQL 工作集/耗时、逐候选 I/O 和全进程 RAM 上限仍单独开放。
+- 本轮 1 名只读代理审计实现与覆盖，未改文件/测试/导入/编译/恢复/访问数据库/生成缓存；主线程实现与串行验收。pytest/pyc 关闭并隔离 prefix，确认进程退出后已删除本轮 `/tmp/codex-map-random-target-20261003`（约 6.6 MiB），仓库无新增字节码。保留运行数据库/WAL/SHM、正式备份、持久回执、`data/`、`.git`、`.venv` 与用户 Boss JSON；收尾磁盘 `20G`、RAM available `1.3GiB`、inode `14%`。下一片只关闭附近展示的全量列表与无界 seen 集合。
+
 **当前目标顺序（2026-10-03）**：每次只切一条经真实调用图证明的默认路径并保留可恢复回执。技能确认缓存、已迁移的日重置/普通修炼/挖矿/通天塔及 BOSS 周限购边界保持关闭；副本 `.006/.007` 启动 schema、operation-scoped RNG、game-only `.008` crash-replay 输入冻结、player-only `.009` 队伍有界查询/投影同步和 session schema/ABA 检查，以及 reset clock/业务时区/跨午夜冻结/manual 回放已完成。player-only `.010` 邀请到期索引与 ID 路由已将默认无界 sleeper 切换为单个有界 worker；本轮补齐 intent Web manifest，运行时 permission/CSRF guard 未改。剩余目标如下，全部关闭前保持 `exit_ready=false`：
 
 1. 继续按 player/economy、combat/dungeon/boss、sect/trade、Web/scheduler 的真实调用图迁移默认旧写入口；全局 `transaction_service`、`xiuxian2_handle` 门禁仍未关闭。普通修炼已走 `BuffApplication`，未证明有生产调用的 `RewardService._grant_exp` 不作为新切片依据。
 2. 副本/Web 独立边界：intent manifest 已关闭，继续审计真实可达的其它旧写入口；全局 Web `user` resolver 默认允许，认证 actor 与 operation user_id 的绑定仍待单独设计，不能以操作 identity 校验替代认证。邀请有界扫描已完成，但通知仍为 best-effort，坏历史行/冲突 receipt 需要受控修复，不作为缓存删除。legacy team reader、invite mapping 和旧 expiry helper 仅保留兼容实现，未证明默认 handler 可达，不重复迁移死 helper。legacy writer 回滚后需要停机受控重建投影，跨队重叠成员仍需备份后清洗，不能直接混用新旧 writer。
-3. 缓存/RAM 独立切片：共享 field-list cache 的容量/过期回收、洞府指定潜入与随机候选有界选择、地图指定道号论道/战绩单目标只读查询已完成；下一项为地图随机论道公平有界选择，再处理附近道友最多 10 个去重用户展示。地图完整 list 的可写 UoW/attach、单个大字段峰值、逐候选事务/attach 开销及缺索引耗时仍开放；有界输出不等于进程 RSS 上限，不复制或主动清空其他玩法共享缓存。签到历史日期/迁移窗口风险继续保留。
+3. 缓存/RAM 独立切片：共享 field-list cache 的容量/过期回收、洞府指定潜入与随机候选有界选择、地图指定道号论道/战绩单目标只读查询及随机论道公平有界选择已完成；下一项为附近道友最多 10 个去重用户展示。地图完整 list 的可写 UoW/attach、单个大字段峰值、SQLite JOIN/排序工作集、逐候选事务/attach 开销及缺索引耗时仍开放；有界输出不等于进程 RSS 上限，不复制或主动清空其他玩法共享缓存。签到历史日期/迁移窗口风险继续保留。
 4. 全局验收：本轮完整 architecture 的错误从 17 降至 15，副本 intent 的 permission/manifest 两项已消失。剩余 avatar driver import、game_events/info 和 operation-id 门禁，以及旧插件 `get_active_user_id` 导入缺失仍需独立处理；校正既有 BOSS source-quality 断言，重跑完整门禁，不把静态误报直接当成真实写入口。
 5. 正式发布：确定 ledger/outbox/receipt 保留窗口与归档格式，再完成真实数据成对备份、迁移、恢复/reconcile 和 P7 证据。持久回执不是缓存，本轮隔离 recovery 成功不能替代正式演练。
 
-**本片方案与子代理范围**：共享 field-list cache 按执行协议完成后进入洞府候选读取。允许合理使用子代理：默认复用 1 名只读代理，限定审计真实调用图、复制/容量/首行语义和测试缺口，不重复相同任务，不改文件、不导入代码、不访问运行数据、不运行代理测试或生成缓存；主线程统一实现、串行测试、资源监测、缓存清理、diff 复核和提交。仅在资源允许且任务独立时增加代理，最多同时 3 名；当前只启用 1 名，重型任务不并行。
+**本片方案与子代理范围**：本轮仅关闭地图随机论道全量候选读取，附近展示另留独立切片。允许合理使用子代理：默认复用 1 名只读代理，限定审计真实调用图、联合游标/重复 JOIN 权重/公平性/取消及测试缺口，不重复相同任务，不改文件、不导入或编译代码、不访问数据库、不运行代理测试/恢复或生成缓存；主线程统一实现、串行测试、资源监测、缓存清理、diff 复核和提交。仅在资源允许且任务独立时增加代理，最多同时 3 名；当前只启用 1 名，重型任务不并行。
 
 **最新验证（2026-10-03，地图指定道号单目标读取）**：指定论道与战绩查询改经 `MapApplication.nearby_target -> MapNearbyPlayersSqlQueryRepository.find`，player 只读 UoW 附加 game 只读 URI，目标 `LIMIT 1`，缺目标时同事务 `LIMIT 1` 存在性查询保留两类提示。论道排除本人，战绩允许本人；无参数战绩直接本人，随机论道与附近展示维持原路径。保留三维位置、双 CAST ID/地图侧输出 ID、现行 TEXT 道号 BINARY 精确匹配、先匹配所有重复 profile 再选目标、Python 大数战力及 NULL 默认。map rowid 保持优先，profile rowid 是旧未定义并列顺序的确定化，不清洗历史数据。缺文件/schema、坏附库、presence 错误和所选 power 解析异常均 fail closed 且关闭连接，不建库/DDL/cache；无 migration 或运行数据变更。修复前 3 个选择/handler 回归均失败；修复后地图/论道/progress 聚合 `160 passed`，最终 named-target/inventory/architecture 单元 `62 passed`，source-quality 定向 `1 passed`。四项 named-nearby progress gate 全 true，inventory freshness、7 文件 AST 内存编译和 diff check 通过。抽取真实 handler 函数执行，连接真实 application/query/结算验证成功、同操作回放和选择后位置漂移拒绝；不是 NoneBot 注册/真实在线端到端测试。完整 architecture 仍有既有 15 项错误，整体 `exit_ready=false`。隔离五库 backup、restore dry-run/restore、265 项 migration recovery/reconcile clean 通过，路由 `203/58/7/1/1`，不替代正式发布/P7。本轮复用 1 名只读代理静态复核，无代理测试/导入/编译/恢复/缓存；主线程实现、补测及串行验收。上轮代理额外测试事实已在随机片记录更正，不并入本片主线程结果。pytest/pyc 禁用并设置专用 pycache prefix；进程退出后删除本片 `/tmp/codex-map-named-target-20261003`（约 3.9 MiB），仓库无新增字节码，保留运行数据库/WAL/SHM、正式备份、持久回执、`data/`、`.git`、`.venv` 和用户 `boss_info.json`。收尾磁盘 `20G`、RAM available `1.3GiB`、inode `14%`；下一片继续地图随机论道，不宣称地图读取全面完成。
 

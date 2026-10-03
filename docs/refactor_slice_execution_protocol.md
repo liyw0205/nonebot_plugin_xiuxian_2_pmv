@@ -53,7 +53,7 @@
 
 1. **player/economy 旧写路径清零**：继续按真实调用图迁移 `xiuxian2_handle`、剩余 `transaction_service` 的默认 handler、scheduler 和 Web 写入；旧实现只能作为显式 compatibility/rollback，不得由默认入口构造或调用。
 2. **其余领域边界**：按 cultivation/training、combat/dungeon/boss、sect/trade/scheduler/Web 的顺序完成真实入口、随机/时间注入、operation receipt、启动 migration、跨库恢复和缺 schema fail-closed。
-   - 当前洞府/地图进度：共享 field-list cache 的 64 项/8 MiB 总预算/1 MiB 单项预算及过期回收、指定潜入单目标和随机潜入有界选择均已提交推送；地图指定道号论道/战绩单目标只读查询本轮验收完成。下一片为地图随机论道有界选择，再处理附近展示；完整 list 的可写 UoW/attach、单个大字段峰值、逐候选 I/O 和缺索引耗时仍单独开放，不以候选容量上限宣称进程 RAM 全部有界。不得复制或主动清空 `ITEMS_CACHE` 等其他玩法共享缓存。
+   - 当前洞府/地图进度：共享 field-list cache 的 64 项/8 MiB 总预算/1 MiB 单项预算及过期回收、指定潜入单目标和随机潜入有界选择均已提交推送；地图指定道号论道/战绩单目标只读查询及随机论道有界选择已验收完成。下一片为附近展示；完整 list 的可写 UoW/attach、单个大字段峰值、SQL 工作集/耗时及逐候选 I/O 仍单独开放，不以候选容量上限宣称进程 RAM 全部有界。不得复制或主动清空 `ITEMS_CACHE` 等其他玩法共享缓存。
    - 本轮随机候选切片复用 1 名只读子代理核对过滤/分页/公平性/取消与 schema 兼容；子代理不改代码、不跑 SQLite 测试、不访问运行库或生成缓存，主线程负责实现、串行验收和资源收尾。
    - 当前副本已完成项：player-only `dungeon.007`、prepared settlement schema、operation-scoped RNG、game-only `dungeon.008` 输入冻结、player-only `dungeon.009` 队伍成员索引/同事务投影同步和 session schema/ABA 检查，以及 reset clock 贯穿、scheduler 业务时区、跨午夜日期冻结与 manual 跨日回放；本轮 `.010` 到期索引/ID 路由和单 worker 关闭默认每邀请一个 sleeper 的任务资源边界。成员读取与探索结算都改为单行选择；真实 `user_xiuxian` owner 为 game DB，队伍写入仍只在 player UoW 内执行。
    - 当前副本未完成项：Web 认证 actor 绑定、正式 migration/recovery/P7，历史损坏邀请/冲突 receipt 的受控修复。intent Web manifest 已补齐，现有 permission/CSRF guard 未改；全局 `user` resolver 默认允许，operation identity 校验不能替代认证。通知不是 outbox，不能宣称持久补发。legacy team reader、`PersistentTeamInviteMapping` 无界迭代/请求期 DDL 和旧 expiry helper 仍保留兼容实现，但最新限定调用图未证明默认 handler 可达，不以 helper 存在作为迁移依据。跨队历史重叠成员尚未清洗，本片仅统一选择最小 `team_id`；清洗必须独立制定备份、冲突决策和对账方案。
@@ -65,7 +65,7 @@
 
 ### 子代理与资源约束
 
-- 允许合理使用子代理，但默认只分派只读调用图审计、静态门禁、单切片聚焦测试和文档证据整理；不得扫描无关用户目录、读取运行数据库/凭据或执行正式 migration。
+- 允许合理使用子代理，默认仅分派只读调用图审计、静态门禁和文档证据整理；本轮禁止代理测试、Python 导入、编译、恢复、生成缓存或访问数据库。不得扫描无关用户目录、读取凭据或执行正式 migration。
 - 代码修改型子代理必须限定在一个小边界，先给出文件/行号和回滚点；主线程负责整合、复核 diff、运行验收并决定是否提交。默认最多 1 个只读子代理；只有资源检查通过且任务完全独立时才增加，并始终不超过 3 个。测试和恢复任务全部串行，不使用并行 pytest worker，不与子代理测试同时运行。
 - 子代理不是默认步骤；仅当调用图审计、静态门禁、独立只读证据整理能与主线隔离时使用。方案/切片记录需注明子代理分工与并发数；所有代码修改、测试协调、资源监测、最终 diff 和提交由主线程统一负责。
 - RAM 可用量低于 512 MiB、磁盘可用量低于 10 GiB 或 inode 可用量异常时，停止新测试/恢复任务，只保留必要的收尾和清理；测试默认串行、禁用 pytest cacheprovider 和字节码写入，批处理/查询必须有界。
@@ -167,12 +167,21 @@
 
 本片执行收口（2026-10-03）：query/application/DTO 和两个指定道号 handler 已切换，随机/附近路径未改；无 migration/cache/DDL。Map 的全部重复 profile 先匹配名字再 LIMIT，与洞府首 profile 规则不同；保留 map rowid，追加 profile rowid 明确旧并列顺序，现行 TEXT 道号精确匹配，不声称任意 REAL/BLOB 储存类型与 Python str 完全等价。target/presence 同短只读 UoW，缺库/schema、坏附库、第二条 SELECT 故障和所选 power 解析异常均 fail closed/关闭连接。修复前 3 回归失败；地图/论道/progress 聚合 `160 passed`，最终查询/inventory/architecture 单元 `62 passed`，source 定向 `1 passed`；四项 named-nearby gate、inventory freshness、7 文件 AST 编译和 diff check 通过。抽取真实 handler 配合真实 query/结算验证 replay 和位置漂移，不是 NoneBot 注册/在线 smoke；完整 architecture 仍为既有 15 错，`exit_ready=false`。隔离五库 backup、restore dry-run/restore、265 项 migration/reconcile clean 通过，路由 `203/58/7/1/1`，非正式发布。本轮 1 名只读代理仅静态审计，未测试/导入/编译/恢复/生成缓存；主线程实现、补测和串行验收，上轮代理额外测试事实已更正。禁用 pytest/pyc 并隔离 pycache prefix；进程退出后已删本片 `/tmp`（约 3.9 MiB），仓库无新增字节码，未触碰运行数据库/WAL/SHM、正式备份、持久回执、`data/`、`.git`、`.venv` 或用户 Boss JSON。收尾磁盘 `20G`、RAM available `1.3GiB`、inode `14%`。
 
-### 下一片随机论道有界选择方案
+### 本轮随机论道有界选择方案
 
 1. 只关闭 `dao_qc` 无道号分支的 `_get_all_in_same_node -> list -> choice` 全量物化，指定道号使用本轮已完成查询不重做；附近展示另留独立去重/抽样切片。保留排除本人、同节点、缺 profile 跳过和全部重复 profile 候选权重，不引入洞府首 profile 或隐式去重。
-2. 设计 map/profile rowid 联合游标，每页最多 256 条 raw 元数据，候选 public profile 逐行短只读读取；明确双库高水位、rowid 非快照插入/删除/更新/复用语义，避免为 RAM 节省却持有跨扫描长读而阻碍 WAL 回收。只保存一份最终目标，公平 reservoir(k=1)，固定小批/页末协作让出，所有连接在 await 前关闭；读取故障丢弃部分结果，取消向上传播。
+2. 设计 map/profile rowid 联合游标，每页最多 256 条 raw 数值元数据，候选 public profile 逐行短只读读取；明确双库高水位、rowid 非快照插入/删除/更新/复用语义，避免为 RAM 节省却持有跨扫描长读而阻碍 WAL 回收。游标越过的是联合 pair，不是 profile 全局 rowid；后续 map 行仍读取较小 profile rowid，不重扫已越过 pair。只保存一份最终目标，公平 reservoir(k=1)，固定小批/页末协作让出，所有连接在 await 前关闭；读取故障丢弃部分结果，取消向上传播。
 3. 复用至多 1 名只读代理审计联合游标/重复权重/资格漂移和公平性，不运行测试、导入、恢复或编译；主线程先建失败回归再实现，测试/恢复全部串行。覆盖空集、自身/缺 profile、晚页候选、重复加权与精确公平、负/零 rowid、高水位/游标、异常/取消/连接关闭、handler await 和结算漂移。
-4. 继续独立 `/tmp`、禁用 pytest/pyc，资源低于 10 GiB/512 MiB 停止重任务；验收、缓存清理、资源复核、提交推送后再进入附近展示。单字段大小、缺索引 SQL 耗时和全进程 RAM 上限仍须单独证明，不以分页候选数替代这些边界。
+4. 继续独立 `/tmp`、禁用 pytest/pyc，资源低于 10 GiB/512 MiB 停止重任务；验收、缓存清理、资源复核、提交推送后再进入附近展示。单字段大小、SQLite JOIN/排序临时工作集、缺索引 SQL 耗时、逐候选 I/O 和全进程 RAM 上限仍须单独证明，不以分页候选数替代这些边界。
+
+本片执行收口（2026-10-03）：随机 handler/application/query 已切换，指定查询和附近展示未扩改。修复前 3 回归失败；地图/论道/progress `242 passed`、最终 random/inventory/architecture 单元 `87 passed`（random 70 项）、source 定向 `1 passed`；五项随机门禁、inventory freshness、9 文件 AST 编译和 diff check 通过。完整 architecture 保持既有 15 错、`exit_ready=false`；隔离五库 backup、restore dry-run/restore、265 项 migration/reconcile clean、路由 `203/58/7/1/1` 通过，非正式发布/P7。1 名代理仅静态审计实现/覆盖，主线程实现和串行验收；无代理测试/导入/编译/恢复/数据库访问或缓存。禁用 pytest/pyc 并隔离 prefix，进程全部退出后删除本片专用 `/tmp`（约 6.6 MiB），无仓库字节码；保留运行数据、正式备份、持久回执和用户 Boss JSON。收尾磁盘 `20G`、RAM available `1.3GiB`、inode `14%`；无 migration/cache/请求期 DDL，回滚仅恢复查询及 handler 接线。抽取 handler 是功能回归，不是 NoneBot 注册/在线验收。
+
+### 下一片附近展示有界选择方案
+
+1. 已确认真实路径 `nearby_users_cmd -> _get_all_in_same_node -> nearby_players.list` 仍物化完整 JOIN/list，再创建 filtered list、无界 seen 集合与去重 list，超过 10 个用户才 sample。仅关闭此入口，不重做已完成的随机/指定目标选择或结算。
+2. 展示按字符串用户 ID 去重，保留每个 ID 首个 map/profile pair 的 public 展示字段；不能复用论道的重复 pair 加权。先用 focused 回归明确旧 profile 并列顺序的确定化与异常字段行为，再设计 SQL 端首 pair 识别/数值游标分页，禁止用无界 Python seen 集合换掉全量 list。
+3. 最多保留 10 份展示对象，按有效唯一用户流公平 reservoir(k=10)；不足 10 保留读取顺序，超过 10 时还需随机展示顺序。采用双高水位、短只读 UoW、固定批次协作让出和读取故障丢弃结果；明确并发非全局快照及重复/资格更新语义，不加共享缓存或请求期 DDL。
+4. 默认至多复用 1 名只读代理审计去重/首行/公平性/查询峰值，代理禁止测试/导入/编译/恢复/数据库访问/生成缓存；主线程负责实现、串行验收、专用缓存清理与提交推送。继续 10 GiB/512 MiB 阈值，SQL 工作集、单字段大小、缺索引耗时及正式发布证据仍开放。
 
 ## 缓存清理允许范围
 

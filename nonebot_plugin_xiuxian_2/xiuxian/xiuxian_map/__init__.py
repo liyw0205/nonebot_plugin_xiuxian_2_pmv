@@ -1270,11 +1270,13 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
             return
         target = selection.target
     else:
-        nearby = [u for u in _get_all_in_same_node(st["realm"], st["heaven"], st["node_id"]) if str(u["user_id"]) != uid]
-        if not nearby:
+        target = await map_application.random_nearby_target(
+            realm=st["realm"], heaven=st["heaven"], node_id=st["node_id"],
+            exclude_user_id=uid, random_source=runtime_random,
+        )
+        if target is None:
             await handle_send(bot, event, "附近无可切磋道友。")
             return
-        target = runtime_random.choice(nearby)
 
     if not target:
         await handle_send(bot, event, f"附近未找到道友【{target_name}】")
