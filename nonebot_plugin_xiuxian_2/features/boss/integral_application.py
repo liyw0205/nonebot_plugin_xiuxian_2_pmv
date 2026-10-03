@@ -6,7 +6,7 @@ from .integral_repository import BossIntegralMutation, BossIntegralSqlRepository
 
 
 class BossIntegralApplication:
-    """Application boundary for compatibility reward grants to boss points."""
+    """Application boundary for world-boss point grants and ranking."""
 
     def __init__(
         self,
@@ -18,6 +18,9 @@ class BossIntegralApplication:
 
     def grant_integral(self, user_id: str, amount: int) -> BossIntegralMutation:
         return self.repository.grant_integral(user_id, amount)
+
+    def top_integrals(self, limit: int = 50) -> list[tuple[str, int]]:
+        return self.repository.top_integrals(limit)
 
 
 __all__ = ["BossIntegralApplication", "BossIntegralMutation"]

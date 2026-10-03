@@ -26,6 +26,8 @@
 
 世界BOSS战斗和“世界BOSS信息”通过 `BossApplication.daily_limit_snapshot` 读取每日讨伐次数、积分和灵石。读取使用只读 UoW，每次最多取一行，不缓存；缺数据库、表、用户行或旧字段时返回零，不创建数据库/表、不补字段，也不插入默认用户行。战斗沿用该快照作为结算 CAS 的期望值；显式限额写入与每日重置仍由各自 mutation 路径负责。
 
+世界BOSS积分排行榜通过 `BossIntegralApplication.top_integrals` 读取长期 `boss_limit.integral` 投影，只返回最多 50 项且不在 Python 中物化全量积分表。重复 user_id 保持与积分发放相同的首 rowid 语义；缺数据库/schema 返回空列表，不建库、不建表。旧积分榜曾读取错误的 `integral.boss_integral` 表，不能作为当前数据源。
+
 ## 定时任务
 
 世界BOSS刷新和天罚仍由显式兼容生命周期注册，手动生成、全量刷新与每日重置的持久化由 feature-owned repository 承担；手动与定时全量刷新共享 operation receipt，未在 feature 导入时重复注册。

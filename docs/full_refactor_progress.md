@@ -2,11 +2,19 @@
 
 状态：进行中。`v1.1.0` 的 P0-P7 发布证据继续保留，但不作为底层全面重构完成证明。
 
+**最新验证（2026-10-03，世界 BOSS 积分排行榜）**：默认 `世界BOSS积分排行榜` handler 改为调用 `BossIntegralApplication.top_integrals`，只从规范 `boss_limit.integral` 投影读取；SQL 硬限制 50 项，重复 user_id 取首 rowid，与积分发放一致，并用 rowid 稳定打破积分并列。旧用户名查询缺失时回退显示 user_id；缺数据库/schema 返回空榜，不建库/表，无 migration。
+
+积分 application/handler/BOSS 结算聚焦测试 `15 passed`，库存 freshness `2 passed`，4 个改动 Python 文件 AST 检查和 `git diff --check` 通过。未运行完整 architecture/source-quality 套件；整体 `exit_ready=false`，全局 architecture 基线仍需后续复测。复用 1 名只读代理审计真实命令注册、旧表/字段、已有 application 边界及重复 ID 风险；代理未改文件、运行测试/导入/编译、访问数据库或生成缓存。测试串行运行，pytest cache 与字节码关闭，约 8 KiB 专用目录在进程退出后删除；本片无 migration/运行数据变更。收尾磁盘可用 `20G`、`MemAvailable` `1.2GiB`、inode 使用 `14%`；保留用户 `boss_info.json`、运行库/WAL/SHM、正式备份、持久回执、`data/`、`.git` 和 `.venv`。下一片审计 BOSS 长期积分单用户读取 helper 的真实调用与旧 writer 是否仍可达；本片不代表 BOSS/全局重构完成。
+
 **最新验证（2026-10-03，世界 BOSS 日限额只读快照）**：默认战斗与“世界BOSS信息”展示通过 `BossApplication.daily_limit_snapshot -> BossPurchaseSqlRepository -> WorldBossBattleSettlementSqlRepository` 读取讨伐次数、每日积分、每日灵石。查询使用只读 UoW、每次最多读取一行，不缓存；缺数据库/表/用户行/字段返回零且不插入、不补 schema。战斗复用入口处同一快照，原结算 CAS 未改；显式 `BossLimit` mutation 和每日重置保留。无 migration 或运行数据访问。
 
 Boss feature/settlement/handler 聚焦测试 `28 passed`（含 handler source contract），库存 freshness `2 passed`，奖励结算 source contract `1 passed`；`git diff --check` 与 7 个改动 Python 文件 AST 检查通过。未运行完整 architecture/source-quality 套件；此前 architecture 基线仍有 15 项既有错误，整体 `exit_ready=false`。复用 1 名只读调用图审计代理的既有结论，没有重复派工；代理未改代码、运行测试/导入/编译、访问数据库或生成缓存。测试串行运行，pytest cache 与字节码关闭，约 8 KiB 的空专用临时目录在进程退出后删除；未发现本轮缓存文件。本片测试完成时可用 RAM 约 `1.2GiB`；最后复核磁盘可用 `20G`、`MemAvailable` `1.1GiB`、inode 使用 `14%`，当时另有不属于本片的 pytest 进程运行且未干预。保留运行数据库/WAL/SHM、正式备份、持久回执、`data/`、`.git`、`.venv` 和用户 `boss_info.json`。下一片仍按开发文档顺序审计另一条真实可达默认旧写路径，本切片不代表 BOSS 或整体重构完成。
 
 **本片方案与子代理范围**：切片仅覆盖默认世界 BOSS 战斗/信息命令的日限额读取；不改显式写入、重置调度和结算事务。允许合理使用子代理：优先复用已完成的只读调用图审计，不重复相同任务；遇到独立未知时至多委派 1 名代理只读复核调用图/测试缺口，不改文件、不访问数据库、不运行测试/导入/编译/恢复或生成缓存。主线程负责实现、串行验收和收尾。磁盘低于 10 GiB 或 `MemAvailable` 低于 512 MiB 时停止重任务；测试禁用 pytest cache/字节码并使用本片独立 `/tmp`，只清理进程退出后确认属于本片的产物；不清运行库、备份、持久回执、`data/`、`.git`、`.venv` 或用户文件。
+
+**本片方案与子代理范围**：调用图确认 `世界BOSS积分排行榜` 是默认注册命令，但 handler 通过按值导入且保持为 `None` 的 `player_data_manager` 访问旧存储；旧调用的 `integral.boss_integral` 也不是当前规范长期积分投影。扩展 `BossIntegralApplication.top_integrals(limit<=50)`，只读 `player_db.boss_limit(user_id,integral)`，缺数据库/schema 返回空榜、不创建文件/表；重复 user_id 沿用积分发放的首 rowid 值，积分降序、rowid 升序稳定打破并列。handler 复用该 application，缺失用户名时回退展示 user_id，不改命令/文案、奖励/兑换路径或 migration。
+
+验收覆盖排序、50 项硬上限、重复用户首行、缺库/缺 schema 无写入及默认 handler 不再访问旧 manager/错表。允许合理使用子代理：复用本片已完成的一个只读调用图审计，不重复派工；仅在出现独立未知时再启用至多 1 名只读代理，不改文件、不运行测试/导入/编译、不访问数据库或生成缓存。主线程串行实现与验收；磁盘可用低于 10 GiB 或 `MemAvailable` 低于 512 MiB 时停止重任务，测试缓存使用独立临时目录并在进程退出后清理本片产物，不动用户文件、运行库、WAL/SHM、正式备份、持久回执、`data/`、`.git` 或 `.venv`。
 
 **最新验证（2026-10-03，地图随机论道有界选择）**：
 

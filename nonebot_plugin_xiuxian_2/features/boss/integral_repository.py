@@ -22,6 +22,8 @@ class BossIntegralMutation:
 class BossIntegralSqlRepository:
     """Update the startup-migrated player-side boss integral projection."""
 
+    MAX_RANKED_USERS = 50
+
     def __init__(self, database: str | Path) -> None:
         self.database = Path(database)
 
@@ -41,6 +43,31 @@ class BossIntegralSqlRepository:
             for row in uow.query_all('PRAGMA table_info("boss_limit")')
         }
         return {"user_id", "integral"}.issubset(columns)
+
+    def top_integrals(self, limit: int = MAX_RANKED_USERS) -> list[tuple[str, int]]:
+        try:
+            limit = max(0, min(int(limit), self.MAX_RANKED_USERS))
+        except (TypeError, ValueError, OverflowError):
+            return []
+        if limit == 0 or not self.database.is_file():
+            return []
+
+        with DatabaseUnitOfWork(self.database, read_only=True) as uow:
+            if not self._ready(uow):
+                return []
+            rows = uow.query_all(
+                "SELECT entry.user_id AS user_id,"
+                "CAST(COALESCE(entry.integral,0) AS INTEGER) AS integral "
+                "FROM boss_limit AS entry "
+                "WHERE entry.user_id IS NOT NULL "
+                "AND TRIM(CAST(entry.user_id AS TEXT))<>'' "
+                "AND entry.rowid=(SELECT MIN(candidate.rowid) FROM boss_limit AS candidate "
+                "WHERE candidate.user_id=entry.user_id) "
+                "ORDER BY CAST(COALESCE(entry.integral,0) AS INTEGER) DESC,entry.rowid ASC "
+                "LIMIT ?",
+                (limit,),
+            )
+        return [(str(row["user_id"]), int(row["integral"] or 0)) for row in rows]
 
     def grant_integral(self, user_id: str, amount: int) -> BossIntegralMutation:
         user_id = str(user_id).strip()

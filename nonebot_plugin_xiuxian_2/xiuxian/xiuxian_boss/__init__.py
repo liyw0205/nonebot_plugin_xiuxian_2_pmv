@@ -51,6 +51,7 @@ from .boss_limit import player_data_manager, DAILY_BATTLE_COUNT
 from .transaction_service import BossPurchaseResult
 from ...compatibility.boss import WorldBossBattleSettlementService
 from ...features.boss.application import BossApplication
+from ...features.boss.integral_application import BossIntegralApplication
 from ...features.player_state.application import PlayerStateApplication
 from ...features.boss.repository import BossPurchaseSqlRepository
 from ...infrastructure.ids import UUIDGenerator
@@ -83,6 +84,7 @@ boss_application = BossApplication(
     ),
     full_refresh_config_loader=get_boss_config,
 )
+boss_integral_application = BossIntegralApplication(get_paths().player_db)
 boss_ids = UUIDGenerator()
 player_state_application = PlayerStateApplication(get_paths().player_db)
 runtime_clock = SystemClock()
@@ -1543,17 +1545,14 @@ async def boss_integral_rank_(bot: Bot, event: GroupMessageEvent | PrivateMessag
         await handle_send(bot, event, msg, md_type="我要修仙")
         await boss_integral_rank.finish()
 
-    # 获取所有用户的boss_integral数据
-    all_user_integral = player_data_manager.get_all_field_data("integral", "boss_integral")
-    
-    # 排序数据
-    sorted_integral = sorted(all_user_integral, key=lambda x: x[1], reverse=True)
+    ranked_integral = boss_integral_application.top_integrals(50)
     
     # 生成排行榜
     rank_msg = "【世界BOSS积分排行榜】\n"
-    for i, (user_id, integral) in enumerate(sorted_integral[:50], start=1):
+    for i, (user_id, integral) in enumerate(ranked_integral, start=1):
         user_info = _sql_message().get_user_info_with_id(user_id)
-        rank_msg += f"第{i}位 | {user_info['user_name']} | {number_to(integral)}\n"
+        user_name = user_info.get("user_name") if user_info else None
+        rank_msg += f"第{i}位 | {user_name or user_id} | {number_to(integral)}\n"
     
     await handle_send(bot, event, rank_msg)
     await boss_integral_rank.finish()
