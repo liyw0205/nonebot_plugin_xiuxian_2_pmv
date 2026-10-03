@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Emit quantitative evidence for the second-stage full refactor.
 
-This report intentionally distinguishes a real entry-point cutover from removal
-of the old implementation.  It is a progress instrument, not a completion gate.
+The report distinguishes entry-point cutover from implementation removal and
+includes the frozen Phase 2 scope result. Enforce that scope with
+``phase2_legacy_path_gate.py --check``; P7 release evidence stays independent.
 """
 
 from __future__ import annotations
@@ -12,6 +13,11 @@ import ast
 import json
 import re
 from pathlib import Path
+
+try:
+    from .phase2_legacy_path_gate import load_phase2_scope_report
+except ImportError:
+    from phase2_legacy_path_gate import load_phase2_scope_report
 
 ROOT = Path(__file__).resolve().parents[1]
 PACKAGE = ROOT / "nonebot_plugin_xiuxian_2"
@@ -3944,19 +3950,23 @@ def main() -> int:
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args()
     slices = _slice_status()
-    blockers = [
-        "legacy transaction services remain",
-        "xiuxian2_handle remains in legacy execution paths",
-    ]
-    if slices["sign_in"]["lottery_compatibility_fallback"]:
-        blockers.append("sign_in explicit lottery compatibility fallback remains")
+    phase2_scope = load_phase2_scope_report()
+    blockers = list(phase2_scope["integrity_errors"])
+    if phase2_scope["blocked_count"]:
+        blockers.append(f"{phase2_scope['blocked_count']} frozen default legacy paths remain blocked")
     report = {
         "schema": 1,
         "scope": "full_refactor_phase2",
         "counts": _counts(),
         "slices": slices,
-        "exit_ready": False,
+        "phase2_scope": phase2_scope,
+        "phase2_complete": phase2_scope["ready"],
+        "exit_ready": phase2_scope["ready"],
         "exit_blockers": blockers,
+        "p7_release_gate": {
+            "status": "independent; evaluated by scripts/refactor_completion_audit.py with real release evidence",
+            "included_in_phase2_complete": False,
+        },
     }
     print(json.dumps(report, ensure_ascii=False, sort_keys=True, indent=None if args.json else 2))
     return 0

@@ -1,0 +1,314 @@
+{
+  "schema": 1,
+  "scope_id": "phase2-default-runtime-legacy-paths-v1",
+  "frozen_on": "2026-10-04",
+  "frozen_entries_file": "docs/refactor_phase2_legacy_path_items.json",
+  "frozen_membership_sha256": "9d6d112676aa13917ab8957c7353914b946a886a10c57c2b7c98e402bd127162",
+  "profile": "NoneBot driver initialized, production plugin startup, default environment; XIUXIAN_WEB_STATUS defaults to true.",
+  "source_snapshot": {
+    "path": "docs/refactor_inventory.json",
+    "fields": ["commands", "legacy_jobs", "legacy_routes"],
+    "sha256": "a9874035de2c540b1f86d4ccfd654cd41d9bfb06a0b11c99a051c0fde3cc43d6"
+  },
+  "status_values": ["已迁移", "允许保留的兼容路径", "不可达", "受阻"],
+  "families": [
+    {
+      "id": "legacy-command-matchers",
+      "source_field": "commands",
+      "allowed_features": [
+        "activity", "admin", "arena", "back", "bank", "base", "beg", "boss",
+        "buff", "compensation", "dongfu", "dufang", "dungeon", "entertainment",
+        "fusion", "illusion", "impart", "impart_pk", "info", "interactive",
+        "lunhui", "past_life", "sect", "simulator", "status", "tasks", "tianti",
+        "title", "trade", "training", "work", "world_events"
+      ],
+      "status": "受阻",
+      "entry_format": "{feature}:{name} (aliases: {aliases})",
+      "target_format": "legacy command handler under xiuxian_{feature}",
+      "reason": "These command rows come from compatibility.command_inventory and represent old AST command candidates for legacy feature manifests. The inventory does not bind each matcher to its handler body or terminal state effect. Keep every unresolved command in scope as blocked; do not infer migration from a feature manifest.",
+      "unknown_edge": "matcher -> handler body -> application/repository or legacy writer",
+      "call_graph": [
+        "nonebot_plugin_xiuxian_2/__init__.py:_load_legacy_plugins_if_initialized -> iter_modules(xiuxian/) -> load_all_plugins(plugin_modules)",
+        "legacy feature module:on_command -> xiuxian/on_compat.py:on_command -> _nb_on_command -> legacy matcher",
+        "legacy matcher -> matching handler (specific per-command downstream target not recorded by refactor_inventory.json)"
+      ],
+      "evidence": [
+        "nonebot_plugin_xiuxian_2/__init__.py:89-121",
+        "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
+        "nonebot_plugin_xiuxian_2/compatibility/command_inventory.py:14-18,55-89",
+        "nonebot_plugin_xiuxian_2/compatibility/feature_inventory.py:14-54"
+      ]
+    },
+    {
+      "id": "legacy-scheduler-jobs",
+      "source_field": "legacy_jobs",
+      "status": "允许保留的兼容路径",
+      "entry_format": "job:{id}",
+      "target_format": "resolved by legacy_job_handler({id}) through _TARGETS/_ALIASES or xiuxian.xiuxian_scheduler fallback",
+      "reason": "The composition root explicitly keeps legacy APScheduler decorators for the compatibility release. Retain until the independent P7 release gate permits removal; this allowance does not assert that job internals are feature-owned.",
+      "call_graph": [
+        "package initialization -> install_scheduler_bridge -> legacy job decorators are deferred",
+        "plugin.ensure_jobs -> activate_scheduler_bridge and legacy_job_handler(job.id)",
+        "compatibility/legacy_jobs.py:legacy_job_handler -> importlib.import_module -> getattr(target) -> target(*args, **kwargs)"
+      ],
+      "evidence": [
+        "nonebot_plugin_xiuxian_2/__init__.py:109-121",
+        "nonebot_plugin_xiuxian_2/plugin.py:1211-1240",
+        "nonebot_plugin_xiuxian_2/compatibility/legacy_jobs.py:10-75",
+        "nonebot_plugin_xiuxian_2/compatibility/legacy_manifest.py:13-54"
+      ],
+      "removal_condition": "Only after the independent P7 real-release evidence gate passes."
+    },
+    {
+      "id": "legacy-web-routes",
+      "source_field": "legacy_routes",
+      "status": "受阻",
+      "entry_format": "{methods} {path} -> {file}:{function}",
+      "target_format": "legacy Flask route handler {file}:{function}",
+      "reason": "The old Flask app and route modules are loaded and its server is enabled by default. Route registration is proven, but each handler's downstream ownership and replacement/compatibility decision is not closed.",
+      "unknown_edge": "route function -> old data/service or feature application -> state effect",
+      "call_graph": [
+        "xiuxian/xiuxian_web/__init__.py imports route modules -> Flask @app.route registers each route",
+        "register_legacy_startup(start_web_server_on_startup) -> start_web_server -> _web_enabled -> make_server(host, port, app)",
+        "web_enabled_from_env uses XIUXIAN_WEB_STATUS default true"
+      ],
+      "evidence": [
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
+        "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
+        "scripts/export_refactor_inventory.py:41-70"
+      ]
+    }
+  ],
+  "manifest_command_registration": {
+    "call_graph": [
+      "features/<feature>/manifest.py CommandSpec -> build_registry -> plugin.install_driver_hooks -> register_migrated_matchers(driver, holder)"
+    ],
+    "evidence": [
+      "nonebot_plugin_xiuxian_2/plugin.py:1359-1364",
+      "nonebot_plugin_xiuxian_2/adapters/nonebot/commands.py:register_migrated_matchers"
+    ]
+  },
+  "legacy_command_exclusions": [
+    {
+      "feature": "trade",
+      "name": "交易",
+      "status": "不可达",
+      "call_graph": ["features/trade/manifest.py CommandSpec -> new manifest matcher; no matching legacy on_command declaration in xiuxian_trade"],
+      "evidence": ["nonebot_plugin_xiuxian_2/features/trade/manifest.py:4-6"]
+    },
+    {
+      "feature": "base",
+      "name": "修炼",
+      "status": "不可达",
+      "call_graph": ["features/base/manifest.py CommandSpec -> new manifest matcher; no matching legacy on_command declaration in xiuxian_base"],
+      "evidence": ["nonebot_plugin_xiuxian_2/features/base/manifest.py:4-6"]
+    },
+    {
+      "feature": "buff",
+      "name": "功法",
+      "status": "不可达",
+      "call_graph": ["features/buff/manifest.py CommandSpec -> new manifest matcher; no matching legacy on_command declaration in xiuxian_buff"],
+      "evidence": ["nonebot_plugin_xiuxian_2/features/buff/manifest.py:4-6"]
+    },
+    {
+      "feature": "sect",
+      "name": "宗门商店兑换",
+      "status": "不可达",
+      "call_graph": ["features/sect/manifest.py CommandSpec -> new manifest matcher; no matching legacy on_command declaration in xiuxian_sect"],
+      "evidence": ["nonebot_plugin_xiuxian_2/features/sect/manifest.py:4-9"]
+    },
+    {
+      "feature": "work",
+      "name": "悬赏令",
+      "status": "不可达",
+      "call_graph": ["features/work/manifest.py CommandSpec -> new manifest matcher; no matching legacy on_command declaration in xiuxian_work"],
+      "evidence": ["nonebot_plugin_xiuxian_2/features/work/manifest.py:4-8"]
+    },
+    {
+      "feature": "bank",
+      "name": "灵庄",
+      "status": "不可达",
+      "call_graph": ["features/bank/manifest.py CommandSpec -> new manifest matcher; no matching legacy on_command declaration in xiuxian_bank"],
+      "evidence": ["nonebot_plugin_xiuxian_2/features/bank/manifest.py:4-8"]
+    },
+    {
+      "feature": "back",
+      "name": "背包",
+      "status": "不可达",
+      "call_graph": ["features/back/manifest.py CommandSpec -> new manifest matcher; no matching legacy on_command declaration in xiuxian_back"],
+      "evidence": ["nonebot_plugin_xiuxian_2/features/back/manifest.py:4-6"]
+    },
+    {
+      "feature": "boss",
+      "name": "讨伐世界BOSS",
+      "status": "不可达",
+      "call_graph": ["features/boss/manifest.py CommandSpec -> new manifest matcher; no matching legacy on_command declaration in xiuxian_boss"],
+      "evidence": ["nonebot_plugin_xiuxian_2/features/boss/manifest.py:4-9"]
+    },
+    {
+      "feature": "sect",
+      "name": "领取宗门炼体堂",
+      "status": "不可达",
+      "call_graph": ["features/sect/manifest.py CommandSpec -> new manifest matcher; no matching legacy on_command declaration in xiuxian_sect"],
+      "evidence": ["nonebot_plugin_xiuxian_2/features/sect/manifest.py:4-9"]
+    }
+  ],
+  "explicit_paths": [
+    {
+      "id": "admin.player_status.reset.single",
+      "kind": "command-effect",
+      "entry": "重置状态 <player>",
+      "status": "受阻",
+      "reason": "Single-player reset still reaches AdminPlayerStatusResetService.reset through AdminApplication; global batch migration did not replace this branch.",
+      "call_graph": [
+        "xiuxian_admin.__init__:重置状态 matcher -> handler restate_",
+        "handler restate_ -> admin_application.reset_player_status",
+        "features/admin/application.py:AdminApplication.reset_player_status -> AdminPlayerStatusResetService.reset"
+      ],
+      "evidence": [
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:272,1570-1575",
+        "nonebot_plugin_xiuxian_2/features/admin/application.py:25-27"
+      ]
+    },
+    {
+      "id": "admin.player_status.reset.all",
+      "kind": "command-effect",
+      "entry": "重置状态 (no-argument global batch)",
+      "status": "已迁移",
+      "reason": "The global batch branch freezes and pages targets through the feature-owned batch repository, with a 100-target read cap.",
+      "call_graph": [
+        "xiuxian_admin.__init__:restate_ no-argument branch -> admin_application batch API",
+        "AdminApplication.reset_player_status_batch -> AdminPlayerStatusBatchResetSqlRepository.reset -> bounded SQL target page"
+      ],
+      "evidence": [
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:1517-1568",
+        "nonebot_plugin_xiuxian_2/features/admin/application.py:32-45",
+        "nonebot_plugin_xiuxian_2/features/admin/player_status_batch_repository.py:38-100"
+      ]
+    },
+    {
+      "id": "title.equip.write",
+      "kind": "command-effect",
+      "entry": "装备称号 state write",
+      "status": "已迁移",
+      "reason": "The command's equip mutation uses TitleApplication.execute; legacy reads/presentation are not claimed migrated by this effect-level item.",
+      "call_graph": [
+        "title_equip_cmd handler -> _run_title_action('equip', ...) -> title_application.execute",
+        "TitleApplication -> feature-owned repository"
+      ],
+      "evidence": [
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_title/__init__.py:91-100,218-269",
+        "nonebot_plugin_xiuxian_2/features/title/application.py"
+      ]
+    },
+    {
+      "id": "title.unequip.write",
+      "kind": "command-effect",
+      "entry": "卸下称号 state write",
+      "status": "已迁移",
+      "reason": "The command's unequip mutation uses TitleApplication.execute; legacy reads/presentation are not claimed migrated by this effect-level item.",
+      "call_graph": [
+        "title_unequip_cmd handler -> _run_title_action('unequip', ...) -> title_application.execute",
+        "TitleApplication -> feature-owned repository"
+      ],
+      "evidence": [
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_title/__init__.py:91-100,272-307",
+        "nonebot_plugin_xiuxian_2/features/title/application.py"
+      ]
+    },
+    {
+      "id": "title.unlock.write",
+      "kind": "command-effect",
+      "entry": "检查称号 unlock writes",
+      "status": "已迁移",
+      "reason": "Manual and automatic unlock writes call TitleApplication.execute through _run_title_action; title eligibility reads remain a separate legacy-read concern.",
+      "call_graph": [
+        "检查称号 handler / unlock callback -> _unlock_titles_from_event -> _run_title_action('unlock_batch', ...) -> title_application.execute",
+        "TitleApplication -> feature-owned repository"
+      ],
+      "evidence": [
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_title/__init__.py:75-88,310-332",
+        "nonebot_plugin_xiuxian_2/features/title/application.py"
+      ]
+    },
+    {
+      "id": "title.grant_all.user_enumeration",
+      "kind": "command-effect",
+      "entry": "赠送称号 <title> all user enumeration",
+      "status": "受阻",
+      "reason": "The default all-users branch still materializes user IDs from the legacy XiuxianDateManage helper before issuing grants.",
+      "call_graph": [
+        "赠送称号 matcher -> title_grant handler",
+        "target == all -> _sql_message().get_all_user_id() -> legacy user enumeration",
+        "per-user writes -> _run_title_action -> TitleApplication.execute"
+      ],
+      "evidence": [
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_title/__init__.py:91-100,450-490",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_title/__init__.py:35-51"
+      ]
+    },
+    {
+      "id": "title.transaction_service",
+      "kind": "legacy-service",
+      "entry": "TitleTransactionService lazy getter",
+      "status": "不可达",
+      "reason": "The service is imported and lazily constructible, but no production caller of _title_transaction_service() was found; the command handlers audited above use TitleApplication instead.",
+      "call_graph": [
+        "title module import -> TitleTransactionService symbol",
+        "_title_transaction_service definition -> no production caller"
+      ],
+      "evidence": [
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_title/__init__.py:35,47-51",
+        "repository search for _title_transaction_service() has no production call site"
+      ]
+    },
+    {
+      "id": "legacy.matcher.non_command_dispatch",
+      "kind": "matcher-family",
+      "entry": "default old on_message/on_regex/on_startswith and other non-command matcher handlers",
+      "status": "受阻",
+      "reason": "The default loader exposes these matcher kinds, but the checked-in command inventory does not enumerate them. Keep this as a blocking family; new discoveries belong in backlog until scope is explicitly reviewed.",
+      "call_graph": [
+        "package initialization -> load_all_plugins(plugin_modules)",
+        "legacy feature decorators -> xiuxian/on_compat.py wrappers -> NoneBot matcher registration"
+      ],
+      "evidence": [
+        "nonebot_plugin_xiuxian_2/__init__.py:89-121",
+        "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-903"
+      ]
+    }
+  ],
+  "suppressed_legacy_command_keys": [
+    "今日运势",
+    "占卜",
+    "卜卦",
+    "求签",
+    "运势",
+    "算命",
+    "修仙签到",
+    "签到",
+    "送灵石"
+  ],
+  "suppressed_status": "不可达",
+  "suppressed_reason": "on_compat.on_command returns _SuppressedLegacyMatcher for these exact normalized keys, so their old matcher handlers cannot be registered through this wrapper.",
+  "suppressed_evidence": [
+    "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:69-82,819-849"
+  ],
+  "backlog": [
+    {
+      "id": "runtime-conditional-and-non-command-legacy-entries",
+      "reason": "Record newly discovered defaults, dynamic imports, and non-command callbacks here first; they do not enter this frozen scope unless a reviewed scope-version change explicitly adopts them."
+    },
+    {
+      "id": "command-and-web-handler-downstream-closure",
+      "reason": "Close each blocked handler to its terminal application/repository or legacy state writer without creating a new gameplay slice for every discovery."
+    }
+  ],
+  "p7_gate": {
+    "script": "scripts/refactor_completion_audit.py",
+    "status": "independent",
+    "required_for_compatibility_removal": true
+  }
+}

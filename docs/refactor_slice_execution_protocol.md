@@ -203,12 +203,13 @@
 
 本片执行收口（2026-10-03）：`nearby_users_cmd` 改经 async feature application 与 BINARY ID seek query；一页只读一个 ID 与首 pair，候选以 expected ID 重查。稳定数据下最多保留 10 个唯一对象，不足 10 按 map rowid 顺序，超过 10 使用 reservoir(k=10) 并随机排列。地图/论道/progress 聚合 `326 passed`，附近展示专项 `83 passed`，最终 progress/inventory/architecture 单元 `33 passed`，source-quality 地图随机/附近定向 `2 passed`；五项展示 progress gate、inventory freshness、11 文件 AST 内存编译和 diff check 通过。完整 source-quality 为 `278 passed, 1 failed`，单个既有 BOSS handler source 断言仍查找旧 `boss_data=` 片段；本片未改该 handler，Boss JSON 用户改动保留。完整 architecture 仍 `15` 项错误，无新增展示错误，`exit_ready=false`。隔离五库 backup/restore dry-run/restore、265 项 migration/reconcile clean、路由 `203/58/7/1/1` 通过，非正式发布/P7。1 名只读代理指出数值游标下并发首 pair 删除可能重复计权；最终改为 ID seek，并复审无阻断。实时变化不是全局快照，唯一流公平只对稳定扫描成立；非首重复 profile 坏字段不再触发展示失败。pytest/pyc 关闭，所有进程退出后删除本轮 `/tmp/codex-map-nearby-display-20261003`（约 8.3 MiB），无仓库字节码；保留运行数据库/WAL/SHM、正式备份、持久回执、`.venv`、`.git`、`data/` 和用户 Boss JSON。收尾资源复核后提交并推送，再进入下一个真实默认旧写入口调用图审计。
 
-### 下一片默认旧写入口审计方案
+### 冻结默认旧路径清单方案
 
-1. 按目标顺序优先 player/economy，再 combat/dungeon/boss；从当前 `exit_blockers`、progress 门禁和真实注册 handler/route 向下追，不按 grep 到的兼容 helper 自动开切片。
-2. 1 名只读代理审计一个真实入口的 handler/route、旧 transaction/service 调用、目标 feature 边界、启动 schema/回执契约和聚焦测试位置；不访问运行数据库/凭据，不改代码、不测试/导入/编译/恢复或生成缓存。主线程确认可达性后只关闭一个入口，先写失败回归。
-3. 每片测试及恢复串行，完整标注用户/持久状态边界；无默认替代路径的旧实现保持 compatibility/rollback，不删除回执或运行数据。超过一个领域、需历史数据清洗或认证决策的事项拆成独立方案。
-4. 继续保留本地 10 GiB/512 MiB 停止阈值、pytest/pyc 隔离、进程退出后清理专用缓存、资源复核、提交和远端 SHA 核验；整体 `exit_ready=false` 期间不得宣称全面重构完成。
+1. 暂停按 player/economy 或 combat/dungeon/boss 顺序继续追加玩法切片；本期范围固定为 `docs/refactor_phase2_legacy_paths.json` 的 `scope_id`。它从已初始化 NoneBot 的默认生产加载根，枚举旧命令候选、旧 Web route、legacy scheduler job，并把细分到具体效果的已核实路径单独列出。
+2. 每项状态只能是 `已迁移`、`允许保留的兼容路径`、`不可达`、`受阻`。迁移必须有默认入口到 feature application/repository 的调用边；兼容项必须写明授权周期/移除条件；不可达必须证明没有从生产根到达；动态目标或调用链未闭合一律受阻。各项附注册入口、调用图和源码证据，不以文件数、feature 名或 import/定义存在判定。
+3. `scripts/phase2_legacy_path_gate.py --check` 对 `docs/refactor_phase2_legacy_path_items.json` 的冻结成员校验 membership hash，并按每项状态计算；有 `受阻`、非法状态、缺调用图证据、仍标为受阻的命令/路由失去对应源码注册、不可达命令重新可注册或冻结成员损坏均失败。活动 inventory 与基线的差异以 `source_inventory_added` 等字段报告 backlog 候选，不自动扩范围或改变冻结清单完成状态。新发现经人工核实后进入 `docs/refactor_phase2_legacy_paths.json` 的 `backlog`；只有显式评审、升级 `scope_id` 并重算成员 hash 后才能纳入本期。成员变更后用 `scripts/phase2_legacy_path_gate.py --membership-hash` 计算新 hash，再人工更新 scope manifest；此命令不写文件。旧的 slice 布尔值仅作诊断，不替代清单状态；P7 真实发布周期 gate 独立运行，不混入 phase 2。
+4. 可以合理追加最多 2 名只读子代理，按互不重叠的问题分工核对调用可达性、迁移/回执契约和门禁测试覆盖。子代理不改代码、不运行测试/导入/编译/恢复、不访问运行数据库或凭据、不制造缓存；主线程负责实现、测试、整合、资源复核与清理，测试/恢复串行。
+5. 每项保留用户/持久状态边界；缓存只清理本轮确认归属、相关进程已退出的临时产物，不清理 operation ledger、outbox、compatibility hits、数据库/WAL/SHM、备份或用户文件。继续遵守磁盘 10 GiB / `MemAvailable` 512 MiB 重任务停止阈值和 pytest/pyc 隔离。
 
 ## 缓存清理允许范围
 
