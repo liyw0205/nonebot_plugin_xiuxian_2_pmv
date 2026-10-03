@@ -31,6 +31,13 @@ class WorldBossBattleSettlementResult:
         return getattr(self, key)
 
 
+@dataclass(frozen=True)
+class WorldBossDailyLimitSnapshot:
+    battle_count: int = 0
+    integral: int = 0
+    stone: int = 0
+
+
 class WorldBossBattleSettlementSqlRepository:
     """Feature-owned world-boss settlement across game/player/activity DBs."""
 
@@ -48,6 +55,49 @@ class WorldBossBattleSettlementSqlRepository:
         self.activity_database = str(activity_database) if activity_database else None
         self.clock = clock or SystemClock()
         self.lock = lock or RLock()
+
+    @staticmethod
+    def _integer(value: Any) -> int:
+        try:
+            return int(value or 0)
+        except (TypeError, ValueError, OverflowError):
+            return 0
+
+    def daily_limit_snapshot(self, user_id: str) -> WorldBossDailyLimitSnapshot:
+        user_id = str(user_id).strip()
+        if not user_id or not Path(self.player_database).is_file():
+            return WorldBossDailyLimitSnapshot()
+
+        fields = {
+            "battle_count": "boss_battle_count",
+            "integral": "boss_integral",
+            "stone": "boss_stone",
+        }
+        with self.lock, DatabaseUnitOfWork(self.player_database, read_only=True) as uow:
+            columns = {
+                str(row["name"]).casefold()
+                for row in uow.query_all('PRAGMA table_info("boss")')
+            }
+            if "user_id" not in columns:
+                return WorldBossDailyLimitSnapshot()
+            selected = [
+                f'"{column}" AS "{name}"'
+                for name, column in fields.items()
+                if column in columns
+            ]
+            if not selected:
+                return WorldBossDailyLimitSnapshot()
+            row = uow.query_one(
+                f'SELECT {", ".join(selected)} FROM "boss" WHERE user_id=? LIMIT 1',
+                (user_id,),
+            )
+        if row is None:
+            return WorldBossDailyLimitSnapshot()
+        return WorldBossDailyLimitSnapshot(
+            self._integer(row.get("battle_count")),
+            self._integer(row.get("integral")),
+            self._integer(row.get("stone")),
+        )
 
     @staticmethod
     def _json(value: Any) -> str:

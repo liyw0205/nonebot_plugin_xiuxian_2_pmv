@@ -8,7 +8,10 @@ from datetime import date, datetime
 
 from ...infrastructure.database import DatabaseUnitOfWork
 from ...infrastructure.clock import SystemClock
-from .battle_repository import WorldBossBattleSettlementSqlRepository
+from .battle_repository import (
+    WorldBossBattleSettlementSqlRepository,
+    WorldBossDailyLimitSnapshot,
+)
 
 
 class BossRepository(Protocol):
@@ -16,6 +19,7 @@ class BossRepository(Protocol):
     def settle(self, *args: Any, **kwargs: Any) -> Any: ...
     def settlement_result(self, operation_id: str) -> Any: ...
     def weekly_purchases(self, user_id: str, today: Any = None) -> dict[str, Any] | None: ...
+    def daily_limit_snapshot(self, user_id: str) -> WorldBossDailyLimitSnapshot: ...
 
 
 class LegacyBossRepository:
@@ -40,6 +44,13 @@ class LegacyBossRepository:
 
     def settlement_result(self, operation_id: str) -> Any:
         return self._services()[1].get_result(operation_id)
+
+    def daily_limit_snapshot(self, user_id: str) -> WorldBossDailyLimitSnapshot:
+        return WorldBossBattleSettlementSqlRepository(
+            self.game_database,
+            self.player_database,
+            self.activity_database,
+        ).daily_limit_snapshot(user_id)
 
     def weekly_purchases(self, user_id: str, today=None) -> dict[str, Any] | None:
         return BossPurchaseSqlRepository(
@@ -67,6 +78,9 @@ class BossPurchaseSqlRepository:
 
     def settlement_result(self, operation_id: str) -> Any:
         return self._settlement.settlement_result(operation_id)
+
+    def daily_limit_snapshot(self, user_id: str) -> WorldBossDailyLimitSnapshot:
+        return self._settlement.daily_limit_snapshot(user_id)
 
     def weekly_purchases(self, user_id: str, today=None) -> dict[str, Any] | None:
         user_id = str(user_id).strip()

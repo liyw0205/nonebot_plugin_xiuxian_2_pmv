@@ -47,7 +47,7 @@ from ..xiuxian_utils.utils import (
     restore_player_stamina,
 )
 from ..xiuxian_title.title_data import check_and_unlock_titles
-from .boss_limit import boss_limit, player_data_manager, DAILY_BATTLE_COUNT
+from .boss_limit import player_data_manager, DAILY_BATTLE_COUNT
 from .transaction_service import BossPurchaseResult
 from ...compatibility.boss import WorldBossBattleSettlementService
 from ...features.boss.application import BossApplication
@@ -508,7 +508,8 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
         await battle.finish()
 
     # 检查每日讨伐次数限制
-    today_battle_count = boss_limit.get_battle_count(user_id)
+    daily_limits = boss_application.daily_limit_snapshot(user_id)
+    today_battle_count = daily_limits.battle_count
     battle_count = DAILY_BATTLE_COUNT
     if today_battle_count >= battle_count:
         msg = f"今日讨伐次数已达上限（{battle_count}次），请明日再来！"
@@ -698,8 +699,8 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
     # 奖励按实际扣除血量计算
     damage_ratio = actual_damage / boss_all_hp if boss_all_hp > 0 else 0
 
-    today_integral = int(boss_limit.get_integral(user_id))
-    today_stone = int(boss_limit.get_stone(user_id))
+    today_integral = daily_limits.integral
+    today_stone = daily_limits.stone
     total_integral = int(get_user_boss_fight_info(user_id)['boss_integral'])
 
     integral_limit = 12000
@@ -1394,9 +1395,10 @@ async def boss_integral_info_(bot: Bot, event: GroupMessageEvent | PrivateMessag
     user_boss_fight_info = get_user_boss_fight_info(user_id)
     
     # 获取今日已获得的积分和灵石和讨伐次数
-    today_integral = int(boss_limit.get_integral(user_id))
-    today_stone = int(boss_limit.get_stone(user_id))
-    today_battle_count = boss_limit.get_battle_count(user_id)
+    daily_limits = boss_application.daily_limit_snapshot(user_id)
+    today_integral = daily_limits.integral
+    today_stone = daily_limits.stone
+    today_battle_count = daily_limits.battle_count
     
     # 设置每日上限
     integral_limit = 12000

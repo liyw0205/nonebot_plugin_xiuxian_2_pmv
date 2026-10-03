@@ -2,6 +2,12 @@
 
 状态：进行中。`v1.1.0` 的 P0-P7 发布证据继续保留，但不作为底层全面重构完成证明。
 
+**最新验证（2026-10-03，世界 BOSS 日限额只读快照）**：默认战斗与“世界BOSS信息”展示通过 `BossApplication.daily_limit_snapshot -> BossPurchaseSqlRepository -> WorldBossBattleSettlementSqlRepository` 读取讨伐次数、每日积分、每日灵石。查询使用只读 UoW、每次最多读取一行，不缓存；缺数据库/表/用户行/字段返回零且不插入、不补 schema。战斗复用入口处同一快照，原结算 CAS 未改；显式 `BossLimit` mutation 和每日重置保留。无 migration 或运行数据访问。
+
+Boss feature/settlement/handler 聚焦测试 `28 passed`（含 handler source contract），库存 freshness `2 passed`，奖励结算 source contract `1 passed`；`git diff --check` 与 7 个改动 Python 文件 AST 检查通过。未运行完整 architecture/source-quality 套件；此前 architecture 基线仍有 15 项既有错误，整体 `exit_ready=false`。复用 1 名只读调用图审计代理的既有结论，没有重复派工；代理未改代码、运行测试/导入/编译、访问数据库或生成缓存。测试串行运行，pytest cache 与字节码关闭，约 8 KiB 的空专用临时目录在进程退出后删除；未发现本轮缓存文件。本片测试完成时可用 RAM 约 `1.2GiB`；最后复核磁盘可用 `20G`、`MemAvailable` `1.1GiB`、inode 使用 `14%`，当时另有不属于本片的 pytest 进程运行且未干预。保留运行数据库/WAL/SHM、正式备份、持久回执、`data/`、`.git`、`.venv` 和用户 `boss_info.json`。下一片仍按开发文档顺序审计另一条真实可达默认旧写路径，本切片不代表 BOSS 或整体重构完成。
+
+**本片方案与子代理范围**：切片仅覆盖默认世界 BOSS 战斗/信息命令的日限额读取；不改显式写入、重置调度和结算事务。允许合理使用子代理：优先复用已完成的只读调用图审计，不重复相同任务；遇到独立未知时至多委派 1 名代理只读复核调用图/测试缺口，不改文件、不访问数据库、不运行测试/导入/编译/恢复或生成缓存。主线程负责实现、串行验收和收尾。磁盘低于 10 GiB 或 `MemAvailable` 低于 512 MiB 时停止重任务；测试禁用 pytest cache/字节码并使用本片独立 `/tmp`，只清理进程退出后确认属于本片的产物；不清运行库、备份、持久回执、`data/`、`.git`、`.venv` 或用户文件。
+
 **最新验证（2026-10-03，地图随机论道有界选择）**：
 
 - 默认无道号论道改经 async application/query，双 rowid 高水位和联合 pair 游标每页最多 256 个数值元数据，逐 pair 短只读读取 public profile；排除本人/位置/JOIN 在候选读取时重查。公平 reservoir(k=1) 保留全部重复 map/profile pair 权重，每 32 raw pair 及页末让出，连接全部在 await 前关闭。缺库/schema、附库/页/候选故障或坏 power 丢弃部分 sample，取消传播；不建库、不执行 DDL、不缓存、无 migration 或运行数据变更。指定道号查询不重做，附近展示仍开放。

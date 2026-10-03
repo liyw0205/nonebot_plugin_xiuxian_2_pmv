@@ -1,6 +1,7 @@
 import sqlite3
 
 from ..migrations import apply_boss_player_schema
+from ..application import BossApplication
 from ..repository import BossPurchaseSqlRepository
 from ....infrastructure.database import DatabaseUnitOfWork
 
@@ -37,6 +38,53 @@ def test_settlement_replay_does_not_create_missing_schema(tmp_path):
         assert connection.execute(
             "SELECT 1 FROM sqlite_master WHERE type='table' AND name='world_boss_battle_operations'"
         ).fetchone() is None
+
+
+def test_daily_limit_snapshot_is_read_only_and_defaults_missing_rows(tmp_path):
+    game = tmp_path / "game.db"
+    player = tmp_path / "player.db"
+    with sqlite3.connect(player) as connection:
+        connection.execute(
+            "CREATE TABLE boss(user_id TEXT PRIMARY KEY,boss_integral INTEGER,boss_stone INTEGER,boss_battle_count INTEGER)"
+        )
+        connection.execute("INSERT INTO boss VALUES('existing',12,34,5)")
+
+    application = BossApplication(game, player)
+    missing = application.daily_limit_snapshot("missing")
+    existing = application.daily_limit_snapshot("existing")
+
+    assert (missing.battle_count, missing.integral, missing.stone) == (0, 0, 0)
+    assert (existing.battle_count, existing.integral, existing.stone) == (5, 12, 34)
+    with sqlite3.connect(player) as connection:
+        assert connection.execute("SELECT COUNT(*) FROM boss").fetchone()[0] == 1
+
+
+def test_daily_limit_snapshot_missing_database_and_schema_do_not_create_them(tmp_path):
+    player = tmp_path / "missing-player.db"
+    repository = BossPurchaseSqlRepository(tmp_path / "game.db", player)
+
+    snapshot = repository.daily_limit_snapshot("u")
+    assert (snapshot.battle_count, snapshot.integral, snapshot.stone) == (0, 0, 0)
+    assert not player.exists()
+
+    sqlite3.connect(player).close()
+    snapshot = repository.daily_limit_snapshot("u")
+    assert (snapshot.battle_count, snapshot.integral, snapshot.stone) == (0, 0, 0)
+    with sqlite3.connect(player) as connection:
+        assert connection.execute(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='boss'"
+        ).fetchone()[0] == 0
+
+
+def test_daily_limit_snapshot_tolerates_legacy_partial_columns(tmp_path):
+    player = tmp_path / "player.db"
+    with sqlite3.connect(player) as connection:
+        connection.execute("CREATE TABLE boss(user_id TEXT PRIMARY KEY,boss_stone INTEGER)")
+        connection.execute("INSERT INTO boss VALUES('u',34)")
+
+    snapshot = BossPurchaseSqlRepository(tmp_path / "game.db", player).daily_limit_snapshot("u")
+
+    assert (snapshot.battle_count, snapshot.integral, snapshot.stone) == (0, 0, 34)
 
 
 def test_clean_player_schema_uses_separate_weekly_purchase_projection(tmp_path):

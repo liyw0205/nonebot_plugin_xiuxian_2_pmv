@@ -24,6 +24,8 @@
 
 资产 application 先写 `operation_ledger`，再执行结算；手动生成使用版本 CAS 与回执幂等，每日限额重置冻结目标并按 chunk 恢复。相同 operation/日期重试只返回首次结果；异常在当前事务回滚并保留可恢复进度。旧 transaction service 仅作为显式兼容/回滚路径。
 
+世界BOSS战斗和“世界BOSS信息”通过 `BossApplication.daily_limit_snapshot` 读取每日讨伐次数、积分和灵石。读取使用只读 UoW，每次最多取一行，不缓存；缺数据库、表、用户行或旧字段时返回零，不创建数据库/表、不补字段，也不插入默认用户行。战斗沿用该快照作为结算 CAS 的期望值；显式限额写入与每日重置仍由各自 mutation 路径负责。
+
 ## 定时任务
 
 世界BOSS刷新和天罚仍由显式兼容生命周期注册，手动生成、全量刷新与每日重置的持久化由 feature-owned repository 承担；手动与定时全量刷新共享 operation receipt，未在 feature 导入时重复注册。

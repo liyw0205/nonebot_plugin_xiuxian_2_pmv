@@ -9,6 +9,7 @@ from ...core.result import OperationOutcome, ReplyPlan
 from ...infrastructure.database import DatabaseUnitOfWork, OperationLedger
 from ...infrastructure.clock import SystemClock
 from ...infrastructure.observability import trace_context
+from .battle_repository import WorldBossDailyLimitSnapshot
 from .domain import BossPurchaseRequest, BossSettlementRequest
 from .repository import BossPurchaseSqlRepository, BossRepository
 from .punishment_repository import WorldBossPunishmentSqlRepository
@@ -112,6 +113,9 @@ class BossApplication:
 
     def weekly_purchases(self, user_id: str, today: Any = None) -> dict[str, Any] | None:
         return self._repository().weekly_purchases(str(user_id), today)
+
+    def daily_limit_snapshot(self, user_id: str) -> WorldBossDailyLimitSnapshot:
+        return self._repository().daily_limit_snapshot(str(user_id))
 
     def _execute(self, *, operation_id: str, user_id: str, action: str, payload: Mapping[str, Any], call) -> OperationOutcome[dict[str, Any]]:
         with trace_context(operation_id=operation_id, user_scope=user_id):
