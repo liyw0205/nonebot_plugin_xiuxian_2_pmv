@@ -493,9 +493,10 @@ class DungeonExploreOperationServiceTests(unittest.TestCase):
         ]
         self.assertLess(
             handler.index("dungeon_application.replay"),
-            handler.index("dungeon_manager.trigger_event"),
+            handler.index("resolution_manager.trigger_event"),
         )
-        self.assertIn("dungeon_application.prepare", handler)
+        self.assertIn("dungeon_application.prepare_intent", handler)
+        self.assertIn("dungeon_application.prepare_resolution", handler)
         self.assertIn("dungeon_application.settle", handler)
         self.assertIn("dungeon_application.resolve_rejection", handler)
         self.assertIn("random_source=encounter_rng", handler)

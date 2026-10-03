@@ -55,7 +55,7 @@
 2. **其余领域边界**：按 cultivation/training、combat/dungeon/boss、sect/trade/scheduler/Web 的顺序完成真实入口、随机/时间注入、operation receipt、启动 migration、跨库恢复和缺 schema fail-closed。
    - 当前洞府未完成项：随机潜入与同节点读取调用 `list_users_by_fields` 后完整物化候选用户，再逐个读取 profile/洞府；`PlayerDataManager._field_list_cache` 的 TTL entry 没有容量上限或主动过期清扫。单独设计有界/流式候选选择，并给共享 field-list cache 增加可证明的条目或字节上限及过期回收；不得复制或主动清空 `ITEMS_CACHE` 等其他玩法共享缓存。
    - 下一洞府候选/缓存切片委派 1 名只读子代理梳理 field-list cache 的生产调用点、失效路径与条目体积风险；子代理不改代码、不跑 SQLite 测试，主线程负责实现、串行验收和资源收尾。
-   - 当前副本未完成项：player-only `dungeon.007` 与 prepared settlement schema 已完成；探索 encounter/PVE 已改用 operation-scoped RNG，但只对相同输入可复现。下一片在任何随机计算前持久化 resolution intent、玩家/队伍/副本/战斗属性快照与 seed，并在状态漂移时拒绝重放；之后再处理 reset 时钟、队伍有界查询/索引和重置/会话兼容边界。最近只读调用图审计已确认普通修炼结算切到 `BuffApplication`，没有新的 `up_exp_` 旧 service 切片证据；`RewardService._grant_exp` 的生产入口仍未证明，不据此开切片。
+   - 当前副本未完成项：player-only `dungeon.007`、prepared settlement schema 与 operation-scoped RNG 已完成；当前切片新增 game-only `dungeon.008`，在随机前持久化 resolution intent、玩家/队伍/副本/战斗属性/背包快照与用途 seed，恢复只复用冻结输入，状态漂移将 intent 终结为 `state_changed`。之后再处理 reset 时钟、队伍有界查询/索引和重置/会话兼容边界。最近只读调用图审计已确认普通修炼结算切到 `BuffApplication`，没有新的 `up_exp_` 旧 service 切片证据；`RewardService._grant_exp` 的生产入口仍未证明，不据此开切片。
    - 当前历练未完成项：普通修炼生命周期默认入口已由 `BuffApplication` 承担，后续只审计事件随机计划、排行榜有界分页和 `training_limit.py` 兼容读写，不重复迁移已关闭的结算边界。
 3. **持久状态与恢复证据**：盘点 operation ledger、outbox、projection receipt、失败/死信和 bet/payout 等历史回执的保留窗口；在有备份、checksum、dry-run、restore、reconcile 和人工决策记录前，不删除或压缩任何持久状态。
 4. **发布退出条件**：完成正式数据备份/迁移/恢复演练、P7 发布证据、全局 legacy 门禁和真实运行 readiness；只有脚本输出 `exit_ready=true` 且证据归档后，才可声明全面重构完成。

@@ -7,6 +7,7 @@ from typing import Any, Mapping
 from ...core.errors import ConflictError, DomainError, ValidationError
 from ...core.result import OperationOutcome, ReplyPlan
 from ...infrastructure.database import DatabaseUnitOfWork, OperationLedger
+from ...infrastructure.clock import SystemClock
 from ...infrastructure.observability import trace_context
 from .domain import DungeonPurchaseRequest
 from .repository import DungeonRepository, DungeonSessionSqlRepository
@@ -94,6 +95,16 @@ class DungeonApplication:
         if not str(operation_id).strip() or not str(user_id).strip() or not isinstance(plan, Mapping):
             raise ValidationError("operation_id, user_id and plan are required")
         return self._repository().prepare(operation_id, user_id, dict(plan))
+
+    def prepare_intent(self, *, operation_id: str, user_id: str, intent: Mapping[str, Any]) -> Any:
+        if not str(operation_id).strip() or not str(user_id).strip() or not isinstance(intent, Mapping):
+            raise ValidationError("operation_id, user_id and intent are required")
+        return self._repository().prepare_intent(operation_id, user_id, dict(intent))
+
+    def prepare_resolution(self, *, operation_id: str, user_id: str, plan: Mapping[str, Any]) -> Any:
+        if not str(operation_id).strip() or not str(user_id).strip() or not isinstance(plan, Mapping):
+            raise ValidationError("operation_id, user_id and plan are required")
+        return self._repository().prepare_resolution(operation_id, user_id, dict(plan))
 
     def settle(self, *, operation_id: str, user_id: str, max_goods_num: int) -> Any:
         if not str(operation_id).strip() or not str(user_id).strip() or int(max_goods_num) < 0:

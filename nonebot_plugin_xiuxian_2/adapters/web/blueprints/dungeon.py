@@ -35,8 +35,19 @@ def create_blueprint(*, application, permission) -> Blueprint:
         try:
             if action == "replay":
                 result = application.replay(operation_id=operation_id, user_id=payload.get("user_id", ""))
+            elif action == "intent":
+                result = application.prepare_intent(
+                    operation_id=operation_id,
+                    user_id=payload.get("user_id", ""),
+                    intent=payload.get("intent", {}),
+                )
             elif action == "prepare":
-                result = application.prepare(operation_id=operation_id, user_id=payload.get("user_id", ""), plan=payload.get("plan", {}))
+                # A plan may only be attached to a previously persisted intent.
+                result = application.prepare_resolution(
+                    operation_id=operation_id,
+                    user_id=payload.get("user_id", ""),
+                    plan=payload.get("plan", {}),
+                )
             else:
                 result = application.settle(operation_id=operation_id, user_id=payload.get("user_id", ""), max_goods_num=payload.get("max_goods_num", 0))
         except sqlite3.OperationalError as exc:
@@ -47,9 +58,14 @@ def create_blueprint(*, application, permission) -> Blueprint:
             return api_error(exc.code, exc.message, details=exc.details, status=400)
         data = result if isinstance(result, dict) else getattr(result, "__dict__", {})
         status = str(data.get("status", ""))
-        return api_success(data, status=200 if status in {"applied", "duplicate", "completed", "prepared"} else 409)
+        return api_success(data, status=200 if status in {"applied", "duplicate", "completed", "intent", "prepared"} else 409)
 
-    for path, action in (("replay", "replay"), ("prepare", "prepare"), ("settle", "settle")):
+    for path, action in (
+        ("replay", "replay"),
+        ("intent", "intent"),
+        ("prepare", "prepare"),
+        ("settle", "settle"),
+    ):
         router.add_url_rule(
             f"/api/v1/dungeon/explore/{path}",
             endpoint=f"explore_{action}",

@@ -14,6 +14,8 @@ class DungeonRepository(Protocol):
     def operation_result(self, *args: Any, **kwargs: Any) -> Any: ...
     def replay(self, *args: Any, **kwargs: Any) -> Any: ...
     def prepare(self, *args: Any, **kwargs: Any) -> Any: ...
+    def prepare_intent(self, *args: Any, **kwargs: Any) -> Any: ...
+    def prepare_resolution(self, *args: Any, **kwargs: Any) -> Any: ...
     def settle(self, *args: Any, **kwargs: Any) -> Any: ...
     def resolve_rejection(self, *args: Any, **kwargs: Any) -> Any: ...
     def operation_session_result(self, *args: Any, **kwargs: Any) -> Any: ...
@@ -46,6 +48,12 @@ class LegacyDungeonRepository:
 
     def prepare(self, *args: Any, **kwargs: Any) -> Any:
         return self._explore_service().prepare(*args, **kwargs)
+
+    def prepare_intent(self, *args: Any, **kwargs: Any) -> Any:
+        return self._explore_service().prepare_intent(*args, **kwargs)
+
+    def prepare_resolution(self, *args: Any, **kwargs: Any) -> Any:
+        return self._explore_service().prepare_resolution(*args, **kwargs)
 
     def settle(self, *args: Any, **kwargs: Any) -> Any:
         return self._explore_service().settle(*args, **kwargs)
@@ -172,6 +180,17 @@ class DungeonSessionSqlRepository(DungeonPurchaseSqlRepository):
         )
 
     @staticmethod
+    def _explore_columns(uow: DatabaseUnitOfWork) -> set[str]:
+        return {
+            str(row["name"])
+            for row in uow.query_all("PRAGMA table_info(dungeon_explore_operations)")
+        }
+
+    @staticmethod
+    def _explore_updated_at(columns: set[str]) -> str:
+        return ",updated_at=CURRENT_TIMESTAMP" if "updated_at" in columns else ""
+
+    @staticmethod
     def _schema_missing(phase: str = "") -> dict[str, Any]:
         return {
             "status": "schema_missing",
@@ -207,20 +226,135 @@ class DungeonSessionSqlRepository(DungeonPurchaseSqlRepository):
                 return self._schema_missing()
             existing=self._explore_row(uow,operation_id)
             if existing:return self._explore_result(existing,identity)
-            uow.execute("INSERT INTO dungeon_explore_operations(operation_id,request_identity,phase,prepared_json,result_status,result_json,current_layer,dungeon_status) VALUES(?,?,'prepared',?,'','{}',0,'')",(operation_id,identity,prepared))
+            columns = self._explore_columns(uow)
+            if "intent_json" in columns:
+                return {
+                    "status": "invalid_phase",
+                    "phase": "",
+                    "result_status": "intent_required",
+                    "response": {},
+                    "plan": {},
+                    "current_layer": 0,
+                    "dungeon_status": "",
+                }
+            uow.execute("INSERT INTO dungeon_explore_operations(operation_id,request_identity,phase,prepared_json,result_status,result_json,current_layer,dungeon_status) VALUES(?,?,'prepared',?,'','{}',0,'')", (operation_id, identity, prepared))
         return {"status":"prepared","phase":"prepared","result_status":"","response":{},"plan":plan,"current_layer":0,"dungeon_status":""}
 
+    def prepare_intent(self, operation_id: str, user_id: str, intent: dict[str, Any]) -> dict[str, Any]:
+        operation_id, user_id = str(operation_id).strip(), str(user_id)
+        if not operation_id or not isinstance(intent, dict) or not intent:
+            raise ValueError("operation and intent required")
+        identity = json.dumps({"action": "explore", "user_id": user_id}, ensure_ascii=True, sort_keys=True)
+        intent_json = json.dumps(intent, ensure_ascii=True, sort_keys=True, separators=(",", ":"))
+        if not Path(self.game_database).is_file():
+            return self._schema_missing()
+        with DatabaseUnitOfWork(self.game_database, immediate=True) as uow:
+            columns = self._explore_columns(uow)
+            required = {"operation_id", "request_identity", "phase", "prepared_json", "result_status", "result_json", "current_layer", "dungeon_status", "intent_json", "updated_at"}
+            if not required <= columns:
+                return self._schema_missing()
+            existing = self._explore_row(uow, operation_id)
+            if existing:
+                return self._explore_result(existing, identity)
+            uow.execute(
+                "INSERT INTO dungeon_explore_operations(operation_id,request_identity,phase,prepared_json,intent_json,result_status,result_json,current_layer,dungeon_status) VALUES(?,?,'intent','{}',?,'','{}',0,'')",
+                (operation_id, identity, intent_json),
+            )
+        return {"status": "intent", "phase": "intent", "result_status": "", "response": {}, "intent": intent, "plan": {}, "current_layer": 0, "dungeon_status": ""}
+
+    def prepare_resolution(self, operation_id: str, user_id: str, plan: dict[str, Any]) -> dict[str, Any]:
+        operation_id, user_id = str(operation_id).strip(), str(user_id)
+        if not operation_id or not isinstance(plan, dict) or not plan:
+            raise ValueError("operation and plan required")
+        identity = json.dumps({"action": "explore", "user_id": user_id}, ensure_ascii=True, sort_keys=True)
+        prepared = json.dumps(plan, ensure_ascii=True, sort_keys=True, separators=(",", ":"))
+        if not Path(self.game_database).is_file():
+            return self._schema_missing()
+        with DatabaseUnitOfWork(self.game_database, immediate=True) as uow:
+            columns = self._explore_columns(uow)
+            if not {
+                "operation_id",
+                "request_identity",
+                "phase",
+                "prepared_json",
+                "result_status",
+                "result_json",
+                "current_layer",
+                "dungeon_status",
+                "intent_json",
+                "updated_at",
+            } <= columns:
+                return self._schema_missing()
+            existing = self._explore_row(uow, operation_id)
+            if existing is None:
+                return {"status": "missing", "phase": "", "result_status": "", "response": {}, "plan": {}, "current_layer": 0, "dungeon_status": ""}
+            if str(existing["request_identity"]) != identity:
+                return {"status": "operation_conflict", "phase": "", "result_status": "", "response": {}, "plan": {}, "current_layer": 0, "dungeon_status": ""}
+            phase = str(existing["phase"] or "")
+            if phase == "completed":
+                return self._explore_result(existing, identity)
+            if phase != "intent":
+                return self._explore_result(existing, identity)
+            uow.execute(
+                "UPDATE dungeon_explore_operations SET phase='prepared',prepared_json=?"
+                + self._explore_updated_at(columns)
+                + " WHERE operation_id=? AND phase='intent'",
+                (prepared, operation_id),
+            )
+        return {"status": "prepared", "phase": "prepared", "result_status": "", "response": {}, "plan": plan, "current_layer": 0, "dungeon_status": ""}
+
     def resolve_rejection(self, operation_id: str, user_id: str, result_status: str, response: dict[str, Any], max_goods_num: int, current_layer: int = 0, dungeon_status: str = "") -> dict[str, Any]:
-        identity=json.dumps({"action":"explore","user_id":str(user_id)},ensure_ascii=True,sort_keys=True);response_json=json.dumps(dict(response),ensure_ascii=True,sort_keys=True,separators=(",",":"))
+        operation_id = str(operation_id).strip()
+        identity = json.dumps(
+            {"action": "explore", "user_id": str(user_id)},
+            ensure_ascii=True,
+            sort_keys=True,
+        )
+        response_json = json.dumps(
+            dict(response), ensure_ascii=True, sort_keys=True, separators=(",", ":")
+        )
+        if not operation_id or not Path(self.game_database).is_file():
+            return self._schema_missing()
         with DatabaseUnitOfWork(self.game_database,immediate=True) as uow:
-            existing=self._explore_row(uow,str(operation_id))
-            if existing:return self._explore_result(existing,identity)
-            uow.execute("INSERT INTO dungeon_explore_operations(operation_id,request_identity,phase,prepared_json,result_status,result_json,current_layer,dungeon_status) VALUES(?,?,'completed','{}',?,?,?,?)",(str(operation_id),identity,str(result_status),response_json,int(current_layer),str(dungeon_status)))
+            columns = self._explore_columns(uow)
+            # A rejection must not create a row before the durable intent
+            # column is installed; migration must remain able to retry it.
+            if not {
+                "operation_id",
+                "request_identity",
+                "phase",
+                "prepared_json",
+                "result_status",
+                "result_json",
+                "current_layer",
+                "dungeon_status",
+            } <= columns:
+                return self._schema_missing()
+            existing=self._explore_row(uow,operation_id)
+            if existing:
+                if str(existing["request_identity"]) != identity:
+                    return self._explore_result(existing, identity)
+                if str(existing["phase"] or "") == "intent":
+                    if not {"intent_json", "updated_at"} <= columns:
+                        return self._schema_missing()
+                    uow.execute(
+                        "UPDATE dungeon_explore_operations SET phase='completed',result_status=?,result_json=?,current_layer=?,dungeon_status=?"
+                        + self._explore_updated_at(columns)
+                        + " WHERE operation_id=? AND phase='intent'",
+                        (str(result_status), response_json, int(current_layer), str(dungeon_status), operation_id),
+                    )
+                    return {"status": "applied", "phase": "completed", "result_status": str(result_status), "response": dict(response), "plan": {}, "intent": {}, "current_layer": int(current_layer), "dungeon_status": str(dungeon_status)}
+                return self._explore_result(existing,identity)
+            if not {"intent_json", "updated_at"} <= columns:
+                return self._schema_missing()
+            uow.execute("INSERT INTO dungeon_explore_operations(operation_id,request_identity,phase,prepared_json,intent_json,result_status,result_json,current_layer,dungeon_status) VALUES(?,?,'completed','{}','{}',?,?,?,?)",(operation_id,identity,str(result_status),response_json,int(current_layer),str(dungeon_status)))
         return {"status":"applied","phase":"completed","result_status":str(result_status),"response":dict(response),"plan":{},"current_layer":int(current_layer),"dungeon_status":str(dungeon_status)}
 
     @staticmethod
     def _explore_row(uow: DatabaseUnitOfWork, operation_id: str):
-        return uow.query_one("SELECT request_identity,phase,prepared_json,result_status,result_json,current_layer,dungeon_status FROM dungeon_explore_operations WHERE operation_id=?",(operation_id,))
+        columns = DungeonSessionSqlRepository._explore_columns(uow)
+        intent = "intent_json" if "intent_json" in columns else "'' AS intent_json"
+        return uow.query_one(f"SELECT request_identity,phase,prepared_json,{intent},result_status,result_json,current_layer,dungeon_status FROM dungeon_explore_operations WHERE operation_id=?", (operation_id,))
 
     @staticmethod
     def _explore_result(row: Any, identity: str) -> dict[str, Any]:
@@ -228,7 +362,10 @@ class DungeonSessionSqlRepository(DungeonPurchaseSqlRepository):
         def load(value):
             try:return json.loads(str(value or "{}"))
             except (TypeError,ValueError):return {}
-        phase=str(row["phase"] or "");return {"status":"duplicate" if phase=="completed" else phase,"phase":phase,"result_status":str(row["result_status"] or ""),"response":load(row["result_json"]),"plan":load(row["prepared_json"]),"current_layer":int(row["current_layer"] or 0),"dungeon_status":str(row["dungeon_status"] or "")}
+        phase = str(row["phase"] or "")
+        plan = load(row["prepared_json"])
+        intent = load(row["intent_json"])
+        return {"status": "duplicate" if phase == "completed" else phase, "phase": phase, "result_status": str(row["result_status"] or ""), "response": load(row["result_json"]), "plan": plan, "intent": intent, "current_layer": int(row["current_layer"] or 0), "dungeon_status": str(row["dungeon_status"] or "")}
 
     @classmethod
     def _normalize_status(cls, value: dict[str, Any]) -> dict[str, Any]:
@@ -276,7 +413,11 @@ class DungeonSessionSqlRepository(DungeonPurchaseSqlRepository):
         elif status == "inventory_full":
             response["message"] = "背包中该物品数量已达上限，本次探索未结算。"
         uow.execute(
-            "UPDATE dungeon_explore_operations SET phase='completed',result_status=?,result_json=?,current_layer=?,dungeon_status=?,updated_at=CURRENT_TIMESTAMP WHERE operation_id=? AND phase='prepared'",
+            "UPDATE dungeon_explore_operations SET phase='completed',result_status=?,result_json=?,current_layer=?,dungeon_status=?"
+            + DungeonSessionSqlRepository._explore_updated_at(
+                DungeonSessionSqlRepository._explore_columns(uow)
+            )
+            + " WHERE operation_id=? AND phase='prepared'",
             (status, json.dumps(response, ensure_ascii=True, sort_keys=True), int(expected.get("current_layer", 0) or 0), str(expected.get("dungeon_status", "") or ""), operation_id),
         )
         return {"status": "applied", "phase": "completed", "result_status": status, "response": response, "plan": None, "current_layer": int(expected.get("current_layer", 0) or 0), "dungeon_status": str(expected.get("dungeon_status", "") or "")}
@@ -389,7 +530,7 @@ class DungeonSessionSqlRepository(DungeonPurchaseSqlRepository):
             if updated.rowcount != 1:
                 return self._explore_conflict(uow, operation_id, "state_changed", plan)
             response = plan.get("response", {}) if isinstance(plan.get("response"), dict) else {}
-            uow.execute("UPDATE dungeon_explore_operations SET phase='completed',result_status='applied',result_json=?,current_layer=?,dungeon_status=?,updated_at=CURRENT_TIMESTAMP WHERE operation_id=? AND phase='prepared'", (json.dumps(response, ensure_ascii=True, sort_keys=True), final_layer, final_status, operation_id))
+            uow.execute("UPDATE dungeon_explore_operations SET phase='completed',result_status='applied',result_json=?,current_layer=?,dungeon_status=?" + self._explore_updated_at(self._explore_columns(uow)) + " WHERE operation_id=? AND phase='prepared'", (json.dumps(response, ensure_ascii=True, sort_keys=True), final_layer, final_status, operation_id))
             return {"status": "applied", "phase": "completed", "result_status": "applied", "response": response, "plan": None, "current_layer": final_layer, "dungeon_status": final_status}
 
     def replay(self, operation_id: str, user_id: str) -> dict[str, Any]:
@@ -397,6 +538,17 @@ class DungeonSessionSqlRepository(DungeonPurchaseSqlRepository):
         if not Path(self.game_database).is_file():
             return {"status":"missing","phase":"","result_status":"","response":{},"plan":{},"current_layer":0,"dungeon_status":""}
         with DatabaseUnitOfWork(self.game_database, read_only=True) as uow:
+            if not {
+                "operation_id",
+                "request_identity",
+                "phase",
+                "prepared_json",
+                "result_status",
+                "result_json",
+                "current_layer",
+                "dungeon_status",
+            } <= self._explore_columns(uow):
+                return self._schema_missing()
             row = self._explore_row(uow, str(operation_id))
         if row is None: return {"status":"missing","phase":"","result_status":"","response":{},"plan":{},"current_layer":0,"dungeon_status":""}
         return self._explore_result(row, identity)

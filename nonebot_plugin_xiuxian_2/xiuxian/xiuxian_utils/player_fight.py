@@ -117,26 +117,33 @@ def _player_state():
 
 async def pve_fight(
     user, monster, type_in=2, bot_id=0, level_ratios=None, attack_buffs=None,
-    *, random_source=None,
+    *, random_source=None, player_data_by_id=None,
 ):
     token = _battle_random_source.set(random_source)
     try:
         return await _run_pve_fight(
-            user, monster, type_in, bot_id, level_ratios, attack_buffs, random_source
+            user, monster, type_in, bot_id, level_ratios, attack_buffs, random_source,
+            player_data_by_id,
         )
     finally:
         _battle_random_source.reset(token)
 
 
 async def _run_pve_fight(
-    user, monster, type_in, bot_id, level_ratios, attack_buffs, random_source
+    user, monster, type_in, bot_id, level_ratios, attack_buffs, random_source,
+    player_data_by_id=None,
 ):
     user_data = []
     monster_data = []
     attack_buffs = attack_buffs or {}
 
     for u in user:
-        player_data = get_players_attributes(u, level_ratios)
+        if player_data_by_id is not None:
+            player_data = (player_data_by_id or {}).get(str(u))
+            if not isinstance(player_data, dict) or not player_data.get("属性"):
+                raise ValueError("frozen player battle input is missing")
+        else:
+            player_data = get_players_attributes(u, level_ratios)
         player_attr = player_data["属性"]
         attack_multiplier = attack_buffs.get(str(u), attack_buffs.get(u, 1))
         if attack_multiplier != 1:

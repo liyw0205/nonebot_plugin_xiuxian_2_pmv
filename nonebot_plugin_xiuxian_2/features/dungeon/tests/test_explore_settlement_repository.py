@@ -5,6 +5,24 @@ from ..repository import DungeonSessionSqlRepository
 from tests.test_db_backend import db_backend
 
 class DungeonExploreSettlementRepositoryTests(unittest.TestCase):
+    def test_intent_is_durable_and_promotes_to_prepared(self):
+        with tempfile.TemporaryDirectory() as temp:
+            game, player = Path(temp) / "game.db", Path(temp) / "player.db"
+            with db_backend.transaction(game) as c:
+                c.execute(
+                    "CREATE TABLE dungeon_explore_operations("
+                    "operation_id TEXT PRIMARY KEY,request_identity TEXT,phase TEXT,"
+                    "prepared_json TEXT,result_status TEXT,result_json TEXT,current_layer INTEGER,"
+                    "dungeon_status TEXT,intent_json TEXT,created_at TEXT,updated_at TEXT)"
+                )
+            repo = DungeonSessionSqlRepository(game, player)
+            intent = {"seed_version": "dungeon-explore-rng-v1", "expected_status": {"current_layer": 1}}
+            self.assertEqual("intent", repo.prepare_intent("op", "u", intent)["phase"])
+            self.assertEqual(intent, repo.replay("op", "u")["intent"])
+            plan = {"members": [{"user_id": "u"}], "response": {"message": "ok"}}
+            self.assertEqual("prepared", repo.prepare_resolution("op", "u", plan)["phase"])
+            self.assertEqual(plan, repo.replay("op", "u")["plan"])
+
     def test_settle_replays_prepared_operation(self):
         with tempfile.TemporaryDirectory() as temp:
             game, player = Path(temp)/'game.db', Path(temp)/'player.db'

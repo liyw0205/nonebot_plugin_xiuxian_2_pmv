@@ -872,7 +872,7 @@ class SourceQualityTests(unittest.TestCase):
             encoding="utf-8"
         )
         self.assertNotIn("PlayerDataManager", source)
-        self.assertNotIn("player_data =", source)
+        self.assertNotIn("\n    player_data =", source)
 
     def test_title_facade_does_not_construct_unused_player_manager(self) -> None:
         source = (SOURCE_ROOT / "xiuxian" / "xiuxian_title" / "__init__.py").read_text(
@@ -3189,7 +3189,8 @@ class SourceQualityTests(unittest.TestCase):
         start = source.index("async def handle_explore_dungeon")
         handler = source[start:source.index("async def handle_dungeon_status", start)]
         self.assertIn("dungeon_application.replay(", handler)
-        self.assertIn("dungeon_application.prepare(", handler)
+        self.assertIn("dungeon_application.prepare_intent(", handler)
+        self.assertIn("dungeon_application.prepare_resolution(", handler)
         self.assertIn("dungeon_application.settle(", handler)
         self.assertIn("dungeon_application.resolve_rejection(", handler)
         self.assertNotIn("dungeon_reward_service.award(", handler)

@@ -59,6 +59,29 @@ class DungeonExploreOperationService:
         self._lock = lock or RLock()
 
     @staticmethod
+    def _unsupported_resolution() -> dict[str, Any]:
+        """Keep the legacy adapter explicit when durable intents are unavailable."""
+        return {
+            "status": "unsupported",
+            "phase": "",
+            "result_status": "unsupported",
+            "response": {},
+            "plan": {},
+            "current_layer": 0,
+            "dungeon_status": "",
+        }
+
+    def prepare_intent(
+        self, operation_id: str, user_id: str, intent: dict[str, Any]
+    ) -> dict[str, Any]:
+        return self._unsupported_resolution()
+
+    def prepare_resolution(
+        self, operation_id: str, user_id: str, plan: dict[str, Any]
+    ) -> dict[str, Any]:
+        return self._unsupported_resolution()
+
+    @staticmethod
     def _identity(user_id: str) -> str:
         return json.dumps(
             {"action": "explore", "user_id": str(user_id)},

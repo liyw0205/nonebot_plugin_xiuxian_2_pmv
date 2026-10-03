@@ -27,6 +27,24 @@ def apply_dungeon_explore(uow: DatabaseUnitOfWork) -> None:
     uow.execute("CREATE TABLE IF NOT EXISTS dungeon_explore_operations(operation_id TEXT PRIMARY KEY,request_identity TEXT NOT NULL,phase TEXT NOT NULL,prepared_json TEXT NOT NULL DEFAULT '{}',result_status TEXT NOT NULL DEFAULT '',result_json TEXT NOT NULL DEFAULT '{}',current_layer INTEGER NOT NULL DEFAULT 0,dungeon_status TEXT NOT NULL DEFAULT '',created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)")
 
 
+def apply_dungeon_explore_resolution_intent(uow: DatabaseUnitOfWork) -> None:
+    """Add the durable pre-resolution input snapshot without touching rows."""
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS dungeon_explore_operations("
+        "operation_id TEXT PRIMARY KEY,request_identity TEXT NOT NULL,"
+        "phase TEXT NOT NULL,prepared_json TEXT NOT NULL DEFAULT '{}',"
+        "intent_json TEXT NOT NULL DEFAULT '{}',result_status TEXT NOT NULL DEFAULT '',"
+        "result_json TEXT NOT NULL DEFAULT '{}',current_layer INTEGER NOT NULL DEFAULT 0,"
+        "dungeon_status TEXT NOT NULL DEFAULT '',created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,"
+        "updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)"
+    )
+    _add_missing_columns(
+        uow,
+        "dungeon_explore_operations",
+        {"intent_json": "TEXT NOT NULL DEFAULT '{}'"},
+    )
+
+
 def apply_dungeon_team(uow: DatabaseUnitOfWork) -> None:
     apply_dungeon_team_schema(uow)
     uow.execute("CREATE TABLE IF NOT EXISTS dungeon_team_operations(operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,result_status TEXT NOT NULL,team_id TEXT NOT NULL,result_json TEXT NOT NULL DEFAULT '',action TEXT NOT NULL DEFAULT '',created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
@@ -200,6 +218,7 @@ def apply_dungeon_explore_player_schema(uow: DatabaseUnitOfWork) -> None:
 __all__ = [
     "apply_dungeon",
     "apply_dungeon_explore",
+    "apply_dungeon_explore_resolution_intent",
     "apply_dungeon_purchase",
     "apply_dungeon_session",
     "apply_dungeon_team",

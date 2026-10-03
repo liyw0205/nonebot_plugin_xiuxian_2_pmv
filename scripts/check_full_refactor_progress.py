@@ -1439,7 +1439,10 @@ def _slice_status() -> dict[str, dict[str, object]]:
                 and "legacy_dungeon_reward import DungeonRewardResult, DungeonRewardService" in dungeon_transaction_shim
             ),
             "explore_settlement_application_owned": (
-                all(f"dungeon_application.{method}(" in dungeon_facade for method in ("replay", "prepare", "settle", "resolve_rejection"))
+                all(
+                    f"dungeon_application.{method}(" in dungeon_facade
+                    for method in ("replay", "prepare_intent", "prepare_resolution", "settle", "resolve_rejection")
+                )
                 and "_dungeon_explore_operation_service" not in dungeon_facade
                 and "DungeonExploreOperationResult" not in dungeon_facade
             ),
@@ -1482,8 +1485,8 @@ def _slice_status() -> dict[str, dict[str, object]]:
                 and "_player_data_manager().get_fields(self.GLOBAL_USER_ID" not in dungeon_manager
             ),
             "explore_random_sources_operation_scoped": (
-                'def _dungeon_explore_random_source(operation_id: str, purpose: str)' in dungeon_facade
-                and 'random.Random(f"dungeon-explore-rng-v1:{purpose}:{operation_id}")' in dungeon_facade
+                "def _dungeon_explore_random_source(" in dungeon_facade
+                and "DUNGEON_EXPLORE_RNG_VERSION" in dungeon_facade
                 and 'random_source=encounter_rng' in dungeon_facade
                 and 'random_source=battle_rng' in dungeon_facade
                 and "def trigger_event(self, user_level, user_exp, *, random_source=None)" in dungeon_manager
@@ -1491,6 +1494,18 @@ def _slice_status() -> dict[str, dict[str, object]]:
                 and "async def pve_fight(" in dungeon_player_fight
                 and "_battle_random_source = ContextVar" in dungeon_player_fight
                 and "generate_boss_buff(m, random_source=random_source)" in dungeon_player_fight
+            ),
+            "explore_resolution_intent_frozen_inputs": (
+                'Migration("dungeon.008", "dungeon_explore_resolution_intent", apply_dungeon_explore_resolution_intent)' in plugin
+                and "def apply_dungeon_explore_resolution_intent(" in dungeon_migrations
+                and "def prepare_intent(" in dungeon_repository
+                and "def prepare_resolution(" in dungeon_repository
+                and '== "intent"' in dungeon_repository
+                and '"intent_json"' in dungeon_repository
+                and "player_data_by_id=frozen_battle_data" in dungeon_facade
+                and "resolution_manager.current_dungeon" in dungeon_facade
+                and "_frozen_explore_seed" in dungeon_facade
+                and "inventory_snapshot=frozen_inventory" in dungeon_facade
             ),
             "status": "team_commands_and_reads_application_owned_with_startup_schema_and_invite_projection_compatibility_retained",
         },

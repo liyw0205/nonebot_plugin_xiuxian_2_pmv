@@ -1,4 +1,7 @@
 import asyncio
+import copy
+import hashlib
+import json
 import random
 import time
 from datetime import datetime, timedelta
@@ -23,7 +26,11 @@ from ..messaging.delivery import delivery_service
 
 from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage, leave_harm_time
 from ..xiuxian_utils.utils import check_user, handle_send, send_msg_handler, number_to, check_user_type, _impersonating_users, send_help_message
-from ..xiuxian_utils.player_fight import pve_fight, resolve_final_user_statuses
+from ..xiuxian_utils.player_fight import (
+    get_players_attributes,
+    pve_fight,
+    resolve_final_user_statuses,
+)
 from ..xiuxian_utils import db_backend
 from ..xiuxian_utils.lay_out import assign_bot, Cooldown
 from ..xiuxian_utils.item_json import Items
@@ -109,8 +116,85 @@ def _team_operation_id(event, action: str, user_id: str) -> str:
     return f"dungeon-team-{action}:{dungeon_ids.new_id()}:{user_id}"
 
 
-def _dungeon_explore_random_source(operation_id: str, purpose: str):
-    return random.Random(f"dungeon-explore-rng-v1:{purpose}:{operation_id}")
+DUNGEON_EXPLORE_RNG_VERSION = "dungeon-explore-rng-v1"
+
+
+def _dungeon_explore_random_source(
+    operation_id: str, purpose: str, *, seed: str | None = None
+):
+    """Build the operation RNG; callers may only replay a persisted seed."""
+    return random.Random(
+        str(seed)
+        if seed is not None
+        else f"{DUNGEON_EXPLORE_RNG_VERSION}:{purpose}:{operation_id}"
+    )
+
+
+def _frozen_explore_seed(intent: dict[str, Any], purpose: str) -> str:
+    if intent.get("seed_version") != DUNGEON_EXPLORE_RNG_VERSION:
+        raise ValueError("unsupported dungeon explore seed version")
+    seeds = intent.get("seeds")
+    seed = seeds.get(purpose) if isinstance(seeds, dict) else None
+    if not isinstance(seed, str) or not seed:
+        raise ValueError("missing dungeon explore seed")
+    return seed
+
+
+def _dungeon_explore_rng(intent: dict[str, Any], operation_id: str, purpose: str):
+    seed = _frozen_explore_seed(intent, purpose)
+    return _dungeon_explore_random_source(operation_id, purpose, seed=seed)
+
+
+def _freeze_json(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {str(key): _freeze_json(value[key]) for key in sorted(value, key=str)}
+    if isinstance(value, (list, tuple)):
+        return [_freeze_json(item) for item in value]
+    if isinstance(value, (str, int, float, bool)) or value is None:
+        return value
+    return str(value)
+
+
+def _snapshot_digest(value: Any) -> str:
+    encoded = json.dumps(
+        _freeze_json(value), ensure_ascii=True, sort_keys=True, separators=(",", ":")
+    )
+    return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+
+
+def _battle_input_snapshot(
+    members_info: list[dict], level_ratios, attack_buffs
+) -> dict[str, Any]:
+    players = {}
+    for member in members_info:
+        user_id = str(member["user_id"])
+        players[user_id] = {
+            "attributes": _freeze_json(get_players_attributes(user_id, level_ratios)),
+            "attack_multiplier": float((attack_buffs or {}).get(user_id, 1)),
+        }
+    return {"players": players}
+
+
+def _frozen_member_info(member_plan: dict[str, Any], live: dict[str, Any]) -> dict[str, Any]:
+    """Rebuild reward inputs from the durable member plan, never live assets."""
+    expected = member_plan.get("expected")
+    if not isinstance(expected, dict):
+        raise ValueError("frozen member resources are missing")
+    result = dict(live)
+    result.update(
+        {
+            "user_id": str(member_plan.get("user_id", "")),
+            "user_name": str(member_plan.get("user_name", live.get("user_name", ""))),
+            "level": str(member_plan.get("level", live.get("level", ""))),
+            "hp": int(expected["hp"]),
+            "mp": int(expected["mp"]),
+            "stone": int(expected["stone"]),
+            "exp": int(expected["exp"]),
+        }
+    )
+    if not result["user_id"] or not result["level"]:
+        raise ValueError("frozen member profile is missing")
+    return result
 
 
 def format_seconds(sec: int):
@@ -716,7 +800,8 @@ def _get_reward_caps(user_level: str, is_boss: bool):
 
 
 def build_battle_rewards(
-    user_info, members_info, monsters_list, status_list, operation_id
+    user_info, members_info, monsters_list, status_list, operation_id,
+    inventory_snapshot=None, random_source=None,
 ):
     is_boss = any(m.get("monster_type") == "boss" for m in monsters_list)
 
@@ -748,7 +833,7 @@ def build_battle_rewards(
 
     msg = "\n副本奖励："
     rewards = []
-    reward_rng = random.Random(operation_id)
+    reward_rng = random_source or random.Random(operation_id)
 
     for uid in real_members:
         m_info = member_info_map.get(uid)
@@ -788,10 +873,23 @@ def build_battle_rewards(
                 rewards_msg.append(f"{item_info['name']}")
 
         for item in reward_items:
-            item["expected_num"] = int(_sql_message().goods_num(uid, item["id"]))
-            item["expected_bind_num"] = int(
-                _sql_message().goods_num(uid, item["id"], "bind")
-            )
+            if inventory_snapshot is not None:
+                frozen_user = inventory_snapshot.get(uid)
+                if not isinstance(frozen_user, dict):
+                    raise ValueError("frozen inventory snapshot is missing")
+                # An absent row is a valid zero-count inventory entry.
+                frozen = frozen_user.get(
+                    str(item["id"]), {"goods_num": 0, "bind_num": 0}
+                )
+            else:
+                frozen = {
+                    "goods_num": int(_sql_message().goods_num(uid, item["id"])),
+                    "bind_num": int(_sql_message().goods_num(uid, item["id"], "bind")),
+                }
+            if not isinstance(frozen, dict):
+                raise ValueError("frozen inventory entry is invalid")
+            item["expected_num"] = int(frozen.get("goods_num", 0) or 0)
+            item["expected_bind_num"] = int(frozen.get("bind_num", 0) or 0)
         rewards.append({
             "user_id": uid,
             "expected_stone": int(m_info["stone"]),
@@ -821,6 +919,24 @@ def _get_user_cd_type(user_id: str) -> int:
             (str(user_id),),
         ).fetchone()
     return int(row[0]) if row else 0
+
+
+def _inventory_snapshot(user_ids: list[str]) -> dict[str, dict[str, dict[str, int]]]:
+    snapshot: dict[str, dict[str, dict[str, int]]] = {}
+    with db_backend.connection(get_paths().game_db) as conn:
+        if not conn.table_exists("back"):
+            return {str(user_id): {} for user_id in user_ids}
+        for user_id in user_ids:
+            rows = conn.execute(
+                "SELECT goods_id, COALESCE(goods_num,0), COALESCE(bind_num,0) "
+                "FROM back WHERE user_id=%s",
+                (str(user_id),),
+            ).fetchall()
+            snapshot[str(user_id)] = {
+                str(row[0]): {"goods_num": int(row[1] or 0), "bind_num": int(row[2] or 0)}
+                for row in rows
+            }
+    return snapshot
 
 
 def _explore_response(message: str, battle_messages=None) -> dict:
@@ -866,6 +982,8 @@ def _progress_message(current_layer: int, total_layers: int, *, advance: bool, c
 def _base_member_plan(user_info: dict, cd_type: int) -> dict:
     return {
         "user_id": str(user_info["user_id"]),
+        "user_name": str(user_info.get("user_name", user_info["user_id"])),
+        "level": str(user_info.get("level", "")),
         "expected": {
             "hp": int(user_info["hp"]),
             "mp": int(user_info["mp"]),
@@ -1134,6 +1252,8 @@ async def handle_explore_dungeon(bot: Bot, event: GroupMessageEvent | PrivateMes
             await handle_send(bot, event, "副本结算任务恢复失败：结算未完成。")
         await explore_dungeon.finish()
 
+    frozen_intent = replay.get("intent") if replay.get("phase") == "intent" else None
+
     async def reject(result_status: str, message: str, status=None) -> None:
         status = status or {}
         response = _explore_response(message)
@@ -1279,14 +1399,178 @@ async def handle_explore_dungeon(bot: Bot, event: GroupMessageEvent | PrivateMes
         str(uid): data["attack_multiplier"]
         for uid, data in mentor_attack_buffs.items()
     }
+
+    dungeon_snapshot = dungeon_manager._template_snapshot(
+        dungeon_manager.current_dungeon
+    )
+    live_battle_inputs = _battle_input_snapshot(
+        members_info, exp_ratios, attack_buffs
+    )
+    live_inventory = _inventory_snapshot(user_ids_in_battle)
+    intent = {
+        "seed_version": DUNGEON_EXPLORE_RNG_VERSION,
+        "seeds": {
+            "encounter": f"{DUNGEON_EXPLORE_RNG_VERSION}:encounter:{operation_id}",
+            "battle": f"{DUNGEON_EXPLORE_RNG_VERSION}:battle:{operation_id}",
+            "reward": f"{DUNGEON_EXPLORE_RNG_VERSION}:reward:{operation_id}",
+        },
+        "expected_status": _freeze_json(player_status),
+        "team": _freeze_json(team_snapshot),
+        "dungeon": _freeze_json(dungeon_snapshot),
+        "battle_inputs": live_battle_inputs,
+        "level_ratios": _freeze_json(exp_ratios or {}),
+        "attack_buffs": _freeze_json(attack_buffs),
+        "mentor_buff_message": mentor_buff_msg,
+        "inventory": live_inventory,
+        "members": _freeze_json(member_plans),
+    }
+    if frozen_intent:
+        intent = frozen_intent
+    if not frozen_intent:
+        try:
+            intent_result = dungeon_application.prepare_intent(
+                operation_id=operation_id, user_id=user_id, intent=intent
+            )
+        except Exception:
+            logger.exception("持久化副本探索 resolution intent 失败")
+            await handle_send(bot, event, "副本探索结算失败：处理过程异常。")
+            await explore_dungeon.finish()
+        if intent_result.get("phase") == "intent" and isinstance(intent_result.get("intent"), dict):
+            if _snapshot_digest(intent_result["intent"]) != _snapshot_digest(intent):
+                await reject(
+                    "state_changed",
+                    "副本操作未结算：该操作已由其他请求冻结，请重新发起。",
+                    player_status,
+                )
+                await explore_dungeon.finish()
+            intent = intent_result["intent"]
+        if intent_result.get("status") in {"schema_missing", "unsupported"}:
+            await handle_send(bot, event, "副本探索结算失败：结算 schema 尚未就绪，请稍后重试。")
+            await explore_dungeon.finish()
+        if intent_result.get("status") == "operation_conflict":
+            await reject(
+                "state_changed",
+                "副本操作未结算：结算输入无法持久化，请稍后重试。",
+                player_status,
+            )
+            await explore_dungeon.finish()
+
+    try:
+        if not isinstance(intent, dict) or not intent:
+            raise ValueError("frozen intent is missing")
+        if (
+            _snapshot_digest(intent.get("expected_status"))
+            != _snapshot_digest(player_status)
+            or _snapshot_digest(intent.get("team"))
+            != _snapshot_digest(team_snapshot)
+            or _snapshot_digest(intent.get("dungeon"))
+            != _snapshot_digest(dungeon_snapshot)
+            or _snapshot_digest(intent.get("battle_inputs"))
+            != _snapshot_digest(live_battle_inputs)
+            or _snapshot_digest(intent.get("level_ratios"))
+            != _snapshot_digest(exp_ratios or {})
+            or _snapshot_digest(intent.get("attack_buffs"))
+            != _snapshot_digest(attack_buffs)
+            or _snapshot_digest(intent.get("members"))
+            != _snapshot_digest(member_plans)
+            or _snapshot_digest(intent.get("inventory"))
+            != _snapshot_digest(live_inventory)
+        ):
+            raise ValueError("live dungeon input differs from frozen intent")
+        member_plans = copy.deepcopy(intent.get("members"))
+        if not isinstance(member_plans, list) or not member_plans:
+            raise ValueError("frozen members are missing")
+        member_plan_map = {
+            str(member.get("user_id", "")): member
+            for member in member_plans
+            if isinstance(member, dict)
+        }
+        user_ids_in_battle = [str(member.get("user_id", "")) for member in member_plans]
+        if not user_ids_in_battle or "" in user_ids_in_battle or len(set(user_ids_in_battle)) != len(user_ids_in_battle):
+            raise ValueError("frozen member ids are invalid")
+        live_members = {str(member["user_id"]): member for member in members_info}
+        members_info = [
+            _frozen_member_info(member_plan_map[member_id], live_members[member_id])
+            for member_id in user_ids_in_battle
+        ]
+        user_info = members_info[0]
+        user_exp = int(user_info["exp"])
+
+        raw_ratios = intent.get("level_ratios")
+        if not isinstance(raw_ratios, dict):
+            raise ValueError("frozen level ratios are missing")
+        exp_ratios = {str(key): float(value) for key, value in raw_ratios.items()} or None
+        raw_attack_buffs = intent.get("attack_buffs")
+        if not isinstance(raw_attack_buffs, dict):
+            raise ValueError("frozen attack buffs are missing")
+        attack_buffs = {str(key): float(value) for key, value in raw_attack_buffs.items()}
+        mentor_buff_msg = str(intent.get("mentor_buff_message", ""))
+
+        battle_inputs = intent.get("battle_inputs")
+        players = battle_inputs.get("players") if isinstance(battle_inputs, dict) else None
+        if not isinstance(players, dict):
+            raise ValueError("frozen battle inputs are missing")
+        frozen_battle_data = {}
+        for member_id in user_ids_in_battle:
+            entry = players.get(member_id)
+            attributes = entry.get("attributes") if isinstance(entry, dict) else None
+            if not isinstance(attributes, dict) or not isinstance(attributes.get("属性"), dict) or not attributes.get("属性"):
+                raise ValueError("frozen player battle input is invalid")
+            frozen_battle_data[member_id] = attributes
+
+        frozen_inventory = intent.get("inventory")
+        if not isinstance(frozen_inventory, dict):
+            raise ValueError("frozen inventory is missing")
+        for member_id in user_ids_in_battle:
+            member_inventory = frozen_inventory.get(member_id)
+            if not isinstance(member_inventory, dict):
+                raise ValueError("frozen inventory member is missing")
+            for inventory_entry in member_inventory.values():
+                if not isinstance(inventory_entry, dict):
+                    raise ValueError("frozen inventory entry is invalid")
+                goods_num = int(inventory_entry.get("goods_num", 0) or 0)
+                bind_num = int(inventory_entry.get("bind_num", 0) or 0)
+                if goods_num < 0 or bind_num < 0 or bind_num > goods_num:
+                    raise ValueError("frozen inventory counts are invalid")
+
+        frozen_status = intent.get("expected_status")
+        if not isinstance(frozen_status, dict):
+            raise ValueError("frozen dungeon status is missing")
+        player_status = copy.deepcopy(frozen_status)
+        current_layer = int(player_status["current_layer"])
+        total_layers = int(player_status["total_layers"])
+    except (KeyError, TypeError, ValueError, OverflowError):
+        await reject(
+            "state_changed",
+            "副本操作未结算：冻结的战斗输入已损坏或发生变化，请重新发起。",
+            player_status,
+        )
+        await explore_dungeon.finish()
     advance = True
     complete = False
     resolved = {}
-    encounter_rng = _dungeon_explore_random_source(operation_id, "encounter")
-    battle_rng = _dungeon_explore_random_source(operation_id, "battle")
+    try:
+        encounter_rng = _dungeon_explore_rng(intent, operation_id, "encounter")
+        battle_rng = _dungeon_explore_rng(intent, operation_id, "battle")
+        reward_rng = _dungeon_explore_rng(intent, operation_id, "reward")
+    except ValueError:
+        await reject(
+            "invalid_intent",
+            "副本操作未结算：冻结的随机计划无效，请重新发起。",
+            player_status,
+        )
+        await explore_dungeon.finish()
+
+    # Copy the concrete manager, not the lazy proxy, so frozen template reads
+    # cannot fall through to the mutable process-wide singleton.
+    resolution_manager = copy.copy(_dungeon_manager())
+    resolution_manager.current_dungeon = DungeonManager._template_from_snapshot(
+        intent.get("dungeon") or dungeon_snapshot
+    )
+    resolution_manager.sync_current_dungeon = lambda: None
 
     if current_layer == total_layers - 1:
-        boss_info = dungeon_manager.get_boss_data(
+        boss_info = resolution_manager.get_boss_data(
             user_info["level"], user_exp, random_source=encounter_rng
         )
         battle_messages, winner, status = await pve_fight(
@@ -1297,6 +1581,7 @@ async def handle_explore_dungeon(bot: Bot, event: GroupMessageEvent | PrivateMes
             level_ratios=exp_ratios,
             attack_buffs=attack_buffs,
             random_source=battle_rng,
+            player_data_by_id=frozen_battle_data,
         )
         final_statuses = resolve_final_user_statuses(
             status, bot.self_id, exp_ratios
@@ -1307,7 +1592,13 @@ async def handle_explore_dungeon(bot: Bot, event: GroupMessageEvent | PrivateMes
                 member_plan_map[member_id]["final_mp"] = int(final["mp"])
         if winner == 0:
             reward_message, rewards = build_battle_rewards(
-                user_info, members_info, boss_info, status, operation_id
+                user_info,
+                members_info,
+                boss_info,
+                status,
+                operation_id,
+                inventory_snapshot=frozen_inventory,
+                random_source=reward_rng,
             )
             for reward in rewards:
                 plan_member = member_plan_map.get(str(reward["user_id"]))
@@ -1330,7 +1621,7 @@ async def handle_explore_dungeon(bot: Bot, event: GroupMessageEvent | PrivateMes
         response = _explore_response(summary, battle_messages)
         resolved = {"kind": "boss", "winner": int(winner), "monsters": boss_info}
     else:
-        event_result = dungeon_manager.trigger_event(
+        event_result = resolution_manager.trigger_event(
             user_info["level"], user_exp, random_source=encounter_rng
         )
         event_type = str(event_result.get("type", "nothing"))
@@ -1357,6 +1648,7 @@ async def handle_explore_dungeon(bot: Bot, event: GroupMessageEvent | PrivateMes
                 level_ratios=exp_ratios,
                 attack_buffs=attack_buffs,
                 random_source=battle_rng,
+                player_data_by_id=frozen_battle_data,
             )
             final_statuses = resolve_final_user_statuses(
                 status, bot.self_id, exp_ratios
@@ -1373,6 +1665,8 @@ async def handle_explore_dungeon(bot: Bot, event: GroupMessageEvent | PrivateMes
                     event_result["monster_data"],
                     status,
                     operation_id,
+                    inventory_snapshot=frozen_inventory,
+                    random_source=reward_rng,
                 )
                 for reward in rewards:
                     plan_member = member_plan_map.get(str(reward["user_id"]))
@@ -1392,16 +1686,22 @@ async def handle_explore_dungeon(bot: Bot, event: GroupMessageEvent | PrivateMes
             item_id = int(event_result.get("drop_items", 0) or 0)
             item_info = items.get_data_by_item_id(item_id) if item_id else None
             if item_info:
+                inventory_entry = frozen_inventory.get(user_id)
+                if not isinstance(inventory_entry, dict):
+                    raise ValueError("frozen inventory member is missing")
+                item_inventory = inventory_entry.get(
+                    str(item_id), {"goods_num": 0, "bind_num": 0}
+                )
+                if not isinstance(item_inventory, dict):
+                    raise ValueError("frozen inventory entry is invalid")
                 member_plan_map[user_id]["items"] = [
                     {
                         "id": item_id,
                         "name": item_info["name"],
                         "type": item_info["type"],
                         "amount": 1,
-                        "expected_num": int(_sql_message().goods_num(user_id, item_id)),
-                        "expected_bind_num": int(
-                            _sql_message().goods_num(user_id, item_id, "bind")
-                        ),
+                        "expected_num": int(item_inventory.get("goods_num", 0) or 0),
+                        "expected_bind_num": int(item_inventory.get("bind_num", 0) or 0),
                     }
                 ]
                 summary = (
@@ -1439,12 +1739,12 @@ async def handle_explore_dungeon(bot: Bot, event: GroupMessageEvent | PrivateMes
         "response": response,
     }
     try:
-        prepared_data = dungeon_application.prepare(
+        prepared_data = dungeon_application.prepare_resolution(
             operation_id=operation_id, user_id=user_id, plan=plan
         )
         prepared = prepared_data
         settled = None
-        if prepared.get("status") != "operation_conflict" and prepared.get("phase") != "completed":
+        if prepared.get("status") not in {"operation_conflict", "schema_missing", "unsupported"} and prepared.get("phase") != "completed":
             settled = dungeon_application.settle(
                 operation_id=operation_id,
                 user_id=user_id,
@@ -1457,6 +1757,9 @@ async def handle_explore_dungeon(bot: Bot, event: GroupMessageEvent | PrivateMes
 
     if prepared.get("status") == "operation_conflict":
         await handle_send(bot, event, "该探索事件身份冲突，无法结算。")
+        await explore_dungeon.finish()
+    if prepared.get("status") in {"schema_missing", "unsupported"}:
+        await handle_send(bot, event, "副本探索结算失败：结算 schema 尚未就绪，请稍后重试。")
         await explore_dungeon.finish()
     if prepared.get("phase") == "completed":
         await _send_explore_response(bot, event, prepared.get("response") or {})

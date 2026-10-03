@@ -110,6 +110,24 @@ class DungeonExploreSchemaBoundaryTests(unittest.TestCase):
         self.assertIn("dungeon.007", player)
         self.assertNotIn("dungeon.007", game)
 
+    def test_resolution_intent_migration_is_game_owned_and_legacy_checksum_stays_stable(self) -> None:
+        from ....plugin import build_migrations, migrations_for_database
+
+        catalog = build_migrations()
+        game_migrations = migrations_for_database(catalog, "game_db")
+        player_migrations = migrations_for_database(catalog, "player_db")
+        game_versions = {item.version for item in game_migrations}
+        player_versions = {item.version for item in player_migrations}
+
+        self.assertIn("dungeon.008", game_versions)
+        self.assertNotIn("dungeon.008", player_versions)
+
+        legacy = next(item for item in catalog if item.version == "dungeon.004")
+        self.assertEqual(
+            legacy.checksum,
+            "dee3dab604ac54c3f303e3e46f9ab7a394eb132f441b747b26a8ea1ea9ba4af2",
+        )
+
     def test_reset_and_status_paths_fail_closed_without_request_schema_creation(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             database = Path(directory) / "player.db"
