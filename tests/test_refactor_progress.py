@@ -239,6 +239,9 @@ class RefactorProgressTests(unittest.TestCase):
         self.assertTrue(dungeon_team["legacy_team_transaction_imports_explicit"])
         self.assertTrue(dungeon_team["team_presentation_feature_owned"])
         self.assertTrue(dungeon_team["team_presentation_legacy_identity_preserved"])
+        self.assertTrue(dungeon_team["team_schema_startup_migrated"])
+        self.assertTrue(dungeon_team["team_request_path_has_no_ddl"])
+        self.assertTrue(dungeon_team["team_schema_missing_fails_closed"])
         bank = slices["bank"]
         self.assertTrue(bank["deposit_application_owned"])
         self.assertTrue(bank["v1_web_game_db_owned"])

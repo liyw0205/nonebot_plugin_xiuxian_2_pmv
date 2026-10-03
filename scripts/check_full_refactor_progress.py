@@ -322,6 +322,8 @@ def _slice_status() -> dict[str, dict[str, object]]:
     dungeon_reward_compatibility = (PACKAGE / "compatibility" / "legacy_dungeon_reward.py").read_text(encoding="utf-8")
     dungeon_compatibility_facade = (PACKAGE / "compatibility" / "dungeon.py").read_text(encoding="utf-8")
     dungeon_repository = (PACKAGE / "features" / "dungeon" / "repository.py").read_text(encoding="utf-8")
+    dungeon_team_repository = (PACKAGE / "features" / "dungeon" / "team_repository.py").read_text(encoding="utf-8")
+    dungeon_migrations = (PACKAGE / "features" / "dungeon" / "migrations.py").read_text(encoding="utf-8")
     dungeon_manager = (PACKAGE / "xiuxian" / "xiuxian_dungeon" / "dungeon_manager.py").read_text(encoding="utf-8")
     bank_facade = (PACKAGE / "xiuxian" / "xiuxian_bank" / "__init__.py").read_text(encoding="utf-8")
     bank_handler = bank_facade[bank_facade.index("async def bank_") : bank_facade.index("def savef")]
@@ -1440,7 +1442,22 @@ def _slice_status() -> dict[str, dict[str, object]]:
                 and "DungeonExploreOperationResult" not in dungeon_facade
             ),
             "reset_application_owned": "self.dungeon_application = DungeonApplication(" in dungeon_manager and "self._reset_application().reset(" in dungeon_manager and "self.reset_service.reset(" not in dungeon_manager,
-            "status": "team_commands_and_reads_application_owned_with_invite_projection_compatibility_retained",
+            "team_schema_startup_migrated": (
+                'Migration("dungeon.006", "dungeon_team_state_schema", apply_dungeon_team_schema)' in plugin
+                and "def apply_dungeon_team_schema(" in dungeon_migrations
+                and '"dungeon.006"' in plugin[plugin.index("_PLAYER_DATABASE_MIGRATION_VERSIONS"):]
+            ),
+            "team_request_path_has_no_ddl": all(
+                token not in dungeon_team_repository
+                for token in ("CREATE TABLE", "ALTER TABLE", "ensure_schema", "ensure_team_schema")
+            ),
+            "team_schema_missing_fails_closed": (
+                "def _schema_ready(" in dungeon_team_repository
+                and "def _database_exists(" in dungeon_team_repository
+                and 'TeamMutationResult("schema_missing"' in dungeon_team_repository
+                and 'TeamExitResult("schema_missing"' in dungeon_team_repository
+            ),
+            "status": "team_commands_and_reads_application_owned_with_startup_schema_and_invite_projection_compatibility_retained",
         },
         "bank": {
             "v1_web_game_db_owned": (
