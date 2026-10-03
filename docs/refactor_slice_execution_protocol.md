@@ -114,6 +114,13 @@
 
 本片执行收口：代码 `e1391cd0` 已推送，最终聚合回归 `197 passed`，静态/progress/source 聚焦 `27 passed`，额外聚合 progress/scheduler/锁补口 `7 passed`；42 项邀请边界与 UoW 合并回归 `45 passed`。隔离五库备份和 restore dry-run/restore 成功，265 项 migration 的回执路由为 `203/58/7/1/1`，`.010` 仅 player，reconcile clean。完整 architecture 仍有 17 项既有错误、整体 `exit_ready=false`；未跑全量 pytest 或正式迁移/P7。验收后专用目录已删除（收尾约 4 MiB，早期旧测试约 25 MiB 已清），磁盘 `19G`、RAM available 约 `1.4GiB`、inode `15%`。下一片复用 1 名只读代理审计 intent Web permission/manifest 的真实鉴权链；不跑测试、不访问运行库、不生成缓存，主线程写方案与实现。
 
+### 下一片 Intent Web 声明方案（只读审计完成）
+
+1. 已复用 1 名只读代理核对真实路由链；`adapters/web/blueprints/dungeon.py` 的 intent 已与 replay/prepare/settle 共用 `guard("user", permission, write=True)`，先检查 permission 再检查 CSRF。architecture 的两项 intent 错误来自 manifest 路由索引漂移，不是独立证明的运行时 guard 缺失；不重复改业务 intent 持久计划。
+2. 最小实现仅在 `features/dungeon/manifest.py` 补 `POST /api/v1/dungeon/explore/intent`、permission `user`，同步 feature 文档与 inventory。主线程增加聚焦 Web 回归：五项 POST 路由声明、注入拒绝 permission 时零应用调用、缺/错/跨会话 CSRF、Idempotency-Key 优先、同 user replay 与不同 user 的 409/conflict 且不泄露原结果。
+3. 现有 Web `user` permission resolver 默认允许，operation identity 的 user_id 校验不等同于认证 actor 绑定。该通用策略保持独立未完成项，本片不扩改全部 Web auth，也不以注入拒绝 resolver 的测试宣称默认策略已加强。
+4. 子代理只负责上述静态审计，不改文件、运行测试或访问运行库；主线程串行测试、静态门禁、清理和提交。继续关闭 pytest/pyc 缓存并使用独立临时目录，复核 10 GiB 磁盘/512 MiB RAM 阈值；上一邀请切片目录已清理，不重新保留测试副本。
+
 ## 缓存清理允许范围
 
 - 仓库内未跟踪的 `__pycache__/`、`*.pyc`、`.pytest_cache/`。
