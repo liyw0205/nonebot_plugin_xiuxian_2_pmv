@@ -1567,7 +1567,17 @@ async def restate_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
         else:
             give_qq = None
     if give_qq:
-        expected_state = _admin_player_status_reset_service().snapshot(give_qq)
+        try:
+            expected_state = admin_application.player_status_snapshot(give_qq)
+        except Exception as e:
+            logger.opt(exception=e).error(f"重置状态快照失败 user={give_qq}")
+            msg = (
+                "状态重置服务尚未就绪，请检查启动迁移。"
+                if str(e) == "schema_missing"
+                else f"重置状态失败：{e}"
+            )
+            await handle_send(bot, event, msg)
+            await restate.finish()
         if expected_state is None:
             await handle_send(bot, event, "目标玩家已不存在")
             await restate.finish()
@@ -1583,6 +1593,8 @@ async def restate_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
             await restate.finish()
         if result.status == "state_changed":
             msg = "操作未结算：玩家当前状态已更新，请重新执行。"
+        elif result.status == "schema_missing":
+            msg = "状态重置服务尚未就绪，请检查启动迁移。"
         elif result.status == "operation_conflict":
             msg = "本次管理员状态重置与已记录事件冲突"
         elif result.status == "user_missing":

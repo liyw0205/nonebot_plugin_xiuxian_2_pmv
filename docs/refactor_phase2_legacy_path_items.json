@@ -6,16 +6,23 @@
       "id": "admin.player_status.reset.single",
       "kind": "command-effect",
       "entry": "重置状态 <player>",
-      "status": "受阻",
-      "reason": "Single-player reset still reaches AdminPlayerStatusResetService.reset through AdminApplication; global batch migration did not replace this branch.",
+      "status": "已迁移",
+      "reason": "The default single-player handler reads and atomically resets through the feature-owned repository; the legacy service remains only behind the non-default compatibility batch service.",
       "call_graph": [
-        "xiuxian_admin.__init__:重置状态 matcher -> handler restate_",
-        "handler restate_ -> admin_application.reset_player_status",
-        "features/admin/application.py:AdminApplication.reset_player_status -> AdminPlayerStatusResetService.reset"
+        "xiuxian_admin.__init__:重置状态 matcher -> handler restate_ single-player branch",
+        "handler restate_ -> AdminApplication.player_status_snapshot -> AdminPlayerStatusResetSqlRepository.snapshot (read-only UOW)",
+        "handler restate_ -> AdminApplication.reset_player_status -> AdminPlayerStatusResetSqlRepository.reset -> immediate game UOW atomically updates user_xiuxian and the existing operation receipt",
+        "startup legacy.admin.002 -> apply_admin_player_status_batch_reset prepares admin_player_status_reset_operations; request path checks schema and performs no DDL",
+        "Legacy AdminPlayerStatusResetService remains only behind the separate legacy batch-reset helper/service; the default single-player handler has no edge to it"
       ],
       "evidence": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:272,1570-1575",
-        "nonebot_plugin_xiuxian_2/features/admin/application.py:25-27"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:272,1569-1605",
+        "nonebot_plugin_xiuxian_2/features/admin/application.py:12-35",
+        "nonebot_plugin_xiuxian_2/features/admin/player_status_reset_repository.py:24-196",
+        "nonebot_plugin_xiuxian_2/features/admin/migrations.py:149-192",
+        "nonebot_plugin_xiuxian_2/features/_legacy_migrated.py:123",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:104-120",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/transaction_service.py:2663-2674,2887-2902"
       ]
     },
     {
