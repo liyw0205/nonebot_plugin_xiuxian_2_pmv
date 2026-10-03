@@ -55,7 +55,10 @@
 2. **其余领域边界**：按 cultivation/training、combat/dungeon/boss、sect/trade/scheduler/Web 的顺序完成真实入口、随机/时间注入、operation receipt、启动 migration、跨库恢复和缺 schema fail-closed。
    - 当前洞府未完成项：随机潜入与同节点读取调用 `list_users_by_fields` 后完整物化候选用户，再逐个读取 profile/洞府；`PlayerDataManager._field_list_cache` 的 TTL entry 没有容量上限或主动过期清扫。单独设计有界/流式候选选择，并给共享 field-list cache 增加可证明的条目或字节上限及过期回收；不得复制或主动清空 `ITEMS_CACHE` 等其他玩法共享缓存。
    - 下一洞府候选/缓存切片委派 1 名只读子代理梳理 field-list cache 的生产调用点、失效路径与条目体积风险；子代理不改代码、不跑 SQLite 测试，主线程负责实现、串行验收和资源收尾。
-   - 当前副本未完成项：player-only `dungeon.007`、prepared settlement schema 与 operation-scoped RNG 已完成；当前切片新增 game-only `dungeon.008`，在随机前持久化 resolution intent、玩家/队伍/副本/战斗属性/背包快照与用途 seed，恢复只复用冻结输入，状态漂移将 intent 终结为 `state_changed`。之后再处理 reset 时钟、队伍有界查询/索引和重置/会话兼容边界。最近只读调用图审计已确认普通修炼结算切到 `BuffApplication`，没有新的 `up_exp_` 旧 service 切片证据；`RewardService._grant_exp` 的生产入口仍未证明，不据此开切片。
+   - 当前副本已完成项：player-only `dungeon.007`、prepared settlement schema、operation-scoped RNG、game-only `dungeon.008` 输入冻结，以及 player-only `dungeon.009` 队伍成员索引/同事务投影同步和 session schema/ABA 检查。成员读取与探索结算都改为单行选择；真实 `user_xiuxian` owner 为 game DB，队伍写入仍只在 player UoW 内执行。
+   - 当前副本未完成项：reset 时钟注入；legacy team reader、`PersistentTeamInviteMapping` 无界迭代/请求期 DDL，以及每邀请一个无上限 sleeper task；intent Web route 的 permission/manifest 声明。跨队历史重叠成员尚未清洗，本片仅统一选择最小 `team_id`；清洗必须独立制定备份、冲突决策和对账方案。
+   - 队伍回滚边界：legacy writer 不维护 `.009` 投影，不得与默认新 writer 混用。回滚期间一旦发生旧写，再回默认入口必须停机并受控重建/核验投影；migration ledger 不会自动重跑已应用的 `.009`，不能仅切换开关恢复服务。
+   - 最近只读调用图审计已确认普通修炼结算切到 `BuffApplication`，没有新的 `up_exp_` 旧 service 切片证据；`RewardService._grant_exp` 的生产入口仍未证明，不据此开切片。
    - 当前历练未完成项：普通修炼生命周期默认入口已由 `BuffApplication` 承担，后续只审计事件随机计划、排行榜有界分页和 `training_limit.py` 兼容读写，不重复迁移已关闭的结算边界。
 3. **持久状态与恢复证据**：盘点 operation ledger、outbox、projection receipt、失败/死信和 bet/payout 等历史回执的保留窗口；在有备份、checksum、dry-run、restore、reconcile 和人工决策记录前，不删除或压缩任何持久状态。
 4. **发布退出条件**：完成正式数据备份/迁移/恢复演练、P7 发布证据、全局 legacy 门禁和真实运行 readiness；只有脚本输出 `exit_ready=true` 且证据归档后，才可声明全面重构完成。
@@ -63,7 +66,7 @@
 ### 子代理与资源约束
 
 - 允许合理使用子代理，但默认只分派只读调用图审计、静态门禁、单切片聚焦测试和文档证据整理；不得扫描无关用户目录、读取运行数据库/凭据或执行正式 migration。
-- 代码修改型子代理必须限定在一个小边界，先给出文件/行号和回滚点；主线程负责整合、复核 diff、运行验收并决定是否提交。最多同时运行 3 个子代理，测试任务不得并行争抢同一批 SQLite 文件。
+- 代码修改型子代理必须限定在一个小边界，先给出文件/行号和回滚点；主线程负责整合、复核 diff、运行验收并决定是否提交。默认最多 1 个只读子代理；只有资源检查通过且任务完全独立时才增加，并始终不超过 3 个。测试和恢复任务全部串行，不使用并行 pytest worker，不与子代理测试同时运行。
 - 子代理不是默认步骤；仅当调用图审计、静态门禁、独立只读证据整理能与主线隔离时使用。方案/切片记录需注明子代理分工与并发数；所有代码修改、测试协调、资源监测、最终 diff 和提交由主线程统一负责。
 - RAM 可用量低于 512 MiB、磁盘可用量低于 10 GiB 或 inode 可用量异常时，停止新测试/恢复任务，只保留必要的收尾和清理；测试默认串行、禁用 pytest cacheprovider 和字节码写入，批处理/查询必须有界。
 - 每个切片使用独立 `/tmp/<slice>-*` basetemp、recovery 和 compile cache，验收后立即删除并复核 `df -hT`、`df -ih`、`free -h`。不清理 `.venv`、`.git`、仓库 `data/`、运行数据库/WAL/SHM、备份、配置或用户 `boss_info.json`。
@@ -81,6 +84,15 @@
 8. 验收成功后，清理本轮明确产生的 pytest basetemp、pytest cache、Python 字节码缓存和临时 receipt/log；清理范围不得包含 `.venv`、`.git`、`data/`、配置、备份或运行数据。
 9. 重新检查 `df -hT`、`df -ih`、仓库和临时目录大小，确认工作树与运行数据未被误删。
 10. 只有清理和磁盘复核完成后，才读取并执行下一个切片。
+
+### 本轮队伍/session 方案（2026-10-03）
+
+1. 先由只读子代理核对队伍查询调用图、legacy fallback 和 schema 缺口；范围限于源代码与静态门禁，不访问运行数据库、不改代码、不运行 SQLite 测试。
+2. 主线程新增 player-only `dungeon.009` 成员投影 migration，使用 SQLite JSON1 在 SQL 内回填，不物化全队伍 Python 列表；随后将默认队伍查询和探索结算查询切换为索引 `LIMIT 1`，并在 create/join/transfer/leave/kick/disband 的同一 UoW 内维护投影版本。旧 schema fallback 只返回一行，但仍可能扫描旧 JSON，不能当作索引性能保证。
+3. 主线程为 session replay/transition 增加文件、表、列预检和 read-only replay；缺 schema 返回 `schema_missing`，handler 显式失败，不创建缺失数据库或执行请求期 DDL。reset generation/operation ID 和完整 expected snapshot 必须存在，防止 ABA；已有 receipt 优先回放。rollback-journal 缺 schema fixture 验证数据库字节不变且不新增 sidecar，不泛化为 SQLite WAL 数据库永不产生 sidecar 的承诺。
+4. 用户存在性只读查询真实 game DB，不在 player DB 复制用户表；game 缺文件/用户 schema 时不记失败 receipt，已有队伍 receipt 仍可回放。子代理复核 owner、typed JSON 成员、跨队选择、ABA 和 replay-first 缺口，主线程实现修正。
+5. 测试按串行顺序执行：migration malformed/mixed JSON、索引/query plan/版本同步、receipt 失败整体回滚、分库 owner、缺 projection/依赖 schema、session 缺库/缺表/缺列、退出 handler、progress/source/architecture/inventory/内存编译/diff check。测试 fixture 必须显式应用 `.009`，不修改历史 `.004/.006/.008` migration 实现；隔离 recovery 覆盖五库备份、restore dry-run/restore 和 reconcile，不接触运行库。
+6. 验收后仅清理本轮专用 pytest/pyc/`__pycache__` 与 `/tmp` 产物，复核 `df -hT`、`df -ih`、`free -h`；不删除持久回执、运行数据库/WAL/SHM、备份或用户文件。主线程统一整合 diff、记录真实失败基线并决定提交，子代理不并行争抢 SQLite 资源。legacy writer 回滚边界和历史重叠成员必须保留为未完成项，不能以投影上线宣称已经修复。
 
 ## 缓存清理允许范围
 

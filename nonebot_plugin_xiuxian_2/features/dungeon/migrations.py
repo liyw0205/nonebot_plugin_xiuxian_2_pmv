@@ -144,6 +144,36 @@ def apply_dungeon_team_schema(uow: DatabaseUnitOfWork) -> None:
     )
 
 
+def apply_dungeon_team_members_index(uow: DatabaseUnitOfWork) -> None:
+    """Build the bounded member lookup projection for legacy JSON teams."""
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS dungeon_team_members("
+        "team_id TEXT NOT NULL,member_id TEXT NOT NULL,version INTEGER NOT NULL DEFAULT 0,"
+        "PRIMARY KEY(team_id,member_id))"
+    )
+    uow.execute(
+        "CREATE INDEX IF NOT EXISTS dungeon_team_members_member_idx "
+        "ON dungeon_team_members(member_id,team_id)"
+    )
+    columns = {str(row["name"]) for row in uow.query_all("PRAGMA table_info(teams)")}
+    if "leader" in columns:
+        uow.execute("CREATE INDEX IF NOT EXISTS dungeon_teams_leader_idx ON teams(leader,user_id)")
+    # The projection is derived state. Rebuilding it makes a retried migration
+    # repair rows left behind by a previous partial backfill.
+    uow.execute("DELETE FROM dungeon_team_members")
+    # SQLite expands each legacy JSON member directly into the projection; no
+    # Python-side team roster is materialized during startup migration.
+    uow.execute(
+        "INSERT OR IGNORE INTO dungeon_team_members(team_id,member_id,version) "
+        "SELECT CAST(t.user_id AS TEXT),CAST(j.value AS TEXT),"
+        "MAX(COALESCE(CAST(t.version AS INTEGER),0),0) "
+        "FROM teams AS t "
+        "JOIN json_each(CASE WHEN json_valid(t.members) "
+        "AND json_type(t.members)='array' THEN t.members ELSE '[]' END) AS j "
+        "WHERE j.type IN ('text','integer') AND trim(CAST(j.value AS TEXT))<>''"
+    )
+
+
 def apply_dungeon_explore_player_schema(uow: DatabaseUnitOfWork) -> None:
     """Prepare player-owned dungeon state before exploration requests run."""
     uow.execute(
@@ -223,5 +253,6 @@ __all__ = [
     "apply_dungeon_session",
     "apply_dungeon_team",
     "apply_dungeon_team_schema",
+    "apply_dungeon_team_members_index",
     "apply_dungeon_explore_player_schema",
 ]

@@ -7,6 +7,7 @@ import json
 
 from ...infrastructure.database import DatabaseUnitOfWork
 from ...infrastructure.clock import SystemClock
+from .team_repository import DungeonTeamRepository
 
 
 class DungeonRepository(Protocol):
@@ -125,6 +126,13 @@ class DungeonSessionSqlRepository(DungeonPurchaseSqlRepository):
         "dungeon_id", "dungeon_name", "dungeon_status", "current_layer",
         "total_layers", "last_reset_date", "reset_generation", "reset_operation_id",
     )
+    _SESSION_COLUMNS = frozenset(
+        {"operation_id", "payload", "result_status", "dungeon_status"}
+    )
+    _SESSION_STATUS_FIELDS = (
+        "dungeon_id", "dungeon_status", "current_layer", "total_layers",
+        "last_reset_date", "reset_generation", "reset_operation_id",
+    )
 
     @staticmethod
     def _table_ready(
@@ -138,6 +146,20 @@ class DungeonSessionSqlRepository(DungeonPurchaseSqlRepository):
             for row in uow.query_all(f"PRAGMA {schema}.table_info({table})")
         }
         return required <= columns
+
+    @staticmethod
+    def _columns(uow: DatabaseUnitOfWork, table: str, schema: str = "main") -> set[str]:
+        """Return a table's columns without creating or altering its schema."""
+        return {
+            str(row["name"])
+            for row in uow.query_all(f"PRAGMA {schema}.table_info({table})")
+        }
+
+    @classmethod
+    def _session_status_ready(cls, uow: DatabaseUnitOfWork) -> bool:
+        return {"user_id", *cls._SESSION_STATUS_FIELDS} <= cls._columns(
+            uow, "player_dungeon_status"
+        )
 
     @classmethod
     def _settlement_schema_ready(cls, uow: DatabaseUnitOfWork) -> bool:
@@ -377,11 +399,7 @@ class DungeonSessionSqlRepository(DungeonPurchaseSqlRepository):
 
     @staticmethod
     def _members(value: Any) -> list[str]:
-        try:
-            value = json.loads(value or "[]") if isinstance(value, str) else value
-        except (TypeError, ValueError, json.JSONDecodeError):
-            value = []
-        return [str(item) for item in value] if isinstance(value, list) else []
+        return DungeonTeamRepository._members(value)
 
     @classmethod
     def _current_team(cls, uow: DatabaseUnitOfWork, user_id: str) -> dict[str, Any] | None:
@@ -392,15 +410,39 @@ class DungeonSessionSqlRepository(DungeonPurchaseSqlRepository):
         selected = ["user_id", "leader", "members"]
         if "version" in columns:
             selected.append("version")
-        for row in uow.query_all("SELECT " + ",".join(selected) + " FROM player_data.teams"):
-            members = cls._members(row["members"])
-            if str(row["leader"]) != user_id and user_id not in members:
-                continue
-            result = {"team_id": str(row["user_id"]), "leader": str(row["leader"]), "members": members}
-            if "version" in columns:
-                result["version"] = int(row["version"] or 0)
-            return result
-        return None
+        if not {"user_id", "leader", "members"} <= columns:
+            return None
+        if DungeonTeamRepository._member_index_ready(uow, "player_data"):
+            lookup = (
+                "SELECT team_id FROM player_data.dungeon_team_members "
+                "WHERE member_id=? ORDER BY team_id LIMIT 1"
+            )
+        else:
+            lookup = (
+                "SELECT t.user_id FROM player_data.teams AS t "
+                "JOIN json_each(CASE WHEN json_valid(t.members) "
+                "AND json_type(t.members)='array' THEN t.members ELSE '[]' END) AS m "
+                "WHERE m.type IN ('text','integer') AND CAST(m.value AS TEXT)=? "
+                "ORDER BY t.user_id LIMIT 1"
+            )
+        row = uow.query_one(
+            "SELECT " + ",".join(selected) + " FROM player_data.teams "
+            "WHERE user_id=(" + lookup + ")",
+            (str(user_id),),
+        )
+        # A legacy leader omitted from members still blocks solo settlement.
+        if row is None:
+            row = uow.query_one(
+                "SELECT " + ",".join(selected) + " FROM player_data.teams "
+                "WHERE leader=? ORDER BY user_id LIMIT 1",
+                (str(user_id),),
+            )
+        if row is None:
+            return None
+        result = {"team_id": str(row["user_id"]), "leader": str(row["leader"]), "members": cls._members(row["members"])}
+        if "version" in columns:
+            result["version"] = int(row["version"] or 0)
+        return result
 
     @staticmethod
     def _explore_conflict(uow: DatabaseUnitOfWork, operation_id: str, status: str, plan: dict[str, Any]) -> dict[str, Any]:
@@ -553,27 +595,71 @@ class DungeonSessionSqlRepository(DungeonPurchaseSqlRepository):
         if row is None: return {"status":"missing","phase":"","result_status":"","response":{},"plan":{},"current_layer":0,"dungeon_status":""}
         return self._explore_result(row, identity)
     def operation_session_result(self, operation_id: str, user_id: str, action: str) -> dict[str, Any] | None:
-        with DatabaseUnitOfWork(self.player_database) as uow:
-            row = uow.query_one("SELECT payload,result_status,dungeon_status FROM dungeon_session_operations WHERE operation_id=?", (str(operation_id),))
-        if row is None: return None
-        try: payload=json.loads(str(row["payload"]))
-        except (TypeError,ValueError): return {"status":"state_changed","dungeon_status":str(row["dungeon_status"])}
-        if str(payload.get("user_id",""))!=str(user_id) or str(payload.get("action",""))!=str(action): return {"status":"state_changed","dungeon_status":str(row["dungeon_status"])}
-        status=str(row["result_status"]);return {"status":"duplicate" if status=="applied" else status,"dungeon_status":str(row["dungeon_status"])}
+        operation_id, user_id, action = str(operation_id).strip(), str(user_id), str(action)
+        if not operation_id or action not in {"enter", "exit"}:
+            raise ValueError("valid operation is required")
+        if not Path(self.player_database).is_file():
+            return {"status": "schema_missing", "dungeon_status": ""}
+        with DatabaseUnitOfWork(self.player_database, read_only=True) as uow:
+            if not self._table_ready(uow, "dungeon_session_operations", self._SESSION_COLUMNS):
+                return {"status": "schema_missing", "dungeon_status": ""}
+            row = uow.query_one(
+                "SELECT payload,result_status,dungeon_status "
+                "FROM dungeon_session_operations WHERE operation_id=?",
+                (operation_id,),
+            )
+            if row is None and not self._session_status_ready(uow):
+                return {"status": "schema_missing", "dungeon_status": ""}
+        if row is None:
+            return None
+        try:
+            payload = json.loads(str(row["payload"]))
+        except (TypeError, ValueError, json.JSONDecodeError):
+            return {"status": "state_changed", "dungeon_status": str(row["dungeon_status"])}
+        if (
+            not isinstance(payload, dict)
+            or str(payload.get("user_id", "")) != user_id
+            or str(payload.get("action", "")) != action
+        ):
+            return {"status": "state_changed", "dungeon_status": str(row["dungeon_status"])}
+        status = str(row["result_status"])
+        return {
+            "status": "duplicate" if status == "applied" else status,
+            "dungeon_status": str(row["dungeon_status"]),
+        }
 
     def session_transition(self, operation_id: str, user_id: str, expected: dict[str, Any], dungeon: dict[str, Any], action: str) -> dict[str, Any]:
         operation_id,user_id,action=str(operation_id).strip(),str(user_id),str(action);expected=dict(expected);dungeon=dict(dungeon)
         if not operation_id or action not in {"enter","exit"}: raise ValueError("valid operation required")
         payload=json.dumps({"user_id":user_id,"dungeon":dungeon,"action":action},ensure_ascii=True,sort_keys=True)
+        if not Path(self.player_database).is_file():
+            return {"status": "schema_missing", "dungeon_status": ""}
+        with DatabaseUnitOfWork(self.player_database, read_only=True) as uow:
+            if not self._table_ready(uow, "dungeon_session_operations", self._SESSION_COLUMNS):
+                return {"status": "schema_missing", "dungeon_status": ""}
+            old = uow.query_one(
+                "SELECT payload,result_status,dungeon_status FROM dungeon_session_operations WHERE operation_id=?",
+                (operation_id,),
+            )
+            if old:
+                status = str(old["result_status"])
+                return {"status": "state_changed" if str(old["payload"]) != payload else ("duplicate" if status == "applied" else status), "dungeon_status": str(old["dungeon_status"])}
+            if not self._session_status_ready(uow):
+                return {"status": "schema_missing", "dungeon_status": ""}
         with DatabaseUnitOfWork(self.player_database,immediate=True) as uow:
+            if not self._table_ready(uow, "dungeon_session_operations", self._SESSION_COLUMNS):
+                return {"status": "schema_missing", "dungeon_status": ""}
             old=uow.query_one("SELECT payload,result_status,dungeon_status FROM dungeon_session_operations WHERE operation_id=?",(operation_id,))
             if old:
                 status=str(old["result_status"]);return {"status":"state_changed" if str(old["payload"])!=payload else ("duplicate" if status=="applied" else status),"dungeon_status":str(old["dungeon_status"])}
-            row=uow.query_one("SELECT dungeon_id,dungeon_status,current_layer,total_layers,last_reset_date,reset_generation,reset_operation_id FROM player_dungeon_status WHERE user_id=?",(user_id,))
+            if not self._session_status_ready(uow):
+                return {"status": "schema_missing", "dungeon_status": ""}
+            columns = self._SESSION_STATUS_FIELDS
+            row=uow.query_one("SELECT " + ",".join(columns) + " FROM player_dungeon_status WHERE user_id=?",(user_id,))
             if row is None:return self._record_session(uow,operation_id,payload,"state_changed","")
             current={k:(int(row[k] or 0) if k in {"current_layer","total_layers","reset_generation"} else str(row[k] or "")) for k in row.keys()}
             normalized={k:(int(expected.get(k,0) or 0) if k in {"current_layer","total_layers","reset_generation"} else str(expected.get(k,"") or "")) for k in current}
-            if current!=normalized or current["dungeon_id"]!=str(dungeon.get("dungeon_id","")) or current["last_reset_date"]!=str(dungeon.get("date","")):return self._record_session(uow,operation_id,payload,"state_changed",current["dungeon_status"])
+            if not set(columns) <= expected.keys() or current!=normalized or current["dungeon_id"]!=str(dungeon.get("dungeon_id","")) or current["last_reset_date"]!=str(dungeon.get("date","")):return self._record_session(uow,operation_id,payload,"state_changed",current["dungeon_status"])
             if current["dungeon_status"]=="completed":return self._record_session(uow,operation_id,payload,"completed","completed")
             if action=="exit" and current["dungeon_status"]!="exploring":return self._record_session(uow,operation_id,payload,"not_exploring",current["dungeon_status"])
             new_status="exploring" if action=="enter" else "exited";uow.execute("UPDATE player_dungeon_status SET dungeon_status=? WHERE user_id=?",(new_status,user_id));return self._record_session(uow,operation_id,payload,"applied",new_status)

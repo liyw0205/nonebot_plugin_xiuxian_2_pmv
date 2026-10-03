@@ -61,8 +61,14 @@ class TeamExitResult:
 
 
 class DungeonTeamRepository:
-    def __init__(self, database: str | Path) -> None:
+    _TEAM_COLUMNS = (
+        "user_id,team_id,team_name,group_id,leader,members,"
+        "create_time,max_members,description,version"
+    )
+
+    def __init__(self, database: str | Path, *, game_database: str | Path | None = None) -> None:
         self.database = str(database)
+        self.game_database = str(game_database or database)
 
     @staticmethod
     def _json(value: Any) -> str:
@@ -72,14 +78,23 @@ class DungeonTeamRepository:
         return Path(self.database).is_file()
 
     @staticmethod
-    def _columns(uow: DatabaseUnitOfWork, table: str) -> set[str]:
-        return {str(row["name"]) for row in uow.query_all(f"PRAGMA table_info({table})")}
+    def _columns(uow: DatabaseUnitOfWork, table: str, schema: str = "main") -> set[str]:
+        return {str(row["name"]) for row in uow.query_all(f"PRAGMA {schema}.table_info({table})")}
 
     @classmethod
     def _table_ready(
-        cls, uow: DatabaseUnitOfWork, table: str, required: set[str]
+        cls, uow: DatabaseUnitOfWork, table: str, required: set[str], schema: str = "main"
     ) -> bool:
-        return required <= cls._columns(uow, table)
+        return required <= cls._columns(uow, table, schema)
+
+    @classmethod
+    def _team_select(cls, uow: DatabaseUnitOfWork) -> str | None:
+        """Build a fixed-column projection that tolerates legacy omissions."""
+        columns = cls._columns(uow, "teams")
+        if "user_id" not in columns:
+            return None
+        selected = [column for column in cls._TEAM_COLUMNS.split(",") if column in columns]
+        return ",".join(selected) if selected else None
 
     @classmethod
     def _schema_ready(cls, uow: DatabaseUnitOfWork) -> bool:
@@ -89,8 +104,60 @@ class DungeonTeamRepository:
             "dungeon_team_invites": {"invite_id", "team_id", "inviter_id", "invitee_id", "group_id", "expires_at", "consumed_at", "status", "created_at", "resolved_operation_id"},
             "team_cd": {"user_id", "join_cd_until", "had_first_join"},
             "dungeon_team_exit_operations": {"operation_id", "payload", "result_json"},
+            "player_dungeon_status": {"user_id", "dungeon_status"},
         }
         return all(cls._table_ready(uow, table, columns) for table, columns in required.items())
+
+    @classmethod
+    def _member_index_ready(cls, uow: DatabaseUnitOfWork, schema: str = "main") -> bool:
+        if not cls._table_ready(
+            uow, "dungeon_team_members", {"team_id", "member_id", "version"}, schema
+        ):
+            return False
+        indexes = {
+            str(row["name"])
+            for row in uow.query_all(f"PRAGMA {schema}.index_list(dungeon_team_members)")
+            if not row["partial"]
+        }
+        if "dungeon_team_members_member_idx" not in indexes:
+            return False
+        return [
+            str(row["name"])
+            for row in uow.query_all(f"PRAGMA {schema}.index_info(dungeon_team_members_member_idx)")
+        ] == ["member_id", "team_id"]
+
+    @classmethod
+    def _mutation_schema_ready(cls, uow: DatabaseUnitOfWork) -> bool:
+        return cls._schema_ready(uow) and cls._member_index_ready(uow)
+
+    def _user_exists(self, uow: DatabaseUnitOfWork, user_id: str) -> bool | None:
+        if Path(self.game_database).resolve() == Path(self.database).resolve():
+            if not self._table_ready(uow, "user_xiuxian", {"user_id"}):
+                return None
+            return uow.query_one("SELECT 1 FROM user_xiuxian WHERE user_id=?", (user_id,)) is not None
+        if not Path(self.game_database).is_file():
+            return None
+        with DatabaseUnitOfWork(self.game_database, read_only=True) as game:
+            if not self._table_ready(game, "user_xiuxian", {"user_id"}):
+                return None
+            return game.query_one("SELECT 1 FROM user_xiuxian WHERE user_id=?", (user_id,)) is not None
+
+    @classmethod
+    def _sync_membership(
+        cls, uow: DatabaseUnitOfWork, team_id: str, members: list[str], version: int
+    ) -> None:
+        """Keep the bounded member lookup projection aligned with teams.members."""
+        uow.execute("DELETE FROM dungeon_team_members WHERE team_id=?", (str(team_id),))
+        rows = [
+            (str(team_id), str(member), int(version))
+            for member in dict.fromkeys(members)
+            if str(member).strip()
+        ]
+        if rows:
+            uow.executemany(
+                "INSERT INTO dungeon_team_members(team_id,member_id,version) VALUES(?,?,?)",
+                rows,
+            )
 
     @staticmethod
     def _members(value: Any) -> list[str]:
@@ -98,7 +165,10 @@ class DungeonTeamRepository:
             value = json.loads(value or "[]") if isinstance(value, str) else value
         except (TypeError, ValueError):
             return []
-        return [str(item) for item in value] if isinstance(value, list) else []
+        return [
+            str(item) for item in value
+            if type(item) in (str, int) and str(item).strip()
+        ] if isinstance(value, list) else []
 
     @staticmethod
     def _decode_team_record(record: dict[str, Any]) -> dict[str, Any]:
@@ -127,7 +197,7 @@ class DungeonTeamRepository:
         team["members"] = [
             str(member)
             for member in members
-            if isinstance(member, (str, int)) and str(member).strip()
+            if type(member) in (str, int) and str(member).strip()
         ]
 
         leader = team.get("leader")
@@ -148,25 +218,39 @@ class DungeonTeamRepository:
     def team_info(self, team_id: str) -> dict[str, Any] | None:
         if not self._database_exists():
             return None
-        with DatabaseUnitOfWork(self.database) as uow:
-            if not self._table_ready(uow, "teams", {"user_id"}):
+        with DatabaseUnitOfWork(self.database, read_only=True) as uow:
+            projection = self._team_select(uow)
+            if projection is None:
                 return None
-            record = uow.query_one("SELECT * FROM teams WHERE user_id=?", (str(team_id),))
+            record = uow.query_one(
+                f"SELECT {projection} FROM teams WHERE user_id=?",
+                (str(team_id),),
+            )
         return None if record is None else self._normalize_team_record(record)
 
     def team_id_for_user(self, user_id: str) -> str | None:
         if not self._database_exists():
             return None
-        with DatabaseUnitOfWork(self.database) as uow:
+        with DatabaseUnitOfWork(self.database, read_only=True) as uow:
             if not self._table_ready(uow, "teams", {"user_id", "members"}):
                 return None
-            records = uow.query_all("SELECT * FROM teams")
-        for record in records:
-            team = self._normalize_team_record(record)
-            team_id = team.get("user_id")
-            if team_id and str(user_id) in team["members"]:
-                return str(team_id)
-        return None
+            if self._member_index_ready(uow):
+                row = uow.query_one(
+                    "SELECT team_id FROM dungeon_team_members "
+                    "WHERE member_id=? ORDER BY team_id LIMIT 1",
+                    (str(user_id),),
+                )
+            else:
+                # Read-only compatibility for databases before dungeon.009.
+                row = uow.query_one(
+                    "SELECT t.user_id FROM teams AS t "
+                    "JOIN json_each(CASE WHEN json_valid(t.members) "
+                    "AND json_type(t.members)='array' THEN t.members ELSE '[]' END) AS m "
+                    "WHERE m.type IN ('text','integer') AND CAST(m.value AS TEXT)=? "
+                    "ORDER BY t.user_id LIMIT 1",
+                    (str(user_id),),
+                )
+        return None if row is None else str(row.get("team_id") or row.get("user_id") or "") or None
 
     @staticmethod
     def _invite_snapshot(row: dict[str, Any]) -> TeamInviteSnapshot:
@@ -185,7 +269,7 @@ class DungeonTeamRepository:
     def invite_by_id(self, invite_id: str) -> TeamInviteSnapshot | None:
         if not self._database_exists():
             return None
-        with DatabaseUnitOfWork(self.database) as uow:
+        with DatabaseUnitOfWork(self.database, read_only=True) as uow:
             if not self._table_ready(
                 uow,
                 "dungeon_team_invites",
@@ -201,17 +285,19 @@ class DungeonTeamRepository:
 
     @classmethod
     def _user_team(cls, uow: DatabaseUnitOfWork, user_id: str) -> str:
-        for row in uow.query_all("SELECT user_id,members FROM teams"):
-            if str(user_id) in cls._members(row.get("members")):
-                return str(row.get("user_id"))
-        return ""
+        row = uow.query_one(
+            "SELECT team_id FROM dungeon_team_members "
+            "WHERE member_id=? ORDER BY team_id LIMIT 1",
+            (str(user_id),),
+        )
+        return "" if row is None else str(row.get("team_id") or row.get("user_id") or "")
 
     @staticmethod
     def _active_session(uow: DatabaseUnitOfWork, user_id: str) -> bool:
-        try:
-            row = uow.query_one("SELECT dungeon_status FROM player_dungeon_status WHERE user_id=?", (user_id,))
-        except Exception:
-            return False
+        row = uow.query_one(
+            "SELECT dungeon_status FROM player_dungeon_status WHERE user_id=?",
+            (user_id,),
+        )
         return row is not None and str(row["dungeon_status"]) == "exploring"
 
     @staticmethod
@@ -245,24 +331,27 @@ class DungeonTeamRepository:
         if not self._database_exists():
             return TeamMutationResult("schema_missing", team_id=str(team_id), target_id=str(leader_id), group_id=str(group_id))
         with DatabaseUnitOfWork(self.database, immediate=True) as uow:
-            if not self._schema_ready(uow):
+            if not self._mutation_schema_ready(uow):
                 return TeamMutationResult("schema_missing", team_id=str(team_id), target_id=str(leader_id), group_id=str(group_id))
             old = uow.query_one("SELECT payload,result_status,team_id,result_json FROM dungeon_team_operations WHERE operation_id=?", (operation_id,))
             if old is not None:
                 return self._decode_mutation(old) if old["payload"] == payload else TeamMutationResult("state_changed", team_id=str(old["team_id"]))
             base = dict(team_id=str(team_id), team_name=str(team_name), leader_id=str(leader_id), target_id=str(leader_id), group_id=str(group_id))
             if not group_id: return self._finish(uow, operation_id, "create", payload, TeamMutationResult("group_required", **base))
-            if uow.query_one("SELECT 1 FROM user_xiuxian WHERE user_id=?", (leader_id,)) is None: return self._finish(uow, operation_id, "create", payload, TeamMutationResult("user_missing", **base))
+            user_exists = self._user_exists(uow, leader_id)
+            if user_exists is None: return TeamMutationResult("schema_missing", **base)
+            if not user_exists: return self._finish(uow, operation_id, "create", payload, TeamMutationResult("user_missing", **base))
             if self._user_team(uow, leader_id): return self._finish(uow, operation_id, "create", payload, TeamMutationResult("user_has_team", **base))
             if self._active_session(uow, leader_id): return self._finish(uow, operation_id, "create", payload, TeamMutationResult("session_active", **base))
             if uow.query_one("SELECT 1 FROM teams WHERE user_id=?", (team_id,)): return self._finish(uow, operation_id, "create", payload, TeamMutationResult("team_exists", **base))
             uow.execute("INSERT INTO teams(user_id,team_id,team_name,group_id,leader,members,create_time,max_members,description,version) VALUES(?,?,?,?,?,?,?,?,?,0)", (team_id,team_id,team_name,group_id,leader_id,json.dumps([leader_id]),created_at,4,""))
+            self._sync_membership(uow, team_id, [leader_id], 0)
             return self._finish(uow, operation_id, "create", payload, TeamMutationResult("applied", member_count=1, max_members=4, **base))
 
     def operation_result(self, operation_id: str, action: str = "") -> TeamMutationResult | None:
         if not self._database_exists():
             return None
-        with DatabaseUnitOfWork(self.database) as uow:
+        with DatabaseUnitOfWork(self.database, read_only=True) as uow:
             if not self._table_ready(
                 uow, "dungeon_team_operations", {"operation_id", "payload", "result_status", "team_id", "result_json", "action"}
             ):
@@ -278,10 +367,14 @@ class DungeonTeamRepository:
     def snapshot(self, team_id: str) -> TeamStateSnapshot | None:
         if not self._database_exists():
             return None
-        with DatabaseUnitOfWork(self.database) as uow:
-            if not self._table_ready(uow, "teams", {"user_id"}):
+        with DatabaseUnitOfWork(self.database, read_only=True) as uow:
+            projection = self._team_select(uow)
+            if projection is None:
                 return None
-            row = uow.query_one("SELECT * FROM teams WHERE user_id=?", (str(team_id),))
+            row = uow.query_one(
+                f"SELECT {projection} FROM teams WHERE user_id=?",
+                (str(team_id),),
+            )
         if row is None:
             return None
         return TeamStateSnapshot(str(team_id), str(row.get("team_name") or ""), str(row.get("leader") or ""), tuple(self._members(row.get("members"))), int(row.get("version") or 0))
@@ -293,7 +386,7 @@ class DungeonTeamRepository:
         if not self._database_exists():
             return TeamMutationResult("schema_missing", team_id=expected.team_id, target_id=str(target_id), version=expected.version)
         with DatabaseUnitOfWork(self.database, immediate=True) as uow:
-            if not self._schema_ready(uow):
+            if not self._mutation_schema_ready(uow):
                 return TeamMutationResult("schema_missing", team_id=expected.team_id, target_id=str(target_id), version=expected.version)
             old = uow.query_one("SELECT payload,result_status,team_id,result_json FROM dungeon_team_operations WHERE operation_id=?", (operation_id,))
             if old is not None: return self._decode_mutation(old) if old["payload"] == payload else TeamMutationResult("state_changed", team_id=str(old["team_id"]))
@@ -308,6 +401,10 @@ class DungeonTeamRepository:
             if any(self._active_session(uow, member) for member in current.members): return self._finish(uow, operation_id, "transfer", payload, TeamMutationResult("session_active", **base))
             changed = uow.execute("UPDATE teams SET leader=?,version=version+1 WHERE user_id=? AND version=?", (target_id, current.team_id, current.version))
             if changed.rowcount != 1: return TeamMutationResult("state_changed", **base)
+            uow.execute(
+                "UPDATE dungeon_team_members SET version=? WHERE team_id=?",
+                (current.version + 1, current.team_id),
+            )
             base.update(leader_id=str(target_id), version=current.version + 1)
             return self._finish(uow, operation_id, "transfer", payload, TeamMutationResult("applied", **base))
 
@@ -316,14 +413,16 @@ class DungeonTeamRepository:
         if not self._database_exists():
             return TeamMutationResult("schema_missing", team_id=str(team_id), invite_id=str(invite_id), target_id=str(invitee_id), group_id=str(group_id))
         with DatabaseUnitOfWork(self.database, immediate=True) as uow:
-            if not self._schema_ready(uow):
+            if not self._mutation_schema_ready(uow):
                 return TeamMutationResult("schema_missing", team_id=str(team_id), invite_id=str(invite_id), target_id=str(invitee_id), group_id=str(group_id))
             old = uow.query_one("SELECT payload,result_status,team_id,result_json FROM dungeon_team_operations WHERE operation_id=?", (operation_id,))
             if old is not None: return self._decode_mutation(old) if old["payload"] == payload else TeamMutationResult("state_changed", team_id=str(old["team_id"]))
             base = dict(team_id=team_id, invite_id=invite_id, target_id=invitee_id, group_id=group_id, expires_at=float(expires_at))
             if not group_id: return self._finish(uow, operation_id, "invite", payload, TeamMutationResult("group_required", **base))
             if not invitee_id: return self._finish(uow, operation_id, "invite", payload, TeamMutationResult("target_missing", **base))
-            if uow.query_one("SELECT 1 FROM user_xiuxian WHERE user_id=?", (invitee_id,)) is None: return self._finish(uow, operation_id, "invite", payload, TeamMutationResult("user_missing", **base))
+            user_exists = self._user_exists(uow, invitee_id)
+            if user_exists is None: return TeamMutationResult("schema_missing", **base)
+            if not user_exists: return self._finish(uow, operation_id, "invite", payload, TeamMutationResult("user_missing", **base))
             team = uow.query_one("SELECT team_name,leader,members,max_members,version FROM teams WHERE user_id=?", (team_id,))
             if team is None: return self._finish(uow, operation_id, "invite", payload, TeamMutationResult("team_disbanded", **base))
             members, maximum = self._members(team["members"]), max(int(team["max_members"] or 4), 1)
@@ -343,7 +442,7 @@ class DungeonTeamRepository:
         if not self._database_exists():
             return TeamMutationResult("schema_missing", team_id=str(team_id), invite_id=str(invite_id), target_id=str(user_id), group_id=str(group_id))
         with DatabaseUnitOfWork(self.database, immediate=True) as uow:
-            if not self._schema_ready(uow):
+            if not self._mutation_schema_ready(uow):
                 return TeamMutationResult("schema_missing", team_id=str(team_id), invite_id=str(invite_id), target_id=str(user_id), group_id=str(group_id))
             old = uow.query_one("SELECT payload,result_status,team_id,result_json FROM dungeon_team_operations WHERE operation_id=?", (operation_id,))
             if old is not None: return self._decode_mutation(old) if old["payload"] == payload else TeamMutationResult("state_changed", team_id=str(old["team_id"]))
@@ -351,7 +450,9 @@ class DungeonTeamRepository:
             base = dict(team_id=team_id, invite_id=invite_id, target_id=user_id, group_id=group_id)
             if invite is None or (str(invite["team_id"]), str(invite["inviter_id"]), str(invite["invitee_id"]), str(invite["group_id"])) != (team_id, inviter_id, user_id, group_id) or str(invite["status"]) != "pending" or invite["consumed_at"] is not None or float(invite["expires_at"]) <= float(now_timestamp):
                 return self._finish(uow, operation_id, "join", payload, TeamMutationResult("invite_invalid", **base))
-            if uow.query_one("SELECT 1 FROM user_xiuxian WHERE user_id=?", (user_id,)) is None: return self._finish(uow, operation_id, "join", payload, TeamMutationResult("user_missing", **base))
+            user_exists = self._user_exists(uow, user_id)
+            if user_exists is None: return TeamMutationResult("schema_missing", **base)
+            if not user_exists: return self._finish(uow, operation_id, "join", payload, TeamMutationResult("user_missing", **base))
             if self._user_team(uow, user_id): return self._finish(uow, operation_id, "join", payload, TeamMutationResult("user_has_team", **base))
             team = uow.query_one("SELECT team_name,leader,members,max_members,version FROM teams WHERE user_id=?", (team_id,))
             if team is None: return self._finish(uow, operation_id, "join", payload, TeamMutationResult("team_disbanded", **base))
@@ -362,6 +463,7 @@ class DungeonTeamRepository:
             members.append(user_id)
             changed = uow.execute("UPDATE teams SET members=?,version=version+1 WHERE user_id=? AND version=?", (json.dumps(members), team_id, int(team["version"] or 0)))
             if changed.rowcount != 1: return TeamMutationResult("state_changed", **base)
+            self._sync_membership(uow, team_id, members, int(team["version"] or 0) + 1)
             uow.execute("INSERT INTO team_cd(user_id,join_cd_until,had_first_join) VALUES(?,?,1) ON CONFLICT(user_id) DO UPDATE SET had_first_join=1", (user_id, ""))
             uow.execute("UPDATE dungeon_team_invites SET consumed_at=CURRENT_TIMESTAMP,status='joined',resolved_operation_id=? WHERE invite_id=? AND status='pending'", (operation_id, invite_id))
             base["member_count"] = len(members)
@@ -373,7 +475,7 @@ class DungeonTeamRepository:
         if not self._database_exists():
             return TeamMutationResult("schema_missing", invite_id=str(invite_id), target_id=str(user_id), group_id=str(group_id))
         with DatabaseUnitOfWork(self.database, immediate=True) as uow:
-            if not self._schema_ready(uow):
+            if not self._mutation_schema_ready(uow):
                 return TeamMutationResult("schema_missing", invite_id=str(invite_id), target_id=str(user_id), group_id=str(group_id))
             old = uow.query_one("SELECT payload,result_status,team_id,result_json FROM dungeon_team_operations WHERE operation_id=?", (operation_id,))
             if old is not None: return self._decode_mutation(old) if old["payload"] == payload else TeamMutationResult("state_changed", team_id=str(old["team_id"]))
@@ -398,7 +500,7 @@ class DungeonTeamRepository:
     def exit_operation_result(self, operation_id: str, action: str, actor_id: str, target_id: str | None = None) -> TeamExitResult | None:
         if not self._database_exists():
             return None
-        with DatabaseUnitOfWork(self.database) as uow:
+        with DatabaseUnitOfWork(self.database, read_only=True) as uow:
             if not self._table_ready(
                 uow, "dungeon_team_exit_operations", {"operation_id", "payload", "result_json"}
             ):
@@ -428,7 +530,7 @@ class DungeonTeamRepository:
         if not self._database_exists():
             return TeamExitResult("schema_missing", expected.team_id, expected.team_name, target_id=target_id)
         with DatabaseUnitOfWork(self.database, immediate=True) as uow:
-            if not self._schema_ready(uow):
+            if not self._mutation_schema_ready(uow):
                 return TeamExitResult("schema_missing", expected.team_id, expected.team_name, target_id=target_id)
             old = uow.query_one("SELECT payload,result_json FROM dungeon_team_exit_operations WHERE operation_id=?", (operation_id,))
             if old is not None:
@@ -447,6 +549,10 @@ class DungeonTeamRepository:
             else:
                 members.remove(target_id); new_leader = members[0] if target_id == current.leader_id else current.leader_id; changed = uow.execute("UPDATE teams SET members=?,leader=?,version=version+1 WHERE user_id=? AND version=?", (json.dumps(members), new_leader, current.team_id, current.version))
             if changed.rowcount != 1: return TeamExitResult("state_changed", current.team_id, current.team_name, target_id=target_id)
+            if disbanded:
+                uow.execute("DELETE FROM dungeon_team_members WHERE team_id=?", (current.team_id,))
+            else:
+                self._sync_membership(uow, current.team_id, members, current.version + 1)
             cooldown_members = []
             for member in affected:
                 first = uow.query_one("SELECT had_first_join FROM team_cd WHERE user_id=?", (member,))
@@ -467,7 +573,7 @@ class DungeonTeamRepository:
     def pending_invite(self, user_id: str, now_timestamp: float) -> TeamInviteSnapshot | None:
         if not self._database_exists():
             return None
-        with DatabaseUnitOfWork(self.database) as uow:
+        with DatabaseUnitOfWork(self.database, read_only=True) as uow:
             if not self._table_ready(
                 uow,
                 "dungeon_team_invites",

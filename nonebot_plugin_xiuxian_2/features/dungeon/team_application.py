@@ -7,8 +7,8 @@ from .team_repository import DungeonTeamRepository, TeamExitResult, TeamInviteSn
 
 
 class DungeonTeamApplication:
-    def __init__(self, player_database: str | Path, *, repository: DungeonTeamRepository | None = None) -> None:
-        self.repository = repository or DungeonTeamRepository(player_database)
+    def __init__(self, player_database: str | Path, *, game_database: str | Path | None = None, repository: DungeonTeamRepository | None = None) -> None:
+        self.repository = repository or DungeonTeamRepository(player_database, game_database=game_database)
 
     def create(self, operation_id: str, team_id: str, team_name: str, leader_id: str, group_id: str, created_at: str, now_timestamp: float) -> TeamMutationResult:
         return self.repository.create(operation_id, team_id, team_name, leader_id, group_id, created_at, now_timestamp)

@@ -59,7 +59,7 @@ from ...infrastructure.clock import SystemClock
 _sql_message_instance = None
 items = Items()
 dungeon_application = DungeonApplication(get_paths().game_db, get_paths().player_db)
-dungeon_team_application = DungeonTeamApplication(get_paths().player_db)
+dungeon_team_application = DungeonTeamApplication(get_paths().player_db, game_database=get_paths().game_db)
 dungeon_ids = UUIDGenerator()
 runtime_clock = SystemClock()
 
@@ -1190,7 +1190,9 @@ async def handle_dungeon_exit(bot: Bot, event: GroupMessageEvent | PrivateMessag
         )
         result = raw_result
     result_status = str(result.get("status", "state_changed"))
-    if result_status == "not_exploring":
+    if result_status == "schema_missing":
+        await handle_send(bot, event, "副本数据结构未就绪，请稍后重试。")
+    elif result_status == "not_exploring":
         await handle_send(bot, event, "当前未在副本探索中。")
     elif result_status == "completed":
         await handle_send(bot, event, "今日副本已完成，无需退出。")

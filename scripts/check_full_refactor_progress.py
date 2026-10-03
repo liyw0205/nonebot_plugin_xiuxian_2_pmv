@@ -1452,6 +1452,41 @@ def _slice_status() -> dict[str, dict[str, object]]:
                 and "def apply_dungeon_team_schema(" in dungeon_migrations
                 and '"dungeon.006"' in plugin[plugin.index("_PLAYER_DATABASE_MIGRATION_VERSIONS"):]
             ),
+            "team_members_projection_migrated": (
+                'Migration("dungeon.009", "dungeon_team_members_index", apply_dungeon_team_members_index)' in plugin
+                and "def apply_dungeon_team_members_index(" in dungeon_migrations
+                and '"dungeon.009"' in plugin[plugin.index("_PLAYER_DATABASE_MIGRATION_VERSIONS"):]
+                and '"dungeon.009"' in plugin[plugin.index("_GAME_DATABASE_EXCLUDED_MIGRATION_VERSIONS"):plugin.index("_PLAYER_DATABASE_MIGRATION_VERSIONS")]
+                and "CREATE TABLE IF NOT EXISTS dungeon_team_members" in dungeon_migrations
+                and "json_each" in dungeon_migrations
+            ),
+            "team_member_lookup_bounded": (
+                "FROM dungeon_team_members" in dungeon_team_repository
+                and "WHERE member_id=? ORDER BY team_id LIMIT 1" in dungeon_team_repository
+                and "SELECT * FROM teams" not in dungeon_team_repository
+            ),
+            "explore_team_lookup_bounded": (
+                "FROM player_data.dungeon_team_members" in dungeon_repository
+                and "WHERE member_id=? ORDER BY team_id LIMIT 1" in dungeon_repository
+                and 'uow.query_all("SELECT " + ",".join(selected) + " FROM player_data.teams")' not in dungeon_repository
+            ),
+            "team_user_lookup_game_owner": (
+                "game_database=get_paths().game_db" in dungeon_facade
+                and "game_database=get_paths().game_db" in dungeon_team_manager
+                and "DatabaseUnitOfWork(self.game_database, read_only=True)" in dungeon_team_repository
+            ),
+            "team_membership_projection_sync": (
+                "def _sync_membership(" in dungeon_team_repository
+                and "INSERT INTO dungeon_team_members" in dungeon_team_repository
+                and "DELETE FROM dungeon_team_members" in dungeon_team_repository
+                and "UPDATE dungeon_team_members SET version=?" in dungeon_team_repository
+            ),
+            "team_reads_use_read_only_uow": (
+                "DatabaseUnitOfWork(self.database, read_only=True)" in dungeon_team_repository
+                and "def team_info(" in dungeon_team_repository
+                and "def snapshot(" in dungeon_team_repository
+                and "DatabaseUnitOfWork(self.database) as uow" not in dungeon_team_repository
+            ),
             "team_request_path_has_no_ddl": all(
                 token not in dungeon_team_repository
                 for token in ("CREATE TABLE", "ALTER TABLE", "ensure_schema", "ensure_team_schema")
@@ -1507,7 +1542,19 @@ def _slice_status() -> dict[str, dict[str, object]]:
                 and "_frozen_explore_seed" in dungeon_facade
                 and "inventory_snapshot=frozen_inventory" in dungeon_facade
             ),
-            "status": "team_commands_and_reads_application_owned_with_startup_schema_and_invite_projection_compatibility_retained",
+            "session_schema_missing_fails_closed": (
+                "def _columns(" in dungeon_repository
+                and '"status": "schema_missing"' in dungeon_repository
+                and "DatabaseUnitOfWork(self.player_database, read_only=True)" in dungeon_repository
+                and "player_dungeon_status" in dungeon_repository
+                and 'if result_status == "schema_missing":' in dungeon_facade
+            ),
+            "session_aba_schema_required": (
+                "_SESSION_STATUS_FIELDS" in dungeon_repository
+                and "def _session_status_ready(" in dungeon_repository
+                and "not set(columns) <= expected.keys()" in dungeon_repository
+            ),
+            "status": "team_commands_and_reads_application_owned_with_bounded_member_projection_and_session_schema_boundary",
         },
         "bank": {
             "v1_web_game_db_owned": (

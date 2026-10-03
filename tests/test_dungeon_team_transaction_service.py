@@ -11,7 +11,10 @@ nonebot.init()
 
 from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_dungeon.transaction_service import DungeonTeamTransactionService
 from nonebot_plugin_xiuxian_2.features.dungeon.team_application import DungeonTeamApplication
-from nonebot_plugin_xiuxian_2.features.dungeon.migrations import apply_dungeon_team
+from nonebot_plugin_xiuxian_2.features.dungeon.migrations import (
+    apply_dungeon_team,
+    apply_dungeon_team_members_index,
+)
 from nonebot_plugin_xiuxian_2.infrastructure.database import DatabaseUnitOfWork
 from tests.test_db_backend import db_backend
 
@@ -29,11 +32,10 @@ class DungeonTeamTransactionServiceTests(unittest.TestCase):
         source = Path(
             "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dungeon/dungeon_manager.py"
         ).read_text(encoding="utf-8")
-        self.assertIn("_player_data_manager_instance = None", source)
-        self.assertIn("def _player_data_manager(", source)
-        self.assertNotIn("player_data = PlayerDataManager()", source)
-        self.assertIn("_player_data_manager().get_fields(", source)
-        self.assertIn("_player_data_manager()._ensure_table_exists(", source)
+        self.assertNotIn("PlayerDataManager", source)
+        self.assertNotIn("_player_data_manager", source)
+        self.assertIn("self.dungeon_application = DungeonApplication(", source)
+        self.assertIn("self._reset_application().ensure_player_status(", source)
 
     def test_feature_team_application_owns_create_and_invite(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -45,6 +47,7 @@ class DungeonTeamTransactionServiceTests(unittest.TestCase):
                 conn.executemany("INSERT INTO player_dungeon_status VALUES (%s,%s)", (("leader", "not_started"), ("member", "not_started")))
             with DatabaseUnitOfWork(database) as uow:
                 apply_dungeon_team(uow)
+                apply_dungeon_team_members_index(uow)
             application = DungeonTeamApplication(database)
             created = application.create("create-feature", "team-1", "试炼队", "leader", "100", "now", 100)
             invited = application.invite("invite-feature", "invite-1", "team-1", "leader", "member", "100", 160, 100)
@@ -60,6 +63,7 @@ class DungeonTeamTransactionServiceTests(unittest.TestCase):
                 conn.executemany("INSERT INTO player_dungeon_status VALUES (%s,%s)", (("leader", "not_started"), ("member", "not_started")))
             with DatabaseUnitOfWork(database) as uow:
                 apply_dungeon_team(uow)
+                apply_dungeon_team_members_index(uow)
             application = DungeonTeamApplication(database)
             application.create("create-feature", "team-1", "试炼队", "leader", "100", "now", 100)
             application.invite("invite-feature", "invite-1", "team-1", "leader", "member", "100", 160, 100)
@@ -76,6 +80,7 @@ class DungeonTeamTransactionServiceTests(unittest.TestCase):
                 conn.executemany("INSERT INTO player_dungeon_status VALUES (%s,%s)", (("leader", "not_started"), ("member", "not_started")))
             with DatabaseUnitOfWork(database) as uow:
                 apply_dungeon_team(uow)
+                apply_dungeon_team_members_index(uow)
             application = DungeonTeamApplication(database)
             application.create("create-feature", "team-1", "试炼队", "leader", "100", "now", 100)
             application.invite("invite-reject", "invite-reject", "team-1", "leader", "member", "100", 160, 100)
@@ -94,6 +99,7 @@ class DungeonTeamTransactionServiceTests(unittest.TestCase):
                 conn.executemany("INSERT INTO player_dungeon_status VALUES (%s,%s)", (("leader", "not_started"), ("member", "not_started")))
             with DatabaseUnitOfWork(database) as uow:
                 apply_dungeon_team(uow)
+                apply_dungeon_team_members_index(uow)
             application = DungeonTeamApplication(database)
             application.create("create-feature", "team-1", "试炼队", "leader", "100", "now", 100)
             application.invite("invite-feature", "invite-1", "team-1", "leader", "member", "100", 160, 100)
@@ -112,6 +118,7 @@ class DungeonTeamTransactionServiceTests(unittest.TestCase):
                 conn.executemany("INSERT INTO player_dungeon_status VALUES (%s,%s)", (("leader", "not_started"), ("member", "not_started")))
             with DatabaseUnitOfWork(database) as uow:
                 apply_dungeon_team(uow)
+                apply_dungeon_team_members_index(uow)
             application = DungeonTeamApplication(database)
             application.create("create-feature", "team-1", "试炼队", "leader", "100", "now", 100)
             application.invite("invite-feature", "invite-1", "team-1", "leader", "member", "100", 160, 100)

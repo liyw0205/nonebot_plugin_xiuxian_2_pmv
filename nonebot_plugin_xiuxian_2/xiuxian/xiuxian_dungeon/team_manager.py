@@ -126,7 +126,7 @@ async def expire_team_invite(user_id: str, invite_id: str, bot: Bot, event):
 
     from ...features.dungeon.team_application import DungeonTeamApplication
 
-    application = DungeonTeamApplication(get_paths().player_db)
+    application = DungeonTeamApplication(get_paths().player_db, game_database=get_paths().game_db)
     invite = application.invite_by_id(invite_id)
     if invite is None or invite.invitee_id != str(user_id):
         return
