@@ -123,6 +123,16 @@
 
 本片执行收口：manifest、feature 文档与 inventory 已补齐 intent；运行时 guard 和全局 auth 未改，无新增 migration。新增 Web 边界回归修复前为 `1 failed, 35 passed`，唯一失败是漏声明；修复后的 Web/副本仓储/inventory 聚合 `97 passed`，progress/architecture 单元 `25 passed`。完整 architecture 两项 intent 错误消失，`web_permissions/manifest_routes/manifest_documentation` 均为空，仍有 15 项既有错误；不宣称全量门禁已通过。progress 保持 `exit_ready=false`；inventory freshness、2 个 Python 文件内存编译、diff check 通过。隔离五库 backup、restore dry-run/restore 和 265 项 migration recovery 成功，路由数 `203/58/7/1/1`，reconcile clean（operations/outbox/dead events 均为 0）；没有正式运行库迁移/P7。复用前一轮已完成的 1 名只读代理结论，不重复派相同审计；主线程实施全部修改与串行验收。进程全部退出后已删除本片专用 `/tmp/codex-dungeon-intent-web-20261003`（收尾约 6.5 MiB），仓库保护范围外未发现 pytest/pyc 缓存；磁盘可用 `20G`、RAM available 约 `1.4GiB`、inode 使用 `14%`。保留运行数据库/WAL/SHM、备份、持久回执和用户 `boss_info.json`；下一片只读审计洞府候选与共享 field-list cache 的真实资源边界。
 
+### 下一片共享 Field-List Cache 方案（只读审计完成）
+
+1. 资源复核后启用 1 名只读子代理，限定审计 `PlayerDataManager._field_list_cache` 的生产调用、复制和失效路径；主线程核对洞府候选 matcher。代理未改文件、执行测试、导入代码、访问运行库或生成缓存。本次并发仅主线程与 1 名只读代理，无并行测试；方案不依赖扩大代理数。
+2. 真实资源问题已证明：`player_data_manager.py:189/309` 的双查询入口共用无界字典，TTL 使用 monotonic 但不删除过期 key；`get_all_field_data` 保存深层 JSON，`list_users_by_fields` 的 key 包含条件和排除用户。`xiuxian_dongfu/__init__.py:1265/1271` 的真实随机/指定潜入入口分别调用 `:525/439` 的 helper；每个随机发起用户缓存近似相同的完整候选列表，随后完整建立 profile/candidates 列表。
+3. 下一片仅关闭共享缓存的保留边界，不改 SQL、返回结果/顺序或候选随机规则。初始策略采用最多 64 项、总计 8 MiB charged bytes、单项最多 1 MiB；这是保守策略而非运行测量。统一私有 get/store/drop/clear/expire helpers，在既有 `RLock` 内维护记账，FIFO 淘汰；替换、删除、表/字段失效和 close/reconnect 都更新额度。只清此缓存，不复制或清空 `ITEMS_CACHE` 等其他缓存，也不改持久数据。
+4. key、容器及深层 JSON 内容全部计量；只限定条目数/行数不能约束长字符串。估算遍历必须有节点/深度上限，超大 key/value、超预算或不支持对象不缓存，仍返回查询结果；先预检再复制，副本计量通过后才淘汰旧项并发布，避免为了无法入缓存的新值先清掉有效缓存。保留返回副本隔离；非有限 TTL 不得形成永久缓存，保持 TTL 0 不缓存。
+5. 两个入口每次读取/保存前按需扫描过期项，TTL 0 的查询也维护缓存；至多 64 项使扫描有确定上限，不新增 heap、后台 task 或每查询 timer。保留非滑动 monotonic TTL。无访问时过期项仍可能驻留，但有容量上界；charged bytes 不是整个进程 RSS，也不能承诺 TTL 到点立即释放 RSS。若后续要求闲置时主动回收，必须另立生命周期拥有的单一维护任务，只访问已存在的 manager，不为清缓存新建数据库连接，不持有 bot/event。
+6. 主线程先建立假 clock/cursor 与隔离 manager 回归：双入口共享预算、超大 key/字符串/深层 JSON 绕过缓存、命中副本隔离、精确过期边界、替换/FIFO 多项淘汰、表/字段失效和 close/reconnect 额度清零、TTL 0/查询失败不发布。所有测试与恢复串行，关闭 pytest/pyc，使用独立 `/tmp/codex-field-list-cache-20261003`；验收后立即清理本片产物并复核磁盘/RAM。不得在未实现/验证前把本方案列为已完成。
+7. 下一独立洞府候选片处理一次请求的 RAM/事件循环占用：当前 `fetchall`、JSON 解析、profile/candidates 全量物化不由缓存上限解决。设计 keyset 有界分页、协作让出、无全量列表的公平随机选择和指定名字单行查询，保留过滤、玩家数据 game owner 和结算 CAS；如需索引另加启动 migration，不请求期 DDL。地图自己的 `_get_all_in_same_node` 已走 `MapApplication.nearby_players -> MapNearbyPlayersSqlQueryRepository`，但仍 `query_all` 全量，这是另一个独立可达读取边界，不与洞府 helper 混淆。`save_doc` 提交后未触发 field-list 失效是既有一致性缺口，本缓存片不扩大其语义，后续须单独核对真实写入调用。
+
 ## 缓存清理允许范围
 
 - 仓库内未跟踪的 `__pycache__/`、`*.pyc`、`.pytest_cache/`。
