@@ -53,7 +53,7 @@
 
 1. **player/economy 旧写路径清零**：继续按真实调用图迁移 `xiuxian2_handle`、剩余 `transaction_service` 的默认 handler、scheduler 和 Web 写入；旧实现只能作为显式 compatibility/rollback，不得由默认入口构造或调用。
 2. **其余领域边界**：按 cultivation/training、combat/dungeon/boss、sect/trade/scheduler/Web 的顺序完成真实入口、随机/时间注入、operation receipt、启动 migration、跨库恢复和缺 schema fail-closed。
-   - 当前洞府/地图进度：共享 field-list cache 的 64 项/8 MiB 总预算/1 MiB 单项预算及过期回收、指定潜入单目标和随机潜入有界选择均已提交推送；地图指定道号论道/战绩单目标只读查询及随机论道有界选择已验收完成。下一片为附近展示；完整 list 的可写 UoW/attach、单个大字段峰值、SQL 工作集/耗时及逐候选 I/O 仍单独开放，不以候选容量上限宣称进程 RAM 全部有界。不得复制或主动清空 `ITEMS_CACHE` 等其他玩法共享缓存。
+   - 当前洞府/地图进度：共享 field-list cache 的 64 项/8 MiB 总预算/1 MiB 单项预算及过期回收、指定潜入单目标和随机潜入有界选择均已提交推送；地图指定道号论道/战绩单目标只读查询、随机论道有界选择及附近展示有界去重均已验收完成。地图完整 list 的可写 UoW/attach、单个大字段峰值、SQL 工作集/耗时及逐候选 I/O 仍单独开放，不以候选容量上限宣称进程 RAM 全部有界。不得复制或主动清空 `ITEMS_CACHE` 等其他玩法共享缓存。
    - 本轮随机候选切片复用 1 名只读子代理核对过滤/分页/公平性/取消与 schema 兼容；子代理不改代码、不跑 SQLite 测试、不访问运行库或生成缓存，主线程负责实现、串行验收和资源收尾。
    - 当前副本已完成项：player-only `dungeon.007`、prepared settlement schema、operation-scoped RNG、game-only `dungeon.008` 输入冻结、player-only `dungeon.009` 队伍成员索引/同事务投影同步和 session schema/ABA 检查，以及 reset clock 贯穿、scheduler 业务时区、跨午夜日期冻结与 manual 跨日回放；本轮 `.010` 到期索引/ID 路由和单 worker 关闭默认每邀请一个 sleeper 的任务资源边界。成员读取与探索结算都改为单行选择；真实 `user_xiuxian` owner 为 game DB，队伍写入仍只在 player UoW 内执行。
    - 当前副本未完成项：Web 认证 actor 绑定、正式 migration/recovery/P7，历史损坏邀请/冲突 receipt 的受控修复。intent Web manifest 已补齐，现有 permission/CSRF guard 未改；全局 `user` resolver 默认允许，operation identity 校验不能替代认证。通知不是 outbox，不能宣称持久补发。legacy team reader、`PersistentTeamInviteMapping` 无界迭代/请求期 DDL 和旧 expiry helper 仍保留兼容实现，但最新限定调用图未证明默认 handler 可达，不以 helper 存在作为迁移依据。跨队历史重叠成员尚未清洗，本片仅统一选择最小 `team_id`；清洗必须独立制定备份、冲突决策和对账方案。
@@ -62,6 +62,24 @@
    - 当前历练未完成项：普通修炼生命周期默认入口已由 `BuffApplication` 承担，后续只审计事件随机计划、排行榜有界分页和 `training_limit.py` 兼容读写，不重复迁移已关闭的结算边界。
 3. **持久状态与恢复证据**：盘点 operation ledger、outbox、projection receipt、失败/死信和 bet/payout 等历史回执的保留窗口；在有备份、checksum、dry-run、restore、reconcile 和人工决策记录前，不删除或压缩任何持久状态。
 4. **发布退出条件**：完成正式数据备份/迁移/恢复演练、P7 发布证据、全局 legacy 门禁和真实运行 readiness；只有脚本输出 `exit_ready=true` 且证据归档后，才可声明全面重构完成。
+
+### 近期执行方案（2026-10-03）
+
+1. **校准证据，不先改业务代码（已完成）**：1 名只读子代理对照 architecture 检查器、manifest、实际 blueprint 路由和已有回归，确认旧 dungeon explore intent Web permission/manifest 报告已过期。`FEATURE.routes` 已声明 `POST /api/v1/dungeon/explore/intent`/`user`，实际 blueprint 路由匹配，且 handler 使用 `guard("user", permission, write=True)`；既有测试也核对五条路由并覆盖 permission/CSRF。未改代码、未跑测试/导入/编译、未访问数据库或生成缓存；不重复补已有声明。若完整 architecture CLI 仍报告此项，后续须先定位实际运行差异，不把静态旧记录当作当前 blocker。
+2. **回到首要 blocker：player/economy 默认旧写路径**。按真实生产调用图，每次只选一个由默认 command、scheduler 或 Web 可达的 `xiuxian2_handle`/`transaction_service` 写边界；先证明 owner、写入和回放语义，再迁到 application/repository。旧实现保留为显式 compatibility/rollback；不按旧 service/helper 的存在与否批量删代码。
+3. **逐域关闭余项**：仅在 player/economy 阶段取得可验证进展后，按上方领域顺序继续。洞府/地图只处理列出的完整-list attach/工作集/逐候选 I/O 和真实默认写边界；副本队伍 legacy writer/reader、历史冲突修复、Web actor 绑定等各自独立计划，不合并清洗历史数据。
+4. **持久状态与发布最后验收**：ledger、outbox、projection receipt、失败/死信、批次目标和备份均不是缓存；没有保留窗口、checksum 备份、dry-run、restore、reconcile 和人工处置证据前不删除/压缩。切片只清理由本轮明确生成的 `/tmp`、pytest/pyc 产物，不清系统 page cache、业务共享缓存、`data/`、运行库或未知文件；每次重任务前检查 RAM/磁盘阈值，测试和恢复保持串行。
+5. **子代理分工**：本次已使用 1 名只读代理完成第 1 项证据交叉核对；后续只有在一个独立边界能明确文件/入口且不竞争 SQLite/测试资源时才再委派。代码、测试、资源监测、清理、文档和提交均由主线程负责；每片记录代理职责和未执行事项。
+
+### 本轮全服状态重置方案（2026-10-04）
+
+1. 只处理 `xiuxian_admin.restate_` 无参数的全服批处理。1 名只读代理已确认默认入口当前先调用旧 `get_all_user_id()` 全量 `fetchall`，经缓存 deepcopy、ID list/tuple/set/sort 和 JSON roster 多次复制；application 仍转发到 `transaction_service`，operation 表由请求期 DDL 创建。代理未改代码、运行测试/导入/编译、访问数据库或生成缓存。
+2. 主线程把批处理 application 接到 feature-owned SQL repository，使用 game DB SQL 冻结去重 ID 到持久 target 表；单次工作最多取 100 个 pending target，保留稳定 child operation ID、单用户 reset receipt、started/retry 和历史结果语义。默认 handler 不再读取或捕获全服 ID 列表；`@用户` 单人重置及其他管理员路径不在本片。
+3. 新增 `legacy.admin.002` startup migration 预建 batch operation/target/progress schema，并用 JSON1 SQL 回填历史 roster、原 progress 保持不变；migration 和新冻结都做磁盘预检，旧 payload 按估算工作集检查系统/cgroup RAM。SQLite cache 限约 2 MiB，临时排序使用文件。迁移先验证旧 payload、保留旧表/JSON，坏数据或空间不足时 fail closed，不删除持久历史。新请求路径只读验证 schema，缺 schema 返回明确状态，不建表。
+4. 串行验证 old/new resume、completed replay、operation conflict、缺用户、目标写入与 receipt 故障回滚、低磁盘/损坏 legacy payload migration、player/game owner 路由和不调用 `get_all_user_id` 的默认入口。测试禁用 pytest/字节码缓存，所有数据库和缓存产物限于本片专用 `/tmp`；恢复演练与测试串行，收尾只清理本片已退出进程生成的临时文件并复核磁盘/RAM。
+5. 子代理分工：复用前序 1 名只读默认调用图审计；本续行另委派 1 名只读 migration 路由、SQLite JSON1 与容量预检范例审计。两者均未改文件、跑测试/导入/编译、访问数据库或生成缓存；代码与测试不委派。主线程负责实现、串行验收、最终 diff、资源收尾和进度记录。切片完成且远端 SHA 核验后，自动进入 player/economy 下一条真实默认旧写路径，不把该批处理迁移当成全局 blocker 关闭。
+
+**本片实现与验收（2026-10-04）**：`features/admin/tests/test_player_status_batch_repository.py` `8 passed`，覆盖 legacy JSON target 回填与 migration 重跑、原 progress 保留、冻结集合/100 人上限、低磁盘与低 RAM fail closed、新 operation 磁盘预检、receipt 故障重放（含 legacy forced child）、缺 schema、game-only migration 路由和默认 handler 无全量名单读取。refactor inventory 由 exporter 更新并通过 `--check`；`check_full_refactor_progress.py --json` 的本片四项门禁均为 `true`；全局 `exit_ready=false` 仍由既有 transaction service 与 `xiuxian2_handle` 阻塞。旧顶层 batch/single-reset 测试 collection 被已知 legacy plugin `get_active_user_id` 导入错误阻断，未执行且未扩大修复。最终回归使用专用 `/tmp/admin-reset-batch-final3-20261004`，关闭 pytest cacheprovider/pyc；本轮临时产物在验收后核对并清理。
 
 ### 子代理与资源约束
 

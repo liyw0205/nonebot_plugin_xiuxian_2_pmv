@@ -1510,40 +1510,25 @@ async def hmll_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: 
 async def restate_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """重置用户状态"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
-    # Keep the empty-argument entry explicitly tied to the resumable batch
-    # facade; the normalized parsing below also covers mention-only events.
-    if not args:
-        _batch_operator_id = str(get_user_id(event) or "unknown")
-        _batch_max_stamina = XiuConfig().max_stamina
-        _batch_running = admin_application.find_player_status_batch(
-            _batch_operator_id, _batch_max_stamina
-        )
-        _batch_reset = admin_application.reset_player_status_batch
     give_qq = get_at_user_id(args)
     plain_text = (args.extract_plain_text() if args is not None else "") or ""
     plain_args = plain_text.split()
     # 无纯文本判空：QQ 官方 AT 事件可能带 mention 段，bool(args) 为真却无道号
     if not plain_args and not give_qq:
-        all_users = _sql_message().get_all_user_id()
         operator_id = str(get_user_id(event) or "unknown")
         max_stamina = XiuConfig().max_stamina
         running_operation = admin_application.find_player_status_batch(
             operator_id, max_stamina
         )
-        if not all_users and not running_operation:
-            await handle_send(bot, event, "当前没有可重置的用户")
-            await restate.finish()
         operation_id = running_operation or _admin_operation_id(
             event, "player-status-reset-all", "all"
         )
-        users = tuple(all_users or ())
 
         def _work():
             return run_chunked_until_done(
                 lambda: admin_application.reset_player_status_batch(
                     operation_id,
                     operator_id,
-                    users,
                     max_stamina,
                 )
             )
@@ -1551,6 +1536,14 @@ async def restate_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
         def _done(result):
             if result.status == "operation_conflict":
                 return "本次全服状态重置与已记录计划冲突"
+            if result.status == "schema_missing":
+                return "全服状态重置服务尚未就绪，请检查启动迁移。"
+            if result.status == "insufficient_storage":
+                return "磁盘空间不足，已停止全服状态重置；释放空间后可重新执行。"
+            if result.total == 0:
+                return "当前没有可重置的用户"
+            if result.status not in {"applied", "duplicate"}:
+                return f"全服重置状态未完成：{result.status}"
             return (
                 f"所有用户信息重置完成！已处理 {result.completed}/{result.total} 名玩家，"
                 f"成功重置 {result.reset_users} 名，跳过 {result.skipped_users} 名"
@@ -1560,10 +1553,7 @@ async def restate_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
             bot,
             event,
             job_key=f"player-status-reset-all:{operator_id}",
-            start_msg=(
-                f"🔄 全服重置状态已在后台开始（共 {len(users)} 人），"
-                f"完成后另行通知；期间其他指令可正常使用。"
-            ),
+            start_msg="全服重置状态已在后台开始，完成后另行通知；期间其他指令可正常使用。",
             work=_work,
             done_msg=_done,
             fail_prefix="全服重置状态失败",

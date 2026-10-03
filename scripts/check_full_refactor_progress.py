@@ -734,6 +734,11 @@ def _slice_status() -> dict[str, dict[str, object]]:
     ]
     impart_pk_facade = (PACKAGE / "xiuxian" / "xiuxian_impart_pk" / "__init__.py").read_text(encoding="utf-8")
     admin_facade = (PACKAGE / "xiuxian" / "xiuxian_admin" / "__init__.py").read_text(encoding="utf-8")
+    admin_status_batch_handler = admin_facade[
+        admin_facade.index("async def restate_") : admin_facade.index(
+            "@set_xiuxian.handle", admin_facade.index("async def restate_")
+        )
+    ]
     admin_rename_handler = admin_facade[
         admin_facade.index("@admin_rename_cmd.handle") : admin_facade.index("# GM加灵石")
     ]
@@ -763,6 +768,10 @@ def _slice_status() -> dict[str, dict[str, object]]:
     ]
     admin_asset_application = (PACKAGE / "features" / "admin_asset" / "application.py").read_text(encoding="utf-8")
     legacy_admin_application = (PACKAGE / "features" / "admin" / "application.py").read_text(encoding="utf-8")
+    admin_status_batch_repository = (PACKAGE / "features" / "admin" / "player_status_batch_repository.py").read_text(encoding="utf-8")
+    admin_feature_migrations = (PACKAGE / "features" / "admin" / "migrations.py").read_text(encoding="utf-8")
+    legacy_migrated = (PACKAGE / "features" / "_legacy_migrated.py").read_text(encoding="utf-8")
+    admin_status_batch_repository_tests = (PACKAGE / "features" / "admin" / "tests" / "test_player_status_batch_repository.py").read_text(encoding="utf-8")
     admin_asset_stone_application = admin_asset_application[
         admin_asset_application.index("    def adjust_stone(") : admin_asset_application.index("    def adjust_impart_stone(")
     ]
@@ -3864,7 +3873,36 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "root_change_application_owned": "admin_asset_application.change_root(" in admin_facade,
             "impart_stone_application_owned": "admin_asset_application.adjust_impart_stone(" in admin_facade,
             "accessory_application_owned": "admin_asset_application.adjust_accessory(" in admin_facade,
-            "player_status_batch_application_owned": "admin_application.reset_player_status_batch(" in admin_facade,
+            "player_status_batch_application_owned": (
+                "AdminPlayerStatusBatchResetSqlRepository" in legacy_admin_application
+                and "self.player_status_batch_repository.reset(" in legacy_admin_application
+                and "AdminPlayerStatusBatchResetService" not in legacy_admin_application
+            ),
+            "player_status_batch_default_entry_bounded": (
+                "admin_application.find_player_status_batch(" in admin_status_batch_handler
+                and "admin_application.reset_player_status_batch(" in admin_status_batch_handler
+                and "get_all_user_id()" not in admin_status_batch_handler
+                and "tuple(all_users" not in admin_status_batch_handler
+                and "MAX_CHUNK_SIZE = 100" in admin_status_batch_repository
+                and "ORDER BY t.ordinal LIMIT ?" in admin_status_batch_repository
+                and "def _has_target_capacity(" in admin_status_batch_repository
+                and "shutil.disk_usage" in admin_status_batch_repository
+            ),
+            "player_status_batch_startup_migration_and_capacity": (
+                '("legacy.admin.002", apply_admin_player_status_batch_reset)' in legacy_migrated
+                and "def apply_admin_player_status_batch_reset(" in admin_feature_migrations
+                and "json_each(" in admin_feature_migrations
+                and "shutil.disk_usage" in admin_feature_migrations
+                and "MemAvailable:" in admin_feature_migrations
+            ),
+            "player_status_batch_recovery_and_resource_tests": (
+                "test_legacy_batches_backfill_targets_and_keep_progress" in admin_status_batch_repository_tests
+                and "test_progress_failure_replays_stable_child_receipt" in admin_status_batch_repository_tests
+                and "test_legacy_forced_child_receipt_remains_replayable" in admin_status_batch_repository_tests
+                and "test_new_batch_freezes_targets_and_caps_each_chunk_at_100" in admin_status_batch_repository_tests
+                and "test_new_batch_checks_disk_before_freezing_targets" in admin_status_batch_repository_tests
+                and "test_migration_capacity_and_database_routing" in admin_status_batch_repository_tests
+            ),
             "item_batch_application_owned": (
                 "AdminItemBatchSqlRepository" in admin_asset_application
                 and "admin_asset_application.find_running_item_batch(" in admin_item_grant_handler

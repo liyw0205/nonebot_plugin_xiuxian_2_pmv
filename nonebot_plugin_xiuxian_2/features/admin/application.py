@@ -4,24 +4,45 @@ from pathlib import Path
 
 from ...paths import get_paths
 from .._migrated_application import MigratedFeatureApplication
+from .player_status_batch_repository import AdminPlayerStatusBatchResetSqlRepository
 from .repository import AdminRepository
 
 
 class AdminApplication(MigratedFeatureApplication):
-    def __init__(self, database: str | Path, *, repository: AdminRepository | None = None) -> None:
+    def __init__(
+        self,
+        database: str | Path,
+        *,
+        repository: AdminRepository | None = None,
+        player_status_batch_repository: AdminPlayerStatusBatchResetSqlRepository | None = None,
+    ) -> None:
         super().__init__(database, feature="admin", repository=repository or AdminRepository(database))
+        self.player_status_batch_repository = (
+            player_status_batch_repository
+            or AdminPlayerStatusBatchResetSqlRepository(database)
+        )
 
     def reset_player_status(self, *args, **kwargs):
         from ...xiuxian.xiuxian_admin.transaction_service import AdminPlayerStatusResetService
         return AdminPlayerStatusResetService(self.database).reset(*args, **kwargs)
 
     def find_player_status_batch(self, operator_id: str, max_stamina: int) -> str | None:
-        from ...xiuxian.xiuxian_admin.transaction_service import AdminPlayerStatusBatchResetService
-        return AdminPlayerStatusBatchResetService(self.database).find_running(operator_id, max_stamina)
+        return self.player_status_batch_repository.find_running(operator_id, max_stamina)
 
-    def reset_player_status_batch(self, *args, **kwargs):
-        from ...xiuxian.xiuxian_admin.transaction_service import AdminPlayerStatusBatchResetService
-        return AdminPlayerStatusBatchResetService(self.database).reset(*args, **kwargs)
+    def reset_player_status_batch(
+        self,
+        operation_id: str,
+        operator_id: str,
+        max_stamina: int,
+        *,
+        chunk_size: int = 100,
+    ):
+        return self.player_status_batch_repository.reset(
+            operation_id,
+            operator_id,
+            max_stamina,
+            chunk_size=chunk_size,
+        )
 
     def grant_accessory_batch(self, operation_id: str, operator_id: str, user_ids,
                               item_id: int, item_name: str, quality: int,

@@ -2649,6 +2649,7 @@
     "admin_level_change_operations",
     "admin_player_status_batch_reset_operations",
     "admin_player_status_batch_reset_progress",
+    "admin_player_status_batch_reset_targets",
     "admin_player_status_reset_operations",
     "admin_root_change_operations",
     "admin_stone_adjustment_operations",
