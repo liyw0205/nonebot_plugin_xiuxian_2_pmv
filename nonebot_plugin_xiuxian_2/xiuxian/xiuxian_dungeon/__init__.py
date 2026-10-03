@@ -58,10 +58,10 @@ from ...infrastructure.clock import SystemClock
 
 _sql_message_instance = None
 items = Items()
-dungeon_application = DungeonApplication(get_paths().game_db, get_paths().player_db)
+runtime_clock = SystemClock()
+dungeon_application = DungeonApplication(get_paths().game_db, get_paths().player_db, clock=runtime_clock)
 dungeon_team_application = DungeonTeamApplication(get_paths().player_db, game_database=get_paths().game_db)
 dungeon_ids = UUIDGenerator()
-runtime_clock = SystemClock()
 
 
 def _sql_message():
@@ -83,7 +83,9 @@ _dungeon_manager_instance = None
 def _dungeon_manager():
     global _dungeon_manager_instance
     if _dungeon_manager_instance is None:
-        _dungeon_manager_instance = DungeonManager()
+        _dungeon_manager_instance = DungeonManager(
+            clock=runtime_clock, business_timezone=getattr(scheduler, "timezone", None)
+        )
     return _dungeon_manager_instance
 
 

@@ -66,8 +66,8 @@ class DungeonResetSqlRepository:
         return date.fromisoformat(str(value).strip()).isoformat()
 
     @classmethod
-    def automatic_operation_id(cls, business_date: Any = None) -> str:
-        return f"dungeon-reset:auto:{cls._date(business_date or date.today())}"
+    def automatic_operation_id(cls, business_date: Any) -> str:
+        return f"dungeon-reset:auto:{cls._date(business_date)}"
 
     @classmethod
     def _snapshot(cls, value: Any) -> dict[str, Any]:

@@ -1,7 +1,6 @@
 import json
 import threading
 import time
-from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Any, Optional
 
@@ -154,6 +153,13 @@ class DungeonManager:
         # reset_service; normal runtime construction always sets the application.
         return getattr(self, "reset_service")
 
+    def _reset_operation(self, operation_id: str):
+        application = self._reset_application()
+        reader = getattr(application, "reset_operation_result", None)
+        if reader is None:
+            reader = getattr(application, "operation_result", None)
+        return reader(operation_id) if operation_id and callable(reader) else None
+
     _instance = None
     _has_init = False
     _lock = threading.RLock()
@@ -208,13 +214,14 @@ class DungeonManager:
                 cls._instance = super(DungeonManager, cls).__new__(cls)
         return cls._instance
 
-    def __init__(self, random_source=None, clock=None):
+    def __init__(self, random_source=None, clock=None, *, business_timezone=None):
         with self._lock:
             if self.__class__._has_init:
                 return
             self.__class__._has_init = True
             self.random = random_source or SystemRandom()
             self.clock = clock or SystemClock()
+            self.business_timezone = business_timezone
             self.ids = UUIDGenerator()
 
             self.plugin_path = Path(__file__).parent.absolute()
@@ -225,7 +232,9 @@ class DungeonManager:
             self.dungeon_data_path.mkdir(parents=True, exist_ok=True)
 
             self.dungeon_templates = self._load_dungeon_templates()
-            self.dungeon_application = DungeonApplication(get_paths().game_db, get_paths().player_db)
+            self.dungeon_application = DungeonApplication(
+                get_paths().game_db, get_paths().player_db, clock=self.clock
+            )
 
             self.current_dungeon: Optional[DungeonTemplate] = None
             self._load_or_init_today_dungeon()
@@ -233,7 +242,7 @@ class DungeonManager:
             logger.info("DungeonManager 初始化完成")
 
     def _get_current_date(self) -> str:
-        return self.clock.now().strftime("%Y-%m-%d")
+        return self.clock.now().astimezone(self.business_timezone).date().isoformat()
 
     def _load_dungeon_templates(self) -> List[DungeonTemplate]:
         templates = []
@@ -299,13 +308,8 @@ class DungeonManager:
         dungeon_id = str(global_state.get("dungeon_id") or "")
         if not dungeon_id:
             return None
-        operation = None
         operation_id = str(global_state.get("reset_operation_id") or "")
-        operation_reader = getattr(self._reset_application(), "reset_operation_result", None)
-        if operation_reader is None:
-            operation_reader = getattr(self._reset_application(), "operation_result", None)
-        if operation_id and callable(operation_reader):
-            operation = operation_reader(operation_id)
+        operation = self._reset_operation(operation_id)
         snapshot = dict(operation.dungeon_snapshot) if operation is not None else {}
         if snapshot and str(snapshot.get("dungeon_id", "")) != dungeon_id:
             snapshot = {}
@@ -369,6 +373,7 @@ class DungeonManager:
             result = self.reset_dungeon(
                 DungeonResetSqlRepository.automatic_operation_id(current_date),
                 source="crossday",
+                business_date=current_date,
             )
             logger.info(
                 f"初始化今日副本成功: {self.current_dungeon.id} - "
@@ -394,6 +399,7 @@ class DungeonManager:
                 self.reset_dungeon(
                     DungeonResetSqlRepository.automatic_operation_id(current_date),
                     source="crossday",
+                    business_date=current_date,
                 )
                 return
 
@@ -408,19 +414,29 @@ class DungeonManager:
                 logger.warning(f"全局副本ID无效: {dungeon_id}，重新初始化今日副本")
                 self._load_or_init_today_dungeon()
 
-    def reset_dungeon(self, operation_id: str | None = None, source: str = "manual"):
+    def reset_dungeon(self, operation_id: str | None = None, source: str = "manual", *, business_date: str | None = None):
         """
         每日刷新副本。
         只有这里才会重置所有玩家副本状态。
         """
         with self._lock:
-            current_date = self._get_current_date()
+            source = str(source).strip().lower()
+            if operation_id is not None:
+                operation_id = str(operation_id).strip()
+            previous = None
+            if operation_id is not None:
+                previous = self._reset_operation(operation_id)
+            # A retried message keeps its original date; explicitly supplied
+            # dates still participate in repository conflict checks.
+            if previous is not None and source == "manual" and business_date is None and str(previous.source) == "manual":
+                current_date = str(previous.business_date)
+            else:
+                current_date = business_date if business_date is not None else self._get_current_date()
 
-            if not self.dungeon_templates:
+            if not self.dungeon_templates and previous is None:
                 self.current_dungeon = None
                 raise RuntimeError("副本刷新失败：没有可用副本模板")
 
-            source = str(source).lower()
             if operation_id is None:
                 operation_id = (
                     DungeonResetSqlRepository.automatic_operation_id(current_date)
@@ -451,31 +467,29 @@ class DungeonManager:
             return result
 
     def get_dungeon_progress(self) -> Dict[str, Any]:
-        self.sync_current_dungeon()
-
-        if not self.current_dungeon:
+        with self._lock:
+            self.sync_current_dungeon()
+            global_state = self._get_global_state() or {}
+            template = self._published_template(global_state)
+            if template is None:
+                return {
+                    "name": "未知副本",
+                    "description": "副本数据加载失败",
+                    "total_layers": 0,
+                    "date": str(global_state.get("date") or ""),
+                    "type": "explore"
+                }
+            self.current_dungeon = template
             return {
-                "name": "未知副本",
-                "description": "副本数据加载失败",
-                "total_layers": 0,
-                "date": self._get_current_date(),
-                "type": "explore"
+                "dungeon_id": template.id,
+                "name": template.name,
+                "description": template.description,
+                "total_layers": template.total_layers,
+                "date": str(global_state.get("date") or ""),
+                "type": template.type,
+                "reset_generation": int(global_state.get("reset_generation") or 0),
+                "reset_operation_id": str(global_state.get("reset_operation_id") or ""),
             }
-
-        return {
-            "dungeon_id": self.current_dungeon.id,
-            "name": self.current_dungeon.name,
-            "description": self.current_dungeon.description,
-            "total_layers": self.current_dungeon.total_layers,
-            "date": self._get_current_date(),
-            "type": self.current_dungeon.type,
-            "reset_generation": int(
-                (self._get_global_state() or {}).get("reset_generation", 0) or 0
-            ),
-            "reset_operation_id": str(
-                (self._get_global_state() or {}).get("reset_operation_id", "") or ""
-            ),
-        }
 
     def get_player_status(self, user_id) -> Dict[str, Any]:
         """

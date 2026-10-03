@@ -255,6 +255,11 @@ class RefactorProgressTests(unittest.TestCase):
         self.assertTrue(dungeon_team["explore_settlement_missing_schema_retryable"])
         self.assertTrue(dungeon_team["dungeon_reset_request_path_has_no_ddl"])
         self.assertTrue(dungeon_team["dungeon_global_state_read_feature_owned"])
+        self.assertTrue(dungeon_team["reset_clock_injected"])
+        self.assertTrue(dungeon_team["reset_business_date_uses_scheduler_timezone"])
+        self.assertTrue(dungeon_team["reset_crossday_business_date_frozen"])
+        self.assertTrue(dungeon_team["reset_progress_uses_published_snapshot"])
+        self.assertTrue(dungeon_team["reset_manual_crossday_replay_covered"])
         self.assertTrue(dungeon_team["explore_random_sources_operation_scoped"])
         self.assertTrue(dungeon_team["explore_resolution_intent_frozen_inputs"])
         bank = slices["bank"]

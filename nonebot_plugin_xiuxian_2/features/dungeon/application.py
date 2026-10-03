@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any, Mapping
 
 from ...core.errors import ConflictError, DomainError, ValidationError
+from ...core.ports import Clock
 from ...core.result import OperationOutcome, ReplyPlan
 from ...infrastructure.database import DatabaseUnitOfWork, OperationLedger
 from ...infrastructure.clock import SystemClock
@@ -23,14 +24,18 @@ def _data(raw: Any) -> dict[str, Any]:
 
 
 class DungeonApplication:
-    def __init__(self, game_database: str | Path, player_database: str | Path, *, repository: DungeonRepository | None = None, ledger: OperationLedger | None = None) -> None:
+    def __init__(self, game_database: str | Path, player_database: str | Path, *, repository: DungeonRepository | None = None, ledger: OperationLedger | None = None, clock: Clock | None = None) -> None:
         self.game_database = str(game_database)
         self.player_database = str(player_database)
         self.repository = repository
-        self.ledger = ledger or OperationLedger()
+        self.clock = clock or SystemClock()
+        self.ledger = ledger or OperationLedger(clock=self.clock)
 
     def _repository(self) -> DungeonRepository:
         return self.repository or DungeonSessionSqlRepository(self.game_database, self.player_database)
+
+    def _reset_repository(self) -> DungeonResetSqlRepository:
+        return DungeonResetSqlRepository(self.player_database, clock=self.clock)
 
     def _execute_purchase(self, request: DungeonPurchaseRequest) -> OperationOutcome[dict[str, Any]]:
         action = "dungeon.purchase"
@@ -77,16 +82,16 @@ class DungeonApplication:
         return self._repository().session_transition(operation_id, user_id, dict(expected), dict(dungeon), action)
 
     def reset(self, operation_id: str, business_date: Any, source: str, dungeon_factory: Any) -> dict[str, Any]:
-        return DungeonResetSqlRepository(self.player_database, clock=SystemClock()).reset(operation_id, business_date, source, dungeon_factory)
+        return self._reset_repository().reset(operation_id, business_date, source, dungeon_factory)
 
     def reset_operation_result(self, operation_id: str) -> dict[str, Any] | None:
-        return DungeonResetSqlRepository(self.player_database).operation_result(operation_id)
+        return self._reset_repository().operation_result(operation_id)
 
     def global_state(self) -> dict[str, Any] | None:
-        return DungeonResetSqlRepository(self.player_database).global_state()
+        return self._reset_repository().global_state()
 
     def ensure_player_status(self, user_id: str, fallback_snapshot: Mapping[str, Any] | None = None) -> dict[str, Any]:
-        return DungeonResetSqlRepository(self.player_database).ensure_player_status(user_id, fallback_snapshot)
+        return self._reset_repository().ensure_player_status(user_id, fallback_snapshot)
 
     def replay(self, *, operation_id: str, user_id: str) -> Any:
         return self._repository().replay(operation_id, user_id)

@@ -55,8 +55,8 @@
 2. **其余领域边界**：按 cultivation/training、combat/dungeon/boss、sect/trade/scheduler/Web 的顺序完成真实入口、随机/时间注入、operation receipt、启动 migration、跨库恢复和缺 schema fail-closed。
    - 当前洞府未完成项：随机潜入与同节点读取调用 `list_users_by_fields` 后完整物化候选用户，再逐个读取 profile/洞府；`PlayerDataManager._field_list_cache` 的 TTL entry 没有容量上限或主动过期清扫。单独设计有界/流式候选选择，并给共享 field-list cache 增加可证明的条目或字节上限及过期回收；不得复制或主动清空 `ITEMS_CACHE` 等其他玩法共享缓存。
    - 下一洞府候选/缓存切片委派 1 名只读子代理梳理 field-list cache 的生产调用点、失效路径与条目体积风险；子代理不改代码、不跑 SQLite 测试，主线程负责实现、串行验收和资源收尾。
-   - 当前副本已完成项：player-only `dungeon.007`、prepared settlement schema、operation-scoped RNG、game-only `dungeon.008` 输入冻结，以及 player-only `dungeon.009` 队伍成员索引/同事务投影同步和 session schema/ABA 检查。成员读取与探索结算都改为单行选择；真实 `user_xiuxian` owner 为 game DB，队伍写入仍只在 player UoW 内执行。
-   - 当前副本未完成项：reset 时钟注入；legacy team reader、`PersistentTeamInviteMapping` 无界迭代/请求期 DDL，以及每邀请一个无上限 sleeper task；intent Web route 的 permission/manifest 声明。跨队历史重叠成员尚未清洗，本片仅统一选择最小 `team_id`；清洗必须独立制定备份、冲突决策和对账方案。
+   - 当前副本已完成项：player-only `dungeon.007`、prepared settlement schema、operation-scoped RNG、game-only `dungeon.008` 输入冻结、player-only `dungeon.009` 队伍成员索引/同事务投影同步和 session schema/ABA 检查，以及 reset clock 贯穿、scheduler 业务时区、跨午夜日期冻结与 manual 跨日回放。成员读取与探索结算都改为单行选择；真实 `user_xiuxian` owner 为 game DB，队伍写入仍只在 player UoW 内执行。
+   - 当前副本未完成项：默认邀请每条创建一个无上限 sleeper task；intent Web route 的 permission/manifest 声明。legacy team reader 和 `PersistentTeamInviteMapping` 的无界迭代/请求期 DDL 仍在 compatibility 内，但最新限定调用图未证明默认 handler 可达，不以 helper 存在作为迁移依据。跨队历史重叠成员尚未清洗，本片仅统一选择最小 `team_id`；清洗必须独立制定备份、冲突决策和对账方案。
    - 队伍回滚边界：legacy writer 不维护 `.009` 投影，不得与默认新 writer 混用。回滚期间一旦发生旧写，再回默认入口必须停机并受控重建/核验投影；migration ledger 不会自动重跑已应用的 `.009`，不能仅切换开关恢复服务。
    - 最近只读调用图审计已确认普通修炼结算切到 `BuffApplication`，没有新的 `up_exp_` 旧 service 切片证据；`RewardService._grant_exp` 的生产入口仍未证明，不据此开切片。
    - 当前历练未完成项：普通修炼生命周期默认入口已由 `BuffApplication` 承担，后续只审计事件随机计划、排行榜有界分页和 `training_limit.py` 兼容读写，不重复迁移已关闭的结算边界。
@@ -93,6 +93,14 @@
 4. 用户存在性只读查询真实 game DB，不在 player DB 复制用户表；game 缺文件/用户 schema 时不记失败 receipt，已有队伍 receipt 仍可回放。子代理复核 owner、typed JSON 成员、跨队选择、ABA 和 replay-first 缺口，主线程实现修正。
 5. 测试按串行顺序执行：migration malformed/mixed JSON、索引/query plan/版本同步、receipt 失败整体回滚、分库 owner、缺 projection/依赖 schema、session 缺库/缺表/缺列、退出 handler、progress/source/architecture/inventory/内存编译/diff check。测试 fixture 必须显式应用 `.009`，不修改历史 `.004/.006/.008` migration 实现；隔离 recovery 覆盖五库备份、restore dry-run/restore 和 reconcile，不接触运行库。
 6. 验收后仅清理本轮专用 pytest/pyc/`__pycache__` 与 `/tmp` 产物，复核 `df -hT`、`df -ih`、`free -h`；不删除持久回执、运行数据库/WAL/SHM、备份或用户文件。主线程统一整合 diff、记录真实失败基线并决定提交，子代理不并行争抢 SQLite 资源。legacy writer 回滚边界和历史重叠成员必须保留为未完成项，不能以投影上线宣称已经修复。
+
+### 本轮 Reset 时钟方案（2026-10-03）
+
+1. 已复用 1 名只读子代理核对 manager/application/repository、scheduler 和 replay 契约；确认默认 UTC 时钟与 scheduler 业务时区不一致，application 丢弃注入 clock，跨午夜还可能混用 operation ID 日期、payload 日期和展示日期。代理不改文件、不跑测试、不访问运行数据库或生成缓存。
+2. 主线程将 clock 贯穿 manager/application/reset repository，生产 lazy manager 显式使用 scheduler 时区；automatic operation ID 必须接收显式业务日，crossday 的 ID/payload 复用一次冻结日期。展示使用同份已发布 global snapshot 的日期、代次和模板，不再重新取今天拼接。
+3. 同 manual operation 且未显式指定日期时，manager 从持久 receipt 恢复原业务日；repository 的显式日期/source 冲突契约保持不变。回放只同步当前已发布全局状态，不重新发布旧副本或重抽模板；历史 receipt 日期不改写。
+4. 先建立失败回归，再串行验证上海午夜/DST、daily/crossday 去重、跨午夜冻结、真实 feature manual 跨日重试、显式日期/source 冲突、同实例注入 clock 和 receipt 时间；随后验证副本既有行为、source/progress/inventory、内存编译和 diff。本片不改变 schema/migration 或正式数据，不重复执行已完成的索引切片。
+5. 使用本片独立 `/tmp/codex-dungeon-reset-clock-20261003`，禁用 pytest cacheprovider/pyc；测试完成后清理专用目录并复核资源，再提交推送、自动进入下一队列项。发布时区修正需受控核验当前 global 业务日，既有 UTC 历史日期不得自动重标记；隔离测试不能替代正式发布演练。
 
 ## 缓存清理允许范围
 

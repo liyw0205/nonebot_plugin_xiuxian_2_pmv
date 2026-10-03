@@ -325,7 +325,13 @@ def _slice_status() -> dict[str, dict[str, object]]:
     dungeon_team_repository = (PACKAGE / "features" / "dungeon" / "team_repository.py").read_text(encoding="utf-8")
     dungeon_migrations = (PACKAGE / "features" / "dungeon" / "migrations.py").read_text(encoding="utf-8")
     dungeon_reset_repository = (PACKAGE / "features" / "dungeon" / "reset_repository.py").read_text(encoding="utf-8")
+    dungeon_application = (PACKAGE / "features" / "dungeon" / "application.py").read_text(encoding="utf-8")
     dungeon_manager = (PACKAGE / "xiuxian" / "xiuxian_dungeon" / "dungeon_manager.py").read_text(encoding="utf-8")
+    dungeon_progress_read = dungeon_manager[
+        dungeon_manager.index("    def get_dungeon_progress("):
+        dungeon_manager.index("    def get_player_status(")
+    ]
+    dungeon_reset_clock_tests = (ROOT / "tests" / "test_dungeon_reset_clock_boundary.py").read_text(encoding="utf-8")
     dungeon_player_fight = (PACKAGE / "xiuxian" / "xiuxian_utils" / "player_fight.py").read_text(encoding="utf-8")
     bank_facade = (PACKAGE / "xiuxian" / "xiuxian_bank" / "__init__.py").read_text(encoding="utf-8")
     bank_handler = bank_facade[bank_facade.index("async def bank_") : bank_facade.index("def savef")]
@@ -1447,6 +1453,30 @@ def _slice_status() -> dict[str, dict[str, object]]:
                 and "DungeonExploreOperationResult" not in dungeon_facade
             ),
             "reset_application_owned": "self.dungeon_application = DungeonApplication(" in dungeon_manager and "self._reset_application().reset(" in dungeon_manager and "self.reset_service.reset(" not in dungeon_manager,
+            "reset_clock_injected": (
+                "get_paths().game_db, get_paths().player_db, clock=self.clock" in dungeon_manager
+                and "DungeonResetSqlRepository(self.player_database, clock=self.clock)" in dungeon_application
+                and "OperationLedger(clock=self.clock)" in dungeon_application
+                and "clock=SystemClock()" not in dungeon_application
+                and "date.today()" not in dungeon_reset_repository
+            ),
+            "reset_business_date_uses_scheduler_timezone": (
+                'business_timezone=getattr(scheduler, "timezone", None)' in dungeon_facade
+                and "self.clock.now().astimezone(self.business_timezone).date().isoformat()" in dungeon_manager
+            ),
+            "reset_crossday_business_date_frozen": dungeon_manager.count("business_date=current_date") == 2,
+            "reset_progress_uses_published_snapshot": (
+                '"date": str(global_state.get("date") or "")' in dungeon_progress_read
+                and "self._published_template(global_state)" in dungeon_progress_read
+                and "_get_current_date()" not in dungeon_progress_read
+                and dungeon_progress_read.count("self._get_global_state()") == 1
+            ),
+            "reset_manual_crossday_replay_covered": (
+                "previous = self._reset_operation(operation_id)" in dungeon_manager
+                and "current_date = str(previous.business_date)" in dungeon_manager
+                and "test_manual_crossday_replay_preserves_current_publication" in dungeon_reset_clock_tests
+                and 'match="operation_conflict"' in dungeon_reset_clock_tests
+            ),
             "team_schema_startup_migrated": (
                 'Migration("dungeon.006", "dungeon_team_state_schema", apply_dungeon_team_schema)' in plugin
                 and "def apply_dungeon_team_schema(" in dungeon_migrations

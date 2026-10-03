@@ -2,15 +2,15 @@
 
 状态：进行中。`v1.1.0` 的 P0-P7 发布证据继续保留，但不作为底层全面重构完成证明。
 
-**当前目标顺序（2026-10-03）**：每次只切一条经真实调用图证明的默认路径并保留可恢复回执。技能确认缓存、已迁移的日重置/普通修炼/挖矿/通天塔及 BOSS 周限购边界保持关闭；副本 `.006/.007` 启动 schema、operation-scoped RNG、game-only `.008` crash-replay 输入冻结，以及本轮 player-only `.009` 队伍有界查询/投影同步和 session schema/ABA 检查已完成。剩余目标如下，全部关闭前保持 `exit_ready=false`：
+**当前目标顺序（2026-10-03）**：每次只切一条经真实调用图证明的默认路径并保留可恢复回执。技能确认缓存、已迁移的日重置/普通修炼/挖矿/通天塔及 BOSS 周限购边界保持关闭；副本 `.006/.007` 启动 schema、operation-scoped RNG、game-only `.008` crash-replay 输入冻结、player-only `.009` 队伍有界查询/投影同步和 session schema/ABA 检查，以及本轮 reset clock/业务时区/跨午夜日期冻结与 manual 跨日回放已完成。剩余目标如下，全部关闭前保持 `exit_ready=false`：
 
 1. 继续按 player/economy、combat/dungeon/boss、sect/trade、Web/scheduler 的真实调用图迁移默认旧写入口；全局 `transaction_service`、`xiuxian2_handle` 门禁仍未关闭。普通修炼已走 `BuffApplication`，未证明有生产调用的 `RewardService._grant_exp` 不作为新切片依据。
-2. 副本独立切片：reset 时钟注入、legacy team reader、invite mapping 无界读取/请求 DDL、每邀请一个无上限 sleeper task；legacy writer 回滚后需要停机受控重建投影，跨队重叠成员仍需备份后清洗，不能直接混用新旧 writer。
+2. 副本独立切片：关闭默认邀请每条创建一个无上限 sleeper task 的可达入口。legacy team reader、invite mapping 无界读取/请求 DDL 目前只证明位于 compatibility，未证明默认 handler 可达；先保留审计边界，不重复迁移死 helper。legacy writer 回滚后需要停机受控重建投影，跨队重叠成员仍需备份后清洗，不能直接混用新旧 writer。
 3. 缓存/RAM 独立切片：洞府候选用户有界选择、共享 field-list cache 容量/过期回收；不复制或主动清空其他玩法共享缓存。签到历史日期/迁移窗口风险继续保留。
 4. 全局验收：修补既有 architecture 问题，包括副本 intent Web permission/manifest、avatar driver import、game_events/info 和 operation-id 门禁，以及旧插件 `get_active_user_id` 导入缺失；校正既有 BOSS source-quality 断言，重跑完整门禁。
 5. 正式发布：确定 ledger/outbox/receipt 保留窗口与归档格式，再完成真实数据成对备份、迁移、恢复/reconcile 和 P7 证据。持久回执不是缓存，本轮隔离 recovery 成功不能替代正式演练。
 
-**本片方案与子代理范围**：本轮完成队伍有界成员投影和 session 缺 schema/ABA 边界，具体闭环见 `docs/refactor_slice_execution_protocol.md` 的本轮队伍/session 方案。允许合理使用子代理：默认 1 名只读代理审计限定文件的调用图、schema owner、迁移路由和恢复缺口，不访问运行数据、不运行 SQLite 测试；主线程统一修改、串行测试、资源监测、缓存清理、diff 复核和提交。仅在资源允许且任务独立时增加代理，最多同时 3 名，不为使用代理而重复已完成的审计。
+**本片方案与子代理范围**：本轮完成副本 reset 时钟与业务日边界，具体闭环见 `docs/refactor_slice_execution_protocol.md` 的本轮 Reset 时钟方案。允许合理使用子代理：默认 1 名只读代理审计限定文件的调用图、schema owner、迁移路由和恢复缺口，不访问运行数据、不运行 SQLite 测试；主线程统一修改、串行测试、资源监测、缓存清理、diff 复核和提交。仅在资源允许且任务独立时增加代理，最多同时 3 名，不为使用代理而重复已完成的审计。
 
 **缓存、资源与验收约束**：测试关闭 pytest cacheprovider 和 Python 字节码写入，使用本轮专用 `/tmp` basetemp；仅在相关进程退出后清理本轮明确生成的临时目录/日志/字节码，不清理未知或业务缓存，也不碰 `.venv`、`.git`、`data/`、运行数据库/WAL/SHM、备份、持久回执或用户文件。开始重型任务前复核 `df -h`、`df -ih`、`free -h` 与高占用进程；RAM available 低于 `512 MiB`、磁盘可用低于 `10 GiB` 或 inode 异常时停止测试，重型任务串行执行。通过定向行为测试、单个 progress gate、inventory freshness、AST 编译和 `git diff --check` 后审阅 staged diff，再提交并推送；保留未暂存的用户改动。
 
@@ -5279,3 +5279,15 @@ Boss 通过 `get_rift_battle_final_attributes` 注入 `get_rift_battle_impart_da
 - 子代理分工：复用 1 名队伍调用图/schema/恢复风险只读代理，反馈 typed members、ABA、replay-first、game owner 和结算查询缺口，并在收尾只读复核方案/证据分类，未发现实质性文档遗漏；代理未改代码、跑测试、访问运行库或清理文件。主线程负责实现、串行验收、资源检查和整合。pytest cacheprovider/字节码关闭，本轮两个专用 `/tmp/codex-dungeon-team-*-20261003` 目录在测试进程退出后清理；不清理 `.git`、`.venv`、`data/`、运行数据库/WAL/SHM、备份、持久回执或用户 `boss_info.json`。
 - 资源收尾：已删除本轮 pytest/architecture/recovery 专用目录，共约 `6.5 MiB`；仓库非运行数据范围内未发现 `.pytest_cache`、`__pycache__` 或 `.pyc`。磁盘可用 `20G`、inode 使用 `14%`、RAM available `1.3GiB`，没有遗留本轮测试/恢复进程。不清理系统 page cache，也不终止用户服务来释放 RAM。
 - 剩余边界：legacy writer 不维护 `.009`，不能混用；回滚发生旧写后再回默认入口，须停机受控重建并核验投影，migration ledger 不会自动重跑。历史跨队重叠未清洗，legacy reader、mapping 无界迭代/请求 DDL、invite sleeper task 上限和 reset 时钟仍需独立切片。全局 `exit_ready=false`，继续按本文开头的目标顺序推进。
+
+## 2026-10-03 Reset 时钟与业务日边界
+
+- 已证明并修复默认入口的 UTC/scheduler 时区错配：`SystemClock` 保持返回 UTC instant，lazy manager 显式注入 runtime clock 和 scheduler timezone；manager 按业务时区转换日期，application/reset repository 和默认 ledger 共享该 clock。上海本地 00:01 按新业务日发布，不再拖到 08:00；其他 repository 的随机/时钟边界不在本片宣称完成。
+- crossday 初始化/同步冻结一次业务日，automatic ID 与 payload 共用该日期，feature API 不再默认调用 `date.today()`。副本展示从同份已发布 global snapshot 取模板、日期、generation 和 operation ID，缺 publication 时保持失败 DTO/零层数且日期为空或已存日期，不伪造今天。
+- 给定 operation ID 先只读查 receipt；仅未显式指定日期的 manual 同源重试恢复原业务日。隐式跨日/无 live 模板和显式原日期都可回放；显式不同日期或 source 仍为 `operation_conflict`，不重抽、不清新进度，不把旧 receipt 快照重新发布到全局。历史日期/回执未修改，无新增 migration 或请求期 DDL。
+- 最终串行行为回归 `124 passed`，其中本片 clock/timezone/scheduler/午夜冻结/快照一致性/manual replay/无 publication 回归 `18` 项；progress 聚合 `1`、inventory `2`、lazy-reader `2`、架构单元测试 `15`、副本 source-quality `7` 共 `27 passed`。本片五项 progress gate 为 true；8 个变更 Python 文件内存编译及 `git diff --check` 通过。未运行全量 pytest 或重新宣称全量 source-quality 已通过，上一片确认的既有 BOSS source 断言失败仍开放。
+- 隔离五库 recovery smoke 的 backup、restore dry-run/restore 成功，reconcile clean，operations/outbox/dead events 均为 0；恢复后的 migration 行数实查 game/player/trade/impart/message 为 `203/57/7/1/1`，`.009` 仍仅在 player。全量 architecture CLI 仍为 `ok=false`，列出的 17 项既有错误包括 avatar driver import、副本 intent permission/manifest、game_events/info 和 operation-id 门禁；空隔离目录的静态资源缺失日志不作为玩法缺陷修复依据，`get_active_user_id` 导入问题仍开放。
+- 复用 1 名只读子代理审计时钟调用图与最终 replay/展示边界；代理发现的无模板显式日期回放及失败展示 DTO 漏测均已补齐。代理未改代码、跑测试、访问运行数据库或产生缓存；主线程统一实现、串行验收和资源收尾。pytest cacheprovider/pyc 禁用，所有 pytest/architecture/recovery 产物只在本片 `/tmp/codex-dungeon-reset-clock-20261003`。
+- 验收进程退出后已删除该专用目录（约 `3.7 MiB`），仓库保护范围外未发现 pytest/pyc 缓存；收尾磁盘可用 `19G`、inode 使用 `14%`、RAM available `1.2GiB`。运行数据库/WAL/SHM、正式备份、持久回执、`.git`、`.venv`、`data/` 和用户 `boss_info.json` 均保留。
+- 发布风险：生产 manager 固定使用初始化时的 scheduler timezone，时区调整需要受控重启；上线前核验当前 global 业务日，旧 UTC 历史 receipt 不自动重标记。本轮未访问正式运行库、执行正式 migration/恢复或补齐 P7；全局 `exit_ready=false`。
+- 自动接入下一队列项的只读审计已证明：默认邀请 handler 调用 `asyncio.create_task(expire_team_invite(...))`，每条 sleeper 保留 bot/event 且无任务容量/跟踪/重启恢复；legacy mapping/reader 未在默认 handler 调用图中证明可达。下一片应关闭这个真实任务资源边界，不因 compatibility helper 存在而重复迁移。
