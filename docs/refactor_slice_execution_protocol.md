@@ -53,8 +53,8 @@
 
 1. **player/economy 旧写路径清零**：继续按真实调用图迁移 `xiuxian2_handle`、剩余 `transaction_service` 的默认 handler、scheduler 和 Web 写入；旧实现只能作为显式 compatibility/rollback，不得由默认入口构造或调用。
 2. **其余领域边界**：按 cultivation/training、combat/dungeon/boss、sect/trade/scheduler/Web 的顺序完成真实入口、随机/时间注入、operation receipt、启动 migration、跨库恢复和缺 schema fail-closed。
-   - 当前洞府未完成项：随机潜入与同节点读取调用 `list_users_by_fields` 后完整物化候选用户，再逐个读取 profile/洞府；`PlayerDataManager._field_list_cache` 的 TTL entry 没有容量上限或主动过期清扫。单独设计有界/流式候选选择，并给共享 field-list cache 增加可证明的条目或字节上限及过期回收；不得复制或主动清空 `ITEMS_CACHE` 等其他玩法共享缓存。
-   - 下一洞府候选/缓存切片委派 1 名只读子代理梳理 field-list cache 的生产调用点、失效路径与条目体积风险；子代理不改代码、不跑 SQLite 测试，主线程负责实现、串行验收和资源收尾。
+   - 当前洞府进度：共享 field-list cache 的 64 项/8 MiB 总预算/1 MiB 单项预算及过期回收、指定潜入单目标只读查询均已提交推送；随机潜入的 256 raw 元数据分页/单行状态/公平 reservoir 已完成验收，详见下方收口记录。下一片审计地图 nearby 真实消费方；单个大字段峰值、逐候选事务/attach 开销和缺索引耗时仍单独开放，不以候选容量上限宣称进程 RAM 全部有界。不得复制或主动清空 `ITEMS_CACHE` 等其他玩法共享缓存。
+   - 本轮随机候选切片复用 1 名只读子代理核对过滤/分页/公平性/取消与 schema 兼容；子代理不改代码、不跑 SQLite 测试、不访问运行库或生成缓存，主线程负责实现、串行验收和资源收尾。
    - 当前副本已完成项：player-only `dungeon.007`、prepared settlement schema、operation-scoped RNG、game-only `dungeon.008` 输入冻结、player-only `dungeon.009` 队伍成员索引/同事务投影同步和 session schema/ABA 检查，以及 reset clock 贯穿、scheduler 业务时区、跨午夜日期冻结与 manual 跨日回放；本轮 `.010` 到期索引/ID 路由和单 worker 关闭默认每邀请一个 sleeper 的任务资源边界。成员读取与探索结算都改为单行选择；真实 `user_xiuxian` owner 为 game DB，队伍写入仍只在 player UoW 内执行。
    - 当前副本未完成项：Web 认证 actor 绑定、正式 migration/recovery/P7，历史损坏邀请/冲突 receipt 的受控修复。intent Web manifest 已补齐，现有 permission/CSRF guard 未改；全局 `user` resolver 默认允许，operation identity 校验不能替代认证。通知不是 outbox，不能宣称持久补发。legacy team reader、`PersistentTeamInviteMapping` 无界迭代/请求期 DDL 和旧 expiry helper 仍保留兼容实现，但最新限定调用图未证明默认 handler 可达，不以 helper 存在作为迁移依据。跨队历史重叠成员尚未清洗，本片仅统一选择最小 `team_id`；清洗必须独立制定备份、冲突决策和对账方案。
    - 队伍回滚边界：legacy writer 不维护 `.009` 投影，不得与默认新 writer 混用。回滚期间一旦发生旧写，再回默认入口必须停机并受控重建/核验投影；migration ledger 不会自动重跑已应用的 `.009`，不能仅切换开关恢复服务。
@@ -145,16 +145,20 @@
 
 本片执行收口（2026-10-03）：Application/repository/matcher 已改为单目标只读查询，删除旧全量同节点 helper；无新增 migration、cache、DDL 或持久状态变更。位置保持 legacy JSON 解码、字符串 ID 参数和三维等值规则，名字按 BINARY 精确匹配；game 重复 profile 先取首行再过滤名字，map 同名首人明确 rowid 排序，资格检查顺序不变。洞府/潜入/地图聚合 `84 passed`，最终 named-target/inventory `39 passed`，cache/named-target progress `2 passed`；三项 named-target gate 全 true，inventory freshness、7 个 Python 文件 AST 内存编译、diff check 通过。完整 architecture 最终仍有既有 15 项错误，无新增洞府错误；全局 `exit_ready=false`。隔离五库 backup、restore dry-run/restore、265 项 migration recovery/reconcile clean 通过，路由 `203/58/7/1/1`，不是正式发布。复用 1 名只读子代理完成调用图/实现复核，代理未改代码、运行测试、访问运行库或生成缓存；主线程补齐其非阻断边界建议并串行验收。测试 pytest/pyc 禁用；导出器产生的临时仓库字节码已清理，inventory 的测试 import 误识别已通过普通 import 避免，未改扫描器或引入虚假表名。进程退出后已删除专用 `/tmp/codex-dongfu-nearby-target-20261003`（约 3.9 MiB），保护运行数据库/WAL/SHM、正式备份、持久回执、`data/`、`.git`、`.venv` 和用户 `boss_info.json`。磁盘 `19G`、RAM available `1.3GiB`；随机候选 RAM 边界仍开放。
 
-### 下一片随机潜入有界选择方案
+### 本轮随机潜入有界选择方案
 
 1. 只处理真实 `_get_random_dongfu_target`，不重做已完成的指定名字查询。通过 feature-owned 只读 repository 读取 player 洞府候选，按 rowid keyset 每页至多 256 行，冻结扫描边界；不使用共享 field-list cache，不把整个候选集或 profile 列表保存在 RAM。
-2. 优先在调用内的单个只读事务中分页，局部 context/finally 确保成功、异常、取消都关闭连接；若采用独立页面事务，必须明示非快照语义并验证新增/删除边界。不要跨事件保存 connection/generator，不持有 bot/event；大扫描持有读事务可能延长 WAL 生命周期，需核对公平选择与磁盘压力的取舍。
+2. 本轮选用独立页面/候选短只读事务，所有连接在异步让出前关闭，避免扫描期间长读事务延长 WAL 生命周期；这是磁盘压力优先的选择，不提供跨页全局快照。初始 rowid 高水位只冻结扫描边界：新行若大于高水位不进入，空洞中插入/rowid 复用可能被观察，删除与更新按后续读取时状态处理，已经越过的 rowid 不重扫。测试验证这些边界，成功、异常、取消均无连接留存，不跨事件保存 connection/generator 或 bot/event。
 3. 保留排除本人、built=1、有效 seed 灵田、目标当日次数和首 profile 存在规则，不新增位置/等级/成熟度过滤。只对最终合格候选做 reservoir(k=1)，第 n 个合格项以 1/n 概率替换；异步扫描按页面/固定小批协作让出，故障丢弃部分扫描结果，不能把半个集合当成公平选择成功。最终结算 CAS 保持负责状态漂移拒绝。
 4. 默认只复用 1 名只读代理核对过滤/分页/公平性及取消清理，主线程实现和串行测试；资源允许且任务独立才增加代理，最多同时 3 名。覆盖空集、晚页有效候选、各拒绝规则、均匀选择、页面/高水位、异常/取消/事务关闭和源调用图；测试关闭 pytest/pyc，使用新专用 `/tmp`，结束立即清理，不删除旧持久回执或业务数据。需要索引时只加独立启动 migration，先证明现有 schema/索引，不做请求期 DDL。
 
+本轮实施细化：页只加载 rowid/user_id/built 等值标志，最多 256 个 raw 行，避免一次加载 256 个大 JSON；候选状态与首 profile 另用短只读单行查询。每 32 个 raw 行及页面末尾协作让出，业务日与 seed 配置在调用开始冻结，最终 matcher/结算 CAS 继续重查当前资格。正常 `dongfu_status` 的 user_id 主键使 reservoir 对合格用户均匀；遗留非唯一表仍保留旧重复 UID 候选加权语义，显式固定首次 player/profile 行，不在读取片清洗数据。独立页面事务只对实际观察到的合格候选流均匀，不宣称并发写入下存在一个全局时刻的均匀集合。单个大 JSON/字段、索引缺失时的 SQL 扫描时间和地图 nearby 全量读取仍是独立未完成边界。
+
+本片执行收口（2026-10-03）：无新 migration/cache/DDL，所有读取错误 fail closed；optional 列按固定允许字段投影，保持 legacy planting fallback、缺次数默认及 JSON 日期/count 解码。正常启动 schema 的 cave 主键查询计划使用既有索引，不为本片新增索引。逐候选短 UoW/attach 和扫描所有 raw 元数据是容量/协作优先的明确取舍，不能宣称 N+1 I/O 或 SQL 耗时已经解决。洞府/地图/潜入/progress 聚合 `236 passed`，最终随机/inventory `55 passed`，architecture/inventory 单元 `17 passed`；四项随机 progress gate、inventory freshness、8 文件 AST 编译和 diff check 通过，完整 architecture 仍有既有 15 项错误，整体 `exit_ready=false`。首次定向运行的唯一失败是 WAL fixture 错误要求无 sidecar（45 项行为通过）；已改为 rollback-journal fixture，不承诺 WAL 只读永不产生 sidecar。隔离五库 backup、restore dry-run/restore、265 项 migration/reconcile clean 通过，路由 `203/58/7/1/1`；不是正式发布。复用 1 名只读代理审计，无代理测试/代码改动/运行库访问/缓存；主线程实现、补测和串行验收。所有进程退出后已删除本片专用 `/tmp`（约 3.9 MiB）与最终导入生成的未跟踪字节码，未碰运行数据库/WAL/SHM、正式备份、持久回执、`data/`、`.git`、`.venv` 或用户 `boss_info.json`。资源收尾为磁盘 `20G`、RAM available `1.2GiB`、inode `14%`；下一片只读审计地图 nearby 的真实默认调用图和消费方，再确定分页/目标选择/展示输出边界。
+
 ## 缓存清理允许范围
 
-- 仓库内未跟踪的 `__pycache__/`、`*.pyc`、`.pytest_cache/`。
+- 确认属于本轮、相关进程已退出的未跟踪 `__pycache__/`、`*.pyc`、`.pytest_cache/`；不按目录名盲删未知缓存。
 - 当前切片专用的 `/tmp/<slice>-pytest*`、`/tmp/<slice>-*` receipt 和日志目录。
 - 已确认属于本轮测试的旧临时 smoke 目录。
 

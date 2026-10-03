@@ -499,30 +499,17 @@ def _can_intrude(target_uid: str):
     return _to_int(d.get("intrude_count")) < INFILTRATE_DAILY_LIMIT, d
 
 
-def _get_random_dongfu_target(my_uid: str):
-    # 仅扫已建洞府用户（SQL 等值 + 短缓存），避免全服 user_id 循环
-    candidate_ids = _player_data_manager().list_users_by_fields(
-        DONGFU_TABLE,
-        {"built": 1},
-        cache_ttl=30,
-        exclude_user_id=str(my_uid),
+async def _get_random_dongfu_target(my_uid: str):
+    return await dongfu_application.random_target(
+        user_id=str(my_uid),
+        day=_today_str(),
+        target_limit=INFILTRATE_DAILY_LIMIT,
+        base_plot_count=DONGFU_PLOT_COUNT,
+        max_plot_count=DONGFU_PLOT_MAX,
+        fertilizer_max=DONGFU_FERTILIZER_MAX,
+        seed_names={seed_id: conf["name"] for seed_id, conf in SEED_CONFIG.items()},
+        random_source=runtime_random,
     )
-    candidates = []
-    for uid in candidate_ids:
-        uid = str(uid)
-        d = _player_data_manager().get_fields(uid, DONGFU_TABLE) or {}
-        if _to_int(d.get("built")) != 1:
-            continue
-        _normalize_plant_slots(d)
-        if not _active_plant_slots(d):
-            continue
-        can_intrude, _ = _can_intrude(uid)
-        if not can_intrude:
-            continue
-        ui = _sql_message().get_user_info_with_id(uid)
-        if ui:
-            candidates.append(ui)
-    return runtime_random.choice(candidates) if candidates else None
 
 
 @dongfu_help.handle(parameterless=[Cooldown(cd_time=0)])
@@ -1239,7 +1226,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         return
 
     if not tname:
-        target = _get_random_dongfu_target(my_uid)
+        target = await _get_random_dongfu_target(my_uid)
         if not target:
             await handle_send(bot, event, "暂未找到可随机潜入的洞府。")
             return

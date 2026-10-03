@@ -17,4 +17,5 @@ class DongfuApplication(MigratedFeatureApplication):
     def infiltrate_failure(self,**kwargs): return self.repository.infiltrate_failure(**kwargs)
     def status(self, user_id): return self.repository.status(user_id)
     def nearby_target(self, user_id, user_name): return self.repository.nearby_target(user_id,user_name)
+    async def random_target(self, **kwargs): return await self.repository.random_target(**kwargs)
 __all__=['DongfuApplication']

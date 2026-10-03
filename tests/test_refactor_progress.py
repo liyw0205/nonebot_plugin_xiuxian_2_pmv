@@ -6,6 +6,13 @@ from scripts.check_full_refactor_progress import _slice_status
 
 
 class RefactorProgressTests(unittest.TestCase):
+    def test_progress_report_tracks_bounded_random_dongfu_selection(self) -> None:
+        dongfu = _slice_status()["dongfu"]
+        self.assertTrue(dongfu["random_target_feature_owned"])
+        self.assertTrue(dongfu["random_target_bounded_short_read_only"])
+        self.assertTrue(dongfu["random_target_fair_cooperative_fail_closed"])
+        self.assertTrue(dongfu["legacy_random_target_full_list_disabled"])
+
     def test_progress_report_tracks_single_named_dongfu_target(self) -> None:
         dongfu = _slice_status()["dongfu"]
         self.assertTrue(dongfu["named_target_feature_owned"])

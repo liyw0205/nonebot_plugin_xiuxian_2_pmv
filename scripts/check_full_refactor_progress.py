@@ -691,6 +691,8 @@ def _slice_status() -> dict[str, dict[str, object]]:
     dongfu_migrations = (PACKAGE / "features" / "dongfu" / "migrations.py").read_text(encoding="utf-8")
     dongfu_status_repository = (PACKAGE / "features" / "dongfu" / "status_repository.py").read_text(encoding="utf-8")
     dongfu_nearby_target_repository = (PACKAGE / "features" / "dongfu" / "nearby_target_repository.py").read_text(encoding="utf-8")
+    dongfu_random_target_repository = (PACKAGE / "features" / "dongfu" / "random_target_repository.py").read_text(encoding="utf-8")
+    dongfu_random_target_query = (PACKAGE / "features" / "dongfu" / "random_target_query.py").read_text(encoding="utf-8")
     dongfu_expansion_repository = (PACKAGE / "features" / "dongfu" / "expansion_repository.py").read_text(encoding="utf-8")
     dongfu_plant_slots = (PACKAGE / "features" / "dongfu" / "plant_slots.py").read_text(encoding="utf-8")
     dongfu_application = (PACKAGE / "features" / "dongfu" / "application.py").read_text(encoding="utf-8")
@@ -3295,6 +3297,35 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "legacy_named_target_list_disabled": (
                 "def _get_same_node_users(" not in dongfu_facade
                 and "nearby_users =" not in dongfu_facade
+            ),
+            "random_target_feature_owned": (
+                "await dongfu_application.random_target(" in dongfu_facade
+                and "await _get_random_dongfu_target(my_uid)" in dongfu_facade
+                and "async def random_target(" in dongfu_application
+                and "DongfuRandomTargetSqlQueryRepository" in dongfu_repository
+            ),
+            "random_target_bounded_short_read_only": (
+                "CANDIDATE_PAGE_SIZE = 256" in dongfu_random_target_repository
+                and "rowid>? AND rowid<=?" in dongfu_random_target_repository
+                and "ORDER BY rowid ASC LIMIT ?" in dongfu_random_target_repository
+                and "read_only=True" in dongfu_random_target_repository
+                and "?mode=ro" in dongfu_random_target_repository
+                and "PRAGMA table_info(dongfu_status)" in dongfu_random_target_repository
+                and "CREATE TABLE" not in dongfu_random_target_repository
+                and "ALTER TABLE" not in dongfu_random_target_repository
+            ),
+            "random_target_fair_cooperative_fail_closed": (
+                "random_source.randint(1, eligible_count) == 1" in dongfu_random_target_query
+                and "CANDIDATE_YIELD_INTERVAL = 32" in dongfu_random_target_query
+                and "await asyncio.sleep(0)" in dongfu_random_target_query
+                and "except DongfuCandidateReadError:\n        return None" in dongfu_random_target_query
+            ),
+            "legacy_random_target_full_list_disabled": all(
+                token not in dongfu_facade[
+                    dongfu_facade.index("async def _get_random_dongfu_target") :
+                    dongfu_facade.index("@dongfu_help.handle")
+                ]
+                for token in ("list_users_by_fields", "get_fields", "get_user_info_with_id", "candidates", "choice(")
             ),
             "status_read_has_no_legacy_writeback": (
                 "def _get_dongfu" in dongfu_facade
