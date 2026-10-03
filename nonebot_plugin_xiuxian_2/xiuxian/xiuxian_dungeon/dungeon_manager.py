@@ -1,5 +1,4 @@
 import json
-import random
 import threading
 import time
 from datetime import datetime
@@ -84,14 +83,17 @@ class DungeonTemplate:
     def get_event_map(self) -> Dict[str, DungeonEvent]:
         return {e.event_id: e for e in self.events}
 
-    def get_minion_info(self, template_type: str = "common") -> Dict[str, Any]:
+    def get_minion_info(
+        self, template_type: str = "common", random_source=None
+    ) -> Dict[str, Any]:
         """根据模板生成小怪基准数据"""
+        rng = random_source or self.random
         if template_type not in self.monster_templates:
             template_type = "common"
 
         template = self.monster_templates.get(template_type, {})
-        prefix = self.random.choice(template.get("name_prefix", [""]))
-        base_name = self.random.choice(template.get("base_names", ["怪物"]))
+        prefix = rng.choice(template.get("name_prefix", [""]))
+        base_name = rng.choice(template.get("base_names", ["怪物"]))
         name = f"{prefix}·{base_name}" if prefix else base_name
 
         hp_range = template.get("hp_range", [50, 100])
@@ -104,21 +106,22 @@ class DungeonTemplate:
 
         if skill_pool:
             pick_n = 1 if template_type == "common" else min(2, len(skill_pool))
-            skills = self.random.sample(skill_pool, pick_n)
+            skills = rng.sample(skill_pool, pick_n)
         else:
             skills = DEFAULT_MINION_SKILLS[:1]
 
         return {
             "name": name,
-            "hp_base_multiplier": self.random.uniform(hp_range[0], hp_range[1]),
-            "mp_base_multiplier": self.random.uniform(mp_range[0], mp_range[1]),
-            "attack_base_multiplier": self.random.uniform(attack_range[0], attack_range[1]),
+            "hp_base_multiplier": rng.uniform(hp_range[0], hp_range[1]),
+            "mp_base_multiplier": rng.uniform(mp_range[0], mp_range[1]),
+            "attack_base_multiplier": rng.uniform(attack_range[0], attack_range[1]),
             "skills": skills,
             "reward": template.get("reward", {}),
         }
 
-    def get_boss_info(self) -> Dict[str, Any]:
+    def get_boss_info(self, random_source=None) -> Dict[str, Any]:
         """获取BOSS基准数据（保证skills有效）"""
+        rng = random_source or self.random
         boss_config = self.boss_config
         hp_range = boss_config.get("hp_range", [100, 200])
         mp_range = boss_config.get("mp_range", [1, 2])
@@ -132,9 +135,9 @@ class DungeonTemplate:
 
         return {
             "name": boss_config.get("name", "副本BOSS"),
-            "hp_base_multiplier": self.random.uniform(hp_range[0], hp_range[1]),
-            "mp_base_multiplier": self.random.uniform(mp_range[0], mp_range[1]),
-            "attack_base_multiplier": self.random.uniform(attack_range[0], attack_range[1]),
+            "hp_base_multiplier": rng.uniform(hp_range[0], hp_range[1]),
+            "mp_base_multiplier": rng.uniform(mp_range[0], mp_range[1]),
+            "attack_base_multiplier": rng.uniform(attack_range[0], attack_range[1]),
             "skills": skills,
             "reward": boss_config.get("reward", {})
         }
@@ -523,7 +526,13 @@ class DungeonManager:
         except Exception:
             return 100
 
-    def _choose_main_jinjie_by_player(self, user_level: str, prefer_player_level_for_boss=False):
+    def _choose_main_jinjie_by_player(
+        self,
+        user_level: str,
+        prefer_player_level_for_boss=False,
+        random_source=None,
+    ):
+        rng = random_source or self.random
         player_rank_val, _ = convert_rank(user_level)
         if player_rank_val is None:
             player_rank_val = convert_rank("江湖好手")[0] or 0
@@ -563,7 +572,7 @@ class DungeonManager:
                 w = 1
             weighted.extend([jj] * w)
 
-        return self.random.choice(weighted) if weighted else self.random.choice([x[0] for x in available])
+        return rng.choice(weighted) if weighted else rng.choice([x[0] for x in available])
 
     def _get_type_multipliers(self):
         t = self._get_dungeon_type()
@@ -576,31 +585,43 @@ class DungeonManager:
     # 掉落与怪物创建
     # =========================
 
-    def generate_drop_item(self, user_level, drop_items):
+    def generate_drop_item(self, user_level, drop_items, *, random_source=None):
+        rng = random_source or self.random
         if not drop_items:
             return 0
 
         items_list = list(drop_items.keys())
         weights = list(drop_items.values())
-        selected_item = self.random.choices(items_list, weights=weights, k=1)[0]
+        selected_item = rng.choices(items_list, weights=weights, k=1)[0]
 
         player_rank_val, _ = convert_rank(user_level)
         if player_rank_val is None:
             player_rank_val = convert_rank("江湖好手")[0] or 0
 
         max_rank = convert_rank("江湖好手")[0] or 55
-        item_base_rank = max(player_rank_val - self.random.randint(15, 20), 5)
-        item_final_rank = self.random.randint(item_base_rank, min(item_base_rank + self.random.randint(5, 10), max_rank))
+        item_base_rank = max(player_rank_val - rng.randint(15, 20), 5)
+        item_final_rank = rng.randint(
+            item_base_rank, min(item_base_rank + rng.randint(5, 10), max_rank)
+        )
 
-        if item_final_rank <= 10 and self.random.random() < 0.2:
-            item_final_rank = self.random.randint(11, 20)
+        if item_final_rank <= 10 and rng.random() < 0.2:
+            item_final_rank = rng.randint(11, 20)
 
         items_id = item_s.get_random_id_list_by_rank_and_item_type(item_final_rank, selected_item)
         if not items_id:
             return 0
-        return self.random.choice(items_id)
+        return rng.choice(items_id)
 
-    def creating_monsters(self, user_level, user_exp, monsters_info, monster_type="minion"):
+    def creating_monsters(
+        self,
+        user_level,
+        user_exp,
+        monsters_info,
+        monster_type="minion",
+        *,
+        random_source=None,
+    ):
+        rng = random_source or self.random
         self.sync_current_dungeon()
         if not self.current_dungeon:
             return {}
@@ -609,7 +630,9 @@ class DungeonManager:
         diff_low, diff_high, reward_mult, _ = self._get_type_multipliers()
 
         prefer_player_level_for_boss = monster_type == "boss"
-        monsters_jj_main = self._choose_main_jinjie_by_player(user_level, prefer_player_level_for_boss)
+        monsters_jj_main = self._choose_main_jinjie_by_player(
+            user_level, prefer_player_level_for_boss, rng
+        )
 
         if monsters_jj_main in ("江湖好手", "至高"):
             monster_level_key = monsters_jj_main
@@ -619,7 +642,7 @@ class DungeonManager:
         monster_base_exp_for_level = self._safe_level_power(monster_level_key)
         player_level_power = self._safe_level_power(user_level)
         player_exp_factor = max(0.8, min(1.3, (user_exp / max(1, player_level_power)) ** 0.2))
-        type_diff_factor = self.random.uniform(diff_low, diff_high)
+        type_diff_factor = rng.uniform(diff_low, diff_high)
 
         if monster_type == "boss":
             boss_bonus = 1.25 if dungeon_type == "challenge" else 1.10
@@ -629,9 +652,15 @@ class DungeonManager:
 
         power_anchor = max(100, power_anchor)
 
-        hp = int(power_anchor * monsters_info.get("hp_base_multiplier", 60) * self.random.uniform(0.92, 1.08))
-        mp = int(power_anchor * monsters_info.get("mp_base_multiplier", 1.5) * self.random.uniform(0.92, 1.08))
-        attack = int(power_anchor * monsters_info.get("attack_base_multiplier", 0.15) * self.random.uniform(0.92, 1.08))
+        hp = int(
+            power_anchor * monsters_info.get("hp_base_multiplier", 60) * rng.uniform(0.92, 1.08)
+        )
+        mp = int(
+            power_anchor * monsters_info.get("mp_base_multiplier", 1.5) * rng.uniform(0.92, 1.08)
+        )
+        attack = int(
+            power_anchor * monsters_info.get("attack_base_multiplier", 0.15) * rng.uniform(0.92, 1.08)
+        )
 
         hp = max(hp, 100)
         mp = max(mp, 10)
@@ -642,12 +671,14 @@ class DungeonManager:
         spirit_stone_cfg = reward_cfg.get("spirit_stone", [0.2, 0.6])
         if not isinstance(spirit_stone_cfg, list) or len(spirit_stone_cfg) != 2:
             spirit_stone_cfg = [0.2, 0.6]
-        rand_stone_mul = self.random.uniform(spirit_stone_cfg[0], spirit_stone_cfg[1])
+        rand_stone_mul = rng.uniform(spirit_stone_cfg[0], spirit_stone_cfg[1])
         stone_base = 12000 if monster_type == "boss" else 8000
-        final_stone_value = int(stone_base * rand_stone_mul * reward_mult * self.random.uniform(90, 150))
+        final_stone_value = int(
+            stone_base * rand_stone_mul * reward_mult * rng.uniform(90, 150)
+        )
 
         exp_ratio = float(reward_cfg.get("experience", 0.002))
-        base_exp_reward = power_anchor * 180 * exp_ratio * reward_mult * self.random.uniform(1.0, 1.8)
+        base_exp_reward = power_anchor * 180 * exp_ratio * reward_mult * rng.uniform(1.0, 1.8)
         if monster_type == "boss":
             base_exp_reward *= 1.6
         final_exp_reward = int(base_exp_reward)
@@ -660,9 +691,9 @@ class DungeonManager:
         drop_chance = min(drop_chance, 0.95)
 
         item_id = 0
-        if random.random() < drop_chance:
+        if rng.random() < drop_chance:
             drop_items = reward_cfg.get("drop_items", {})
-            item_id = self.generate_drop_item(user_level, drop_items)
+            item_id = self.generate_drop_item(user_level, drop_items, random_source=rng)
 
         skills = monsters_info.get("skills", [])
         if not isinstance(skills, list):
@@ -688,7 +719,8 @@ class DungeonManager:
     # 事件触发
     # =========================
 
-    def _pick_event_by_type(self) -> DungeonEvent:
+    def _pick_event_by_type(self, random_source=None) -> DungeonEvent:
+        rng = random_source or self.random
         self.sync_current_dungeon()
 
         e_map = self.current_dungeon.get_event_map()
@@ -706,14 +738,15 @@ class DungeonManager:
             if not self.current_dungeon.events:
                 return DungeonEvent({"event_id": "nothing", "description": "无事发生", "weight": 1})
             ws = [max(1, e.weight) for e in self.current_dungeon.events]
-            return random.choices(self.current_dungeon.events, weights=ws, k=1)[0]
+            return rng.choices(self.current_dungeon.events, weights=ws, k=1)[0]
 
-        return random.choices(candidates, weights=weights, k=1)[0]
+        return rng.choices(candidates, weights=weights, k=1)[0]
 
-    def trigger_event(self, user_level, user_exp):
+    def trigger_event(self, user_level, user_exp, *, random_source=None):
+        rng = random_source or self.random
         self.sync_current_dungeon()
 
-        event = self._pick_event_by_type()
+        event = self._pick_event_by_type(rng)
         dungeon_type = self._get_dungeon_type()
         _, _, _, non_battle_reward_mult = self._get_type_multipliers()
 
@@ -730,7 +763,7 @@ class DungeonManager:
             elif dungeon_type == "challenge":
                 low *= 1.05
                 high *= 1.10
-            result["damage"] = self.random.uniform(low, high)
+            result["damage"] = rng.uniform(low, high)
 
         elif event.event_type == "monster":
             battle_config = getattr(event, "battle", {}) or {}
@@ -740,7 +773,7 @@ class DungeonManager:
             enemy_data = []
 
             if dungeon_type == "challenge":
-                minion_count = random.randint(1, 3)
+                minion_count = rng.randint(1, 3)
                 elite_chance = min(0.5, elite_chance + 0.15)
             else:
                 minion_count = 1
@@ -749,14 +782,16 @@ class DungeonManager:
 
             for _ in range(minion_count):
                 actual_template_type = "common"
-                if random.random() < elite_chance and "elite" in template_type_choices:
+                if rng.random() < elite_chance and "elite" in template_type_choices:
                     actual_template_type = "elite"
                 elif len(template_type_choices) > 1:
                     pool = [t for t in template_type_choices if t != "elite"]
-                    actual_template_type = random.choice(pool) if pool else "common"
+                    actual_template_type = rng.choice(pool) if pool else "common"
 
-                minion_info = self.current_dungeon.get_minion_info(actual_template_type)
-                minion = self.creating_monsters(user_level, user_exp, minion_info, monster_type="minion")
+                minion_info = self.current_dungeon.get_minion_info(actual_template_type, rng)
+                minion = self.creating_monsters(
+                    user_level, user_exp, minion_info, monster_type="minion", random_source=rng
+                )
                 enemy_data.append(minion)
 
             result["monster_data"] = enemy_data
@@ -772,7 +807,7 @@ class DungeonManager:
             best_item = 0
             best_rank = -1
             for _ in range(roll_times):
-                iid = self.generate_drop_item(user_level, drop_items)
+                iid = self.generate_drop_item(user_level, drop_items, random_source=rng)
                 if iid == 0:
                     continue
                 data = item_s.get_data_by_item_id(iid)
@@ -787,7 +822,7 @@ class DungeonManager:
             if not isinstance(spirit_stone_cfg, list) or len(spirit_stone_cfg) != 2:
                 spirit_stone_cfg = [1, 2]
 
-            rand_mul = self.random.uniform(spirit_stone_cfg[0], spirit_stone_cfg[1])
+            rand_mul = rng.uniform(spirit_stone_cfg[0], spirit_stone_cfg[1])
 
             player_rank_val, _ = convert_rank(user_level)
             if player_rank_val is None:
@@ -796,7 +831,10 @@ class DungeonManager:
             rank_diff = max(0, player_rank_val - base_rank)
 
             base_stone = 12000
-            final_stone_value = int(base_stone * rand_mul * (1.18 ** rank_diff) * non_battle_reward_mult * self.random.uniform(90, 140))
+            final_stone_value = int(
+                base_stone * rand_mul * (1.18 ** rank_diff)
+                * non_battle_reward_mult * rng.uniform(90, 140)
+            )
             result["stones"] = max(1, final_stone_value)
 
         return result
@@ -805,26 +843,31 @@ class DungeonManager:
     # Boss层生成
     # =========================
 
-    def get_boss_data(self, user_level, user_exp):
+    def get_boss_data(self, user_level, user_exp, *, random_source=None):
+        rng = random_source or self.random
         self.sync_current_dungeon()
 
         enemy_data = []
         dungeon_type = self._get_dungeon_type()
 
-        boss_info = self.current_dungeon.get_boss_info()
-        boss = self.creating_monsters(user_level, user_exp, boss_info, monster_type="boss")
+        boss_info = self.current_dungeon.get_boss_info(rng)
+        boss = self.creating_monsters(
+            user_level, user_exp, boss_info, monster_type="boss", random_source=rng
+        )
         enemy_data.append(boss)
 
         if dungeon_type == "challenge":
-            minion_count = random.randint(1, 3)
-            minion_template_type = "elite" if random.random() < 0.6 else "common"
+            minion_count = rng.randint(1, 3)
+            minion_template_type = "elite" if rng.random() < 0.6 else "common"
         else:
             minion_count = 1
             minion_template_type = "common"
 
         for _ in range(minion_count):
-            minion_info = self.current_dungeon.get_minion_info(minion_template_type)
-            minion = self.creating_monsters(user_level, user_exp, minion_info, monster_type="minion")
+            minion_info = self.current_dungeon.get_minion_info(minion_template_type, rng)
+            minion = self.creating_monsters(
+                user_level, user_exp, minion_info, monster_type="minion", random_source=rng
+            )
             enemy_data.append(minion)
 
         return enemy_data

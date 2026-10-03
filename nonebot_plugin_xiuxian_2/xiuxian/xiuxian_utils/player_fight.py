@@ -1,5 +1,6 @@
 import json
-import random
+import random as _random
+from contextvars import ContextVar
 from nonebot.log import logger
 from ...paths import get_paths
 from ...features.player_state.application import PlayerStateApplication
@@ -71,6 +72,17 @@ from ..xiuxian_natal_treasure.natal_config import (
 )
 
 _items_instance = None
+_battle_random_source = ContextVar("battle_random_source", default=None)
+
+
+# Keep seeded battle draws task-local without mutating Python's global RNG.
+class _BattleRandomProxy:
+    def __getattr__(self, name):
+        source = _battle_random_source.get()
+        return getattr(_random if source is None else source, name)
+
+
+random = _BattleRandomProxy()
 
 
 def _items():
@@ -103,7 +115,22 @@ def _player_state():
     return _player_state_application
 
 
-async def pve_fight(user, monster, type_in=2, bot_id=0, level_ratios=None, attack_buffs=None):
+async def pve_fight(
+    user, monster, type_in=2, bot_id=0, level_ratios=None, attack_buffs=None,
+    *, random_source=None,
+):
+    token = _battle_random_source.set(random_source)
+    try:
+        return await _run_pve_fight(
+            user, monster, type_in, bot_id, level_ratios, attack_buffs, random_source
+        )
+    finally:
+        _battle_random_source.reset(token)
+
+
+async def _run_pve_fight(
+    user, monster, type_in, bot_id, level_ratios, attack_buffs, random_source
+):
     user_data = []
     monster_data = []
     attack_buffs = attack_buffs or {}
@@ -122,7 +149,11 @@ async def pve_fight(user, monster, type_in=2, bot_id=0, level_ratios=None, attac
     for m in monster:
         enemy_data = get_boss_attributes(m, bot_id)
         enemy = Entity(enemy_data["属性"], team_id=1, is_boss=True)
-        enemy.start_skills.extend(generate_boss_buff(m))
+        if random_source is None:
+            boss_buffs = generate_boss_buff(m)
+        else:
+            boss_buffs = generate_boss_buff(m, random_source=random_source)
+        enemy.start_skills.extend(boss_buffs)
         generate_boss_skill(enemy, m.get("skills", []))
         monster_data.append(enemy)
 

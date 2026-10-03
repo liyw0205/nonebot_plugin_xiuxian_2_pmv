@@ -326,6 +326,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
     dungeon_migrations = (PACKAGE / "features" / "dungeon" / "migrations.py").read_text(encoding="utf-8")
     dungeon_reset_repository = (PACKAGE / "features" / "dungeon" / "reset_repository.py").read_text(encoding="utf-8")
     dungeon_manager = (PACKAGE / "xiuxian" / "xiuxian_dungeon" / "dungeon_manager.py").read_text(encoding="utf-8")
+    dungeon_player_fight = (PACKAGE / "xiuxian" / "xiuxian_utils" / "player_fight.py").read_text(encoding="utf-8")
     bank_facade = (PACKAGE / "xiuxian" / "xiuxian_bank" / "__init__.py").read_text(encoding="utf-8")
     bank_handler = bank_facade[bank_facade.index("async def bank_") : bank_facade.index("def savef")]
     bank_web_application = (PACKAGE / "features" / "bank" / "application.py").read_text(encoding="utf-8")
@@ -1479,6 +1480,17 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "dungeon_global_state_read_feature_owned": (
                 "return self._reset_application().global_state()" in dungeon_manager
                 and "_player_data_manager().get_fields(self.GLOBAL_USER_ID" not in dungeon_manager
+            ),
+            "explore_random_sources_operation_scoped": (
+                'def _dungeon_explore_random_source(operation_id: str, purpose: str)' in dungeon_facade
+                and 'random.Random(f"dungeon-explore-rng-v1:{purpose}:{operation_id}")' in dungeon_facade
+                and 'random_source=encounter_rng' in dungeon_facade
+                and 'random_source=battle_rng' in dungeon_facade
+                and "def trigger_event(self, user_level, user_exp, *, random_source=None)" in dungeon_manager
+                and "rng.choices(candidates, weights=weights, k=1)[0]" in dungeon_manager
+                and "async def pve_fight(" in dungeon_player_fight
+                and "_battle_random_source = ContextVar" in dungeon_player_fight
+                and "generate_boss_buff(m, random_source=random_source)" in dungeon_player_fight
             ),
             "status": "team_commands_and_reads_application_owned_with_startup_schema_and_invite_projection_compatibility_retained",
         },

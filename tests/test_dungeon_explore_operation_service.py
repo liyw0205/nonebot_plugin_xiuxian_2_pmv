@@ -498,6 +498,8 @@ class DungeonExploreOperationServiceTests(unittest.TestCase):
         self.assertIn("dungeon_application.prepare", handler)
         self.assertIn("dungeon_application.settle", handler)
         self.assertIn("dungeon_application.resolve_rejection", handler)
+        self.assertIn("random_source=encounter_rng", handler)
+        self.assertIn("random_source=battle_rng", handler)
         self.assertNotIn("DungeonExploreOperationResult", handler)
         self.assertIn("type_in=0", handler)
         self.assertNotIn("dungeon_session_service.enter", handler)

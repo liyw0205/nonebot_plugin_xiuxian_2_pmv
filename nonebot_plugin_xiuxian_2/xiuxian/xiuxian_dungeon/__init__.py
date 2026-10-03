@@ -109,6 +109,10 @@ def _team_operation_id(event, action: str, user_id: str) -> str:
     return f"dungeon-team-{action}:{dungeon_ids.new_id()}:{user_id}"
 
 
+def _dungeon_explore_random_source(operation_id: str, purpose: str):
+    return random.Random(f"dungeon-explore-rng-v1:{purpose}:{operation_id}")
+
+
 def format_seconds(sec: int):
     h = sec // 3600
     m = (sec % 3600) // 60
@@ -1278,9 +1282,13 @@ async def handle_explore_dungeon(bot: Bot, event: GroupMessageEvent | PrivateMes
     advance = True
     complete = False
     resolved = {}
+    encounter_rng = _dungeon_explore_random_source(operation_id, "encounter")
+    battle_rng = _dungeon_explore_random_source(operation_id, "battle")
 
     if current_layer == total_layers - 1:
-        boss_info = dungeon_manager.get_boss_data(user_info["level"], user_exp)
+        boss_info = dungeon_manager.get_boss_data(
+            user_info["level"], user_exp, random_source=encounter_rng
+        )
         battle_messages, winner, status = await pve_fight(
             user_ids_in_battle,
             boss_info,
@@ -1288,6 +1296,7 @@ async def handle_explore_dungeon(bot: Bot, event: GroupMessageEvent | PrivateMes
             bot_id=bot.self_id,
             level_ratios=exp_ratios,
             attack_buffs=attack_buffs,
+            random_source=battle_rng,
         )
         final_statuses = resolve_final_user_statuses(
             status, bot.self_id, exp_ratios
@@ -1321,7 +1330,9 @@ async def handle_explore_dungeon(bot: Bot, event: GroupMessageEvent | PrivateMes
         response = _explore_response(summary, battle_messages)
         resolved = {"kind": "boss", "winner": int(winner), "monsters": boss_info}
     else:
-        event_result = dungeon_manager.trigger_event(user_info["level"], user_exp)
+        event_result = dungeon_manager.trigger_event(
+            user_info["level"], user_exp, random_source=encounter_rng
+        )
         event_type = str(event_result.get("type", "nothing"))
         battle_messages = []
         if event_type == "trap":
@@ -1345,6 +1356,7 @@ async def handle_explore_dungeon(bot: Bot, event: GroupMessageEvent | PrivateMes
                 bot_id=bot.self_id,
                 level_ratios=exp_ratios,
                 attack_buffs=attack_buffs,
+                random_source=battle_rng,
             )
             final_statuses = resolve_final_user_statuses(
                 status, bot.self_id, exp_ratios

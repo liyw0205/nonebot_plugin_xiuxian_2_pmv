@@ -247,6 +247,7 @@ class RefactorProgressTests(unittest.TestCase):
         self.assertTrue(dungeon_team["explore_settlement_missing_schema_retryable"])
         self.assertTrue(dungeon_team["dungeon_reset_request_path_has_no_ddl"])
         self.assertTrue(dungeon_team["dungeon_global_state_read_feature_owned"])
+        self.assertTrue(dungeon_team["explore_random_sources_operation_scoped"])
         bank = slices["bank"]
         self.assertTrue(bank["deposit_application_owned"])
         self.assertTrue(bank["v1_web_game_db_owned"])
