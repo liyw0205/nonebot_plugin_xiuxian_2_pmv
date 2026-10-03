@@ -5,7 +5,7 @@ from .ledger import OperationLedger, OperationRecord, OutboxStore, request_hash
 from .migrations import Migration, MigrationRunner
 from .reconcile import ReconcileReport, ReconcileService
 from .readonly import ReadOnlyQuery
-from .uow import DatabaseUnitOfWork
+from .uow import DatabaseUnitOfWork, is_database_busy
 from .attached_uow import AttachedDatabaseUnitOfWork
 
 __all__ = [
@@ -25,4 +25,5 @@ __all__ = [
     "ReconcileService",
     "ReadOnlyQuery",
     "request_hash",
+    "is_database_busy",
 ]

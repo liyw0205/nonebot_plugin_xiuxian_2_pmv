@@ -21,6 +21,7 @@ _TARGETS = {
     "check_auction_end": ("xiuxian.xiuxian_trade", "check_auction_end_job"),
     "clear_expired_baitan_orders": ("xiuxian.xiuxian_trade", "clear_expired_baitan_orders_job"),
     "daily_dungeon_reset": ("xiuxian.xiuxian_dungeon", "daily_dungeon_reset"),
+    "dungeon_team_invite_expiry": ("xiuxian.xiuxian_dungeon", "expire_pending_team_invites"),
     "demon_invasion_refresh_schedule": (
         "xiuxian.xiuxian_world_events",
         "demon_invasion_refresh_schedule_job",

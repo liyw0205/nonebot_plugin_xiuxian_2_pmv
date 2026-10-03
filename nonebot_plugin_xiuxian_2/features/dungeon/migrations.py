@@ -174,6 +174,24 @@ def apply_dungeon_team_members_index(uow: DatabaseUnitOfWork) -> None:
     )
 
 
+def apply_dungeon_team_invite_expiry(uow: DatabaseUnitOfWork) -> None:
+    """Prepare bounded pending scans and minimal notification routing."""
+    _add_missing_columns(
+        uow,
+        "dungeon_team_invites",
+        {
+            "bot_id": "TEXT NOT NULL DEFAULT ''",
+            "source_message_id": "TEXT NOT NULL DEFAULT ''",
+            "notification_scene": "TEXT NOT NULL DEFAULT ''",
+        },
+    )
+    uow.execute(
+        "CREATE INDEX IF NOT EXISTS dungeon_team_invites_expiry_idx "
+        "ON dungeon_team_invites(expires_at,invite_id) "
+        "WHERE status='pending' AND consumed_at IS NULL"
+    )
+
+
 def apply_dungeon_explore_player_schema(uow: DatabaseUnitOfWork) -> None:
     """Prepare player-owned dungeon state before exploration requests run."""
     uow.execute(

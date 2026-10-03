@@ -39,7 +39,7 @@ class DatabaseUnitOfWork:
             self.connection.row_factory = sqlite3.Row
             if not self.read_only:
                 self.connection.execute("PRAGMA journal_mode=WAL")
-            self.connection.execute("PRAGMA busy_timeout=30000")
+            self.connection.execute(f"PRAGMA busy_timeout={max(int(self.timeout * 1000), 0)}")
             self.connection.execute("PRAGMA foreign_keys=ON")
             self.connection.execute(
                 "BEGIN IMMEDIATE" if self.immediate and not self.read_only else "BEGIN"
@@ -115,4 +115,11 @@ class DatabaseUnitOfWork:
             self.execute(f'RELEASE SAVEPOINT "{safe_name}"')
 
 
-__all__ = ["DatabaseUnitOfWork"]
+def is_database_busy(exc: BaseException) -> bool:
+    return (
+        isinstance(exc, sqlite3.OperationalError)
+        and (getattr(exc, "sqlite_errorcode", 0) & 0xFF) in {sqlite3.SQLITE_BUSY, sqlite3.SQLITE_LOCKED}
+    )
+
+
+__all__ = ["DatabaseUnitOfWork", "is_database_busy"]

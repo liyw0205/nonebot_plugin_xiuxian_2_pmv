@@ -2,15 +2,15 @@
 
 状态：进行中。`v1.1.0` 的 P0-P7 发布证据继续保留，但不作为底层全面重构完成证明。
 
-**当前目标顺序（2026-10-03）**：每次只切一条经真实调用图证明的默认路径并保留可恢复回执。技能确认缓存、已迁移的日重置/普通修炼/挖矿/通天塔及 BOSS 周限购边界保持关闭；副本 `.006/.007` 启动 schema、operation-scoped RNG、game-only `.008` crash-replay 输入冻结、player-only `.009` 队伍有界查询/投影同步和 session schema/ABA 检查，以及本轮 reset clock/业务时区/跨午夜日期冻结与 manual 跨日回放已完成。剩余目标如下，全部关闭前保持 `exit_ready=false`：
+**当前目标顺序（2026-10-03）**：每次只切一条经真实调用图证明的默认路径并保留可恢复回执。技能确认缓存、已迁移的日重置/普通修炼/挖矿/通天塔及 BOSS 周限购边界保持关闭；副本 `.006/.007` 启动 schema、operation-scoped RNG、game-only `.008` crash-replay 输入冻结、player-only `.009` 队伍有界查询/投影同步和 session schema/ABA 检查，以及 reset clock/业务时区/跨午夜冻结/manual 回放已完成。本轮新增 player-only `.010` 邀请到期索引与 ID 路由，默认无界 sleeper 已切换为单个有界 worker。剩余目标如下，全部关闭前保持 `exit_ready=false`：
 
 1. 继续按 player/economy、combat/dungeon/boss、sect/trade、Web/scheduler 的真实调用图迁移默认旧写入口；全局 `transaction_service`、`xiuxian2_handle` 门禁仍未关闭。普通修炼已走 `BuffApplication`，未证明有生产调用的 `RewardService._grant_exp` 不作为新切片依据。
-2. 副本独立切片：关闭默认邀请每条创建一个无上限 sleeper task 的可达入口。legacy team reader、invite mapping 无界读取/请求 DDL 目前只证明位于 compatibility，未证明默认 handler 可达；先保留审计边界，不重复迁移死 helper。legacy writer 回滚后需要停机受控重建投影，跨队重叠成员仍需备份后清洗，不能直接混用新旧 writer。
+2. 副本独立切片：继续补齐 intent Web permission/manifest，并审计真实可达的其它旧写入口。邀请有界扫描已完成，但通知仍为 best-effort，坏历史行/冲突 receipt 需要受控修复，不作为缓存删除。legacy team reader、invite mapping 和旧 expiry helper 仅保留兼容实现，未证明默认 handler 可达，不重复迁移死 helper。legacy writer 回滚后需要停机受控重建投影，跨队重叠成员仍需备份后清洗，不能直接混用新旧 writer。
 3. 缓存/RAM 独立切片：洞府候选用户有界选择、共享 field-list cache 容量/过期回收；不复制或主动清空其他玩法共享缓存。签到历史日期/迁移窗口风险继续保留。
 4. 全局验收：修补既有 architecture 问题，包括副本 intent Web permission/manifest、avatar driver import、game_events/info 和 operation-id 门禁，以及旧插件 `get_active_user_id` 导入缺失；校正既有 BOSS source-quality 断言，重跑完整门禁。
 5. 正式发布：确定 ledger/outbox/receipt 保留窗口与归档格式，再完成真实数据成对备份、迁移、恢复/reconcile 和 P7 证据。持久回执不是缓存，本轮隔离 recovery 成功不能替代正式演练。
 
-**本片方案与子代理范围**：本轮完成副本 reset 时钟与业务日边界，具体闭环见 `docs/refactor_slice_execution_protocol.md` 的本轮 Reset 时钟方案。允许合理使用子代理：默认 1 名只读代理审计限定文件的调用图、schema owner、迁移路由和恢复缺口，不访问运行数据、不运行 SQLite 测试；主线程统一修改、串行测试、资源监测、缓存清理、diff 复核和提交。仅在资源允许且任务独立时增加代理，最多同时 3 名，不为使用代理而重复已完成的审计。
+**本片方案与子代理范围**：本轮处理副本邀请过期任务，具体闭环见 `docs/refactor_slice_execution_protocol.md` 的本轮邀请过期任务方案。允许合理使用子代理：本轮仅复用 1 名只读代理核对调用图、通知路由、schema/receipt 和锁等待风险，不访问运行数据、不运行测试；主线程统一修改、串行测试、资源监测、缓存清理、diff 复核和提交。仅在资源允许且任务独立时增加代理，最多同时 3 名，不为使用代理而重复已完成的审计。
 
 **缓存、资源与验收约束**：测试关闭 pytest cacheprovider 和 Python 字节码写入，使用本轮专用 `/tmp` basetemp；仅在相关进程退出后清理本轮明确生成的临时目录/日志/字节码，不清理未知或业务缓存，也不碰 `.venv`、`.git`、`data/`、运行数据库/WAL/SHM、备份、持久回执或用户文件。开始重型任务前复核 `df -h`、`df -ih`、`free -h` 与高占用进程；RAM available 低于 `512 MiB`、磁盘可用低于 `10 GiB` 或 inode 异常时停止测试，重型任务串行执行。通过定向行为测试、单个 progress gate、inventory freshness、AST 编译和 `git diff --check` 后审阅 staged diff，再提交并推送；保留未暂存的用户改动。
 
@@ -5291,3 +5291,13 @@ Boss 通过 `get_rift_battle_final_attributes` 注入 `get_rift_battle_impart_da
 - 验收进程退出后已删除该专用目录（约 `3.7 MiB`），仓库保护范围外未发现 pytest/pyc 缓存；收尾磁盘可用 `19G`、inode 使用 `14%`、RAM available `1.2GiB`。运行数据库/WAL/SHM、正式备份、持久回执、`.git`、`.venv`、`data/` 和用户 `boss_info.json` 均保留。
 - 发布风险：生产 manager 固定使用初始化时的 scheduler timezone，时区调整需要受控重启；上线前核验当前 global 业务日，旧 UTC 历史 receipt 不自动重标记。本轮未访问正式运行库、执行正式 migration/恢复或补齐 P7；全局 `exit_ready=false`。
 - 自动接入下一队列项的只读审计已证明：默认邀请 handler 调用 `asyncio.create_task(expire_team_invite(...))`，每条 sleeper 保留 bot/event 且无任务容量/跟踪/重启恢复；legacy mapping/reader 未在默认 handler 调用图中证明可达。下一片应关闭这个真实任务资源边界，不因 compatibility helper 存在而重复迁移。
+
+## 2026-10-03 邀请过期任务有界化
+
+- 默认邀请 handler 不再为每条邀请创建 sleeper task，也不持有 `bot/event`。新增 player-only `dungeon.010`，预建 `bot_id/source_message_id/notification_scene` 路由列和 partial `(expires_at,invite_id)` pending 索引；迁移通过 plugin 路由到 player DB，game DB 排除。首份邀请冻结原接收 bot/群或频道场景，避免 `assign_bot` 换应用及频道 ID 误发；历史无路由邀请仍可过期但不通知。
+- 新增 `DungeonInviteExpiryWorker` 与固定 ID `dungeon_team_invite_expiry` interval job：DeferredScheduler 在 composition root 激活，APScheduler `max_instances=1/coalesce`，每 5 秒直接运行 feature worker，每轮最多 100 条。常量大小 keyset 游标跨越损坏行并在尾部回绕；重启扫描持久 pending。扫描 read-only 和逐条 expire 使用零锁等待，遇 `BUSY/LOCKED` 立即结束本轮并清游标，逐条让出 event loop，避免 100 条写锁冲突阻塞 NoneBot；UoW 的 `busy_timeout` 现在尊重显式 timeout，默认仍 30 秒。
+- 过期状态与成功 receipt 在同一 player UoW 提交；未到 deadline 不写终结 receipt，回拨后同 ID 可重试；成功 replay 返回 `duplicate`。历史空/NULL action 仅在 payload、receipt status 与 JSON status 一致时恢复，最终 CAS 更新 action；错 action/损坏 JSON/索引归属不符均 fail closed。坏时间戳逐条计数，不阻断健康行；不删除持久坏行或回执。
+- 所有状态变更完成后才做 best-effort 通知；单条 2 秒、整轮 10 秒预算，缺 bot/消息失效/发送异常不回滚、不无限补发。该路径不是 outbox，提交后崩溃可能丢通知，取消不会留下后台引用。没有新增内存缓存，也不经过 `JobExecutor._completed` 高频去重集合。
+- 验证：邀请过期边界与锁/回放/路由/损坏批次回归 `36 passed`；副本/队伍/session/reset/UoW 串行聚合集合 `197 passed`；progress/inventory/lazy-reader/architecture 单元/source-quality 聚焦 `27 passed, 249 deselected`；progress 中 worker/迁移/回放/锁门禁均为 true；inventory freshness、11 个变更 Python 文件内存编译和 `git diff --check` 通过。隔离 architecture CLI 仍 `ok=false`，18 项为既有 avatar driver、intent Web permission/manifest、game_events、pet/map/beg/boss operation-id、info 门禁；本片新增 worker 已通过 feature driver-import 门禁。
+- 子代理方案与执行：1 名只读子代理审计默认调用图、APScheduler 生命周期、原接收 bot/频道通知路由、索引/receipt/锁等待风险；未改代码、未跑测试、未访问运行库或生成缓存。主线程实现、串行测试、资源检查、文档和整合。清理仅限本片 `/tmp/codex-dungeon-invite-expiry-20261003` 的测试/架构/进度产物；保留 `.venv`、`.git`、`data/`、运行数据库/WAL/SHM、正式备份、持久回执和用户 `boss_info.json`。
+- 收尾资源：磁盘可用约 `19G`，RAM available 约 `1.2GiB`，inode 未见异常；本轮没有清理系统 page cache、业务缓存或终止用户服务。整体 `exit_ready=false` 仍由全局 legacy transaction/`xiuxian2_handle`、既有 architecture 门禁和正式 backup/restore/P7 证据阻塞。下一队列项继续按真实调用图推进，不重复迁移 compatibility 死 helper。

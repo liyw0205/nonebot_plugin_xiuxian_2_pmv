@@ -55,8 +55,8 @@
 2. **其余领域边界**：按 cultivation/training、combat/dungeon/boss、sect/trade/scheduler/Web 的顺序完成真实入口、随机/时间注入、operation receipt、启动 migration、跨库恢复和缺 schema fail-closed。
    - 当前洞府未完成项：随机潜入与同节点读取调用 `list_users_by_fields` 后完整物化候选用户，再逐个读取 profile/洞府；`PlayerDataManager._field_list_cache` 的 TTL entry 没有容量上限或主动过期清扫。单独设计有界/流式候选选择，并给共享 field-list cache 增加可证明的条目或字节上限及过期回收；不得复制或主动清空 `ITEMS_CACHE` 等其他玩法共享缓存。
    - 下一洞府候选/缓存切片委派 1 名只读子代理梳理 field-list cache 的生产调用点、失效路径与条目体积风险；子代理不改代码、不跑 SQLite 测试，主线程负责实现、串行验收和资源收尾。
-   - 当前副本已完成项：player-only `dungeon.007`、prepared settlement schema、operation-scoped RNG、game-only `dungeon.008` 输入冻结、player-only `dungeon.009` 队伍成员索引/同事务投影同步和 session schema/ABA 检查，以及 reset clock 贯穿、scheduler 业务时区、跨午夜日期冻结与 manual 跨日回放。成员读取与探索结算都改为单行选择；真实 `user_xiuxian` owner 为 game DB，队伍写入仍只在 player UoW 内执行。
-   - 当前副本未完成项：默认邀请每条创建一个无上限 sleeper task；intent Web route 的 permission/manifest 声明。legacy team reader 和 `PersistentTeamInviteMapping` 的无界迭代/请求期 DDL 仍在 compatibility 内，但最新限定调用图未证明默认 handler 可达，不以 helper 存在作为迁移依据。跨队历史重叠成员尚未清洗，本片仅统一选择最小 `team_id`；清洗必须独立制定备份、冲突决策和对账方案。
+   - 当前副本已完成项：player-only `dungeon.007`、prepared settlement schema、operation-scoped RNG、game-only `dungeon.008` 输入冻结、player-only `dungeon.009` 队伍成员索引/同事务投影同步和 session schema/ABA 检查，以及 reset clock 贯穿、scheduler 业务时区、跨午夜日期冻结与 manual 跨日回放；本轮 `.010` 到期索引/ID 路由和单 worker 关闭默认每邀请一个 sleeper 的任务资源边界。成员读取与探索结算都改为单行选择；真实 `user_xiuxian` owner 为 game DB，队伍写入仍只在 player UoW 内执行。
+   - 当前副本未完成项：intent Web route 的 permission/manifest 声明，正式 migration/recovery/P7，历史损坏邀请/冲突 receipt 的受控修复。通知不是 outbox，不能宣称持久补发。legacy team reader、`PersistentTeamInviteMapping` 无界迭代/请求期 DDL 和旧 expiry helper 仍保留兼容实现，但最新限定调用图未证明默认 handler 可达，不以 helper 存在作为迁移依据。跨队历史重叠成员尚未清洗，本片仅统一选择最小 `team_id`；清洗必须独立制定备份、冲突决策和对账方案。
    - 队伍回滚边界：legacy writer 不维护 `.009` 投影，不得与默认新 writer 混用。回滚期间一旦发生旧写，再回默认入口必须停机并受控重建/核验投影；migration ledger 不会自动重跑已应用的 `.009`，不能仅切换开关恢复服务。
    - 最近只读调用图审计已确认普通修炼结算切到 `BuffApplication`，没有新的 `up_exp_` 旧 service 切片证据；`RewardService._grant_exp` 的生产入口仍未证明，不据此开切片。
    - 当前历练未完成项：普通修炼生命周期默认入口已由 `BuffApplication` 承担，后续只审计事件随机计划、排行榜有界分页和 `training_limit.py` 兼容读写，不重复迁移已关闭的结算边界。
@@ -101,6 +101,16 @@
 3. 同 manual operation 且未显式指定日期时，manager 从持久 receipt 恢复原业务日；repository 的显式日期/source 冲突契约保持不变。回放只同步当前已发布全局状态，不重新发布旧副本或重抽模板；历史 receipt 日期不改写。
 4. 先建立失败回归，再串行验证上海午夜/DST、daily/crossday 去重、跨午夜冻结、真实 feature manual 跨日重试、显式日期/source 冲突、同实例注入 clock 和 receipt 时间；随后验证副本既有行为、source/progress/inventory、内存编译和 diff。本片不改变 schema/migration 或正式数据，不重复执行已完成的索引切片。
 5. 使用本片独立 `/tmp/codex-dungeon-reset-clock-20261003`，禁用 pytest cacheprovider/pyc；测试完成后清理专用目录并复核资源，再提交推送、自动进入下一队列项。发布时区修正需受控核验当前 global 业务日，既有 UTC 历史日期不得自动重标记；隔离测试不能替代正式发布演练。
+
+### 本轮邀请过期任务方案（2026-10-03）
+
+1. 复用 1 名只读子代理核对默认邀请调用图、NoneBot/QQ 通知路由、scheduler 生命周期和回放风险；不改文件、不运行测试、不访问运行库或生成缓存，不新增代理。主线程负责代码、迁移、串行测试、证据和提交。
+2. 默认邀请不再逐条 `create_task` 或持有 `bot/event` 睡眠。单个 scheduler job 使用 `max_instances=1`、coalesce 和每轮最多 100 条的持久到期扫描，常量大小 keyset 游标允许越过整批坏行、扫完回绕重试，启动/重启后继续处理已存在的 pending 邀请；不删除邀请或 operation receipt。沿用 DeferredScheduler 的 composition-root 激活和既有 scheduler manifest/lazy target 声明，默认 5 秒 tick 直接运行 feature worker，不经过 `JobExecutor._completed` 去重集合，避免新增高频无界缓存；CLI/Web 手动执行仍走既有 scheduler bridge。
+3. 新增独立 player-only `dungeon.010`，建立 pending 到期索引，保存最小 `bot_id/source_message_id/notification_scene` 路由。冻结原接收 bot（不使用 `assign_bot` 选出的其他 QQ 应用）并区分群/频道，路由随首份邀请冻结，不新增内存缓存；旧无路由邀请仍能过期。默认 handler/扫描缺 schema/index fail closed，不做请求期 DDL，不改历史 migration。无路由的既有 feature API 仍兼容旧 schema。
+4. 过期状态与成功 receipt 同事务提交；未到 deadline 不写终结 receipt，同 ID 可在时钟回拨后重试。成功 replay 返回 duplicate，不重复通知。已存在的旧 not_expired receipt 仅作为非终结状态恢复，更新为最终结果时与邀请状态原子提交，不删除历史行。
+5. 先完成本轮所有状态/receipt 提交，再串行、最佳努力通知；单条 2 秒、整轮 10 秒预算，超预算丢弃剩余提示。无 bot、路由过期、发送异常不影响后续邀请，不通过无限重试/任务积压补发。该通知不是持久 outbox，提交与通知之间崩溃可能丢通知，恢复保证仅覆盖邀请状态。
+   - SQLite 扫描/过期使用零锁等待，锁冲突立即结束本轮并重试，逐条让出事件循环；共享 UoW 尊重显式 timeout（默认 30 秒不变），不额外创建线程或后台任务。持锁回归必须验证 heartbeat、取消和解锁后恢复，不能只证明通知限时。
+6. 先建失败回归，再验证索引/query plan、100 条上限、路由冻结、重启恢复、精确 deadline/回拨、join/reject 竞争、receipt 失败回滚、重复执行和异常隔离。所有测试与 recovery 串行，关闭 pytest/pyc 缓存并使用 `/tmp/codex-dungeon-invite-expiry-20261003`；进程退出后仅清理本轮产物并复核磁盘/RAM，保留运行库/WAL/SHM、备份、持久回执和用户 `boss_info.json`。
 
 ## 缓存清理允许范围
 

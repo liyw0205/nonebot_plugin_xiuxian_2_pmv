@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -36,6 +36,17 @@ class TeamInviteSnapshot:
     created_at: float
     expires_at: float
     status: str = "pending"
+    bot_id: str = ""
+    source_message_id: str = ""
+    notification_scene: str = ""
+
+
+@dataclass(frozen=True)
+class TeamInviteBatch:
+    status: str
+    invites: tuple[TeamInviteSnapshot, ...] = ()
+    failures: int = 0
+    next_cursor: tuple[Any, Any] | None = None
 
 
 @dataclass(frozen=True)
@@ -61,6 +72,7 @@ class TeamExitResult:
 
 
 class DungeonTeamRepository:
+    MAX_INVITE_EXPIRY_BATCH = 100
     _TEAM_COLUMNS = (
         "user_id,team_id,team_name,group_id,leader,members,"
         "create_time,max_members,description,version"
@@ -129,6 +141,57 @@ class DungeonTeamRepository:
     @classmethod
     def _mutation_schema_ready(cls, uow: DatabaseUnitOfWork) -> bool:
         return cls._schema_ready(uow) and cls._member_index_ready(uow)
+
+    @classmethod
+    def _invite_expiry_schema_ready(cls, uow: DatabaseUnitOfWork) -> bool:
+        if not cls._table_ready(
+            uow, "dungeon_team_invites",
+            {"invite_id", "team_id", "inviter_id", "invitee_id", "group_id", "created_at",
+             "expires_at", "status", "consumed_at", "bot_id", "source_message_id", "notification_scene"},
+        ):
+            return False
+        index = uow.query_one(
+            "SELECT sql FROM sqlite_master WHERE type='index' AND name='dungeon_team_invites_expiry_idx' "
+            "AND tbl_name='dungeon_team_invites'"
+        )
+        if index is None:
+            return False
+        normalized = " ".join(str(index["sql"] or "").split())
+        return (
+            normalized.endswith("WHERE status='pending' AND consumed_at IS NULL")
+            and [str(row["name"]) for row in uow.query_all(
+                "PRAGMA index_info(dungeon_team_invites_expiry_idx)"
+            )] == ["expires_at", "invite_id"]
+        )
+
+    def due_invites(self, now_timestamp: float, *, limit: int = 100, after: tuple[Any, Any] | None = None) -> TeamInviteBatch:
+        limit = min(max(int(limit), 0), self.MAX_INVITE_EXPIRY_BATCH)
+        if not self._database_exists():
+            return TeamInviteBatch("schema_missing")
+        with DatabaseUnitOfWork(self.database, read_only=True, timeout=0) as uow:
+            if not self._invite_expiry_schema_ready(uow):
+                return TeamInviteBatch("schema_missing")
+            continuation = ""
+            parameters: tuple[Any, ...] = (float(now_timestamp),)
+            if after is not None:
+                continuation = "AND (expires_at,invite_id)>(?,?) "
+                parameters += after
+            rows = uow.query_all(
+                "SELECT invite_id,team_id,inviter_id,invitee_id,group_id,created_at,"
+                "expires_at,status,bot_id,source_message_id,notification_scene "
+                "FROM dungeon_team_invites WHERE status='pending' AND consumed_at IS NULL "
+                f"AND expires_at<=? {continuation}ORDER BY expires_at,invite_id LIMIT ?",
+                parameters + (limit,),
+            )
+        invites = []
+        failures = 0
+        for row in rows:
+            try:
+                invites.append(self._invite_snapshot(row))
+            except (TypeError, ValueError, OverflowError):
+                failures += 1
+        cursor = (rows[-1]["expires_at"], rows[-1]["invite_id"]) if rows and len(rows) == limit else None
+        return TeamInviteBatch("ok", tuple(invites), failures, cursor)
 
     def _user_exists(self, uow: DatabaseUnitOfWork, user_id: str) -> bool | None:
         if Path(self.game_database).resolve() == Path(self.database).resolve():
@@ -264,6 +327,9 @@ class DungeonTeamRepository:
             created_at=float(row["created_at"] or expires_at - 60),
             expires_at=expires_at,
             status=str(row["status"] or "pending"),
+            bot_id=str(row.get("bot_id") or ""),
+            source_message_id=str(row.get("source_message_id") or ""),
+            notification_scene=str(row.get("notification_scene") or ""),
         )
 
     def invite_by_id(self, invite_id: str) -> TeamInviteSnapshot | None:
@@ -276,9 +342,13 @@ class DungeonTeamRepository:
                 {"invite_id", "team_id", "inviter_id", "invitee_id", "group_id", "created_at", "expires_at", "status"},
             ):
                 return None
+            routing = ""
+            columns = self._columns(uow, "dungeon_team_invites")
+            if {"bot_id", "source_message_id", "notification_scene"} <= columns:
+                routing = ",bot_id,source_message_id,notification_scene"
             row = uow.query_one(
                 "SELECT invite_id,team_id,inviter_id,invitee_id,group_id,"
-                "created_at,expires_at,status FROM dungeon_team_invites WHERE invite_id=?",
+                f"created_at,expires_at,status{routing} FROM dungeon_team_invites WHERE invite_id=?",
                 (str(invite_id),),
             )
         return None if row is None else self._invite_snapshot(row)
@@ -322,8 +392,17 @@ class DungeonTeamRepository:
         except (TypeError, ValueError, json.JSONDecodeError):
             return TeamMutationResult(str(row["result_status"]), team_id=str(row["team_id"]))
 
-    def _finish(self, uow: DatabaseUnitOfWork, operation_id: str, action: str, payload: str, result: TeamMutationResult) -> TeamMutationResult:
-        uow.execute("INSERT INTO dungeon_team_operations(operation_id,payload,result_status,team_id,result_json,action) VALUES(?,?,?,?,?,?)", (operation_id, payload, result.status, result.team_id, self._json(result.__dict__), action))
+    def _finish(self, uow: DatabaseUnitOfWork, operation_id: str, action: str, payload: str, result: TeamMutationResult, *, retry_receipt: bool = False) -> TeamMutationResult:
+        if retry_receipt:
+            changed = uow.execute(
+                "UPDATE dungeon_team_operations SET result_status=?,team_id=?,result_json=?,action='expire' "
+                "WHERE operation_id=? AND COALESCE(action,'') IN ('','expire') AND payload=? AND result_status='not_expired'",
+                (result.status, result.team_id, self._json(result.__dict__), operation_id, payload),
+            )
+            if changed.rowcount != 1:
+                raise RuntimeError("invite expiry receipt changed")
+        else:
+            uow.execute("INSERT INTO dungeon_team_operations(operation_id,payload,result_status,team_id,result_json,action) VALUES(?,?,?,?,?,?)", (operation_id, payload, result.status, result.team_id, self._json(result.__dict__), action))
         return result
 
     def create(self, operation_id: str, team_id: str, team_name: str, leader_id: str, group_id: str, created_at: str, now_timestamp: float) -> TeamMutationResult:
@@ -408,7 +487,7 @@ class DungeonTeamRepository:
             base.update(leader_id=str(target_id), version=current.version + 1)
             return self._finish(uow, operation_id, "transfer", payload, TeamMutationResult("applied", **base))
 
-    def invite(self, operation_id: str, invite_id: str, team_id: str, inviter_id: str, invitee_id: str, group_id: str, expires_at: float, now_timestamp: float) -> TeamMutationResult:
+    def invite(self, operation_id: str, invite_id: str, team_id: str, inviter_id: str, invitee_id: str, group_id: str, expires_at: float, now_timestamp: float, *, bot_id: str = "", source_message_id: str = "", notification_scene: str = "") -> TeamMutationResult:
         payload = self._json({"action":"invite","invite_id":invite_id,"team_id":team_id,"inviter_id":inviter_id,"invitee_id":invitee_id,"group_id":group_id})
         if not self._database_exists():
             return TeamMutationResult("schema_missing", team_id=str(team_id), invite_id=str(invite_id), target_id=str(invitee_id), group_id=str(group_id))
@@ -418,6 +497,9 @@ class DungeonTeamRepository:
             old = uow.query_one("SELECT payload,result_status,team_id,result_json FROM dungeon_team_operations WHERE operation_id=?", (operation_id,))
             if old is not None: return self._decode_mutation(old) if old["payload"] == payload else TeamMutationResult("state_changed", team_id=str(old["team_id"]))
             base = dict(team_id=team_id, invite_id=invite_id, target_id=invitee_id, group_id=group_id, expires_at=float(expires_at))
+            routing = bool(bot_id or source_message_id or notification_scene)
+            if routing and not self._invite_expiry_schema_ready(uow):
+                return TeamMutationResult("schema_missing", **base)
             if not group_id: return self._finish(uow, operation_id, "invite", payload, TeamMutationResult("group_required", **base))
             if not invitee_id: return self._finish(uow, operation_id, "invite", payload, TeamMutationResult("target_missing", **base))
             user_exists = self._user_exists(uow, invitee_id)
@@ -434,7 +516,13 @@ class DungeonTeamRepository:
             uow.execute("UPDATE dungeon_team_invites SET status='expired',consumed_at=CURRENT_TIMESTAMP WHERE invitee_id=? AND status='pending' AND expires_at<=?", (invitee_id, now_timestamp))
             pending = uow.query_one("SELECT invite_id FROM dungeon_team_invites WHERE invitee_id=? AND status='pending' AND expires_at>?", (invitee_id, now_timestamp))
             if pending is not None: return self._finish(uow, operation_id, "invite", payload, TeamMutationResult("duplicate" if pending["invite_id"] == invite_id else "invite_pending", **base))
-            uow.execute("INSERT INTO dungeon_team_invites(invite_id,team_id,inviter_id,invitee_id,group_id,expires_at,status,created_at) VALUES(?,?,?,?,?,?,?,?)", (invite_id,team_id,inviter_id,invitee_id,group_id,float(expires_at),"pending",float(now_timestamp)))
+            if routing:
+                uow.execute(
+                    "INSERT INTO dungeon_team_invites(invite_id,team_id,inviter_id,invitee_id,group_id,expires_at,status,created_at,bot_id,source_message_id,notification_scene) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
+                    (invite_id, team_id, inviter_id, invitee_id, group_id, float(expires_at), "pending", float(now_timestamp), str(bot_id), str(source_message_id), str(notification_scene)),
+                )
+            else:
+                uow.execute("INSERT INTO dungeon_team_invites(invite_id,team_id,inviter_id,invitee_id,group_id,expires_at,status,created_at) VALUES(?,?,?,?,?,?,?,?)", (invite_id,team_id,inviter_id,invitee_id,group_id,float(expires_at),"pending",float(now_timestamp)))
             return self._finish(uow, operation_id, "invite", payload, TeamMutationResult("applied", **base))
 
     def join(self, operation_id: str, invite_id: str, team_id: str, inviter_id: str, user_id: str, group_id: str, now_timestamp: float) -> TeamMutationResult:
@@ -470,32 +558,48 @@ class DungeonTeamRepository:
             base["version"] = int(team["version"] or 0) + 1
             return self._finish(uow, operation_id, "join", payload, TeamMutationResult("applied", **base))
 
-    def _resolve_invite(self, action: str, operation_id: str, invite_id: str, user_id: str, group_id: str, now_timestamp: float) -> TeamMutationResult:
+    def _resolve_invite(self, action: str, operation_id: str, invite_id: str, user_id: str, group_id: str, now_timestamp: float, *, lock_timeout: float = 30) -> TeamMutationResult:
         payload = self._json({"action":action,"invite_id":invite_id,"user_id":user_id,"group_id":group_id})
         if not self._database_exists():
             return TeamMutationResult("schema_missing", invite_id=str(invite_id), target_id=str(user_id), group_id=str(group_id))
-        with DatabaseUnitOfWork(self.database, immediate=True) as uow:
+        with DatabaseUnitOfWork(self.database, immediate=True, timeout=lock_timeout) as uow:
+            if not self._table_ready(uow, "dungeon_team_operations", {"operation_id", "payload", "result_status", "team_id", "result_json", "action"}):
+                return TeamMutationResult("schema_missing", invite_id=str(invite_id), target_id=str(user_id), group_id=str(group_id))
+            old = uow.query_one("SELECT payload,result_status,team_id,result_json,action FROM dungeon_team_operations WHERE operation_id=?", (operation_id,))
+            retry_receipt = False
+            if old is not None:
+                if old["payload"] != payload or str(old["action"] or "") not in {"", action}:
+                    return TeamMutationResult("state_changed", team_id=str(old["team_id"]))
+                try:
+                    stored = json.loads(str(old["result_json"] or "{}"))
+                except (TypeError, ValueError):
+                    return TeamMutationResult("state_changed", team_id=str(old["team_id"]))
+                if not isinstance(stored, dict) or str(stored.get("status", old["result_status"])) != str(old["result_status"]):
+                    return TeamMutationResult("state_changed", team_id=str(old["team_id"]))
+                previous = self._decode_mutation(old)
+                retry_receipt = action == "expire" and previous.status == "not_expired"
+                if not retry_receipt:
+                    return replace(previous, status="duplicate") if action == "expire" and previous.status == "applied" else previous
             if not self._mutation_schema_ready(uow):
                 return TeamMutationResult("schema_missing", invite_id=str(invite_id), target_id=str(user_id), group_id=str(group_id))
-            old = uow.query_one("SELECT payload,result_status,team_id,result_json FROM dungeon_team_operations WHERE operation_id=?", (operation_id,))
-            if old is not None: return self._decode_mutation(old) if old["payload"] == payload else TeamMutationResult("state_changed", team_id=str(old["team_id"]))
-            invite = uow.query_one("SELECT team_id,inviter_id,invitee_id,group_id,expires_at,status FROM dungeon_team_invites WHERE invite_id=?", (invite_id,))
+            invite = uow.query_one("SELECT team_id,inviter_id,invitee_id,group_id,expires_at,status,consumed_at FROM dungeon_team_invites WHERE invite_id=?", (invite_id,))
             base = dict(invite_id=invite_id, target_id=user_id)
-            if invite is None or (action != "expire" and str(invite["invitee_id"]) != user_id): return self._finish(uow, operation_id, action, payload, TeamMutationResult("invite_invalid", **base))
+            if invite is None or (action != "expire" and str(invite["invitee_id"]) != user_id): return self._finish(uow, operation_id, action, payload, TeamMutationResult("invite_invalid", **base), retry_receipt=retry_receipt)
             base.update(team_id=str(invite["team_id"]), leader_id=str(invite["inviter_id"]), group_id=str(invite["group_id"]), expires_at=float(invite["expires_at"]))
-            if group_id and str(invite["group_id"]) != str(group_id): return self._finish(uow, operation_id, action, payload, TeamMutationResult("wrong_group", **base))
-            if str(invite["status"]) != "pending": return self._finish(uow, operation_id, action, payload, TeamMutationResult("invite_invalid", **base))
-            if action == "expire" and float(now_timestamp) < float(invite["expires_at"]): return self._finish(uow, operation_id, action, payload, TeamMutationResult("not_expired", **base))
+            if group_id and str(invite["group_id"]) != str(group_id): return self._finish(uow, operation_id, action, payload, TeamMutationResult("wrong_group", **base), retry_receipt=retry_receipt)
+            if str(invite["status"]) != "pending" or invite["consumed_at"] is not None: return self._finish(uow, operation_id, action, payload, TeamMutationResult("invite_invalid", **base), retry_receipt=retry_receipt)
+            if action == "expire" and float(now_timestamp) < float(invite["expires_at"]):
+                return TeamMutationResult("not_expired", **base)
             status = "expired" if action == "expire" else "rejected"
             changed = uow.execute("UPDATE dungeon_team_invites SET status=?,consumed_at=CURRENT_TIMESTAMP,resolved_operation_id=? WHERE invite_id=? AND status='pending'", (status, operation_id, invite_id))
             if changed.rowcount != 1: return TeamMutationResult("state_changed", **base)
-            return self._finish(uow, operation_id, action, payload, TeamMutationResult("applied", **base))
+            return self._finish(uow, operation_id, action, payload, TeamMutationResult("applied", **base), retry_receipt=retry_receipt)
 
     def reject(self, operation_id: str, invite_id: str, user_id: str, group_id: str = "", now_timestamp: float = 0) -> TeamMutationResult:
         return self._resolve_invite("reject", operation_id, invite_id, user_id, group_id, now_timestamp)
 
-    def expire(self, operation_id: str, invite_id: str, now_timestamp: float) -> TeamMutationResult:
-        return self._resolve_invite("expire", operation_id, invite_id, "", "", now_timestamp)
+    def expire(self, operation_id: str, invite_id: str, now_timestamp: float, *, lock_timeout: float = 30) -> TeamMutationResult:
+        return self._resolve_invite("expire", operation_id, invite_id, "", "", now_timestamp, lock_timeout=lock_timeout)
 
     def exit_operation_result(self, operation_id: str, action: str, actor_id: str, target_id: str | None = None) -> TeamExitResult | None:
         if not self._database_exists():

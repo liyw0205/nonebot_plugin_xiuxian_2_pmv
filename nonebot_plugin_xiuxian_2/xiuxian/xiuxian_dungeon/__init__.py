@@ -1,4 +1,3 @@
-import asyncio
 import copy
 import hashlib
 import json
@@ -8,7 +7,7 @@ from datetime import datetime, timedelta
 from fractions import Fraction
 from typing import Union, Any
 
-from nonebot import require
+from nonebot import get_bot, require
 from ..on_compat import on_command
 from nonebot.params import CommandArg
 from nonebot.permission import SUPERUSER
@@ -21,6 +20,7 @@ from ..adapter_compat import (
     Message,
     MessageSegment,
     get_at_user_id,
+    get_chat_scene,
 )
 from ..messaging.delivery import delivery_service
 
@@ -38,7 +38,6 @@ from ..xiuxian_config import XiuConfig, convert_rank
 from ..xiuxian_utils.data_source import jsondata
 
 from .dungeon_manager import DungeonManager
-from .team_manager import expire_team_invite
 from ...features.dungeon.team_presentation import (
     TeamInviteResponseResult,
     build_invite_response_message,
@@ -52,6 +51,7 @@ from ...features.dungeon.team_presentation import (
 from ...paths import get_paths
 from ...features.dungeon.application import DungeonApplication
 from ...features.dungeon.team_application import DungeonTeamApplication
+from ...features.dungeon.invite_expiry import DungeonInviteExpiryWorker
 from ...features.dungeon.team_repository import TeamExitResult, TeamMutationResult, TeamStateSnapshot
 from ...infrastructure.ids import UUIDGenerator
 from ...infrastructure.clock import SystemClock
@@ -443,6 +443,9 @@ async def create_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateM
 
 @invite_team_cmd.handle(parameterless=[Cooldown(cd_time=0)])
 async def invite_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateMessageEvent], args: Message = CommandArg()):
+    notification_bot_id = str(bot.self_id)
+    notification_scene = get_chat_scene(event)
+    source_message_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "")
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
@@ -476,11 +479,12 @@ async def invite_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateM
         group_id,
         now + 60,
         now,
+        bot_id=notification_bot_id,
+        source_message_id=source_message_id,
+        notification_scene=notification_scene,
     )
     await handle_send(bot, event, _team_mutation_message("invite", result), md_type="team", k1="查看队伍", v1="查看队伍", k2="队伍帮助", v2="队伍帮助")
 
-    if result.status == "applied":
-        asyncio.create_task(expire_team_invite(target_user_id, invite_id, bot, event))
     try:
         if result.status == "applied" and isinstance(event, GroupMessageEvent):
             await delivery_service.send_to_user(
@@ -1020,6 +1024,37 @@ def check_user_state(user_info):
 # =========================
 # 副本定时任务
 # =========================
+async def _notify_expired_team_invite(invite):
+    if not invite.bot_id or not invite.group_id:
+        return
+    bot = get_bot(invite.bot_id)
+    if invite.notification_scene == "channel_group":
+        await delivery_service.send_to_channel(
+            bot, invite.group_id, "组队邀请已过期！", source_message_id=invite.source_message_id
+        )
+    elif invite.notification_scene == "group":
+        await delivery_service.send_to_group(
+            bot, invite.group_id, "组队邀请已过期！", source_message_id=invite.source_message_id
+        )
+
+
+team_invite_expiry_worker = DungeonInviteExpiryWorker(
+    dungeon_team_application, clock=runtime_clock, notify=_notify_expired_team_invite
+)
+
+
+@scheduler.scheduled_job(
+    "interval", seconds=5, id="dungeon_team_invite_expiry", max_instances=1, coalesce=True
+)
+async def expire_pending_team_invites():
+    try:
+        result = await team_invite_expiry_worker.run()
+        if result.status not in {"ok", "busy"} or result.failures or result.notification_failures:
+            logger.warning(f"副本邀请过期扫描: {result}")
+    except Exception as exc:
+        logger.exception(f"副本邀请过期扫描失败: {exc}")
+
+
 @scheduler.scheduled_job(
     "cron",
     hour=0,

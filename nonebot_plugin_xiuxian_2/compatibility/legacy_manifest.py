@@ -39,6 +39,7 @@ _JOB_IDS = (
     "daily_reset_xiangyuan",
     "demon_invasion_refresh_schedule",
     "demon_invasion_schedule",
+    "dungeon_team_invite_expiry",
     "generate_all_bosses",
     "newapi_auto_checkin_daily",
     "recover_user_stamina",

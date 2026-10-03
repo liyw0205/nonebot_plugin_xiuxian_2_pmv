@@ -323,6 +323,8 @@ def _slice_status() -> dict[str, dict[str, object]]:
     dungeon_compatibility_facade = (PACKAGE / "compatibility" / "dungeon.py").read_text(encoding="utf-8")
     dungeon_repository = (PACKAGE / "features" / "dungeon" / "repository.py").read_text(encoding="utf-8")
     dungeon_team_repository = (PACKAGE / "features" / "dungeon" / "team_repository.py").read_text(encoding="utf-8")
+    dungeon_invite_expiry = (PACKAGE / "features" / "dungeon" / "invite_expiry.py").read_text(encoding="utf-8")
+    dungeon_invite_expiry_tests = (ROOT / "tests" / "test_dungeon_invite_expiry_boundary.py").read_text(encoding="utf-8")
     dungeon_migrations = (PACKAGE / "features" / "dungeon" / "migrations.py").read_text(encoding="utf-8")
     dungeon_reset_repository = (PACKAGE / "features" / "dungeon" / "reset_repository.py").read_text(encoding="utf-8")
     dungeon_application = (PACKAGE / "features" / "dungeon" / "application.py").read_text(encoding="utf-8")
@@ -1494,6 +1496,43 @@ def _slice_status() -> dict[str, dict[str, object]]:
                 "FROM dungeon_team_members" in dungeon_team_repository
                 and "WHERE member_id=? ORDER BY team_id LIMIT 1" in dungeon_team_repository
                 and "SELECT * FROM teams" not in dungeon_team_repository
+            ),
+            "team_invite_expiry_startup_migrated": (
+                'Migration("dungeon.010", "dungeon_team_invite_expiry", apply_dungeon_team_invite_expiry)' in plugin
+                and '"dungeon.010"' in plugin[plugin.index("_PLAYER_DATABASE_MIGRATION_VERSIONS"):]
+                and '"dungeon.010"' in plugin[plugin.index("_GAME_DATABASE_EXCLUDED_MIGRATION_VERSIONS"):plugin.index("_PLAYER_DATABASE_MIGRATION_VERSIONS")]
+                and "dungeon_team_invites_expiry_idx" in dungeon_migrations
+                and "def _invite_expiry_schema_ready(" in dungeon_team_repository
+            ),
+            "team_invite_expiry_single_bounded_worker": (
+                'id="dungeon_team_invite_expiry", max_instances=1, coalesce=True' in dungeon_facade
+                and "await team_invite_expiry_worker.run()" in dungeon_facade
+                and "create_task(expire_team_invite" not in dungeon_facade
+                and "MAX_INVITE_EXPIRY_BATCH = 100" in dungeon_team_repository
+                and "ORDER BY expires_at,invite_id LIMIT ?" in dungeon_team_repository
+                and "limit=100" in dungeon_invite_expiry
+                and "self._cursor = None if busy else batch.next_cursor" in dungeon_invite_expiry
+            ),
+            "team_invite_expiry_replay_retry_and_route_covered": (
+                "test_not_expired_has_no_receipt_and_can_retry_at_deadline" in dungeon_invite_expiry_tests
+                and "test_legacy_not_expired_receipt_is_retryable_without_deleting_row" in dungeon_invite_expiry_tests
+                and "test_expiry_receipt_failure_rolls_back_state" in dungeon_invite_expiry_tests
+                and "test_due_batch_and_restarted_worker_are_bounded" in dungeon_invite_expiry_tests
+                and "test_invite_handler_freezes_origin_before_assign_bot" in dungeon_invite_expiry_tests
+                and "test_runtime_notification_uses_exact_origin_bot_and_scene" in dungeon_invite_expiry_tests
+            ),
+            "team_invite_expiry_notifications_bounded_best_effort": (
+                "notification_timeout: float = 2.0" in dungeon_invite_expiry
+                and "notification_budget: float = 10.0" in dungeon_invite_expiry
+                and "asyncio.wait_for(" in dungeon_invite_expiry
+                and "test_notification_budget_expires_all_states_without_sending" in dungeon_invite_expiry_tests
+            ),
+            "team_invite_expiry_lock_wait_and_poison_batch_bounded": (
+                "lock_timeout=0" in dungeon_invite_expiry
+                and "timeout=0" in dungeon_team_repository
+                and "await asyncio.sleep(0)" in dungeon_invite_expiry
+                and "test_locked_database_does_not_block_event_loop_or_accumulate_workers" in dungeon_invite_expiry_tests
+                and "test_full_poison_batch_does_not_starve_later_healthy_invite" in dungeon_invite_expiry_tests
             ),
             "explore_team_lookup_bounded": (
                 "FROM player_data.dungeon_team_members" in dungeon_repository
