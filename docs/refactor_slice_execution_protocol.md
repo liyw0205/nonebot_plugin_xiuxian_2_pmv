@@ -156,6 +156,15 @@
 
 本片执行收口（2026-10-03）：无新 migration/cache/DDL，所有读取错误 fail closed；optional 列按固定允许字段投影，保持 legacy planting fallback、缺次数默认及 JSON 日期/count 解码。正常启动 schema 的 cave 主键查询计划使用既有索引，不为本片新增索引。逐候选短 UoW/attach 和扫描所有 raw 元数据是容量/协作优先的明确取舍，不能宣称 N+1 I/O 或 SQL 耗时已经解决。洞府/地图/潜入/progress 聚合 `236 passed`，最终随机/inventory `55 passed`，architecture/inventory 单元 `17 passed`；四项随机 progress gate、inventory freshness、8 文件 AST 编译和 diff check 通过，完整 architecture 仍有既有 15 项错误，整体 `exit_ready=false`。首次定向运行的唯一失败是 WAL fixture 错误要求无 sidecar（45 项行为通过）；已改为 rollback-journal fixture，不承诺 WAL 只读永不产生 sidecar。隔离五库 backup、restore dry-run/restore、265 项 migration/reconcile clean 通过，路由 `203/58/7/1/1`；不是正式发布。复用 1 名只读代理审计，无代理测试/代码改动/运行库访问/缓存；主线程实现、补测和串行验收。所有进程退出后已删除本片专用 `/tmp`（约 3.9 MiB）与最终导入生成的未跟踪字节码，未碰运行数据库/WAL/SHM、正式备份、持久回执、`data/`、`.git`、`.venv` 或用户 `boss_info.json`。资源收尾为磁盘 `20G`、RAM available `1.2GiB`、inode `14%`；下一片只读审计地图 nearby 的真实默认调用图和消费方，再确定分页/目标选择/展示输出边界。
 
+### 下一片地图指定目标只读查询方案
+
+源调用图已核对：`xiuxian_map/__init__.py::_get_all_in_same_node -> MapApplication.nearby_players -> MapNearbyPlayersSqlQueryRepository.list` 仍整次 `query_all` 并复制全部 public profile。真实消费方为附近道友展示、论道目标选择、指定道号战绩查询三处；现有 repository 还是可写 UoW/可写 attach，缺库可能创建文件。这不是洞府已关闭边界的重复任务。
+
+1. 先只关闭指定道号论道与战绩查询的全量读取，提供 feature-owned `LIMIT 1` 只读目标查询；保留三维位置、当前 CAST ID 等值与名称精确匹配。论道先排除本人，战绩查询允许本人，不能共用一个固定排除规则。同名顺序保留 map rowid，历史重复 profile 的并列顺序需明确并测试，不趁读片清洗数据。
+2. 随机论道选择与附近道友展示另立两个切片：前者对实际候选流公平 reservoir(k=1)，后者最多展示 10 个去重用户，需设计无需无界 seen-ID set 的去重/抽样契约。不得直接 LIMIT 10 前十人替代随机展示，也不以一次查询有界宣称缺索引 SQL 时间有界。
+3. 本片允许复用至多 1 名只读子代理核对三个消费方的 self、重复 ID/profile、名字/顺序与缺 schema 行为；主线程实现、串行测试和最终提交。代理不启动测试、不读运行库、不生成缓存，避免与主线程争抢 RAM/SQLite。
+4. 测试覆盖同名、本人排除差异、缺位置/profile、重复 profile、CAST 等值、引号/大小写、只读 URI/路径空格、缺库/缺表不创建及 handler 源调用图；随后串行执行地图/论道相邻回归、progress/inventory/architecture、AST 编译与隔离恢复。继续使用独立 `/tmp`、禁用 pytest/pyc、资源低于 10 GiB/512 MiB 停止重任务，进程退出后仅清本片临时产物；现有 Boss JSON 修改和所有持久状态保持不动。
+
 ## 缓存清理允许范围
 
 - 确认属于本轮、相关进程已退出的未跟踪 `__pycache__/`、`*.pyc`、`.pytest_cache/`；不按目录名盲删未知缓存。
