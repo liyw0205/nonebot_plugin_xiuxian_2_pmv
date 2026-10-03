@@ -135,6 +135,23 @@
 
 本片执行收口（2026-10-03）：按上述容量/TTL/复制/失效/生命周期方案完成双入口缓存，无新增 migration、线程或后台任务，不改 SQL、返回顺序和其它共享缓存。1 名只读子代理复核实现并建议补充累计节点、深度边界、deadline 溢出和同 key 替换/FIFO 用例，主线程补齐并串行验收；代理未改文件、跑测试、导入代码、访问运行库或生成缓存。cache 定向 `37 passed`；cache/DB backend/洞府状态/地图聚合 `79 passed`；progress/architecture/inventory 聚合 `28 passed`；缓存三项 progress gate 全 true，状态仍明确保留 `query_materialization_open`。inventory freshness、4 个 Python 文件 AST 内存编译、diff check 通过。完整 architecture 仍有既有 15 项错误，`exit_ready=false`；隔离五库备份/恢复、265 项 migration recovery 和 reconcile clean 通过，路由数 `203/58/7/1/1`，不是正式发布演练。pytest/pyc 禁用，进程退出后已删除专用 `/tmp/codex-field-list-cache-20261003` 测试/恢复/日志产物，未触碰运行数据库/WAL/SHM、正式备份、持久回执、`data/`、`.git`、`.venv` 或用户 `boss_info.json`。收尾磁盘 `19G`、RAM available `1.3GiB`、inode `14%`。下一片继续处理洞府随机候选/指定潜入的真实全量读取，不把本缓存预算当作一次查询或进程 RSS 上限。
 
+### 指定潜入单行读取方案（已实现验收）
+
+1. 复用 1 名只读子代理的洞府候选审计，代理已核对 matcher、profile 首行和 player/game schema，不改文件、不测试、不访问运行库；主线程实现和串行验收，不增加并发任务。
+2. 将真实指定潜入 matcher 的 `_get_same_node_users -> 完整 profile 列表 -> next(user_name)` 改为 `DongfuApplication.nearby_target -> feature-owned read-only query`。位置仍读取 player DB 的 `map_status`，profile 仍归 game DB；只返回单个 `user_id/user_name`，使用参数绑定和只读 URI，不缓存全量候选、不请求期 DDL、不建缺失数据库。
+3. 保留先选人再检查资格的顺序：game 历史重复 user_id 取最早 rowid，候选查询不先排除本人、未建府、无灵田或今日目标次数已满的用户，仍由后续 handler 检查并拒绝，不跳到更合格的同名后者。旧候选 SQL 没有 ORDER BY，并不保证同名顺序；新查询参考地图投影明确按 map rowid ASC 固定首人，这是行为确定化而非声称旧 SQL 保证。没有等级、成熟度或全服过滤。
+4. 聚焦测试覆盖位置三维匹配、缺 profile/库/表/列、重复 game user_id、同名首行、自身与无洞府用户仍可被选中、引号道号参数绑定、SQL 输出单行和源调用图。单行返回约束的是 Python 候选物化，不保证索引未齐时 SQL 扫描耗时；`map_status` 唯一性没有新启动迁移保证，显式固定首行，不做数据清洗。
+5. 使用 `/tmp/codex-dongfu-nearby-target-20261003`，关闭 pytest/pyc 缓存，测试/恢复串行，低于 10 GiB 磁盘或 512 MiB RAM available 停止重任务，验收后清理本片产物。下一随机片另实现 rowid keyset/初始高水位、协作让出和 reservoir sampling；地图 nearby 与单个超大 JSON/字段的峰值另列未完成，不混成同一次修改。
+
+本片执行收口（2026-10-03）：Application/repository/matcher 已改为单目标只读查询，删除旧全量同节点 helper；无新增 migration、cache、DDL 或持久状态变更。位置保持 legacy JSON 解码、字符串 ID 参数和三维等值规则，名字按 BINARY 精确匹配；game 重复 profile 先取首行再过滤名字，map 同名首人明确 rowid 排序，资格检查顺序不变。洞府/潜入/地图聚合 `84 passed`，最终 named-target/inventory `39 passed`，cache/named-target progress `2 passed`；三项 named-target gate 全 true，inventory freshness、7 个 Python 文件 AST 内存编译、diff check 通过。完整 architecture 最终仍有既有 15 项错误，无新增洞府错误；全局 `exit_ready=false`。隔离五库 backup、restore dry-run/restore、265 项 migration recovery/reconcile clean 通过，路由 `203/58/7/1/1`，不是正式发布。复用 1 名只读子代理完成调用图/实现复核，代理未改代码、运行测试、访问运行库或生成缓存；主线程补齐其非阻断边界建议并串行验收。测试 pytest/pyc 禁用；导出器产生的临时仓库字节码已清理，inventory 的测试 import 误识别已通过普通 import 避免，未改扫描器或引入虚假表名。进程退出后已删除专用 `/tmp/codex-dongfu-nearby-target-20261003`（约 3.9 MiB），保护运行数据库/WAL/SHM、正式备份、持久回执、`data/`、`.git`、`.venv` 和用户 `boss_info.json`。磁盘 `19G`、RAM available `1.3GiB`；随机候选 RAM 边界仍开放。
+
+### 下一片随机潜入有界选择方案
+
+1. 只处理真实 `_get_random_dongfu_target`，不重做已完成的指定名字查询。通过 feature-owned 只读 repository 读取 player 洞府候选，按 rowid keyset 每页至多 256 行，冻结扫描边界；不使用共享 field-list cache，不把整个候选集或 profile 列表保存在 RAM。
+2. 优先在调用内的单个只读事务中分页，局部 context/finally 确保成功、异常、取消都关闭连接；若采用独立页面事务，必须明示非快照语义并验证新增/删除边界。不要跨事件保存 connection/generator，不持有 bot/event；大扫描持有读事务可能延长 WAL 生命周期，需核对公平选择与磁盘压力的取舍。
+3. 保留排除本人、built=1、有效 seed 灵田、目标当日次数和首 profile 存在规则，不新增位置/等级/成熟度过滤。只对最终合格候选做 reservoir(k=1)，第 n 个合格项以 1/n 概率替换；异步扫描按页面/固定小批协作让出，故障丢弃部分扫描结果，不能把半个集合当成公平选择成功。最终结算 CAS 保持负责状态漂移拒绝。
+4. 默认只复用 1 名只读代理核对过滤/分页/公平性及取消清理，主线程实现和串行测试；资源允许且任务独立才增加代理，最多同时 3 名。覆盖空集、晚页有效候选、各拒绝规则、均匀选择、页面/高水位、异常/取消/事务关闭和源调用图；测试关闭 pytest/pyc，使用新专用 `/tmp`，结束立即清理，不删除旧持久回执或业务数据。需要索引时只加独立启动 migration，先证明现有 schema/索引，不做请求期 DDL。
+
 ## 缓存清理允许范围
 
 - 仓库内未跟踪的 `__pycache__/`、`*.pyc`、`.pytest_cache/`。

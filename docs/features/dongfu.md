@@ -3,6 +3,8 @@
 ## 用户流程
 The historical command package remains the transport adapter. Mutating actions enter `DongfuApplication` and its feature-owned repositories.
 
+Named infiltration selects one public target through `DongfuApplication.nearby_target` without loading a nearby-user list. The read-only query uses the actor's `realm/heaven/node_id` in `player_db.map_status` and the earliest profile row per user ID in `game_db.user_xiuxian`. Duplicate names are resolved by the earliest matching map row; the old query did not specify ordering. Self, cave construction, active plots, and daily intrusion limits are still checked after selection, not used to skip to a later namesake. Missing databases or schema return no target without repairs or file creation.
+
 ## 命令与别名
 The historical package owns command names during the compatibility release. New names are added only through this feature manifest.
 
@@ -28,7 +30,7 @@ Command and web adapters translate transport input into the application DTO; bus
 Run the Dongfu repository/schema tests and the full architecture gate. Verify operation replay after startup migration and verify that requests without `dongfu.004` fail closed without creating tables.
 
 ## 灰度开关、回滚和已知限制
-Read-only cave-dwelling displays and legacy player-data projections still use compatibility managers and JSON state; they are separate migration work and are not covered by the transaction-service isolation. The legacy classes remain importable through the shim for external callers. Removing `dongfu.002`, `.003`, or `.004`, if ever required, needs restoration from a pre-migration database backup.
+Status displays use the feature-owned player projection, and named infiltration uses the single-target query. Random infiltration still materializes the full candidate set and needs a separate bounded, fair selection slice; legacy player-data writes and JSON state remain separate work. Single-row output bounds Python candidate materialization, not SQL scan time or the size of an individual field. The legacy classes remain importable through the shim for external callers. Removing `dongfu.002`, `.003`, or `.004`, if ever required, needs restoration from a pre-migration database backup.
 
 ## Manifest 清单
 - `command: 我的洞府`

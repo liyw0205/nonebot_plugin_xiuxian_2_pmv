@@ -436,29 +436,6 @@ def _roll_harvest(seed_id: int, array_lv: int):
     return result
 
 
-def _get_same_node_users(uid: str):
-    me_map = _player_data_manager().get_fields(str(uid), MAP_TABLE) or {}
-    if not me_map:
-        return []
-    realm = me_map.get("realm")
-    heaven = me_map.get("heaven")
-    node_id = me_map.get("node_id")
-    if not all([realm, heaven, node_id]):
-        return []
-
-    uids = _player_data_manager().list_users_by_fields(
-        MAP_TABLE,
-        {"realm": realm, "heaven": heaven, "node_id": node_id},
-        cache_ttl=20,
-    )
-    result = []
-    for x in uids:
-        ui = _sql_message().get_user_info_with_id(x)
-        if ui:
-            result.append(ui)
-    return result
-
-
 def _reset_intrude_count_if_needed(d: dict):
     today = _today_str()
     if d.get("intrude_date") != today:
@@ -1268,8 +1245,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
             return
         tname = target["user_name"]
     else:
-        nearby_users = _get_same_node_users(my_uid)
-        target = next((u for u in nearby_users if u["user_name"] == tname), None)
+        target = dongfu_application.nearby_target(my_uid, tname)
         if not target:
             await handle_send(bot, event, f"附近未找到道友【{tname}】。指定潜入只能针对同一地点附近的洞府。")
             return

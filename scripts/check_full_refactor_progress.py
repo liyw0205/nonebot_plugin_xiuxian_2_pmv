@@ -690,6 +690,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
     dongfu_compatibility = (PACKAGE / "compatibility" / "legacy_dongfu_transactions.py").read_text(encoding="utf-8")
     dongfu_migrations = (PACKAGE / "features" / "dongfu" / "migrations.py").read_text(encoding="utf-8")
     dongfu_status_repository = (PACKAGE / "features" / "dongfu" / "status_repository.py").read_text(encoding="utf-8")
+    dongfu_nearby_target_repository = (PACKAGE / "features" / "dongfu" / "nearby_target_repository.py").read_text(encoding="utf-8")
     dongfu_expansion_repository = (PACKAGE / "features" / "dongfu" / "expansion_repository.py").read_text(encoding="utf-8")
     dongfu_plant_slots = (PACKAGE / "features" / "dongfu" / "plant_slots.py").read_text(encoding="utf-8")
     dongfu_application = (PACKAGE / "features" / "dongfu" / "application.py").read_text(encoding="utf-8")
@@ -3278,6 +3279,23 @@ def _slice_status() -> dict[str, dict[str, object]]:
             ),
             "status_read_application_owned": "dongfu_application.status(" in dongfu_facade
             and "DongfuStatusSqlQueryRepository" in dongfu_status_repository,
+            "named_target_feature_owned": (
+                "dongfu_application.nearby_target(my_uid, tname)" in dongfu_facade
+                and "def nearby_target(" in dongfu_application
+                and "DongfuNearbyTargetSqlQueryRepository" in dongfu_repository
+            ),
+            "named_target_single_row_read_only": (
+                "read_only=True" in dongfu_nearby_target_repository
+                and "?mode=ro" in dongfu_nearby_target_repository
+                and "ORDER BY nearby.rowid ASC LIMIT 1" in dongfu_nearby_target_repository
+                and "query_all" not in dongfu_nearby_target_repository
+                and "CREATE TABLE" not in dongfu_nearby_target_repository
+                and "ALTER TABLE" not in dongfu_nearby_target_repository
+            ),
+            "legacy_named_target_list_disabled": (
+                "def _get_same_node_users(" not in dongfu_facade
+                and "nearby_users =" not in dongfu_facade
+            ),
             "status_read_has_no_legacy_writeback": (
                 "def _get_dongfu" in dongfu_facade
                 and "_player_data_manager().get_fields" not in dongfu_facade[

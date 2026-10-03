@@ -6,6 +6,12 @@ from scripts.check_full_refactor_progress import _slice_status
 
 
 class RefactorProgressTests(unittest.TestCase):
+    def test_progress_report_tracks_single_named_dongfu_target(self) -> None:
+        dongfu = _slice_status()["dongfu"]
+        self.assertTrue(dongfu["named_target_feature_owned"])
+        self.assertTrue(dongfu["named_target_single_row_read_only"])
+        self.assertTrue(dongfu["legacy_named_target_list_disabled"])
+
     def test_progress_report_separates_retained_cache_from_query_peak(self) -> None:
         cache = _slice_status()["field_list_cache"]
         self.assertTrue(cache["shared_entry_and_byte_budget"])
