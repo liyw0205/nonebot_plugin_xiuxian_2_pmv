@@ -1,10 +1,125 @@
 from __future__ import annotations
 
 import json
-from typing import Any
+import sqlite3
+import tempfile
+from pathlib import Path
+from typing import Any, BinaryIO, Iterator
 
 from ...infrastructure.database import DatabaseUnitOfWork
+from ...infrastructure.database.backup_capacity import backup_reserve_bytes, preflight_capacity
 from .domain import TitleTransactionResult
+
+
+MAX_TITLE_GRANT_USER_ID_BYTES = 1024 * 1024
+_SQLITE_TITLE_GRANT_VALUE_LIMIT = MAX_TITLE_GRANT_USER_ID_BYTES + 8192
+_SNAPSHOT_CAPACITY_CHECK_BYTES = 1024 * 1024
+_SNAPSHOT_LENGTH_PREFIX_BYTES = 8
+
+
+class TitleGrantTargetSnapshot:
+    """Anonymous disk-backed snapshot of the legacy game roster result."""
+
+    def __init__(self, stream: BinaryIO, count: int) -> None:
+        self._stream = stream
+        self.count = int(count)
+
+    def iter_user_ids(self) -> Iterator[str]:
+        self._stream.seek(0)
+        while True:
+            length_prefix = self._stream.read(_SNAPSHOT_LENGTH_PREFIX_BYTES)
+            if not length_prefix:
+                return
+            if len(length_prefix) != _SNAPSHOT_LENGTH_PREFIX_BYTES:
+                raise OSError("truncated title grant target snapshot")
+            length = int.from_bytes(length_prefix, "big")
+            encoded = self._stream.read(length)
+            if len(encoded) != length:
+                raise OSError("truncated title grant target snapshot")
+            yield encoded.decode("utf-8", errors="surrogatepass")
+
+    def close(self) -> None:
+        if not self._stream.closed:
+            self._stream.close()
+
+
+class TitleGrantTargetSqlRepository:
+    """Reads the game-owned roster without retaining the full result in RAM."""
+
+    def __init__(self, *, temp_directory: str | Path | None = None) -> None:
+        self.temp_directory = (
+            Path(temp_directory) if temp_directory is not None else Path(tempfile.gettempdir())
+        )
+
+    def snapshot_user_ids(self, uow: DatabaseUnitOfWork) -> TitleGrantTargetSnapshot:
+        stream = tempfile.TemporaryFile(mode="w+b", dir=self.temp_directory)
+        count = 0
+        written_bytes = 0
+        pending_capacity_check_bytes = 0
+        try:
+            if uow.connection is not None and hasattr(uow.connection, "setlimit"):
+                uow.connection.setlimit(sqlite3.SQLITE_LIMIT_LENGTH, _SQLITE_TITLE_GRANT_VALUE_LIMIT)
+
+            # Bound each Python row value even on Python versions without setlimit().
+            try:
+                cursor = uow.execute(
+                    "SELECT substr(user_id, 1, ?) AS user_id FROM user_xiuxian",
+                    (MAX_TITLE_GRANT_USER_ID_BYTES + 1,),
+                )
+            except sqlite3.DataError as exc:
+                if getattr(exc, "sqlite_errorcode", None) == sqlite3.SQLITE_TOOBIG:
+                    raise ValueError(
+                        "user id exceeds the title grant snapshot limit"
+                    ) from exc
+                raise
+            try:
+                while row := cursor.fetchone():
+                    user_id = str(row["user_id"])
+                    encoded = user_id.encode("utf-8", errors="surrogatepass")
+                    if len(encoded) > MAX_TITLE_GRANT_USER_ID_BYTES:
+                        raise ValueError("user id exceeds the title grant snapshot limit")
+                    record = len(encoded).to_bytes(_SNAPSHOT_LENGTH_PREFIX_BYTES, "big") + encoded
+                    if (
+                        not count
+                        or pending_capacity_check_bytes + len(record)
+                        > _SNAPSHOT_CAPACITY_CHECK_BYTES
+                    ):
+                        stream.flush()
+                        self._preflight(len(record), cumulative_bytes=written_bytes)
+                        pending_capacity_check_bytes = 0
+                    stream.write(record)
+                    written_bytes += len(record)
+                    pending_capacity_check_bytes += len(record)
+                    count += 1
+            except sqlite3.DataError as exc:
+                if getattr(exc, "sqlite_errorcode", None) == sqlite3.SQLITE_TOOBIG:
+                    raise ValueError(
+                        "user id exceeds the title grant snapshot limit"
+                    ) from exc
+                raise
+            finally:
+                cursor.close()
+
+            stream.flush()
+            if written_bytes:
+                self._preflight(0, cumulative_bytes=written_bytes)
+            stream.seek(0)
+            return TitleGrantTargetSnapshot(stream, count)
+        except Exception:
+            stream.close()
+            raise
+
+    def _preflight(self, additional_bytes: int, *, cumulative_bytes: int) -> None:
+        required_reserve = backup_reserve_bytes(cumulative_bytes + additional_bytes)
+        additional_reserve = max(
+            0,
+            required_reserve - backup_reserve_bytes(additional_bytes),
+        )
+        preflight_capacity(
+            {self.temp_directory: int(additional_bytes)},
+            operation="title grant target snapshot",
+            additional_reserve_bytes=additional_reserve,
+        )
 
 
 def _decode_titles(value: Any) -> tuple[str, ...]:

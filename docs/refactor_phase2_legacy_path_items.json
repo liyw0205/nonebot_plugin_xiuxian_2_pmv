@@ -90,16 +90,27 @@
       "id": "title.grant_all.user_enumeration",
       "kind": "command-effect",
       "entry": "赠送称号 <title> all user enumeration",
-      "status": "受阻",
-      "reason": "The default all-users branch still materializes user IDs from the legacy XiuxianDateManage helper before issuing grants.",
+      "status": "已迁移",
+      "reason": "The default all-users branch now snapshots every game roster row through a read-only feature query into an anonymous, capacity-checked temporary spool; it preserves duplicate IDs and the legacy query's unspecified ordering without a full RAM list or long-lived game DB reader.",
       "call_graph": [
-        "赠送称号 matcher -> title_grant handler",
-        "target == all -> _sql_message().get_all_user_id() -> legacy user enumeration",
-        "per-user writes -> _run_title_action -> TitleApplication.execute"
+        "赠送称号 SUPERUSER matcher -> title_grant handler -> target == all",
+        "handler -> _snapshot_title_grant_targets -> TitleGrantTargetApplication.snapshot -> read-only game_db UOW -> TitleGrantTargetSqlRepository.snapshot_user_ids",
+        "repository selects substr(user_id, 1, 1 MiB + 1) from every user_xiuxian row without filtering, DISTINCT, or ORDER BY; the bounded prefix lets it reject oversized IDs before Python materializes an unbounded value, while accepted rows preserve the exact legacy value and result sequence in a capacity-checked anonymous temporary spool",
+        "default startup lifecycle runs feature migrations before JOBS; run_legacy_startup -> on_compat index refresh -> bootstrap_from_user_xiuxian -> sql_message lazy proxy -> XiuxianDateManage initializes/checks the legacy game schema before commands are ready",
+        "background worker -> snapshot.iter_user_ids -> get_user_unlocked_titles -> _run_title_action('grant') -> TitleApplication.execute -> player_db TitleRepository"
       ],
       "evidence": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_title/__init__.py:91-100,450-490",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_title/__init__.py:35-51"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_title/__init__.py:98,54-71,488-556",
+        "nonebot_plugin_xiuxian_2/features/title/application.py:194-211",
+        "nonebot_plugin_xiuxian_2/features/title/repository.py:14-111",
+        "nonebot_plugin_xiuxian_2/infrastructure/database/uow.py:17-38,87-92",
+        "nonebot_plugin_xiuxian_2/infrastructure/database/backup_capacity.py:28-90",
+        "nonebot_plugin_xiuxian_2/bootstrap/lifecycle.py:15-22,76-100",
+        "nonebot_plugin_xiuxian_2/plugin.py:1235-1240",
+        "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:631-640,798-800",
+        "nonebot_plugin_xiuxian_2/xiuxian/blackhouse.py:147-155",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_utils/xiuxian2_handle.py:94-134,204-228,4603-4607,4638",
+        "nonebot_plugin_xiuxian_2/features/title/application.py:56-153"
       ]
     },
     {

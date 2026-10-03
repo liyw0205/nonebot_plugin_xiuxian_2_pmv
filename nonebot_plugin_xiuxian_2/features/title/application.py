@@ -9,7 +9,7 @@ from ...infrastructure.clock import SystemClock
 from ...infrastructure.database import DatabaseUnitOfWork, OperationLedger
 from ...infrastructure.observability import trace_context
 from .domain import TitleTransactionResult
-from .repository import TitleRepository
+from .repository import TitleGrantTargetSnapshot, TitleGrantTargetSqlRepository, TitleRepository
 
 
 class TitleApplication:
@@ -191,4 +191,24 @@ class TitleApplication:
         return ReplyPlan(outcome.message or outcome.data, reference=True)
 
 
-__all__ = ["TitleApplication"]
+class TitleGrantTargetApplication:
+    """Builds a bounded-RAM snapshot from the game-owned player roster."""
+
+    def __init__(
+        self,
+        database: str | Path,
+        *,
+        repository: TitleGrantTargetSqlRepository | None = None,
+        temp_directory: str | Path | None = None,
+    ) -> None:
+        self.database = str(database)
+        self.repository = repository or TitleGrantTargetSqlRepository(
+            temp_directory=temp_directory
+        )
+
+    def snapshot(self) -> TitleGrantTargetSnapshot:
+        with DatabaseUnitOfWork(self.database, read_only=True) as uow:
+            return self.repository.snapshot_user_ids(uow)
+
+
+__all__ = ["TitleApplication", "TitleGrantTargetApplication"]

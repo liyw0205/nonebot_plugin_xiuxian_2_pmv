@@ -31,7 +31,7 @@ from .title_data import (
     get_title_achievement_records, find_unlockable_titles
 )
 from ...paths import get_paths
-from ...features.title.application import TitleApplication
+from ...features.title.application import TitleApplication, TitleGrantTargetApplication
 from .title_transaction_service import TitleTransactionService
 
 _sql_message_instance = None
@@ -52,6 +52,23 @@ def _title_transaction_service():
 
 
 title_application = TitleApplication(get_paths().player_db)
+title_grant_target_application = TitleGrantTargetApplication(get_paths().game_db)
+
+
+async def _snapshot_title_grant_targets():
+    import asyncio
+
+    task = asyncio.create_task(asyncio.to_thread(title_grant_target_application.snapshot))
+    try:
+        return await asyncio.shield(task)
+    except asyncio.CancelledError:
+        try:
+            snapshot = await task
+        except Exception:
+            pass
+        else:
+            snapshot.close()
+        raise
 
 
 def _run_title_action(action: str, operation_id: str, user_id: str, **payload):
@@ -470,37 +487,49 @@ async def title_grant_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
 
     # 全服
     if target and target.lower() == "all":
-        all_users = _sql_message().get_all_user_id() or []
-        if not all_users:
+        try:
+            snapshot = await _snapshot_title_grant_targets()
+        except Exception as exc:
+            logger.opt(exception=exc).error("全服称号赠送名单快照创建失败")
+            await handle_send(bot, event, "全服赠送称号失败：名单读取或临时空间检查未通过，未开始发放。")
+            return
+        if not snapshot.count:
+            snapshot.close()
             await handle_send(bot, event, "当前没有可赠送的用户")
             return
-        users = [str(u) for u in all_users]
         title_id_local = title_id
         title_name_local = title_name
 
         def _work():
+            scanned = 0
             success_count = 0
             repeat_or_fail = 0
-            for uid in users:
-                try:
-                    unlocked = get_user_unlocked_titles(str(uid))
-                    result = _run_title_action(
-                        "grant",
-                        _title_operation_id(event, f"grant-{title_id_local}", str(uid)),
-                        uid,
-                        expected_unlocked=unlocked,
-                        title_id=title_id_local,
-                    )
-                    if result.status in {"applied", "duplicate"}:
-                        success_count += 1
-                    else:
+            try:
+                for uid in snapshot.iter_user_ids():
+                    scanned += 1
+                    try:
+                        unlocked = get_user_unlocked_titles(uid)
+                        result = _run_title_action(
+                            "grant",
+                            _title_operation_id(event, f"grant-{title_id_local}", uid),
+                            uid,
+                            expected_unlocked=unlocked,
+                            title_id=title_id_local,
+                        )
+                        if result.status in {"applied", "duplicate"}:
+                            success_count += 1
+                        else:
+                            repeat_or_fail += 1
+                    except Exception:
                         repeat_or_fail += 1
-                except Exception:
-                    repeat_or_fail += 1
-            return success_count, repeat_or_fail
+                return scanned, success_count, repeat_or_fail
+            finally:
+                snapshot.close()
 
         def _done(pair):
-            success_count, repeat_or_fail = pair
+            scanned, success_count, repeat_or_fail = pair
+            if not scanned:
+                return "当前没有可赠送的用户"
             return (
                 f"全服赠送称号【{title_name_local}】完成："
                 f"成功{success_count}，重复/失败{repeat_or_fail}"
@@ -508,18 +537,23 @@ async def title_grant_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
 
         from ..xiuxian_utils.bg_jobs import spawn_admin_job
 
-        await spawn_admin_job(
-            bot,
-            event,
-            job_key=f"title-grant-all:{title_id}",
-            start_msg=(
-                f"🔄 全服赠送称号【{title_name}】已在后台开始"
-                f"（共 {len(users)} 人），完成后另行通知。"
-            ),
-            work=_work,
-            done_msg=_done,
-            fail_prefix="全服赠送称号失败",
-        )
+        started = False
+        try:
+            started = await spawn_admin_job(
+                bot,
+                event,
+                job_key=f"title-grant-all:{title_id}",
+                start_msg=(
+                    f"🔄 全服赠送称号【{title_name}】已在后台开始"
+                    f"（共 {snapshot.count} 条用户记录），完成后另行通知。"
+                ),
+                work=_work,
+                done_msg=_done,
+                fail_prefix="全服赠送称号失败",
+            )
+        finally:
+            if not started:
+                snapshot.close()
         return
 
     # 单人目标解析
