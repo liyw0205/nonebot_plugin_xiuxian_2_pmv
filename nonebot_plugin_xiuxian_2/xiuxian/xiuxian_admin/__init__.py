@@ -56,7 +56,7 @@ from ..xiuxian_utils.xiuxian2_handle import (
 )
 from ..xiuxian_config import XiuConfig, JsonConfig, convert_rank
 from ..xiuxian_utils.utils import (
-    check_user, number_to, get_msg_pic, handle_send, send_msg_handler,
+    check_user, get_user_profile_by_name, number_to, get_msg_pic, handle_send, send_msg_handler,
     generate_command, _impersonating_users, send_help_message,
     parse_page_arg, paginate_text_blocks, build_pagination_buttons
 )
@@ -1561,7 +1561,7 @@ async def restate_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
         await restate.finish()
     nick_name = plain_args[0] if plain_args else ""
     if nick_name and not give_qq:
-        give_message = _sql_message().get_user_info_with_name(nick_name)
+        give_message = get_user_profile_by_name(nick_name)
         if give_message:
             give_qq = give_message['user_id']
         else:

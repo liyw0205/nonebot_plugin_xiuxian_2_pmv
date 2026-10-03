@@ -140,7 +140,9 @@ def test_default_single_handler_routes_snapshot_and_reset_through_application() 
     start = source.index("async def restate_")
     handler = source[start:source.index("@set_xiuxian.handle", start)]
     single = handler[handler.index("if give_qq:"):]
+    assert "get_user_profile_by_name(nick_name)" in handler
     assert "admin_application.player_status_snapshot(" in single
     assert "admin_application.reset_player_status(" in single
     assert "_admin_player_status_reset_service().snapshot(" not in single
+    assert "_sql_message().get_user_info_with_name(nick_name)" not in handler
     assert "schema_missing" in single

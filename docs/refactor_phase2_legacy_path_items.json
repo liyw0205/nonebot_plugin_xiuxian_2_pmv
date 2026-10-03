@@ -7290,13 +7290,13 @@
       "id": "command:admin:重置状态",
       "kind": "commands",
       "entry": "admin:重置状态 (aliases: )",
-      "status": "受阻",
-      "reason": "Both single-player and global reset effects now use feature repositories, but non-mention name resolution still reads through the legacy XiuxianDateManage/UserRepository path. Keep this command blocked until that default legacy read is migrated or explicitly reviewed as compatibility.",
+      "status": "已迁移",
+      "reason": "The default command's target lookup and both reset branches use feature-owned read/write boundaries; the compatibility matcher shell no longer reaches the legacy XiuxianDateManage lookup or reset writer.",
       "call_graph": [
         "xiuxian_admin.__init__:272 matcher -> on_compat.on_command -> _nb_on_command -> restate_",
         "restate_ no-argument branch -> AdminApplication.find_player_status_batch/reset_player_status_batch -> AdminPlayerStatusBatchResetSqlRepository (bounded feature-owned reset)",
         "restate_ mention branch -> AdminApplication.player_status_snapshot/reset_player_status -> AdminPlayerStatusResetSqlRepository (feature-owned snapshot and atomic reset)",
-        "restate_ text-name branch -> _sql_message().get_user_info_with_name -> XiuxianDateManage.users.get_by_name -> legacy _read_query(user_xiuxian)"
+        "restate_ text-name branch -> get_user_profile_by_name -> PlayerProfileApplication -> PlayerProfileSqlRepository (read-only first-row lookup)"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
@@ -7304,8 +7304,9 @@
         "nonebot_plugin_xiuxian_2/features/admin/application.py:35-56",
         "nonebot_plugin_xiuxian_2/features/admin/player_status_reset_repository.py:64-196",
         "nonebot_plugin_xiuxian_2/features/admin/player_status_batch_repository.py:369-412",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_utils/xiuxian2_handle.py:823-824",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_utils/repositories.py:53-62"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_utils/utils.py:109-121",
+        "nonebot_plugin_xiuxian_2/features/info/profile_application.py:11-24",
+        "nonebot_plugin_xiuxian_2/features/info/profile_repository.py:32-42"
       ],
       "source_declaration_found": true,
       "source": {
