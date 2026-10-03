@@ -9,6 +9,12 @@ class MapRequest(TypedDict, total=False):
 
 
 @dataclass(frozen=True)
+class MapNearbyTargetResult:
+    target: dict[str, Any] | None = None
+    has_candidates: bool = False
+
+
+@dataclass(frozen=True)
 class SeedPurchaseResult:
     status: str
     quantity: int
@@ -93,6 +99,7 @@ __all__ = [
     "MapExploreStartResult",
     "MapInteractiveActionResult",
     "MapMissionClaimResult",
+    "MapNearbyTargetResult",
     "MapRequest",
     "SeedPurchaseResult",
 ]

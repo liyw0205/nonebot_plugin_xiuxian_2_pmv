@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Any, Protocol
 import json
 from ...infrastructure.database import DatabaseUnitOfWork, OutboxStore
+from .schemas import MapNearbyTargetResult
 
 
 class MapRepository(Protocol):
@@ -520,6 +521,54 @@ class MapNearbyPlayersSqlQueryRepository:
     def __init__(self, player_database: str | Path, game_database: str | Path) -> None:
         self.player_database = str(player_database)
         self.game_database = str(game_database)
+
+    def find(
+        self,
+        realm: str,
+        heaven: str,
+        node_id: str,
+        user_name: str,
+        *,
+        exclude_user_id: str | None = None,
+    ) -> MapNearbyTargetResult:
+        realm, heaven, node_id = str(realm or ""), str(heaven or ""), str(node_id or "")
+        user_name = str(user_name or "")
+        player, game = Path(self.player_database), Path(self.game_database)
+        if not all((realm, heaven, node_id, user_name)) or not player.is_file() or not game.is_file():
+            return MapNearbyTargetResult()
+        scope = (
+            "FROM map_status JOIN game_data.user_xiuxian AS profile "
+            "ON CAST(profile.user_id AS TEXT)=CAST(map_status.user_id AS TEXT) "
+            "WHERE map_status.realm=? AND map_status.heaven=? AND map_status.node_id=? "
+        )
+        params = (realm, heaven, node_id)
+        if exclude_user_id is not None:
+            scope += "AND CAST(map_status.user_id AS TEXT) COLLATE BINARY<>? "
+            params += (str(exclude_user_id),)
+        try:
+            with DatabaseUnitOfWork(player, read_only=True) as uow:
+                uow.attach_database(f"{game.resolve().as_uri()}?mode=ro", "game_data")
+                row = uow.query_one(
+                    "SELECT map_status.user_id,profile.user_name,profile.level,profile.power "
+                    + scope
+                    + "AND CAST(profile.user_name AS TEXT) COLLATE BINARY=? "
+                    "AND (typeof(profile.user_name) NOT IN ('integer','real') OR profile.user_name<>0) "
+                    "ORDER BY map_status.rowid ASC,profile.rowid ASC LIMIT 1",
+                    (*params, user_name),
+                )
+                if row is None:
+                    # Keep the no-other-player message distinct from a missing name.
+                    present = uow.query_one("SELECT 1 AS present " + scope + "LIMIT 1", params)
+                    return MapNearbyTargetResult(has_candidates=present is not None)
+                target = {
+                    "user_id": str(row["user_id"]),
+                    "user_name": str(row["user_name"] or ""),
+                    "level": str(row["level"] or ""),
+                    "power": int(row["power"] or 0),
+                }
+        except Exception:
+            return MapNearbyTargetResult()
+        return MapNearbyTargetResult(target=target, has_candidates=True)
 
     def list(self, realm: str, heaven: str, node_id: str) -> list[dict[str, Any]]:
         realm, heaven, node_id = str(realm or ""), str(heaven or ""), str(node_id or "")

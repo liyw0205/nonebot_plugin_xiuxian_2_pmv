@@ -1260,12 +1260,22 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
 
     map_data = _load_map_data()
     st = _get_player_map_status(uid, map_data)
-    nearby = [u for u in _get_all_in_same_node(st["realm"], st["heaven"], st["node_id"]) if str(u["user_id"]) != uid]
-    if not nearby:
-        await handle_send(bot, event, "附近无可切磋道友。")
-        return
+    if target_name:
+        selection = map_application.nearby_target(
+            realm=st["realm"], heaven=st["heaven"], node_id=st["node_id"],
+            user_name=target_name, exclude_user_id=uid,
+        )
+        if not selection.has_candidates:
+            await handle_send(bot, event, "附近无可切磋道友。")
+            return
+        target = selection.target
+    else:
+        nearby = [u for u in _get_all_in_same_node(st["realm"], st["heaven"], st["node_id"]) if str(u["user_id"]) != uid]
+        if not nearby:
+            await handle_send(bot, event, "附近无可切磋道友。")
+            return
+        target = runtime_random.choice(nearby)
 
-    target = next((u for u in nearby if u["user_name"] == target_name), None) if target_name else runtime_random.choice(nearby)
     if not target:
         await handle_send(bot, event, f"附近未找到道友【{target_name}】")
         return
@@ -1308,8 +1318,10 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     if target_name:
         map_data = _load_map_data()
         st = _get_player_map_status(uid, map_data)
-        nearby = _get_all_in_same_node(st["realm"], st["heaven"], st["node_id"])
-        target = next((u for u in nearby if u["user_name"] == target_name), None)
+        target = map_application.nearby_target(
+            realm=st["realm"], heaven=st["heaven"], node_id=st["node_id"],
+            user_name=target_name, exclude_user_id=None,
+        ).target
         if not target:
             await handle_send(bot, event, f"附近未找到道友【{target_name}】")
             return

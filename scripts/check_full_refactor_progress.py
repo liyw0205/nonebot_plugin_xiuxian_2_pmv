@@ -365,6 +365,10 @@ def _slice_status() -> dict[str, dict[str, object]]:
     map_legacy_shim = (PACKAGE / "xiuxian" / "xiuxian_map" / "transaction_service.py").read_text(encoding="utf-8")
     map_compatibility = (PACKAGE / "compatibility" / "legacy_map_transactions.py").read_text(encoding="utf-8")
     map_repository = (PACKAGE / "features" / "map" / "repository.py").read_text(encoding="utf-8")
+    map_named_target_query = map_repository.split("class MapNearbyPlayersSqlQueryRepository:", 1)[-1].split("    def list(", 1)[0]
+    map_qc_handler = map_facade[map_facade.index("@dao_qc.handle") : map_facade.index("@dao_view.handle")]
+    map_named_qc = map_qc_handler.split("    if target_name:", 1)[-1].split("    else:", 1)[0]
+    map_record_handler = map_facade[map_facade.index("@dao_view.handle") : map_facade.index("@seed_shop.handle")]
     pet_application_source = (PACKAGE / "features" / "pet" / "application.py").read_text(encoding="utf-8")
     pet_repository_source = (PACKAGE / "features" / "pet" / "repository.py").read_text(encoding="utf-8")
     pet_migrations_source = (PACKAGE / "features" / "pet" / "migrations.py").read_text(encoding="utf-8")
@@ -1779,6 +1783,30 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "status": "v1_web_and_commands_game_db_owned; startup_backfill_and_explicit_rollback_compatibility_retained",
         },
         "map": {
+            "named_nearby_target_feature_owned": (
+                "map_application.nearby_target(" in map_named_qc
+                and "map_application.nearby_target(" in map_record_handler
+                and "def nearby_target(" in map_application
+                and ").find(" in map_application
+            ),
+            "named_nearby_target_single_row_read_only": (
+                "read_only=True" in map_named_target_query
+                and "?mode=ro" in map_named_target_query
+                and "profile.rowid ASC LIMIT 1" in map_named_target_query
+                and "query_all" not in map_named_target_query
+                and "CREATE TABLE" not in map_named_target_query
+                and "ALTER TABLE" not in map_named_target_query
+            ),
+            "named_nearby_self_and_empty_semantics_preserved": (
+                "exclude_user_id=uid" in map_named_qc
+                and "if not selection.has_candidates:" in map_named_qc
+                and "exclude_user_id=None" in map_record_handler
+                and "MapNearbyTargetResult(has_candidates=present is not None)" in map_named_target_query
+            ),
+            "named_nearby_full_list_disabled": (
+                "_get_all_in_same_node" not in map_named_qc
+                and "_get_all_in_same_node" not in map_record_handler
+            ),
             "interactive_application_owned": "map_application.interactive_settlement(" in map_facade and "map_application.interactive_start(" in map_facade,
             "resource_application_owned": "map_application.resource_reward(" in map_facade,
             "combat_engine_injected": (

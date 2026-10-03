@@ -10,6 +10,7 @@ from .._legacy_application import LegacyApplication
 from ..combat_settlement.application import CombatSettlementApplication
 from ...core.result import OperationOutcome
 from ...infrastructure.database import DatabaseUnitOfWork
+from .schemas import MapNearbyTargetResult
 from .repository import LegacyMapRepository, MapCombatLifecyclePlanSqlRepository, MapCombatLifecycleQueryRepository, MapCombatLifecycleStartSqlRepository, MapDongfuBuildSqlRepository, MapDongfuSqlQueryRepository, MapExploreSettlementSqlRepository, MapExploreStartSqlRepository, MapExploreStatusSqlQueryRepository, MapExploreStatusSqlWriteRepository, MapMissionClaimSqlRepository, MapMissionSqlQueryRepository, MapMissionSqlWriteRepository, MapNearbyPlayersSqlQueryRepository, MapProjectionSqlRepository, MapProjectionSqlWriteRepository, MapSeedPurchaseSqlRepository, MapHomeReturnSqlRepository, MapInteractiveFailureSqlRepository, MapInteractiveSettlementSqlRepository, MapInteractiveSqlQueryRepository, MapInteractiveStartSqlRepository, MapMovementSqlRepository, MapResourceRewardSqlRepository, MapStatusSqlQueryRepository, MapStatusSqlWriteRepository, MapRepository
 
 class MapCombatRunner(Protocol):
@@ -110,6 +111,20 @@ class MapApplication(LegacyApplication):
 
     def nearby_players(self, realm: str, heaven: str, node_id: str) -> list[dict[str, Any]]:
         return MapNearbyPlayersSqlQueryRepository(self.player_database, self.game_database).list(realm, heaven, node_id)
+
+    def nearby_target(
+        self,
+        realm: str,
+        heaven: str,
+        node_id: str,
+        user_name: str,
+        *,
+        exclude_user_id: str | None = None,
+    ) -> MapNearbyTargetResult:
+        return MapNearbyPlayersSqlQueryRepository(self.player_database, self.game_database).find(
+            realm=realm, heaven=heaven, node_id=node_id,
+            user_name=user_name, exclude_user_id=exclude_user_id,
+        )
 
     def interactive_start(self, *, operation_id: str, user_id: str, **kwargs: Any):
         if self._explicit_repository is None:

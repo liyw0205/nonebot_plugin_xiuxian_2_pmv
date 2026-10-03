@@ -6,6 +6,13 @@ from scripts.check_full_refactor_progress import _slice_status
 
 
 class RefactorProgressTests(unittest.TestCase):
+    def test_progress_report_tracks_single_named_map_target(self) -> None:
+        mapping = _slice_status()["map"]
+        self.assertTrue(mapping["named_nearby_target_feature_owned"])
+        self.assertTrue(mapping["named_nearby_target_single_row_read_only"])
+        self.assertTrue(mapping["named_nearby_self_and_empty_semantics_preserved"])
+        self.assertTrue(mapping["named_nearby_full_list_disabled"])
+
     def test_progress_report_tracks_bounded_random_dongfu_selection(self) -> None:
         dongfu = _slice_status()["dongfu"]
         self.assertTrue(dongfu["random_target_feature_owned"])
