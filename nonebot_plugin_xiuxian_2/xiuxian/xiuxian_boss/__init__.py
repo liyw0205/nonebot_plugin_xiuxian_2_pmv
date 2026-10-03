@@ -1352,6 +1352,10 @@ async def boss_integral_store_(bot: Bot, event: GroupMessageEvent | PrivateMessa
     l_msg.append(f"【世界积分商店】第{page}/{total_pages}页")
     
     if boss_integral_shop:
+        weekly_purchases = boss_application.weekly_purchases(user_id)
+        if weekly_purchases is None:
+            await handle_send(bot, event, "每周限购数据未就绪，请稍后重试。")
+            await boss_integral_store.finish()
         # 计算当前页的商品范围
         start_index = (page - 1) * per_page
         end_index = min(start_index + per_page, total_items)
@@ -1362,7 +1366,7 @@ async def boss_integral_store_(bot: Bot, event: GroupMessageEvent | PrivateMessa
         for item_id, item_info in shop_items:
             item_data = _items().get_data_by_item_id(item_id)
             weekly_limit = item_info.get('weekly_limit', 1)
-            already_purchased = boss_limit.get_weekly_purchases(user_id, item_id)
+            already_purchased = int(weekly_purchases.get(str(item_id), 0) or 0)
             msg = f"编号:{item_id}\n"
             msg += f"名字：{item_data['name']}\n"
             msg += f"描述：{item_data.get('desc', '暂无描述')}\n"
@@ -1452,6 +1456,10 @@ async def boss_integral_use_(bot: Bot, event: GroupMessageEvent | PrivateMessage
         await boss_integral_use.finish()
         
     if is_in:
+        weekly_purchases = boss_application.weekly_purchases(user_id)
+        if weekly_purchases is None:
+            await handle_send(bot, event, "每周限购数据未就绪，请稍后重试。")
+            await boss_integral_use.finish()
         event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
         operation_id = (
             f"boss-purchase:{event_id}:{user_id}"
@@ -1459,7 +1467,7 @@ async def boss_integral_use_(bot: Bot, event: GroupMessageEvent | PrivateMessage
             else f"boss-purchase:{boss_ids.new_id()}:{user_id}"
         )
         # 先走 operation：重放必须在限购/积分前置拦截之前完成。
-        already_purchased = boss_limit.get_weekly_purchases(user_id, shop_id)
+        already_purchased = int(weekly_purchases.get(str(shop_id), 0) or 0)
         max_quantity = weekly_limit - already_purchased
         request_quantity = quantity
         if request_quantity > max_quantity:
@@ -1472,7 +1480,6 @@ async def boss_integral_use_(bot: Bot, event: GroupMessageEvent | PrivateMessage
             request_quantity = max(1, quantity)
 
         user_boss_fight_info = get_user_boss_fight_info(user_id)
-        boss_data = boss_limit._load_data(user_id)
         purchase_outcome = boss_application.purchase(
             operation_id=operation_id,
             user_id=user_id,
@@ -1483,7 +1490,7 @@ async def boss_integral_use_(bot: Bot, event: GroupMessageEvent | PrivateMessage
             unit_cost=cost,
             weekly_limit=weekly_limit,
             expected_integral=user_boss_fight_info["boss_integral"],
-            expected_weekly_purchases=boss_data.get("weekly_purchases", {}),
+            expected_weekly_purchases=weekly_purchases,
             max_goods_num=XiuConfig().max_goods_num,
         )
         purchase_data = purchase_outcome.data or {}

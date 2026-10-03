@@ -80,6 +80,14 @@ class RefactorProgressTests(unittest.TestCase):
         self.assertTrue(compensation["claim_delete_is_atomic_with_definition"])
         self.assertTrue(compensation["claim_delete_admin_handlers_handle_failure"])
 
+    def test_progress_report_tracks_boss_weekly_purchase_read_ownership(self) -> None:
+        boss = _slice_status()["boss"]
+        self.assertTrue(boss["weekly_purchase_snapshot_application_owned"])
+        self.assertTrue(boss["weekly_purchase_snapshot_read_only_and_no_ddl"])
+        self.assertTrue(boss["weekly_purchase_handlers_use_feature_snapshot"])
+        self.assertTrue(boss["weekly_purchase_snapshot_and_write_share_schema_selection"])
+        self.assertTrue(boss["weekly_purchase_legacy_row_initialized_only_on_success"])
+
     def test_progress_report_tracks_arena_cutovers_and_active_blockers(self) -> None:
         slices = _slice_status()
         arena = slices["arena"]

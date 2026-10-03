@@ -110,6 +110,9 @@ class BossApplication:
     def _repository(self) -> BossRepository:
         return self.repository or BossPurchaseSqlRepository(self.game_database, self.player_database, self.activity_database, clock=self.clock)
 
+    def weekly_purchases(self, user_id: str, today: Any = None) -> dict[str, Any] | None:
+        return self._repository().weekly_purchases(str(user_id), today)
+
     def _execute(self, *, operation_id: str, user_id: str, action: str, payload: Mapping[str, Any], call) -> OperationOutcome[dict[str, Any]]:
         with trace_context(operation_id=operation_id, user_scope=user_id):
             try:

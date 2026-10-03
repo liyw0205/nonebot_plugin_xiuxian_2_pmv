@@ -625,8 +625,29 @@ def _slice_status() -> dict[str, dict[str, object]]:
     boss_facade = (PACKAGE / "xiuxian" / "xiuxian_boss" / "__init__.py").read_text(encoding="utf-8")
     reward_service_source = (PACKAGE / "xiuxian" / "xiuxian_utils" / "reward_service.py").read_text(encoding="utf-8")
     boss_application = (PACKAGE / "features" / "boss" / "application.py").read_text(encoding="utf-8")
+    boss_purchase_repository = (PACKAGE / "features" / "boss" / "repository.py").read_text(encoding="utf-8")
     boss_world_repository = (PACKAGE / "features" / "boss" / "world_boss_repository.py").read_text(encoding="utf-8")
     boss_migrations = (PACKAGE / "features" / "boss" / "migrations.py").read_text(encoding="utf-8")
+    boss_shop_handler = boss_facade[
+        boss_facade.index("async def boss_integral_store_") : boss_facade.index(
+            "@boss_integral_info.handle", boss_facade.index("async def boss_integral_store_")
+        )
+    ]
+    boss_purchase_handler = boss_facade[
+        boss_facade.index("async def boss_integral_use_") : boss_facade.index(
+            "@boss_integral_rank.handle", boss_facade.index("async def boss_integral_use_")
+        )
+    ]
+    boss_weekly_snapshot_repository = boss_purchase_repository[
+        boss_purchase_repository.index(
+            "    def weekly_purchases(", boss_purchase_repository.index("class BossPurchaseSqlRepository")
+        ) : boss_purchase_repository.index("    @staticmethod\n    def _weekly")
+    ]
+    boss_purchase_write_repository = boss_purchase_repository[
+        boss_purchase_repository.index("    def purchase(", boss_purchase_repository.index("class BossPurchaseSqlRepository")) : boss_purchase_repository.index(
+            "    @staticmethod\n    def _record", boss_purchase_repository.index("class BossPurchaseSqlRepository")
+        )
+    ]
     buff_facade = (PACKAGE / "xiuxian" / "xiuxian_buff" / "__init__.py").read_text(encoding="utf-8")
     buff_training_handler = buff_facade[
         buff_facade.index("async def up_exp_") : buff_facade.index("@stone_exp.handle")
@@ -2778,8 +2799,36 @@ def _slice_status() -> dict[str, dict[str, object]]:
                 and "items = Items()" not in boss_facade
                 and "_items().get_data_by_item_id(" in boss_facade
             ),
+            "weekly_purchase_snapshot_application_owned": (
+                "def weekly_purchases(" in boss_application
+                and "self._repository().weekly_purchases(" in boss_application
+                and "def weekly_purchases(" in boss_weekly_snapshot_repository
+            ),
+            "weekly_purchase_snapshot_read_only_and_no_ddl": (
+                "DatabaseUnitOfWork(self.player_database, read_only=True)" in boss_weekly_snapshot_repository
+                and "boss_weekly_purchases" in boss_weekly_snapshot_repository
+                and '"weekly_purchases" in boss_columns' in boss_weekly_snapshot_repository
+                and "CREATE TABLE" not in boss_weekly_snapshot_repository
+                and "ALTER TABLE" not in boss_weekly_snapshot_repository
+            ),
+            "weekly_purchase_handlers_use_feature_snapshot": (
+                "boss_application.weekly_purchases(user_id)" in boss_shop_handler
+                and "boss_application.weekly_purchases(user_id)" in boss_purchase_handler
+                and "boss_limit.get_weekly_purchases(" not in boss_shop_handler + boss_purchase_handler
+                and "boss_limit._load_data(" not in boss_purchase_handler
+            ),
+            "weekly_purchase_snapshot_and_write_share_schema_selection": (
+                '"weekly_purchases" in boss_columns' in boss_purchase_write_repository
+                and 'weekly_table = "boss_weekly_purchases"' in boss_purchase_write_repository
+                and "INSERT INTO player_data.boss_weekly_purchases" in boss_purchase_write_repository
+                and "ON CONFLICT(user_id) DO UPDATE SET weekly_purchases=excluded.weekly_purchases" in boss_purchase_write_repository
+            ),
+            "weekly_purchase_legacy_row_initialized_only_on_success": (
+                'boss = boss or {"weekly": "{}"}' in boss_purchase_write_repository
+                and "INSERT INTO player_data.boss(user_id,weekly_purchases)" in boss_purchase_write_repository
+            ),
             "legacy_manual_spawn_disabled": "_spawn_world_boss(" not in boss_facade or "boss_application.spawn(" in boss_facade,
-            "status": "manual_spawn_daily_limit_full_refresh_punishment_cutover_with_other_boss_compatibility",
+            "status": "manual_spawn_daily_limit_full_refresh_punishment_and_weekly_purchase_snapshot_cutover_with_other_boss_compatibility",
         },
         "buff": {
             "player_experience_normalization_owned": (

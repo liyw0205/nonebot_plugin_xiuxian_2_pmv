@@ -5,6 +5,7 @@ import unittest
 from pathlib import Path
 
 from ..application import BossApplication
+from ....infrastructure.database import DatabaseUnitOfWork, OperationLedger
 
 
 class _Repository:
@@ -22,10 +23,21 @@ class _Repository:
 
 
 class BossApplicationTests(unittest.TestCase):
+    @staticmethod
+    def _application(directory, repository):
+        game_database = Path(directory) / "game.db"
+        with DatabaseUnitOfWork(game_database) as uow:
+            OperationLedger().ensure_schema(uow)
+        return BossApplication(
+            game_database,
+            Path(directory) / "player.db",
+            repository=repository,
+        )
+
     def test_purchase_is_idempotent(self):
         with tempfile.TemporaryDirectory() as directory:
             repository = _Repository()
-            app = BossApplication(Path(directory) / "game.db", Path(directory) / "player.db", repository=repository)
+            app = self._application(directory, repository)
             request = dict(operation_id="boss-buy-1", user_id="u", item_id=1, item_name="灵草", item_type="药材", quantity=1, unit_cost=10, weekly_limit=2, expected_integral=100, expected_weekly_purchases={}, max_goods_num=99)
             first = app.purchase(**request)
             replay = app.purchase(**request)
@@ -35,7 +47,7 @@ class BossApplicationTests(unittest.TestCase):
     def test_rejected_purchase_is_recorded(self):
         with tempfile.TemporaryDirectory() as directory:
             repository = _Repository("integral_insufficient")
-            app = BossApplication(Path(directory) / "game.db", Path(directory) / "player.db", repository=repository)
+            app = self._application(directory, repository)
             request = dict(operation_id="boss-buy-reject", user_id="u", item_id=1, item_name="灵草", item_type="药材", quantity=1, unit_cost=10, weekly_limit=2, expected_integral=100, expected_weekly_purchases={}, max_goods_num=99)
             result = app.purchase(**request)
             replay = app.purchase(**request)
@@ -47,7 +59,7 @@ class BossApplicationTests(unittest.TestCase):
     def test_settlement_requires_operation_and_replays(self):
         with tempfile.TemporaryDirectory() as directory:
             repository = _Repository()
-            app = BossApplication(Path(directory) / "game.db", Path(directory) / "player.db", repository=repository)
+            app = self._application(directory, repository)
             request = dict(operation_id="boss-settle-1", user_id="u", expected_bosses=[{"气血": 10}], settled_bosses=[{"气血": 0}], boss_index=0, expected_stamina=10, stamina_cost=1, expected_hp=100, expected_mp=20, final_hp=90, final_mp=20, expected_exp=1, exp_reward=2, expected_stone=3, stone_reward=4, expected_daily_stone=0, expected_daily_integral=0, expected_total_integral=0, integral_reward=1, expected_battle_count=0, battle_limit=3, expected_checked_at="2026-09-12", checked_at="2026-09-12", item=None, max_goods_num=99, actual_damage=10, killed=True, daily_period="2026-09-12", weekly_period="2026-W37")
             first = app.settle(**request)
             replay = app.settle(**request)
