@@ -133,34 +133,36 @@
       "kind": "matcher-family",
       "entry": "default old on_message/on_regex/on_startswith and other non-command matcher handlers",
       "status": "受阻",
-      "reason": "A source inventory confirms seven default matcher registrations here: five regex, one message, and one notice matcher. Their effects are mixed: work claim now atomically commits user_cd, the status=2 work_offer_snapshots projection, the selected work_active_snapshots payload and its receipt; settlement prefers a read-only feature active snapshot, with the legacy read path retained only when no active snapshot is available. The claim JSON file remains a non-authoritative projection; refresh and expiration still write it. Bank mutations use feature applications; media parsing and fallback retain legacy callbacks; group lifecycle notices remain a separate old event path. Keep the family blocked until every handler and remaining projection has a closed owner; do not add members automatically, and put out-of-scope discoveries in backlog for explicit review.",
+      "reason": "A source inventory confirms seven default matcher registrations here: five regex, one message, and one notice matcher. Their effects are mixed: work claim now atomically commits user_cd, the status=2 work_offer_snapshots projection, the selected work_active_snapshots payload and its receipt; settlement prefers a read-only feature active snapshot, with the legacy read path retained only when no active snapshot is available. Expiration now uses WorkRefreshApplication.mark_offer_expired -> WorkRefreshSqlRepository.mark_offer_expired to compare-and-set the database snapshot; savef(sync_snapshot=False) afterward writes only the JSON file projection. Refresh and claim also retain JSON projections, so the compatibility boundary is still open. The bank regex handler still owns parsing, validation, orchestration, and reply mapping even though mutations call feature applications. Media parsing and fallback retain legacy callbacks; group lifecycle notices remain a separate old event path. Keep the family blocked until every handler and remaining projection has a closed owner; do not add members automatically, and put out-of-scope discoveries in backlog for explicit review.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized enumerates non-internal xiuxian modules -> load_all_plugins imports modules and evaluates their decorators",
         "six on_compat message/regex registrations: empty_fallback.on_message; work.do_work and bank.bank on_regex; three media_parse_link on_regex handlers -> NoneBot matcher constructor -> _register_route",
         "only on_command checks the explicit _MIGRATED_COMMAND_KEYS suppression set; the six confirmed non-command registrations bypass that suppression -> XiuxianOnCompatProvider dispatches matching indexed/generic routes",
         "admin.group_welcome is explicitly imported by xiuxian_admin and registers direct nonebot.on_notice -> handle_group_lifecycle -> lifecycle/config/send behavior outside on_compat",
+        "bank.bank on_regex -> bank_ parses and validates the requested action -> BankAccountInfoApplication plus BankDepositApplication/BankWithdrawalApplication/BankUpgradeApplication/BankInterestApplication -> feature-owned repositories; the legacy handler still owns result-to-reply mapping",
         "work.do_work -> do_work_ -> work_refresh_application.refresh -> WorkRefreshSqlRepository commits offer/count/receipt -> savef(sync_snapshot=False) still writes players/<id>/workinfo.json",
         "work.do_work -> do_work_ -> work_claim_application.claim -> WorkClaimSqlRepository commits user_cd, status=2 work_offer_snapshots, selected work_active_snapshots and claim receipt atomically -> savef(sync_snapshot=False) writes only players/<id>/workinfo.json",
         "work.do_work settlement branch -> settle_work -> WorkClaimApplication.get_active_snapshot -> read-only WorkClaimSqlRepository joins the active snapshot to user_cd; new status=2 snapshots are used directly and historical status=1 snapshots are derived in memory -> workhandle.do_work(offer_snapshot=...) -> WorkSettlementApplication/WorkSettlementSqlRepository settles assets",
         "work.do_work settlement branch falls back to readf only when no active feature snapshot exists; the legacy projection is still needed for historical users outside the active-snapshot table",
-        "work.do_work status checks -> has_unaccepted_work -> readf; expiration changes status to 0 and calls savef, which updates both the offer snapshot and legacy JSON"
+        "work.do_work status checks -> has_unaccepted_work -> readf prefers work_offer_snapshots and falls back to legacy JSON without importing it -> _mark_work_offer_expired -> WorkRefreshApplication.mark_offer_expired -> WorkRefreshSqlRepository.mark_offer_expired compare-and-set -> savef(sync_snapshot=False) writes only the JSON projection"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:69-82,135-139,214-227,486-537,789-971",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:80,82",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/empty_fallback.py:10,95-103",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_work/__init__.py:8,42-48,122-126,247-304,489-495,593-615,659-686,814-863,985",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_work/reward_data_source.py:58-117,138-170",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_work/__init__.py:71-76,130-134,202-205,257-320,471-477,522-536,598-636,694-724,749-763,825-875,945-955",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_work/reward_data_source.py:58-88,90-106,127-167",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_work/work_handle.py:8,76-87",
-        "nonebot_plugin_xiuxian_2/features/work/refresh_repository.py:155-184",
+        "nonebot_plugin_xiuxian_2/features/work/refresh_repository.py:94-142,155-184",
+        "nonebot_plugin_xiuxian_2/features/work/refresh_application.py:28-37",
         "nonebot_plugin_xiuxian_2/features/work/claim_repository.py:23-155",
         "nonebot_plugin_xiuxian_2/features/work/application.py:30-49",
         "nonebot_plugin_xiuxian_2/features/work/settlement_repository.py:104-170",
         "nonebot_plugin_xiuxian_2/features/work/tests/test_claim_repository.py:14-153",
         "nonebot_plugin_xiuxian_2/features/work/tests/test_refresh_repository.py:14-189",
-        "tests/test_work_refresh_settlement.py:105-175",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_bank/__init__.py:5,29-33,58-70,85-138",
+        "tests/test_work_refresh_settlement.py:83-175",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_bank/__init__.py:29-33,58-83,85-138,140-325",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/__init__.py:40",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/media_parse_link.py:45-126",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/group_welcome.py:13,229-270"
@@ -581,7 +583,7 @@
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:91-103,118-126,2632-2656",
         "nonebot_plugin_xiuxian_2/features/admin/application.py:65-84",
-        "nonebot_plugin_xiuxian_2/features/admin/id_swap_repository.py:18-25,82-145,148-303,337-389,412-438,486-536,541-621,626-712",
+        "nonebot_plugin_xiuxian_2/features/admin/id_swap_repository.py:18-25,82-145,148-303,337-389,412-438,486-536,541-621,626-701",
         "nonebot_plugin_xiuxian_2/features/admin/migrations.py:14-40",
         "nonebot_plugin_xiuxian_2/features/_legacy_migrated.py:54-62,126-131",
         "nonebot_plugin_xiuxian_2/plugin.py:542-543,603-604,607-635,1248",
@@ -9882,7 +9884,7 @@
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
@@ -9910,7 +9912,7 @@
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
@@ -9938,7 +9940,7 @@
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
@@ -9967,7 +9969,7 @@
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
@@ -9995,7 +9997,7 @@
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
@@ -10023,7 +10025,7 @@
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
@@ -10051,7 +10053,7 @@
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
@@ -10079,7 +10081,7 @@
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
@@ -10107,7 +10109,7 @@
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
@@ -10135,7 +10137,7 @@
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
@@ -10163,7 +10165,7 @@
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
@@ -10191,7 +10193,7 @@
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
@@ -10219,7 +10221,7 @@
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
@@ -10247,7 +10249,7 @@
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
@@ -10275,7 +10277,7 @@
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
@@ -10303,7 +10305,7 @@
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
@@ -10331,7 +10333,7 @@
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
@@ -10359,7 +10361,7 @@
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
@@ -10387,7 +10389,7 @@
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
@@ -10415,7 +10417,7 @@
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
@@ -10443,7 +10445,7 @@
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
@@ -10471,7 +10473,7 @@
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
@@ -10499,7 +10501,7 @@
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
@@ -10527,7 +10529,7 @@
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
@@ -10555,7 +10557,7 @@
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
@@ -10583,7 +10585,7 @@
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
@@ -10611,7 +10613,7 @@
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
@@ -10639,7 +10641,7 @@
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
@@ -10667,7 +10669,7 @@
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
@@ -10695,7 +10697,7 @@
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
@@ -10723,7 +10725,7 @@
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
@@ -10751,7 +10753,7 @@
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
@@ -10779,7 +10781,7 @@
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
@@ -10807,7 +10809,7 @@
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
@@ -10835,7 +10837,7 @@
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
@@ -10863,7 +10865,7 @@
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
@@ -10891,7 +10893,7 @@
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
@@ -10919,7 +10921,7 @@
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
@@ -10947,7 +10949,7 @@
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
@@ -10975,7 +10977,7 @@
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
@@ -11003,7 +11005,7 @@
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
@@ -11031,7 +11033,7 @@
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
@@ -11059,7 +11061,7 @@
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
@@ -11087,7 +11089,7 @@
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
@@ -11115,7 +11117,7 @@
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
@@ -11143,7 +11145,7 @@
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
@@ -11171,7 +11173,7 @@
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
@@ -11199,7 +11201,7 @@
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
@@ -11227,7 +11229,7 @@
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
@@ -11255,7 +11257,7 @@
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
@@ -11283,7 +11285,7 @@
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
@@ -11311,7 +11313,7 @@
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
@@ -11339,7 +11341,7 @@
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
@@ -11367,7 +11369,7 @@
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
@@ -11395,7 +11397,7 @@
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
@@ -11423,7 +11425,7 @@
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
@@ -11451,7 +11453,7 @@
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
@@ -11479,7 +11481,7 @@
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
@@ -11507,7 +11509,7 @@
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
@@ -11535,7 +11537,7 @@
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
@@ -11563,7 +11565,7 @@
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
@@ -11591,7 +11593,7 @@
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
@@ -11619,7 +11621,7 @@
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
@@ -11647,7 +11649,7 @@
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
@@ -11675,7 +11677,7 @@
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
@@ -11703,7 +11705,7 @@
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
@@ -11731,7 +11733,7 @@
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
@@ -11759,7 +11761,7 @@
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
@@ -11787,7 +11789,7 @@
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
@@ -11815,7 +11817,7 @@
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
@@ -11843,7 +11845,7 @@
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
@@ -11871,7 +11873,7 @@
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
@@ -11899,7 +11901,7 @@
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
@@ -11927,7 +11929,7 @@
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
@@ -11955,7 +11957,7 @@
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
@@ -11983,7 +11985,7 @@
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
@@ -12011,7 +12013,7 @@
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
@@ -12039,7 +12041,7 @@
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
@@ -12067,7 +12069,7 @@
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
@@ -12095,7 +12097,7 @@
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
@@ -12123,7 +12125,7 @@
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
@@ -12151,7 +12153,7 @@
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
@@ -12179,7 +12181,7 @@
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
@@ -12207,7 +12209,7 @@
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
@@ -12235,7 +12237,7 @@
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
@@ -12263,7 +12265,7 @@
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
@@ -12291,7 +12293,7 @@
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
@@ -12319,7 +12321,7 @@
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
@@ -12347,7 +12349,7 @@
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
@@ -12375,7 +12377,7 @@
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
@@ -12404,7 +12406,7 @@
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
@@ -12432,7 +12434,7 @@
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
@@ -12460,7 +12462,7 @@
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
@@ -12488,7 +12490,7 @@
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
@@ -12516,7 +12518,7 @@
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
@@ -12544,7 +12546,7 @@
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
@@ -12572,7 +12574,7 @@
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
@@ -12600,7 +12602,7 @@
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
@@ -12628,7 +12630,7 @@
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
@@ -12656,7 +12658,7 @@
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
@@ -12684,7 +12686,7 @@
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
@@ -12712,7 +12714,7 @@
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
@@ -12740,7 +12742,7 @@
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
@@ -12768,7 +12770,7 @@
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
@@ -12796,7 +12798,7 @@
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
@@ -12824,7 +12826,7 @@
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
@@ -12852,7 +12854,7 @@
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
@@ -12880,7 +12882,7 @@
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
@@ -12908,7 +12910,7 @@
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
@@ -12937,7 +12939,7 @@
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
@@ -12965,7 +12967,7 @@
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
@@ -12994,7 +12996,7 @@
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
@@ -13022,7 +13024,7 @@
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
@@ -13050,7 +13052,7 @@
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
@@ -13078,7 +13080,7 @@
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
@@ -13106,7 +13108,7 @@
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",

@@ -68,6 +68,14 @@ def _sql_message():
     return _sql_message_instance
 
 
+def _mark_work_offer_expired(user_id: str, expected_offer: dict[str, Any]):
+    return work_refresh_application.mark_offer_expired(
+        user_id=user_id,
+        expected_offer=expected_offer,
+        updated_at=runtime_clock.now().strftime("%Y-%m-%d %H:%M:%S.%f"),
+    )
+
+
 
 def format_reward_item(item_id: int) -> str:
     """格式化额外奖励物品，支持点击查看效果。"""
@@ -192,7 +200,9 @@ def get_user_work_status(user_id: str) -> Tuple[int, Any]:
             return 2, user_cd_message
 
     # 使用新的 has_unaccepted_work 函数检查未接取悬赏令
-    has_work, work_info = has_unaccepted_work(user_id)
+    has_work, work_info = has_unaccepted_work(
+        user_id, mark_expired=_mark_work_offer_expired
+    )
     if has_work:
         return 3, work_info  # 未过期的悬赏令
     elif work_info:  # 有数据但已过期或已接取
@@ -462,7 +472,9 @@ async def delayed_reminder(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
     try:
         await asyncio.sleep(180)
         if user_id in user_reminder_status and user_reminder_status[user_id]["pending"]:
-            has_work, work_data = has_unaccepted_work(user_id)
+            has_work, work_data = has_unaccepted_work(
+                user_id, mark_expired=_mark_work_offer_expired
+            )
             if has_work:
                 remaining_minutes = (runtime_clock.now() - user_reminder_status[user_id]["refresh_time"]).total_seconds() / 60
                 remaining_minutes = max(WORK_EXPIRE_MINUTES - remaining_minutes, 0)
@@ -583,7 +595,9 @@ async def do_work_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
             await do_work.finish()
         
         # 检查是否已有未接取的悬赏令
-        has_work, work_data = has_unaccepted_work(user_id)
+        has_work, work_data = has_unaccepted_work(
+            user_id, mark_expired=_mark_work_offer_expired
+        )
         if has_work:
             # 取消任何现有的延迟提醒任务
             if user_id in user_reminder_tasks:

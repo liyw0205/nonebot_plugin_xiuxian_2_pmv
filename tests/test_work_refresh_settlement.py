@@ -3,6 +3,7 @@ from __future__ import annotations
 import tempfile
 import json
 import unittest
+from datetime import datetime as DateTime
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock, patch
@@ -51,6 +52,99 @@ class WorkRefreshSettlementTests(unittest.TestCase):
                     ).fetchall()
                 }
         self.assertNotIn("work_offer_snapshots", tables)
+
+    def test_legacy_json_fallback_is_not_imported_during_read(self):
+        from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_work import reward_data_source
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            database = root / "game.sqlite3"
+            players = root / "players"
+            player_dir = players / "u"
+            player_dir.mkdir(parents=True)
+            offer = {"tasks": {"采药": {"time": 5}}, "status": 1}
+            (player_dir / "workinfo.json").write_text(json.dumps(offer), encoding="utf-8")
+            with db_backend.transaction(database) as conn:
+                conn.execute(
+                    "CREATE TABLE work_offer_snapshots(user_id TEXT PRIMARY KEY,snapshot TEXT,updated_at TEXT)"
+                )
+            paths = SimpleNamespace(game_db=database)
+            with patch.object(reward_data_source, "PLAYERSDATA", players), patch.object(
+                reward_data_source, "get_paths", return_value=paths
+            ):
+                self.assertEqual(reward_data_source.readf("u"), offer)
+
+            with db_backend.connection(database) as conn:
+                count = conn.execute(
+                    "SELECT COUNT(*) FROM work_offer_snapshots WHERE user_id='u'"
+                ).fetchone()[0]
+        self.assertEqual(count, 0)
+
+    def test_expired_offer_uses_feature_transition_and_json_only_projection(self):
+        from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_work import reward_data_source
+
+        offer = {
+            "tasks": {"采药": {"time": 5}},
+            "status": 1,
+            "refresh_time": "2026-10-04 09:00:00",
+        }
+        expired = {**offer, "status": 0}
+        callback = Mock(return_value=SimpleNamespace(status="applied", offer=expired))
+
+        class FrozenDateTime:
+            @staticmethod
+            def now():
+                return DateTime(2026, 10, 4, 10, 0, 0)
+
+            @staticmethod
+            def strptime(value, date_format):
+                return DateTime.strptime(value, date_format)
+
+        with (
+            patch.object(reward_data_source, "datetime", FrozenDateTime),
+            patch.object(reward_data_source, "readf", return_value=offer),
+            patch.object(reward_data_source, "savef") as save,
+        ):
+            has_work, current = reward_data_source.has_unaccepted_work(
+                "u", mark_expired=callback
+            )
+
+        self.assertFalse(has_work)
+        self.assertEqual(current, expired)
+        callback.assert_called_once_with("u", offer)
+        save.assert_called_once_with("u", expired, sync_snapshot=False)
+
+    def test_expiration_conflict_preserves_a_new_unaccepted_offer(self):
+        from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_work import reward_data_source
+
+        stale = {
+            "tasks": {"采药": {"time": 5}},
+            "status": 1,
+            "refresh_time": "2026-10-04 09:00:00",
+        }
+        current = {**stale, "refresh_time": "2026-10-04 09:59:00"}
+        callback = Mock(return_value=SimpleNamespace(status="state_changed", offer=current))
+
+        class FrozenDateTime:
+            @staticmethod
+            def now():
+                return DateTime(2026, 10, 4, 10, 0, 0)
+
+            @staticmethod
+            def strptime(value, date_format):
+                return DateTime.strptime(value, date_format)
+
+        with (
+            patch.object(reward_data_source, "datetime", FrozenDateTime),
+            patch.object(reward_data_source, "readf", return_value=stale),
+            patch.object(reward_data_source, "savef"),
+        ):
+            has_work, result = reward_data_source.has_unaccepted_work(
+                "u", mark_expired=callback
+            )
+
+        self.assertTrue(has_work)
+        self.assertEqual(result, current)
 
     def test_offer_projection_write_without_migration_fails_without_creating_schema(self):
         from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_work import reward_data_source

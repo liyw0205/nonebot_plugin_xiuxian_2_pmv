@@ -37,6 +37,13 @@ class WorkSettlementRepository(Protocol):
 class WorkRefreshRepository(Protocol):
     def get_result(self, operation_id: str) -> Any: ...
 
+    def mark_offer_expired(
+        self,
+        user_id: str,
+        expected_offer: Mapping[str, Any],
+        updated_at: str,
+    ) -> Any: ...
+
     def refresh(
         self,
         operation_id: str,

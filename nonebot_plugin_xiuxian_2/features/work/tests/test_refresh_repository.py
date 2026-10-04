@@ -75,6 +75,72 @@ class WorkRefreshRepositoryTests(unittest.TestCase):
         self.assertEqual(replay.status, "duplicate")
         self.assertEqual(replay.remaining_count, 2)
 
+    def test_expiration_updates_only_the_matching_offer_and_is_idempotent(self) -> None:
+        with db_backend.transaction(self.database) as conn:
+            conn.execute(
+                "INSERT INTO work_offer_snapshots VALUES(?,?,?)",
+                ("u", json.dumps(self.offer), "created"),
+            )
+
+        expired = self.application.mark_offer_expired(
+            user_id="u", expected_offer=self.offer, updated_at="expired"
+        )
+        replay = self.application.mark_offer_expired(
+            user_id="u", expected_offer=self.offer, updated_at="later"
+        )
+
+        self.assertEqual((expired.status, expired.offer["status"]), ("applied", 0))
+        self.assertEqual((replay.status, replay.offer["status"]), ("state_changed", 0))
+        with db_backend.connection(self.database) as conn:
+            stored = conn.execute(
+                "SELECT snapshot,updated_at FROM work_offer_snapshots WHERE user_id='u'"
+            ).fetchone()
+        self.assertEqual(json.loads(stored[0])["status"], 0)
+        self.assertEqual(stored[1], "expired")
+
+    def test_expiration_conflict_does_not_replace_a_new_offer(self) -> None:
+        current = {**self.offer, "refresh_time": "new"}
+        with db_backend.transaction(self.database) as conn:
+            conn.execute(
+                "INSERT INTO work_offer_snapshots VALUES(?,?,?)",
+                ("u", json.dumps(current), "new"),
+            )
+
+        result = self.application.mark_offer_expired(
+            user_id="u", expected_offer=self.offer, updated_at="expired"
+        )
+
+        self.assertEqual(result.status, "state_changed")
+        self.assertEqual(result.offer, current)
+        with db_backend.connection(self.database) as conn:
+            stored = conn.execute(
+                "SELECT snapshot FROM work_offer_snapshots WHERE user_id='u'"
+            ).fetchone()[0]
+        self.assertEqual(json.loads(stored), current)
+
+    def test_expiration_write_failure_keeps_original_snapshot(self) -> None:
+        with db_backend.transaction(self.database) as conn:
+            conn.execute(
+                "INSERT INTO work_offer_snapshots VALUES(?,?,?)",
+                ("u", json.dumps(self.offer), "created"),
+            )
+            conn.execute(
+                "CREATE TRIGGER fail_expiration BEFORE UPDATE ON work_offer_snapshots "
+                "BEGIN SELECT RAISE(ABORT,'expiration failed'); END"
+            )
+
+        with self.assertRaises(db_backend.IntegrityError):
+            self.application.mark_offer_expired(
+                user_id="u", expected_offer=self.offer, updated_at="expired"
+            )
+
+        with db_backend.connection(self.database) as conn:
+            stored = conn.execute(
+                "SELECT snapshot,updated_at FROM work_offer_snapshots WHERE user_id='u'"
+            ).fetchone()
+        self.assertEqual(json.loads(stored[0]), self.offer)
+        self.assertEqual(stored[1], "created")
+
     def test_stale_state_and_unforced_offer_are_rejected(self) -> None:
         changed_cd = {**self.expected_cd, "create_time": "changed"}
         stale = self.refresh("stale", expected_cd=changed_cd)
@@ -113,8 +179,12 @@ class WorkRefreshRepositoryTests(unittest.TestCase):
             expected_offer=None,
             new_offer=self.offer,
         )
+        expiration = WorkRefreshApplication(database).mark_offer_expired(
+            user_id="u", expected_offer=self.offer, updated_at="expired"
+        )
 
         self.assertEqual(result.status, "schema_missing")
+        self.assertEqual(expiration.status, "schema_missing")
         with db_backend.connection(database) as conn:
             tables = {
                 row[0]

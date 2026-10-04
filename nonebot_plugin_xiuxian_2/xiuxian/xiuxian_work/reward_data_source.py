@@ -88,7 +88,7 @@ def savef(user_id, data, sync_snapshot=True):
     save_json_file(FILEPATH, save_data)
 
 def readf(user_id):
-    """优先读取数据库权威快照，并兼容迁移旧 JSON。"""
+    """Read the database snapshot, falling back to the legacy JSON without importing it."""
     user_id = str(user_id)
     FILEPATH = PLAYERSDATA / user_id / "workinfo.json"
     database = get_paths().game_db
@@ -100,17 +100,6 @@ def readf(user_id):
                 ).fetchone()
                 if row is not None:
                     return json.loads(str(row[0]))
-                if not os.path.exists(FILEPATH):
-                    return None
-                data = load_json_file(FILEPATH, {}, dict)
-                if not data:
-                    return None
-                conn.execute(
-                    "INSERT INTO work_offer_snapshots(user_id,snapshot,updated_at) VALUES(%s,%s,%s)",
-                    (user_id, json.dumps(data, ensure_ascii=True, sort_keys=True), str(data.get("refresh_time", ""))),
-                )
-                conn.commit()
-                return data
     if not os.path.exists(FILEPATH):
         return None
     data = load_json_file(FILEPATH, {}, dict)
@@ -135,7 +124,7 @@ def delete_work_file(user_id, delete_snapshot=True):
             return False
     return False
 
-def has_unaccepted_work(user_id, check_expired=True, expire_minutes=30):
+def has_unaccepted_work(user_id, check_expired=True, expire_minutes=30, mark_expired=None):
     """
     检查用户是否有未接取的悬赏令
     :param user_id: 用户ID
@@ -164,9 +153,15 @@ def has_unaccepted_work(user_id, check_expired=True, expire_minutes=30):
         
         time_diff = datetime.now() - refresh_time
         if time_diff.total_seconds() > expire_minutes * 60:
-            # 自动标记为过期
-            work_data["status"] = 0
-            savef(user_id, work_data)
-            return False, work_data
-    
-    return True, work_data
+            result = (
+                mark_expired(user_id, work_data)
+                if mark_expired is not None
+                else None
+            )
+            if result is not None and isinstance(result.offer, dict):
+                work_data = result.offer
+            else:
+                work_data = {**work_data, "status": 0}
+            savef(user_id, work_data, sync_snapshot=False)
+
+    return int(work_data.get("status", 0) or 0) == 1, work_data

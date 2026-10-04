@@ -65,11 +65,11 @@
 
 ## 目标
 
-将重构拆成边界清晰的单功能切片。一个切片完成并通过验收后，先清理本轮产生的测试缓存和临时输出，再开始下一个切片，避免多个功能和多轮测试的产物同时占用磁盘。
+将重构按冻结清单拆成边界清晰的单项。只实施当前冻结范围内的条目；单项验收后清理本轮明确产生的测试缓存和临时输出，再开始下一项。清单外发现只进入 backlog，必须经过显式范围评审和版本升级后才能纳入，不得自动追加玩法切片。
 
-## 当前剩余目标
+## 后续路线（非当前执行队列）
 
-截至 2026-10-03，切片级进度门禁已覆盖主要 feature，但整体 `exit_ready=false`。剩余目标按以下顺序关闭，不能用局部测试通过替代：
+以下是全仓重构的长期路线，不是当前可直接领取的切片队列。当前唯一完成分母是 `docs/refactor_phase2_legacy_path_items.json` 中冻结的 496 项；先按其四态和调用图关闭 v1，不从下列领域目标自动开新玩法切片。清单外发现保持 backlog，显式批准新 scope 版本前不进入 phase 2。P7 真实发布证据仍由独立门禁判定，不并入 v1。
 
 1. **player/economy 旧写路径清零**：继续按真实调用图迁移 `xiuxian2_handle`、剩余 `transaction_service` 的默认 handler、scheduler 和 Web 写入；旧实现只能作为显式 compatibility/rollback，不得由默认入口构造或调用。
 2. **其余领域边界**：按 cultivation/training、combat/dungeon/boss、sect/trade/scheduler/Web 的顺序完成真实入口、随机/时间注入、operation receipt、启动 migration、跨库恢复和缺 schema fail-closed。
@@ -83,7 +83,9 @@
 3. **持久状态与恢复证据**：盘点 operation ledger、outbox、projection receipt、失败/死信和 bet/payout 等历史回执的保留窗口；在有备份、checksum、dry-run、restore、reconcile 和人工决策记录前，不删除或压缩任何持久状态。
 4. **发布退出条件**：完成正式数据备份/迁移/恢复演练、P7 发布证据、全局 legacy 门禁和真实运行 readiness；只有脚本输出 `exit_ready=true` 且证据归档后，才可声明全面重构完成。
 
-### 近期执行方案（2026-10-03）
+### 历史路线快照（2026-10-03，不驱动当前执行）
+
+本节记录 v1 冻结前的路线安排，仅作历史背景；其中“自动进入下一条切片”等旧调度语句已暂停，不能覆盖上方的有限 scope、backlog 和 P7 边界。
 
 1. **校准证据，不先改业务代码（已完成）**：1 名只读子代理对照 architecture 检查器、manifest、实际 blueprint 路由和已有回归，确认旧 dungeon explore intent Web permission/manifest 报告已过期。`FEATURE.routes` 已声明 `POST /api/v1/dungeon/explore/intent`/`user`，实际 blueprint 路由匹配，且 handler 使用 `guard("user", permission, write=True)`；既有测试也核对五条路由并覆盖 permission/CSRF。未改代码、未跑测试/导入/编译、未访问数据库或生成缓存；不重复补已有声明。若完整 architecture CLI 仍报告此项，后续须先定位实际运行差异，不把静态旧记录当作当前 blocker。
 2. **回到首要 blocker：player/economy 默认旧写路径**。按真实生产调用图，每次只选一个由默认 command、scheduler 或 Web 可达的 `xiuxian2_handle`/`transaction_service` 写边界；先证明 owner、写入和回放语义，再迁到 application/repository。旧实现保留为显式 compatibility/rollback；不按旧 service/helper 的存在与否批量删代码。

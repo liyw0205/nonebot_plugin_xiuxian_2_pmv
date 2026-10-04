@@ -25,6 +25,17 @@ class WorkRefreshApplication:
     def get_result(self, operation_id: str) -> WorkRefreshResult | None:
         return self.repository.get_result(str(operation_id).strip())
 
+    def mark_offer_expired(
+        self,
+        *,
+        user_id: str,
+        expected_offer: Mapping[str, Any],
+        updated_at: str,
+    ) -> WorkRefreshResult:
+        return self.repository.mark_offer_expired(
+            str(user_id), dict(expected_offer), str(updated_at)
+        )
+
     def refresh(
         self,
         *,

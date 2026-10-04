@@ -91,6 +91,56 @@ class WorkRefreshSqlRepository:
                 json.loads(str(previous["offer_snapshot"])),
             )
 
+    def mark_offer_expired(
+        self,
+        user_id: str,
+        expected_offer: Mapping[str, Any],
+        updated_at: str,
+    ) -> WorkRefreshResult:
+        user_id = str(user_id)
+        expected_offer = dict(expected_offer)
+        if not self.database.is_file():
+            return WorkRefreshResult("schema_missing")
+
+        with DatabaseUnitOfWork(self.database, immediate=True) as uow:
+            table = uow.query_one(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name='work_offer_snapshots'"
+            )
+            if table is None:
+                return WorkRefreshResult("schema_missing")
+            row = uow.query_one(
+                "SELECT snapshot FROM work_offer_snapshots WHERE user_id=?", (user_id,)
+            )
+            if row is None:
+                return WorkRefreshResult("missing")
+            stored_snapshot = str(row["snapshot"])
+            current = json.loads(stored_snapshot)
+            if not isinstance(current, dict):
+                raise ValueError("work offer snapshot must be an object")
+            if current != expected_offer:
+                return WorkRefreshResult("state_changed", offer=current)
+            if int(current.get("status", 1) or 0) != 1:
+                return WorkRefreshResult("unchanged", offer=current)
+
+            expired = {**current, "status": 0}
+            cursor = uow.execute(
+                "UPDATE work_offer_snapshots SET snapshot=?,updated_at=? "
+                "WHERE user_id=? AND snapshot=?",
+                (
+                    json.dumps(expired, ensure_ascii=True, sort_keys=True),
+                    str(updated_at),
+                    user_id,
+                    stored_snapshot,
+                ),
+            )
+            if cursor.rowcount != 1:
+                latest = uow.query_one(
+                    "SELECT snapshot FROM work_offer_snapshots WHERE user_id=?", (user_id,)
+                )
+                latest_offer = json.loads(str(latest["snapshot"])) if latest else None
+                return WorkRefreshResult("state_changed", offer=latest_offer)
+            return WorkRefreshResult("applied", offer=expired)
+
     def refresh(
         self,
         operation_id: str,
