@@ -7,7 +7,12 @@ import unittest
 from contextlib import redirect_stdout, redirect_stderr
 from unittest.mock import patch
 
-from scripts.phase2_legacy_path_gate import evaluate_phase2_scope, load_phase2_scope_report, main
+from scripts.phase2_legacy_path_gate import (
+    _refreshed_command_graph,
+    evaluate_phase2_scope,
+    load_phase2_scope_report,
+    main,
+)
 
 
 def _snapshot_hash(inventory: dict, fields: list[str]) -> str:
@@ -22,7 +27,13 @@ def _snapshot_hash(inventory: dict, fields: list[str]) -> str:
 
 
 def _membership_hash(items: list[dict]) -> str:
-    membership = [{key: item.get(key) for key in ("id", "kind", "entry")} for item in items]
+    membership = [
+        {
+            key: item.get(key)
+            for key in ("id", "kind", "entry", "source", "legacy_command_exclusion")
+        }
+        for item in items
+    ]
     payload = json.dumps(membership, ensure_ascii=False, separators=(",", ":"), sort_keys=True).encode("utf-8")
     return hashlib.sha256(payload).hexdigest()
 
@@ -32,6 +43,33 @@ def _source_projection(inventory: dict, fields: list[str]) -> dict:
 
 
 class Phase2LegacyPathGateTests(unittest.TestCase):
+    def test_command_binding_refresh_preserves_custom_downstream_edges(self):
+        existing_graph = [
+            "initialized NoneBot -> old command path",
+            "legacy/back.py:10 back_cmd = on_command('我的背包') -> compatibility matcher",
+            "legacy/back.py:19 back_cmd_ -> legacy downstream effect not closed in this frozen item",
+            "legacy/back.py:19 back_cmd_ -> BackApplication.show_inventory -> BackSqlRepository.snapshot",
+            "BackSqlRepository.snapshot -> read-only inventory query",
+        ]
+        record = {
+            "file": "legacy/back.py",
+            "line": 11,
+            "name": "我的背包",
+            "matcher_names": ["back_cmd"],
+            "aliases": [],
+            "handlers": [{"name": "back_cmd_", "line": 22}],
+        }
+
+        call_graph, evidence = _refreshed_command_graph(existing_graph, (record,))
+
+        self.assertTrue(any("legacy/back.py:11 back_cmd = on_command" in edge for edge in call_graph))
+        self.assertTrue(
+            any("legacy/back.py:22 back_cmd_ -> BackApplication.show_inventory" in edge for edge in call_graph)
+        )
+        self.assertIn("BackSqlRepository.snapshot -> read-only inventory query", call_graph)
+        self.assertFalse(any("legacy downstream effect not closed" in edge for edge in call_graph))
+        self.assertIn("legacy/back.py:22", evidence)
+
     def test_frozen_repository_scope_has_call_graphs_and_reports_open_paths(self):
         report = load_phase2_scope_report(include_items=True)
 
@@ -40,7 +78,7 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
         self.assertEqual(report["path_count"], 496)
         self.assertEqual(
             report["status_counts"],
-            {"不可达": 19, "允许保留的兼容路径": 43, "受阻": 424, "已迁移": 10},
+            {"不可达": 19, "允许保留的兼容路径": 44, "受阻": 423, "已迁移": 10},
         )
         self.assertGreater(report["blocked_count"], 0)
         self.assertTrue(all(item["call_graph"] and item["evidence"] for item in report["items"]))
@@ -77,6 +115,16 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
         self.assertEqual(dm["status"], "允许保留的兼容路径")
         self.assertTrue(any("delivery_service.reply" in edge for edge in dm["call_graph"]))
         self.assertTrue(any("message_db.py" in evidence for evidence in dm["evidence"]))
+        markdown_template = next(
+            item for item in report["items"] if item["id"] == "command:admin:md模板"
+        )
+        self.assertEqual(markdown_template["status"], "允许保留的兼容路径")
+        self.assertTrue(
+            any("MessageSegment.markdown_template" in edge for edge in markdown_template["call_graph"])
+        )
+        self.assertTrue(
+            any("message_db.py" in evidence for evidence in markdown_template["evidence"])
+        )
         steam_query = next(
             item for item in report["items"] if item["id"] == "command:entertainment:Steam喜加一"
         )
@@ -202,6 +250,128 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
                 )
                 self.assertFalse(report["ready"])
                 self.assertTrue(any(expected_error in error for error in report["integrity_errors"]))
+
+    def test_command_call_graph_must_bind_handler_for_nonblocked_paths(self):
+        inventory = {"commands": [], "legacy_jobs": [], "legacy_routes": []}
+        fields = ["commands", "legacy_jobs", "legacy_routes"]
+        frozen_items = [
+            {
+                "id": "command:back:我的背包",
+                "kind": "commands",
+                "entry": "back:我的背包",
+                "status": "允许保留的兼容路径",
+                "source": {"feature": "back", "name": "我的背包"},
+                "call_graph": ["legacy/back.py:10 back_cmd = on_command('我的背包') -> compatibility matcher"],
+                "evidence": ["legacy/back.py:10", "legacy/back.py:20"],
+            }
+        ]
+        scope = {
+            "scope_id": "test-scope",
+            "source_snapshot": {"fields": fields, "sha256": _snapshot_hash(inventory, fields)},
+            "frozen_membership_sha256": _membership_hash(frozen_items),
+        }
+        command = {
+            "feature": "back",
+            "name": "我的背包",
+            "file": "legacy/back.py",
+            "line": 10,
+            "matcher_names": ["back_cmd"],
+            "aliases": [],
+            "handlers": [{"name": "back_cmd_", "line": 20}],
+            "suppressed": False,
+        }
+
+        report = evaluate_phase2_scope(
+            scope,
+            inventory,
+            frozen_items=frozen_items,
+            frozen_scope_id="test-scope",
+            frozen_source_projection=_source_projection(inventory, fields),
+            default_legacy_commands={("back", "我的背包"): (command,)},
+        )
+
+        self.assertTrue(
+            any("evidence/call graph omits handler back_cmd_" in error for error in report["integrity_errors"])
+        )
+
+        frozen_items[0]["call_graph"].append(
+            "legacy/back.py:20 back_cmd_ -> legacy downstream effect not closed in this frozen item"
+        )
+        report = evaluate_phase2_scope(
+            scope,
+            inventory,
+            frozen_items=frozen_items,
+            frozen_scope_id="test-scope",
+            frozen_source_projection=_source_projection(inventory, fields),
+            default_legacy_commands={("back", "我的背包"): (command,)},
+        )
+        self.assertTrue(
+            any("Closed command status retains an unresolved downstream edge" in error for error in report["integrity_errors"])
+        )
+
+    def test_membership_hash_freezes_source_identity(self):
+        inventory = {"commands": [], "legacy_jobs": [], "legacy_routes": []}
+        fields = ["commands", "legacy_jobs", "legacy_routes"]
+        frozen_items = [
+            {
+                "id": "command:back:我的背包",
+                "kind": "commands",
+                "entry": "back:我的背包",
+                "status": "已迁移",
+                "source": {"feature": "back", "name": "我的背包"},
+                "call_graph": ["legacy/back.py:10 back_cmd -> back_cmd_"],
+                "evidence": ["legacy/back.py:10", "legacy/back.py:20"],
+            }
+        ]
+        scope = {
+            "scope_id": "test-scope",
+            "source_snapshot": {"fields": fields, "sha256": _snapshot_hash(inventory, fields)},
+            "frozen_membership_sha256": _membership_hash(frozen_items),
+        }
+        frozen_items[0]["source"] = {"feature": "admin", "name": "ID更新"}
+
+        report = evaluate_phase2_scope(
+            scope,
+            inventory,
+            frozen_items=frozen_items,
+            frozen_scope_id="test-scope",
+            frozen_source_projection=_source_projection(inventory, fields),
+        )
+
+        self.assertFalse(report["frozen_membership_valid"])
+        self.assertTrue(any("membership hash is invalid" in error for error in report["integrity_errors"]))
+
+    def test_frozen_job_requires_registered_default_execution_path(self):
+        inventory = {"commands": [], "legacy_jobs": ["backup_database_files"], "legacy_routes": []}
+        fields = ["commands", "legacy_jobs", "legacy_routes"]
+        frozen_items = [
+            {
+                "id": "job:backup_database_files",
+                "kind": "legacy_jobs",
+                "entry": "job:backup_database_files",
+                "status": "允许保留的兼容路径",
+                "source": {"job_id": "backup_database_files"},
+                "call_graph": ["old scheduler path"],
+                "evidence": ["legacy.py:1"],
+            }
+        ]
+        scope = {
+            "scope_id": "test-scope",
+            "source_snapshot": {"fields": fields, "sha256": _snapshot_hash(inventory, fields)},
+            "frozen_membership_sha256": _membership_hash(frozen_items),
+        }
+
+        report = evaluate_phase2_scope(
+            scope,
+            inventory,
+            frozen_items=frozen_items,
+            frozen_scope_id="test-scope",
+            frozen_source_projection=_source_projection(inventory, fields),
+        )
+
+        self.assertTrue(
+            any("omits the default manual execution path" in error for error in report["integrity_errors"])
+        )
 
     def test_new_inventory_entry_is_backlogged_without_expanding_scope(self):
         frozen_inventory = {"commands": [], "legacy_jobs": [], "legacy_routes": []}

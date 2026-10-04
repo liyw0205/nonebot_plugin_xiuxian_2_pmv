@@ -3,9 +3,9 @@
   "scope_id": "phase2-default-runtime-legacy-paths-v1",
   "frozen_on": "2026-10-04",
   "frozen_entries_file": "docs/refactor_phase2_legacy_path_items.json",
-  "frozen_membership_sha256": "9d6d112676aa13917ab8957c7353914b946a886a10c57c2b7c98e402bd127162",
+  "frozen_membership_sha256": "7787a74a3e0c15c220a5f257921693b14706ef23b224bac9f3dad55a1ff51fac",
   "profile": "NoneBot driver initialized, production plugin startup, default environment; XIUXIAN_WEB_STATUS defaults to true.",
-  "scope_boundary": "This is the finite frozen v1 completion denominator, not a claim that every default legacy registration in the repository is listed. The gate statically derives an AST startup import closure and reports unlisted command candidates to backlog without adding them to v1 membership. This is source analysis, not an observed live runtime registration count; dynamic imports and non-command callbacks still require explicit review.",
+  "scope_boundary": "This is the finite frozen v1 completion denominator, not a claim that every default legacy registration in the repository is listed. The identity hash binds each stable id/kind/entry/source identity; status and reviewed call-graph evidence evolve without changing membership. The gate statically derives an AST startup import closure and reports unlisted command candidates to backlog without adding them to v1 membership. This is source analysis, not an observed live runtime registration count; dynamic imports, conditional registrations, and non-command callbacks still require explicit review. The 40 legacy job items prove the default manifest registry and admin scheduler API path; direct APScheduler decorator callbacks are a separate path and are not implied for every manifest job.",
   "source_snapshot": {
     "path": "docs/refactor_inventory.json",
     "fields": ["commands", "legacy_jobs", "legacy_routes"],
@@ -48,17 +48,23 @@
       "status": "允许保留的兼容路径",
       "entry_format": "job:{id}",
       "target_format": "resolved by legacy_job_handler({id}) through _TARGETS/_ALIASES or xiuxian.xiuxian_scheduler fallback",
-      "reason": "The composition root explicitly keeps legacy APScheduler decorators for the compatibility release. Retain until the independent P7 release gate permits removal; this allowance does not assert that job internals are feature-owned.",
+      "reason": "The default job registry keeps the legacy handlers reachable through its admin-only scheduler API. Where an old APScheduler decorator is declared, its original function is separately activated through the deferred bridge; that automatic callback does not pass through legacy_job_handler. Retain the compatibility handler through the release period; P7 independently governs removal and this allowance does not assert feature-owned internals.",
       "call_graph": [
-        "package initialization -> install_scheduler_bridge -> legacy job decorators are deferred",
-        "plugin.ensure_jobs -> activate_scheduler_bridge and legacy_job_handler(job.id)",
-        "compatibility/legacy_jobs.py:legacy_job_handler -> importlib.import_module -> getattr(target) -> target(*args, **kwargs)"
+        "production startup -> plugin.ensure_jobs -> register legacy scheduler manifest JobSpec with handler=legacy_job_handler(job.id)",
+        "admin POST /api/v1/scheduler/<job_id>/run -> scheduler blueprint -> JobExecutor.run_sync -> JobExecutor.run -> registered legacy_job_handler",
+        "legacy_job_handler -> _TARGETS/_ALIASES or xiuxian_scheduler fallback -> importlib.import_module -> target(*args, **kwargs)",
+        "separate automatic path when a legacy scheduled_job declaration exists: startup imports declaring module -> DeferredScheduler captures original function -> ensure_jobs.activate_scheduler_bridge -> APScheduler.add_job(original function); this path does not call legacy_job_handler"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:109-121",
         "nonebot_plugin_xiuxian_2/plugin.py:1211-1240",
-        "nonebot_plugin_xiuxian_2/compatibility/legacy_jobs.py:10-75",
-        "nonebot_plugin_xiuxian_2/compatibility/legacy_manifest.py:13-54"
+        "nonebot_plugin_xiuxian_2/compatibility/legacy_manifest.py:18-68",
+        "nonebot_plugin_xiuxian_2/adapters/web/app.py:466-473",
+        "nonebot_plugin_xiuxian_2/adapters/web/blueprints/scheduler.py:16-32",
+        "nonebot_plugin_xiuxian_2/infrastructure/scheduler/runner.py:22-94",
+        "nonebot_plugin_xiuxian_2/compatibility/legacy_jobs.py:42-75",
+        "nonebot_plugin_xiuxian_2/compatibility/scheduler.py:48-91,122-128",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18"
       ],
       "removal_condition": "Only after the independent P7 real-release evidence gate passes."
     },
@@ -353,7 +359,7 @@
     },
     {
       "id": "message-db-queue-byte-budget",
-      "reason": "The shared message-history queue is count-bounded (default 100000 records) but has no byte budget; a small number of unusually large payloads can still consume substantial RAM. Review a byte-aware admission limit or bounded message size independently of the frozen phase 2 path scope."
+      "reason": "The shared message-history queue is count-bounded (default 100000 records) but has no byte budget; large sends from dm or md模板 can consume substantial RAM. The md模板 parser also materializes args and parameter values proportional to input size without an explicit local byte cap. Review byte-aware queue admission and/or a bounded parser independently of the frozen phase 2 path scope."
     }
   ],
   "p7_gate": {

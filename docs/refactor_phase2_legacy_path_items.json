@@ -544,16 +544,20 @@
       "status": "允许保留的兼容路径",
       "reason": "This is a stateless external news query: the default handler performs only the existing 60s API GET through the shared http_client and blocking-I/O runner, then formats and sends text; it does not read or mutate local business state or persistent files. Retain the existing user-facing command as a compatibility adapter until the independent P7 release gate permits removal; this is not a claim that its legacy handler was migrated.",
       "call_graph": [
-        "initialized NoneBot -> load_all_plugins -> xiuxian_entertainment package imports mod.world_60s -> 60S读世界 matcher (aliases 每日60S/60秒读世界)",
+        "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
+        "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
+        "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/world_60s.py:3 world_60s_cmd = on_command('60S读世界') aliases=60秒读世界,每日60S -> compatibility matcher",
         "world_60s_cmd_ -> get_json_api -> run_blocking_io -> _get_json_api_sync -> shared http_client.get_json(https://api.pearapi.ai/api/60s/)",
         "handler parses API response and sends formatted text; no game/player DB, JSON store, or file mutation -> compatibility removal remains gated by independent P7"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/__init__.py:28",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/world_60s.py:3-8,11-75",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/command.py:31-33,923-936,968-1040",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/io_runtime.py:36-74"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/io_runtime.py:36-74",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/world_60s.py:3",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/world_60s.py:12"
       ],
       "source_declaration_found": true,
       "source": {
@@ -568,7 +572,10 @@
       "status": "已迁移",
       "reason": "The default compatibility matcher now reaches a concrete handler that calls AdminApplication and the feature-owned recoverable ID-swap repository. Each of the four legacy SQLite files has an independent transaction and durable step receipt; the game DB stores the operation plan and startup recovery journal, and player-directory renames are phase-journaled. The former swap_two_user_ids implementation is removed from the default call path.",
       "call_graph": [
-        "default NoneBot startup imports xiuxian_admin; swap_id_cmd is registered through on_compat.on_command -> _nb_on_command -> swap_id_cmd_ handler",
+        "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
+        "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
+        "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:338 swap_id_cmd = on_command('ID交换') -> compatibility matcher",
         "swap_id_cmd_ -> AdminApplication.swap_user_ids(operation_id, id1, id2) -> AdminIdSwapSqlRepository.swap",
         "repository validates both IDs across configured target columns in game_db/impart_db/trade_db/player_db; it atomically creates the game_db operation plan, operation-ledger entry, and outbox event before starting effects",
         "before user-data writes repository preflights a three-phase WAL workspace budget from the four database file sizes and preserves the shared 64 MiB/10% disk reserve; insufficient capacity leaves the durable plan pending for a later retry",
@@ -581,14 +588,15 @@
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:91-103,118-126,2632-2656",
         "nonebot_plugin_xiuxian_2/features/admin/application.py:65-84",
         "nonebot_plugin_xiuxian_2/features/admin/id_swap_repository.py:18-25,82-145,148-303,337-389,412-438,486-536,541-621,626-701",
         "nonebot_plugin_xiuxian_2/features/admin/migrations.py:14-40",
         "nonebot_plugin_xiuxian_2/features/_legacy_migrated.py:54-62,126-131",
         "nonebot_plugin_xiuxian_2/plugin.py:542-543,603-604,607-635,1248",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_utils/xiuxian2_handle.py:4609-4617",
-        "nonebot_plugin_xiuxian_2/features/admin/tests/test_id_swap_repository.py:54-285"
+        "nonebot_plugin_xiuxian_2/features/admin/tests/test_id_swap_repository.py:54-285",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:338",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2649"
       ],
       "source_declaration_found": true,
       "source": {
@@ -607,7 +615,7 @@
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:337 update_id_cmd = on_command('ID更新') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2625 update_id_cmd_ -> AdminApplication.update_user_id",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2620 update_id_cmd_ -> AdminApplication.update_user_id",
         "AdminApplication.update_user_id -> AdminIdUpdateSqlRepository.update -> shared ID mutation lock -> game operation plan/outbox -> frozen target columns and old/new ID validation",
         "AdminIdUpdateSqlRepository._resume -> each of four SQLite databases: update whitelisted columns + step receipt in one transaction -> game progress receipt",
         "AdminIdUpdateSqlRepository._rename_player_directory -> recoverable players/<old_id> to players/<new_id> rename -> roster/player-data cache invalidation -> ledger/outbox completion",
@@ -617,7 +625,6 @@
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:132-145,337,2625-2651",
         "nonebot_plugin_xiuxian_2/features/admin/application.py:86-105",
         "nonebot_plugin_xiuxian_2/features/admin/id_update_repository.py:34-176,198-371,373-556",
         "nonebot_plugin_xiuxian_2/features/admin/id_mutation_lock.py:14-45",
@@ -626,7 +633,9 @@
         "nonebot_plugin_xiuxian_2/features/_legacy_migrated.py:133-134",
         "nonebot_plugin_xiuxian_2/plugin.py:540-605",
         "nonebot_plugin_xiuxian_2/features/admin/tests/test_id_update_repository.py",
-        "nonebot_plugin_xiuxian_2/features/admin/tests/test_id_swap_repository.py"
+        "nonebot_plugin_xiuxian_2/features/admin/tests/test_id_swap_repository.py",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:337",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2620"
       ],
       "source_declaration_found": true,
       "source": {
@@ -641,8 +650,10 @@
       "status": "允许保留的兼容路径",
       "reason": "The default handler only fetches the external Steam free-games API, reads plugin configuration for presentation, formats the response, and sends it; it does not read or mutate local game/player state or persistent files. The response is streamed with a 1 MiB limit. Retain this existing user-facing command until the independent P7 real-release gate permits removal; this is not a claim that its legacy handler was migrated.",
       "call_graph": [
-        "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins -> xiuxian_entertainment package imports mod.steam_plus_one",
-        "steam_plus_one.py:4 on_command('Steam喜加一', aliases={'喜加一'}) -> on_compat registration -> XiuxianOnCompatProvider command index -> matcher handle() dispatch",
+        "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
+        "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
+        "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/steam_plus_one.py:4 steam_plus_one_cmd = on_command('Steam喜加一') aliases=喜加一 -> compatibility matcher",
         "steam_plus_one_cmd_ -> get_json_api(api_url, timeout=15, max_bytes=1 MiB) -> run_blocking_io -> _get_json_api_sync -> shared http_client.get_json",
         "HttpClient.get_json -> streaming GET; reject oversized Content-Length or decoded response body above 1 MiB; close response after parsing",
         "handler reads presentation config, formats the external API result, and sends text; no local game/player database or persistent file read/write -> retain until independent P7 real-release gate permits removal"
@@ -652,10 +663,11 @@
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/__init__.py:1-24",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/steam_plus_one.py:4-20,32-91",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/command.py:923-945",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/io_runtime.py:36-74",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_utils/http_proxy.py:187-225"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_utils/http_proxy.py:187-225",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/steam_plus_one.py:4",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/steam_plus_one.py:14"
       ],
       "source_declaration_found": true,
       "source": {
@@ -673,7 +685,7 @@
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_status/__init__.py:96 bot_info_cmd = on_command('bot信息') -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_status/__init__.py:88 bot_info_cmd = on_command('bot信息') -> compatibility matcher",
         "xiuxian_status.handle_bot_info -> get_bot_info -> status_application.bot_overview -> StatusApplication.bot_overview -> BotOverviewSqlRepository.snapshot",
         "BotOverviewSqlRepository opens short read-only game_db/trade_db UOWs; it counts all user_xiuxian rows, distinct user_cd users for the same local-date windows, SUM(back.goods_num), and the legacy filtered xianshi_item/guishi_item quantities; each call rereads and closes both connections",
         "default on_compat startup -> rebuild_on_compat_index -> bootstrap_from_user_xiuxian -> lazy sql_message resolves XiuxianDateManage and prepares user_xiuxian/user_cd/back before command dispatch",
@@ -683,9 +695,6 @@
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_status/__init__.py:96",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_status/__init__.py:63-72,202-256",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_status/__init__.py:362-370",
         "nonebot_plugin_xiuxian_2/features/status/application.py:11-28",
         "nonebot_plugin_xiuxian_2/features/status/bot_overview_repository.py:20-118",
         "nonebot_plugin_xiuxian_2/infrastructure/database/uow.py:20-28,49-64",
@@ -693,7 +702,9 @@
         "nonebot_plugin_xiuxian_2/xiuxian/blackhouse.py:147-156",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_utils/xiuxian2_handle.py:192-270,2820-2864,4650",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_trade/__init__.py:27-29",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_utils/db_backend.py:76-77"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_utils/db_backend.py:76-77",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_status/__init__.py:88",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_status/__init__.py:363"
       ],
       "source_declaration_found": true,
       "source": {
@@ -711,7 +722,7 @@
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:316 dm_command = on_command('dm') -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:332 dm_command = on_command('dm') -> compatibility matcher",
         "dm_command_ -> str(args).strip() -> fix_mqqapi_inlinecmd_links -> MessageSegment.markdown(bot, text) -> delivery_service.reply(bot, event, msg)",
         "MessageDeliveryService.reply maps group/private/channel events to a SendRequest -> send dispatches to the adapter sender; an unknown event scene calls bot.send directly",
         "successful group/private adapter send -> adapter_message_sender._record_send -> record_send_message -> _insert_message_record -> message_db.insert_message_record -> bounded-count async message DB queue -> messages.content",
@@ -723,13 +734,13 @@
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:316",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2495-2514,2518-2526",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/admin_helpers.py:19-60",
         "nonebot_plugin_xiuxian_2/xiuxian/messaging/delivery.py:107-133,226-268",
         "nonebot_plugin_xiuxian_2/xiuxian/adapter_message_sender.py:66-82,98-178",
         "nonebot_plugin_xiuxian_2/xiuxian/adapter_message_records.py:399-445",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_utils/message_db.py:161-175,422-427,556-604,734-761"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_utils/message_db.py:161-175,422-427,556-604,734-761",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:332",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2495"
       ],
       "source_declaration_found": true,
       "source": {
@@ -741,22 +752,31 @@
       "id": "command:admin:md模板",
       "kind": "commands",
       "entry": "admin:md模板 (aliases: )",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "允许保留的兼容路径",
+      "reason": "This SUPERUSER-only command is a legacy platform Markdown-template diagnostic: it parses operator-supplied parameters, reads only the in-memory XiuConfig defaults, constructs a platform message segment, and sends it without accessing player/game repositories or business files. A successful send may be recorded by the shared operational message-history infrastructure, which is a generic adapter side effect rather than command-owned business state. Keep the diagnostic command through the compatibility period; P7 independently governs release-based removal. Handler logs no longer include parameter values or exception text.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2343 mb_template_test = on_command('md模板') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2345 mb_template_test_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2359 mb_template_test = on_command('md模板') -> compatibility matcher",
+        "mb_template_test_ -> parse operator arguments and in-memory XiuConfig defaults into template_id, button_id, and parameter values",
+        "mb_template_test_ -> MessageSegment.markdown_template(bot, template_id, params, button_id) selects QQ or OneBot v11 message segments; unsupported adapters fail closed",
+        "mb_template_test_ -> delivery_service.reply -> scene-specific SendRequest -> MessageDeliveryService.send -> adapter sender",
+        "successful adapter send -> record_send_message -> bounded asynchronous message-history queue -> messages.content; the writer applies configured size/age cleanup no more than once per 600 seconds",
+        "No call edge from this command to player/game repositories, legacy business writers, or business files"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2343",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2345"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_config.py:15-354",
+        "nonebot_plugin_xiuxian_2/xiuxian/adapter_compat.py:595-618",
+        "nonebot_plugin_xiuxian_2/xiuxian/messaging/delivery.py:107-133,226-268",
+        "nonebot_plugin_xiuxian_2/xiuxian/adapter_message_sender.py:66-82,98-178",
+        "nonebot_plugin_xiuxian_2/xiuxian/adapter_message_records.py:399-445",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_utils/message_db.py:161-175,422-427,556-604,734-761",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2359",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2361"
       ],
       "source_declaration_found": true,
       "source": {
@@ -991,15 +1011,15 @@
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_status/__init__.py:98 ping_test_cmd = on_command('ping测试') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_status/__init__.py:383 handle_ping_test -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_status/__init__.py:90 ping_test_cmd = on_command('ping测试') -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_status/__init__.py:380 handle_ping_test -> legacy downstream effect not closed in this frozen item"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_status/__init__.py:98",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_status/__init__.py:383"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_status/__init__.py:90",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_status/__init__.py:380"
       ],
       "source_declaration_found": true,
       "source": {
@@ -1585,15 +1605,15 @@
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:293 ccll_command = on_command('传承力量') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:583 ccll_command_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:309 ccll_command = on_command('传承力量') -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:599 ccll_command_ -> legacy downstream effect not closed in this frozen item"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:293",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:583"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:309",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:599"
       ],
       "source_declaration_found": true,
       "source": {
@@ -1828,15 +1848,15 @@
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:291 adjust_exp_command = on_command('修为调整') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:721 adjust_exp_command_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:307 adjust_exp_command = on_command('修为调整') -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:737 adjust_exp_command_ -> legacy downstream effect not closed in this frozen item"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:291",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:721"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:307",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:737"
       ],
       "source_declaration_found": true,
       "source": {
@@ -1855,15 +1875,15 @@
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:302 super_help = on_command('修仙手册') aliases=修仙管理 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2049 super_help_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:318 super_help = on_command('修仙手册') aliases=修仙管理 -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2065 super_help_ -> legacy downstream effect not closed in this frozen item"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:302",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2049"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:318",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2065"
       ],
       "source_declaration_found": true,
       "source": {
@@ -1882,15 +1902,15 @@
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:303 xiuxian_updata_level = on_command('修仙适配') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:1746 xiuxian_updata_level_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:319 xiuxian_updata_level = on_command('修仙适配') -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:1762 xiuxian_updata_level_ -> legacy downstream effect not closed in this frozen item"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:303",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:1746"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:319",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:1762"
       ],
       "source_declaration_found": true,
       "source": {
@@ -2017,15 +2037,15 @@
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:325 global_broadcast_cmd = on_command('全局广播') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2727 global_broadcast_cmd_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:341 global_broadcast_cmd = on_command('全局广播') -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2743 global_broadcast_cmd_ -> legacy downstream effect not closed in this frozen item"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:325",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2727"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:341",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2743"
       ],
       "source_declaration_found": true,
       "source": {
@@ -2152,15 +2172,15 @@
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:295 cz = on_command('创造力量') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:947 cz_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:311 cz = on_command('创造力量') -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:963 cz_ -> legacy downstream effect not closed in this frozen item"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:295",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:947"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:311",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:963"
       ],
       "source_declaration_found": true,
       "source": {
@@ -2935,15 +2955,15 @@
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:334 cancel_broadcast_cmd = on_command('取消广播') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2770 cancel_broadcast_cmd_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:350 cancel_broadcast_cmd = on_command('取消广播') -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2786 cancel_broadcast_cmd_ -> legacy downstream effect not closed in this frozen item"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:334",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2770"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:350",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2786"
       ],
       "source_declaration_found": true,
       "source": {
@@ -3124,15 +3144,15 @@
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:298 set_xiuxian = on_command('启用修仙功能') aliases=禁用修仙功能 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:1639 open_xiuxian_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:314 set_xiuxian = on_command('启用修仙功能') aliases=禁用修仙功能 -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:1655 open_xiuxian_ -> legacy downstream effect not closed in this frozen item"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:298",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:1639"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:314",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:1655"
       ],
       "source_declaration_found": true,
       "source": {
@@ -3151,15 +3171,15 @@
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:299 set_private_chat = on_command('启用私聊功能') aliases=禁用私聊功能 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:1671 set_private_chat_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:315 set_private_chat = on_command('启用私聊功能') aliases=禁用私聊功能 -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:1687 set_private_chat_ -> legacy downstream effect not closed in this frozen item"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:299",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:1671"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:315",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:1687"
       ],
       "source_declaration_found": true,
       "source": {
@@ -3178,15 +3198,15 @@
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:301 set_auto_sect_name = on_command('启用自动宗名') aliases=禁用自动宗名 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:1721 set_auto_sect_name_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:317 set_auto_sect_name = on_command('启用自动宗名') aliases=禁用自动宗名 -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:1737 set_auto_sect_name_ -> legacy downstream effect not closed in this frozen item"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:301",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:1721"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:317",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:1737"
       ],
       "source_declaration_found": true,
       "source": {
@@ -3529,15 +3549,15 @@
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:312 blackhouse = on_command('小黑屋') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:1944 _ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:328 blackhouse = on_command('小黑屋') -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:1960 _ -> legacy downstream effect not closed in this frozen item"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:312",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:1944"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:328",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:1960"
       ],
       "source_declaration_found": true,
       "source": {
@@ -3610,15 +3630,15 @@
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:349 broadcast_help_cmd = on_command('广播帮助') aliases=广播指令,广播说明 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2796 broadcast_help_cmd_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:365 broadcast_help_cmd = on_command('广播帮助') aliases=广播指令,广播说明 -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2812 broadcast_help_cmd_ -> legacy downstream effect not closed in this frozen item"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:349",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2796"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:365",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2812"
       ],
       "source_declaration_found": true,
       "source": {
@@ -3664,15 +3684,15 @@
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:300 set_auto_root = on_command('开启自动灵根') aliases=关闭自动灵根 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:1696 set_auto_root_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:316 set_auto_root = on_command('开启自动灵根') aliases=关闭自动灵根 -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:1712 set_auto_root_ -> legacy downstream effect not closed in this frozen item"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:300",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:1696"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:316",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:1712"
       ],
       "source_declaration_found": true,
       "source": {
@@ -4474,15 +4494,15 @@
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:317 keyboard_test_cmd = on_command('按钮测试') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2451 keyboard_test_cmd_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:333 keyboard_test_cmd = on_command('按钮测试') -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2466 keyboard_test_cmd_ -> legacy downstream effect not closed in this frozen item"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:317",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2451"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:333",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2466"
       ],
       "source_declaration_found": true,
       "source": {
@@ -4555,15 +4575,15 @@
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_status/__init__.py:99 status_cmd = on_command('插件帮助') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_status/__init__.py:389 handle_status -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_status/__init__.py:91 status_cmd = on_command('插件帮助') -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_status/__init__.py:386 handle_status -> legacy downstream effect not closed in this frozen item"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_status/__init__.py:99",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_status/__init__.py:389"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_status/__init__.py:91",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_status/__init__.py:386"
       ],
       "source_declaration_found": true,
       "source": {
@@ -4798,15 +4818,15 @@
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:319 admin_rename_cmd = on_command('易名') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:387 admin_rename_cmd_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:335 admin_rename_cmd = on_command('易名') -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:403 admin_rename_cmd_ -> legacy downstream effect not closed in this frozen item"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:319",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:387"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:335",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:403"
       ],
       "source_declaration_found": true,
       "source": {
@@ -4906,15 +4926,15 @@
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:314 view_blackhouse = on_command('查看小黑屋') aliases=小黑屋列表 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2032 _ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:330 view_blackhouse = on_command('查看小黑屋') aliases=小黑屋列表 -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2048 _ -> legacy downstream effect not closed in this frozen item"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:314",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2032"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:330",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2048"
       ],
       "source_declaration_found": true,
       "source": {
@@ -4933,15 +4953,15 @@
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:326 view_broadcast_cmd = on_command('查看广播') aliases=广播列表 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2761 view_broadcast_cmd_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:342 view_broadcast_cmd = on_command('查看广播') aliases=广播列表 -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2777 view_broadcast_cmd_ -> legacy downstream effect not closed in this frozen item"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:326",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2761"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:342",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2777"
       ],
       "source_declaration_found": true,
       "source": {
@@ -5041,15 +5061,15 @@
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_status/__init__.py:102 check_update_cmd = on_command('检测更新') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_status/__init__.py:453 handle_check_update -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_status/__init__.py:94 check_update_cmd = on_command('检测更新') -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_status/__init__.py:450 handle_check_update -> legacy downstream effect not closed in this frozen item"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_status/__init__.py:102",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_status/__init__.py:453"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_status/__init__.py:94",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_status/__init__.py:450"
       ],
       "source_declaration_found": true,
       "source": {
@@ -5095,15 +5115,15 @@
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:296 hmll = on_command('毁灭力量') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:1253 hmll_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:312 hmll = on_command('毁灭力量') -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:1269 hmll_ -> legacy downstream effect not closed in this frozen item"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:296",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:1253"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:312",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:1269"
       ],
       "source_declaration_found": true,
       "source": {
@@ -6013,15 +6033,15 @@
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:304 clear_xiangyuan = on_command('清空仙缘') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:1801 clear_xiangyuan_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:320 clear_xiangyuan = on_command('清空仙缘') -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:1817 clear_xiangyuan_ -> legacy downstream effect not closed in this frozen item"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:304",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:1801"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:320",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:1817"
       ],
       "source_declaration_found": true,
       "source": {
@@ -6094,15 +6114,15 @@
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:341 clear_broadcast_cmd = on_command('清空广播') aliases=清除广播 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2782 clear_broadcast_cmd_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:357 clear_broadcast_cmd = on_command('清空广播') aliases=清除广播 -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2798 clear_broadcast_cmd_ -> legacy downstream effect not closed in this frozen item"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:341",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2782"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:357",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2798"
       ],
       "source_declaration_found": true,
       "source": {
@@ -6391,15 +6411,15 @@
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_status/__init__.py:101 version_update_cmd = on_command('版本更新') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_status/__init__.py:469 handle_version_update -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_status/__init__.py:93 version_update_cmd = on_command('版本更新') -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_status/__init__.py:466 handle_version_update -> legacy downstream effect not closed in this frozen item"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_status/__init__.py:101",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_status/__init__.py:469"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_status/__init__.py:93",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_status/__init__.py:466"
       ],
       "source_declaration_found": true,
       "source": {
@@ -6418,15 +6438,15 @@
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_status/__init__.py:100 version_query_cmd = on_command('版本查询') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_status/__init__.py:437 handle_version_query -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_status/__init__.py:92 version_query_cmd = on_command('版本查询') -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_status/__init__.py:434 handle_version_query -> legacy downstream effect not closed in this frozen item"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_status/__init__.py:100",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_status/__init__.py:437"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_status/__init__.py:92",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_status/__init__.py:434"
       ],
       "source_declaration_found": true,
       "source": {
@@ -6634,15 +6654,15 @@
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:306 create_new_rift = on_command('生成秘境') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:1830 create_new_rift_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:322 create_new_rift = on_command('生成秘境') -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:1846 create_new_rift_ -> legacy downstream effect not closed in this frozen item"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:306",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:1830"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:322",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:1846"
       ],
       "source_declaration_found": true,
       "source": {
@@ -6661,15 +6681,15 @@
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:315 impersonate_user_command = on_command('用户伪装') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2517 impersonate_user_command_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:331 impersonate_user_command = on_command('用户伪装') -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2528 impersonate_user_command_ -> legacy downstream effect not closed in this frozen item"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:315",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2517"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:331",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2528"
       ],
       "source_declaration_found": true,
       "source": {
@@ -6877,15 +6897,15 @@
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:324 private_broadcast_cmd = on_command('私聊广播') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2693 private_broadcast_cmd_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:340 private_broadcast_cmd = on_command('私聊广播') -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2709 private_broadcast_cmd_ -> legacy downstream effect not closed in this frozen item"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:324",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2693"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:340",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2709"
       ],
       "source_declaration_found": true,
       "source": {
@@ -7039,15 +7059,15 @@
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_status/__init__.py:97 sys_info_cmd = on_command('系统信息') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_status/__init__.py:377 handle_sys_info -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_status/__init__.py:89 sys_info_cmd = on_command('系统信息') -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_status/__init__.py:374 handle_sys_info -> legacy downstream effect not closed in this frozen item"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_status/__init__.py:97",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_status/__init__.py:377"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_status/__init__.py:89",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_status/__init__.py:374"
       ],
       "source_declaration_found": true,
       "source": {
@@ -7201,15 +7221,15 @@
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:323 group_broadcast_cmd = on_command('群聊广播') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2659 group_broadcast_cmd_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:339 group_broadcast_cmd = on_command('群聊广播') -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2675 group_broadcast_cmd_ -> legacy downstream effect not closed in this frozen item"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:323",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2659"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:339",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2675"
       ],
       "source_declaration_found": true,
       "source": {
@@ -7363,15 +7383,15 @@
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:318 at_test_cmd = on_command('艾特测试') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:359 at_test_cmd_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:334 at_test_cmd = on_command('艾特测试') -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:375 at_test_cmd_ -> legacy downstream effect not closed in this frozen item"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:318",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:359"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:334",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:375"
       ],
       "source_declaration_found": true,
       "source": {
@@ -7741,15 +7761,15 @@
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:313 unblackhouse = on_command('解除小黑屋') aliases=放出小黑屋,解禁 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:1990 _ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:329 unblackhouse = on_command('解除小黑屋') aliases=放出小黑屋,解禁 -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2006 _ -> legacy downstream effect not closed in this frozen item"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:313",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:1990"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:329",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2006"
       ],
       "source_declaration_found": true,
       "source": {
@@ -7930,15 +7950,15 @@
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:320 migrate_qqid_cmd = on_command('转换QQID') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2594 migrate_qqid_cmd_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:336 migrate_qqid_cmd = on_command('转换QQID') -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2605 migrate_qqid_cmd_ -> legacy downstream effect not closed in this frozen item"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:320",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2594"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:336",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2605"
       ],
       "source_declaration_found": true,
       "source": {
@@ -7957,15 +7977,15 @@
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:292 gmm_command = on_command('轮回力量') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:861 gmm_command_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:308 gmm_command = on_command('轮回力量') -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:877 gmm_command_ -> legacy downstream effect not closed in this frozen item"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:292",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:861"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:308",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:877"
       ],
       "source_declaration_found": true,
       "source": {
@@ -8173,15 +8193,15 @@
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:294 zaohua_xiuxian = on_command('造化力量') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:790 zaohua_xiuxian_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:310 zaohua_xiuxian = on_command('造化力量') -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:806 zaohua_xiuxian_ -> legacy downstream effect not closed in this frozen item"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:294",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:790"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:310",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:806"
       ],
       "source_declaration_found": true,
       "source": {
@@ -8389,15 +8409,15 @@
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:309 boss_reset = on_command('重置世界BOSS') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:1921 boss_reset_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:325 boss_reset = on_command('重置世界BOSS') -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:1937 boss_reset_ -> legacy downstream effect not closed in this frozen item"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:309",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:1921"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:325",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:1937"
       ],
       "source_declaration_found": true,
       "source": {
@@ -8443,15 +8463,15 @@
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:308 training_reset = on_command('重置历练') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:1866 training_reset_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:324 training_reset = on_command('重置历练') -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:1882 training_reset_ -> legacy downstream effect not closed in this frozen item"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:308",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:1866"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:324",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:1882"
       ],
       "source_declaration_found": true,
       "source": {
@@ -8497,15 +8517,15 @@
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:307 do_work_cz = on_command('重置悬赏令') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:1836 do_work_cz_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:323 do_work_cz = on_command('重置悬赏令') -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:1852 do_work_cz_ -> legacy downstream effect not closed in this frozen item"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:307",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:1836"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:323",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:1852"
       ],
       "source_declaration_found": true,
       "source": {
@@ -8524,15 +8544,15 @@
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:305 xiuxian_novice = on_command('重置新手礼包') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:1807 xiuxian_novice_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:321 xiuxian_novice = on_command('重置新手礼包') -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:1823 xiuxian_novice_ -> legacy downstream effect not closed in this frozen item"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:305",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:1807"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:321",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:1823"
       ],
       "source_declaration_found": true,
       "source": {
@@ -8547,20 +8567,24 @@
       "status": "已迁移",
       "reason": "The default command's target lookup and both reset branches use feature-owned read/write boundaries; the compatibility matcher shell no longer reaches the legacy XiuxianDateManage lookup or reset writer.",
       "call_graph": [
-        "xiuxian_admin.__init__:272 matcher -> on_compat.on_command -> _nb_on_command -> restate_",
+        "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
+        "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
+        "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:313 restate = on_command('重置状态') -> compatibility matcher",
         "restate_ no-argument branch -> AdminApplication.find_player_status_batch/reset_player_status_batch -> AdminPlayerStatusBatchResetSqlRepository (bounded feature-owned reset)",
         "restate_ mention branch -> AdminApplication.player_status_snapshot/reset_player_status -> AdminPlayerStatusResetSqlRepository (feature-owned snapshot and atomic reset)",
         "restate_ text-name branch -> get_user_profile_by_name -> PlayerProfileApplication -> PlayerProfileSqlRepository (read-only first-row lookup)"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:272,1510-1605",
         "nonebot_plugin_xiuxian_2/features/admin/application.py:35-56",
         "nonebot_plugin_xiuxian_2/features/admin/player_status_reset_repository.py:64-196",
         "nonebot_plugin_xiuxian_2/features/admin/player_status_batch_repository.py:369-412",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_utils/utils.py:109-121",
         "nonebot_plugin_xiuxian_2/features/info/profile_application.py:11-24",
-        "nonebot_plugin_xiuxian_2/features/info/profile_repository.py:32-42"
+        "nonebot_plugin_xiuxian_2/features/info/profile_repository.py:32-42",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:313",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:1551"
       ],
       "source_declaration_found": true,
       "source": {
@@ -8579,15 +8603,15 @@
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:310 tower_reset = on_command('重置通天塔') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:1898 tower_reset_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:326 tower_reset = on_command('重置通天塔') -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:1914 tower_reset_ -> legacy downstream effect not closed in this frozen item"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:310",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:1898"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:326",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:1914"
       ],
       "source_declaration_found": true,
       "source": {
@@ -8606,15 +8630,15 @@
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:311 items_refresh = on_command('重载items') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:1936 items_refresh_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:327 items_refresh = on_command('重载items') -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:1952 items_refresh_ -> legacy downstream effect not closed in this frozen item"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:311",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:1936"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:327",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:1952"
       ],
       "source_declaration_found": true,
       "source": {
@@ -9062,13 +9086,21 @@
       "reason": "The composition root explicitly keeps legacy APScheduler decorators for the compatibility release. Retain until the independent P7 release gate permits removal; this allowance does not assert that job internals are feature-owned.",
       "unknown_edge": null,
       "call_graph": [
-        "job:auto_guishi_transactions -> plugin.ensure_jobs -> legacy_job_handler(auto_guishi_transactions) -> dynamic legacy target"
+        "production NoneBot startup -> plugin.install_driver_hooks -> ensure_jobs -> legacy scheduler manifest JobSpec registration with handler=legacy_job_handler(job.id)",
+        "admin POST /api/v1/scheduler/auto_guishi_transactions/run -> scheduler blueprint run_job -> JobExecutor.run_sync -> JobExecutor.run -> registered legacy_job_handler(auto_guishi_transactions)",
+        "legacy_job_handler(auto_guishi_transactions) -> _TARGETS/_ALIASES or xiuxian_scheduler fallback -> importlib.import_module -> target(*args, **kwargs)",
+        "separate automatic path when this job has a legacy scheduled_job declaration: plugin startup imports its declaring module -> DeferredScheduler captures the original decorated function -> ensure_jobs.activate_scheduler_bridge -> APScheduler.add_job(original function); this path does not call legacy_job_handler"
       ],
       "evidence": [
-        "nonebot_plugin_xiuxian_2/__init__.py:109-121",
-        "nonebot_plugin_xiuxian_2/plugin.py:1211-1240",
-        "nonebot_plugin_xiuxian_2/compatibility/legacy_jobs.py:10-75",
-        "nonebot_plugin_xiuxian_2/compatibility/legacy_manifest.py:13-54"
+        "nonebot_plugin_xiuxian_2/__init__.py:89-121",
+        "nonebot_plugin_xiuxian_2/plugin.py:1211-1244",
+        "nonebot_plugin_xiuxian_2/compatibility/legacy_manifest.py:18-68",
+        "nonebot_plugin_xiuxian_2/adapters/web/app.py:466-473",
+        "nonebot_plugin_xiuxian_2/adapters/web/blueprints/scheduler.py:16-32",
+        "nonebot_plugin_xiuxian_2/infrastructure/scheduler/runner.py:22-94",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/compatibility/legacy_jobs.py:42-75",
+        "nonebot_plugin_xiuxian_2/compatibility/scheduler.py:48-91,122-128"
       ],
       "source_declaration_found": true,
       "source": {
@@ -9083,13 +9115,21 @@
       "reason": "The composition root explicitly keeps legacy APScheduler decorators for the compatibility release. Retain until the independent P7 release gate permits removal; this allowance does not assert that job internals are feature-owned.",
       "unknown_edge": null,
       "call_graph": [
-        "job:auto_handle_inactive_sect_owners_job -> plugin.ensure_jobs -> legacy_job_handler(auto_handle_inactive_sect_owners_job) -> dynamic legacy target"
+        "production NoneBot startup -> plugin.install_driver_hooks -> ensure_jobs -> legacy scheduler manifest JobSpec registration with handler=legacy_job_handler(job.id)",
+        "admin POST /api/v1/scheduler/auto_handle_inactive_sect_owners_job/run -> scheduler blueprint run_job -> JobExecutor.run_sync -> JobExecutor.run -> registered legacy_job_handler(auto_handle_inactive_sect_owners_job)",
+        "legacy_job_handler(auto_handle_inactive_sect_owners_job) -> _TARGETS/_ALIASES or xiuxian_scheduler fallback -> importlib.import_module -> target(*args, **kwargs)",
+        "separate automatic path when this job has a legacy scheduled_job declaration: plugin startup imports its declaring module -> DeferredScheduler captures the original decorated function -> ensure_jobs.activate_scheduler_bridge -> APScheduler.add_job(original function); this path does not call legacy_job_handler"
       ],
       "evidence": [
-        "nonebot_plugin_xiuxian_2/__init__.py:109-121",
-        "nonebot_plugin_xiuxian_2/plugin.py:1211-1240",
-        "nonebot_plugin_xiuxian_2/compatibility/legacy_jobs.py:10-75",
-        "nonebot_plugin_xiuxian_2/compatibility/legacy_manifest.py:13-54"
+        "nonebot_plugin_xiuxian_2/__init__.py:89-121",
+        "nonebot_plugin_xiuxian_2/plugin.py:1211-1244",
+        "nonebot_plugin_xiuxian_2/compatibility/legacy_manifest.py:18-68",
+        "nonebot_plugin_xiuxian_2/adapters/web/app.py:466-473",
+        "nonebot_plugin_xiuxian_2/adapters/web/blueprints/scheduler.py:16-32",
+        "nonebot_plugin_xiuxian_2/infrastructure/scheduler/runner.py:22-94",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/compatibility/legacy_jobs.py:42-75",
+        "nonebot_plugin_xiuxian_2/compatibility/scheduler.py:48-91,122-128"
       ],
       "source_declaration_found": true,
       "source": {
@@ -9104,13 +9144,21 @@
       "reason": "The composition root explicitly keeps legacy APScheduler decorators for the compatibility release. Retain until the independent P7 release gate permits removal; this allowance does not assert that job internals are feature-owned.",
       "unknown_edge": null,
       "call_graph": [
-        "job:auto_harvest -> plugin.ensure_jobs -> legacy_job_handler(auto_harvest) -> dynamic legacy target"
+        "production NoneBot startup -> plugin.install_driver_hooks -> ensure_jobs -> legacy scheduler manifest JobSpec registration with handler=legacy_job_handler(job.id)",
+        "admin POST /api/v1/scheduler/auto_harvest/run -> scheduler blueprint run_job -> JobExecutor.run_sync -> JobExecutor.run -> registered legacy_job_handler(auto_harvest)",
+        "legacy_job_handler(auto_harvest) -> _TARGETS/_ALIASES or xiuxian_scheduler fallback -> importlib.import_module -> target(*args, **kwargs)",
+        "separate automatic path when this job has a legacy scheduled_job declaration: plugin startup imports its declaring module -> DeferredScheduler captures the original decorated function -> ensure_jobs.activate_scheduler_bridge -> APScheduler.add_job(original function); this path does not call legacy_job_handler"
       ],
       "evidence": [
-        "nonebot_plugin_xiuxian_2/__init__.py:109-121",
-        "nonebot_plugin_xiuxian_2/plugin.py:1211-1240",
-        "nonebot_plugin_xiuxian_2/compatibility/legacy_jobs.py:10-75",
-        "nonebot_plugin_xiuxian_2/compatibility/legacy_manifest.py:13-54"
+        "nonebot_plugin_xiuxian_2/__init__.py:89-121",
+        "nonebot_plugin_xiuxian_2/plugin.py:1211-1244",
+        "nonebot_plugin_xiuxian_2/compatibility/legacy_manifest.py:18-68",
+        "nonebot_plugin_xiuxian_2/adapters/web/app.py:466-473",
+        "nonebot_plugin_xiuxian_2/adapters/web/blueprints/scheduler.py:16-32",
+        "nonebot_plugin_xiuxian_2/infrastructure/scheduler/runner.py:22-94",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/compatibility/legacy_jobs.py:42-75",
+        "nonebot_plugin_xiuxian_2/compatibility/scheduler.py:48-91,122-128"
       ],
       "source_declaration_found": true,
       "source": {
@@ -9125,13 +9173,21 @@
       "reason": "The composition root explicitly keeps legacy APScheduler decorators for the compatibility release. Retain until the independent P7 release gate permits removal; this allowance does not assert that job internals are feature-owned.",
       "unknown_edge": null,
       "call_graph": [
-        "job:auto_start_auction -> plugin.ensure_jobs -> legacy_job_handler(auto_start_auction) -> dynamic legacy target"
+        "production NoneBot startup -> plugin.install_driver_hooks -> ensure_jobs -> legacy scheduler manifest JobSpec registration with handler=legacy_job_handler(job.id)",
+        "admin POST /api/v1/scheduler/auto_start_auction/run -> scheduler blueprint run_job -> JobExecutor.run_sync -> JobExecutor.run -> registered legacy_job_handler(auto_start_auction)",
+        "legacy_job_handler(auto_start_auction) -> _TARGETS/_ALIASES or xiuxian_scheduler fallback -> importlib.import_module -> target(*args, **kwargs)",
+        "separate automatic path when this job has a legacy scheduled_job declaration: plugin startup imports its declaring module -> DeferredScheduler captures the original decorated function -> ensure_jobs.activate_scheduler_bridge -> APScheduler.add_job(original function); this path does not call legacy_job_handler"
       ],
       "evidence": [
-        "nonebot_plugin_xiuxian_2/__init__.py:109-121",
-        "nonebot_plugin_xiuxian_2/plugin.py:1211-1240",
-        "nonebot_plugin_xiuxian_2/compatibility/legacy_jobs.py:10-75",
-        "nonebot_plugin_xiuxian_2/compatibility/legacy_manifest.py:13-54"
+        "nonebot_plugin_xiuxian_2/__init__.py:89-121",
+        "nonebot_plugin_xiuxian_2/plugin.py:1211-1244",
+        "nonebot_plugin_xiuxian_2/compatibility/legacy_manifest.py:18-68",
+        "nonebot_plugin_xiuxian_2/adapters/web/app.py:466-473",
+        "nonebot_plugin_xiuxian_2/adapters/web/blueprints/scheduler.py:16-32",
+        "nonebot_plugin_xiuxian_2/infrastructure/scheduler/runner.py:22-94",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/compatibility/legacy_jobs.py:42-75",
+        "nonebot_plugin_xiuxian_2/compatibility/scheduler.py:48-91,122-128"
       ],
       "source_declaration_found": true,
       "source": {
@@ -9146,13 +9202,21 @@
       "reason": "The composition root explicitly keeps legacy APScheduler decorators for the compatibility release. Retain until the independent P7 release gate permits removal; this allowance does not assert that job internals are feature-owned.",
       "unknown_edge": null,
       "call_graph": [
-        "job:backup_database_files -> plugin.ensure_jobs -> legacy_job_handler(backup_database_files) -> dynamic legacy target"
+        "production NoneBot startup -> plugin.install_driver_hooks -> ensure_jobs -> legacy scheduler manifest JobSpec registration with handler=legacy_job_handler(job.id)",
+        "admin POST /api/v1/scheduler/backup_database_files/run -> scheduler blueprint run_job -> JobExecutor.run_sync -> JobExecutor.run -> registered legacy_job_handler(backup_database_files)",
+        "legacy_job_handler(backup_database_files) -> _TARGETS/_ALIASES or xiuxian_scheduler fallback -> importlib.import_module -> target(*args, **kwargs)",
+        "separate automatic path when this job has a legacy scheduled_job declaration: plugin startup imports its declaring module -> DeferredScheduler captures the original decorated function -> ensure_jobs.activate_scheduler_bridge -> APScheduler.add_job(original function); this path does not call legacy_job_handler"
       ],
       "evidence": [
-        "nonebot_plugin_xiuxian_2/__init__.py:109-121",
-        "nonebot_plugin_xiuxian_2/plugin.py:1211-1240",
-        "nonebot_plugin_xiuxian_2/compatibility/legacy_jobs.py:10-75",
-        "nonebot_plugin_xiuxian_2/compatibility/legacy_manifest.py:13-54"
+        "nonebot_plugin_xiuxian_2/__init__.py:89-121",
+        "nonebot_plugin_xiuxian_2/plugin.py:1211-1244",
+        "nonebot_plugin_xiuxian_2/compatibility/legacy_manifest.py:18-68",
+        "nonebot_plugin_xiuxian_2/adapters/web/app.py:466-473",
+        "nonebot_plugin_xiuxian_2/adapters/web/blueprints/scheduler.py:16-32",
+        "nonebot_plugin_xiuxian_2/infrastructure/scheduler/runner.py:22-94",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/compatibility/legacy_jobs.py:42-75",
+        "nonebot_plugin_xiuxian_2/compatibility/scheduler.py:48-91,122-128"
       ],
       "source_declaration_found": true,
       "source": {
@@ -9167,13 +9231,21 @@
       "reason": "The composition root explicitly keeps legacy APScheduler decorators for the compatibility release. Retain until the independent P7 release gate permits removal; this allowance does not assert that job internals are feature-owned.",
       "unknown_edge": null,
       "call_graph": [
-        "job:check_auction_end -> plugin.ensure_jobs -> legacy_job_handler(check_auction_end) -> dynamic legacy target"
+        "production NoneBot startup -> plugin.install_driver_hooks -> ensure_jobs -> legacy scheduler manifest JobSpec registration with handler=legacy_job_handler(job.id)",
+        "admin POST /api/v1/scheduler/check_auction_end/run -> scheduler blueprint run_job -> JobExecutor.run_sync -> JobExecutor.run -> registered legacy_job_handler(check_auction_end)",
+        "legacy_job_handler(check_auction_end) -> _TARGETS/_ALIASES or xiuxian_scheduler fallback -> importlib.import_module -> target(*args, **kwargs)",
+        "separate automatic path when this job has a legacy scheduled_job declaration: plugin startup imports its declaring module -> DeferredScheduler captures the original decorated function -> ensure_jobs.activate_scheduler_bridge -> APScheduler.add_job(original function); this path does not call legacy_job_handler"
       ],
       "evidence": [
-        "nonebot_plugin_xiuxian_2/__init__.py:109-121",
-        "nonebot_plugin_xiuxian_2/plugin.py:1211-1240",
-        "nonebot_plugin_xiuxian_2/compatibility/legacy_jobs.py:10-75",
-        "nonebot_plugin_xiuxian_2/compatibility/legacy_manifest.py:13-54"
+        "nonebot_plugin_xiuxian_2/__init__.py:89-121",
+        "nonebot_plugin_xiuxian_2/plugin.py:1211-1244",
+        "nonebot_plugin_xiuxian_2/compatibility/legacy_manifest.py:18-68",
+        "nonebot_plugin_xiuxian_2/adapters/web/app.py:466-473",
+        "nonebot_plugin_xiuxian_2/adapters/web/blueprints/scheduler.py:16-32",
+        "nonebot_plugin_xiuxian_2/infrastructure/scheduler/runner.py:22-94",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/compatibility/legacy_jobs.py:42-75",
+        "nonebot_plugin_xiuxian_2/compatibility/scheduler.py:48-91,122-128"
       ],
       "source_declaration_found": true,
       "source": {
@@ -9188,13 +9260,21 @@
       "reason": "The composition root explicitly keeps legacy APScheduler decorators for the compatibility release. Retain until the independent P7 release gate permits removal; this allowance does not assert that job internals are feature-owned.",
       "unknown_edge": null,
       "call_graph": [
-        "job:cleanup_media_parser_cache_job -> plugin.ensure_jobs -> legacy_job_handler(cleanup_media_parser_cache_job) -> dynamic legacy target"
+        "production NoneBot startup -> plugin.install_driver_hooks -> ensure_jobs -> legacy scheduler manifest JobSpec registration with handler=legacy_job_handler(job.id)",
+        "admin POST /api/v1/scheduler/cleanup_media_parser_cache_job/run -> scheduler blueprint run_job -> JobExecutor.run_sync -> JobExecutor.run -> registered legacy_job_handler(cleanup_media_parser_cache_job)",
+        "legacy_job_handler(cleanup_media_parser_cache_job) -> _TARGETS/_ALIASES or xiuxian_scheduler fallback -> importlib.import_module -> target(*args, **kwargs)",
+        "separate automatic path when this job has a legacy scheduled_job declaration: plugin startup imports its declaring module -> DeferredScheduler captures the original decorated function -> ensure_jobs.activate_scheduler_bridge -> APScheduler.add_job(original function); this path does not call legacy_job_handler"
       ],
       "evidence": [
-        "nonebot_plugin_xiuxian_2/__init__.py:109-121",
-        "nonebot_plugin_xiuxian_2/plugin.py:1211-1240",
-        "nonebot_plugin_xiuxian_2/compatibility/legacy_jobs.py:10-75",
-        "nonebot_plugin_xiuxian_2/compatibility/legacy_manifest.py:13-54"
+        "nonebot_plugin_xiuxian_2/__init__.py:89-121",
+        "nonebot_plugin_xiuxian_2/plugin.py:1211-1244",
+        "nonebot_plugin_xiuxian_2/compatibility/legacy_manifest.py:18-68",
+        "nonebot_plugin_xiuxian_2/adapters/web/app.py:466-473",
+        "nonebot_plugin_xiuxian_2/adapters/web/blueprints/scheduler.py:16-32",
+        "nonebot_plugin_xiuxian_2/infrastructure/scheduler/runner.py:22-94",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/compatibility/legacy_jobs.py:42-75",
+        "nonebot_plugin_xiuxian_2/compatibility/scheduler.py:48-91,122-128"
       ],
       "source_declaration_found": true,
       "source": {
@@ -9209,13 +9289,21 @@
       "reason": "The composition root explicitly keeps legacy APScheduler decorators for the compatibility release. Retain until the independent P7 release gate permits removal; this allowance does not assert that job internals are feature-owned.",
       "unknown_edge": null,
       "call_graph": [
-        "job:clear_expired_baitan_orders -> plugin.ensure_jobs -> legacy_job_handler(clear_expired_baitan_orders) -> dynamic legacy target"
+        "production NoneBot startup -> plugin.install_driver_hooks -> ensure_jobs -> legacy scheduler manifest JobSpec registration with handler=legacy_job_handler(job.id)",
+        "admin POST /api/v1/scheduler/clear_expired_baitan_orders/run -> scheduler blueprint run_job -> JobExecutor.run_sync -> JobExecutor.run -> registered legacy_job_handler(clear_expired_baitan_orders)",
+        "legacy_job_handler(clear_expired_baitan_orders) -> _TARGETS/_ALIASES or xiuxian_scheduler fallback -> importlib.import_module -> target(*args, **kwargs)",
+        "separate automatic path when this job has a legacy scheduled_job declaration: plugin startup imports its declaring module -> DeferredScheduler captures the original decorated function -> ensure_jobs.activate_scheduler_bridge -> APScheduler.add_job(original function); this path does not call legacy_job_handler"
       ],
       "evidence": [
-        "nonebot_plugin_xiuxian_2/__init__.py:109-121",
-        "nonebot_plugin_xiuxian_2/plugin.py:1211-1240",
-        "nonebot_plugin_xiuxian_2/compatibility/legacy_jobs.py:10-75",
-        "nonebot_plugin_xiuxian_2/compatibility/legacy_manifest.py:13-54"
+        "nonebot_plugin_xiuxian_2/__init__.py:89-121",
+        "nonebot_plugin_xiuxian_2/plugin.py:1211-1244",
+        "nonebot_plugin_xiuxian_2/compatibility/legacy_manifest.py:18-68",
+        "nonebot_plugin_xiuxian_2/adapters/web/app.py:466-473",
+        "nonebot_plugin_xiuxian_2/adapters/web/blueprints/scheduler.py:16-32",
+        "nonebot_plugin_xiuxian_2/infrastructure/scheduler/runner.py:22-94",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/compatibility/legacy_jobs.py:42-75",
+        "nonebot_plugin_xiuxian_2/compatibility/scheduler.py:48-91,122-128"
       ],
       "source_declaration_found": true,
       "source": {
@@ -9230,13 +9318,21 @@
       "reason": "The composition root explicitly keeps legacy APScheduler decorators for the compatibility release. Retain until the independent P7 release gate permits removal; this allowance does not assert that job internals are feature-owned.",
       "unknown_edge": null,
       "call_graph": [
-        "job:daily_add_impart_lv -> plugin.ensure_jobs -> legacy_job_handler(daily_add_impart_lv) -> dynamic legacy target"
+        "production NoneBot startup -> plugin.install_driver_hooks -> ensure_jobs -> legacy scheduler manifest JobSpec registration with handler=legacy_job_handler(job.id)",
+        "admin POST /api/v1/scheduler/daily_add_impart_lv/run -> scheduler blueprint run_job -> JobExecutor.run_sync -> JobExecutor.run -> registered legacy_job_handler(daily_add_impart_lv)",
+        "legacy_job_handler(daily_add_impart_lv) -> _TARGETS/_ALIASES or xiuxian_scheduler fallback -> importlib.import_module -> target(*args, **kwargs)",
+        "separate automatic path when this job has a legacy scheduled_job declaration: plugin startup imports its declaring module -> DeferredScheduler captures the original decorated function -> ensure_jobs.activate_scheduler_bridge -> APScheduler.add_job(original function); this path does not call legacy_job_handler"
       ],
       "evidence": [
-        "nonebot_plugin_xiuxian_2/__init__.py:109-121",
-        "nonebot_plugin_xiuxian_2/plugin.py:1211-1240",
-        "nonebot_plugin_xiuxian_2/compatibility/legacy_jobs.py:10-75",
-        "nonebot_plugin_xiuxian_2/compatibility/legacy_manifest.py:13-54"
+        "nonebot_plugin_xiuxian_2/__init__.py:89-121",
+        "nonebot_plugin_xiuxian_2/plugin.py:1211-1244",
+        "nonebot_plugin_xiuxian_2/compatibility/legacy_manifest.py:18-68",
+        "nonebot_plugin_xiuxian_2/adapters/web/app.py:466-473",
+        "nonebot_plugin_xiuxian_2/adapters/web/blueprints/scheduler.py:16-32",
+        "nonebot_plugin_xiuxian_2/infrastructure/scheduler/runner.py:22-94",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/compatibility/legacy_jobs.py:42-75",
+        "nonebot_plugin_xiuxian_2/compatibility/scheduler.py:48-91,122-128"
       ],
       "source_declaration_found": true,
       "source": {
@@ -9251,13 +9347,21 @@
       "reason": "The composition root explicitly keeps legacy APScheduler decorators for the compatibility release. Retain until the independent P7 release gate permits removal; this allowance does not assert that job internals are feature-owned.",
       "unknown_edge": null,
       "call_graph": [
-        "job:daily_clean_expired_items -> plugin.ensure_jobs -> legacy_job_handler(daily_clean_expired_items) -> dynamic legacy target"
+        "production NoneBot startup -> plugin.install_driver_hooks -> ensure_jobs -> legacy scheduler manifest JobSpec registration with handler=legacy_job_handler(job.id)",
+        "admin POST /api/v1/scheduler/daily_clean_expired_items/run -> scheduler blueprint run_job -> JobExecutor.run_sync -> JobExecutor.run -> registered legacy_job_handler(daily_clean_expired_items)",
+        "legacy_job_handler(daily_clean_expired_items) -> _TARGETS/_ALIASES or xiuxian_scheduler fallback -> importlib.import_module -> target(*args, **kwargs)",
+        "separate automatic path when this job has a legacy scheduled_job declaration: plugin startup imports its declaring module -> DeferredScheduler captures the original decorated function -> ensure_jobs.activate_scheduler_bridge -> APScheduler.add_job(original function); this path does not call legacy_job_handler"
       ],
       "evidence": [
-        "nonebot_plugin_xiuxian_2/__init__.py:109-121",
-        "nonebot_plugin_xiuxian_2/plugin.py:1211-1240",
-        "nonebot_plugin_xiuxian_2/compatibility/legacy_jobs.py:10-75",
-        "nonebot_plugin_xiuxian_2/compatibility/legacy_manifest.py:13-54"
+        "nonebot_plugin_xiuxian_2/__init__.py:89-121",
+        "nonebot_plugin_xiuxian_2/plugin.py:1211-1244",
+        "nonebot_plugin_xiuxian_2/compatibility/legacy_manifest.py:18-68",
+        "nonebot_plugin_xiuxian_2/adapters/web/app.py:466-473",
+        "nonebot_plugin_xiuxian_2/adapters/web/blueprints/scheduler.py:16-32",
+        "nonebot_plugin_xiuxian_2/infrastructure/scheduler/runner.py:22-94",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/compatibility/legacy_jobs.py:42-75",
+        "nonebot_plugin_xiuxian_2/compatibility/scheduler.py:48-91,122-128"
       ],
       "source_declaration_found": true,
       "source": {
@@ -9272,13 +9376,21 @@
       "reason": "The composition root explicitly keeps legacy APScheduler decorators for the compatibility release. Retain until the independent P7 release gate permits removal; this allowance does not assert that job internals are feature-owned.",
       "unknown_edge": null,
       "call_graph": [
-        "job:daily_dungeon_reset -> plugin.ensure_jobs -> legacy_job_handler(daily_dungeon_reset) -> dynamic legacy target"
+        "production NoneBot startup -> plugin.install_driver_hooks -> ensure_jobs -> legacy scheduler manifest JobSpec registration with handler=legacy_job_handler(job.id)",
+        "admin POST /api/v1/scheduler/daily_dungeon_reset/run -> scheduler blueprint run_job -> JobExecutor.run_sync -> JobExecutor.run -> registered legacy_job_handler(daily_dungeon_reset)",
+        "legacy_job_handler(daily_dungeon_reset) -> _TARGETS/_ALIASES or xiuxian_scheduler fallback -> importlib.import_module -> target(*args, **kwargs)",
+        "separate automatic path when this job has a legacy scheduled_job declaration: plugin startup imports its declaring module -> DeferredScheduler captures the original decorated function -> ensure_jobs.activate_scheduler_bridge -> APScheduler.add_job(original function); this path does not call legacy_job_handler"
       ],
       "evidence": [
-        "nonebot_plugin_xiuxian_2/__init__.py:109-121",
-        "nonebot_plugin_xiuxian_2/plugin.py:1211-1240",
-        "nonebot_plugin_xiuxian_2/compatibility/legacy_jobs.py:10-75",
-        "nonebot_plugin_xiuxian_2/compatibility/legacy_manifest.py:13-54"
+        "nonebot_plugin_xiuxian_2/__init__.py:89-121",
+        "nonebot_plugin_xiuxian_2/plugin.py:1211-1244",
+        "nonebot_plugin_xiuxian_2/compatibility/legacy_manifest.py:18-68",
+        "nonebot_plugin_xiuxian_2/adapters/web/app.py:466-473",
+        "nonebot_plugin_xiuxian_2/adapters/web/blueprints/scheduler.py:16-32",
+        "nonebot_plugin_xiuxian_2/infrastructure/scheduler/runner.py:22-94",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/compatibility/legacy_jobs.py:42-75",
+        "nonebot_plugin_xiuxian_2/compatibility/scheduler.py:48-91,122-128"
       ],
       "source_declaration_found": true,
       "source": {
@@ -9293,13 +9405,21 @@
       "reason": "The composition root explicitly keeps legacy APScheduler decorators for the compatibility release. Retain until the independent P7 release gate permits removal; this allowance does not assert that job internals are feature-owned.",
       "unknown_edge": null,
       "call_graph": [
-        "job:daily_reset_arena -> plugin.ensure_jobs -> legacy_job_handler(daily_reset_arena) -> dynamic legacy target"
+        "production NoneBot startup -> plugin.install_driver_hooks -> ensure_jobs -> legacy scheduler manifest JobSpec registration with handler=legacy_job_handler(job.id)",
+        "admin POST /api/v1/scheduler/daily_reset_arena/run -> scheduler blueprint run_job -> JobExecutor.run_sync -> JobExecutor.run -> registered legacy_job_handler(daily_reset_arena)",
+        "legacy_job_handler(daily_reset_arena) -> _TARGETS/_ALIASES or xiuxian_scheduler fallback -> importlib.import_module -> target(*args, **kwargs)",
+        "separate automatic path when this job has a legacy scheduled_job declaration: plugin startup imports its declaring module -> DeferredScheduler captures the original decorated function -> ensure_jobs.activate_scheduler_bridge -> APScheduler.add_job(original function); this path does not call legacy_job_handler"
       ],
       "evidence": [
-        "nonebot_plugin_xiuxian_2/__init__.py:109-121",
-        "nonebot_plugin_xiuxian_2/plugin.py:1211-1240",
-        "nonebot_plugin_xiuxian_2/compatibility/legacy_jobs.py:10-75",
-        "nonebot_plugin_xiuxian_2/compatibility/legacy_manifest.py:13-54"
+        "nonebot_plugin_xiuxian_2/__init__.py:89-121",
+        "nonebot_plugin_xiuxian_2/plugin.py:1211-1244",
+        "nonebot_plugin_xiuxian_2/compatibility/legacy_manifest.py:18-68",
+        "nonebot_plugin_xiuxian_2/adapters/web/app.py:466-473",
+        "nonebot_plugin_xiuxian_2/adapters/web/blueprints/scheduler.py:16-32",
+        "nonebot_plugin_xiuxian_2/infrastructure/scheduler/runner.py:22-94",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/compatibility/legacy_jobs.py:42-75",
+        "nonebot_plugin_xiuxian_2/compatibility/scheduler.py:48-91,122-128"
       ],
       "source_declaration_found": true,
       "source": {
@@ -9314,13 +9434,21 @@
       "reason": "The composition root explicitly keeps legacy APScheduler decorators for the compatibility release. Retain until the independent P7 release gate permits removal; this allowance does not assert that job internals are feature-owned.",
       "unknown_edge": null,
       "call_graph": [
-        "job:daily_reset_beg -> plugin.ensure_jobs -> legacy_job_handler(daily_reset_beg) -> dynamic legacy target"
+        "production NoneBot startup -> plugin.install_driver_hooks -> ensure_jobs -> legacy scheduler manifest JobSpec registration with handler=legacy_job_handler(job.id)",
+        "admin POST /api/v1/scheduler/daily_reset_beg/run -> scheduler blueprint run_job -> JobExecutor.run_sync -> JobExecutor.run -> registered legacy_job_handler(daily_reset_beg)",
+        "legacy_job_handler(daily_reset_beg) -> _TARGETS/_ALIASES or xiuxian_scheduler fallback -> importlib.import_module -> target(*args, **kwargs)",
+        "separate automatic path when this job has a legacy scheduled_job declaration: plugin startup imports its declaring module -> DeferredScheduler captures the original decorated function -> ensure_jobs.activate_scheduler_bridge -> APScheduler.add_job(original function); this path does not call legacy_job_handler"
       ],
       "evidence": [
-        "nonebot_plugin_xiuxian_2/__init__.py:109-121",
-        "nonebot_plugin_xiuxian_2/plugin.py:1211-1240",
-        "nonebot_plugin_xiuxian_2/compatibility/legacy_jobs.py:10-75",
-        "nonebot_plugin_xiuxian_2/compatibility/legacy_manifest.py:13-54"
+        "nonebot_plugin_xiuxian_2/__init__.py:89-121",
+        "nonebot_plugin_xiuxian_2/plugin.py:1211-1244",
+        "nonebot_plugin_xiuxian_2/compatibility/legacy_manifest.py:18-68",
+        "nonebot_plugin_xiuxian_2/adapters/web/app.py:466-473",
+        "nonebot_plugin_xiuxian_2/adapters/web/blueprints/scheduler.py:16-32",
+        "nonebot_plugin_xiuxian_2/infrastructure/scheduler/runner.py:22-94",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/compatibility/legacy_jobs.py:42-75",
+        "nonebot_plugin_xiuxian_2/compatibility/scheduler.py:48-91,122-128"
       ],
       "source_declaration_found": true,
       "source": {
@@ -9335,13 +9463,21 @@
       "reason": "The composition root explicitly keeps legacy APScheduler decorators for the compatibility release. Retain until the independent P7 release gate permits removal; this allowance does not assert that job internals are feature-owned.",
       "unknown_edge": null,
       "call_graph": [
-        "job:daily_reset_boss_limits -> plugin.ensure_jobs -> legacy_job_handler(daily_reset_boss_limits) -> dynamic legacy target"
+        "production NoneBot startup -> plugin.install_driver_hooks -> ensure_jobs -> legacy scheduler manifest JobSpec registration with handler=legacy_job_handler(job.id)",
+        "admin POST /api/v1/scheduler/daily_reset_boss_limits/run -> scheduler blueprint run_job -> JobExecutor.run_sync -> JobExecutor.run -> registered legacy_job_handler(daily_reset_boss_limits)",
+        "legacy_job_handler(daily_reset_boss_limits) -> _TARGETS/_ALIASES or xiuxian_scheduler fallback -> importlib.import_module -> target(*args, **kwargs)",
+        "separate automatic path when this job has a legacy scheduled_job declaration: plugin startup imports its declaring module -> DeferredScheduler captures the original decorated function -> ensure_jobs.activate_scheduler_bridge -> APScheduler.add_job(original function); this path does not call legacy_job_handler"
       ],
       "evidence": [
-        "nonebot_plugin_xiuxian_2/__init__.py:109-121",
-        "nonebot_plugin_xiuxian_2/plugin.py:1211-1240",
-        "nonebot_plugin_xiuxian_2/compatibility/legacy_jobs.py:10-75",
-        "nonebot_plugin_xiuxian_2/compatibility/legacy_manifest.py:13-54"
+        "nonebot_plugin_xiuxian_2/__init__.py:89-121",
+        "nonebot_plugin_xiuxian_2/plugin.py:1211-1244",
+        "nonebot_plugin_xiuxian_2/compatibility/legacy_manifest.py:18-68",
+        "nonebot_plugin_xiuxian_2/adapters/web/app.py:466-473",
+        "nonebot_plugin_xiuxian_2/adapters/web/blueprints/scheduler.py:16-32",
+        "nonebot_plugin_xiuxian_2/infrastructure/scheduler/runner.py:22-94",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/compatibility/legacy_jobs.py:42-75",
+        "nonebot_plugin_xiuxian_2/compatibility/scheduler.py:48-91,122-128"
       ],
       "source_declaration_found": true,
       "source": {
@@ -9356,13 +9492,21 @@
       "reason": "The composition root explicitly keeps legacy APScheduler decorators for the compatibility release. Retain until the independent P7 release gate permits removal; this allowance does not assert that job internals are feature-owned.",
       "unknown_edge": null,
       "call_graph": [
-        "job:daily_reset_day_num -> plugin.ensure_jobs -> legacy_job_handler(daily_reset_day_num) -> dynamic legacy target"
+        "production NoneBot startup -> plugin.install_driver_hooks -> ensure_jobs -> legacy scheduler manifest JobSpec registration with handler=legacy_job_handler(job.id)",
+        "admin POST /api/v1/scheduler/daily_reset_day_num/run -> scheduler blueprint run_job -> JobExecutor.run_sync -> JobExecutor.run -> registered legacy_job_handler(daily_reset_day_num)",
+        "legacy_job_handler(daily_reset_day_num) -> _TARGETS/_ALIASES or xiuxian_scheduler fallback -> importlib.import_module -> target(*args, **kwargs)",
+        "separate automatic path when this job has a legacy scheduled_job declaration: plugin startup imports its declaring module -> DeferredScheduler captures the original decorated function -> ensure_jobs.activate_scheduler_bridge -> APScheduler.add_job(original function); this path does not call legacy_job_handler"
       ],
       "evidence": [
-        "nonebot_plugin_xiuxian_2/__init__.py:109-121",
-        "nonebot_plugin_xiuxian_2/plugin.py:1211-1240",
-        "nonebot_plugin_xiuxian_2/compatibility/legacy_jobs.py:10-75",
-        "nonebot_plugin_xiuxian_2/compatibility/legacy_manifest.py:13-54"
+        "nonebot_plugin_xiuxian_2/__init__.py:89-121",
+        "nonebot_plugin_xiuxian_2/plugin.py:1211-1244",
+        "nonebot_plugin_xiuxian_2/compatibility/legacy_manifest.py:18-68",
+        "nonebot_plugin_xiuxian_2/adapters/web/app.py:466-473",
+        "nonebot_plugin_xiuxian_2/adapters/web/blueprints/scheduler.py:16-32",
+        "nonebot_plugin_xiuxian_2/infrastructure/scheduler/runner.py:22-94",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/compatibility/legacy_jobs.py:42-75",
+        "nonebot_plugin_xiuxian_2/compatibility/scheduler.py:48-91,122-128"
       ],
       "source_declaration_found": true,
       "source": {
@@ -9377,13 +9521,21 @@
       "reason": "The composition root explicitly keeps legacy APScheduler decorators for the compatibility release. Retain until the independent P7 release gate permits removal; this allowance does not assert that job internals are feature-owned.",
       "unknown_edge": null,
       "call_graph": [
-        "job:daily_reset_illusion -> plugin.ensure_jobs -> legacy_job_handler(daily_reset_illusion) -> dynamic legacy target"
+        "production NoneBot startup -> plugin.install_driver_hooks -> ensure_jobs -> legacy scheduler manifest JobSpec registration with handler=legacy_job_handler(job.id)",
+        "admin POST /api/v1/scheduler/daily_reset_illusion/run -> scheduler blueprint run_job -> JobExecutor.run_sync -> JobExecutor.run -> registered legacy_job_handler(daily_reset_illusion)",
+        "legacy_job_handler(daily_reset_illusion) -> _TARGETS/_ALIASES or xiuxian_scheduler fallback -> importlib.import_module -> target(*args, **kwargs)",
+        "separate automatic path when this job has a legacy scheduled_job declaration: plugin startup imports its declaring module -> DeferredScheduler captures the original decorated function -> ensure_jobs.activate_scheduler_bridge -> APScheduler.add_job(original function); this path does not call legacy_job_handler"
       ],
       "evidence": [
-        "nonebot_plugin_xiuxian_2/__init__.py:109-121",
-        "nonebot_plugin_xiuxian_2/plugin.py:1211-1240",
-        "nonebot_plugin_xiuxian_2/compatibility/legacy_jobs.py:10-75",
-        "nonebot_plugin_xiuxian_2/compatibility/legacy_manifest.py:13-54"
+        "nonebot_plugin_xiuxian_2/__init__.py:89-121",
+        "nonebot_plugin_xiuxian_2/plugin.py:1211-1244",
+        "nonebot_plugin_xiuxian_2/compatibility/legacy_manifest.py:18-68",
+        "nonebot_plugin_xiuxian_2/adapters/web/app.py:466-473",
+        "nonebot_plugin_xiuxian_2/adapters/web/blueprints/scheduler.py:16-32",
+        "nonebot_plugin_xiuxian_2/infrastructure/scheduler/runner.py:22-94",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/compatibility/legacy_jobs.py:42-75",
+        "nonebot_plugin_xiuxian_2/compatibility/scheduler.py:48-91,122-128"
       ],
       "source_declaration_found": true,
       "source": {
@@ -9398,13 +9550,21 @@
       "reason": "The composition root explicitly keeps legacy APScheduler decorators for the compatibility release. Retain until the independent P7 release gate permits removal; this allowance does not assert that job internals are feature-owned.",
       "unknown_edge": null,
       "call_graph": [
-        "job:daily_reset_impart_num -> plugin.ensure_jobs -> legacy_job_handler(daily_reset_impart_num) -> dynamic legacy target"
+        "production NoneBot startup -> plugin.install_driver_hooks -> ensure_jobs -> legacy scheduler manifest JobSpec registration with handler=legacy_job_handler(job.id)",
+        "admin POST /api/v1/scheduler/daily_reset_impart_num/run -> scheduler blueprint run_job -> JobExecutor.run_sync -> JobExecutor.run -> registered legacy_job_handler(daily_reset_impart_num)",
+        "legacy_job_handler(daily_reset_impart_num) -> _TARGETS/_ALIASES or xiuxian_scheduler fallback -> importlib.import_module -> target(*args, **kwargs)",
+        "separate automatic path when this job has a legacy scheduled_job declaration: plugin startup imports its declaring module -> DeferredScheduler captures the original decorated function -> ensure_jobs.activate_scheduler_bridge -> APScheduler.add_job(original function); this path does not call legacy_job_handler"
       ],
       "evidence": [
-        "nonebot_plugin_xiuxian_2/__init__.py:109-121",
-        "nonebot_plugin_xiuxian_2/plugin.py:1211-1240",
-        "nonebot_plugin_xiuxian_2/compatibility/legacy_jobs.py:10-75",
-        "nonebot_plugin_xiuxian_2/compatibility/legacy_manifest.py:13-54"
+        "nonebot_plugin_xiuxian_2/__init__.py:89-121",
+        "nonebot_plugin_xiuxian_2/plugin.py:1211-1244",
+        "nonebot_plugin_xiuxian_2/compatibility/legacy_manifest.py:18-68",
+        "nonebot_plugin_xiuxian_2/adapters/web/app.py:466-473",
+        "nonebot_plugin_xiuxian_2/adapters/web/blueprints/scheduler.py:16-32",
+        "nonebot_plugin_xiuxian_2/infrastructure/scheduler/runner.py:22-94",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/compatibility/legacy_jobs.py:42-75",
+        "nonebot_plugin_xiuxian_2/compatibility/scheduler.py:48-91,122-128"
       ],
       "source_declaration_found": true,
       "source": {
@@ -9419,13 +9579,21 @@
       "reason": "The composition root explicitly keeps legacy APScheduler decorators for the compatibility release. Retain until the independent P7 release gate permits removal; this allowance does not assert that job internals are feature-owned.",
       "unknown_edge": null,
       "call_graph": [
-        "job:daily_reset_impart_pk -> plugin.ensure_jobs -> legacy_job_handler(daily_reset_impart_pk) -> dynamic legacy target"
+        "production NoneBot startup -> plugin.install_driver_hooks -> ensure_jobs -> legacy scheduler manifest JobSpec registration with handler=legacy_job_handler(job.id)",
+        "admin POST /api/v1/scheduler/daily_reset_impart_pk/run -> scheduler blueprint run_job -> JobExecutor.run_sync -> JobExecutor.run -> registered legacy_job_handler(daily_reset_impart_pk)",
+        "legacy_job_handler(daily_reset_impart_pk) -> _TARGETS/_ALIASES or xiuxian_scheduler fallback -> importlib.import_module -> target(*args, **kwargs)",
+        "separate automatic path when this job has a legacy scheduled_job declaration: plugin startup imports its declaring module -> DeferredScheduler captures the original decorated function -> ensure_jobs.activate_scheduler_bridge -> APScheduler.add_job(original function); this path does not call legacy_job_handler"
       ],
       "evidence": [
-        "nonebot_plugin_xiuxian_2/__init__.py:109-121",
-        "nonebot_plugin_xiuxian_2/plugin.py:1211-1240",
-        "nonebot_plugin_xiuxian_2/compatibility/legacy_jobs.py:10-75",
-        "nonebot_plugin_xiuxian_2/compatibility/legacy_manifest.py:13-54"
+        "nonebot_plugin_xiuxian_2/__init__.py:89-121",
+        "nonebot_plugin_xiuxian_2/plugin.py:1211-1244",
+        "nonebot_plugin_xiuxian_2/compatibility/legacy_manifest.py:18-68",
+        "nonebot_plugin_xiuxian_2/adapters/web/app.py:466-473",
+        "nonebot_plugin_xiuxian_2/adapters/web/blueprints/scheduler.py:16-32",
+        "nonebot_plugin_xiuxian_2/infrastructure/scheduler/runner.py:22-94",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/compatibility/legacy_jobs.py:42-75",
+        "nonebot_plugin_xiuxian_2/compatibility/scheduler.py:48-91,122-128"
       ],
       "source_declaration_found": true,
       "source": {
@@ -9440,13 +9608,21 @@
       "reason": "The composition root explicitly keeps legacy APScheduler decorators for the compatibility release. Retain until the independent P7 release gate permits removal; this allowance does not assert that job internals are feature-owned.",
       "unknown_edge": null,
       "call_graph": [
-        "job:daily_reset_lottery -> plugin.ensure_jobs -> legacy_job_handler(daily_reset_lottery) -> dynamic legacy target"
+        "production NoneBot startup -> plugin.install_driver_hooks -> ensure_jobs -> legacy scheduler manifest JobSpec registration with handler=legacy_job_handler(job.id)",
+        "admin POST /api/v1/scheduler/daily_reset_lottery/run -> scheduler blueprint run_job -> JobExecutor.run_sync -> JobExecutor.run -> registered legacy_job_handler(daily_reset_lottery)",
+        "legacy_job_handler(daily_reset_lottery) -> _TARGETS/_ALIASES or xiuxian_scheduler fallback -> importlib.import_module -> target(*args, **kwargs)",
+        "separate automatic path when this job has a legacy scheduled_job declaration: plugin startup imports its declaring module -> DeferredScheduler captures the original decorated function -> ensure_jobs.activate_scheduler_bridge -> APScheduler.add_job(original function); this path does not call legacy_job_handler"
       ],
       "evidence": [
-        "nonebot_plugin_xiuxian_2/__init__.py:109-121",
-        "nonebot_plugin_xiuxian_2/plugin.py:1211-1240",
-        "nonebot_plugin_xiuxian_2/compatibility/legacy_jobs.py:10-75",
-        "nonebot_plugin_xiuxian_2/compatibility/legacy_manifest.py:13-54"
+        "nonebot_plugin_xiuxian_2/__init__.py:89-121",
+        "nonebot_plugin_xiuxian_2/plugin.py:1211-1244",
+        "nonebot_plugin_xiuxian_2/compatibility/legacy_manifest.py:18-68",
+        "nonebot_plugin_xiuxian_2/adapters/web/app.py:466-473",
+        "nonebot_plugin_xiuxian_2/adapters/web/blueprints/scheduler.py:16-32",
+        "nonebot_plugin_xiuxian_2/infrastructure/scheduler/runner.py:22-94",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/compatibility/legacy_jobs.py:42-75",
+        "nonebot_plugin_xiuxian_2/compatibility/scheduler.py:48-91,122-128"
       ],
       "source_declaration_found": true,
       "source": {
@@ -9461,13 +9637,21 @@
       "reason": "The composition root explicitly keeps legacy APScheduler decorators for the compatibility release. Retain until the independent P7 release gate permits removal; this allowance does not assert that job internals are feature-owned.",
       "unknown_edge": null,
       "call_graph": [
-        "job:daily_reset_mixelixir_num -> plugin.ensure_jobs -> legacy_job_handler(daily_reset_mixelixir_num) -> dynamic legacy target"
+        "production NoneBot startup -> plugin.install_driver_hooks -> ensure_jobs -> legacy scheduler manifest JobSpec registration with handler=legacy_job_handler(job.id)",
+        "admin POST /api/v1/scheduler/daily_reset_mixelixir_num/run -> scheduler blueprint run_job -> JobExecutor.run_sync -> JobExecutor.run -> registered legacy_job_handler(daily_reset_mixelixir_num)",
+        "legacy_job_handler(daily_reset_mixelixir_num) -> _TARGETS/_ALIASES or xiuxian_scheduler fallback -> importlib.import_module -> target(*args, **kwargs)",
+        "separate automatic path when this job has a legacy scheduled_job declaration: plugin startup imports its declaring module -> DeferredScheduler captures the original decorated function -> ensure_jobs.activate_scheduler_bridge -> APScheduler.add_job(original function); this path does not call legacy_job_handler"
       ],
       "evidence": [
-        "nonebot_plugin_xiuxian_2/__init__.py:109-121",
-        "nonebot_plugin_xiuxian_2/plugin.py:1211-1240",
-        "nonebot_plugin_xiuxian_2/compatibility/legacy_jobs.py:10-75",
-        "nonebot_plugin_xiuxian_2/compatibility/legacy_manifest.py:13-54"
+        "nonebot_plugin_xiuxian_2/__init__.py:89-121",
+        "nonebot_plugin_xiuxian_2/plugin.py:1211-1244",
+        "nonebot_plugin_xiuxian_2/compatibility/legacy_manifest.py:18-68",
+        "nonebot_plugin_xiuxian_2/adapters/web/app.py:466-473",
+        "nonebot_plugin_xiuxian_2/adapters/web/blueprints/scheduler.py:16-32",
+        "nonebot_plugin_xiuxian_2/infrastructure/scheduler/runner.py:22-94",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/compatibility/legacy_jobs.py:42-75",
+        "nonebot_plugin_xiuxian_2/compatibility/scheduler.py:48-91,122-128"
       ],
       "source_declaration_found": true,
       "source": {
@@ -9482,13 +9666,21 @@
       "reason": "The composition root explicitly keeps legacy APScheduler decorators for the compatibility release. Retain until the independent P7 release gate permits removal; this allowance does not assert that job internals are feature-owned.",
       "unknown_edge": null,
       "call_graph": [
-        "job:daily_reset_sect_task -> plugin.ensure_jobs -> legacy_job_handler(daily_reset_sect_task) -> dynamic legacy target"
+        "production NoneBot startup -> plugin.install_driver_hooks -> ensure_jobs -> legacy scheduler manifest JobSpec registration with handler=legacy_job_handler(job.id)",
+        "admin POST /api/v1/scheduler/daily_reset_sect_task/run -> scheduler blueprint run_job -> JobExecutor.run_sync -> JobExecutor.run -> registered legacy_job_handler(daily_reset_sect_task)",
+        "legacy_job_handler(daily_reset_sect_task) -> _TARGETS/_ALIASES or xiuxian_scheduler fallback -> importlib.import_module -> target(*args, **kwargs)",
+        "separate automatic path when this job has a legacy scheduled_job declaration: plugin startup imports its declaring module -> DeferredScheduler captures the original decorated function -> ensure_jobs.activate_scheduler_bridge -> APScheduler.add_job(original function); this path does not call legacy_job_handler"
       ],
       "evidence": [
-        "nonebot_plugin_xiuxian_2/__init__.py:109-121",
-        "nonebot_plugin_xiuxian_2/plugin.py:1211-1240",
-        "nonebot_plugin_xiuxian_2/compatibility/legacy_jobs.py:10-75",
-        "nonebot_plugin_xiuxian_2/compatibility/legacy_manifest.py:13-54"
+        "nonebot_plugin_xiuxian_2/__init__.py:89-121",
+        "nonebot_plugin_xiuxian_2/plugin.py:1211-1244",
+        "nonebot_plugin_xiuxian_2/compatibility/legacy_manifest.py:18-68",
+        "nonebot_plugin_xiuxian_2/adapters/web/app.py:466-473",
+        "nonebot_plugin_xiuxian_2/adapters/web/blueprints/scheduler.py:16-32",
+        "nonebot_plugin_xiuxian_2/infrastructure/scheduler/runner.py:22-94",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/compatibility/legacy_jobs.py:42-75",
+        "nonebot_plugin_xiuxian_2/compatibility/scheduler.py:48-91,122-128"
       ],
       "source_declaration_found": true,
       "source": {
@@ -9503,13 +9695,21 @@
       "reason": "The composition root explicitly keeps legacy APScheduler decorators for the compatibility release. Retain until the independent P7 release gate permits removal; this allowance does not assert that job internals are feature-owned.",
       "unknown_edge": null,
       "call_graph": [
-        "job:daily_reset_sign -> plugin.ensure_jobs -> legacy_job_handler(daily_reset_sign) -> dynamic legacy target"
+        "production NoneBot startup -> plugin.install_driver_hooks -> ensure_jobs -> legacy scheduler manifest JobSpec registration with handler=legacy_job_handler(job.id)",
+        "admin POST /api/v1/scheduler/daily_reset_sign/run -> scheduler blueprint run_job -> JobExecutor.run_sync -> JobExecutor.run -> registered legacy_job_handler(daily_reset_sign)",
+        "legacy_job_handler(daily_reset_sign) -> _TARGETS/_ALIASES or xiuxian_scheduler fallback -> importlib.import_module -> target(*args, **kwargs)",
+        "separate automatic path when this job has a legacy scheduled_job declaration: plugin startup imports its declaring module -> DeferredScheduler captures the original decorated function -> ensure_jobs.activate_scheduler_bridge -> APScheduler.add_job(original function); this path does not call legacy_job_handler"
       ],
       "evidence": [
-        "nonebot_plugin_xiuxian_2/__init__.py:109-121",
-        "nonebot_plugin_xiuxian_2/plugin.py:1211-1240",
-        "nonebot_plugin_xiuxian_2/compatibility/legacy_jobs.py:10-75",
-        "nonebot_plugin_xiuxian_2/compatibility/legacy_manifest.py:13-54"
+        "nonebot_plugin_xiuxian_2/__init__.py:89-121",
+        "nonebot_plugin_xiuxian_2/plugin.py:1211-1244",
+        "nonebot_plugin_xiuxian_2/compatibility/legacy_manifest.py:18-68",
+        "nonebot_plugin_xiuxian_2/adapters/web/app.py:466-473",
+        "nonebot_plugin_xiuxian_2/adapters/web/blueprints/scheduler.py:16-32",
+        "nonebot_plugin_xiuxian_2/infrastructure/scheduler/runner.py:22-94",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/compatibility/legacy_jobs.py:42-75",
+        "nonebot_plugin_xiuxian_2/compatibility/scheduler.py:48-91,122-128"
       ],
       "source_declaration_found": true,
       "source": {
@@ -9524,13 +9724,21 @@
       "reason": "The composition root explicitly keeps legacy APScheduler decorators for the compatibility release. Retain until the independent P7 release gate permits removal; this allowance does not assert that job internals are feature-owned.",
       "unknown_edge": null,
       "call_graph": [
-        "job:daily_reset_stone_limits -> plugin.ensure_jobs -> legacy_job_handler(daily_reset_stone_limits) -> dynamic legacy target"
+        "production NoneBot startup -> plugin.install_driver_hooks -> ensure_jobs -> legacy scheduler manifest JobSpec registration with handler=legacy_job_handler(job.id)",
+        "admin POST /api/v1/scheduler/daily_reset_stone_limits/run -> scheduler blueprint run_job -> JobExecutor.run_sync -> JobExecutor.run -> registered legacy_job_handler(daily_reset_stone_limits)",
+        "legacy_job_handler(daily_reset_stone_limits) -> _TARGETS/_ALIASES or xiuxian_scheduler fallback -> importlib.import_module -> target(*args, **kwargs)",
+        "separate automatic path when this job has a legacy scheduled_job declaration: plugin startup imports its declaring module -> DeferredScheduler captures the original decorated function -> ensure_jobs.activate_scheduler_bridge -> APScheduler.add_job(original function); this path does not call legacy_job_handler"
       ],
       "evidence": [
-        "nonebot_plugin_xiuxian_2/__init__.py:109-121",
-        "nonebot_plugin_xiuxian_2/plugin.py:1211-1240",
-        "nonebot_plugin_xiuxian_2/compatibility/legacy_jobs.py:10-75",
-        "nonebot_plugin_xiuxian_2/compatibility/legacy_manifest.py:13-54"
+        "nonebot_plugin_xiuxian_2/__init__.py:89-121",
+        "nonebot_plugin_xiuxian_2/plugin.py:1211-1244",
+        "nonebot_plugin_xiuxian_2/compatibility/legacy_manifest.py:18-68",
+        "nonebot_plugin_xiuxian_2/adapters/web/app.py:466-473",
+        "nonebot_plugin_xiuxian_2/adapters/web/blueprints/scheduler.py:16-32",
+        "nonebot_plugin_xiuxian_2/infrastructure/scheduler/runner.py:22-94",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/compatibility/legacy_jobs.py:42-75",
+        "nonebot_plugin_xiuxian_2/compatibility/scheduler.py:48-91,122-128"
       ],
       "source_declaration_found": true,
       "source": {
@@ -9545,13 +9753,21 @@
       "reason": "The composition root explicitly keeps legacy APScheduler decorators for the compatibility release. Retain until the independent P7 release gate permits removal; this allowance does not assert that job internals are feature-owned.",
       "unknown_edge": null,
       "call_graph": [
-        "job:daily_reset_two_exp -> plugin.ensure_jobs -> legacy_job_handler(daily_reset_two_exp) -> dynamic legacy target"
+        "production NoneBot startup -> plugin.install_driver_hooks -> ensure_jobs -> legacy scheduler manifest JobSpec registration with handler=legacy_job_handler(job.id)",
+        "admin POST /api/v1/scheduler/daily_reset_two_exp/run -> scheduler blueprint run_job -> JobExecutor.run_sync -> JobExecutor.run -> registered legacy_job_handler(daily_reset_two_exp)",
+        "legacy_job_handler(daily_reset_two_exp) -> _TARGETS/_ALIASES or xiuxian_scheduler fallback -> importlib.import_module -> target(*args, **kwargs)",
+        "separate automatic path when this job has a legacy scheduled_job declaration: plugin startup imports its declaring module -> DeferredScheduler captures the original decorated function -> ensure_jobs.activate_scheduler_bridge -> APScheduler.add_job(original function); this path does not call legacy_job_handler"
       ],
       "evidence": [
-        "nonebot_plugin_xiuxian_2/__init__.py:109-121",
-        "nonebot_plugin_xiuxian_2/plugin.py:1211-1240",
-        "nonebot_plugin_xiuxian_2/compatibility/legacy_jobs.py:10-75",
-        "nonebot_plugin_xiuxian_2/compatibility/legacy_manifest.py:13-54"
+        "nonebot_plugin_xiuxian_2/__init__.py:89-121",
+        "nonebot_plugin_xiuxian_2/plugin.py:1211-1244",
+        "nonebot_plugin_xiuxian_2/compatibility/legacy_manifest.py:18-68",
+        "nonebot_plugin_xiuxian_2/adapters/web/app.py:466-473",
+        "nonebot_plugin_xiuxian_2/adapters/web/blueprints/scheduler.py:16-32",
+        "nonebot_plugin_xiuxian_2/infrastructure/scheduler/runner.py:22-94",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/compatibility/legacy_jobs.py:42-75",
+        "nonebot_plugin_xiuxian_2/compatibility/scheduler.py:48-91,122-128"
       ],
       "source_declaration_found": true,
       "source": {
@@ -9566,13 +9782,21 @@
       "reason": "The composition root explicitly keeps legacy APScheduler decorators for the compatibility release. Retain until the independent P7 release gate permits removal; this allowance does not assert that job internals are feature-owned.",
       "unknown_edge": null,
       "call_graph": [
-        "job:daily_reset_work_refresh_num -> plugin.ensure_jobs -> legacy_job_handler(daily_reset_work_refresh_num) -> dynamic legacy target"
+        "production NoneBot startup -> plugin.install_driver_hooks -> ensure_jobs -> legacy scheduler manifest JobSpec registration with handler=legacy_job_handler(job.id)",
+        "admin POST /api/v1/scheduler/daily_reset_work_refresh_num/run -> scheduler blueprint run_job -> JobExecutor.run_sync -> JobExecutor.run -> registered legacy_job_handler(daily_reset_work_refresh_num)",
+        "legacy_job_handler(daily_reset_work_refresh_num) -> _TARGETS/_ALIASES or xiuxian_scheduler fallback -> importlib.import_module -> target(*args, **kwargs)",
+        "separate automatic path when this job has a legacy scheduled_job declaration: plugin startup imports its declaring module -> DeferredScheduler captures the original decorated function -> ensure_jobs.activate_scheduler_bridge -> APScheduler.add_job(original function); this path does not call legacy_job_handler"
       ],
       "evidence": [
-        "nonebot_plugin_xiuxian_2/__init__.py:109-121",
-        "nonebot_plugin_xiuxian_2/plugin.py:1211-1240",
-        "nonebot_plugin_xiuxian_2/compatibility/legacy_jobs.py:10-75",
-        "nonebot_plugin_xiuxian_2/compatibility/legacy_manifest.py:13-54"
+        "nonebot_plugin_xiuxian_2/__init__.py:89-121",
+        "nonebot_plugin_xiuxian_2/plugin.py:1211-1244",
+        "nonebot_plugin_xiuxian_2/compatibility/legacy_manifest.py:18-68",
+        "nonebot_plugin_xiuxian_2/adapters/web/app.py:466-473",
+        "nonebot_plugin_xiuxian_2/adapters/web/blueprints/scheduler.py:16-32",
+        "nonebot_plugin_xiuxian_2/infrastructure/scheduler/runner.py:22-94",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/compatibility/legacy_jobs.py:42-75",
+        "nonebot_plugin_xiuxian_2/compatibility/scheduler.py:48-91,122-128"
       ],
       "source_declaration_found": true,
       "source": {
@@ -9587,13 +9811,21 @@
       "reason": "The composition root explicitly keeps legacy APScheduler decorators for the compatibility release. Retain until the independent P7 release gate permits removal; this allowance does not assert that job internals are feature-owned.",
       "unknown_edge": null,
       "call_graph": [
-        "job:daily_reset_xiangyuan -> plugin.ensure_jobs -> legacy_job_handler(daily_reset_xiangyuan) -> dynamic legacy target"
+        "production NoneBot startup -> plugin.install_driver_hooks -> ensure_jobs -> legacy scheduler manifest JobSpec registration with handler=legacy_job_handler(job.id)",
+        "admin POST /api/v1/scheduler/daily_reset_xiangyuan/run -> scheduler blueprint run_job -> JobExecutor.run_sync -> JobExecutor.run -> registered legacy_job_handler(daily_reset_xiangyuan)",
+        "legacy_job_handler(daily_reset_xiangyuan) -> _TARGETS/_ALIASES or xiuxian_scheduler fallback -> importlib.import_module -> target(*args, **kwargs)",
+        "separate automatic path when this job has a legacy scheduled_job declaration: plugin startup imports its declaring module -> DeferredScheduler captures the original decorated function -> ensure_jobs.activate_scheduler_bridge -> APScheduler.add_job(original function); this path does not call legacy_job_handler"
       ],
       "evidence": [
-        "nonebot_plugin_xiuxian_2/__init__.py:109-121",
-        "nonebot_plugin_xiuxian_2/plugin.py:1211-1240",
-        "nonebot_plugin_xiuxian_2/compatibility/legacy_jobs.py:10-75",
-        "nonebot_plugin_xiuxian_2/compatibility/legacy_manifest.py:13-54"
+        "nonebot_plugin_xiuxian_2/__init__.py:89-121",
+        "nonebot_plugin_xiuxian_2/plugin.py:1211-1244",
+        "nonebot_plugin_xiuxian_2/compatibility/legacy_manifest.py:18-68",
+        "nonebot_plugin_xiuxian_2/adapters/web/app.py:466-473",
+        "nonebot_plugin_xiuxian_2/adapters/web/blueprints/scheduler.py:16-32",
+        "nonebot_plugin_xiuxian_2/infrastructure/scheduler/runner.py:22-94",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/compatibility/legacy_jobs.py:42-75",
+        "nonebot_plugin_xiuxian_2/compatibility/scheduler.py:48-91,122-128"
       ],
       "source_declaration_found": true,
       "source": {
@@ -9608,13 +9840,21 @@
       "reason": "The composition root explicitly keeps legacy APScheduler decorators for the compatibility release. Retain until the independent P7 release gate permits removal; this allowance does not assert that job internals are feature-owned.",
       "unknown_edge": null,
       "call_graph": [
-        "job:demon_invasion_refresh_schedule -> plugin.ensure_jobs -> legacy_job_handler(demon_invasion_refresh_schedule) -> dynamic legacy target"
+        "production NoneBot startup -> plugin.install_driver_hooks -> ensure_jobs -> legacy scheduler manifest JobSpec registration with handler=legacy_job_handler(job.id)",
+        "admin POST /api/v1/scheduler/demon_invasion_refresh_schedule/run -> scheduler blueprint run_job -> JobExecutor.run_sync -> JobExecutor.run -> registered legacy_job_handler(demon_invasion_refresh_schedule)",
+        "legacy_job_handler(demon_invasion_refresh_schedule) -> _TARGETS/_ALIASES or xiuxian_scheduler fallback -> importlib.import_module -> target(*args, **kwargs)",
+        "separate automatic path when this job has a legacy scheduled_job declaration: plugin startup imports its declaring module -> DeferredScheduler captures the original decorated function -> ensure_jobs.activate_scheduler_bridge -> APScheduler.add_job(original function); this path does not call legacy_job_handler"
       ],
       "evidence": [
-        "nonebot_plugin_xiuxian_2/__init__.py:109-121",
-        "nonebot_plugin_xiuxian_2/plugin.py:1211-1240",
-        "nonebot_plugin_xiuxian_2/compatibility/legacy_jobs.py:10-75",
-        "nonebot_plugin_xiuxian_2/compatibility/legacy_manifest.py:13-54"
+        "nonebot_plugin_xiuxian_2/__init__.py:89-121",
+        "nonebot_plugin_xiuxian_2/plugin.py:1211-1244",
+        "nonebot_plugin_xiuxian_2/compatibility/legacy_manifest.py:18-68",
+        "nonebot_plugin_xiuxian_2/adapters/web/app.py:466-473",
+        "nonebot_plugin_xiuxian_2/adapters/web/blueprints/scheduler.py:16-32",
+        "nonebot_plugin_xiuxian_2/infrastructure/scheduler/runner.py:22-94",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/compatibility/legacy_jobs.py:42-75",
+        "nonebot_plugin_xiuxian_2/compatibility/scheduler.py:48-91,122-128"
       ],
       "source_declaration_found": true,
       "source": {
@@ -9629,13 +9869,21 @@
       "reason": "The composition root explicitly keeps legacy APScheduler decorators for the compatibility release. Retain until the independent P7 release gate permits removal; this allowance does not assert that job internals are feature-owned.",
       "unknown_edge": null,
       "call_graph": [
-        "job:demon_invasion_schedule -> plugin.ensure_jobs -> legacy_job_handler(demon_invasion_schedule) -> dynamic legacy target"
+        "production NoneBot startup -> plugin.install_driver_hooks -> ensure_jobs -> legacy scheduler manifest JobSpec registration with handler=legacy_job_handler(job.id)",
+        "admin POST /api/v1/scheduler/demon_invasion_schedule/run -> scheduler blueprint run_job -> JobExecutor.run_sync -> JobExecutor.run -> registered legacy_job_handler(demon_invasion_schedule)",
+        "legacy_job_handler(demon_invasion_schedule) -> _TARGETS/_ALIASES or xiuxian_scheduler fallback -> importlib.import_module -> target(*args, **kwargs)",
+        "separate automatic path when this job has a legacy scheduled_job declaration: plugin startup imports its declaring module -> DeferredScheduler captures the original decorated function -> ensure_jobs.activate_scheduler_bridge -> APScheduler.add_job(original function); this path does not call legacy_job_handler"
       ],
       "evidence": [
-        "nonebot_plugin_xiuxian_2/__init__.py:109-121",
-        "nonebot_plugin_xiuxian_2/plugin.py:1211-1240",
-        "nonebot_plugin_xiuxian_2/compatibility/legacy_jobs.py:10-75",
-        "nonebot_plugin_xiuxian_2/compatibility/legacy_manifest.py:13-54"
+        "nonebot_plugin_xiuxian_2/__init__.py:89-121",
+        "nonebot_plugin_xiuxian_2/plugin.py:1211-1244",
+        "nonebot_plugin_xiuxian_2/compatibility/legacy_manifest.py:18-68",
+        "nonebot_plugin_xiuxian_2/adapters/web/app.py:466-473",
+        "nonebot_plugin_xiuxian_2/adapters/web/blueprints/scheduler.py:16-32",
+        "nonebot_plugin_xiuxian_2/infrastructure/scheduler/runner.py:22-94",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/compatibility/legacy_jobs.py:42-75",
+        "nonebot_plugin_xiuxian_2/compatibility/scheduler.py:48-91,122-128"
       ],
       "source_declaration_found": true,
       "source": {
@@ -9650,13 +9898,21 @@
       "reason": "The composition root explicitly keeps legacy APScheduler decorators for the compatibility release. Retain until the independent P7 release gate permits removal; this allowance does not assert that job internals are feature-owned.",
       "unknown_edge": null,
       "call_graph": [
-        "job:dungeon_team_invite_expiry -> plugin.ensure_jobs -> legacy_job_handler(dungeon_team_invite_expiry) -> dynamic legacy target"
+        "production NoneBot startup -> plugin.install_driver_hooks -> ensure_jobs -> legacy scheduler manifest JobSpec registration with handler=legacy_job_handler(job.id)",
+        "admin POST /api/v1/scheduler/dungeon_team_invite_expiry/run -> scheduler blueprint run_job -> JobExecutor.run_sync -> JobExecutor.run -> registered legacy_job_handler(dungeon_team_invite_expiry)",
+        "legacy_job_handler(dungeon_team_invite_expiry) -> _TARGETS/_ALIASES or xiuxian_scheduler fallback -> importlib.import_module -> target(*args, **kwargs)",
+        "separate automatic path when this job has a legacy scheduled_job declaration: plugin startup imports its declaring module -> DeferredScheduler captures the original decorated function -> ensure_jobs.activate_scheduler_bridge -> APScheduler.add_job(original function); this path does not call legacy_job_handler"
       ],
       "evidence": [
-        "nonebot_plugin_xiuxian_2/__init__.py:109-121",
-        "nonebot_plugin_xiuxian_2/plugin.py:1211-1240",
-        "nonebot_plugin_xiuxian_2/compatibility/legacy_jobs.py:10-75",
-        "nonebot_plugin_xiuxian_2/compatibility/legacy_manifest.py:13-54"
+        "nonebot_plugin_xiuxian_2/__init__.py:89-121",
+        "nonebot_plugin_xiuxian_2/plugin.py:1211-1244",
+        "nonebot_plugin_xiuxian_2/compatibility/legacy_manifest.py:18-68",
+        "nonebot_plugin_xiuxian_2/adapters/web/app.py:466-473",
+        "nonebot_plugin_xiuxian_2/adapters/web/blueprints/scheduler.py:16-32",
+        "nonebot_plugin_xiuxian_2/infrastructure/scheduler/runner.py:22-94",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/compatibility/legacy_jobs.py:42-75",
+        "nonebot_plugin_xiuxian_2/compatibility/scheduler.py:48-91,122-128"
       ],
       "source_declaration_found": true,
       "source": {
@@ -9671,13 +9927,21 @@
       "reason": "The composition root explicitly keeps legacy APScheduler decorators for the compatibility release. Retain until the independent P7 release gate permits removal; this allowance does not assert that job internals are feature-owned.",
       "unknown_edge": null,
       "call_graph": [
-        "job:generate_all_bosses -> plugin.ensure_jobs -> legacy_job_handler(generate_all_bosses) -> dynamic legacy target"
+        "production NoneBot startup -> plugin.install_driver_hooks -> ensure_jobs -> legacy scheduler manifest JobSpec registration with handler=legacy_job_handler(job.id)",
+        "admin POST /api/v1/scheduler/generate_all_bosses/run -> scheduler blueprint run_job -> JobExecutor.run_sync -> JobExecutor.run -> registered legacy_job_handler(generate_all_bosses)",
+        "legacy_job_handler(generate_all_bosses) -> _TARGETS/_ALIASES or xiuxian_scheduler fallback -> importlib.import_module -> target(*args, **kwargs)",
+        "separate automatic path when this job has a legacy scheduled_job declaration: plugin startup imports its declaring module -> DeferredScheduler captures the original decorated function -> ensure_jobs.activate_scheduler_bridge -> APScheduler.add_job(original function); this path does not call legacy_job_handler"
       ],
       "evidence": [
-        "nonebot_plugin_xiuxian_2/__init__.py:109-121",
-        "nonebot_plugin_xiuxian_2/plugin.py:1211-1240",
-        "nonebot_plugin_xiuxian_2/compatibility/legacy_jobs.py:10-75",
-        "nonebot_plugin_xiuxian_2/compatibility/legacy_manifest.py:13-54"
+        "nonebot_plugin_xiuxian_2/__init__.py:89-121",
+        "nonebot_plugin_xiuxian_2/plugin.py:1211-1244",
+        "nonebot_plugin_xiuxian_2/compatibility/legacy_manifest.py:18-68",
+        "nonebot_plugin_xiuxian_2/adapters/web/app.py:466-473",
+        "nonebot_plugin_xiuxian_2/adapters/web/blueprints/scheduler.py:16-32",
+        "nonebot_plugin_xiuxian_2/infrastructure/scheduler/runner.py:22-94",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/compatibility/legacy_jobs.py:42-75",
+        "nonebot_plugin_xiuxian_2/compatibility/scheduler.py:48-91,122-128"
       ],
       "source_declaration_found": true,
       "source": {
@@ -9692,13 +9956,21 @@
       "reason": "The composition root explicitly keeps legacy APScheduler decorators for the compatibility release. Retain until the independent P7 release gate permits removal; this allowance does not assert that job internals are feature-owned.",
       "unknown_edge": null,
       "call_graph": [
-        "job:newapi_auto_checkin_daily -> plugin.ensure_jobs -> legacy_job_handler(newapi_auto_checkin_daily) -> dynamic legacy target"
+        "production NoneBot startup -> plugin.install_driver_hooks -> ensure_jobs -> legacy scheduler manifest JobSpec registration with handler=legacy_job_handler(job.id)",
+        "admin POST /api/v1/scheduler/newapi_auto_checkin_daily/run -> scheduler blueprint run_job -> JobExecutor.run_sync -> JobExecutor.run -> registered legacy_job_handler(newapi_auto_checkin_daily)",
+        "legacy_job_handler(newapi_auto_checkin_daily) -> _TARGETS/_ALIASES or xiuxian_scheduler fallback -> importlib.import_module -> target(*args, **kwargs)",
+        "separate automatic path when this job has a legacy scheduled_job declaration: plugin startup imports its declaring module -> DeferredScheduler captures the original decorated function -> ensure_jobs.activate_scheduler_bridge -> APScheduler.add_job(original function); this path does not call legacy_job_handler"
       ],
       "evidence": [
-        "nonebot_plugin_xiuxian_2/__init__.py:109-121",
-        "nonebot_plugin_xiuxian_2/plugin.py:1211-1240",
-        "nonebot_plugin_xiuxian_2/compatibility/legacy_jobs.py:10-75",
-        "nonebot_plugin_xiuxian_2/compatibility/legacy_manifest.py:13-54"
+        "nonebot_plugin_xiuxian_2/__init__.py:89-121",
+        "nonebot_plugin_xiuxian_2/plugin.py:1211-1244",
+        "nonebot_plugin_xiuxian_2/compatibility/legacy_manifest.py:18-68",
+        "nonebot_plugin_xiuxian_2/adapters/web/app.py:466-473",
+        "nonebot_plugin_xiuxian_2/adapters/web/blueprints/scheduler.py:16-32",
+        "nonebot_plugin_xiuxian_2/infrastructure/scheduler/runner.py:22-94",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/compatibility/legacy_jobs.py:42-75",
+        "nonebot_plugin_xiuxian_2/compatibility/scheduler.py:48-91,122-128"
       ],
       "source_declaration_found": true,
       "source": {
@@ -9713,13 +9985,21 @@
       "reason": "The composition root explicitly keeps legacy APScheduler decorators for the compatibility release. Retain until the independent P7 release gate permits removal; this allowance does not assert that job internals are feature-owned.",
       "unknown_edge": null,
       "call_graph": [
-        "job:recover_user_stamina -> plugin.ensure_jobs -> legacy_job_handler(recover_user_stamina) -> dynamic legacy target"
+        "production NoneBot startup -> plugin.install_driver_hooks -> ensure_jobs -> legacy scheduler manifest JobSpec registration with handler=legacy_job_handler(job.id)",
+        "admin POST /api/v1/scheduler/recover_user_stamina/run -> scheduler blueprint run_job -> JobExecutor.run_sync -> JobExecutor.run -> registered legacy_job_handler(recover_user_stamina)",
+        "legacy_job_handler(recover_user_stamina) -> _TARGETS/_ALIASES or xiuxian_scheduler fallback -> importlib.import_module -> target(*args, **kwargs)",
+        "separate automatic path when this job has a legacy scheduled_job declaration: plugin startup imports its declaring module -> DeferredScheduler captures the original decorated function -> ensure_jobs.activate_scheduler_bridge -> APScheduler.add_job(original function); this path does not call legacy_job_handler"
       ],
       "evidence": [
-        "nonebot_plugin_xiuxian_2/__init__.py:109-121",
-        "nonebot_plugin_xiuxian_2/plugin.py:1211-1240",
-        "nonebot_plugin_xiuxian_2/compatibility/legacy_jobs.py:10-75",
-        "nonebot_plugin_xiuxian_2/compatibility/legacy_manifest.py:13-54"
+        "nonebot_plugin_xiuxian_2/__init__.py:89-121",
+        "nonebot_plugin_xiuxian_2/plugin.py:1211-1244",
+        "nonebot_plugin_xiuxian_2/compatibility/legacy_manifest.py:18-68",
+        "nonebot_plugin_xiuxian_2/adapters/web/app.py:466-473",
+        "nonebot_plugin_xiuxian_2/adapters/web/blueprints/scheduler.py:16-32",
+        "nonebot_plugin_xiuxian_2/infrastructure/scheduler/runner.py:22-94",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/compatibility/legacy_jobs.py:42-75",
+        "nonebot_plugin_xiuxian_2/compatibility/scheduler.py:48-91,122-128"
       ],
       "source_declaration_found": true,
       "source": {
@@ -9734,13 +10014,21 @@
       "reason": "The composition root explicitly keeps legacy APScheduler decorators for the compatibility release. Retain until the independent P7 release gate permits removal; this allowance does not assert that job internals are feature-owned.",
       "unknown_edge": null,
       "call_graph": [
-        "job:reset_data_by_time_job -> plugin.ensure_jobs -> legacy_job_handler(reset_data_by_time_job) -> dynamic legacy target"
+        "production NoneBot startup -> plugin.install_driver_hooks -> ensure_jobs -> legacy scheduler manifest JobSpec registration with handler=legacy_job_handler(job.id)",
+        "admin POST /api/v1/scheduler/reset_data_by_time_job/run -> scheduler blueprint run_job -> JobExecutor.run_sync -> JobExecutor.run -> registered legacy_job_handler(reset_data_by_time_job)",
+        "legacy_job_handler(reset_data_by_time_job) -> _TARGETS/_ALIASES or xiuxian_scheduler fallback -> importlib.import_module -> target(*args, **kwargs)",
+        "separate automatic path when this job has a legacy scheduled_job declaration: plugin startup imports its declaring module -> DeferredScheduler captures the original decorated function -> ensure_jobs.activate_scheduler_bridge -> APScheduler.add_job(original function); this path does not call legacy_job_handler"
       ],
       "evidence": [
-        "nonebot_plugin_xiuxian_2/__init__.py:109-121",
-        "nonebot_plugin_xiuxian_2/plugin.py:1211-1240",
-        "nonebot_plugin_xiuxian_2/compatibility/legacy_jobs.py:10-75",
-        "nonebot_plugin_xiuxian_2/compatibility/legacy_manifest.py:13-54"
+        "nonebot_plugin_xiuxian_2/__init__.py:89-121",
+        "nonebot_plugin_xiuxian_2/plugin.py:1211-1244",
+        "nonebot_plugin_xiuxian_2/compatibility/legacy_manifest.py:18-68",
+        "nonebot_plugin_xiuxian_2/adapters/web/app.py:466-473",
+        "nonebot_plugin_xiuxian_2/adapters/web/blueprints/scheduler.py:16-32",
+        "nonebot_plugin_xiuxian_2/infrastructure/scheduler/runner.py:22-94",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/compatibility/legacy_jobs.py:42-75",
+        "nonebot_plugin_xiuxian_2/compatibility/scheduler.py:48-91,122-128"
       ],
       "source_declaration_found": true,
       "source": {
@@ -9755,13 +10043,21 @@
       "reason": "The composition root explicitly keeps legacy APScheduler decorators for the compatibility release. Retain until the independent P7 release gate permits removal; this allowance does not assert that job internals are feature-owned.",
       "unknown_edge": null,
       "call_graph": [
-        "job:reset_message_rate_limits -> plugin.ensure_jobs -> legacy_job_handler(reset_message_rate_limits) -> dynamic legacy target"
+        "production NoneBot startup -> plugin.install_driver_hooks -> ensure_jobs -> legacy scheduler manifest JobSpec registration with handler=legacy_job_handler(job.id)",
+        "admin POST /api/v1/scheduler/reset_message_rate_limits/run -> scheduler blueprint run_job -> JobExecutor.run_sync -> JobExecutor.run -> registered legacy_job_handler(reset_message_rate_limits)",
+        "legacy_job_handler(reset_message_rate_limits) -> _TARGETS/_ALIASES or xiuxian_scheduler fallback -> importlib.import_module -> target(*args, **kwargs)",
+        "separate automatic path when this job has a legacy scheduled_job declaration: plugin startup imports its declaring module -> DeferredScheduler captures the original decorated function -> ensure_jobs.activate_scheduler_bridge -> APScheduler.add_job(original function); this path does not call legacy_job_handler"
       ],
       "evidence": [
-        "nonebot_plugin_xiuxian_2/__init__.py:109-121",
-        "nonebot_plugin_xiuxian_2/plugin.py:1211-1240",
-        "nonebot_plugin_xiuxian_2/compatibility/legacy_jobs.py:10-75",
-        "nonebot_plugin_xiuxian_2/compatibility/legacy_manifest.py:13-54"
+        "nonebot_plugin_xiuxian_2/__init__.py:89-121",
+        "nonebot_plugin_xiuxian_2/plugin.py:1211-1244",
+        "nonebot_plugin_xiuxian_2/compatibility/legacy_manifest.py:18-68",
+        "nonebot_plugin_xiuxian_2/adapters/web/app.py:466-473",
+        "nonebot_plugin_xiuxian_2/adapters/web/blueprints/scheduler.py:16-32",
+        "nonebot_plugin_xiuxian_2/infrastructure/scheduler/runner.py:22-94",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/compatibility/legacy_jobs.py:42-75",
+        "nonebot_plugin_xiuxian_2/compatibility/scheduler.py:48-91,122-128"
       ],
       "source_declaration_found": true,
       "source": {
@@ -9776,13 +10072,21 @@
       "reason": "The composition root explicitly keeps legacy APScheduler decorators for the compatibility release. Retain until the independent P7 release gate permits removal; this allowance does not assert that job internals are feature-owned.",
       "unknown_edge": null,
       "call_graph": [
-        "job:scheduled_rift_generation_job -> plugin.ensure_jobs -> legacy_job_handler(scheduled_rift_generation_job) -> dynamic legacy target"
+        "production NoneBot startup -> plugin.install_driver_hooks -> ensure_jobs -> legacy scheduler manifest JobSpec registration with handler=legacy_job_handler(job.id)",
+        "admin POST /api/v1/scheduler/scheduled_rift_generation_job/run -> scheduler blueprint run_job -> JobExecutor.run_sync -> JobExecutor.run -> registered legacy_job_handler(scheduled_rift_generation_job)",
+        "legacy_job_handler(scheduled_rift_generation_job) -> _TARGETS/_ALIASES or xiuxian_scheduler fallback -> importlib.import_module -> target(*args, **kwargs)",
+        "separate automatic path when this job has a legacy scheduled_job declaration: plugin startup imports its declaring module -> DeferredScheduler captures the original decorated function -> ensure_jobs.activate_scheduler_bridge -> APScheduler.add_job(original function); this path does not call legacy_job_handler"
       ],
       "evidence": [
-        "nonebot_plugin_xiuxian_2/__init__.py:109-121",
-        "nonebot_plugin_xiuxian_2/plugin.py:1211-1240",
-        "nonebot_plugin_xiuxian_2/compatibility/legacy_jobs.py:10-75",
-        "nonebot_plugin_xiuxian_2/compatibility/legacy_manifest.py:13-54"
+        "nonebot_plugin_xiuxian_2/__init__.py:89-121",
+        "nonebot_plugin_xiuxian_2/plugin.py:1211-1244",
+        "nonebot_plugin_xiuxian_2/compatibility/legacy_manifest.py:18-68",
+        "nonebot_plugin_xiuxian_2/adapters/web/app.py:466-473",
+        "nonebot_plugin_xiuxian_2/adapters/web/blueprints/scheduler.py:16-32",
+        "nonebot_plugin_xiuxian_2/infrastructure/scheduler/runner.py:22-94",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/compatibility/legacy_jobs.py:42-75",
+        "nonebot_plugin_xiuxian_2/compatibility/scheduler.py:48-91,122-128"
       ],
       "source_declaration_found": true,
       "source": {
@@ -9797,13 +10101,21 @@
       "reason": "The composition root explicitly keeps legacy APScheduler decorators for the compatibility release. Retain until the independent P7 release gate permits removal; this allowance does not assert that job internals are feature-owned.",
       "unknown_edge": null,
       "call_graph": [
-        "job:sect_materials_grant -> plugin.ensure_jobs -> legacy_job_handler(sect_materials_grant) -> dynamic legacy target"
+        "production NoneBot startup -> plugin.install_driver_hooks -> ensure_jobs -> legacy scheduler manifest JobSpec registration with handler=legacy_job_handler(job.id)",
+        "admin POST /api/v1/scheduler/sect_materials_grant/run -> scheduler blueprint run_job -> JobExecutor.run_sync -> JobExecutor.run -> registered legacy_job_handler(sect_materials_grant)",
+        "legacy_job_handler(sect_materials_grant) -> _TARGETS/_ALIASES or xiuxian_scheduler fallback -> importlib.import_module -> target(*args, **kwargs)",
+        "separate automatic path when this job has a legacy scheduled_job declaration: plugin startup imports its declaring module -> DeferredScheduler captures the original decorated function -> ensure_jobs.activate_scheduler_bridge -> APScheduler.add_job(original function); this path does not call legacy_job_handler"
       ],
       "evidence": [
-        "nonebot_plugin_xiuxian_2/__init__.py:109-121",
-        "nonebot_plugin_xiuxian_2/plugin.py:1211-1240",
-        "nonebot_plugin_xiuxian_2/compatibility/legacy_jobs.py:10-75",
-        "nonebot_plugin_xiuxian_2/compatibility/legacy_manifest.py:13-54"
+        "nonebot_plugin_xiuxian_2/__init__.py:89-121",
+        "nonebot_plugin_xiuxian_2/plugin.py:1211-1244",
+        "nonebot_plugin_xiuxian_2/compatibility/legacy_manifest.py:18-68",
+        "nonebot_plugin_xiuxian_2/adapters/web/app.py:466-473",
+        "nonebot_plugin_xiuxian_2/adapters/web/blueprints/scheduler.py:16-32",
+        "nonebot_plugin_xiuxian_2/infrastructure/scheduler/runner.py:22-94",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/compatibility/legacy_jobs.py:42-75",
+        "nonebot_plugin_xiuxian_2/compatibility/scheduler.py:48-91,122-128"
       ],
       "source_declaration_found": true,
       "source": {
@@ -9818,13 +10130,21 @@
       "reason": "The composition root explicitly keeps legacy APScheduler decorators for the compatibility release. Retain until the independent P7 release gate permits removal; this allowance does not assert that job internals are feature-owned.",
       "unknown_edge": null,
       "call_graph": [
-        "job:spirit_vein_schedule -> plugin.ensure_jobs -> legacy_job_handler(spirit_vein_schedule) -> dynamic legacy target"
+        "production NoneBot startup -> plugin.install_driver_hooks -> ensure_jobs -> legacy scheduler manifest JobSpec registration with handler=legacy_job_handler(job.id)",
+        "admin POST /api/v1/scheduler/spirit_vein_schedule/run -> scheduler blueprint run_job -> JobExecutor.run_sync -> JobExecutor.run -> registered legacy_job_handler(spirit_vein_schedule)",
+        "legacy_job_handler(spirit_vein_schedule) -> _TARGETS/_ALIASES or xiuxian_scheduler fallback -> importlib.import_module -> target(*args, **kwargs)",
+        "separate automatic path when this job has a legacy scheduled_job declaration: plugin startup imports its declaring module -> DeferredScheduler captures the original decorated function -> ensure_jobs.activate_scheduler_bridge -> APScheduler.add_job(original function); this path does not call legacy_job_handler"
       ],
       "evidence": [
-        "nonebot_plugin_xiuxian_2/__init__.py:109-121",
-        "nonebot_plugin_xiuxian_2/plugin.py:1211-1240",
-        "nonebot_plugin_xiuxian_2/compatibility/legacy_jobs.py:10-75",
-        "nonebot_plugin_xiuxian_2/compatibility/legacy_manifest.py:13-54"
+        "nonebot_plugin_xiuxian_2/__init__.py:89-121",
+        "nonebot_plugin_xiuxian_2/plugin.py:1211-1244",
+        "nonebot_plugin_xiuxian_2/compatibility/legacy_manifest.py:18-68",
+        "nonebot_plugin_xiuxian_2/adapters/web/app.py:466-473",
+        "nonebot_plugin_xiuxian_2/adapters/web/blueprints/scheduler.py:16-32",
+        "nonebot_plugin_xiuxian_2/infrastructure/scheduler/runner.py:22-94",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/compatibility/legacy_jobs.py:42-75",
+        "nonebot_plugin_xiuxian_2/compatibility/scheduler.py:48-91,122-128"
       ],
       "source_declaration_found": true,
       "source": {
@@ -9839,13 +10159,21 @@
       "reason": "The composition root explicitly keeps legacy APScheduler decorators for the compatibility release. Retain until the independent P7 release gate permits removal; this allowance does not assert that job internals are feature-owned.",
       "unknown_edge": null,
       "call_graph": [
-        "job:weekly_reduce_arena_rank -> plugin.ensure_jobs -> legacy_job_handler(weekly_reduce_arena_rank) -> dynamic legacy target"
+        "production NoneBot startup -> plugin.install_driver_hooks -> ensure_jobs -> legacy scheduler manifest JobSpec registration with handler=legacy_job_handler(job.id)",
+        "admin POST /api/v1/scheduler/weekly_reduce_arena_rank/run -> scheduler blueprint run_job -> JobExecutor.run_sync -> JobExecutor.run -> registered legacy_job_handler(weekly_reduce_arena_rank)",
+        "legacy_job_handler(weekly_reduce_arena_rank) -> _TARGETS/_ALIASES or xiuxian_scheduler fallback -> importlib.import_module -> target(*args, **kwargs)",
+        "separate automatic path when this job has a legacy scheduled_job declaration: plugin startup imports its declaring module -> DeferredScheduler captures the original decorated function -> ensure_jobs.activate_scheduler_bridge -> APScheduler.add_job(original function); this path does not call legacy_job_handler"
       ],
       "evidence": [
-        "nonebot_plugin_xiuxian_2/__init__.py:109-121",
-        "nonebot_plugin_xiuxian_2/plugin.py:1211-1240",
-        "nonebot_plugin_xiuxian_2/compatibility/legacy_jobs.py:10-75",
-        "nonebot_plugin_xiuxian_2/compatibility/legacy_manifest.py:13-54"
+        "nonebot_plugin_xiuxian_2/__init__.py:89-121",
+        "nonebot_plugin_xiuxian_2/plugin.py:1211-1244",
+        "nonebot_plugin_xiuxian_2/compatibility/legacy_manifest.py:18-68",
+        "nonebot_plugin_xiuxian_2/adapters/web/app.py:466-473",
+        "nonebot_plugin_xiuxian_2/adapters/web/blueprints/scheduler.py:16-32",
+        "nonebot_plugin_xiuxian_2/infrastructure/scheduler/runner.py:22-94",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/compatibility/legacy_jobs.py:42-75",
+        "nonebot_plugin_xiuxian_2/compatibility/scheduler.py:48-91,122-128"
       ],
       "source_declaration_found": true,
       "source": {
@@ -9860,13 +10188,21 @@
       "reason": "The composition root explicitly keeps legacy APScheduler decorators for the compatibility release. Retain until the independent P7 release gate permits removal; this allowance does not assert that job internals are feature-owned.",
       "unknown_edge": null,
       "call_graph": [
-        "job:weekly_reduce_impart_lv -> plugin.ensure_jobs -> legacy_job_handler(weekly_reduce_impart_lv) -> dynamic legacy target"
+        "production NoneBot startup -> plugin.install_driver_hooks -> ensure_jobs -> legacy scheduler manifest JobSpec registration with handler=legacy_job_handler(job.id)",
+        "admin POST /api/v1/scheduler/weekly_reduce_impart_lv/run -> scheduler blueprint run_job -> JobExecutor.run_sync -> JobExecutor.run -> registered legacy_job_handler(weekly_reduce_impart_lv)",
+        "legacy_job_handler(weekly_reduce_impart_lv) -> _TARGETS/_ALIASES or xiuxian_scheduler fallback -> importlib.import_module -> target(*args, **kwargs)",
+        "separate automatic path when this job has a legacy scheduled_job declaration: plugin startup imports its declaring module -> DeferredScheduler captures the original decorated function -> ensure_jobs.activate_scheduler_bridge -> APScheduler.add_job(original function); this path does not call legacy_job_handler"
       ],
       "evidence": [
-        "nonebot_plugin_xiuxian_2/__init__.py:109-121",
-        "nonebot_plugin_xiuxian_2/plugin.py:1211-1240",
-        "nonebot_plugin_xiuxian_2/compatibility/legacy_jobs.py:10-75",
-        "nonebot_plugin_xiuxian_2/compatibility/legacy_manifest.py:13-54"
+        "nonebot_plugin_xiuxian_2/__init__.py:89-121",
+        "nonebot_plugin_xiuxian_2/plugin.py:1211-1244",
+        "nonebot_plugin_xiuxian_2/compatibility/legacy_manifest.py:18-68",
+        "nonebot_plugin_xiuxian_2/adapters/web/app.py:466-473",
+        "nonebot_plugin_xiuxian_2/adapters/web/blueprints/scheduler.py:16-32",
+        "nonebot_plugin_xiuxian_2/infrastructure/scheduler/runner.py:22-94",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/compatibility/legacy_jobs.py:42-75",
+        "nonebot_plugin_xiuxian_2/compatibility/scheduler.py:48-91,122-128"
       ],
       "source_declaration_found": true,
       "source": {
@@ -9881,13 +10217,21 @@
       "reason": "The composition root explicitly keeps legacy APScheduler decorators for the compatibility release. Retain until the independent P7 release gate permits removal; this allowance does not assert that job internals are feature-owned.",
       "unknown_edge": null,
       "call_graph": [
-        "job:weekly_reset_tower_floors -> plugin.ensure_jobs -> legacy_job_handler(weekly_reset_tower_floors) -> dynamic legacy target"
+        "production NoneBot startup -> plugin.install_driver_hooks -> ensure_jobs -> legacy scheduler manifest JobSpec registration with handler=legacy_job_handler(job.id)",
+        "admin POST /api/v1/scheduler/weekly_reset_tower_floors/run -> scheduler blueprint run_job -> JobExecutor.run_sync -> JobExecutor.run -> registered legacy_job_handler(weekly_reset_tower_floors)",
+        "legacy_job_handler(weekly_reset_tower_floors) -> _TARGETS/_ALIASES or xiuxian_scheduler fallback -> importlib.import_module -> target(*args, **kwargs)",
+        "separate automatic path when this job has a legacy scheduled_job declaration: plugin startup imports its declaring module -> DeferredScheduler captures the original decorated function -> ensure_jobs.activate_scheduler_bridge -> APScheduler.add_job(original function); this path does not call legacy_job_handler"
       ],
       "evidence": [
-        "nonebot_plugin_xiuxian_2/__init__.py:109-121",
-        "nonebot_plugin_xiuxian_2/plugin.py:1211-1240",
-        "nonebot_plugin_xiuxian_2/compatibility/legacy_jobs.py:10-75",
-        "nonebot_plugin_xiuxian_2/compatibility/legacy_manifest.py:13-54"
+        "nonebot_plugin_xiuxian_2/__init__.py:89-121",
+        "nonebot_plugin_xiuxian_2/plugin.py:1211-1244",
+        "nonebot_plugin_xiuxian_2/compatibility/legacy_manifest.py:18-68",
+        "nonebot_plugin_xiuxian_2/adapters/web/app.py:466-473",
+        "nonebot_plugin_xiuxian_2/adapters/web/blueprints/scheduler.py:16-32",
+        "nonebot_plugin_xiuxian_2/infrastructure/scheduler/runner.py:22-94",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+        "nonebot_plugin_xiuxian_2/compatibility/legacy_jobs.py:42-75",
+        "nonebot_plugin_xiuxian_2/compatibility/scheduler.py:48-91,122-128"
       ],
       "source_declaration_found": true,
       "source": {

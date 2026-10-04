@@ -2444,13 +2444,12 @@ async def mb_template_test_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
                 value = " "
             params.append({"key": key, "values": [value]})
 
-    logger.debug(f"dm markdown模板参数：传入={args_str!r}，解析={params!r}")
     try:
         msg = MessageSegment.markdown_template(bot, template_id, params, button_id)
         await delivery_service.reply(bot, event, msg)
     except Exception as e:
         err = str(e)
-        logger.error(f"dm发送markdown模板失败: {err}")
+        logger.warning(f"dm发送markdown模板失败 ({type(e).__name__})")
 
         reason = "Markdown模板发送失败，请检查内容格式或平台是否支持。"
 
@@ -2461,7 +2460,7 @@ async def mb_template_test_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
             reason = m_msg.group(1).strip()
             if m_code:
                 reason = f"\n{reason}\n错误码：{m_code.group(1)}"
-        await handle_send(bot, event, f"Markdown模板发送失败：{reason}")
+        await delivery_service.reply(bot, event, f"Markdown模板发送失败：{reason}")
 
 @keyboard_test_cmd.handle(parameterless=[Cooldown(cd_time=0.5)])
 async def keyboard_test_cmd_(

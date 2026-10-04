@@ -53,8 +53,35 @@ def _canonical_items(items: list[dict[str, Any]]) -> bytes:
 
 
 def _membership_digest(items: list[dict[str, Any]]) -> str:
-    membership = [{key: item.get(key) for key in ("id", "kind", "entry")} for item in items]
+    membership = [
+        {
+            key: item.get(key)
+            for key in ("id", "kind", "entry", "source", "legacy_command_exclusion")
+        }
+        for item in items
+    ]
     return hashlib.sha256(_canonical_items(membership)).hexdigest()
+
+
+@lru_cache(maxsize=1)
+def _legacy_manifest_job_ids() -> frozenset[str] | None:
+    path = PACKAGE / "compatibility" / "legacy_manifest.py"
+    try:
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    except (OSError, SyntaxError):
+        return None
+    for node in tree.body:
+        if not isinstance(node, ast.Assign):
+            continue
+        if not any(isinstance(target, ast.Name) and target.id == "_JOB_IDS" for target in node.targets):
+            continue
+        try:
+            value = ast.literal_eval(node.value)
+        except (ValueError, TypeError, SyntaxError):
+            return None
+        if isinstance(value, (tuple, list, set)) and all(isinstance(job_id, str) for job_id in value):
+            return frozenset(value)
+    return None
 
 
 @lru_cache(maxsize=None)
@@ -333,6 +360,52 @@ def _command_path_call_graph(records: tuple[dict[str, Any], ...]) -> tuple[list[
     return call_graph, list(dict.fromkeys(evidence))
 
 
+def _refreshed_command_graph(
+    existing_graph: list[str], records: tuple[dict[str, Any], ...]
+) -> tuple[list[str], list[str]]:
+    call_graph, evidence = _command_path_call_graph(records)
+    preserved_edges: list[str] = []
+    for edge in existing_graph:
+        if (
+            "on_command(" in edge
+            or "matcher -> on_compat.on_command" in edge
+            or edge.startswith("default NoneBot startup")
+            or "legacy downstream effect not closed in this frozen item" in edge
+        ):
+            continue
+        for record in records:
+            source_file = str(record["file"])
+            for handler in record.get("handlers", []):
+                marker = f" {handler['name']} ->"
+                if edge.startswith(f"{source_file}:") and marker in edge:
+                    edge = f"{source_file}:{handler['line']}{edge[edge.index(marker):]}"
+        preserved_edges.append(edge)
+
+    bound_handler_names = {
+        str(handler["name"])
+        for record in records
+        for handler in record.get("handlers", [])
+        if any(
+            (
+                edge.startswith(f"{handler['name']} ")
+                or f" {handler['name']} ->" in edge
+                or f".{handler['name']} ->" in edge
+            )
+            and "legacy downstream effect not closed in this frozen item" not in edge
+            for edge in preserved_edges
+        )
+    }
+    call_graph = [
+        edge
+        for edge in call_graph
+        if not (
+            "legacy downstream effect not closed in this frozen item" in edge
+            and any(f" {handler_name} ->" in edge for handler_name in bound_handler_names)
+        )
+    ]
+    return list(dict.fromkeys([*call_graph, *preserved_edges])), evidence
+
+
 @lru_cache(maxsize=1)
 def _suppressed_legacy_command_keys() -> frozenset[str]:
     path = PACKAGE / "xiuxian" / "on_compat.py"
@@ -474,24 +547,48 @@ def evaluate_phase2_scope(
                 integrity_errors.append(f"Frozen default legacy command is suppressed: {feature}:{name}")
             elif not any(record.get("handlers") for record in records):
                 integrity_errors.append(f"Frozen default legacy command has no bound handler: {feature}:{name}")
-            elif item.get("status") == "受阻":
-                if any("unresolved handler target" in str(edge) for edge in item.get("call_graph", [])):
-                    integrity_errors.append(f"Frozen command call graph still has an unresolved handler: {feature}:{name}")
+            else:
+                graph = "\n".join(str(edge) for edge in item.get("call_graph", []))
+                evidence = {str(value) for value in item.get("evidence", [])}
                 for record in records:
-                    for handler in record.get("handlers", []):
-                        has_handler_edge = any(
-                            str(handler["name"]) in str(edge)
-                            and str(record["file"]) in str(edge)
-                            for edge in item.get("call_graph", [])
+                    declaration = f"{record['file']}:{record['line']}"
+                    if declaration not in evidence:
+                        integrity_errors.append(
+                            f"Frozen command evidence omits declaration {declaration}: {feature}:{name}"
                         )
-                        if not has_handler_edge:
-                            integrity_errors.append(f"Frozen command call graph omits handler {handler['name']}: {feature}:{name}")
+                    for handler in record.get("handlers", []):
+                        handler_location = f"{record['file']}:{handler['line']}"
+                        if handler_location not in evidence or str(handler["name"]) not in graph:
+                            integrity_errors.append(
+                                f"Frozen command evidence/call graph omits handler {handler['name']} at "
+                                f"{handler_location}: {feature}:{name}"
+                            )
+                    if any("unresolved handler target" in str(edge) for edge in item.get("call_graph", [])):
+                        integrity_errors.append(
+                            f"Frozen command call graph still has an unresolved handler: {feature}:{name}"
+                        )
+                    if item.get("status") in {"已迁移", "允许保留的兼容路径"} and any(
+                        "legacy downstream effect not closed in this frozen item" in str(edge)
+                        for edge in item.get("call_graph", [])
+                    ):
+                        integrity_errors.append(
+                            f"Closed command status retains an unresolved downstream edge: {feature}:{name}"
+                        )
         elif item.get("kind") == "legacy_routes" and item.get("status") == "受阻":
             if not _legacy_route_location(source):
                 integrity_errors.append(f"Blocked legacy Web route registration disappeared: {item.get('id')}")
-        elif item.get("kind") == "legacy_jobs" and item.get("status") == "允许保留的兼容路径":
-            if str(source.get("job_id", "")) not in inventory.get("legacy_jobs", []):
-                integrity_errors.append(f"Allowed compatibility job is no longer declared: {source.get('job_id')}")
+        elif item.get("kind") == "legacy_jobs":
+            job_id = str(source.get("job_id", ""))
+            manifest_job_ids = _legacy_manifest_job_ids()
+            if manifest_job_ids is None:
+                integrity_errors.append("Legacy scheduler manifest job IDs could not be verified.")
+            elif job_id not in manifest_job_ids:
+                integrity_errors.append(f"Frozen scheduler job is not registered by the default manifest: {job_id}")
+            elif job_id not in inventory.get("legacy_jobs", []):
+                integrity_errors.append(f"Frozen scheduler job is no longer declared in source inventory: {job_id}")
+            graph = "\n".join(str(edge) for edge in item.get("call_graph", []))
+            if "JobExecutor.run_sync" not in graph or "legacy_job_handler" not in graph:
+                integrity_errors.append(f"Frozen scheduler job call graph omits the default manual execution path: {job_id}")
 
     seen_ids: set[str] = set()
     for item in items:
@@ -630,6 +727,16 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="refresh generic frozen command call graphs from the default startup import graph without changing membership",
     )
+    parser.add_argument(
+        "--refresh-job-evidence",
+        action="store_true",
+        help="refresh frozen scheduler call graphs with separate manual and APScheduler paths",
+    )
+    parser.add_argument(
+        "--refresh-command-bindings",
+        action="store_true",
+        help="refresh frozen command declaration/handler source locations without changing membership",
+    )
     args = parser.parse_args(argv)
     if args.membership_hash:
         scope = json.loads(SCOPE_PATH.read_text(encoding="utf-8"))
@@ -668,6 +775,73 @@ def main(argv: list[str] | None = None) -> int:
             return 1
         items_path.write_text(json.dumps(frozen, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
         print(f"refreshed_command_call_graphs={refreshed} membership_sha256={before_membership}")
+        return 0
+    if args.refresh_job_evidence:
+        scope = json.loads(SCOPE_PATH.read_text(encoding="utf-8"))
+        items_path = ROOT / str(scope.get("frozen_entries_file", ITEMS_PATH.relative_to(ROOT)))
+        frozen = json.loads(items_path.read_text(encoding="utf-8"))
+        before_membership = _membership_digest(frozen["items"])
+        for item in frozen["items"]:
+            if item.get("kind") != "legacy_jobs":
+                continue
+            job_id = str((item.get("source") or {}).get("job_id", ""))
+            item["call_graph"] = [
+                "production NoneBot startup -> plugin.install_driver_hooks -> ensure_jobs -> legacy scheduler manifest JobSpec registration with handler=legacy_job_handler(job.id)",
+                f"admin POST /api/v1/scheduler/{job_id}/run -> scheduler blueprint run_job -> JobExecutor.run_sync -> JobExecutor.run -> registered legacy_job_handler({job_id})",
+                f"legacy_job_handler({job_id}) -> _TARGETS/_ALIASES or xiuxian_scheduler fallback -> importlib.import_module -> target(*args, **kwargs)",
+                "separate automatic path when this job has a legacy scheduled_job declaration: plugin startup imports its declaring module -> DeferredScheduler captures the original decorated function -> ensure_jobs.activate_scheduler_bridge -> APScheduler.add_job(original function); this path does not call legacy_job_handler",
+            ]
+            item["evidence"] = [
+                "nonebot_plugin_xiuxian_2/__init__.py:89-121",
+                "nonebot_plugin_xiuxian_2/plugin.py:1211-1244",
+                "nonebot_plugin_xiuxian_2/compatibility/legacy_manifest.py:18-68",
+                "nonebot_plugin_xiuxian_2/adapters/web/app.py:466-473",
+                "nonebot_plugin_xiuxian_2/adapters/web/blueprints/scheduler.py:16-32",
+                "nonebot_plugin_xiuxian_2/infrastructure/scheduler/runner.py:22-94",
+                "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
+                "nonebot_plugin_xiuxian_2/compatibility/legacy_jobs.py:42-75",
+                "nonebot_plugin_xiuxian_2/compatibility/scheduler.py:48-91,122-128",
+            ]
+        if _membership_digest(frozen["items"]) != before_membership:
+            print("refusing scheduler evidence refresh because frozen membership changed", file=sys.stderr)
+            return 1
+        items_path.write_text(json.dumps(frozen, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        print(f"refreshed_scheduler_call_graphs={sum(item.get('kind') == 'legacy_jobs' for item in frozen['items'])} membership_sha256={before_membership}")
+        return 0
+    if args.refresh_command_bindings:
+        scope = json.loads(SCOPE_PATH.read_text(encoding="utf-8"))
+        items_path = ROOT / str(scope.get("frozen_entries_file", ITEMS_PATH.relative_to(ROOT)))
+        frozen = json.loads(items_path.read_text(encoding="utf-8"))
+        before_membership = _membership_digest(frozen["items"])
+        command_index = _default_legacy_command_inventory()
+        refreshed = 0
+        for item in frozen["items"]:
+            if item.get("kind") != "commands":
+                continue
+            source = item.get("source") or {}
+            key = (str(source.get("feature", "")), str(source.get("name", "")))
+            records = command_index.get(key, ())
+            if not records:
+                print(f"cannot resolve default command route for {item.get('id')}", file=sys.stderr)
+                return 1
+            call_graph, evidence = _refreshed_command_graph(
+                [str(edge) for edge in item.get("call_graph", [])], records
+            )
+            record_evidence = evidence[3:]
+            matcher_files = tuple(str(record["file"]) + ":" for record in records)
+            item["call_graph"] = call_graph
+            retained_evidence = [
+                value
+                for value in item.get("evidence", [])
+                if not str(value).startswith(matcher_files)
+            ]
+            item["evidence"] = list(dict.fromkeys([*retained_evidence, *record_evidence]))
+            refreshed += 1
+        if _membership_digest(frozen["items"]) != before_membership:
+            print("refusing command binding refresh because frozen membership changed", file=sys.stderr)
+            return 1
+        items_path.write_text(json.dumps(frozen, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        print(f"refreshed_command_bindings={refreshed} membership_sha256={before_membership}")
         return 0
     report = load_phase2_scope_report(include_items=args.items)
     if args.json:

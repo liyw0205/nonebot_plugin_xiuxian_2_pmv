@@ -3,9 +3,17 @@
 状态：执行中
 适用范围：全面底层重构第二阶段
 
+2026-10-04 frozen Phase 2 inventory consolidation：当前只处理冻结清单中的 blocker，暂停新增玩法切片。`docs/refactor_phase2_legacy_path_items.json` 的 496 项为固定完成分母：314 个 legacy command、40 个 legacy job、116 个 Flask route 和 26 个 effect/exclusion/suppression/family 项。当前状态 `10 已迁移 / 44 允许兼容 / 19 不可达 / 423 受阻`；受阻项拆为 306 个 command、116 个 route、1 个 non-command matcher family。Backlog 有 326 条，含 323 个已知清单外 AST command candidate；新增发现只进 backlog，不自动扩分母。
+
+清单身份 hash 绑定 `id/kind/entry/source`；status 和调用图证据只在同一冻结身份下更新。Gate 对所有冻结 command 校验 AST 启动闭包 declaration、绑定 handler 和证据位置；job 项校验 legacy manifest 与 admin scheduler API 的手动执行路径。APScheduler 装饰器原函数是独立自动执行路径，不对所有 manifest job 一概声称可自动调度。Web/admin 与命令默认可达性基于源码静态导入/注册闭包，不是 live runtime 测量；dynamic/conditional imports 和 non-command callbacks 仍是发现限制。P7 真实发布 gate 单独保留，不并入 phase 2。最近冻结项 `command:admin:md模板` 分类为允许保留的兼容路径，日志仅记异常类型，失败直接发纯文本；解析输入 byte cap 和消息历史队列 byte budget 只登记 backlog，不扩当前范围。下一项按冻结清单审计 `command:entertainment:newapi信息`，不得因调用图分析自动接纳其相邻命令。
+
+本轮验证：phase2/P7 gate 合约 `13 passed`，Markdown handler 日志 contract `2 passed`；清单 membership/source provenance 有效、integrity errors 为 0，phase 2 仍有 423 个既有 blocker，所以 `--check` 预期返回 `1`。JSON 与 `git diff --check` 通过。测试关闭 pytest cache 和字节码；未运行真实 P7 release check。
+
+以下按日期记录的计数均为当时历史快照；当前状态以本节、scope manifest 和 `scripts/phase2_legacy_path_gate.py` 报告为准。
+
 2026-10-04 Steam compatibility and bounded response：冻结项 `command:entertainment:Steam喜加一` 的默认 handler 保留为兼容路径，不标记迁移；调用图止于共享 `HttpClient` 对外部 API 的 GET、1 MiB 流式响应上限、格式化和发送，不触及本地游戏/玩家状态或持久文件。该项保留至独立 P7 真实发布门禁允许移除。Steam/HTTP 定向回归 `14 passed`。冻结成员仍为 496、状态 `9/42/19/426`（已迁移/兼容/不可达/受阻），membership hash 不变；phase 2 gate `--check` 仍只会因 426 个已冻结 blocker 未完成而失败，P7 独立。
 
-2026-10-04 bounded Phase 2 completion contract：暂停追加玩法切片。完成分母固定为 `docs/refactor_phase2_legacy_path_items.json` 中 membership hash 验证通过的 496 项；每项使用 `已迁移 / 允许保留的兼容路径 / 不可达 / 受阻`，必须有调用图与源码证据。`scripts/phase2_legacy_path_gate.py --check` 以该冻结清单、来源快照、启动导入闭包和逐项 handler 绑定计算 v1 状态；inventory drift 和清单外候选只进入报告 backlog，不改成员、不改 hash、不扩展分母。AST 静态启动闭包扫描得到 637 个未被 suppression 的旧命令候选，323 项不在 v1 中；这是源码推导，不是实跑 runtime 注册数。323 项含源位置与 handler 调用图，等待显式范围评审；动态导入和非命令回调不由该扫描器自动发现，须人工登记 backlog。v1 关闭只表示冻结成员完成，不宣称全仓旧路径已经清零。当前 v1 为 496 项、`10/42/19/425`（已迁移/兼容/不可达/受阻）；`ID更新` 已切换至 feature-owned 可恢复仓储，`bot信息` 已切换至 feature-owned 只读统计仓储。P7 发布门禁继续由 `scripts/refactor_completion_audit.py` 单独使用真实 release evidence 判定，不合并进 phase 2 完成状态。
+2026-10-04 bounded Phase 2 completion contract：暂停追加玩法切片。完成分母固定为 `docs/refactor_phase2_legacy_path_items.json` 中 identity hash 验证通过的 496 项；每项使用 `已迁移 / 允许保留的兼容路径 / 不可达 / 受阻`，必须有调用图与源码证据。`scripts/phase2_legacy_path_gate.py --check` 以该冻结清单、来源快照、启动导入闭包和逐项 handler 绑定计算 v1 状态；inventory drift 和清单外候选只进入报告 backlog，不改成员、不改 hash、不扩展分母。AST 静态启动闭包扫描得到 637 个未被 suppression 的旧命令候选，323 项不在 v1 中；这是源码推导，不是实跑 runtime 注册数。323 项含源位置与 handler 调用图，等待显式范围评审；动态导入、条件注册和非命令回调不由该扫描器自动发现，须人工登记 backlog。v1 关闭只表示冻结成员完成，不宣称全仓旧路径已经清零。P7 发布门禁继续由 `scripts/refactor_completion_audit.py` 单独使用真实 release evidence 判定，不合并进 phase 2 完成状态。
 
 2026-10-04 bot overview read boundary：冻结项 `command:status:bot信息` 改由 `StatusApplication -> BotOverviewSqlRepository` 执行只读统计；逐次读取 game/trade 数据库，无结果缓存，请求不建表，缺 schema 返回 unavailable。固定日期、旧筛选口径、实时重读、缺表 fail-closed 和 handler 委托测试已补；冻结 membership 未变，P7 独立。
 
