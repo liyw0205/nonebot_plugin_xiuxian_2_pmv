@@ -40,7 +40,7 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
         self.assertEqual(report["path_count"], 496)
         self.assertEqual(
             report["status_counts"],
-            {"不可达": 19, "允许保留的兼容路径": 42, "受阻": 426, "已迁移": 9},
+            {"不可达": 19, "允许保留的兼容路径": 42, "受阻": 425, "已迁移": 10},
         )
         self.assertGreater(report["blocked_count"], 0)
         self.assertTrue(all(item["call_graph"] and item["evidence"] for item in report["items"]))
@@ -60,6 +60,9 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
         self.assertEqual(id_update["status"], "已迁移")
         self.assertTrue(any("AdminApplication.update_user_id" in edge for edge in id_update["call_graph"]))
         self.assertTrue(any("AdminIdUpdateSqlRepository._resume" in edge for edge in id_update["call_graph"]))
+        bot_info = next(item for item in report["items"] if item["id"] == "command:status:bot信息")
+        self.assertEqual(bot_info["status"], "已迁移")
+        self.assertTrue(any("BotOverviewSqlRepository.snapshot" in edge for edge in bot_info["call_graph"]))
         backlog_command = next(
             item for item in report["backlog"] if item["id"] == "default-legacy-command:back:我的背包"
         )

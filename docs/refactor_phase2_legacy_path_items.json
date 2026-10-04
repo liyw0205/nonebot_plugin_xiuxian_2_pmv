@@ -667,22 +667,33 @@
       "id": "command:status:bot信息",
       "kind": "commands",
       "entry": "status:bot信息 (aliases: )",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "The default command now reads bot counters through StatusApplication and a feature-owned read-only repository. Queries preserve the legacy filters and date window, hold no result cache, and do not create missing databases or tables.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_status/__init__.py:96 bot_info_cmd = on_command('bot信息') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_status/__init__.py:366 handle_bot_info -> legacy downstream effect not closed in this frozen item"
+        "xiuxian_status.handle_bot_info -> get_bot_info -> status_application.bot_overview -> StatusApplication.bot_overview -> BotOverviewSqlRepository.snapshot",
+        "BotOverviewSqlRepository opens short read-only game_db/trade_db UOWs; it counts all user_xiuxian rows, distinct user_cd users for the same local-date windows, SUM(back.goods_num), and the legacy filtered xianshi_item/guishi_item quantities; each call rereads and closes both connections",
+        "default on_compat startup -> rebuild_on_compat_index -> bootstrap_from_user_xiuxian -> lazy sql_message resolves XiuxianDateManage and prepares user_xiuxian/user_cd/back before command dispatch",
+        "default xiuxian_trade import -> xiuxian2_handle module -> global TradeDataManager initialization prepares xianshi_item/guishi_item; the query itself is read-only and performs no DDL"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_status/__init__.py:96",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_status/__init__.py:366"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_status/__init__.py:63-72,202-256",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_status/__init__.py:362-370",
+        "nonebot_plugin_xiuxian_2/features/status/application.py:11-28",
+        "nonebot_plugin_xiuxian_2/features/status/bot_overview_repository.py:20-118",
+        "nonebot_plugin_xiuxian_2/infrastructure/database/uow.py:20-28,49-64",
+        "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:631-640,798-802",
+        "nonebot_plugin_xiuxian_2/xiuxian/blackhouse.py:147-156",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_utils/xiuxian2_handle.py:192-270,2820-2864,4650",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_trade/__init__.py:27-29",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_utils/db_backend.py:76-77"
       ],
       "source_declaration_found": true,
       "source": {

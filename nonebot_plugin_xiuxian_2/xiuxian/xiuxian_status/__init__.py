@@ -20,7 +20,6 @@ from ..xiuxian_utils.lay_out import Cooldown
 import subprocess
 import re
 from types import SimpleNamespace
-from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage, TradeDataManager
 from ..xiuxian_utils.download_xiuxian_data import UpdateManager
 
 psutil_available = False
@@ -62,22 +61,15 @@ except ImportError:
     psutil = DummyPsutil()
 
 update_manager = UpdateManager()
-_sql_message_instance = None
-trade_manager = TradeDataManager()
 from ..xiuxian_utils.periods import format_duration_full
 from ...features.status.application import StatusApplication
 from ...paths import get_paths
 from ...infrastructure.ids import UUIDGenerator
 
-status_application = StatusApplication(get_paths().game_db)
+status_application = StatusApplication(
+    get_paths().game_db, trade_database=get_paths().trade_db
+)
 runtime_ids = UUIDGenerator()
-
-
-def _sql_message():
-    global _sql_message_instance
-    if _sql_message_instance is None:
-        _sql_message_instance = XiuxianDateManage()
-    return _sql_message_instance
 
 
 def _run_status_action(action: str, operation_id: str, user_id: str, call, **payload):
@@ -211,12 +203,7 @@ async def get_bot_info(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
     """获取Bot信息"""
     is_group = isinstance(event, GroupMessageEvent)
     group_id = str(event.group_id) if is_group else "私聊"
-    all_users = _sql_message().all_users()
-    active_users = _sql_message().today_active_users()
-    yesterday_active_users = _sql_message().yesterday_active_users()
-    last_7days_active_users = _sql_message().last_7days_active_users()
-    total_items_quantity = _sql_message().total_items_quantity()
-    total_goods_quantity = trade_manager.total_goods_quantity()
+    overview = status_application.bot_overview()
     
     # 获取Bot运行时间, 仅在psutil可用时
     if psutil_available:
@@ -250,12 +237,22 @@ async def get_bot_info(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
     msg += "\n\n【运行时间】\n"
     msg += "\n".join(f"{k}: {v}" for k, v in bot_uptime.items())
     msg += "\n\n【修仙数据】\n"
-    msg += f"全部用户：{all_users}"
-    msg += f"\n活跃用户：{active_users}"
-    msg += f"\n昨日活跃：{yesterday_active_users}"
-    msg += f"\n七日活跃：{last_7days_active_users}"
-    msg += f"\n用户物品：{total_items_quantity}({number_to(total_items_quantity)})"
-    msg += f"\n交易物品：{total_goods_quantity}({number_to(total_goods_quantity)})"
+    msg += f"全部用户：{overview.total_users if overview.total_users is not None else '不可用'}"
+    msg += f"\n活跃用户：{overview.today_active_users if overview.today_active_users is not None else '不可用'}"
+    msg += f"\n昨日活跃：{overview.yesterday_active_users if overview.yesterday_active_users is not None else '不可用'}"
+    msg += f"\n七日活跃：{overview.last_7days_active_users if overview.last_7days_active_users is not None else '不可用'}"
+    items_text = (
+        "不可用"
+        if overview.total_items_quantity is None
+        else f"{overview.total_items_quantity}({number_to(overview.total_items_quantity)})"
+    )
+    trade_text = (
+        "不可用"
+        if overview.total_goods_quantity is None
+        else f"{overview.total_goods_quantity}({number_to(overview.total_goods_quantity)})"
+    )
+    msg += f"\n用户物品：{items_text}"
+    msg += f"\n交易物品：{trade_text}"
     return msg
 
 async def get_system_info(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent) -> str:
