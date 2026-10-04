@@ -40,7 +40,7 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
         self.assertEqual(report["path_count"], 496)
         self.assertEqual(
             report["status_counts"],
-            {"不可达": 19, "允许保留的兼容路径": 41, "受阻": 427, "已迁移": 9},
+            {"不可达": 19, "允许保留的兼容路径": 42, "受阻": 426, "已迁移": 9},
         )
         self.assertGreater(report["blocked_count"], 0)
         self.assertTrue(all(item["call_graph"] and item["evidence"] for item in report["items"]))
@@ -70,6 +70,17 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
         )
         self.assertEqual(news_query["status"], "允许保留的兼容路径")
         self.assertTrue(any("http_client.get_json" in edge for edge in news_query["call_graph"]))
+        steam_query = next(
+            item for item in report["items"] if item["id"] == "command:entertainment:Steam喜加一"
+        )
+        self.assertEqual(steam_query["status"], "允许保留的兼容路径")
+        self.assertTrue(
+            any(
+                "1 MiB" in edge and "streaming GET" in edge
+                for edge in steam_query["call_graph"]
+            )
+        )
+        self.assertTrue(any("http_proxy.py:187-225" in evidence for evidence in steam_query["evidence"]))
         self.assertEqual(report["p7_gate"]["status"], "independent")
 
     def test_phase2_completes_when_every_frozen_item_is_closed(self):

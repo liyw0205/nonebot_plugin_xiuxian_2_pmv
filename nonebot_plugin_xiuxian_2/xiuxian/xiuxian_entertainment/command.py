@@ -920,19 +920,31 @@ async def fun_media_send_parse_result(
             return
         raise
 
-def _get_json_api_sync(api_url: str, params: dict | None = None, timeout: int = 15) -> dict:
+def _get_json_api_sync(
+    api_url: str,
+    params: dict | None = None,
+    timeout: int = 15,
+    max_bytes: int | None = None,
+) -> dict:
     """
     通用 JSON 接口请求
     - 优先 resp.json()
     - 失败时兼容 text -> json.loads
     - 失败抛异常给上层处理
     """
-    return http_client.get_json(api_url, params=params, timeout=timeout)
+    return http_client.get_json(
+        api_url, params=params, timeout=timeout, max_bytes=max_bytes
+    )
 
 
-async def get_json_api(api_url: str, params: dict | None = None, timeout: int = 15) -> dict:
+async def get_json_api(
+    api_url: str,
+    params: dict | None = None,
+    timeout: int = 15,
+    max_bytes: int | None = None,
+) -> dict:
     return await run_blocking_io(
-        _get_json_api_sync, api_url, params, timeout, timeout=timeout + 5
+        _get_json_api_sync, api_url, params, timeout, max_bytes, timeout=timeout + 5
     )
 
 

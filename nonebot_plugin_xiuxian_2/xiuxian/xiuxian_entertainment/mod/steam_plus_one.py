@@ -2,6 +2,7 @@ from ..command import *
 from ...messaging.delivery import delivery_service
 
 steam_plus_one_cmd = on_command("Steam喜加一", aliases={"喜加一"}, priority=5, block=True)
+STEAM_RESPONSE_MAX_BYTES = 1024 * 1024
 
 
 def _safe_list_data(result: dict) -> list:
@@ -16,7 +17,9 @@ async def steam_plus_one_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessag
     api_url = "https://api.pearapi.ai/api/steamplusone/"
 
     try:
-        result = await get_json_api(api_url, timeout=15)
+        result = await get_json_api(
+            api_url, timeout=15, max_bytes=STEAM_RESPONSE_MAX_BYTES
+        )
     except Exception as e:
         await handle_send(
             bot, event,

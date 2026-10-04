@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import re
 import time
 from typing import Any
@@ -188,8 +189,33 @@ class HttpClient:
         url: str,
         *,
         expected_type: type | tuple[type, ...] = dict,
+        max_bytes: int | None = None,
         **kwargs: Any,
     ) -> Any:
+        if max_bytes is not None:
+            max_bytes = int(max_bytes)
+            if max_bytes < 1:
+                raise ValueError("max_bytes must be positive")
+            request_kwargs = {**kwargs, "stream": True}
+            response = self.request("GET", url, **request_kwargs)
+            try:
+                length = int(response.headers.get("content-length", 0) or 0)
+                if length > max_bytes:
+                    raise ValueError(f"HTTP JSON exceeds size limit: {length} > {max_bytes}")
+                content = bytearray()
+                for chunk in response.iter_content(chunk_size=64 * 1024):
+                    if not chunk:
+                        continue
+                    if len(content) + len(chunk) > max_bytes:
+                        raise ValueError("HTTP JSON exceeded size limit while streaming")
+                    content.extend(chunk)
+                data = json.loads(content)
+                if not isinstance(data, expected_type):
+                    raise ValueError(f"HTTP JSON 根类型不是 {expected_type!r}")
+                return data
+            finally:
+                response.close()
+
         response = self.request("GET", url, **kwargs)
         try:
             data = response.json()

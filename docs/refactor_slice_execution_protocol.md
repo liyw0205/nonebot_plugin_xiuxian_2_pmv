@@ -3,7 +3,9 @@
 状态：执行中
 适用范围：全面底层重构第二阶段
 
-2026-10-04 bounded Phase 2 completion contract：暂停追加玩法切片。完成分母固定为 `docs/refactor_phase2_legacy_path_items.json` 中 membership hash 验证通过的 496 项；每项使用 `已迁移 / 允许保留的兼容路径 / 不可达 / 受阻`，必须有调用图与源码证据。`scripts/phase2_legacy_path_gate.py --check` 以该冻结清单、来源快照、启动导入闭包和逐项 handler 绑定计算 v1 状态；inventory drift 和清单外候选只进入报告 backlog，不改成员、不改 hash、不扩展分母。AST 静态启动闭包扫描得到 637 个未被 suppression 的旧命令候选，323 项不在 v1 中；这是源码推导，不是实跑 runtime 注册数。323 项含源位置与 handler 调用图，等待显式范围评审；动态导入和非命令回调不由该扫描器自动发现，须人工登记 backlog。v1 关闭只表示冻结成员完成，不宣称全仓旧路径已经清零。当前 v1 为 496 项、`9/41/19/427`（已迁移/兼容/不可达/受阻）；`ID更新` 已切换至 feature-owned 可恢复仓储，P7 发布门禁继续由 `scripts/refactor_completion_audit.py` 单独使用真实 release evidence 判定，不合并进 phase 2 完成状态。
+2026-10-04 Steam compatibility and bounded response：冻结项 `command:entertainment:Steam喜加一` 的默认 handler 保留为兼容路径，不标记迁移；调用图止于共享 `HttpClient` 对外部 API 的 GET、1 MiB 流式响应上限、格式化和发送，不触及本地游戏/玩家状态或持久文件。该项保留至独立 P7 真实发布门禁允许移除。Steam/HTTP 定向回归 `14 passed`。冻结成员仍为 496、状态 `9/42/19/426`（已迁移/兼容/不可达/受阻），membership hash 不变；phase 2 gate `--check` 仍只会因 426 个已冻结 blocker 未完成而失败，P7 独立。
+
+2026-10-04 bounded Phase 2 completion contract：暂停追加玩法切片。完成分母固定为 `docs/refactor_phase2_legacy_path_items.json` 中 membership hash 验证通过的 496 项；每项使用 `已迁移 / 允许保留的兼容路径 / 不可达 / 受阻`，必须有调用图与源码证据。`scripts/phase2_legacy_path_gate.py --check` 以该冻结清单、来源快照、启动导入闭包和逐项 handler 绑定计算 v1 状态；inventory drift 和清单外候选只进入报告 backlog，不改成员、不改 hash、不扩展分母。AST 静态启动闭包扫描得到 637 个未被 suppression 的旧命令候选，323 项不在 v1 中；这是源码推导，不是实跑 runtime 注册数。323 项含源位置与 handler 调用图，等待显式范围评审；动态导入和非命令回调不由该扫描器自动发现，须人工登记 backlog。v1 关闭只表示冻结成员完成，不宣称全仓旧路径已经清零。当前 v1 为 496 项、`9/42/19/426`（已迁移/兼容/不可达/受阻）；`ID更新` 已切换至 feature-owned 可恢复仓储，P7 发布门禁继续由 `scripts/refactor_completion_audit.py` 单独使用真实 release evidence 判定，不合并进 phase 2 完成状态。
 
 本范围方案允许最多 2 名只读子代理分别检查启动可达性/调用图和门禁/P7 分离；优先复用已有审计，只有互不重复的问题才派工。子代理不得改文件、导入/编译/运行插件、访问运行数据库/凭据或生成缓存；主线程负责代码、门禁、文档和串行验证。本轮使用 2 名只读子代理，分别交叉检查冻结项调用图/真实可达范围与完成门禁/P7/backlog 边界；两者均未改文件或运行测试。验证禁用 pytest cache/pyc；测试使用隔离临时目录，结束后只清理由本轮创建且确认进程退出的产物。磁盘可用低于 10 GiB 或 `MemAvailable` 低于 512 MiB 时停止重任务；不触碰运行库/WAL/SHM、正式备份、持久 receipt、`.git`、`.venv` 或用户数据。
 
