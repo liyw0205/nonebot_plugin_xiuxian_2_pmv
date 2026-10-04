@@ -18,6 +18,24 @@ SCOPE_PATH = ROOT / "docs" / "refactor_phase2_legacy_paths.json"
 ITEMS_PATH = ROOT / "docs" / "refactor_phase2_legacy_path_items.json"
 VALID_STATUSES = frozenset({"已迁移", "允许保留的兼容路径", "不可达", "受阻"})
 _COMMAND_PACKAGE_NAMES = {"illusion": "xiuxian_Illusion", "interactive": "xiuxian_Interactive"}
+_PLUGIN_MODULE_EXCLUSIONS = frozenset(
+    {
+        "infrastructure",
+        "messaging",
+        "qq_compat",
+        "xiuxian_adapter",
+        "xiuxian_utils",
+        "adapter_compat",
+        "adapter_message_actions",
+        "adapter_message_records",
+        "adapter_message_sender",
+        "broadcast_manager",
+        "command_disable",
+        "on_compat",
+        "runtime",
+        "xiuxian_config",
+    }
+)
 
 
 def _canonical_projection(inventory: dict[str, Any], fields: list[str]) -> bytes:
@@ -79,6 +97,240 @@ def _legacy_command_declarations(feature: str) -> dict[str, tuple[str, ...]]:
             if location not in declarations[name]:
                 declarations[name].append(location)
     return {name: tuple(locations) for name, locations in declarations.items()}
+
+
+def _module_path(module_name: str) -> Path | None:
+    prefix = "nonebot_plugin_xiuxian_2."
+    if not module_name.startswith(prefix):
+        return None
+    relative = Path(*module_name[len(prefix):].split("."))
+    for candidate in (PACKAGE / relative.with_suffix(".py"), PACKAGE / relative / "__init__.py"):
+        if candidate.is_file():
+            return candidate
+    return None
+
+
+def _module_name(path: Path) -> str:
+    relative = path.relative_to(PACKAGE).with_suffix("")
+    parts = list(relative.parts)
+    if parts[-1] == "__init__":
+        parts.pop()
+    return "nonebot_plugin_xiuxian_2." + ".".join(parts)
+
+
+@lru_cache(maxsize=1)
+def _plugin_module_exclusions_from_source() -> frozenset[str] | None:
+    path = PACKAGE / "__init__.py"
+    try:
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    except (OSError, SyntaxError):
+        return None
+    values: dict[str, frozenset[str]] = {}
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Assign):
+            continue
+        if not any(
+            isinstance(target, ast.Name) and target.id in {"_INTERNAL_PACKAGES", "_NON_PLUGIN_MODULES"}
+            for target in node.targets
+        ):
+            continue
+        try:
+            value = ast.literal_eval(node.value)
+        except (ValueError, TypeError, SyntaxError):
+            continue
+        if isinstance(value, (set, list, tuple)):
+            for target in node.targets:
+                if isinstance(target, ast.Name) and target.id in {"_INTERNAL_PACKAGES", "_NON_PLUGIN_MODULES"}:
+                    values[target.id] = frozenset(str(item) for item in value)
+    if set(values) != {"_INTERNAL_PACKAGES", "_NON_PLUGIN_MODULES"}:
+        return None
+    return values["_INTERNAL_PACKAGES"] | values["_NON_PLUGIN_MODULES"]
+
+
+def _module_imports(module_name: str, path: Path, tree: ast.Module) -> set[str]:
+    imports: set[str] = set()
+    package_name = module_name if path.name == "__init__.py" else module_name.rpartition(".")[0]
+    for node in tree.body:
+        if isinstance(node, ast.Import):
+            imports.update(
+                alias.name
+                for alias in node.names
+                if alias.name.startswith("nonebot_plugin_xiuxian_2.xiuxian.")
+            )
+            continue
+        if not isinstance(node, ast.ImportFrom):
+            continue
+        parts = package_name.split(".")
+        if node.level:
+            parts = parts[: len(parts) - (node.level - 1)]
+        if node.module:
+            parts.extend(node.module.split("."))
+        base = ".".join(parts)
+        if not base.startswith("nonebot_plugin_xiuxian_2.xiuxian."):
+            continue
+        if _module_path(base):
+            imports.add(base)
+        for alias in node.names:
+            child = f"{base}.{alias.name}"
+            if _module_path(child):
+                imports.add(child)
+    return imports
+
+
+def _call_is_import_time(node: ast.AST, parents: dict[int, ast.AST]) -> bool:
+    parent = parents.get(id(node))
+    while parent is not None:
+        if isinstance(parent, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda, ast.ClassDef)):
+            return False
+        parent = parents.get(id(parent))
+    return True
+
+
+@lru_cache(maxsize=1)
+def _default_legacy_command_inventory() -> dict[tuple[str, str], tuple[dict[str, Any], ...]]:
+    """Read command registrations reachable from the production plugin import graph."""
+    xiuxian_root = PACKAGE / "xiuxian"
+    roots: list[str] = []
+    for path in sorted(xiuxian_root.iterdir()):
+        if path.name.startswith("_") or path.stem in _PLUGIN_MODULE_EXCLUSIONS:
+            continue
+        if path.is_dir():
+            if (path / "__init__.py").is_file():
+                roots.append(_module_name(path / "__init__.py"))
+        elif path.suffix == ".py":
+            roots.append(_module_name(path))
+
+    loaded: dict[str, Path] = {}
+    pending = roots[:]
+    while pending:
+        module = pending.pop()
+        if module in loaded:
+            continue
+        path = _module_path(module)
+        if path is None:
+            continue
+        try:
+            tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        except (OSError, SyntaxError):
+            continue
+        loaded[module] = path
+        pending.extend(sorted(_module_imports(module, path, tree).difference(loaded)))
+
+    result: dict[tuple[str, str], list[dict[str, Any]]] = {}
+    feature_aliases = {package: feature for feature, package in _COMMAND_PACKAGE_NAMES.items()}
+    for module, path in sorted(loaded.items()):
+        try:
+            tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        except (OSError, SyntaxError):
+            continue
+        parents = {
+            id(child): node
+            for node in ast.walk(tree)
+            for child in ast.iter_child_nodes(node)
+        }
+        module_root = module.split(".xiuxian.", 1)[-1].split(".", 1)[0]
+        feature = feature_aliases.get(module_root, module_root.removeprefix("xiuxian_"))
+        matchers: list[tuple[str, ast.Call, tuple[str, ...], tuple[str, ...], bool]] = []
+        for node in ast.walk(tree):
+            if (
+                not isinstance(node, ast.Call)
+                or not _call_is_import_time(node, parents)
+                or not isinstance(node.func, ast.Name)
+                or node.func.id != "on_command"
+                or not node.args
+            ):
+                continue
+            try:
+                name = ast.literal_eval(node.args[0])
+            except (ValueError, TypeError, SyntaxError):
+                continue
+            if not isinstance(name, str) or not name.strip():
+                continue
+            aliases: tuple[str, ...] = ()
+            for keyword in node.keywords:
+                if keyword.arg != "aliases":
+                    continue
+                try:
+                    value = ast.literal_eval(keyword.value)
+                except (ValueError, TypeError, SyntaxError):
+                    continue
+                if isinstance(value, (set, list, tuple)):
+                    aliases = tuple(sorted(str(alias) for alias in value if str(alias).strip()))
+            parent = parents.get(id(node))
+            matcher_names: tuple[str, ...] = ()
+            if isinstance(parent, ast.Assign) and parent.value is node:
+                matcher_names = tuple(target.id for target in parent.targets if isinstance(target, ast.Name))
+            elif isinstance(parent, ast.AnnAssign) and parent.value is node and isinstance(parent.target, ast.Name):
+                matcher_names = (parent.target.id,)
+            suppressed = any(
+                key.casefold() in _suppressed_legacy_command_keys()
+                for key in (name, *aliases)
+            )
+            matchers.append((name, node, aliases, matcher_names, suppressed))
+
+        handlers: dict[str, list[dict[str, Any]]] = {}
+        for node in ast.walk(tree):
+            if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            for decorator in node.decorator_list:
+                target = decorator.func if isinstance(decorator, ast.Call) else decorator
+                if (
+                    isinstance(target, ast.Attribute)
+                    and target.attr in {"handle", "got"}
+                    and isinstance(target.value, ast.Name)
+                ):
+                    handlers.setdefault(target.value.id, []).append(
+                        {"name": node.name, "line": node.lineno}
+                    )
+
+        for name, call, aliases, matcher_names, suppressed in matchers:
+            bindings = [
+                handler
+                for matcher_name in matcher_names
+                for handler in handlers.get(matcher_name, [])
+            ]
+            record = {
+                "feature": feature,
+                "name": name,
+                "aliases": list(aliases),
+                "file": path.relative_to(ROOT).as_posix(),
+                "line": call.lineno,
+                "matcher_names": list(matcher_names),
+                "handlers": bindings,
+                "suppressed": suppressed,
+            }
+            result.setdefault((feature, name), []).append(record)
+    return {key: tuple(records) for key, records in result.items()}
+
+
+def _command_path_call_graph(records: tuple[dict[str, Any], ...]) -> tuple[list[str], list[str]]:
+    call_graph = [
+        "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
+        "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
+        "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
+    ]
+    evidence = [
+        "nonebot_plugin_xiuxian_2/__init__.py:89-121",
+        "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
+        "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
+    ]
+    for record in records:
+        file = str(record["file"])
+        line = int(record["line"])
+        matcher_names = record.get("matcher_names") or []
+        aliases = record.get("aliases") or []
+        alias_note = f" aliases={','.join(aliases)}" if aliases else ""
+        matcher_note = f" {','.join(matcher_names)}" if matcher_names else ""
+        call_graph.append(
+            f"{file}:{line}{matcher_note} = on_command({record['name']!r}){alias_note} -> compatibility matcher"
+        )
+        evidence.append(f"{file}:{line}")
+        for handler in record.get("handlers", []):
+            call_graph.append(
+                f"{file}:{handler['line']} {handler['name']} -> legacy downstream effect not closed in this frozen item"
+            )
+            evidence.append(f"{file}:{handler['line']}")
+    return call_graph, list(dict.fromkeys(evidence))
 
 
 @lru_cache(maxsize=1)
@@ -158,6 +410,7 @@ def evaluate_phase2_scope(
     frozen_items: list[dict[str, Any]] | None = None,
     frozen_scope_id: str | None = None,
     frozen_source_projection: dict[str, Any] | None = None,
+    default_legacy_commands: dict[tuple[str, str], tuple[dict[str, Any], ...]] | None = None,
     include_items: bool = False,
 ) -> dict[str, Any]:
     """Compute readiness from the frozen entries; inventory drift never adds paths."""
@@ -184,6 +437,8 @@ def evaluate_phase2_scope(
         integrity_errors.append("Frozen entry membership hash is invalid.")
     if not provenance_valid:
         integrity_errors.append("Frozen source provenance hash is invalid.")
+    if _plugin_module_exclusions_from_source() != _PLUGIN_MODULE_EXCLUSIONS:
+        integrity_errors.append("Default plugin import scanner exclusions differ from the production startup loader.")
 
     for item in items:
         exclusion = item.get("legacy_command_exclusion")
@@ -195,10 +450,27 @@ def evaluate_phase2_scope(
         elif item.get("kind") == "suppressed-command" and item.get("status") == "不可达":
             if str(item.get("entry", "")).casefold() not in _suppressed_legacy_command_keys():
                 integrity_errors.append(f"Suppressed legacy command is no longer suppressed: {item.get('entry')}")
-        elif item.get("kind") == "commands" and item.get("status") == "受阻":
+        elif item.get("kind") == "commands":
             feature, name = str(source.get("feature", "")), str(source.get("name", ""))
-            if not _legacy_command_declarations(feature).get(name):
-                integrity_errors.append(f"Blocked legacy command registration disappeared: {feature}:{name}")
+            records = (default_legacy_commands or {}).get((feature, name), ())
+            if not records:
+                integrity_errors.append(f"Frozen legacy command is not in the default plugin import graph: {feature}:{name}")
+            elif all(record.get("suppressed") for record in records):
+                integrity_errors.append(f"Frozen default legacy command is suppressed: {feature}:{name}")
+            elif not any(record.get("handlers") for record in records):
+                integrity_errors.append(f"Frozen default legacy command has no bound handler: {feature}:{name}")
+            elif item.get("status") == "受阻":
+                if any("unresolved handler target" in str(edge) for edge in item.get("call_graph", [])):
+                    integrity_errors.append(f"Frozen command call graph still has an unresolved handler: {feature}:{name}")
+                for record in records:
+                    for handler in record.get("handlers", []):
+                        has_handler_edge = any(
+                            str(handler["name"]) in str(edge)
+                            and str(record["file"]) in str(edge)
+                            for edge in item.get("call_graph", [])
+                        )
+                        if not has_handler_edge:
+                            integrity_errors.append(f"Frozen command call graph omits handler {handler['name']}: {feature}:{name}")
         elif item.get("kind") == "legacy_routes" and item.get("status") == "受阻":
             if not _legacy_route_location(source):
                 integrity_errors.append(f"Blocked legacy Web route registration disappeared: {item.get('id')}")
@@ -259,6 +531,31 @@ def evaluate_phase2_scope(
                     "reason": "Discovered after the Phase 2 scope freeze; review in backlog before any explicit scope-version change.",
                 }
             )
+    frozen_command_keys = {
+        (str((item.get("source") or {}).get("feature", "")), str((item.get("source") or {}).get("name", "")))
+        for item in items
+        if item.get("kind") == "commands"
+    }
+    default_command_backlog = []
+    for (feature, name), records in sorted((default_legacy_commands or {}).items()):
+        if (feature, name) in frozen_command_keys or all(record.get("suppressed") for record in records):
+            continue
+        call_graph, evidence = _command_path_call_graph(records)
+        default_command_backlog.append(
+            {
+                "id": f"default-legacy-command:{feature}:{name}",
+                "source_field": "default_legacy_commands",
+                "entry": {"feature": feature, "name": name},
+                "call_graph": call_graph,
+                "evidence": evidence,
+                "reason": (
+                    "The production startup import graph registers this non-suppressed legacy command, but it is absent "
+                    "from the frozen scope membership. Keep it in backlog; do not add it to Phase 2 completion until an "
+                    "explicitly reviewed scope version adopts it."
+                ),
+            }
+        )
+    backlog.extend(default_command_backlog)
     result: dict[str, Any] = {
         "scope_id": scope.get("scope_id"),
         "ready": ready,
@@ -270,6 +567,11 @@ def evaluate_phase2_scope(
             "the frozen Phase 2 item set was not expanded."
         ),
         "backlog": backlog,
+        "default_legacy_command_count": sum(
+            not all(record.get("suppressed") for record in records)
+            for records in (default_legacy_commands or {}).values()
+        ),
+        "default_legacy_command_backlog_count": len(default_command_backlog),
         "path_count": len(items),
         "status_counts": status_counts,
         "family_counts": family_counts,
@@ -296,6 +598,7 @@ def load_phase2_scope_report(*, include_items: bool = False) -> dict[str, Any]:
         frozen_items=frozen.get("items"),
         frozen_scope_id=frozen.get("scope_id"),
         frozen_source_projection=frozen.get("source_projection"),
+        default_legacy_commands=_default_legacy_command_inventory(),
         include_items=include_items,
     )
 
@@ -306,6 +609,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--items", action="store_true", help="include every frozen entry")
     parser.add_argument("--check", action="store_true", help="return nonzero when Phase 2 scope is incomplete")
     parser.add_argument("--membership-hash", action="store_true", help="print the frozen file membership hash for a reviewed scope edit")
+    parser.add_argument(
+        "--refresh-command-evidence",
+        action="store_true",
+        help="refresh generic frozen command call graphs from the default startup import graph without changing membership",
+    )
     args = parser.parse_args(argv)
     if args.membership_hash:
         scope = json.loads(SCOPE_PATH.read_text(encoding="utf-8"))
@@ -313,13 +621,47 @@ def main(argv: list[str] | None = None) -> int:
         frozen = json.loads(items_path.read_text(encoding="utf-8"))
         print(_membership_digest(frozen["items"]))
         return 0
+    if args.refresh_command_evidence:
+        scope = json.loads(SCOPE_PATH.read_text(encoding="utf-8"))
+        items_path = ROOT / str(scope.get("frozen_entries_file", ITEMS_PATH.relative_to(ROOT)))
+        frozen = json.loads(items_path.read_text(encoding="utf-8"))
+        before_membership = _membership_digest(frozen["items"])
+        command_index = _default_legacy_command_inventory()
+        refreshed = 0
+        for item in frozen["items"]:
+            if item.get("kind") != "commands" or item.get("status") != "受阻":
+                continue
+            if not any("unresolved handler target" in str(edge) for edge in item.get("call_graph", [])):
+                continue
+            source = item.get("source") or {}
+            key = (str(source.get("feature", "")), str(source.get("name", "")))
+            records = command_index.get(key, ())
+            if not records or all(record.get("suppressed") for record in records):
+                print(f"cannot resolve default command route for {item.get('id')}", file=sys.stderr)
+                return 1
+            item["call_graph"], item["evidence"] = _command_path_call_graph(records)
+            item["reason"] = (
+                "The command is default-reachable and its legacy handler binding is recorded below. This item remains "
+                "blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain "
+                "in backlog rather than expanding the frozen scope."
+            )
+            item["unknown_edge"] = "legacy handler -> downstream state/effect owner"
+            refreshed += 1
+        if _membership_digest(frozen["items"]) != before_membership:
+            print("refusing command evidence refresh because frozen membership changed", file=sys.stderr)
+            return 1
+        items_path.write_text(json.dumps(frozen, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        print(f"refreshed_command_call_graphs={refreshed} membership_sha256={before_membership}")
+        return 0
     report = load_phase2_scope_report(include_items=args.items)
     if args.json:
         print(json.dumps(report, ensure_ascii=False, sort_keys=True))
     else:
         print(
             f"{report['scope_id']}: ready={report['ready']} paths={report['path_count']} "
-            f"blocked={report['blocked_count']} frozen_membership_valid={report['frozen_membership_valid']}"
+            f"blocked={report['blocked_count']} frozen_membership_valid={report['frozen_membership_valid']} "
+            f"default_legacy_commands={report.get('default_legacy_command_count', 0)} "
+            f"backlog_default_commands={report.get('default_legacy_command_backlog_count', 0)}"
         )
         for error in report["integrity_errors"]:
             print(f"ERROR: {error}", file=sys.stderr)

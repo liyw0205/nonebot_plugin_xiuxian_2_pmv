@@ -3,6 +3,10 @@
 状态：执行中
 适用范围：全面底层重构第二阶段
 
+2026-10-04 bounded Phase 2 completion contract：暂停追加玩法切片。完成分母固定为 `docs/refactor_phase2_legacy_path_items.json` 中 membership hash 验证通过的 496 项；每项使用 `已迁移 / 允许保留的兼容路径 / 不可达 / 受阻`，必须有调用图与源码证据。`scripts/phase2_legacy_path_gate.py --check` 以该冻结清单、来源快照、启动导入闭包和逐项 handler 绑定计算 v1 状态；inventory drift 和清单外真实默认路径只进入报告 backlog，不改成员、不改 hash、不扩展分母。当前扫描到 637 个默认可达、未被 suppression 的旧命令，323 项不在 v1 中；这些候选含源位置与 handler 调用图，等待显式范围评审。v1 关闭只表示冻结成员完成，不宣称全仓旧路径已经清零。`ID更新` 留在受阻状态，本轮不迁移。P7 发布门禁继续由 `scripts/refactor_completion_audit.py` 单独使用真实 release evidence 判定，不合并进 phase 2 完成状态。
+
+本范围方案允许最多 2 名只读子代理分别检查启动可达性/调用图和门禁/P7 分离；优先复用已有审计，只有互不重复的问题才派工。子代理不得改文件、导入/编译/运行插件、访问运行数据库/凭据或生成缓存；主线程负责代码、门禁、文档和串行验证。本轮复用已有 ID 命令调用图审计，没有新派代理。验证禁用 pytest cache/pyc；测试使用隔离临时目录，结束后只清理由本轮创建且确认进程退出的产物。磁盘可用低于 10 GiB 或 `MemAvailable` 低于 512 MiB 时停止重任务；不触碰运行库/WAL/SHM、正式备份、持久 receipt、`.git`、`.venv` 或用户数据。
+
 2026-10-04 admin ID-swap cutover：冻结项 `command:admin:ID交换` 的默认 handler 改由 `AdminApplication -> AdminIdSwapSqlRepository` 执行；`ID更新` 与 QQID 转换仍是独立范围。四个 SQLite 文件分别原子提交交换步骤和 receipt，game DB 保存 operation ledger/outbox/恢复计划；players 目录按阶段 journal rename，startup callback 恢复未完成操作，rename 与 phase commit 之间中断可由路径状态识别。用户数据更新前按四库主文件大小的三阶段 WAL 工作预算预检容量并保留共享 64 MiB/10% reserve，空间不足则留 pending 且不执行数据更新；仅使已初始化的 roster cache 失效，不构造 legacy manager。交换 UoW 局部关闭 FK 检查、SQLite cache 2 MiB、`temp_store=FILE`。迁移 `.003` 路由四库、`.004` 仅 game DB；无请求期建表。复用 1 名只读调用图审计、未重复派工。专项测试 `11 passed`；phase2/progress/UoW 首轮 `22 passed, 1 failed`（唯一失败为过时计数断言），修正后对应单测 `1 passed, 5 deselected`。inventory `--check` 通过；冻结 496 项计数为 `8/41/19/428`，membership/source inventory 有效，backlog 未扩大，phase 2 未完成，P7 独立且未运行。隔离数据目录，关闭 pytest/pyc cache；保留用户 `boss_info.json`。
 
 2026-10-04 frozen-scope backlog reporting：phase 2 gate 将相对冻结来源快照新增的 inventory 条目作为具体候选并入只读 `backlog` 报告，列出来源字段、原始条目和评审理由；不写回 scope、membership hash 或冻结成员，也不影响已冻结成员的完成计算。回归 `6 passed`，当前 496 项的状态计数与来源快照未变；phase 2 仍有 429 个 blocker，P7 仍独立且本轮未运行。

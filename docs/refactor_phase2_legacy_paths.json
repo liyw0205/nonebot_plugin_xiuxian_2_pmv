@@ -5,6 +5,7 @@
   "frozen_entries_file": "docs/refactor_phase2_legacy_path_items.json",
   "frozen_membership_sha256": "9d6d112676aa13917ab8957c7353914b946a886a10c57c2b7c98e402bd127162",
   "profile": "NoneBot driver initialized, production plugin startup, default environment; XIUXIAN_WEB_STATUS defaults to true.",
+  "scope_boundary": "This is the finite frozen v1 completion denominator, not a claim that every default legacy registration in the repository is listed. The gate scans the startup import graph and reports unlisted default legacy commands to backlog without adding them to v1 membership.",
   "source_snapshot": {
     "path": "docs/refactor_inventory.json",
     "fields": ["commands", "legacy_jobs", "legacy_routes"],
@@ -25,18 +26,20 @@
       "status": "受阻",
       "entry_format": "{feature}:{name} (aliases: {aliases})",
       "target_format": "legacy command handler under xiuxian_{feature}",
-      "reason": "These command rows come from compatibility.command_inventory and represent old AST command candidates for legacy feature manifests. The inventory does not bind each matcher to its handler body or terminal state effect. Keep every unresolved command in scope as blocked; do not infer migration from a feature manifest.",
-      "unknown_edge": "matcher -> handler body -> application/repository or legacy writer",
+      "reason": "The frozen v1 command members are individually bound to source handlers and checked against the default startup import graph. The inventory-backed v1 list is intentionally bounded: a runtime-import-graph audit found 323 additional non-suppressed default legacy commands outside membership; they are reported in backlog and do not expand this denominator. A frozen command remains blocked until its handler's downstream state/effect ownership is closed.",
+      "unknown_edge": "legacy handler -> downstream state/effect owner",
       "call_graph": [
         "nonebot_plugin_xiuxian_2/__init__.py:_load_legacy_plugins_if_initialized -> iter_modules(xiuxian/) -> load_all_plugins(plugin_modules)",
-        "legacy feature module:on_command -> xiuxian/on_compat.py:on_command -> _nb_on_command -> legacy matcher",
-        "legacy matcher -> matching handler (specific per-command downstream target not recorded by refactor_inventory.json)"
+        "default plugin import closure -> imported legacy feature module:on_command -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
+        "XiuxianOnCompatProvider command index -> the concrete handle() handler recorded on each frozen command item -> downstream state/effect ownership"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
+        "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
         "nonebot_plugin_xiuxian_2/compatibility/command_inventory.py:14-18,55-89",
-        "nonebot_plugin_xiuxian_2/compatibility/feature_inventory.py:14-54"
+        "nonebot_plugin_xiuxian_2/compatibility/feature_inventory.py:14-54",
+        "scripts/phase2_legacy_path_gate.py:_default_legacy_command_inventory"
       ]
     },
     {
