@@ -126,7 +126,7 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
         self.assertFalse(report["ready"])
         self.assertEqual(report["blocked_count"], 1)
 
-    def test_new_inventory_entry_fails_snapshot_instead_of_expanding_scope(self):
+    def test_new_inventory_entry_is_backlogged_without_expanding_scope(self):
         frozen_inventory = {"commands": [], "legacy_jobs": [], "legacy_routes": []}
         changed_inventory = {**frozen_inventory, "commands": [{"feature": "new", "name": "new command", "aliases": []}]}
         fields = ["commands", "legacy_jobs", "legacy_routes"]
@@ -154,7 +154,16 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
         self.assertEqual([item["id"] for item in report["items"]], ["already-closed"])
         self.assertTrue(report["source_inventory_drift_notice"])
         self.assertEqual(report["source_inventory_added"]["commands"], changed_inventory["commands"])
-        self.assertEqual(report["backlog"], scope["backlog"])
+        self.assertEqual(report["backlog"][0], scope["backlog"][0])
+        self.assertEqual(
+            report["backlog"][1],
+            {
+                "id": "inventory-drift:commands:new:new command",
+                "source_field": "commands",
+                "entry": changed_inventory["commands"][0],
+                "reason": "Discovered after the Phase 2 scope freeze; review in backlog before any explicit scope-version change.",
+            },
+        )
 
     def test_invalid_status_and_missing_evidence_fail_closed(self):
         inventory = {"commands": [], "legacy_jobs": [], "legacy_routes": []}

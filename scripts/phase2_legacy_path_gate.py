@@ -235,28 +235,41 @@ def evaluate_phase2_scope(
         )
         for family in scope.get("families", [])
     }
+    source_inventory_added = {
+        field: [
+            item
+            for item in inventory.get(field, [])
+            if _inventory_entry_key(field, item)
+            not in {
+                _inventory_entry_key(field, baseline)
+                for baseline in (frozen_source_projection or {}).get(field, [])
+            }
+        ]
+        for field in fields
+    }
+    backlog = list(scope.get("backlog", []))
+    for field, entries in source_inventory_added.items():
+        for entry in entries:
+            entry_key = _inventory_entry_key(field, entry)
+            backlog.append(
+                {
+                    "id": f"inventory-drift:{field}:{entry_key}",
+                    "source_field": field,
+                    "entry": entry,
+                    "reason": "Discovered after the Phase 2 scope freeze; review in backlog before any explicit scope-version change.",
+                }
+            )
     result: dict[str, Any] = {
         "scope_id": scope.get("scope_id"),
         "ready": ready,
         "frozen_membership_valid": membership_valid,
         "source_inventory_unchanged": inventory_unchanged,
-        "source_inventory_added": {
-            field: [
-                item
-                for item in inventory.get(field, [])
-                if _inventory_entry_key(field, item)
-                not in {
-                    _inventory_entry_key(field, baseline)
-                    for baseline in (frozen_source_projection or {}).get(field, [])
-                }
-            ]
-            for field in fields
-        },
+        "source_inventory_added": source_inventory_added,
         "source_inventory_drift_notice": None if inventory_unchanged else (
             "Current refactor inventory differs from the frozen provenance snapshot. Review the diff into backlog; "
             "the frozen Phase 2 item set was not expanded."
         ),
-        "backlog": scope.get("backlog", []),
+        "backlog": backlog,
         "path_count": len(items),
         "status_counts": status_counts,
         "family_counts": family_counts,

@@ -3,6 +3,8 @@
 状态：执行中
 适用范围：全面底层重构第二阶段
 
+2026-10-04 frozen-scope backlog reporting：phase 2 gate 将相对冻结来源快照新增的 inventory 条目作为具体候选并入只读 `backlog` 报告，列出来源字段、原始条目和评审理由；不写回 scope、membership hash 或冻结成员，也不影响已冻结成员的完成计算。回归 `6 passed`，当前 496 项的状态计数与来源快照未变；phase 2 仍有 429 个 blocker，P7 仍独立且本轮未运行。
+
 2026-10-04 stateless 60S news command compatibility classification：冻结项 `command:entertainment:60S读世界` 只做外部新闻 API GET，通过共享 `http_client`/`run_blocking_io` 格式化发送，无本地业务状态或持久文件读写；作为明确兼容 matcher 保留到独立 P7 真实发布门禁允许移除，不宣称已迁移，不新增 app/cache/scope member。phase 2 gate 回归 `6 passed`；当前状态为 496 项、7 migrated/41 compatibility/19 unreachable/429 blocked，membership 不变。清单 gate `--check` 因 429 个 blocker 返回 `1`，聚合 `phase2_complete=false`，inventory exporter `--check` 通过；P7 保持独立且未运行。
 
 2026-10-04 non-command matcher family call-graph audit：冻结项 `legacy.matcher.non_command_dispatch` 仍受阻。静态确认七个默认注册：`xiuxian_work`、`xiuxian_bank` 的业务 regex，`media_parse_link` 的三条 regex，admin empty fallback 的 message matcher，以及直接 `nonebot.on_notice` 注册的 group lifecycle handler；admin 与 entertainment 包分别显式导入对应模块。6 个 message/regex handler 经 `on_compat` 注册，其中 work 仍维护旧 JSON 投影、bank 写操作由 feature application 承担、media/fallback 保留旧 handler；notice 不走该 provider并执行 lifecycle/config/send 逻辑。单一 family 状态无法诚实概括为全迁移或兼容，故保持 blocker 并在 evidence 中列出所有确认入口；不新增冻结成员。清单外新发现先入 backlog，只有显式评审才变更 scope/member hash。phase2 gate 回归 `6 passed`，JSON 报告 496 项、430 blockers、membership 有效、无新增 inventory candidate，P7 独立且未运行。
