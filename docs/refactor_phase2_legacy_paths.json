@@ -350,6 +350,10 @@
     {
       "id": "command-and-web-handler-downstream-closure",
       "reason": "Close each blocked handler to its terminal application/repository or legacy state writer without creating a new gameplay slice for every discovery."
+    },
+    {
+      "id": "message-db-queue-byte-budget",
+      "reason": "The shared message-history queue is count-bounded (default 100000 records) but has no byte budget; a small number of unusually large payloads can still consume substantial RAM. Review a byte-aware admission limit or bounded message size independently of the frozen phase 2 path scope."
     }
   ],
   "p7_gate": {

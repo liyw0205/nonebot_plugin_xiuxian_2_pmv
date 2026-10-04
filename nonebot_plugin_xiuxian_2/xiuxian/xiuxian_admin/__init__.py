@@ -2497,7 +2497,6 @@ async def dm_command_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
     bot, _ = await assign_bot(bot=bot, event=event)
 
     text = str(args).strip()
-    logger.info(f"收到 {text}")
 
     if not text:
         await handle_send(bot, event, "用法：dm Markdown内容\n示例：dm # 你好")
@@ -2506,16 +2505,13 @@ async def dm_command_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
     # 只修 mqqapi inlinecmd，别再全局 replace(':/', '://')
     text = fix_mqqapi_inlinecmd_links(text)
 
-    logger.info(f"处理 {text}")
-
     try:
         msg = MessageSegment.markdown(bot, text)
-        logger.info(f"转换 {msg}")
         await delivery_service.reply(bot, event, msg)
 
     except Exception as e:
         err = str(e)
-        logger.error(f"dm发送markdown失败: {err}")
+        logger.warning(f"dm发送markdown失败 ({type(e).__name__})")
 
         reason = "Markdown发送失败，请检查内容格式或平台是否支持。"
 

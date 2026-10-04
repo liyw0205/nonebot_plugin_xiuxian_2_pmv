@@ -705,22 +705,31 @@
       "id": "command:admin:dm",
       "kind": "commands",
       "entry": "admin:dm (aliases: )",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "允许保留的兼容路径",
+      "reason": "The default handler is an administrative Markdown relay: it normalizes the supplied text, builds an adapter message, and sends it through the shared delivery service without reading or mutating player/game state or business files. Successful sends may enter the shared operational message-history database (default 1000 MiB size threshold, age retention disabled by default); that is a system-wide message-recording side effect, not DM-owned business state. Keep this adapter command through the compatibility period; P7 independently governs release-based removal. Raw Markdown and exception text are no longer logged by this handler.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:316 dm_command = on_command('dm') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2480 dm_command_ -> legacy downstream effect not closed in this frozen item"
+        "dm_command_ -> str(args).strip() -> fix_mqqapi_inlinecmd_links -> MessageSegment.markdown(bot, text) -> delivery_service.reply(bot, event, msg)",
+        "MessageDeliveryService.reply maps group/private/channel events to a SendRequest -> send dispatches to the adapter sender; an unknown event scene calls bot.send directly",
+        "successful group/private adapter send -> adapter_message_sender._record_send -> record_send_message -> _insert_message_record -> message_db.insert_message_record -> bounded-count async message DB queue -> messages.content",
+        "successful channel send -> MessageDeliveryService._send_channel -> record_send_message -> message DB queue; queue-full drops a history record without blocking delivery",
+        "message DB writer calls maybe_cleanup_message_db after batches, at most once per 600 seconds; size cleanup uses configured max size (default 1000 MiB), while group/private age retention defaults to disabled",
+        "No call edge from this command to player/game repositories, legacy business writers, or business files"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:316",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2480"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2495-2514,2518-2526",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/admin_helpers.py:19-60",
+        "nonebot_plugin_xiuxian_2/xiuxian/messaging/delivery.py:107-133,226-268",
+        "nonebot_plugin_xiuxian_2/xiuxian/adapter_message_sender.py:66-82,98-178",
+        "nonebot_plugin_xiuxian_2/xiuxian/adapter_message_records.py:399-445",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_utils/message_db.py:161-175,422-427,556-604,734-761"
       ],
       "source_declaration_found": true,
       "source": {

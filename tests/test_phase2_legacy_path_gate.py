@@ -40,7 +40,7 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
         self.assertEqual(report["path_count"], 496)
         self.assertEqual(
             report["status_counts"],
-            {"不可达": 19, "允许保留的兼容路径": 42, "受阻": 425, "已迁移": 10},
+            {"不可达": 19, "允许保留的兼容路径": 43, "受阻": 424, "已迁移": 10},
         )
         self.assertGreater(report["blocked_count"], 0)
         self.assertTrue(all(item["call_graph"] and item["evidence"] for item in report["items"]))
@@ -73,6 +73,10 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
         )
         self.assertEqual(news_query["status"], "允许保留的兼容路径")
         self.assertTrue(any("http_client.get_json" in edge for edge in news_query["call_graph"]))
+        dm = next(item for item in report["items"] if item["id"] == "command:admin:dm")
+        self.assertEqual(dm["status"], "允许保留的兼容路径")
+        self.assertTrue(any("delivery_service.reply" in edge for edge in dm["call_graph"]))
+        self.assertTrue(any("message_db.py" in evidence for evidence in dm["evidence"]))
         steam_query = next(
             item for item in report["items"] if item["id"] == "command:entertainment:Steam喜加一"
         )
