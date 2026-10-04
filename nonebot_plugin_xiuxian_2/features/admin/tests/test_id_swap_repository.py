@@ -10,7 +10,12 @@ from ....infrastructure.database.backup_capacity import InsufficientBackupSpace
 from ....plugin import build_migrations, migrations_for_database
 from .. import id_swap_repository as id_swap_repository_module
 from ..id_swap_repository import ACTION, DATABASE_ORDER, AdminIdSwapSqlRepository
-from ..migrations import apply_admin_id_swap_operations, apply_admin_id_swap_receipts
+from ..migrations import (
+    apply_admin_id_swap_operations,
+    apply_admin_id_swap_receipts,
+    apply_admin_id_update_operations,
+    apply_admin_id_update_step_receipts,
+)
 
 
 def _databases(root: Path, *, migrated: bool = True) -> dict[str, Path]:
@@ -30,6 +35,8 @@ def _databases(root: Path, *, migrated: bool = True) -> dict[str, Path]:
                     OutboxStore().ensure_schema(uow)
                     apply_admin_id_swap_receipts(uow)
                     apply_admin_id_swap_operations(uow)
+                    apply_admin_id_update_step_receipts(uow)
+                    apply_admin_id_update_operations(uow)
             elif key == "impart_db":
                 uow.execute("CREATE TABLE user_xiuxian(user_id TEXT PRIMARY KEY)")
                 uow.execute("INSERT INTO user_xiuxian VALUES('u1'),('u2')")
@@ -63,9 +70,11 @@ def _values(database: Path, sql: str) -> list[tuple]:
 
 def test_id_swap_updates_all_four_databases_and_player_directories(tmp_path: Path) -> None:
     cache_invalidations: list[str] = []
+    player_cache_invalidations: list[tuple[str, tuple[str, ...]]] = []
     repository = _repository(
         tmp_path,
         invalidate_user_id_cache=lambda: cache_invalidations.append("cleared"),
+        invalidate_player_data_cache=lambda table, fields: player_cache_invalidations.append((table, fields)),
     )
     players = tmp_path / "players"
     (players / "u1").mkdir(parents=True)
@@ -93,6 +102,7 @@ def test_id_swap_updates_all_four_databases_and_player_directories(tmp_path: Pat
     assert (players / "u1" / "marker").read_text(encoding="utf-8") == "second"
     assert (players / "u2" / "marker").read_text(encoding="utf-8") == "first"
     assert cache_invalidations == ["cleared"]
+    assert player_cache_invalidations == [("user_xiuxian", ("partner_id",)), ("user_xiuxian", ("user_id",))]
 
     replay = repository.swap("swap-ok", "u1", "u2")
     assert replay.replayed
@@ -317,3 +327,10 @@ def test_id_swap_migrations_route_to_exact_four_databases() -> None:
         migration.version for migration in migrations_for_database(migrations, "game_db")
     }
     assert "legacy.admin.004" in game_versions
+    assert "legacy.admin.006" in game_versions
+    for key in DATABASE_ORDER:
+        versions = {migration.version for migration in migrations_for_database(migrations, key)}
+        assert "legacy.admin.005" in versions
+    for key in ("player_db", "trade_db", "impart_db"):
+        versions = {migration.version for migration in migrations_for_database(migrations, key)}
+        assert "legacy.admin.006" not in versions

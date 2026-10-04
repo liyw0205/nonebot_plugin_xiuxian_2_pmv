@@ -40,21 +40,26 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
         self.assertEqual(report["path_count"], 496)
         self.assertEqual(
             report["status_counts"],
-            {"不可达": 19, "允许保留的兼容路径": 41, "受阻": 428, "已迁移": 8},
+            {"不可达": 19, "允许保留的兼容路径": 41, "受阻": 427, "已迁移": 9},
         )
         self.assertGreater(report["blocked_count"], 0)
         self.assertTrue(all(item["call_graph"] and item["evidence"] for item in report["items"]))
         self.assertEqual(report["default_legacy_command_count"], 637)
         self.assertEqual(report["default_legacy_command_backlog_count"], 323)
+        self.assertEqual(
+            report["default_legacy_command_discovery"],
+            "static_ast_startup_import_closure_not_live_runtime_observation",
+        )
+        self.assertFalse(any("Explicit path summary" in error for error in report["integrity_errors"]))
         self.assertEqual(report["path_count"], 496)
         self.assertIn(
             "admin.player_status.reset.single",
             {item["id"] for item in report["items"]},
         )
         id_update = next(item for item in report["items"] if item["id"] == "command:admin:ID更新")
-        self.assertEqual(id_update["status"], "受阻")
-        self.assertTrue(any("update_id_cmd_" in edge for edge in id_update["call_graph"]))
-        self.assertFalse(any("unresolved handler target" in edge for edge in id_update["call_graph"]))
+        self.assertEqual(id_update["status"], "已迁移")
+        self.assertTrue(any("AdminApplication.update_user_id" in edge for edge in id_update["call_graph"]))
+        self.assertTrue(any("AdminIdUpdateSqlRepository._resume" in edge for edge in id_update["call_graph"]))
         backlog_command = next(
             item for item in report["backlog"] if item["id"] == "default-legacy-command:back:我的背包"
         )
@@ -290,6 +295,36 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
 
         self.assertFalse(report["ready"])
         self.assertGreaterEqual(len(report["integrity_errors"]), 2)
+
+    def test_explicit_path_summary_must_match_frozen_classification(self):
+        inventory = {"commands": [], "legacy_jobs": [], "legacy_routes": []}
+        fields = ["commands", "legacy_jobs", "legacy_routes"]
+        frozen_item = {
+            "id": "explicit",
+            "kind": "command-effect",
+            "entry": "example command effect",
+            "status": "已迁移",
+            "reason": "The default effect is feature-owned.",
+            "call_graph": ["matcher -> application -> repository"],
+            "evidence": ["feature/application.py:1"],
+        }
+        stale_summary = {**frozen_item, "status": "受阻"}
+        scope = {
+            "scope_id": "test-scope",
+            "source_snapshot": {"fields": fields, "sha256": _snapshot_hash(inventory, fields)},
+            "frozen_membership_sha256": _membership_hash([frozen_item]),
+            "explicit_paths": [stale_summary],
+        }
+
+        report = evaluate_phase2_scope(
+            scope,
+            inventory,
+            frozen_items=[frozen_item],
+            frozen_scope_id="test-scope",
+            frozen_source_projection=_source_projection(inventory, fields),
+        )
+
+        self.assertTrue(any("Explicit path summary differs from frozen entry: explicit" in error for error in report["integrity_errors"]))
 
     def test_check_cli_returns_nonzero_for_incomplete_frozen_scope(self):
         report = {

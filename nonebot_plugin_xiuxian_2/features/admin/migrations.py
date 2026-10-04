@@ -40,6 +40,32 @@ def apply_admin_id_swap_operations(uow: DatabaseUnitOfWork) -> None:
     )
 
 
+def apply_admin_id_update_step_receipts(uow: DatabaseUnitOfWork) -> None:
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS admin_id_update_step_receipts("
+        "operation_id TEXT PRIMARY KEY,payload_hash TEXT NOT NULL,"
+        "updated_cells INTEGER NOT NULL,created_at TEXT NOT NULL)"
+    )
+
+
+def apply_admin_id_update_operations(uow: DatabaseUnitOfWork) -> None:
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS admin_id_update_operations("
+        "operation_id TEXT PRIMARY KEY,payload_hash TEXT NOT NULL,"
+        "old_id TEXT NOT NULL,new_id TEXT NOT NULL,target_columns_json TEXT NOT NULL,"
+        "directory_old_present INTEGER NOT NULL,directory_phase TEXT NOT NULL DEFAULT 'pending',"
+        "status TEXT NOT NULL DEFAULT 'started',completed_databases TEXT NOT NULL DEFAULT '[]',"
+        "last_error TEXT NOT NULL DEFAULT '',created_at TEXT NOT NULL,updated_at TEXT NOT NULL,"
+        "CHECK(directory_phase IN ('pending','completed')),"
+        "CHECK(status IN ('started','needs_reconcile','applied','rejected')))"
+    )
+    uow.execute(
+        "CREATE INDEX IF NOT EXISTS admin_id_update_pending_operations "
+        "ON admin_id_update_operations(status,created_at) "
+        "WHERE status IN ('started','needs_reconcile')"
+    )
+
+
 def _table_exists(uow: DatabaseUnitOfWork, name: str) -> bool:
     return uow.query_one(
         "SELECT 1 AS present FROM sqlite_master WHERE type='table' AND name=?",

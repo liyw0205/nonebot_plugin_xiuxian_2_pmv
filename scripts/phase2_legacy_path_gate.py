@@ -188,7 +188,7 @@ def _call_is_import_time(node: ast.AST, parents: dict[int, ast.AST]) -> bool:
 
 @lru_cache(maxsize=1)
 def _default_legacy_command_inventory() -> dict[tuple[str, str], tuple[dict[str, Any], ...]]:
-    """Read command registrations reachable from the production plugin import graph."""
+    """Approximate default command registrations from the static startup import closure."""
     xiuxian_root = PACKAGE / "xiuxian"
     roots: list[str] = []
     for path in sorted(xiuxian_root.iterdir()):
@@ -440,6 +440,21 @@ def evaluate_phase2_scope(
     if _plugin_module_exclusions_from_source() != _PLUGIN_MODULE_EXCLUSIONS:
         integrity_errors.append("Default plugin import scanner exclusions differ from the production startup loader.")
 
+    frozen_by_id = {str(item.get("id", "")): item for item in items}
+    explicit_fields = ("kind", "entry", "status", "reason", "call_graph", "evidence")
+    explicit_ids: set[str] = set()
+    for summary in scope.get("explicit_paths", []):
+        item_id = str(summary.get("id", ""))
+        if not item_id or item_id in explicit_ids:
+            integrity_errors.append(f"Explicit path summary has a missing or duplicate id: {item_id!r}")
+            continue
+        explicit_ids.add(item_id)
+        frozen = frozen_by_id.get(item_id)
+        if frozen is None:
+            integrity_errors.append(f"Explicit path summary is missing from frozen entries: {item_id}")
+        elif any(summary.get(field) != frozen.get(field) for field in explicit_fields):
+            integrity_errors.append(f"Explicit path summary differs from frozen entry: {item_id}")
+
     for item in items:
         exclusion = item.get("legacy_command_exclusion")
         source = item.get("source") or {}
@@ -454,7 +469,7 @@ def evaluate_phase2_scope(
             feature, name = str(source.get("feature", "")), str(source.get("name", ""))
             records = (default_legacy_commands or {}).get((feature, name), ())
             if not records:
-                integrity_errors.append(f"Frozen legacy command is not in the default plugin import graph: {feature}:{name}")
+                integrity_errors.append(f"Frozen legacy command is not in the AST-derived default startup closure: {feature}:{name}")
             elif all(record.get("suppressed") for record in records):
                 integrity_errors.append(f"Frozen default legacy command is suppressed: {feature}:{name}")
             elif not any(record.get("handlers") for record in records):
@@ -567,6 +582,7 @@ def evaluate_phase2_scope(
             "the frozen Phase 2 item set was not expanded."
         ),
         "backlog": backlog,
+        "default_legacy_command_discovery": "static_ast_startup_import_closure_not_live_runtime_observation",
         "default_legacy_command_count": sum(
             not all(record.get("suppressed") for record in records)
             for records in (default_legacy_commands or {}).values()
@@ -660,8 +676,8 @@ def main(argv: list[str] | None = None) -> int:
         print(
             f"{report['scope_id']}: ready={report['ready']} paths={report['path_count']} "
             f"blocked={report['blocked_count']} frozen_membership_valid={report['frozen_membership_valid']} "
-            f"default_legacy_commands={report.get('default_legacy_command_count', 0)} "
-            f"backlog_default_commands={report.get('default_legacy_command_backlog_count', 0)}"
+            f"static_ast_default_command_candidates={report.get('default_legacy_command_count', 0)} "
+            f"backlog_static_ast_commands={report.get('default_legacy_command_backlog_count', 0)}"
         )
         for error in report["integrity_errors"]:
             print(f"ERROR: {error}", file=sys.stderr)

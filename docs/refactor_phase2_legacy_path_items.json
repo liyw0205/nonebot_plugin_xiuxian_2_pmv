@@ -584,22 +584,33 @@
       "id": "command:admin:ID更新",
       "kind": "commands",
       "entry": "admin:ID更新 (aliases: )",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "The default handler now delegates to AdminApplication and a feature-owned recoverable ID-update repository. A frozen plan, per-database step receipts, bounded SQLite cache/temp-store settings, capacity preflight, directory rename recovery, and cache invalidation close the legacy writer edge without adding a scope member.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:321 update_id_cmd = on_command('ID更新') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2609 update_id_cmd_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:337 update_id_cmd = on_command('ID更新') -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2625 update_id_cmd_ -> AdminApplication.update_user_id",
+        "AdminApplication.update_user_id -> AdminIdUpdateSqlRepository.update -> shared ID mutation lock -> game operation plan/outbox -> frozen target columns and old/new ID validation",
+        "AdminIdUpdateSqlRepository._resume -> each of four SQLite databases: update whitelisted columns + step receipt in one transaction -> game progress receipt",
+        "AdminIdUpdateSqlRepository._rename_player_directory -> recoverable players/<old_id> to players/<new_id> rename -> roster/player-data cache invalidation -> ledger/outbox completion",
+        "registered admin startup callback -> reconcile_user_id_updates -> resume started/needs_reconcile plans"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:321",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2609"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:132-145,337,2625-2651",
+        "nonebot_plugin_xiuxian_2/features/admin/application.py:86-105",
+        "nonebot_plugin_xiuxian_2/features/admin/id_update_repository.py:34-176,198-371,373-556",
+        "nonebot_plugin_xiuxian_2/features/admin/id_mutation_lock.py:14-45",
+        "nonebot_plugin_xiuxian_2/features/admin/id_swap_repository.py:120-159,414-467",
+        "nonebot_plugin_xiuxian_2/features/admin/migrations.py:42-66",
+        "nonebot_plugin_xiuxian_2/features/_legacy_migrated.py:133-134",
+        "nonebot_plugin_xiuxian_2/plugin.py:540-605",
+        "nonebot_plugin_xiuxian_2/features/admin/tests/test_id_update_repository.py",
+        "nonebot_plugin_xiuxian_2/features/admin/tests/test_id_swap_repository.py"
       ],
       "source_declaration_found": true,
       "source": {

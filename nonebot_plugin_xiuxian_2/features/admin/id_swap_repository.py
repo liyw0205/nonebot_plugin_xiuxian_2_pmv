@@ -2,10 +2,8 @@ from __future__ import annotations
 
 import json
 import os
-from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
-import threading
 import uuid
 from typing import Any, Callable, Iterator, Mapping
 
@@ -14,6 +12,7 @@ from ...core.result import OperationOutcome
 from ...infrastructure.database.backup_capacity import preflight_capacity
 from ...infrastructure.database import DatabaseUnitOfWork, OperationLedger, OutboxStore
 from ...infrastructure.database.ledger import request_hash
+from .id_mutation_lock import exclusive_id_mutation_lock
 
 
 ACTION = "admin.id-swap"
@@ -25,9 +24,6 @@ TARGET_COLUMNS = {
     "player_db": frozenset({"user_id", "partner_id", "group_id", "main_id", "active_id"}),
 }
 MAX_ID_BYTES = 255
-_operation_lock = threading.RLock()
-
-
 def _quote_ident(value: str) -> str:
     return '"' + value.replace('"', '""') + '"'
 
@@ -40,39 +36,6 @@ def _path_entry_exists(path: Path) -> bool:
     return path.exists() or path.is_symlink()
 
 
-@contextmanager
-def _exclusive_swap_lock(game_database: Path) -> Iterator[None]:
-    """Serialize ID swaps across bot processes without holding a SQLite writer lock."""
-    with _operation_lock:
-        lock_path = game_database.with_name(".admin-id-swap.lock")
-        with lock_path.open("a+b") as handle:
-            if os.name == "nt":
-                import msvcrt
-
-                handle.seek(0, os.SEEK_END)
-                if handle.tell() == 0:
-                    handle.write(b"0")
-                    handle.flush()
-                handle.seek(0)
-                msvcrt.locking(handle.fileno(), msvcrt.LK_LOCK, 1)
-            else:
-                import fcntl
-
-                fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
-            try:
-                yield
-            finally:
-                if os.name == "nt":
-                    import msvcrt
-
-                    handle.seek(0)
-                    msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
-                else:
-                    import fcntl
-
-                    fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
-
-
 class AdminIdSwapSqlRepository:
     """Recoverable ID swaps across the legacy SQLite files and player folders."""
 
@@ -82,10 +45,12 @@ class AdminIdSwapSqlRepository:
         players_dir: str | Path,
         *,
         invalidate_user_id_cache: Callable[[], Any] | None = None,
+        invalidate_player_data_cache: Callable[[str, tuple[str, ...]], Any] | None = None,
     ) -> None:
         self.databases = {key: Path(databases[key]) for key in DATABASE_ORDER}
         self.players_dir = Path(players_dir)
         self.invalidate_user_id_cache = invalidate_user_id_cache or (lambda: None)
+        self.invalidate_player_data_cache = invalidate_player_data_cache or (lambda *_args: None)
         self.ledger = OperationLedger()
         self.outbox = OutboxStore()
 
@@ -103,7 +68,7 @@ class AdminIdSwapSqlRepository:
                 audit_category="admin",
             )
 
-        with _exclusive_swap_lock(self.databases["game_db"]):
+        with exclusive_id_mutation_lock(self.databases["game_db"]):
             try:
                 plan, terminal = self._prepare(operation_id, id1, id2)
             except Exception as exc:
@@ -146,7 +111,12 @@ class AdminIdSwapSqlRepository:
         required = {"admin_id_swap_step_receipts"}
         if database_key == "game_db":
             required.update(
-                {"admin_id_swap_operations", "operation_ledger", "domain_outbox"}
+                {
+                    "admin_id_swap_operations",
+                    "admin_id_update_operations",
+                    "operation_ledger",
+                    "domain_outbox",
+                }
             )
         rows = uow.query_all(
             "SELECT name FROM sqlite_master WHERE type='table' AND name IN ("
@@ -235,6 +205,17 @@ class AdminIdSwapSqlRepository:
                 "SELECT operation_id FROM admin_id_swap_operations "
                 "WHERE status IN ('started','needs_reconcile') LIMIT 1"
             )
+            pending_update = game_uow.query_one(
+                "SELECT operation_id FROM admin_id_update_operations "
+                "WHERE status IN ('started','needs_reconcile') LIMIT 1"
+            )
+            if pending_update is not None:
+                return None, self._finish_rejected(
+                    game_uow,
+                    operation_id,
+                    f"另一笔 ID更新仍待恢复：{pending_update['operation_id']}。恢复完成前不能开始新交换。",
+                    code="reconcile_pending",
+                )
             if pending is not None:
                 return None, self._finish_rejected(
                     game_uow,
@@ -451,6 +432,11 @@ class AdminIdSwapSqlRepository:
             )
             if database_key == "game_db":
                 self.invalidate_user_id_cache()
+            if database_key == "player_db":
+                with DatabaseUnitOfWork(self.databases[database_key], read_only=True) as uow:
+                    targets = list(self._id_table_targets(uow, database_key))
+                for table, column in targets:
+                    self.invalidate_player_data_cache(table, (column,))
             self._after_database_step(database_key)
             self._record_database_complete(operation_id, database_key)
         self._swap_directories(plan)
@@ -669,7 +655,7 @@ class AdminIdSwapSqlRepository:
     def reconcile_pending(self, *, limit: int = 100) -> dict[str, int]:
         if not all(self.databases[key].is_file() for key in DATABASE_ORDER):
             return {"recovered": 0, "pending": 0, "failed": 0}
-        with _exclusive_swap_lock(self.databases["game_db"]):
+        with exclusive_id_mutation_lock(self.databases["game_db"]):
             with DatabaseUnitOfWork(
                 self.databases["game_db"], read_only=True
             ) as uow:

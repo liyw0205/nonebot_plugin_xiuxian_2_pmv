@@ -540,6 +540,7 @@ _GAME_DATABASE_EXCLUDED_MIGRATION_VERSIONS = frozenset(
 _PLAYER_DATABASE_MIGRATION_VERSIONS = frozenset(
     {
         "legacy.admin.003",
+        "legacy.admin.005",
         "arena.006",
         "arena.008",
         "arena.009",
@@ -600,8 +601,8 @@ _PLAYER_DATABASE_MIGRATION_VERSIONS = frozenset(
         "boss.006",
     }
 )
-_TRADE_DATABASE_MIGRATION_VERSIONS = frozenset({"legacy.admin.003", "platform.001", "trade.003", "trade.005", "trade.006", "trade.007", "trade.008", "auction.004"})
-_IMPART_DATABASE_MIGRATION_VERSIONS = frozenset({"legacy.admin.003", "platform.001"})
+_TRADE_DATABASE_MIGRATION_VERSIONS = frozenset({"legacy.admin.003", "legacy.admin.005", "platform.001", "trade.003", "trade.005", "trade.006", "trade.007", "trade.008", "auction.004"})
+_IMPART_DATABASE_MIGRATION_VERSIONS = frozenset({"legacy.admin.003", "legacy.admin.005", "platform.001"})
 
 
 def migrations_for_database(

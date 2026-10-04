@@ -14,6 +14,7 @@ from ...features.admin_asset.application import AdminAssetApplication
 from ...features.admin_asset.root_repository import AdminRootChangeSqlRepository
 from ...features.admin.application import AdminApplication
 from ...features.admin.id_swap_repository import AdminIdSwapSqlRepository
+from ...features.admin.id_update_repository import AdminIdUpdateSqlRepository
 from ...features.base.application import BaseApplication
 from ...features.work.admin_refresh_reset_application import WorkAdminRefreshResetApplication
 from nonebot.typing import T_State
@@ -54,13 +55,13 @@ from ..xiuxian_utils.xiuxian2_handle import (
     XiuxianDateManage,
     invalidate_all_user_id_cache_if_initialized,
     migrate_user_id_to_openid,
-    migrate_single_user_id,
 )
 from ..xiuxian_config import XiuConfig, JsonConfig, convert_rank
 from ..xiuxian_utils.utils import (
     check_user, get_user_profile_by_name, number_to, get_msg_pic, handle_send, send_msg_handler,
     generate_command, _impersonating_users, send_help_message,
-    parse_page_arg, paginate_text_blocks, build_pagination_buttons
+    parse_page_arg, paginate_text_blocks, build_pagination_buttons,
+    invalidate_player_data_cache,
 )
 from ..xiuxian_utils.bg_jobs import spawn_admin_job, run_chunked_until_done
 from ..xiuxian_utils.item_json import Items
@@ -99,6 +100,18 @@ admin_application = AdminApplication(
         },
         get_paths().players,
         invalidate_user_id_cache=invalidate_all_user_id_cache_if_initialized,
+        invalidate_player_data_cache=invalidate_player_data_cache,
+    ),
+    id_update_repository=AdminIdUpdateSqlRepository(
+        {
+            "game_db": get_paths().game_db,
+            "impart_db": get_paths().impart_db,
+            "trade_db": get_paths().trade_db,
+            "player_db": get_paths().player_db,
+        },
+        get_paths().players,
+        invalidate_user_id_cache=invalidate_all_user_id_cache_if_initialized,
+        invalidate_player_data_cache=invalidate_player_data_cache,
     ),
 )
 admin_base_application = BaseApplication(get_paths().game_db, get_paths().player_db)
@@ -116,12 +129,15 @@ def _sql_message():
 
 
 @register_legacy_startup
-def _reconcile_admin_id_swaps_on_startup():
-    report = admin_application.reconcile_user_id_swaps()
-    if report["pending"]:
+def _reconcile_admin_id_mutations_on_startup():
+    swap_report = admin_application.reconcile_user_id_swaps()
+    update_report = admin_application.reconcile_user_id_updates()
+    if swap_report["pending"] or update_report["pending"]:
         logger.warning(
-            "管理员 ID交换待恢复：recovered={}, pending={}, failed={}".format(
-                report["recovered"], report["pending"], report["failed"]
+            "管理员 ID变更待恢复：swap(recovered={}, pending={}, failed={}), "
+            "update(recovered={}, pending={}, failed={})".format(
+                swap_report["recovered"], swap_report["pending"], swap_report["failed"],
+                update_report["recovered"], update_report["pending"], update_report["failed"],
             )
         )
 
@@ -2625,8 +2641,13 @@ async def update_id_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
 
     await handle_send(bot, event, f"开始执行手动ID更新：{old_id} -> {new_id}\n正在校验并更新 SQLite，请稍候...")
 
-    ok, msg = await asyncio.to_thread(migrate_single_user_id, old_id, new_id)
-    await handle_send(bot, event, msg)
+    outcome = await asyncio.to_thread(
+        admin_application.update_user_id,
+        _admin_operation_id(event, "id-update", "single"),
+        old_id,
+        new_id,
+    )
+    await handle_send(bot, event, outcome.message)
     await update_id_cmd.finish()
 
 @swap_id_cmd.handle(parameterless=[Cooldown(cd_time=0)])

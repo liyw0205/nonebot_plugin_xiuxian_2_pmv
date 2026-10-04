@@ -57,6 +57,8 @@ from .training.manifest import FEATURE as TRAINING
 from .activity.migrations import apply_activity
 from .admin.migrations import (
     apply_admin,
+    apply_admin_id_update_operations,
+    apply_admin_id_update_step_receipts,
     apply_admin_id_swap_operations,
     apply_admin_id_swap_receipts,
     apply_admin_player_status_batch_reset,
@@ -128,6 +130,8 @@ MIGRATIONS = tuple(
          ("legacy.admin.002", apply_admin_player_status_batch_reset),
          ("legacy.admin.003", apply_admin_id_swap_receipts),
          ("legacy.admin.004", apply_admin_id_swap_operations),
+         ("legacy.admin.005", apply_admin_id_update_step_receipts),
+         ("legacy.admin.006", apply_admin_id_update_operations),
          ("legacy.dufang.002", apply_dufang_share),
          ("legacy.dufang.003", apply_dufang_share_player),
          ("legacy.dufang.004", apply_dufang_bet_payout),
