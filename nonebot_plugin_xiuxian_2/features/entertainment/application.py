@@ -4,6 +4,7 @@ from pathlib import Path
 
 from .._migrated_application import MigratedFeatureApplication
 from .repository import EntertainmentRepository
+from .schemas import NewApiAccountListResult
 
 
 class EntertainmentApplication(MigratedFeatureApplication):
@@ -15,6 +16,9 @@ class EntertainmentApplication(MigratedFeatureApplication):
 
     def delete_accounts(self, *, operation_id: str, user_id: str, state_path: str | Path, indices):
         return self.execute(operation_id=operation_id, user_id=user_id, payload={"action": "delete_accounts", "state_path": str(state_path), "indices": indices})
+
+    def list_account_summaries(self, *, state_path: str | Path) -> NewApiAccountListResult:
+        return self.repository.list_account_summaries(state_path)
 
 
 __all__ = ["EntertainmentApplication"]

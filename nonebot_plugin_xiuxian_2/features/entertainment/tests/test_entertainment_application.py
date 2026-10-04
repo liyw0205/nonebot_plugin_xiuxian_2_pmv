@@ -10,6 +10,19 @@ from ....plugin import apply_platform_schema
 
 
 class EntertainmentApplicationTest(unittest.TestCase):
+    def test_list_account_summaries_is_read_only_and_does_not_open_game_database(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            database = Path(directory) / "game.db"
+            state = Path(directory) / "accounts.json"
+            state.write_text('[{"api_user_id":"42","secret":"hidden"}]', encoding="utf-8")
+            app = EntertainmentApplication(database)
+
+            result = app.list_account_summaries(state_path=state)
+
+            self.assertEqual(result.status, "ok")
+            self.assertEqual(result.accounts[0].api_user_id, "42")
+            self.assertFalse(database.exists())
+
     def test_execute_is_idempotent(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             database = Path(directory) / "game.db"

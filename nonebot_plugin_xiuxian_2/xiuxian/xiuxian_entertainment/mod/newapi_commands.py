@@ -25,6 +25,7 @@ from .newapi_store import (
     delete_accounts,
     display_base_url,
     iter_all_auto_checkin_bindings,
+    list_account_summaries,
     load_accounts,
     load_checkin_history,
     resolve_targets,
@@ -42,6 +43,7 @@ _NEWAPI_FUN_KW = dict(
 )
 
 runtime_ids = UUIDGenerator()
+_MAX_NEWAPI_LIST_RESPONSE_BYTES = 64 * 1024
 
 _URL_LIKE = re.compile(r"^https?://", re.I)
 
@@ -146,8 +148,8 @@ def _parse_delete_indices(text: str) -> list[int] | None:
 
 
 def _format_list_message(qq_id: str) -> str:
-    accounts = load_accounts(qq_id)
-    if not accounts:
+    result = list_account_summaries(qq_id)
+    if result.status == "missing" or (result.status == "ok" and not result.accounts):
         return (
             "【NewAPI 绑定列表】\n"
             "暂无绑定\n\n"
@@ -155,17 +157,27 @@ def _format_list_message(qq_id: str) -> str:
             "Cookie 格式：newapi绑定 cookie 站点用户ID#session或Cookie#接口地址\n"
             "说明：# 用于分隔字段。"
         )
+    if result.status != "ok":
+        messages = {
+            "invalid": "绑定数据格式无效，未修改原文件。",
+            "too_large": "绑定数据超过 1 MiB 读取上限，未加载凭据。",
+            "too_many": "绑定账号超过 48 条展示上限，未加载凭据。",
+            "unavailable": "暂时无法读取绑定数据，未修改原文件。",
+        }
+        return f"【NewAPI 绑定列表】\n{messages.get(result.status, '绑定数据暂不可用。')}"
     lines = ["【NewAPI 绑定列表】", ""]
-    for i, acc in enumerate(accounts, start=1):
-        mode = acc.get("mode") or "token"
-        api_id = acc.get("api_user_id", "?")
-        base = display_base_url(acc.get("base_url"))
-        label = (acc.get("label") or "").strip()
-        auth = "Cookie" if mode == "cookie" else "Token"
-        auto = " · 自动签到开" if acc.get("auto_checkin") else ""
+    for i, account in enumerate(result.accounts, start=1):
+        api_id = escape_markdown_text(account.api_user_id)
+        base = escape_markdown_text(account.base_url)
+        label = escape_markdown_text(account.label)
+        auth = "Cookie" if account.mode == "cookie" else "Token"
+        auto = " · 自动签到开" if account.auto_checkin else ""
         extra = f" · {label}" if label else ""
         lines.append(f"{i}. 站点用户 {api_id} · {auth} · {base}{auto}{extra}")
-    return "\n".join(lines)
+    message = "\n".join(lines)
+    if len(message.encode("utf-8")) > _MAX_NEWAPI_LIST_RESPONSE_BYTES:
+        return "【NewAPI 绑定列表】\n绑定列表超过安全展示上限，未发送部分内容。"
+    return message
 
 
 def _run_checkin_for_account(

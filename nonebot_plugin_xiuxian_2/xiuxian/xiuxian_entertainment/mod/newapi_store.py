@@ -80,6 +80,10 @@ def load_accounts(qq_id: str) -> list[dict[str, Any]]:
     return [x for x in data if isinstance(x, dict)]
 
 
+def list_account_summaries(qq_id: str):
+    return entertainment_application.list_account_summaries(state_path=_path_for_qq(qq_id))
+
+
 def save_accounts(qq_id: str, accounts: list[dict[str, Any]]) -> None:
     save_json_file(_path_for_qq(qq_id), accounts, indent=2)
 

@@ -371,14 +371,21 @@ def _refreshed_command_graph(
             or "matcher -> on_compat.on_command" in edge
             or edge.startswith("default NoneBot startup")
             or "legacy downstream effect not closed in this frozen item" in edge
+            or "reviewed downstream call-graph edges" in edge
         ):
             continue
         for record in records:
             source_file = str(record["file"])
             for handler in record.get("handlers", []):
-                marker = f" {handler['name']} ->"
+                handler_name = str(handler["name"])
+                marker = f" {handler_name} ->"
                 if edge.startswith(f"{source_file}:") and marker in edge:
-                    edge = f"{source_file}:{handler['line']}{edge[edge.index(marker):]}"
+                    edge = f"{source_file}:{handler['line']} {edge[edge.index(marker) + 1:]}"
+                elif edge.startswith(f"{handler_name} "):
+                    edge = f"{source_file}:{handler['line']} {edge}"
+                elif f".{handler_name} " in edge and "->" in edge.split(f".{handler_name} ", 1)[1]:
+                    fragment = edge.index(f".{handler_name} ") + 1
+                    edge = f"{source_file}:{handler['line']} {edge[fragment:]}"
         preserved_edges.append(edge)
 
     bound_handler_names = {
@@ -390,6 +397,7 @@ def _refreshed_command_graph(
                 edge.startswith(f"{handler['name']} ")
                 or f" {handler['name']} ->" in edge
                 or f".{handler['name']} ->" in edge
+                or edge.startswith(f"{record['file']}:{handler['line']} {handler['name']} ")
             )
             and "legacy downstream effect not closed in this frozen item" not in edge
             for edge in preserved_edges
@@ -548,19 +556,29 @@ def evaluate_phase2_scope(
             elif not any(record.get("handlers") for record in records):
                 integrity_errors.append(f"Frozen default legacy command has no bound handler: {feature}:{name}")
             else:
-                graph = "\n".join(str(edge) for edge in item.get("call_graph", []))
                 evidence = {str(value) for value in item.get("evidence", [])}
                 for record in records:
                     declaration = f"{record['file']}:{record['line']}"
-                    if declaration not in evidence:
+                    declaration_in_graph = any(
+                        str(edge).startswith(f"{declaration} ") and "= on_command(" in str(edge)
+                        for edge in item.get("call_graph", [])
+                    )
+                    if declaration not in evidence or not declaration_in_graph:
                         integrity_errors.append(
-                            f"Frozen command evidence omits declaration {declaration}: {feature}:{name}"
+                            f"Frozen command evidence/call graph omits declaration {declaration}: {feature}:{name}"
                         )
                     for handler in record.get("handlers", []):
                         handler_location = f"{record['file']}:{handler['line']}"
-                        if handler_location not in evidence or str(handler["name"]) not in graph:
+                        handler_name = str(handler["name"])
+                        handler_edges = [
+                            str(edge)
+                            for edge in item.get("call_graph", [])
+                            if str(edge).startswith(f"{handler_location} {handler_name} ")
+                            and "->" in str(edge)
+                        ]
+                        if handler_location not in evidence or not handler_edges:
                             integrity_errors.append(
-                                f"Frozen command evidence/call graph omits handler {handler['name']} at "
+                                f"Frozen command evidence/call graph omits source-bound handler {handler_name} at "
                                 f"{handler_location}: {feature}:{name}"
                             )
                     if any("unresolved handler target" in str(edge) for edge in item.get("call_graph", [])):
@@ -573,6 +591,14 @@ def evaluate_phase2_scope(
                     ):
                         integrity_errors.append(
                             f"Closed command status retains an unresolved downstream edge: {feature}:{name}"
+                        )
+                    if item.get("status") in {"已迁移", "允许保留的兼容路径"} and not any(
+                        "legacy downstream effect not closed in this frozen item" not in edge
+                        and "reviewed downstream call-graph edges" not in edge
+                        for edge in handler_edges
+                    ):
+                        integrity_errors.append(
+                            f"Closed command has no source-bound downstream edge: {feature}:{name}"
                         )
         elif item.get("kind") == "legacy_routes" and item.get("status") == "受阻":
             if not _legacy_route_location(source):
@@ -828,12 +854,25 @@ def main(argv: list[str] | None = None) -> int:
                 [str(edge) for edge in item.get("call_graph", [])], records
             )
             record_evidence = evidence[3:]
-            matcher_files = tuple(str(record["file"]) + ":" for record in records)
+            stale_binding_locations = set()
+            for edge in item.get("call_graph", []):
+                edge = str(edge)
+                is_declaration = "= on_command(" in edge
+                is_handler = any(
+                    f" {handler['name']} ->" in edge
+                    for record in records
+                    for handler in record.get("handlers", [])
+                )
+                if not (is_declaration or is_handler):
+                    continue
+                location = edge.split(" ", 1)[0]
+                if ":" in location and location.rsplit(":", 1)[-1].isdigit():
+                    stale_binding_locations.add(location)
             item["call_graph"] = call_graph
             retained_evidence = [
                 value
                 for value in item.get("evidence", [])
-                if not str(value).startswith(matcher_files)
+                if str(value) not in stale_binding_locations
             ]
             item["evidence"] = list(dict.fromkeys([*retained_evidence, *record_evidence]))
             refreshed += 1

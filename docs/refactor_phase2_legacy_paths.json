@@ -365,13 +365,14 @@
       "id": "newapi-info-state-and-response-working-set",
       "source": "command:entertainment:newapi信息",
       "evidence": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/newapi_store.py:21-22,68-80,181-216",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/newapi_commands.py:316-345",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/newapi_store.py:21-22,68-88,120-178,185-220,263-340",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/newapi_commands.py:185-218,305-357,360-381,407-416",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/newapi_client.py:89-136",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_utils/json_store.py:39-58",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_utils/json_store.py:25-58",
+        "nonebot_plugin_xiuxian_2/features/entertainment/repository.py:9-96",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_utils/http_proxy.py:160-185"
       ],
-      "reason": "The frozen info path reads an unbounded per-user JSON account file containing tokens/cookies, may load it twice and select every account, then fully buffers each external response before parsing. There is no response cache to clear; binding JSON is persistent user data and must not be treated as disposable cache. Review account/file and response byte limits plus credential ownership without expanding frozen membership."
+      "reason": "The frozen newapi查看 list read is now bounded and read-only through EntertainmentApplication/Repository, but newapi绑定/签到/信息/删除/自动签到 and scheduled account paths still use load_accounts/load_json_file without a file byte or account-count bound; auto-checkin also enumerates and loads every per-user binding file. Missing files may be created and malformed JSON is renamed to a timestamped backup before a default file is written; these are persistent credential data and backups, not disposable caches, and there is no backup retention cap here. newapi信息 may load the account file twice, select every account, and fully buffer each remote response. No response cache exists to clear. Review the remaining account/file/backup/response working sets and credential ownership without expanding frozen membership."
     },
     {
       "id": "newapi-delete-json-ledger-crash-window",

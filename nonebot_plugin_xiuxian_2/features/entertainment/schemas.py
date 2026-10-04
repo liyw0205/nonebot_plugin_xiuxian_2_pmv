@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Mapping
+from typing import Any, Literal, Mapping
 
 
 @dataclass(frozen=True)
@@ -15,4 +15,19 @@ class EntertainmentRequest:
             raise ValueError("operation_id and user_id are required")
 
 
-__all__ = ["EntertainmentRequest"]
+@dataclass(frozen=True)
+class NewApiAccountSummary:
+    api_user_id: str
+    mode: Literal["token", "cookie"]
+    base_url: str
+    label: str
+    auto_checkin: bool
+
+
+@dataclass(frozen=True)
+class NewApiAccountListResult:
+    status: Literal["ok", "missing", "invalid", "too_large", "too_many", "unavailable"]
+    accounts: tuple[NewApiAccountSummary, ...] = ()
+
+
+__all__ = ["EntertainmentRequest", "NewApiAccountListResult", "NewApiAccountSummary"]
