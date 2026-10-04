@@ -13,11 +13,13 @@ from ...paths import get_paths
 from ...features.admin_asset.application import AdminAssetApplication
 from ...features.admin_asset.root_repository import AdminRootChangeSqlRepository
 from ...features.admin.application import AdminApplication
+from ...features.admin.id_swap_repository import AdminIdSwapSqlRepository
 from ...features.base.application import BaseApplication
 from ...features.work.admin_refresh_reset_application import WorkAdminRefreshResetApplication
 from nonebot.typing import T_State
 from nonebot.permission import SUPERUSER
 from nonebot.log import logger
+from ...bootstrap.legacy import register_legacy_startup
 from nonebot.params import CommandArg
 from nonebot import require, get_bot
 from ..on_compat import on_command
@@ -50,9 +52,9 @@ from ..xiuxian_base import clear_all_xiangyuan
 from ..xiuxian_rift import create_rift
 from ..xiuxian_utils.xiuxian2_handle import (
     XiuxianDateManage,
+    invalidate_all_user_id_cache_if_initialized,
     migrate_user_id_to_openid,
     migrate_single_user_id,
-    swap_two_user_ids,
 )
 from ..xiuxian_config import XiuConfig, JsonConfig, convert_rank
 from ..xiuxian_utils.utils import (
@@ -86,7 +88,19 @@ _sql_message_instance = None
 _admin_exp_adjustment_service_instance = None
 admin_asset_application = AdminAssetApplication(get_paths().game_db)
 work_admin_refresh_reset_application = WorkAdminRefreshResetApplication(get_paths().game_db)
-admin_application = AdminApplication(get_paths().game_db)
+admin_application = AdminApplication(
+    get_paths().game_db,
+    id_swap_repository=AdminIdSwapSqlRepository(
+        {
+            "game_db": get_paths().game_db,
+            "impart_db": get_paths().impart_db,
+            "trade_db": get_paths().trade_db,
+            "player_db": get_paths().player_db,
+        },
+        get_paths().players,
+        invalidate_user_id_cache=invalidate_all_user_id_cache_if_initialized,
+    ),
+)
 admin_base_application = BaseApplication(get_paths().game_db, get_paths().player_db)
 _admin_item_destroy_service_instance = None
 _admin_player_status_reset_service_instance = None
@@ -99,6 +113,17 @@ def _sql_message():
     if _sql_message_instance is None:
         _sql_message_instance = XiuxianDateManage()
     return _sql_message_instance
+
+
+@register_legacy_startup
+def _reconcile_admin_id_swaps_on_startup():
+    report = admin_application.reconcile_user_id_swaps()
+    if report["pending"]:
+        logger.warning(
+            "管理员 ID交换待恢复：recovered={}, pending={}, failed={}".format(
+                report["recovered"], report["pending"], report["failed"]
+            )
+        )
 
 
 def _admin_player_status_reset_service():
@@ -2621,8 +2646,13 @@ async def swap_id_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
     id1, id2 = arg_list[0], arg_list[1]
     await handle_send(bot, event, f"开始执行ID交换：{id1} - {id2}\n正在校验并更新 SQLite，请稍候...")
 
-    ok, msg = await asyncio.to_thread(swap_two_user_ids, id1, id2)
-    await handle_send(bot, event, msg)
+    outcome = await asyncio.to_thread(
+        admin_application.swap_user_ids,
+        _admin_operation_id(event, "id-swap", "pair"),
+        id1,
+        id2,
+    )
+    await handle_send(bot, event, outcome.message)
     await swap_id_cmd.finish()
 
 @group_broadcast_cmd.handle(parameterless=[Cooldown(cd_time=0)])

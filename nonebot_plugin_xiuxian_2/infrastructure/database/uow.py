@@ -17,11 +17,13 @@ class DatabaseUnitOfWork:
         timeout: float = 30,
         immediate: bool = False,
         read_only: bool = False,
+        foreign_keys: bool = True,
     ) -> None:
         self.database = Path(database)
         self.timeout = timeout
         self.immediate = bool(immediate)
         self.read_only = bool(read_only)
+        self.foreign_keys = bool(foreign_keys)
         self.connection: sqlite3.Connection | None = None
         self._attached_schemas: set[str] = set()
 
@@ -40,7 +42,7 @@ class DatabaseUnitOfWork:
             if not self.read_only:
                 self.connection.execute("PRAGMA journal_mode=WAL")
             self.connection.execute(f"PRAGMA busy_timeout={max(int(self.timeout * 1000), 0)}")
-            self.connection.execute("PRAGMA foreign_keys=ON")
+            self.connection.execute(f"PRAGMA foreign_keys={'ON' if self.foreign_keys else 'OFF'}")
             self.connection.execute(
                 "BEGIN IMMEDIATE" if self.immediate and not self.read_only else "BEGIN"
             )

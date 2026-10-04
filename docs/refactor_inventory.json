@@ -2636,6 +2636,8 @@
     "admin_blackhouse_status_operations",
     "admin_exp_adjustment_operations",
     "admin_feature_migrations",
+    "admin_id_swap_operations",
+    "admin_id_swap_step_receipts",
     "admin_impart_stone_batch_operations",
     "admin_impart_stone_batch_progress",
     "admin_impart_stone_batch_targets",

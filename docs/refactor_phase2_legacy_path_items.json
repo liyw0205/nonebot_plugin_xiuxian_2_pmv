@@ -549,18 +549,30 @@
       "id": "command:admin:ID交换",
       "kind": "commands",
       "entry": "admin:ID交换 (aliases: )",
-      "status": "受阻",
-      "reason": "These command rows come from compatibility.command_inventory and represent old AST command candidates for legacy feature manifests. The inventory does not bind each matcher to its handler body or terminal state effect. Keep every unresolved command in scope as blocked; do not infer migration from a feature manifest.",
-      "unknown_edge": "matcher -> handler body -> application/repository or legacy writer",
+      "status": "已迁移",
+      "reason": "The default compatibility matcher now reaches a concrete handler that calls AdminApplication and the feature-owned recoverable ID-swap repository. Each of the four legacy SQLite files has an independent transaction and durable step receipt; the game DB stores the operation plan and startup recovery journal, and player-directory renames are phase-journaled. The former swap_two_user_ids implementation is removed from the default call path.",
       "call_graph": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:297 -> on_compat.on_command -> _nb_on_command -> legacy matcher -> unresolved handler target"
+        "default NoneBot startup imports xiuxian_admin; swap_id_cmd is registered through on_compat.on_command -> _nb_on_command -> swap_id_cmd_ handler",
+        "swap_id_cmd_ -> AdminApplication.swap_user_ids(operation_id, id1, id2) -> AdminIdSwapSqlRepository.swap",
+        "repository validates both IDs across configured target columns in game_db/impart_db/trade_db/player_db; it atomically creates the game_db operation plan, operation-ledger entry, and outbox event before starting effects",
+        "before user-data writes repository preflights a three-phase WAL workspace budget from the four database file sizes and preserves the shared 64 MiB/10% disk reserve; insufficient capacity leaves the durable plan pending for a later retry",
+        "repository applies each database's three-phase temporary-ID replacement in its own immediate UoW with foreign-key checks disabled only for the swap transaction, then commits an admin_id_swap_step_receipts row in that same transaction; SQLite cache is capped at 2 MiB and temp_store uses FILE",
+        "repository phase-journals each players directory rename and fsyncs the players directory; state inspection makes rename-before-phase-commit interruptions resumable",
+        "successful game_db step invalidates only an already-initialized XiuxianDateManage get_all_user_id cache; it does not construct the legacy manager",
+        "run_legacy_startup -> _reconcile_admin_id_swaps_on_startup -> AdminApplication.reconcile_user_id_swaps -> repository.reconcile_pending resumes started/needs_reconcile plans",
+        "startup migration legacy.admin.003 creates per-database step receipts in game_db/impart_db/trade_db/player_db; legacy.admin.004 creates the operation plan/index in game_db only"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
-        "nonebot_plugin_xiuxian_2/compatibility/command_inventory.py:14-18,55-89",
-        "nonebot_plugin_xiuxian_2/compatibility/feature_inventory.py:14-54",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:297"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:91-103,118-126,2632-2656",
+        "nonebot_plugin_xiuxian_2/features/admin/application.py:65-84",
+        "nonebot_plugin_xiuxian_2/features/admin/id_swap_repository.py:18-25,82-145,148-303,337-389,412-438,486-536,541-621,626-712",
+        "nonebot_plugin_xiuxian_2/features/admin/migrations.py:14-40",
+        "nonebot_plugin_xiuxian_2/features/_legacy_migrated.py:54-62,126-131",
+        "nonebot_plugin_xiuxian_2/plugin.py:542-543,603-604,607-635,1248",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_utils/xiuxian2_handle.py:4609-4617",
+        "nonebot_plugin_xiuxian_2/features/admin/tests/test_id_swap_repository.py:54-285"
       ],
       "source_declaration_found": true,
       "source": {

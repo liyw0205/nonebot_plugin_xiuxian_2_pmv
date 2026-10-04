@@ -11,6 +11,35 @@ def apply_admin(uow: DatabaseUnitOfWork) -> None:
     uow.execute("INSERT OR IGNORE INTO admin_feature_migrations(version) VALUES ('legacy.admin.001')")
 
 
+def apply_admin_id_swap_receipts(uow: DatabaseUnitOfWork) -> None:
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS admin_id_swap_step_receipts("
+        "operation_id TEXT PRIMARY KEY,payload_hash TEXT NOT NULL,"
+        "updated_cells INTEGER NOT NULL,created_at TEXT NOT NULL)"
+    )
+
+
+def apply_admin_id_swap_operations(uow: DatabaseUnitOfWork) -> None:
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS admin_id_swap_operations("
+        "operation_id TEXT PRIMARY KEY,payload_hash TEXT NOT NULL,"
+        "id1 TEXT NOT NULL,id2 TEXT NOT NULL,temp_id TEXT NOT NULL,"
+        "directory_id1_present INTEGER NOT NULL,directory_id2_present INTEGER NOT NULL,"
+        "directory_phase TEXT NOT NULL DEFAULT 'pending',"
+        "status TEXT NOT NULL DEFAULT 'started',completed_databases TEXT NOT NULL DEFAULT '[]',"
+        "last_error TEXT NOT NULL DEFAULT '',"
+        "created_at TEXT NOT NULL,updated_at TEXT NOT NULL,"
+        "CHECK(directory_phase IN ('pending','first_moved','second_moved','completed')) ,"
+        "CHECK(status IN ('started','needs_reconcile','applied','rejected'))"
+        ")"
+    )
+    uow.execute(
+        "CREATE INDEX IF NOT EXISTS admin_id_swap_pending_operations "
+        "ON admin_id_swap_operations(status,created_at) "
+        "WHERE status IN ('started','needs_reconcile')"
+    )
+
+
 def _table_exists(uow: DatabaseUnitOfWork, name: str) -> bool:
     return uow.query_one(
         "SELECT 1 AS present FROM sqlite_master WHERE type='table' AND name=?",

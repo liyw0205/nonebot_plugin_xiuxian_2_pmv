@@ -3,8 +3,10 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from ...core.result import OperationOutcome
 from ...paths import get_paths
 from .._migrated_application import MigratedFeatureApplication
+from .id_swap_repository import AdminIdSwapSqlRepository
 from .player_status_batch_repository import AdminPlayerStatusBatchResetSqlRepository
 from .player_status_reset_repository import (
     AdminPlayerStatusResetResult,
@@ -21,6 +23,7 @@ class AdminApplication(MigratedFeatureApplication):
         repository: AdminRepository | None = None,
         player_status_reset_repository: AdminPlayerStatusResetSqlRepository | None = None,
         player_status_batch_repository: AdminPlayerStatusBatchResetSqlRepository | None = None,
+        id_swap_repository: AdminIdSwapSqlRepository | None = None,
     ) -> None:
         super().__init__(database, feature="admin", repository=repository or AdminRepository(database))
         self.player_status_reset_repository = (
@@ -31,6 +34,7 @@ class AdminApplication(MigratedFeatureApplication):
             player_status_batch_repository
             or AdminPlayerStatusBatchResetSqlRepository(database)
         )
+        self.id_swap_repository = id_swap_repository
 
     def player_status_snapshot(
         self, user_id: str
@@ -57,6 +61,24 @@ class AdminApplication(MigratedFeatureApplication):
             max_stamina,
             chunk_size=chunk_size,
         )
+
+    def swap_user_ids(
+        self, operation_id: str, id1: str, id2: str
+    ) -> OperationOutcome[dict[str, Any]]:
+        if self.id_swap_repository is None:
+            return OperationOutcome.failed(
+                operation_id,
+                "admin.id-swap",
+                "ID交换应用未配置。",
+                code="not_configured",
+                audit_category="admin",
+            )
+        return self.id_swap_repository.swap(operation_id, id1, id2)
+
+    def reconcile_user_id_swaps(self) -> dict[str, int]:
+        if self.id_swap_repository is None:
+            return {"recovered": 0, "pending": 0, "failed": 0}
+        return self.id_swap_repository.reconcile_pending()
 
     def grant_accessory_batch(self, operation_id: str, operator_id: str, user_ids,
                               item_id: int, item_name: str, quality: int,

@@ -3,6 +3,8 @@
 状态：执行中
 适用范围：全面底层重构第二阶段
 
+2026-10-04 admin ID-swap cutover：冻结项 `command:admin:ID交换` 的默认 handler 改由 `AdminApplication -> AdminIdSwapSqlRepository` 执行；`ID更新` 与 QQID 转换仍是独立范围。四个 SQLite 文件分别原子提交交换步骤和 receipt，game DB 保存 operation ledger/outbox/恢复计划；players 目录按阶段 journal rename，startup callback 恢复未完成操作，rename 与 phase commit 之间中断可由路径状态识别。用户数据更新前按四库主文件大小的三阶段 WAL 工作预算预检容量并保留共享 64 MiB/10% reserve，空间不足则留 pending 且不执行数据更新；仅使已初始化的 roster cache 失效，不构造 legacy manager。交换 UoW 局部关闭 FK 检查、SQLite cache 2 MiB、`temp_store=FILE`。迁移 `.003` 路由四库、`.004` 仅 game DB；无请求期建表。复用 1 名只读调用图审计、未重复派工。专项测试 `11 passed`；phase2/progress/UoW 首轮 `22 passed, 1 failed`（唯一失败为过时计数断言），修正后对应单测 `1 passed, 5 deselected`。inventory `--check` 通过；冻结 496 项计数为 `8/41/19/428`，membership/source inventory 有效，backlog 未扩大，phase 2 未完成，P7 独立且未运行。隔离数据目录，关闭 pytest/pyc cache；保留用户 `boss_info.json`。
+
 2026-10-04 frozen-scope backlog reporting：phase 2 gate 将相对冻结来源快照新增的 inventory 条目作为具体候选并入只读 `backlog` 报告，列出来源字段、原始条目和评审理由；不写回 scope、membership hash 或冻结成员，也不影响已冻结成员的完成计算。回归 `6 passed`，当前 496 项的状态计数与来源快照未变；phase 2 仍有 429 个 blocker，P7 仍独立且本轮未运行。
 
 2026-10-04 stateless 60S news command compatibility classification：冻结项 `command:entertainment:60S读世界` 只做外部新闻 API GET，通过共享 `http_client`/`run_blocking_io` 格式化发送，无本地业务状态或持久文件读写；作为明确兼容 matcher 保留到独立 P7 真实发布门禁允许移除，不宣称已迁移，不新增 app/cache/scope member。phase 2 gate 回归 `6 passed`；当前状态为 496 项、7 migrated/41 compatibility/19 unreachable/429 blocked，membership 不变。清单 gate `--check` 因 429 个 blocker 返回 `1`，聚合 `phase2_complete=false`，inventory exporter `--check` 通过；P7 保持独立且未运行。

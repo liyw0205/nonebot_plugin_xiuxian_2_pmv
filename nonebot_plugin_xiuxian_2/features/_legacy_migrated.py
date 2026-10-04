@@ -55,7 +55,12 @@ from .tasks.manifest import FEATURE as TASKS
 from .tianti.manifest import FEATURE as TIANTI
 from .training.manifest import FEATURE as TRAINING
 from .activity.migrations import apply_activity
-from .admin.migrations import apply_admin, apply_admin_player_status_batch_reset
+from .admin.migrations import (
+    apply_admin,
+    apply_admin_id_swap_operations,
+    apply_admin_id_swap_receipts,
+    apply_admin_player_status_batch_reset,
+)
 from .compensation.migrations import (
     apply_compensation,
     apply_compensation_definition_schema,
@@ -121,6 +126,8 @@ MIGRATIONS = tuple(
          ("legacy.compensation.005", apply_compensation_definition_schema),
          ("legacy.compensation.006", apply_compensation_reward_catalog_schema),
          ("legacy.admin.002", apply_admin_player_status_batch_reset),
+         ("legacy.admin.003", apply_admin_id_swap_receipts),
+         ("legacy.admin.004", apply_admin_id_swap_operations),
          ("legacy.dufang.002", apply_dufang_share),
          ("legacy.dufang.003", apply_dufang_share_player),
          ("legacy.dufang.004", apply_dufang_bet_payout),

@@ -539,6 +539,7 @@ _GAME_DATABASE_EXCLUDED_MIGRATION_VERSIONS = frozenset(
 )
 _PLAYER_DATABASE_MIGRATION_VERSIONS = frozenset(
     {
+        "legacy.admin.003",
         "arena.006",
         "arena.008",
         "arena.009",
@@ -599,7 +600,8 @@ _PLAYER_DATABASE_MIGRATION_VERSIONS = frozenset(
         "boss.006",
     }
 )
-_TRADE_DATABASE_MIGRATION_VERSIONS = frozenset({"platform.001", "trade.003", "trade.005", "trade.006", "trade.007", "trade.008", "auction.004"})
+_TRADE_DATABASE_MIGRATION_VERSIONS = frozenset({"legacy.admin.003", "platform.001", "trade.003", "trade.005", "trade.006", "trade.007", "trade.008", "auction.004"})
+_IMPART_DATABASE_MIGRATION_VERSIONS = frozenset({"legacy.admin.003", "platform.001"})
 
 
 def migrations_for_database(
@@ -623,6 +625,12 @@ def migrations_for_database(
             migration
             for migration in migrations
             if migration.version in _TRADE_DATABASE_MIGRATION_VERSIONS
+        )
+    if database_key == "impart_db":
+        return tuple(
+            migration
+            for migration in migrations
+            if migration.version in _IMPART_DATABASE_MIGRATION_VERSIONS
         )
     return tuple(migration for migration in migrations if migration.version == "platform.001")
 

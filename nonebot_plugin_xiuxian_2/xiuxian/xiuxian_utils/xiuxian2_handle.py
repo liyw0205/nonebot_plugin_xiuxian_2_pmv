@@ -48,7 +48,6 @@ from .id_migration import (
     _update_ids_in_table,
     migrate_single_user_id,
     migrate_user_id_to_openid,
-    swap_two_user_ids,
 )
 
 WORKDATA = get_paths().work
@@ -4605,6 +4604,17 @@ def _sql_message():
     if _sql_message_instance is None:
         _sql_message_instance = XiuxianDateManage()
     return _sql_message_instance
+
+
+def invalidate_all_user_id_cache_if_initialized() -> bool:
+    """Invalidate only the roster cache without constructing the legacy manager."""
+    instance = XiuxianDateManage._instance.get(xiuxian_num)
+    cache = getattr(instance, "_read_cache", None)
+    lock = getattr(instance, "_read_cache_lock", None)
+    if cache is None or lock is None:
+        return False
+    with lock:
+        return cache.pop(("get_all_user_id",), None) is not None
 
 
 def _player_data_manager():
