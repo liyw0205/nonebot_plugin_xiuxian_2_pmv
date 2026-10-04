@@ -870,22 +870,36 @@
       "id": "command:entertainment:newapi帮助",
       "kind": "commands",
       "entry": "entertainment:newapi帮助 (aliases: newapi)",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "允许保留的兼容路径",
+      "reason": "The default handler sends only the built-in help text and does not read NewAPI account/history state or call the remote API. Startup import creates the module's empty data directories and initializes path-only store objects; the shared cooldown reads runtime config and uses transient rate-limit state, while delivery may write generic message history. Keep this user-facing adapter through the compatibility period; P7 independently governs release-based removal.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
+        "xiuxian_entertainment package import -> newapi_commands imports newapi_store -> ensure newapi_bindings and newapi_checkin_history directories; construct EntertainmentApplication/Repository without opening the database or account files",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/newapi_commands.py:218 newapi_help_cmd = on_command('newapi帮助') aliases=NewAPI帮助,newapi -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/newapi_commands.py:252 newapi_help_ -> legacy downstream effect not closed in this frozen item"
+        "newapi_help_cmd parameterless Cooldown -> JsonConfig reads config.json (creates defaults only if missing) through its single class-level mtime cache -> limit_all_run updates process-local user counters, reset by the one-minute scheduler; per-command cooldown entries expire after 2 seconds",
+        "newapi_help_ -> sends static __NEWAPI_HELP__ text through handle_send -> delivery_service.reply -> adapter sender -> shared operational message-history writer when enabled; no newapi_store/newapi_client call and no NewAPI business-state read/write or HTTP request"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/__init__.py:42",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/newapi_commands.py:21-32",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/newapi_commands.py:218",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/newapi_commands.py:252"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/newapi_commands.py:251-255",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/newapi_commands.py:252",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/newapi_store.py:21-28",
+        "nonebot_plugin_xiuxian_2/features/entertainment/application.py:9-11",
+        "nonebot_plugin_xiuxian_2/features/_migrated_application.py:46-50",
+        "nonebot_plugin_xiuxian_2/features/entertainment/repository.py:10-14",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_utils/lay_out.py:38-48,216-264,293-324,399-418",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_config.py:360-363,422-448",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_utils/utils.py:1295-1395,1397-1423",
+        "nonebot_plugin_xiuxian_2/xiuxian/messaging/delivery.py:226-263",
+        "nonebot_plugin_xiuxian_2/xiuxian/adapter_message_records.py:399-432",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_utils/message_db.py:161-168,781-808"
       ],
       "source_declaration_found": true,
       "source": {

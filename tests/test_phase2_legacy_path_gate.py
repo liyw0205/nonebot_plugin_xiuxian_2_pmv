@@ -78,13 +78,13 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
         self.assertEqual(report["path_count"], 496)
         self.assertEqual(
             report["status_counts"],
-            {"不可达": 19, "允许保留的兼容路径": 44, "受阻": 423, "已迁移": 10},
+            {"不可达": 19, "允许保留的兼容路径": 45, "受阻": 422, "已迁移": 10},
         )
         self.assertGreater(report["blocked_count"], 0)
         self.assertTrue(all(item["call_graph"] and item["evidence"] for item in report["items"]))
         self.assertEqual(report["default_legacy_command_count"], 637)
         self.assertEqual(report["default_legacy_command_backlog_count"], 323)
-        self.assertEqual(len(report["backlog"]), 328)
+        self.assertEqual(len(report["backlog"]), 329)
         self.assertEqual(
             report["default_legacy_command_discovery"],
             "static_ast_startup_import_closure_not_live_runtime_observation",
@@ -157,6 +157,21 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
             item for item in report["backlog"] if item["id"] == "newapi-delete-json-ledger-crash-window"
         )
         self.assertEqual(newapi_delete_risk["source"], "command:entertainment:newapi删除")
+        newapi_help = next(
+            item for item in report["items"] if item["id"] == "command:entertainment:newapi帮助"
+        )
+        self.assertEqual(newapi_help["status"], "允许保留的兼容路径")
+        self.assertTrue(any("static __NEWAPI_HELP__" in edge for edge in newapi_help["call_graph"]))
+        self.assertTrue(
+            any("without opening the database or account files" in edge for edge in newapi_help["call_graph"])
+        )
+        self.assertTrue(
+            any("shared operational message-history writer" in edge for edge in newapi_help["call_graph"])
+        )
+        cooldown_risk = next(
+            item for item in report["backlog"] if item["id"] == "legacy-cooldown-rate-map-cardinality"
+        )
+        self.assertEqual(cooldown_risk["source"], "command:entertainment:newapi帮助")
         self.assertEqual(report["p7_gate"]["status"], "independent")
 
     def test_phase2_completes_when_every_frozen_item_is_closed(self):

@@ -6,7 +6,9 @@
 
 **历史记录说明**：以下按时间倒序保存旧切片的执行记录；其中“下一片/下一项”只表示当时计划，不是当前待办。当前待办只以上方“当前目标与范围”和冻结清单的 `受阻` 项为准；清单外发现先进入 backlog，未经 scope 升版不开展对应新切片。
 
-**当前范围冻结与默认路径审计（2026-10-04）**：暂停追加玩法切片。phase 2 只按 `phase2-default-runtime-legacy-paths-v1` 的 496 个带 identity membership hash 冻结项计算完成；当前为 `10 已迁移 / 44 允许保留兼容 / 19 不可达 / 423 受阻`。423 个 blocker 为 306 个默认命令 handler、116 条旧 Flask route、1 个非命令 matcher family。hash 锁定稳定 ID、种类、入口和 source identity，状态/调用图/证据可在人工复核后更新；门禁另核对命令 handler 绑定与 job registry 执行链。backlog 共 328 条，其中 323 个已知清单外静态命令候选，其余为明确的边界/风险记录；不扩大分母。当前 membership/source hash 有效、完整性错误为 0。
+**当前范围冻结与默认路径审计（2026-10-04）**：暂停追加玩法切片。phase 2 只按 `phase2-default-runtime-legacy-paths-v1` 的 496 个带 identity membership hash 冻结项计算完成；当前为 `10 已迁移 / 45 允许保留兼容 / 19 不可达 / 422 受阻`。422 个 blocker 为 305 个默认命令 handler、116 条旧 Flask route、1 个非命令 matcher family。hash 锁定稳定 ID、种类、入口和 source identity，状态/调用图/证据可在人工复核后更新；门禁另核对命令 handler 绑定与 job registry 执行链。backlog 共 329 条，其中 323 个已知清单外静态命令候选，其余为明确的边界/风险记录；不扩大分母。当前 membership/source hash 有效、完整性错误为 0。
+
+**本片兼容路径分类（2026-10-04，冻结项 entertainment:newapi帮助）**：handler 只发送静态帮助文案，不读取账号/签到历史、不调用 NewAPI client，也不发远端请求，标为“允许保留的兼容路径”而非已迁移。完整调用图记录启动 import 创建两个空 NewAPI 数据目录、path-only application/repository 初始化、通用 cooldown/config cache、delivery adapter 与共享消息历史写入；无 NewAPI 业务状态读写。共享 `limit_all_data` 每分钟重置但没有 cardinality/byte cap，新增一条 RAM 风险 backlog，不扩冻结身份。清单仍为 496 项，状态 `10/45/19/422`，backlog 329 条；identity/source hash 不变，P7 发布门禁仍独立。
 
 静态 AST 启动闭包发现 637 个未抑制命令候选，其中 323 项不在 v1 membership；这是源码静态候选，不是实跑注册数。清单外候选带 handler/调用图进入 backlog，不增加 `path_count`、不改 membership hash，也不阻止或伪造 v1 范围完成。动态导入和非命令回调仍需人工登记 backlog；只有显式评审并升级 `scope_id` 才能接纳。有限 v1 清单闭合不等同于全仓旧 matcher 全部迁移，状态分类仍依赖逐项源码审阅。P7 真实发布周期证据由 `scripts/refactor_completion_audit.py` 独立判定，不并入 phase 2；当前缺少真实发布周期输入。P0 inventory freshness、P2 架构边界/operation-id 规则、P3 `game_events` feature contract 的静态审计阻塞也不自动扩入冻结清单。验证继续使用隔离临时目录、串行测试、关闭 pytest/pyc 缓存；磁盘低于 10 GiB 或 `MemAvailable` 低于 512 MiB 时停止重任务。
 

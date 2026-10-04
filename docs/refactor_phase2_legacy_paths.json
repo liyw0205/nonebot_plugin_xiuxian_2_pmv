@@ -383,6 +383,15 @@
         "nonebot_plugin_xiuxian_2/infrastructure/database/ledger.py:106-143"
       ],
       "reason": "The application commits the started operation ledger before the repository atomically replaces account JSON, then commits the final ledger result separately. A process crash in that gap leaves a started row and changed file; a same-operation retry returns an in-progress conflict rather than reconciling the mutation. Add a recoverable cross-store plan or an idempotent state transition without expanding frozen membership."
+    },
+    {
+      "id": "legacy-cooldown-rate-map-cardinality",
+      "source": "command:entertainment:newapi帮助",
+      "evidence": [
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_utils/lay_out.py:33-48,78-101",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_utils/lay_out.py:242-250,306-324,399-418"
+      ],
+      "reason": "The shared command Cooldown dependency stores per-user counters in the process-local limit_all_data dictionary and resets it every minute, but has no per-window cardinality or byte limit. Keep this operational RAM bound in backlog; it does not change the frozen Phase 2 membership or block classifying the static help handler as an allowed compatibility path."
     }
   ],
   "p7_gate": {
