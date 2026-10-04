@@ -5,9 +5,21 @@ from ...infrastructure.clock import SystemClock
 import random
 
 class workhandle(XiuxianJsonDate):
-    def do_work(self, key, work_list=None, name=None, level="江湖好手", exp=None, user_id=None, persist=True, random_source=None, clock=None):
+    def do_work(
+        self,
+        key,
+        work_list=None,
+        name=None,
+        level="江湖好手",
+        exp=None,
+        user_id=None,
+        persist=True,
+        random_source=None,
+        clock=None,
+        offer_snapshot=None,
+    ):
         """
-        悬赏令核心处理逻辑(纯JSON版本)
+        悬赏令核心处理逻辑，可使用调用方提供的冻结 offer 快照。
         
         参数:
             key: 操作类型
@@ -74,8 +86,7 @@ class workhandle(XiuxianJsonDate):
             return 0
 
         elif key == 2:  # 结算任务奖励
-            # 读取任务数据
-            data = readf(user_id)
+            data = offer_snapshot if offer_snapshot is not None else readf(user_id)
             if not data or data.get("status") != 2:  # 无任务或未接取
                 return "无效的任务", 0, False, 0, False
                 

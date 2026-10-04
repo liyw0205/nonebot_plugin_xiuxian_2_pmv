@@ -35,6 +35,13 @@ class WorkClaimApplication:
         self.repository = repository
         self.ledger = ledger or OperationLedger()
 
+    def get_active_snapshot(self, user_id: str) -> dict[str, Any] | None:
+        repository = self.repository or WorkClaimSqlRepository(self.database)
+        reader = getattr(repository, "get_active_snapshot", None)
+        if reader is None:
+            reader = WorkClaimSqlRepository(self.database).get_active_snapshot
+        return reader(str(user_id))
+
     def claim(
         self,
         *,

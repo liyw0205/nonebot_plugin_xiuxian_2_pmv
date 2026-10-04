@@ -5,6 +5,8 @@ from typing import Any, Mapping, Protocol
 
 
 class WorkClaimRepository(Protocol):
+    def get_active_snapshot(self, user_id: str) -> dict[str, Any] | None: ...
+
     def claim(
         self,
         operation_id: str,

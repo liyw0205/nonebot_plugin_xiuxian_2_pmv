@@ -249,6 +249,26 @@ async def settle_work(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
     event_message_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
     operation_id = f"work-settlement:{user_id}:{event_message_id or runtime_ids.new_id()}"
 
+    active_snapshot = work_claim_application.get_active_snapshot(user_id)
+    settlement_offer = active_snapshot if active_snapshot is not None else readf(user_id)
+    task_name = str(work_data.get("scheduled_time") or "")
+    offer_tasks = settlement_offer.get("tasks") if isinstance(settlement_offer, dict) else None
+    active_matches_cd = active_snapshot is None or (
+        int(active_snapshot.get("status", 0) or 0) == 2
+        and str(active_snapshot.get("scheduled_time") or "") == task_name
+        and str(active_snapshot.get("create_time") or "") == str(work_data.get("create_time") or "")
+    )
+    if (
+        not active_matches_cd
+        or not isinstance(settlement_offer, dict)
+        or int(settlement_offer.get("status", 0) or 0) != 2
+        or not isinstance(offer_tasks, dict)
+        or task_name not in offer_tasks
+    ):
+        msg = "悬赏结算未完成：悬赏快照与当前进度不一致，请重新查看。"
+        await handle_send(bot, event, result_card("悬赏令", kind="warn", summary=msg), **nav_kwargs("work", md_type="悬赏令"))
+        return msg
+
     user_info = _sql_message().get_user_info_with_id(user_id)
     _, give_exp, s_o_f, item_id, big_suc = workhandle().do_work(
         2,
@@ -258,6 +278,7 @@ async def settle_work(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
         user_id=user_id,
         random_source=runtime_random,
         clock=runtime_clock,
+        offer_snapshot=settlement_offer,
     )
     max_exp = int(OtherSet().set_closing_type(user_info["level"])) * XiuConfig().closing_exp_upper_limit
     item_info = items.get_data_by_item_id(item_id) if item_id else None
@@ -846,7 +867,7 @@ async def do_work_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
 
         # JSON 文件仅保留为旧读取路径的投影，权威状态已由事务服务落库。
         work_data["status"] = 2
-        savef(user_id, work_data)
+        savef(user_id, work_data, sync_snapshot=False)
                 
         msg = (
             f"成功接取悬赏令！\n"

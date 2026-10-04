@@ -5,7 +5,7 @@ import json
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import AsyncMock, Mock, patch
 
 import nonebot
 
@@ -101,6 +101,77 @@ class WorkRefreshSettlementTests(unittest.TestCase):
         self.assertEqual(task_list[0][0], "采药")
         self.assertEqual(offer["user_level"], "筑基")
         self.assertFalse(hasattr(work_handle, "items"))
+
+    def test_settlement_calculation_uses_supplied_active_snapshot(self):
+        from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_work import work_handle
+
+        handler = object.__new__(work_handle.workhandle)
+        offer = {
+            "tasks": {
+                "采药": {
+                    "rate": 80, "award": 10, "item_id": 0,
+                    "success_msg": "完成", "fail_msg": "失败",
+                }
+            },
+            "status": 2,
+            "scheduled_time": "采药",
+        }
+        with patch.object(work_handle, "readf", side_effect=AssertionError("legacy read used")):
+            result = handler.do_work(
+                2,
+                work_list="采药",
+                user_id="u",
+                offer_snapshot=offer,
+                random_source=SimpleNamespace(randint=lambda lower, upper: 1),
+            )
+
+        self.assertEqual(result, ("完成", 10, True, 0, False))
+
+
+class WorkSettlementHandlerTests(unittest.IsolatedAsyncioTestCase):
+    async def test_handler_passes_matching_feature_snapshot_to_reward_calculator(self):
+        from nonebot_plugin_xiuxian_2.xiuxian import xiuxian_work
+
+        active = {
+            "tasks": {"采药": {"rate": 80, "award": 10, "time": 5, "item_id": 0}},
+            "status": 2,
+            "scheduled_time": "采药",
+            "create_time": "2026-10-04 10:00:00",
+        }
+        outcome = SimpleNamespace(
+            status="applied",
+            replayed=False,
+            data={"status": "applied", "exp": 10, "item_awarded": False},
+        )
+        calculator = SimpleNamespace(do_work=Mock(return_value=("完成", 10, True, 0, False)))
+        event = SimpleNamespace(message_id="settle-1")
+
+        with (
+            patch.object(xiuxian_work.work_claim_application, "get_active_snapshot", return_value=active),
+            patch.object(xiuxian_work, "_sql_message", return_value=SimpleNamespace(
+                get_user_info_with_id=lambda user_id: {"level": "筑基", "exp": 0}
+            )),
+            patch.object(xiuxian_work, "workhandle", return_value=calculator),
+            patch.object(xiuxian_work, "readf", side_effect=AssertionError("legacy offer read used")),
+            patch.object(xiuxian_work, "OtherSet", return_value=SimpleNamespace(set_closing_type=lambda level: 1)),
+            patch.object(xiuxian_work, "XiuConfig", return_value=SimpleNamespace(
+                closing_exp_upper_limit=100, max_goods_num=99
+            )),
+            patch.object(xiuxian_work.work_settlement_application, "settle", return_value=outcome),
+            patch.object(xiuxian_work, "delete_work_file"),
+            patch.object(xiuxian_work, "log_message"),
+            patch.object(xiuxian_work, "update_statistics_value"),
+            patch.object(xiuxian_work, "record_task_progress"),
+            patch.object(xiuxian_work, "handle_send", new=AsyncMock()),
+            patch.object(xiuxian_work, "number_to", side_effect=str),
+        ):
+            await xiuxian_work.settle_work(
+                object(), event, "u",
+                {"create_time": "2026-10-04 10:00:00", "scheduled_time": "采药"},
+            )
+
+        calculator.do_work.assert_called_once()
+        self.assertIs(calculator.do_work.call_args.kwargs["offer_snapshot"], active)
 
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
