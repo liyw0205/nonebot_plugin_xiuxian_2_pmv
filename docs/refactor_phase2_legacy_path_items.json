@@ -831,21 +831,34 @@
       "kind": "commands",
       "entry": "entertainment:newapi删除 (aliases: newapi解绑)",
       "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "reason": "The default handler delegates deletion through EntertainmentApplication and EntertainmentRepository, but the repository still mutates the compatibility JSON account file through ServicePort. The SQLite operation ledger and JSON replacement are separate commits, with no recovery for a crash after the file replacement and before ledger completion; keep this item blocked until durable state ownership and replay recovery are closed.",
+      "unknown_edge": "JSON account-file replacement and SQLite operation-ledger completion are not atomic or reconciled",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/newapi_commands.py:223 newapi_del_cmd = on_command('newapi删除') aliases=newapi解绑 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/newapi_commands.py:349 newapi_del_ -> legacy downstream effect not closed in this frozen item"
+        "newapi_del_ -> parse requested account indices -> newapi_store.delete_accounts(qq_id, indices, deterministic message operation_id)",
+        "newapi_store.delete_accounts -> load_accounts/json_store.load_json_file reads the full token/cookie-bearing JSON file before entering EntertainmentApplication.delete_accounts",
+        "EntertainmentApplication.delete_accounts -> MigratedFeatureApplication.execute -> SQLite operation_ledger begin in one immediate UoW -> EntertainmentRepository.execute -> EntertainmentRepository.delete_accounts",
+        "EntertainmentRepository.delete_accounts -> load_json_list -> filter selected account rows or replace all rows with [] -> save_json_list writes/fsyncs a temporary file then atomically replaces the JSON file",
+        "after JSON mutation, MigratedFeatureApplication.execute opens a separate immediate UoW to finish the SQLite operation ledger; a process crash between these steps leaves status=started and retry returns an in-progress conflict without reconciling the already-replaced file",
+        "successful outcome -> newapi_del_ handle_send -> adapter sender/message-history path; the JSON state is persistent user data, not a cache"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/newapi_commands.py:223",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/newapi_commands.py:349"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/newapi_commands.py:349",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/newapi_commands.py:348-369",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/newapi_store.py:156-179",
+        "nonebot_plugin_xiuxian_2/features/entertainment/application.py:16-18",
+        "nonebot_plugin_xiuxian_2/features/_migrated_application.py:52-99",
+        "nonebot_plugin_xiuxian_2/features/entertainment/repository.py:10-49",
+        "nonebot_plugin_xiuxian_2/features/entertainment/json_state.py:9-32",
+        "nonebot_plugin_xiuxian_2/features/_service_port.py:89-113",
+        "nonebot_plugin_xiuxian_2/infrastructure/database/ledger.py:106-143"
       ],
       "source_declaration_found": true,
       "source": {

@@ -372,6 +372,17 @@
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_utils/http_proxy.py:160-185"
       ],
       "reason": "The frozen info path reads an unbounded per-user JSON account file containing tokens/cookies, may load it twice and select every account, then fully buffers each external response before parsing. There is no response cache to clear; binding JSON is persistent user data and must not be treated as disposable cache. Review account/file and response byte limits plus credential ownership without expanding frozen membership."
+    },
+    {
+      "id": "newapi-delete-json-ledger-crash-window",
+      "source": "command:entertainment:newapi删除",
+      "evidence": [
+        "nonebot_plugin_xiuxian_2/features/_migrated_application.py:52-99",
+        "nonebot_plugin_xiuxian_2/features/entertainment/repository.py:26-42",
+        "nonebot_plugin_xiuxian_2/features/entertainment/json_state.py:21-32",
+        "nonebot_plugin_xiuxian_2/infrastructure/database/ledger.py:106-143"
+      ],
+      "reason": "The application commits the started operation ledger before the repository atomically replaces account JSON, then commits the final ledger result separately. A process crash in that gap leaves a started row and changed file; a same-operation retry returns an in-progress conflict rather than reconciling the mutation. Add a recoverable cross-store plan or an idempotent state transition without expanding frozen membership."
     }
   ],
   "p7_gate": {

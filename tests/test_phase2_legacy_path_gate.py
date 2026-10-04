@@ -84,7 +84,7 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
         self.assertTrue(all(item["call_graph"] and item["evidence"] for item in report["items"]))
         self.assertEqual(report["default_legacy_command_count"], 637)
         self.assertEqual(report["default_legacy_command_backlog_count"], 323)
-        self.assertEqual(len(report["backlog"]), 327)
+        self.assertEqual(len(report["backlog"]), 328)
         self.assertEqual(
             report["default_legacy_command_discovery"],
             "static_ast_startup_import_closure_not_live_runtime_observation",
@@ -147,6 +147,16 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
             item for item in report["backlog"] if item["id"] == "newapi-info-state-and-response-working-set"
         )
         self.assertEqual(newapi_memory_risk["source"], "command:entertainment:newapi信息")
+        newapi_delete = next(
+            item for item in report["items"] if item["id"] == "command:entertainment:newapi删除"
+        )
+        self.assertEqual(newapi_delete["status"], "受阻")
+        self.assertTrue(any("EntertainmentApplication.delete_accounts" in edge for edge in newapi_delete["call_graph"]))
+        self.assertTrue(any("process crash" in edge for edge in newapi_delete["call_graph"]))
+        newapi_delete_risk = next(
+            item for item in report["backlog"] if item["id"] == "newapi-delete-json-ledger-crash-window"
+        )
+        self.assertEqual(newapi_delete_risk["source"], "command:entertainment:newapi删除")
         self.assertEqual(report["p7_gate"]["status"], "independent")
 
     def test_phase2_completes_when_every_frozen_item_is_closed(self):
