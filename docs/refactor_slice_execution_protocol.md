@@ -3,9 +3,9 @@
 状态：执行中
 适用范围：全面底层重构第二阶段
 
-2026-10-04 frozen Phase 2 inventory consolidation：当前只处理冻结清单中的 blocker，暂停新增玩法切片。`docs/refactor_phase2_legacy_path_items.json` 的 496 项为固定完成分母：314 个 legacy command、40 个 legacy job、116 个 Flask route 和 26 个 effect/exclusion/suppression/family 项。当前状态 `10 已迁移 / 44 允许兼容 / 19 不可达 / 423 受阻`；受阻项拆为 306 个 command、116 个 route、1 个 non-command matcher family。Backlog 有 326 条，含 323 个已知清单外 AST command candidate；新增发现只进 backlog，不自动扩分母。
+2026-10-04 frozen Phase 2 inventory consolidation：当前只处理冻结清单中的 blocker，暂停新增玩法切片。`docs/refactor_phase2_legacy_path_items.json` 的 496 项为固定完成分母：314 个 legacy command、40 个 legacy job、116 个 Flask route 和 26 个 effect/exclusion/suppression/family 项。当前状态 `10 已迁移 / 44 允许兼容 / 19 不可达 / 423 受阻`；受阻项拆为 306 个 command、116 个 route、1 个 non-command matcher family。Backlog 有 327 条，含 323 个已知清单外 AST command candidate；新增发现只进 backlog，不自动扩分母。
 
-清单身份 hash 绑定 `id/kind/entry/source`；status 和调用图证据只在同一冻结身份下更新。Gate 对所有冻结 command 校验 AST 启动闭包 declaration、绑定 handler 和证据位置；job 项校验 legacy manifest 与 admin scheduler API 的手动执行路径。APScheduler 装饰器原函数是独立自动执行路径，不对所有 manifest job 一概声称可自动调度。Web/admin 与命令默认可达性基于源码静态导入/注册闭包，不是 live runtime 测量；dynamic/conditional imports 和 non-command callbacks 仍是发现限制。P7 真实发布 gate 单独保留，不并入 phase 2。最近冻结项 `command:admin:md模板` 分类为允许保留的兼容路径，日志仅记异常类型，失败直接发纯文本；解析输入 byte cap 和消息历史队列 byte budget 只登记 backlog，不扩当前范围。下一项按冻结清单审计 `command:entertainment:newapi信息`，不得因调用图分析自动接纳其相邻命令。
+清单身份 hash 绑定 `id/kind/entry/source`；status 和调用图证据只在同一冻结身份下更新。Gate 对所有冻结 command 校验 AST 启动闭包 declaration、绑定 handler 和证据位置，并拒绝已迁移/兼容项残留未闭合 handler 占位边；job 项校验 legacy manifest 与 admin scheduler API 的手动执行路径。APScheduler 装饰器原函数是独立自动执行路径，不对所有 manifest job 一概声称可自动调度。Web/admin 与命令默认可达性基于源码静态导入/注册闭包，不是 live runtime 测量；dynamic/conditional imports 和 non-command callbacks 仍是发现限制。P7 真实发布 gate 单独保留，不并入 phase 2。最近冻结项 `command:admin:md模板` 分类为允许保留的兼容路径，日志仅记异常类型，失败直接发纯文本；解析输入 byte cap 和消息历史队列 byte budget 只登记 backlog，不扩当前范围。`command:entertainment:newapi信息` 调用图已审计但仍受阻：读取 token/cookie JSON，并对每个选中账号完整缓冲远端响应；账号/响应容量风险留在 backlog，不当作缓存清理，也不扩分母。下一项只按冻结清单继续审计 `command:entertainment:newapi删除`。
 
 本轮验证：phase2/P7 gate 合约 `13 passed`，Markdown handler 日志 contract `2 passed`；清单 membership/source provenance 有效、integrity errors 为 0，phase 2 仍有 423 个既有 blocker，所以 `--check` 预期返回 `1`。JSON 与 `git diff --check` 通过。测试关闭 pytest cache 和字节码；未运行真实 P7 release check。
 

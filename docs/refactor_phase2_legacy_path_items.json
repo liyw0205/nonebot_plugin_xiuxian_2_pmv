@@ -789,21 +789,36 @@
       "kind": "commands",
       "entry": "entertainment:newapi信息 (aliases: )",
       "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "reason": "The default handler reads the user's token/cookie-bearing JSON binding file directly, then fetches account data from the configured NewAPI endpoint and sends a formatted reply. It does not route this read through the feature-owned application/repository boundary. Keep this item blocked until credential/state reads are owned by that boundary; unbounded account-file and HTTP-response working sets are recorded in backlog.",
+      "unknown_edge": "legacy JSON credential/state read remains outside the feature-owned repository",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/newapi_commands.py:222 newapi_info_cmd = on_command('newapi信息') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/newapi_commands.py:317 newapi_info_ -> legacy downstream effect not closed in this frozen item"
+        "newapi_info_ -> _qq(event) -> resolve_targets(qq, args) -> load_accounts(qq) -> data/newapi_bindings/<safe_qq>.json -> load_json_file/json.load; token/cookie values are loaded into memory and this is a direct legacy JSON read, not a cache",
+        "empty account selector resolves every stored account; newapi_info_ loads the same account file again, then processes selected accounts serially and accumulates formatted reply blocks",
+        "for each account: newapi_info_ -> run_blocking_io(fetch_user_self, mode, api_user_id, secret, base_url, timeout=35) -> GET /api/user/self with Authorization or Cookie credentials",
+        "fetch_user_self -> newapi_client._request -> shared http_client.request without stream/max_bytes -> Response.text then Response.json; the complete response is materialized and parsed with no response cache or byte cap",
+        "newapi_info_ -> format_user_info_block -> handle_send -> adapter sender/message-history path",
+        "No call from this handler to EntertainmentApplication or a feature-owned account repository; the JSON binding file remains the read owner"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/newapi_commands.py:222",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/newapi_commands.py:317"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/newapi_commands.py:317",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/newapi_commands.py:316-345",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/__init__.py:42",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/newapi_store.py:21-22,68-80,181-216",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_utils/json_store.py:39-58",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/newapi_client.py:89-136",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_utils/http_proxy.py:160-185",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/command.py:25-37",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_utils/utils.py:1295-1408",
+        "nonebot_plugin_xiuxian_2/xiuxian/messaging/delivery.py:226-268",
+        "nonebot_plugin_xiuxian_2/xiuxian/adapter_message_sender.py:66-85"
       ],
       "source_declaration_found": true,
       "source": {

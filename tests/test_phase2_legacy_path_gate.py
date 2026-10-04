@@ -84,6 +84,7 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
         self.assertTrue(all(item["call_graph"] and item["evidence"] for item in report["items"]))
         self.assertEqual(report["default_legacy_command_count"], 637)
         self.assertEqual(report["default_legacy_command_backlog_count"], 323)
+        self.assertEqual(len(report["backlog"]), 327)
         self.assertEqual(
             report["default_legacy_command_discovery"],
             "static_ast_startup_import_closure_not_live_runtime_observation",
@@ -136,6 +137,16 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
             )
         )
         self.assertTrue(any("http_proxy.py:187-225" in evidence for evidence in steam_query["evidence"]))
+        newapi_info = next(
+            item for item in report["items"] if item["id"] == "command:entertainment:newapi信息"
+        )
+        self.assertEqual(newapi_info["status"], "受阻")
+        self.assertTrue(any("load_json_file/json.load" in edge for edge in newapi_info["call_graph"]))
+        self.assertTrue(any("http_client.request without stream/max_bytes" in edge for edge in newapi_info["call_graph"]))
+        newapi_memory_risk = next(
+            item for item in report["backlog"] if item["id"] == "newapi-info-state-and-response-working-set"
+        )
+        self.assertEqual(newapi_memory_risk["source"], "command:entertainment:newapi信息")
         self.assertEqual(report["p7_gate"]["status"], "independent")
 
     def test_phase2_completes_when_every_frozen_item_is_closed(self):
