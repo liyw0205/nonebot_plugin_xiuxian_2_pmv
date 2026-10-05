@@ -1866,14 +1866,15 @@ class SourceQualityTests(unittest.TestCase):
         self.assertIn("BEGIN IMMEDIATE", service_source)
         self.assertIn("reward_claims", service_source)
 
-    def test_compensation_definition_uses_lazy_database_service(self) -> None:
+    def test_compensation_definition_uses_application_and_keeps_bulk_compat_adapter(self) -> None:
         compensation_root = SOURCE_ROOT / "xiuxian" / "xiuxian_compensation"
         common_source = (compensation_root / "common.py").read_text(encoding="utf-8")
         self.assertIn("_compensation_definition_service_instance = None", common_source)
         self.assertIn("def _compensation_definition_service(", common_source)
-        self.assertIn("_compensation_definition_service().upsert(", common_source)
-        self.assertIn("_compensation_definition_service().delete(", common_source)
-        self.assertIn("_compensation_definition_service().clear(", common_source)
+        self.assertIn("_compensation_application().upsert_compensation_definition(", common_source)
+        self.assertIn("_compensation_application().delete_compensation_definition(", common_source)
+        self.assertIn("_compensation_application().clear_compensation_definitions(", common_source)
+        self.assertIn("_compensation_definition_service().sync(data)", common_source)
         self.assertNotIn("compensation_definition_service = CompensationDefinitionService", common_source)
 
     def test_redeem_code_uses_transactional_limited_claim(self) -> None:

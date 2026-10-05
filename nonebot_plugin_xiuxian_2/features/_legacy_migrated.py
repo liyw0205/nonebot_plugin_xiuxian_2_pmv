@@ -68,6 +68,7 @@ from .compensation.migrations import (
     apply_compensation_definition_schema,
     apply_compensation_invitation_definition_schema,
     apply_compensation_invitation_reward_schema,
+    apply_compensation_invitation_snapshot_migration,
     apply_compensation_reward_claim_schema,
     apply_compensation_reward_catalog_schema,
 )
@@ -127,6 +128,7 @@ MIGRATIONS = tuple(
          ("legacy.compensation.004", apply_compensation_invitation_definition_schema),
          ("legacy.compensation.005", apply_compensation_definition_schema),
          ("legacy.compensation.006", apply_compensation_reward_catalog_schema),
+         ("legacy.compensation.007", apply_compensation_invitation_snapshot_migration),
          ("legacy.admin.002", apply_admin_player_status_batch_reset),
          ("legacy.admin.003", apply_admin_id_swap_receipts),
          ("legacy.admin.004", apply_admin_id_swap_operations),

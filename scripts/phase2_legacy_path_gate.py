@@ -800,7 +800,13 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="refresh frozen command declaration/handler source locations without changing membership",
     )
+    parser.add_argument(
+        "--feature",
+        help="limit --refresh-command-bindings to one frozen feature",
+    )
     args = parser.parse_args(argv)
+    if args.feature and not args.refresh_command_bindings:
+        parser.error("--feature requires --refresh-command-bindings")
     if args.membership_hash:
         scope = json.loads(SCOPE_PATH.read_text(encoding="utf-8"))
         items_path = ROOT / str(scope.get("frozen_entries_file", ITEMS_PATH.relative_to(ROOT)))
@@ -882,6 +888,8 @@ def main(argv: list[str] | None = None) -> int:
             if item.get("kind") != "commands":
                 continue
             source = item.get("source") or {}
+            if args.feature and str(source.get("feature", "")) != args.feature:
+                continue
             key = (str(source.get("feature", "")), str(source.get("name", "")))
             records = command_index.get(key, ())
             if not records:
@@ -917,7 +925,8 @@ def main(argv: list[str] | None = None) -> int:
             print("refusing command binding refresh because frozen membership changed", file=sys.stderr)
             return 1
         items_path.write_text(json.dumps(frozen, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-        print(f"refreshed_command_bindings={refreshed} membership_sha256={before_membership}")
+        feature_label = f" feature={args.feature}" if args.feature else ""
+        print(f"refreshed_command_bindings={refreshed}{feature_label} membership_sha256={before_membership}")
         return 0
     report = load_phase2_scope_report(include_items=args.items)
     if args.json:

@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from .._service_port import ServicePort
+from .definition_repository import CompensationDefinitionSqlRepository
 from .invitation_repository import InvitationRewardClaimSqlRepository
 from .reward_claim_repository import CompensationRewardClaimSqlRepository
 from .reward_definition_repository import CompensationRewardDefinitionSqlRepository
@@ -12,7 +13,48 @@ class CompensationRepository(ServicePort):
     def __init__(self, database: str | Path) -> None:
         super().__init__("compensation", "nonebot_plugin_xiuxian_2.xiuxian.xiuxian_compensation")
         self.database = str(database)
+        self.compensation_definitions = CompensationDefinitionSqlRepository(database)
         self.reward_definitions = CompensationRewardDefinitionSqlRepository(database)
+
+    def list_compensation_definitions(self):
+        return self.compensation_definitions.list_definitions()
+
+    def get_compensation_definition(self, record_id):
+        return self.compensation_definitions.get_definition(record_id)
+
+    def compensation_claimed_data(self):
+        return self.compensation_definitions.claimed_data()
+
+    def compensation_catalog_version(self):
+        return self.compensation_definitions.catalog_version()
+
+    def replay_compensation_definition_upsert(self, operation_id, request_identity):
+        return self.compensation_definitions.replay_upsert(
+            operation_id, request_identity
+        )
+
+    def upsert_compensation_definition(
+        self, operation_id, request_identity, record_id, record, expected_version=None
+    ):
+        return self.compensation_definitions.upsert(
+            operation_id,
+            request_identity,
+            record_id,
+            record,
+            expected_version,
+        )
+
+    def delete_compensation_definition(
+        self, operation_id, record_id, expected_version=None
+    ):
+        return self.compensation_definitions.delete(
+            operation_id, record_id, expected_version
+        )
+
+    def clear_compensation_definitions(self, operation_id, expected_catalog_version):
+        return self.compensation_definitions.clear(
+            operation_id, expected_catalog_version
+        )
 
     def claim_reward(
         self,
@@ -95,23 +137,23 @@ class CompensationRepository(ServicePort):
     def invitation_claimed_thresholds(self, user_id):
         return InvitationRewardClaimSqlRepository(self.database).claimed_thresholds(user_id)
 
-    def invitation_count(self, inviter_id, legacy_records=None):
-        return InvitationRewardClaimSqlRepository(self.database).invitation_count(inviter_id, legacy_records)
+    def invitation_count(self, inviter_id):
+        return InvitationRewardClaimSqlRepository(self.database).invitation_count(inviter_id)
 
-    def invitation_inviter_id(self, user_id, legacy_records=None):
-        return InvitationRewardClaimSqlRepository(self.database).inviter_id(user_id, legacy_records)
+    def invitation_inviter_id(self, user_id):
+        return InvitationRewardClaimSqlRepository(self.database).inviter_id(user_id)
 
-    def invitation_has_code(self, user_id, legacy_records=None):
-        return InvitationRewardClaimSqlRepository(self.database).has_invitation_code(user_id, legacy_records)
+    def invitation_has_code(self, user_id):
+        return InvitationRewardClaimSqlRepository(self.database).has_invitation_code(user_id)
 
-    def invitation_bind(self, inviter_id, invited_id, legacy_records=None):
-        return InvitationRewardClaimSqlRepository(self.database).bind(inviter_id, invited_id, legacy_records)
+    def invitation_bind(self, inviter_id, invited_id):
+        return InvitationRewardClaimSqlRepository(self.database).bind(inviter_id, invited_id)
 
-    def invitation_rewards(self, legacy_rewards=None):
-        return InvitationRewardClaimSqlRepository(self.database).reward_definitions(legacy_rewards)
+    def invitation_rewards(self):
+        return InvitationRewardClaimSqlRepository(self.database).reward_definitions()
 
-    def invitation_set_reward(self, threshold, reward_items, legacy_rewards=None):
-        return InvitationRewardClaimSqlRepository(self.database).set_reward_definition(threshold, reward_items, legacy_rewards)
+    def invitation_set_reward(self, threshold, reward_items):
+        return InvitationRewardClaimSqlRepository(self.database).set_reward_definition(threshold, reward_items)
 
     def invitation_get_result(self, operation_id):
         return InvitationRewardClaimSqlRepository(self.database).get_result(operation_id)
@@ -120,19 +162,15 @@ class CompensationRepository(ServicePort):
         self,
         operation_id,
         user_id,
-        invited_user_ids,
         rewards_by_threshold,
         requested_thresholds,
-        legacy_claimed_thresholds,
         max_goods_num,
     ):
         return InvitationRewardClaimSqlRepository(self.database).claim(
             operation_id,
             user_id,
-            invited_user_ids,
             rewards_by_threshold,
             requested_thresholds,
-            legacy_claimed_thresholds,
             max_goods_num,
         )
 

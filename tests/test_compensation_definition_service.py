@@ -28,6 +28,12 @@ from nonebot_plugin_xiuxian_2.features.compensation.migrations import (
     apply_compensation_definition_schema,
     apply_compensation_reward_claim_schema,
 )
+from nonebot_plugin_xiuxian_2.features.compensation.application import (
+    CompensationApplication,
+)
+from nonebot_plugin_xiuxian_2.features.compensation.definition_repository import (
+    CompensationDefinitionSqlRepository,
+)
 
 
 def test_compensation_facade_does_not_construct_legacy_reward_claim_service() -> None:
@@ -198,6 +204,31 @@ class CompensationDefinitionServiceTests(unittest.TestCase):
             }
         self.assertEqual(tables, {"reward_claims", "reward_claim_counters"})
 
+    def test_malformed_definition_snapshot_does_not_write_migration_marker(self) -> None:
+        for snapshot in ("not-json", "[]"):
+            with self.subTest(snapshot=snapshot), tempfile.TemporaryDirectory() as temp:
+                root = Path(temp)
+                database = root / "compensation.db"
+                definitions = root / "definitions.json"
+                claims = root / "claims.json"
+                definitions.write_text(snapshot, encoding="utf-8")
+                claims.write_text("{}", encoding="utf-8")
+                with DatabaseUnitOfWork(database) as uow:
+                    apply_compensation_reward_claim_schema(uow)
+                with self.assertRaises(ValueError):
+                    with DatabaseUnitOfWork(database) as uow:
+                        apply_compensation_definition_schema(
+                            uow, definitions, claims
+                        )
+                with db_backend.connection(database) as conn:
+                    tables = {
+                        str(row[0])
+                        for row in conn.execute(
+                            "SELECT name FROM sqlite_master WHERE type='table'"
+                        ).fetchall()
+                    }
+                self.assertNotIn("compensation_legacy_migrations", tables)
+
     def test_upsert_creates_and_updates_definition_with_stable_versions(self) -> None:
         created_record = {
             "items": [],
@@ -246,13 +277,10 @@ class CompensationDefinitionServiceTests(unittest.TestCase):
 
         send = AsyncMock()
         generate = unittest.mock.Mock(side_effect=["RANDOM1", "RANDOM2"])
+        application = CompensationApplication(self.database)
         args = "0 灵石x10 维护补偿 1天 0"
         with (
-            patch.object(
-                compensation_common,
-                "_compensation_definition_service_instance",
-                self.service,
-            ),
+            patch.object(compensation_common, "_compensation_application", return_value=application),
             patch.object(compensation_common, "generate_unique_id", generate),
             patch.object(compensation_common, "handle_send", send),
         ):
@@ -394,8 +422,8 @@ class CompensationDefinitionServiceTests(unittest.TestCase):
         config = {"type_key": "补偿"}
         with patch.object(
             compensation_common,
-            "_compensation_definition_service",
-            return_value=self.service,
+            "_compensation_application",
+            return_value=CompensationApplication(self.database),
         ):
             first = compensation_common.delete_record("C1", config, "delete:event")
             replay = compensation_common.delete_record("C1", config, "delete:event")
@@ -411,8 +439,8 @@ class CompensationDefinitionServiceTests(unittest.TestCase):
         config = {"type_key": "补偿"}
         with patch.object(
             compensation_common,
-            "_compensation_definition_service",
-            return_value=self.service,
+            "_compensation_application",
+            return_value=CompensationApplication(self.database),
         ):
             first = compensation_common.clear_records(config, "clear:event")
             replay = compensation_common.clear_records(config, "clear:event")
@@ -546,7 +574,63 @@ class CompensationDefinitionServiceTests(unittest.TestCase):
         )
         self.assertEqual(missing.status, "record_missing")
 
-    def test_production_compensation_paths_use_definition_service(self) -> None:
+    def test_feature_repository_upsert_cas_replay_and_conflict(self) -> None:
+        repository = CompensationDefinitionSqlRepository(self.database)
+        record = {"items": [], "reason": "新定义", "expire_time": "无限"}
+        created = repository.upsert("repo:upsert", "new C2", "C2", record)
+        replay = repository.replay_upsert("repo:upsert", "new C2")
+        conflict = repository.replay_upsert("repo:upsert", "changed request")
+        updated = repository.upsert(
+            "repo:update", "update C2", "C2", {**record, "reason": "更新"}, 1
+        )
+
+        self.assertEqual(("created", 1), (created.status, created.version))
+        self.assertTrue(replay.replayed)
+        self.assertEqual(("created", "C2", record), (replay.status, replay.record_id, {k: v for k, v in replay.record.items() if k != "_definition_version"}))
+        self.assertEqual("operation_conflict", conflict.status)
+        self.assertEqual(("updated", 2), (updated.status, updated.version))
+        self.assertEqual("更新", repository.get_definition("C2")["reason"])
+
+    def test_feature_repository_delete_and_clear_replay_original_outcome(self) -> None:
+        repository = CompensationDefinitionSqlRepository(self.database)
+        with db_backend.transaction(self.database) as conn:
+            conn.execute(
+                "INSERT INTO reward_claim_counters VALUES('补偿','C1',3)"
+            )
+        deleted = repository.delete("repo:delete", "C1", 1)
+        delete_replay = repository.delete("repo:delete", "C1", 1)
+
+        self.assertEqual(("deleted", 1, 1), (deleted.status, deleted.removed_definitions, deleted.removed_claims))
+        self.assertEqual(("deleted", True), (delete_replay.status, delete_replay.replayed))
+        self.assertIsNone(repository.get_definition("C1"))
+
+        catalog_version = repository.catalog_version()
+        cleared = repository.clear("repo:clear", catalog_version)
+        clear_replay = repository.clear("repo:clear", catalog_version)
+        self.assertEqual("cleared", cleared.status)
+        self.assertEqual(("cleared", True), (clear_replay.status, clear_replay.replayed))
+
+    def test_feature_repository_delete_failure_rolls_back_definition_claims_and_receipts(self) -> None:
+        repository = CompensationDefinitionSqlRepository(self.database)
+        with db_backend.transaction(self.database) as conn:
+            conn.execute(
+                "INSERT INTO reward_claim_counters VALUES('补偿','C1',3)"
+            )
+            conn.execute(
+                "CREATE TRIGGER fail_definition_operation BEFORE INSERT ON "
+                "compensation_definition_operations WHEN NEW.action='delete' "
+                "BEGIN SELECT RAISE(ABORT,'failed'); END"
+            )
+
+        with self.assertRaises(db_backend.IntegrityError):
+            repository.delete("repo:delete-failed", "C1", 1)
+
+        self.assertIsNotNone(repository.get_definition("C1"))
+        self.assertEqual(1, self.scalar("SELECT COUNT(*) FROM reward_claims WHERE record_id='C1'"))
+        self.assertEqual(1, self.scalar("SELECT COUNT(*) FROM reward_claim_counters WHERE record_id='C1'"))
+        self.assertEqual(0, self.scalar("SELECT COUNT(*) FROM compensation_definition_operations WHERE operation_id='repo:delete-failed'"))
+
+    def test_production_compensation_paths_use_application_repository(self) -> None:
         root = (
             Path(__file__).parents[1]
             / "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation"
@@ -562,10 +646,11 @@ class CompensationDefinitionServiceTests(unittest.TestCase):
         )[0]
         compensation_delete = delete_body.split("data = load_data(config)", 1)[0]
 
-        self.assertIn("_compensation_definition_service().delete(", compensation_delete)
-        self.assertIn("_compensation_definition_service().clear(", common)
-        self.assertIn("_compensation_definition_service().upsert(", common)
-        self.assertIn("_compensation_definition_service().replay_upsert(", common)
+        self.assertIn("_compensation_application().delete_compensation_definition(", compensation_delete)
+        self.assertIn("_compensation_application().clear_compensation_definitions(", common)
+        self.assertIn("_compensation_application().upsert_compensation_definition(", common)
+        self.assertIn("_compensation_application().replay_compensation_definition_upsert(", common)
+        self.assertIn("_compensation_definition_service().sync(data)", common)
         self.assertIn("expected_definition_version=", common)
         self.assertIn("result = delete_record(", compensation)
         self.assertIn('_compensation_operation_id(event, "delete", comp_id)', compensation)

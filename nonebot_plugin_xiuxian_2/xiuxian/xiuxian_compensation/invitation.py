@@ -1,111 +1,35 @@
-import time
-from pathlib import Path
-
 from ..on_compat import on_command
 from nonebot.params import CommandArg
 from nonebot.permission import SUPERUSER
 
 from ..adapter_compat import Bot, Message, MessageEvent, GroupMessageEvent, PrivateMessageEvent
 from ..xiuxian_utils.lay_out import assign_bot, Cooldown
-from ..xiuxian_utils.json_store import load_json_file, save_json_file
 from ..xiuxian_utils.utils import check_user, send_msg_handler, handle_send, number_to, send_help_message
 from ..xiuxian_config import XiuConfig
-from ...paths import get_paths
 
 from .common import (
-    DATA_PATH,
     _sql_message,
     _compensation_application,
+    _run_compensation_action,
     get_item_list,
     create_item_message,
 )
-from .common import _run_compensation_action
 from .common import runtime_ids
 
-INVITATION_DATA_PATH = DATA_PATH / "invitation_data"
-INVITATION_REWARDS_FILE = INVITATION_DATA_PATH / "invitation_rewards.json"
-INVITATION_RECORDS_FILE = INVITATION_DATA_PATH / "invitation_records.json"
-INVITATION_CLAIMED_FILE = INVITATION_DATA_PATH / "invitation_claimed.json"
-INVITATION_DATA_PATH.mkdir(parents=True, exist_ok=True)
-
-
-def init_file(path: Path):
-    if not path.exists():
-        save_json_file(path, {})
-
-
-init_file(INVITATION_REWARDS_FILE)
-init_file(INVITATION_RECORDS_FILE)
-init_file(INVITATION_CLAIMED_FILE)
-
-
-def load_json(path: Path):
-    return load_json_file(path, {}, dict)
-
-
-def save_json(path: Path, data):
-    save_json_file(path, data)
-
-
-def load_invitation_rewards():
-    return load_json(INVITATION_REWARDS_FILE)
-
-
-def save_invitation_rewards(data):
-    save_json(INVITATION_REWARDS_FILE, data)
-
-
-def load_invitation_records():
-    return load_json(INVITATION_RECORDS_FILE)
-
-
-def save_invitation_records(data):
-    save_json(INVITATION_RECORDS_FILE, data)
-
-
-def load_claimed_records():
-    return load_json(INVITATION_CLAIMED_FILE)
-
-
 def get_user_invitation_count(inviter_id):
-    return _compensation_application().invitation_count(
-        inviter_id, load_invitation_records()
-    )
-
-
-def add_invitation_record(inviter_id, invited_id):
-    records = load_invitation_records()
-
-    inviter_id = str(inviter_id)
-    invited_id = str(invited_id)
-
-    if inviter_id not in records:
-        records[inviter_id] = []
-
-    if invited_id in records[inviter_id]:
-        return False
-
-    records[inviter_id].append(invited_id)
-    save_invitation_records(records)
-
-    return True
+    return _compensation_application().invitation_count(inviter_id)
 
 
 def has_invitation_code(user_id):
-    return _compensation_application().invitation_has_code(
-        user_id, load_invitation_records()
-    )
+    return _compensation_application().invitation_has_code(user_id)
 
 
 def get_inviter_id(user_id):
-    return _compensation_application().invitation_inviter_id(
-        user_id, load_invitation_records()
-    )
+    return _compensation_application().invitation_inviter_id(user_id)
 
 
 def _invitation_rewards():
-    """Read the feature catalog, falling back to the legacy JSON snapshot."""
-    return _compensation_application().invitation_rewards(load_invitation_rewards())
+    return _compensation_application().invitation_rewards()
 
 
 invitation_use_cmd = on_command("邀请码", priority=5, block=True)
@@ -158,15 +82,13 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         return
 
     operation_id = f"compensation:invitation_bind:{getattr(event, 'message_id', '') or getattr(event, 'id', '') or runtime_ids.new_id()}:{user_id}"
-    legacy_records = load_invitation_records()
     result = _run_compensation_action(
         "invitation_bind",
         operation_id,
         user_id,
         lambda: _compensation_application().invitation_bind(
-            inviter_id, user_id, legacy_records
+            inviter_id, user_id
         ),
-        database=get_paths().game_db,
         inviter_id=inviter_id,
         invited_id=user_id,
     )
@@ -232,8 +154,6 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     count = get_user_invitation_count(user_id)
     rewards = _invitation_rewards()
     claimed = {
-        str(value) for value in load_claimed_records().get(user_id, [])
-    } | {
         str(value) for value in _compensation_application().invitation_claimed_thresholds(user_id)
     }
 
@@ -283,8 +203,6 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         )
         return
 
-    invitation_records = load_invitation_records()
-    invited_user_ids = invitation_records.get(user_id, [])
     rewards = _invitation_rewards()
 
     if not rewards:
@@ -311,13 +229,10 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         lambda: _compensation_application().invitation_claim(
             operation_id=operation_id,
             user_id=user_id,
-            invited_user_ids=invited_user_ids,
             rewards_by_threshold=rewards,
             requested_thresholds=thresholds,
-            legacy_claimed_thresholds=load_claimed_records().get(user_id, []),
             max_goods_num=XiuConfig().max_goods_num,
         ),
-        database=get_paths().game_db,
         thresholds=thresholds,
     )
     if result.status == "duplicate":
@@ -379,16 +294,14 @@ async def _(bot: Bot, event: MessageEvent, args: Message = CommandArg()):
 
     reward_items = get_item_list(parts[1])
 
-    legacy_rewards = load_invitation_rewards()
     operation_id = f"compensation:invitation_reward_set:{getattr(event, 'message_id', '') or getattr(event, 'id', '') or runtime_ids.new_id()}:{threshold}"
     result = _run_compensation_action(
         "invitation_reward_set",
         operation_id,
         str(event.get_user_id()),
         lambda: _compensation_application().invitation_set_reward(
-            threshold, reward_items, legacy_rewards
+            threshold, reward_items
         ),
-        database=get_paths().game_db,
         threshold=threshold,
     )
     if result.status == "schema_missing":

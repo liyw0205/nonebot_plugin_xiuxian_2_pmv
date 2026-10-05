@@ -56,7 +56,22 @@ class InvitationRewardClaimSqlRepository:
                 "'invitation_reward_claims','invitation_reward_operations')"
             )
         }
-        return tables == cls._TABLES
+        if tables != cls._TABLES:
+            return False
+        required = {"invitation_reward_definitions", "invitation_reward_migrations"}
+        existing = {
+            str(row["name"])
+            for row in uow.query_all(
+                "SELECT name FROM sqlite_master WHERE type='table' "
+                "AND name IN ('invitation_reward_definitions','invitation_reward_migrations')"
+            )
+        }
+        if existing != required:
+            return False
+        return uow.query_one(
+            "SELECT 1 AS found FROM invitation_reward_migrations WHERE migration_key=?",
+            ("legacy.compensation.invitation-json-v1",),
+        ) is not None
 
     @classmethod
     def _definition_schema_ready(cls, uow: DatabaseUnitOfWork) -> bool:
@@ -66,89 +81,49 @@ class InvitationRewardClaimSqlRepository:
         )
         return row is not None
 
-    @staticmethod
-    def _legacy_invites(legacy_records: Mapping[Any, Iterable[Any]] | None):
-        for raw_inviter, raw_invited in (legacy_records or {}).items():
-            inviter_id = str(raw_inviter).strip()
-            if not inviter_id or not isinstance(raw_invited, (list, tuple, set)):
-                continue
-            for raw_invited_id in raw_invited:
-                invited_id = str(raw_invited_id).strip()
-                if invited_id and invited_id != inviter_id:
-                    yield inviter_id, invited_id
-
-    @staticmethod
-    def _legacy_rewards(legacy_rewards: Mapping[Any, Iterable[Mapping[str, Any]]] | None):
-        result: dict[str, list[dict[str, Any]]] = {}
-        for raw_threshold, raw_items in (legacy_rewards or {}).items():
-            try:
-                threshold_value = int(raw_threshold)
-            except (TypeError, ValueError):
-                continue
-            if threshold_value <= 0 or not isinstance(raw_items, (list, tuple)):
-                continue
-            items = [dict(item) for item in raw_items if isinstance(item, Mapping)]
-            if items:
-                result[str(threshold_value)] = items
-        return result
-
     def invitation_count(
         self,
         inviter_id: str,
-        legacy_records: Mapping[Any, Iterable[Any]] | None = None,
     ) -> int:
         inviter_id = str(inviter_id).strip()
-        legacy_ids = {
-            invited_id
-            for legacy_inviter, invited_id in self._legacy_invites(legacy_records)
-            if legacy_inviter == inviter_id
-        }
         if not inviter_id or not self.database.is_file():
-            return len(legacy_ids)
+            raise RuntimeError("invitation schema is missing")
         with DatabaseUnitOfWork(self.database, read_only=True) as uow:
             if not self._schema_ready(uow):
-                return len(legacy_ids)
-            rows = uow.query_all(
-                "SELECT invited_id FROM invitation_reward_invites WHERE inviter_id=?",
+                raise RuntimeError("invitation schema is missing")
+            row = uow.query_one(
+                "SELECT COUNT(*) AS total FROM invitation_reward_invites WHERE inviter_id=?",
                 (inviter_id,),
             )
-            return len(legacy_ids | {str(row["invited_id"]) for row in rows})
+            return int(row["total"])
 
     def inviter_id(
         self,
         user_id: str,
-        legacy_records: Mapping[Any, Iterable[Any]] | None = None,
     ) -> str | None:
         user_id = str(user_id).strip()
-        if not user_id:
-            return None
-        if self.database.is_file():
-            with DatabaseUnitOfWork(self.database, read_only=True) as uow:
-                if self._schema_ready(uow):
-                    row = uow.query_one(
-                        "SELECT inviter_id FROM invitation_reward_invites "
-                        "WHERE invited_id=? ORDER BY created_at LIMIT 1",
-                        (user_id,),
-                    )
-                    if row is not None:
-                        return str(row["inviter_id"])
-        for inviter_id, invited_id in self._legacy_invites(legacy_records):
-            if invited_id == user_id:
-                return inviter_id
-        return None
+        if not user_id or not self.database.is_file():
+            raise RuntimeError("invitation schema is missing")
+        with DatabaseUnitOfWork(self.database, read_only=True) as uow:
+            if not self._schema_ready(uow):
+                raise RuntimeError("invitation schema is missing")
+            row = uow.query_one(
+                "SELECT inviter_id FROM invitation_reward_invites "
+                "WHERE invited_id=? ORDER BY created_at LIMIT 1",
+                (user_id,),
+            )
+            return None if row is None else str(row["inviter_id"])
 
     def has_invitation_code(
         self,
         user_id: str,
-        legacy_records: Mapping[Any, Iterable[Any]] | None = None,
     ) -> bool:
-        return self.inviter_id(user_id, legacy_records) is not None
+        return self.inviter_id(user_id) is not None
 
     def bind(
         self,
         inviter_id: str,
         invited_id: str,
-        legacy_records: Mapping[Any, Iterable[Any]] | None = None,
     ) -> InvitationBindingResult:
         inviter_id, invited_id = str(inviter_id).strip(), str(invited_id).strip()
         if not inviter_id or not invited_id or inviter_id == invited_id:
@@ -158,12 +133,6 @@ class InvitationRewardClaimSqlRepository:
         with DatabaseUnitOfWork(self.database, immediate=True) as uow:
             if not self._schema_ready(uow):
                 return InvitationBindingResult("schema_missing", inviter_id, invited_id)
-            for legacy_inviter, legacy_invited in self._legacy_invites(legacy_records):
-                uow.execute(
-                    "INSERT INTO invitation_reward_invites(inviter_id,invited_id,source) "
-                    "VALUES(?,?,?) ON CONFLICT(inviter_id,invited_id) DO NOTHING",
-                    (legacy_inviter, legacy_invited, "legacy_json"),
-                )
             existing = uow.query_one(
                 "SELECT inviter_id FROM invitation_reward_invites WHERE invited_id=? "
                 "ORDER BY created_at LIMIT 1",
@@ -181,14 +150,12 @@ class InvitationRewardClaimSqlRepository:
 
     def reward_definitions(
         self,
-        legacy_rewards: Mapping[Any, Iterable[Mapping[str, Any]]] | None = None,
     ) -> dict[str, list[dict[str, Any]]]:
-        fallback = self._legacy_rewards(legacy_rewards)
         if not self.database.is_file():
-            return fallback
+            raise RuntimeError("invitation schema is missing")
         with DatabaseUnitOfWork(self.database, read_only=True) as uow:
-            if not self._definition_schema_ready(uow):
-                return fallback
+            if not self._schema_ready(uow):
+                raise RuntimeError("invitation schema is missing")
             rows = uow.query_all(
                 "SELECT threshold,rewards_json FROM invitation_reward_definitions "
                 "ORDER BY threshold"
@@ -203,13 +170,12 @@ class InvitationRewardClaimSqlRepository:
                 result[str(int(row["threshold"]))] = [
                     dict(item) for item in items if isinstance(item, Mapping)
                 ]
-        return result or fallback
+        return result
 
     def set_reward_definition(
         self,
         threshold: int,
         reward_items: Iterable[Mapping[str, Any]],
-        legacy_rewards: Mapping[Any, Iterable[Mapping[str, Any]]] | None = None,
     ) -> dict[str, Any]:
         threshold = int(threshold)
         if threshold <= 0:
@@ -220,17 +186,8 @@ class InvitationRewardClaimSqlRepository:
         if not self.database.is_file():
             return {"status": "schema_missing", "threshold": threshold}
         with DatabaseUnitOfWork(self.database, immediate=True) as uow:
-            if not self._definition_schema_ready(uow):
+            if not self._schema_ready(uow):
                 return {"status": "schema_missing", "threshold": threshold}
-            for raw_threshold, raw_items in self._legacy_rewards(legacy_rewards).items():
-                uow.execute(
-                    "INSERT INTO invitation_reward_definitions(threshold,rewards_json) "
-                    "VALUES(?,?) ON CONFLICT(threshold) DO NOTHING",
-                    (
-                        int(raw_threshold),
-                        json.dumps(raw_items, ensure_ascii=False, sort_keys=True, separators=(",", ":")),
-                    ),
-                )
             encoded = json.dumps(items, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
             changed = uow.execute(
                 "INSERT INTO invitation_reward_definitions(threshold,rewards_json) "
@@ -279,10 +236,10 @@ class InvitationRewardClaimSqlRepository:
 
     def claimed_thresholds(self, user_id: str) -> set[int]:
         if not self.database.is_file():
-            return set()
+            raise RuntimeError("invitation schema is missing")
         with DatabaseUnitOfWork(self.database, read_only=True) as uow:
             if not self._schema_ready(uow):
-                return set()
+                raise RuntimeError("invitation schema is missing")
             rows = uow.query_all(
                 "SELECT threshold FROM invitation_reward_claims WHERE user_id=?",
                 (str(user_id),),
@@ -313,10 +270,8 @@ class InvitationRewardClaimSqlRepository:
         self,
         operation_id: str,
         user_id: str,
-        invited_user_ids: Iterable[Any],
         rewards_by_threshold: Mapping[Any, Iterable[Mapping[str, Any]]],
         requested_thresholds: Iterable[Any],
-        legacy_claimed_thresholds: Iterable[Any],
         max_goods_num: int,
     ) -> InvitationRewardClaimResult:
         operation_id = str(operation_id).strip()
@@ -325,20 +280,8 @@ class InvitationRewardClaimSqlRepository:
         if not operation_id or max_goods_num < 0:
             raise ValueError("valid invitation reward claim is required")
 
-        invited_ids = tuple(
-            sorted(
-                {
-                    str(invited_id).strip()
-                    for invited_id in invited_user_ids
-                    if str(invited_id).strip() and str(invited_id).strip() != user_id
-                }
-            )
-        )
         rewards = self._normalize_rewards(rewards_by_threshold)
         requested = tuple(sorted({int(value) for value in requested_thresholds}))
-        legacy_claimed = tuple(
-            sorted({int(value) for value in legacy_claimed_thresholds if int(value) > 0})
-        )
         payload = json.dumps([user_id, requested], ensure_ascii=True, separators=(",", ":"))
 
         if not self.database.is_file():
@@ -347,19 +290,6 @@ class InvitationRewardClaimSqlRepository:
         with DatabaseUnitOfWork(self.database, immediate=True) as uow:
             if not self._schema_ready(uow):
                 return InvitationRewardClaimResult("schema_missing")
-
-            for invited_id in invited_ids:
-                uow.execute(
-                    "INSERT INTO invitation_reward_invites(inviter_id,invited_id,source) "
-                    "VALUES(?,?,?) ON CONFLICT(inviter_id,invited_id) DO NOTHING",
-                    (user_id, invited_id, "legacy_json"),
-                )
-            for threshold in legacy_claimed:
-                uow.execute(
-                    "INSERT INTO invitation_reward_claims(user_id,threshold,source) "
-                    "VALUES(?,?,?) ON CONFLICT(user_id,threshold) DO NOTHING",
-                    (user_id, threshold, "legacy_json"),
-                )
 
             previous = uow.query_one(
                 "SELECT payload,thresholds_json,invitation_count "

@@ -890,7 +890,24 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "invitation_application_owned": "invitation_claim(" in compensation_invitation and "InvitationRewardClaimService" not in compensation_invitation,
             "invitation_request_path_has_no_ddl": "CREATE TABLE" not in compensation_invitation_repository and "ALTER TABLE" not in compensation_invitation_repository,
             "invitation_schema_migration_owned": "def apply_compensation_invitation_reward_schema" in compensation_migrations and "legacy.compensation.003" in compensation_legacy_migrated,
-            "invitation_schema_checked": "def _schema_ready" in compensation_invitation_repository and "schema_missing" in compensation_invitation_repository,
+            "invitation_schema_checked": "def _schema_ready" in compensation_invitation_repository and "schema_missing" in compensation_invitation_repository and "legacy.compensation.invitation-json-v1" in compensation_invitation_repository,
+            "invitation_snapshot_migration_owned": (
+                "def apply_compensation_invitation_snapshot_migration" in compensation_migrations
+                and "legacy.compensation.007" in compensation_legacy_migrated
+                and "invitation_reward_migrations" in compensation_migrations
+            ),
+            "invitation_request_path_has_no_json": all(
+                token not in compensation_invitation
+                for token in (
+                    "load_invitation_records",
+                    "load_invitation_rewards",
+                    "load_claimed_records",
+                    "save_invitation_records",
+                    "save_invitation_rewards",
+                    "load_json_file",
+                    "save_json_file",
+                )
+            ),
             "invitation_binding_application_owned": "invitation_bind(" in compensation_invitation and "add_invitation_record(inviter_id, user_id)" not in compensation_invitation,
             "invitation_binding_projection_owned": "def bind(" in compensation_invitation_repository and "invitation_bind(" in compensation_invitation,
             "invitation_definition_migration_owned": "def apply_compensation_invitation_definition_schema" in compensation_migrations and "legacy.compensation.004" in compensation_legacy_migrated,
@@ -967,7 +984,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
             ),
             "reward_inventory_application_owned": "PlayerInventoryApplication" in compensation_common and "_inventory_application().grant_item(" in compensation_reward_writer,
             "reward_inventory_legacy_writer_disabled": ".send_back(" not in compensation_reward_writer,
-            "status": "claim, invitation and reward definition ledgers startup-migrated; requests fail closed without DDL",
+            "status": "claim, invitation snapshots and reward definitions startup-migrated; requests fail closed without DDL or JSON fallback",
         },
         "stone_gift": {
             "default_legacy_handler_disabled": '"送灵石" if _legacy_stone_gift_enabled' in base,

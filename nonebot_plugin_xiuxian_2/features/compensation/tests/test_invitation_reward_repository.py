@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import tempfile
 import unittest
+import json
 from pathlib import Path
 
 from ....infrastructure.database import DatabaseUnitOfWork
@@ -9,6 +10,7 @@ from ..invitation_repository import InvitationRewardClaimSqlRepository
 from ..migrations import (
     apply_compensation_invitation_definition_schema,
     apply_compensation_invitation_reward_schema,
+    apply_compensation_invitation_snapshot_migration,
 )
 from tests.test_db_backend import db_backend
 
@@ -17,6 +19,10 @@ class InvitationRewardRepositoryTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temp = tempfile.TemporaryDirectory()
         self.database = Path(self.temp.name) / "game.db"
+        self.rewards = {
+            "1": [{"type": "stone", "id": "stone", "name": "灵石", "quantity": 50}],
+            "3": [{"type": "道具", "id": 101, "name": "邀请令", "quantity": 2}],
+        }
         with db_backend.transaction(self.database) as conn:
             conn.execute("CREATE TABLE user_xiuxian(user_id TEXT PRIMARY KEY,stone INTEGER)")
             conn.execute("INSERT INTO user_xiuxian VALUES(?,?)", ("u1", 10))
@@ -28,21 +34,43 @@ class InvitationRewardRepositoryTests(unittest.TestCase):
         with DatabaseUnitOfWork(self.database) as uow:
             apply_compensation_invitation_reward_schema(uow)
             apply_compensation_invitation_definition_schema(uow)
+            apply_compensation_invitation_snapshot_migration(
+                uow,
+                Path(self.temp.name) / "invitation_records.json",
+                Path(self.temp.name) / "invitation_claimed.json",
+                Path(self.temp.name) / "invitation_rewards.json",
+            )
         self.repository = InvitationRewardClaimSqlRepository(self.database)
-        self.rewards = {
-            "1": [{"type": "stone", "id": "stone", "name": "灵石", "quantity": 50}],
-            "3": [{"type": "道具", "id": 101, "name": "邀请令", "quantity": 2}],
-        }
 
     def tearDown(self) -> None:
         self.temp.cleanup()
 
-    def test_claim_replay_and_legacy_snapshot_are_idempotent(self) -> None:
+    def test_claim_uses_startup_migrated_snapshots_and_replays_idempotently(self) -> None:
+        (Path(self.temp.name) / "invitation_records.json").write_text(
+            json.dumps({"u1": ["a", "b", "c"]}), encoding="utf-8"
+        )
+        (Path(self.temp.name) / "invitation_claimed.json").write_text(
+            json.dumps({"u1": [1]}), encoding="utf-8"
+        )
+        (Path(self.temp.name) / "invitation_rewards.json").write_text(
+            json.dumps(self.rewards), encoding="utf-8"
+        )
+        with DatabaseUnitOfWork(self.database) as uow:
+            uow.execute(
+                "DELETE FROM invitation_reward_migrations WHERE migration_key=?",
+                ("legacy.compensation.invitation-json-v1",),
+            )
+            apply_compensation_invitation_snapshot_migration(
+                uow,
+                Path(self.temp.name) / "invitation_records.json",
+                Path(self.temp.name) / "invitation_claimed.json",
+                Path(self.temp.name) / "invitation_rewards.json",
+            )
         result = self.repository.claim(
-            "op-1", "u1", ["a", "b", "c", "u1"], self.rewards, [1, 3], [1], 1000
+            "op-1", "u1", self.rewards, [1, 3], 1000
         )
         replay = self.repository.claim(
-            "op-1", "u1", ["changed"], {"1": self.rewards["1"]}, [1, 3], [], 1000
+            "op-1", "u1", {"1": self.rewards["1"]}, [1, 3], 1000
         )
 
         self.assertEqual(("applied", (3,), 3), (result.status, result.thresholds, result.invitation_count))
@@ -58,7 +86,7 @@ class InvitationRewardRepositoryTests(unittest.TestCase):
                 conn.execute("CREATE TABLE user_xiuxian(user_id TEXT PRIMARY KEY,stone INTEGER)")
                 conn.execute("INSERT INTO user_xiuxian VALUES(?,?)", ("u1", 0))
             result = InvitationRewardClaimSqlRepository(database).claim(
-                "op", "u1", ["a"], self.rewards, [1], [], 100
+                "op", "u1", self.rewards, [1], 100
             )
             self.assertEqual("schema_missing", result.status)
             with db_backend.connection(database) as conn:
@@ -72,19 +100,37 @@ class InvitationRewardRepositoryTests(unittest.TestCase):
     def test_operation_failure_rolls_back_rewards_and_claims(self) -> None:
         with db_backend.transaction(self.database) as conn:
             conn.execute(
+                "INSERT INTO invitation_reward_invites(inviter_id,invited_id,source) "
+                "VALUES('u1','a','test')"
+            )
+            conn.execute(
                 "CREATE TRIGGER fail_invitation_operation BEFORE INSERT ON "
                 "invitation_reward_operations BEGIN SELECT RAISE(ABORT,'failed'); END"
             )
         with self.assertRaises(Exception):
-            self.repository.claim("op-fail", "u1", ["a"], self.rewards, [1], [], 1000)
+            self.repository.claim("op-fail", "u1", self.rewards, [1], 1000)
         with db_backend.connection(self.database) as conn:
             self.assertEqual(10, conn.execute("SELECT stone FROM user_xiuxian WHERE user_id='u1'").fetchone()[0])
             self.assertEqual(0, conn.execute("SELECT COUNT(*) FROM invitation_reward_claims").fetchone()[0])
 
-    def test_binding_imports_legacy_snapshot_and_is_idempotent(self) -> None:
-        first = self.repository.bind("u1", "a", {"u1": ["b"]})
-        duplicate = self.repository.bind("u1", "a", {"u1": ["a"]})
-        conflict = self.repository.bind("u2", "a", {})
+    def test_binding_uses_startup_migrated_snapshot_and_is_idempotent(self) -> None:
+        (Path(self.temp.name) / "invitation_records.json").write_text(
+            json.dumps({"u1": ["b"]}), encoding="utf-8"
+        )
+        with DatabaseUnitOfWork(self.database) as uow:
+            uow.execute(
+                "DELETE FROM invitation_reward_migrations WHERE migration_key=?",
+                ("legacy.compensation.invitation-json-v1",),
+            )
+            apply_compensation_invitation_snapshot_migration(
+                uow,
+                Path(self.temp.name) / "invitation_records.json",
+                Path(self.temp.name) / "missing-claimed.json",
+                Path(self.temp.name) / "missing-rewards.json",
+            )
+        first = self.repository.bind("u1", "a")
+        duplicate = self.repository.bind("u1", "a")
+        conflict = self.repository.bind("u2", "a")
 
         self.assertEqual("applied", first.status)
         self.assertEqual("duplicate", duplicate.status)
@@ -95,10 +141,23 @@ class InvitationRewardRepositoryTests(unittest.TestCase):
 
     def test_reward_definition_import_and_update_are_sql_owned(self) -> None:
         legacy = {"1": [{"type": "stone", "id": "stone", "name": "灵石", "quantity": 1}]}
+        (Path(self.temp.name) / "invitation_rewards.json").write_text(
+            json.dumps(legacy), encoding="utf-8"
+        )
+        with DatabaseUnitOfWork(self.database) as uow:
+            uow.execute(
+                "DELETE FROM invitation_reward_migrations WHERE migration_key=?",
+                ("legacy.compensation.invitation-json-v1",),
+            )
+            apply_compensation_invitation_snapshot_migration(
+                uow,
+                Path(self.temp.name) / "missing-records.json",
+                Path(self.temp.name) / "missing-claimed.json",
+                Path(self.temp.name) / "invitation_rewards.json",
+            )
         created = self.repository.set_reward_definition(
             3,
             [{"type": "道具", "id": 101, "name": "邀请令", "quantity": 2}],
-            legacy,
         )
         self.assertEqual("applied", created["status"])
         self.assertEqual({"1", "3"}, set(self.repository.reward_definitions()))

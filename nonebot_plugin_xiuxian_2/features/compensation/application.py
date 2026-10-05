@@ -10,6 +10,46 @@ class CompensationApplication(MigratedFeatureApplication):
     def __init__(self, database: str | Path, *, repository: CompensationRepository | None = None) -> None:
         super().__init__(database, feature="compensation", repository=repository or CompensationRepository(database))
 
+    def compensation_definitions(self):
+        return self.repository.list_compensation_definitions()
+
+    def compensation_definition(self, record_id):
+        return self.repository.get_compensation_definition(record_id)
+
+    def compensation_claimed_data(self):
+        return self.repository.compensation_claimed_data()
+
+    def compensation_catalog_version(self):
+        return self.repository.compensation_catalog_version()
+
+    def replay_compensation_definition_upsert(self, operation_id, request_identity):
+        return self.repository.replay_compensation_definition_upsert(
+            operation_id, request_identity
+        )
+
+    def upsert_compensation_definition(
+        self, operation_id, request_identity, record_id, record, expected_version=None
+    ):
+        return self.repository.upsert_compensation_definition(
+            operation_id,
+            request_identity,
+            record_id,
+            record,
+            expected_version,
+        )
+
+    def delete_compensation_definition(
+        self, operation_id, record_id, expected_version=None
+    ):
+        return self.repository.delete_compensation_definition(
+            operation_id, record_id, expected_version
+        )
+
+    def clear_compensation_definitions(self, operation_id, expected_catalog_version):
+        return self.repository.clear_compensation_definitions(
+            operation_id, expected_catalog_version
+        )
+
     def claim_reward(self, *, operation_id, reward_type, record_id, user_id, reward_items, max_goods_num, usage_limit=0, legacy_used_count=0, expected_definition_version=None):
         return self.repository.claim_reward(operation_id, reward_type, record_id, user_id, reward_items, max_goods_num, usage_limit, legacy_used_count, expected_definition_version)
 
@@ -67,23 +107,23 @@ class CompensationApplication(MigratedFeatureApplication):
     def invitation_claimed_thresholds(self, user_id):
         return self.repository.invitation_claimed_thresholds(user_id)
 
-    def invitation_count(self, inviter_id, legacy_records=None):
-        return self.repository.invitation_count(inviter_id, legacy_records)
+    def invitation_count(self, inviter_id):
+        return self.repository.invitation_count(inviter_id)
 
-    def invitation_inviter_id(self, user_id, legacy_records=None):
-        return self.repository.invitation_inviter_id(user_id, legacy_records)
+    def invitation_inviter_id(self, user_id):
+        return self.repository.invitation_inviter_id(user_id)
 
-    def invitation_has_code(self, user_id, legacy_records=None):
-        return self.repository.invitation_has_code(user_id, legacy_records)
+    def invitation_has_code(self, user_id):
+        return self.repository.invitation_has_code(user_id)
 
-    def invitation_bind(self, inviter_id, invited_id, legacy_records=None):
-        return self.repository.invitation_bind(inviter_id, invited_id, legacy_records)
+    def invitation_bind(self, inviter_id, invited_id):
+        return self.repository.invitation_bind(inviter_id, invited_id)
 
-    def invitation_rewards(self, legacy_rewards=None):
-        return self.repository.invitation_rewards(legacy_rewards)
+    def invitation_rewards(self):
+        return self.repository.invitation_rewards()
 
-    def invitation_set_reward(self, threshold, reward_items, legacy_rewards=None):
-        return self.repository.invitation_set_reward(threshold, reward_items, legacy_rewards)
+    def invitation_set_reward(self, threshold, reward_items):
+        return self.repository.invitation_set_reward(threshold, reward_items)
 
     def invitation_get_result(self, operation_id):
         return self.repository.invitation_get_result(operation_id)
@@ -93,19 +133,15 @@ class CompensationApplication(MigratedFeatureApplication):
         *,
         operation_id,
         user_id,
-        invited_user_ids,
         rewards_by_threshold,
         requested_thresholds,
-        legacy_claimed_thresholds,
         max_goods_num,
     ):
         return self.repository.invitation_claim(
             operation_id,
             user_id,
-            invited_user_ids,
             rewards_by_threshold,
             requested_thresholds,
-            legacy_claimed_thresholds,
             max_goods_num,
         )
 

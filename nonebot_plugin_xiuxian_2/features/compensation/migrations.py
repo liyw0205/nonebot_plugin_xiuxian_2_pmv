@@ -58,6 +58,132 @@ def apply_compensation_invitation_definition_schema(uow: DatabaseUnitOfWork) -> 
     )
 
 
+def apply_compensation_invitation_snapshot_migration(
+    uow: DatabaseUnitOfWork,
+    legacy_records_path: str | Path | None = None,
+    legacy_claimed_path: str | Path | None = None,
+    legacy_rewards_path: str | Path | None = None,
+    occurred_at: str | None = None,
+) -> None:
+    """Import invitation JSON snapshots once before request handlers run."""
+    package_root = Path(__file__).resolve().parents[2]
+    legacy_dir = (
+        package_root
+        / "xiuxian"
+        / "xiuxian_compensation"
+        / "compensation_data"
+        / "invitation_data"
+    )
+    paths = {
+        "records": Path(legacy_records_path or legacy_dir / "invitation_records.json"),
+        "claimed": Path(legacy_claimed_path or legacy_dir / "invitation_claimed.json"),
+        "rewards": Path(legacy_rewards_path or legacy_dir / "invitation_rewards.json"),
+    }
+    migrated_at = str(occurred_at or datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+    required_tables = {
+        "invitation_reward_invites",
+        "invitation_reward_claims",
+        "invitation_reward_definitions",
+    }
+    existing_tables = {
+        str(row["name"])
+        for row in uow.query_all("SELECT name FROM sqlite_master WHERE type='table'")
+    }
+    if not required_tables.issubset(existing_tables):
+        raise RuntimeError("invitation schemas must be migrated before snapshot import")
+
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS invitation_reward_migrations("
+        "migration_key TEXT PRIMARY KEY,records_sha256 TEXT NOT NULL,"
+        "claimed_sha256 TEXT NOT NULL,rewards_sha256 TEXT NOT NULL,migrated_at TEXT NOT NULL)"
+    )
+    migration_key = "legacy.compensation.invitation-json-v1"
+    if uow.query_one(
+        "SELECT 1 AS found FROM invitation_reward_migrations WHERE migration_key=?",
+        (migration_key,),
+    ) is not None:
+        return
+
+    def load_snapshot(path: Path) -> tuple[dict, str]:
+        try:
+            with path.open("rb") as snapshot:
+                raw = snapshot.read(1024 * 1024 + 1)
+        except FileNotFoundError:
+            raw = b""
+        except OSError as exc:
+            raise RuntimeError(f"could not read invitation snapshot: {path}") from exc
+        if len(raw) > 1024 * 1024:
+            raise ValueError(f"invitation snapshot exceeds 1 MiB: {path}")
+        if not raw.strip():
+            value = {}
+        else:
+            try:
+                value = json.loads(raw.decode("utf-8"))
+            except (UnicodeDecodeError, ValueError, TypeError) as exc:
+                raise ValueError(f"invalid invitation snapshot: {path}") from exc
+            if not isinstance(value, dict):
+                raise ValueError(f"invitation snapshot must be an object: {path}")
+        return value, hashlib.sha256(raw).hexdigest()
+
+    records, records_hash = load_snapshot(paths["records"])
+    claimed, claimed_hash = load_snapshot(paths["claimed"])
+    rewards, rewards_hash = load_snapshot(paths["rewards"])
+
+    for raw_inviter, raw_invited in records.items():
+        inviter_id = str(raw_inviter).strip()
+        if not inviter_id or not isinstance(raw_invited, (list, tuple, set)):
+            continue
+        for raw_invited_id in raw_invited:
+            invited_id = str(raw_invited_id).strip()
+            if invited_id and invited_id != inviter_id:
+                uow.execute(
+                    "INSERT INTO invitation_reward_invites(inviter_id,invited_id,source) "
+                    "VALUES(?,?,?) ON CONFLICT(inviter_id,invited_id) DO NOTHING",
+                    (inviter_id, invited_id, "legacy_json"),
+                )
+
+    for raw_user_id, raw_thresholds in claimed.items():
+        user_id = str(raw_user_id).strip()
+        if not user_id or not isinstance(raw_thresholds, (list, tuple, set)):
+            continue
+        for raw_threshold in raw_thresholds:
+            try:
+                threshold = int(raw_threshold)
+            except (TypeError, ValueError):
+                continue
+            if threshold > 0:
+                uow.execute(
+                    "INSERT INTO invitation_reward_claims(user_id,threshold,source) "
+                    "VALUES(?,?,?) ON CONFLICT(user_id,threshold) DO NOTHING",
+                    (user_id, threshold, "legacy_json"),
+                )
+
+    for raw_threshold, raw_items in rewards.items():
+        try:
+            threshold = int(raw_threshold)
+        except (TypeError, ValueError):
+            continue
+        if threshold <= 0 or not isinstance(raw_items, (list, tuple)):
+            continue
+        items = [dict(item) for item in raw_items if isinstance(item, dict)]
+        if not items:
+            continue
+        uow.execute(
+            "INSERT INTO invitation_reward_definitions(threshold,rewards_json) "
+            "VALUES(?,?) ON CONFLICT(threshold) DO NOTHING",
+            (
+                threshold,
+                json.dumps(items, ensure_ascii=True, sort_keys=True, separators=(",", ":")),
+            ),
+        )
+
+    uow.execute(
+        "INSERT INTO invitation_reward_migrations(migration_key,records_sha256,"
+        "claimed_sha256,rewards_sha256,migrated_at) VALUES(?,?,?,?,?)",
+        (migration_key, records_hash, claimed_hash, rewards_hash, migrated_at),
+    )
+
+
 def apply_compensation_definition_schema(
     uow: DatabaseUnitOfWork,
     legacy_definitions_path: str | Path | None = None,
@@ -128,13 +254,21 @@ def apply_compensation_definition_schema(
         return
 
     def load_dict(path: Path) -> dict:
-        if not path.is_file():
+        try:
+            raw = path.read_text(encoding="utf-8")
+        except FileNotFoundError:
+            return {}
+        except OSError as exc:
+            raise RuntimeError(f"could not read compensation snapshot: {path}") from exc
+        if not raw.strip():
             return {}
         try:
-            value = json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, ValueError, TypeError):
-            return {}
-        return value if isinstance(value, dict) else {}
+            value = json.loads(raw)
+        except (UnicodeDecodeError, ValueError, TypeError) as exc:
+            raise ValueError(f"invalid compensation snapshot: {path}") from exc
+        if not isinstance(value, dict):
+            raise ValueError(f"compensation snapshot must be an object: {path}")
+        return value
 
     definitions = load_dict(definitions_path)
     claims = load_dict(claims_path)

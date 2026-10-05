@@ -27,6 +27,10 @@ def test_invitation_facade_uses_lazy_game_database_service():
     assert "_compensation_application().invitation_claimed_thresholds(" in source
     assert "_compensation_application().invitation_get_result(" in source
     assert "_compensation_application().invitation_claim(" in source
+    assert "load_invitation_records" not in source
+    assert "load_invitation_rewards" not in source
+    assert "load_claimed_records" not in source
+    assert "INVITATION_DATA_PATH.mkdir" not in source
     assert "InvitationRewardClaimService" not in source
     assert "getattr(_invitation_reward_service()," not in source
 

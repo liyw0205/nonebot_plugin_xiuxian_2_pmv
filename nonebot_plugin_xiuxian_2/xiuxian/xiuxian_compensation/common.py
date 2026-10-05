@@ -125,19 +125,15 @@ def _run_compensation_action(
     ledger_payload=None,
     **payload,
 ):
-    """Route one historical compensation mutation through the new boundary."""
-    # Resolve the database from the active legacy service.  Tests and runtime
-    # migrations may replace that service with one backed by a temporary or
-    # alternate catalog; the idempotency ledger must follow the same store.
+    """Keep invitation effects behind the shared operation-ledger adapter."""
     database = database or getattr(_compensation_definition_service(), "_database", None)
-    compensation_application = CompensationApplication(database or get_paths().game_db)
+    application = CompensationApplication(database or get_paths().game_db)
 
     def invoke():
         result = call()
-        # Historical JSON writers mutate in place and return None on success.
         return {"status": "applied"} if result is None else result
 
-    outcome = compensation_application.execute_legacy_call(
+    outcome = application.execute_legacy_call(
         operation_id=str(operation_id),
         user_id=str(user_id),
         action=action,
@@ -153,13 +149,13 @@ def _run_compensation_action(
 
 def load_data(config: Dict[str, Any]) -> Dict[str, dict]:
     if config["type_key"] == "补偿":
-        return _compensation_definition_service().list()
+        return _compensation_application().compensation_definitions()
     return _compensation_application().reward_definitions(config["type_key"])
 
 
 def get_reward_definition(config: Dict[str, Any], record_id: str):
     if config["type_key"] == "补偿":
-        return _compensation_definition_service().list().get(record_id)
+        return _compensation_application().compensation_definition(record_id)
     return _compensation_application().reward_definition(
         config["type_key"], record_id
     )
@@ -191,7 +187,7 @@ def upsert_reward_definition(
 
 def load_claimed_data(config: Dict[str, Any]) -> Dict[str, List[str]]:
     if config["type_key"] == "补偿":
-        return _compensation_definition_service().claimed_data()
+        return _compensation_application().compensation_claimed_data()
     return _compensation_application().list_claims(config["type_key"])
 
 
@@ -513,7 +509,7 @@ async def create_reward_record(
     replay = None
     if config["type_key"] == "补偿":
         operation_id = _compensation_upsert_operation_id(event)
-        replay = _compensation_definition_service().replay_upsert(
+        replay = _compensation_application().replay_compensation_definition_upsert(
             operation_id, request_identity
         )
         if replay is not None and replay.status == "operation_conflict":
@@ -586,20 +582,11 @@ async def create_reward_record(
                 if record_id in data
                 else None
             )
-            result = _run_compensation_action(
-                "definition_upsert",
+            result = _compensation_application().upsert_compensation_definition(
                 operation_id,
-                str(event.get_user_id()),
-                lambda: _compensation_definition_service().upsert(
-                    operation_id,
-                    request_identity,
-                    record_id,
-                    record,
-                    expected_version,
-                ),
-                database=getattr(_compensation_definition_service(), "_database", None),
-                record_id=record_id,
-                request_identity=request_identity,
+                request_identity,
+                record_id,
+                record,
                 expected_version=expected_version,
             )
             if result.status == "operation_conflict":
@@ -667,7 +654,7 @@ async def claim_normal_reward(
     user_id = str(user_info["user_id"])
 
     if config["type_key"] == "补偿":
-        record = load_data(config).get(record_id)
+        record = _compensation_application().compensation_definition(record_id)
     else:
         record = _compensation_application().reward_definition(
             config["type_key"], record_id
@@ -703,12 +690,7 @@ async def claim_normal_reward(
     # 先 claim：成功后 has_claimed 会挡住同事件重放。
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
     operation_id = f"compensation:claim:{event_id or runtime_ids.new_id()}:{user_id}:{config['type_key']}:{record_id}"
-    database = (
-        getattr(_compensation_definition_service(), "_database", None)
-        if config["type_key"] == "补偿"
-        else None
-    )
-    result = _compensation_application(database).claim_reward(
+    result = _compensation_application().claim_reward(
         operation_id=operation_id,
         reward_type=config["type_key"],
         record_id=record_id,
@@ -757,18 +739,13 @@ def delete_record(
     operation_id: str | None = None,
 ):
     if config["type_key"] == "补偿":
-        definition = _compensation_definition_service().get(record_id)
-        version = None if definition is None else definition.version
+        definition = _compensation_application().compensation_definition(record_id)
+        version = None if definition is None else definition.get("_definition_version")
         operation_id = operation_id or f"compensation-delete:{record_id}:v{version or 'missing'}"
-        return _run_compensation_action(
-            "definition_delete",
+        return _compensation_application().delete_compensation_definition(
             operation_id,
-            "system",
-            lambda: _compensation_definition_service().delete(operation_id, record_id, version),
-            database=getattr(_compensation_definition_service(), "_database", None),
-            ledger_payload={"record_id": record_id},
-            record_id=record_id,
-            expected_version=version,
+            record_id,
+            version,
         )
 
     operation_id = operation_id or f"compensation-delete:{runtime_ids.new_id()}"
@@ -779,16 +756,11 @@ def delete_record(
 
 def clear_records(config: Dict[str, Any], operation_id: str | None = None):
     if config["type_key"] == "补偿":
-        catalog_version = _compensation_definition_service().catalog_version()
+        catalog_version = _compensation_application().compensation_catalog_version()
         operation_id = operation_id or f"compensation-clear:{catalog_version}"
-        result = _run_compensation_action(
-            "definition_clear",
+        result = _compensation_application().clear_compensation_definitions(
             operation_id,
-            "system",
-            lambda: _compensation_definition_service().clear(operation_id, catalog_version),
-            database=getattr(_compensation_definition_service(), "_database", None),
-            ledger_payload={"scope": "all"},
-            expected_catalog_version=catalog_version,
+            catalog_version,
         )
         logger.info(
             f"已清空所有补偿数据：定义{result.removed_definitions}条，"
@@ -882,7 +854,7 @@ def clean_expired_by_config(config: Dict[str, Any]):
             if not is_expired(info):
                 continue
             version = int(info["_definition_version"])
-            result = _compensation_definition_service().delete(
+            result = _compensation_application().delete_compensation_definition(
                 f"compensation-expire:{record_id}:v{version}",
                 record_id,
                 version,

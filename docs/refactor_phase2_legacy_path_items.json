@@ -2039,15 +2039,15 @@
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/redeem_code.py:37",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/redeem_code.py:102",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/redeem_code.py:102-191",
         "nonebot_plugin_xiuxian_2/features/compensation/application.py:13-34",
         "nonebot_plugin_xiuxian_2/features/compensation/reward_claim_repository.py:284-390",
         "nonebot_plugin_xiuxian_2/features/compensation/migrations.py:17-26",
         "nonebot_plugin_xiuxian_2/features/compensation/tests/test_reward_claim_repository.py",
         "nonebot_plugin_xiuxian_2/features/compensation/tests/test_reward_claim_limit_repository.py",
-        "tests/test_source_quality.py:1879-1888"
+        "tests/test_source_quality.py:1879-1888",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/redeem_code.py:37",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/redeem_code.py:102"
       ],
       "source_declaration_found": true,
       "source": {
@@ -2072,14 +2072,14 @@
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/redeem_code.py:34",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/redeem_code.py:93",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/redeem_code.py:214-277",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/common.py:152-155",
         "nonebot_plugin_xiuxian_2/features/compensation/application.py:41-54",
         "nonebot_plugin_xiuxian_2/features/compensation/reward_definition_repository.py:147-160",
         "nonebot_plugin_xiuxian_2/features/compensation/reward_claim_repository.py:139-152",
-        "nonebot_plugin_xiuxian_2/features/compensation/tests/test_reward_definition_repository.py"
+        "nonebot_plugin_xiuxian_2/features/compensation/tests/test_reward_definition_repository.py",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/redeem_code.py:34",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/redeem_code.py:93"
       ],
       "source_declaration_found": true,
       "source": {
@@ -2104,10 +2104,10 @@
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/redeem_code.py:38",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/redeem_code.py:193",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/redeem_code.py:192-201",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_utils/utils.py:1812-1893"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_utils/utils.py:1812-1893",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/redeem_code.py:38",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/redeem_code.py:193"
       ],
       "source_declaration_found": true,
       "source": {
@@ -2132,10 +2132,10 @@
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/redeem_code.py:35",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/redeem_code.py:204",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/redeem_code.py:203-212",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_utils/utils.py:1812-1893"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_utils/utils.py:1812-1893",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/redeem_code.py:35",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/redeem_code.py:204"
       ],
       "source_declaration_found": true,
       "source": {
@@ -2322,12 +2322,12 @@
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/redeem_code.py:32",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/redeem_code.py:58",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/common.py:752-777",
         "nonebot_plugin_xiuxian_2/features/compensation/application.py:13-22",
         "nonebot_plugin_xiuxian_2/features/compensation/reward_definition_repository.py:300-360",
-        "nonebot_plugin_xiuxian_2/features/compensation/tests/test_reward_definition_repository.py"
+        "nonebot_plugin_xiuxian_2/features/compensation/tests/test_reward_definition_repository.py",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/redeem_code.py:32",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/redeem_code.py:58"
       ],
       "source_declaration_found": true,
       "source": {
@@ -2352,12 +2352,12 @@
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/gift_package.py:23",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/gift_package.py:49",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/common.py:752-777",
         "nonebot_plugin_xiuxian_2/features/compensation/application.py:13-22",
         "nonebot_plugin_xiuxian_2/features/compensation/reward_definition_repository.py:300-360",
-        "nonebot_plugin_xiuxian_2/features/compensation/tests/test_reward_definition_repository.py"
+        "nonebot_plugin_xiuxian_2/features/compensation/tests/test_reward_definition_repository.py",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/gift_package.py:23",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/gift_package.py:49"
       ],
       "source_declaration_found": true,
       "source": {
@@ -2369,22 +2369,25 @@
       "id": "command:compensation:删除补偿",
       "kind": "commands",
       "entry": "compensation:删除补偿 (aliases: )",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "The default delete handler uses the feature application and SQL repository with version checking; definition, claims, counters and operation outcomes commit atomically.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/compensation.py:23 delete_compensation_cmd = on_command('删除补偿') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/compensation.py:49 _ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/compensation.py:49 _ -> delete_record -> CompensationApplication.delete_compensation_definition -> CompensationDefinitionSqlRepository.delete (version CAS, claims/counters, legacy receipt and operation ledger in one immediate UOW)",
+        "legacy.compensation.005 startup migration imports compensation definitions and claims; request path does no JSON read or DDL"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/compensation.py:23",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/compensation.py:49"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/compensation.py:49",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/common.py:741-749",
+        "nonebot_plugin_xiuxian_2/features/compensation/application.py:30-42",
+        "nonebot_plugin_xiuxian_2/features/compensation/definition_repository.py:444-560"
       ],
       "source_declaration_found": true,
       "source": {
@@ -4374,22 +4377,24 @@
       "id": "command:compensation:我的邀请",
       "kind": "commands",
       "entry": "compensation:我的邀请 (aliases: )",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "The default invitation summary reads count, reward definitions and claimed thresholds from the feature-owned SQL repository; request handling has no JSON fallback.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/invitation.py:113 invitation_info_cmd = on_command('我的邀请') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/invitation.py:222 _ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/invitation.py:37 invitation_info_cmd = on_command('我的邀请') -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/invitation.py:144 _ -> CompensationApplication.invitation_count/invitation_rewards/invitation_claimed_thresholds -> InvitationRewardClaimSqlRepository read-only queries; no request JSON fallback"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/invitation.py:113",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/invitation.py:222"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/invitation.py:37",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/invitation.py:144",
+        "nonebot_plugin_xiuxian_2/features/compensation/application.py:100-128",
+        "nonebot_plugin_xiuxian_2/features/compensation/invitation_repository.py:95-218",
+        "legacy.compensation.007 startup snapshot migration"
       ],
       "source_declaration_found": true,
       "source": {
@@ -4792,13 +4797,13 @@
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/redeem_code.py:31",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/redeem_code.py:42",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/common.py:484-628",
         "nonebot_plugin_xiuxian_2/features/compensation/application.py:9-65",
         "nonebot_plugin_xiuxian_2/features/compensation/reward_definition_repository.py:181-298",
         "nonebot_plugin_xiuxian_2/features/compensation/tests/test_reward_definition_repository.py",
-        "tests/test_source_quality.py:1879-1888"
+        "tests/test_source_quality.py:1879-1888",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/redeem_code.py:31",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/redeem_code.py:42"
       ],
       "source_declaration_found": true,
       "source": {
@@ -4823,13 +4828,13 @@
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/gift_package.py:22",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/gift_package.py:33",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/common.py:484-628",
         "nonebot_plugin_xiuxian_2/features/compensation/application.py:9-65",
         "nonebot_plugin_xiuxian_2/features/compensation/reward_definition_repository.py:181-298",
         "nonebot_plugin_xiuxian_2/features/compensation/tests/test_reward_definition_repository.py",
-        "tests/test_source_quality.py:1842-1868"
+        "tests/test_source_quality.py:1842-1868",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/gift_package.py:22",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/gift_package.py:33"
       ],
       "source_declaration_found": true,
       "source": {
@@ -4841,22 +4846,25 @@
       "id": "command:compensation:新增补偿",
       "kind": "commands",
       "entry": "compensation:新增补偿 (aliases: )",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "The default create handler replays before generating a random ID, then writes definitions through the feature application and SQL repository with request identity and version checks.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/compensation.py:22 add_compensation_cmd = on_command('新增补偿') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/compensation.py:33 _ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/compensation.py:33 _ -> create_reward_record -> CompensationApplication.replay_compensation_definition_upsert/upsert_compensation_definition -> CompensationDefinitionSqlRepository (immediate UOW, definition revision, legacy receipt and operation ledger)",
+        "legacy.compensation.005 startup migration imports the source catalog; request path does no JSON read or DDL"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/compensation.py:22",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/compensation.py:33"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/compensation.py:33",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/common.py:510-616",
+        "nonebot_plugin_xiuxian_2/features/compensation/application.py:18-29",
+        "nonebot_plugin_xiuxian_2/features/compensation/definition_repository.py:254-443"
       ],
       "source_declaration_found": true,
       "source": {
@@ -6204,12 +6212,12 @@
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/redeem_code.py:33",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/redeem_code.py:79",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/common.py:777-802",
         "nonebot_plugin_xiuxian_2/features/compensation/application.py:13-22",
         "nonebot_plugin_xiuxian_2/features/compensation/reward_definition_repository.py:360-424",
-        "nonebot_plugin_xiuxian_2/features/compensation/tests/test_reward_definition_repository.py"
+        "nonebot_plugin_xiuxian_2/features/compensation/tests/test_reward_definition_repository.py",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/redeem_code.py:33",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/redeem_code.py:79"
       ],
       "source_declaration_found": true,
       "source": {
@@ -6288,12 +6296,12 @@
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/gift_package.py:24",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/gift_package.py:70",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/common.py:777-802",
         "nonebot_plugin_xiuxian_2/features/compensation/application.py:13-22",
         "nonebot_plugin_xiuxian_2/features/compensation/reward_definition_repository.py:360-424",
-        "nonebot_plugin_xiuxian_2/features/compensation/tests/test_reward_definition_repository.py"
+        "nonebot_plugin_xiuxian_2/features/compensation/tests/test_reward_definition_repository.py",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/gift_package.py:24",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/gift_package.py:70"
       ],
       "source_declaration_found": true,
       "source": {
@@ -6305,22 +6313,24 @@
       "id": "command:compensation:清空补偿",
       "kind": "commands",
       "entry": "compensation:清空补偿 (aliases: )",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "The default clear handler uses a catalog version snapshot and feature-owned SQL transaction to remove definitions, claims and counters with a replayable outcome.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/compensation.py:24 clear_compensation_cmd = on_command('清空补偿') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/compensation.py:70 _ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/compensation.py:70 _ -> clear_records -> CompensationApplication.clear_compensation_definitions -> CompensationDefinitionSqlRepository.clear (catalog CAS, claims/counters and receipts in one immediate UOW)"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/compensation.py:24",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/compensation.py:70"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/compensation.py:70",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/common.py:757-770",
+        "nonebot_plugin_xiuxian_2/features/compensation/application.py:38-42",
+        "nonebot_plugin_xiuxian_2/features/compensation/definition_repository.py:562-632"
       ],
       "source_declaration_found": true,
       "source": {
@@ -6966,12 +6976,12 @@
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/gift_package.py:26",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/gift_package.py:84",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/common.py:152-155,805-855",
         "nonebot_plugin_xiuxian_2/features/compensation/application.py:41-44",
         "nonebot_plugin_xiuxian_2/features/compensation/reward_definition_repository.py:147-160",
-        "nonebot_plugin_xiuxian_2/features/compensation/tests/test_reward_definition_repository.py"
+        "nonebot_plugin_xiuxian_2/features/compensation/tests/test_reward_definition_repository.py",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/gift_package.py:26",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/gift_package.py:84"
       ],
       "source_declaration_found": true,
       "source": {
@@ -6996,10 +7006,10 @@
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/gift_package.py:28",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/gift_package.py:104",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/gift_package.py:103-112",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_utils/utils.py:1812-1893"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_utils/utils.py:1812-1893",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/gift_package.py:28",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/gift_package.py:104"
       ],
       "source_declaration_found": true,
       "source": {
@@ -7024,10 +7034,10 @@
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/gift_package.py:29",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/gift_package.py:115",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/gift_package.py:114-124",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_utils/utils.py:1812-1893"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_utils/utils.py:1812-1893",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/gift_package.py:29",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/gift_package.py:115"
       ],
       "source_declaration_found": true,
       "source": {
@@ -7795,22 +7805,24 @@
       "id": "command:compensation:补偿列表",
       "kind": "commands",
       "entry": "compensation:补偿列表 (aliases: )",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "The default list handler reads compensation definitions and claims through the feature application; the definition repository uses a read-only game-database UOW.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/compensation.py:26 list_compensation_cmd = on_command('补偿列表') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/compensation.py:84 _ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/compensation.py:84 _ -> list_normal_rewards -> load_data/load_claimed_data -> CompensationApplication -> CompensationDefinitionSqlRepository read-only UOW"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/compensation.py:26",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/compensation.py:84"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/compensation.py:84",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/common.py:126-171",
+        "nonebot_plugin_xiuxian_2/features/compensation/application.py:15-20",
+        "nonebot_plugin_xiuxian_2/features/compensation/definition_repository.py:199-240"
       ],
       "source_declaration_found": true,
       "source": {
@@ -7822,15 +7834,14 @@
       "id": "command:compensation:补偿帮助",
       "kind": "commands",
       "entry": "compensation:补偿帮助 (aliases: )",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "允许保留的兼容路径",
+      "reason": "The default handler sends built-in static compensation help text through the shared delivery path and performs no compensation business-state operation.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/compensation.py:28 help_compensation_cmd = on_command('补偿帮助') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/compensation.py:104 _ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/compensation.py:104 _ -> static COMPENSATION_HELP -> send_help_message -> shared delivery; no compensation business-state edge"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
@@ -7849,15 +7860,14 @@
       "id": "command:compensation:补偿管理",
       "kind": "commands",
       "entry": "compensation:补偿管理 (aliases: )",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "允许保留的兼容路径",
+      "reason": "The default administrator handler sends built-in static compensation-management help text through shared delivery and performs no business-state operation.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/compensation.py:29 admin_help_compensation_cmd = on_command('补偿管理') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/compensation.py:115 _ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/compensation.py:115 _ -> static COMPENSATION_ADMIN_HELP -> send_help_message -> shared delivery; no compensation business-state edge"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
@@ -8362,22 +8372,23 @@
       "id": "command:compensation:邀请人",
       "kind": "commands",
       "entry": "compensation:邀请人 (aliases: )",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "The default inviter lookup reads the canonical invitation binding from the feature-owned SQL repository and fails closed when the invitation snapshot migration is absent.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/invitation.py:112 invitation_check_cmd = on_command('邀请人') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/invitation.py:193 _ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/invitation.py:36 invitation_check_cmd = on_command('邀请人') -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/invitation.py:115 _ -> CompensationApplication.invitation_inviter_id -> InvitationRewardClaimSqlRepository.inviter_id (read-only game UOW; migration receipt required)"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/invitation.py:112",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/invitation.py:193"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/invitation.py:36",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/invitation.py:115",
+        "nonebot_plugin_xiuxian_2/features/compensation/application.py:106-110",
+        "nonebot_plugin_xiuxian_2/features/compensation/invitation_repository.py:122-141"
       ],
       "source_declaration_found": true,
       "source": {
@@ -8389,22 +8400,23 @@
       "id": "command:compensation:邀请奖励列表",
       "kind": "commands",
       "entry": "compensation:邀请奖励列表 (aliases: )",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "The default invitation reward list reads the SQL-owned reward catalog through CompensationApplication; the old JSON file is not opened by the request path.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/invitation.py:115 invitation_reward_list_cmd = on_command('邀请奖励列表') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/invitation.py:409 _ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/invitation.py:39 invitation_reward_list_cmd = on_command('邀请奖励列表') -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/invitation.py:322 _ -> _invitation_rewards -> CompensationApplication.invitation_rewards -> InvitationRewardClaimSqlRepository.reward_definitions (read-only game UOW)"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/invitation.py:115",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/invitation.py:409"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/invitation.py:39",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/invitation.py:322",
+        "nonebot_plugin_xiuxian_2/features/compensation/application.py:118-120",
+        "nonebot_plugin_xiuxian_2/features/compensation/invitation_repository.py:153-200"
       ],
       "source_declaration_found": true,
       "source": {
@@ -8416,22 +8428,23 @@
       "id": "command:compensation:邀请奖励设置",
       "kind": "commands",
       "entry": "compensation:邀请奖励设置 (aliases: )",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "The default invitation reward editor writes the SQL-owned catalog through CompensationApplication, wrapped in the feature's shared operation-ledger adapter; it does not load or update JSON.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/invitation.py:118 invitation_set_reward_cmd = on_command('邀请奖励设置') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/invitation.py:358 _ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/invitation.py:42 invitation_set_reward_cmd = on_command('邀请奖励设置') -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/invitation.py:273 _ -> _run_compensation_action -> CompensationApplication.invitation_set_reward -> InvitationRewardClaimSqlRepository.set_reward_definition (SQL UOW, no JSON fallback)"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/invitation.py:118",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/invitation.py:358"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/invitation.py:42",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/invitation.py:273",
+        "nonebot_plugin_xiuxian_2/features/compensation/application.py:122-124",
+        "nonebot_plugin_xiuxian_2/features/compensation/invitation_repository.py:202-234"
       ],
       "source_declaration_found": true,
       "source": {
@@ -8443,22 +8456,24 @@
       "id": "command:compensation:邀请奖励领取",
       "kind": "commands",
       "entry": "compensation:邀请奖励领取 (aliases: )",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "The default invitation claim resolves the migrated SQL reward catalog, then atomically rechecks invitation count, threshold claims, inventory and asset grants in the feature repository.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/invitation.py:114 invitation_claim_cmd = on_command('邀请奖励领取') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/invitation.py:256 _ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/invitation.py:38 invitation_claim_cmd = on_command('邀请奖励领取') -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/invitation.py:176 _ -> invitation_get_result/invitation_rewards -> _run_compensation_action -> CompensationApplication.invitation_claim -> InvitationRewardClaimSqlRepository.claim immediate UOW"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/invitation.py:114",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/invitation.py:256"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/invitation.py:38",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/invitation.py:176",
+        "nonebot_plugin_xiuxian_2/features/compensation/application.py:126-150",
+        "nonebot_plugin_xiuxian_2/features/compensation/invitation_repository.py:267-436",
+        "legacy.compensation.007 startup snapshot migration"
       ],
       "source_declaration_found": true,
       "source": {
@@ -8470,22 +8485,21 @@
       "id": "command:compensation:邀请帮助",
       "kind": "commands",
       "entry": "compensation:邀请帮助 (aliases: )",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "允许保留的兼容路径",
+      "reason": "The default invitation-help handler sends built-in static help text through the shared delivery path and performs no invitation business-state operation.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/invitation.py:116 invitation_help_cmd = on_command('邀请帮助') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/invitation.py:439 _ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/invitation.py:40 invitation_help_cmd = on_command('邀请帮助') -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/invitation.py:352 _ -> static invitation help text -> send_help_message -> shared delivery; no invitation business-state edge"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/invitation.py:116",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/invitation.py:439"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/invitation.py:40",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/invitation.py:352"
       ],
       "source_declaration_found": true,
       "source": {
@@ -8497,22 +8511,24 @@
       "id": "command:compensation:邀请码",
       "kind": "commands",
       "entry": "compensation:邀请码 (aliases: )",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "The default binding command checks and writes invitation relationships through the feature-owned SQL repository; the shared operation adapter records message replay, with no request JSON import or fallback.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/invitation.py:111 invitation_use_cmd = on_command('邀请码') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/invitation.py:130 _ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/invitation.py:35 invitation_use_cmd = on_command('邀请码') -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/invitation.py:54 _ -> CompensationApplication.invitation_has_code/invitation_bind -> InvitationRewardClaimSqlRepository (read and bind in migrated SQL; shared operation adapter handles replay)"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/invitation.py:111",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/invitation.py:130"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/invitation.py:35",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/invitation.py:54",
+        "nonebot_plugin_xiuxian_2/features/compensation/application.py:108-117",
+        "nonebot_plugin_xiuxian_2/features/compensation/invitation_repository.py:122-152",
+        "legacy.compensation.007 startup snapshot migration"
       ],
       "source_declaration_found": true,
       "source": {
@@ -8524,22 +8540,21 @@
       "id": "command:compensation:邀请管理",
       "kind": "commands",
       "entry": "compensation:邀请管理 (aliases: )",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "允许保留的兼容路径",
+      "reason": "The default invitation-admin handler sends built-in static management help through shared delivery and performs no invitation business-state operation.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/invitation.py:119 invitation_admin_help_cmd = on_command('邀请管理') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/invitation.py:450 _ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/invitation.py:43 invitation_admin_help_cmd = on_command('邀请管理') -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/invitation.py:363 _ -> static invitation administration help -> send_help_message -> shared delivery; no invitation business-state edge"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/invitation.py:119",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/invitation.py:450"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/invitation.py:43",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/invitation.py:363"
       ],
       "source_declaration_found": true,
       "source": {
@@ -9169,15 +9184,15 @@
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/gift_package.py:27",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/gift_package.py:91",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/common.py:648-749",
         "nonebot_plugin_xiuxian_2/features/compensation/application.py:13-34",
         "nonebot_plugin_xiuxian_2/features/compensation/reward_claim_repository.py:284-390",
         "nonebot_plugin_xiuxian_2/features/compensation/migrations.py:17-26",
         "nonebot_plugin_xiuxian_2/features/compensation/tests/test_reward_claim_repository.py",
         "nonebot_plugin_xiuxian_2/features/compensation/tests/test_reward_claim_limit_repository.py",
-        "tests/test_source_quality.py:1842-1868"
+        "tests/test_source_quality.py:1842-1868",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/gift_package.py:27",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/gift_package.py:91"
       ],
       "source_declaration_found": true,
       "source": {
@@ -9189,22 +9204,24 @@
       "id": "command:compensation:领取补偿",
       "kind": "commands",
       "entry": "compensation:领取补偿 (aliases: )",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "The default claim handler resolves the SQL-owned definition and delegates idempotent claim checks and inventory/stone grants to the feature application and transactional repository.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/compensation.py:27 claim_compensation_cmd = on_command('领取补偿') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/compensation.py:91 _ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/compensation.py:91 _ -> claim_normal_reward -> CompensationApplication.definition/has_claimed/claim_reward -> CompensationRewardClaimSqlRepository immediate UOW"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/compensation.py:27",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/compensation.py:91"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/compensation.py:91",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/common.py:637-701",
+        "nonebot_plugin_xiuxian_2/features/compensation/application.py:44-53",
+        "nonebot_plugin_xiuxian_2/features/compensation/reward_claim_repository.py"
       ],
       "source_declaration_found": true,
       "source": {
