@@ -1,3 +1,5 @@
+import asyncio
+import time
 from collections.abc import Awaitable, Callable
 from ....infrastructure.random_source import SystemRandom
 from ..command import *
@@ -22,8 +24,8 @@ DWO_VIDEO_APIS: dict[str, str] = {
 }
 
 
-async def _fetch_video_from_yujn() -> str:
-    result = await get_json_api(YUJN_API, timeout=20)
+async def _fetch_video_from_yujn(timeout: float = 8) -> str:
+    result = await get_json_api(YUJN_API, timeout=timeout)
     if not api_code_success(result):
         msg = extract_api_message(result)
         raise ValueError(msg)
@@ -33,18 +35,20 @@ async def _fetch_video_from_yujn() -> str:
     return video_url
 
 
-async def _fetch_video_from_dwo_direct(api_url: str) -> str:
+async def _fetch_video_from_dwo_direct(api_url: str, timeout: float = 8) -> str:
     """GET 直链：响应为 video/mp4，最终 URL 一般为 api_url 本身"""
-    video_url = await get_media_url_api(api_url, timeout=30)
+    video_url = await get_media_url_api(api_url, timeout=timeout)
     video_url = str(video_url).strip()
     if not video_url:
         raise ValueError("接口未返回视频地址")
     return video_url
 
 
-def _make_dwo_fetcher(name: str, api_url: str) -> tuple[str, Callable[[], Awaitable[str]]]:
-    async def _fetch() -> str:
-        return await _fetch_video_from_dwo_direct(api_url)
+def _make_dwo_fetcher(
+    name: str, api_url: str
+) -> tuple[str, Callable[[float], Awaitable[str]]]:
+    async def _fetch(timeout: float) -> str:
+        return await _fetch_video_from_dwo_direct(api_url, timeout=timeout)
 
     return name, _fetch
 
@@ -54,8 +58,8 @@ async def _fetch_random_girl_video() -> tuple[str, str]:
     多源负载均衡：随机打乱后依次尝试，任一成功即返回。
     返回 (video_url, source_name)
     """
-    providers: list[tuple[str, Callable[[], Awaitable[str]]]] = [
-        ("yujn", _fetch_video_from_yujn),
+    providers: list[tuple[str, Callable[[float], Awaitable[str]]]] = [
+        ("yujn", lambda timeout: _fetch_video_from_yujn(timeout=timeout)),
     ]
     for name, url in DWO_VIDEO_APIS.items():
         providers.append(_make_dwo_fetcher(name, url))
@@ -63,9 +67,17 @@ async def _fetch_random_girl_video() -> tuple[str, str]:
     runtime_random.shuffle(providers)
 
     errors: list[str] = []
+    deadline = time.monotonic() + 30.0
     for name, fetcher in providers:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            errors.append("总查询时间超过 30 秒")
+            break
         try:
-            return await fetcher(), name
+            video_url = await asyncio.wait_for(
+                fetcher(min(8.0, remaining)), timeout=remaining
+            )
+            return video_url, name
         except Exception as e:
             errors.append(f"{name}: {e}")
             logger.warning(f"随机小姐姐 {name} 源失败：{e}")

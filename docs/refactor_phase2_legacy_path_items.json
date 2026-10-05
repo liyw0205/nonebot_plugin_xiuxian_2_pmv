@@ -1383,15 +1383,15 @@
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/anime_reaction.py:139 anime_reaction_help_cmd = on_command('二次元帮助') aliases=动漫互动帮助,随机二次元帮助 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/anime_reaction.py:217 anime_reaction_help_cmd_ -> send_help_message -> handle_send built-in text/buttons -> shared delivery; no anime provider or business-state access"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/anime_reaction.py:137 anime_reaction_help_cmd = on_command('二次元帮助') aliases=动漫互动帮助,随机二次元帮助 -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/anime_reaction.py:215 anime_reaction_help_cmd_ -> send_help_message -> handle_send built-in text/buttons -> shared delivery; no anime provider or business-state access"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/anime_reaction.py:139",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/anime_reaction.py:217"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/anime_reaction.py:137",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/anime_reaction.py:215"
       ],
       "source_declaration_found": true,
       "source": {
@@ -1483,22 +1483,25 @@
       "id": "command:entertainment:今日番剧",
       "kind": "commands",
       "entry": "entertainment:今日番剧 (aliases: 每日番剧, 番剧日历)",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "Jikan calendar reads now use the feature-owned provider: at most 6 pages, 1 MiB per response, a 28-second checked fetch budget, direct-then-proxy fallback, and a 15-minute cache. Async handlers offload the fetch and preserve the existing output contract.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/bangumi_calendar.py:283 today_bangumi_cmd = on_command('今日番剧') aliases=每日番剧,番剧日历 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/bangumi_calendar.py:299 today_bangumi_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/bangumi_calendar.py:196 today_bangumi_cmd = on_command('今日番剧') aliases=每日番剧,番剧日历 -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/bangumi_calendar.py:212 today_bangumi_ -> EntertainmentApplication external-query capability -> EntertainmentExternalQueryProvider with zero-retry HTTP and bounded response bodies -> existing result formatting -> shared messaging/media output boundary"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
-        "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
+        "nonebot_plugin_xiuxian_2/features/entertainment/application.py:13-65",
+        "nonebot_plugin_xiuxian_2/features/entertainment/external_query.py:28-220",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/bangumi_calendar.py:283",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/bangumi_calendar.py:299"
+        "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/command.py:924-959,1056-1070",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/io_runtime.py:36-73",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/bangumi_calendar.py:196",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/bangumi_calendar.py:212"
       ],
       "source_declaration_found": true,
       "source": {
@@ -1510,20 +1513,23 @@
       "id": "command:entertainment:今日老婆",
       "kind": "commands",
       "entry": "entertainment:今日老婆 (aliases: )",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "External content reads now go through the feature-owned provider and no-retry HTTP client with bounded JSON (2 MiB), text (256 KiB), and media-byte (20 MiB) responses. Redirect-only media lookups do not eagerly download the media body; existing formatting and messaging remain compatible.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/today_wife.py:2 today_wife_cmd = on_command('今日老婆') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/today_wife.py:13 today_wife_cmd_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/today_wife.py:13 today_wife_cmd_ -> EntertainmentApplication external-query capability -> EntertainmentExternalQueryProvider with zero-retry HTTP and bounded response bodies -> existing result formatting -> shared messaging/media output boundary"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
-        "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
+        "nonebot_plugin_xiuxian_2/features/entertainment/application.py:13-65",
+        "nonebot_plugin_xiuxian_2/features/entertainment/external_query.py:28-220",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
+        "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/command.py:924-959,1056-1070",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/io_runtime.py:36-73",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/today_wife.py:2",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/today_wife.py:13"
       ],
@@ -1537,20 +1543,23 @@
       "id": "command:entertainment:今日超能力",
       "kind": "commands",
       "entry": "entertainment:今日超能力 (aliases: )",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "External content reads now go through the feature-owned provider and no-retry HTTP client with bounded JSON (2 MiB), text (256 KiB), and media-byte (20 MiB) responses. Redirect-only media lookups do not eagerly download the media body; existing formatting and messaging remain compatible.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/today_superpower.py:2 today_superpower_cmd = on_command('今日超能力') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/today_superpower.py:6 today_superpower_cmd_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/today_superpower.py:6 today_superpower_cmd_ -> EntertainmentApplication external-query capability -> EntertainmentExternalQueryProvider with zero-retry HTTP and bounded response bodies -> existing result formatting -> shared messaging/media output boundary"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
-        "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
+        "nonebot_plugin_xiuxian_2/features/entertainment/application.py:13-65",
+        "nonebot_plugin_xiuxian_2/features/entertainment/external_query.py:28-220",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
+        "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/command.py:924-959,1056-1070",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/io_runtime.py:36-73",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/today_superpower.py:2",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/today_superpower.py:6"
       ],
@@ -2599,12 +2608,12 @@
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/gomoku.py:445",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/gomoku.py:526",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/gomoku.py:192-195",
         "nonebot_plugin_xiuxian_2/features/entertainment/application.py:25-32",
         "nonebot_plugin_xiuxian_2/features/entertainment/room_repository.py:91-138",
-        "nonebot_plugin_xiuxian_2/features/entertainment/migrations.py:161-203"
+        "nonebot_plugin_xiuxian_2/features/entertainment/migrations.py:161-203",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/gomoku.py:445",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/gomoku.py:526"
       ],
       "source_declaration_found": true,
       "source": {
@@ -2630,12 +2639,12 @@
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/half_ten.py:377",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/half_ten.py:417",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/half_ten.py:296-298",
         "nonebot_plugin_xiuxian_2/features/entertainment/application.py:25-32",
         "nonebot_plugin_xiuxian_2/features/entertainment/room_repository.py:91-138",
-        "nonebot_plugin_xiuxian_2/features/entertainment/migrations.py:161-203"
+        "nonebot_plugin_xiuxian_2/features/entertainment/migrations.py:161-203",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/half_ten.py:377",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/half_ten.py:417"
       ],
       "source_declaration_found": true,
       "source": {
@@ -2728,22 +2737,25 @@
       "id": "command:entertainment:动漫互动",
       "kind": "commands",
       "entry": "entertainment:动漫互动 (aliases: )",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "External content reads now go through the feature-owned provider and no-retry HTTP client with bounded JSON (2 MiB), text (256 KiB), and media-byte (20 MiB) responses. Redirect-only media lookups do not eagerly download the media body; existing formatting and messaging remain compatible.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/anime_reaction.py:133 anime_action_cmd = on_command('动漫互动') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/anime_reaction.py:187 anime_action_cmd_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/anime_reaction.py:131 anime_action_cmd = on_command('动漫互动') -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/anime_reaction.py:185 anime_action_cmd_ -> EntertainmentApplication external-query capability -> EntertainmentExternalQueryProvider with zero-retry HTTP and bounded response bodies -> existing result formatting -> shared messaging/media output boundary"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
-        "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
+        "nonebot_plugin_xiuxian_2/features/entertainment/application.py:13-65",
+        "nonebot_plugin_xiuxian_2/features/entertainment/external_query.py:28-220",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/anime_reaction.py:133",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/anime_reaction.py:187"
+        "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/command.py:924-959,1056-1070",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/io_runtime.py:36-73",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/anime_reaction.py:131",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/anime_reaction.py:185"
       ],
       "source_declaration_found": true,
       "source": {
@@ -2769,12 +2781,12 @@
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/half_ten.py:380",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/half_ten.py:503",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/half_ten.py:296-298",
         "nonebot_plugin_xiuxian_2/features/entertainment/application.py:25-32",
         "nonebot_plugin_xiuxian_2/features/entertainment/room_repository.py:91-138",
-        "nonebot_plugin_xiuxian_2/features/entertainment/migrations.py:161-203"
+        "nonebot_plugin_xiuxian_2/features/entertainment/migrations.py:161-203",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/half_ten.py:380",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/half_ten.py:503"
       ],
       "source_declaration_found": true,
       "source": {
@@ -2839,20 +2851,23 @@
       "id": "command:entertainment:历史上的今天",
       "kind": "commands",
       "entry": "entertainment:历史上的今天 (aliases: )",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "External content reads now go through the feature-owned provider and no-retry HTTP client with bounded JSON (2 MiB), text (256 KiB), and media-byte (20 MiB) responses. Redirect-only media lookups do not eagerly download the media body; existing formatting and messaging remain compatible.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/history_today.py:3 history_today_cmd = on_command('历史上的今天') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/history_today.py:7 history_today_cmd_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/history_today.py:7 history_today_cmd_ -> EntertainmentApplication external-query capability -> EntertainmentExternalQueryProvider with zero-retry HTTP and bounded response bodies -> existing result formatting -> shared messaging/media output boundary"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
-        "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
+        "nonebot_plugin_xiuxian_2/features/entertainment/application.py:13-65",
+        "nonebot_plugin_xiuxian_2/features/entertainment/external_query.py:28-220",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
+        "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/command.py:924-959,1056-1070",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/io_runtime.py:36-73",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/history_today.py:3",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/history_today.py:7"
       ],
@@ -3379,20 +3394,23 @@
       "id": "command:entertainment:哈基米",
       "kind": "commands",
       "entry": "entertainment:哈基米 (aliases: 哈基米音乐, 随机哈基米, 随机哈基米音乐)",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "External content reads now go through the feature-owned provider and no-retry HTTP client with bounded JSON (2 MiB), text (256 KiB), and media-byte (20 MiB) responses. Redirect-only media lookups do not eagerly download the media body; existing formatting and messaging remain compatible.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/random_hakimi.py:3 hajimi_cmd = on_command('哈基米') aliases=哈基米音乐,随机哈基米,随机哈基米音乐 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/random_hakimi.py:11 hajimi_cmd_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/random_hakimi.py:11 hajimi_cmd_ -> EntertainmentApplication external-query capability -> EntertainmentExternalQueryProvider with zero-retry HTTP and bounded response bodies -> existing result formatting -> shared messaging/media output boundary"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
-        "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
+        "nonebot_plugin_xiuxian_2/features/entertainment/application.py:13-65",
+        "nonebot_plugin_xiuxian_2/features/entertainment/external_query.py:28-220",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
+        "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/command.py:924-959,1056-1070",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/io_runtime.py:36-73",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/random_hakimi.py:3",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/random_hakimi.py:11"
       ],
@@ -3567,20 +3585,23 @@
       "id": "command:entertainment:宝可梦图鉴",
       "kind": "commands",
       "entry": "entertainment:宝可梦图鉴 (aliases: 宝可梦, 查宝可梦, 精灵图鉴)",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "External content reads now go through the feature-owned provider and no-retry HTTP client with bounded JSON (2 MiB), text (256 KiB), and media-byte (20 MiB) responses. Redirect-only media lookups do not eagerly download the media body; existing formatting and messaging remain compatible.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/pokemon_box.py:176 pokemon_query_cmd = on_command('宝可梦图鉴') aliases=宝可梦,查宝可梦,精灵图鉴 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/pokemon_box.py:201 pokemon_query_cmd_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/pokemon_box.py:201 pokemon_query_cmd_ -> EntertainmentApplication external-query capability -> EntertainmentExternalQueryProvider with zero-retry HTTP and bounded response bodies -> existing result formatting -> shared messaging/media output boundary"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
-        "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
+        "nonebot_plugin_xiuxian_2/features/entertainment/application.py:13-65",
+        "nonebot_plugin_xiuxian_2/features/entertainment/external_query.py:28-220",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
+        "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/command.py:924-959,1056-1070",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/io_runtime.py:36-73",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/pokemon_box.py:176",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/pokemon_box.py:201"
       ],
@@ -3620,20 +3641,23 @@
       "id": "command:entertainment:宝可梦盲盒",
       "kind": "commands",
       "entry": "entertainment:宝可梦盲盒 (aliases: 今日宝可梦, 随机宝可梦)",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "External content reads now go through the feature-owned provider and no-retry HTTP client with bounded JSON (2 MiB), text (256 KiB), and media-byte (20 MiB) responses. Redirect-only media lookups do not eagerly download the media body; existing formatting and messaging remain compatible.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/pokemon_box.py:175 pokemon_box_cmd = on_command('宝可梦盲盒') aliases=今日宝可梦,随机宝可梦 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/pokemon_box.py:181 pokemon_box_cmd_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/pokemon_box.py:181 pokemon_box_cmd_ -> EntertainmentApplication external-query capability -> EntertainmentExternalQueryProvider with zero-retry HTTP and bounded response bodies -> existing result formatting -> shared messaging/media output boundary"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
-        "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
+        "nonebot_plugin_xiuxian_2/features/entertainment/application.py:13-65",
+        "nonebot_plugin_xiuxian_2/features/entertainment/external_query.py:28-220",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
+        "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/command.py:924-959,1056-1070",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/io_runtime.py:36-73",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/pokemon_box.py:175",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/pokemon_box.py:181"
       ],
@@ -3876,12 +3900,12 @@
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/gomoku.py:443",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/gomoku.py:457",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/gomoku.py:192-195",
         "nonebot_plugin_xiuxian_2/features/entertainment/application.py:25-32",
         "nonebot_plugin_xiuxian_2/features/entertainment/room_repository.py:91-138",
-        "nonebot_plugin_xiuxian_2/features/entertainment/migrations.py:161-203"
+        "nonebot_plugin_xiuxian_2/features/entertainment/migrations.py:161-203",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/gomoku.py:443",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/gomoku.py:457"
       ],
       "source_declaration_found": true,
       "source": {
@@ -3907,12 +3931,12 @@
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/half_ten.py:376",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/half_ten.py:385",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/half_ten.py:296-298",
         "nonebot_plugin_xiuxian_2/features/entertainment/application.py:25-32",
         "nonebot_plugin_xiuxian_2/features/entertainment/room_repository.py:91-138",
-        "nonebot_plugin_xiuxian_2/features/entertainment/migrations.py:161-203"
+        "nonebot_plugin_xiuxian_2/features/entertainment/migrations.py:161-203",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/half_ten.py:376",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/half_ten.py:385"
       ],
       "source_declaration_found": true,
       "source": {
@@ -3938,12 +3962,12 @@
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/gomoku.py:444",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/gomoku.py:489",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/gomoku.py:192-195",
         "nonebot_plugin_xiuxian_2/features/entertainment/application.py:25-32",
         "nonebot_plugin_xiuxian_2/features/entertainment/room_repository.py:91-138",
-        "nonebot_plugin_xiuxian_2/features/entertainment/migrations.py:161-203"
+        "nonebot_plugin_xiuxian_2/features/entertainment/migrations.py:161-203",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/gomoku.py:444",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/gomoku.py:489"
       ],
       "source_declaration_found": true,
       "source": {
@@ -3996,12 +4020,12 @@
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/minesweeper.py:20",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/minesweeper.py:29",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/minesweeper.py:305-307",
         "nonebot_plugin_xiuxian_2/features/entertainment/application.py:25-32",
         "nonebot_plugin_xiuxian_2/features/entertainment/room_repository.py:91-138",
-        "nonebot_plugin_xiuxian_2/features/entertainment/migrations.py:161-203"
+        "nonebot_plugin_xiuxian_2/features/entertainment/migrations.py:161-203",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/minesweeper.py:20",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/minesweeper.py:29"
       ],
       "source_declaration_found": true,
       "source": {
@@ -4067,20 +4091,23 @@
       "id": "command:entertainment:弱智吧问答",
       "kind": "commands",
       "entry": "entertainment:弱智吧问答 (aliases: 弱智吧)",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "External content reads now go through the feature-owned provider and no-retry HTTP client with bounded JSON (2 MiB), text (256 KiB), and media-byte (20 MiB) responses. Redirect-only media lookups do not eagerly download the media body; existing formatting and messaging remain compatible.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/ruozhiba_qa.py:3 ruozhiba_qa_cmd = on_command('弱智吧问答') aliases=弱智吧 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/ruozhiba_qa.py:7 ruozhiba_qa_cmd_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/ruozhiba_qa.py:7 ruozhiba_qa_cmd_ -> EntertainmentApplication external-query capability -> EntertainmentExternalQueryProvider with zero-retry HTTP and bounded response bodies -> existing result formatting -> shared messaging/media output boundary"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
-        "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
+        "nonebot_plugin_xiuxian_2/features/entertainment/application.py:13-65",
+        "nonebot_plugin_xiuxian_2/features/entertainment/external_query.py:28-220",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
+        "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/command.py:924-959,1056-1070",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/io_runtime.py:36-73",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/ruozhiba_qa.py:3",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/ruozhiba_qa.py:7"
       ],
@@ -4441,12 +4468,12 @@
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/minesweeper.py:23",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/minesweeper.py:146",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/minesweeper.py:305-307",
         "nonebot_plugin_xiuxian_2/features/entertainment/application.py:25-32",
         "nonebot_plugin_xiuxian_2/features/entertainment/room_repository.py:91-138",
-        "nonebot_plugin_xiuxian_2/features/entertainment/migrations.py:161-203"
+        "nonebot_plugin_xiuxian_2/features/entertainment/migrations.py:161-203",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/minesweeper.py:23",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/minesweeper.py:146"
       ],
       "source_declaration_found": true,
       "source": {
@@ -4754,20 +4781,23 @@
       "id": "command:entertainment:搞笑段子",
       "kind": "commands",
       "entry": "entertainment:搞笑段子 (aliases: 随机段子)",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "External content reads now go through the feature-owned provider and no-retry HTTP client with bounded JSON (2 MiB), text (256 KiB), and media-byte (20 MiB) responses. Redirect-only media lookups do not eagerly download the media body; existing formatting and messaging remain compatible.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/random_duanzi.py:3 random_duanzi_cmd = on_command('搞笑段子') aliases=随机段子 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/random_duanzi.py:7 random_duanzi_cmd_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/random_duanzi.py:7 random_duanzi_cmd_ -> EntertainmentApplication external-query capability -> EntertainmentExternalQueryProvider with zero-retry HTTP and bounded response bodies -> existing result formatting -> shared messaging/media output boundary"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
-        "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
+        "nonebot_plugin_xiuxian_2/features/entertainment/application.py:13-65",
+        "nonebot_plugin_xiuxian_2/features/entertainment/external_query.py:28-220",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
+        "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/command.py:924-959,1056-1070",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/io_runtime.py:36-73",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/random_duanzi.py:3",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/random_duanzi.py:7"
       ],
@@ -4781,20 +4811,23 @@
       "id": "command:entertainment:摸鱼日报",
       "kind": "commands",
       "entry": "entertainment:摸鱼日报 (aliases: 今日摸鱼, 摸鱼人日历, 摸鱼日历)",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "External content reads now go through the feature-owned provider and no-retry HTTP client with bounded JSON (2 MiB), text (256 KiB), and media-byte (20 MiB) responses. Redirect-only media lookups do not eagerly download the media body; existing formatting and messaging remain compatible.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/moyu_calendar.py:9 moyu_calendar_cmd = on_command('摸鱼日报') aliases=今日摸鱼,摸鱼人日历,摸鱼日历 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/moyu_calendar.py:69 moyu_calendar_cmd_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/moyu_calendar.py:69 moyu_calendar_cmd_ -> EntertainmentApplication external-query capability -> EntertainmentExternalQueryProvider with zero-retry HTTP and bounded response bodies -> existing result formatting -> shared messaging/media output boundary"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
-        "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
+        "nonebot_plugin_xiuxian_2/features/entertainment/application.py:13-65",
+        "nonebot_plugin_xiuxian_2/features/entertainment/external_query.py:28-220",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
+        "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/command.py:924-959,1056-1070",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/io_runtime.py:36-73",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/moyu_calendar.py:9",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/moyu_calendar.py:69"
       ],
@@ -5157,12 +5190,12 @@
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/minesweeper.py:22",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/minesweeper.py:120",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/minesweeper.py:305-307",
         "nonebot_plugin_xiuxian_2/features/entertainment/application.py:25-32",
         "nonebot_plugin_xiuxian_2/features/entertainment/room_repository.py:91-138",
-        "nonebot_plugin_xiuxian_2/features/entertainment/migrations.py:161-203"
+        "nonebot_plugin_xiuxian_2/features/entertainment/migrations.py:161-203",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/minesweeper.py:22",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/minesweeper.py:120"
       ],
       "source_declaration_found": true,
       "source": {
@@ -5269,12 +5302,12 @@
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/gomoku.py:448",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/gomoku.py:696",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/gomoku.py:192-195",
         "nonebot_plugin_xiuxian_2/features/entertainment/application.py:25-32",
         "nonebot_plugin_xiuxian_2/features/entertainment/room_repository.py:91-138",
-        "nonebot_plugin_xiuxian_2/features/entertainment/migrations.py:161-203"
+        "nonebot_plugin_xiuxian_2/features/entertainment/migrations.py:161-203",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/gomoku.py:448",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/gomoku.py:696"
       ],
       "source_declaration_found": true,
       "source": {
@@ -5313,20 +5346,23 @@
       "id": "command:entertainment:每日60S图片",
       "kind": "commands",
       "entry": "entertainment:每日60S图片 (aliases: 60S图片)",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "External content reads now go through the feature-owned provider and no-retry HTTP client with bounded JSON (2 MiB), text (256 KiB), and media-byte (20 MiB) responses. Redirect-only media lookups do not eagerly download the media body; existing formatting and messaging remain compatible.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/daily_60s_image.py:3 daily_60s_image_cmd = on_command('每日60S图片') aliases=60S图片,60s图片 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/daily_60s_image.py:12 daily_60s_image_cmd_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/daily_60s_image.py:12 daily_60s_image_cmd_ -> EntertainmentApplication external-query capability -> EntertainmentExternalQueryProvider with zero-retry HTTP and bounded response bodies -> existing result formatting -> shared messaging/media output boundary"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
-        "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
+        "nonebot_plugin_xiuxian_2/features/entertainment/application.py:13-65",
+        "nonebot_plugin_xiuxian_2/features/entertainment/external_query.py:28-220",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
+        "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/command.py:924-959,1056-1070",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/io_runtime.py:36-73",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/daily_60s_image.py:3",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/daily_60s_image.py:12"
       ],
@@ -5340,20 +5376,23 @@
       "id": "command:entertainment:每日Bing图",
       "kind": "commands",
       "entry": "entertainment:每日Bing图 (aliases: )",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "External content reads now go through the feature-owned provider and no-retry HTTP client with bounded JSON (2 MiB), text (256 KiB), and media-byte (20 MiB) responses. Redirect-only media lookups do not eagerly download the media body; existing formatting and messaging remain compatible.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/daily_bing.py:3 daily_bing_cmd = on_command('每日Bing图') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/daily_bing.py:7 daily_bing_cmd_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/daily_bing.py:7 daily_bing_cmd_ -> EntertainmentApplication external-query capability -> EntertainmentExternalQueryProvider with zero-retry HTTP and bounded response bodies -> existing result formatting -> shared messaging/media output boundary"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
-        "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
+        "nonebot_plugin_xiuxian_2/features/entertainment/application.py:13-65",
+        "nonebot_plugin_xiuxian_2/features/entertainment/external_query.py:28-220",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
+        "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/command.py:924-959,1056-1070",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/io_runtime.py:36-73",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/daily_bing.py:3",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/daily_bing.py:7"
       ],
@@ -6562,20 +6601,23 @@
       "id": "command:entertainment:热榜图片",
       "kind": "commands",
       "entry": "entertainment:热榜图片 (aliases: 微博热榜图片, 百度热榜图片)",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "External content reads now go through the feature-owned provider and no-retry HTTP client with bounded JSON (2 MiB), text (256 KiB), and media-byte (20 MiB) responses. Redirect-only media lookups do not eagerly download the media body; existing formatting and messaging remain compatible.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/hot_rank_image.py:3 hot_rank_image_cmd = on_command('热榜图片') aliases=微博热榜图片,百度热榜图片 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/hot_rank_image.py:12 hot_rank_image_cmd_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/hot_rank_image.py:12 hot_rank_image_cmd_ -> EntertainmentApplication external-query capability -> EntertainmentExternalQueryProvider with zero-retry HTTP and bounded response bodies -> existing result formatting -> shared messaging/media output boundary"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
-        "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
+        "nonebot_plugin_xiuxian_2/features/entertainment/application.py:13-65",
+        "nonebot_plugin_xiuxian_2/features/entertainment/external_query.py:28-220",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
+        "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/command.py:924-959,1056-1070",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/io_runtime.py:36-73",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/hot_rank_image.py:3",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/hot_rank_image.py:12"
       ],
@@ -6802,20 +6844,21 @@
       "id": "command:entertainment:猫猫说",
       "kind": "commands",
       "entry": "entertainment:猫猫说 (aliases: 猫猫说话, 猫说)",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "允许保留的兼容路径",
+      "reason": "This output-only command constructs a public CATAAS image URL; 猫猫说 URL-encodes text and caps it at 40 characters. Image delivery remains on the existing adapter compatibility path and the handler has no game/account state access.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/cat_picture.py:32 cat_says_cmd = on_command('猫猫说') aliases=猫猫说话,猫说 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/cat_picture.py:67 cat_says_cmd_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/cat_picture.py:67 cat_says_cmd_ -> construct a public CATAAS image URL (cat_says input is capped at 40 characters and percent-encoded) -> handle_pic_msg_send -> CompatMessageSegment.image(URL) -> adapter sender; no business-state access"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
-        "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
+        "nonebot_plugin_xiuxian_2/xiuxian/adapter_compat.py:814-831",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
+        "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_utils/utils.py:2053-2105",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/cat_picture.py:32",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/cat_picture.py:67"
       ],
@@ -6883,22 +6926,25 @@
       "id": "command:entertainment:番剧周表",
       "kind": "commands",
       "entry": "entertainment:番剧周表 (aliases: 每周番剧, 番剧总表)",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "Jikan calendar reads now use the feature-owned provider: at most 6 pages, 1 MiB per response, a 28-second checked fetch budget, direct-then-proxy fallback, and a 15-minute cache. Async handlers offload the fetch and preserve the existing output contract.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/bangumi_calendar.py:290 week_bangumi_cmd = on_command('番剧周表') aliases=每周番剧,番剧总表 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/bangumi_calendar.py:331 week_bangumi_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/bangumi_calendar.py:203 week_bangumi_cmd = on_command('番剧周表') aliases=每周番剧,番剧总表 -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/bangumi_calendar.py:244 week_bangumi_ -> EntertainmentApplication external-query capability -> EntertainmentExternalQueryProvider with zero-retry HTTP and bounded response bodies -> existing result formatting -> shared messaging/media output boundary"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
-        "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
+        "nonebot_plugin_xiuxian_2/features/entertainment/application.py:13-65",
+        "nonebot_plugin_xiuxian_2/features/entertainment/external_query.py:28-220",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/bangumi_calendar.py:290",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/bangumi_calendar.py:331"
+        "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/command.py:924-959,1056-1070",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/io_runtime.py:36-73",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/bangumi_calendar.py:203",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/bangumi_calendar.py:244"
       ],
       "source_declaration_found": true,
       "source": {
@@ -6910,20 +6956,23 @@
       "id": "command:entertainment:番剧盲盒",
       "kind": "commands",
       "entry": "entertainment:番剧盲盒 (aliases: 动漫盲盒, 随机动漫, 随机番剧)",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "External content reads now go through the feature-owned provider and no-retry HTTP client with bounded JSON (2 MiB), text (256 KiB), and media-byte (20 MiB) responses. Redirect-only media lookups do not eagerly download the media body; existing formatting and messaging remain compatible.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/random_anime_box.py:7 anime_box_cmd = on_command('番剧盲盒') aliases=动漫盲盒,随机动漫,随机番剧 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/random_anime_box.py:90 anime_box_cmd_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/random_anime_box.py:90 anime_box_cmd_ -> EntertainmentApplication external-query capability -> EntertainmentExternalQueryProvider with zero-retry HTTP and bounded response bodies -> existing result formatting -> shared messaging/media output boundary"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
-        "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
+        "nonebot_plugin_xiuxian_2/features/entertainment/application.py:13-65",
+        "nonebot_plugin_xiuxian_2/features/entertainment/external_query.py:28-220",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
+        "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/command.py:924-959,1056-1070",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/io_runtime.py:36-73",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/random_anime_box.py:7",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/random_anime_box.py:90"
       ],
@@ -7211,20 +7260,23 @@
       "id": "command:entertainment:答案之书",
       "kind": "commands",
       "entry": "entertainment:答案之书 (aliases: 答案书, 问答案之书, 问答案书)",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "External content reads now go through the feature-owned provider and no-retry HTTP client with bounded JSON (2 MiB), text (256 KiB), and media-byte (20 MiB) responses. Redirect-only media lookups do not eagerly download the media body; existing formatting and messaging remain compatible.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/answer_book.py:8 answer_book_cmd = on_command('答案之书') aliases=答案书,问答案之书,问答案书 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/answer_book.py:17 answer_book_cmd_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/answer_book.py:17 answer_book_cmd_ -> EntertainmentApplication external-query capability -> EntertainmentExternalQueryProvider with zero-retry HTTP and bounded response bodies -> existing result formatting -> shared messaging/media output boundary"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
-        "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
+        "nonebot_plugin_xiuxian_2/features/entertainment/application.py:13-65",
+        "nonebot_plugin_xiuxian_2/features/entertainment/external_query.py:28-220",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
+        "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/command.py:924-959,1056-1070",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/io_runtime.py:36-73",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/answer_book.py:8",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/answer_book.py:17"
       ],
@@ -7279,12 +7331,12 @@
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/minesweeper.py:24",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/minesweeper.py:167",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/minesweeper.py:305-307",
         "nonebot_plugin_xiuxian_2/features/entertainment/application.py:25-32",
         "nonebot_plugin_xiuxian_2/features/entertainment/room_repository.py:91-138",
-        "nonebot_plugin_xiuxian_2/features/entertainment/migrations.py:161-203"
+        "nonebot_plugin_xiuxian_2/features/entertainment/migrations.py:161-203",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/minesweeper.py:24",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/minesweeper.py:167"
       ],
       "source_declaration_found": true,
       "source": {
@@ -7337,12 +7389,12 @@
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/half_ten.py:378",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/half_ten.py:466",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/half_ten.py:296-298",
         "nonebot_plugin_xiuxian_2/features/entertainment/application.py:25-32",
         "nonebot_plugin_xiuxian_2/features/entertainment/room_repository.py:91-138",
-        "nonebot_plugin_xiuxian_2/features/entertainment/migrations.py:161-203"
+        "nonebot_plugin_xiuxian_2/features/entertainment/migrations.py:161-203",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/half_ten.py:378",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/half_ten.py:466"
       ],
       "source_declaration_found": true,
       "source": {
@@ -7449,12 +7501,12 @@
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/minesweeper.py:21",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/minesweeper.py:67",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/minesweeper.py:305-307",
         "nonebot_plugin_xiuxian_2/features/entertainment/application.py:25-32",
         "nonebot_plugin_xiuxian_2/features/entertainment/room_repository.py:91-138",
-        "nonebot_plugin_xiuxian_2/features/entertainment/migrations.py:161-203"
+        "nonebot_plugin_xiuxian_2/features/entertainment/migrations.py:161-203",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/minesweeper.py:21",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/minesweeper.py:67"
       ],
       "source_declaration_found": true,
       "source": {
@@ -7466,20 +7518,23 @@
       "id": "command:entertainment:肯德基文案",
       "kind": "commands",
       "entry": "entertainment:肯德基文案 (aliases: KFC文案, 疯狂星期四)",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "External content reads now go through the feature-owned provider and no-retry HTTP client with bounded JSON (2 MiB), text (256 KiB), and media-byte (20 MiB) responses. Redirect-only media lookups do not eagerly download the media body; existing formatting and messaging remain compatible.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/kfc_copywriting.py:3 kfc_copywriting_cmd = on_command('肯德基文案') aliases=KFC文案,疯狂星期四 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/kfc_copywriting.py:7 kfc_copywriting_cmd_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/kfc_copywriting.py:7 kfc_copywriting_cmd_ -> EntertainmentApplication external-query capability -> EntertainmentExternalQueryProvider with zero-retry HTTP and bounded response bodies -> existing result formatting -> shared messaging/media output boundary"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
-        "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
+        "nonebot_plugin_xiuxian_2/features/entertainment/application.py:13-65",
+        "nonebot_plugin_xiuxian_2/features/entertainment/external_query.py:28-220",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
+        "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/command.py:924-959,1056-1070",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/io_runtime.py:36-73",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/kfc_copywriting.py:3",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/kfc_copywriting.py:7"
       ],
@@ -7493,20 +7548,23 @@
       "id": "command:entertainment:脑筋急转弯",
       "kind": "commands",
       "entry": "entertainment:脑筋急转弯 (aliases: )",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "External content reads now go through the feature-owned provider and no-retry HTTP client with bounded JSON (2 MiB), text (256 KiB), and media-byte (20 MiB) responses. Redirect-only media lookups do not eagerly download the media body; existing formatting and messaging remain compatible.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/brainteasers.py:3 brainteasers_cmd = on_command('脑筋急转弯') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/brainteasers.py:7 brainteasers_cmd_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/brainteasers.py:7 brainteasers_cmd_ -> EntertainmentApplication external-query capability -> EntertainmentExternalQueryProvider with zero-retry HTTP and bounded response bodies -> existing result formatting -> shared messaging/media output boundary"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
-        "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
+        "nonebot_plugin_xiuxian_2/features/entertainment/application.py:13-65",
+        "nonebot_plugin_xiuxian_2/features/entertainment/external_query.py:28-220",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
+        "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/command.py:924-959,1056-1070",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/io_runtime.py:36-73",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/brainteasers.py:3",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/brainteasers.py:7"
       ],
@@ -7547,20 +7605,23 @@
       "id": "command:entertainment:舔狗日记",
       "kind": "commands",
       "entry": "entertainment:舔狗日记 (aliases: )",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "External content reads now go through the feature-owned provider and no-retry HTTP client with bounded JSON (2 MiB), text (256 KiB), and media-byte (20 MiB) responses. Redirect-only media lookups do not eagerly download the media body; existing formatting and messaging remain compatible.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/tiangou_diary.py:3 tiangou_diary_cmd = on_command('舔狗日记') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/tiangou_diary.py:7 tiangou_diary_cmd_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/tiangou_diary.py:7 tiangou_diary_cmd_ -> EntertainmentApplication external-query capability -> EntertainmentExternalQueryProvider with zero-retry HTTP and bounded response bodies -> existing result formatting -> shared messaging/media output boundary"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
-        "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
+        "nonebot_plugin_xiuxian_2/features/entertainment/application.py:13-65",
+        "nonebot_plugin_xiuxian_2/features/entertainment/external_query.py:28-220",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
+        "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/command.py:924-959,1056-1070",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/io_runtime.py:36-73",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/tiangou_diary.py:3",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/tiangou_diary.py:7"
       ],
@@ -7615,12 +7676,12 @@
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/gomoku.py:446",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/gomoku.py:565",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/gomoku.py:192-195",
         "nonebot_plugin_xiuxian_2/features/entertainment/application.py:25-32",
         "nonebot_plugin_xiuxian_2/features/entertainment/room_repository.py:91-138",
-        "nonebot_plugin_xiuxian_2/features/entertainment/migrations.py:161-203"
+        "nonebot_plugin_xiuxian_2/features/entertainment/migrations.py:161-203",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/gomoku.py:446",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/gomoku.py:565"
       ],
       "source_declaration_found": true,
       "source": {
@@ -7997,12 +8058,12 @@
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/gomoku.py:447",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/gomoku.py:667",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/gomoku.py:192-195",
         "nonebot_plugin_xiuxian_2/features/entertainment/application.py:25-32",
         "nonebot_plugin_xiuxian_2/features/entertainment/room_repository.py:91-138",
-        "nonebot_plugin_xiuxian_2/features/entertainment/migrations.py:161-203"
+        "nonebot_plugin_xiuxian_2/features/entertainment/migrations.py:161-203",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/gomoku.py:447",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/gomoku.py:667"
       ],
       "source_declaration_found": true,
       "source": {
@@ -8325,12 +8386,12 @@
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/gomoku.py:449",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/gomoku.py:737",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/gomoku.py:192-195",
         "nonebot_plugin_xiuxian_2/features/entertainment/application.py:25-32",
         "nonebot_plugin_xiuxian_2/features/entertainment/room_repository.py:91-138",
-        "nonebot_plugin_xiuxian_2/features/entertainment/migrations.py:161-203"
+        "nonebot_plugin_xiuxian_2/features/entertainment/migrations.py:161-203",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/gomoku.py:449",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/gomoku.py:737"
       ],
       "source_declaration_found": true,
       "source": {
@@ -8356,12 +8417,12 @@
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/half_ten.py:379",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/half_ten.py:496",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/half_ten.py:296-298",
         "nonebot_plugin_xiuxian_2/features/entertainment/application.py:25-32",
         "nonebot_plugin_xiuxian_2/features/entertainment/room_repository.py:91-138",
-        "nonebot_plugin_xiuxian_2/features/entertainment/migrations.py:161-203"
+        "nonebot_plugin_xiuxian_2/features/entertainment/migrations.py:161-203",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/half_ten.py:379",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/half_ten.py:496"
       ],
       "source_declaration_found": true,
       "source": {
@@ -9037,20 +9098,23 @@
       "id": "command:entertainment:随机一言",
       "kind": "commands",
       "entry": "entertainment:随机一言 (aliases: )",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "External content reads now go through the feature-owned provider and no-retry HTTP client with bounded JSON (2 MiB), text (256 KiB), and media-byte (20 MiB) responses. Redirect-only media lookups do not eagerly download the media body; existing formatting and messaging remain compatible.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/hitokoto.py:3 hitokoto_cmd = on_command('随机一言') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/hitokoto.py:7 hitokoto_cmd_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/hitokoto.py:7 hitokoto_cmd_ -> EntertainmentApplication external-query capability -> EntertainmentExternalQueryProvider with zero-retry HTTP and bounded response bodies -> existing result formatting -> shared messaging/media output boundary"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
-        "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
+        "nonebot_plugin_xiuxian_2/features/entertainment/application.py:13-65",
+        "nonebot_plugin_xiuxian_2/features/entertainment/external_query.py:28-220",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
+        "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/command.py:924-959,1056-1070",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/io_runtime.py:36-73",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/hitokoto.py:3",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/hitokoto.py:7"
       ],
@@ -9064,22 +9128,25 @@
       "id": "command:entertainment:随机二次元",
       "kind": "commands",
       "entry": "entertainment:随机二次元 (aliases: 二次元图, 猫娘图, 随机狐娘, 随机猫娘, 随机老公, 随机老婆)",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "External content reads now go through the feature-owned provider and no-retry HTTP client with bounded JSON (2 MiB), text (256 KiB), and media-byte (20 MiB) responses. Redirect-only media lookups do not eagerly download the media body; existing formatting and messaging remain compatible.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/anime_reaction.py:127 random_anime_cmd = on_command('随机二次元') aliases=二次元图,猫娘图,随机狐娘,随机猫娘,随机老公,随机老婆 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/anime_reaction.py:148 random_anime_cmd_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/anime_reaction.py:125 random_anime_cmd = on_command('随机二次元') aliases=二次元图,猫娘图,随机狐娘,随机猫娘,随机老公,随机老婆 -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/anime_reaction.py:146 random_anime_cmd_ -> EntertainmentApplication external-query capability -> EntertainmentExternalQueryProvider with zero-retry HTTP and bounded response bodies -> existing result formatting -> shared messaging/media output boundary"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
-        "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
+        "nonebot_plugin_xiuxian_2/features/entertainment/application.py:13-65",
+        "nonebot_plugin_xiuxian_2/features/entertainment/external_query.py:28-220",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/anime_reaction.py:127",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/anime_reaction.py:148"
+        "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/command.py:924-959,1056-1070",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/io_runtime.py:36-73",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/anime_reaction.py:125",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/anime_reaction.py:146"
       ],
       "source_declaration_found": true,
       "source": {
@@ -9091,22 +9158,25 @@
       "id": "command:entertainment:随机小姐姐",
       "kind": "commands",
       "entry": "entertainment:随机小姐姐 (aliases: 小姐姐, 随机美女视频)",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "External source failover now has an 8-second per-source cap and 30-second total deadline; provider requests use no retries and do not eagerly download non-JSON video bodies. Existing media delivery and output remain compatible.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/random_girl_video.py:7 random_girl_video_cmd = on_command('随机小姐姐') aliases=小姐姐,随机美女视频 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/random_girl_video.py:118 random_girl_video_cmd_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/random_girl_video.py:9 random_girl_video_cmd = on_command('随机小姐姐') aliases=小姐姐,随机美女视频 -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/random_girl_video.py:130 random_girl_video_cmd_ -> EntertainmentApplication external-query capability -> EntertainmentExternalQueryProvider with zero-retry HTTP and bounded response bodies -> existing result formatting -> shared messaging/media output boundary"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
-        "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
+        "nonebot_plugin_xiuxian_2/features/entertainment/application.py:13-65",
+        "nonebot_plugin_xiuxian_2/features/entertainment/external_query.py:28-220",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/random_girl_video.py:7",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/random_girl_video.py:118"
+        "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/command.py:924-959,1056-1070",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/io_runtime.py:36-73",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/random_girl_video.py:9",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/random_girl_video.py:130"
       ],
       "source_declaration_found": true,
       "source": {
@@ -9118,20 +9188,23 @@
       "id": "command:entertainment:随机点歌",
       "kind": "commands",
       "entry": "entertainment:随机点歌 (aliases: )",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "External content reads now go through the feature-owned provider and no-retry HTTP client with bounded JSON (2 MiB), text (256 KiB), and media-byte (20 MiB) responses. Redirect-only media lookups do not eagerly download the media body; existing formatting and messaging remain compatible.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/click_music.py:4 click_music_cmd = on_command('随机点歌') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/click_music.py:19 click_music_cmd_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/click_music.py:19 click_music_cmd_ -> EntertainmentApplication external-query capability -> EntertainmentExternalQueryProvider with zero-retry HTTP and bounded response bodies -> existing result formatting -> shared messaging/media output boundary"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
-        "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
+        "nonebot_plugin_xiuxian_2/features/entertainment/application.py:13-65",
+        "nonebot_plugin_xiuxian_2/features/entertainment/external_query.py:28-220",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
+        "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/command.py:924-959,1056-1070",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/io_runtime.py:36-73",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/click_music.py:4",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/click_music.py:19"
       ],
@@ -9145,20 +9218,21 @@
       "id": "command:entertainment:随机猫猫",
       "kind": "commands",
       "entry": "entertainment:随机猫猫 (aliases: 猫图, 猫猫, 随机猫图)",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "允许保留的兼容路径",
+      "reason": "This output-only command constructs a public CATAAS image URL; 猫猫说 URL-encodes text and caps it at 40 characters. Image delivery remains on the existing adapter compatibility path and the handler has no game/account state access.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/cat_picture.py:26 random_cat_cmd = on_command('随机猫猫') aliases=猫图,猫猫,随机猫图 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/cat_picture.py:47 random_cat_cmd_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/cat_picture.py:47 random_cat_cmd_ -> construct a public CATAAS image URL (cat_says input is capped at 40 characters and percent-encoded) -> handle_pic_msg_send -> CompatMessageSegment.image(URL) -> adapter sender; no business-state access"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
-        "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
+        "nonebot_plugin_xiuxian_2/xiuxian/adapter_compat.py:814-831",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
+        "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_utils/utils.py:2053-2105",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/cat_picture.py:26",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/cat_picture.py:47"
       ],
@@ -9172,20 +9246,23 @@
       "id": "command:entertainment:随机语音",
       "kind": "commands",
       "entry": "entertainment:随机语音 (aliases: 御姐语音, 怼人语音, 绿茶语音, 语音, 随机御姐撒娇语音, 随机绿茶语音)",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "External content reads now go through the feature-owned provider and no-retry HTTP client with bounded JSON (2 MiB), text (256 KiB), and media-byte (20 MiB) responses. Redirect-only media lookups do not eagerly download the media body; existing formatting and messaging remain compatible.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/random_voice.py:6 random_voice_cmd = on_command('随机语音') aliases=御姐语音,怼人语音,绿茶语音,语音,随机御姐撒娇语音,随机绿茶语音 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/random_voice.py:15 random_voice_cmd_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/random_voice.py:15 random_voice_cmd_ -> EntertainmentApplication external-query capability -> EntertainmentExternalQueryProvider with zero-retry HTTP and bounded response bodies -> existing result formatting -> shared messaging/media output boundary"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
-        "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
+        "nonebot_plugin_xiuxian_2/features/entertainment/application.py:13-65",
+        "nonebot_plugin_xiuxian_2/features/entertainment/external_query.py:28-220",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
+        "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/command.py:924-959,1056-1070",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/io_runtime.py:36-73",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/random_voice.py:6",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/random_voice.py:15"
       ],

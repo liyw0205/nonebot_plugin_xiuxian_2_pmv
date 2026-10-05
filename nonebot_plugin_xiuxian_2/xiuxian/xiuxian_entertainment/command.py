@@ -50,6 +50,7 @@ from .io_runtime import (
     run_blocking_io,
     run_media_send,
 )
+from .room_store import entertainment_application
 
 
 async def send_entertainment_media(bot: Bot, event, media, *, media_type: str):
@@ -926,13 +927,8 @@ def _get_json_api_sync(
     timeout: int = 15,
     max_bytes: int | None = None,
 ) -> dict:
-    """
-    通用 JSON 接口请求
-    - 优先 resp.json()
-    - 失败时兼容 text -> json.loads
-    - 失败抛异常给上层处理
-    """
-    return http_client.get_json(
+    """Fetch parsed JSON through the feature-owned bounded provider."""
+    return entertainment_application.external_json(
         api_url, params=params, timeout=timeout, max_bytes=max_bytes
     )
 
@@ -952,8 +948,9 @@ def _get_text_api_sync(api_url: str, params: dict | None = None, timeout: int = 
     """
     通用文本接口请求
     """
-    resp = http_client.request("GET", api_url, params=params, timeout=timeout)
-    return resp.text.strip()
+    return entertainment_application.external_text(
+        api_url, params=params, timeout=timeout
+    )
 
 
 async def get_text_api(api_url: str, params: dict | None = None, timeout: int = 15) -> str:
@@ -1062,30 +1059,9 @@ def _get_media_url_api_sync(api_url: str, params: dict | None = None, timeout: i
     - 如果返回 JSON，则尝试从常见字段里找 URL
     - 如果不是 JSON，则使用 resp.url
     """
-    resp = http_client.request(
-        "GET", api_url, params=params, timeout=timeout, allow_redirects=True
+    return entertainment_application.external_media_url(
+        api_url, params=params, timeout=timeout
     )
-
-    content_type = resp.headers.get("Content-Type", "")
-    if "application/json" in content_type:
-        try:
-            result = resp.json()
-        except Exception:
-            result = json.loads(resp.text)
-
-        if isinstance(result, dict):
-            media_url = (
-                result.get("url")
-                or result.get("image")
-                or result.get("image_url")
-                or result.get("data")
-            )
-            if media_url:
-                return str(media_url)
-
-        raise ValueError("接口未返回媒体地址")
-
-    return str(resp.url)
 
 
 async def get_media_url_api(api_url: str, params: dict | None = None, timeout: int = 20) -> str:

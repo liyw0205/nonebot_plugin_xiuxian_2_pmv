@@ -5,14 +5,15 @@
 """
 from __future__ import annotations
 
-import time
 from datetime import datetime
 from typing import Any
 
 from nonebot.params import CommandArg
 
 from ..command import *
-from ...xiuxian_utils.http_proxy import requests_get, describe_proxy_request_error
+from ..room_store import entertainment_application
+from ..io_runtime import run_blocking_io
+from ...xiuxian_utils.http_proxy import describe_proxy_request_error
 from ...xiuxian_utils.utils import (
     parse_page_arg,
     paginate_text_blocks,
@@ -20,7 +21,6 @@ from ...xiuxian_utils.utils import (
     send_help_message,
 )
 
-_JIKAN_SEASONS_NOW = "https://api.jikan.moe/v4/seasons/now"
 _WEEKDAY_CN = ("周一", "周二", "周三", "周四", "周五", "周六", "周日")
 # Jikan broadcast.day 常见写法
 _JIKAN_DAY_TO_IDX = {
@@ -39,17 +39,6 @@ _JIKAN_DAY_TO_IDX = {
     "sundays": 6,
     "sunday": 6,
 }
-_UA = {
-    "User-Agent": (
-        "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 "
-        "(KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
-    ),
-    "Accept": "application/json",
-}
-# 短缓存，降低 Jikan 限频与抖动
-_CACHE_TTL_SEC = 900
-_cache_at: float = 0.0
-_cache_days: list[dict[str, Any]] | None = None
 
 
 def _today_weekday_index() -> int:
@@ -105,86 +94,12 @@ def _empty_week_blocks() -> list[dict[str, Any]]:
     return out
 
 
-def _http_get_json(url: str, *, timeout: int, use_proxy: bool) -> dict[str, Any]:
-    resp = requests_get(
-        url,
-        timeout=timeout,
-        headers=_UA,
-        use_config_proxy=use_proxy,
-    )
-    resp.raise_for_status()
-    data = resp.json()
-    if not isinstance(data, dict):
-        raise ValueError("Jikan 返回非 JSON 对象")
-    return data
-
-
-def _fetch_seasons_now_pages(timeout: int = 25, max_pages: int = 6) -> list[dict[str, Any]]:
-    """拉取当季列表；直连优先，失败再代理。单页失败时保留已拉到的数据。"""
-    last_err: BaseException | None = None
-
-    def _load_all(use_proxy: bool) -> list[dict[str, Any]]:
-        collected: list[dict[str, Any]] = []
-        page = 1
-        while page <= max_pages:
-            url = f"{_JIKAN_SEASONS_NOW}?sfw=true&page={page}"
-            page_ok = False
-            page_err: BaseException | None = None
-            for attempt in range(3):
-                try:
-                    payload = _http_get_json(url, timeout=timeout, use_proxy=use_proxy)
-                    chunk = payload.get("data") or []
-                    if not isinstance(chunk, list):
-                        chunk = []
-                    for it in chunk:
-                        if isinstance(it, dict):
-                            collected.append(it)
-                    page_ok = True
-                    pag = payload.get("pagination") or {}
-                    if not pag.get("has_next_page"):
-                        return collected
-                    break
-                except BaseException as e:
-                    page_err = e
-                    time.sleep(0.4 * (attempt + 1))
-            if not page_ok:
-                # 已有数据则返回部分结果，避免整表失败
-                if collected:
-                    return collected
-                if page_err is not None:
-                    raise page_err
-                break
-            page += 1
-            if page <= max_pages:
-                time.sleep(0.45)
-        return collected
-
-    # 1) 直连 2) 代理
-    for use_proxy in (False, True):
-        try:
-            collected = _load_all(use_proxy)
-            if collected:
-                return collected
-            last_err = ValueError("Jikan 当季列表为空")
-        except BaseException as e:
-            last_err = e
-            continue
-    if last_err is not None:
-        raise last_err
-    return []
-
-
-def fetch_bangumi_calendar(timeout: int = 25) -> list[dict[str, Any]]:
+def fetch_bangumi_calendar() -> list[dict[str, Any]]:
     """返回 7（+未知）天块，每项含 weekday + items（兼容旧 format_*）。
 
     源：Jikan /v4/seasons/now（仅 airing=true 的条目按 broadcast.day 归入周几）。
     """
-    global _cache_at, _cache_days
-    now = time.time()
-    if _cache_days is not None and (now - _cache_at) < _CACHE_TTL_SEC:
-        return _cache_days
-
-    raw = _fetch_seasons_now_pages(timeout=timeout)
+    raw = entertainment_application.bangumi_seasons_now()
     blocks = _empty_week_blocks()
     for it in raw:
         if not it.get("airing"):
@@ -198,8 +113,6 @@ def fetch_bangumi_calendar(timeout: int = 25) -> list[dict[str, Any]]:
             blocks[idx]["items"].append(item)
 
     # 周表仍按周一到周日；未知日单独一块
-    _cache_days = blocks
-    _cache_at = now
     return blocks
 
 
@@ -298,7 +211,7 @@ week_bangumi_cmd = on_command(
 @today_bangumi_cmd.handle(parameterless=[Cooldown(cd_time=8)])
 async def today_bangumi_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     try:
-        days = fetch_bangumi_calendar()
+        days = await run_blocking_io(fetch_bangumi_calendar, timeout=30)
         items = _items_for_today(days)
         msg = format_today_message(items)
         await handle_send(
@@ -335,7 +248,7 @@ async def week_bangumi_(
 ):
     page = parse_page_arg(args.extract_plain_text())
     try:
-        days = fetch_bangumi_calendar()
+        days = await run_blocking_io(fetch_bangumi_calendar, timeout=30)
         full = format_week_message(days)
         msg, page, total_pages = paginate_text_blocks(full, page, per_page=2)
         if total_pages > 1:

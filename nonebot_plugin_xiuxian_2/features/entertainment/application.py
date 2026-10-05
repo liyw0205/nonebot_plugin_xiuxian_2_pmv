@@ -6,6 +6,7 @@ from .._migrated_application import MigratedFeatureApplication
 from .repository import EntertainmentRepository
 from .room_repository import EntertainmentRoomSqlRepository
 from .schemas import NewApiAccountListResult, NewApiCheckinTargetsResult
+from .external_query import EntertainmentExternalQueryProvider
 from .webdav_repository import WebDavRepository
 
 
@@ -17,10 +18,51 @@ class EntertainmentApplication(MigratedFeatureApplication):
         repository: EntertainmentRepository | None = None,
         room_repository: EntertainmentRoomSqlRepository | None = None,
         webdav_repository: WebDavRepository | None = None,
+        external_query_provider: EntertainmentExternalQueryProvider | None = None,
     ) -> None:
         super().__init__(database, feature="entertainment", repository=repository or EntertainmentRepository(database))
         self.room_repository = room_repository or EntertainmentRoomSqlRepository(database)
         self.webdav_repository = webdav_repository or WebDavRepository()
+        self.external_query_provider = external_query_provider or EntertainmentExternalQueryProvider()
+
+    def external_json(
+        self,
+        api_url: str,
+        params=None,
+        timeout: float = 15,
+        max_bytes=None,
+        **request_options,
+    ):
+        return self.external_query_provider.get_json(
+            api_url,
+            params=params,
+            timeout=timeout,
+            max_bytes=max_bytes,
+            **request_options,
+        )
+
+    def external_text(self, api_url: str, params=None, timeout: float = 15):
+        return self.external_query_provider.get_text(
+            api_url, params=params, timeout=timeout
+        )
+
+    def external_media_url(self, api_url: str, params=None, timeout: float = 20):
+        return self.external_query_provider.get_media_url(
+            api_url, params=params, timeout=timeout
+        )
+
+    def external_bytes(
+        self, url: str, *, max_bytes: int, timeout: float = 20, **request_options
+    ):
+        return self.external_query_provider.get_bytes(
+            url,
+            max_bytes=max_bytes,
+            timeout=timeout,
+            **request_options,
+        )
+
+    def bangumi_seasons_now(self):
+        return self.external_query_provider.fetch_bangumi_seasons_now()
 
     def room_states(self, game_type: str):
         return self.room_repository.list_states(game_type)

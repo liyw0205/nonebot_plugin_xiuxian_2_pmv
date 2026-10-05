@@ -6,7 +6,6 @@ from nonebot.params import CommandArg
 from ..command import *
 
 runtime_random = SystemRandom()
-from ...xiuxian_utils.http_proxy import http_client
 
 
 NEKOS_API_BASE = "https://nekos.best/api/v2"
@@ -41,13 +40,12 @@ ACTION_CATEGORIES = {
 
 
 def _fetch_nekos_sync(category: str) -> tuple[BytesIO, str]:
-    resp = http_client.request(
-        "GET",
+    result = entertainment_application.external_json(
         f"{NEKOS_API_BASE}/{category}",
         headers={"User-Agent": NEKOS_USER_AGENT},
         timeout=15,
+        max_bytes=2 * 1024 * 1024,
     )
-    result = resp.json()
     if not isinstance(result, dict):
         raise ValueError("接口返回不是JSON对象")
 
@@ -64,7 +62,7 @@ def _fetch_nekos_sync(category: str) -> tuple[BytesIO, str]:
         raise ValueError("接口未返回图片地址")
 
     source = str(item.get("anime_name") or item.get("artist_name") or item.get("source_url") or "").strip()
-    media_data = http_client.download(
+    media_data = entertainment_application.external_bytes(
         media_url,
         max_bytes=20 * 1024 * 1024,
         headers={"User-Agent": NEKOS_USER_AGENT},
