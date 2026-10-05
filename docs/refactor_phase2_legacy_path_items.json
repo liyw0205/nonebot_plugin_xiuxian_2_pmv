@@ -1410,22 +1410,26 @@
       "id": "command:interactive:互动",
       "kind": "commands",
       "entry": "interactive:互动 (aliases: )",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
+      "status": "允许保留的兼容路径",
+      "reason": "The handler only builds and sends a static command catalog. Its 今日运势 item is served by the separate migrated DailyFortune matcher; this handler performs no Interactive business-state or external-data operation. Retain this response as a compatibility command.",
       "unknown_edge": "legacy handler -> downstream state/effect owner",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Interactive/__init__.py:170 interaction_command = on_command('互动') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Interactive/__init__.py:1201 handle_interaction -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Interactive/__init__.py:1201 handle_interaction -> builds the static command catalog -> handle_send compatibility adapter",
+        "The displayed 今日运势 item -> register_migrated_matchers daily matcher -> _build_daily -> DailyFortune feature handler"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
-        "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
+        "nonebot_plugin_xiuxian_2/adapters/nonebot/commands.py:104-106,290-322",
+        "nonebot_plugin_xiuxian_2/features/daily_fortune/commands.py:8",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
+        "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Interactive/__init__.py:1201",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Interactive/__init__.py:170",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Interactive/__init__.py:1201"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_utils/utils.py:1306-1407"
       ],
       "source_declaration_found": true,
       "source": {
@@ -1463,22 +1467,23 @@
       "id": "command:interactive:今天吃什么",
       "kind": "commands",
       "entry": "interactive:今天吃什么 (aliases: 吃什么, 吃啥, 推荐美食, 美食推荐)",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
+      "status": "允许保留的兼容路径",
+      "reason": "The handler selects or formats local static text and sends it through the shared adapter. It has no player-state, asset, or external-data effect, so no feature-owned use case is needed; retain it as a compatibility command.",
       "unknown_edge": "legacy handler -> downstream state/effect owner",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Interactive/__init__.py:167 what_to_eat = on_command('今天吃什么') aliases=吃什么,吃啥,推荐美食,美食推荐 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Interactive/__init__.py:1007 handle_what_to_eat -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Interactive/__init__.py:1007 handle_what_to_eat -> local static text/random choice -> handle_send compatibility adapter"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
-        "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
+        "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Interactive/__init__.py:1007",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Interactive/__init__.py:167",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Interactive/__init__.py:1007"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_utils/utils.py:1306-1407"
       ],
       "source_declaration_found": true,
       "source": {
@@ -1634,22 +1639,23 @@
       "id": "command:interactive:休息",
       "kind": "commands",
       "entry": "interactive:休息 (aliases: relax, 休憩, 小憩, 放松, 歇会)",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
+      "status": "允许保留的兼容路径",
+      "reason": "The handler selects or formats local static text and sends it through the shared adapter. It has no player-state, asset, or external-data effect, so no feature-owned use case is needed; retain it as a compatibility command.",
       "unknown_edge": "legacy handler -> downstream state/effect owner",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Interactive/__init__.py:160 rest_command = on_command('休息') aliases=relax,休憩,小憩,放松,歇会 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Interactive/__init__.py:1132 handle_rest -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Interactive/__init__.py:1132 handle_rest -> local static text/random choice -> handle_send compatibility adapter"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
-        "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
+        "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Interactive/__init__.py:1132",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Interactive/__init__.py:160",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Interactive/__init__.py:1132"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_utils/utils.py:1306-1407"
       ],
       "source_declaration_found": true,
       "source": {
@@ -1904,22 +1910,23 @@
       "id": "command:interactive:你好",
       "kind": "commands",
       "entry": "interactive:你好 (aliases: hello, hi, 你好呀, 哈喽, 嗨, 道友你好)",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
+      "status": "允许保留的兼容路径",
+      "reason": "The handler selects or formats local static text and sends it through the shared adapter. It has no player-state, asset, or external-data effect, so no feature-owned use case is needed; retain it as a compatibility command.",
       "unknown_edge": "legacy handler -> downstream state/effect owner",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Interactive/__init__.py:151 hello_command = on_command('你好') aliases=hello,hi,你好呀,哈喽,嗨,道友你好 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Interactive/__init__.py:1078 handle_hello -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Interactive/__init__.py:1078 handle_hello -> local static text/random choice -> handle_send compatibility adapter"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
-        "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
+        "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Interactive/__init__.py:1078",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Interactive/__init__.py:151",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Interactive/__init__.py:1078"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_utils/utils.py:1306-1407"
       ],
       "source_declaration_found": true,
       "source": {
@@ -1931,22 +1938,23 @@
       "id": "command:interactive:你好吗",
       "kind": "commands",
       "entry": "interactive:你好吗 (aliases: howareyou, 别来无恙, 怎么样, 最近怎么样, 近来可好)",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
+      "status": "允许保留的兼容路径",
+      "reason": "The handler selects or formats local static text and sends it through the shared adapter. It has no player-state, asset, or external-data effect, so no feature-owned use case is needed; retain it as a compatibility command.",
       "unknown_edge": "legacy handler -> downstream state/effect owner",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Interactive/__init__.py:154 how_are_you = on_command('你好吗') aliases=howareyou,别来无恙,怎么样,最近怎么样,近来可好 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Interactive/__init__.py:1096 handle_how_are_you -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Interactive/__init__.py:1096 handle_how_are_you -> local static text/random choice -> handle_send compatibility adapter"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
-        "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
+        "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Interactive/__init__.py:1096",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Interactive/__init__.py:154",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Interactive/__init__.py:1096"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_utils/utils.py:1306-1407"
       ],
       "source_declaration_found": true,
       "source": {
@@ -2268,22 +2276,23 @@
       "id": "command:interactive:再见",
       "kind": "commands",
       "entry": "interactive:再见 (aliases: bye, goodbye, 再会, 后会有期, 告辞, 拜拜)",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
+      "status": "允许保留的兼容路径",
+      "reason": "The handler selects or formats local static text and sends it through the shared adapter. It has no player-state, asset, or external-data effect, so no feature-owned use case is needed; retain it as a compatibility command.",
       "unknown_edge": "legacy handler -> downstream state/effect owner",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Interactive/__init__.py:153 bye_command = on_command('再见') aliases=bye,goodbye,再会,后会有期,告辞,拜拜 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Interactive/__init__.py:1090 handle_bye -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Interactive/__init__.py:1090 handle_bye -> local static text/random choice -> handle_send compatibility adapter"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
-        "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
+        "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Interactive/__init__.py:1090",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Interactive/__init__.py:153",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Interactive/__init__.py:1090"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_utils/utils.py:1306-1407"
       ],
       "source_declaration_found": true,
       "source": {
@@ -2690,22 +2699,23 @@
       "id": "command:interactive:加油",
       "kind": "commands",
       "entry": "interactive:加油 (aliases: fighting, 冲鸭, 加把劲, 努力, 鼓励)",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
+      "status": "允许保留的兼容路径",
+      "reason": "The handler selects or formats local static text and sends it through the shared adapter. It has no player-state, asset, or external-data effect, so no feature-owned use case is needed; retain it as a compatibility command.",
       "unknown_edge": "legacy handler -> downstream state/effect owner",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Interactive/__init__.py:162 encourage_command = on_command('加油') aliases=fighting,冲鸭,加把劲,努力,鼓励 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Interactive/__init__.py:1144 handle_encourage -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Interactive/__init__.py:1144 handle_encourage -> local static text/random choice -> handle_send compatibility adapter"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
-        "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
+        "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Interactive/__init__.py:1144",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Interactive/__init__.py:162",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Interactive/__init__.py:1144"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_utils/utils.py:1306-1407"
       ],
       "source_declaration_found": true,
       "source": {
@@ -3171,22 +3181,23 @@
       "id": "command:interactive:可爱",
       "kind": "commands",
       "entry": "interactive:可爱 (aliases: 卡哇伊, 可爱捏, 好可爱, 萌, 萌萌哒)",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
+      "status": "允许保留的兼容路径",
+      "reason": "The handler selects or formats local static text and sends it through the shared adapter. It has no player-state, asset, or external-data effect, so no feature-owned use case is needed; retain it as a compatibility command.",
       "unknown_edge": "legacy handler -> downstream state/effect owner",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Interactive/__init__.py:150 cute_command = on_command('可爱') aliases=卡哇伊,可爱捏,好可爱,萌,萌萌哒 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Interactive/__init__.py:1072 handle_cute -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Interactive/__init__.py:1072 handle_cute -> local static text/random choice -> handle_send compatibility adapter"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
-        "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
+        "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Interactive/__init__.py:1072",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Interactive/__init__.py:150",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Interactive/__init__.py:1072"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_utils/utils.py:1306-1407"
       ],
       "source_declaration_found": true,
       "source": {
@@ -3198,22 +3209,23 @@
       "id": "command:interactive:吃饭",
       "kind": "commands",
       "entry": "interactive:吃饭 (aliases: 干饭, 用膳, 进食, 饿了)",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
+      "status": "允许保留的兼容路径",
+      "reason": "The handler selects or formats local static text and sends it through the shared adapter. It has no player-state, asset, or external-data effect, so no feature-owned use case is needed; retain it as a compatibility command.",
       "unknown_edge": "legacy handler -> downstream state/effect owner",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Interactive/__init__.py:157 eat_command = on_command('吃饭') aliases=干饭,用膳,进食,饿了 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Interactive/__init__.py:1114 handle_eat -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Interactive/__init__.py:1114 handle_eat -> local static text/random choice -> handle_send compatibility adapter"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
-        "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
+        "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Interactive/__init__.py:1114",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Interactive/__init__.py:157",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Interactive/__init__.py:1114"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_utils/utils.py:1306-1407"
       ],
       "source_declaration_found": true,
       "source": {
@@ -3471,22 +3483,23 @@
       "id": "command:interactive:土味情话",
       "kind": "commands",
       "entry": "interactive:土味情话 (aliases: 土味, 情话, 表白, 说情话)",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
+      "status": "允许保留的兼容路径",
+      "reason": "The handler selects or formats local static text and sends it through the shared adapter. It has no player-state, asset, or external-data effect, so no feature-owned use case is needed; retain it as a compatibility command.",
       "unknown_edge": "legacy handler -> downstream state/effect owner",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Interactive/__init__.py:165 love_sentence = on_command('土味情话') aliases=土味,情话,表白,说情话 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Interactive/__init__.py:1156 handle_love_sentence -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Interactive/__init__.py:1156 handle_love_sentence -> local static text/random choice -> handle_send compatibility adapter"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
-        "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
+        "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Interactive/__init__.py:1156",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Interactive/__init__.py:165",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Interactive/__init__.py:1156"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_utils/utils.py:1306-1407"
       ],
       "source_declaration_found": true,
       "source": {
@@ -3498,22 +3511,23 @@
       "id": "command:interactive:天气",
       "kind": "commands",
       "entry": "interactive:天气 (aliases: 今天天气, 天气预报, 天象, 气象)",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
+      "status": "允许保留的兼容路径",
+      "reason": "The handler selects from built-in weather-themed text and sends it; it is not a live weather query and has no player-state, asset, or external-data effect. Retain it as a compatibility command.",
       "unknown_edge": "legacy handler -> downstream state/effect owner",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Interactive/__init__.py:155 weather_command = on_command('天气') aliases=今天天气,天气预报,天象,气象 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Interactive/__init__.py:1102 handle_weather -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Interactive/__init__.py:1102 handle_weather -> selects built-in weather-themed text -> handle_send compatibility adapter"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
-        "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
+        "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Interactive/__init__.py:1102",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Interactive/__init__.py:155",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Interactive/__init__.py:1102"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_utils/utils.py:1306-1407"
       ],
       "source_declaration_found": true,
       "source": {
@@ -3551,22 +3565,23 @@
       "id": "command:interactive:学习",
       "kind": "commands",
       "entry": "interactive:学习 (aliases: study, 修行, 用功, 练功)",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
+      "status": "允许保留的兼容路径",
+      "reason": "The handler selects or formats local static text and sends it through the shared adapter. It has no player-state, asset, or external-data effect, so no feature-owned use case is needed; retain it as a compatibility command.",
       "unknown_edge": "legacy handler -> downstream state/effect owner",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Interactive/__init__.py:158 study_command = on_command('学习') aliases=study,修行,用功,练功 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Interactive/__init__.py:1120 handle_study -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Interactive/__init__.py:1120 handle_study -> local static text/random choice -> handle_send compatibility adapter"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
-        "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
+        "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Interactive/__init__.py:1120",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Interactive/__init__.py:158",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Interactive/__init__.py:1120"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_utils/utils.py:1306-1407"
       ],
       "source_declaration_found": true,
       "source": {
@@ -3744,22 +3759,23 @@
       "id": "command:interactive:工作",
       "kind": "commands",
       "entry": "interactive:工作 (aliases: work, 上班, 劳作, 当值, 打工)",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
+      "status": "允许保留的兼容路径",
+      "reason": "The handler selects or formats local static text and sends it through the shared adapter. It has no player-state, asset, or external-data effect, so no feature-owned use case is needed; retain it as a compatibility command.",
       "unknown_edge": "legacy handler -> downstream state/effect owner",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Interactive/__init__.py:159 work_command = on_command('工作') aliases=work,上班,劳作,当值,打工 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Interactive/__init__.py:1126 handle_work -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Interactive/__init__.py:1126 handle_work -> local static text/random choice -> handle_send compatibility adapter"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
-        "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
+        "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Interactive/__init__.py:1126",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Interactive/__init__.py:159",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Interactive/__init__.py:1126"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_utils/utils.py:1306-1407"
       ],
       "source_declaration_found": true,
       "source": {
@@ -5002,22 +5018,32 @@
       "id": "command:interactive:早安",
       "kind": "commands",
       "entry": "interactive:早安 (aliases: 早, 早上好, 早啊, 晨安, 道友早)",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
+      "status": "已迁移",
+      "reason": "The command uses the shared check_user admission boundary, then delegates its greeting or reward state effect to InteractiveApplication and its feature-owned SQL repository. The legacy matcher and shared message adapter remain compatibility entry/delivery boundaries; profile/avatar and blackhouse admission are cross-feature owners.",
       "unknown_edge": "legacy handler -> downstream state/effect owner",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Interactive/__init__.py:148 good_morning = on_command('早安') aliases=早,早上好,早啊,晨安,道友早 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Interactive/__init__.py:1014 handle_good_morning -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Interactive/__init__.py:1014 handle_good_morning -> check_user -> shared avatar/profile applications and blackhouse admission guard",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Interactive/__init__.py:1014 handle_good_morning -> _run_interactive_action(greeting_claim) -> InteractiveApplication.execute -> InteractiveRepository.claim_greeting in an immediate game_db UoW; OperationLedger begin/finish records the replay receipt in that UoW",
+        "handle_good_morning -> handle_send adapter delivers the committed result"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
-        "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
+        "nonebot_plugin_xiuxian_2/features/interactive/application.py:62-140",
+        "nonebot_plugin_xiuxian_2/features/interactive/migrations.py:7-10",
+        "nonebot_plugin_xiuxian_2/features/interactive/repository.py:48-135",
+        "nonebot_plugin_xiuxian_2/infrastructure/database/ledger.py:61-154",
+        "nonebot_plugin_xiuxian_2/plugin.py:357,850,970-971",
+        "nonebot_plugin_xiuxian_2/xiuxian/blackhouse.py:69-80",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
+        "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Interactive/__init__.py:1014",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Interactive/__init__.py:148",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Interactive/__init__.py:1014"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_utils/utils.py:1306-1407",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_utils/utils.py:98-127,383-433"
       ],
       "source_declaration_found": true,
       "source": {
@@ -5029,22 +5055,23 @@
       "id": "command:interactive:时间",
       "kind": "commands",
       "entry": "interactive:时间 (aliases: 什么时辰了, 几点了, 几点钟, 当前时间, 时辰, 现在几点)",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
+      "status": "允许保留的兼容路径",
+      "reason": "The handler formats local SystemClock time and sends it; it has no player-state, asset, or external-data effect. Retain it as a compatibility command.",
       "unknown_edge": "legacy handler -> downstream state/effect owner",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Interactive/__init__.py:156 time_command = on_command('时间') aliases=什么时辰了,几点了,几点钟,当前时间,时辰,现在几点 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Interactive/__init__.py:1108 handle_time -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Interactive/__init__.py:1108 handle_time -> get_time_message uses local SystemClock -> handle_send compatibility adapter"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
-        "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
+        "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Interactive/__init__.py:1108",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Interactive/__init__.py:156",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Interactive/__init__.py:1108"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_utils/utils.py:1306-1407"
       ],
       "source_declaration_found": true,
       "source": {
@@ -5083,22 +5110,32 @@
       "id": "command:interactive:晚安",
       "kind": "commands",
       "entry": "interactive:晚安 (aliases: 安寝, 晚安啦, 睡了, 睡觉, 道友晚安)",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
+      "status": "已迁移",
+      "reason": "The command uses the shared check_user admission boundary, then delegates its greeting or reward state effect to InteractiveApplication and its feature-owned SQL repository. The legacy matcher and shared message adapter remain compatibility entry/delivery boundaries; profile/avatar and blackhouse admission are cross-feature owners.",
       "unknown_edge": "legacy handler -> downstream state/effect owner",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Interactive/__init__.py:149 good_night = on_command('晚安') aliases=安寝,晚安啦,睡了,睡觉,道友晚安 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Interactive/__init__.py:1043 handle_good_night -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Interactive/__init__.py:1043 handle_good_night -> check_user -> shared avatar/profile applications and blackhouse admission guard",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Interactive/__init__.py:1043 handle_good_night -> _run_interactive_action(greeting_claim) -> InteractiveApplication.execute -> InteractiveRepository.claim_greeting in an immediate game_db UoW; OperationLedger begin/finish records the replay receipt in that UoW",
+        "handle_good_night -> handle_send adapter delivers the committed result"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
-        "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
+        "nonebot_plugin_xiuxian_2/features/interactive/application.py:62-140",
+        "nonebot_plugin_xiuxian_2/features/interactive/migrations.py:7-10",
+        "nonebot_plugin_xiuxian_2/features/interactive/repository.py:48-135",
+        "nonebot_plugin_xiuxian_2/infrastructure/database/ledger.py:61-154",
+        "nonebot_plugin_xiuxian_2/plugin.py:357,850,970-971",
+        "nonebot_plugin_xiuxian_2/xiuxian/blackhouse.py:69-80",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
+        "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Interactive/__init__.py:1043",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Interactive/__init__.py:149",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Interactive/__init__.py:1043"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_utils/utils.py:1306-1407",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_utils/utils.py:98-127,383-433"
       ],
       "source_declaration_found": true,
       "source": {
@@ -7497,22 +7534,32 @@
       "id": "command:interactive:给点修为",
       "kind": "commands",
       "entry": "interactive:给点修为 (aliases: 施舍点修为, 求点修为, 赏点修为)",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
+      "status": "已迁移",
+      "reason": "The command uses the shared check_user admission boundary, then delegates its greeting or reward state effect to InteractiveApplication and its feature-owned SQL repository. The legacy matcher and shared message adapter remain compatibility entry/delivery boundaries; profile/avatar and blackhouse admission are cross-feature owners.",
       "unknown_edge": "legacy handler -> downstream state/effect owner",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Interactive/__init__.py:168 give_exp_command = on_command('给点修为') aliases=施舍点修为,求点修为,赏点修为 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Interactive/__init__.py:950 handle_give_exp -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Interactive/__init__.py:950 handle_give_exp -> check_user -> shared avatar/profile applications and blackhouse admission guard",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Interactive/__init__.py:950 handle_give_exp -> _run_interactive_action(exp_settle) -> InteractiveApplication.execute -> InteractiveRepository.settle_exp in an immediate game_db UoW; OperationLedger begin/finish records the replay receipt in that UoW",
+        "handle_give_exp -> handle_send adapter delivers the committed result"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
-        "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
+        "nonebot_plugin_xiuxian_2/features/interactive/application.py:62-140",
+        "nonebot_plugin_xiuxian_2/features/interactive/migrations.py:7-10",
+        "nonebot_plugin_xiuxian_2/features/interactive/repository.py:48-135",
+        "nonebot_plugin_xiuxian_2/infrastructure/database/ledger.py:61-154",
+        "nonebot_plugin_xiuxian_2/plugin.py:357,850,970-971",
+        "nonebot_plugin_xiuxian_2/xiuxian/blackhouse.py:69-80",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
+        "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Interactive/__init__.py:168",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Interactive/__init__.py:950"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Interactive/__init__.py:950",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_utils/utils.py:1306-1407",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_utils/utils.py:98-127,383-433"
       ],
       "source_declaration_found": true,
       "source": {
@@ -7524,22 +7571,32 @@
       "id": "command:interactive:给点灵石",
       "kind": "commands",
       "entry": "interactive:给点灵石 (aliases: 施舍点灵石, 求点灵石, 赏点灵石)",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
+      "status": "已迁移",
+      "reason": "The command uses the shared check_user admission boundary, then delegates its greeting or reward state effect to InteractiveApplication and its feature-owned SQL repository. The legacy matcher and shared message adapter remain compatibility entry/delivery boundaries; profile/avatar and blackhouse admission are cross-feature owners.",
       "unknown_edge": "legacy handler -> downstream state/effect owner",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Interactive/__init__.py:169 give_stone_command = on_command('给点灵石') aliases=施舍点灵石,求点灵石,赏点灵石 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Interactive/__init__.py:979 handle_give_stone -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Interactive/__init__.py:979 handle_give_stone -> check_user -> shared avatar/profile applications and blackhouse admission guard",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Interactive/__init__.py:979 handle_give_stone -> _run_interactive_action(stone_settle) -> InteractiveApplication.execute -> InteractiveRepository.settle_stone in an immediate game_db UoW; OperationLedger begin/finish records the replay receipt in that UoW",
+        "handle_give_stone -> handle_send adapter delivers the committed result"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
-        "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
+        "nonebot_plugin_xiuxian_2/features/interactive/application.py:62-140",
+        "nonebot_plugin_xiuxian_2/features/interactive/migrations.py:7-10",
+        "nonebot_plugin_xiuxian_2/features/interactive/repository.py:48-135",
+        "nonebot_plugin_xiuxian_2/infrastructure/database/ledger.py:61-154",
+        "nonebot_plugin_xiuxian_2/plugin.py:357,850,970-971",
+        "nonebot_plugin_xiuxian_2/xiuxian/blackhouse.py:69-80",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
+        "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Interactive/__init__.py:169",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Interactive/__init__.py:979"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Interactive/__init__.py:979",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_utils/utils.py:1306-1407",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_utils/utils.py:98-127,383-433"
       ],
       "source_declaration_found": true,
       "source": {
@@ -8166,22 +8223,23 @@
       "id": "command:interactive:讲个段子",
       "kind": "commands",
       "entry": "interactive:讲个段子 (aliases: 幽默, 来段搞笑的, 段子, 趣事)",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
+      "status": "允许保留的兼容路径",
+      "reason": "The handler selects or formats local static text and sends it through the shared adapter. It has no player-state, asset, or external-data effect, so no feature-owned use case is needed; retain it as a compatibility command.",
       "unknown_edge": "legacy handler -> downstream state/effect owner",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Interactive/__init__.py:164 funny_story = on_command('讲个段子') aliases=幽默,来段搞笑的,段子,趣事 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Interactive/__init__.py:1150 handle_funny_story -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Interactive/__init__.py:1150 handle_funny_story -> local static text/random choice -> handle_send compatibility adapter"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
-        "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
+        "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Interactive/__init__.py:1150",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Interactive/__init__.py:164",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Interactive/__init__.py:1150"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_utils/utils.py:1306-1407"
       ],
       "source_declaration_found": true,
       "source": {
@@ -8193,22 +8251,23 @@
       "id": "command:interactive:讲个笑话",
       "kind": "commands",
       "entry": "interactive:讲个笑话 (aliases: joke, 搞笑, 来点乐子, 笑话, 逗我笑)",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
+      "status": "允许保留的兼容路径",
+      "reason": "The handler selects or formats local static text and sends it through the shared adapter. It has no player-state, asset, or external-data effect, so no feature-owned use case is needed; retain it as a compatibility command.",
       "unknown_edge": "legacy handler -> downstream state/effect owner",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Interactive/__init__.py:161 joke_command = on_command('讲个笑话') aliases=joke,搞笑,来点乐子,笑话,逗我笑 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Interactive/__init__.py:1138 handle_joke -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Interactive/__init__.py:1138 handle_joke -> local static text/random choice -> handle_send compatibility adapter"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
-        "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
+        "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Interactive/__init__.py:1138",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Interactive/__init__.py:161",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Interactive/__init__.py:1138"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_utils/utils.py:1306-1407"
       ],
       "source_declaration_found": true,
       "source": {
@@ -8220,22 +8279,23 @@
       "id": "command:interactive:谢谢",
       "kind": "commands",
       "entry": "interactive:谢谢 (aliases: thx, 多谢, 感恩, 感谢, 谢啦)",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
+      "status": "允许保留的兼容路径",
+      "reason": "The handler selects or formats local static text and sends it through the shared adapter. It has no player-state, asset, or external-data effect, so no feature-owned use case is needed; retain it as a compatibility command.",
       "unknown_edge": "legacy handler -> downstream state/effect owner",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Interactive/__init__.py:152 thanks_command = on_command('谢谢') aliases=thx,多谢,感恩,感谢,谢啦 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Interactive/__init__.py:1084 handle_thanks -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Interactive/__init__.py:1084 handle_thanks -> local static text/random choice -> handle_send compatibility adapter"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
-        "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
+        "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Interactive/__init__.py:1084",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Interactive/__init__.py:152",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Interactive/__init__.py:1084"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_utils/utils.py:1306-1407"
       ],
       "source_declaration_found": true,
       "source": {

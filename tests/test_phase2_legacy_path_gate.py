@@ -78,7 +78,7 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
         self.assertEqual(report["path_count"], 496)
         self.assertEqual(
             report["status_counts"],
-            {"不可达": 19, "允许保留的兼容路径": 70, "受阻": 287, "已迁移": 120},
+            {"不可达": 19, "允许保留的兼容路径": 87, "受阻": 266, "已迁移": 124},
         )
         self.assertGreater(report["blocked_count"], 0)
         self.assertTrue(all(item["call_graph"] and item["evidence"] for item in report["items"]))
@@ -105,6 +105,21 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
         my_id = next(item for item in report["items"] if item["id"] == "command:info:我的ID")
         self.assertEqual(my_id["status"], "已迁移")
         self.assertTrue(any("AvatarStateSqlRepository.get_active_id" in edge for edge in my_id["call_graph"]))
+        interactive = [
+            item for item in report["items"]
+            if item.get("kind") == "commands" and (item.get("source") or {}).get("feature") == "interactive"
+        ]
+        self.assertEqual(len(interactive), 21)
+        self.assertEqual(sum(item["status"] == "已迁移" for item in interactive), 4)
+        self.assertEqual(sum(item["status"] == "允许保留的兼容路径" for item in interactive), 17)
+        for name in ("早安", "晚安", "给点修为", "给点灵石"):
+            item = next(entry for entry in interactive if entry["source"]["name"] == name)
+            self.assertTrue(any("InteractiveApplication.execute" in edge for edge in item["call_graph"]))
+            self.assertTrue(any("OperationLedger" in edge for edge in item["call_graph"]))
+        legacy_fortune = next(
+            item for item in report["items"] if item["id"] == "legacy-command-suppressed:今日运势"
+        )
+        self.assertEqual(legacy_fortune["status"], "不可达")
         backlog_command = next(
             item for item in report["backlog"] if item["id"] == "default-legacy-command:back:我的背包"
         )

@@ -6,6 +6,15 @@ from scripts.check_full_refactor_progress import _slice_status
 
 
 class RefactorProgressTests(unittest.TestCase):
+    def test_progress_report_tracks_interactive_command_ownership(self) -> None:
+        interactive = _slice_status()["interactive"]
+        self.assertTrue(interactive["static_commands_remain_message_only"])
+        self.assertTrue(interactive["effectful_commands_use_interactive_application"])
+        self.assertTrue(interactive["application_and_repository_own_reward_effects"])
+        self.assertTrue(interactive["startup_migration_manifest_and_service_registered"])
+        self.assertTrue(interactive["exp_application_replay_and_asset_effect_tested"])
+        self.assertTrue(interactive["legacy_fortune_suppression_has_migrated_matcher"])
+
     def test_progress_report_tracks_bounded_unique_nearby_display(self) -> None:
         mapping = _slice_status()["map"]
         self.assertTrue(mapping["nearby_display_feature_owned"])

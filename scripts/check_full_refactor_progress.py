@@ -146,6 +146,78 @@ def _has_production_bank_savef_import() -> bool:
 def _slice_status() -> dict[str, dict[str, object]]:
     base = (PACKAGE / "xiuxian" / "xiuxian_base" / "__init__.py").read_text(encoding="utf-8")
     base_root_reroll_handler = base[base.index("@restart.handle"):base.index("@rank.handle")]
+    interactive_facade = (PACKAGE / "xiuxian" / "xiuxian_Interactive" / "__init__.py").read_text(encoding="utf-8")
+    interactive_application_source = (PACKAGE / "features" / "interactive" / "application.py").read_text(encoding="utf-8")
+    interactive_repository_source = (PACKAGE / "features" / "interactive" / "repository.py").read_text(encoding="utf-8")
+    interactive_migrations_source = (PACKAGE / "features" / "interactive" / "migrations.py").read_text(encoding="utf-8")
+    interactive_manifest_source = (PACKAGE / "features" / "interactive" / "manifest.py").read_text(encoding="utf-8")
+    interactive_application_tests = (PACKAGE / "features" / "interactive" / "tests" / "test_interactive_application.py").read_text(encoding="utf-8")
+    interactive_plugin_source = (PACKAGE / "plugin.py").read_text(encoding="utf-8")
+    interactive_command_adapter_source = (PACKAGE / "adapters" / "nonebot" / "commands.py").read_text(encoding="utf-8")
+    interactive_tree = ast.parse(interactive_facade)
+    interactive_functions = {
+        node.name: node
+        for node in interactive_tree.body
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+    }
+
+    def interactive_call_names(handler_name: str) -> set[str]:
+        handler = interactive_functions.get(handler_name)
+        if handler is None:
+            return set()
+        names: set[str] = set()
+        for statement in handler.body:
+            for node in ast.walk(statement):
+                if not isinstance(node, ast.Call):
+                    continue
+                if isinstance(node.func, ast.Name):
+                    names.add(node.func.id)
+                elif isinstance(node.func, ast.Attribute):
+                    names.add(node.func.attr)
+        return names
+
+    def interactive_delegates_to(handler_name: str, action: str) -> bool:
+        handler = interactive_functions.get(handler_name)
+        if handler is None:
+            return False
+        return any(
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id == "_run_interactive_action"
+            and node.args
+            and isinstance(node.args[0], ast.Constant)
+            and node.args[0].value == action
+            for node in ast.walk(handler)
+        )
+
+    interactive_static_handlers = (
+        "handle_interaction",
+        "handle_what_to_eat",
+        "handle_rest",
+        "handle_hello",
+        "handle_how_are_you",
+        "handle_bye",
+        "handle_encourage",
+        "handle_cute",
+        "handle_eat",
+        "handle_love_sentence",
+        "handle_weather",
+        "handle_study",
+        "handle_work",
+        "handle_time",
+        "handle_funny_story",
+        "handle_joke",
+        "handle_thanks",
+    )
+    interactive_effect_handlers = {
+        "handle_good_morning": "greeting_claim",
+        "handle_good_night": "greeting_claim",
+        "handle_give_exp": "exp_settle",
+        "handle_give_stone": "stone_settle",
+    }
+    interactive_help_source = ast.get_source_segment(
+        interactive_facade, interactive_functions.get("handle_interaction")
+    ) or ""
     legacy_handle = (PACKAGE / "xiuxian" / "xiuxian_utils" / "xiuxian2_handle.py").read_text(encoding="utf-8")
     wishing_stone_writer = legacy_handle.split("def convert_stone_to_wishing_stone", 1)[1].split(
         "def add_impart_exp_day", 1
@@ -861,6 +933,60 @@ def _slice_status() -> dict[str, dict[str, object]]:
     ]
     field_list_source = (PACKAGE / "xiuxian" / "xiuxian_utils" / "player_data_manager.py").read_text(encoding="utf-8")
     return {
+        "interactive": {
+            "static_commands_remain_message_only": (
+                len(interactive_static_handlers) == 17
+                and all(
+                    "handle_send" in interactive_call_names(name)
+                    and interactive_call_names(name) <= {"handle_send", "choice", "get_time_message", "items"}
+                    for name in interactive_static_handlers
+                )
+            ),
+            "effectful_commands_use_interactive_application": all(
+                "check_user" in interactive_call_names(name)
+                and "_run_interactive_action" in interactive_call_names(name)
+                and interactive_delegates_to(name, action)
+                for name, action in interactive_effect_handlers.items()
+            ),
+            "application_and_repository_own_reward_effects": all(
+                token in interactive_application_source
+                for token in (
+                    "self.repository.settle_exp(",
+                    "self.repository.settle_stone(",
+                    "self.repository.claim_greeting(",
+                    "self.ledger.begin(uow",
+                    "self.ledger.finish(uow, outcome)",
+                )
+            ) and all(
+                token in interactive_repository_source
+                for token in (
+                    "def settle_exp(",
+                    "UPDATE user_xiuxian SET exp = ?",
+                    "def settle_stone(",
+                    "UPDATE user_xiuxian SET stone = ?",
+                    "def claim_greeting(",
+                    "interactive_greeting_claims",
+                )
+            ),
+            "startup_migration_manifest_and_service_registered": (
+                'ConfigSpec("interactive_enabled"' in interactive_manifest_source
+                and 'commands_for("interactive")' in interactive_manifest_source
+                and "def apply_interactive(" in interactive_migrations_source
+                and 'Migration("interactive.001", "interactive_feature_migrations", apply_interactive)' in interactive_plugin_source
+                and 'not context.settings.get("interactive_enabled", True)' in interactive_plugin_source
+                and '"interactive": InteractiveApplication(str(context.database.path("game_db")))' in interactive_plugin_source
+            ),
+            "exp_application_replay_and_asset_effect_tested": (
+                "def test_exp_reward_action_replays_and_commits_asset_once" in interactive_application_tests
+            ),
+            "legacy_fortune_suppression_has_migrated_matcher": (
+                'daily = on_command(\n        "今日运势"' in interactive_command_adapter_source
+                and "def _daily_handler(" in interactive_command_adapter_source
+                and "handle_daily_fortune" in interactive_command_adapter_source
+                and "今日运势 - 占卜每日运势" in interactive_help_source
+            ),
+            "status": "interactive_21_commands_17_message_compatibility_4_application_owned",
+        },
         "field_list_cache": {
             "shared_entry_and_byte_budget": all(token in field_list_source for token in (
                 "FIELD_LIST_CACHE_MAX_ENTRIES = 64",
