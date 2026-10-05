@@ -40,7 +40,7 @@ class MigratedFeatureApplication:
     success_statuses = frozenset({
         "applied", "duplicate", "success", "succeeded", "completed", "created", "opened",
         "built", "changed", "used", "started", "updated", "purchased", "upgraded", "signed",
-        "entered", "generated", "settled", "finished", "claimed", "trained", "renamed", "ok", "pending",
+        "entered", "generated", "settled", "finished", "claimed", "trained", "renamed", "deleted", "cleared", "ok", "pending",
     })
 
     def __init__(self, database: str | Path, *, feature: str, repository: Any, ledger: OperationLedger | None = None) -> None:
@@ -111,20 +111,34 @@ class MigratedFeatureApplication:
         action: str,
         call: Callable[[], Any],
         payload: Mapping[str, Any] | None = None,
+        ledger_payload: Mapping[str, Any] | None = None,
     ) -> OperationOutcome[dict[str, Any]]:
         request = dict(payload or {})
         request["user_id"] = str(user_id)
-        return self._execute_call(operation_id, user_id, action, request, call)
+        ledger_request = dict(ledger_payload or request)
+        ledger_request["user_id"] = str(user_id)
+        return self._execute_call(
+            operation_id, user_id, action, request, call, ledger_request
+        )
 
-    def _execute_call(self, operation_id: str, user_id: str, action: str, request: Mapping[str, Any], call: Callable[[], Any]) -> OperationOutcome[dict[str, Any]]:
+    def _execute_call(
+        self,
+        operation_id: str,
+        user_id: str,
+        action: str,
+        request: Mapping[str, Any],
+        call: Callable[[], Any],
+        ledger_request: Mapping[str, Any] | None = None,
+    ) -> OperationOutcome[dict[str, Any]]:
         operation_id, user_id = str(operation_id).strip(), str(user_id).strip()
         if not operation_id or not user_id:
             raise ValidationError("operation_id and user_id are required")
         ledger_action = f"{self.feature}.{action}"
+        identity = dict(ledger_request or request)
         with trace_context(operation_id=operation_id, user_scope=user_id):
             try:
                 with DatabaseUnitOfWork(self.database, immediate=True) as uow:
-                    existing = self.ledger.begin(uow, operation_id, ledger_action, dict(request))
+                    existing = self.ledger.begin(uow, operation_id, ledger_action, identity)
                     if existing is not None:
                         previous = existing.outcome()
                         if previous is not None:
@@ -151,7 +165,7 @@ class MigratedFeatureApplication:
             except DomainError:
                 raise
             except Exception as exc:
-                self.ledger.record_failure(self.database, operation_id, ledger_action, dict(request), str(exc))
+                self.ledger.record_failure(self.database, operation_id, ledger_action, identity, str(exc))
                 raise
 
     def inspect(self, *, user_id: str) -> Mapping[str, Any]:

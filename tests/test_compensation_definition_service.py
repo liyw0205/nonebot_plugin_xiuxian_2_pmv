@@ -390,6 +390,40 @@ class CompensationDefinitionServiceTests(unittest.TestCase):
         self.assertEqual(self.scalar("SELECT COUNT(*) FROM reward_claim_counters"), 0)
         self.assertEqual(self.scalar("SELECT COUNT(*) FROM compensation_definition_operations"), 1)
 
+    def test_delete_action_reports_success_and_replays_after_definition_is_gone(self) -> None:
+        config = {"type_key": "补偿"}
+        with patch.object(
+            compensation_common,
+            "_compensation_definition_service",
+            return_value=self.service,
+        ):
+            first = compensation_common.delete_record("C1", config, "delete:event")
+            replay = compensation_common.delete_record("C1", config, "delete:event")
+
+        self.assertEqual((first.status, first.succeeded), ("deleted", True))
+        self.assertEqual((replay.status, replay.succeeded), ("deleted", True))
+        self.assertEqual(
+            self.scalar("SELECT COUNT(*) FROM compensation_definition_operations WHERE action='delete'"),
+            1,
+        )
+
+    def test_clear_action_reports_success_and_replays_after_catalog_changes(self) -> None:
+        config = {"type_key": "补偿"}
+        with patch.object(
+            compensation_common,
+            "_compensation_definition_service",
+            return_value=self.service,
+        ):
+            first = compensation_common.clear_records(config, "clear:event")
+            replay = compensation_common.clear_records(config, "clear:event")
+
+        self.assertEqual((first.status, first.succeeded), ("cleared", True))
+        self.assertEqual((replay.status, replay.succeeded), ("cleared", True))
+        self.assertEqual(
+            self.scalar("SELECT COUNT(*) FROM compensation_definition_operations WHERE action='clear'"),
+            1,
+        )
+
     def test_delete_rechecks_version_and_recreated_record_has_new_revision(self) -> None:
         current = self.service.get("C1")
         mismatch = self.service.delete("delete:stale", "C1", 99)

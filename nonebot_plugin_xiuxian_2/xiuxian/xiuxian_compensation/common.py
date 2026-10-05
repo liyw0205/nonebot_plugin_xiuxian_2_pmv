@@ -122,6 +122,7 @@ def _run_compensation_action(
     user_id: str,
     call,
     database=None,
+    ledger_payload=None,
     **payload,
 ):
     """Route one historical compensation mutation through the new boundary."""
@@ -141,6 +142,7 @@ def _run_compensation_action(
         user_id=str(user_id),
         action=action,
         payload=payload,
+        ledger_payload=ledger_payload,
         call=invoke,
     )
     data = dict(outcome.data or {})
@@ -764,6 +766,7 @@ def delete_record(
             "system",
             lambda: _compensation_definition_service().delete(operation_id, record_id, version),
             database=getattr(_compensation_definition_service(), "_database", None),
+            ledger_payload={"record_id": record_id},
             record_id=record_id,
             expected_version=version,
         )
@@ -784,6 +787,7 @@ def clear_records(config: Dict[str, Any], operation_id: str | None = None):
             "system",
             lambda: _compensation_definition_service().clear(operation_id, catalog_version),
             database=getattr(_compensation_definition_service(), "_database", None),
+            ledger_payload={"scope": "all"},
             expected_catalog_version=catalog_version,
         )
         logger.info(
