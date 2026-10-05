@@ -18,6 +18,9 @@ NewAPI bind, delete and auto-check-in toggle mutate SQL state and finish their o
 ## 定时任务
 The existing NewAPI daily auto-check-in job remains registered through the compatibility scheduler; it reads feature-owned SQL account snapshots in pages of at most 32. Room timeout tasks are not rearmed from restored room snapshots after restart. Unexpired guess sessions persist across restart, but their process-local timeout task resumes only when a later command provides the current bot/event context; expired sessions are removed on access.
 
+## 点歌
+`点歌`、`选歌`、`点歌翻页` 与 `点歌配置` 共用 `EntertainmentApplication.music`。配置和选歌列表仍是进程内状态，重启后清空；最多保留 128 个用户 session，每个 session 的歌曲字段编码量最多 512 KiB。搜索默认最多串行查 3 页，配置上限为 50 首/5 页；单次 HTTP 请求 timeout 为 5 秒、无重试、响应最多 512 KiB，并从 20 秒递减总预算中读取响应流。同步请求在线程中运行，handler 最多等待 25 秒。
+
 ## 配置项
 `entertainment_enabled` controls the application boundary and defaults to true.
 
@@ -25,10 +28,10 @@ The existing NewAPI daily auto-check-in job remains registered through the compa
 Command and web adapters translate transport input into the application DTO; business code does not import NoneBot or Flask.
 
 ## 测试与手工验收
-Run the entertainment repository/manager, guess-session, and NewAPI client/owner contract tests, then the phase2 frozen-evidence gate. Operation-ID replay checks apply to NewAPI bind/delete/toggle, not room snapshots, guess sessions, or history append.
+Run the entertainment repository/manager, guess-session, NewAPI client/owner, music application, external-query provider, and handler contract tests, then the phase2 frozen-evidence gate. Operation-ID replay checks apply to NewAPI bind/delete/toggle, not room snapshots, guess sessions, or history append.
 
 ## 灰度开关、回滚和已知限制
-Room handlers still call synchronous SQLite repository methods on the legacy event path, so database writes can briefly occupy the event loop. NewAPI database operations are offloaded from command handlers, but the scheduled job performs selected remote check-ins sequentially; its total duration depends on the number of enabled accounts and remote site latency. Legacy algorithms remain behind the compatibility adapter for one complete release cycle; the compatibility hit counter determines when removal is safe.
+Room handlers still call synchronous SQLite repository methods on the legacy event path, so database writes can briefly occupy the event loop. NewAPI database operations are offloaded from command handlers, but the scheduled job performs selected remote check-ins sequentially; its total duration depends on the number of enabled accounts and remote site latency. Music search remains sequential because later pages are only useful after earlier results; slow remote reads can therefore consume most of its 20-second budget. Legacy algorithms remain behind the compatibility adapter for one complete release cycle; the compatibility hit counter determines when removal is safe.
 
 ## Manifest 清单
 - `command: 60S读世界`

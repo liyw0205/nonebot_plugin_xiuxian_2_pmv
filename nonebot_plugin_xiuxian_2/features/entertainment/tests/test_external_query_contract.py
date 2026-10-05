@@ -35,7 +35,31 @@ def _called_names(node: ast.AST) -> set[str]:
     }
 
 
+def _attributes(node: ast.AST) -> set[str]:
+    return {
+        child.attr
+        for child in ast.walk(node)
+        if isinstance(child, ast.Attribute)
+    }
+
+
 class EntertainmentExternalQueryContractTests(unittest.TestCase):
+    def test_music_handlers_delegate_search_and_state_to_feature_application(self):
+        source = (ENTERTAINMENT / "mod/music.py").read_text(encoding="utf-8")
+        expected = {
+            "music_search_cmd_": {"search", "save_selection"},
+            "music_page_cmd_": {"get_selection", "set_selection_page"},
+            "music_select_cmd_": {"get_selection", "select_song"},
+            "music_config_cmd_": {"load_config", "set_config"},
+        }
+        for name, methods in expected.items():
+            with self.subTest(handler=name):
+                attributes = _attributes(_function(source, name))
+                self.assertTrue(methods <= attributes)
+                self.assertIn("entertainment_application", source)
+        self.assertNotIn("search_music", source)
+        self.assertNotIn("MUSIC_SELECT_CACHE", source)
+
     def test_generic_query_helpers_delegate_to_feature_application(self):
         source = (ENTERTAINMENT / "command.py").read_text(encoding="utf-8")
         for name, method in (

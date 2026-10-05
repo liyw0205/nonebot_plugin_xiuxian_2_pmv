@@ -78,13 +78,13 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
         self.assertEqual(report["path_count"], 496)
         self.assertEqual(
             report["status_counts"],
-            {"不可达": 19, "允许保留的兼容路径": 53, "受阻": 362, "已迁移": 62},
+            {"不可达": 19, "允许保留的兼容路径": 68, "受阻": 308, "已迁移": 101},
         )
         self.assertGreater(report["blocked_count"], 0)
         self.assertTrue(all(item["call_graph"] and item["evidence"] for item in report["items"]))
         self.assertEqual(report["default_legacy_command_count"], 637)
         self.assertEqual(report["default_legacy_command_backlog_count"], 323)
-        self.assertEqual(len(report["backlog"]), 330)
+        self.assertEqual(len(report["backlog"]), 328)
         self.assertEqual(
             report["default_legacy_command_discovery"],
             "static_ast_startup_import_closure_not_live_runtime_observation",
@@ -161,20 +161,15 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
             any("EntertainmentRepository.resolve_checkin_targets" in edge for edge in newapi_checkin["call_graph"])
         )
         self.assertTrue(
-            any("update_json_file_bounded" in edge for edge in newapi_checkin["call_graph"])
+            any("EntertainmentRepository.append_checkin_history" in edge for edge in newapi_checkin["call_graph"])
         )
+        self.assertTrue(any("1 MiB" in edge for edge in newapi_checkin["call_graph"]))
         for webdav_name in ("webdav查看", "webdav列表", "webdav信息", "webdav绑定", "webdav删除", "webdav链接", "webdav文件"):
             webdav = next(
                 item for item in report["items"] if item["id"] == f"command:entertainment:{webdav_name}"
             )
             self.assertEqual(webdav["status"], "已迁移")
             self.assertTrue(any("EntertainmentApplication" in edge for edge in webdav["call_graph"]))
-        newapi_memory_risk = next(
-            item for item in report["backlog"] if item["id"] == "newapi-info-state-and-response-working-set"
-        )
-        self.assertEqual(newapi_memory_risk["source"], "command:entertainment:newapi信息")
-        self.assertIn("newapi查看", newapi_memory_risk["reason"])
-        self.assertIn("manual newapi签到", newapi_memory_risk["reason"])
         newapi_checkin_risk = next(
             item for item in report["backlog"] if item["id"] == "newapi-checkin-remote-history-window"
         )
@@ -182,13 +177,9 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
         newapi_delete = next(
             item for item in report["items"] if item["id"] == "command:entertainment:newapi删除"
         )
-        self.assertEqual(newapi_delete["status"], "受阻")
+        self.assertEqual(newapi_delete["status"], "已迁移")
         self.assertTrue(any("EntertainmentApplication.delete_accounts" in edge for edge in newapi_delete["call_graph"]))
-        self.assertTrue(any("process crash" in edge for edge in newapi_delete["call_graph"]))
-        newapi_delete_risk = next(
-            item for item in report["backlog"] if item["id"] == "newapi-delete-json-ledger-crash-window"
-        )
-        self.assertEqual(newapi_delete_risk["source"], "command:entertainment:newapi删除")
+        self.assertTrue(any("immediate SQLite UoW" in edge for edge in newapi_delete["call_graph"]))
         newapi_help = next(
             item for item in report["items"] if item["id"] == "command:entertainment:newapi帮助"
         )

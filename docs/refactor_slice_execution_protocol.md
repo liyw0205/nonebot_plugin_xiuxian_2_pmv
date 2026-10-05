@@ -3,6 +3,8 @@
 状态：执行中
 适用范围：全面底层重构第二阶段
 
+2026-10-06 Entertainment music capability group：一次完成冻结项 `点歌`、`点歌翻页`、`选歌`、`点歌配置`，帮助仍保留为静态兼容路径；没有按 handler 拆成四次重复改动。旧搜索默认每页 15 秒、最多 3 页且 HTTP 重试 2 次，调用方 30 秒超时后底层线程仍继续占用 4 个 I/O 槽之一。新 `EntertainmentApplication.music` 保留配置/选歌列表的进程内语义，限制列表至 128 个 session，每个 session 歌曲字段编码量至 512 KiB；搜索最多 50 首/5 页，零重试、5 秒单请求 timeout、512 KiB 响应及逐块执行的 20 秒总 deadline，command handler 等待上限 25 秒。聚焦应用/provider/handler contract tests `21 passed, 4 subtests passed`；完整 Entertainment 与 phase2 gate 回归 `92 passed, 1 warning, 6 subtests passed`。Phase 2 冻结成员 496 项、membership 有效、integrity errors 为 0，阻塞项降至 308，`--check` 只因其余既有 blocker 返回 1。用户 `boss_info.json` 改动未进入本组。
+
 2026-10-05 compensation gift/redeem batch：复核并闭合同一奖励目录下 14 个冻结入口，其中 10 个业务 handler 已走 `CompensationApplication -> CompensationRepository` 的 SQL 定义/领取仓储，4 个静态帮助 handler 按允许保留的兼容路径分类；未重复改写已有业务实现。奖励发放在 immediate transaction 内写资产与唯一 claim `(reward_type,record_id,user_id)`，业务唯一键保证同一用户同一奖励至多发一次；`CompensationRewardClaimSqlRepository.claim()` 接收但不使用 `operation_id`，因此不主张 operation-ID replay 或冲突检测，若要求该契约应另立切片。聚焦仓储、schema 与 handler 契约 `22 passed`；冻结 membership/source inventory 不变、integrity errors 为 0，状态为 `34/49/19/394`，phase2 `--check` 仅因剩余 blocker 返回 1。
 
 2026-10-05 Entertainment NewAPI user-info batch：冻结项 `command:entertainment:newapi信息` 经 `EntertainmentApplication.resolve_info_targets -> EntertainmentRepository` 有界读取账号凭据，复用 redacted target DTO；最多查询 8 个账号、最多 4 路并发。旧 `mode` 缺省时继续按 secret 推断 token/cookie；用户信息请求使用无重试 client、(5,15) 秒 HTTP timeout、512 KiB 流式响应上限，回复按 UTF-8 字节限制 64 KiB 且为截断提示留空间。handler 只解析 selector、调度请求、格式化和发送，不改账号 JSON 或其它 NewAPI 命令。聚焦回归 `37 passed`（另有单项 HTTP source-quality 检查通过）；phase2 冻结总数 `24/45/19/408`，membership hash 不变。

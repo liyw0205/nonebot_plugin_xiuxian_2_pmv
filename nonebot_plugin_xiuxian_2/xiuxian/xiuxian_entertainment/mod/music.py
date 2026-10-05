@@ -1,13 +1,5 @@
 from ..command import *
 from .music_utils import (
-    load_music_config,
-    set_music_config,
-    detect_platform_from_cmd,
-    search_music,
-    set_music_session,
-    get_music_session,
-    clear_music_session,
-    touch_music_session,
     build_song_list_page_text,
     send_song_rich,
     get_platform_display_name,
@@ -100,17 +92,18 @@ async def music_search_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
         await music_search_cmd.finish()
 
     keyword = parts[1].strip()
-    cfg = load_music_config()
-    platform = detect_platform_from_cmd(cmd, fallback=cfg["default_platform"])
+    cfg = entertainment_application.music.load_config()
+    platform = entertainment_application.music.detect_platform(
+        cmd, fallback=cfg["default_platform"]
+    )
     platform_name = get_platform_display_name(platform)
 
     try:
         songs = await run_blocking_io(
-            search_music,
+            entertainment_application.music.search,
             keyword,
             platform,
-            cfg["song_limit"],
-            timeout=30,
+            timeout=25,
         )
     except Exception as e:
         logger.warning(f"点歌搜索失败: {e}")
@@ -150,14 +143,8 @@ async def music_search_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
         await music_search_cmd.finish()
 
     user_id = str(event.get_user_id())
-    page_size = int(cfg.get("page_size", 5))
-    set_music_session(
-        user_id=user_id,
-        songs=songs,
-        platform=platform,
-        timeout_sec=cfg["select_timeout"],
-        page_size=page_size
-    )
+    page_size = int(cfg["page_size"])
+    entertainment_application.music.save_selection(user_id, songs, platform)
 
     text_msg, _ = build_song_list_page_text(
         platform_name, songs, page=1, page_size=page_size, markdown=True
@@ -184,7 +171,7 @@ async def music_page_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
 
     raw_msg = str(event.get_message()).strip()
     user_id = str(event.get_user_id())
-    session_data = get_music_session(user_id)
+    session_data = entertainment_application.music.get_selection(user_id)
 
     if not session_data:
         await handle_send(
@@ -214,7 +201,9 @@ async def music_page_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
             page = int(m.group(1))
 
     page = max(1, min(page, total_pages))
-    session_data["page"] = page
+    session_data = entertainment_application.music.set_selection_page(user_id, page)
+    if session_data is None:
+        await music_page_cmd.finish()
 
     platform_name = get_platform_display_name(platform)
     text_msg, _ = build_song_list_page_text(
@@ -255,7 +244,7 @@ async def music_select_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
         await music_select_cmd.finish()
 
     user_id = str(event.get_user_id())
-    session_data = get_music_session(user_id)
+    session_data = entertainment_application.music.get_selection(user_id)
     if not session_data:
         await handle_send(
             bot, event,
@@ -294,9 +283,9 @@ async def music_select_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
         )
         await music_select_cmd.finish()
 
-    selected_song = songs[index - 1]
-    # 选歌后保留列表 120s（配置 select_timeout），仅刷新过期；重搜/超时才清理
-    touch_music_session(user_id)
+    selected_song = entertainment_application.music.select_song(user_id, index)
+    if selected_song is None:
+        await music_select_cmd.finish()
 
     ok, tip = await send_song_rich(bot, event, selected_song)
     if not ok:
@@ -318,7 +307,7 @@ async def music_config_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     parts = raw_msg.split()
 
     if len(parts) == 1 or (len(parts) >= 2 and parts[1] == "查看"):
-        cfg = load_music_config()
+        cfg = entertainment_application.music.load_config()
         msg = (
             "【点歌配置】\n"
             f"default_platform: {cfg['default_platform']}\n"
@@ -340,7 +329,7 @@ async def music_config_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     if len(parts) >= 4 and parts[1] == "设置":
         key = parts[2]
         value = " ".join(parts[3:])
-        ok, tip = set_music_config(key, value)
+        ok, tip = entertainment_application.music.set_config(key, value)
         await handle_send(
             bot, event,
             tip,

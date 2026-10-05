@@ -16,17 +16,22 @@ class _Response:
         headers: dict[str, str] | None = None,
         url: str = "https://example.invalid/final",
         encoding: str | None = "utf-8",
+        on_chunk=None,
     ) -> None:
         self.chunks = chunks
         self.headers = headers or {}
         self.url = url
         self.encoding = encoding
+        self.on_chunk = on_chunk
         self.closed = False
         self.iterated = False
 
     def iter_content(self, *, chunk_size: int):
         self.iterated = True
-        yield from self.chunks
+        for chunk in self.chunks:
+            if self.on_chunk is not None:
+                self.on_chunk()
+            yield chunk
 
     def close(self) -> None:
         self.closed = True
@@ -77,6 +82,58 @@ class EntertainmentExternalQueryProviderTests(unittest.TestCase):
 
         self.assertEqual(result, "hello world")
         self.assertTrue(response.iterated)
+        self.assertTrue(response.closed)
+
+    def test_form_post_json_is_streamed_bounded_and_uses_no_retry_client(self) -> None:
+        response = _Response([b'{"data":[]}'], headers={"Content-Length": "11"})
+        client = _HttpClient([response])
+        provider = EntertainmentExternalQueryProvider(http_client=client)
+
+        result = provider.post_form_json(
+            "https://example.invalid/search",
+            {"input": "song"},
+            max_bytes=64,
+        )
+
+        self.assertEqual(result, {"data": []})
+        self.assertEqual(provider.http_client.retries, 0)
+        self.assertTrue(client.requests[0][1]["stream"])
+        self.assertEqual(client.requests[0][1]["data"], {"input": "song"})
+        self.assertTrue(response.iterated)
+        self.assertTrue(response.closed)
+
+    def test_form_post_json_rejects_streamed_overflow_and_closes(self) -> None:
+        response = _Response([b'{"data":', b'[]}' ])
+        provider = EntertainmentExternalQueryProvider(http_client=_HttpClient([response]))
+
+        with self.assertRaisesRegex(ValueError, "size limit"):
+            provider.post_form_json(
+                "https://example.invalid/search",
+                {"input": "song"},
+                max_bytes=8,
+            )
+
+        self.assertTrue(response.closed)
+
+    def test_form_post_json_enforces_total_deadline_during_streaming(self) -> None:
+        now = [0.0]
+        response = _Response(
+            [b'{"data":', b"[]}"],
+            on_chunk=lambda: now.__setitem__(0, now[0] + 0.6),
+        )
+        provider = EntertainmentExternalQueryProvider(
+            http_client=_HttpClient([response]),
+            clock=lambda: now[0],
+        )
+
+        with self.assertRaisesRegex(TimeoutError, "total time budget"):
+            provider.post_form_json(
+                "https://example.invalid/search",
+                {"input": "song"},
+                total_timeout=1,
+                max_bytes=64,
+            )
+
         self.assertTrue(response.closed)
 
     def test_text_response_rejects_streamed_overflow_and_closes(self) -> None:

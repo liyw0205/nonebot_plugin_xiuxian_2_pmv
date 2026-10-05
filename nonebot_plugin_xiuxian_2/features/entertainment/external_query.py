@@ -65,6 +65,47 @@ class EntertainmentExternalQueryProvider:
             **request_options,
         )
 
+    def post_form_json(
+        self,
+        api_url: str,
+        data: dict[str, Any],
+        *,
+        timeout: float = 15,
+        total_timeout: float | None = None,
+        max_bytes: int = DEFAULT_JSON_RESPONSE_MAX_BYTES,
+        expected_type: type | tuple[type, ...] = dict,
+        **request_options: Any,
+    ) -> Any:
+        deadline = (
+            self._clock() + total_timeout
+            if total_timeout is not None
+            else None
+        )
+        response = self.http_client.request(
+            "POST",
+            api_url,
+            data=data,
+            timeout=timeout,
+            stream=True,
+            **request_options,
+        )
+        try:
+            content = _read_bounded_response(
+                response,
+                max_bytes,
+                deadline=deadline,
+                clock=self._clock,
+            )
+            try:
+                result = json.loads(content)
+            except (TypeError, ValueError, RecursionError) as exc:
+                raise ValueError("HTTP 响应不是合法 JSON") from exc
+            if not isinstance(result, expected_type):
+                raise ValueError(f"HTTP JSON 根类型不是 {expected_type!r}")
+            return result
+        finally:
+            response.close()
+
     def get_text(
         self,
         api_url: str,
@@ -199,7 +240,13 @@ class EntertainmentExternalQueryProvider:
         return []
 
 
-def _read_bounded_response(response: Any, max_bytes: int) -> bytes:
+def _read_bounded_response(
+    response: Any,
+    max_bytes: int,
+    *,
+    deadline: float | None = None,
+    clock=time.monotonic,
+) -> bytes:
     if max_bytes < 1:
         raise ValueError("max_bytes must be positive")
     headers = getattr(response, "headers", {}) or {}
@@ -212,11 +259,15 @@ def _read_bounded_response(response: Any, max_bytes: int) -> bytes:
 
     content = bytearray()
     for chunk in response.iter_content(chunk_size=64 * 1024):
+        if deadline is not None and clock() >= deadline:
+            raise TimeoutError("HTTP response exceeded total time budget")
         if not chunk:
             continue
         if len(content) + len(chunk) > max_bytes:
             raise ValueError("HTTP response exceeded size limit while streaming")
         content.extend(chunk)
+    if deadline is not None and clock() >= deadline:
+        raise TimeoutError("HTTP response exceeded total time budget")
     return bytes(content)
 
 

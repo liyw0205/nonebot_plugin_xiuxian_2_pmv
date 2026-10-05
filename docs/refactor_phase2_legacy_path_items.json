@@ -6461,22 +6461,28 @@
       "id": "command:entertainment:点歌",
       "kind": "commands",
       "entry": "entertainment:点歌 (aliases: 5sing原创, 5sing翻唱, QQ点歌, 一听点歌, 全民K歌, 咪咕点歌, 喜马点歌, 百度点歌, 网易云点歌, 网易点歌, 荔枝点歌, 蜻蜓点歌, 酷我点歌, 酷狗点歌)",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "The legacy command remains the transport adapter, while search, platform/config ownership and bounded result selection are provided by EntertainmentApplication.music. Search makes zero-retry form POSTs with 512 KiB responses, at most five pages, five-second per-request timeout and a 20-second page-start budget; blocking I/O is offloaded with a 25-second caller wait. Configuration and selection state remain volatile across restarts, matching legacy behavior; sessions are capped at 128 entries and bounded to 512 KiB each.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/music.py:16 music_search_cmd = on_command('点歌') aliases=5sing原创,5sing翻唱,QQ点歌,一听点歌,全民K歌,咪咕点歌,喜马点歌,百度点歌,网易云点歌,网易点歌,荔枝点歌,蜻蜓点歌,酷我点歌,酷狗点歌 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/music.py:81 music_search_cmd_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/music.py:8 music_search_cmd = on_command('点歌') aliases=5sing原创,5sing翻唱,QQ点歌,一听点歌,全民K歌,咪咕点歌,喜马点歌,百度点歌,网易云点歌,网易点歌,荔枝点歌,蜻蜓点歌,酷我点歌,酷狗点歌 -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/music.py:73 music_search_cmd_ -> EntertainmentApplication.music.detect_platform/load_config/search -> run_blocking_io -> EntertainmentMusicApplication.search -> EntertainmentExternalQueryProvider.post_form_json -> zero-retry HttpClient with bounded response"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/music.py:16",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/music.py:81"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/music.py:8",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/music.py:73",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/music.py:73,95-107,145-165",
+        "nonebot_plugin_xiuxian_2/features/entertainment/application.py:34-37",
+        "nonebot_plugin_xiuxian_2/features/entertainment/music_application.py:52-67,145-220",
+        "nonebot_plugin_xiuxian_2/features/entertainment/external_query.py:28-44,68-96",
+        "nonebot_plugin_xiuxian_2/features/entertainment/tests/test_music_application.py",
+        "nonebot_plugin_xiuxian_2/features/entertainment/tests/test_external_query_provider.py",
+        "nonebot_plugin_xiuxian_2/features/entertainment/tests/test_external_query_contract.py"
       ],
       "source_declaration_found": true,
       "source": {
@@ -6494,15 +6500,15 @@
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/music.py:42 music_help_cmd = on_command('点歌帮助') aliases=点歌说明,音乐帮助 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/music.py:58 music_help_cmd_ -> send_help_message -> handle_send built-in text/buttons -> shared delivery; no music provider/cache/config access"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/music.py:34 music_help_cmd = on_command('点歌帮助') aliases=点歌说明,音乐帮助 -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/music.py:50 music_help_cmd_ -> send_help_message -> handle_send built-in text/buttons -> shared delivery; no music provider/cache/config access"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/music.py:42",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/music.py:58"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/music.py:34",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/music.py:50"
       ],
       "source_declaration_found": true,
       "source": {
@@ -6514,22 +6520,25 @@
       "id": "command:entertainment:点歌翻页",
       "kind": "commands",
       "entry": "entertainment:点歌翻页 (aliases: 点歌上一页, 点歌下一页)",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "The compatibility handler parses the requested page and delegates selection lookup/page mutation to EntertainmentApplication.music. The owner maintains the legacy process-local, expiring list semantics with bounded session count and payload size; message formatting and delivery stay in the adapter.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/music.py:49 music_page_cmd = on_command('点歌翻页') aliases=点歌上一页,点歌下一页 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/music.py:182 music_page_cmd_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/music.py:41 music_page_cmd = on_command('点歌翻页') aliases=点歌上一页,点歌下一页 -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/music.py:169 music_page_cmd_ -> EntertainmentApplication.music.get_selection/set_selection_page -> bounded process-local selection state -> existing page formatting and shared delivery"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/music.py:49",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/music.py:182"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/music.py:41",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/music.py:169",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/music.py:169,172-225",
+        "nonebot_plugin_xiuxian_2/features/entertainment/music_application.py:227-270",
+        "nonebot_plugin_xiuxian_2/features/entertainment/tests/test_music_application.py",
+        "nonebot_plugin_xiuxian_2/features/entertainment/tests/test_external_query_contract.py"
       ],
       "source_declaration_found": true,
       "source": {
@@ -6541,22 +6550,25 @@
       "id": "command:entertainment:点歌配置",
       "kind": "commands",
       "entry": "entertainment:点歌配置 (aliases: 音乐配置)",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "Configuration reads and writes are owned by EntertainmentApplication.music with a lock, allowlisted keys and bounded values. Values intentionally remain process-local and are not loaded from or written to the legacy music_config.json file, preserving the current runtime-only behavior.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/music.py:34 music_config_cmd = on_command('点歌配置') aliases=音乐配置 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/music.py:316 music_config_cmd_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/music.py:26 music_config_cmd = on_command('点歌配置') aliases=音乐配置 -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/music.py:305 music_config_cmd_ -> EntertainmentApplication.music.load_config/set_config -> bounded process-local configuration -> existing message delivery"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/music.py:34",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/music.py:316"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/music.py:26",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/music.py:305",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/music.py:305,309-355",
+        "nonebot_plugin_xiuxian_2/features/entertainment/music_application.py:79-119",
+        "nonebot_plugin_xiuxian_2/features/entertainment/tests/test_music_application.py",
+        "nonebot_plugin_xiuxian_2/features/entertainment/tests/test_external_query_contract.py"
       ],
       "source_declaration_found": true,
       "source": {
@@ -8471,22 +8483,25 @@
       "id": "command:entertainment:选歌",
       "kind": "commands",
       "entry": "entertainment:选歌 (aliases: 播放歌曲, 点歌选择)",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "The compatibility handler validates the selection index, then EntertainmentApplication.music atomically reads the process-local session and refreshes its expiry before returning a bounded song DTO to the existing media sender. Session state remains ephemeral across restarts, matching the legacy contract.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/music.py:27 music_select_cmd = on_command('选歌') aliases=播放歌曲,点歌选择 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/music.py:240 music_select_cmd_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/music.py:19 music_select_cmd = on_command('选歌') aliases=播放歌曲,点歌选择 -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/music.py:229 music_select_cmd_ -> EntertainmentApplication.music.get_selection/select_song -> bounded session owner -> existing send_song_rich media output"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/music.py:27",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/music.py:240"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/music.py:19",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/music.py:229",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/music.py:229,246-301",
+        "nonebot_plugin_xiuxian_2/features/entertainment/music_application.py:272-278",
+        "nonebot_plugin_xiuxian_2/features/entertainment/tests/test_music_application.py",
+        "nonebot_plugin_xiuxian_2/features/entertainment/tests/test_external_query_contract.py"
       ],
       "source_declaration_found": true,
       "source": {
