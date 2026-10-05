@@ -1201,15 +1201,14 @@
       "id": "command:entertainment:webdav帮助",
       "kind": "commands",
       "entry": "entertainment:webdav帮助 (aliases: 网盘帮助)",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "允许保留的兼容路径",
+      "reason": "The default handler sends built-in WebDAV help text only; it does not read or mutate WebDAV bindings or call the WebDAV client. Shared cooldown/runtime config, transient rate-limit counters, message delivery, and optional generic message-history writes remain compatibility effects. P7 separately governs release-based removal.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/alist_webdav.py:259 webdav_help_cmd = on_command('webdav帮助') aliases=网盘帮助 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/alist_webdav.py:310 webdav_help_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/alist_webdav.py:310 webdav_help_ -> handle_send built-in __WEBDAV_HELP__ text -> shared delivery; no WebDAV repository/client or binding-file access"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
@@ -1378,15 +1377,14 @@
       "id": "command:entertainment:二次元帮助",
       "kind": "commands",
       "entry": "entertainment:二次元帮助 (aliases: 动漫互动帮助, 随机二次元帮助)",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "允许保留的兼容路径",
+      "reason": "The default handler sends built-in anime help text and command buttons only; it does not call the anime provider or read/write Entertainment business state. Shared cooldown/runtime config, transient rate-limit counters, message delivery, and optional generic message-history writes remain compatibility effects. P7 separately governs release-based removal.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/anime_reaction.py:139 anime_reaction_help_cmd = on_command('二次元帮助') aliases=动漫互动帮助,随机二次元帮助 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/anime_reaction.py:217 anime_reaction_help_cmd_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/anime_reaction.py:217 anime_reaction_help_cmd_ -> send_help_message -> handle_send built-in text/buttons -> shared delivery; no anime provider or business-state access"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
@@ -1432,15 +1430,14 @@
       "id": "command:entertainment:五子棋帮助",
       "kind": "commands",
       "entry": "entertainment:五子棋帮助 (aliases: )",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "允许保留的兼容路径",
+      "reason": "The default handler sends built-in Gomoku help text and command buttons only; it does not access the room manager or room repository. Shared cooldown/runtime config, transient rate-limit counters, message delivery, and optional generic message-history writes remain compatibility effects. P7 separately governs release-based removal.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/gomoku.py:442 gomoku_help = on_command('五子棋帮助') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/gomoku.py:744 _ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/gomoku.py:744 _ -> send_help_message -> handle_send built-in text/buttons -> shared delivery; no room-manager/repository access"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
@@ -2789,15 +2786,14 @@
       "id": "command:entertainment:十点半帮助",
       "kind": "commands",
       "entry": "entertainment:十点半帮助 (aliases: )",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "允许保留的兼容路径",
+      "reason": "The default handler sends built-in Half-Ten help text and command buttons only; it does not access the room manager or room repository. Shared cooldown/runtime config, transient rate-limit counters, message delivery, and optional generic message-history writes remain compatibility effects. P7 separately governs release-based removal.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/half_ten.py:381 half_ten_help = on_command('十点半帮助') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/half_ten.py:540 _ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/half_ten.py:540 _ -> send_help_message -> handle_send built-in text/buttons -> shared delivery; no room-manager/repository access"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
@@ -3491,15 +3487,14 @@
       "id": "command:entertainment:娱乐帮助",
       "kind": "commands",
       "entry": "entertainment:娱乐帮助 (aliases: 娱乐功能, 娱乐菜单)",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "允许保留的兼容路径",
+      "reason": "The default handler paginates built-in menu text and sends command buttons only; it does not read feature data or call feature services. Shared cooldown/runtime config, transient rate-limit counters, message delivery, and optional generic message-history writes remain compatibility effects. P7 separately governs release-based removal.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/__init__.py:47 fun_menu_cmd = on_command('娱乐帮助') aliases=娱乐功能,娱乐菜单 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/__init__.py:135 fun_menu_cmd_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/__init__.py:135 fun_menu_cmd_ -> paginate built-in __FUN_HELP__ -> send_help_message -> handle_send -> shared delivery; no feature-state access"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
@@ -3599,15 +3594,14 @@
       "id": "command:entertainment:宝可梦帮助",
       "kind": "commands",
       "entry": "entertainment:宝可梦帮助 (aliases: 宝可梦盲盒帮助)",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "允许保留的兼容路径",
+      "reason": "The default handler sends built-in Pokemon help text and command buttons only; it does not query Pokemon data or mutate Entertainment business state. Shared cooldown/runtime config, transient rate-limit counters, message delivery, and optional generic message-history writes remain compatibility effects. P7 separately governs release-based removal.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/pokemon_box.py:177 pokemon_help_cmd = on_command('宝可梦帮助') aliases=宝可梦盲盒帮助 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/pokemon_box.py:248 pokemon_help_cmd_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/pokemon_box.py:248 pokemon_help_cmd_ -> _send_pokemon_help -> send_help_message -> handle_send built-in text/buttons -> shared delivery; no Pokemon data query"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
@@ -3653,15 +3647,14 @@
       "id": "command:entertainment:小游戏帮助",
       "kind": "commands",
       "entry": "entertainment:小游戏帮助 (aliases: 小游戏菜单, 游戏帮助, 游戏菜单)",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "允许保留的兼容路径",
+      "reason": "The default handler sends built-in mini-game menu text and command buttons only; it does not access game sessions or room repositories. Shared cooldown/runtime config, transient rate-limit counters, message delivery, and optional generic message-history writes remain compatibility effects. P7 separately governs release-based removal.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/__init__.py:168 game_menu_cmd = on_command('小游戏帮助') aliases=小游戏菜单,游戏帮助,游戏菜单 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/__init__.py:172 game_menu_cmd_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/__init__.py:172 game_menu_cmd_ -> send_help_message built-in __GAME_HELP__ and buttons -> handle_send -> shared delivery; no game-session access"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
@@ -4465,15 +4458,14 @@
       "id": "command:entertainment:扫雷帮助",
       "kind": "commands",
       "entry": "entertainment:扫雷帮助 (aliases: )",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "允许保留的兼容路径",
+      "reason": "The default handler sends built-in Minesweeper help text and command buttons only; it does not access game sessions or room repositories. Shared cooldown/runtime config, transient rate-limit counters, message delivery, and optional generic message-history writes remain compatibility effects. P7 separately governs release-based removal.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/minesweeper.py:25 ms_help = on_command('扫雷帮助') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/minesweeper.py:180 _ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/minesweeper.py:180 _ -> send_help_message -> handle_send built-in text/buttons -> shared delivery; no room-manager/repository access"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
@@ -6436,15 +6428,14 @@
       "id": "command:entertainment:点歌帮助",
       "kind": "commands",
       "entry": "entertainment:点歌帮助 (aliases: 点歌说明, 音乐帮助)",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "允许保留的兼容路径",
+      "reason": "The default handler sends built-in music help text and command buttons only; it does not access the music search provider, selection cache, or music configuration. Shared cooldown/runtime config, transient rate-limit counters, message delivery, and optional generic message-history writes remain compatibility effects. P7 separately governs release-based removal.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/music.py:42 music_help_cmd = on_command('点歌帮助') aliases=点歌说明,音乐帮助 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/music.py:58 music_help_cmd_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/music.py:58 music_help_cmd_ -> send_help_message -> handle_send built-in text/buttons -> shared delivery; no music provider/cache/config access"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
@@ -6706,15 +6697,14 @@
       "id": "command:entertainment:猜数字帮助",
       "kind": "commands",
       "entry": "entertainment:猜数字帮助 (aliases: )",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "允许保留的兼容路径",
+      "reason": "The default handler sends built-in number-guessing help text and command buttons only; it does not access active guessing sessions. Shared cooldown/runtime config, transient rate-limit counters, message delivery, and optional generic message-history writes remain compatibility effects. P7 separately governs release-based removal.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/guess_number.py:81 guess_number_help_cmd = on_command('猜数字帮助') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/guess_number.py:309 _ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/guess_number.py:309 _ -> send_help_message -> handle_send built-in text/buttons -> shared delivery; no guessing-session access"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
@@ -6760,15 +6750,14 @@
       "id": "command:entertainment:猜数谜帮助",
       "kind": "commands",
       "entry": "entertainment:猜数谜帮助 (aliases: 猜数迷帮助)",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "允许保留的兼容路径",
+      "reason": "The default handler sends built-in puzzle help text and command buttons only; its difficulty hint is a static function and it does not access active puzzle sessions. Shared cooldown/runtime config, transient rate-limit counters, message delivery, and optional generic message-history writes remain compatibility effects. P7 separately governs release-based removal.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/guess_number_puzzle.py:423 guess_puzzle_help_cmd = on_command('猜数谜帮助') aliases=猜数迷帮助 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/guess_number_puzzle.py:462 _ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/guess_number_puzzle.py:462 _ -> _send_help -> static _difficulty_hint -> send_help_message -> handle_send -> shared delivery; no puzzle-session access"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
@@ -6787,15 +6776,14 @@
       "id": "command:entertainment:猫猫帮助",
       "kind": "commands",
       "entry": "entertainment:猫猫帮助 (aliases: 猫图帮助, 猫猫说帮助)",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "允许保留的兼容路径",
+      "reason": "The default handler sends built-in cat help text and command buttons only; it does not call the cat provider or read/write Entertainment business state. Shared cooldown/runtime config, transient rate-limit counters, message delivery, and optional generic message-history writes remain compatibility effects. P7 separately governs release-based removal.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/cat_picture.py:38 cat_help_cmd = on_command('猫猫帮助') aliases=猫图帮助,猫猫说帮助 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/cat_picture.py:113 cat_help_cmd_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/cat_picture.py:113 cat_help_cmd_ -> _send_cat_help -> send_help_message -> handle_send built-in text/buttons -> shared delivery; no cat provider call"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
@@ -6949,15 +6937,14 @@
       "id": "command:entertainment:番剧盲盒帮助",
       "kind": "commands",
       "entry": "entertainment:番剧盲盒帮助 (aliases: 随机番剧帮助)",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "允许保留的兼容路径",
+      "reason": "The default handler sends built-in anime-box help text and command buttons only; it does not call the anime provider or access Entertainment business state. Shared cooldown/runtime config, transient rate-limit counters, message delivery, and optional generic message-history writes remain compatibility effects. P7 separately governs release-based removal.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/random_anime_box.py:13 anime_box_help_cmd = on_command('番剧盲盒帮助') aliases=随机番剧帮助 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/random_anime_box.py:118 anime_box_help_cmd_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/random_anime_box.py:118 anime_box_help_cmd_ -> send_help_message -> handle_send built-in text/buttons -> shared delivery; no anime provider call"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
