@@ -1,191 +1,44 @@
-"""封装本插件原生 Parser：解析文本并格式化为 QQ 可发送内容。
-
-不再从 GitHub 下载 astrbot_plugin_media_parser core。
-可选 PIL 媒体卡片（参考 astrbot_plugin_parser 布局）。
-"""
+"""Compatibility facade for the feature-owned media parser workflow."""
 from __future__ import annotations
 
 from typing import Any
 
-from nonebot.log import logger
-
-from ..io_runtime import run_blocking_io
-from .card import render_media_card
-from .config import get_fun_media_parser_config
-from .io_runtime_safe import run_native_parse
-from .native import (
-    _use_proxy_for,
-    extract_supported_links,
-    parse_text_native,
-    sort_media_urls_by_quality,
-    dedupe_media_urls_by_object,
+from ....features.entertainment.media_parser_application import (
+    collect_media_urls,
+    dedupe_media_urls_preserve_order,
+    format_media_meta_line as _format_meta_line,
 )
 
 
 async def extract_links(text: str) -> list[tuple[str, str]]:
-    """返回 [(url, parser_name), ...]；纯本地正则，无需网络。"""
-    return extract_supported_links(text or "")
+    from ..room_store import entertainment_application
+
+    return entertainment_application.media_parser.extract_links(text or "")
 
 
 async def parse_text(text: str) -> list[dict[str, Any]]:
-    # 平台请求走线程池，避免阻塞事件循环
-    # Legacy bootstrap remains an I/O boundary when enabled:
-    # await run_blocking_io(ensure_vendor_core, ...)
-    return await run_native_parse(text or "")
+    from ..room_store import entertainment_application
+
+    return await entertainment_application.media_parser.parse_metas(text or "")
 
 
 def last_init_error() -> str | None:
     return None
 
 
-def _format_meta_line(meta: dict[str, Any]) -> str:
-    from ...xiuxian_utils.status_card import media_fail_hint
-
-    platform = meta.get("platform") or meta.get("parser_name") or "未知"
-    title = (meta.get("title") or "").strip()
-    author = (meta.get("author") or "").strip()
-    desc = (meta.get("desc") or "").strip()
-    # 展示用户原始短链；展开后的落地页只在内部解析用，不直接当「原始链接」刷屏
-    source = (meta.get("source_url") or "").strip()
-    resolved = (meta.get("url") or "").strip()
-    display_url = source or resolved
-    lines: list[str] = [f"【媒体解析】{platform}"]
-    err = meta.get("error")
-    if err:
-        lines.append(media_fail_hint(str(err), platform=str(platform)))
-        if display_url:
-            lines.append(f"原始链接：{display_url}")
-        return "\n".join(lines)
-    if title:
-        lines.append(f"标题：{title}")
-    if author:
-        lines.append(f"作者：{author}")
-    if desc and desc != title:
-        d = desc if len(desc) <= 400 else desc[:400] + "…"
-        lines.append(f"简介：{d}")
-    if display_url:
-        lines.append(f"原始链接：{display_url}")
-    if not meta.get("video_urls") and not meta.get("image_urls") and not meta.get("audio_urls"):
-        lines.append(media_fail_hint("未提取到可发送媒体", platform=str(platform)))
-        lines.append("可尝试打开原始链接")
-    if len(lines) == 1:
-        lines.append("提示：无标题信息")
-    return "\n".join(lines)
-
-
-def collect_media_urls(meta: dict[str, Any]) -> tuple[list[str], list[str]]:
-    images: list[str] = []
-    videos: list[str] = []
-    seen_i: set[str] = set()
-    seen_v: set[str] = set()
-
-    def _norm(u: str) -> str:
-        return (u or "").strip().rstrip("/")
-
-    def _flat(field: str, out: list[str], seen: set[str]) -> None:
-        raw = meta.get(field) or []
-        for item in raw:
-            if isinstance(item, str) and item.startswith("http"):
-                key = _norm(item)
-                if key and key not in seen:
-                    seen.add(key)
-                    out.append(item.strip())
-            elif isinstance(item, list):
-                for u in item:
-                    if isinstance(u, str) and u.startswith("http"):
-                        key = _norm(u)
-                        if key and key not in seen:
-                            seen.add(key)
-                            out.append(u.strip())
-
-    _flat("image_urls", images, seen_i)
-    _flat("video_urls", videos, seen_v)
-    return images, videos
-
-
-def dedupe_media_urls_preserve_order(urls: list[str]) -> list[str]:
-    seen: set[str] = set()
-    out: list[str] = []
-    for u in urls:
-        key = (u or "").strip().rstrip("/")
-        if not key.startswith("http") or key in seen:
-            continue
-        seen.add(key)
-        out.append(u.strip())
-    return out
-
-
-def _render_card_sync(meta: dict[str, Any]) -> str | None:
-    imgs, vids = collect_media_urls(meta)
-    cover = imgs[0] if imgs else None
-    plat = str(meta.get("platform") or "")
-    use_proxy = _use_proxy_for(plat)
-    path = render_media_card(
-        meta,
-        cover_url=cover,
-        has_video=bool(vids),
-        use_proxy=use_proxy,
-    )
-    return str(path) if path else None
-
-
 async def run_parse_and_build_messages(
     text: str,
 ) -> tuple[list[str], list[str], list[str], list[str]]:
-    """解析文本，返回 (text_chunks, image_urls, video_urls, card_paths)。"""
-    if not text or not text.strip():
-        return (["【媒体解析】\n请在消息中附带可解析的链接。"], [], [], [])
+    from ..room_store import entertainment_application
 
-    _ = get_fun_media_parser_config()
+    return await entertainment_application.media_parser.parse_and_build_messages(text)
 
-    try:
-        metas = await parse_text(text)
-    except Exception as e:
-        logger.warning(f"娱乐媒体解析失败: {e}")
-        return ([f"【媒体解析】\n状态：不可用\n原因：{e}"], [], [], [])
 
-    if not metas:
-        return (["【媒体解析】\n未识别到支持的流媒体链接。"], [], [], [])
-
-    texts: list[str] = []
-    all_images: list[str] = []
-    all_videos: list[str] = []
-    card_paths: list[str] = []
-    seen_meta_keys: set[str] = set()
-    for meta in metas:
-        if not isinstance(meta, dict):
-            continue
-        meta_key = (
-            (meta.get("url") or meta.get("source_url") or meta.get("link") or "")
-            .strip()
-            .rstrip("/")
-        )
-        if meta_key and meta_key in seen_meta_keys:
-            continue
-        if meta_key:
-            seen_meta_keys.add(meta_key)
-        texts.append(_format_meta_line(meta))
-        imgs, vids = collect_media_urls(meta)
-        all_images.extend(imgs)
-        all_videos.extend(vids)
-        if not meta.get("error") and (imgs or vids or meta.get("title")):
-            try:
-                path = await run_blocking_io(_render_card_sync, meta, timeout=45)
-                if path:
-                    card_paths.append(path)
-            except Exception as e:
-                logger.warning(f"媒体卡片渲染失败: {e}")
-
-    all_images = dedupe_media_urls_preserve_order(all_images)
-    all_videos = dedupe_media_urls_preserve_order(all_videos)
-    # 最高质量优先；发送侧再按 20MB 降档
-    all_videos = sort_media_urls_by_quality(all_videos, kind="video")[:5]
-    # 过滤明显非内容图（表情包等），图片按对象去重后再按质量排序
-    all_images = [
-        u
-        for u in all_images
-        if "emotion" not in u.lower() and "emoji" not in u.lower()
-    ]
-    all_images = dedupe_media_urls_by_object(all_images, kind="image")
-    all_images = sort_media_urls_by_quality(all_images, kind="image")[:18]
-    return (texts, all_images, all_videos, card_paths)
+__all__ = [
+    "collect_media_urls",
+    "dedupe_media_urls_preserve_order",
+    "extract_links",
+    "last_init_error",
+    "parse_text",
+    "run_parse_and_build_messages",
+]

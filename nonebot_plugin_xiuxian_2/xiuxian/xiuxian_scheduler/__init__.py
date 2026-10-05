@@ -347,9 +347,9 @@ async def daily_clean_expired_items():
 )
 async def cleanup_media_parser_cache_job():
     """清理视频解析缓存（cache/media_parser + 旧 media_parser_cache）"""
-    from ..xiuxian_entertainment.media_parser.cleanup import cleanup_media_parser_cache
+    from ..xiuxian_entertainment.room_store import entertainment_application
 
-    await _run_job("清理媒体解析缓存", cleanup_media_parser_cache)
+    await _run_job("清理媒体解析缓存", entertainment_application.media_parser.cleanup_cache)
 
 
 # =========================

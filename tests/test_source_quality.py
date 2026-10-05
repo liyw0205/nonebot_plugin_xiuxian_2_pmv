@@ -63,7 +63,7 @@ class SourceQualityTests(unittest.TestCase):
         self.assertIn("get_paths().message_db", source)
         self.assertIn("migrate_legacy_message_db()", source)
 
-    def test_newapi_runtime_state_uses_central_json_store(self) -> None:
+    def test_newapi_runtime_state_uses_feature_sql_owner(self) -> None:
         source = (
             SOURCE_ROOT
             / "xiuxian"
@@ -73,11 +73,12 @@ class SourceQualityTests(unittest.TestCase):
         ).read_text(encoding="utf-8")
         self.assertNotIn("json.load(", source)
         self.assertNotIn("json.dump(", source)
-        self.assertIn("update_json_file(", source)
+        self.assertIn("EntertainmentApplication", source)
+        self.assertIn("entertainment_application.bind_newapi_account", source)
+        self.assertIn("entertainment_application.list_account_summaries", source)
 
     def test_entertainment_http_calls_use_central_client(self) -> None:
         paths = (
-            SOURCE_ROOT / "xiuxian" / "xiuxian_entertainment" / "command.py",
             SOURCE_ROOT
             / "xiuxian"
             / "xiuxian_entertainment"
@@ -91,6 +92,13 @@ class SourceQualityTests(unittest.TestCase):
             self.assertNotIn("requests.post(", source)
             self.assertNotIn("requests.request(", source)
             self.assertIn("http_client", source)
+
+        parser_provider = (
+            SOURCE_ROOT / "features" / "entertainment" / "media_parser_provider.py"
+        ).read_text(encoding="utf-8")
+        self.assertIn("HttpClient(", parser_provider)
+        self.assertIn("_BoundedResponse(", parser_provider)
+        self.assertIn("wrapped = _BoundedResponse(", parser_provider)
 
     def test_uptime_formatters_use_period_helpers(self) -> None:
         for relative in (
@@ -3294,11 +3302,17 @@ class SourceQualityTests(unittest.TestCase):
                 "await run_blocking_io(\n            entertainment_application.webdav_download_link",
             ),
             entertainment / "mod" / "newapi_commands.py": (
-                "await run_blocking_io(\n                _run_checkin_for_account",
+                "await run_blocking_io(\n                    _run_checkin_for_target",
                 "await run_blocking_io(\n        fetch_user_self",
             ),
             entertainment / "media_parser" / "service.py": (
-                "await run_blocking_io(ensure_vendor_core",
+                "return await entertainment_application.media_parser.parse_metas",
+            ),
+            SOURCE_ROOT
+            / "features"
+            / "entertainment"
+            / "media_parser_application.py": (
+                "return await self._blocking_runner(self._parse_sync, text, timeout=35)",
             ),
             entertainment / "mod" / "anime_reaction.py": (
                 "await run_blocking_io(_fetch_nekos_sync",

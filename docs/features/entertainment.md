@@ -21,6 +21,9 @@ The existing NewAPI daily auto-check-in job remains registered through the compa
 ## 点歌
 `点歌`、`选歌`、`点歌翻页` 与 `点歌配置` 共用 `EntertainmentApplication.music`。配置和选歌列表仍是进程内状态，重启后清空；最多保留 128 个用户 session，每个 session 的歌曲字段编码量最多 512 KiB。搜索默认最多串行查 3 页，配置上限为 50 首/5 页；单次 HTTP 请求 timeout 为 5 秒、无重试、响应最多 512 KiB，并从 20 秒递减总预算中读取响应流。同步请求在线程中运行，handler 最多等待 25 秒。
 
+## 链接解析
+`链接解析`、四个别名和三个自动提链 matcher 共用 `EntertainmentApplication.media_parser`。旧 matcher 的优先级、冷却、`auto_parse`/关键词过滤、命令前缀跳过、`原始链接：` 跳过和 90 秒 message-id 去重语义保持不变。消息文本最多 8192 字符、每条最多解析 3 个链接；普通 HTTP client 关闭自动重试，小黑盒保留一次有界的 `curl_cffi` 到 provider fallback；最多 24 次 HTTP 尝试、单请求最多 8 秒、解析阶段最多 30 秒、每个响应最多 4 MiB。解析与卡片图片下载使用同一 provider；图集仍最多 18 张，视频候选最多 5 条，且每条消息只生成实际发送的第一张卡片。视频大小探测和本地下载也由 parser owner 承担，本地视频仍最多 20 MiB；旧视频缓存只读兼容。NoneBot 只发送 application 返回的文本/媒体计划，通用 Bot 发送能力仍由共享 adapter 提供。缓存清理实现归 feature owner，现有每日 scheduler 只触发 application。
+
 ## 配置项
 `entertainment_enabled` controls the application boundary and defaults to true.
 
@@ -28,10 +31,10 @@ The existing NewAPI daily auto-check-in job remains registered through the compa
 Command and web adapters translate transport input into the application DTO; business code does not import NoneBot or Flask.
 
 ## 测试与手工验收
-Run the entertainment repository/manager, guess-session, NewAPI client/owner, music application, external-query provider, and handler contract tests, then the phase2 frozen-evidence gate. Operation-ID replay checks apply to NewAPI bind/delete/toggle, not room snapshots, guess sessions, or history append.
+Run the entertainment repository/manager, guess-session, NewAPI client/owner, music application, media-parser provider/application/output and handler contract tests, then the phase2 frozen-evidence gate. Operation-ID replay checks apply to NewAPI bind/delete/toggle, not room snapshots, guess sessions, or history append.
 
 ## 灰度开关、回滚和已知限制
-Room handlers still call synchronous SQLite repository methods on the legacy event path, so database writes can briefly occupy the event loop. NewAPI database operations are offloaded from command handlers, but the scheduled job performs selected remote check-ins sequentially; its total duration depends on the number of enabled accounts and remote site latency. Music search remains sequential because later pages are only useful after earlier results; slow remote reads can therefore consume most of its 20-second budget. Legacy algorithms remain behind the compatibility adapter for one complete release cycle; the compatibility hit counter determines when removal is safe.
+Room handlers still call synchronous SQLite repository methods on the legacy event path, so database writes can briefly occupy the event loop. NewAPI database operations are offloaded from command handlers, but the scheduled job performs selected remote check-ins sequentially; its total duration depends on the number of enabled accounts and remote site latency. Music search remains sequential because later pages are only useful after earlier results; slow remote reads can therefore consume most of its 20-second budget. Media parsing also follows platform-specific sequential fallbacks, but its provider now stops starting requests after the 30-second parse budget; actual site and adapter delivery latency still requires runtime measurement. Legacy algorithms remain behind the compatibility adapter for one complete release cycle; the compatibility hit counter determines when removal is safe.
 
 ## Manifest 清单
 - `command: 60S读世界`

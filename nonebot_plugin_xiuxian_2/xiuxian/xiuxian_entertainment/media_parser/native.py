@@ -11,12 +11,40 @@ from __future__ import annotations
 
 import json
 import re
+from contextvars import ContextVar
 from typing import Any
 from urllib.parse import parse_qs, unquote, urlparse
 
 from nonebot.log import logger
 
-from ...xiuxian_utils.http_proxy import get_custom_proxy_url, http_client
+from ...xiuxian_utils.http_proxy import get_custom_proxy_url, http_client as _legacy_http_client
+
+_active_http_provider: ContextVar[Any | None] = ContextVar(
+    "entertainment_media_parser_http_provider", default=None
+)
+
+
+class _HttpProviderProxy:
+    def _provider(self):
+        return _active_http_provider.get() or _legacy_http_client
+
+    def request(self, *args, **kwargs):
+        return self._provider().request(*args, **kwargs)
+
+    def get_json(self, *args, **kwargs):
+        return self._provider().get_json(*args, **kwargs)
+
+    def xiaoheihe_json(self, *args, **kwargs):
+        provider = self._provider()
+        method = getattr(provider, "xiaoheihe_json", None)
+        if method is None:
+            raise RuntimeError("小黑盒请求需要娱乐媒体解析 provider")
+        return method(*args, **kwargs)
+
+
+http_client = _HttpProviderProxy()
+
+MAX_MEDIA_PARSE_LINKS = 3
 
 _URL_RE = re.compile(
     r"https?://[^\s\u200b\u00a0<>\"'，。！？、；：（）【】《》]+",
@@ -2454,7 +2482,7 @@ def _xhh_request_json(
     cookies: dict[str, str] | None = None,
     timeout: int = 20,
 ) -> dict[str, Any]:
-    """优先 curl_cffi chrome 伪装；失败回退 http_client/requests。"""
+    """Delegate browser-compatible requests and bounded fallback to the feature provider."""
     hdrs = {
         "accept": "application/json, text/plain, */*",
         "referer": "https://www.xiaoheihe.cn/",
@@ -2463,74 +2491,18 @@ def _xhh_request_json(
     }
     if headers:
         hdrs.update(headers)
-    # 1) curl_cffi
     try:
-        from curl_cffi import requests as curl_requests  # type: ignore
-
-        resp = curl_requests.request(
+        return http_client.xiaoheihe_json(
             method,
             url,
             params=params,
-            json=json_body,
-            headers=hdrs,
-            cookies=cookies,
-            timeout=timeout,
-            impersonate="chrome131",
-        )
-        data = resp.json()
-        if isinstance(data, dict):
-            return data
-    except Exception as e:
-        logger.debug(f"小黑盒 curl_cffi 请求失败: {e}")
-    # 2) http_client
-    try:
-        if method.upper() == "GET":
-            resp = http_client.request(
-                "GET",
-                url,
-                params=params,
-                timeout=timeout,
-                check_status=False,
-                use_config_proxy=False,
-                headers=hdrs,
-            )
-        else:
-            resp = http_client.request(
-                method.upper(),
-                url,
-                params=params,
-                timeout=timeout,
-                check_status=False,
-                use_config_proxy=False,
-                headers=hdrs,
-                data=None if json_body is None else json.dumps(json_body),
-            )
-            # some clients need json= ; fallback below
-        raw = getattr(resp, "text", "") or ""
-        if raw.strip().startswith("{"):
-            data = json.loads(raw)
-            if isinstance(data, dict):
-                return data
-    except Exception as e:
-        logger.debug(f"小黑盒 http_client 请求失败: {e}")
-    # 3) requests
-    try:
-        import requests as _requests
-
-        resp = _requests.request(
-            method,
-            url,
-            params=params,
-            json=json_body,
+            json_body=json_body,
             headers=hdrs,
             cookies=cookies,
             timeout=timeout,
         )
-        data = resp.json()
-        if isinstance(data, dict):
-            return data
     except Exception as e:
-        logger.debug(f"小黑盒 requests 请求失败: {e}")
+        logger.debug(f"小黑盒请求失败: {e}")
     return {}
 
 
@@ -2783,12 +2755,23 @@ def parse_url(url: str, platform: str | None = None) -> dict[str, Any]:
     return meta
 
 
-def parse_text_native(text: str) -> list[dict[str, Any]]:
-    links = extract_supported_links(text)
-    if not links:
-        # 若用户强制「链接解析」塞了任意 URL，尝试通用
-        any_urls = extract_urls(text)
-        if not any_urls:
-            return []
-        return [parse_url(any_urls[0], detect_platform(any_urls[0]) or "unknown")]
-    return [parse_url(u, p) for u, p in links]
+def parse_text_native(
+    text: str,
+    *,
+    http_provider: Any | None = None,
+    max_links: int = MAX_MEDIA_PARSE_LINKS,
+) -> list[dict[str, Any]]:
+    token = _active_http_provider.set(http_provider) if http_provider is not None else None
+    try:
+        link_limit = max(1, min(int(max_links), MAX_MEDIA_PARSE_LINKS))
+        links = extract_supported_links(text)[:link_limit]
+        if not links:
+            # 若用户强制「链接解析」塞了任意 URL，尝试通用
+            any_urls = extract_urls(text)
+            if not any_urls:
+                return []
+            return [parse_url(any_urls[0], detect_platform(any_urls[0]) or "unknown")]
+        return [parse_url(u, p) for u, p in links]
+    finally:
+        if token is not None:
+            _active_http_provider.reset(token)

@@ -34,15 +34,13 @@ from ..xiuxian_utils.utils import (
 
 from ..xiuxian_config import XiuConfig
 from ..messaging import MediaInput, delivery_service
-from ..xiuxian_utils.http_proxy import http_client
 from ..xiuxian_utils.lay_out import Cooldown
 
 # 娱乐子模块历史写法 parameterless=[Data(...)]，与 Cooldown 同义
 Data = Cooldown
 
 from .media_parser.config import get_fun_media_parser_config
-from .media_parser.service import extract_links, run_parse_and_build_messages, dedupe_media_urls_preserve_order
-from .media_parser.native import MEDIA_MAX_BYTES, sort_media_urls_by_quality
+from .media_parser.native import MEDIA_MAX_BYTES
 from .io_runtime import (
     AUDIO_SEND_TIMEOUT,
     IMAGE_SEND_TIMEOUT,
@@ -51,6 +49,8 @@ from .io_runtime import (
     run_media_send,
 )
 from .room_store import entertainment_application
+
+entertainment_application.media_parser.bind_blocking_runner(run_blocking_io)
 
 
 async def send_entertainment_media(bot: Bot, event, media, *, media_type: str):
@@ -218,18 +218,10 @@ def fun_media_quick_has_share_url(text: str) -> bool:
 async def fun_media_has_supported_link(text: str) -> bool:
     if not fun_media_quick_has_share_url(text):
         return False
-    try:
-        links = await extract_links(text)
-    except Exception:
-        return False
-    return len(links) > 0
+    return entertainment_application.media_parser.has_supported_link(text)
 
 
 # 同一条群消息只解析发送一次（防止多个 on_regex 或重复投递）
-_fun_media_parsed_message_ids: dict[str, float] = {}
-_FUN_MEDIA_PARSE_DEDUP_SEC = 90.0
-
-
 def _fun_media_event_dedupe_key(event: GroupMessageEvent | PrivateMessageEvent) -> str:
     mid = getattr(event, "message_id", None)
     if mid is not None:
@@ -241,14 +233,7 @@ def fun_media_should_skip_duplicate_event(
     event: GroupMessageEvent | PrivateMessageEvent,
 ) -> bool:
     key = _fun_media_event_dedupe_key(event)
-    now = time.time()
-    expired = [k for k, t in _fun_media_parsed_message_ids.items() if now - t > _FUN_MEDIA_PARSE_DEDUP_SEC]
-    for k in expired:
-        _fun_media_parsed_message_ids.pop(k, None)
-    if key in _fun_media_parsed_message_ids:
-        return True
-    _fun_media_parsed_message_ids[key] = now
-    return False
+    return entertainment_application.media_parser.should_skip_duplicate(key)
 
 
 def _guess_image_size_from_url(url: str) -> tuple[int, int] | None:
@@ -423,33 +408,35 @@ def _probe_image_size(url: str) -> tuple[int, int]:
         elif "hdslb" in host or "bilibili" in host:
             headers["Referer"] = "https://www.bilibili.com/"
 
-        resp = http_client.request(
+        resp = entertainment_application.media_parser.provider.request(
             "GET",
             s,
-            timeout=12,
+            timeout=5,
+            max_bytes=512 * 1024,
             headers=headers,
             check_status=False,
             use_config_proxy=False,
-            stream=True,
         )
-        if int(getattr(resp, "status_code", 0) or 0) >= 400:
-            return 720, 960
-        data = bytearray()
-        # 头信息通常够用；过大则截断
-        for chunk in resp.iter_content(32 * 1024):
-            if not chunk:
-                continue
-            data.extend(chunk)
-            if len(data) >= 512 * 1024:
-                break
-            # 已能解析尺寸则提前停
-            if len(data) >= 64 * 1024:
-                sized = _image_size_from_bytes(bytes(data))
-                if sized:
-                    return _normalize_md_display_size(*sized)
-        sized = _image_size_from_bytes(bytes(data))
-        if sized:
-            return _normalize_md_display_size(*sized)
+        try:
+            if int(getattr(resp, "status_code", 0) or 0) >= 400:
+                return 720, 960
+            data = bytearray()
+            # 头信息通常够用；过大则截断
+            for chunk in resp.iter_content(32 * 1024):
+                if not chunk:
+                    continue
+                data.extend(chunk)
+                if len(data) >= 512 * 1024:
+                    break
+                if len(data) >= 64 * 1024:
+                    sized = _image_size_from_bytes(bytes(data))
+                    if sized:
+                        return _normalize_md_display_size(*sized)
+            sized = _image_size_from_bytes(bytes(data))
+            if sized:
+                return _normalize_md_display_size(*sized)
+        finally:
+            resp.close()
     except Exception as e:
         logger.debug(f"图片尺寸探测失败 {s[:80]}: {e}")
     # 竖图默认比方图更自然
@@ -487,18 +474,8 @@ async def fun_media_send_parse_result(
         logger.debug(f"娱乐媒体解析：跳过重复消息 {_fun_media_event_dedupe_key(event)}")
         return
 
-    texts, images, videos, cards = await run_parse_and_build_messages(source_text)
-    # 图片按「资源对象」去重后再按画质排序，避免同图多 CDN/多清晰度重复发
-    try:
-        from .media_parser.native import dedupe_media_urls_by_object
-        images = dedupe_media_urls_by_object(images, kind="image")
-    except Exception:
-        images = dedupe_media_urls_preserve_order(images)
-    # 保持解析顺序为主：卡片首图与图集第一张一致；仅对象去重，不再按画质重排打乱
-    # （画质优选已在各平台解析时做过）
-    images = list(images)
-    videos = sort_media_urls_by_quality(
-        dedupe_media_urls_preserve_order(videos), kind="video"
+    texts, images, videos, cards = await entertainment_application.media_parser.parse_and_build_messages(
+        source_text
     )
     body = "\n\n".join(t for t in texts if t).strip()
     has_video = bool(videos)
@@ -527,155 +504,6 @@ async def fun_media_send_parse_result(
             )
         )
 
-    def _media_headers(url: str) -> dict[str, str]:
-        headers = {
-            "User-Agent": (
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                "AppleWebKit/537.36 (KHTML, like Gecko) "
-                "Chrome/122.0.0.0 Safari/537.36"
-            ),
-            "Accept": "*/*",
-        }
-        low = (url or "").lower()
-        if any(x in low for x in ("bilivideo", "hdslb", "bilibili")):
-            headers["Referer"] = "https://www.bilibili.com"
-            headers["Origin"] = "https://www.bilibili.com"
-        elif "weibo" in low or "sinaimg" in low:
-            headers["Referer"] = "https://weibo.com/"
-        elif "xhscdn" in low or "xiaohongshu" in low:
-            headers["Referer"] = "https://www.xiaohongshu.com/"
-        elif "douyin" in low or "byte" in low:
-            headers["Referer"] = "https://www.douyin.com/"
-        elif "kuaishou" in low or "kwimgs" in low or "yximgs" in low:
-            headers["Referer"] = "https://www.kuaishou.com/"
-        return headers
-
-    def _probe_media_size(url: str) -> int | None:
-        """探测媒体大小（字节）。未知返回 None。"""
-        headers = _media_headers(url)
-        # 1) HEAD
-        try:
-            resp = http_client.request(
-                "HEAD",
-                url,
-                timeout=12,
-                check_status=False,
-                use_config_proxy=False,
-                headers=headers,
-            )
-            cl = resp.headers.get("Content-Length") or resp.headers.get("content-length")
-            if cl and str(cl).isdigit():
-                return int(cl)
-        except Exception:
-            pass
-        # 2) Range 0-0
-        try:
-            h2 = dict(headers)
-            h2["Range"] = "bytes=0-0"
-            resp = http_client.request(
-                "GET",
-                url,
-                timeout=15,
-                check_status=False,
-                use_config_proxy=False,
-                headers=h2,
-                stream=True,
-            )
-            cr = resp.headers.get("Content-Range") or resp.headers.get("content-range") or ""
-            # bytes 0-0/12345
-            if "/" in cr:
-                total = cr.rsplit("/", 1)[-1]
-                if total.isdigit():
-                    return int(total)
-            cl = resp.headers.get("Content-Length") or resp.headers.get("content-length")
-            if cl and str(cl).isdigit() and int(getattr(resp, "status_code", 0) or 0) != 206:
-                return int(cl)
-        except Exception:
-            pass
-        return None
-
-    def _download_video_local(
-        url: str,
-        referer: str = "https://www.bilibili.com",
-        max_bytes: int = MEDIA_MAX_BYTES,
-    ) -> Path:
-        """带 Referer 下载到缓存，返回本地路径。超过 max_bytes 抛错供降档。"""
-        import hashlib
-
-        # 插件部署在 src.plugins 命名空间下，相对导入才能同时兼容源码与部署路径。
-        try:
-            from ...paths import get_paths
-        except Exception:
-            from pathlib import Path as _P
-
-            def get_paths():  # type: ignore
-                class _Pth:
-                    data = _P("data/xiuxian")
-
-                return _Pth()
-
-        # 放 cache 下，自动备份跳过
-        try:
-            from .media_parser.config import media_parser_cache_dir
-            cache = media_parser_cache_dir() / "videos"
-        except Exception:
-            base = getattr(get_paths(), "cache", None) or (get_paths().data / "cache")
-            cache = Path(base) / "media_parser" / "videos"
-        cache.mkdir(parents=True, exist_ok=True)
-        name = hashlib.sha1(url.encode("utf-8")).hexdigest()[:20] + ".mp4"
-        out = cache / name
-        # 兼容旧目录命中（只读）
-        if not out.is_file():
-            legacy = get_paths().data / "media_parser_cache" / "videos" / name
-            if legacy.is_file() and 1024 < legacy.stat().st_size <= max_bytes:
-                return legacy
-        if out.is_file() and 1024 < out.stat().st_size <= max_bytes:
-            return out
-        # 缓存过大则删掉重下/换档
-        if out.is_file() and out.stat().st_size > max_bytes:
-            try:
-                out.unlink(missing_ok=True)
-            except Exception:
-                pass
-
-        headers = _media_headers(url)
-        if referer:
-            headers["Referer"] = referer
-        resp = http_client.request(
-            "GET",
-            url,
-            timeout=90,
-            stream=True,
-            check_status=False,
-            use_config_proxy=False,
-            headers=headers,
-        )
-        code = int(getattr(resp, "status_code", 0) or 0)
-        if code >= 400:
-            raise RuntimeError(f"视频下载 HTTP {code}")
-        size = 0
-        tmp = out.with_suffix(".tmp")
-        with tmp.open("wb") as f:
-            for chunk in resp.iter_content(256 * 1024):
-                if not chunk:
-                    continue
-                size += len(chunk)
-                if size > max_bytes:
-                    try:
-                        tmp.unlink(missing_ok=True)
-                    except Exception:
-                        pass
-                    raise RuntimeError(f"视频超过 {max_bytes // (1024 * 1024)}MB")
-                f.write(chunk)
-        if size < 1024:
-            try:
-                tmp.unlink(missing_ok=True)
-            except Exception:
-                pass
-            raise RuntimeError("视频下载内容过小")
-        tmp.replace(out)
-        return out
-
     async def _safe_send_media(media, *, media_type: str, label: str) -> bool:
         try:
             await send_entertainment_media(bot, event, media, media_type=media_type)
@@ -692,7 +520,11 @@ async def fun_media_send_parse_result(
         last_err: Exception | None = None
         for vid in candidates[:5]:
             try:
-                size = await run_blocking_io(_probe_media_size, vid, timeout=20)
+                size = await run_blocking_io(
+                    entertainment_application.media_parser.probe_media_size,
+                    vid,
+                    timeout=20,
+                )
             except Exception:
                 size = None
             if isinstance(size, int) and size > max_bytes:
@@ -706,11 +538,11 @@ async def fun_media_send_parse_result(
             if _needs_local_video_download(vid):
                 try:
                     local = await run_blocking_io(
-                        _download_video_local,
+                        entertainment_application.media_parser.download_video_local,
                         vid,
                         "https://www.bilibili.com",
                         max_bytes,
-                        timeout=120,
+                        timeout=35,
                     )
                     ok = await _safe_send_media(
                         Path(local),

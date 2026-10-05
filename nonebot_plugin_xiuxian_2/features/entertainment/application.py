@@ -10,6 +10,8 @@ from .room_repository import EntertainmentRoomSqlRepository
 from .schemas import NewApiAccountListResult, NewApiCheckinTargetsResult
 from .external_query import EntertainmentExternalQueryProvider
 from .music_application import EntertainmentMusicApplication
+from .media_parser_application import EntertainmentMediaParserApplication
+from .media_parser_provider import EntertainmentMediaParserProvider
 from .webdav_repository import WebDavRepository
 
 
@@ -24,6 +26,8 @@ class EntertainmentApplication(MigratedFeatureApplication):
         webdav_repository: WebDavRepository | None = None,
         external_query_provider: EntertainmentExternalQueryProvider | None = None,
         music_application: EntertainmentMusicApplication | None = None,
+        media_parser_application: EntertainmentMediaParserApplication | None = None,
+        media_parser_provider: EntertainmentMediaParserProvider | None = None,
     ) -> None:
         super().__init__(database, feature="entertainment", repository=repository or EntertainmentRepository(database))
         self.guess_sessions = EntertainmentGuessSessionApplication(
@@ -34,6 +38,9 @@ class EntertainmentApplication(MigratedFeatureApplication):
         self.external_query_provider = external_query_provider or EntertainmentExternalQueryProvider()
         self.music = music_application or EntertainmentMusicApplication(
             self.external_query_provider
+        )
+        self.media_parser = media_parser_application or EntertainmentMediaParserApplication(
+            media_parser_provider
         )
 
     def external_json(

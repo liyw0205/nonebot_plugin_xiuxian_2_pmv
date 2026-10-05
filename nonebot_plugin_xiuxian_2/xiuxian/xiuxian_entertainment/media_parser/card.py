@@ -113,13 +113,18 @@ def _wrap(font: ImageFont.ImageFont, text: str, max_w: int, max_lines: int = 4) 
     return lines
 
 
-def _download_image(url: str, *, use_proxy: bool = False, timeout: int = 20) -> Image.Image | None:
+def _download_image(
+    url: str,
+    *,
+    use_proxy: bool = False,
+    timeout: int = 20,
+    http_provider=None,
+) -> Image.Image | None:
     if not url or not str(url).startswith("http"):
         return None
     try:
-        resp = http_client.request(
-            "GET",
-            url,
+        client = http_provider or http_client
+        request_options = dict(
             timeout=timeout,
             headers={
                 "User-Agent": (
@@ -133,13 +138,24 @@ def _download_image(url: str, *, use_proxy: bool = False, timeout: int = 20) -> 
             use_config_proxy=bool(use_proxy),
             stream=True,
         )
+        if http_provider is not None:
+            request_options["max_bytes"] = 8 * 1024 * 1024
+        resp = client.request("GET", url, **request_options)
         if int(getattr(resp, "status_code", 0) or 0) >= 400:
+            close = getattr(resp, "close", None)
+            if close is not None:
+                close()
             return None
         data = bytearray()
-        for chunk in resp.iter_content(64 * 1024):
-            data.extend(chunk)
-            if len(data) > 8 * 1024 * 1024:
-                break
+        try:
+            for chunk in resp.iter_content(64 * 1024):
+                data.extend(chunk)
+                if len(data) > 8 * 1024 * 1024:
+                    break
+        finally:
+            close = getattr(resp, "close", None)
+            if close is not None:
+                close()
         img = Image.open(io.BytesIO(bytes(data)))
         return img.convert("RGBA")
     except Exception as e:
@@ -249,6 +265,7 @@ def render_media_card(
     cover_url: str | None = None,
     has_video: bool = False,
     use_proxy: bool = False,
+    http_provider=None,
     out_path: str | Path | None = None,
 ) -> Path | None:
     """根据解析 meta 渲染卡片，返回本地 png 路径。"""
@@ -269,10 +286,22 @@ def render_media_card(
         cover_url = images[0]
 
     avatar_url = meta.get("avatar_url") or meta.get("author_avatar") or ""
-    avatar_img = _download_image(str(avatar_url), use_proxy=use_proxy) if avatar_url else None
+    avatar_img = (
+        _download_image(
+            str(avatar_url), use_proxy=use_proxy, http_provider=http_provider
+        )
+        if avatar_url
+        else None
+    )
     avatar = _circle_avatar(avatar_img, AVATAR)
     logo = _load_platform_logo(platform)
-    cover_img = _download_image(str(cover_url or ""), use_proxy=use_proxy) if cover_url else None
+    cover_img = (
+        _download_image(
+            str(cover_url or ""), use_proxy=use_proxy, http_provider=http_provider
+        )
+        if cover_url
+        else None
+    )
 
     font_title = _pick_font(TITLE_SIZE)
     font_meta = _pick_font(META_SIZE)
