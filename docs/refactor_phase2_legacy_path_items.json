@@ -2888,22 +2888,25 @@
       "id": "command:training:历练兑换",
       "kind": "commands",
       "entry": "training:历练兑换 (aliases: )",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "The legacy command is retained as an adapter; purchase state and inventory settlement are owned by the training application and attached SQL repository.",
+      "unknown_edge": "",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_training/__init__.py:104 training_buy = on_command('历练兑换') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_training/__init__.py:296 _ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_training/__init__.py:84 training_buy = on_command('历练兑换') -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_training/__init__.py:298 _ -> _run_training_action('purchase') -> TrainingApplication.execute -> TrainingRepository.purchase -> TrainingPurchaseSqlRepository"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_training/__init__.py:104",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_training/__init__.py:296"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_training/__init__.py:84",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_training/__init__.py:298",
+        "nonebot_plugin_xiuxian_2/features/training/application.py",
+        "nonebot_plugin_xiuxian_2/features/training/repository.py",
+        "nonebot_plugin_xiuxian_2/features/training/purchase_repository.py"
       ],
       "source_declaration_found": true,
       "source": {
@@ -2915,22 +2918,25 @@
       "id": "command:training:历练商店",
       "kind": "commands",
       "entry": "training:历练商店 (aliases: )",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "The compatibility handler renders configured shop items from one feature-owned training state snapshot; it no longer opens a state transaction per listed item.",
+      "unknown_edge": "",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_training/__init__.py:103 training_shop = on_command('历练商店') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_training/__init__.py:236 _ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_training/__init__.py:83 training_shop = on_command('历练商店') -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_training/__init__.py:237 _ -> training_application.get_state -> TrainingStateApplication -> TrainingStateRepository"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_training/__init__.py:103",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_training/__init__.py:236"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_training/__init__.py:83",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_training/__init__.py:237",
+        "nonebot_plugin_xiuxian_2/features/training/application.py",
+        "nonebot_plugin_xiuxian_2/features/training/state_application.py",
+        "nonebot_plugin_xiuxian_2/features/training/state_repository.py"
       ],
       "source_declaration_found": true,
       "source": {
@@ -2942,22 +2948,22 @@
       "id": "command:training:历练帮助",
       "kind": "commands",
       "entry": "training:历练帮助 (aliases: )",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "允许保留的兼容路径",
+      "reason": "The handler sends a built-in help message and buttons only; it does not read or mutate training business state.",
+      "unknown_edge": "",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_training/__init__.py:105 training_help = on_command('历练帮助') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_training/__init__.py:110 _ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_training/__init__.py:85 training_help = on_command('历练帮助') -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_training/__init__.py:90 _ -> static help text -> send_help_message"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_training/__init__.py:105",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_training/__init__.py:110"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_training/__init__.py:85",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_training/__init__.py:90"
       ],
       "source_declaration_found": true,
       "source": {
@@ -2969,22 +2975,24 @@
       "id": "command:training:历练排行榜",
       "kind": "commands",
       "entry": "training:历练排行榜 (aliases: )",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "The compatibility handler reads a deterministic numeric top-50 projection through the training leaderboard repository; it no longer loads and sorts the full player roster or queries each name separately.",
+      "unknown_edge": "",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_training/__init__.py:106 training_rank = on_command('历练排行榜') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_training/__init__.py:380 training_rank_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_training/__init__.py:86 training_rank = on_command('历练排行榜') -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_training/__init__.py:382 training_rank_ -> _training_rank_message -> TrainingApplication.leaderboard -> TrainingLeaderboardSqlRepository.top"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_training/__init__.py:106",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_training/__init__.py:380"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_training/__init__.py:86",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_training/__init__.py:382",
+        "nonebot_plugin_xiuxian_2/features/training/application.py",
+        "nonebot_plugin_xiuxian_2/features/training/leaderboard_repository.py"
       ],
       "source_declaration_found": true,
       "source": {
@@ -2996,22 +3004,25 @@
       "id": "command:training:历练状态",
       "kind": "commands",
       "entry": "training:历练状态 (aliases: )",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "Training state and initialization are read through the feature-owned application and player database repository; the legacy handler remains only as the transport adapter.",
+      "unknown_edge": "",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_training/__init__.py:102 training_status = on_command('历练状态') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_training/__init__.py:190 _ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_training/__init__.py:82 training_status = on_command('历练状态') -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_training/__init__.py:191 _ -> training_application.get_state -> TrainingStateApplication -> TrainingStateRepository"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_training/__init__.py:102",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_training/__init__.py:190"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_training/__init__.py:82",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_training/__init__.py:191",
+        "nonebot_plugin_xiuxian_2/features/training/application.py",
+        "nonebot_plugin_xiuxian_2/features/training/state_application.py",
+        "nonebot_plugin_xiuxian_2/features/training/state_repository.py"
       ],
       "source_declaration_found": true,
       "source": {
@@ -3023,22 +3034,24 @@
       "id": "command:training:历练积分排行榜",
       "kind": "commands",
       "entry": "training:历练积分排行榜 (aliases: )",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "The compatibility handler reads a deterministic numeric top-50 projection through the training leaderboard repository; it no longer loads and sorts the full player roster or queries each name separately.",
+      "unknown_edge": "",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_training/__init__.py:107 training_integral_rank = on_command('历练积分排行榜') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_training/__init__.py:404 training_integral_rank_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_training/__init__.py:87 training_integral_rank = on_command('历练积分排行榜') -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_training/__init__.py:399 training_integral_rank_ -> _training_rank_message -> TrainingApplication.leaderboard -> TrainingLeaderboardSqlRepository.top"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_training/__init__.py:107",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_training/__init__.py:404"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_training/__init__.py:87",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_training/__init__.py:399",
+        "nonebot_plugin_xiuxian_2/features/training/application.py",
+        "nonebot_plugin_xiuxian_2/features/training/leaderboard_repository.py"
       ],
       "source_declaration_found": true,
       "source": {
@@ -3986,22 +3999,25 @@
       "id": "command:training:开始历练",
       "kind": "commands",
       "entry": "training:开始历练 (aliases: 历练开始)",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "The compatibility handler resumes an existing event before cooldown checks and delegates new resolution, frozen-plan persistence, and cross-database settlement to the training application/repository.",
+      "unknown_edge": "",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_training/__init__.py:101 training_start = on_command('开始历练') aliases=历练开始 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_training/__init__.py:143 _ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_training/__init__.py:81 training_start = on_command('开始历练') aliases=历练开始 -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_training/__init__.py:123 _ -> TrainingApplication.resume_event/run_event -> frozen event plan -> TrainingEventSqlRepository.apply_frozen"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_training/__init__.py:101",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_training/__init__.py:143"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_training/__init__.py:81",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_training/__init__.py:123",
+        "nonebot_plugin_xiuxian_2/features/training/application.py",
+        "nonebot_plugin_xiuxian_2/features/training/event_repository.py",
+        "nonebot_plugin_xiuxian_2/features/training/event_planner.py"
       ],
       "source_declaration_found": true,
       "source": {
@@ -8788,22 +8804,25 @@
       "id": "command:admin:重置历练",
       "kind": "commands",
       "entry": "admin:重置历练 (aliases: )",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "The compatibility admin adapter runs the feature-owned resumable reset application in the existing chunk worker; the reset freezes targets and updates state through the SQL repository.",
+      "unknown_edge": "",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:324 training_reset = on_command('重置历练') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:1882 training_reset_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:1882 training_reset_ -> run_chunked_until_done -> training_reset_limits -> TrainingApplication.reset_limits -> TrainingResetSqlRepository"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:324",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:1882"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:1882",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_training/__init__.py:431",
+        "nonebot_plugin_xiuxian_2/features/training/application.py",
+        "nonebot_plugin_xiuxian_2/features/training/reset_repository.py"
       ],
       "source_declaration_found": true,
       "source": {

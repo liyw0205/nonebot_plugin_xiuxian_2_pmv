@@ -2,18 +2,14 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Callable, Mapping
 
 from ...infrastructure.database.attached_uow import AttachedDatabaseUnitOfWork
+from ...infrastructure.database import DatabaseUnitOfWork
 
 
 class TrainingEventSqlRepository:
-    """Persist one training event across the game and player databases.
-
-    Random event selection and reward formatting remain in the legacy adapter;
-    this repository owns the state/CAS, inventory, resources and statistics
-    write once the adapter has produced an explicit snapshot.
-    """
+    """Persist one frozen training event across the game and player databases."""
 
     _FIELDS = (
         "progress",
@@ -111,6 +107,151 @@ class TrainingEventSqlRepository:
         return {"status": "duplicate", "message": fallback}
 
     @staticmethod
+    def _plan_json(plan: Mapping[str, Any]) -> str:
+        return json.dumps(
+            dict(plan), ensure_ascii=True, sort_keys=True, default=str, separators=(",", ":")
+        )
+
+    def get_result(self, operation_id: str, user_id: str) -> dict[str, Any]:
+        operation_id, user_id = str(operation_id).strip(), str(user_id).strip()
+        if not operation_id or not user_id or not Path(self.game_database).is_file():
+            return {"status": "schema_missing", "message": ""}
+        with DatabaseUnitOfWork(self.game_database, read_only=True) as uow:
+            tables = {
+                str(row["name"]).casefold()
+                for row in uow.query_all("SELECT name FROM sqlite_master WHERE type='table'")
+            }
+            if "training_event_operations" not in tables:
+                return {"status": "schema_missing", "message": ""}
+            columns = {
+                str(row["name"]).casefold()
+                for row in uow.query_all('PRAGMA table_info("training_event_operations")')
+            }
+            result_column = ",result_json" if "result_json" in columns else ""
+            previous = uow.query_one(
+                f"SELECT payload{result_column} FROM training_event_operations WHERE operation_id=?",
+                (operation_id,),
+            )
+        return {"status": "missing", "message": ""} if previous is None else self._duplicate(previous, user_id)
+
+    def get_plan(self, operation_id: str, user_id: str) -> dict[str, Any]:
+        operation_id, user_id = str(operation_id).strip(), str(user_id).strip()
+        if not operation_id or not user_id or not Path(self.game_database).is_file():
+            return {"status": "schema_missing"}
+        with DatabaseUnitOfWork(self.game_database, read_only=True) as uow:
+            tables = {
+                str(row["name"]).casefold()
+                for row in uow.query_all("SELECT name FROM sqlite_master WHERE type='table'")
+            }
+            if "training_event_resolutions" not in tables:
+                return {"status": "schema_missing"}
+            row = uow.query_one(
+                "SELECT user_id,plan_json FROM training_event_resolutions WHERE operation_id=?",
+                (operation_id,),
+            )
+        if row is None:
+            return {"status": "missing"}
+        if str(row["user_id"]) != user_id:
+            return {"status": "operation_conflict"}
+        try:
+            plan = json.loads(str(row["plan_json"]))
+        except (TypeError, ValueError, json.JSONDecodeError):
+            return {"status": "plan_invalid"}
+        return {"status": "frozen", "plan": plan} if isinstance(plan, dict) else {"status": "plan_invalid"}
+
+    def freeze_plan(
+        self, operation_id: str, user_id: str, plan: Mapping[str, Any]
+    ) -> dict[str, Any]:
+        operation_id, user_id = str(operation_id).strip(), str(user_id).strip()
+        if not operation_id or not user_id or not plan:
+            raise ValueError("operation_id, user_id and a non-empty plan are required")
+        if not Path(self.game_database).is_file():
+            return {"status": "schema_missing"}
+        with DatabaseUnitOfWork(self.game_database, immediate=True) as uow:
+            tables = {
+                str(row["name"]).casefold()
+                for row in uow.query_all("SELECT name FROM sqlite_master WHERE type='table'")
+            }
+            if "training_event_resolutions" not in tables:
+                return {"status": "schema_missing"}
+            uow.execute(
+                "INSERT OR IGNORE INTO training_event_resolutions(operation_id,user_id,plan_json) "
+                "VALUES(?,?,?)",
+                (operation_id, user_id, self._plan_json(plan)),
+            )
+            row = uow.query_one(
+                "SELECT user_id,plan_json FROM training_event_resolutions WHERE operation_id=?",
+                (operation_id,),
+            )
+        if row is None:
+            return {"status": "schema_missing"}
+        if str(row["user_id"]) != user_id:
+            return {"status": "operation_conflict"}
+        try:
+            frozen = json.loads(str(row["plan_json"]))
+        except (TypeError, ValueError, json.JSONDecodeError):
+            return {"status": "plan_invalid"}
+        return {"status": "frozen", "plan": frozen} if isinstance(frozen, dict) else {"status": "plan_invalid"}
+
+    def apply_frozen(self, operation_id: str, user_id: str) -> dict[str, Any]:
+        resolution = self.get_plan(operation_id, user_id)
+        if resolution.get("status") != "frozen":
+            if resolution.get("status") == "missing":
+                result = self.get_result(operation_id, user_id)
+                if result.get("status") != "missing":
+                    return result
+            return {"status": resolution.get("status", "plan_invalid"), "message": ""}
+        plan = resolution["plan"]
+        required = {
+            "expected_state", "state", "expected_user", "stone_delta", "exp_delta",
+            "hp_delta", "items", "max_goods_num",
+        }
+        if not required.issubset(plan):
+            return {"status": "plan_invalid", "message": ""}
+        return self.apply(
+            operation_id=operation_id,
+            user_id=user_id,
+            expected_state=plan["expected_state"],
+            state=plan["state"],
+            expected_user=plan["expected_user"],
+            stone_delta=plan["stone_delta"],
+            exp_delta=plan["exp_delta"],
+            hp_delta=plan["hp_delta"],
+            items=plan["items"],
+            max_goods_num=plan["max_goods_num"],
+            _require_frozen_plan=True,
+        )
+
+    def resume_event(self, operation_id: str, user_id: str) -> dict[str, Any] | None:
+        result = self.get_result(operation_id, user_id)
+        if result["status"] != "missing":
+            return result
+        plan = self.get_plan(operation_id, user_id)
+        if plan["status"] == "missing":
+            return None
+        if plan["status"] != "frozen":
+            return {"status": plan["status"], "message": ""}
+        return self.apply_frozen(operation_id, user_id)
+
+    def run_event(
+        self,
+        operation_id: str,
+        user_id: str,
+        plan_factory: Callable[[], Mapping[str, Any]],
+    ) -> dict[str, Any]:
+        resumed = self.resume_event(operation_id, user_id)
+        if resumed is not None:
+            return resumed
+        plan = dict(plan_factory())
+        plan_status = str(plan.pop("status", "ready"))
+        if plan_status != "ready":
+            return {"status": plan_status, "message": ""}
+        frozen = self.freeze_plan(operation_id, user_id, plan)
+        if frozen.get("status") != "frozen":
+            return {"status": frozen.get("status", "plan_invalid"), "message": ""}
+        return self.apply_frozen(operation_id, user_id)
+
+    @staticmethod
     def _inventory_columns(uow: AttachedDatabaseUnitOfWork) -> set[str]:
         return {str(row["name"]) for row in uow.query_all("PRAGMA table_info(back)")}
 
@@ -188,6 +329,7 @@ class TrainingEventSqlRepository:
         hp_delta: int = 0,
         items: Any = (),
         max_goods_num: int = 0,
+        _require_frozen_plan: bool = False,
     ) -> dict[str, Any]:
         operation_id, user_id = str(operation_id).strip(), str(user_id).strip()
         if not operation_id or not user_id:
@@ -233,7 +375,10 @@ class TrainingEventSqlRepository:
                     "SELECT name FROM player_data.sqlite_master WHERE type='table'"
                 )
             }
-            if not {"user_xiuxian", "back", "training_event_operations"}.issubset(game_tables):
+            required_game_tables = {"user_xiuxian", "back", "training_event_operations"}
+            if _require_frozen_plan:
+                required_game_tables.add("training_event_resolutions")
+            if not required_game_tables.issubset(game_tables):
                 return {"status": "schema_missing", "message": "训练事件 schema 尚未迁移。"}
             if not {"training", "statistics"}.issubset(player_tables):
                 return {"status": "schema_missing", "message": "训练玩家 schema 尚未迁移。"}
@@ -257,6 +402,34 @@ class TrainingEventSqlRepository:
                 if str(previous["payload"]) != payload:
                     return {"status": "operation_conflict", "message": ""}
                 return self._duplicate(previous, user_id)
+
+            if _require_frozen_plan:
+                frozen = uow.query_one(
+                    "SELECT user_id,plan_json FROM training_event_resolutions WHERE operation_id=?",
+                    (operation_id,),
+                )
+                if frozen is None or str(frozen["user_id"]) != user_id:
+                    return {"status": "operation_conflict", "message": ""}
+                try:
+                    frozen_plan = json.loads(str(frozen["plan_json"]))
+                except (TypeError, ValueError, json.JSONDecodeError):
+                    return {"status": "plan_invalid", "message": ""}
+                expected_plan = {
+                    "expected_state": expected_state,
+                    "state": state,
+                    "expected_user": expected_user,
+                    "stone_delta": stone_delta,
+                    "exp_delta": exp_delta,
+                    "hp_delta": hp_delta,
+                    "items": [
+                        {"id": item_id, "name": name, "type": item_type, "amount": amount}
+                        for item_id, name, item_type, amount in rewards
+                    ],
+                    "max_goods_num": max_goods_num,
+                    "message": str(state.get("last_event", "")),
+                }
+                if self._plan_json(frozen_plan) != self._plan_json(expected_plan):
+                    return {"status": "operation_conflict", "message": ""}
 
             user = uow.query_one(
                 "SELECT stone,exp,hp,mp FROM user_xiuxian WHERE user_id=?",
@@ -340,6 +513,11 @@ class TrainingEventSqlRepository:
                 uow.execute(
                     "INSERT INTO training_event_operations(operation_id,payload) VALUES(?,?)",
                     (operation_id, payload),
+                )
+            if _require_frozen_plan:
+                uow.execute(
+                    "DELETE FROM training_event_resolutions WHERE operation_id=?",
+                    (operation_id,),
                 )
             return {"status": "applied", "message": message}
 

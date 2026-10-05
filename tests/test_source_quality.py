@@ -3209,20 +3209,22 @@ class SourceQualityTests(unittest.TestCase):
         self.assertIn("UPDATE user_xiuxian SET hp=?", repository)
         self.assertIn("UPDATE player_data.player_dungeon_status SET current_layer=?", repository)
 
-    def test_training_completion_uses_cross_database_transaction(self) -> None:
+    def test_training_completion_freezes_plan_before_cross_database_transaction(self) -> None:
         root = SOURCE_ROOT / "xiuxian" / "xiuxian_training"
         source = (root / "__init__.py").read_text(encoding="utf-8")
         start = source.index("def make_choice")
         handler = source[start:source.index("def training_reset_limits", start)]
-        self.assertIn("training_event_service.apply(", handler)
-        completion = handler[handler.index("if training_info[\"progress\"] >= 12:"):]
-        self.assertNotIn("sql_message.update_exp(", completion)
-        self.assertNotIn("sql_message.update_ls(", completion)
-        self.assertNotIn("sql_message.send_back(", completion)
-        service = (root / "event_service.py").read_text(encoding="utf-8")
-        self.assertIn("ATTACH DATABASE", service)
-        self.assertIn("BEGIN IMMEDIATE", service)
-        self.assertIn("training_event_operations", service)
+        self.assertIn("training_application.run_event(", handler)
+        self.assertNotIn("training_events.handle_event(", handler)
+        self.assertNotIn("get_all_field_data", source)
+        planner = (SOURCE_ROOT / "features" / "training" / "event_planner.py").read_text(encoding="utf-8")
+        repository = (SOURCE_ROOT / "features" / "training" / "event_repository.py").read_text(encoding="utf-8")
+        self.assertIn("build_training_event_plan(", planner)
+        self.assertIn("def freeze_plan(", repository)
+        self.assertIn("def apply_frozen(", repository)
+        self.assertIn("training_event_resolutions", repository)
+        self.assertIn("AttachedDatabaseUnitOfWork", repository)
+        self.assertIn("DELETE FROM training_event_resolutions", repository)
 
     def test_sect_rename_uses_transactional_service(self) -> None:
         source = (

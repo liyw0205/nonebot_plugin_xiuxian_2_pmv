@@ -1,4 +1,3 @@
-import random
 import time
 import json
 import re
@@ -11,18 +10,16 @@ from ..adapter_compat import Bot, Message, GroupMessageEvent, PrivateMessageEven
 from nonebot.permission import SUPERUSER
 from ..xiuxian_utils.lay_out import assign_bot, Cooldown
 from ..xiuxian_utils.utils import check_user, check_user_type, get_msg_pic, log_message, handle_send, send_msg_handler, update_statistics_value, send_help_message
-from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage, PlayerDataManager, leave_harm_time
+from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage, leave_harm_time
 from ..xiuxian_utils.item_json import Items
 from .training_data import training_data
 from .training_limit import training_limit
-from .training_events import training_events
 from ...paths import get_paths
 from ...features.training.application import TrainingApplication
 from ...features.player_state.application import PlayerStateApplication
 from ...infrastructure.clock import SystemClock
 from ...infrastructure.ids import UUIDGenerator
-from ..xiuxian_config import XiuConfig, convert_rank
-from ..xiuxian_utils.numeric_bind import percent_exp_reward
+from ..xiuxian_config import XiuConfig
 from ..xiuxian_utils.item_json import Items
 from ..xiuxian_utils.utils import number_to
 
@@ -39,25 +36,8 @@ def configure_training_application(application: TrainingApplication) -> None:
     """Inject the composition-root application used by command handlers."""
     global training_application
     training_application = application
-
-
-def _resolve_player_data_manager():
-    global _player_data_manager_instance
-    if _player_data_manager_instance is None:
-        _player_data_manager_instance = PlayerDataManager()
-    return _player_data_manager_instance
-
-
-class _LazyPlayerDataManager:
-    def __getattr__(self, name):
-        return getattr(_resolve_player_data_manager(), name)
-
-
-player_data_manager = _LazyPlayerDataManager()
-
-
-def _player_data_manager():
-    return player_data_manager
+    if application.state_application is not None:
+        training_limit.configure(application.state_application)
 
 
 def _sql_message():
@@ -149,6 +129,24 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await training_start.finish()
     
     user_id = user_info["user_id"]
+    event_id = getattr(event, "message_id", None)
+    operation_id = f"training-completion:{event_id}:{user_id}" if event_id else f"training-completion:{runtime_ids.new_id()}:{user_id}"
+
+    try:
+        resumed = training_application.resume_event(operation_id=operation_id, user_id=user_id)
+    except Exception:
+        logger.exception("历练事件恢复失败 user_id={}", user_id)
+        resumed = {"status": "error"}
+    if resumed is not None:
+        result = (
+            str(resumed.get("message", ""))
+            if resumed.get("status") in {"applied", "duplicate"}
+            else "历练事件结算失败：结算过程异常，请稍后再试。"
+        )
+        await handle_send(bot, event, result, md_type="历练", k1="开始历练", v1="开始历练", k2="历练状态", v2="历练状态", k3="商店", v3="历练商店")
+        if resumed.get("status") in {"applied", "duplicate"}:
+            log_message(user_id, result)
+        await training_start.finish()
     
     # 检查气血
     if user_info['hp'] is None or user_info['hp'] == 0:
@@ -161,7 +159,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await training_start.finish()
     
     # 检查历练时间 - 同小时内不可重复历练
-    training_info = training_limit.get_user_training_info(user_id)
+    training_info = training_application.get_state(user_id)
     now = runtime_clock.now()
     last_time = training_info["last_time"]
     
@@ -173,10 +171,13 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await training_start.finish()
     
     # 开始历练 - 随机选择事件类型
-    event_id = getattr(event, "message_id", None)
-    operation_id = f"training-completion:{event_id}:{user_id}" if event_id else f"training-completion:{runtime_ids.new_id()}:{user_id}"
     try:
-        result = make_choice(user_id, operation_id)
+        outcome = make_choice(user_id, operation_id)
+        result = (
+            str(outcome.get("message", ""))
+            if outcome.get("status") in {"applied", "duplicate"}
+            else "历练事件结算失败：结算过程异常，请稍后再试。"
+        )
     except Exception:
         logger.exception("历练事件事务失败 user_id={}", user_id)
         result = "历练事件结算失败：结算过程异常，请稍后再试。"
@@ -196,7 +197,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await training_status.finish()
     
     user_id = user_info["user_id"]
-    training_info = training_limit.get_user_training_info(user_id)
+    training_info = training_application.get_state(user_id)
     now = runtime_clock.now()
     
     # 计算下次可历练时间
@@ -243,7 +244,8 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         await training_shop.finish()
     
     user_id = user_info["user_id"]
-    training_info = training_limit.get_user_training_info(user_id)
+    training_info = training_application.get_state(user_id)
+    weekly_purchases = training_info["weekly_purchases"]
     
     if not shop_items:
         msg = "历练商店暂无商品！"
@@ -275,7 +277,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     for item_id, item_data in current_page_items:
         # 动态获取物品信息
         item_info = _items().get_data_by_item_id(item_id)
-        already_purchased = training_limit.get_weekly_purchases(user_id, item_id)
+        already_purchased = int(weekly_purchases.get(str(item_id), 0))
         if not item_info:
             continue
             
@@ -321,9 +323,9 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     
     item_data = shop_items[shop_id]
     item_info = _items().get_data_by_item_id(shop_id)
-    training_info = training_limit.get_user_training_info(user_id)
+    training_info = training_application.get_state(user_id)
     # 检查限购
-    already_purchased = training_limit.get_weekly_purchases(user_id, shop_id)
+    already_purchased = int(training_info["weekly_purchases"].get(str(shop_id), 0))
     max_quantity = item_data['weekly_limit'] - already_purchased
     if quantity > max_quantity:
         quantity = max_quantity
@@ -385,18 +387,11 @@ async def training_rank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         await handle_send(bot, event, msg, md_type="我要修仙")
         await training_rank.finish()
 
-    # 获取所有用户的completed数据
-    all_user_integral = _player_data_manager().get_all_field_data("training", "completed")
-    
-    # 排序数据
-    sorted_integral = sorted(all_user_integral, key=lambda x: x[1], reverse=True)
-    
-    # 生成排行榜
-    rank_msg = "【历练排行榜】\n"
-    for i, (user_id, integral) in enumerate(sorted_integral[:50], start=1):
-        user_info = _sql_message().get_user_info_with_id(user_id)
-        rank_msg += f"第{i}位 | {user_info['user_name']} | {number_to(integral)}\n"
-    
+    try:
+        rank_msg = _training_rank_message("completed", "历练排行榜")
+    except Exception:
+        logger.exception("历练排行榜读取失败")
+        rank_msg = "暂时无法查询历练排行榜，请稍后再试。"
     await handle_send(bot, event, rank_msg)
     await training_rank.finish()
 
@@ -409,162 +404,31 @@ async def training_integral_rank_(bot: Bot, event: GroupMessageEvent | PrivateMe
         await handle_send(bot, event, msg, md_type="我要修仙")
         await training_integral_rank.finish()
 
-    # 获取所有用户的completed数据
-    all_user_integral = _player_data_manager().get_all_field_data("training", "points")
-    
-    # 排序数据
-    sorted_integral = sorted(all_user_integral, key=lambda x: x[1], reverse=True)
-    
-    # 生成排行榜
-    rank_msg = "【历练积分排行榜】\n"
-    for i, (user_id, integral) in enumerate(sorted_integral[:50], start=1):
-        user_info = _sql_message().get_user_info_with_id(user_id)
-        rank_msg += f"第{i}位 | {user_info['user_name']} | {number_to(integral)}\n"
-    
+    try:
+        rank_msg = _training_rank_message("points", "历练积分排行榜")
+    except Exception:
+        logger.exception("历练积分排行榜读取失败")
+        rank_msg = "暂时无法查询历练积分排行榜，请稍后再试。"
     await handle_send(bot, event, rank_msg)
     await training_integral_rank.finish()
 
+
+def _training_rank_message(field: str, title: str) -> str:
+    rows = training_application.leaderboard(field, limit=50)
+    return f"【{title}】\n" + "".join(
+        f"第{index}位 | {row['user_name']} | {number_to(row['value'])}\n"
+        for index, row in enumerate(rows, start=1)
+    )
+
+
 def make_choice(user_id, operation_id):
-    """进行历练选择"""
-    training_info = training_limit.get_user_training_info(user_id)
-    expected_training_info = training_info.copy()
-    expected_training_info["weekly_purchases"] = dict(training_info["weekly_purchases"])
-    if isinstance(expected_training_info["last_time"], datetime):
-        expected_training_info["last_time"] = expected_training_info["last_time"].strftime("%Y-%m-%d %H:%M:%S")
-    user_info = _sql_message().get_user_info_with_id(user_id)
-    now = runtime_clock.now()
-    
-    # 记录本次历练时间
-    training_info["last_time"] = now
-    
-    # weights = {  # 等价于原版
-    #     "progress_plus_1": 33,
-    #     "progress_plus_2": 20,
-    #     "nothing": 27,
-    #     "progress_minus_1": 13,
-    #     "progress_minus_2": 7
-    # }
-    weights = {
-        "progress_plus_1": 35,
-        "progress_plus_2": 30,
-        "nothing": 20,
-        "progress_minus_1": 10,
-        "progress_minus_2": 5,
-    }
-    # 随机选择事件
-    event_type = random.choices(list(weights.keys()), weights=list(weights.values()))[0]
-    
-    # 调用事件处理器，传入用户信息
-    event_result = training_events.handle_event(user_id, user_info, event_type)
-    stone_delta = int(event_result.get("amount", 0)) if isinstance(event_result, dict) and event_result.get("type") == "stone" else 0
-    exp_delta = int(event_result.get("amount", 0)) if isinstance(event_result, dict) and event_result.get("type") == "exp" else 0
-    hp_delta = int(event_result.get("amount", 0)) if isinstance(event_result, dict) and event_result.get("type") == "hp" else 0
-    event_items = []
-    if isinstance(event_result, dict) and event_result.get("type") == "item":
-        item_info = _items().get_data_by_item_id(event_result["item_id"])
-        event_items.append({"id": event_result["item_id"], "name": event_result["item_name"], "type": item_info["type"], "amount": -1 if event_result.get("lost") else 1})
-    
-    # 更新进度 - 默认+1
-    base_progress = 1
-    
-    if "plus_1" in event_type:  # 小奖励: +1 (总+2)
-        progress_change = base_progress + 1
-    elif "plus_2" in event_type:  # 大奖励: +1 (总+2)
-        progress_change = base_progress + 1
-    elif "minus_1" in event_type:  # 小惩罚: -1 (总0)
-        progress_change = base_progress - 1
-    elif "minus_2" in event_type:  # 大惩罚: -2 (总-1)
-        progress_change = base_progress - 2
-    else:  # nothing: 0 (总+1)
-        progress_change = base_progress
-    
-    training_info["progress"] = max(0, training_info["progress"] + progress_change)
-    
-    # 处理事件结果
-    if isinstance(event_result, dict):
-        # 更新成就点
-        if event_result.get("type") == "points":
-            training_info["points"] += event_result["amount"]
-        
-        # 记录最后事件
-        training_info["last_event"] = event_result.get("message", "")
-    else:
-        training_info["last_event"] = str(event_result)
-    
-    # 检查是否完成一个进程
-    if training_info["progress"] >= 12:
-        training_info["progress"] = 0
-        training_info["completed"] += 1
-        training_info["max_progress"] = max(training_info["max_progress"], 12)
-        user_rank = convert_rank(user_info["level"])[0]
-
-        # 完成奖励
-        # L3: 完成轮 1% 锚到 gap（再 rank//3 压制）
-        exp_reward = percent_exp_reward(
-            user_info["exp"], 0.01, user_info["level"],
-            divide_by_three=True, anchor="gap",
-        )
-        stone_reward = random.randint(5000000, 10000000)  # 500万-1000万灵石
-        points_reward = 1000  # 1000成就点
-        training_info["points"] += points_reward
-        
-        # 添加随机物品奖励
-        min_rank = max(user_rank - 16, 16)
-        item_rank = random.randint(min_rank, min_rank + 20)
-        item_types = ["功法", "神通", "药材"]
-        item_type = random.choice(item_types)
-        item_id_list = _items().get_random_id_list_by_rank_and_item_type(item_rank, item_type)
-        
-        if item_id_list:
-            item_id = random.choice(item_id_list)
-            item_info = _items().get_data_by_item_id(item_id)
-            reward_items = [{"id": item_id, "name": item_info["name"], "type": item_info["type"], "amount": 1}]
-            item_reward_msg = f"\n随机物品：{item_info['level']}:{item_info['name']}"
-        else:
-            reward_items = []
-            item_reward_msg = ""
-            
-        training_info["last_event"] += (
-            f"\n恭喜道友完成一个历练进程！获得：\n"
-            f"修为+{number_to(exp_reward)}\n"
-            f"灵石+{number_to(stone_reward)}\n"
-            f"成就点+{points_reward}{item_reward_msg}"
-        )
-    
-    # 更新最高进度
-    training_info["max_progress"] = max(training_info["max_progress"], training_info["progress"])
-    
-    if training_info["completed"] > expected_training_info["completed"]:
-        saved_training_info = training_info.copy()
-        saved_training_info["weekly_purchases"] = dict(training_info["weekly_purchases"])
-        if isinstance(saved_training_info["last_time"], datetime):
-            saved_training_info["last_time"] = saved_training_info["last_time"].strftime("%Y-%m-%d %H:%M:%S")
-        stone_delta += stone_reward
-        exp_delta += exp_reward
-        event_items.extend(reward_items)
-
-    saved_training_info = training_info.copy()
-    saved_training_info["weekly_purchases"] = dict(training_info["weekly_purchases"])
-    if isinstance(saved_training_info["last_time"], datetime):
-        saved_training_info["last_time"] = saved_training_info["last_time"].strftime("%Y-%m-%d %H:%M:%S")
-    settlement = _run_training_action(
-        "event_apply", operation_id, user_id,
-        # Compatibility target: training_event_service.apply(
-        expected_state=expected_training_info,
-        state=saved_training_info,
-        expected_user={key: user_info[key] for key in ("stone", "exp", "hp", "mp")},
-        stone_delta=stone_delta,
-        exp_delta=exp_delta,
-        hp_delta=hp_delta,
-        items=event_items,
+    """Compatibility entry point for the feature-owned event application."""
+    return training_application.run_event(
+        operation_id=operation_id,
+        user_id=str(user_id),
+        items=_items(),
         max_goods_num=XiuConfig().max_goods_num,
     )
-    if not settlement.succeeded:
-        return "历练事件结算失败：结算过程异常，请稍后再试。"
-    if settlement.status == "duplicate":
-        return settlement.message
-
-    return training_info["last_event"]
 
 def training_reset_limits(operation_id, operator_id, *, chunk_size=500):
     return training_application.reset_limits(

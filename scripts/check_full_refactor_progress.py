@@ -277,9 +277,14 @@ def _slice_status() -> dict[str, dict[str, object]]:
     training_limit = (PACKAGE / "xiuxian" / "xiuxian_training" / "training_limit.py").read_text(encoding="utf-8")
     training_facade = (PACKAGE / "xiuxian" / "xiuxian_training" / "__init__.py").read_text(encoding="utf-8")
     training_events = (PACKAGE / "xiuxian" / "xiuxian_training" / "training_events.py").read_text(encoding="utf-8")
+    training_event_resolver = (PACKAGE / "features" / "training" / "event_resolver.py").read_text(encoding="utf-8")
     training_application = (PACKAGE / "features" / "training" / "application.py").read_text(encoding="utf-8")
     training_repository = (PACKAGE / "features" / "training" / "repository.py").read_text(encoding="utf-8")
     training_event_repository = (PACKAGE / "features" / "training" / "event_repository.py").read_text(encoding="utf-8")
+    training_event_context_repository = (PACKAGE / "features" / "training" / "event_context_repository.py").read_text(encoding="utf-8")
+    training_event_planner = (PACKAGE / "features" / "training" / "event_planner.py").read_text(encoding="utf-8")
+    training_leaderboard_repository = (PACKAGE / "features" / "training" / "leaderboard_repository.py").read_text(encoding="utf-8")
+    training_plugin = (PACKAGE / "plugin.py").read_text(encoding="utf-8")
     training_purchase_repository = (PACKAGE / "features" / "training" / "purchase_repository.py").read_text(encoding="utf-8")
     training_reset_repository = (PACKAGE / "features" / "training" / "reset_repository.py").read_text(encoding="utf-8")
     training_migrations = (PACKAGE / "features" / "training" / "migrations.py").read_text(encoding="utf-8")
@@ -820,6 +825,9 @@ def _slice_status() -> dict[str, dict[str, object]]:
     admin_work_reset_handler = admin_facade[
         admin_facade.index("@do_work_cz.handle") : admin_facade.index("@training_reset.handle")
     ]
+    admin_training_reset_handler = admin_facade[
+        admin_facade.index("@training_reset.handle") : admin_facade.index("@tower_reset.handle")
+    ]
     admin_root_handler = admin_facade[
         admin_facade.index("async def gmm_command_") : admin_facade.index("@cz.handle")
     ]
@@ -1161,15 +1169,39 @@ def _slice_status() -> dict[str, dict[str, object]]:
         "training": {
             "state_application_owned": "TrainingStateApplication" in training_limit,
             "legacy_state_owner_disabled": "TrainingStateService" not in training_limit,
-            "event_application_owned": "TrainingEventSqlRepository" in training_repository and "event_apply" in training_repository,
-            "event_default_entry_owned": "training_application.execute(" in training_facade and "TrainingApplication(get_paths().game_db, get_paths().player_db)" in training_facade,
+            "event_application_owned": "TrainingEventSqlRepository" in training_repository and "run_event" in training_repository,
+            "event_default_entry_owned": "training_application.run_event(" in training_facade and "TrainingApplication(get_paths().game_db, get_paths().player_db)" in training_facade,
             "event_repository_atomic": "AttachedDatabaseUnitOfWork" in training_event_repository and "player_data" in training_event_repository,
             "event_request_path_has_no_ddl": "CREATE TABLE" not in training_event_repository and "ALTER TABLE" not in training_event_repository,
+            "event_plan_is_frozen_before_settlement": (
+                "def freeze_plan(" in training_event_repository
+                and "def apply_frozen(" in training_event_repository
+                and "training_event_resolutions" in training_event_repository
+                and "DELETE FROM training_event_resolutions" in training_event_repository
+                and "self.repository.run_event(operation_id, user_id, create_plan)" in training_application
+            ),
+            "event_context_is_read_only": (
+                "DatabaseUnitOfWork(self.game_database, read_only=True)" in training_event_context_repository
+                and all(token not in training_event_context_repository for token in ("CREATE TABLE", "INSERT INTO", "UPDATE ", "DELETE FROM", "UserBuffDate", "XiuxianDateManage"))
+                and "def read_event_context(" in training_repository
+            ),
+            "event_resolver_has_no_legacy_database_reads": (
+                "from ...features.training.event_resolver import TrainingEvents" in training_events
+                and "class TrainingEvents" in training_event_resolver
+                and "XiuxianDateManage" not in training_event_resolver
+                and "UserBuffDate" not in training_event_resolver
+                and "get_back_msg" not in training_event_resolver
+                and "get_top_users_by_level" not in training_event_resolver
+            ),
             "event_migrations_registered": (
-                'Migration("training.001", "training_event_operations", apply_training_event_operations)' in plugin
-                and 'Migration("training.002", "training_event_player_schema", apply_training_event_player)' in plugin
+                'Migration("training.001", "training_event_operations", apply_training_event_operations)' in training_plugin
+                and 'Migration("training.002", "training_event_player_schema", apply_training_event_player)' in training_plugin
+                and 'Migration("training.005", "training_event_resolutions", apply_training_event_resolutions)' in training_plugin
+                and '"training.005"' not in training_plugin[training_plugin.index("_PLAYER_DATABASE_MIGRATION_VERSIONS"):training_plugin.index("_TRADE_DATABASE_MIGRATION_VERSIONS")]
+                and '"training.005"' not in training_plugin[training_plugin.index("_GAME_DATABASE_EXCLUDED_MIGRATION_VERSIONS"):training_plugin.index("_PLAYER_DATABASE_MIGRATION_VERSIONS")]
                 and "def apply_training_event_operations(" in training_migrations
                 and "def apply_training_event_player(" in training_migrations
+                and "def apply_training_event_resolutions(" in training_migrations
             ),
             "purchase_application_owned": "TrainingPurchaseSqlRepository" in training_repository and "purchase" in training_repository,
             "purchase_default_entry_owned": "training_application.execute(" in training_facade and '"purchase"' in training_facade[training_facade.index("def _run_training_action"):],
@@ -1188,16 +1220,30 @@ def _slice_status() -> dict[str, dict[str, object]]:
                 'Migration("training.004", "training_reset_operations", apply_training_reset_operations)' in plugin
                 and "def apply_training_reset_operations(" in training_migrations
             ),
-            "item_catalog_lazy": (
-                "_items_instance = None" in training_facade
-                and "def _items(" in training_facade
-                and "items = Items()" not in training_facade
-                and "_items_instance = None" in training_events
-                and "def _items(" in training_events
-                and "items = Items()" not in training_events
+            "admin_reset_uses_resumable_feature_application": (
+                "run_chunked_until_done(" in admin_training_reset_handler
+                and "training_reset_limits(operation_id, operator_id)" in admin_training_reset_handler
+                and "training_application.reset_limits(" in training_facade
+                and "TrainingResetSqlRepository" in training_repository
             ),
+            "leaderboard_is_bounded_and_cached": (
+                "limit = max(1, min(int(limit), 50))" in training_leaderboard_repository
+                and "ORDER BY CAST(COALESCE(t." in training_leaderboard_repository
+                and "LIMIT ?" in training_leaderboard_repository
+                and "cache_ttl: float = 45.0" in training_leaderboard_repository
+                and "training_application.leaderboard(field, limit=50)" in training_facade
+            ),
+            "leaderboard_indexes_registered_on_player_db": (
+                'Migration("training.006", "training_leaderboard_indexes", apply_training_leaderboard_indexes)' in training_plugin
+                and '"training.006"' in training_plugin[training_plugin.index("_GAME_DATABASE_EXCLUDED_MIGRATION_VERSIONS"):training_plugin.index("_PLAYER_DATABASE_MIGRATION_VERSIONS")]
+                and '"training.006"' in training_plugin[training_plugin.index("_PLAYER_DATABASE_MIGRATION_VERSIONS"):training_plugin.index("_TRADE_DATABASE_MIGRATION_VERSIONS")]
+                and "training_completed_rank_idx" in training_migrations
+                and "training_points_rank_idx" in training_migrations
+            ),
+            "state_reads_use_training_application": "training_application.get_state(user_id)" in training_facade and "get_user_training_info(user_id)" not in training_facade,
+            "item_catalog_is_lazy_and_shared": "_items_instance = None" in training_facade and "def _items(" in training_facade and "items=_items()" in training_facade and "items = Items()" not in training_facade,
             "purchase_reset_compatibility_retained": "training_purchase_service" in training_repository and "training_reset_service" in training_repository,
-            "status": "event_purchase_and_reset_cutover_with_lazy_item_catalog_and_legacy_fallback",
+            "status": "event_resolution_freeze_bounded_leaderboard_state_purchase_and_reset_feature_owned",
         },
         "work": {
             "daily_refresh_application_owned": "work_daily_refresh_application.reset(" in work_facade,

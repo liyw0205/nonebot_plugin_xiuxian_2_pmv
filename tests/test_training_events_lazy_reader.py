@@ -3,26 +3,27 @@ import unittest
 
 
 class TrainingEventsLazyReaderTests(unittest.TestCase):
-    def test_training_events_defers_sql_manager_construction(self):
+    def test_training_event_resolver_has_no_legacy_database_reads(self):
         source = (
             Path(__file__).parents[1]
-            / "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_training/training_events.py"
+            / "nonebot_plugin_xiuxian_2/features/training/event_resolver.py"
         ).read_text(encoding="utf-8")
-        self.assertIn("_sql_message_instance = None", source)
-        self.assertIn("def _sql_message(", source)
-        self.assertIn("_sql_message().get_top_users_by_level(", source)
-        self.assertIn("_sql_message().get_back_msg(", source)
-        self.assertNotIn("sql_message = XiuxianDateManage()", source)
+        self.assertIn("def handle_event(", source)
+        self.assertIn("context=context", source)
+        self.assertNotIn("XiuxianDateManage", source)
+        self.assertNotIn("UserBuffDate", source)
+        self.assertNotIn("get_back_msg", source)
+        self.assertNotIn("get_top_users_by_level", source)
 
-    def test_training_events_defers_item_catalog_construction(self):
+    def test_training_event_resolver_receives_item_catalog_and_random_source(self):
         source = (
             Path(__file__).parents[1]
-            / "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_training/training_events.py"
+            / "nonebot_plugin_xiuxian_2/features/training/event_resolver.py"
         ).read_text(encoding="utf-8")
-        self.assertIn("_items_instance = None", source)
-        self.assertIn("def _items(", source)
-        self.assertNotIn("items = Items()", source)
-        self.assertIn("_items().get_data_by_item_id(", source)
+        self.assertIn("def __init__(self, random_source=None)", source)
+        self.assertIn("items=items", source)
+        self.assertIn("items.get_data_by_item_id(", source)
+        self.assertIn("random.Random()", source)
 
 
 if __name__ == "__main__":

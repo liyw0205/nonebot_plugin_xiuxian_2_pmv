@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import random
 from pathlib import Path
 from typing import Any
 
@@ -7,6 +8,7 @@ from .._migrated_application import MigratedFeatureApplication
 from ...infrastructure.database import DatabaseUnitOfWork
 from ...infrastructure.clock import SystemClock
 from .repository import TrainingRepository
+from .state_application import TrainingStateApplication
 
 
 class TrainingApplication(MigratedFeatureApplication):
@@ -17,8 +19,15 @@ class TrainingApplication(MigratedFeatureApplication):
         *,
         repository: TrainingRepository | None = None,
         clock: Any | None = None,
+        random_factory: Any | None = None,
     ) -> None:
         self.clock = clock or SystemClock()
+        self.state_application = (
+            TrainingStateApplication(player_database, clock=self.clock)
+            if player_database is not None
+            else None
+        )
+        self.random_factory = random_factory or random.Random
         super().__init__(
             database,
             feature="training",
@@ -30,6 +39,47 @@ class TrainingApplication(MigratedFeatureApplication):
         # contexts where the full composition-root migration has not run yet.
         with DatabaseUnitOfWork(self.database) as uow:
             self.ledger.ensure_schema(uow)
+
+    def get_state(self, user_id: str) -> dict[str, Any]:
+        if self.state_application is None:
+            raise RuntimeError("training state requires the player database")
+        return self.state_application.get(user_id)
+
+    def leaderboard(self, field: str, *, limit: int = 50) -> list[dict[str, Any]]:
+        return self.repository.leaderboard(field, limit=limit)
+
+    def resume_event(self, *, operation_id: str, user_id: str):
+        return self.repository.resume_event(operation_id, user_id)
+
+    def run_event(
+        self,
+        *,
+        operation_id: str,
+        user_id: str,
+        items: Any,
+        max_goods_num: int,
+    ):
+        def create_plan():
+            if self.state_application is None:
+                return {"status": "schema_missing"}
+            state = self.state_application.get(user_id)
+            context = self.repository.read_event_context(user_id)
+            if context.get("status") != "ready":
+                return context
+            from .event_planner import build_training_event_plan
+
+            plan = build_training_event_plan(
+                user_id=user_id,
+                training_state=state,
+                context=context,
+                now=self.clock.now(),
+                items=items,
+                random_source=self.random_factory(),
+                max_goods_num=max_goods_num,
+            )
+            return {"status": "ready", **plan}
+
+        return self.repository.run_event(operation_id, user_id, create_plan)
 
     def reset_limits(self, *, operation_id: str, operator_id: str, chunk_size: int = 500, **kwargs: Any):
         """Process one administrator reset chunk.

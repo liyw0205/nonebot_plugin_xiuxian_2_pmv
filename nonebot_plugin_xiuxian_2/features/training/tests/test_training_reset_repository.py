@@ -141,8 +141,8 @@ def test_reset_migration_backfills_legacy_columns_and_is_game_only(tmp_path: Pat
     assert {"status", "previous_state", "updated_at"}.issubset(target_columns)
     migrations = build_migrations()
     assert [m.version for m in migrations_for_database(migrations, "game_db") if m.version.startswith("training.")] == [
-        "training.001", "training.003", "training.004"
+        "training.001", "training.003", "training.004", "training.005"
     ]
     assert [m.version for m in migrations_for_database(migrations, "player_db") if m.version.startswith("training.")] == [
-        "training.002"
+        "training.002", "training.006"
     ]

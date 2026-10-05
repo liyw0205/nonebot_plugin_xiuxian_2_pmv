@@ -24,6 +24,8 @@ class TrainingRepository(ServicePort):
         self.player_database = str(player_database) if player_database is not None else None
         self.clock = clock or SystemClock()
         self._event_repository = None
+        self._event_context_repository = None
+        self._leaderboard_repository = None
         self._purchase_repository = None
         self._reset_repository = None
 
@@ -73,6 +75,55 @@ class TrainingRepository(ServicePort):
                 self.database, self.player_database
             )
         return self._event_repository.apply(**kwargs)
+
+    def _event_context(self):
+        if self._event_context_repository is None:
+            from .event_context_repository import TrainingEventContextSqlRepository
+
+            self._event_context_repository = TrainingEventContextSqlRepository(self.database)
+        return self._event_context_repository
+
+    def read_event_context(self, user_id: str) -> dict[str, Any]:
+        return self._event_context().read(user_id)
+
+    def _leaderboard(self):
+        if self.player_database is None:
+            raise RuntimeError("training leaderboard requires the player database")
+        if self._leaderboard_repository is None:
+            from .leaderboard_repository import TrainingLeaderboardSqlRepository
+
+            self._leaderboard_repository = TrainingLeaderboardSqlRepository(
+                self.database, self.player_database
+            )
+        return self._leaderboard_repository
+
+    def leaderboard(self, field: str, *, limit: int = 50) -> list[dict[str, Any]]:
+        return self._leaderboard().top(field, limit=limit)
+
+    def resume_event(self, operation_id: str, user_id: str):
+        if self.player_database is None:
+            return None
+        return self._event_sql_repository().resume_event(operation_id, user_id)
+
+    def run_event(self, operation_id: str, user_id: str, plan_factory):
+        if self.player_database is None:
+            plan = dict(plan_factory())
+            status = str(plan.pop("status", "ready"))
+            if status != "ready":
+                return {"status": status, "message": ""}
+            return self._event_apply(operation_id=operation_id, user_id=user_id, **plan)
+        return self._event_sql_repository().run_event(operation_id, user_id, plan_factory)
+
+    def _event_sql_repository(self):
+        if self.player_database is None:
+            raise RuntimeError("training event settlement requires the player database")
+        if self._event_repository is None:
+            from .event_repository import TrainingEventSqlRepository
+
+            self._event_repository = TrainingEventSqlRepository(
+                self.database, self.player_database
+            )
+        return self._event_repository
 
     def _purchase(self, **kwargs: Any):
         if self.player_database is None:

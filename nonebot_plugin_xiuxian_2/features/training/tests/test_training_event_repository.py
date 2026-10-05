@@ -8,7 +8,11 @@ from unittest.mock import patch
 import pytest
 
 from ..event_repository import TrainingEventSqlRepository
-from ..migrations import apply_training_event_operations, apply_training_event_player
+from ..migrations import (
+    apply_training_event_operations,
+    apply_training_event_player,
+    apply_training_event_resolutions,
+)
 from ..application import TrainingApplication
 from ....infrastructure.database import DatabaseUnitOfWork
 from ....plugin import build_migrations, migrations_for_database
@@ -20,15 +24,20 @@ def _databases(tmp_path: Path) -> tuple[Path, Path]:
     with DatabaseUnitOfWork(game) as uow:
         uow.execute(
             "CREATE TABLE user_xiuxian("
-            "user_id TEXT PRIMARY KEY,stone INTEGER,exp INTEGER,hp INTEGER,mp INTEGER)"
+            "user_id TEXT PRIMARY KEY,user_name TEXT,level TEXT,stone INTEGER,exp INTEGER,hp INTEGER,mp INTEGER)"
         )
         uow.execute(
             "CREATE TABLE back("
             "user_id TEXT,goods_id INTEGER,goods_name TEXT,goods_type TEXT,goods_num INTEGER,"
             "create_time TEXT,update_time TEXT,bind_num INTEGER,PRIMARY KEY(user_id,goods_id))"
         )
-        uow.execute("INSERT INTO user_xiuxian VALUES ('u',100,200,50,3)")
+        uow.execute("INSERT INTO user_xiuxian VALUES ('u','道友','筑基初期',100,200,50,3)")
+        uow.execute(
+            "CREATE TABLE BuffInfo(user_id TEXT PRIMARY KEY,sub_buff INTEGER DEFAULT 0,"
+            "faqi_buff INTEGER DEFAULT 0,armor_buff INTEGER DEFAULT 0)"
+        )
         apply_training_event_operations(uow)
+        apply_training_event_resolutions(uow)
     with DatabaseUnitOfWork(player) as uow:
         apply_training_event_player(uow)
         uow.execute(
@@ -173,5 +182,5 @@ def test_application_routes_event_apply_to_feature_repository(tmp_path: Path) ->
 
 def test_training_migrations_are_routed_to_their_own_databases() -> None:
     migrations = build_migrations()
-    assert [item.version for item in migrations_for_database(migrations, "game_db") if item.version.startswith("training.")] == ["training.001", "training.003", "training.004"]
-    assert [item.version for item in migrations_for_database(migrations, "player_db") if item.version.startswith("training.")] == ["training.002"]
+    assert [item.version for item in migrations_for_database(migrations, "game_db") if item.version.startswith("training.")] == ["training.001", "training.003", "training.004", "training.005"]
+    assert [item.version for item in migrations_for_database(migrations, "player_db") if item.version.startswith("training.")] == ["training.002", "training.006"]

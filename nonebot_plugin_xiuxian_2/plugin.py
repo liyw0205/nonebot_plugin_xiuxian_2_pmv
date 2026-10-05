@@ -146,7 +146,7 @@ from .features.tianti_settlement.manifest import FEATURE as TIANTI_SETTLEMENT_FE
 from .features.tianti_settlement.migrations import apply_tianti_settlement, apply_tianti_settlement_operations
 from .features.tianti_training.manifest import FEATURE as TIANTI_TRAINING_FEATURE
 from .features.tianti_training.migrations import apply_tianti_breakthrough_operations, apply_tianti_item_reward_operations, apply_tianti_medicine_bath_operations, apply_tianti_player_info, apply_tianti_qiaoxue_operations, apply_tianti_training, apply_tianti_training_operations, apply_training_state
-from .features.training.migrations import apply_training_event_operations, apply_training_event_player, apply_training_purchase_operations, apply_training_reset_operations
+from .features.training.migrations import apply_training_event_operations, apply_training_event_player, apply_training_event_resolutions, apply_training_leaderboard_indexes, apply_training_purchase_operations, apply_training_reset_operations
 from .features.tower.manifest import FEATURE as TOWER_FEATURE
 from .features.tower.migrations import apply_tower, apply_tower_purchase, apply_tower_settlement, apply_tower_state
 from .features.sect_fairyland.manifest import FEATURE as SECT_FAIRYLAND_FEATURE
@@ -454,6 +454,8 @@ def build_migrations() -> tuple[Migration, ...]:
         Migration("training.002", "training_event_player_schema", apply_training_event_player),
         Migration("training.003", "training_purchase_operations", apply_training_purchase_operations),
         Migration("training.004", "training_reset_operations", apply_training_reset_operations),
+        Migration("training.005", "training_event_resolutions", apply_training_event_resolutions),
+        Migration("training.006", "training_leaderboard_indexes", apply_training_leaderboard_indexes),
         Migration("work.001", "work_feature_migrations", apply_work),
         Migration("work.002", "work_daily_refresh_reset_operations", apply_work_daily_refresh_reset),
         Migration("work.003", "work_item_use_operations", apply_work_item_use),
@@ -521,6 +523,7 @@ _GAME_DATABASE_EXCLUDED_MIGRATION_VERSIONS = frozenset(
         "tasks.001",
         "tasks.004",
         "training.002",
+        "training.006",
         "world_events.002",
         "world_events.004",
         "world_events.005",
@@ -588,6 +591,7 @@ _PLAYER_DATABASE_MIGRATION_VERSIONS = frozenset(
         "tasks.001",
         "tasks.004",
         "training.002",
+        "training.006",
         "world_events.002",
         "world_events.004",
         "world_events.005",

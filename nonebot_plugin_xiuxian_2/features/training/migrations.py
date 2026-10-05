@@ -136,10 +136,34 @@ def apply_training_reset_operations(uow: DatabaseUnitOfWork) -> None:
             )
 
 
+def apply_training_event_resolutions(uow: DatabaseUnitOfWork) -> None:
+    """Persist resolved event plans before player/resource settlement begins."""
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS training_event_resolutions("
+        "operation_id TEXT PRIMARY KEY,user_id TEXT NOT NULL,plan_json TEXT NOT NULL,"
+        "created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)"
+    )
+
+
+def apply_training_leaderboard_indexes(uow: DatabaseUnitOfWork) -> None:
+    """Support bounded numeric top-N reads for legacy text-affinity values."""
+    apply_training_state(uow)
+    uow.execute(
+        "CREATE INDEX IF NOT EXISTS training_completed_rank_idx "
+        "ON training(CAST(COALESCE(completed,0) AS INTEGER) DESC)"
+    )
+    uow.execute(
+        "CREATE INDEX IF NOT EXISTS training_points_rank_idx "
+        "ON training(CAST(COALESCE(points,0) AS INTEGER) DESC)"
+    )
+
+
 __all__ = [
     "apply_training",
     "apply_training_event_operations",
     "apply_training_event_player",
+    "apply_training_event_resolutions",
+    "apply_training_leaderboard_indexes",
     "apply_training_purchase_operations",
     "apply_training_reset_operations",
     "apply_training_state",

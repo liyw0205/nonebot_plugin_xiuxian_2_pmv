@@ -2638,6 +2638,8 @@
     "admin_feature_migrations",
     "admin_id_swap_operations",
     "admin_id_swap_step_receipts",
+    "admin_id_update_operations",
+    "admin_id_update_step_receipts",
     "admin_impart_stone_batch_operations",
     "admin_impart_stone_batch_progress",
     "admin_impart_stone_batch_targets",
@@ -2806,6 +2808,12 @@
     "economy_operations",
     "email",
     "entertainment_feature_migrations",
+    "entertainment_game_room_migrations",
+    "entertainment_game_rooms",
+    "entertainment_guess_sessions",
+    "entertainment_newapi_accounts",
+    "entertainment_newapi_checkin_history",
+    "entertainment_newapi_migrations",
     "enum",
     "equipment_operations",
     "eternal",
@@ -2869,6 +2877,7 @@
     "invitation_reward_claims",
     "invitation_reward_definitions",
     "invitation_reward_invites",
+    "invitation_reward_migrations",
     "invitation_reward_operations",
     "io",
     "is",
@@ -3128,6 +3137,7 @@
     "training",
     "training_completion_operations",
     "training_event_operations",
+    "training_event_resolutions",
     "training_feature_migrations",
     "training_purchase_operations",
     "training_state_operations",
@@ -3147,6 +3157,7 @@
     "user_tribulation",
     "user_xiuxian",
     "uuid",
+    "wal",
     "wall",
     "wcwidth",
     "web_audit",
@@ -5037,6 +5048,14 @@
       ],
       "path": "/api/v1/dungeon/purchase",
       "permission": "user"
+    },
+    {
+      "feature": "info",
+      "methods": [
+        "GET"
+      ],
+      "path": "/api/v1/info/users/search",
+      "permission": "admin"
     },
     {
       "feature": "runtime_web",
