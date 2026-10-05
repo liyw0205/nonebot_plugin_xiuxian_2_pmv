@@ -8,6 +8,7 @@ from pathlib import Path
 from ..repository import (
     MAX_ACCOUNT_LIST_FILE_BYTES,
     MAX_ACCOUNT_LIST_ROWS,
+    MAX_INFO_TARGETS,
     EntertainmentRepository,
 )
 
@@ -82,7 +83,32 @@ class EntertainmentAccountListRepositoryTests(unittest.TestCase):
             result = EntertainmentRepository(Path(temp) / "game.db").resolve_checkin_targets(state, "1-999999999")
 
             self.assertEqual(result.status, "invalid_selector")
-            self.assertIn("最多选择", result.message)
+        self.assertIn("最多选择", result.message)
+
+    def test_info_targets_are_bounded_and_reuse_redacted_credential_dto(self):
+        with tempfile.TemporaryDirectory() as temp:
+            state = Path(temp) / "accounts.json"
+            state.write_text(
+                json.dumps(
+                    [
+                        {
+                            "api_user_id": str(index + 1),
+                            "mode": "token",
+                            "secret": f"private-{index}",
+                            "base_url": "https://api.test",
+                        }
+                        for index in range(MAX_INFO_TARGETS + 1)
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            repository = EntertainmentRepository(Path(temp) / "game.db")
+
+            result = repository.resolve_info_targets(state, "")
+
+            self.assertEqual(result.status, "too_many")
+            self.assertIn(str(MAX_INFO_TARGETS), result.message)
+            self.assertNotIn("private-", repr(result))
 
     def test_checkin_rejects_invalid_credential_file_without_mutating_or_backing_it_up(self):
         with tempfile.TemporaryDirectory() as temp:

@@ -83,11 +83,7 @@ class SourceQualityTests(unittest.TestCase):
             / "xiuxian_entertainment"
             / "mod"
             / "newapi_client.py",
-            SOURCE_ROOT
-            / "xiuxian"
-            / "xiuxian_entertainment"
-            / "mod"
-            / "alist_webdav.py",
+            SOURCE_ROOT / "features" / "entertainment" / "webdav_repository.py",
         )
         for path in paths:
             source = path.read_text(encoding="utf-8")
@@ -3298,7 +3294,7 @@ class SourceQualityTests(unittest.TestCase):
             ),
             entertainment / "mod" / "newapi_commands.py": (
                 "await run_blocking_io(\n                _run_checkin_for_account",
-                "await run_blocking_io(\n                fetch_user_self",
+                "await run_blocking_io(\n        fetch_user_self",
             ),
             entertainment / "media_parser" / "service.py": (
                 "await run_blocking_io(ensure_vendor_core",

@@ -1,6 +1,7 @@
 """NewAPI 绑定、签到、信息、查看、删除。"""
 from __future__ import annotations
 
+import asyncio
 import re
 import time
 from typing import Any, Literal
@@ -17,6 +18,7 @@ from .newapi_client import (
     fetch_user_self,
     format_checkin_block,
     format_user_info_block,
+    format_user_info_reply,
     normalize_base_url,
     summarize_checkin_for_history,
 )
@@ -49,6 +51,9 @@ _NEWAPI_FUN_KW = dict(
 runtime_ids = UUIDGenerator()
 _MAX_NEWAPI_LIST_RESPONSE_BYTES = 64 * 1024
 _MAX_NEWAPI_CHECKIN_REPLY_BYTES = 64 * 1024
+_MAX_NEWAPI_INFO_REPLY_BYTES = 64 * 1024
+_NEWAPI_INFO_CONCURRENCY = 4
+_NEWAPI_INFO_IO_TIMEOUT = 18
 
 _URL_LIKE = re.compile(r"^https?://", re.I)
 
@@ -256,6 +261,20 @@ async def run_scheduled_auto_checkins() -> int:
     return n
 
 
+async def _fetch_info_for_target(target: NewApiCheckinTarget) -> dict[str, Any]:
+    base = account_base_url(target.base_url)
+    if not base:
+        return {"_error": "未配置接口地址"}
+    return await run_blocking_io(
+        fetch_user_self,
+        target.mode or detect_auth_mode(target.secret),
+        target.api_user_id,
+        target.secret,
+        base,
+        timeout=_NEWAPI_INFO_IO_TIMEOUT,
+    )
+
+
 newapi_help_cmd = on_command("newapi帮助", aliases={"newapi", "NewAPI帮助"}, priority=5, block=True)
 newapi_bind_cmd = on_command("newapi绑定", priority=5, block=True)
 newapi_list_cmd = on_command("newapi查看", aliases={"newapi列表", "newapi绑定列表"}, priority=5, block=True)
@@ -378,32 +397,41 @@ async def newapi_checkin_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
 @newapi_info_cmd.handle(parameterless=[Cooldown(cd_time=8)])
 async def newapi_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     qq = _qq(event)
-    targets, err = resolve_targets(qq, args.extract_plain_text())
-    if err or not targets:
-        await handle_send(bot, event, err or "无可用账号", **_NEWAPI_FUN_KW)
+    result = entertainment_application.resolve_info_targets(
+        state_path=_path_for_qq(qq),
+        selector=args.extract_plain_text(),
+    )
+    if result.status != "ok":
+        messages = {
+            "empty": "尚未绑定账号，请使用：newapi绑定 站点用户ID#令牌#接口地址",
+            "missing": "尚未绑定账号，请使用：newapi绑定 站点用户ID#令牌#接口地址",
+            "invalid": "绑定数据格式或字段无效，未修改原文件。",
+            "too_large": "绑定数据超过 1 MiB 读取上限，未加载凭据。",
+            "too_many": result.message or "绑定账号数量超过 48 条读取上限。",
+            "unavailable": "暂时无法读取绑定数据，未修改原文件。",
+            "invalid_selector": result.message,
+        }
+        await handle_send(bot, event, messages.get(result.status, "绑定数据暂不可用。"), **_NEWAPI_FUN_KW)
         await newapi_info_cmd.finish()
 
-    all_acc = load_accounts(qq)
-    blocks: list[str] = ["【NewAPI 用户信息】", ""]
-    for acc in targets:
-        idx = account_index(all_acc, acc)
-        mode = acc.get("mode") or detect_auth_mode(acc.get("secret") or "")
-        base = account_base_url(acc.get("base_url"))
-        if not base:
-            data = {"_error": "未配置接口地址"}
-        else:
-            data = await run_blocking_io(
-                fetch_user_self,
-                mode,
-                str(acc.get("api_user_id")),
-                acc.get("secret") or "",
-                base,
-                timeout=35,
-            )
-        blocks.append(format_user_info_block(idx, acc, data))
-        blocks.append("")
+    semaphore = asyncio.Semaphore(_NEWAPI_INFO_CONCURRENCY)
 
-    await handle_send(bot, event, "\n".join(blocks).strip(), **_NEWAPI_FUN_KW)
+    async def fetch_one(target: NewApiCheckinTarget):
+        async with semaphore:
+            return target, await _fetch_info_for_target(target)
+
+    fetched = await asyncio.gather(*(fetch_one(target) for target in result.targets))
+    blocks: list[str] = []
+    for target, data in fetched:
+        account_view = {"api_user_id": target.api_user_id, "base_url": target.base_url}
+        blocks.append(format_user_info_block(target.index, account_view, data))
+
+    await handle_send(
+        bot,
+        event,
+        format_user_info_reply(blocks, max_bytes=_MAX_NEWAPI_INFO_REPLY_BYTES),
+        **_NEWAPI_FUN_KW,
+    )
     await newapi_info_cmd.finish()
 
 

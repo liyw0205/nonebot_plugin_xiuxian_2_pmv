@@ -372,7 +372,7 @@
         "nonebot_plugin_xiuxian_2/features/entertainment/repository.py:9-225",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_utils/http_proxy.py:160-185"
       ],
-      "reason": "The frozen newapi查看 and manual newapi签到 paths now use bounded feature-owned reads; manual check-in caps streamed responses and its history writer. Remaining newapi绑定/信息/删除/自动签到 and scheduled account paths still use load_accounts/load_json_file without a file byte or account-count bound; auto-checkin also enumerates and loads every per-user binding file, while newapi信息 fully buffers remote responses. These credential/history JSON files and malformed-file backups are persistent data, not disposable caches. A remote check-in may succeed before local history is written; the crash window is tracked separately and must not be blindly replayed. Review remaining account/file/backup/response working sets without expanding frozen membership."
+      "reason": "The frozen newapi查看、newapi信息 and manual newapi签到 paths now use bounded feature-owned account reads; newapi信息 caps selected accounts and streamed remote responses, while manual check-in caps streamed responses and its history writer. Remaining newapi绑定/删除/自动签到 and scheduled account paths still use legacy mutation/enumeration boundaries; auto-checkin also enumerates and loads every per-user binding file. These credential/history JSON files and malformed-file backups are persistent data, not disposable caches. A remote check-in may succeed before local history is written; the crash window is tracked separately and must not be blindly replayed. Review remaining account/file/backup/response working sets without expanding frozen membership."
     },
     {
       "id": "newapi-checkin-remote-history-window",

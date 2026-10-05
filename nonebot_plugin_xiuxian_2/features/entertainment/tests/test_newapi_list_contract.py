@@ -58,6 +58,28 @@ class NewApiListCommandContractTests(unittest.TestCase):
             if isinstance(node, ast.Attribute)
         })
 
+    def test_info_handler_uses_feature_owned_targets_and_bounded_remote_helper(self):
+        source = COMMANDS_PATH.read_text(encoding="utf-8")
+        handler = _function(source, "newapi_info_")
+        called = _called_names(handler)
+
+        self.assertIn("resolve_info_targets", {
+            node.attr
+            for node in ast.walk(handler)
+            if isinstance(node, ast.Attribute)
+        })
+        self.assertNotIn("resolve_targets", called)
+        self.assertNotIn("load_accounts", called)
+        self.assertIn("_MAX_NEWAPI_INFO_REPLY_BYTES", source)
+        self.assertIn("_fetch_info_for_target", {
+            node.id
+            for node in ast.walk(handler)
+            if isinstance(node, ast.Name)
+        })
+        fetcher = _function(source, "_fetch_info_for_target")
+        self.assertIn("detect_auth_mode", _called_names(fetcher))
+        self.assertIn("format_user_info_reply", called)
+
 
 if __name__ == "__main__":
     unittest.main()

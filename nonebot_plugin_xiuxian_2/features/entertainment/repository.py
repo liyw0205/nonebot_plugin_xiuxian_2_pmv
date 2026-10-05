@@ -25,6 +25,7 @@ MAX_CHECKIN_BASE_URL_CHARS = 512
 MAX_CHECKIN_SELECTOR_CHARS = 64
 MAX_CHECKIN_HISTORY_BYTES = 64 * 1024
 MAX_CHECKIN_HISTORY_ROWS = 3
+MAX_INFO_TARGETS = 8
 
 
 def _bounded_display_text(value, limit: int) -> str:
@@ -153,7 +154,13 @@ class EntertainmentRepository(ServicePort):
         summaries = tuple(_account_summary(row) for row in rows if isinstance(row, dict))
         return NewApiAccountListResult("ok", summaries)
 
-    def resolve_checkin_targets(self, state_path: str | Path, selector: str) -> NewApiCheckinTargetsResult:
+    def _resolve_account_targets(
+        self,
+        state_path: str | Path,
+        selector: str,
+        *,
+        max_targets: int = MAX_ACCOUNT_LIST_ROWS,
+    ) -> NewApiCheckinTargetsResult:
         status, rows = _read_account_rows(Path(state_path))
         if status != "ok":
             return NewApiCheckinTargetsResult(status)
@@ -192,7 +199,19 @@ class EntertainmentRepository(ServicePort):
         indices, message = _checkin_selector_indices(selector, len(targets))
         if message:
             return NewApiCheckinTargetsResult("invalid_selector", message=message)
-        return NewApiCheckinTargetsResult("ok", tuple(targets[index - 1] for index in indices or ()))
+        selected = indices or ()
+        if len(selected) > max_targets:
+            return NewApiCheckinTargetsResult(
+                "too_many",
+                message=f"一次最多查询 {max_targets} 个账号",
+            )
+        return NewApiCheckinTargetsResult("ok", tuple(targets[index - 1] for index in selected))
+
+    def resolve_checkin_targets(self, state_path: str | Path, selector: str) -> NewApiCheckinTargetsResult:
+        return self._resolve_account_targets(state_path, selector)
+
+    def resolve_info_targets(self, state_path: str | Path, selector: str) -> NewApiCheckinTargetsResult:
+        return self._resolve_account_targets(state_path, selector, max_targets=MAX_INFO_TARGETS)
 
     def append_checkin_history(
         self,

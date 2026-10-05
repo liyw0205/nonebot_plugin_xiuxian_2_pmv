@@ -31,6 +31,9 @@ class EntertainmentApplication(MigratedFeatureApplication):
     def resolve_checkin_targets(self, *, state_path: str | Path, selector: str) -> NewApiCheckinTargetsResult:
         return self.repository.resolve_checkin_targets(state_path, selector)
 
+    def resolve_info_targets(self, *, state_path: str | Path, selector: str) -> NewApiCheckinTargetsResult:
+        return self.repository.resolve_info_targets(state_path, selector)
+
     def append_checkin_history(
         self,
         *,

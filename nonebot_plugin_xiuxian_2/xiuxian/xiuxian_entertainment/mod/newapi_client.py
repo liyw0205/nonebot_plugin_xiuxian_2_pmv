@@ -3,15 +3,18 @@ from __future__ import annotations
 
 import json
 import re
-from typing import Any
+from typing import Any, Iterable
 
-from ...xiuxian_utils.http_proxy import describe_proxy_request_error, http_client
+from ...xiuxian_utils.http_proxy import HttpClient, describe_proxy_request_error, http_client
 
 _UA = (
     "Mozilla/5.0 (Linux; Android; Pixel 7) AppleWebKit/537.36 "
     "(KHTML, like Gecko) Chrome/116.0.0.0 Mobile Safari/537.36"
 )
 MAX_CHECKIN_RESPONSE_BYTES = 1024 * 1024
+MAX_INFO_RESPONSE_BYTES = 512 * 1024
+INFO_REQUEST_TIMEOUT = (5, 15)
+info_http_client = HttpClient(timeout=INFO_REQUEST_TIMEOUT, retries=0)
 
 
 def normalize_base_url(raw: str | None) -> str:
@@ -98,11 +101,14 @@ def _request(
     json_body: Any = None,
     timeout: tuple[float, float] = (8, 45),
     max_response_bytes: int | None = None,
+    client: Any = None,
+    response_limit_message: str = "响应超过大小上限",
 ) -> dict[str, Any]:
     url = f"{base_url.rstrip('/')}{path}"
     headers = _build_headers(mode, api_user_id, secret, base_url)
     try:
-        resp = http_client.request(
+        request_client = client or http_client
+        resp = request_client.request(
             method,
             url,
             timeout=timeout,
@@ -138,13 +144,13 @@ def _request(
             except (AttributeError, TypeError, ValueError):
                 content_length = 0
             if content_length > limit:
-                return {"_error": "签到响应超过 1 MiB 上限", "_raw": ""}
+                return {"_error": response_limit_message, "_raw": ""}
             content = bytearray()
             for chunk in resp.iter_content(chunk_size=64 * 1024):
                 if not chunk:
                     continue
                 if len(content) + len(chunk) > limit:
-                    return {"_error": "签到响应超过 1 MiB 上限", "_raw": ""}
+                    return {"_error": response_limit_message, "_raw": ""}
                 content.extend(chunk)
             text = bytes(content).decode(getattr(resp, "encoding", None) or "utf-8", errors="replace").strip()
         if not text:
@@ -166,7 +172,18 @@ def _request(
 
 
 def fetch_user_self(mode: str, api_user_id: str, secret: str, base_url: str) -> dict[str, Any]:
-    data = _request("GET", base_url, "/api/user/self", mode=mode, api_user_id=api_user_id, secret=secret)
+    data = _request(
+        "GET",
+        base_url,
+        "/api/user/self",
+        mode=mode,
+        api_user_id=api_user_id,
+        secret=secret,
+        timeout=INFO_REQUEST_TIMEOUT,
+        max_response_bytes=MAX_INFO_RESPONSE_BYTES,
+        client=info_http_client,
+        response_limit_message="用户信息响应超过 512 KiB 上限",
+    )
     if data.get("_error"):
         return data
     if data.get("success") is False and data.get("message"):
@@ -183,6 +200,7 @@ def do_checkin(mode: str, api_user_id: str, secret: str, base_url: str) -> dict[
         api_user_id=api_user_id,
         secret=secret,
         max_response_bytes=MAX_CHECKIN_RESPONSE_BYTES,
+        response_limit_message="签到响应超过 1 MiB 上限",
     )
     if data.get("_error"):
         return data
@@ -224,6 +242,31 @@ def format_user_info_block(index: int, acc: dict[str, Any], data: dict[str, Any]
     lines.append(f"消耗：{bytes_to_human(used)}")
     lines.append(f"次数：{req_count}")
     return "\n".join(lines)
+
+
+def format_user_info_reply(blocks: Iterable[str], *, max_bytes: int = 64 * 1024) -> str:
+    title = "【NewAPI 用户信息】"
+    notice = "部分用户信息因消息长度限制未展示。"
+    accepted: list[str] = []
+    reply_bytes = len((title + "\n\n").encode("utf-8"))
+    omitted = False
+
+    for block in blocks:
+        block_bytes = len((block + "\n\n").encode("utf-8"))
+        if not omitted and reply_bytes + block_bytes <= max_bytes:
+            accepted.append(block)
+            reply_bytes += block_bytes
+        else:
+            omitted = True
+
+    if omitted:
+        notice_bytes = len(notice.encode("utf-8"))
+        while accepted and reply_bytes + notice_bytes > max_bytes:
+            removed = accepted.pop()
+            reply_bytes -= len((removed + "\n\n").encode("utf-8"))
+        accepted.append(notice)
+
+    return "\n\n".join([title, *accepted]).strip()
 
 
 def format_checkin_block(index: int, acc: dict[str, Any], data: dict[str, Any]) -> str:
