@@ -1,22 +1,16 @@
 import asyncio
-from pathlib import Path
 
 from ....infrastructure.clock import SystemClock
 from ....infrastructure.random_source import SystemRandom
 from ....infrastructure.ids import UUIDGenerator
+from ....bootstrap.legacy import register_legacy_startup
 
 from ...on_compat import on_command
-from ...xiuxian_utils.json_store import load_json_file, save_json_file
 from nonebot.params import CommandArg
 
 from ..command import *
 from .game_utils import event_display_name, now_text
-
-# =========================
-# 数据目录（娱乐独立）
-# =========================
-HALF_TEN_ROOMS_PATH = Path(__file__).resolve().parent / "data" / "rooms"
-HALF_TEN_ROOMS_PATH.mkdir(parents=True, exist_ok=True)
+from ..room_store import entertainment_application
 
 # =========================
 # 游戏配置
@@ -174,32 +168,25 @@ class HalfTenGame:
 # 管理器
 # =========================
 class HalfTenRoomManager:
-    def __init__(self):
+    def __init__(self, application=entertainment_application):
         self.rooms: dict[str, HalfTenGame] = {}
-        self.load_rooms()
-
-    def _file(self, room_id: str):
-        return HALF_TEN_ROOMS_PATH / f"{room_id}.json"
+        self.application = application
 
     def load_rooms(self):
-        for f in HALF_TEN_ROOMS_PATH.glob("*.json"):
-            try:
-                data = load_json_file(f, {}, dict)
-                g = HalfTenGame.from_dict(data)
-                self.rooms[g.room_id] = g
-
-                # 重建用户状态
-                if g.status == "waiting":
-                    for uid in g.players:
-                        user_half_status[uid] = g.room_id
-            except Exception:
-                continue
+        self.rooms.clear()
+        user_half_status.clear()
+        for data in self.application.room_states("half_ten"):
+            game = HalfTenGame.from_dict(data)
+            self.rooms[game.room_id] = game
+            if game.status == "waiting":
+                for uid in game.players:
+                    user_half_status[uid] = game.room_id
 
     def save_room(self, room_id: str):
         g = self.rooms.get(room_id)
         if not g:
             return
-        save_json_file(self._file(room_id), g.to_dict(), indent=2)
+        self.application.save_room_state("half_ten", room_id, g.to_dict())
 
     def create_room(self, room_id: str, creator_id: str, creator_name: str):
         if room_id in self.rooms:
@@ -239,9 +226,7 @@ class HalfTenRoomManager:
 
         self.rooms.pop(room_id, None)
 
-        fp = self._file(room_id)
-        if fp.exists():
-            fp.unlink()
+        self.application.delete_room_state("half_ten", room_id)
 
         if room_id in half_timeout_tasks:
             half_timeout_tasks[room_id].cancel()
@@ -306,6 +291,11 @@ class HalfTenRoomManager:
 
 
 half_manager = HalfTenRoomManager()
+
+
+@register_legacy_startup
+def restore_half_ten_rooms() -> None:
+    half_manager.load_rooms()
 
 
 # =========================

@@ -1439,15 +1439,15 @@
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/gomoku.py:451 gomoku_help = on_command('五子棋帮助') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/gomoku.py:753 _ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/gomoku.py:442 gomoku_help = on_command('五子棋帮助') -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/gomoku.py:744 _ -> legacy downstream effect not closed in this frozen item"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/gomoku.py:451",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/gomoku.py:753"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/gomoku.py:442",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/gomoku.py:744"
       ],
       "source_declaration_found": true,
       "source": {
@@ -2588,22 +2588,26 @@
       "id": "command:entertainment:加入五子棋",
       "kind": "commands",
       "entry": "entertainment:加入五子棋 (aliases: )",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "Game state is persisted by the feature-owned SQL room repository and restored at startup from a one-time legacy JSON import. The legacy files are retained. Room snapshots do not have event-level operation-ID replay receipts, and timeout tasks are not rearmed on restart.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/gomoku.py:454 gomoku_join = on_command('加入五子棋') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/gomoku.py:535 _ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/gomoku.py:445 gomoku_join = on_command('加入五子棋') -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/gomoku.py:526 _ -> GomokuRoomManager.join_room/save_room -> EntertainmentApplication.save_room_state -> EntertainmentRoomSqlRepository.save_state -> entertainment_game_rooms",
+        "GomokuRoomManager.load_rooms -> EntertainmentApplication.room_states -> EntertainmentRoomSqlRepository.list_states -> SELECT from entertainment_game_rooms"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/gomoku.py:454",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/gomoku.py:535"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/gomoku.py:445",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/gomoku.py:526",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/gomoku.py:192-195",
+        "nonebot_plugin_xiuxian_2/features/entertainment/application.py:25-32",
+        "nonebot_plugin_xiuxian_2/features/entertainment/room_repository.py:91-138",
+        "nonebot_plugin_xiuxian_2/features/entertainment/migrations.py:161-203"
       ],
       "source_declaration_found": true,
       "source": {
@@ -2615,22 +2619,26 @@
       "id": "command:entertainment:加入十点半",
       "kind": "commands",
       "entry": "entertainment:加入十点半 (aliases: )",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "Game state is persisted by the feature-owned SQL room repository and restored at startup from a one-time legacy JSON import. The legacy files are retained. Room snapshots do not have event-level operation-ID replay receipts, and timeout tasks are not rearmed on restart.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/half_ten.py:387 half_ten_join = on_command('加入十点半') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/half_ten.py:427 _ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/half_ten.py:377 half_ten_join = on_command('加入十点半') -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/half_ten.py:417 _ -> HalfTenRoomManager.join_room/save_room -> EntertainmentApplication.save_room_state -> EntertainmentRoomSqlRepository.save_state -> entertainment_game_rooms",
+        "HalfTenRoomManager.load_rooms -> EntertainmentApplication.room_states -> EntertainmentRoomSqlRepository.list_states -> SELECT from entertainment_game_rooms"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/half_ten.py:387",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/half_ten.py:427"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/half_ten.py:377",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/half_ten.py:417",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/half_ten.py:296-298",
+        "nonebot_plugin_xiuxian_2/features/entertainment/application.py:25-32",
+        "nonebot_plugin_xiuxian_2/features/entertainment/room_repository.py:91-138",
+        "nonebot_plugin_xiuxian_2/features/entertainment/migrations.py:161-203"
       ],
       "source_declaration_found": true,
       "source": {
@@ -2750,22 +2758,26 @@
       "id": "command:entertainment:十点半信息",
       "kind": "commands",
       "entry": "entertainment:十点半信息 (aliases: )",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "Game state is persisted by the feature-owned SQL room repository and restored at startup from a one-time legacy JSON import. The legacy files are retained. Room snapshots do not have event-level operation-ID replay receipts, and timeout tasks are not rearmed on restart.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/half_ten.py:390 half_ten_info = on_command('十点半信息') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/half_ten.py:513 _ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/half_ten.py:380 half_ten_info = on_command('十点半信息') -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/half_ten.py:503 _ -> HalfTenRoomManager.get_room -> state restored by EntertainmentApplication.room_states -> EntertainmentRoomSqlRepository.list_states -> entertainment_game_rooms",
+        "HalfTenRoomManager.load_rooms -> EntertainmentApplication.room_states -> EntertainmentRoomSqlRepository.list_states -> SELECT from entertainment_game_rooms"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/half_ten.py:390",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/half_ten.py:513"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/half_ten.py:380",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/half_ten.py:503",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/half_ten.py:296-298",
+        "nonebot_plugin_xiuxian_2/features/entertainment/application.py:25-32",
+        "nonebot_plugin_xiuxian_2/features/entertainment/room_repository.py:91-138",
+        "nonebot_plugin_xiuxian_2/features/entertainment/migrations.py:161-203"
       ],
       "source_declaration_found": true,
       "source": {
@@ -2784,15 +2796,15 @@
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/half_ten.py:391 half_ten_help = on_command('十点半帮助') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/half_ten.py:550 _ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/half_ten.py:381 half_ten_help = on_command('十点半帮助') -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/half_ten.py:540 _ -> legacy downstream effect not closed in this frozen item"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/half_ten.py:391",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/half_ten.py:550"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/half_ten.py:381",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/half_ten.py:540"
       ],
       "source_declaration_found": true,
       "source": {
@@ -3857,22 +3869,26 @@
       "id": "command:entertainment:开始五子棋",
       "kind": "commands",
       "entry": "entertainment:开始五子棋 (aliases: )",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "Game state is persisted by the feature-owned SQL room repository and restored at startup from a one-time legacy JSON import. The legacy files are retained. Room snapshots do not have event-level operation-ID replay receipts, and timeout tasks are not rearmed on restart.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/gomoku.py:452 gomoku_start = on_command('开始五子棋') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/gomoku.py:466 _ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/gomoku.py:443 gomoku_start = on_command('开始五子棋') -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/gomoku.py:457 _ -> GomokuRoomManager.create_room/save_room -> EntertainmentApplication.save_room_state -> EntertainmentRoomSqlRepository.save_state -> entertainment_game_rooms",
+        "GomokuRoomManager.load_rooms -> EntertainmentApplication.room_states -> EntertainmentRoomSqlRepository.list_states -> SELECT from entertainment_game_rooms"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/gomoku.py:452",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/gomoku.py:466"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/gomoku.py:443",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/gomoku.py:457",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/gomoku.py:192-195",
+        "nonebot_plugin_xiuxian_2/features/entertainment/application.py:25-32",
+        "nonebot_plugin_xiuxian_2/features/entertainment/room_repository.py:91-138",
+        "nonebot_plugin_xiuxian_2/features/entertainment/migrations.py:161-203"
       ],
       "source_declaration_found": true,
       "source": {
@@ -3884,22 +3900,26 @@
       "id": "command:entertainment:开始十点半",
       "kind": "commands",
       "entry": "entertainment:开始十点半 (aliases: )",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "Game state is persisted by the feature-owned SQL room repository and restored at startup from a one-time legacy JSON import. The legacy files are retained. Room snapshots do not have event-level operation-ID replay receipts, and timeout tasks are not rearmed on restart.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/half_ten.py:386 half_ten_start = on_command('开始十点半') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/half_ten.py:395 _ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/half_ten.py:376 half_ten_start = on_command('开始十点半') -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/half_ten.py:385 _ -> HalfTenRoomManager.create_room/save_room -> EntertainmentApplication.save_room_state -> EntertainmentRoomSqlRepository.save_state -> entertainment_game_rooms",
+        "HalfTenRoomManager.load_rooms -> EntertainmentApplication.room_states -> EntertainmentRoomSqlRepository.list_states -> SELECT from entertainment_game_rooms"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/half_ten.py:386",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/half_ten.py:395"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/half_ten.py:376",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/half_ten.py:385",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/half_ten.py:296-298",
+        "nonebot_plugin_xiuxian_2/features/entertainment/application.py:25-32",
+        "nonebot_plugin_xiuxian_2/features/entertainment/room_repository.py:91-138",
+        "nonebot_plugin_xiuxian_2/features/entertainment/migrations.py:161-203"
       ],
       "source_declaration_found": true,
       "source": {
@@ -3911,22 +3931,26 @@
       "id": "command:entertainment:开始单人五子棋",
       "kind": "commands",
       "entry": "entertainment:开始单人五子棋 (aliases: )",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "Game state is persisted by the feature-owned SQL room repository and restored at startup from a one-time legacy JSON import. The legacy files are retained. Room snapshots do not have event-level operation-ID replay receipts, and timeout tasks are not rearmed on restart.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/gomoku.py:453 gomoku_single = on_command('开始单人五子棋') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/gomoku.py:498 _ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/gomoku.py:444 gomoku_single = on_command('开始单人五子棋') -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/gomoku.py:489 _ -> GomokuRoomManager.create_room/save_room -> EntertainmentApplication.save_room_state -> EntertainmentRoomSqlRepository.save_state -> entertainment_game_rooms",
+        "GomokuRoomManager.load_rooms -> EntertainmentApplication.room_states -> EntertainmentRoomSqlRepository.list_states -> SELECT from entertainment_game_rooms"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/gomoku.py:453",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/gomoku.py:498"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/gomoku.py:444",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/gomoku.py:489",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/gomoku.py:192-195",
+        "nonebot_plugin_xiuxian_2/features/entertainment/application.py:25-32",
+        "nonebot_plugin_xiuxian_2/features/entertainment/room_repository.py:91-138",
+        "nonebot_plugin_xiuxian_2/features/entertainment/migrations.py:161-203"
       ],
       "source_declaration_found": true,
       "source": {
@@ -3965,22 +3989,26 @@
       "id": "command:entertainment:开始扫雷",
       "kind": "commands",
       "entry": "entertainment:开始扫雷 (aliases: )",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "Game state is persisted by the feature-owned SQL room repository and restored at startup from a one-time legacy JSON import. The legacy files are retained. Room snapshots do not have event-level operation-ID replay receipts, and timeout tasks are not rearmed on restart.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/minesweeper.py:20 ms_start = on_command('开始扫雷') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/minesweeper.py:29 _ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/minesweeper.py:29 _ -> MinesweeperManager.create/save -> EntertainmentApplication.save_room_state -> EntertainmentRoomSqlRepository.save_state -> entertainment_game_rooms",
+        "MinesweeperManager.load_rooms -> EntertainmentApplication.room_states -> EntertainmentRoomSqlRepository.list_states -> SELECT from entertainment_game_rooms"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/minesweeper.py:20",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/minesweeper.py:29"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/minesweeper.py:29",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/minesweeper.py:305-307",
+        "nonebot_plugin_xiuxian_2/features/entertainment/application.py:25-32",
+        "nonebot_plugin_xiuxian_2/features/entertainment/room_repository.py:91-138",
+        "nonebot_plugin_xiuxian_2/features/entertainment/migrations.py:161-203"
       ],
       "source_declaration_found": true,
       "source": {
@@ -4406,22 +4434,26 @@
       "id": "command:entertainment:扫雷信息",
       "kind": "commands",
       "entry": "entertainment:扫雷信息 (aliases: )",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "Game state is persisted by the feature-owned SQL room repository and restored at startup from a one-time legacy JSON import. The legacy files are retained. Room snapshots do not have event-level operation-ID replay receipts, and timeout tasks are not rearmed on restart.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/minesweeper.py:23 ms_info = on_command('扫雷信息') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/minesweeper.py:146 _ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/minesweeper.py:146 _ -> MinesweeperManager.get_user_game -> state restored by EntertainmentApplication.room_states -> EntertainmentRoomSqlRepository.list_states -> entertainment_game_rooms",
+        "MinesweeperManager.load_rooms -> EntertainmentApplication.room_states -> EntertainmentRoomSqlRepository.list_states -> SELECT from entertainment_game_rooms"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/minesweeper.py:23",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/minesweeper.py:146"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/minesweeper.py:146",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/minesweeper.py:305-307",
+        "nonebot_plugin_xiuxian_2/features/entertainment/application.py:25-32",
+        "nonebot_plugin_xiuxian_2/features/entertainment/room_repository.py:91-138",
+        "nonebot_plugin_xiuxian_2/features/entertainment/migrations.py:161-203"
       ],
       "source_declaration_found": true,
       "source": {
@@ -5119,22 +5151,26 @@
       "id": "command:entertainment:标记",
       "kind": "commands",
       "entry": "entertainment:标记 (aliases: )",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "Game state is persisted by the feature-owned SQL room repository and restored at startup from a one-time legacy JSON import. The legacy files are retained. Room snapshots do not have event-level operation-ID replay receipts, and timeout tasks are not rearmed on restart.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/minesweeper.py:22 ms_flag = on_command('标记') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/minesweeper.py:120 _ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/minesweeper.py:120 _ -> MinesweeperManager.save -> EntertainmentApplication.save_room_state -> EntertainmentRoomSqlRepository.save_state -> entertainment_game_rooms",
+        "MinesweeperManager.load_rooms -> EntertainmentApplication.room_states -> EntertainmentRoomSqlRepository.list_states -> SELECT from entertainment_game_rooms"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/minesweeper.py:22",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/minesweeper.py:120"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/minesweeper.py:120",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/minesweeper.py:305-307",
+        "nonebot_plugin_xiuxian_2/features/entertainment/application.py:25-32",
+        "nonebot_plugin_xiuxian_2/features/entertainment/room_repository.py:91-138",
+        "nonebot_plugin_xiuxian_2/features/entertainment/migrations.py:161-203"
       ],
       "source_declaration_found": true,
       "source": {
@@ -5227,22 +5263,26 @@
       "id": "command:entertainment:棋局信息",
       "kind": "commands",
       "entry": "entertainment:棋局信息 (aliases: )",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "Game state is persisted by the feature-owned SQL room repository and restored at startup from a one-time legacy JSON import. The legacy files are retained. Room snapshots do not have event-level operation-ID replay receipts, and timeout tasks are not rearmed on restart.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/gomoku.py:457 gomoku_info = on_command('棋局信息') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/gomoku.py:705 _ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/gomoku.py:448 gomoku_info = on_command('棋局信息') -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/gomoku.py:696 _ -> GomokuRoomManager.get_room -> state restored by EntertainmentApplication.room_states -> EntertainmentRoomSqlRepository.list_states -> entertainment_game_rooms",
+        "GomokuRoomManager.load_rooms -> EntertainmentApplication.room_states -> EntertainmentRoomSqlRepository.list_states -> SELECT from entertainment_game_rooms"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/gomoku.py:457",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/gomoku.py:705"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/gomoku.py:448",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/gomoku.py:696",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/gomoku.py:192-195",
+        "nonebot_plugin_xiuxian_2/features/entertainment/application.py:25-32",
+        "nonebot_plugin_xiuxian_2/features/entertainment/room_repository.py:91-138",
+        "nonebot_plugin_xiuxian_2/features/entertainment/migrations.py:161-203"
       ],
       "source_declaration_found": true,
       "source": {
@@ -7238,22 +7278,26 @@
       "id": "command:entertainment:结束扫雷",
       "kind": "commands",
       "entry": "entertainment:结束扫雷 (aliases: )",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "Game state is persisted by the feature-owned SQL room repository and restored at startup from a one-time legacy JSON import. The legacy files are retained. Room snapshots do not have event-level operation-ID replay receipts, and timeout tasks are not rearmed on restart.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/minesweeper.py:24 ms_end = on_command('结束扫雷') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/minesweeper.py:167 _ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/minesweeper.py:167 _ -> MinesweeperManager.delete -> EntertainmentApplication.delete_room_state -> EntertainmentRoomSqlRepository.delete_state -> entertainment_game_rooms",
+        "MinesweeperManager.load_rooms -> EntertainmentApplication.room_states -> EntertainmentRoomSqlRepository.list_states -> SELECT from entertainment_game_rooms"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/minesweeper.py:24",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/minesweeper.py:167"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/minesweeper.py:167",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/minesweeper.py:305-307",
+        "nonebot_plugin_xiuxian_2/features/entertainment/application.py:25-32",
+        "nonebot_plugin_xiuxian_2/features/entertainment/room_repository.py:91-138",
+        "nonebot_plugin_xiuxian_2/features/entertainment/migrations.py:161-203"
       ],
       "source_declaration_found": true,
       "source": {
@@ -7292,22 +7336,26 @@
       "id": "command:entertainment:结算十点半",
       "kind": "commands",
       "entry": "entertainment:结算十点半 (aliases: )",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "Game state is persisted by the feature-owned SQL room repository and restored at startup from a one-time legacy JSON import. The legacy files are retained. Room snapshots do not have event-level operation-ID replay receipts, and timeout tasks are not rearmed on restart.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/half_ten.py:388 half_ten_close = on_command('结算十点半') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/half_ten.py:476 _ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/half_ten.py:378 half_ten_close = on_command('结算十点半') -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/half_ten.py:466 _ -> HalfTenRoomManager.manual_settle/save_room/delete_room -> EntertainmentApplication.save_room_state/delete_room_state -> EntertainmentRoomSqlRepository -> entertainment_game_rooms",
+        "HalfTenRoomManager.load_rooms -> EntertainmentApplication.room_states -> EntertainmentRoomSqlRepository.list_states -> SELECT from entertainment_game_rooms"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/half_ten.py:388",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/half_ten.py:476"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/half_ten.py:378",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/half_ten.py:466",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/half_ten.py:296-298",
+        "nonebot_plugin_xiuxian_2/features/entertainment/application.py:25-32",
+        "nonebot_plugin_xiuxian_2/features/entertainment/room_repository.py:91-138",
+        "nonebot_plugin_xiuxian_2/features/entertainment/migrations.py:161-203"
       ],
       "source_declaration_found": true,
       "source": {
@@ -7400,22 +7448,26 @@
       "id": "command:entertainment:翻开",
       "kind": "commands",
       "entry": "entertainment:翻开 (aliases: )",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "Game state is persisted by the feature-owned SQL room repository and restored at startup from a one-time legacy JSON import. The legacy files are retained. Room snapshots do not have event-level operation-ID replay receipts, and timeout tasks are not rearmed on restart.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/minesweeper.py:21 ms_open = on_command('翻开') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/minesweeper.py:67 _ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/minesweeper.py:67 _ -> MinesweeperManager.save/delete -> EntertainmentApplication.save_room_state/delete_room_state -> EntertainmentRoomSqlRepository -> entertainment_game_rooms",
+        "MinesweeperManager.load_rooms -> EntertainmentApplication.room_states -> EntertainmentRoomSqlRepository.list_states -> SELECT from entertainment_game_rooms"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/minesweeper.py:21",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/minesweeper.py:67"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/minesweeper.py:67",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/minesweeper.py:305-307",
+        "nonebot_plugin_xiuxian_2/features/entertainment/application.py:25-32",
+        "nonebot_plugin_xiuxian_2/features/entertainment/room_repository.py:91-138",
+        "nonebot_plugin_xiuxian_2/features/entertainment/migrations.py:161-203"
       ],
       "source_declaration_found": true,
       "source": {
@@ -7562,22 +7614,26 @@
       "id": "command:entertainment:落子",
       "kind": "commands",
       "entry": "entertainment:落子 (aliases: )",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "Game state is persisted by the feature-owned SQL room repository and restored at startup from a one-time legacy JSON import. The legacy files are retained. Room snapshots do not have event-level operation-ID replay receipts, and timeout tasks are not rearmed on restart.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/gomoku.py:455 gomoku_move = on_command('落子') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/gomoku.py:574 _ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/gomoku.py:446 gomoku_move = on_command('落子') -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/gomoku.py:565 _ -> GomokuRoomManager.save_room/delete_room -> EntertainmentApplication.save_room_state/delete_room_state -> EntertainmentRoomSqlRepository -> entertainment_game_rooms",
+        "GomokuRoomManager.load_rooms -> EntertainmentApplication.room_states -> EntertainmentRoomSqlRepository.list_states -> SELECT from entertainment_game_rooms"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/gomoku.py:455",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/gomoku.py:574"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/gomoku.py:446",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/gomoku.py:565",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/gomoku.py:192-195",
+        "nonebot_plugin_xiuxian_2/features/entertainment/application.py:25-32",
+        "nonebot_plugin_xiuxian_2/features/entertainment/room_repository.py:91-138",
+        "nonebot_plugin_xiuxian_2/features/entertainment/migrations.py:161-203"
       ],
       "source_declaration_found": true,
       "source": {
@@ -7940,22 +7996,26 @@
       "id": "command:entertainment:认输",
       "kind": "commands",
       "entry": "entertainment:认输 (aliases: )",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "Game state is persisted by the feature-owned SQL room repository and restored at startup from a one-time legacy JSON import. The legacy files are retained. Room snapshots do not have event-level operation-ID replay receipts, and timeout tasks are not rearmed on restart.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/gomoku.py:456 gomoku_surrender = on_command('认输') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/gomoku.py:676 _ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/gomoku.py:447 gomoku_surrender = on_command('认输') -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/gomoku.py:667 _ -> GomokuRoomManager.delete_room -> EntertainmentApplication.delete_room_state -> EntertainmentRoomSqlRepository.delete_state -> entertainment_game_rooms",
+        "GomokuRoomManager.load_rooms -> EntertainmentApplication.room_states -> EntertainmentRoomSqlRepository.list_states -> SELECT from entertainment_game_rooms"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/gomoku.py:456",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/gomoku.py:676"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/gomoku.py:447",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/gomoku.py:667",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/gomoku.py:192-195",
+        "nonebot_plugin_xiuxian_2/features/entertainment/application.py:25-32",
+        "nonebot_plugin_xiuxian_2/features/entertainment/room_repository.py:91-138",
+        "nonebot_plugin_xiuxian_2/features/entertainment/migrations.py:161-203"
       ],
       "source_declaration_found": true,
       "source": {
@@ -8264,22 +8324,26 @@
       "id": "command:entertainment:退出五子棋",
       "kind": "commands",
       "entry": "entertainment:退出五子棋 (aliases: )",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "Game state is persisted by the feature-owned SQL room repository and restored at startup from a one-time legacy JSON import. The legacy files are retained. Room snapshots do not have event-level operation-ID replay receipts, and timeout tasks are not rearmed on restart.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/gomoku.py:458 gomoku_quit = on_command('退出五子棋') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/gomoku.py:746 _ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/gomoku.py:449 gomoku_quit = on_command('退出五子棋') -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/gomoku.py:737 _ -> GomokuRoomManager.quit_room/delete_room -> EntertainmentApplication.delete_room_state -> EntertainmentRoomSqlRepository.delete_state -> entertainment_game_rooms",
+        "GomokuRoomManager.load_rooms -> EntertainmentApplication.room_states -> EntertainmentRoomSqlRepository.list_states -> SELECT from entertainment_game_rooms"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/gomoku.py:458",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/gomoku.py:746"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/gomoku.py:449",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/gomoku.py:737",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/gomoku.py:192-195",
+        "nonebot_plugin_xiuxian_2/features/entertainment/application.py:25-32",
+        "nonebot_plugin_xiuxian_2/features/entertainment/room_repository.py:91-138",
+        "nonebot_plugin_xiuxian_2/features/entertainment/migrations.py:161-203"
       ],
       "source_declaration_found": true,
       "source": {
@@ -8291,22 +8355,26 @@
       "id": "command:entertainment:退出十点半",
       "kind": "commands",
       "entry": "entertainment:退出十点半 (aliases: )",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "Game state is persisted by the feature-owned SQL room repository and restored at startup from a one-time legacy JSON import. The legacy files are retained. Room snapshots do not have event-level operation-ID replay receipts, and timeout tasks are not rearmed on restart.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/half_ten.py:389 half_ten_quit = on_command('退出十点半') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/half_ten.py:506 _ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/half_ten.py:379 half_ten_quit = on_command('退出十点半') -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/half_ten.py:496 _ -> HalfTenRoomManager.quit_room/delete_room -> EntertainmentApplication.delete_room_state -> EntertainmentRoomSqlRepository.delete_state -> entertainment_game_rooms",
+        "HalfTenRoomManager.load_rooms -> EntertainmentApplication.room_states -> EntertainmentRoomSqlRepository.list_states -> SELECT from entertainment_game_rooms"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/half_ten.py:389",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/half_ten.py:506"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/half_ten.py:379",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/half_ten.py:496",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/half_ten.py:296-298",
+        "nonebot_plugin_xiuxian_2/features/entertainment/application.py:25-32",
+        "nonebot_plugin_xiuxian_2/features/entertainment/room_repository.py:91-138",
+        "nonebot_plugin_xiuxian_2/features/entertainment/migrations.py:161-203"
       ],
       "source_declaration_found": true,
       "source": {

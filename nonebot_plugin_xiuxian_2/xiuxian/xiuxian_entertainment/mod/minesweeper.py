@@ -1,17 +1,17 @@
 import asyncio
-from pathlib import Path
 from io import BytesIO
 from PIL import Image, ImageDraw, ImageFont
 
 from ....infrastructure.clock import SystemClock
 from ....infrastructure.random_source import SystemRandom
 from ....infrastructure.ids import UUIDGenerator
+from ....bootstrap.legacy import register_legacy_startup
 
 from ...on_compat import on_command
-from ...xiuxian_utils.json_store import load_json_file, save_json_file
 from nonebot.params import CommandArg
 from ..command import *
 from .game_utils import event_display_name, format_board_coord, now_text, parse_board_coord
+from ..room_store import entertainment_application
 
 runtime_clock = SystemClock()
 runtime_random = SystemRandom()
@@ -197,9 +197,6 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 # =========================
 # 数据目录
 # =========================
-MINESWEEPER_DATA_PATH = Path(__file__).resolve().parent / "data" / "rooms"
-MINESWEEPER_DATA_PATH.mkdir(parents=True, exist_ok=True)
-
 # 用户状态：每个用户仅一个扫雷局
 user_minesweeper_status = {}   # {user_id: game_id}
 minesweeper_timeout_tasks = {} # {game_id: task}
@@ -252,38 +249,34 @@ class MinesweeperGame:
 
 
 class MinesweeperManager:
-    def __init__(self):
+    def __init__(self, application=entertainment_application):
         self.games = {}
-        self._load()
-
-    def _file(self, game_id: str):
-        return MINESWEEPER_DATA_PATH / f"{game_id}.json"
+        self.application = application
 
     def _load(self):
-        for f in MINESWEEPER_DATA_PATH.glob("*.json"):
-            try:
-                data = load_json_file(f, {}, dict)
-                game = MinesweeperGame.from_dict(data)
-                self.games[game.game_id] = game
-                if game.status == "playing":
-                    user_minesweeper_status[game.user_id] = game.game_id
-            except Exception:
-                continue
+        self.games.clear()
+        user_minesweeper_status.clear()
+        for data in self.application.room_states("minesweeper"):
+            game = MinesweeperGame.from_dict(data)
+            self.games[game.game_id] = game
+            if game.status == "playing":
+                user_minesweeper_status[game.user_id] = game.game_id
+
+    def load_rooms(self):
+        self._load()
 
     def save(self, game_id: str):
         game = self.games.get(game_id)
         if not game:
             return
-        save_json_file(self._file(game_id), game.to_dict(), indent=2)
+        self.application.save_room_state("minesweeper", game_id, game.to_dict())
 
     def delete(self, game_id: str):
         g = self.games.get(game_id)
         if g:
             user_minesweeper_status.pop(g.user_id, None)
         self.games.pop(game_id, None)
-        fp = self._file(game_id)
-        if fp.exists():
-            fp.unlink()
+        self.application.delete_room_state("minesweeper", game_id)
 
     def create(self, user_id: str, user_name: str, w: int, h: int, mines: int):
         if str(user_id) in user_minesweeper_status:
@@ -307,6 +300,11 @@ class MinesweeperManager:
 
 
 ms_manager = MinesweeperManager()
+
+
+@register_legacy_startup
+def restore_minesweeper_rooms() -> None:
+    ms_manager.load_rooms()
 
 
 def parse_coord(s: str):

@@ -1,27 +1,21 @@
 import asyncio
-from pathlib import Path
 from io import BytesIO
 from datetime import datetime
 from PIL import Image, ImageDraw, ImageFont
 
 from ....infrastructure.clock import SystemClock
 from ....infrastructure.ids import UUIDGenerator
+from ....bootstrap.legacy import register_legacy_startup
 
 from ...on_compat import on_command
-from ...xiuxian_utils.json_store import load_json_file, save_json_file
 from nonebot.params import CommandArg
 
 from ..command import *
 from .game_utils import event_display_name, format_board_coord, now_text, parse_board_coord
+from ..room_store import entertainment_application
 
 runtime_clock = SystemClock()
 runtime_ids = UUIDGenerator()
-
-# =========================
-# 数据目录（娱乐独立）
-# =========================
-GOMOKU_ROOMS_PATH = Path(__file__).resolve().parent / "data" / "rooms"
-GOMOKU_ROOMS_PATH.mkdir(parents=True, exist_ok=True)
 
 # =========================
 # 棋盘配置
@@ -102,31 +96,25 @@ class GomokuGame:
 
 
 class GomokuRoomManager:
-    def __init__(self):
+    def __init__(self, application=entertainment_application):
         self.rooms: dict[str, GomokuGame] = {}
-        self.load_rooms()
+        self.application = application
 
     def load_rooms(self):
-        for f in GOMOKU_ROOMS_PATH.glob("*.json"):
-            try:
-                data = load_json_file(f, {}, dict)
-                room_id = f.stem
-                game = GomokuGame.from_dict(data)
-                self.rooms[room_id] = game
-
-                # 重建用户状态
-                for uid in [game.player_black, game.player_white]:
-                    if uid and uid != "__AI__":
-                        user_room_status[uid] = room_id
-            except Exception:
-                continue
+        self.rooms.clear()
+        user_room_status.clear()
+        for data in self.application.room_states("gomoku"):
+            game = GomokuGame.from_dict(data)
+            self.rooms[game.room_id] = game
+            for uid in [game.player_black, game.player_white]:
+                if uid and uid != "__AI__":
+                    user_room_status[uid] = game.room_id
 
     def save_room(self, room_id: str):
         game = self.rooms.get(room_id)
         if not game:
             return
-        fp = GOMOKU_ROOMS_PATH / f"{room_id}.json"
-        save_json_file(fp, game.to_dict(), indent=2)
+        self.application.save_room_state("gomoku", room_id, game.to_dict())
 
     def create_room(self, room_id: str, creator_id: str, creator_name: str):
         if room_id in self.rooms:
@@ -175,9 +163,7 @@ class GomokuRoomManager:
                     user_room_status.pop(uid, None)
         self.rooms.pop(room_id, None)
 
-        fp = GOMOKU_ROOMS_PATH / f"{room_id}.json"
-        if fp.exists():
-            fp.unlink()
+        self.application.delete_room_state("gomoku", room_id)
 
         # 清任务
         if room_id in room_timeout_tasks:
@@ -201,6 +187,11 @@ class GomokuRoomManager:
 
 
 room_manager = GomokuRoomManager()
+
+
+@register_legacy_startup
+def restore_gomoku_rooms() -> None:
+    room_manager.load_rooms()
 
 
 # =========================

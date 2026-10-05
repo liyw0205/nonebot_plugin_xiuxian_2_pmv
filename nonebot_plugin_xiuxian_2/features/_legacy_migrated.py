@@ -81,7 +81,7 @@ from .dufang.migrations import (
     apply_dufang_share,
     apply_dufang_share_player,
 )
-from .entertainment.migrations import apply_entertainment
+from .entertainment.migrations import apply_entertainment, apply_entertainment_rooms
 from .fusion.migrations import apply_fusion
 from .impart.migrations import apply_impart
 from .impart_pk.migrations import apply_impart_pk
@@ -139,6 +139,7 @@ MIGRATIONS = tuple(
          ("legacy.dufang.004", apply_dufang_bet_payout),
          ("legacy.dufang.005", apply_dufang_resolution),
          ("legacy.dufang.006", apply_dufang_player_receipts),
+         ("legacy.entertainment.002", apply_entertainment_rooms),
          ("legacy.illusion.001", apply_illusion)),
         key=lambda item: item[0],
     )

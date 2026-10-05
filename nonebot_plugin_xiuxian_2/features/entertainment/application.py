@@ -4,6 +4,7 @@ from pathlib import Path
 
 from .._migrated_application import MigratedFeatureApplication
 from .repository import EntertainmentRepository
+from .room_repository import EntertainmentRoomSqlRepository
 from .schemas import NewApiAccountListResult, NewApiCheckinTargetsResult
 from .webdav_repository import WebDavRepository
 
@@ -14,10 +15,21 @@ class EntertainmentApplication(MigratedFeatureApplication):
         database: str | Path,
         *,
         repository: EntertainmentRepository | None = None,
+        room_repository: EntertainmentRoomSqlRepository | None = None,
         webdav_repository: WebDavRepository | None = None,
     ) -> None:
         super().__init__(database, feature="entertainment", repository=repository or EntertainmentRepository(database))
+        self.room_repository = room_repository or EntertainmentRoomSqlRepository(database)
         self.webdav_repository = webdav_repository or WebDavRepository()
+
+    def room_states(self, game_type: str):
+        return self.room_repository.list_states(game_type)
+
+    def save_room_state(self, game_type: str, room_id: str, state: dict):
+        self.room_repository.save_state(game_type, room_id, state)
+
+    def delete_room_state(self, game_type: str, room_id: str):
+        return self.room_repository.delete_state(game_type, room_id)
 
     def toggle_auto_checkin(self, *, operation_id: str, user_id: str, state_path: str | Path, index: int):
         return self.execute(operation_id=operation_id, user_id=user_id, payload={"action": "toggle_auto_checkin", "state_path": str(state_path), "index": int(index)})
