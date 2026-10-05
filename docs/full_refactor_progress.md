@@ -4,7 +4,7 @@
 
 **当前目标与范围**：暂停新增玩法/命令切片，只完成有限的“真实默认可达旧路径清单”。权威范围是 `docs/refactor_phase2_legacy_paths.json` 与 `docs/refactor_phase2_legacy_path_items.json`：496 个冻结身份，314 个旧命令、40 个旧调度 job、116 条旧 Flask route，以及 26 个细分/抑制/排除项。profile 是已初始化 NoneBot 的生产插件启动、默认环境；默认可达性来自源码静态导入闭包和注册/调用点证据，不宣称是 live runtime 实测，动态导入/条件注册/非命令 callback 必须标为限制或进 backlog。每项只标 `已迁移 / 允许保留的兼容路径 / 不可达 / 受阻` 并附调用图和源码位置。`scripts/phase2_legacy_path_gate.py --check` 只按冻结身份及状态计算 phase 2；inventory 漂移和清单外候选进入 backlog，不自动改变分母。范围变更必须显式评审、升级 `scope_id`、更新冻结 identity hash。P7 真实发布周期证据由 `scripts/refactor_completion_audit.py` 单独判定，不并入 phase 2。方案允许最多 2 名互不重叠的只读子代理复核入口/调用图、门禁/测试覆盖；子代理不改文件、不运行测试/导入/编译/恢复、不访问运行数据或凭据、不制造缓存。主线程整合并串行验证。磁盘低于 10 GiB 或 `MemAvailable` 低于 512 MiB 时停重任务；只清理确认归属且进程已退出的本轮临时产物，不清理持久回执、用户数据、运行库/WAL/SHM、正式备份、`.git`、`.venv` 或用户修改。
 
-**执行队列与提交约束**：以子插件为队列单位，不再按全局 blocker 列表逐入口跳转。开始一个 feature 前先列出其全部冻结项和共同数据 owner；插件内按共享 repository/UoW 分组，同一 handler 文件的读、写、帮助兼容分类尽量一次审完。除已记录的外部依赖外，当前 feature 的冻结项全部归类前不切到下一个 feature。每个 owner 组必须先通过聚焦回归、该 feature 门禁、冻结证据校验和 `git diff --check`，随后只暂存该组文件、提交并推送；验证未过时不留未完成工作区作为停靠点。Entertainment owner 队列为房间状态、外部查询/输出、NewAPI 共享状态、猜数 session、点歌和链接解析；截至 2026-10-06，六组均已闭合，Entertainment 清单中的 blocker 为 0。Training 本轮整组收口后，7 个训练命令和管理员重置均已归类，Training blocker 为 0。后续子插件按冻结范围和依赖顺序整组推进。完整审计作为周期性范围核对运行，不替代每组定向测试。
+**执行队列与提交约束**：以子插件为队列单位，不再按全局 blocker 列表逐入口跳转。开始一个 feature 前先列出其全部冻结项和共同数据 owner；插件内按共享 repository/UoW 分组，同一 handler 文件的读、写、帮助兼容分类尽量一次审完。除已记录的外部依赖外，当前 feature 的冻结项全部归类前不切到下一个 feature。每个 owner 组必须先通过聚焦回归、该 feature 门禁、冻结证据校验和 `git diff --check`，随后只暂存该组文件、提交并推送；验证未过时不留未完成工作区作为停靠点。Entertainment owner 队列为房间状态、外部查询/输出、NewAPI 共享状态、猜数 session、点歌和链接解析；截至 2026-10-06，六组均已闭合，Entertainment 清单中的 blocker 为 0。Training 本轮整组收口后，7 个训练命令和管理员重置均已归类，Training blocker 为 0。**当前下一插件为 Dongfu：先闭合其 12 个冻结命令的 owner 与证据分类，再进入 Map；不得按全局 blocker 排名跳到其它插件。**完整审计作为周期性范围核对运行，不替代每组定向测试。
 
 **执行偏差与纠正（2026-10-05，2026-10-06 更新）**：实际提交轨迹没有严格遵循上面的子插件队列：Entertainment 的 WebDAV 被拆成只读、绑定/删除、链接/文件多个提交，NewAPI 的账号列表与用户信息也分开提交；Entertainment 尚有 72 个 blocker 时已转去完成 Compensation。这些提交各自覆盖了不同的 I/O 边界，但在先盘清整个子插件 owner 后再批量收口这一点上，执行仍然偏向零散能力组，造成同一功能目录被多次触及、其它 Entertainment 入口迟迟未处理。纠正后的执行单位是完整 Entertainment 子插件：盘点范围为 13 个帮助/菜单、28 个外部查询/输出、17 个 JSON 游戏房间、6 个猜数 session、4 个点歌状态、4 个 NewAPI 命令及 1 个链接解析入口；关联的 Activity、Scheduler 和通用 Web routes 不归 Entertainment。2026-10-06 收尾后，上述 Entertainment 冻结项均已归类，feature 内 blocker 为 0；不为凑整组重复改写已完成实现，任何用户改动继续排除在暂存范围外。
 
@@ -3338,7 +3338,7 @@ Boss 旧 settlement transaction 的同事务时间戳写入仍是独立未迁移
   closed。`StoneContestService` 仍作为显式兼容 API 承载未迁移的 transfer/Web 边界，抢劫也仍
   走原兼容 service；本切片不代表 base/economy 整域完成。
 
-### 6.2 当前推进队列（2026-10-03）
+### 6.2 推进队列历史快照（2026-10-03）
 
 2026-10-02 已收口洞府背包写入审计及 compensation 礼包/兑换码 SQL cutover：定义、领取、删除和清空均由 feature SQL 持有，旧 JSON 只作为一次性导入源。2026-10-03 player/economy 只读审计未证明 `RewardService._grant_exp` 是真实默认入口；不可见于 production handler/route 的 helper 暂不迁移。1 名只读子代理随后确认普通「修炼」completion 是活跃旧写路径：当前 feature repository 漏掉修炼/挖矿统计和修炼周任务，并执行请求期 DDL；主线程按本轮方案补齐同 UoW 状态、统计、任务和 ledger，添加 game/player 启动 schema，修复 Outcome handler 契约并加强 source/progress gate。ATTACH 事务回滚不作为跨库 crash-atomicity 证明。全局重构仍受 legacy transaction services、`xiuxian2_handle` 和正式发布/P7 证据阻塞。
 
