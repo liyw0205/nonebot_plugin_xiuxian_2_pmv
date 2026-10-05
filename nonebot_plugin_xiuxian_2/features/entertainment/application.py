@@ -53,6 +53,26 @@ class EntertainmentApplication(MigratedFeatureApplication):
     def webdav_bindings(self, *, bindings_path: str | Path):
         return self.webdav_repository.load_bindings(bindings_path)
 
+    def webdav_bind(
+        self,
+        *,
+        bindings_path: str | Path,
+        label: str,
+        dav_url: str,
+        username: str,
+        password: str,
+    ):
+        return self.webdav_repository.bind(
+            bindings_path,
+            label=label,
+            dav_url=dav_url,
+            username=username,
+            password=password,
+        )
+
+    def webdav_delete(self, *, bindings_path: str | Path, text: str):
+        return self.webdav_repository.delete(bindings_path, text)
+
     def webdav_info(self, *, bindings_path: str | Path, text: str):
         return self.webdav_repository.propfind(
             bindings_path,

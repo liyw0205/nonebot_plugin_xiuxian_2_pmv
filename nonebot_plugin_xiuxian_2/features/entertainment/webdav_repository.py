@@ -1,14 +1,17 @@
 from __future__ import annotations
 
 import json
+import os
 import re
+import tempfile
+import threading
 from pathlib import Path
 from typing import Any
 from urllib.parse import quote, unquote, urlsplit, urlunsplit
 from xml.etree import ElementTree as ET
 
 from ...xiuxian.xiuxian_utils.http_proxy import http_client as default_http_client
-from .schemas import WebDavBinding, WebDavEntry, WebDavQueryResult
+from .schemas import WebDavBinding, WebDavEntry, WebDavMutationResult, WebDavQueryResult
 
 DAV_NS = {"d": "DAV:"}
 MAX_WEBDAV_BINDINGS_BYTES = 256 * 1024
@@ -144,6 +147,7 @@ def _entry_from_response(response: ET.Element) -> WebDavEntry:
 class WebDavRepository:
     def __init__(self, *, http_client: Any = default_http_client) -> None:
         self.http_client = http_client
+        self._bindings_lock = threading.RLock()
 
     def load_bindings(self, bindings_path: str | Path) -> tuple[WebDavBinding, ...]:
         path = Path(bindings_path)
@@ -205,6 +209,128 @@ class WebDavRepository:
             raise WebDavTargetError("请填写路径，例如：webdav信息 1 /电影/test.mp4")
         return bindings[index - 1], _format_dav_path(path_text)
 
+    @staticmethod
+    def _binding_row(binding: WebDavBinding) -> dict[str, str]:
+        return {
+            "label": binding.label,
+            "dav_url": binding.dav_url,
+            "username": binding.username,
+            "password": binding.password,
+        }
+
+    def _write_bindings(self, path: Path, bindings: tuple[WebDavBinding, ...]) -> None:
+        payload = json.dumps(
+            [self._binding_row(binding) for binding in bindings],
+            ensure_ascii=False,
+            indent=2,
+        ).encode("utf-8")
+        if len(payload) > MAX_WEBDAV_BINDINGS_BYTES:
+            raise WebDavRepositoryError("WebDAV 绑定文件超过大小限制")
+
+        path.parent.mkdir(parents=True, exist_ok=True)
+        temp_path: Path | None = None
+        try:
+            fd, temp_name = tempfile.mkstemp(
+                prefix=f".{path.name}.", suffix=".tmp", dir=str(path.parent)
+            )
+            temp_path = Path(temp_name)
+            with os.fdopen(fd, "wb") as handle:
+                handle.write(payload)
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(temp_path, path)
+            temp_path = None
+            try:
+                directory_fd = os.open(path.parent, os.O_RDONLY)
+            except OSError:
+                directory_fd = None
+            if directory_fd is not None:
+                try:
+                    os.fsync(directory_fd)
+                finally:
+                    os.close(directory_fd)
+        except OSError as exc:
+            raise WebDavRepositoryError("WebDAV 绑定文件写入失败") from exc
+        finally:
+            if temp_path is not None:
+                try:
+                    temp_path.unlink()
+                except FileNotFoundError:
+                    pass
+
+    def bind(
+        self,
+        bindings_path: str | Path,
+        *,
+        label: str,
+        dav_url: str,
+        username: str,
+        password: str,
+    ) -> WebDavMutationResult:
+        path = Path(bindings_path)
+        label_value = _display_text(label or "WebDAV", MAX_WEBDAV_LABEL_CHARS) or "WebDAV"
+        url_value = _normalize_dav_url(_display_text(dav_url, MAX_WEBDAV_URL_CHARS))
+        username_value = _display_text(username, MAX_WEBDAV_USERNAME_CHARS)
+        if not url_value or not username_value or not isinstance(password, str) or not password:
+            return WebDavMutationResult("rejected", "WebDAV 绑定参数无效")
+        if len(password) > MAX_WEBDAV_PASSWORD_CHARS:
+            return WebDavMutationResult("rejected", "WebDAV 绑定参数无效")
+
+        with self._bindings_lock:
+            bindings = self.load_bindings(path)
+            if len(bindings) >= MAX_WEBDAV_BINDINGS_ROWS:
+                return WebDavMutationResult("rejected", "WebDAV 绑定数量超过限制")
+            if any(
+                binding.dav_url == url_value and binding.username == username_value
+                for binding in bindings
+            ):
+                return WebDavMutationResult("rejected", "已存在相同 WebDAV 地址和用户名的绑定")
+
+            candidate = WebDavBinding(
+                len(bindings) + 1,
+                label_value,
+                url_value,
+                username_value,
+                password,
+            )
+            self._propfind_binding(candidate, "/", depth="0")
+            self._write_bindings(path, bindings + (candidate,))
+            return WebDavMutationResult(
+                "applied",
+                f"已绑定第 {candidate.index} 个 WebDAV：{candidate.label} · {candidate.dav_url}",
+            )
+
+    def delete(self, bindings_path: str | Path, text: str) -> WebDavMutationResult:
+        path = Path(bindings_path)
+        with self._bindings_lock:
+            bindings = self.load_bindings(path)
+            if not bindings:
+                return WebDavMutationResult("rejected", "当前没有 WebDAV 绑定")
+            value = str(text or "").strip().casefold()
+            if value in {"全部", "所有", "all", "*"}:
+                self._write_bindings(path, ())
+                return WebDavMutationResult(
+                    "applied",
+                    f"已删除全部 {len(bindings)} 个 WebDAV 绑定",
+                    removed=bindings,
+                )
+            if not value.isdigit():
+                return WebDavMutationResult("rejected", "删除用法：webdav删除 序号 或 webdav删除 全部")
+            index = int(value)
+            if index < 1 or index > len(bindings):
+                return WebDavMutationResult("rejected", f"序号 {index} 超出范围（1～{len(bindings)}）")
+            removed = bindings[index - 1]
+            remaining = tuple(
+                WebDavBinding(position, item.label, item.dav_url, item.username, item.password)
+                for position, item in enumerate(bindings[: index - 1] + bindings[index:], start=1)
+            )
+            self._write_bindings(path, remaining)
+            return WebDavMutationResult(
+                "applied",
+                f"已删除绑定 {index}：{removed.label or removed.dav_url}",
+                removed=(removed,),
+            )
+
     def propfind(
         self,
         bindings_path: str | Path,
@@ -214,6 +340,15 @@ class WebDavRepository:
         need_path: bool,
     ) -> WebDavQueryResult:
         binding, path = self.resolve_target(bindings_path, text, need_path=need_path)
+        return self._propfind_binding(binding, path, depth=depth)
+
+    def _propfind_binding(
+        self,
+        binding: WebDavBinding,
+        path: str,
+        *,
+        depth: str,
+    ) -> WebDavQueryResult:
         response = self.http_client.request(
             "PROPFIND",
             _join_dav_url(binding.dav_url, path),

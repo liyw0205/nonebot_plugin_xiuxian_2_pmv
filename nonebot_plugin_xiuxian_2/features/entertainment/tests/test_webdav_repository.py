@@ -119,6 +119,56 @@ class WebDavRepositoryTests(unittest.TestCase):
             with self.assertRaisesRegex(WebDavRepositoryError, "条目数量"):
                 repository.propfind(path, "1 /", depth="1", need_path=False)
 
+    def test_bind_validates_before_atomic_write_and_delete_reindexes(self):
+        response = _Response(207, b'<multistatus xmlns="DAV:" />')
+        client = _HttpClient(response)
+        repository = WebDavRepository(http_client=client)
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "nested" / "bindings.json"
+            result = repository.bind(
+                path,
+                label="main",
+                dav_url="https://dav.test/dav/",
+                username="u",
+                password="p",
+            )
+            self.assertEqual(result.status, "applied")
+            self.assertEqual(repository.load_bindings(path)[0].dav_url, "https://dav.test/dav")
+            calls_after_bind = len(client.calls)
+
+            duplicate = repository.bind(
+                path,
+                label="other",
+                dav_url="https://dav.test/dav",
+                username="u",
+                password="new",
+            )
+            self.assertEqual(duplicate.status, "rejected")
+            self.assertEqual(len(client.calls), calls_after_bind)
+
+            deleted = repository.delete(path, "1")
+            self.assertEqual(deleted.status, "applied")
+            self.assertEqual(deleted.removed[0].label, "main")
+            self.assertEqual(repository.load_bindings(path), ())
+
+    def test_bind_and_delete_leave_invalid_file_untouched(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "bindings.json"
+            path.write_text("not json", encoding="utf-8")
+            original = path.read_bytes()
+            repository = WebDavRepository(http_client=_HttpClient(_Response(207, b"")))
+            with self.assertRaises(WebDavRepositoryError):
+                repository.bind(
+                    path,
+                    label="main",
+                    dav_url="https://dav.test/dav",
+                    username="u",
+                    password="p",
+                )
+            with self.assertRaises(WebDavRepositoryError):
+                repository.delete(path, "all")
+            self.assertEqual(path.read_bytes(), original)
+
 
 if __name__ == "__main__":
     unittest.main()

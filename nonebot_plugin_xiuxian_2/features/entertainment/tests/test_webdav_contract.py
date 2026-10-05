@@ -28,6 +28,25 @@ class WebDavCommandContractTests(unittest.TestCase):
             self.assertNotIn("_load_bindings", {call.func.id for call in ast.walk(node) if isinstance(call, ast.Call) and isinstance(call.func, ast.Name)})
             self.assertNotIn("_propfind", {call.func.id for call in ast.walk(node) if isinstance(call, ast.Call) and isinstance(call.func, ast.Name)})
 
+    def test_mutating_handlers_delegate_to_entertainment_application(self):
+        source = COMMANDS.read_text(encoding="utf-8")
+        for name, method in (("webdav_bind_", "webdav_bind"), ("webdav_del_", "webdav_delete")):
+            node = _function(source, name)
+            self.assertTrue(
+                any(
+                    isinstance(item, ast.Attribute) and item.attr == method
+                    for item in ast.walk(node)
+                )
+            )
+            self.assertNotIn(
+                "_save_bindings",
+                {call.func.id for call in ast.walk(node) if isinstance(call, ast.Call) and isinstance(call.func, ast.Name)},
+            )
+            self.assertNotIn(
+                "_delete_bindings",
+                {call.func.id for call in ast.walk(node) if isinstance(call, ast.Call) and isinstance(call.func, ast.Name)},
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

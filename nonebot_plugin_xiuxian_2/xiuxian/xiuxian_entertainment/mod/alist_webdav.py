@@ -47,11 +47,6 @@ def _load_bindings() -> list[dict[str, Any]]:
     return []
 
 
-def _save_bindings(rows: list[dict[str, Any]]) -> None:
-    with open(WEBDAV_BINDINGS_FILE, "w", encoding="utf-8") as f:
-        json.dump(rows, f, ensure_ascii=False, indent=2)
-
-
 def _normalize_dav_url(url: str) -> str:
     value = (url or "").strip().rstrip("/")
     if not value:
@@ -518,56 +513,6 @@ def _get_download_link(binding: dict[str, Any], dav_path: str) -> dict[str, Any]
     return result
 
 
-def _test_binding(binding: dict[str, Any]) -> None:
-    _propfind(binding, "/", "0")
-
-
-def _append_binding(
-    *,
-    label: str,
-    dav_url: str,
-    username: str,
-    password: str,
-) -> tuple[bool, str]:
-    rows = _load_bindings()
-    norm_url = _normalize_dav_url(dav_url)
-    for row in rows:
-        if _normalize_dav_url(str(row.get("dav_url") or "")) == norm_url and str(row.get("username")) == username:
-            return False, "已存在相同 WebDAV 地址和用户名的绑定"
-
-    binding = {
-        "label": label or "WebDAV",
-        "dav_url": norm_url,
-        "username": username,
-        "password": password,
-    }
-    _test_binding(binding)
-    rows.append(binding)
-    _save_bindings(rows)
-    return True, f"已绑定第 {len(rows)} 个 WebDAV：{binding['label']} · {_display_url(norm_url)}"
-
-
-def _delete_bindings(text: str) -> tuple[bool, str]:
-    rows = _load_bindings()
-    if not rows:
-        return False, "当前没有 WebDAV 绑定"
-    value = (text or "").strip().lower()
-    if value in {"全部", "所有", "all", "*"}:
-        count = len(rows)
-        _save_bindings([])
-        _clear_binding_cache()
-        return True, f"已删除全部 {count} 个 WebDAV 绑定"
-    if not value.isdigit():
-        return False, "删除用法：webdav删除 序号 或 webdav删除 全部"
-    idx = int(value)
-    if idx < 1 or idx > len(rows):
-        return False, f"序号 {idx} 超出范围（1～{len(rows)}）"
-    removed = rows.pop(idx - 1)
-    _save_bindings(rows)
-    _clear_binding_cache(removed)
-    return True, f"已删除绑定 {idx}：{removed.get('label') or _display_url(removed.get('dav_url') or '')}"
-
-
 def _format_bindings(rows=None) -> str:
     rows = list(rows if rows is not None else _load_bindings())
     if not rows:
@@ -762,8 +707,9 @@ async def webdav_bind_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
 
     label, dav_url, username, password = parsed
     try:
-        ok, msg = await run_blocking_io(
-            _append_binding,
+        result = await run_blocking_io(
+            entertainment_application.webdav_bind,
+            bindings_path=WEBDAV_BINDINGS_FILE,
             label=label,
             dav_url=dav_url,
             username=username,
@@ -771,8 +717,11 @@ async def webdav_bind_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
             timeout=30,
         )
     except Exception as e:
-        ok, msg = False, str(e)
-    await handle_send(bot, event, msg if ok else f"绑定失败：{msg}", **_DAV_KW)
+        result = None
+        msg = f"绑定失败：{e}"
+    else:
+        msg = result.message if result.status == "applied" else f"绑定失败：{result.message}"
+    await handle_send(bot, event, msg, **_DAV_KW)
     await webdav_bind_cmd.finish()
 
 
@@ -891,6 +840,26 @@ async def webdav_del_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
         await handle_send(bot, event, "WebDAV 删除仅管理员可用。", **_DAV_KW)
         await webdav_del_cmd.finish()
 
-    ok, msg = _delete_bindings(args.extract_plain_text())
-    await handle_send(bot, event, msg if ok else f"删除失败：{msg}", **_DAV_KW)
+    try:
+        result = await run_blocking_io(
+            entertainment_application.webdav_delete,
+            bindings_path=WEBDAV_BINDINGS_FILE,
+            text=args.extract_plain_text(),
+            timeout=5,
+        )
+    except Exception as e:
+        msg = f"删除失败：{e}"
+    else:
+        if result.status == "applied":
+            for binding in result.removed:
+                _clear_binding_cache(
+                    {
+                        "dav_url": binding.dav_url,
+                        "username": binding.username,
+                    }
+                )
+            msg = result.message
+        else:
+            msg = f"删除失败：{result.message}"
+    await handle_send(bot, event, msg, **_DAV_KW)
     await webdav_del_cmd.finish()

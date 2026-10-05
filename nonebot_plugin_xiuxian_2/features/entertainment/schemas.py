@@ -81,6 +81,13 @@ class WebDavQueryResult:
     entries: tuple[WebDavEntry, ...]
 
 
+@dataclass(frozen=True)
+class WebDavMutationResult:
+    status: Literal["applied", "rejected"]
+    message: str
+    removed: tuple[WebDavBinding, ...] = ()
+
+
 __all__ = [
     "EntertainmentRequest",
     "NewApiAccountListResult",
@@ -89,5 +96,6 @@ __all__ = [
     "NewApiCheckinTargetsResult",
     "WebDavBinding",
     "WebDavEntry",
+    "WebDavMutationResult",
     "WebDavQueryResult",
 ]
