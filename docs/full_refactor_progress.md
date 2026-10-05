@@ -6,6 +6,8 @@
 
 **执行队列与提交约束**：以子插件为队列单位，不再按全局 blocker 列表逐入口跳转。开始一个 feature 前先列出其全部冻结项和共同数据 owner；插件内按共享 repository/UoW 分组，同一 handler 文件的读、写、帮助兼容分类尽量一次审完。除已记录的外部依赖外，当前 feature 的冻结项全部归类前不切到下一个 feature。每个 feature 组必须先通过聚焦回归、该 feature 门禁、冻结证据校验和 `git diff --check`，随后只暂存该组文件、提交并推送；验证未过时不留未完成工作区作为停靠点。当前队列头为 entertainment（72 个命令 blocker）；先盘完该 feature 的冻结项和共同账号/签到数据 owner，并核对关联路由 owner，再进入下一 feature。完整审计作为周期性范围核对运行，不替代每组定向测试。
 
+**执行偏差与纠正（2026-10-05）**：实际提交轨迹没有严格遵循上面的子插件队列：Entertainment 的 WebDAV 被拆成只读、绑定/删除、链接/文件多个提交，NewAPI 的账号列表与用户信息也分开提交；Entertainment 尚有 72 个 blocker 时已转去完成 Compensation。这些提交各自覆盖了不同的 I/O 边界，但在先盘清整个子插件 owner 后再批量收口这一点上，执行仍然偏向零散能力组，造成同一功能目录被多次触及、其它 Entertainment 入口迟迟未处理。纠正后的当前执行单位是完整 Entertainment 子插件：已盘点为 13 个帮助/菜单、28 个外部查询/输出、17 个 JSON 游戏房间、6 个猜数 session、4 个点歌状态和 4 个 NewAPI 命令；关联的 Activity、Scheduler 和通用 Web routes 不归 Entertainment。后续保留已完成实现，不为凑整组重复改写；只处理剩余 blocker，所有 72 项分类/收口并通过 feature 验收前不切换子插件。每次收尾在本地核实 upstream 无领先/落后后报告提交哈希；任何用户改动继续排除在暂存范围外。
+
 **历史记录说明**：以下按时间倒序保存旧切片的执行记录；其中“下一片/下一项”只表示当时计划，不是当前待办。当前待办只以上方“当前目标与范围”和冻结清单的 `受阻` 项为准；清单外发现先进入 backlog，未经 scope 升版不开展对应新切片。
 
 **当前范围冻结与默认路径审计（2026-10-05）**：只按 `phase2-default-runtime-legacy-paths-v1` 的 496 个带 identity membership hash 冻结项计算完成，不纳入清单外玩法。compensation 组闭合后为 `45 已迁移 / 53 允许保留兼容 / 19 不可达 / 379 受阻`；379 个 blocker 为 263 个默认命令 handler、115 条旧 Flask route、1 个非命令 matcher family。hash 锁定稳定 ID、种类、入口和 source identity，状态/调用图/证据可在人工复核后更新；门禁核对所有冻结命令当前的 declaration/handler 源码锚点均出现在调用图和证据中，闭合项还必须有绑定当前 handler 位置的真实下游边，并核对 job registry 执行链。backlog 共 330 条，其中 323 个已知清单外静态命令候选，其余为明确的边界/风险记录；不扩大分母。当前 membership/source hash 有效、完整性错误为 0。
