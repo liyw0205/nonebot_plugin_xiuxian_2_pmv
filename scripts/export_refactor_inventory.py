@@ -43,7 +43,13 @@ def _legacy_routes() -> list[dict[str, Any]]:
     web_root = PACKAGE / "xiuxian" / "xiuxian_web"
     for path in _iter_python_files(web_root):
         try:
-            tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+            source = path.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        if ".route" not in source:
+            continue
+        try:
+            tree = ast.parse(source, filename=str(path))
         except SyntaxError:
             continue
         for node in ast.walk(tree):
@@ -78,7 +84,13 @@ def _legacy_jobs() -> list[str]:
     ids: set[str] = set()
     for path in _iter_python_files(PACKAGE / "xiuxian"):
         try:
-            tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+            source = path.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        if "scheduled_job" not in source and "add_job" not in source:
+            continue
+        try:
+            tree = ast.parse(source, filename=str(path))
         except SyntaxError:
             continue
         for node in ast.walk(tree):

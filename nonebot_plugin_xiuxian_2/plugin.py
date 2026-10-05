@@ -1260,6 +1260,14 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
         phase_state["jobs"] = False
 
     def ensure_web() -> None:
+        if not context.legacy_startup:
+            # Maintenance commands check storage and repository readiness but
+            # do not own a NoneBot transport or the legacy Web matcher graph.
+            # Keeping this phase successful preserves the six-check health
+            # contract without importing driver-bound legacy modules.
+            context.web_app = None
+            phase_state["web"] = True
+            return
         from .adapters.web.app import create_app
 
         context.web_app = create_app(context=context, registry=registry, readiness=readiness)

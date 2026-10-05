@@ -106,6 +106,11 @@ def _player_avatar() -> PlayerAvatarApplication:
     return _player_avatar_application
 
 
+def get_active_user_id(user_id: int | str) -> str:
+    """Keep the historical utility import as a thin avatar read adapter."""
+    return _player_avatar().get_active_user_id(str(user_id))
+
+
 def _player_profile():
     global _player_profile_application
     if _player_profile_application is None:
@@ -119,6 +124,10 @@ def get_user_profile(user_id: int | str):
 
 def get_user_profile_by_name(user_name: str):
     return _player_profile().get_user_profile_by_name(user_name)
+
+
+def search_users(query: str):
+    return _player_profile().search_users(query)
 
 
 def configure_player_attribute_application(application: PlayerAttributeApplication) -> None:

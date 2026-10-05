@@ -84,6 +84,29 @@ def list_account_summaries(qq_id: str):
     return entertainment_application.list_account_summaries(state_path=_path_for_qq(qq_id))
 
 
+def resolve_checkin_targets(qq_id: str, selector: str):
+    return entertainment_application.resolve_checkin_targets(state_path=_path_for_qq(qq_id), selector=selector)
+
+
+def record_checkin_history(
+    qq_id: str,
+    *,
+    account_index: int,
+    api_user_id: str,
+    base_url: str,
+    summary: str,
+    source: str = "manual",
+) -> None:
+    entertainment_application.append_checkin_history(
+        history_path=_history_path(qq_id),
+        account_index=account_index,
+        api_user_id=api_user_id,
+        base_url=base_url,
+        summary=summary,
+        source=source,
+    )
+
+
 def save_accounts(qq_id: str, accounts: list[dict[str, Any]]) -> None:
     save_json_file(_path_for_qq(qq_id), accounts, indent=2)
 

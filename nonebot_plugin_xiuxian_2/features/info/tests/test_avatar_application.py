@@ -273,6 +273,15 @@ class PlayerAvatarApplicationTests(unittest.TestCase):
                 }
             self.assertEqual(tables, set())
 
+    def test_active_id_read_fails_closed_without_creating_database(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="avatar-read-missing-") as temp_dir:
+            database = Path(temp_dir) / "missing" / "player.db"
+            application = PlayerAvatarApplication(database)
+
+            self.assertEqual(application.get_active_user_id("main"), "main")
+            self.assertFalse(database.exists())
+            self.assertFalse(database.parent.exists())
+
     def test_player_migration_preserves_legacy_avatar_row(self) -> None:
         with tempfile.TemporaryDirectory(prefix="avatar-migration-") as temp_dir:
             database = Path(temp_dir) / "player.db"

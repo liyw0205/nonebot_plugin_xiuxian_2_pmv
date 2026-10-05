@@ -36,6 +36,7 @@ from .core import (
     url_for,
     web_auth_is_enabled,
 )
+from ..xiuxian_utils.utils import search_users as search_users_application
 
 
 def _stats_count(sql, params=None):
@@ -261,12 +262,14 @@ def api_dashboard_summary():
 def search_users():
     if 'admin_id' not in session:
         return jsonify([])
-    
+
     query = request.args.get('query', '')
-    sql = "SELECT user_id, user_name FROM user_xiuxian WHERE user_name LIKE %s LIMIT 10"
-    results = execute_sql(DATABASE, sql, (f"%{query}%",))
-    
-    return jsonify([{"id": r['user_id'], "name": r['user_name']} for r in results])
+    try:
+        results = search_users_application(query)
+    except ValueError:
+        # Preserve the legacy response shape for invalidly long queries.
+        return jsonify([])
+    return jsonify(results)
 
 @app.route('/download/<path:filepath>')
 def download_file(filepath):

@@ -18,6 +18,67 @@ WIN_PLAN = {"payout_outcome": "win", "gain": 50, "requested_loss": 0}
 
 
 class DufangBetRepositoryTests(unittest.TestCase):
+    def test_stats_snapshot_reads_without_creating_missing_user(self):
+        with tempfile.TemporaryDirectory() as temp:
+            game = Path(temp) / "game.db"
+            player = Path(temp) / "player.db"
+            with DatabaseUnitOfWork(player) as uow:
+                apply_dufang_share_player(uow)
+                apply_dufang_player_receipts(uow)
+                uow.execute(
+                    "INSERT INTO unseal_data(user_id,count,total_cost,profit,loss,"
+                    "shared_profit,shared_loss,received_profit,received_loss,last_update) "
+                    "VALUES('u',2,300,40,5,6,7,8,9,'2026-07-12 10:00:00')"
+                )
+
+            repository = DufangPlayerStatsSqlRepository(game, player)
+            existing = repository.snapshot("u")
+            missing = repository.snapshot("missing")
+
+            self.assertEqual(existing.status, "ok")
+            self.assertEqual(existing.legacy_data()["unseal_info"], {
+                "count": 2,
+                "total_cost": 300,
+                "profit": 40,
+                "loss": 5,
+            })
+            self.assertEqual(existing.legacy_data()["sharing_info"], {
+                "shared_profit": 6,
+                "shared_loss": 7,
+                "received_profit": 8,
+                "received_loss": 9,
+            })
+            self.assertEqual(missing.status, "ok")
+            self.assertEqual(missing.unseal_info, {"count": 0, "total_cost": 0, "profit": 0, "loss": 0})
+            with DatabaseUnitOfWork(player, read_only=True) as uow:
+                self.assertEqual(
+                    uow.query_one("SELECT COUNT(*) AS count FROM unseal_data")["count"],
+                    1,
+                )
+
+    def test_stats_snapshot_fails_closed_without_database_or_schema(self):
+        with tempfile.TemporaryDirectory() as temp:
+            game = Path(temp) / "game.db"
+            player = Path(temp) / "missing-player.db"
+            repository = DufangPlayerStatsSqlRepository(game, player)
+            self.assertEqual(repository.snapshot("u").status, "schema_missing")
+            self.assertFalse(player.exists())
+
+            player.touch()
+            self.assertEqual(repository.snapshot("u").status, "schema_missing")
+            with DatabaseUnitOfWork(player, read_only=True) as uow:
+                self.assertEqual(
+                    uow.query_one(
+                        "SELECT COUNT(*) AS count FROM sqlite_master "
+                        "WHERE type='table' AND name='unseal_data'"
+                    )["count"],
+                    0,
+                )
+
+            with DatabaseUnitOfWork(player) as uow:
+                apply_dufang_share_player(uow)
+            self.assertEqual(repository.snapshot("u").status, "schema_missing")
+
     def test_place_replay_and_insufficient(self):
         with tempfile.TemporaryDirectory() as temp:
             game = Path(temp) / "game.db"

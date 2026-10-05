@@ -6,7 +6,11 @@ from .activity_repository import PlayerActivitySqlRepository
 from .attribute_application import PlayerAttributeApplication
 from .manifest import FEATURE
 from .profile_application import PlayerProfileApplication
-from .profile_repository import PlayerProfileSqlRepository
+from .profile_repository import (
+    MAX_USER_SEARCH_QUERY_CHARS,
+    MAX_USER_SEARCH_RESULTS,
+    PlayerProfileSqlRepository,
+)
 
 __all__ = [
     "InfoApplication",
@@ -15,5 +19,7 @@ __all__ = [
     "PlayerAttributeApplication",
     "PlayerProfileApplication",
     "PlayerProfileSqlRepository",
+    "MAX_USER_SEARCH_QUERY_CHARS",
+    "MAX_USER_SEARCH_RESULTS",
     "FEATURE",
 ]

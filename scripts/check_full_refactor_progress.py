@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import ast
+from functools import lru_cache
 import json
 import re
 from pathlib import Path
@@ -32,72 +33,116 @@ PATTERNS = {
     "time_now_files": "time.time",
 }
 
+# The production AST index is only queried for these legacy bank symbols.
+# A source-token prefilter avoids compiling unrelated vendor and feature files;
+# matching files still go through the same AST checks below.
+_PRODUCTION_AST_TOKENS = (
+    "get_legacy_info",
+    "legacy_record_status",
+    "LegacyBankRepository",
+    "legacy_bank_account_storage",
+    "xiuxian_bank",
+    "savef",
+)
 
-def _py_files() -> list[Path]:
-    return sorted(PACKAGE.rglob("*.py"))
+
+@lru_cache(maxsize=None)
+def _read_source(path: Path) -> str | None:
+    """Read a package source file once during one progress report."""
+    try:
+        return path.read_text(encoding="utf-8", errors="ignore")
+    except OSError:
+        return None
+
+
+@lru_cache(maxsize=1)
+def _py_files() -> tuple[Path, ...]:
+    return tuple(sorted(PACKAGE.rglob("*.py")))
 
 
 def _counts() -> dict[str, int]:
     files = _py_files()
+    sources = {path: (_read_source(path) or "") for path in files}
     counts = {"python_files": len(files)}
     for name, token in PATTERNS.items():
-        counts[name] = sum(token in path.read_text(encoding="utf-8", errors="ignore") for path in files)
+        counts[name] = sum(token in sources[path] for path in files)
     transaction_files = list(PACKAGE.rglob("*transaction_service.py"))
     counts["transaction_service_files"] = len(transaction_files)
     counts["transaction_service_lines"] = sum(
-        len(path.read_text(encoding="utf-8", errors="ignore").splitlines()) for path in transaction_files
+        len(sources[path].splitlines()) for path in transaction_files
     )
     handle = PACKAGE / "xiuxian" / "xiuxian_utils" / "xiuxian2_handle.py"
     counts["xiuxian2_handle_bytes"] = handle.stat().st_size if handle.is_file() else 0
     return counts
 
 
-def _has_production_call(*names: str, excluding: set[Path] | None = None) -> bool:
-    excluded = excluding or set()
+@lru_cache(maxsize=1)
+def _production_ast_index() -> tuple[tuple[Path, frozenset[str], bool], ...]:
+    """Index calls and bank imports in one package-wide AST traversal."""
+    indexed: list[tuple[Path, frozenset[str], bool]] = []
     for path in _py_files():
-        if path in excluded:
+        source = _read_source(path)
+        if source is None:
+            continue
+        if not any(token in source for token in _PRODUCTION_AST_TOKENS):
             continue
         try:
-            tree = ast.parse(path.read_text(encoding="utf-8", errors="ignore"))
+            tree = ast.parse(source)
         except SyntaxError:
             continue
+        call_targets: set[str] = set()
+        bank_savef_import = False
         for node in ast.walk(tree):
-            if not isinstance(node, ast.Call):
-                continue
-            target = node.func.id if isinstance(node.func, ast.Name) else (
-                node.func.attr if isinstance(node.func, ast.Attribute) else ""
-            )
-            if target in names:
-                return True
+            if isinstance(node, ast.Call):
+                target = node.func.id if isinstance(node.func, ast.Name) else (
+                    node.func.attr if isinstance(node.func, ast.Attribute) else ""
+                )
+                if target:
+                    call_targets.add(target)
+            elif isinstance(node, ast.ImportFrom) and node.module:
+                if (
+                    node.module.endswith("xiuxian_bank")
+                    or node.module.endswith("legacy_bank_account_storage")
+                ) and any(alias.name == "savef" for alias in node.names):
+                    bank_savef_import = True
+                if node.module.endswith("compatibility") and any(
+                    alias.name == "legacy_bank_account_storage" for alias in node.names
+                ):
+                    bank_savef_import = True
+            elif isinstance(node, ast.Import):
+                if any(
+                    alias.name.endswith("xiuxian_bank")
+                    or alias.name.endswith("legacy_bank_account_storage")
+                    for alias in node.names
+                ):
+                    bank_savef_import = True
+        indexed.append((path, frozenset(call_targets), bank_savef_import))
+    return tuple(indexed)
+
+
+def _has_production_call(*names: str, excluding: set[Path] | None = None) -> bool:
+    excluded = excluding or set()
+    requested = frozenset(names)
+    for path, call_targets, _ in _production_ast_index():
+        if path in excluded:
+            continue
+        if call_targets.intersection(requested):
+            return True
     return False
 
 
 def _has_production_bank_savef_import() -> bool:
     facade = PACKAGE / "xiuxian" / "xiuxian_bank" / "__init__.py"
     writer = PACKAGE / "compatibility" / "legacy_bank_account_storage.py"
-    for path in _py_files():
+    for path, _, bank_savef_import in _production_ast_index():
         if path in {facade, writer}:
             continue
-        try:
-            tree = ast.parse(path.read_text(encoding="utf-8", errors="ignore"))
-        except SyntaxError:
-            continue
-        for node in ast.walk(tree):
-            if isinstance(node, ast.ImportFrom) and node.module:
-                if node.module.endswith("xiuxian_bank") or node.module.endswith("legacy_bank_account_storage"):
-                    if any(alias.name == "savef" for alias in node.names):
-                        return True
-                if node.module.endswith("compatibility") and any(
-                    alias.name == "legacy_bank_account_storage" for alias in node.names
-                ):
-                    return True
-            elif isinstance(node, ast.Import):
-                for alias in node.names:
-                    if alias.name.endswith("xiuxian_bank") or alias.name.endswith("legacy_bank_account_storage"):
-                        return True
+        if bank_savef_import:
+            return True
     return False
 
 
+@lru_cache(maxsize=1)
 def _slice_status() -> dict[str, dict[str, object]]:
     base = (PACKAGE / "xiuxian" / "xiuxian_base" / "__init__.py").read_text(encoding="utf-8")
     base_root_reroll_handler = base[base.index("@restart.handle"):base.index("@rank.handle")]

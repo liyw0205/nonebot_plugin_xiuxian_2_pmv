@@ -16,6 +16,14 @@ _LOCKS_GUARD = RLock()
 _PATH_LOCKS: dict[Path, RLock] = {}
 
 
+class JsonStoreLimitError(ValueError):
+    pass
+
+
+class JsonStoreDataError(ValueError):
+    pass
+
+
 def _path_lock(path: Path) -> RLock:
     resolved = path.expanduser().resolve()
     with _LOCKS_GUARD:
@@ -91,6 +99,49 @@ def update_json_file(
             updated = current
         if expected_type is not None and not isinstance(updated, expected_type):
             raise TypeError(f"更新后的 JSON 根类型不是 {expected_type!r}")
+        save_json_file(file_path, updated, **dump_kwargs)
+        return updated
+
+
+def update_json_file_bounded(
+    path: str | Path,
+    default: Any,
+    updater,
+    *,
+    max_bytes: int,
+    expected_type: type | tuple[type, ...] | None = None,
+    **dump_kwargs,
+) -> Any:
+    file_path = Path(path)
+    limit = int(max_bytes)
+    if limit < 1:
+        raise ValueError("max_bytes must be positive")
+    with _path_lock(file_path):
+        try:
+            with file_path.open("rb") as handle:
+                payload = handle.read(limit + 1)
+        except FileNotFoundError:
+            current = deepcopy(default)
+        else:
+            if len(payload) > limit:
+                raise JsonStoreLimitError(f"JSON state exceeds size limit: {limit}")
+            try:
+                current = json.loads(payload)
+            except (ValueError, RecursionError) as exc:
+                raise JsonStoreDataError("JSON state is invalid; original file was preserved") from exc
+            if expected_type is not None and not isinstance(current, expected_type):
+                raise JsonStoreDataError("JSON state has an unexpected root type; original file was preserved")
+
+        updated = updater(deepcopy(current))
+        if updated is None:
+            updated = current
+        if expected_type is not None and not isinstance(updated, expected_type):
+            raise TypeError(f"更新后的 JSON 根类型不是 {expected_type!r}")
+        dump_options = {"ensure_ascii": False, "indent": 4}
+        dump_options.update(dump_kwargs)
+        encoded = json.dumps(updated, **dump_options).encode("utf-8")
+        if len(encoded) > limit:
+            raise JsonStoreLimitError(f"updated JSON state exceeds size limit: {limit}")
         save_json_file(file_path, updated, **dump_kwargs)
         return updated
 

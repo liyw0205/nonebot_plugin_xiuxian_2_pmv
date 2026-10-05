@@ -11,6 +11,7 @@ _UA = (
     "Mozilla/5.0 (Linux; Android; Pixel 7) AppleWebKit/537.36 "
     "(KHTML, like Gecko) Chrome/116.0.0.0 Mobile Safari/537.36"
 )
+MAX_CHECKIN_RESPONSE_BYTES = 1024 * 1024
 
 
 def normalize_base_url(raw: str | None) -> str:
@@ -96,6 +97,7 @@ def _request(
     secret: str,
     json_body: Any = None,
     timeout: tuple[float, float] = (8, 45),
+    max_response_bytes: int | None = None,
 ) -> dict[str, Any]:
     url = f"{base_url.rstrip('/')}{path}"
     headers = _build_headers(mode, api_user_id, secret, base_url)
@@ -111,20 +113,56 @@ def _request(
             ),
             json=None if method.upper() == "GET" else (json_body or {}),
             check_status=False,
+            stream=max_response_bytes is not None,
         )
     except Exception as e:
         return {"_error": describe_proxy_request_error(e), "_raw": ""}
-
-    text = (resp.text or "").strip()
-    if not text:
-        return {"_error": f"无响应（HTTP {getattr(resp, 'status_code', '?')}）", "_raw": ""}
     try:
-        data = resp.json()
-        if isinstance(data, dict):
-            return data
-    except json.JSONDecodeError:
-        pass
-    return {"_error": "响应非 JSON", "_raw": text[:500]}
+        if max_response_bytes is None:
+            text = (resp.text or "").strip()
+            if not text:
+                return {"_error": f"无响应（HTTP {getattr(resp, 'status_code', '?')}）", "_raw": ""}
+            try:
+                data = resp.json()
+                if isinstance(data, dict):
+                    return data
+            except (ValueError, RecursionError):
+                pass
+            return {"_error": "响应非 JSON", "_raw": text[:500]}
+        else:
+            limit = int(max_response_bytes)
+            if limit < 1:
+                raise ValueError("max_response_bytes must be positive")
+            try:
+                content_length = int(resp.headers.get("content-length", 0) or 0)
+            except (AttributeError, TypeError, ValueError):
+                content_length = 0
+            if content_length > limit:
+                return {"_error": "签到响应超过 1 MiB 上限", "_raw": ""}
+            content = bytearray()
+            for chunk in resp.iter_content(chunk_size=64 * 1024):
+                if not chunk:
+                    continue
+                if len(content) + len(chunk) > limit:
+                    return {"_error": "签到响应超过 1 MiB 上限", "_raw": ""}
+                content.extend(chunk)
+            text = bytes(content).decode(getattr(resp, "encoding", None) or "utf-8", errors="replace").strip()
+        if not text:
+            return {"_error": f"无响应（HTTP {getattr(resp, 'status_code', '?')}）", "_raw": ""}
+        try:
+            data = json.loads(text)
+            if isinstance(data, dict):
+                return data
+        except (json.JSONDecodeError, RecursionError):
+            pass
+        return {"_error": "响应非 JSON", "_raw": text[:500]}
+    except Exception as e:
+        return {"_error": describe_proxy_request_error(e), "_raw": ""}
+    finally:
+        try:
+            resp.close()
+        except Exception:
+            pass
 
 
 def fetch_user_self(mode: str, api_user_id: str, secret: str, base_url: str) -> dict[str, Any]:
@@ -137,7 +175,15 @@ def fetch_user_self(mode: str, api_user_id: str, secret: str, base_url: str) -> 
 
 
 def do_checkin(mode: str, api_user_id: str, secret: str, base_url: str) -> dict[str, Any]:
-    data = _request("POST", base_url, "/api/user/checkin", mode=mode, api_user_id=api_user_id, secret=secret)
+    data = _request(
+        "POST",
+        base_url,
+        "/api/user/checkin",
+        mode=mode,
+        api_user_id=api_user_id,
+        secret=secret,
+        max_response_bytes=MAX_CHECKIN_RESPONSE_BYTES,
+    )
     if data.get("_error"):
         return data
     return data

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Literal, Mapping
 
 
@@ -30,4 +30,64 @@ class NewApiAccountListResult:
     accounts: tuple[NewApiAccountSummary, ...] = ()
 
 
-__all__ = ["EntertainmentRequest", "NewApiAccountListResult", "NewApiAccountSummary"]
+@dataclass(frozen=True)
+class NewApiCheckinTarget:
+    index: int
+    api_user_id: str
+    mode: str
+    secret: str = field(repr=False)
+    base_url: str
+
+
+@dataclass(frozen=True)
+class NewApiCheckinTargetsResult:
+    status: Literal[
+        "ok",
+        "empty",
+        "missing",
+        "invalid",
+        "too_large",
+        "too_many",
+        "unavailable",
+        "invalid_selector",
+    ]
+    targets: tuple[NewApiCheckinTarget, ...] = ()
+    message: str = ""
+
+
+@dataclass(frozen=True)
+class WebDavBinding:
+    index: int
+    label: str
+    dav_url: str
+    username: str
+    password: str = field(repr=False)
+
+
+@dataclass(frozen=True)
+class WebDavEntry:
+    href: str
+    name: str
+    is_dir: bool
+    size: str
+    modified: str
+    content_type: str
+
+
+@dataclass(frozen=True)
+class WebDavQueryResult:
+    binding: WebDavBinding
+    path: str
+    entries: tuple[WebDavEntry, ...]
+
+
+__all__ = [
+    "EntertainmentRequest",
+    "NewApiAccountListResult",
+    "NewApiAccountSummary",
+    "NewApiCheckinTarget",
+    "NewApiCheckinTargetsResult",
+    "WebDavBinding",
+    "WebDavEntry",
+    "WebDavQueryResult",
+]

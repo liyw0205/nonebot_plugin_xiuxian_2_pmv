@@ -17,8 +17,6 @@ from ..adapter_compat import (
 )
 from ..xiuxian_utils.utils import handle_send, number_to, send_help_message
 from ..xiuxian_utils.lay_out import Cooldown
-import subprocess
-import re
 from types import SimpleNamespace
 from ..xiuxian_utils.download_xiuxian_data import UpdateManager
 
@@ -97,107 +95,10 @@ def format_time(seconds: float) -> str:
     """将秒数格式化为 'X天X小时X分X秒'"""
     return format_duration_full(seconds, zero="未知")
 
-def get_ping_emoji(delay: float) -> str:
-    """根据延迟返回对应的表情"""
-    if delay == 0:
-        return "💀"  # 超时/失败
-    elif delay < 20:
-        return "🚀"  # 极快
-    elif delay < 50:
-        return "⚡"  # 快速
-    elif delay < 100:
-        return "🐎"  # 中等
-    elif delay < 200:
-        return "🐢"  # 慢速
-    else:
-        return "🐌"  # 极慢
-
-async def ping_host(host: str) -> tuple:
-    """
-    异步执行单个 ping 测试
-    返回 (host, delay_ms, is_timeout, emoji)
-    """
-    loop = asyncio.get_event_loop()
-    try:
-        # Windows和Linux/macOS的ping命令参数不同
-        param = '-n' if platform.system().lower() == 'windows' else '-c'
-        count = '4'  # ping 4次
-
-        # 使用 asyncio 创建子进程执行 ping
-        def _ping():
-            try:
-                result = subprocess.run(
-                    ['ping', param, count, host],
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,
-                    text=True,
-                    timeout=10
-                )
-                output = result.stdout
-                if platform.system().lower() == 'windows':
-                    match = re.search(r'平均 = (\d+)ms', output)
-                    if match:
-                        return (float(match.group(1)), False)
-                else:
-                    match = re.search(r'min/avg/max/mdev = [\d.]+/([\d.]+)/', output)
-                    if match:
-                        return (float(match.group(1)), False)
-                return (0, True)  # 未找到平均延迟，视为超时
-            except subprocess.TimeoutExpired:
-                return (0, True)
-            except Exception:
-                return (0, True)
-
-        delay, is_timeout = await loop.run_in_executor(None, _ping)
-
-        emoji = get_ping_emoji(delay)
-
-        return (host, delay, is_timeout, emoji)
-
-    except Exception:
-        return (host, 0, True, "💀")  # 兜底异常也视为超时
-
 async def get_ping_test(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent) -> str:
-    """异步并发执行所有 ping 测试"""
+    """保留旧消息流程，将无状态探测委托给 status application。"""
     await ping_test_cmd.send("正在测试网络延迟，请稍候...")
-
-    sites = {
-        "百度": "www.baidu.com",
-        "腾讯": "www.qq.com",
-        "阿里": "www.aliyun.com",
-        "必应": "cn.bing.com",
-        "GitHub": "github.com",
-        "Gitee": "gitee.com",
-        "谷歌": "www.google.com",
-        "苹果": "www.apple.com"
-    }
-
-    # 构造所有要 ping 的任务
-    tasks = [ping_host(host) for host in sites.values()]
-
-    # 并发执行所有 ping
-    results = await asyncio.gather(*tasks)
-
-    # 组装消息
-    msg = "网络延迟测试\n"
-
-    # 国内站点（前4个）
-    msg += "\n【国内站点】\n"
-    for (name, host), (_, delay, is_timeout, emoji) in zip(list(sites.items())[:4], results[:4]):
-        if is_timeout:
-            msg += f"{emoji} {name}: 超时(0ms)\n"
-        else:
-            msg += f"{emoji} {name}: {delay:.3f}ms\n"
-
-    # 国外站点（后4个）
-    msg += "\n【国外站点】\n"
-    for (name, host), (_, delay, is_timeout, emoji) in zip(list(sites.items())[4:], results[4:]):
-        if is_timeout:
-            msg += f"{emoji} {name}: 超时(0ms)\n"
-        else:
-            msg += f"{emoji} {name}: {delay:.3f}ms\n"
-
-    return msg
+    return await status_application.ping_test()
 
 async def get_bot_info(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent) -> str:
     """获取Bot信息"""

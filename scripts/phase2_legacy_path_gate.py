@@ -7,8 +7,10 @@ import ast
 from functools import lru_cache
 import hashlib
 import json
+import os
 from pathlib import Path
 import sys
+import tempfile
 from typing import Any
 
 
@@ -36,6 +38,16 @@ _PLUGIN_MODULE_EXCLUSIONS = frozenset(
         "xiuxian_config",
     }
 )
+_COMMAND_INDEX_CACHE_VERSION = "legacy-command-index-v3"
+
+
+@lru_cache(maxsize=None)
+def _read_source(path: Path) -> str | None:
+    """Read a source file once per gate invocation."""
+    try:
+        return path.read_text(encoding="utf-8")
+    except OSError:
+        return None
 
 
 def _canonical_projection(inventory: dict[str, Any], fields: list[str]) -> bytes:
@@ -66,9 +78,12 @@ def _membership_digest(items: list[dict[str, Any]]) -> str:
 @lru_cache(maxsize=1)
 def _legacy_manifest_job_ids() -> frozenset[str] | None:
     path = PACKAGE / "compatibility" / "legacy_manifest.py"
+    source = _read_source(path)
+    if source is None:
+        return None
     try:
-        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
-    except (OSError, SyntaxError):
+        tree = ast.parse(source, filename=str(path))
+    except SyntaxError:
         return None
     for node in tree.body:
         if not isinstance(node, ast.Assign):
@@ -86,71 +101,42 @@ def _legacy_manifest_job_ids() -> frozenset[str] | None:
 
 @lru_cache(maxsize=None)
 def _legacy_command_declarations(feature: str) -> dict[str, tuple[str, ...]]:
-    package_name = _COMMAND_PACKAGE_NAMES.get(feature, f"xiuxian_{feature}")
-    package_root = PACKAGE / "xiuxian" / package_name
     declarations: dict[str, list[str]] = {}
-    if not package_root.is_dir():
-        return {}
-    for path in sorted(package_root.rglob("*.py")):
-        try:
-            tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
-        except (OSError, SyntaxError):
+    for (record_feature, name), records in _default_legacy_command_inventory().items():
+        if record_feature != feature:
             continue
-        for node in ast.walk(tree):
-            if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Name) or node.func.id != "on_command":
-                continue
-            if not node.args:
-                continue
-            try:
-                name = ast.literal_eval(node.args[0])
-            except (ValueError, TypeError, SyntaxError):
-                continue
-            if not isinstance(name, str) or not name.strip():
-                continue
-            aliases: tuple[str, ...] = ()
-            for keyword in node.keywords:
-                if keyword.arg != "aliases":
-                    continue
-                try:
-                    value = ast.literal_eval(keyword.value)
-                except (ValueError, TypeError, SyntaxError):
-                    continue
-                if isinstance(value, (set, list, tuple)):
-                    aliases = tuple(str(alias) for alias in value)
-            if name not in declarations:
-                declarations[name] = []
-            aliases_note = f" aliases={','.join(sorted(aliases))}" if aliases else ""
-            location = f"{path.relative_to(ROOT).as_posix()}:{node.lineno}{aliases_note}"
-            if location not in declarations[name]:
+        for record in records:
+            aliases = record.get("aliases") or []
+            aliases_note = f" aliases={','.join(sorted(str(alias) for alias in aliases))}" if aliases else ""
+            location = f"{record['file']}:{record['line']}{aliases_note}"
+            if location not in declarations.setdefault(name, []):
                 declarations[name].append(location)
     return {name: tuple(locations) for name, locations in declarations.items()}
 
 
-def _module_path(module_name: str) -> Path | None:
-    prefix = "nonebot_plugin_xiuxian_2."
-    if not module_name.startswith(prefix):
+@lru_cache(maxsize=None)
+def _parse_ast(path: Path) -> ast.Module | None:
+    """Parse each source file once during a gate invocation.
+
+    The static gate revisits legacy modules for command declarations, route
+    validation and suppression checks.  The source tree is stable for the
+    duration of one invocation, so an in-process AST cache removes redundant
+    parser/compiler work without persistent invalidation.
+    """
+    source = _read_source(path)
+    if source is None:
         return None
-    relative = Path(*module_name[len(prefix):].split("."))
-    for candidate in (PACKAGE / relative.with_suffix(".py"), PACKAGE / relative / "__init__.py"):
-        if candidate.is_file():
-            return candidate
-    return None
-
-
-def _module_name(path: Path) -> str:
-    relative = path.relative_to(PACKAGE).with_suffix("")
-    parts = list(relative.parts)
-    if parts[-1] == "__init__":
-        parts.pop()
-    return "nonebot_plugin_xiuxian_2." + ".".join(parts)
+    try:
+        return ast.parse(source, filename=str(path))
+    except SyntaxError:
+        return None
 
 
 @lru_cache(maxsize=1)
 def _plugin_module_exclusions_from_source() -> frozenset[str] | None:
     path = PACKAGE / "__init__.py"
-    try:
-        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
-    except (OSError, SyntaxError):
+    tree = _parse_ast(path)
+    if tree is None:
         return None
     values: dict[str, frozenset[str]] = {}
     for node in ast.walk(tree):
@@ -174,141 +160,178 @@ def _plugin_module_exclusions_from_source() -> frozenset[str] | None:
     return values["_INTERNAL_PACKAGES"] | values["_NON_PLUGIN_MODULES"]
 
 
-def _module_imports(module_name: str, path: Path, tree: ast.Module) -> set[str]:
-    imports: set[str] = set()
-    package_name = module_name if path.name == "__init__.py" else module_name.rpartition(".")[0]
-    for node in tree.body:
-        if isinstance(node, ast.Import):
-            imports.update(
-                alias.name
-                for alias in node.names
-                if alias.name.startswith("nonebot_plugin_xiuxian_2.xiuxian.")
-            )
-            continue
-        if not isinstance(node, ast.ImportFrom):
-            continue
-        parts = package_name.split(".")
-        if node.level:
-            parts = parts[: len(parts) - (node.level - 1)]
-        if node.module:
-            parts.extend(node.module.split("."))
-        base = ".".join(parts)
-        if not base.startswith("nonebot_plugin_xiuxian_2.xiuxian."):
-            continue
-        if _module_path(base):
-            imports.add(base)
-        for alias in node.names:
-            child = f"{base}.{alias.name}"
-            if _module_path(child):
-                imports.add(child)
-    return imports
+def _command_index_cache_path() -> Path:
+    root_key = hashlib.sha256(str(ROOT).encode("utf-8")).hexdigest()[:16]
+    return Path(tempfile.gettempdir()) / f"xiuxian-phase2-command-index-{root_key}.json"
 
 
-def _call_is_import_time(node: ast.AST, parents: dict[int, ast.AST]) -> bool:
-    parent = parents.get(id(node))
-    while parent is not None:
-        if isinstance(parent, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda, ast.ClassDef)):
-            return False
-        parent = parents.get(id(parent))
-    return True
+def _command_index_fingerprint(candidates: list[tuple[Path, str]]) -> str:
+    digest = hashlib.sha256(_COMMAND_INDEX_CACHE_VERSION.encode("ascii"))
+    for path, source in candidates:
+        digest.update(path.relative_to(ROOT).as_posix().encode("utf-8"))
+        digest.update(b"\0")
+        digest.update(source.encode("utf-8"))
+        digest.update(b"\0")
+    suppression_source = _read_source(PACKAGE / "xiuxian" / "on_compat.py") or ""
+    digest.update(suppression_source.encode("utf-8"))
+    loader_source = _read_source(PACKAGE / "__init__.py") or ""
+    digest.update(loader_source.encode("utf-8"))
+    return digest.hexdigest()
+
+
+def _load_command_index_cache(fingerprint: str) -> dict[tuple[str, str], tuple[dict[str, Any], ...]] | None:
+    if os.environ.get("XIUXIAN_PHASE2_DISABLE_CACHE"):
+        return None
+    try:
+        payload = json.loads(_command_index_cache_path().read_text(encoding="utf-8"))
+    except (OSError, ValueError, TypeError):
+        return None
+    if not isinstance(payload, dict):
+        return None
+    if payload.get("version") != _COMMAND_INDEX_CACHE_VERSION or payload.get("fingerprint") != fingerprint:
+        return None
+    result: dict[tuple[str, str], tuple[dict[str, Any], ...]] = {}
+    for entry in payload.get("entries", []):
+        if not isinstance(entry, dict):
+            return None
+        key = (str(entry.get("feature", "")), str(entry.get("name", "")))
+        records = entry.get("records", [])
+        if not isinstance(records, list) or not all(isinstance(record, dict) for record in records):
+            return None
+        result[key] = tuple(records)
+    return result
+
+
+def _save_command_index_cache(
+    fingerprint: str,
+    result: dict[tuple[str, str], tuple[dict[str, Any], ...]],
+) -> None:
+    if os.environ.get("XIUXIAN_PHASE2_DISABLE_CACHE"):
+        return
+    payload = {
+        "version": _COMMAND_INDEX_CACHE_VERSION,
+        "fingerprint": fingerprint,
+        "entries": [
+            {"feature": feature, "name": name, "records": list(records)}
+            for (feature, name), records in sorted(result.items())
+        ],
+    }
+    path = _command_index_cache_path()
+    temporary = path.with_name(f"{path.name}.{os.getpid()}.tmp")
+    try:
+        temporary.write_text(json.dumps(payload, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+        os.replace(temporary, path)
+    except OSError:
+        try:
+            temporary.unlink()
+        except OSError:
+            pass
 
 
 @lru_cache(maxsize=1)
 def _default_legacy_command_inventory() -> dict[tuple[str, str], tuple[dict[str, Any], ...]]:
-    """Approximate default command registrations from the static startup import closure."""
-    xiuxian_root = PACKAGE / "xiuxian"
-    roots: list[str] = []
-    for path in sorted(xiuxian_root.iterdir()):
-        if path.name.startswith("_") or path.stem in _PLUGIN_MODULE_EXCLUSIONS:
-            continue
-        if path.is_dir():
-            if (path / "__init__.py").is_file():
-                roots.append(_module_name(path / "__init__.py"))
-        elif path.suffix == ".py":
-            roots.append(_module_name(path))
+    """Index default legacy commands without compiling unrelated modules.
 
-    loaded: dict[str, Path] = {}
-    pending = roots[:]
-    while pending:
-        module = pending.pop()
-        if module in loaded:
+    The production loader imports each legacy plugin package below ``xiuxian``.
+    Command and handler declarations are source-local, so walking only files
+    containing a registration/decorator token is equivalent to the previous
+    import-closure result for the default tree while avoiding AST compilation
+    of hundreds of helper modules that cannot contribute a command record.
+    """
+    xiuxian_root = PACKAGE / "xiuxian"
+    candidates: list[tuple[Path, str]] = []
+    for path in sorted(xiuxian_root.rglob("*.py")):
+        if "__pycache__" in path.parts:
             continue
-        path = _module_path(module)
-        if path is None:
+        relative_parts = path.relative_to(xiuxian_root).parts
+        if relative_parts and relative_parts[0] in _PLUGIN_MODULE_EXCLUSIONS:
             continue
-        try:
-            tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
-        except (OSError, SyntaxError):
+        source = _read_source(path)
+        if source is None:
             continue
-        loaded[module] = path
-        pending.extend(sorted(_module_imports(module, path, tree).difference(loaded)))
+        # A handler in a helper file cannot bind a matcher declared in a
+        # different module: the source-local index below only joins names
+        # within one parsed file.  Skip helper-only files accordingly.
+        if "on_command" not in source:
+            continue
+        candidates.append((path, source))
+
+    fingerprint = _command_index_fingerprint(candidates)
+    cached = _load_command_index_cache(fingerprint)
+    if cached is not None:
+        return cached
 
     result: dict[tuple[str, str], list[dict[str, Any]]] = {}
     feature_aliases = {package: feature for feature, package in _COMMAND_PACKAGE_NAMES.items()}
-    for module, path in sorted(loaded.items()):
-        try:
-            tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
-        except (OSError, SyntaxError):
+    for path, source in candidates:
+        tree = _parse_ast(path)
+        if tree is None:
             continue
-        parents = {
-            id(child): node
-            for node in ast.walk(tree)
-            for child in ast.iter_child_nodes(node)
-        }
-        module_root = module.split(".xiuxian.", 1)[-1].split(".", 1)[0]
+        relative_parts = path.relative_to(xiuxian_root).parts
+        module_root = relative_parts[0] if relative_parts else path.stem
         feature = feature_aliases.get(module_root, module_root.removeprefix("xiuxian_"))
         matchers: list[tuple[str, ast.Call, tuple[str, ...], tuple[str, ...], bool]] = []
-        for node in ast.walk(tree):
-            if (
-                not isinstance(node, ast.Call)
-                or not _call_is_import_time(node, parents)
-                or not isinstance(node.func, ast.Name)
-                or node.func.id != "on_command"
-                or not node.args
-            ):
-                continue
-            try:
-                name = ast.literal_eval(node.args[0])
-            except (ValueError, TypeError, SyntaxError):
-                continue
-            if not isinstance(name, str) or not name.strip():
-                continue
-            aliases: tuple[str, ...] = ()
-            for keyword in node.keywords:
-                if keyword.arg != "aliases":
-                    continue
-                try:
-                    value = ast.literal_eval(keyword.value)
-                except (ValueError, TypeError, SyntaxError):
-                    continue
-                if isinstance(value, (set, list, tuple)):
-                    aliases = tuple(sorted(str(alias) for alias in value if str(alias).strip()))
-            parent = parents.get(id(node))
-            matcher_names: tuple[str, ...] = ()
-            if isinstance(parent, ast.Assign) and parent.value is node:
-                matcher_names = tuple(target.id for target in parent.targets if isinstance(target, ast.Name))
-            elif isinstance(parent, ast.AnnAssign) and parent.value is node and isinstance(parent.target, ast.Name):
-                matcher_names = (parent.target.id,)
-            suppressed = any(
-                key.casefold() in _suppressed_legacy_command_keys()
-                for key in (name, *aliases)
-            )
-            matchers.append((name, node, aliases, matcher_names, suppressed))
-
         handlers: dict[str, list[dict[str, Any]]] = {}
-        for node in ast.walk(tree):
-            if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+        # Carry the direct parent and import-time context in one explicit
+        # traversal.  A stack avoids the allocation and popleft overhead of
+        # ``ast.walk`` plus a second parent map on these large legacy files.
+        pending = [(tree, None, True)]
+        while pending:
+            node, parent, import_time = pending.pop()
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                for decorator in node.decorator_list:
+                    target = decorator.func if isinstance(decorator, ast.Call) else decorator
+                    if (
+                        isinstance(target, ast.Attribute)
+                        and target.attr in {"handle", "got"}
+                        and isinstance(target.value, ast.Name)
+                    ):
+                        handlers.setdefault(target.value.id, []).append(
+                            {"name": node.name, "line": node.lineno}
+                        )
+                # Function bodies cannot register a matcher during module
+                # import.  Their decorators above are the only source-bound
+                # handler evidence needed by this index.
                 continue
-            for decorator in node.decorator_list:
-                target = decorator.func if isinstance(decorator, ast.Call) else decorator
-                if (
-                    isinstance(target, ast.Attribute)
-                    and target.attr in {"handle", "got"}
-                    and isinstance(target.value, ast.Name)
-                ):
-                    handlers.setdefault(target.value.id, []).append(
-                        {"name": node.name, "line": node.lineno}
+            if isinstance(node, (ast.ClassDef, ast.Lambda)):
+                # The legacy loader does not treat class/lambda bodies as
+                # import-time matcher declarations.
+                continue
+
+            if (
+                isinstance(node, ast.Call)
+                and import_time
+                and isinstance(node.func, ast.Name)
+                and node.func.id == "on_command"
+                and node.args
+            ):
+                try:
+                    name = ast.literal_eval(node.args[0])
+                except (ValueError, TypeError, SyntaxError):
+                    name = None
+                if isinstance(name, str) and name.strip():
+                    aliases: tuple[str, ...] = ()
+                    for keyword in node.keywords:
+                        if keyword.arg != "aliases":
+                            continue
+                        try:
+                            value = ast.literal_eval(keyword.value)
+                        except (ValueError, TypeError, SyntaxError):
+                            continue
+                        if isinstance(value, (set, list, tuple)):
+                            aliases = tuple(sorted(str(alias) for alias in value if str(alias).strip()))
+                    matcher_names: tuple[str, ...] = ()
+                    if isinstance(parent, ast.Assign) and parent.value is node:
+                        matcher_names = tuple(target.id for target in parent.targets if isinstance(target, ast.Name))
+                    elif isinstance(parent, ast.AnnAssign) and parent.value is node and isinstance(parent.target, ast.Name):
+                        matcher_names = (parent.target.id,)
+                    suppressed = any(
+                        key.casefold() in _suppressed_legacy_command_keys()
+                        for key in (name, *aliases)
                     )
+                    matchers.append((name, node, aliases, matcher_names, suppressed))
+
+            pending.extend((child, node, import_time) for child in ast.iter_child_nodes(node))
 
         for name, call, aliases, matcher_names, suppressed in matchers:
             bindings = [
@@ -327,7 +350,9 @@ def _default_legacy_command_inventory() -> dict[tuple[str, str], tuple[dict[str,
                 "suppressed": suppressed,
             }
             result.setdefault((feature, name), []).append(record)
-    return {key: tuple(records) for key, records in result.items()}
+    indexed = {key: tuple(records) for key, records in result.items()}
+    _save_command_index_cache(fingerprint, indexed)
+    return indexed
 
 
 def _command_path_call_graph(records: tuple[dict[str, Any], ...]) -> tuple[list[str], list[str]]:
@@ -417,9 +442,8 @@ def _refreshed_command_graph(
 @lru_cache(maxsize=1)
 def _suppressed_legacy_command_keys() -> frozenset[str]:
     path = PACKAGE / "xiuxian" / "on_compat.py"
-    try:
-        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
-    except (OSError, SyntaxError):
+    tree = _parse_ast(path)
+    if tree is None:
         return frozenset()
     for node in ast.walk(tree):
         if not isinstance(node, (ast.Assign, ast.AnnAssign)):
@@ -439,32 +463,42 @@ def _suppressed_legacy_command_keys() -> frozenset[str]:
     return frozenset()
 
 
+@lru_cache(maxsize=None)
+def _legacy_route_locations(relative: str) -> dict[tuple[str, str], str]:
+    """Index all Flask route decorators in one file once per gate run."""
+    path = ROOT / relative
+    if not path.is_file():
+        return {}
+    tree = _parse_ast(path)
+    if tree is None:
+        return {}
+    locations: dict[tuple[str, str], str] = {}
+    pending = list(tree.body)
+    while pending:
+        node = pending.pop()
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            for decorator in node.decorator_list:
+                if not isinstance(decorator, ast.Call) or not isinstance(decorator.func, ast.Attribute):
+                    continue
+                if decorator.func.attr != "route" or not decorator.args:
+                    continue
+                try:
+                    declared_path = ast.literal_eval(decorator.args[0])
+                except (ValueError, TypeError, SyntaxError):
+                    continue
+                if isinstance(declared_path, str):
+                    locations[(node.name, declared_path)] = f"{relative}:{node.lineno}"
+            # Function bodies cannot contain a module-level Flask route.
+            continue
+        pending.extend(ast.iter_child_nodes(node))
+    return locations
+
+
 def _legacy_route_location(item: dict[str, Any]) -> str | None:
     relative = str(item.get("file", ""))
-    path = ROOT / relative
     function_name = str(item.get("function", ""))
     route_path = str(item.get("path", ""))
-    if not path.is_file():
-        return None
-    try:
-        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
-    except (OSError, SyntaxError):
-        return None
-    for node in ast.walk(tree):
-        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) or node.name != function_name:
-            continue
-        for decorator in node.decorator_list:
-            if not isinstance(decorator, ast.Call) or not isinstance(decorator.func, ast.Attribute):
-                continue
-            if decorator.func.attr != "route" or not decorator.args:
-                continue
-            try:
-                declared_path = ast.literal_eval(decorator.args[0])
-            except (ValueError, TypeError, SyntaxError):
-                continue
-            if declared_path == route_path:
-                return f"{relative}:{node.lineno}"
-    return None
+    return _legacy_route_locations(relative).get((function_name, route_path))
 
 
 def _inventory_entry_key(field: str, item: Any) -> str:
@@ -645,15 +679,18 @@ def evaluate_phase2_scope(
         )
         for family in scope.get("families", [])
     }
+    baseline_keys = {
+        field: {
+            _inventory_entry_key(field, baseline)
+            for baseline in (frozen_source_projection or {}).get(field, [])
+        }
+        for field in fields
+    }
     source_inventory_added = {
         field: [
             item
             for item in inventory.get(field, [])
-            if _inventory_entry_key(field, item)
-            not in {
-                _inventory_entry_key(field, baseline)
-                for baseline in (frozen_source_projection or {}).get(field, [])
-            }
+            if _inventory_entry_key(field, item) not in baseline_keys[field]
         ]
         for field in fields
     }

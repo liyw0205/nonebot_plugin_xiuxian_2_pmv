@@ -395,7 +395,11 @@ async def unseal_message_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
         return
     
     user_id = user_info['user_id']
-    data = get_unseal_data(user_id)
+    snapshot = dufang_application.player_stats_snapshot(user_id)
+    if snapshot.status == "schema_missing":
+        await handle_send(bot, event, "鉴石统计数据尚未就绪，请先完成数据迁移。", md_type="鉴石")
+        return
+    data = snapshot.legacy_data()
     
     msg = (
         "【鉴石统计】\n"

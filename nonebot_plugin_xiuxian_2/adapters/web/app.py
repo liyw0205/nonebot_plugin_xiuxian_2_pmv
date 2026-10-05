@@ -36,6 +36,7 @@ from ...features.back.web import blueprint as back_blueprint
 from ...features.trade.web import blueprint as trade_blueprint
 from ...features.map.web import blueprint as map_blueprint
 from ...features.rift.web import blueprint as rift_blueprint
+from ...features.info.web import blueprint as info_blueprint
 from .api import api_error, api_success
 from .auth import csrf_token
 from .auth import HostPolicy
@@ -455,6 +456,13 @@ def create_app(
         from ...features.rift.application import RiftApplication
         rift = (context.services or {}).get("rift") or RiftApplication(str(context.database.path("game_db")), str(context.database.path("player_db")))
         app.register_blueprint(rift_blueprint(rift, permission=has_permission))
+    if any(feature.key == "info" for feature in registry.features):
+        from ...features.info.profile_application import PlayerProfileApplication
+
+        info = (context.services or {}).get("player_profile") or PlayerProfileApplication(
+            str(context.database.path("game_db"))
+        )
+        app.register_blueprint(info_blueprint(info, permission=has_permission))
     from .blueprints.activity import create_blueprint as activity_blueprint
     from .blueprints.backups import create_blueprint as backups_blueprint
     from .blueprints.config import create_blueprint as config_blueprint

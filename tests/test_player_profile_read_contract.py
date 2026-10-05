@@ -65,6 +65,16 @@ class PlayerProfileReadContractTest(unittest.TestCase):
         self.assertIn("_player_activity().get_last_check_info_time", boundary)
         self.assertNotIn("_sql_message().update_last_check_info_time", boundary)
 
+    def test_legacy_search_route_delegates_to_profile_application(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        source = (root / "nonebot_plugin_xiuxian_2" / "xiuxian" / "xiuxian_web" / "system.py").read_text(encoding="utf-8")
+        start = source.index("def search_users():")
+        end = source.index("@app.route('/download/", start)
+        boundary = source[start:end]
+        self.assertIn("search_users_application(query)", boundary)
+        self.assertIn("return jsonify([])", boundary)
+        self.assertNotIn("execute_sql(DATABASE", boundary)
+
 
 if __name__ == "__main__":
     unittest.main()

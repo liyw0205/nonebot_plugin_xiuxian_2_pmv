@@ -15,6 +15,47 @@ class DufangPlayerStatsResult:
     pending: int = 0
 
 
+@dataclass(frozen=True)
+class DufangPlayerStatsSnapshot:
+    """Read-only player statistics returned to the legacy display handler."""
+
+    status: str
+    count: int = 0
+    total_cost: int = 0
+    profit: int = 0
+    loss: int = 0
+    shared_profit: int = 0
+    shared_loss: int = 0
+    received_profit: int = 0
+    received_loss: int = 0
+    last_update: str = ""
+
+    @property
+    def unseal_info(self) -> dict[str, int]:
+        return {
+            "count": self.count,
+            "total_cost": self.total_cost,
+            "profit": self.profit,
+            "loss": self.loss,
+        }
+
+    @property
+    def sharing_info(self) -> dict[str, int]:
+        return {
+            "shared_profit": self.shared_profit,
+            "shared_loss": self.shared_loss,
+            "received_profit": self.received_profit,
+            "received_loss": self.received_loss,
+        }
+
+    def legacy_data(self) -> dict[str, Any]:
+        return {
+            "unseal_info": self.unseal_info,
+            "sharing_info": self.sharing_info,
+            "last_update": self.last_update,
+        }
+
+
 def _encoded(payload: Mapping[str, Any]) -> str:
     return json.dumps(dict(payload), ensure_ascii=True, sort_keys=True, separators=(",", ":"))
 
@@ -47,7 +88,18 @@ def append_player_outbox(
 
 
 class DufangPlayerStatsSqlRepository:
-    _PLAYER_COLUMNS = {"user_id", "count", "total_cost", "profit", "loss", "last_update"}
+    _PLAYER_COLUMNS = {
+        "user_id",
+        "count",
+        "total_cost",
+        "profit",
+        "loss",
+        "shared_profit",
+        "shared_loss",
+        "received_profit",
+        "received_loss",
+        "last_update",
+    }
     _RECEIPT_COLUMNS = {"operation_id", "event_type", "payload_json", "created_at"}
 
     def __init__(self, game_database: str | Path, player_database: str | Path) -> None:
@@ -98,6 +150,42 @@ class DufangPlayerStatsSqlRepository:
                 (str(user_id),),
             )
             return 0 if row is None else int(row["total_cost"])
+
+    def snapshot(self, user_id: str) -> DufangPlayerStatsSnapshot:
+        """Read projected statistics without creating schema or user rows."""
+        user_id = str(user_id).strip()
+        if not user_id or not self.player_database.is_file():
+            return DufangPlayerStatsSnapshot("schema_missing")
+        with DatabaseUnitOfWork(self.player_database, read_only=True) as uow:
+            if not self._player_schema_ready(uow):
+                return DufangPlayerStatsSnapshot("schema_missing")
+            row = uow.query_one(
+                "SELECT count,total_cost,profit,loss,shared_profit,shared_loss,"
+                "received_profit,received_loss,last_update "
+                "FROM unseal_data WHERE user_id=?",
+                (user_id,),
+            )
+        if row is None:
+            return DufangPlayerStatsSnapshot("ok")
+
+        def integer(value: Any) -> int:
+            try:
+                return int(value or 0)
+            except (TypeError, ValueError, OverflowError):
+                return 0
+
+        return DufangPlayerStatsSnapshot(
+            "ok",
+            count=integer(row.get("count")),
+            total_cost=integer(row.get("total_cost")),
+            profit=integer(row.get("profit")),
+            loss=integer(row.get("loss")),
+            shared_profit=integer(row.get("shared_profit")),
+            shared_loss=integer(row.get("shared_loss")),
+            received_profit=integer(row.get("received_profit")),
+            received_loss=integer(row.get("received_loss")),
+            last_update=str(row.get("last_update") or ""),
+        )
 
     def reconcile(self, *, limit: int = 25, priority_event_id: str = "") -> DufangPlayerStatsResult:
         limit = max(1, min(int(limit), 25))
@@ -205,4 +293,9 @@ class DufangPlayerStatsSqlRepository:
         )
 
 
-__all__ = ["DufangPlayerStatsResult", "DufangPlayerStatsSqlRepository", "append_player_outbox"]
+__all__ = [
+    "DufangPlayerStatsResult",
+    "DufangPlayerStatsSnapshot",
+    "DufangPlayerStatsSqlRepository",
+    "append_player_outbox",
+]

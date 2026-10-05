@@ -8,6 +8,8 @@ from typing import Any, Literal
 from ..command import *
 from ..io_runtime import run_blocking_io
 from ....infrastructure.ids import UUIDGenerator
+from ....features.entertainment.schemas import NewApiCheckinTarget
+from ...xiuxian_utils.json_store import JsonStoreDataError, JsonStoreLimitError
 from .newapi_client import (
     account_base_url,
     detect_auth_mode,
@@ -28,6 +30,8 @@ from .newapi_store import (
     list_account_summaries,
     load_accounts,
     load_checkin_history,
+    record_checkin_history,
+    resolve_checkin_targets,
     resolve_targets,
     toggle_auto_checkin,
 )
@@ -44,6 +48,7 @@ _NEWAPI_FUN_KW = dict(
 
 runtime_ids = UUIDGenerator()
 _MAX_NEWAPI_LIST_RESPONSE_BYTES = 64 * 1024
+_MAX_NEWAPI_CHECKIN_REPLY_BYTES = 64 * 1024
 
 _URL_LIKE = re.compile(r"^https?://", re.I)
 
@@ -210,6 +215,30 @@ def _run_checkin_for_account(
     return idx, data
 
 
+def _run_manual_checkin_for_target(
+    qq_id: str,
+    target: NewApiCheckinTarget,
+) -> tuple[int, dict[str, Any]]:
+    mode = target.mode or detect_auth_mode(target.secret)
+    base = account_base_url(target.base_url)
+    if not base:
+        data = {"_error": "未配置接口地址"}
+    else:
+        data = do_checkin(mode, target.api_user_id, target.secret, base)
+    try:
+        record_checkin_history(
+            qq_id,
+            account_index=target.index,
+            api_user_id=target.api_user_id,
+            base_url=target.base_url,
+            summary=summarize_checkin_for_history(data),
+            source="manual",
+        )
+    except (OSError, JsonStoreDataError, JsonStoreLimitError):
+        data["_history_warning"] = "历史记录未更新，签到结果不受影响"
+    return target.index, data
+
+
 async def run_scheduled_auto_checkins() -> int:
     n = 0
     for qq_key, _idx, acc in iter_all_auto_checkin_bindings():
@@ -304,22 +333,43 @@ async def newapi_list_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
 @newapi_checkin_cmd.handle(parameterless=[Cooldown(cd_time=8)])
 async def newapi_checkin_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     qq = _qq(event)
-    targets, err = resolve_targets(qq, args.extract_plain_text())
-    if err or not targets:
-        await handle_send(bot, event, err or "无可用账号", **_NEWAPI_FUN_KW)
+    result = resolve_checkin_targets(qq, args.extract_plain_text())
+    if result.status != "ok":
+        messages = {
+            "empty": "尚未绑定账号，请使用：newapi绑定 站点用户ID#令牌#接口地址",
+            "missing": "尚未绑定账号，请使用：newapi绑定 站点用户ID#令牌#接口地址",
+            "invalid": "绑定数据格式或字段无效，未修改原文件。",
+            "too_large": "绑定数据超过 1 MiB 读取上限，未加载凭据。",
+            "too_many": "绑定账号超过 48 条处理上限，未加载凭据。",
+            "unavailable": "暂时无法读取绑定数据，未修改原文件。",
+            "invalid_selector": result.message,
+        }
+        await handle_send(bot, event, messages.get(result.status, "绑定数据暂不可用。"), **_NEWAPI_FUN_KW)
         await newapi_checkin_cmd.finish()
 
     blocks: list[str] = ["【NewAPI 签到】", ""]
-    for acc in targets:
+    reply_bytes = len("【NewAPI 签到】\n\n".encode("utf-8"))
+    omitted_results = False
+    for target in result.targets:
         idx, data = await run_blocking_io(
-            _run_checkin_for_account,
+            _run_manual_checkin_for_target,
             qq,
-            acc,
-            source="manual",
+            target,
             timeout=35,
         )
-        blocks.append(format_checkin_block(idx, acc, data))
-        blocks.append("")
+        account_view = {"api_user_id": target.api_user_id, "base_url": target.base_url}
+        block = format_checkin_block(idx, account_view, data)
+        warning = data.get("_history_warning")
+        if warning:
+            block = f"{block}\n{warning}"
+        encoded = (block + "\n\n").encode("utf-8")
+        if not omitted_results and reply_bytes + len(encoded) <= _MAX_NEWAPI_CHECKIN_REPLY_BYTES:
+            blocks.extend((block, ""))
+            reply_bytes += len(encoded)
+        else:
+            omitted_results = True
+    if omitted_results:
+        blocks.append("部分签到结果因消息长度限制未展示。")
 
     await handle_send(bot, event, "\n".join(blocks).strip(), **_NEWAPI_FUN_KW)
     await newapi_checkin_cmd.finish()

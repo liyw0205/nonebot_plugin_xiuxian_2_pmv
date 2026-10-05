@@ -11,6 +11,7 @@ from ...infrastructure.observability import trace_context
 from .._migrated_application import MigratedFeatureApplication
 from .bet_repository import DufangBetResult
 from .repository import DufangRepository
+from .player_stats_repository import DufangPlayerStatsSnapshot
 
 
 class DufangApplication(MigratedFeatureApplication):
@@ -91,6 +92,9 @@ class DufangApplication(MigratedFeatureApplication):
 
     def player_total_cost(self, user_id: str) -> int:
         return self.repository.player_total_cost(user_id)
+
+    def player_stats_snapshot(self, user_id: str) -> DufangPlayerStatsSnapshot:
+        return self.repository.player_stats_snapshot(str(user_id))
 
     def reconcile_pending(self, *, limit: int = 5, settled_at: str = "") -> Mapping[str, int]:
         limit = max(1, min(int(limit), 5))

@@ -3292,8 +3292,8 @@ class SourceQualityTests(unittest.TestCase):
         entertainment = SOURCE_ROOT / "xiuxian" / "xiuxian_entertainment"
         expected_calls = {
             entertainment / "mod" / "alist_webdav.py": (
-                "await run_blocking_io(\n            _cached_propfind",
-                "await run_blocking_io(\n            _propfind",
+                "await run_blocking_io(\n            entertainment_application.webdav_list",
+                "await run_blocking_io(\n            entertainment_application.webdav_info",
                 "await run_blocking_io(\n            _format_link_message",
             ),
             entertainment / "mod" / "newapi_commands.py": (

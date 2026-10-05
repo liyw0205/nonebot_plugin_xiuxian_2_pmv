@@ -14,6 +14,9 @@ from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_utils.json_store import (
     load_json_file,
     save_json_file,
     update_json_file,
+    update_json_file_bounded,
+    JsonStoreDataError,
+    JsonStoreLimitError,
 )
 
 
@@ -48,6 +51,49 @@ class JsonStoreTests(unittest.TestCase):
                 ["x"],
             )
             self.assertEqual(load_json_file(path, [], list), ["x"])
+
+    def test_bounded_update_rejects_oversized_state_without_rewrite_or_backup(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "state.json"
+            original = b"[" + b" " * 128
+            path.write_bytes(original)
+
+            with self.assertRaises(JsonStoreLimitError):
+                update_json_file_bounded(path, [], lambda rows: [*rows, "x"], max_bytes=64, expected_type=list)
+
+            self.assertEqual(path.read_bytes(), original)
+            self.assertEqual(list(path.parent.glob("*.bak")), [])
+
+    def test_bounded_update_preserves_invalid_json_without_backup(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "state.json"
+            path.write_text("{broken", encoding="utf-8")
+
+            with self.assertRaises(JsonStoreDataError):
+                update_json_file_bounded(path, [], lambda rows: [*rows, "x"], max_bytes=64, expected_type=list)
+
+            self.assertEqual(path.read_text(encoding="utf-8"), "{broken")
+            self.assertEqual(list(path.parent.glob("*.bak")), [])
+
+    def test_bounded_update_limits_output_and_writes_with_existing_atomic_writer(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "state.json"
+
+            self.assertEqual(
+                update_json_file_bounded(path, [], lambda rows: [*rows, "ok"], max_bytes=32, expected_type=list),
+                ["ok"],
+            )
+            original = path.read_bytes()
+            with self.assertRaises(JsonStoreLimitError):
+                update_json_file_bounded(
+                    path,
+                    [],
+                    lambda rows: [*rows, "x" * 64],
+                    max_bytes=32,
+                    expected_type=list,
+                )
+            self.assertEqual(path.read_bytes(), original)
+            self.assertEqual(list(path.parent.glob(".*.tmp")), [])
 
     def test_delete_json_file_is_idempotent(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

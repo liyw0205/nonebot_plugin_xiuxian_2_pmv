@@ -78,13 +78,13 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
         self.assertEqual(report["path_count"], 496)
         self.assertEqual(
             report["status_counts"],
-            {"不可达": 19, "允许保留的兼容路径": 45, "受阻": 421, "已迁移": 11},
+            {"不可达": 19, "允许保留的兼容路径": 45, "受阻": 413, "已迁移": 19},
         )
         self.assertGreater(report["blocked_count"], 0)
         self.assertTrue(all(item["call_graph"] and item["evidence"] for item in report["items"]))
         self.assertEqual(report["default_legacy_command_count"], 637)
         self.assertEqual(report["default_legacy_command_backlog_count"], 323)
-        self.assertEqual(len(report["backlog"]), 329)
+        self.assertEqual(len(report["backlog"]), 330)
         self.assertEqual(
             report["default_legacy_command_discovery"],
             "static_ast_startup_import_closure_not_live_runtime_observation",
@@ -102,6 +102,9 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
         bot_info = next(item for item in report["items"] if item["id"] == "command:status:bot信息")
         self.assertEqual(bot_info["status"], "已迁移")
         self.assertTrue(any("BotOverviewSqlRepository.snapshot" in edge for edge in bot_info["call_graph"]))
+        my_id = next(item for item in report["items"] if item["id"] == "command:info:我的ID")
+        self.assertEqual(my_id["status"], "已迁移")
+        self.assertTrue(any("AvatarStateSqlRepository.get_active_id" in edge for edge in my_id["call_graph"]))
         backlog_command = next(
             item for item in report["backlog"] if item["id"] == "default-legacy-command:back:我的背包"
         )
@@ -150,11 +153,32 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
         self.assertTrue(
             any("EntertainmentRepository.list_account_summaries" in edge for edge in newapi_list["call_graph"])
         )
+        newapi_checkin = next(
+            item for item in report["items"] if item["id"] == "command:entertainment:newapi签到"
+        )
+        self.assertEqual(newapi_checkin["status"], "已迁移")
+        self.assertTrue(
+            any("EntertainmentRepository.resolve_checkin_targets" in edge for edge in newapi_checkin["call_graph"])
+        )
+        self.assertTrue(
+            any("update_json_file_bounded" in edge for edge in newapi_checkin["call_graph"])
+        )
+        for webdav_name in ("webdav查看", "webdav列表", "webdav信息"):
+            webdav = next(
+                item for item in report["items"] if item["id"] == f"command:entertainment:{webdav_name}"
+            )
+            self.assertEqual(webdav["status"], "已迁移")
+            self.assertTrue(any("EntertainmentApplication" in edge for edge in webdav["call_graph"]))
         newapi_memory_risk = next(
             item for item in report["backlog"] if item["id"] == "newapi-info-state-and-response-working-set"
         )
         self.assertEqual(newapi_memory_risk["source"], "command:entertainment:newapi信息")
         self.assertIn("newapi查看", newapi_memory_risk["reason"])
+        self.assertIn("manual newapi签到", newapi_memory_risk["reason"])
+        newapi_checkin_risk = next(
+            item for item in report["backlog"] if item["id"] == "newapi-checkin-remote-history-window"
+        )
+        self.assertEqual(newapi_checkin_risk["source"], "command:entertainment:newapi签到")
         newapi_delete = next(
             item for item in report["items"] if item["id"] == "command:entertainment:newapi删除"
         )

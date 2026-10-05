@@ -58,7 +58,12 @@ class SettingsProvider:
 def _driver_config() -> Any:
     from nonebot import get_driver
 
-    return get_driver().config
+    try:
+        return get_driver().config
+    except ValueError:
+        # Library and maintenance imports are valid before NoneBot startup.
+        # Persisted XiuConfig values and explicit defaults remain available.
+        return type("UninitializedNoneBotConfig", (), {})()
 
 
 def _persisted_config() -> Any:

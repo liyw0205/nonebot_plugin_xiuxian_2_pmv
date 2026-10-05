@@ -10,6 +10,7 @@ legacy package.
 from __future__ import annotations
 
 import ast
+from functools import lru_cache
 from pathlib import Path
 
 from ..bootstrap.registry import CommandSpec
@@ -54,6 +55,22 @@ def _literal(value: ast.AST, default):
         return default
 
 
+@lru_cache(maxsize=None)
+def _read_source(path: Path) -> str | None:
+    """Read each legacy source file once per process.
+
+    Registry construction and architecture checks ask for the same historical
+    command surface repeatedly.  The source tree is immutable for the life of
+    a process, so sharing the read also avoids parsing helper files that cannot
+    contain a matcher declaration.
+    """
+    try:
+        return path.read_text(encoding="utf-8")
+    except OSError:
+        return None
+
+
+@lru_cache(maxsize=None)
 def legacy_command_candidates(
     feature: str,
     *,
@@ -65,29 +82,41 @@ def legacy_command_candidates(
         return ()
     candidates: list[tuple[str, tuple[str, ...], str]] = []
     for path in sorted(root.rglob("*.py")):
-        try:
-            tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
-        except (OSError, SyntaxError):
+        source = _read_source(path)
+        if source is None or "on_command" not in source:
             continue
-        for node in ast.walk(tree):
+        try:
+            tree = ast.parse(source, filename=str(path))
+        except SyntaxError:
+            continue
+        # Matcher declarations are evaluated by the legacy loader while the
+        # module is imported.  Skip function/lambda bodies: they cannot add a
+        # registration at import time and dominate the AST node count in the
+        # larger legacy modules.  Class bodies stay traversable because they
+        # execute while the class is created.
+        pending = list(tree.body)
+        while pending:
+            node = pending.pop()
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)):
+                continue
             if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Name):
+                pending.extend(ast.iter_child_nodes(node))
                 continue
-            if node.func.id != "on_command" or not node.args:
-                continue
-            name = _literal(node.args[0], "")
-            if not isinstance(name, str) or not name.strip() or (not include_migrated and name in _MIGRATED_NAMES):
-                continue
-            aliases: tuple[str, ...] = ()
-            permission = "user"
-            for keyword in node.keywords:
-                if keyword.arg == "aliases":
-                    raw_aliases = _literal(keyword.value, ())
-                    if isinstance(raw_aliases, (set, list, tuple)):
-                        aliases = tuple(sorted(str(alias) for alias in raw_aliases if str(alias).strip()))
-                elif keyword.arg == "permission":
-                    text = ast.unparse(keyword.value)
-                    permission = "superuser" if "SUPERUSER" in text else text
-            candidates.append((name, aliases, permission))
+            if node.func.id == "on_command" and node.args:
+                name = _literal(node.args[0], "")
+                if isinstance(name, str) and name.strip() and (include_migrated or name not in _MIGRATED_NAMES):
+                    aliases: tuple[str, ...] = ()
+                    permission = "user"
+                    for keyword in node.keywords:
+                        if keyword.arg == "aliases":
+                            raw_aliases = _literal(keyword.value, ())
+                            if isinstance(raw_aliases, (set, list, tuple)):
+                                aliases = tuple(sorted(str(alias) for alias in raw_aliases if str(alias).strip()))
+                        elif keyword.arg == "permission":
+                            text = ast.unparse(keyword.value)
+                            permission = "superuser" if "SUPERUSER" in text else text
+                    candidates.append((name, aliases, permission))
+            pending.extend(ast.iter_child_nodes(node))
     return tuple(candidates)
 
 

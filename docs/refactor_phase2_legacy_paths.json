@@ -365,14 +365,25 @@
       "id": "newapi-info-state-and-response-working-set",
       "source": "command:entertainment:newapi信息",
       "evidence": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/newapi_store.py:21-22,68-88,120-178,185-220,263-340",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/newapi_commands.py:185-218,305-357,360-381,407-416",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/newapi_store.py:21-22,68-109,120-178,185-220,256-340",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/newapi_commands.py:183-243,334-425,469-478",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/newapi_client.py:89-136",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_utils/json_store.py:25-58",
-        "nonebot_plugin_xiuxian_2/features/entertainment/repository.py:9-96",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_utils/json_store.py:25-58,106-148",
+        "nonebot_plugin_xiuxian_2/features/entertainment/repository.py:9-225",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_utils/http_proxy.py:160-185"
       ],
-      "reason": "The frozen newapi查看 list read is now bounded and read-only through EntertainmentApplication/Repository, but newapi绑定/签到/信息/删除/自动签到 and scheduled account paths still use load_accounts/load_json_file without a file byte or account-count bound; auto-checkin also enumerates and loads every per-user binding file. Missing files may be created and malformed JSON is renamed to a timestamped backup before a default file is written; these are persistent credential data and backups, not disposable caches, and there is no backup retention cap here. newapi信息 may load the account file twice, select every account, and fully buffer each remote response. No response cache exists to clear. Review the remaining account/file/backup/response working sets and credential ownership without expanding frozen membership."
+      "reason": "The frozen newapi查看 and manual newapi签到 paths now use bounded feature-owned reads; manual check-in caps streamed responses and its history writer. Remaining newapi绑定/信息/删除/自动签到 and scheduled account paths still use load_accounts/load_json_file without a file byte or account-count bound; auto-checkin also enumerates and loads every per-user binding file, while newapi信息 fully buffers remote responses. These credential/history JSON files and malformed-file backups are persistent data, not disposable caches. A remote check-in may succeed before local history is written; the crash window is tracked separately and must not be blindly replayed. Review remaining account/file/backup/response working sets without expanding frozen membership."
+    },
+    {
+      "id": "newapi-checkin-remote-history-window",
+      "source": "command:entertainment:newapi签到",
+      "evidence": [
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/newapi_commands.py:218-243,334-370",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/newapi_client.py:92-164,179-186",
+        "nonebot_plugin_xiuxian_2/features/entertainment/application.py:26-42",
+        "nonebot_plugin_xiuxian_2/features/entertainment/repository.py:197-225"
+      ],
+      "reason": "The external check-in POST and local three-row JSON history cannot commit atomically. A process crash after the remote service accepts a check-in but before the bounded history update leaves the remote effect without a local record. Determine remote idempotency/reconciliation semantics before adding retries; do not blindly replay the external write. This risk does not expand the frozen path membership."
     },
     {
       "id": "newapi-delete-json-ledger-crash-window",

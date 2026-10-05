@@ -7,7 +7,11 @@ from ...infrastructure.database import DatabaseUnitOfWork
 from .._service_port import ServicePort
 from .bet_repository import DufangBetSqlRepository
 from .payout_repository import DufangPayoutSqlRepository
-from .player_stats_repository import DufangPlayerStatsResult, DufangPlayerStatsSqlRepository
+from .player_stats_repository import (
+    DufangPlayerStatsResult,
+    DufangPlayerStatsSnapshot,
+    DufangPlayerStatsSqlRepository,
+)
 from .share_repository import DufangShareSqlRepository
 
 
@@ -80,6 +84,11 @@ class DufangRepository(ServicePort):
         projected = 0 if self.player_stats is None else self.player_stats.total_cost(user_id)
         durable = DufangBetSqlRepository(self.database).total_cost(user_id)
         return max(projected, durable)
+
+    def player_stats_snapshot(self, user_id: str) -> DufangPlayerStatsSnapshot:
+        if self.player_stats is None:
+            return DufangPlayerStatsSnapshot("schema_missing")
+        return self.player_stats.snapshot(user_id)
 
     def reconcile_player_outbox(
         self, *, limit: int = 25, priority_event_id: str = ""

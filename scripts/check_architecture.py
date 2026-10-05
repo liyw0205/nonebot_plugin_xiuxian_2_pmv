@@ -47,8 +47,10 @@ def check_feature_connections() -> list[str]:
     for path in (PACKAGE / "features").rglob("*.py"):
         if "tests" in path.parts:
             continue
-        names = _imports(path)
         source = path.read_text(encoding="utf-8")
+        if not any(token in source for token in ("sqlite3", "nonebot", "flask", "db_backend.connect", "db_backend.connection")):
+            continue
+        names = _imports(path)
         if any(name.split(".", 1)[0] in {"sqlite3", "nonebot", "flask"} for name in names) or any(token in source for token in ("db_backend.connect", "db_backend.connection", "sqlite3.connect")):
             errors.append(f"{path.relative_to(ROOT)} imports a framework/database driver")
     return errors
@@ -88,7 +90,14 @@ def check_no_lifecycle_hooks_outside_bootstrap() -> list[str]:
         if path.name == "plugin.py":
             continue
         try:
-            tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+            source = path.read_text(encoding="utf-8")
+        except OSError as exc:
+            errors.append(f"{path.relative_to(ROOT)} cannot be read: {exc}")
+            continue
+        if "on_startup" not in source and "on_shutdown" not in source:
+            continue
+        try:
+            tree = ast.parse(source, filename=str(path))
         except SyntaxError as exc:
             errors.append(f"{path.relative_to(ROOT)} has syntax error: {exc}")
             continue
@@ -158,7 +167,13 @@ def check_legacy_scheduler_manifest_alignment() -> list[str]:
             if "vendor" in path.parts or "__pycache__" in path.parts:
                 continue
             try:
-                tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+                source = path.read_text(encoding="utf-8")
+            except OSError:
+                continue
+            if "scheduled_job" not in source and "add_job" not in source:
+                continue
+            try:
+                tree = ast.parse(source, filename=str(path))
             except SyntaxError:
                 continue
             for node in ast.walk(tree):

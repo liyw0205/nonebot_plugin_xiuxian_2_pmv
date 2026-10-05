@@ -39,7 +39,11 @@ from .qq_compat import (
     is_qq_event,
 )
 
-DRIVER = get_driver()
+try:
+    DRIVER = get_driver()
+except ValueError:
+    # CLI/library imports intentionally do not initialize a NoneBot driver.
+    DRIVER = None
 _INTERNAL_PACKAGES = {
     "infrastructure",
     "messaging",
@@ -57,12 +61,15 @@ _INTERNAL_PACKAGES = {
     "xiuxian_config",
 }
 
-try:
-    NICKNAME: str = list(DRIVER.config.nickname)[0]
-except Exception as e:
-    logger.opt(colors=True).info(f"<red>缺少超级用户配置文件，{e}!</red>")
-    logger.opt(colors=True).info(f"<red>请去.env.dev文件中设置超级用户QQ号以及nickname!</red>")
-    NICKNAME = 'bot'
+if DRIVER is None:
+    NICKNAME = "bot"
+else:
+    try:
+        NICKNAME = list(DRIVER.config.nickname)[0]
+    except Exception as e:
+        logger.opt(colors=True).info(f"<red>缺少超级用户配置文件，{e}!</red>")
+        logger.opt(colors=True).info(f"<red>请去.env.dev文件中设置超级用户QQ号以及nickname!</red>")
+        NICKNAME = "bot"
 
 put_bot = XiuConfig().put_bot
 shield_group = XiuConfig().shield_group
@@ -73,9 +80,10 @@ try:
 except Exception:
     logger.opt(colors=True).info(f"<green>修仙插件没有配置put_bot,如果有多个qq和nb链接,请务必配置put_bot,具体介绍参考【风控帮助】！</green>")
 
-require('nonebot_plugin_apscheduler')
+if DRIVER is not None:
+    require('nonebot_plugin_apscheduler')
 
-if get_plugin_by_module_name("xiuxian"):
+if DRIVER is not None and get_plugin_by_module_name("xiuxian"):
     logger.opt(colors=True).info(f"<green>推荐直接加载 xiuxian 仓库文件夹</green>")
     load_all_plugins(
         [

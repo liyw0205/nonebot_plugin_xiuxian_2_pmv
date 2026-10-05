@@ -11,6 +11,11 @@ from nonebot.params import CommandArg
 
 from ..command import *
 from ..io_runtime import run_blocking_io
+from ....features.entertainment.application import EntertainmentApplication
+from ....features.entertainment.webdav_repository import (
+    WebDavTargetError,
+)
+from ....paths import get_paths
 from ...xiuxian_utils.utils import build_md_command_link
 from ...xiuxian_utils.http_proxy import http_client
 
@@ -25,6 +30,8 @@ LINK_CACHE_TTL = 300
 _LIST_CACHE: dict[tuple[str, str, str, str], list[dict[str, Any]]] = {}
 _TOKEN_CACHE: dict[tuple[str, str], str] = {}
 _LINK_CACHE: dict[tuple[str, str, str], tuple[float, dict[str, Any]]] = {}
+
+entertainment_application = EntertainmentApplication(get_paths().game_db)
 
 
 def _load_bindings() -> list[dict[str, Any]]:
@@ -561,8 +568,8 @@ def _delete_bindings(text: str) -> tuple[bool, str]:
     return True, f"已删除绑定 {idx}：{removed.get('label') or _display_url(removed.get('dav_url') or '')}"
 
 
-def _format_bindings() -> str:
-    rows = _load_bindings()
+def _format_bindings(rows=None) -> str:
+    rows = list(rows if rows is not None else _load_bindings())
     if not rows:
         return (
             "【WebDAV 绑定】\n"
@@ -572,9 +579,34 @@ def _format_bindings() -> str:
         )
     lines = ["【WebDAV 绑定】", ""]
     for i, row in enumerate(rows, start=1):
-        label = row.get("label") or "WebDAV"
-        lines.append(f"{i}. {label} · {row.get('username') or '?'} · {_display_url(row.get('dav_url') or '')}")
+        if hasattr(row, "label"):
+            label = row.label or "WebDAV"
+            username = row.username or "?"
+            dav_url = row.dav_url or ""
+        else:
+            label = row.get("label") or "WebDAV"
+            username = row.get("username") or "?"
+            dav_url = row.get("dav_url") or ""
+        lines.append(f"{i}. {label} · {username} · {_display_url(dav_url)}")
     return "\n".join(lines)
+
+
+def _binding_mapping(binding) -> dict[str, Any]:
+    return {
+        "label": getattr(binding, "label", "WebDAV"),
+        "dav_url": getattr(binding, "dav_url", ""),
+    }
+
+
+def _entry_mapping(entry) -> dict[str, Any]:
+    return {
+        "href": getattr(entry, "href", ""),
+        "name": getattr(entry, "name", "/"),
+        "is_dir": bool(getattr(entry, "is_dir", False)),
+        "size": getattr(entry, "size", ""),
+        "modified": getattr(entry, "modified", ""),
+        "content_type": getattr(entry, "content_type", ""),
+    }
 
 
 def _parent_path(dav_path: str) -> str:
@@ -746,25 +778,38 @@ async def webdav_bind_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
 
 @webdav_list_bind_cmd.handle(parameterless=[Cooldown(cd_time=2)])
 async def webdav_list_bind_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
-    await handle_send(bot, event, _format_bindings(), **_DAV_KW)
+    try:
+        bindings = await run_blocking_io(
+            entertainment_application.webdav_bindings,
+            bindings_path=WEBDAV_BINDINGS_FILE,
+            timeout=5,
+        )
+        msg = _format_bindings(bindings)
+    except Exception as e:
+        msg = f"读取 WebDAV 绑定失败：{e}"
+    await handle_send(bot, event, msg, **_DAV_KW)
     await webdav_list_bind_cmd.finish()
 
 
 @webdav_ls_cmd.handle(parameterless=[Cooldown(cd_time=6)])
 async def webdav_ls_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
-    binding, idx, dav_path, err = _parse_target_and_path(args.extract_plain_text(), need_path=False)
-    if err or not binding:
-        await handle_send(bot, event, err or "无可用绑定", **_DAV_KW)
-        await webdav_ls_cmd.finish()
     try:
-        entries = await run_blocking_io(
-            _cached_propfind, binding, dav_path, "1", timeout=25
+        result = await run_blocking_io(
+            entertainment_application.webdav_list,
+            bindings_path=WEBDAV_BINDINGS_FILE,
+            text=args.extract_plain_text(),
+            timeout=25,
         )
+    except WebDavTargetError as e:
+        await handle_send(bot, event, str(e), **_DAV_KW)
+        await webdav_ls_cmd.finish()
     except Exception as e:
         await handle_send(bot, event, f"读取 WebDAV 目录失败：{e}", **_DAV_KW)
         await webdav_ls_cmd.finish()
-    msg = _format_list(binding, idx, dav_path, entries, markdown=True)
-    fallback = _format_list(binding, idx, dav_path, entries, markdown=False)
+    binding = _binding_mapping(result.binding)
+    entries = [_entry_mapping(entry) for entry in result.entries]
+    msg = _format_list(binding, result.binding.index, result.path, entries, markdown=True)
+    fallback = _format_list(binding, result.binding.index, result.path, entries, markdown=False)
     await handle_send(
         bot,
         event,
@@ -772,7 +817,11 @@ async def webdav_ls_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, a
         native_markdown=True,
         fallback_msg=fallback,
         keyboard_rows=[
-            [("查看绑定", "webdav查看"), ("根目录", f"webdav列表 {idx} /"), ("帮助", "webdav帮助")]
+            [
+                ("查看绑定", "webdav查看"),
+                ("根目录", f"webdav列表 {result.binding.index} /"),
+                ("帮助", "webdav帮助"),
+            ]
         ],
         at_msg=True,
     )
@@ -781,17 +830,25 @@ async def webdav_ls_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, a
 
 @webdav_info_cmd.handle(parameterless=[Cooldown(cd_time=5)])
 async def webdav_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
-    binding, idx, dav_path, err = _parse_target_and_path(args.extract_plain_text(), need_path=True)
-    if err or not binding:
-        await handle_send(bot, event, err or "无可用绑定", **_DAV_KW)
-        await webdav_info_cmd.finish()
     try:
-        entries = await run_blocking_io(
-            _propfind, binding, dav_path, "0", timeout=25
+        result = await run_blocking_io(
+            entertainment_application.webdav_info,
+            bindings_path=WEBDAV_BINDINGS_FILE,
+            text=args.extract_plain_text(),
+            timeout=25,
         )
-        msg = _format_info(binding, idx, dav_path, entries)
+    except WebDavTargetError as e:
+        await handle_send(bot, event, str(e), **_DAV_KW)
+        await webdav_info_cmd.finish()
     except Exception as e:
         msg = f"读取 WebDAV 信息失败：{e}"
+    else:
+        msg = _format_info(
+            _binding_mapping(result.binding),
+            result.binding.index,
+            result.path,
+            [_entry_mapping(entry) for entry in result.entries],
+        )
     await handle_send(bot, event, msg, **_DAV_KW)
     await webdav_info_cmd.finish()
 

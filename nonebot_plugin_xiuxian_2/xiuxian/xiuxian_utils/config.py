@@ -11,5 +11,13 @@ class Config(BaseModel):
     priority: int = Field(2, alias="xiuxian_priority")
 
 
-config = Config.parse_obj(get_driver().config)
+try:
+    # Maintenance commands import legacy repositories without starting a
+    # NoneBot driver.  Their configuration must still be importable; a real
+    # driver remains the authoritative source whenever one is initialized.
+    driver_config = get_driver().config
+except ValueError:
+    driver_config = {}
+
+config = Config.parse_obj(driver_config)
 priority = config.priority
