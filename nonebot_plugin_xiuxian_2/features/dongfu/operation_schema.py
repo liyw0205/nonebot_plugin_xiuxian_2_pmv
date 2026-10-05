@@ -29,7 +29,7 @@ OPERATION_TABLE_DDL = (
     "operation_id TEXT PRIMARY KEY, payload TEXT NOT NULL, "
     "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)",
     "CREATE TABLE IF NOT EXISTS dongfu_visit_reward_operations ("
-    "operation_id TEXT PRIMARY KEY, payload TEXT NOT NULL, "
+    "operation_id TEXT PRIMARY KEY, payload TEXT NOT NULL, gain INTEGER NOT NULL DEFAULT 0, "
     "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)",
 )
 
@@ -45,7 +45,10 @@ OPERATION_TABLE_COLUMNS = {
         "operation_id", "payload", "patrol_count", "patrol_guard", "created_at"
     },
     "dongfu_plant_operations": {"operation_id", "payload", "created_at"},
-    "dongfu_visit_reward_operations": {"operation_id", "payload", "created_at"},
+    "dongfu_visit_reward_operations": {"operation_id", "payload", "gain", "created_at"},
+    "dongfu_infiltration_operations": {
+        "operation_id", "user_id", "payload", "created_at"
+    },
 }
 
 

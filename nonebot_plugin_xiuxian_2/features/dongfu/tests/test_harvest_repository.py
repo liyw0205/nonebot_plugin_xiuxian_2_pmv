@@ -16,7 +16,11 @@ class DongfuHarvestRepositoryTests(unittest.TestCase):
             with db_backend.transaction(game) as c: c.execute('CREATE TABLE user_xiuxian(user_id TEXT PRIMARY KEY)'); c.execute("INSERT INTO user_xiuxian VALUES('u')"); c.execute('CREATE TABLE back(user_id TEXT,goods_id INTEGER,goods_name TEXT,goods_type TEXT,goods_num INTEGER,create_time TEXT,update_time TEXT,bind_num INTEGER,UNIQUE(user_id,goods_id))')
             with db_backend.transaction(player) as c: c.execute('CREATE TABLE dongfu_status(user_id TEXT PRIMARY KEY,built INTEGER,plant_slots TEXT,planting INTEGER,plant_seed_id INTEGER,plant_start TEXT,plant_finish TEXT,harvest_settlement TEXT)'); c.execute("INSERT INTO dongfu_status VALUES('u',1,?,?,?,?,?,?)",(expected,1,1,'','2025-12-31 00:00:00',''))
             install_operation_schema(game)
-            repo=DongfuHarvestSqlRepository(game,player); items=[{'id':2,'name':'果','type':'特殊物品','amount':1}]; first=repo.harvest('h','u',slots,[1],items,99,'2026-01-02 00:00:00'); dup=repo.harvest('h','u',slots,[1],items,99,'2026-01-02 00:00:00'); self.assertEqual((first.status,dup.status),('harvested','duplicate'))
+            repo=DongfuHarvestSqlRepository(game,player); items=[{'id':2,'name':'果','type':'特殊物品','amount':1}]; first=repo.harvest('h','u',slots,[1],items,99,'2026-01-02 00:00:00'); dup=repo.harvest('h','u',slots,[1],items,99,'2026-01-02 00:00:00'); self.assertEqual((first.status,dup.status),('harvested','duplicate')); self.assertEqual(dup.effects_event_id,first.effects_event_id)
+            with DatabaseUnitOfWork(game,read_only=True) as uow:
+                event=uow.query_one('SELECT event_type,payload_json,status FROM domain_outbox WHERE event_id=?',(first.effects_event_id,))
+            self.assertEqual((event['event_type'],event['status']),('game_event.projection','pending'))
+            self.assertEqual(json.loads(event['payload_json'])['meta']['detail']['slots'],[1])
 
 
 class DongfuHarvestSnapshotRepositoryTests(unittest.TestCase):
@@ -58,8 +62,9 @@ class DongfuHarvestSnapshotRepositoryTests(unittest.TestCase):
     def tearDown(self):
         self.temp_dir.cleanup()
 
-    def prepare(self, snapshot=None, expected_slots=None):
+    def prepare(self, snapshot=None, expected_slots=None, operation_id="event"):
         return self.repository.prepare_snapshot(
+            operation_id,
             "u",
             self.slots if expected_slots is None else expected_slots,
             self.snapshot if snapshot is None else snapshot,
@@ -82,8 +87,9 @@ class DongfuHarvestSnapshotRepositoryTests(unittest.TestCase):
         replay = self.prepare(replacement)
 
         self.assertEqual((first.status, replay.status), ("prepared", "existing"))
-        self.assertEqual(replay.snapshot, self.snapshot)
-        self.assertEqual(json.loads(self.read_status()["harvest_settlement"]), self.snapshot)
+        expected = dict(self.snapshot, operation_id="event")
+        self.assertEqual(replay.snapshot, expected)
+        self.assertEqual(json.loads(self.read_status()["harvest_settlement"]), expected)
 
     def test_prepare_normalizes_legacy_plant_fields_before_freezing(self):
         with DatabaseUnitOfWork(self.player) as uow:
@@ -124,3 +130,29 @@ class DongfuHarvestSnapshotRepositoryTests(unittest.TestCase):
 
         self.assertEqual(result.status, "snapshot_invalid")
         self.assertEqual(self.read_status()["harvest_settlement"], "broken")
+
+    def test_stale_snapshot_is_replaced_for_changed_slots_and_new_operation(self):
+        self.prepare()
+        changed = list(self.slots)
+        changed[0] = empty_plant_slot(1)
+        changed[0].update(
+            {
+                "seed_id": 21002,
+                "seed_name": "新种子",
+                "plant_start": "2026-01-02 00:00:00",
+                "plant_finish": "2026-01-02 01:00:00",
+            }
+        )
+        with DatabaseUnitOfWork(self.player) as uow:
+            uow.execute(
+                "UPDATE dongfu_status SET plant_slots=?,plant_seed_id=21002,"
+                "plant_start='2026-01-02 00:00:00',plant_finish='2026-01-02 01:00:00' WHERE user_id='u'",
+                (canonical_plant_slots(changed),),
+            )
+        replacement = dict(self.snapshot, expected_slots=changed, operation_id="new-event")
+
+        result = self.prepare(replacement, expected_slots=changed, operation_id="new-event")
+
+        self.assertEqual(result.status, "prepared")
+        self.assertEqual(result.snapshot["operation_id"], "new-event")
+        self.assertEqual(result.snapshot["items"], self.snapshot["items"])

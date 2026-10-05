@@ -86,6 +86,7 @@ from .features.base.migrations import (
     apply_base_stone_contest_operations,
     apply_base_stone_robbery_operations,
     apply_base_stone_robbery_player_statistics,
+    apply_base_stamina_operations,
     apply_base_xiangyuan,
     apply_base_xiangyuan_player,
 )
@@ -185,6 +186,7 @@ from .features.dungeon.manifest import FEATURE as DUNGEON_FEATURE
 from .features.dungeon.migrations import apply_dungeon, apply_dungeon_explore, apply_dungeon_explore_player_schema, apply_dungeon_explore_resolution_intent, apply_dungeon_purchase, apply_dungeon_session, apply_dungeon_team, apply_dungeon_team_invite_expiry, apply_dungeon_team_members_index, apply_dungeon_team_schema
 from .features.fusion.migrations import apply_fusion_operations
 from .features.dongfu.migrations import (
+    apply_dongfu_event_replay,
     apply_dongfu_infiltrate_failure,
     apply_dongfu_infiltrate_success,
     apply_dongfu_operations,
@@ -305,6 +307,7 @@ def build_migrations() -> tuple[Migration, ...]:
         Migration("base.009", "direct_breakthrough_operations", apply_base_direct_breakthrough_operations),
         Migration("base.010", "direct_breakthrough_plans", apply_base_direct_breakthrough_plans),
         Migration("base.011", "direct_breakthrough_player", apply_base_direct_breakthrough_player),
+        Migration("base.012", "player_stamina_operations", apply_base_stamina_operations),
         Migration("beg.001", "beg_feature_migrations", apply_beg),
         Migration("boss.001", "boss_feature_migrations", apply_boss),
         Migration("boss.002", "boss_purchase_operations", apply_boss_purchase),
@@ -331,6 +334,7 @@ def build_migrations() -> tuple[Migration, ...]:
         Migration("dongfu.002", "dongfu_infiltrate_success_operations", apply_dongfu_infiltrate_success),
         Migration("dongfu.003", "dongfu_infiltrate_failure_operations", apply_dongfu_infiltrate_failure),
         Migration("dongfu.004", "dongfu_action_operations", apply_dongfu_operations),
+        Migration("dongfu.005", "dongfu_event_replay_plans", apply_dongfu_event_replay),
         Migration("dungeon.001", "dungeon_feature_migrations", apply_dungeon),
         Migration("dungeon.002", "dungeon_purchase_operations", apply_dungeon_purchase),
         Migration("dungeon.003", "dungeon_session_operations", apply_dungeon_session),
@@ -891,6 +895,7 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
         from .features.info.attribute_application import PlayerAttributeApplication
         from .features.player_state.application import PlayerStateApplication
         from .features.base.stamina_application import PlayerStaminaApplication
+        from .features.dongfu.application import DongfuApplication
 
         settings = context.settings
         from .features.bank.feature_flag import bank_first_use_enabled
@@ -1081,6 +1086,11 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
                 clock=context.clock,
                 game_event_effects=game_event_effects,
             ),
+            "dongfu": DongfuApplication(
+                str(context.database.path("game_db")),
+                str(context.database.path("player_db")),
+                game_event_effects=game_event_effects,
+            ),
             "sect": SectApplication(
                 str(context.database.path("game_db")),
                 player_database=str(context.database.path("player_db")),
@@ -1167,6 +1177,7 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
             from .xiuxian.xiuxian_buff import configure_buff_application
             from .xiuxian.xiuxian_map import configure_map_application
             from .xiuxian.xiuxian_pet import configure_pet_application
+            from .xiuxian.xiuxian_dongfu import configure_dongfu_application
             from .xiuxian.xiuxian_back import configure_back_application, configure_package_reward_application
             from .xiuxian.xiuxian_tasks.task_data import configure_task_claim_application
             from .xiuxian.xiuxian_training import configure_training_application
@@ -1189,6 +1200,7 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
             configure_buff_application(context.services["buff"])
             configure_map_application(context.services["map"])
             configure_pet_application(context.services["pet"])
+            configure_dongfu_application(context.services["dongfu"])
             configure_player_stamina_application(context.services["player_stamina"])
             configure_back_application(context.services["back"])
             configure_package_reward_application(context.services["package_reward"])

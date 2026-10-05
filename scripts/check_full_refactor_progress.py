@@ -783,16 +783,16 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "visit_reward",
         )
     )
-    dongfu_success_handler = dongfu_facade[
-        dongfu_facade.index('operation_id = f"dongfu-infiltrate-success:') : dongfu_facade.index(
-            'if result.status == "inventory_full":',
-            dongfu_facade.index('operation_id = f"dongfu-infiltrate-success:'),
+    dongfu_visit_reward_repository = (PACKAGE / "features" / "dongfu" / "visit_reward_repository.py").read_text(encoding="utf-8")
+    dongfu_infiltration_plan_repository = (PACKAGE / "features" / "dongfu" / "infiltration_plan_repository.py").read_text(encoding="utf-8")
+    dongfu_operation_receipt_repository = (PACKAGE / "features" / "dongfu" / "operation_receipt_repository.py").read_text(encoding="utf-8")
+    dongfu_settlement_helper = dongfu_facade[
+        dongfu_facade.index("async def _settle_infiltration_plan") : dongfu_facade.index(
+            "@infiltrate_dongfu.handle", dongfu_facade.index("async def _settle_infiltration_plan")
         )
     ]
-    dongfu_failure_handler = dongfu_facade[
-        dongfu_facade.index('operation_id = f"dongfu-infiltrate-failure:') : dongfu_facade.index(
-            "    stealth_penalty =", dongfu_facade.index('operation_id = f"dongfu-infiltrate-failure:')
-        )
+    dongfu_infiltration_handler = dongfu_facade[
+        dongfu_facade.index("@infiltrate_dongfu.handle") :
     ]
     impart_pk_facade = (PACKAGE / "xiuxian" / "xiuxian_impart_pk" / "__init__.py").read_text(encoding="utf-8")
     admin_facade = (PACKAGE / "xiuxian" / "xiuxian_admin" / "__init__.py").read_text(encoding="utf-8")
@@ -2998,7 +2998,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "direct_breakthrough_startup_migration_registered": (
                 'Migration("base.009", "direct_breakthrough_operations", apply_base_direct_breakthrough_operations)' in plugin
                 and "def apply_base_direct_breakthrough_operations(" in base_migrations
-                and 'migration_version="base.011"' in base_manifest
+                and 'migration_version="base.012"' in base_manifest
                 and 'configure_direct_breakthrough_application(context.services["base"])' in plugin_source
             ),
             "direct_breakthrough_request_path_has_no_ddl": (
@@ -3479,6 +3479,36 @@ def _slice_status() -> dict[str, dict[str, object]]:
                 and "def prepare_harvest_snapshot(" in dongfu_repository
                 and "def prepare_snapshot(" in dongfu_operation_repositories[4]
                 and "harvest_settlement=?" in dongfu_operation_repositories[4]
+                and "operation_id = str(snapshot.get(\"operation_id\") or operation_id)" in dongfu_facade
+            ),
+            "harvest_effects_outbox_atomic": (
+                "game_event.projection" in dongfu_operation_repositories[4]
+                and "self.outbox.append(" in dongfu_operation_repositories[4]
+                and "effects_event_id" in dongfu_application
+                and "configure_dongfu_application(context.services[\"dongfu\"])" in plugin
+                and "safe_record_game_event" not in dongfu_facade
+            ),
+            "visit_reward_payload_is_stable_and_replay_preserves_gain": (
+                "_receipt(old['payload'],old['gain'])" in dongfu_visit_reward_repository
+                and "INSERT INTO dongfu_visit_reward_operations(operation_id,payload,gain)" in dongfu_visit_reward_repository
+                and "number_to(result.gain)" in dongfu_facade
+                and "dongfu.005" in plugin
+            ),
+            "infiltration_plan_freezes_branch_and_operation_id": (
+                "dongfu_application.infiltration_plan(" in dongfu_facade
+                and "dongfu_application.prepare_infiltration_plan(" in dongfu_facade
+                and "DongfuInfiltrationPlanSqlRepository" in dongfu_repository
+                and "dongfu-infiltrate:{my_uid}:" in dongfu_infiltration_handler
+                and 'operation_id = f"dongfu-infiltrate-success:' not in dongfu_infiltration_handler
+                and 'operation_id = f"dongfu-infiltrate-failure:' not in dongfu_infiltration_handler
+                and '"settlement": "failure" if failure else "success"' in dongfu_infiltration_handler
+                and "_decode" in dongfu_infiltration_plan_repository
+            ),
+            "static_map_and_visit_profile_reads_are_feature_owned": (
+                "MapStaticDataProvider(JsonDocumentReader(), MAP_FILE)" in dongfu_facade
+                and "player_profile_application.get_user_profile_by_name(tname)" in dongfu_facade
+                and "PlayerDataManager" not in dongfu_facade
+                and "XiuxianDateManage" not in dongfu_facade
             ),
             "harvest_snapshot_handler_has_no_legacy_writeback": (
                 "@dongfu_harvest.handle" in dongfu_facade
@@ -3496,10 +3526,14 @@ def _slice_status() -> dict[str, dict[str, object]]:
                 token not in dongfu_facade
                 for token in ("def _consume_item(", "_sql_message().goods_num(", "_sql_message().update_back_j(")
             ),
-            "infiltrate_success_application_owned": "dongfu_application.infiltrate_success(" in dongfu_success_handler,
-            "legacy_infiltrate_success_disabled": "_dongfu_infiltrate_success_service().settle(" not in dongfu_success_handler and "_run_dongfu_action(" not in dongfu_success_handler,
-            "infiltrate_failure_application_owned": "dongfu_application.infiltrate_failure(" in dongfu_failure_handler,
-            "legacy_infiltrate_failure_disabled": "_dongfu_infiltrate_failure_service().settle(" not in dongfu_failure_handler and "_run_dongfu_action(" not in dongfu_failure_handler,
+            "infiltrate_success_application_owned": "dongfu_application.infiltrate_success(" in dongfu_settlement_helper,
+            "legacy_infiltrate_success_disabled": "_dongfu_infiltrate_success_service().settle(" not in dongfu_settlement_helper and "_run_dongfu_action(" not in dongfu_settlement_helper,
+            "infiltrate_failure_application_owned": "dongfu_application.infiltrate_failure(" in dongfu_settlement_helper,
+            "legacy_infiltrate_failure_disabled": "_dongfu_infiltrate_failure_service().settle(" not in dongfu_settlement_helper and "_run_dongfu_action(" not in dongfu_settlement_helper,
+            "legacy_infiltration_receipts_replayed_before_checks": (
+                "dongfu_application.operation_receipt(legacy_action, legacy_operation_id)" in dongfu_infiltration_handler
+                and "DongfuOperationReceiptSqlQueryRepository" in dongfu_operation_receipt_repository
+            ),
             "legacy_transactions_isolated": (
                 "transaction_service" not in dongfu_facade
                 and all(
@@ -3533,6 +3567,8 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "operation_schema_startup_migration_owned": (
                 'Migration("dongfu.004", "dongfu_action_operations", apply_dongfu_operations)' in plugin
                 and "def apply_dongfu_operations(" in dongfu_migrations
+                and 'Migration("dongfu.005", "dongfu_event_replay_plans", apply_dongfu_event_replay)' in plugin
+                and "def apply_dongfu_event_replay(" in dongfu_migrations
                 and all(table in dongfu_operation_schema for table in (
                     "dongfu_accelerate_operations",
                     "dongfu_array_upgrade_operations",
@@ -3542,6 +3578,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
                     "dongfu_patrol_operations",
                     "dongfu_plant_operations",
                     "dongfu_visit_reward_operations",
+                    "dongfu_infiltration_operations",
                 ))
             ),
             "status_read_application_owned": "dongfu_application.status(" in dongfu_facade
@@ -3595,17 +3632,17 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "status_read_has_no_legacy_writeback": (
                 "def _get_dongfu" in dongfu_facade
                 and "_player_data_manager().get_fields" not in dongfu_facade[
-                    dongfu_facade.index("def _get_dongfu") : dongfu_facade.index("def _save_dongfu")
+                    dongfu_facade.index("def _get_dongfu") : dongfu_facade.index("def _has_dongfu")
                 ]
                 and "update_or_write_data" not in dongfu_facade[
-                    dongfu_facade.index("def _get_dongfu") : dongfu_facade.index("def _save_dongfu")
+                    dongfu_facade.index("def _get_dongfu") : dongfu_facade.index("def _has_dongfu")
                 ]
             ),
             "infiltration_eligibility_has_no_legacy_writeback": all(
                 "_save_dongfu" not in dongfu_facade[dongfu_facade.index(start) : dongfu_facade.index(end)]
                 for start, end in (
-                    ("def _can_infiltrate", "def _consume_infiltrate_count"),
-                    ("def _can_intrude", "def _get_random_dongfu_target"),
+                    ("def _can_infiltrate", "def _can_intrude"),
+                    ("def _can_intrude", "async def _get_random_dongfu_target"),
                 )
             ),
             "status_display_has_no_legacy_writeback": (
@@ -3620,7 +3657,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
                 and '"map.017"' in plugin[plugin.index("_PLAYER_DATABASE_MIGRATION_VERSIONS") : plugin.index("_TRADE_DATABASE_MIGRATION_VERSIONS")]
                 and '"map.017"' in plugin[plugin.index("_GAME_DATABASE_EXCLUDED_MIGRATION_VERSIONS") : plugin.index("_PLAYER_DATABASE_MIGRATION_VERSIONS")]
             ),
-            "status": "asset_actions_application_owned_operation_schema_startup_migrated_legacy_transactions_isolated_with_dongfu_reads_legacy",
+            "status": "dongfu_all_commands_classified_owned_action_transactions_replay_safe_outbox_effects_and_reads_feature_owned",
         },
         "impart_pk": {
             "project_join_application_owned": "impart_pk_application.project_join(" in impart_pk_facade,

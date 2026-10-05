@@ -61,15 +61,18 @@ class DongfuOperationSchemaTests(unittest.TestCase):
         migrations = build_migrations()
         game_migrations = migrations_for_database(migrations, "game_db")
         player_migrations = migrations_for_database(migrations, "player_db")
-        migration = next(item for item in migrations if item.version == "dongfu.004")
-        self.assertIn(migration, game_migrations)
-        self.assertNotIn(migration, player_migrations)
+        action_migration = next(item for item in migrations if item.version == "dongfu.004")
+        replay_migration = next(item for item in migrations if item.version == "dongfu.005")
+        self.assertIn(action_migration, game_migrations)
+        self.assertIn(replay_migration, game_migrations)
+        self.assertNotIn(action_migration, player_migrations)
+        self.assertNotIn(replay_migration, player_migrations)
 
         with tempfile.TemporaryDirectory() as directory:
             database = Path(directory) / "game.db"
-            runner = MigrationRunner((migration,))
+            runner = MigrationRunner((action_migration, replay_migration))
             with DatabaseUnitOfWork(database) as uow:
-                self.assertEqual(runner.apply(uow), ["dongfu.004"])
+                self.assertEqual(runner.apply(uow), ["dongfu.004", "dongfu.005"])
             with DatabaseUnitOfWork(database) as uow:
                 uow.execute(
                     "INSERT INTO dongfu_plant_operations(operation_id,payload) VALUES(?,?)",

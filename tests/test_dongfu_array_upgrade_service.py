@@ -8,29 +8,24 @@ from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_dongfu.transaction_service import 
 from tests.test_db_backend import db_backend
 
 class DongfuArrayUpgradeServiceTests(unittest.TestCase):
- def test_dongfu_facade_defers_sql_manager_construction(self):
+ def test_dongfu_facade_uses_feature_owned_reads(self):
   source=Path("nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dongfu/__init__.py").read_text(encoding="utf-8")
-  self.assertIn("_sql_message_instance = None",source)
-  self.assertIn("def _sql_message(",source)
+  self.assertNotIn("XiuxianDateManage",source)
+  self.assertNotIn("PlayerDataManager",source)
+  self.assertIn("MapStaticDataProvider",source)
+  self.assertIn("JsonDocumentReader",source)
+  self.assertIn("PlayerProfileApplication",source)
   self.assertNotIn("def _consume_item(",source)
-  self.assertNotIn("_sql_message().goods_num(",source)
-  self.assertNotIn("_sql_message().update_back_j(",source)
-  self.assertIn("_sql_message().get_user_info_with_id(",source)
-  self.assertIn("_sql_message().get_user_info_with_name(",source)
-  self.assertNotIn("sql_message = XiuxianDateManage()",source)
-  self.assertIn("_player_data_manager_instance = None",source)
-  self.assertIn("def _player_data_manager(",source)
-  self.assertNotIn("player_data_manager = PlayerDataManager()",source)
-  self.assertIn("_player_data_manager().get_fields(",source)
-  self.assertIn("_player_data_manager().list_users_by_fields(",source)
-  self.assertIn("_player_data_manager().update_or_write_data(",source)
+  self.assertNotIn("_save_dongfu",source)
+  self.assertNotIn("update_or_write_data",source)
  def test_dongfu_facade_defers_array_upgrade_service_construction(self):
   from nonebot_plugin_xiuxian_2.xiuxian import xiuxian_dongfu
   self.assertFalse(hasattr(xiuxian_dongfu, "_dongfu_array_upgrade_service_instance"))
 
  def test_dongfu_array_upgrade_uses_feature_application(self):
   source=Path("nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dongfu/__init__.py").read_text(encoding="utf-8")
-  handler=source[source.index("operation_id = f\"dongfu-array:"):source.index("@infiltrate_dongfu.handle")]
+  start=source.index("@dongfu_array.handle")
+  handler=source[start:source.index("async def _settle_infiltration_plan",start)]
   assert "dongfu_application.array_upgrade(" in handler
 
  def setUp(self):

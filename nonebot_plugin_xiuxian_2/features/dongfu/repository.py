@@ -15,6 +15,8 @@ from .status_repository import DongfuStatusSqlQueryRepository
 from .nearby_target_repository import DongfuNearbyTargetSqlQueryRepository
 from .random_target_repository import DongfuRandomTargetSqlQueryRepository
 from .random_target_query import select_random_target
+from .operation_receipt_repository import DongfuOperationReceiptSqlQueryRepository
+from .infiltration_plan_repository import DongfuInfiltrationPlanSqlRepository
 
 class DongfuRepository(ServicePort):
     def __init__(self,database:str|Path,player_database:str|Path|None=None)->None: super().__init__('dongfu','nonebot_plugin_xiuxian_2.xiuxian.xiuxian_dongfu'); self.database=str(database); self.player_database=str(player_database or database)
@@ -30,6 +32,9 @@ class DongfuRepository(ServicePort):
     def infiltrate_success(self,*a,**k): return DongfuInfiltrateSuccessSqlRepository(self.database,self.player_database).settle(*a,**k)
     def infiltrate_failure(self,*a,**k): return DongfuInfiltrateFailureSqlRepository(self.database,self.player_database).settle(*a,**k)
     def status(self, user_id): return DongfuStatusSqlQueryRepository(self.player_database).get(user_id)
+    def operation_receipt(self, action, operation_id): return DongfuOperationReceiptSqlQueryRepository(self.database).get(action, operation_id)
+    def infiltration_plan(self, operation_id, user_id, request_identity): return DongfuInfiltrationPlanSqlRepository(self.database).get(operation_id,user_id,request_identity)
+    def prepare_infiltration_plan(self, operation_id, user_id, request_identity, plan): return DongfuInfiltrationPlanSqlRepository(self.database).prepare(operation_id,user_id,request_identity,plan)
     def nearby_target(self, user_id, user_name): return DongfuNearbyTargetSqlQueryRepository(self.database,self.player_database).get(user_id,user_name)
     async def random_target(self, **kwargs):
         return await select_random_target(DongfuRandomTargetSqlQueryRepository(self.database,self.player_database), **kwargs)

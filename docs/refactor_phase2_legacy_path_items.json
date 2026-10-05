@@ -4381,22 +4381,24 @@
       "id": "command:dongfu:我的洞府",
       "kind": "commands",
       "entry": "dongfu:我的洞府 (aliases: )",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "The compatibility matcher delegates status reads to DongfuApplication.status and DongfuStatusSqlQueryRepository; rendering is read-only. The legacy registration is retained as the command adapter.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dongfu/__init__.py:136 my_dongfu = on_command('我的洞府') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dongfu/__init__.py:556 _ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dongfu/__init__.py:116 my_dongfu = on_command('我的洞府') -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dongfu/__init__.py:502 _ -> DongfuApplication.status -> DongfuRepository.status -> DongfuStatusSqlQueryRepository.get"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dongfu/__init__.py:136",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dongfu/__init__.py:556"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dongfu/__init__.py:116",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dongfu/__init__.py:502",
+        "nonebot_plugin_xiuxian_2/features/dongfu/application.py:26",
+        "nonebot_plugin_xiuxian_2/features/dongfu/repository.py:34",
+        "nonebot_plugin_xiuxian_2/features/dongfu/status_repository.py:36-77"
       ],
       "source_declaration_found": true,
       "source": {
@@ -4602,22 +4604,25 @@
       "id": "command:dongfu:拜访道友",
       "kind": "commands",
       "entry": "dongfu:拜访道友 (aliases: )",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "The handler resolves the target profile through PlayerProfileApplication, then commits the visitor reward through DongfuApplication and DongfuVisitRewardSqlRepository with a stable replay receipt. The legacy registration is retained as the command adapter.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dongfu/__init__.py:144 visit_friend = on_command('拜访道友') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dongfu/__init__.py:1121 _ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dongfu/__init__.py:124 visit_friend = on_command('拜访道友') -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dongfu/__init__.py:1065 _ -> PlayerProfileApplication.get_user_profile_by_name; DongfuApplication.visit_reward -> DongfuRepository.visit_reward -> DongfuVisitRewardSqlRepository.reward"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dongfu/__init__.py:144",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dongfu/__init__.py:1121"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dongfu/__init__.py:124",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dongfu/__init__.py:1065",
+        "nonebot_plugin_xiuxian_2/features/info/profile_application.py:23",
+        "nonebot_plugin_xiuxian_2/features/dongfu/application.py:20",
+        "nonebot_plugin_xiuxian_2/features/dongfu/repository.py:28",
+        "nonebot_plugin_xiuxian_2/features/dongfu/visit_reward_repository.py:15-45"
       ],
       "source_declaration_found": true,
       "source": {
@@ -5470,22 +5475,24 @@
       "id": "command:dongfu:洞府催熟",
       "kind": "commands",
       "entry": "dongfu:洞府催熟 (aliases: )",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "The handler submits the expected plot snapshot to DongfuApplication.accelerate; DongfuAccelerateSqlRepository atomically owns the plot and item mutation with an operation receipt. The legacy registration is retained as the command adapter.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dongfu/__init__.py:139 dongfu_accelerate = on_command('洞府催熟') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dongfu/__init__.py:1008 _ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dongfu/__init__.py:119 dongfu_accelerate = on_command('洞府催熟') -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dongfu/__init__.py:952 _ -> DongfuApplication.accelerate -> DongfuRepository.accelerate -> DongfuAccelerateSqlRepository.accelerate"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dongfu/__init__.py:139",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dongfu/__init__.py:1008"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dongfu/__init__.py:119",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dongfu/__init__.py:952",
+        "nonebot_plugin_xiuxian_2/features/dongfu/application.py:10",
+        "nonebot_plugin_xiuxian_2/features/dongfu/repository.py:23",
+        "nonebot_plugin_xiuxian_2/features/dongfu/accelerate_repository.py:14-18"
       ],
       "source_declaration_found": true,
       "source": {
@@ -5497,22 +5504,24 @@
       "id": "command:dongfu:洞府地脉",
       "kind": "commands",
       "entry": "dongfu:洞府地脉 (aliases: 地脉查看)",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "The handler reads the Dongfu status projection through DongfuApplication.status and renders the geomancy view without writing state. The legacy registration is retained as the command adapter.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dongfu/__init__.py:142 dongfu_geomancy = on_command('洞府地脉') aliases=地脉查看 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dongfu/__init__.py:845 _ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dongfu/__init__.py:122 dongfu_geomancy = on_command('洞府地脉') aliases=地脉查看 -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dongfu/__init__.py:789 _ -> DongfuApplication.status -> DongfuRepository.status -> DongfuStatusSqlQueryRepository.get"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dongfu/__init__.py:142",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dongfu/__init__.py:845"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dongfu/__init__.py:122",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dongfu/__init__.py:789",
+        "nonebot_plugin_xiuxian_2/features/dongfu/application.py:26",
+        "nonebot_plugin_xiuxian_2/features/dongfu/repository.py:34",
+        "nonebot_plugin_xiuxian_2/features/dongfu/status_repository.py:36-77"
       ],
       "source_declaration_found": true,
       "source": {
@@ -5524,22 +5533,24 @@
       "id": "command:dongfu:洞府巡山",
       "kind": "commands",
       "entry": "dongfu:洞府巡山 (aliases: 巡山护府)",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "The handler delegates patrol settlement, stamina, reward and daily counters to DongfuApplication.patrol and DongfuPatrolSqlRepository in the feature-owned transaction. The legacy registration is retained as the command adapter.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dongfu/__init__.py:143 dongfu_patrol = on_command('洞府巡山') aliases=巡山护府 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dongfu/__init__.py:867 _ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dongfu/__init__.py:123 dongfu_patrol = on_command('洞府巡山') aliases=巡山护府 -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dongfu/__init__.py:811 _ -> DongfuApplication.patrol -> DongfuRepository.patrol -> DongfuPatrolSqlRepository.patrol"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dongfu/__init__.py:143",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dongfu/__init__.py:867"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dongfu/__init__.py:123",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dongfu/__init__.py:811",
+        "nonebot_plugin_xiuxian_2/features/dongfu/application.py:12",
+        "nonebot_plugin_xiuxian_2/features/dongfu/repository.py:25",
+        "nonebot_plugin_xiuxian_2/features/dongfu/patrol_repository.py:14-16"
       ],
       "source_declaration_found": true,
       "source": {
@@ -5551,22 +5562,24 @@
       "id": "command:dongfu:洞府布阵",
       "kind": "commands",
       "entry": "dongfu:洞府布阵 (aliases: )",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "The handler delegates array-level and asset mutation to DongfuApplication.array_upgrade and DongfuArrayUpgradeSqlRepository with a stable operation receipt. The legacy registration is retained as the command adapter.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dongfu/__init__.py:145 dongfu_array = on_command('洞府布阵') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dongfu/__init__.py:1165 _ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dongfu/__init__.py:125 dongfu_array = on_command('洞府布阵') -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dongfu/__init__.py:1110 _ -> DongfuApplication.array_upgrade -> DongfuRepository.array_upgrade -> DongfuArrayUpgradeSqlRepository.upgrade"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dongfu/__init__.py:145",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dongfu/__init__.py:1165"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dongfu/__init__.py:125",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dongfu/__init__.py:1110",
+        "nonebot_plugin_xiuxian_2/features/dongfu/application.py:21",
+        "nonebot_plugin_xiuxian_2/features/dongfu/repository.py:29",
+        "nonebot_plugin_xiuxian_2/features/dongfu/array_repository.py:13-15"
       ],
       "source_declaration_found": true,
       "source": {
@@ -5578,22 +5591,21 @@
       "id": "command:dongfu:洞府帮助",
       "kind": "commands",
       "entry": "dongfu:洞府帮助 (aliases: )",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "允许保留的兼容路径",
+      "reason": "The handler renders embedded static help text and sends it through the shared messaging adapter; it reads or mutates no Dongfu business state, so the compatibility path is intentionally retained.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dongfu/__init__.py:146 dongfu_help = on_command('洞府帮助') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dongfu/__init__.py:516 _ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dongfu/__init__.py:126 dongfu_help = on_command('洞府帮助') -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dongfu/__init__.py:462 _ -> static embedded help text -> send_help_message; no business state access"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dongfu/__init__.py:146",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dongfu/__init__.py:516"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dongfu/__init__.py:126",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dongfu/__init__.py:462"
       ],
       "source_declaration_found": true,
       "source": {
@@ -5605,22 +5617,24 @@
       "id": "command:dongfu:洞府扩建",
       "kind": "commands",
       "entry": "dongfu:洞府扩建 (aliases: )",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "The handler delegates plot count, item, stone and plant-slot updates to DongfuApplication.expand and DongfuExpansionSqlRepository in the feature-owned transaction. The legacy registration is retained as the command adapter.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dongfu/__init__.py:141 dongfu_expand = on_command('洞府扩建') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dongfu/__init__.py:1076 _ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dongfu/__init__.py:121 dongfu_expand = on_command('洞府扩建') -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dongfu/__init__.py:1020 _ -> DongfuApplication.expand -> DongfuRepository.expand -> DongfuExpansionSqlRepository.expand"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dongfu/__init__.py:141",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dongfu/__init__.py:1076"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dongfu/__init__.py:121",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dongfu/__init__.py:1020",
+        "nonebot_plugin_xiuxian_2/features/dongfu/application.py:23",
+        "nonebot_plugin_xiuxian_2/features/dongfu/repository.py:31",
+        "nonebot_plugin_xiuxian_2/features/dongfu/expansion_repository.py:31-86"
       ],
       "source_declaration_found": true,
       "source": {
@@ -5632,22 +5646,24 @@
       "id": "command:dongfu:洞府收获",
       "kind": "commands",
       "entry": "dongfu:洞府收获 (aliases: 收获洞府)",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "The handler freezes a replayable harvest snapshot, then DongfuApplication.harvest and DongfuHarvestSqlRepository atomically settle inventory, plot state, receipt and game-event projection outbox. The legacy registration is retained as the command adapter.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dongfu/__init__.py:138 dongfu_harvest = on_command('洞府收获') aliases=收获洞府 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dongfu/__init__.py:677 _ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dongfu/__init__.py:118 dongfu_harvest = on_command('洞府收获') aliases=收获洞府 -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dongfu/__init__.py:623 _ -> DongfuApplication.prepare_harvest_snapshot/harvest -> DongfuRepository -> DongfuHarvestSqlRepository.prepare_snapshot/harvest -> game_event.projection outbox"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dongfu/__init__.py:138",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dongfu/__init__.py:677"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dongfu/__init__.py:118",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dongfu/__init__.py:623",
+        "nonebot_plugin_xiuxian_2/features/dongfu/application.py:13-19",
+        "nonebot_plugin_xiuxian_2/features/dongfu/repository.py:26-27",
+        "nonebot_plugin_xiuxian_2/features/dongfu/harvest_repository.py:37-300"
       ],
       "source_declaration_found": true,
       "source": {
@@ -5659,22 +5675,24 @@
       "id": "command:dongfu:洞府施肥",
       "kind": "commands",
       "entry": "dongfu:洞府施肥 (aliases: )",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "The handler delegates the expected plot snapshot, fertilizer item and result receipt to DongfuApplication.fertilize and DongfuFertilizeSqlRepository. The legacy registration is retained as the command adapter.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dongfu/__init__.py:140 dongfu_fertilize = on_command('洞府施肥') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dongfu/__init__.py:949 _ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dongfu/__init__.py:120 dongfu_fertilize = on_command('洞府施肥') -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dongfu/__init__.py:893 _ -> DongfuApplication.fertilize -> DongfuRepository.fertilize -> DongfuFertilizeSqlRepository.fertilize"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dongfu/__init__.py:140",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dongfu/__init__.py:949"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dongfu/__init__.py:120",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dongfu/__init__.py:893",
+        "nonebot_plugin_xiuxian_2/features/dongfu/application.py:11",
+        "nonebot_plugin_xiuxian_2/features/dongfu/repository.py:24",
+        "nonebot_plugin_xiuxian_2/features/dongfu/fertilize_repository.py:14-18"
       ],
       "source_declaration_found": true,
       "source": {
@@ -5686,22 +5704,24 @@
       "id": "command:dongfu:洞府种植",
       "kind": "commands",
       "entry": "dongfu:洞府种植 (aliases: )",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "The handler delegates the expected plot snapshot, seed consumption, slot update and operation receipt to DongfuApplication.plant and DongfuPlantSqlRepository. The legacy registration is retained as the command adapter.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dongfu/__init__.py:137 dongfu_plant = on_command('洞府种植') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dongfu/__init__.py:598 _ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dongfu/__init__.py:117 dongfu_plant = on_command('洞府种植') -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dongfu/__init__.py:544 _ -> DongfuApplication.plant -> DongfuRepository.plant -> DongfuPlantSqlRepository.plant"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dongfu/__init__.py:137",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dongfu/__init__.py:598"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dongfu/__init__.py:117",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dongfu/__init__.py:544",
+        "nonebot_plugin_xiuxian_2/features/dongfu/application.py:22",
+        "nonebot_plugin_xiuxian_2/features/dongfu/repository.py:30",
+        "nonebot_plugin_xiuxian_2/features/dongfu/plant_repository.py:14-18"
       ],
       "source_declaration_found": true,
       "source": {
@@ -6450,22 +6470,28 @@
       "id": "command:dongfu:潜入洞府",
       "kind": "commands",
       "entry": "dongfu:潜入洞府 (aliases: 随机潜入, 随机潜入洞府)",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "The handler uses a stable request operation ID and persists the selected target, branch, probability outcome and rewards through DongfuInfiltrationPlanSqlRepository before settlement. DongfuApplication routes success/failure to feature-owned SQL settlement repositories; old success/failure receipts remain readable for replay compatibility. The legacy registration is retained as the command adapter.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dongfu/__init__.py:147 infiltrate_dongfu = on_command('潜入洞府') aliases=随机潜入,随机潜入洞府 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dongfu/__init__.py:1212 _ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dongfu/__init__.py:127 infiltrate_dongfu = on_command('潜入洞府') aliases=随机潜入,随机潜入洞府 -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dongfu/__init__.py:1254 _ -> DongfuApplication.infiltration_plan/prepare_infiltration_plan -> DongfuRepository -> DongfuInfiltrationPlanSqlRepository; _settle_infiltration_plan -> DongfuApplication.infiltrate_success/infiltrate_failure -> feature SQL settlement repositories"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dongfu/__init__.py:147",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dongfu/__init__.py:1212"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dongfu/__init__.py:127",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dongfu/__init__.py:1254",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dongfu/__init__.py:1156-1215",
+        "nonebot_plugin_xiuxian_2/features/dongfu/application.py:24-29",
+        "nonebot_plugin_xiuxian_2/features/dongfu/repository.py:32-37",
+        "nonebot_plugin_xiuxian_2/features/dongfu/infiltration_plan_repository.py:21-119",
+        "nonebot_plugin_xiuxian_2/features/dongfu/infiltrate_success_repository.py:22-180",
+        "nonebot_plugin_xiuxian_2/features/dongfu/infiltrate_failure_repository.py:24-160",
+        "nonebot_plugin_xiuxian_2/plugin.py:337"
       ],
       "source_declaration_found": true,
       "source": {

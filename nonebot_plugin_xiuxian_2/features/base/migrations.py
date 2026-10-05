@@ -98,6 +98,24 @@ def apply_base_direct_breakthrough_player(uow: DatabaseUnitOfWork) -> None:
                 uow.execute(f'ALTER TABLE "{table}" ADD COLUMN "{name}" {datatype}')
 
 
+def apply_base_stamina_operations(uow: DatabaseUnitOfWork) -> None:
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS player_stamina_operations("
+        "operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,stamina_after INTEGER NOT NULL,"
+        "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+    )
+    rows = uow.query_all('PRAGMA table_info("player_stamina_operations")')
+    columns = {str(row["name"]).casefold() for row in rows}
+    if (
+        not {"operation_id", "payload", "stamina_after", "created_at"}.issubset(columns)
+        or not any(
+            str(row["name"]).casefold() == "operation_id" and int(row["pk"] or 0) == 1
+            for row in rows
+        )
+    ):
+        raise RuntimeError("player_stamina_operations has an unsupported schema")
+
+
 def apply_base_stone_contest_operations(uow: DatabaseUnitOfWork) -> None:
     uow.execute(
         "CREATE TABLE IF NOT EXISTS stone_contest_operations("
@@ -230,4 +248,5 @@ __all__ = [
     "apply_base_direct_breakthrough_operations",
     "apply_base_direct_breakthrough_plans",
     "apply_base_direct_breakthrough_player",
+    "apply_base_stamina_operations",
 ]

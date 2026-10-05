@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Any
 
@@ -27,15 +28,29 @@ class PlayerStaminaSqlRepository:
             "stamina": None if stamina is None else int(stamina),
         }
 
+    @staticmethod
+    def _operation_schema_ready(uow: DatabaseUnitOfWork) -> bool:
+        rows = uow.query_all('PRAGMA table_info("player_stamina_operations")')
+        columns = {str(row["name"]) for row in rows}
+        return (
+            {"operation_id", "payload", "stamina_after"}.issubset(columns)
+            and any(
+                str(row["name"]) == "operation_id" and int(row["pk"] or 0) == 1
+                for row in rows
+            )
+        )
+
     def consume(
         self,
         user_id: str,
         amount: int,
         *,
         expected_stamina: int | None = None,
+        operation_id: str | None = None,
     ) -> dict[str, Any]:
         user_id = str(user_id).strip()
         amount = int(amount)
+        operation_id = str(operation_id or "").strip()
         if not user_id or amount < 0:
             return self._result("invalid")
         if amount == 0:
@@ -46,6 +61,18 @@ class PlayerStaminaSqlRepository:
         with DatabaseUnitOfWork(self.database, immediate=True) as uow:
             if not self._schema_ready(uow):
                 return self._result("schema_missing")
+            payload = json.dumps([user_id, amount], separators=(",", ":"))
+            if operation_id:
+                if not self._operation_schema_ready(uow):
+                    return self._result("schema_missing")
+                previous = uow.query_one(
+                    "SELECT payload,stamina_after FROM player_stamina_operations WHERE operation_id=?",
+                    (operation_id,),
+                )
+                if previous is not None:
+                    if str(previous["payload"]) != payload:
+                        return self._result("operation_conflict")
+                    return self._result("duplicate", int(previous["stamina_after"]))
             row = uow.query_one(
                 "SELECT rowid AS _rowid,COALESCE(user_stamina,0) AS user_stamina "
                 "FROM user_xiuxian WHERE user_id=? ORDER BY rowid ASC LIMIT 1",
@@ -66,7 +93,14 @@ class PlayerStaminaSqlRepository:
             )
             if changed.rowcount != 1:
                 return self._result("state_changed", current)
-            return self._result("applied", current - amount)
+            remaining = current - amount
+            if operation_id:
+                uow.execute(
+                    "INSERT INTO player_stamina_operations(operation_id,payload,stamina_after) "
+                    "VALUES(?,?,?)",
+                    (operation_id, payload, remaining),
+                )
+            return self._result("applied", remaining)
 
     def recover(
         self,

@@ -197,11 +197,13 @@ def consume_player_stamina(
     amount: int,
     *,
     expected_stamina: int | None = None,
+    operation_id: str | None = None,
 ):
     return _player_stamina().consume(
         str(user_id),
         int(amount),
         expected_stamina=expected_stamina,
+        operation_id=operation_id,
     )
 
 

@@ -7,10 +7,10 @@ SOURCE = Path(__file__).resolve().parents[1] / "nonebot_plugin_xiuxian_2/xiuxian
 def test_dongfu_status_read_uses_feature_projection_without_legacy_writeback():
     source = SOURCE.read_text(encoding="utf-8")
     start = source.index("def _get_dongfu")
-    end = source.index("def _save_dongfu", start)
+    end = source.index("def _has_dongfu", start)
     helper = source[start:end]
     assert "dongfu_application.status(" in helper
-    assert "_player_data_manager().get_fields" not in helper
+    assert "PlayerDataManager" not in source
     assert "update_or_write_data" not in helper
 
 
@@ -26,7 +26,7 @@ def test_dongfu_status_schema_is_player_startup_migration_only():
 
 def test_infiltration_eligibility_checks_do_not_write_legacy_projection():
     source = SOURCE.read_text(encoding="utf-8")
-    for name, end in (("_can_infiltrate", "def _consume_infiltrate_count"), ("_can_intrude", "def _get_random_dongfu_target")):
+    for name, end in (("_can_infiltrate", "def _can_intrude"), ("_can_intrude", "async def _get_random_dongfu_target")):
         helper = source[source.index(f"def {name}"):source.index(end)]
         assert "_save_dongfu" not in helper
 

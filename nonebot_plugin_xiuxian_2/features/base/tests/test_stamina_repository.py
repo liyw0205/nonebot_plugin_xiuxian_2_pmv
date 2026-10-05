@@ -3,6 +3,8 @@ import unittest
 from pathlib import Path
 
 from ....infrastructure.database import DatabaseUnitOfWork
+from ....plugin import build_migrations, migrations_for_database
+from ..migrations import apply_base_stamina_operations
 from ..stamina_application import PlayerStaminaApplication
 from ..stamina_repository import PlayerStaminaSqlRepository
 
@@ -32,6 +34,38 @@ class PlayerStaminaRepositoryTests(unittest.TestCase):
         self.assertEqual((result["status"], result["stamina"]), ("applied", 7))
         self.assertEqual((stale["status"], stale["stamina"]), ("state_changed", 7))
         self.assertEqual(self._stamina(), 7)
+
+    def test_operation_receipt_makes_same_event_idempotent(self):
+        with DatabaseUnitOfWork(self.database, immediate=True) as uow:
+            apply_base_stamina_operations(uow)
+
+        applied = self.repository.consume("u", 3, expected_stamina=10, operation_id="dongfu:plant:u:m1")
+        replay = self.repository.consume("u", 3, expected_stamina=7, operation_id="dongfu:plant:u:m1")
+        conflict = self.repository.consume("u", 2, expected_stamina=7, operation_id="dongfu:plant:u:m1")
+
+        self.assertEqual((applied["status"], applied["stamina"]), ("applied", 7))
+        self.assertEqual((replay["status"], replay["stamina"]), ("duplicate", 7))
+        self.assertEqual(conflict["status"], "operation_conflict")
+        self.assertEqual(self._stamina(), 7)
+
+    def test_operation_migration_is_game_database_owned(self):
+        migrations = build_migrations()
+        migration = next(item for item in migrations if item.version == "base.012")
+        self.assertIn(migration, migrations_for_database(migrations, "game_db"))
+        self.assertNotIn(migration, migrations_for_database(migrations, "player_db"))
+
+    def test_operation_schema_without_unique_receipt_key_fails_closed(self):
+        with DatabaseUnitOfWork(self.database, immediate=True) as uow:
+            uow.execute(
+                "CREATE TABLE player_stamina_operations("
+                "operation_id TEXT,payload TEXT NOT NULL,stamina_after INTEGER NOT NULL,created_at TEXT)"
+            )
+        result = self.repository.consume("u", 2, expected_stamina=10, operation_id="event")
+        self.assertEqual(result["status"], "schema_missing")
+        self.assertEqual(self._stamina(), 10)
+        with DatabaseUnitOfWork(self.database, immediate=True) as uow:
+            with self.assertRaises(RuntimeError):
+                apply_base_stamina_operations(uow)
 
     def test_duplicate_user_id_updates_only_the_first_projection_row(self):
         with DatabaseUnitOfWork(self.database, immediate=True) as uow:

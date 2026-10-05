@@ -10,6 +10,9 @@ from pathlib import Path
 from ...paths import get_paths
 from ...features.dongfu.application import DongfuApplication
 from ...features.dongfu.plant_slots import empty_plant_slot, legacy_plant_fields, normalize_plant_slots
+from ...features.info.profile_application import PlayerProfileApplication
+from ...features.map.static_data import MapStaticDataProvider
+from ...infrastructure.json_document import JsonDocumentReader
 from ...infrastructure.ids import UUIDGenerator
 from ...infrastructure.random_source import SystemRandom
 from ...infrastructure.clock import SystemClock
@@ -18,49 +21,26 @@ from nonebot.params import CommandArg
 
 from ..adapter_compat import Bot, Message, GroupMessageEvent, PrivateMessageEvent
 from ..xiuxian_utils.lay_out import assign_bot, Cooldown
-from ..xiuxian_utils.game_events import safe_record_game_event
 from ..xiuxian_utils.utils import check_user, handle_send, number_to, send_help_message
-from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage, PlayerDataManager
 from ..xiuxian_utils.item_json import Items
 from ..xiuxian_config import XiuConfig
-_sql_message_instance = None
-_player_data_manager_instance = None
 items = Items()
 dongfu_application = DongfuApplication(get_paths().game_db, get_paths().player_db)
+player_profile_application = PlayerProfileApplication(get_paths().game_db)
 runtime_ids = UUIDGenerator()
 runtime_random = SystemRandom()
 runtime_clock = SystemClock()
 
 
-def _resolve_player_data_manager():
-    global _player_data_manager_instance
-    if _player_data_manager_instance is None:
-        _player_data_manager_instance = PlayerDataManager()
-    return _player_data_manager_instance
-
-
-class _LazyPlayerDataManager:
-    def __getattr__(self, name):
-        return getattr(_resolve_player_data_manager(), name)
-
-
-player_data_manager = _LazyPlayerDataManager()
-
-
-def _player_data_manager():
-    return player_data_manager
-
-
-def _sql_message():
-    global _sql_message_instance
-    if _sql_message_instance is None:
-        _sql_message_instance = XiuxianDateManage()
-    return _sql_message_instance
+def configure_dongfu_application(application: DongfuApplication) -> None:
+    global dongfu_application
+    dongfu_application = application
 
 
 MAP_TABLE = "map_status"
 DONGFU_TABLE = "dongfu_status"
 MAP_FILE = get_paths().data / "地图.json"
+map_data_provider = MapStaticDataProvider(JsonDocumentReader(), MAP_FILE)
 
 SEED_CONFIG = {
     21001: {"name": "青灵草种", "price": 500000, "pool": "herb_low", "minutes": 60},
@@ -171,11 +151,8 @@ def _today_str():
 
 
 def _load_map_data():
-    if not MAP_FILE.exists():
-        return None
     try:
-        with open(MAP_FILE, "r", encoding="utf-8") as f:
-            return json.load(f)
+        return map_data_provider.load()
     except Exception:
         return None
 
@@ -309,14 +286,6 @@ def _reset_patrol_count_if_needed(d: dict):
     return d
 
 
-def _consume_patrol_guard(d: dict):
-    guard = _to_int(d.get("patrol_guard"))
-    if guard <= 0:
-        return False
-    d["patrol_guard"] = guard - 1
-    return True
-
-
 def _format_minutes_left(finish: datetime, now: datetime):
     return max(1, int((finish - now).total_seconds() + 59) // 60)
 
@@ -390,12 +359,6 @@ def _get_dongfu(uid: str):
     _get_dongfu_node_type(d)
     _sync_plant_fields(d)
     return d
-
-
-def _save_dongfu(uid: str, d: dict):
-    _sync_plant_fields(d)
-    for k, v in d.items():
-        _player_data_manager().update_or_write_data(str(uid), DONGFU_TABLE, k, v)
 
 
 def _has_dongfu(uid: str):
@@ -474,23 +437,6 @@ def _can_infiltrate(uid: str, is_random: bool):
     d = _get_dongfu(uid)
     d = _reset_infiltrate_count_if_needed(d)
     return _get_infiltrate_left(d, is_random) > 0, d
-
-
-def _consume_infiltrate_count(uid: str, is_random: bool):
-    d = _get_dongfu(uid)
-    d = _reset_infiltrate_count_if_needed(d)
-    field = _get_infiltrate_count_field(is_random)
-    d[field] = _to_int(d.get(field)) + 1
-    _save_dongfu(uid, d)
-    return d[field], _get_infiltrate_left(d, is_random)
-
-
-def _consume_intrude_count(target_uid: str):
-    d = _get_dongfu(target_uid)
-    d = _reset_intrude_count_if_needed(d)
-    d["intrude_count"] = _to_int(d.get("intrude_count")) + 1
-    _save_dongfu(target_uid, d)
-    return d["intrude_count"]
 
 
 def _can_intrude(target_uid: str):
@@ -594,7 +540,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     await handle_send(bot, event, msg)
 
 
-@dongfu_plant.handle(parameterless=[Cooldown(cd_time=0, stamina_cost=2)])
+@dongfu_plant.handle(parameterless=[Cooldown(cd_time=0, stamina_cost=2, stamina_operation_prefix="dongfu:plant")])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     bot, _ = await assign_bot(bot=bot, event=event)
     ok, user_info, m = check_user(event)
@@ -673,7 +619,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     )
 
 
-@dongfu_harvest.handle(parameterless=[Cooldown(cd_time=0, stamina_cost=2)])
+@dongfu_harvest.handle(parameterless=[Cooldown(cd_time=0, stamina_cost=2, stamina_operation_prefix="dongfu:harvest")])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     bot, _ = await assign_bot(bot=bot, event=event)
     ok, user_info, m = check_user(event)
@@ -729,6 +675,8 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         except (TypeError, ValueError):
             await handle_send(bot, event, "洞府收获结算数据异常，请联系管理员处理。")
             return
+    if snapshot is not None and json.dumps(snapshot.get("expected_slots"), ensure_ascii=False, sort_keys=True) != json.dumps(slots, ensure_ascii=False, sort_keys=True):
+        snapshot = None
     if snapshot is None:
         if not harvest_slots:
             detail = "\n".join(wait_lines) if wait_lines else "暂无成熟灵田。"
@@ -765,8 +713,10 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
                 for gid, reward in reward_map.items()
             ],
             "slot_numbers": [int(slot["slot"]) for slot in harvest_slots],
+            "operation_id": operation_id,
         }
         prepared = dongfu_application.prepare_harvest_snapshot(
+            operation_id=operation_id,
             user_id=uid,
             expected_slots=slots,
             snapshot=snapshot,
@@ -782,8 +732,10 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
                 await handle_send(bot, event, "洞府收获尚未结算：灵田状态已更新，请重新尝试。")
             return
         snapshot = prepared.snapshot
+        operation_id = str(snapshot.get("operation_id") or operation_id)
         failed_slots = snapshot["failed_slots"]
     else:
+        operation_id = str(snapshot.get("operation_id") or operation_id)
         failed_slots = snapshot["failed_slots"]
 
     result = dongfu_application.harvest(
@@ -794,6 +746,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         rewards=snapshot["items"],
         max_goods_num=XiuConfig().max_goods_num,
         settled_at=_fmt_dt(now),
+        failed_slots=failed_slots,
     )
 
     if result.status == "duplicate":
@@ -801,6 +754,8 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         if snapshot["items"]:
             lines.extend(f"- {item['name']} x{item['amount']}" for item in snapshot["items"])
         lines.append("该收获请求已经处理，无需重复提交。")
+        if result.effects_pending:
+            lines.append("统计与任务进度正在补偿。")
         await handle_send(bot, event, "\n".join(lines))
         return
     if result.status == "inventory_full":
@@ -819,24 +774,13 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     d["plant_slots"] = slots
     d["harvest_settlement"] = ""
     _sync_plant_fields(d)
-    if result.status == "harvested":
-        safe_record_game_event(
-            uid,
-            "dongfu_harvest",
-            len(snapshot["slot_numbers"]),
-            {
-                "source": "dongfu",
-                "action": "harvest",
-                "trace_id": operation_id,
-                "item_delta": snapshot["items"],
-                "detail": {"slots": snapshot["slot_numbers"], "failed_slots": failed_slots},
-            },
-        )
     lines = [f"洞府收获完成，共收获{len(snapshot['slot_numbers'])}块灵田："]
     if reward_map:
         lines.extend(f"- {reward['name']} x{reward['num']}" for reward in reward_map.values())
     if failed_slots:
         lines.append(f"{'、'.join(failed_slots)}号灵田无产出。")
+    if result.effects_pending:
+        lines.append("统计与任务进度正在补偿。")
     lines.append(_format_plant_slots(d))
     await handle_send(bot, event, "\n".join(lines))
 
@@ -945,7 +889,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     )
 
 
-@dongfu_fertilize.handle(parameterless=[Cooldown(cd_time=0, stamina_cost=1)])
+@dongfu_fertilize.handle(parameterless=[Cooldown(cd_time=0, stamina_cost=1, stamina_operation_prefix="dongfu:fertilize")])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     bot, _ = await assign_bot(bot=bot, event=event)
     ok, user_info, m = check_user(event)
@@ -1004,7 +948,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     await handle_send(bot, event, f"已对{slot_no}号灵田施肥，当前肥力+{fertilizer + 1}。\n{_format_plant_slots(d)}")
 
 
-@dongfu_accelerate.handle(parameterless=[Cooldown(cd_time=0, stamina_cost=1)])
+@dongfu_accelerate.handle(parameterless=[Cooldown(cd_time=0, stamina_cost=1, stamina_operation_prefix="dongfu:accelerate")])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     bot, _ = await assign_bot(bot=bot, event=event)
     ok, user_info, m = check_user(event)
@@ -1117,7 +1061,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     await handle_send(bot, event, f"洞府扩建成功，灵田数量提升至{result.current_count}块。\n{_format_plant_slots(d)}")
 
 
-@visit_friend.handle(parameterless=[Cooldown(cd_time=0, stamina_cost=VISIT_STAMINA)])
+@visit_friend.handle(parameterless=[Cooldown(cd_time=0, stamina_cost=VISIT_STAMINA, stamina_operation_prefix="dongfu:visit")])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     bot, _ = await assign_bot(bot=bot, event=event)
     ok, user_info, m = check_user(event)
@@ -1131,7 +1075,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         await handle_send(bot, event, "请使用：拜访道友 道号")
         return
 
-    target = _sql_message().get_user_info_with_name(tname)
+    target = player_profile_application.get_user_profile_by_name(tname)
     if not target:
         await handle_send(bot, event, f"未找到道友【{tname}】")
         return
@@ -1145,7 +1089,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     if _to_int(td.get("built")) != 1:
         await handle_send(bot, event, f"{tname}尚未建设洞府。")
         return
-    gain = runtime_random.randint(10000, 50000)
+    requested_gain = runtime_random.randint(10000, 50000)
     event_message_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
     operation_id = f"dongfu-visit:{uid}:{event_message_id or runtime_ids.new_id()}"
     result = dongfu_application.visit_reward(
@@ -1153,12 +1097,13 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         user_id=uid,
         visitor_id=uid,
         target_id=tid,
-        gain=gain,
+        gain=requested_gain,
     )
     if not result.succeeded:
         await handle_send(bot, event, "洞府操作未结算：洞府当前状态已更新，请稍后重试。")
         return
-    await handle_send(bot, event, f"你拜访了【{tname}】的洞府（{td.get('node_name')}），获得灵石{number_to(gain)}。")
+    replay = "（该请求已处理）" if result.status == "duplicate" else ""
+    await handle_send(bot, event, f"你拜访了【{tname}】的洞府（{td.get('node_name')}），获得灵石{number_to(result.gain)}。{replay}")
 
 
 @dongfu_array.handle(parameterless=[Cooldown(cd_time=0)])
@@ -1208,7 +1153,104 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     await handle_send(bot, event, f"消耗{number_to(cost)}灵石{item_msg}，洞府布阵成功，当前阵法等级：{next_lv}")
 
 
-@infiltrate_dongfu.handle(parameterless=[Cooldown(cd_time=1.8, stamina_cost=INFILTRATE_STAMINA)])
+async def _settle_infiltration_plan(bot, event, plan):
+    operation_id = str(plan["operation_id"])
+    if plan["settlement"] == "failure":
+        result = dongfu_application.infiltrate_failure(
+            operation_id=operation_id,
+            visitor_id=plan["visitor_id"],
+            target_id=plan["target_id"],
+            day=plan["day"],
+            mode_field=plan["mode_field"],
+            mode_limit=plan["mode_limit"],
+            target_limit=plan["target_limit"],
+            loss=plan["loss_stone"],
+            consume_guard=plan["guarded"],
+        )
+        if not result.succeeded:
+            await handle_send(bot, event, "潜入未结算：潜入进度当前状态已更新，请稍后重试。")
+            return
+        guard_msg = "\n目标洞府巡山护府尚有余威。" if plan["guarded"] else ""
+        replay_msg = "\n该潜入请求已经处理。" if result.status == "duplicate" else ""
+        await handle_send(
+            bot,
+            event,
+            f"❌ **潜入失败**\n---\n你潜入【{plan['target_name']}】洞府时触发阵法警示，被当场逼退！\n"
+            f"对方阵法等级\n> {plan['array_level']}\n损失灵石\n> {number_to(plan['loss_stone'])}\n"
+            f"今日剩余{plan['mode_name']}次数\n> {result.infiltrate_left}\n"
+            f"该洞府今日剩余可被潜入次数\n> {result.intrude_left}{guard_msg}{replay_msg}",
+        )
+        return
+
+    result = dongfu_application.infiltrate_success(
+        operation_id=operation_id,
+        visitor_id=plan["visitor_id"],
+        target_id=plan["target_id"],
+        day=plan["day"],
+        mode_field=plan["mode_field"],
+        mode_limit=plan["mode_limit"],
+        target_limit=plan["target_limit"],
+        expected_slots=json.dumps(plan["expected_slots"], ensure_ascii=False),
+        slot_no=plan["slot_no"],
+        new_finish=plan["new_finish"],
+        rewards=tuple(tuple(item) for item in plan["rewards"]),
+        stone=plan["stone_gain"],
+        consume_guard=plan["guarded"],
+        max_goods_num=plan["max_goods_num"],
+    )
+    if result.status == "inventory_full":
+        await handle_send(bot, event, "背包空间不足，潜入所得无法结算。")
+        return
+    if not result.succeeded:
+        await handle_send(bot, event, "潜入未结算：潜入进度当前状态已更新，请稍后重试。")
+        return
+
+    infiltrate_left, left = result.infiltrate_left, result.intrude_left
+    rewards = plan["reward_messages"]
+    if not rewards:
+        if plan["detected"]:
+            message = (
+                f"⚠️ 你虽摸进了【{plan['target_name']}】的洞府，却在阵法波动中仓促撤离，一无所获。\n"
+                f"今日剩余{plan['mode_name']}次数：{infiltrate_left}\n"
+                f"该洞府今日剩余可被潜入次数：{left}"
+            )
+        else:
+            message = (
+                f"你潜入了【{plan['target_name']}】的洞府，但这次并没有找到可带走的灵材。\n"
+                f"今日剩余{plan['mode_name']}次数：{infiltrate_left}\n"
+                f"该洞府今日剩余可被潜入次数：{left}"
+            )
+        if result.status == "duplicate":
+            message += "\n该潜入请求已经处理。"
+        await handle_send(bot, event, message)
+        return
+
+    delay_msg = (
+        f"\n对方灵田受扰，生长时间额外增加 {plan['added_minutes']} 分钟。"
+        if plan["added_minutes"] > 0
+        else ""
+    )
+    guard_msg = "\n目标洞府巡山护府尚有余威，你行动明显受阻。" if plan["guarded"] else ""
+    slot_msg = f"{plan['slot_no']}号灵田"
+    replay_msg = "\n该潜入请求已经处理。" if result.status == "duplicate" else ""
+    if plan["detected"]:
+        message = (
+            f"⚠️ 你潜入【{plan['target_name']}】洞府的{slot_msg}时触动阵纹，但仍抢先带走部分灵材！\n"
+            f"获得：{'、'.join(rewards)}{delay_msg}{guard_msg}\n"
+            f"今日剩余{plan['mode_name']}次数：{infiltrate_left}\n"
+            f"该洞府今日剩余可被潜入次数：{left}{replay_msg}"
+        )
+    else:
+        message = (
+            f"🕶️ 你悄然潜入【{plan['target_name']}】洞府的{slot_msg}，顺走了一批灵材。\n"
+            f"获得：{'、'.join(rewards)}{delay_msg}{guard_msg}\n"
+            f"今日剩余{plan['mode_name']}次数：{infiltrate_left}\n"
+            f"该洞府今日剩余可被潜入次数：{left}{replay_msg}"
+        )
+    await handle_send(bot, event, message)
+
+
+@infiltrate_dongfu.handle(parameterless=[Cooldown(cd_time=1.8, stamina_cost=INFILTRATE_STAMINA, stamina_operation_prefix="dongfu:infiltrate")])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     bot, _ = await assign_bot(bot=bot, event=event)
     ok, user_info, m = check_user(event)
@@ -1220,6 +1262,35 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     tname = args.extract_plain_text().strip()
     is_random_mode = not tname
     mode_name = _get_infiltrate_mode_name(is_random_mode)
+    event_message_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
+    operation_id = f"dongfu-infiltrate:{my_uid}:{event_message_id or runtime_ids.new_id()}"
+    request_identity = {"random": is_random_mode, "target_name": tname}
+
+    plan_result = dongfu_application.infiltration_plan(
+        operation_id, my_uid, request_identity
+    )
+    if plan_result.status == "existing":
+        await _settle_infiltration_plan(bot, event, {**plan_result.plan, "operation_id": operation_id})
+        return
+    if plan_result.status != "missing":
+        await handle_send(bot, event, "潜入计划不可用，未执行本次操作。")
+        return
+
+    if event_message_id:
+        for legacy_action, legacy_operation_id in (
+            ("infiltrate_failure", f"dongfu-infiltrate-failure:{my_uid}:{event_message_id}"),
+            ("infiltrate_success", f"dongfu-infiltrate-success:{my_uid}:{event_message_id}"),
+        ):
+            receipt = dongfu_application.operation_receipt(legacy_action, legacy_operation_id)
+            if receipt is not None:
+                await handle_send(
+                    bot,
+                    event,
+                    f"该潜入请求已经处理。今日剩余{mode_name}次数：{receipt['infiltrate_left']}，"
+                    f"该洞府今日剩余可被潜入次数：{receipt['intrude_left']}。",
+                )
+                return
+
     can_use, _ = _can_infiltrate(my_uid, is_random_mode)
     if not can_use:
         await handle_send(bot, event, f"今日{mode_name}次数已达上限（{_get_infiltrate_limit(is_random_mode)}次）。")
@@ -1289,32 +1360,13 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
 
     detected = runtime_random.random() < detect_rate
     success = runtime_random.random() < success_rate
-    if detected and not success:
-        loss_stone = runtime_random.randint(50000, 200000) * max(1, array_lv)
-        event_message_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
-        operation_id = f"dongfu-infiltrate-failure:{my_uid}:{event_message_id or runtime_ids.new_id()}"
-        result = dongfu_application.infiltrate_failure(
-            operation_id=operation_id,
-            visitor_id=my_uid,
-            target_id=target_uid,
-            day=_today_str(),
-            mode_field=_get_infiltrate_count_field(is_random_mode),
-            mode_limit=_get_infiltrate_limit(is_random_mode),
-            target_limit=INFILTRATE_DAILY_LIMIT,
-            loss=loss_stone,
-            consume_guard=guarded,
-        )
-        if not result.succeeded:
-            await handle_send(bot, event, "潜入未结算：潜入进度当前状态已更新，请稍后重试。")
-            return
-        guard_msg = "\n目标洞府巡山护府尚有余威。" if guarded else ""
-        await handle_send(bot, event, f"❌ **潜入失败**\n---\n你潜入【{tname}】洞府时触发阵法警示，被当场逼退！\n对方阵法等级\n> {array_lv}\n损失灵石\n> {number_to(loss_stone)}\n今日剩余{mode_name}次数\n> {result.infiltrate_left}\n该洞府今日剩余可被潜入次数\n> {result.intrude_left}{guard_msg}")
-        return
+    failure = detected and not success
+    loss_stone = runtime_random.randint(50000, 200000) * max(1, array_lv) if failure else 0
     stealth_penalty = 0.6 if detected else 1.0
     reward_rows = []
     reward_messages = []
     stone_gain = 0
-    if matured:
+    if not failure and matured:
         all_drops = _roll_harvest(seed_id, array_lv)
         if all_drops:
             take_n = max(1, min(len(all_drops), int(len(all_drops) * 0.5)))
@@ -1325,7 +1377,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
             for gid, name, item_type, amount in steal_drops:
                 reward_rows.append((gid, name, item_type, amount))
                 reward_messages.append(f"{name} x{amount}")
-    else:
+    elif not failure:
         pool_name = SEED_CONFIG.get(seed_id, {}).get("pool", "herb_low")
         pool = HERB_MID[:8] if pool_name in {"herb_mid", "god_low"} else HERB_LOW[:8]
         steal_count = 1 if detected or runtime_random.random() < 0.75 else 2
@@ -1345,72 +1397,36 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         base_delay = runtime_random.randint(20, 45) if matured else runtime_random.randint(8, 20)
         added_minutes = min(180, base_delay + array_lv * 2)
         new_finish = _fmt_dt(finish + timedelta(minutes=added_minutes))
-    expected_slots = json.dumps(_normalize_plant_slots(td), ensure_ascii=False)
-    event_message_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
-    operation_id = f"dongfu-infiltrate-success:{my_uid}:{event_message_id or runtime_ids.new_id()}"
-    result = dongfu_application.infiltrate_success(
-        operation_id=operation_id,
-        visitor_id=my_uid,
-        target_id=target_uid,
-        day=_today_str(),
-        mode_field=_get_infiltrate_count_field(is_random_mode),
-        mode_limit=_get_infiltrate_limit(is_random_mode),
-        target_limit=INFILTRATE_DAILY_LIMIT,
-        expected_slots=expected_slots,
-        slot_no=_to_int(target_slot.get("slot")),
-        new_finish=new_finish,
-        rewards=reward_rows,
-        stone=stone_gain,
-        consume_guard=guarded,
-        max_goods_num=XiuConfig().max_goods_num,
+    plan = {
+        "visitor_id": my_uid,
+        "target_id": target_uid,
+        "target_name": tname,
+        "mode_name": mode_name,
+        "day": _today_str(),
+        "mode_field": _get_infiltrate_count_field(is_random_mode),
+        "mode_limit": _get_infiltrate_limit(is_random_mode),
+        "target_limit": INFILTRATE_DAILY_LIMIT,
+        "expected_slots": _normalize_plant_slots(td),
+        "slot_no": _to_int(target_slot.get("slot")),
+        "new_finish": new_finish,
+        "rewards": reward_rows,
+        "reward_messages": reward_messages,
+        "stone_gain": stone_gain,
+        "loss_stone": loss_stone,
+        "consume_guard": guarded,
+        "guarded": guarded,
+        "detected": detected,
+        "settlement": "failure" if failure else "success",
+        "array_level": array_lv,
+        "added_minutes": added_minutes,
+        "max_goods_num": XiuConfig().max_goods_num,
+    }
+    prepared = dongfu_application.prepare_infiltration_plan(
+        operation_id, my_uid, request_identity, plan
     )
-    if result.status == "inventory_full":
-        await handle_send(bot, event, "背包空间不足，潜入所得无法结算。")
+    if not prepared.succeeded:
+        await handle_send(bot, event, "潜入计划未能保存，本次操作未结算。")
         return
-    if not result.succeeded:
-        await handle_send(bot, event, "潜入未结算：潜入进度当前状态已更新，请稍后重试。")
-        return
-    rewards = reward_messages
-    infiltrate_left, left = result.infiltrate_left, result.intrude_left
-
-    if not rewards:
-        if detected:
-            await handle_send(
-                bot,
-                event,
-                f"⚠️ 你虽摸进了【{tname}】的洞府，却在阵法波动中仓促撤离，一无所获。\n"
-                f"今日剩余{mode_name}次数：{infiltrate_left}\n"
-                f"该洞府今日剩余可被潜入次数：{left}"
-            )
-        else:
-            await handle_send(
-                bot,
-                event,
-                f"你潜入了【{tname}】的洞府，但这次并没有找到可带走的灵材。\n"
-                f"今日剩余{mode_name}次数：{infiltrate_left}\n"
-                f"该洞府今日剩余可被潜入次数：{left}"
-            )
-        return
-
-    delay_msg = f"\n对方灵田受扰，生长时间额外增加 {added_minutes} 分钟。" if added_minutes > 0 else ""
-    guard_msg = "\n目标洞府巡山护府尚有余威，你行动明显受阻。" if guarded else ""
-    slot_msg = f"{target_slot.get('slot')}号灵田"
-
-    if detected:
-        msg = (
-            f"⚠️ 你潜入【{tname}】洞府的{slot_msg}时触动阵纹，但仍抢先带走部分灵材！\n"
-            f"获得：{'、'.join(rewards)}"
-            f"{delay_msg}{guard_msg}\n"
-            f"今日剩余{mode_name}次数：{infiltrate_left}\n"
-            f"该洞府今日剩余可被潜入次数：{left}"
-        )
-    else:
-        msg = (
-            f"🕶️ 你悄然潜入【{tname}】洞府的{slot_msg}，顺走了一批灵材。\n"
-            f"获得：{'、'.join(rewards)}"
-            f"{delay_msg}{guard_msg}\n"
-            f"今日剩余{mode_name}次数：{infiltrate_left}\n"
-            f"该洞府今日剩余可被潜入次数：{left}"
-        )
-
-    await handle_send(bot, event, msg)
+    await _settle_infiltration_plan(
+        bot, event, {**prepared.plan, "operation_id": operation_id}
+    )

@@ -217,7 +217,8 @@ def Cooldown(
         cd_time: float = 0.5,
         isolate_level: CooldownIsolateLevel = CooldownIsolateLevel.USER,
         parallel: int = 1,
-        stamina_cost: int = 0
+        stamina_cost: int = 0,
+        stamina_operation_prefix: str | None = None,
 ) -> None:
     """依赖注入形式的命令冷却
 
@@ -233,6 +234,7 @@ def Cooldown(
         isolate_level: 命令冷却的隔离级别, 参考 `CooldownIsolateLevel`
         parallel: 并行执行的命令数量
         stamina_cost: 每次执行命令消耗的体力值
+        stamina_operation_prefix: 可选的稳定事件前缀，用于重放时避免重复扣体力
     """
     if not isinstance(isolate_level, CooldownIsolateLevel):
         raise ValueError(
@@ -380,7 +382,15 @@ def Cooldown(
 
             if user_data:
                 current_stamina = int(user_data.get("user_stamina") or 0)
-                if current_stamina < stamina_cost:
+                message_id = str(
+                    getattr(event, "message_id", "") or getattr(event, "id", "") or ""
+                ).strip()
+                stamina_operation_id = (
+                    f"{str(stamina_operation_prefix).strip()}:{stamina_user_id}:{message_id}"
+                    if stamina_operation_prefix and message_id
+                    else None
+                )
+                if current_stamina < stamina_cost and not stamina_operation_id:
                     msg = "你没有足够的体力，请等待体力恢复后再试！"
                     await handle_send(bot, event, msg)
                     await matcher.finish()
@@ -388,8 +398,9 @@ def Cooldown(
                     stamina_user_id,
                     stamina_cost,
                     expected_stamina=current_stamina,
+                    operation_id=stamina_operation_id,
                 )
-                if stamina_result.get("status") != "applied":
+                if stamina_result.get("status") not in {"applied", "duplicate"}:
                     if stamina_result.get("status") == "stamina_insufficient":
                         msg = "你没有足够的体力，请等待体力恢复后再试！"
                     else:

@@ -23,11 +23,13 @@ class PlayerStaminaApplication:
         amount: int,
         *,
         expected_stamina: int | None = None,
+        operation_id: str | None = None,
     ) -> dict[str, Any]:
         return self.repository.consume(
             user_id,
             amount,
             expected_stamina=expected_stamina,
+            operation_id=operation_id,
         )
 
     def recover(
