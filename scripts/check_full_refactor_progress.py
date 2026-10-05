@@ -490,7 +490,13 @@ def _slice_status() -> dict[str, dict[str, object]]:
     sect_weekly_repository = (PACKAGE / "features" / "sect" / "weekly_reward_repository.py").read_text(encoding="utf-8")
     sect_manual_disband_repository = (PACKAGE / "features" / "sect" / "manual_disband_repository.py").read_text(encoding="utf-8")
     sect_migrations = (PACKAGE / "features" / "sect" / "migrations.py").read_text(encoding="utf-8")
+    entertainment_application = (PACKAGE / "features" / "entertainment" / "application.py").read_text(encoding="utf-8")
     entertainment_facade = (PACKAGE / "xiuxian" / "xiuxian_entertainment" / "mod" / "newapi_store.py").read_text(encoding="utf-8")
+    entertainment_guess_application = (PACKAGE / "features" / "entertainment" / "guess_application.py").read_text(encoding="utf-8")
+    entertainment_guess_repository = (PACKAGE / "features" / "entertainment" / "guess_repository.py").read_text(encoding="utf-8")
+    entertainment_migrations = (PACKAGE / "features" / "entertainment" / "migrations.py").read_text(encoding="utf-8")
+    entertainment_number = (PACKAGE / "xiuxian" / "xiuxian_entertainment" / "mod" / "guess_number.py").read_text(encoding="utf-8")
+    entertainment_puzzle = (PACKAGE / "xiuxian" / "xiuxian_entertainment" / "mod" / "guess_number_puzzle.py").read_text(encoding="utf-8")
     partner_facade = (PACKAGE / "xiuxian" / "xiuxian_buff" / "partner.py").read_text(encoding="utf-8")
     partner_cultivation_application = (PACKAGE / "features" / "buff" / "partner_cultivation_application.py").read_text(encoding="utf-8")
     partner_cultivation_repository = (PACKAGE / "features" / "buff" / "partner_cultivation_repository.py").read_text(encoding="utf-8")
@@ -1060,7 +1066,28 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "auto_checkin_application_owned": "entertainment_application.toggle_auto_checkin(" in entertainment_facade,
             "checkin_history_application_owned": "entertainment_application.append_checkin_history(" in entertainment_facade and "entertainment_application.list_checkin_history(" in entertainment_facade,
             "newapi_store_has_no_runtime_json_owner": "json_store" not in entertainment_facade and "load_json_file" not in entertainment_facade and "save_json_file" not in entertainment_facade,
-            "status": "NewAPI account and check-in history state are owned by the Entertainment SQL repository; legacy JSON is a one-time migration source",
+            "guess_sessions_application_owned": (
+                "EntertainmentGuessSessionApplication" in entertainment_guess_application
+                and "self.guess_sessions = EntertainmentGuessSessionApplication(" in entertainment_application
+            ),
+            "guess_sessions_repository_atomic": (
+                "DatabaseUnitOfWork(self.database, immediate=True, timeout=0.5)" in entertainment_guess_repository
+                and "session_token" in entertainment_guess_repository
+                and "expires_at" in entertainment_guess_repository
+            ),
+            "guess_sessions_startup_migration_registered": (
+                "def apply_entertainment_guess_sessions(" in entertainment_migrations
+                and '("legacy.entertainment.004", apply_entertainment_guess_sessions)' in legacy_migrated
+            ),
+            "guess_handlers_use_feature_owner_off_event_loop": (
+                "entertainment_application.guess_sessions" in entertainment_number
+                and "entertainment_application.guess_sessions" in entertainment_puzzle
+                and "guess_number_sessions" not in entertainment_number
+                and "guess_puzzle_sessions" not in entertainment_puzzle
+                and "run_blocking_io" in entertainment_number
+                and "run_blocking_io" in entertainment_puzzle
+            ),
+            "status": "NewAPI and guess-session state are owned by Entertainment SQL repositories; legacy JSON is a one-time migration source",
         },
         "arena": {
             "state_application_owned": "ArenaStateApplication" in arena_limit,

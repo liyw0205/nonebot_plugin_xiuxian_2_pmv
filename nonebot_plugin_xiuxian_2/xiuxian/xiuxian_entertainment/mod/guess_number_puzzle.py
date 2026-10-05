@@ -1,15 +1,18 @@
 import asyncio
 
+from ....features.entertainment.guess_application import PUZZLE_SESSION_TIMEOUT
 from ....infrastructure.clock import SystemClock
 from ....infrastructure.random_source import SystemRandom
 
 from nonebot.params import CommandArg
 
 from ..command import *
-from .game_utils import event_display_name, now_text
+from ..io_runtime import run_blocking_io
+from ..room_store import entertainment_application
+from .game_utils import event_display_name
 
 
-PUZZLE_TIMEOUT = 900
+PUZZLE_TIMEOUT = PUZZLE_SESSION_TIMEOUT
 DEFAULT_DIFFICULTY = "简单"
 DIFFICULTIES = {
     "简单": ("简单", 4),
@@ -37,8 +40,9 @@ STATUS_TOKENS = {"状态", "信息", "进度"}
 
 FULLWIDTH_DIGIT_TABLE = str.maketrans("０１２３４５６７８９", "0123456789")
 
-guess_puzzle_sessions: dict[str, dict] = {}
+# Timeout tasks are process-local; durable game state belongs to the feature repository.
 guess_puzzle_timeout_tasks: dict[str, asyncio.Task] = {}
+guess_puzzle_timeout_tokens: dict[str, str] = {}
 runtime_clock = SystemClock()
 runtime_random = SystemRandom()
 
@@ -97,47 +101,95 @@ def _encourage(correct: int, digits: int, random_source=None) -> str:
     return source.choice(choices)
 
 
-def _clear_session(user_id: str) -> None:
-    guess_puzzle_sessions.pop(user_id, None)
+def _clear_timeout(user_id: str) -> None:
     task = guess_puzzle_timeout_tasks.pop(user_id, None)
-    if task:
+    guess_puzzle_timeout_tokens.pop(user_id, None)
+    if task and task is not asyncio.current_task():
         task.cancel()
 
 
-async def _start_timeout(bot: Bot, event, user_id: str) -> None:
+def _clock_snapshot() -> tuple[float, str]:
+    now = runtime_clock.now()
+    return now.timestamp(), now.strftime("%Y-%m-%d %H:%M:%S")
+
+
+async def _send_timeout(bot: Bot, event, game: dict) -> None:
+    difficulty = game["difficulty"]
+    await handle_send(
+        bot,
+        event,
+        f"【猜数谜超时】\n"
+        f"本局已结束。\n"
+        f"答案：{game['answer']}\n"
+        f"尝试次数：{game['tries']} 次\n"
+        f"提示：下局可以先固定几位做排除。",
+        md_type="娱乐",
+        k1="再来一局",
+        v1=f"开始猜数谜 {difficulty}",
+        k2="换困难",
+        v2="开始猜数谜 困难",
+        k3="帮助",
+        v3="猜数谜帮助",
+    )
+
+
+async def _start_timeout(bot: Bot, event, user_id: str, session: dict) -> None:
+    token = str(session["session_token"])
     old_task = guess_puzzle_timeout_tasks.get(user_id)
-    if old_task:
-        old_task.cancel()
+    if old_task and not old_task.done() and guess_puzzle_timeout_tokens.get(user_id) == token:
+        return
+    _clear_timeout(user_id)
 
     async def _task():
-        await asyncio.sleep(PUZZLE_TIMEOUT)
-        game = guess_puzzle_sessions.get(user_id)
-        if not game or game.get("status") != "playing":
-            return
-
-        answer = game["answer"]
-        tries = game["tries"]
-        difficulty = game["difficulty"]
-        _clear_session(user_id)
-
-        await handle_send(
-            bot,
-            event,
-            f"【猜数谜超时】\n"
-            f"本局已结束。\n"
-            f"答案：{answer}\n"
-            f"尝试次数：{tries} 次\n"
-            f"提示：下局可以先固定几位做排除。",
-            md_type="娱乐",
-            k1="再来一局",
-            v1=f"开始猜数谜 {difficulty}",
-            k2="换困难",
-            v2="开始猜数谜 困难",
-            k3="帮助",
-            v3="猜数谜帮助",
+        delay = max(float(session["expires_at"]) - runtime_clock.now().timestamp(), 0.0)
+        await asyncio.sleep(delay)
+        expired = await run_blocking_io(
+            entertainment_application.guess_sessions.expire,
+            "puzzle",
+            user_id,
+            token,
+            now_epoch=runtime_clock.now().timestamp(),
+            timeout=5,
         )
+        if expired["status"] != "expired":
+            return
+        _clear_timeout(user_id)
+        await _send_timeout(bot, event, expired["session"])
 
-    guess_puzzle_timeout_tasks[user_id] = asyncio.create_task(_task())
+    task = asyncio.create_task(_task())
+    guess_puzzle_timeout_tasks[user_id] = task
+    guess_puzzle_timeout_tokens[user_id] = token
+
+
+async def _read_session(user_id: str):
+    now_epoch, _ = _clock_snapshot()
+    return await run_blocking_io(
+        entertainment_application.guess_sessions.read,
+        "puzzle",
+        user_id,
+        now_epoch=now_epoch,
+        timeout=5,
+    )
+
+
+async def _send_in_progress(bot: Bot, event, game: dict) -> None:
+    digits = game["digits"]
+    await handle_send(
+        bot,
+        event,
+        f"【猜数谜进行中】\n"
+        f"难度：{game['difficulty']}（{digits}位）\n"
+        f"已尝试：{game['tries']} 次\n"
+        f"继续发送：猜数谜 {_example_guess(digits)}\n"
+        f"想放弃可发送：猜数谜 答案",
+        md_type="娱乐",
+        k1="继续猜",
+        v1=f"猜数谜 {_example_guess(digits)}",
+        k2="答案",
+        v2="猜数谜 答案",
+        k3="帮助",
+        v3="猜数谜帮助",
+    )
 
 
 async def _send_help(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent) -> None:
@@ -170,26 +222,14 @@ async def _start_game(
     difficulty_text: str = "",
 ) -> None:
     user_id = str(event.get_user_id())
-    old = guess_puzzle_sessions.get(user_id)
-    if old and old.get("status") == "playing":
-        digits = old["digits"]
-        await handle_send(
-            bot,
-            event,
-            f"【猜数谜进行中】\n"
-            f"难度：{old['difficulty']}（{digits}位）\n"
-            f"已尝试：{old['tries']} 次\n"
-            f"继续发送：猜数谜 {_example_guess(digits)}\n"
-            f"想放弃可发送：猜数谜 答案",
-            md_type="娱乐",
-            k1="继续猜",
-            v1=f"猜数谜 {_example_guess(digits)}",
-            k2="答案",
-            v2="猜数谜 答案",
-            k3="帮助",
-            v3="猜数谜帮助",
-        )
+    old = await _read_session(user_id)
+    if old["status"] == "active":
+        await _start_timeout(bot, event, user_id, old)
+        await _send_in_progress(bot, event, old["session"])
         return
+    if old["status"] == "expired":
+        _clear_timeout(user_id)
+        await _send_timeout(bot, event, old["session"])
 
     parsed = _parse_difficulty(difficulty_text) if difficulty_text else _parse_difficulty(DEFAULT_DIFFICULTY)
     if not parsed:
@@ -209,18 +249,24 @@ async def _start_game(
 
     difficulty, digits = parsed
     answer = _make_answer(digits, runtime_random)
-    guess_puzzle_sessions[user_id] = {
-        "user_id": user_id,
-        "user_name": event_display_name(event),
-        "answer": answer,
-        "difficulty": difficulty,
-        "digits": digits,
-        "tries": 0,
-        "status": "playing",
-        "create_time": now_text(runtime_clock),
-        "last_action_time": now_text(runtime_clock),
-    }
-    await _start_timeout(bot, event, user_id)
+    now_epoch, now_display = _clock_snapshot()
+    started = await run_blocking_io(
+        entertainment_application.guess_sessions.start_puzzle,
+        user_id=user_id,
+        user_name=event_display_name(event),
+        answer=answer,
+        difficulty=difficulty,
+        digits=digits,
+        create_time=now_display,
+        last_action_time=now_display,
+        now_epoch=now_epoch,
+        timeout=5,
+    )
+    if started["status"] == "existing":
+        await _start_timeout(bot, event, user_id, started)
+        await _send_in_progress(bot, event, started["session"])
+        return
+    await _start_timeout(bot, event, user_id, started)
 
     await handle_send(
         bot,
@@ -241,8 +287,12 @@ async def _start_game(
 
 async def _show_status(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent) -> None:
     user_id = str(event.get_user_id())
-    game = guess_puzzle_sessions.get(user_id)
-    if not game or game.get("status") != "playing":
+    current = await _read_session(user_id)
+    if current["status"] == "expired":
+        _clear_timeout(user_id)
+        await _send_timeout(bot, event, current["session"])
+        return
+    if current["status"] != "active":
         await handle_send(
             bot,
             event,
@@ -257,6 +307,8 @@ async def _show_status(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
         )
         return
 
+    game = current["session"]
+    await _start_timeout(bot, event, user_id, current)
     digits = game["digits"]
     await handle_send(
         bot,
@@ -279,8 +331,20 @@ async def _show_status(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
 
 async def _reveal_answer(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent) -> None:
     user_id = str(event.get_user_id())
-    game = guess_puzzle_sessions.get(user_id)
-    if not game or game.get("status") != "playing":
+    now_epoch, _ = _clock_snapshot()
+    result = await run_blocking_io(
+        entertainment_application.guess_sessions.end,
+        "puzzle",
+        user_id,
+        now_epoch=now_epoch,
+        timeout=5,
+    )
+    if result["status"] == "expired":
+        _clear_timeout(user_id)
+        await _send_timeout(bot, event, result["session"])
+        return
+    if result["status"] != "finished":
+        _clear_timeout(user_id)
         await handle_send(
             bot,
             event,
@@ -295,10 +359,11 @@ async def _reveal_answer(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         )
         return
 
+    game = result["session"]
     answer = game["answer"]
     tries = game["tries"]
     difficulty = game["difficulty"]
-    _clear_session(user_id)
+    _clear_timeout(user_id)
 
     await handle_send(
         bot,
@@ -323,8 +388,12 @@ async def _handle_guess(
     raw_guess: str,
 ) -> None:
     user_id = str(event.get_user_id())
-    game = guess_puzzle_sessions.get(user_id)
-    if not game or game.get("status") != "playing":
+    current = await _read_session(user_id)
+    if current["status"] == "expired":
+        _clear_timeout(user_id)
+        await _send_timeout(bot, event, current["session"])
+        return
+    if current["status"] != "active":
         await handle_send(
             bot,
             event,
@@ -338,6 +407,8 @@ async def _handle_guess(
             v3="开始猜数谜 困难",
         )
         return
+    game = current["session"]
+    await _start_timeout(bot, event, user_id, current)
 
     guess = _normalize_digits(raw_guess)
     digits = game["digits"]
@@ -373,16 +444,41 @@ async def _handle_guess(
         )
         return
 
-    await _start_timeout(bot, event, user_id)
-    game["tries"] += 1
-    game["last_action_time"] = now_text(runtime_clock)
-
-    answer = game["answer"]
-    correct = _correct_count(answer, guess)
-    tries = game["tries"]
-    if correct == digits:
+    now_epoch, now_display = _clock_snapshot()
+    result = await run_blocking_io(
+        entertainment_application.guess_sessions.guess_puzzle,
+        user_id,
+        guess,
+        last_action_time=now_display,
+        now_epoch=now_epoch,
+        timeout=5,
+    )
+    if result["status"] == "expired":
+        _clear_timeout(user_id)
+        await _send_timeout(bot, event, result["session"])
+        return
+    if result["status"] == "missing":
+        _clear_timeout(user_id)
+        await handle_send(
+            bot,
+            event,
+            "你当前没有进行中的猜数谜。\n发送：开始猜数谜 简单/普通/困难",
+            md_type="娱乐",
+            k1="简单",
+            v1="开始猜数谜 简单",
+            k2="普通",
+            v2="开始猜数谜 普通",
+            k3="困难",
+            v3="开始猜数谜 困难",
+        )
+        return
+    game = result["session"]
+    correct = int(result["outcome"].split(":", 1)[1])
+    tries = int(game["tries"])
+    if result["status"] == "finished":
         difficulty = game["difficulty"]
-        _clear_session(user_id)
+        answer = game["answer"]
+        _clear_timeout(user_id)
         await handle_send(
             bot,
             event,
@@ -400,6 +496,7 @@ async def _handle_guess(
             v3="小游戏帮助",
         )
         return
+    await _start_timeout(bot, event, user_id, result)
 
     await handle_send(
         bot,

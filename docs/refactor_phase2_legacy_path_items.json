@@ -4044,22 +4044,29 @@
       "id": "command:entertainment:开始猜数字",
       "kind": "commands",
       "entry": "entertainment:开始猜数字 (aliases: )",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "The default start command stores the session in the Entertainment SQL owner and keeps one active game per user. The 300-second timeout remains process-local; unexpired sessions survive restart and resume a timeout when a later command supplies a current bot/event context, while expired sessions are lazily removed on access.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/guess_number.py:77 guess_number_start_cmd = on_command('开始猜数字') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/guess_number.py:85 _ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/guess_number.py:93 guess_number_start_cmd = on_command('开始猜数字') -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/guess_number.py:126 _ -> run_blocking_io -> EntertainmentApplication.guess_sessions.start_number -> EntertainmentGuessSessionSqlRepository.start",
+        "EntertainmentGuessSessionSqlRepository -> game_db immediate UoW atomically inserts one number session with a fresh timeout token",
+        "startup legacy.entertainment.004 -> apply_entertainment_guess_sessions creates the session schema; request paths only verify the existing schema"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/guess_number.py:77",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/guess_number.py:85"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/guess_number.py:93",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/guess_number.py:126",
+        "nonebot_plugin_xiuxian_2/features/entertainment/application.py",
+        "nonebot_plugin_xiuxian_2/features/entertainment/guess_application.py",
+        "nonebot_plugin_xiuxian_2/features/entertainment/guess_repository.py",
+        "nonebot_plugin_xiuxian_2/features/entertainment/migrations.py",
+        "nonebot_plugin_xiuxian_2/features/_legacy_migrated.py:149",
+        "nonebot_plugin_xiuxian_2/features/entertainment/tests/test_guess_sessions.py"
       ],
       "source_declaration_found": true,
       "source": {
@@ -4071,22 +4078,29 @@
       "id": "command:entertainment:开始猜数谜",
       "kind": "commands",
       "entry": "entertainment:开始猜数谜 (aliases: 开始猜数迷)",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "The default start command stores the puzzle session in the Entertainment SQL owner and keeps one active game per user. The 900-second timeout remains process-local; unexpired sessions survive restart and resume a timeout when a later command supplies a current bot/event context, while expired sessions are lazily removed on access.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/guess_number_puzzle.py:422 guess_puzzle_start_cmd = on_command('开始猜数谜') aliases=开始猜数迷 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/guess_number_puzzle.py:457 _ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/guess_number_puzzle.py:519 guess_puzzle_start_cmd = on_command('开始猜数谜') aliases=开始猜数迷 -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/guess_number_puzzle.py:554 _ -> _start_game -> run_blocking_io -> EntertainmentApplication.guess_sessions.start_puzzle -> EntertainmentGuessSessionSqlRepository.start",
+        "EntertainmentGuessSessionSqlRepository -> game_db immediate UoW atomically inserts one puzzle session with a fresh timeout token",
+        "startup legacy.entertainment.004 -> apply_entertainment_guess_sessions creates the session schema; request paths only verify the existing schema"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/guess_number_puzzle.py:422",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/guess_number_puzzle.py:457"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/guess_number_puzzle.py:519",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/guess_number_puzzle.py:554",
+        "nonebot_plugin_xiuxian_2/features/entertainment/application.py",
+        "nonebot_plugin_xiuxian_2/features/entertainment/guess_application.py",
+        "nonebot_plugin_xiuxian_2/features/entertainment/guess_repository.py",
+        "nonebot_plugin_xiuxian_2/features/entertainment/migrations.py",
+        "nonebot_plugin_xiuxian_2/features/_legacy_migrated.py:149",
+        "nonebot_plugin_xiuxian_2/features/entertainment/tests/test_guess_sessions.py"
       ],
       "source_declaration_found": true,
       "source": {
@@ -6692,22 +6706,27 @@
       "id": "command:entertainment:猜",
       "kind": "commands",
       "entry": "entertainment:猜 (aliases: 猜数字)",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "Valid guesses atomically update the answer range, count and 300-second deadline through the Entertainment SQL owner. Session updates rotate a generation token so stale timeout tasks cannot finish a newer game. Duplicate message delivery remains non-idempotent, matching the previous handler behavior.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/guess_number.py:78 guess_number_guess_cmd = on_command('猜') aliases=猜数字 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/guess_number.py:133 _ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/guess_number.py:94 guess_number_guess_cmd = on_command('猜') aliases=猜数字 -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/guess_number.py:170 _ -> run_blocking_io -> EntertainmentApplication.guess_sessions.guess_number -> EntertainmentGuessSessionApplication -> EntertainmentGuessSessionSqlRepository.transition",
+        "EntertainmentGuessSessionSqlRepository -> one game_db immediate UoW commits the updated range, tries, deadline and new timeout token, or deletes the won session",
+        "the process-local timeout task calls expire(game_type,user_id,token); token mismatch cannot expire a newer guess session"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/guess_number.py:78",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/guess_number.py:133"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/guess_number.py:94",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/guess_number.py:170",
+        "nonebot_plugin_xiuxian_2/features/entertainment/guess_application.py",
+        "nonebot_plugin_xiuxian_2/features/entertainment/guess_repository.py",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/guess_number.py:62-89",
+        "nonebot_plugin_xiuxian_2/features/entertainment/tests/test_guess_sessions.py"
       ],
       "source_declaration_found": true,
       "source": {
@@ -6719,22 +6738,25 @@
       "id": "command:entertainment:猜数字信息",
       "kind": "commands",
       "entry": "entertainment:猜数字信息 (aliases: )",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "The information command reads the current number session from the Entertainment SQL owner, preserving the user-scoped range, attempt count and display timestamps. Expired rows are lazily removed and reported on access; the command does not change the timeout deadline.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/guess_number.py:79 guess_number_info_cmd = on_command('猜数字信息') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/guess_number.py:246 _ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/guess_number.py:95 guess_number_info_cmd = on_command('猜数字信息') -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/guess_number.py:299 _ -> _read_session -> run_blocking_io -> EntertainmentApplication.guess_sessions.read -> EntertainmentGuessSessionSqlRepository.get",
+        "EntertainmentGuessSessionSqlRepository -> read-only game_db UoW returns current state; an expired row is conditionally deleted by session token"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/guess_number.py:79",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/guess_number.py:246"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/guess_number.py:95",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/guess_number.py:299",
+        "nonebot_plugin_xiuxian_2/features/entertainment/guess_application.py",
+        "nonebot_plugin_xiuxian_2/features/entertainment/guess_repository.py",
+        "nonebot_plugin_xiuxian_2/features/entertainment/tests/test_guess_sessions.py"
       ],
       "source_declaration_found": true,
       "source": {
@@ -6752,15 +6774,15 @@
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/guess_number.py:81 guess_number_help_cmd = on_command('猜数字帮助') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/guess_number.py:309 _ -> send_help_message -> handle_send built-in text/buttons -> shared delivery; no guessing-session access"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/guess_number.py:97 guess_number_help_cmd = on_command('猜数字帮助') -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/guess_number.py:379 _ -> send_help_message -> handle_send built-in text/buttons -> shared delivery; no guessing-session access"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/guess_number.py:81",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/guess_number.py:309"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/guess_number.py:97",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/guess_number.py:379"
       ],
       "source_declaration_found": true,
       "source": {
@@ -6772,22 +6794,27 @@
       "id": "command:entertainment:猜数谜",
       "kind": "commands",
       "entry": "entertainment:猜数谜 (aliases: 猜数迷)",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "The default parser keeps its existing start, status, reveal-answer and guess tokens while routing session reads and valid guesses through the Entertainment SQL owner. Guess count, positional-match result and 900-second deadline update atomically; duplicate message delivery remains non-idempotent as before.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/guess_number_puzzle.py:421 guess_puzzle_cmd = on_command('猜数谜') aliases=猜数迷 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/guess_number_puzzle.py:427 _ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/guess_number_puzzle.py:518 guess_puzzle_cmd = on_command('猜数谜') aliases=猜数迷 -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/guess_number_puzzle.py:524 _ -> _handle_guess -> run_blocking_io -> EntertainmentApplication.guess_sessions.guess_puzzle -> EntertainmentGuessSessionSqlRepository.transition",
+        "EntertainmentGuessSessionSqlRepository -> one game_db immediate UoW atomically commits tries, positional-match session state, deadline and a new timeout token, or deletes a solved session",
+        "the same matcher routes start/status/reveal tokens to _start_game/_show_status/_reveal_answer, which use the same feature session owner"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/guess_number_puzzle.py:421",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/guess_number_puzzle.py:427"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/guess_number_puzzle.py:518",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/guess_number_puzzle.py:524",
+        "nonebot_plugin_xiuxian_2/features/entertainment/guess_application.py",
+        "nonebot_plugin_xiuxian_2/features/entertainment/guess_repository.py",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/guess_number_puzzle.py:136-161",
+        "nonebot_plugin_xiuxian_2/features/entertainment/tests/test_guess_sessions.py"
       ],
       "source_declaration_found": true,
       "source": {
@@ -6805,15 +6832,15 @@
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/guess_number_puzzle.py:423 guess_puzzle_help_cmd = on_command('猜数谜帮助') aliases=猜数迷帮助 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/guess_number_puzzle.py:462 _ -> _send_help -> static _difficulty_hint -> send_help_message -> handle_send -> shared delivery; no puzzle-session access"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/guess_number_puzzle.py:520 guess_puzzle_help_cmd = on_command('猜数谜帮助') aliases=猜数迷帮助 -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/guess_number_puzzle.py:559 _ -> _send_help -> static _difficulty_hint -> send_help_message -> handle_send -> shared delivery; no puzzle-session access"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/guess_number_puzzle.py:423",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/guess_number_puzzle.py:462"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/guess_number_puzzle.py:520",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/guess_number_puzzle.py:559"
       ],
       "source_declaration_found": true,
       "source": {
@@ -7355,22 +7382,25 @@
       "id": "command:entertainment:结束猜数字",
       "kind": "commands",
       "entry": "entertainment:结束猜数字 (aliases: )",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "The end command finishes and removes only the user's number session in an immediate Entertainment SQL transaction, returning the final answer and attempt count for the legacy response. If the timeout has elapsed, the stored timeout result is returned instead.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/guess_number.py:80 guess_number_end_cmd = on_command('结束猜数字') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/guess_number.py:277 _ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/guess_number.py:96 guess_number_end_cmd = on_command('结束猜数字') -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/guess_number.py:336 _ -> run_blocking_io -> EntertainmentApplication.guess_sessions.end -> EntertainmentGuessSessionSqlRepository.finish",
+        "EntertainmentGuessSessionSqlRepository -> one game_db immediate UoW deletes and returns the matching user's number session; the puzzle session is unaffected"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/guess_number.py:80",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/guess_number.py:277"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/guess_number.py:96",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/guess_number.py:336",
+        "nonebot_plugin_xiuxian_2/features/entertainment/guess_application.py",
+        "nonebot_plugin_xiuxian_2/features/entertainment/guess_repository.py",
+        "nonebot_plugin_xiuxian_2/features/entertainment/tests/test_guess_sessions.py"
       ],
       "source_declaration_found": true,
       "source": {

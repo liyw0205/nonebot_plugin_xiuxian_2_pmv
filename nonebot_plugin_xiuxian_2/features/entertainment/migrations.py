@@ -184,6 +184,7 @@ def apply_entertainment_rooms(
         "state_json TEXT NOT NULL,updated_at TEXT NOT NULL,"
         "PRIMARY KEY(game_type,room_id))"
     )
+
     uow.execute(
         "CREATE INDEX IF NOT EXISTS entertainment_game_rooms_status_idx "
         "ON entertainment_game_rooms(game_type,status,room_id)"
@@ -216,6 +217,18 @@ def apply_entertainment_rooms(
         (migration_key, snapshot_hash, len(imported), ignored_count, snapshot_bytes, migrated_at),
     )
 
+
+def apply_entertainment_guess_sessions(uow: DatabaseUnitOfWork) -> None:
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS entertainment_guess_sessions("
+        "game_type TEXT NOT NULL CHECK(game_type IN ('number','puzzle')),"
+        "user_id TEXT NOT NULL,state_json TEXT NOT NULL,session_token TEXT NOT NULL,"
+        "expires_at REAL NOT NULL,PRIMARY KEY(game_type,user_id))"
+    )
+    uow.execute(
+        "CREATE INDEX IF NOT EXISTS entertainment_guess_sessions_expiry_idx "
+        "ON entertainment_guess_sessions(expires_at)"
+    )
 
 NEWAPI_ACCOUNTS_TABLE = "entertainment_newapi_accounts"
 NEWAPI_HISTORY_TABLE = "entertainment_newapi_checkin_history"

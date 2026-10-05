@@ -3,6 +3,8 @@ from __future__ import annotations
 from pathlib import Path
 
 from .._migrated_application import MigratedFeatureApplication
+from .guess_application import EntertainmentGuessSessionApplication
+from .guess_repository import EntertainmentGuessSessionSqlRepository
 from .repository import EntertainmentRepository
 from .room_repository import EntertainmentRoomSqlRepository
 from .schemas import NewApiAccountListResult, NewApiCheckinTargetsResult
@@ -16,11 +18,15 @@ class EntertainmentApplication(MigratedFeatureApplication):
         database: str | Path,
         *,
         repository: EntertainmentRepository | None = None,
+        guess_session_repository: EntertainmentGuessSessionSqlRepository | None = None,
         room_repository: EntertainmentRoomSqlRepository | None = None,
         webdav_repository: WebDavRepository | None = None,
         external_query_provider: EntertainmentExternalQueryProvider | None = None,
     ) -> None:
         super().__init__(database, feature="entertainment", repository=repository or EntertainmentRepository(database))
+        self.guess_sessions = EntertainmentGuessSessionApplication(
+            guess_session_repository or EntertainmentGuessSessionSqlRepository(database)
+        )
         self.room_repository = room_repository or EntertainmentRoomSqlRepository(database)
         self.webdav_repository = webdav_repository or WebDavRepository()
         self.external_query_provider = external_query_provider or EntertainmentExternalQueryProvider()
