@@ -82,6 +82,14 @@ class WebDavQueryResult:
 
 
 @dataclass(frozen=True)
+class WebDavLinkResult:
+    index: int
+    path: str
+    kind: Literal["direct", "webdav"]
+    url: str
+
+
+@dataclass(frozen=True)
 class WebDavMutationResult:
     status: Literal["applied", "rejected"]
     message: str
@@ -96,6 +104,7 @@ __all__ = [
     "NewApiCheckinTargetsResult",
     "WebDavBinding",
     "WebDavEntry",
+    "WebDavLinkResult",
     "WebDavMutationResult",
     "WebDavQueryResult",
 ]

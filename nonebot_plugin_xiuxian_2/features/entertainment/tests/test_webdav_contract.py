@@ -47,6 +47,25 @@ class WebDavCommandContractTests(unittest.TestCase):
                 {call.func.id for call in ast.walk(node) if isinstance(call, ast.Call) and isinstance(call.func, ast.Name)},
             )
 
+    def test_link_handlers_delegate_bounded_download_capability(self):
+        source = COMMANDS.read_text(encoding="utf-8")
+        for name in ("webdav_link_", "webdav_file_"):
+            node = _function(source, name)
+            self.assertTrue(
+                any(
+                    isinstance(item, ast.Attribute) and item.attr == "webdav_download_link"
+                    for item in ast.walk(node)
+                )
+            )
+            called = {
+                call.func.id
+                for call in ast.walk(node)
+                if isinstance(call, ast.Call) and isinstance(call.func, ast.Name)
+            }
+            self.assertNotIn("_parse_target_and_path", called)
+            self.assertNotIn("_get_download_link", called)
+            self.assertNotIn("_format_link_message", called)
+
 
 if __name__ == "__main__":
     unittest.main()

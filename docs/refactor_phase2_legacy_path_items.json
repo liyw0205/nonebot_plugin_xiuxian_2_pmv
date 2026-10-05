@@ -1113,8 +1113,8 @@
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/alist_webdav.py:635 webdav_info_cmd = on_command('webdav信息') aliases=网盘信息 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/alist_webdav.py:781 webdav_info_ -> run_blocking_io -> EntertainmentApplication.webdav_info -> WebDavRepository.propfind",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/alist_webdav.py:263 webdav_info_cmd = on_command('webdav信息') aliases=网盘信息 -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/alist_webdav.py:407 webdav_info_ -> run_blocking_io -> EntertainmentApplication.webdav_info -> WebDavRepository.propfind",
         "WebDavRepository.resolve_target -> bounded bindings JSON read -> HTTP PROPFIND with Depth=0 -> Content-Length/iter_content response cap -> XML entry cap and DTO normalization",
         "WebDavQueryResult -> legacy formatter _format_info -> handle_send -> delivery adapter/message-history path"
       ],
@@ -1122,8 +1122,8 @@
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/alist_webdav.py:635",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/alist_webdav.py:781",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/alist_webdav.py:263",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/alist_webdav.py:407",
         "nonebot_plugin_xiuxian_2/features/entertainment/application.py:56-62",
         "nonebot_plugin_xiuxian_2/features/entertainment/webdav_repository.py:148-260",
         "nonebot_plugin_xiuxian_2/features/entertainment/schemas.py:45-65"
@@ -1144,8 +1144,8 @@
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/alist_webdav.py:634 webdav_ls_cmd = on_command('webdav列表') aliases=网盘列表 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/alist_webdav.py:744 webdav_ls_ -> run_blocking_io -> EntertainmentApplication.webdav_list -> WebDavRepository.propfind",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/alist_webdav.py:262 webdav_ls_cmd = on_command('webdav列表') aliases=网盘列表 -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/alist_webdav.py:370 webdav_ls_ -> run_blocking_io -> EntertainmentApplication.webdav_list -> WebDavRepository.propfind",
         "WebDavRepository.resolve_target -> bounded bindings JSON read -> HTTP PROPFIND with Depth=1 -> Content-Length/iter_content response cap -> XML entry cap and DTO normalization",
         "WebDavQueryResult -> legacy _format_list Markdown/plain fallback -> delivery adapter/message-history path"
       ],
@@ -1153,8 +1153,8 @@
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/alist_webdav.py:634",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/alist_webdav.py:744",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/alist_webdav.py:262",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/alist_webdav.py:370",
         "nonebot_plugin_xiuxian_2/features/entertainment/application.py:64-70",
         "nonebot_plugin_xiuxian_2/features/entertainment/webdav_repository.py:148-260",
         "nonebot_plugin_xiuxian_2/features/entertainment/schemas.py:45-65"
@@ -1175,16 +1175,16 @@
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/alist_webdav.py:638 webdav_del_cmd = on_command('webdav删除') aliases=webdav解绑,网盘删除,网盘解绑 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/alist_webdav.py:838 webdav_del_ -> run_blocking_io -> EntertainmentApplication.webdav_delete -> WebDavRepository.delete",
-        "WebDavRepository.delete -> bounded existing JSON read -> selector validation -> atomic temp-file fsync/replace -> WebDavMutationResult -> compatibility cache invalidation and message delivery"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/alist_webdav.py:266 webdav_del_cmd = on_command('webdav删除') aliases=webdav解绑,网盘删除,网盘解绑 -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/alist_webdav.py:470 webdav_del_ -> run_blocking_io -> EntertainmentApplication.webdav_delete -> WebDavRepository.delete",
+        "WebDavRepository.delete -> bounded existing JSON read -> selector validation -> atomic temp-file fsync/replace -> cache invalidation -> WebDavMutationResult -> message delivery"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/alist_webdav.py:638",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/alist_webdav.py:838",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/alist_webdav.py:266",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/alist_webdav.py:470",
         "nonebot_plugin_xiuxian_2/features/entertainment/application.py:72-74",
         "nonebot_plugin_xiuxian_2/features/entertainment/webdav_repository.py:285-326",
         "nonebot_plugin_xiuxian_2/features/entertainment/tests/test_webdav_repository.py:126-180",
@@ -1207,15 +1207,15 @@
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/alist_webdav.py:631 webdav_help_cmd = on_command('webdav帮助') aliases=网盘帮助 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/alist_webdav.py:684 webdav_help_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/alist_webdav.py:259 webdav_help_cmd = on_command('webdav帮助') aliases=网盘帮助 -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/alist_webdav.py:310 webdav_help_ -> legacy downstream effect not closed in this frozen item"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/alist_webdav.py:631",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/alist_webdav.py:684"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/alist_webdav.py:259",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/alist_webdav.py:310"
       ],
       "source_declaration_found": true,
       "source": {
@@ -1227,22 +1227,26 @@
       "id": "command:entertainment:webdav文件",
       "kind": "commands",
       "entry": "entertainment:webdav文件 (aliases: 网盘文件)",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "The file-link handler delegates bounded target resolution, OpenList login/token caching, direct-link and signed-link fallback, response limits, and WebDAV fallback to EntertainmentApplication -> WebDavRepository. It only runs the shared blocking capability off the event loop, formats the legacy message, and sends it.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/alist_webdav.py:637 webdav_file_cmd = on_command('webdav文件') aliases=网盘文件 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/alist_webdav.py:822 webdav_file_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/alist_webdav.py:265 webdav_file_cmd = on_command('webdav文件') aliases=网盘文件 -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/alist_webdav.py:451 webdav_file_ -> run_blocking_io -> EntertainmentApplication.webdav_download_link -> WebDavRepository.webdav_download_link",
+        "WebDavRepository.webdav_download_link -> bounded binding target -> bounded OpenList JSON login/link/get -> direct/signed URL or WebDAV fallback -> WebDavLinkResult -> legacy formatter/message delivery"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/alist_webdav.py:637",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/alist_webdav.py:822"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/alist_webdav.py:265",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/alist_webdav.py:451",
+        "nonebot_plugin_xiuxian_2/features/entertainment/application.py:76-77",
+        "nonebot_plugin_xiuxian_2/features/entertainment/webdav_repository.py:497-641",
+        "nonebot_plugin_xiuxian_2/features/entertainment/tests/test_webdav_repository.py:177-272",
+        "nonebot_plugin_xiuxian_2/features/entertainment/tests/test_webdav_contract.py:51-69"
       ],
       "source_declaration_found": true,
       "source": {
@@ -1260,16 +1264,16 @@
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/alist_webdav.py:633 webdav_list_bind_cmd = on_command('webdav查看') aliases=网盘查看 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/alist_webdav.py:729 webdav_list_bind_ -> run_blocking_io -> EntertainmentApplication.webdav_bindings -> WebDavRepository.load_bindings",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/alist_webdav.py:261 webdav_list_bind_cmd = on_command('webdav查看') aliases=网盘查看 -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/alist_webdav.py:355 webdav_list_bind_ -> run_blocking_io -> EntertainmentApplication.webdav_bindings -> WebDavRepository.load_bindings",
         "WebDavRepository.load_bindings -> bounded existing JSON read -> WebDavBinding DTOs -> _format_bindings -> handle_send -> delivery adapter/message-history path"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/alist_webdav.py:633",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/alist_webdav.py:729",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/alist_webdav.py:261",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/alist_webdav.py:355",
         "nonebot_plugin_xiuxian_2/features/entertainment/application.py:53-54",
         "nonebot_plugin_xiuxian_2/features/entertainment/webdav_repository.py:148-179",
         "nonebot_plugin_xiuxian_2/features/entertainment/schemas.py:34-43"
@@ -1290,16 +1294,16 @@
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/alist_webdav.py:632 webdav_bind_cmd = on_command('webdav绑定') aliases=网盘绑定 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/alist_webdav.py:690 webdav_bind_ -> run_blocking_io -> EntertainmentApplication.webdav_bind -> WebDavRepository.bind",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/alist_webdav.py:260 webdav_bind_cmd = on_command('webdav绑定') aliases=网盘绑定 -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/alist_webdav.py:316 webdav_bind_ -> run_blocking_io -> EntertainmentApplication.webdav_bind -> WebDavRepository.bind",
         "WebDavRepository.bind -> bounded existing JSON read -> duplicate check -> WebDAV PROPFIND verification -> atomic temp-file fsync/replace -> WebDavMutationResult -> message delivery"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/alist_webdav.py:632",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/alist_webdav.py:690",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/alist_webdav.py:260",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/alist_webdav.py:316",
         "nonebot_plugin_xiuxian_2/features/entertainment/application.py:56-70",
         "nonebot_plugin_xiuxian_2/features/entertainment/webdav_repository.py:250-283",
         "nonebot_plugin_xiuxian_2/features/entertainment/tests/test_webdav_repository.py:126-180",
@@ -1315,22 +1319,26 @@
       "id": "command:entertainment:webdav链接",
       "kind": "commands",
       "entry": "entertainment:webdav链接 (aliases: 网盘链接)",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "The link handler shares the same bounded download-link capability as webdav文件. OpenList requests use a no-retry client, a total deadline, bounded streaming JSON, bounded token/link caches, one authentication refresh, and the preserved WebDAV fallback; the compatibility handler only formats and sends the result.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/alist_webdav.py:636 webdav_link_cmd = on_command('webdav链接') aliases=网盘链接 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/alist_webdav.py:806 webdav_link_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/alist_webdav.py:264 webdav_link_cmd = on_command('webdav链接') aliases=网盘链接 -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/alist_webdav.py:432 webdav_link_ -> run_blocking_io -> EntertainmentApplication.webdav_download_link -> WebDavRepository.webdav_download_link",
+        "WebDavRepository.webdav_download_link -> bounded binding target -> bounded OpenList JSON login/link/get -> direct/signed URL or WebDAV fallback -> WebDavLinkResult -> legacy formatter/message delivery"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/alist_webdav.py:636",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/alist_webdav.py:806"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/alist_webdav.py:264",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/alist_webdav.py:432",
+        "nonebot_plugin_xiuxian_2/features/entertainment/application.py:76-77",
+        "nonebot_plugin_xiuxian_2/features/entertainment/webdav_repository.py:497-641",
+        "nonebot_plugin_xiuxian_2/features/entertainment/tests/test_webdav_repository.py:177-272",
+        "nonebot_plugin_xiuxian_2/features/entertainment/tests/test_webdav_contract.py:51-69"
       ],
       "source_declaration_found": true,
       "source": {

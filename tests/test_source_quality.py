@@ -3294,7 +3294,7 @@ class SourceQualityTests(unittest.TestCase):
             entertainment / "mod" / "alist_webdav.py": (
                 "await run_blocking_io(\n            entertainment_application.webdav_list",
                 "await run_blocking_io(\n            entertainment_application.webdav_info",
-                "await run_blocking_io(\n            _format_link_message",
+                "await run_blocking_io(\n            entertainment_application.webdav_download_link",
             ),
             entertainment / "mod" / "newapi_commands.py": (
                 "await run_blocking_io(\n                _run_checkin_for_account",

@@ -2,12 +2,14 @@ from __future__ import annotations
 
 import json
 import tempfile
+import time
 import unittest
 from pathlib import Path
 
 from ..webdav_repository import (
     MAX_WEBDAV_BINDINGS_BYTES,
     MAX_WEBDAV_RESPONSE_ENTRIES,
+    MAX_OPENLIST_RESPONSE_BYTES,
     WebDavRepository,
     WebDavRepositoryError,
     WebDavTargetError,
@@ -38,6 +40,22 @@ class _HttpClient:
     def request(self, method: str, url: str, **kwargs):
         self.calls.append((method, url, kwargs))
         return self.response
+
+
+class _QueueHttpClient:
+    def __init__(self, responses):
+        self.responses = list(responses)
+        self.calls = []
+
+    def request(self, method: str, url: str, **kwargs):
+        self.calls.append((method, url, kwargs))
+        if not self.responses:
+            raise AssertionError("unexpected HTTP request")
+        return self.responses.pop(0)
+
+
+def _json_response(status: int, payload, *, content_length: str | None = None) -> _Response:
+    return _Response(status, json.dumps(payload).encode("utf-8"), content_length=content_length)
 
 
 def _xml(*entries: str) -> bytes:
@@ -168,6 +186,80 @@ class WebDavRepositoryTests(unittest.TestCase):
             with self.assertRaises(WebDavRepositoryError):
                 repository.delete(path, "all")
             self.assertEqual(path.read_bytes(), original)
+
+    def test_download_link_direct_and_cache(self):
+        client = _QueueHttpClient(
+            [
+                _json_response(200, {"code": 200, "data": {"token": "t"}}),
+                _json_response(200, {"code": 200, "data": {"url": "/d/movie.mp4"}}),
+            ]
+        )
+        repository = WebDavRepository(openlist_client=client)
+        with tempfile.TemporaryDirectory() as directory:
+            path = self._write_binding(directory)
+            result = repository.webdav_download_link(path, "1 /movie.mp4")
+            cached = repository.webdav_download_link(path, "1 /movie.mp4")
+
+        self.assertEqual(result.kind, "direct")
+        self.assertEqual(result.url, "https://dav.test/d/movie.mp4")
+        self.assertEqual(cached, result)
+        self.assertEqual(len(client.calls), 2)
+
+    def test_download_link_uses_signed_fallback_then_webdav(self):
+        signed_client = _QueueHttpClient(
+            [
+                _json_response(200, {"code": 200, "data": {"token": "t"}}),
+                _json_response(500, {"code": 500, "message": "link unavailable"}),
+                _json_response(200, {"code": 200, "data": {"is_dir": False, "sign": "s"}}),
+            ]
+        )
+        fallback_client = _QueueHttpClient(
+            [
+                _json_response(200, {"code": 200, "data": {"token": "t"}}),
+                _json_response(500, {"code": 500}),
+                _json_response(200, {"code": 200, "data": {"is_dir": True}}),
+            ]
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            path = self._write_binding(directory)
+            signed = WebDavRepository(openlist_client=signed_client).webdav_download_link(path, "1 /x y.mp4")
+            fallback = WebDavRepository(openlist_client=fallback_client).webdav_download_link(path, "1 /x y.mp4")
+
+        self.assertEqual(signed.kind, "direct")
+        self.assertIn("?sign=s", signed.url)
+        self.assertEqual(fallback.kind, "webdav")
+        self.assertIn("x%20y.mp4", fallback.url)
+
+    def test_download_link_refreshes_auth_once(self):
+        client = _QueueHttpClient(
+            [
+                _json_response(200, {"code": 200, "data": {"token": "old"}}),
+                _json_response(200, {"code": 401, "message": "expired"}),
+                _json_response(200, {"code": 200, "data": {"token": "new"}}),
+                _json_response(200, {"code": 200, "data": {"url": "/d/file"}}),
+            ]
+        )
+        repository = WebDavRepository(openlist_client=client)
+        with tempfile.TemporaryDirectory() as directory:
+            result = repository.webdav_download_link(
+                self._write_binding(directory), "1 /file"
+            )
+        self.assertEqual(result.kind, "direct")
+        self.assertEqual(len(client.calls), 4)
+        self.assertEqual(client.calls[1][2]["headers"]["Authorization"], "old")
+        self.assertEqual(client.calls[3][2]["headers"]["Authorization"], "new")
+
+    def test_openlist_json_response_is_bounded(self):
+        client = _QueueHttpClient(
+            [_json_response(200, {"code": 200}, content_length=str(MAX_OPENLIST_RESPONSE_BYTES + 1))]
+        )
+        repository = WebDavRepository(openlist_client=client)
+        binding = self._write_binding(tempfile.mkdtemp())
+        with self.assertRaisesRegex(WebDavRepositoryError, "超过大小限制"):
+            repository._openlist_token(
+                repository.load_bindings(binding)[0],
+                deadline=time.monotonic() + 5,
+            )
 
 
 if __name__ == "__main__":

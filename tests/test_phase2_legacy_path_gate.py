@@ -78,7 +78,7 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
         self.assertEqual(report["path_count"], 496)
         self.assertEqual(
             report["status_counts"],
-            {"不可达": 19, "允许保留的兼容路径": 45, "受阻": 411, "已迁移": 21},
+            {"不可达": 19, "允许保留的兼容路径": 45, "受阻": 409, "已迁移": 23},
         )
         self.assertGreater(report["blocked_count"], 0)
         self.assertTrue(all(item["call_graph"] and item["evidence"] for item in report["items"]))
@@ -163,7 +163,7 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
         self.assertTrue(
             any("update_json_file_bounded" in edge for edge in newapi_checkin["call_graph"])
         )
-        for webdav_name in ("webdav查看", "webdav列表", "webdav信息"):
+        for webdav_name in ("webdav查看", "webdav列表", "webdav信息", "webdav绑定", "webdav删除", "webdav链接", "webdav文件"):
             webdav = next(
                 item for item in report["items"] if item["id"] == f"command:entertainment:{webdav_name}"
             )

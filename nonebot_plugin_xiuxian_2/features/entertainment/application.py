@@ -73,6 +73,9 @@ class EntertainmentApplication(MigratedFeatureApplication):
     def webdav_delete(self, *, bindings_path: str | Path, text: str):
         return self.webdav_repository.delete(bindings_path, text)
 
+    def webdav_download_link(self, *, bindings_path: str | Path, text: str):
+        return self.webdav_repository.webdav_download_link(bindings_path, text)
+
     def webdav_info(self, *, bindings_path: str | Path, text: str):
         return self.webdav_repository.propfind(
             bindings_path,

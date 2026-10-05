@@ -2,16 +2,28 @@ from __future__ import annotations
 
 import json
 import os
+import posixpath
 import re
 import tempfile
 import threading
+import time
+from collections import OrderedDict
 from pathlib import Path
 from typing import Any
 from urllib.parse import quote, unquote, urlsplit, urlunsplit
 from xml.etree import ElementTree as ET
 
-from ...xiuxian.xiuxian_utils.http_proxy import http_client as default_http_client
-from .schemas import WebDavBinding, WebDavEntry, WebDavMutationResult, WebDavQueryResult
+from ...xiuxian.xiuxian_utils.http_proxy import (
+    HttpClient,
+    http_client as default_http_client,
+)
+from .schemas import (
+    WebDavBinding,
+    WebDavEntry,
+    WebDavLinkResult,
+    WebDavMutationResult,
+    WebDavQueryResult,
+)
 
 DAV_NS = {"d": "DAV:"}
 MAX_WEBDAV_BINDINGS_BYTES = 256 * 1024
@@ -22,6 +34,13 @@ MAX_WEBDAV_LABEL_CHARS = 64
 MAX_WEBDAV_URL_CHARS = 512
 MAX_WEBDAV_USERNAME_CHARS = 128
 MAX_WEBDAV_PASSWORD_CHARS = 4096
+MAX_OPENLIST_RESPONSE_BYTES = 512 * 1024
+MAX_OPENLIST_TOKEN_CACHE_ENTRIES = 32
+MAX_OPENLIST_LINK_CACHE_ENTRIES = 256
+OPENLIST_CACHE_TTL = 300.0
+OPENLIST_LOGIN_TIMEOUT = 5
+OPENLIST_REQUEST_TIMEOUT = 8
+OPENLIST_LINK_TOTAL_TIMEOUT = 28.0
 
 
 class WebDavRepositoryError(ValueError):
@@ -76,6 +95,56 @@ def _join_dav_url(base_url: str, dav_path: str) -> str:
     return urlunsplit((parsed.scheme, parsed.netloc, full_path or "/", "", ""))
 
 
+def _normalize_openlist_path(path_text: str) -> str:
+    path = _format_dav_path(path_text)
+    normalized = posixpath.normpath(path)
+    if normalized in {"", "."}:
+        return "/"
+    if not normalized.startswith("/"):
+        normalized = "/" + normalized
+    return normalized
+
+
+def _api_base_from_dav_url(dav_url: str) -> str:
+    split = urlsplit(_normalize_dav_url(dav_url))
+    parts = [part for part in split.path.split("/") if part]
+    dav_index = next((i for i, part in enumerate(parts) if part.casefold() == "dav"), None)
+    api_path = "/" + "/".join(parts[:dav_index]) if dav_index is not None and parts[:dav_index] else ""
+    return urlunsplit((split.scheme, split.netloc, api_path.rstrip("/"), "", "")).rstrip("/")
+
+
+def _openlist_download_path(binding: WebDavBinding, dav_path: str) -> str:
+    split = urlsplit(_normalize_dav_url(binding.dav_url))
+    parts = [unquote(part) for part in split.path.split("/") if part]
+    dav_index = next((i for i, part in enumerate(parts) if part.casefold() == "dav"), None)
+    base_parts = parts[dav_index + 1 :] if dav_index is not None else []
+    path = _normalize_openlist_path(dav_path)
+    if not base_parts:
+        return path
+    base_path = _normalize_openlist_path("/" + "/".join(base_parts))
+    if path == base_path or path.startswith(base_path.rstrip("/") + "/"):
+        return path
+    return _normalize_openlist_path(f"{base_path.rstrip('/')}/{path.lstrip('/')}")
+
+
+def _openlist_url(api_base: str, api_path: str) -> str:
+    return f"{api_base.rstrip('/')}/{api_path.lstrip('/')}"
+
+
+def _absolute_http_url(api_base: str, value: str) -> str:
+    text = str(value or "").strip()
+    if not text or len(text) > MAX_WEBDAV_URL_CHARS * 4:
+        return ""
+    if re.match(r"^https?://", text, re.I):
+        parsed = urlsplit(text)
+        if parsed.scheme.casefold() not in {"http", "https"} or not parsed.netloc:
+            return ""
+        return text
+    if text.startswith("/"):
+        return api_base.rstrip("/") + text
+    return ""
+
+
 def _href_to_dav_path(base_url: str, href: str) -> str:
     href_path = unquote(urlsplit(href or "").path or "/")
     base_path = unquote(urlsplit(_normalize_dav_url(base_url)).path or "").rstrip("/")
@@ -112,6 +181,57 @@ def _read_response_bytes(response: Any) -> bytes:
     return payload
 
 
+def _read_openlist_json(response: Any) -> dict[str, Any]:
+    headers = getattr(response, "headers", {}) or {}
+    try:
+        content_length = int(headers.get("content-length", 0) or 0)
+    except (TypeError, ValueError):
+        content_length = 0
+    if content_length > MAX_OPENLIST_RESPONSE_BYTES:
+        raise WebDavRepositoryError("OpenList 响应超过大小限制")
+
+    iterator = getattr(response, "iter_content", None)
+    if callable(iterator):
+        payload = bytearray()
+        for chunk in iterator(chunk_size=64 * 1024):
+            if not chunk:
+                continue
+            payload.extend(chunk)
+            if len(payload) > MAX_OPENLIST_RESPONSE_BYTES:
+                raise WebDavRepositoryError("OpenList 响应超过大小限制")
+        if payload:
+            try:
+                value = json.loads(payload)
+            except (ValueError, RecursionError) as exc:
+                raise WebDavRepositoryError("OpenList 响应不是合法 JSON") from exc
+            if not isinstance(value, dict):
+                raise WebDavRepositoryError("OpenList 响应格式无效")
+            return value
+
+    content = bytes(getattr(response, "content", b"") or b"")
+    if content:
+        if len(content) > MAX_OPENLIST_RESPONSE_BYTES:
+            raise WebDavRepositoryError("OpenList 响应超过大小限制")
+        try:
+            value = json.loads(content)
+        except (ValueError, RecursionError) as exc:
+            raise WebDavRepositoryError("OpenList 响应不是合法 JSON") from exc
+        if not isinstance(value, dict):
+            raise WebDavRepositoryError("OpenList 响应格式无效")
+        return value
+
+    json_loader = getattr(response, "json", None)
+    if callable(json_loader):
+        try:
+            value = json_loader()
+        except (ValueError, RecursionError) as exc:
+            raise WebDavRepositoryError("OpenList 响应不是合法 JSON") from exc
+        if not isinstance(value, dict):
+            raise WebDavRepositoryError("OpenList 响应格式无效")
+        return value
+    raise WebDavRepositoryError("OpenList 响应不是合法 JSON")
+
+
 def _element_text(parent: ET.Element, name: str) -> str:
     node = parent.find(f"d:{name}", DAV_NS)
     return (node.text or "").strip() if node is not None and node.text else ""
@@ -145,9 +265,17 @@ def _entry_from_response(response: ET.Element) -> WebDavEntry:
 
 
 class WebDavRepository:
-    def __init__(self, *, http_client: Any = default_http_client) -> None:
+    def __init__(self, *, http_client: Any = default_http_client, openlist_client: Any | None = None) -> None:
         self.http_client = http_client
+        self.openlist_client = openlist_client or (
+            HttpClient(timeout=OPENLIST_REQUEST_TIMEOUT, retries=0)
+            if http_client is default_http_client
+            else http_client
+        )
         self._bindings_lock = threading.RLock()
+        self._openlist_lock = threading.RLock()
+        self._token_cache: OrderedDict[tuple[str, str], tuple[float, str]] = OrderedDict()
+        self._link_cache: OrderedDict[tuple[str, str, str], tuple[float, WebDavLinkResult]] = OrderedDict()
 
     def load_bindings(self, bindings_path: str | Path) -> tuple[WebDavBinding, ...]:
         path = Path(bindings_path)
@@ -309,6 +437,8 @@ class WebDavRepository:
             value = str(text or "").strip().casefold()
             if value in {"全部", "所有", "all", "*"}:
                 self._write_bindings(path, ())
+                for binding in bindings:
+                    self.invalidate_binding(binding)
                 return WebDavMutationResult(
                     "applied",
                     f"已删除全部 {len(bindings)} 个 WebDAV 绑定",
@@ -325,11 +455,188 @@ class WebDavRepository:
                 for position, item in enumerate(bindings[: index - 1] + bindings[index:], start=1)
             )
             self._write_bindings(path, remaining)
+            self.invalidate_binding(removed)
             return WebDavMutationResult(
                 "applied",
                 f"已删除绑定 {index}：{removed.label or removed.dav_url}",
                 removed=(removed,),
             )
+
+    def _cache_token(self, key: tuple[str, str], token: str) -> None:
+        with self._openlist_lock:
+            self._token_cache[key] = (time.monotonic() + OPENLIST_CACHE_TTL, token)
+            self._token_cache.move_to_end(key)
+            while len(self._token_cache) > MAX_OPENLIST_TOKEN_CACHE_ENTRIES:
+                self._token_cache.popitem(last=False)
+
+    def invalidate_binding(self, binding: WebDavBinding) -> None:
+        prefix = (_api_base_from_dav_url(binding.dav_url), binding.username)
+        with self._openlist_lock:
+            self._token_cache.pop(prefix, None)
+            for key in [key for key in self._link_cache if key[:2] == prefix]:
+                self._link_cache.pop(key, None)
+
+    def _get_cached_token(self, key: tuple[str, str]) -> str:
+        with self._openlist_lock:
+            cached = self._token_cache.get(key)
+            if cached is None:
+                return ""
+            if cached[0] <= time.monotonic():
+                self._token_cache.pop(key, None)
+                return ""
+            self._token_cache.move_to_end(key)
+            return cached[1]
+
+    @staticmethod
+    def _remaining_timeout(deadline: float, maximum: float) -> float:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise WebDavRepositoryError("获取 WebDAV 下载链接超时")
+        return min(maximum, remaining)
+
+    def _openlist_token(
+        self,
+        binding: WebDavBinding,
+        *,
+        refresh: bool = False,
+        deadline: float,
+    ) -> str:
+        api_base = _api_base_from_dav_url(binding.dav_url)
+        key = (api_base, binding.username)
+        if not api_base:
+            return ""
+        if not refresh:
+            cached = self._get_cached_token(key)
+            if cached:
+                return cached
+        try:
+            response = self.openlist_client.request(
+                "POST",
+                _openlist_url(api_base, "/api/auth/login"),
+                json={"username": binding.username, "password": binding.password},
+                timeout=self._remaining_timeout(deadline, OPENLIST_LOGIN_TIMEOUT),
+                check_status=False,
+                stream=True,
+            )
+        except Exception as exc:
+            raise WebDavRepositoryError("OpenList 登录请求失败") from exc
+        try:
+            status = int(getattr(response, "status_code", 0))
+            payload = _read_openlist_json(response)
+        finally:
+            close = getattr(response, "close", None)
+            if callable(close):
+                close()
+        if status != 200 or payload.get("code") != 200:
+            raise WebDavRepositoryError(str(payload.get("message") or f"OpenList 登录接口返回 {status}"))
+        token = str((payload.get("data") or {}).get("token") or "")
+        if not token:
+            raise WebDavRepositoryError("OpenList 登录接口未返回 token")
+        self._cache_token(key, token)
+        return token
+
+    def _openlist_post(
+        self,
+        binding: WebDavBinding,
+        api_path: str,
+        payload: dict[str, Any],
+        *,
+        deadline: float,
+    ) -> dict[str, Any]:
+        api_base = _api_base_from_dav_url(binding.dav_url)
+        if not api_base:
+            raise WebDavRepositoryError("无法识别站点地址")
+        token = self._openlist_token(binding, deadline=deadline)
+        for attempt in range(2):
+            headers = {"Authorization": token} if token else {}
+            try:
+                response = self.openlist_client.request(
+                    "POST",
+                    _openlist_url(api_base, api_path),
+                    json=payload,
+                    headers=headers,
+                    timeout=self._remaining_timeout(deadline, OPENLIST_REQUEST_TIMEOUT),
+                    check_status=False,
+                    stream=True,
+                )
+            except Exception as exc:
+                raise WebDavRepositoryError("OpenList 请求失败") from exc
+            try:
+                status = int(getattr(response, "status_code", 0))
+                result = _read_openlist_json(response)
+            finally:
+                close = getattr(response, "close", None)
+                if callable(close):
+                    close()
+            code = result.get("code")
+            if status in {401, 403} or code in {401, 403}:
+                if attempt == 0:
+                    token = self._openlist_token(binding, refresh=True, deadline=deadline)
+                    continue
+                raise WebDavRepositoryError("OpenList 认证失败")
+            if status != 200:
+                raise WebDavRepositoryError(f"OpenList 接口返回 {status}")
+            if code != 200:
+                raise WebDavRepositoryError(str(result.get("message") or "OpenList 接口调用失败"))
+            data = result.get("data") or {}
+            return data if isinstance(data, dict) else {}
+        raise WebDavRepositoryError("OpenList 请求失败")
+
+    def webdav_download_link(self, bindings_path: str | Path, text: str) -> WebDavLinkResult:
+        binding, path = self.resolve_target(bindings_path, text, need_path=True)
+        deadline = time.monotonic() + OPENLIST_LINK_TOTAL_TIMEOUT
+        api_base = _api_base_from_dav_url(binding.dav_url)
+        download_path = _openlist_download_path(binding, path)
+        key = (api_base, binding.username, download_path)
+        with self._openlist_lock:
+            cached = self._link_cache.get(key)
+            if cached and cached[0] > time.monotonic():
+                self._link_cache.move_to_end(key)
+                return cached[1]
+            if cached:
+                self._link_cache.pop(key, None)
+
+        result: WebDavLinkResult | None = None
+        try:
+            data = self._openlist_post(
+                binding,
+                "/api/fs/link",
+                {"path": download_path},
+                deadline=deadline,
+            )
+            url = _absolute_http_url(api_base, str(data.get("url") or ""))
+            if url:
+                result = WebDavLinkResult(binding.index, path, "direct", url)
+        except Exception:
+            pass
+
+        if result is None:
+            try:
+                data = self._openlist_post(
+                    binding,
+                    "/api/fs/get",
+                    {"path": download_path, "password": ""},
+                    deadline=deadline,
+                )
+                if not data.get("is_dir", True):
+                    url = _absolute_http_url(api_base, str(data.get("raw_url") or ""))
+                    if not url:
+                        url = f"{api_base.rstrip('/')}/d{quote(download_path, safe='/')}"
+                        sign = str(data.get("sign") or "")
+                        if sign:
+                            url += f"?sign={quote(sign, safe='')}"
+                    result = WebDavLinkResult(binding.index, path, "direct", url)
+            except Exception:
+                pass
+
+        if result is None:
+            result = WebDavLinkResult(binding.index, path, "webdav", _join_dav_url(binding.dav_url, path))
+        with self._openlist_lock:
+            self._link_cache[key] = (time.monotonic() + OPENLIST_CACHE_TTL, result)
+            self._link_cache.move_to_end(key)
+            while len(self._link_cache) > MAX_OPENLIST_LINK_CACHE_ENTRIES:
+                self._link_cache.popitem(last=False)
+        return result
 
     def propfind(
         self,

@@ -1,11 +1,7 @@
-import json
-import posixpath
 import re
-import time
 from pathlib import Path
 from typing import Any
 from urllib.parse import quote, unquote, urlsplit, urlunsplit
-from xml.etree import ElementTree as ET
 
 from nonebot.params import CommandArg
 
@@ -17,34 +13,15 @@ from ....features.entertainment.webdav_repository import (
 )
 from ....paths import get_paths
 from ...xiuxian_utils.utils import build_md_command_link
-from ...xiuxian_utils.http_proxy import http_client
 
 
 WEBDAV_DATA_DIR = Path(__file__).resolve().parent / "data" / "alist_webdav_bindings"
 WEBDAV_DATA_DIR.mkdir(parents=True, exist_ok=True)
 WEBDAV_BINDINGS_FILE = WEBDAV_DATA_DIR / "bindings.json"
 
-DAV_NS = {"d": "DAV:"}
 LIST_LIMIT = 30
-LINK_CACHE_TTL = 300
-_LIST_CACHE: dict[tuple[str, str, str, str], list[dict[str, Any]]] = {}
-_TOKEN_CACHE: dict[tuple[str, str], str] = {}
-_LINK_CACHE: dict[tuple[str, str, str], tuple[float, dict[str, Any]]] = {}
 
 entertainment_application = EntertainmentApplication(get_paths().game_db)
-
-
-def _load_bindings() -> list[dict[str, Any]]:
-    if not WEBDAV_BINDINGS_FILE.exists():
-        return []
-    try:
-        with open(WEBDAV_BINDINGS_FILE, "r", encoding="utf-8") as f:
-            data = json.load(f)
-        if isinstance(data, list):
-            return [item for item in data if isinstance(item, dict)]
-    except Exception:
-        pass
-    return []
 
 
 def _normalize_dav_url(url: str) -> str:
@@ -102,46 +79,6 @@ def _join_dav_url(base_url: str, dav_path: str) -> str:
     return urlunsplit((split.scheme, split.netloc, full_path or "/", "", ""))
 
 
-def _normalize_openlist_path(path_text: str) -> str:
-    path = _format_dav_path(path_text)
-    normalized = posixpath.normpath(path)
-    if normalized in {"", "."}:
-        return "/"
-    if not normalized.startswith("/"):
-        normalized = "/" + normalized
-    return normalized
-
-
-def _api_base_from_dav_url(dav_url: str) -> str:
-    split = urlsplit(_normalize_dav_url(dav_url))
-    parts = [part for part in split.path.split("/") if part]
-    dav_index = next((i for i, part in enumerate(parts) if part.lower() == "dav"), None)
-    api_path = "/" + "/".join(parts[:dav_index]) if dav_index is not None and parts[:dav_index] else ""
-    return urlunsplit((split.scheme, split.netloc, api_path.rstrip("/"), "", "")).rstrip("/")
-
-
-def _openlist_download_path(binding: dict[str, Any], dav_path: str) -> str:
-    split = urlsplit(_normalize_dav_url(str(binding.get("dav_url") or "")))
-    parts = [unquote(part) for part in split.path.split("/") if part]
-    dav_index = next((i for i, part in enumerate(parts) if part.lower() == "dav"), None)
-    base_parts = parts[dav_index + 1 :] if dav_index is not None else []
-    path = _normalize_openlist_path(dav_path)
-    if not base_parts:
-        return path
-
-    base_path = _normalize_openlist_path("/" + "/".join(base_parts))
-    if path == base_path or path.startswith(base_path.rstrip("/") + "/"):
-        return path
-    return _normalize_openlist_path(f"{base_path.rstrip('/')}/{path.lstrip('/')}")
-
-
-def _binding_api_prefix(binding: dict[str, Any]) -> tuple[str, str]:
-    return (
-        _api_base_from_dav_url(str(binding.get("dav_url") or "")),
-        str(binding.get("username") or ""),
-    )
-
-
 def _href_to_dav_path(base_url: str, href: str) -> str:
     href_path = unquote(urlsplit(href or "").path or "/")
     base_path = unquote(urlsplit(_normalize_dav_url(base_url)).path or "").rstrip("/")
@@ -156,57 +93,6 @@ def _display_url(base_url: str) -> str:
     split = urlsplit(_normalize_dav_url(base_url))
     path = split.path or "/"
     return f"{split.scheme}://{split.netloc}{path}"
-
-
-def _binding_cache_prefix(binding: dict[str, Any]) -> tuple[str, str]:
-    return (
-        _normalize_dav_url(str(binding.get("dav_url") or "")),
-        str(binding.get("username") or ""),
-    )
-
-
-def _list_cache_key(binding: dict[str, Any], dav_path: str, depth: str) -> tuple[str, str, str, str]:
-    url, username = _binding_cache_prefix(binding)
-    return url, username, _path_key(dav_path), str(depth)
-
-
-def _clear_binding_cache(binding: dict[str, Any] | None = None) -> None:
-    if binding is None:
-        _LIST_CACHE.clear()
-        _TOKEN_CACHE.clear()
-        _LINK_CACHE.clear()
-        return
-    prefix = _binding_cache_prefix(binding)
-    for key in [key for key in _LIST_CACHE if key[:2] == prefix]:
-        _LIST_CACHE.pop(key, None)
-    api_prefix = _binding_api_prefix(binding)
-    _TOKEN_CACHE.pop(api_prefix, None)
-    for key in [key for key in _LINK_CACHE if key[:2] == api_prefix]:
-        _LINK_CACHE.pop(key, None)
-
-
-def _parse_target_and_path(text: str, need_path: bool = False) -> tuple[dict[str, Any] | None, int, str, str | None]:
-    bindings = _load_bindings()
-    if not bindings:
-        return None, 0, "", (
-            "尚未绑定 WebDAV 账号。\n"
-            "管理员绑定格式：webdav绑定 备注#https://站点/dav#用户名#密码"
-        )
-
-    raw = (text or "").strip()
-    idx = 1
-    path_text = raw
-    if raw:
-        first, _, rest = raw.partition(" ")
-        if first.isdigit():
-            idx = int(first)
-            path_text = rest.strip()
-
-    if idx < 1 or idx > len(bindings):
-        return None, idx, "", f"序号 {idx} 超出范围（1～{len(bindings)}）"
-    if need_path and not path_text:
-        return None, idx, "", "请填写路径，例如：webdav信息 1 /电影/test.mp4"
-    return bindings[idx - 1], idx, _format_dav_path(path_text), None
 
 
 def _format_size(size_text: str | None) -> str:
@@ -224,39 +110,6 @@ def _format_size(size_text: str | None) -> str:
     if unit == "B":
         return f"{int(value)} {unit}"
     return f"{value:.2f} {unit}"
-
-
-def _prop_text(prop: ET.Element, name: str) -> str:
-    node = prop.find(f"d:{name}", DAV_NS)
-    return (node.text or "").strip() if node is not None and node.text else ""
-
-
-def _entry_from_response(resp: ET.Element) -> dict[str, Any]:
-    href = resp.findtext("d:href", default="", namespaces=DAV_NS)
-    prop = None
-    for propstat in resp.findall("d:propstat", DAV_NS):
-        status = propstat.findtext("d:status", default="", namespaces=DAV_NS)
-        if "200" in status:
-            prop = propstat.find("d:prop", DAV_NS)
-            break
-    if prop is None:
-        prop = resp.find(".//d:prop", DAV_NS)
-    if prop is None:
-        prop = ET.Element("prop")
-
-    res_type = prop.find("d:resourcetype", DAV_NS)
-    is_dir = res_type is not None and res_type.find("d:collection", DAV_NS) is not None
-    display_name = _prop_text(prop, "displayname")
-    if not display_name and href:
-        display_name = unquote(href.rstrip("/").split("/")[-1])
-    return {
-        "href": href,
-        "name": display_name or "/",
-        "is_dir": is_dir,
-        "size": _prop_text(prop, "getcontentlength"),
-        "modified": _prop_text(prop, "getlastmodified"),
-        "content_type": _prop_text(prop, "getcontenttype"),
-    }
 
 
 def _entry_display_name(item: dict[str, Any]) -> str:
@@ -288,233 +141,8 @@ def _md_list_line(binding_idx: int, binding: dict[str, Any], item: dict[str, Any
     return f"{kind}：{build_md_command_link(name, cmd)}{size}"
 
 
-def _propfind(binding: dict[str, Any], dav_path: str, depth: str) -> list[dict[str, Any]]:
-    url = _join_dav_url(str(binding.get("dav_url") or ""), dav_path)
-    headers = {
-        "Depth": depth,
-        "Content-Type": "application/xml; charset=utf-8",
-    }
-    body = """<?xml version="1.0" encoding="utf-8" ?>
-<propfind xmlns="DAV:">
-  <prop>
-    <displayname />
-    <resourcetype />
-    <getcontentlength />
-    <getlastmodified />
-    <getcontenttype />
-  </prop>
-</propfind>"""
-    resp = http_client.request(
-        "PROPFIND",
-        url,
-        data=body.encode("utf-8"),
-        headers=headers,
-        auth=(str(binding.get("username") or ""), str(binding.get("password") or "")),
-        timeout=18,
-        check_status=False,
-    )
-    if resp.status_code in {401, 403}:
-        raise ValueError("认证失败，请检查用户名和密码")
-    if resp.status_code == 404:
-        raise ValueError("路径不存在")
-    if resp.status_code not in {200, 207}:
-        raise ValueError(f"WebDAV 返回 {resp.status_code}")
-
-    root = ET.fromstring(resp.content)
-    return [_entry_from_response(item) for item in root.findall("d:response", DAV_NS)]
-
-
-def _cached_propfind(binding: dict[str, Any], dav_path: str, depth: str) -> list[dict[str, Any]]:
-    key = _list_cache_key(binding, dav_path, depth)
-    cached = _LIST_CACHE.get(key)
-    if cached is not None:
-        return cached
-    entries = _propfind(binding, dav_path, depth)
-    _LIST_CACHE[key] = entries
-    return entries
-
-
-def _openlist_url(api_base: str, api_path: str) -> str:
-    return f"{api_base.rstrip('/')}/{api_path.lstrip('/')}"
-
-
-def _absolute_url(api_base: str, url: str) -> str:
-    value = str(url or "").strip()
-    if not value:
-        return ""
-    if re.match(r"^https?://", value, re.I):
-        return value
-    if value.startswith("/"):
-        return api_base.rstrip("/") + value
-    return value
-
-
-def _openlist_token(binding: dict[str, Any], *, refresh: bool = False) -> str:
-    key = _binding_api_prefix(binding)
-    api_base, username = key
-    if not api_base or not username:
-        return ""
-    if not refresh and key in _TOKEN_CACHE:
-        return _TOKEN_CACHE[key]
-
-    resp = http_client.request(
-        "POST",
-        _openlist_url(api_base, "/api/auth/login"),
-        json={
-            "username": username,
-            "password": str(binding.get("password") or ""),
-        },
-        timeout=15,
-        check_status=False,
-    )
-    if resp.status_code != 200:
-        raise ValueError(f"登录接口返回 {resp.status_code}")
-    try:
-        result = resp.json()
-    except Exception as e:
-        raise ValueError("登录接口响应不是 JSON") from e
-    if result.get("code") != 200:
-        raise ValueError(str(result.get("message") or "登录失败"))
-
-    token = str((result.get("data") or {}).get("token") or "")
-    if not token:
-        raise ValueError("登录接口未返回 token")
-    _TOKEN_CACHE[key] = token
-    return token
-
-
-def _openlist_post(
-    binding: dict[str, Any],
-    api_path: str,
-    payload: dict[str, Any],
-    *,
-    retry_auth: bool = True,
-) -> dict[str, Any]:
-    api_base = _api_base_from_dav_url(str(binding.get("dav_url") or ""))
-    if not api_base:
-        raise ValueError("无法识别站点地址")
-
-    headers = {}
-    token = ""
-    try:
-        token = _openlist_token(binding)
-    except Exception:
-        token = ""
-    if token:
-        headers["Authorization"] = token
-
-    resp = http_client.request(
-        "POST",
-        _openlist_url(api_base, api_path),
-        json=payload,
-        headers=headers,
-        timeout=18,
-        check_status=False,
-    )
-    if resp.status_code in {401, 403} and token and retry_auth:
-        _TOKEN_CACHE.pop(_binding_api_prefix(binding), None)
-        refreshed = _openlist_token(binding, refresh=True)
-        headers["Authorization"] = refreshed
-        resp = http_client.request(
-            "POST",
-            _openlist_url(api_base, api_path),
-            json=payload,
-            headers=headers,
-            timeout=18,
-            check_status=False,
-        )
-    if resp.status_code != 200:
-        raise ValueError(f"接口返回 {resp.status_code}")
-
-    try:
-        result = resp.json()
-    except Exception as e:
-        raise ValueError("接口响应不是 JSON") from e
-    if result.get("code") in {401, 403} and token and retry_auth:
-        _TOKEN_CACHE.pop(_binding_api_prefix(binding), None)
-        refreshed = _openlist_token(binding, refresh=True)
-        return _openlist_post(
-            binding,
-            api_path,
-            payload,
-            retry_auth=False,
-        ) if refreshed else {}
-    if result.get("code") != 200:
-        raise ValueError(str(result.get("message") or "接口调用失败"))
-    data = result.get("data") or {}
-    return data if isinstance(data, dict) else {}
-
-
-def _openlist_file_info(binding: dict[str, Any], dav_path: str) -> dict[str, Any]:
-    return _openlist_post(
-        binding,
-        "/api/fs/get",
-        {"path": _openlist_download_path(binding, dav_path), "password": ""},
-    )
-
-
-def _openlist_signed_download_url(binding: dict[str, Any], dav_path: str) -> str:
-    api_base = _api_base_from_dav_url(str(binding.get("dav_url") or ""))
-    file_info = _openlist_file_info(binding, dav_path)
-    if file_info.get("is_dir", True):
-        return ""
-
-    raw_url = _absolute_url(api_base, str(file_info.get("raw_url") or ""))
-    if raw_url:
-        return raw_url
-
-    download_path = _openlist_download_path(binding, dav_path)
-    url = f"{api_base.rstrip('/')}/d{quote(download_path, safe='/')}"
-    sign = str(file_info.get("sign") or "")
-    if sign:
-        url += f"?sign={quote(sign, safe='')}"
-    return url
-
-
-def _openlist_direct_download_link(binding: dict[str, Any], dav_path: str) -> str:
-    api_base = _api_base_from_dav_url(str(binding.get("dav_url") or ""))
-    download_path = _openlist_download_path(binding, dav_path)
-    data = _openlist_post(binding, "/api/fs/link", {"path": download_path})
-    return _absolute_url(api_base, str(data.get("url") or ""))
-
-
-def _download_link_cache_key(binding: dict[str, Any], dav_path: str) -> tuple[str, str, str]:
-    api_base, username = _binding_api_prefix(binding)
-    return api_base, username, _openlist_download_path(binding, dav_path)
-
-
-def _get_download_link(binding: dict[str, Any], dav_path: str) -> dict[str, Any]:
-    key = _download_link_cache_key(binding, dav_path)
-    now = time.time()
-    cached = _LINK_CACHE.get(key)
-    if cached and cached[0] > now:
-        return cached[1]
-
-    try:
-        url = _openlist_direct_download_link(binding, dav_path)
-        if url:
-            result = {"kind": "direct", "url": url}
-            _LINK_CACHE[key] = (now + LINK_CACHE_TTL, result)
-            return result
-    except Exception:
-        pass
-
-    try:
-        url = _openlist_signed_download_url(binding, dav_path)
-        if url:
-            result = {"kind": "direct", "url": url}
-            _LINK_CACHE[key] = (now + LINK_CACHE_TTL, result)
-            return result
-    except Exception:
-        pass
-
-    result = {"kind": "webdav", "url": _join_dav_url(str(binding.get("dav_url") or ""), dav_path)}
-    _LINK_CACHE[key] = (now + LINK_CACHE_TTL, result)
-    return result
-
-
-def _format_bindings(rows=None) -> str:
-    rows = list(rows if rows is not None else _load_bindings())
+def _format_bindings(rows) -> str:
+    rows = list(rows)
     if not rows:
         return (
             "【WebDAV 绑定】\n"
@@ -662,20 +290,18 @@ async def _is_webdav_admin(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
     return bool(await SUPERUSER(bot, event))
 
 
-def _format_link_message(binding: dict[str, Any], idx: int, dav_path: str) -> str:
-    link = _get_download_link(binding, dav_path)
-    url = str(link.get("url") or "")
-    if link.get("kind") == "direct":
+def _format_download_message(result: Any) -> str:
+    if result.kind == "direct":
         return (
-            f"【WebDAV 文件链接】账号 {idx}\n"
-            f"路径：{dav_path}\n"
-            f"地址：\n{url}\n\n"
+            f"【WebDAV 文件链接】账号 {result.index}\n"
+            f"路径：{result.path}\n"
+            f"地址：\n{result.url}\n\n"
             "复制链接到浏览器或下载工具即可使用。"
         )
     return (
-        f"【WebDAV 链接】账号 {idx}\n"
-        f"路径：{dav_path}\n"
-        f"地址：\n{url}\n\n"
+        f"【WebDAV 链接】账号 {result.index}\n"
+        f"路径：{result.path}\n"
+        f"地址：\n{result.url}\n\n"
         "暂未获取到直链，已返回 WebDAV 地址。该地址需要 WebDAV 用户名和密码访问。"
     )
 
@@ -804,32 +430,38 @@ async def webdav_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
 
 @webdav_link_cmd.handle(parameterless=[Cooldown(cd_time=3)])
 async def webdav_link_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
-    binding, idx, dav_path, err = _parse_target_and_path(args.extract_plain_text(), need_path=True)
-    if err or not binding:
-        await handle_send(bot, event, err or "无可用绑定", **_DAV_KW)
-        await webdav_link_cmd.finish()
     try:
-        msg = await run_blocking_io(
-            _format_link_message, binding, idx, dav_path, timeout=35
+        result = await run_blocking_io(
+            entertainment_application.webdav_download_link,
+            bindings_path=WEBDAV_BINDINGS_FILE,
+            text=args.extract_plain_text(),
+            timeout=35,
         )
+    except WebDavTargetError as e:
+        msg = str(e)
     except Exception as e:
         msg = f"获取 WebDAV 链接失败：{e}"
+    else:
+        msg = _format_download_message(result)
     await handle_send(bot, event, msg, **_DAV_KW)
     await webdav_link_cmd.finish()
 
 
 @webdav_file_cmd.handle(parameterless=[Cooldown(cd_time=8)])
 async def webdav_file_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
-    binding, idx, dav_path, err = _parse_target_and_path(args.extract_plain_text(), need_path=True)
-    if err or not binding:
-        await handle_send(bot, event, err or "无可用绑定", **_DAV_KW)
-        await webdav_file_cmd.finish()
     try:
-        msg = await run_blocking_io(
-            _format_link_message, binding, idx, dav_path, timeout=35
+        result = await run_blocking_io(
+            entertainment_application.webdav_download_link,
+            bindings_path=WEBDAV_BINDINGS_FILE,
+            text=args.extract_plain_text(),
+            timeout=35,
         )
+    except WebDavTargetError as e:
+        msg = str(e)
     except Exception as e:
         msg = f"获取 WebDAV 文件失败：{e}"
+    else:
+        msg = _format_download_message(result)
     await handle_send(bot, event, msg, **_DAV_KW)
     await webdav_file_cmd.finish()
 
@@ -851,13 +483,6 @@ async def webdav_del_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
         msg = f"删除失败：{e}"
     else:
         if result.status == "applied":
-            for binding in result.removed:
-                _clear_binding_cache(
-                    {
-                        "dav_url": binding.dav_url,
-                        "username": binding.username,
-                    }
-                )
             msg = result.message
         else:
             msg = f"删除失败：{result.message}"
