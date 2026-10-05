@@ -37,6 +37,7 @@ class NewApiCheckinTarget:
     mode: str
     secret: str = field(repr=False)
     base_url: str
+    account_id: int = 0
 
 
 @dataclass(frozen=True)

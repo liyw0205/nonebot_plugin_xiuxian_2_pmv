@@ -1055,8 +1055,12 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "status": "daily_weekly_progress_and_claim_saga_cutover; task_definition_adapter_and_legacy_service_retained_for_compatibility",
         },
         "entertainment": {
-            "account_delete_application_owned": "entertainment_application.delete_accounts(" in entertainment_facade and "_run_entertainment_write(" not in entertainment_facade[entertainment_facade.index("def delete_accounts("):entertainment_facade.index("def resolve_targets(")],
-            "status": "auto-checkin and account-delete local JSON paths cut over; bind remains credential compatibility",
+            "account_delete_application_owned": "entertainment_application.delete_accounts(" in entertainment_facade and "_run_entertainment_write(" not in entertainment_facade[entertainment_facade.index("def delete_accounts("):entertainment_facade.index("def load_checkin_history(")],
+            "account_bind_application_owned": "entertainment_application.bind_newapi_account(" in entertainment_facade,
+            "auto_checkin_application_owned": "entertainment_application.toggle_auto_checkin(" in entertainment_facade,
+            "checkin_history_application_owned": "entertainment_application.append_checkin_history(" in entertainment_facade and "entertainment_application.list_checkin_history(" in entertainment_facade,
+            "newapi_store_has_no_runtime_json_owner": "json_store" not in entertainment_facade and "load_json_file" not in entertainment_facade and "save_json_file" not in entertainment_facade,
+            "status": "NewAPI account and check-in history state are owned by the Entertainment SQL repository; legacy JSON is a one-time migration source",
         },
         "arena": {
             "state_application_owned": "ArenaStateApplication" in arena_limit,

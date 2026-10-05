@@ -32,16 +32,18 @@ class NewApiCheckinClientTests(unittest.TestCase):
     def test_checkin_streams_and_parses_json_under_the_response_cap(self) -> None:
         payload = json.dumps({"success": True, "message": "checked"}).encode()
         response = _Response([payload], content_length=str(len(payload)))
-        with patch.object(newapi_client.http_client, "request", return_value=response) as request:
+        with patch.object(newapi_client.checkin_http_client, "request", return_value=response) as request:
             result = newapi_client.do_checkin("token", "123", "secret", "https://api.test")
 
         self.assertTrue(result["success"])
+        self.assertEqual(newapi_client.checkin_http_client.retries, 0)
+        self.assertEqual(request.call_args.kwargs["timeout"], newapi_client.CHECKIN_REQUEST_TIMEOUT)
         self.assertTrue(request.call_args.kwargs["stream"])
         self.assertTrue(response.closed)
 
     def test_checkin_rejects_oversized_stream_and_closes_response(self) -> None:
         response = _Response([b"not read"], content_length=str(newapi_client.MAX_CHECKIN_RESPONSE_BYTES + 1))
-        with patch.object(newapi_client.http_client, "request", return_value=response):
+        with patch.object(newapi_client.checkin_http_client, "request", return_value=response):
             result = newapi_client.do_checkin("token", "123", "secret", "https://api.test")
 
         self.assertIn("超过 1 MiB", result["_error"])
@@ -49,7 +51,7 @@ class NewApiCheckinClientTests(unittest.TestCase):
 
     def test_checkin_rejects_oversized_chunk_without_retaining_body(self) -> None:
         response = _Response([b"x" * 64 * 1024] * 17)
-        with patch.object(newapi_client.http_client, "request", return_value=response):
+        with patch.object(newapi_client.checkin_http_client, "request", return_value=response):
             result = newapi_client.do_checkin("token", "123", "secret", "https://api.test")
 
         self.assertIn("超过 1 MiB", result["_error"])

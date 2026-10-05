@@ -27,6 +27,10 @@ def _called_names(node: ast.AST) -> set[str]:
     }
 
 
+def _referenced_names(node: ast.AST) -> set[str]:
+    return {child.id for child in ast.walk(node) if isinstance(child, ast.Name)}
+
+
 class NewApiListCommandContractTests(unittest.TestCase):
     def test_formatter_uses_only_feature_owned_summaries(self):
         source = COMMANDS_PATH.read_text(encoding="utf-8")
@@ -41,18 +45,27 @@ class NewApiListCommandContractTests(unittest.TestCase):
     def test_handler_formats_and_sends_the_feature_owned_query_result(self):
         source = COMMANDS_PATH.read_text(encoding="utf-8")
         handler = _function(source, "newapi_list_")
-        called = _called_names(handler)
+        referenced = _referenced_names(handler)
 
-        self.assertIn("_format_list_message", called)
-        self.assertIn("handle_send", called)
+        self.assertIn("_format_list_message", referenced)
+        self.assertIn("run_blocking_io", _called_names(handler))
+        self.assertIn("handle_send", referenced)
 
-    def test_store_wrapper_resolves_the_existing_file_and_calls_application_query(self):
+    def test_store_wrapper_calls_application_query_without_file_access(self):
         source = STORE_PATH.read_text(encoding="utf-8")
         wrapper = _function(source, "list_account_summaries")
-        called = _called_names(wrapper)
-
-        self.assertIn("_path_for_qq", called)
+        self.assertNotIn("open", _called_names(wrapper))
         self.assertIn("list_account_summaries", {
+            node.attr
+            for node in ast.walk(wrapper)
+            if isinstance(node, ast.Attribute)
+        })
+
+    def test_checkin_history_wrapper_forwards_to_application_without_file_access(self):
+        source = STORE_PATH.read_text(encoding="utf-8")
+        wrapper = _function(source, "append_checkin_history")
+        self.assertNotIn("open", _called_names(wrapper))
+        self.assertIn("append_checkin_history", {
             node.attr
             for node in ast.walk(wrapper)
             if isinstance(node, ast.Attribute)

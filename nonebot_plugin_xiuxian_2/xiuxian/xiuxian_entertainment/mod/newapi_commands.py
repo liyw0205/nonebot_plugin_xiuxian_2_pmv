@@ -3,14 +3,14 @@ from __future__ import annotations
 
 import asyncio
 import re
-import time
+import sqlite3
 from typing import Any, Literal
 
 from ..command import *
 from ..io_runtime import run_blocking_io
 from ....infrastructure.ids import UUIDGenerator
 from ....features.entertainment.schemas import NewApiCheckinTarget
-from ...xiuxian_utils.json_store import JsonStoreDataError, JsonStoreLimitError
+from ....features.entertainment.newapi_policy import MAX_ACCOUNT_LIST_ROWS, MAX_CHECKIN_SELECTOR_CHARS
 from .newapi_client import (
     account_base_url,
     detect_auth_mode,
@@ -23,18 +23,14 @@ from .newapi_client import (
     summarize_checkin_for_history,
 )
 from .newapi_store import (
-    account_index,
     append_account,
     append_checkin_history,
     delete_accounts,
     display_base_url,
-    iter_all_auto_checkin_bindings,
+    list_auto_checkin_bindings,
     list_account_summaries,
-    load_accounts,
     load_checkin_history,
-    record_checkin_history,
     resolve_checkin_targets,
-    resolve_targets,
     toggle_auto_checkin,
 )
 
@@ -132,6 +128,8 @@ def _write_operation_id(event, action: str, target: str = "") -> str:
 
 def _parse_delete_indices(text: str) -> list[int] | None:
     t = (text or "").strip().lower()
+    if len(t) > MAX_CHECKIN_SELECTOR_CHARS:
+        return []
     if not t:
         return []
     if t in ("全部", "所有", "all", "*"):
@@ -145,10 +143,14 @@ def _parse_delete_indices(text: str) -> list[int] | None:
             a, b = part.split("-", 1)
             try:
                 lo, hi = int(a.strip()), int(b.strip())
-                for i in range(min(lo, hi), max(lo, hi) + 1):
-                    indices.add(i)
+                low, high = min(lo, hi), max(lo, hi)
+                if high - low + 1 > MAX_ACCOUNT_LIST_ROWS:
+                    return []
+                indices.update(range(low, high + 1))
             except ValueError:
                 return []
+        if len(indices) > MAX_ACCOUNT_LIST_ROWS or any(index < 1 for index in indices):
+            return []
         else:
             try:
                 indices.add(int(part))
@@ -190,74 +192,69 @@ def _format_list_message(qq_id: str) -> str:
     return message
 
 
-def _run_checkin_for_account(
-    qq_id: str,
-    acc: dict[str, Any],
-    *,
-    source: Literal["manual", "auto"] = "manual",
-) -> tuple[int, dict[str, Any]]:
-    all_acc = load_accounts(qq_id)
-    idx = account_index(all_acc, acc)
-    mode = acc.get("mode") or detect_auth_mode(acc.get("secret") or "")
-    base = account_base_url(acc.get("base_url"))
-    if not base:
-        data = {"_error": "未配置接口地址"}
-    else:
-        data = do_checkin(
-            mode,
-            str(acc.get("api_user_id")),
-            acc.get("secret") or "",
-            base,
-        )
-    append_checkin_history(
-        qq_id,
-        account_index=idx,
-        api_user_id=str(acc.get("api_user_id")),
-        base_url_stored=str(acc.get("base_url") or ""),
-        summary=summarize_checkin_for_history(data),
-        source=source,
-    )
-    return idx, data
-
-
-def _run_manual_checkin_for_target(
+def _run_checkin_for_target(
     qq_id: str,
     target: NewApiCheckinTarget,
+    *,
+    source: Literal["manual", "auto"] = "manual",
 ) -> tuple[int, dict[str, Any]]:
     mode = target.mode or detect_auth_mode(target.secret)
     base = account_base_url(target.base_url)
     if not base:
         data = {"_error": "未配置接口地址"}
     else:
-        data = do_checkin(mode, target.api_user_id, target.secret, base)
+        data = do_checkin(
+            mode,
+            target.api_user_id,
+            target.secret,
+            base,
+        )
     try:
-        record_checkin_history(
+        append_checkin_history(
             qq_id,
             account_index=target.index,
             api_user_id=target.api_user_id,
             base_url=target.base_url,
             summary=summarize_checkin_for_history(data),
-            source="manual",
+            source=source,
         )
-    except (OSError, JsonStoreDataError, JsonStoreLimitError):
+    except (OSError, RuntimeError, sqlite3.Error):
         data["_history_warning"] = "历史记录未更新，签到结果不受影响"
     return target.index, data
 
 
+def _run_manual_checkin_for_target(
+    qq_id: str,
+    target: NewApiCheckinTarget,
+) -> tuple[int, dict[str, Any]]:
+    return _run_checkin_for_target(qq_id, target, source="manual")
+
+
 async def run_scheduled_auto_checkins() -> int:
     n = 0
-    for qq_key, _idx, acc in iter_all_auto_checkin_bindings():
-        try:
-            await run_blocking_io(
-                _run_checkin_for_account,
-                qq_key,
-                acc,
-                source="auto",
-                timeout=35,
-            )
-            n += 1
-        except Exception:
-            continue
+    after_account_id = 0
+    while True:
+        page = await run_blocking_io(
+            list_auto_checkin_bindings,
+            after_account_id=after_account_id,
+            limit=32,
+            timeout=10,
+        )
+        if not page:
+            break
+        after_account_id = page[-1][0]
+        for _account_id, qq_key, target in page:
+            try:
+                await run_blocking_io(
+                    _run_checkin_for_target,
+                    qq_key,
+                    target,
+                    source="auto",
+                    timeout=55,
+                )
+                n += 1
+            except Exception:
+                continue
     return n
 
 
@@ -331,13 +328,15 @@ async def newapi_bind_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
         await newapi_bind_cmd.finish()
 
     base_url = normalize_base_url(url)
-    ok, msg = append_account(
+    ok, msg = await run_blocking_io(
+        append_account,
         _qq(event),
         mode=mode,  # type: ignore[arg-type]
         api_user_id=api_user_id,
         secret=secret,
         base_url=base_url,
         operation_id=_write_operation_id(event, "newapi-bind", api_user_id),
+        timeout=35,
     )
     await handle_send(bot, event, msg if ok else f"绑定失败：{msg}", **_NEWAPI_FUN_KW)
     await newapi_bind_cmd.finish()
@@ -345,14 +344,20 @@ async def newapi_bind_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
 
 @newapi_list_cmd.handle(parameterless=[Cooldown(cd_time=2)])
 async def newapi_list_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
-    await handle_send(bot, event, _format_list_message(_qq(event)), **_NEWAPI_FUN_KW)
+    message = await run_blocking_io(_format_list_message, _qq(event), timeout=10)
+    await handle_send(bot, event, message, **_NEWAPI_FUN_KW)
     await newapi_list_cmd.finish()
 
 
 @newapi_checkin_cmd.handle(parameterless=[Cooldown(cd_time=8)])
 async def newapi_checkin_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     qq = _qq(event)
-    result = resolve_checkin_targets(qq, args.extract_plain_text())
+    result = await run_blocking_io(
+        resolve_checkin_targets,
+        qq,
+        args.extract_plain_text(),
+        timeout=10,
+    )
     if result.status != "ok":
         messages = {
             "empty": "尚未绑定账号，请使用：newapi绑定 站点用户ID#令牌#接口地址",
@@ -374,7 +379,7 @@ async def newapi_checkin_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
             _run_manual_checkin_for_target,
             qq,
             target,
-            timeout=35,
+            timeout=55,
         )
         account_view = {"api_user_id": target.api_user_id, "base_url": target.base_url}
         block = format_checkin_block(idx, account_view, data)
@@ -397,9 +402,11 @@ async def newapi_checkin_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
 @newapi_info_cmd.handle(parameterless=[Cooldown(cd_time=8)])
 async def newapi_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     qq = _qq(event)
-    result = entertainment_application.resolve_info_targets(
-        state_path=_path_for_qq(qq),
+    result = await run_blocking_io(
+        entertainment_application.resolve_info_targets,
+        user_id=qq,
         selector=args.extract_plain_text(),
+        timeout=10,
     )
     if result.status != "ok":
         messages = {
@@ -450,10 +457,12 @@ async def newapi_del_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
         )
         await newapi_del_cmd.finish()
 
-    ok, msg = delete_accounts(
+    ok, msg = await run_blocking_io(
+        delete_accounts,
         _qq(event),
         indices,
         operation_id=_write_operation_id(event, "newapi-delete", text or "all"),
+        timeout=35,
     )
     await handle_send(bot, event, msg if ok else f"删除失败：{msg}", **_NEWAPI_FUN_KW)
     await newapi_del_cmd.finish()
@@ -461,6 +470,8 @@ async def newapi_del_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
 
 def _format_checkin_history(qq_id: str) -> str:
     rows = load_checkin_history(qq_id)
+    if rows is None:
+        return "【NewAPI 签到历史】\n签到历史暂不可用，请稍后重试。"
     if not rows:
         return "【NewAPI 签到历史】\n（暂无，执行 newapi签到 后会记录，最多保留 3 条）"
     lines = ["【NewAPI 签到历史】", ""]
@@ -473,22 +484,28 @@ def _format_checkin_history(qq_id: str) -> str:
         summary = row.get("summary") or "—"
         lines.append(f"{i}. {at} · 账号{idx} · 用户{api_id} · {base}")
         lines.append(f"   [{src}] {summary}")
-    return "\n".join(lines)
+    message = "\n".join(lines)
+    if len(message.encode("utf-8")) > _MAX_NEWAPI_LIST_RESPONSE_BYTES:
+        return "【NewAPI 签到历史】\n签到历史超过安全展示上限。"
+    return message
 
 
 @newapi_history_cmd.handle(parameterless=[Cooldown(cd_time=2)])
 async def newapi_history_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
-    await handle_send(bot, event, _format_checkin_history(_qq(event)), **_NEWAPI_FUN_KW)
+    message = await run_blocking_io(_format_checkin_history, _qq(event), timeout=10)
+    await handle_send(bot, event, message, **_NEWAPI_FUN_KW)
     await newapi_history_cmd.finish()
 
 
 @newapi_auto_cmd.handle(parameterless=[Cooldown(cd_time=2)])
 async def newapi_auto_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     text = args.extract_plain_text()
-    ok, msg = toggle_auto_checkin(
+    ok, msg = await run_blocking_io(
+        toggle_auto_checkin,
         _qq(event),
         text,
         operation_id=_write_operation_id(event, "newapi-auto", text.strip()),
+        timeout=35,
     )
     await handle_send(bot, event, msg if ok else f"操作失败：{msg}", **_NEWAPI_FUN_KW)
     await newapi_auto_cmd.finish()

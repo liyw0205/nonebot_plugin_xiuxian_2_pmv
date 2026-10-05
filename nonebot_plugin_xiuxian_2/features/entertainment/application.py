@@ -73,25 +73,78 @@ class EntertainmentApplication(MigratedFeatureApplication):
     def delete_room_state(self, game_type: str, room_id: str):
         return self.room_repository.delete_state(game_type, room_id)
 
-    def toggle_auto_checkin(self, *, operation_id: str, user_id: str, state_path: str | Path, index: int):
-        return self.execute(operation_id=operation_id, user_id=user_id, payload={"action": "toggle_auto_checkin", "state_path": str(state_path), "index": int(index)})
+    def bind_newapi_account(
+        self,
+        *,
+        operation_id: str,
+        user_id: str,
+        mode: str,
+        api_user_id: str,
+        secret: str,
+        base_url: str,
+        label: str = "",
+    ):
+        return self.repository.bind_account(
+            operation_id,
+            user_id,
+            mode=mode,
+            api_user_id=api_user_id,
+            secret=secret,
+            base_url=base_url,
+            label=label,
+        )
 
-    def delete_accounts(self, *, operation_id: str, user_id: str, state_path: str | Path, indices):
-        return self.execute(operation_id=operation_id, user_id=user_id, payload={"action": "delete_accounts", "state_path": str(state_path), "indices": indices})
+    def toggle_auto_checkin(
+        self,
+        *,
+        operation_id: str,
+        user_id: str,
+        account_id: int,
+        index: int,
+        legacy_state_path: str,
+    ):
+        return self.repository.toggle_auto_checkin(
+            operation_id,
+            user_id,
+            account_id,
+            index,
+            legacy_state_path=legacy_state_path,
+        )
 
-    def list_account_summaries(self, *, state_path: str | Path) -> NewApiAccountListResult:
-        return self.repository.list_account_summaries(state_path)
+    def delete_accounts(
+        self,
+        *,
+        operation_id: str,
+        user_id: str,
+        legacy_state_path: str,
+        indices,
+    ):
+        return self.repository.delete_accounts(
+            operation_id,
+            user_id,
+            indices,
+            legacy_state_path=legacy_state_path,
+        )
 
-    def resolve_checkin_targets(self, *, state_path: str | Path, selector: str) -> NewApiCheckinTargetsResult:
-        return self.repository.resolve_checkin_targets(state_path, selector)
+    def list_account_summaries(self, *, user_id: str) -> NewApiAccountListResult:
+        return self.repository.list_account_summaries(user_id)
 
-    def resolve_info_targets(self, *, state_path: str | Path, selector: str) -> NewApiCheckinTargetsResult:
-        return self.repository.resolve_info_targets(state_path, selector)
+    def resolve_checkin_targets(self, *, user_id: str, selector: str) -> NewApiCheckinTargetsResult:
+        return self.repository.resolve_checkin_targets(user_id, selector)
+
+    def resolve_info_targets(self, *, user_id: str, selector: str) -> NewApiCheckinTargetsResult:
+        return self.repository.resolve_info_targets(user_id, selector)
+
+    def list_auto_checkin_targets(self, *, after_account_id: int = 0, limit: int = 32):
+        return self.repository.list_auto_checkin_targets(after_account_id, limit)
+
+    def list_checkin_history(self, *, user_id: str):
+        return self.repository.list_checkin_history(user_id)
 
     def append_checkin_history(
         self,
         *,
-        history_path: str | Path,
+        user_id: str,
         account_index: int,
         api_user_id: str,
         base_url: str,
@@ -99,7 +152,7 @@ class EntertainmentApplication(MigratedFeatureApplication):
         source: str = "manual",
     ) -> None:
         self.repository.append_checkin_history(
-            history_path,
+            user_id,
             account_index=account_index,
             api_user_id=api_user_id,
             base_url_stored=base_url,

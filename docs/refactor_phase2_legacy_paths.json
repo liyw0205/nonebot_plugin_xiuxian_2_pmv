@@ -362,39 +362,15 @@
       "reason": "The shared message-history queue is count-bounded (default 100000 records) but has no byte budget; large sends from dm or md模板 can consume substantial RAM. The md模板 parser also materializes args and parameter values proportional to input size without an explicit local byte cap. Review byte-aware queue admission and/or a bounded parser independently of the frozen phase 2 path scope."
     },
     {
-      "id": "newapi-info-state-and-response-working-set",
-      "source": "command:entertainment:newapi信息",
-      "evidence": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/newapi_store.py:21-22,68-109,120-178,185-220,256-340",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/newapi_commands.py:183-243,334-425,469-478",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/newapi_client.py:89-136",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_utils/json_store.py:25-58,106-148",
-        "nonebot_plugin_xiuxian_2/features/entertainment/repository.py:9-225",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_utils/http_proxy.py:160-185"
-      ],
-      "reason": "The frozen newapi查看、newapi信息 and manual newapi签到 paths now use bounded feature-owned account reads; newapi信息 caps selected accounts and streamed remote responses, while manual check-in caps streamed responses and its history writer. Remaining newapi绑定/删除/自动签到 and scheduled account paths still use legacy mutation/enumeration boundaries; auto-checkin also enumerates and loads every per-user binding file. These credential/history JSON files and malformed-file backups are persistent data, not disposable caches. A remote check-in may succeed before local history is written; the crash window is tracked separately and must not be blindly replayed. Review remaining account/file/backup/response working sets without expanding frozen membership."
-    },
-    {
       "id": "newapi-checkin-remote-history-window",
       "source": "command:entertainment:newapi签到",
       "evidence": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/newapi_commands.py:218-243,334-370",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/newapi_commands.py:190-243,352-400",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/newapi_client.py:92-164,179-186",
-        "nonebot_plugin_xiuxian_2/features/entertainment/application.py:26-42",
-        "nonebot_plugin_xiuxian_2/features/entertainment/repository.py:197-225"
+        "nonebot_plugin_xiuxian_2/features/entertainment/application.py:144-161",
+        "nonebot_plugin_xiuxian_2/features/entertainment/repository.py:512-558"
       ],
-      "reason": "The external check-in POST and local three-row JSON history cannot commit atomically. A process crash after the remote service accepts a check-in but before the bounded history update leaves the remote effect without a local record. Determine remote idempotency/reconciliation semantics before adding retries; do not blindly replay the external write. This risk does not expand the frozen path membership."
-    },
-    {
-      "id": "newapi-delete-json-ledger-crash-window",
-      "source": "command:entertainment:newapi删除",
-      "evidence": [
-        "nonebot_plugin_xiuxian_2/features/_migrated_application.py:52-99",
-        "nonebot_plugin_xiuxian_2/features/entertainment/repository.py:26-42",
-        "nonebot_plugin_xiuxian_2/features/entertainment/json_state.py:21-32",
-        "nonebot_plugin_xiuxian_2/infrastructure/database/ledger.py:106-143"
-      ],
-      "reason": "The application commits the started operation ledger before the repository atomically replaces account JSON, then commits the final ledger result separately. A process crash in that gap leaves a started row and changed file; a same-operation retry returns an in-progress conflict rather than reconciling the mutation. Add a recoverable cross-store plan or an idempotent state transition without expanding frozen membership."
+      "reason": "The external check-in POST and local three-row SQL history cannot commit atomically. A process crash after the remote service accepts a check-in but before the bounded history update leaves the remote effect without a local record. The POST client does not retry; determine remote idempotency/reconciliation semantics before adding retries. This risk does not expand frozen path membership."
     },
     {
       "id": "legacy-cooldown-rate-map-cardinality",

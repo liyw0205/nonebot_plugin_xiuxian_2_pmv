@@ -10,13 +10,13 @@ The historical package owns command names during the compatibility release. New 
 No new HTTP route is exposed in this migration slice. Existing URLs remain served by the legacy web adapter.
 
 ## 数据模型与迁移
-`legacy.entertainment.001` records the original feature slice. `legacy.entertainment.002` creates `entertainment_game_rooms` and imports the Gomoku, half-ten and Minesweeper room JSON snapshots once at startup. The importer accepts at most 4096 files, 8 MiB per file and 128 MiB total; malformed, non-object and unrecognized JSON is counted as ignored, while a recognized but structurally invalid snapshot aborts the transaction. It stores a source hash and import counts. Source JSON files are retained. Runtime restore is bounded to 4096 rows and 128 MiB per game type.
+`legacy.entertainment.001` records the original feature slice. `legacy.entertainment.002` creates `entertainment_game_rooms` and imports the Gomoku, half-ten and Minesweeper room JSON snapshots once at startup. `legacy.entertainment.003` creates `entertainment_newapi_accounts` and `entertainment_newapi_checkin_history`, importing the existing NewAPI account/history JSON files once. NewAPI import is capped at 4096 files and 64 MiB total; account/history files retain their respective 1 MiB/64 KiB per-file caps. Both imports record a SHA-256 receipt and counts, run transactionally, and retain source JSON. Recognized invalid NewAPI state aborts migration rather than creating a partial receipt.
 
 ## 事务与失败回滚
-Feature operations that use the shared application executor carry an `operation_id` and are recorded in the operation ledger. Room snapshots instead use type-scoped SQL upserts/deletes in individual immediate transactions; they do not have event-level operation-ID replay receipts. The schema is checked on first repository use, not on every move. Restore the pre-migration game database backup to roll back; the original JSON snapshots remain available.
+NewAPI bind, delete and auto-check-in toggle mutate SQL state and finish their operation-ledger receipt in one immediate transaction. A legacy `started` operation with unknown outcome is rejected for manual state inspection rather than blindly replayed. Check-in history uses a separate bounded immediate transaction and retains three rows per QQ. Room snapshots instead use type-scoped SQL upserts/deletes in individual immediate transactions; they do not have event-level operation-ID replay receipts. Repository schemas are checked on first use, not on every command. Restore the pre-migration game database backup to roll back; the original JSON snapshots remain available.
 
 ## 定时任务
-No new scheduled jobs. Legacy jobs stay registered through the compatibility scheduler. Existing game timeout tasks are not rearmed from restored room snapshots after a process restart.
+The existing NewAPI daily auto-check-in job remains registered through the compatibility scheduler; it reads feature-owned SQL account snapshots in pages of at most 32. Existing game timeout tasks are not rearmed from restored room snapshots after a process restart.
 
 ## 配置项
 `entertainment_enabled` controls the application boundary and defaults to true.
@@ -25,10 +25,10 @@ No new scheduled jobs. Legacy jobs stay registered through the compatibility sch
 Command and web adapters translate transport input into the application DTO; business code does not import NoneBot or Flask.
 
 ## 测试与手工验收
-Run the entertainment repository/manager tests and phase2 frozen-evidence gate. Operation-ID replay checks apply only to paths using the shared application executor, not room snapshots.
+Run the entertainment repository/manager and NewAPI client/owner contract tests, then the phase2 frozen-evidence gate. Operation-ID replay checks apply to NewAPI bind/delete/toggle, not room snapshots or history append.
 
 ## 灰度开关、回滚和已知限制
-Room handlers still call synchronous SQLite repository methods on the legacy event path, so database writes can briefly occupy the event loop. Legacy algorithms remain behind the compatibility adapter for one complete release cycle; the compatibility hit counter determines when removal is safe.
+Room handlers still call synchronous SQLite repository methods on the legacy event path, so database writes can briefly occupy the event loop. NewAPI database operations are offloaded from command handlers, but the scheduled job performs selected remote check-ins sequentially; its total duration depends on the number of enabled accounts and remote site latency. Legacy algorithms remain behind the compatibility adapter for one complete release cycle; the compatibility hit counter determines when removal is safe.
 
 ## Manifest 清单
 - `command: 60S读世界`

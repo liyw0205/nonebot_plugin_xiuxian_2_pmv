@@ -14,6 +14,8 @@ _UA = (
 MAX_CHECKIN_RESPONSE_BYTES = 1024 * 1024
 MAX_INFO_RESPONSE_BYTES = 512 * 1024
 INFO_REQUEST_TIMEOUT = (5, 15)
+CHECKIN_REQUEST_TIMEOUT = (8, 45)
+checkin_http_client = HttpClient(timeout=CHECKIN_REQUEST_TIMEOUT, retries=0)
 info_http_client = HttpClient(timeout=INFO_REQUEST_TIMEOUT, retries=0)
 
 
@@ -199,7 +201,9 @@ def do_checkin(mode: str, api_user_id: str, secret: str, base_url: str) -> dict[
         mode=mode,
         api_user_id=api_user_id,
         secret=secret,
+        timeout=CHECKIN_REQUEST_TIMEOUT,
         max_response_bytes=MAX_CHECKIN_RESPONSE_BYTES,
+        client=checkin_http_client,
         response_limit_message="签到响应超过 1 MiB 上限",
     )
     if data.get("_error"):

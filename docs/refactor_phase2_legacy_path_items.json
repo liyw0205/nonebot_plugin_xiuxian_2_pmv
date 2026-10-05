@@ -789,17 +789,17 @@
       "kind": "commands",
       "entry": "entertainment:newapi信息 (aliases: )",
       "status": "已迁移",
-      "reason": "The information handler delegates bounded credential target resolution to EntertainmentApplication -> EntertainmentRepository, which reads the existing account file without creating, backing up, or rewriting it and returns secret-bearing targets only inside a repr-redacted DTO. Remote user-info requests preserve the legacy token/cookie inference when mode is absent, use a no-retry client, a 5/15 second timeout, a 512 KiB streaming response cap, at most eight selected accounts, and four concurrent blocking tasks. The compatibility handler formats and sends a UTF-8 byte-bounded reply, including reserved room for its truncation notice.",
+      "reason": "The information handler resolves credentials from the feature-owned SQLite account repository and returns secret-bearing values only inside a repr-redacted DTO. Remote user-info requests preserve token/cookie inference when mode is absent, use a no-retry client, a 5/15 second timeout, a 512 KiB streaming response cap, at most eight selected accounts, and four concurrent blocking tasks. The compatibility handler formats and sends a UTF-8 byte-bounded reply, including reserved room for its truncation notice. Existing JSON credentials are imported once by legacy.entertainment.003 and retained as source data.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/newapi_commands.py:282 newapi_info_cmd = on_command('newapi信息') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/newapi_commands.py:398 newapi_info_ -> EntertainmentApplication.resolve_info_targets -> EntertainmentRepository.resolve_info_targets -> bounded existing account JSON read -> NewApiCheckinTarget DTOs",
-        "EntertainmentRepository.resolve_info_targets -> at most 8 selected targets; missing, invalid, oversized, or over-row files return a status without creating, renaming, backing up, or rewriting persistent credentials",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/newapi_commands.py:398 newapi_info_ -> bounded semaphore(4) -> _fetch_info_for_target -> run_blocking_io(fetch_user_self, timeout=18) -> GET /api/user/self with Authorization or Cookie credentials",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/newapi_commands.py:279 newapi_info_cmd = on_command('newapi信息') -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/newapi_commands.py:403 newapi_info_ -> run_blocking_io(EntertainmentApplication.resolve_info_targets) -> EntertainmentRepository.resolve_info_targets -> bounded SQLite account query -> NewApiCheckinTarget DTOs",
+        "EntertainmentRepository.resolve_info_targets -> at most 8 selected targets; missing, invalid, corrupt, or over-row database state returns a status without reading or rewriting legacy credential JSON",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/newapi_commands.py:403 newapi_info_ -> bounded semaphore(4) -> _fetch_info_for_target -> run_blocking_io(fetch_user_self, timeout=18) -> GET /api/user/self with Authorization or Cookie credentials",
         "fetch_user_self -> newapi_client._request -> info_http_client(retries=0, timeout=(5,15)) -> streaming JSON response cap 512 KiB -> close response -> bounded result",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/newapi_commands.py:398 newapi_info_ -> format_user_info_block -> format_user_info_reply (64 KiB UTF-8 byte bound with truncation notice reserved) -> handle_send -> adapter sender/message-history path"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/newapi_commands.py:403 newapi_info_ -> format_user_info_block -> format_user_info_reply (64 KiB UTF-8 byte bound with truncation notice reserved) -> handle_send -> adapter sender/message-history path"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
@@ -810,7 +810,7 @@
         "nonebot_plugin_xiuxian_2/features/entertainment/repository.py:18-27,85-214",
         "nonebot_plugin_xiuxian_2/features/entertainment/schemas.py:27-50",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/newapi_client.py:8-17,45-54,93-191,210-269",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/newapi_commands.py:264-275,397-435",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/newapi_commands.py:264-275,402-442",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_utils/http_proxy.py:155-185",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/io_runtime.py:36-73",
         "nonebot_plugin_xiuxian_2/xiuxian/messaging/delivery.py:226-268",
@@ -818,8 +818,8 @@
         "nonebot_plugin_xiuxian_2/features/entertainment/tests/test_account_list_repository.py:82-111",
         "nonebot_plugin_xiuxian_2/features/entertainment/tests/test_newapi_list_contract.py:61-81",
         "tests/test_newapi_checkin_client.py:59-94",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/newapi_commands.py:282",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/newapi_commands.py:398"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/newapi_commands.py:279",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/newapi_commands.py:403"
       ],
       "source_declaration_found": true,
       "source": {
@@ -831,35 +831,32 @@
       "id": "command:entertainment:newapi删除",
       "kind": "commands",
       "entry": "entertainment:newapi删除 (aliases: newapi解绑)",
-      "status": "受阻",
-      "reason": "The default handler delegates deletion through EntertainmentApplication and EntertainmentRepository, but the repository still mutates the compatibility JSON account file through ServicePort. The SQLite operation ledger and JSON replacement are separate commits, with no recovery for a crash after the file replacement and before ledger completion; keep this item blocked until durable state ownership and replay recovery are closed.",
-      "unknown_edge": "JSON account-file replacement and SQLite operation-ledger completion are not atomic or reconciled",
+      "status": "已迁移",
+      "reason": "Account deletion now mutates feature-owned SQLite rows through EntertainmentApplication and EntertainmentRepository. The account mutation and operation-ledger receipt commit in the same immediate transaction; a prior started operation with unknown outcome is explicitly rejected rather than blindly replayed. Legacy JSON credentials are imported once by legacy.entertainment.003 and retained as source data.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/newapi_commands.py:283 newapi_del_cmd = on_command('newapi删除') aliases=newapi解绑 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/newapi_commands.py:439 newapi_del_ -> parse requested account indices -> newapi_store.delete_accounts(qq_id, indices, deterministic message operation_id)",
-        "newapi_store.delete_accounts -> load_accounts/json_store.load_json_file reads the full token/cookie-bearing JSON file before entering EntertainmentApplication.delete_accounts",
-        "EntertainmentApplication.delete_accounts -> MigratedFeatureApplication.execute -> SQLite operation_ledger begin in one immediate UoW -> EntertainmentRepository.execute -> EntertainmentRepository.delete_accounts",
-        "EntertainmentRepository.delete_accounts -> load_json_list -> filter selected account rows or replace all rows with [] -> save_json_list writes/fsyncs a temporary file then atomically replaces the JSON file",
-        "after JSON mutation, MigratedFeatureApplication.execute opens a separate immediate UoW to finish the SQLite operation ledger; a process crash between these steps leaves status=started and retry returns an in-progress conflict without reconciling the already-replaced file",
-        "successful outcome -> newapi_del_ handle_send -> adapter sender/message-history path; the JSON state is persistent user data, not a cache"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/newapi_commands.py:280 newapi_del_cmd = on_command('newapi删除') aliases=newapi解绑 -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/newapi_commands.py:446 newapi_del_ -> parse requested account indices -> run_blocking_io(newapi_store.delete_accounts, deterministic message operation_id)",
+        "newapi_store.delete_accounts -> EntertainmentApplication.delete_accounts -> EntertainmentRepository.delete_accounts",
+        "EntertainmentRepository._write_operation -> one immediate SQLite UoW begins the operation ledger, mutates entertainment_newapi_accounts, and writes the outcome receipt before commit",
+        "EntertainmentRepository.delete_accounts -> remove all rows or reindex surviving rows in entertainment_newapi_accounts; no runtime JSON read/write",
+        "a legacy started operation whose outcome cannot be confirmed is recorded as rejected and returned without blindly replaying a delete; callers must check account state",
+        "successful outcome -> newapi_del_ handle_send -> adapter sender/message-history path; legacy JSON remains retained migration source data"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/newapi_store.py:160-182",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/newapi_commands.py:360-381",
-        "nonebot_plugin_xiuxian_2/features/entertainment/application.py:16-18",
-        "nonebot_plugin_xiuxian_2/features/_migrated_application.py:52-99",
-        "nonebot_plugin_xiuxian_2/features/entertainment/repository.py:10-49",
-        "nonebot_plugin_xiuxian_2/features/entertainment/json_state.py:9-32",
-        "nonebot_plugin_xiuxian_2/features/_service_port.py:89-113",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/newapi_store.py:104-129",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/newapi_commands.py:445-468",
+        "nonebot_plugin_xiuxian_2/features/entertainment/application.py:110-130",
+        "nonebot_plugin_xiuxian_2/features/entertainment/repository.py:301-430",
         "nonebot_plugin_xiuxian_2/infrastructure/database/ledger.py:106-143",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/newapi_commands.py:283",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/newapi_commands.py:439"
+        "nonebot_plugin_xiuxian_2/features/entertainment/tests/test_delete_repository.py:1-106",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/newapi_commands.py:280",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/newapi_commands.py:446"
       ],
       "source_declaration_found": true,
       "source": {
@@ -877,10 +874,10 @@
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/newapi_commands.py:278 newapi_help_cmd = on_command('newapi帮助') aliases=NewAPI帮助,newapi -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/newapi_commands.py:275 newapi_help_cmd = on_command('newapi帮助') aliases=NewAPI帮助,newapi -> compatibility matcher",
         "xiuxian_entertainment package import -> newapi_commands imports newapi_store -> ensure newapi_bindings and newapi_checkin_history directories; construct EntertainmentApplication/Repository without opening the database or account files",
         "newapi_help_cmd parameterless Cooldown -> JsonConfig reads config.json (creates defaults only if missing) through its single class-level mtime cache -> limit_all_run updates process-local user counters, reset by the one-minute scheduler; per-command cooldown entries expire after 2 seconds",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/newapi_commands.py:312 newapi_help_ -> sends static __NEWAPI_HELP__ text through handle_send -> delivery_service.reply -> adapter sender -> shared operational message-history writer when enabled; no newapi_store/newapi_client call and no NewAPI business-state read/write or HTTP request"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/newapi_commands.py:309 newapi_help_ -> sends static __NEWAPI_HELP__ text through handle_send -> delivery_service.reply -> adapter sender -> shared operational message-history writer when enabled; no newapi_store/newapi_client call and no NewAPI business-state read/write or HTTP request"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
@@ -899,8 +896,8 @@
         "nonebot_plugin_xiuxian_2/xiuxian/adapter_message_records.py:399-432",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_utils/message_db.py:161-168,781-808",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/newapi_commands.py:239-266",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/newapi_commands.py:278",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/newapi_commands.py:312"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/newapi_commands.py:275",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/newapi_commands.py:309"
       ],
       "source_declaration_found": true,
       "source": {
@@ -913,17 +910,17 @@
       "kind": "commands",
       "entry": "entertainment:newapi查看 (aliases: newapi列表, newapi绑定列表)",
       "status": "已迁移",
-      "reason": "The default listing read now goes through EntertainmentApplication.list_account_summaries -> EntertainmentRepository and returns a bounded, secret-free summary DTO. This closes the command's read ownership; the underlying account JSON remains persistent compatibility data, not a disposable cache, and this does not claim the other NewAPI commands or storage format migrated.",
+      "reason": "The default listing read now goes through EntertainmentApplication.list_account_summaries -> EntertainmentRepository and returns a bounded, secret-free summary DTO from feature-owned SQLite state. Existing account JSON is imported once by legacy.entertainment.003 and retained as source data.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/newapi_commands.py:280 newapi_list_cmd = on_command('newapi查看') aliases=newapi列表,newapi绑定列表 -> compatibility matcher",
-        "xiuxian_entertainment package import -> newapi_commands imports newapi_store -> ensure newapi_bindings and newapi_checkin_history directories; construct EntertainmentApplication/Repository without opening the database or account files",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/newapi_commands.py:347 newapi_list_ -> _format_list_message(_qq(event)) -> newapi_store.list_account_summaries -> EntertainmentApplication.list_account_summaries -> EntertainmentRepository.list_account_summaries",
-        "repository opens the existing per-user credential JSON read-only, reads at most 1 MiB + 1 byte, rejects larger files and arrays above 48 rows, and parses only within those bounds; a missing file returns empty without creating it, and invalid data returns an error without rename, backup, or rewrite",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/newapi_commands.py:277 newapi_list_cmd = on_command('newapi查看') aliases=newapi列表,newapi绑定列表 -> compatibility matcher",
+        "xiuxian_entertainment package import -> newapi_commands imports newapi_store -> constructs EntertainmentApplication/Repository without opening the database or account files",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/newapi_commands.py:346 newapi_list_ -> run_blocking_io(_format_list_message) -> newapi_store.list_account_summaries -> EntertainmentApplication.list_account_summaries -> EntertainmentRepository.list_account_summaries",
+        "repository queries entertainment_newapi_accounts with a 48-row cap; no runtime credential JSON read/write",
         "repository projects only api_user_id/mode/base_url/label/auto_checkin into NewApiAccountSummary; secret/token/cookie values never leave the repository, URL userinfo/query/fragment are omitted, and display fields are bounded",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/newapi_commands.py:347 newapi_list_ -> handle_send -> delivery_service.reply -> adapter sender -> shared operational message-history writer when enabled; rendered list is capped at 64 KiB and this path makes no business-state mutation or NewAPI HTTP request",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/newapi_commands.py:346 newapi_list_ -> handle_send -> delivery_service.reply -> adapter sender -> shared operational message-history writer when enabled; rendered list is capped at 64 KiB and this path makes no business-state mutation or NewAPI HTTP request",
         "parameterless Cooldown -> shared JsonConfig/config cache and process-local rate counters; this generic command middleware is recorded separately in backlog where its user-cardinality limit is absent"
       ],
       "evidence": [
@@ -942,8 +939,8 @@
         "nonebot_plugin_xiuxian_2/xiuxian/adapter_message_records.py:399-432",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_utils/message_db.py:161-168,781-808",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/newapi_commands.py:150-180",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/newapi_commands.py:280",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/newapi_commands.py:347"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/newapi_commands.py:277",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/newapi_commands.py:346"
       ],
       "source_declaration_found": true,
       "source": {
@@ -961,24 +958,23 @@
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/newapi_commands.py:281 newapi_checkin_cmd = on_command('newapi签到') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/newapi_commands.py:353 newapi_checkin_ -> newapi_store.resolve_checkin_targets -> EntertainmentApplication.resolve_checkin_targets -> EntertainmentRepository.resolve_checkin_targets -> bounded read-only credential JSON selection; account index, selector length, range span, credential fields, file bytes, and account count are capped",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/newapi_commands.py:278 newapi_checkin_cmd = on_command('newapi签到') -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/newapi_commands.py:353 newapi_checkin_ -> run_blocking_io(newapi_store.resolve_checkin_targets) -> EntertainmentApplication.resolve_checkin_targets -> EntertainmentRepository.resolve_checkin_targets -> bounded SQLite account selection; account index, selector length, range span, credential fields, and account count are capped",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/newapi_commands.py:353 newapi_checkin_ -> run_blocking_io(_run_manual_checkin_for_target) -> NewAPI POST /api/user/checkin through shared http_client.request(stream=True); decoded response bytes are capped at 1 MiB and the response is closed",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/newapi_commands.py:218 _run_manual_checkin_for_target -> newapi_store.record_checkin_history -> EntertainmentApplication.append_checkin_history -> EntertainmentRepository.append_checkin_history -> update_json_file_bounded; history read/write is capped at 64 KiB and retained rows at 3, invalid/oversized history is preserved",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/newapi_commands.py:334 newapi_checkin_ formats at most 64 KiB of aggregate results and sends through handle_send; scheduled auto-check-in remains on its separate frozen path"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/newapi_commands.py:194 _run_checkin_for_target -> newapi_store.append_checkin_history -> EntertainmentApplication.append_checkin_history -> EntertainmentRepository.append_checkin_history -> replace the user's three bounded SQL history rows",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/newapi_commands.py:353 newapi_checkin_ formats at most 64 KiB of aggregate results and sends through handle_send; scheduled auto-check-in remains on its separate frozen path"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/newapi_commands.py:218-243,334-370",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/newapi_store.py:87-91,256-270",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/newapi_commands.py:190-243,352-400",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/newapi_store.py:100-103",
         "nonebot_plugin_xiuxian_2/features/entertainment/application.py:23-42",
         "nonebot_plugin_xiuxian_2/features/entertainment/repository.py:90-225",
         "nonebot_plugin_xiuxian_2/features/entertainment/schemas.py:35-55",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/newapi_client.py:92-164,179-186",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_utils/json_store.py:106-148",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/newapi_commands.py:281",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/newapi_commands.py:278",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/newapi_commands.py:353"
       ],
       "source_declaration_found": true,
@@ -991,22 +987,25 @@
       "id": "command:entertainment:newapi签到历史",
       "kind": "commands",
       "entry": "entertainment:newapi签到历史 (aliases: newapi签到记录)",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "The history command reads the three-row, bounded NewAPI history owned by entertainment_newapi_checkin_history through EntertainmentApplication and EntertainmentRepository. History URL display data is sanitized and the reply is byte bounded; legacy JSON history is imported once by legacy.entertainment.003 and retained as source data.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/newapi_commands.py:284 newapi_history_cmd = on_command('newapi签到历史') aliases=newapi签到记录 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/newapi_commands.py:480 newapi_history_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/newapi_commands.py:281 newapi_history_cmd = on_command('newapi签到历史') aliases=newapi签到记录 -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/newapi_commands.py:494 newapi_history_ -> run_blocking_io(_format_checkin_history) -> newapi_store.load_checkin_history -> EntertainmentApplication.list_checkin_history -> EntertainmentRepository.list_checkin_history -> bounded SQL history query -> handle_send"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/newapi_commands.py:284",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/newapi_commands.py:480"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/newapi_commands.py:471-497",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/newapi_store.py:101-103",
+        "nonebot_plugin_xiuxian_2/features/entertainment/application.py:138-160",
+        "nonebot_plugin_xiuxian_2/features/entertainment/repository.py:487-510",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/newapi_commands.py:281",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/newapi_commands.py:494"
       ],
       "source_declaration_found": true,
       "source": {
@@ -1018,22 +1017,25 @@
       "id": "command:entertainment:newapi绑定",
       "kind": "commands",
       "entry": "entertainment:newapi绑定 (aliases: )",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "Account binding validates bounded credentials and inserts them into entertainment_newapi_accounts through EntertainmentApplication and EntertainmentRepository. The SQL account mutation and operation-ledger receipt commit atomically; no runtime JSON account write remains. Existing JSON accounts are imported once by legacy.entertainment.003 and retained as source data.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/newapi_commands.py:279 newapi_bind_cmd = on_command('newapi绑定') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/newapi_commands.py:318 newapi_bind_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/newapi_commands.py:276 newapi_bind_cmd = on_command('newapi绑定') -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/newapi_commands.py:315 newapi_bind_ -> run_blocking_io(newapi_store.append_account, message operation_id) -> EntertainmentApplication.bind_newapi_account -> EntertainmentRepository.bind_account -> validate fields and cap at 48 -> insert entertainment_newapi_accounts and operation-ledger receipt in one immediate transaction -> handle_send"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/newapi_commands.py:279",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/newapi_commands.py:318"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/newapi_commands.py:315-342",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/newapi_store.py:49-78",
+        "nonebot_plugin_xiuxian_2/features/entertainment/application.py:101-109",
+        "nonebot_plugin_xiuxian_2/features/entertainment/repository.py:297-355",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/newapi_commands.py:276",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/newapi_commands.py:315"
       ],
       "source_declaration_found": true,
       "source": {
@@ -1045,22 +1047,27 @@
       "id": "command:entertainment:newapi自动签到",
       "kind": "commands",
       "entry": "entertainment:newapi自动签到 (aliases: )",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "The command toggles auto_checkin in the feature-owned SQL account repository with an operation-ledger receipt in the same transaction. The daily scheduler consumes bounded SQL pages of account snapshots and writes results to the same SQL history owner; check-in POST requests use the no-retry client and remain outside the event loop.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/newapi_commands.py:285 newapi_auto_cmd = on_command('newapi自动签到') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/newapi_commands.py:486 newapi_auto_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/newapi_commands.py:282 newapi_auto_cmd = on_command('newapi自动签到') -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/newapi_commands.py:501 newapi_auto_ -> run_blocking_io(newapi_store.toggle_auto_checkin, message operation_id) -> EntertainmentApplication.toggle_auto_checkin -> EntertainmentRepository.toggle_auto_checkin -> update account and operation ledger in one immediate transaction -> handle_send",
+        "newapi_scheduler.newapi_auto_checkin_daily -> run_scheduled_auto_checkins -> bounded pages from newapi_store.list_auto_checkin_bindings -> EntertainmentApplication.list_auto_checkin_targets -> EntertainmentRepository.list_auto_checkin_targets -> _run_checkin_for_target -> SQL check-in history"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/newapi_commands.py:285",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/newapi_commands.py:486"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/newapi_commands.py:225-258,500-512",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/newapi_store.py:131-151",
+        "nonebot_plugin_xiuxian_2/features/entertainment/application.py:97-142",
+        "nonebot_plugin_xiuxian_2/features/entertainment/repository.py:243-291,431-510",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/newapi_scheduler.py:7-28",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/newapi_commands.py:282",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/newapi_commands.py:501"
       ],
       "source_declaration_found": true,
       "source": {

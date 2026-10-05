@@ -7,8 +7,22 @@ import stat
 from datetime import datetime
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit, urlunsplit
 
-from ...infrastructure.database import DatabaseUnitOfWork
+from ...infrastructure.database import DatabaseUnitOfWork, OperationLedger
+from .newapi_policy import (
+    MAX_ACCOUNT_ID_CHARS,
+    MAX_ACCOUNT_LABEL_CHARS,
+    MAX_ACCOUNT_LIST_FILE_BYTES,
+    MAX_ACCOUNT_LIST_ROWS,
+    MAX_CHECKIN_BASE_URL_CHARS,
+    MAX_CHECKIN_HISTORY_BYTES,
+    MAX_CHECKIN_HISTORY_ROWS,
+    MAX_CHECKIN_HISTORY_SUMMARY_CHARS,
+    MAX_CHECKIN_SECRET_CHARS,
+    MAX_NEWAPI_LEGACY_FILES,
+    MAX_NEWAPI_LEGACY_TOTAL_BYTES,
+)
 
 MAX_LEGACY_ROOM_FILES = 4096
 MAX_LEGACY_ROOM_FILE_BYTES = 8 * 1024 * 1024
@@ -203,4 +217,240 @@ def apply_entertainment_rooms(
     )
 
 
-__all__ = ["apply_entertainment", "apply_entertainment_rooms"]
+NEWAPI_ACCOUNTS_TABLE = "entertainment_newapi_accounts"
+NEWAPI_HISTORY_TABLE = "entertainment_newapi_checkin_history"
+
+
+def _legacy_newapi_directories() -> tuple[Path, Path]:
+    package_root = Path(__file__).resolve().parents[2]
+    module_data = package_root / "xiuxian" / "xiuxian_entertainment" / "mod" / "data"
+    return module_data / "newapi_bindings", module_data / "newapi_checkin_history"
+
+
+def _read_newapi_json_files(directory: Path, max_file_bytes: int, digest, state) -> list[tuple[str, Any]]:
+    if not directory.exists():
+        return []
+    if not directory.is_dir():
+        raise ValueError("NewAPI legacy state path is not a directory")
+    paths: list[Path] = []
+    try:
+        with os.scandir(directory) as entries:
+            for entry in entries:
+                if not entry.name.endswith(".json"):
+                    continue
+                paths.append(directory / entry.name)
+                if len(paths) + state["files"] > MAX_NEWAPI_LEGACY_FILES:
+                    raise ValueError("NewAPI legacy file count exceeds migration limit")
+    except OSError as exc:
+        raise ValueError("could not enumerate NewAPI legacy state") from exc
+    paths.sort(key=lambda item: item.name)
+    result: list[tuple[str, Any]] = []
+    for path in paths:
+        if path.is_symlink():
+            raise ValueError("NewAPI legacy state files must not be symlinks")
+        try:
+            if not stat.S_ISREG(path.stat().st_mode):
+                raise ValueError("NewAPI legacy state is not a regular file")
+            with path.open("rb") as handle:
+                raw = handle.read(max_file_bytes + 1)
+        except OSError as exc:
+            raise ValueError("could not read NewAPI legacy state") from exc
+        if len(raw) > max_file_bytes:
+            raise ValueError("NewAPI legacy state exceeds per-file migration limit")
+        state["files"] += 1
+        state["bytes"] += len(raw)
+        if state["bytes"] > MAX_NEWAPI_LEGACY_TOTAL_BYTES:
+            raise ValueError("NewAPI legacy state exceeds total migration limit")
+        digest.update(path.name.encode("utf-8", "surrogatepass"))
+        digest.update(b"\0")
+        digest.update(raw)
+        digest.update(b"\0")
+        try:
+            payload = json.loads(raw.decode("utf-8"))
+        except (UnicodeDecodeError, ValueError, RecursionError) as exc:
+            raise ValueError("NewAPI legacy state contains invalid JSON") from exc
+        result.append((path.stem, payload))
+    return result
+
+
+def _legacy_newapi_account(row: Any) -> tuple[str, str, str, str, str, int, str]:
+    if not isinstance(row, dict):
+        raise ValueError("NewAPI legacy account entry must be an object")
+    raw_id = row.get("api_user_id")
+    api_user_id = str(raw_id) if isinstance(raw_id, (str, int)) and not isinstance(raw_id, bool) else ""
+    mode = row.get("mode") or ""
+    secret = row.get("secret") or ""
+    base_url = row.get("base_url") or ""
+    label = row.get("label") or ""
+    if (
+        not api_user_id
+        or len(api_user_id) > MAX_ACCOUNT_ID_CHARS
+        or not api_user_id.isdigit()
+        or not isinstance(mode, str)
+        or len(mode) > 16
+        or not isinstance(secret, str)
+        or len(secret) > MAX_CHECKIN_SECRET_CHARS
+        or not isinstance(base_url, str)
+        or len(base_url) > MAX_CHECKIN_BASE_URL_CHARS
+        or not isinstance(label, (str, int))
+        or isinstance(label, bool)
+        or len(str(label)) > MAX_ACCOUNT_LABEL_CHARS
+    ):
+        raise ValueError("NewAPI legacy account fields exceed migration limits")
+    known = {"api_user_id", "mode", "secret", "base_url", "label", "auto_checkin"}
+    extras = {key: value for key, value in row.items() if key not in known}
+    extra_json = json.dumps(extras, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return (
+        api_user_id,
+        mode,
+        secret,
+        base_url,
+        str(label),
+        int(bool(row.get("auto_checkin"))),
+        extra_json,
+    )
+
+
+def _legacy_newapi_history(row: Any) -> tuple[str, int, str, str, str, str]:
+    if not isinstance(row, dict):
+        raise ValueError("NewAPI legacy history entry must be an object")
+    at = row.get("at") or "—"
+    raw_index = row.get("index", 0)
+    try:
+        index = int(raw_index)
+    except (TypeError, ValueError, OverflowError):
+        index = 0
+    api_user_id = row.get("api_user_id") or "?"
+    base_url = row.get("base_url") or ""
+    summary = row.get("summary") or "—"
+    source = row.get("source") or "manual"
+    values = (at, api_user_id, base_url, summary, source)
+    if any(not isinstance(value, str) for value in values):
+        raise ValueError("NewAPI legacy history fields must be text")
+    if len(at) > 32 or len(api_user_id) > MAX_ACCOUNT_ID_CHARS or len(base_url) > MAX_CHECKIN_BASE_URL_CHARS:
+        raise ValueError("NewAPI legacy history fields exceed migration limits")
+    if len(summary) > MAX_CHECKIN_HISTORY_SUMMARY_CHARS:
+        summary = summary[:MAX_CHECKIN_HISTORY_SUMMARY_CHARS]
+    if source not in {"manual", "auto"}:
+        source = "manual"
+    candidate = base_url if "://" in base_url else f"https://{base_url}"
+    try:
+        parsed = urlsplit(candidate)
+        hostname = parsed.hostname
+        port = parsed.port
+    except ValueError:
+        hostname = None
+        port = None
+    if hostname and parsed.scheme.casefold() in {"http", "https"}:
+        if ":" in hostname:
+            hostname = f"[{hostname}]"
+        authority = f"{hostname}:{port}" if port is not None else hostname
+        base_url = urlunsplit((parsed.scheme.casefold(), authority, parsed.path[:96], "", ""))
+    else:
+        base_url = ""
+    return at, index, api_user_id, base_url, summary, source
+
+
+def apply_entertainment_newapi(
+    uow: DatabaseUnitOfWork,
+    *,
+    accounts_directory: str | Path | None = None,
+    history_directory: str | Path | None = None,
+    occurred_at: str | None = None,
+) -> None:
+    """Import legacy NewAPI credentials and history without deleting source files."""
+    uow.execute(
+        f"CREATE TABLE IF NOT EXISTS {NEWAPI_ACCOUNTS_TABLE}("
+        "account_id INTEGER PRIMARY KEY AUTOINCREMENT,user_id TEXT NOT NULL,position INTEGER NOT NULL,"
+        "api_user_id TEXT NOT NULL,mode TEXT NOT NULL,secret TEXT NOT NULL,base_url TEXT NOT NULL,"
+        "label TEXT NOT NULL,auto_checkin INTEGER NOT NULL,extra_json TEXT NOT NULL DEFAULT '{}',"
+        "UNIQUE(user_id,position))"
+    )
+    uow.execute(
+        f"CREATE INDEX IF NOT EXISTS entertainment_newapi_auto_idx "
+        f"ON {NEWAPI_ACCOUNTS_TABLE}(auto_checkin,account_id)"
+    )
+    uow.execute(
+        f"CREATE TABLE IF NOT EXISTS {NEWAPI_HISTORY_TABLE}("
+        "user_id TEXT NOT NULL,position INTEGER NOT NULL,at TEXT NOT NULL,account_index INTEGER NOT NULL,"
+        "api_user_id TEXT NOT NULL,base_url TEXT NOT NULL,summary TEXT NOT NULL,source TEXT NOT NULL,"
+        "PRIMARY KEY(user_id,position))"
+    )
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS entertainment_newapi_migrations("
+        "migration_key TEXT PRIMARY KEY,snapshot_sha256 TEXT NOT NULL,account_files INTEGER NOT NULL,"
+        "history_files INTEGER NOT NULL,account_rows INTEGER NOT NULL,history_rows INTEGER NOT NULL,"
+        "snapshot_bytes INTEGER NOT NULL,migrated_at TEXT NOT NULL)"
+    )
+    OperationLedger().ensure_schema(uow)
+    migration_key = "legacy.entertainment.newapi-json-v1"
+    if uow.query_one(
+        "SELECT 1 AS found FROM entertainment_newapi_migrations WHERE migration_key=?",
+        (migration_key,),
+    ) is not None:
+        return
+
+    defaults = _legacy_newapi_directories()
+    accounts_dir = Path(accounts_directory) if accounts_directory is not None else defaults[0]
+    history_dir = Path(history_directory) if history_directory is not None else defaults[1]
+    digest = hashlib.sha256()
+    state = {"files": 0, "bytes": 0}
+    digest.update(b"accounts\0")
+    account_files = _read_newapi_json_files(accounts_dir, MAX_ACCOUNT_LIST_FILE_BYTES, digest, state)
+    digest.update(b"history\0")
+    history_files = _read_newapi_json_files(history_dir, MAX_CHECKIN_HISTORY_BYTES, digest, state)
+    imported_accounts: list[tuple[str, int, str, str, str, str, str, int, str]] = []
+    imported_history: list[tuple[str, int, str, int, str, str, str, str]] = []
+    for user_id, rows in account_files:
+        if not user_id or len(user_id) > 128 or not isinstance(rows, list) or len(rows) > MAX_ACCOUNT_LIST_ROWS:
+            raise ValueError("NewAPI legacy account file has invalid owner or row count")
+        for position, row in enumerate(rows, start=1):
+            api_user_id, mode, secret, base_url, label, auto_checkin, extra_json = _legacy_newapi_account(row)
+            imported_accounts.append(
+                (user_id, position, api_user_id, mode, secret, base_url, label, auto_checkin, extra_json)
+            )
+    for user_id, rows in history_files:
+        if not user_id or len(user_id) > 128 or not isinstance(rows, list):
+            raise ValueError("NewAPI legacy history file has invalid owner or root type")
+        for position, row in enumerate(rows[:MAX_CHECKIN_HISTORY_ROWS], start=1):
+            at, account_index, api_user_id, base_url, summary, source = _legacy_newapi_history(row)
+            imported_history.append(
+                (user_id, position, at, account_index, api_user_id, base_url, summary, source)
+            )
+
+    if uow.query_one(f"SELECT 1 AS found FROM {NEWAPI_ACCOUNTS_TABLE} LIMIT 1") is not None:
+        raise RuntimeError("NewAPI account rows exist without a legacy migration receipt")
+    if uow.query_one(f"SELECT 1 AS found FROM {NEWAPI_HISTORY_TABLE} LIMIT 1") is not None:
+        raise RuntimeError("NewAPI history rows exist without a legacy migration receipt")
+    migrated_at = str(occurred_at or datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+    uow.executemany(
+        f"INSERT INTO {NEWAPI_ACCOUNTS_TABLE}(user_id,position,api_user_id,mode,secret,base_url,label,auto_checkin,extra_json) "
+        "VALUES(?,?,?,?,?,?,?,?,?)",
+        imported_accounts,
+    )
+    uow.executemany(
+        f"INSERT INTO {NEWAPI_HISTORY_TABLE}(user_id,position,at,account_index,api_user_id,base_url,summary,source) "
+        "VALUES(?,?,?,?,?,?,?,?)",
+        imported_history,
+    )
+    uow.execute(
+        "INSERT INTO entertainment_newapi_migrations(migration_key,snapshot_sha256,account_files,history_files,"
+        "account_rows,history_rows,snapshot_bytes,migrated_at) VALUES(?,?,?,?,?,?,?,?)",
+        (
+            migration_key,
+            digest.hexdigest(),
+            len(account_files),
+            len(history_files),
+            len(imported_accounts),
+            len(imported_history),
+            state["bytes"],
+            migrated_at,
+        ),
+    )
+
+
+__all__ = [
+    "apply_entertainment",
+    "apply_entertainment_newapi",
+    "apply_entertainment_rooms",
+]
