@@ -29,11 +29,11 @@ from ..xiuxian_activity.service import (
     activity_runtime_state,
     activity_state,
     get_activity_data_overview,
-    load_config_state as load_activity_config_state,
     parse_reward,
     reset_activity_data,
     save_config as save_activity_config,
 )
+from ..xiuxian_activity.activity_config import read_config_state as read_activity_config_state
 
 
 TASK_TEMPLATES = {
@@ -1743,7 +1743,7 @@ def activity_management():
     if "admin_id" not in session:
         return redirect(url_for("login"))
 
-    config_state = load_activity_config_state()
+    config_state = read_activity_config_state()
     config = _prepare_activity_config(config_state.config)
     ok, reason = activity_state(config)
     runtime = activity_runtime_state(config)
@@ -1766,7 +1766,7 @@ def api_activity_config():
         return api_error("未登录")
 
     if request.method == "GET":
-        config_state = load_activity_config_state()
+        config_state = read_activity_config_state()
         config = _prepare_activity_config(config_state.config)
         ok, reason = activity_state(config)
         runtime = activity_runtime_state(config)
@@ -1786,7 +1786,7 @@ def api_activity_config():
         config = _normalize_activity_config(payload.get("config", payload))
         operation_id = _clean_text(payload.get("operation_id"))
         expected_revision = int(payload.get("expected_revision") or 0)
-        if not operation_id or expected_revision <= 0:
+        if not operation_id or expected_revision < 0:
             return api_error("缺少活动配置操作标识或版本，请重新载入", status=400)
         request_identity = {
             "action": "replace",

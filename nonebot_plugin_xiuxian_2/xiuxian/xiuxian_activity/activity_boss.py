@@ -24,6 +24,7 @@ from .service import (
     load_config,
     now_str,
     resolve_daohao,
+    resolve_daohao_batch,
     today_str,
     runtime_ids,
     parse_reward,
@@ -221,6 +222,22 @@ def _ensure_boss_hp(cur, activity: dict) -> tuple[int, int]:
             "UPDATE activity_boss_state SET hp_left=%s, max_hp=%s, update_time=%s WHERE activity_key=%s",
             (hp_left, max_hp, ts, key),
         )
+    return hp_left, max_hp
+
+
+def _read_boss_hp(cur, activity: dict) -> tuple[int, int]:
+    max_hp = max(1, int(activity["max_hp"]))
+    cur.execute(
+        "SELECT hp_left, max_hp FROM activity_boss_state WHERE activity_key=%s",
+        (activity["key"],),
+    )
+    row = cur.fetchone()
+    if row is None:
+        return max_hp, max_hp
+    hp_left = max(0, _as_int(row["hp_left"]))
+    stored_max = max(1, _as_int(row["max_hp"], max_hp))
+    if stored_max != max_hp:
+        hp_left = int(max_hp * hp_left / stored_max)
     return hp_left, max_hp
 
 
@@ -499,21 +516,29 @@ def build_boss_status_text(user_id: str, query: str = "") -> str:
         active = _active_boss_activities()
         if not active:
             return "当前没有进行中的活动首领玩法"
-        lines = ["【活动首领】"]
-        for act in active:
-            lines.append(_boss_status_block(act, user_id))
-        return "\n\n".join(lines)
+        conn = db_backend.connect_readonly(DB_PATH)
+        conn.row_factory = db_backend.Row
+        try:
+            ensure_activity_files(conn)
+            cur = conn.cursor()
+            lines = ["【活动首领】"]
+            lines.extend(_boss_status_block(act, user_id, cur) for act in active)
+            return "\n\n".join(lines)
+        finally:
+            conn.close()
     return _boss_status_block(activity, user_id)
 
 
-def _boss_status_block(activity: dict, user_id: str) -> str:
-    ensure_activity_files()
-    conn = db_backend.connect(DB_PATH)
-    conn.row_factory = db_backend.Row
+def _boss_status_block(activity: dict, user_id: str, cur=None) -> str:
+    owned_conn = None
+    if cur is None:
+        owned_conn = db_backend.connect_readonly(DB_PATH)
+        owned_conn.row_factory = db_backend.Row
+        cur = owned_conn.cursor()
     try:
-        cur = conn.cursor()
-        hp_left, max_hp = _ensure_boss_hp(cur, activity)
-        conn.commit()
+        if owned_conn is not None:
+            ensure_activity_files(owned_conn)
+        hp_left, max_hp = _read_boss_hp(cur, activity)
         cur.execute(
             """
             SELECT total_damage FROM activity_boss_damage
@@ -534,24 +559,26 @@ def _boss_status_block(activity: dict, user_id: str) -> str:
         ]
         if activity.get("mode") in {"cooperative", "both"}:
             lines.append(f"今日挑战 {used}/{limit}")
+        cur.execute(
+            "SELECT item_id, count FROM activity_item_inventory "
+            "WHERE activity_key=%s AND user_id=%s",
+            (activity["key"], str(user_id)),
+        )
+        inventory = {
+            str(row["item_id"]): max(0, _as_int(row["count"]))
+            for row in cur.fetchall()
+        }
         items = []
         for it in activity.get("items") or []:
-            cur.execute(
-                """
-                SELECT count FROM activity_item_inventory
-                WHERE activity_key=%s AND user_id=%s AND item_id=%s
-                """,
-                (activity["key"], str(user_id), it["id"]),
-            )
-            r2 = cur.fetchone()
-            cnt = _as_int(r2["count"] if r2 else 0)
+            cnt = inventory.get(it["id"], 0)
             if cnt > 0:
                 items.append(f"{it['name']}x{cnt}")
         if items:
             lines.append("活动道具：" + "、".join(items))
         return "\n".join(lines)
     finally:
-        conn.close()
+        if owned_conn is not None:
+            owned_conn.close()
 
 
 def build_boss_rank_text(query: str = "", limit: int = 10) -> str:
@@ -562,10 +589,10 @@ def build_boss_rank_text(query: str = "", limit: int = 10) -> str:
     if not activity:
         return "请指定活动首领名称后查询排行"
 
-    ensure_activity_files()
-    conn = db_backend.connect(DB_PATH)
+    conn = db_backend.connect_readonly(DB_PATH)
     conn.row_factory = db_backend.Row
     try:
+        ensure_activity_files(conn)
         cur = conn.cursor()
         cur.execute(
             """
@@ -582,9 +609,10 @@ def build_boss_rank_text(query: str = "", limit: int = 10) -> str:
         if not rows:
             lines.append("暂无数据")
             return "\n".join(lines)
+        names = resolve_daohao_batch([str(row["user_id"]) for row in rows])
         for i, row in enumerate(rows, 1):
             uid = str(row["user_id"])
-            name = resolve_daohao(uid)
+            name = names.get(uid) or resolve_daohao(uid)
             lines.append(f"{i}. {name} 伤害 {number_to(_as_int(row['total_damage']))}")
         return "\n".join(lines)
     finally:

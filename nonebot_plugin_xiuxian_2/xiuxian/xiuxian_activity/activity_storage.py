@@ -62,14 +62,15 @@ def now_str() -> str:
     return now_dt().strftime(TIME_FMT)
 
 
-def ensure_activity_files():
-    BASE_DIR.mkdir(parents=True, exist_ok=True)
-    if not CONFIG_PATH.exists():
-        shutil.copyfile(DEFAULT_CONFIG_PATH, CONFIG_PATH)
-    init_db()
+def ensure_activity_files(conn=None):
+    if conn is None:
+        BASE_DIR.mkdir(parents=True, exist_ok=True)
+        if not CONFIG_PATH.exists():
+            shutil.copyfile(DEFAULT_CONFIG_PATH, CONFIG_PATH)
+    init_db(conn)
 
 
-def init_db():
+def init_db(conn=None):
     required = {
         table for table in (
             "activity_user", "activity_sign_log", "activity_collect_inventory",
@@ -81,10 +82,18 @@ def init_db():
             "activity_boss_milestone", "activity_boss_milestone_claim", "activity_boss_rank_claim",
         )
     }
-    with DatabaseUnitOfWork(DB_PATH, read_only=True) as uow:
+    if conn is None:
+        with DatabaseUnitOfWork(DB_PATH, read_only=True) as uow:
+            existing = {
+                str(row["name"])
+                for row in uow.query_all("SELECT name FROM sqlite_master WHERE type='table'")
+            }
+    else:
         existing = {
-            str(row["name"])
-            for row in uow.query_all("SELECT name FROM sqlite_master WHERE type='table'")
+            str(row["name"] if hasattr(row, "keys") else row[0])
+            for row in conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'"
+            ).fetchall()
         }
     missing = sorted(required - existing)
     if missing:
@@ -104,6 +113,10 @@ def resolve_daohao(user_id: str) -> str:
             return name
     except Exception as e:
         logger.debug(f"resolve_daohao failed user_id={uid}: {e}")
+    return _fallback_daohao(uid)
+
+
+def _fallback_daohao(uid: str) -> str:
     if len(uid) > 6:
         return f"修士·{uid[-4:]}"
     return uid
@@ -120,7 +133,7 @@ def resolve_daohao_batch(user_ids: list[str]) -> dict[str, str]:
         ids.append(uid)
     if not ids:
         return {}
-    result = {uid: resolve_daohao(uid) for uid in ids}
+    result = {uid: _fallback_daohao(uid) for uid in ids}
     try:
         placeholders = ",".join(["%s"] * len(ids))
         rows = _sql_message()._read_query(

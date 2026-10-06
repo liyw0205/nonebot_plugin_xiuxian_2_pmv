@@ -387,6 +387,11 @@ def _slice_status() -> dict[str, dict[str, object]]:
         work_facade.index("async def use_work_capture_order") :
     ]
     activity_service = (PACKAGE / "xiuxian" / "xiuxian_activity" / "service.py").read_text(encoding="utf-8")
+    activity_commands = (PACKAGE / "xiuxian" / "xiuxian_activity" / "__init__.py").read_text(encoding="utf-8")
+    activity_application = (PACKAGE / "features" / "activity" / "application.py").read_text(encoding="utf-8")
+    activity_read_model_application = (PACKAGE / "features" / "activity" / "read_model_application.py").read_text(encoding="utf-8")
+    activity_read_model_repository = (PACKAGE / "features" / "activity" / "read_model_repository.py").read_text(encoding="utf-8")
+    activity_read_model_tests = (ROOT / "tests" / "test_activity_read_model.py").read_text(encoding="utf-8")
     activity_cli = (PACKAGE / "cli.py").read_text(encoding="utf-8")
     activity_reward_application = (PACKAGE / "features" / "activity_reward" / "application.py").read_text(encoding="utf-8")
     activity_claim_repository = (PACKAGE / "features" / "activity_reward" / "claim_all_repository.py").read_text(encoding="utf-8")
@@ -1650,7 +1655,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "state_default_storage_is_game_db": (
                 "DB_PATH = get_paths().game_db" in activity_storage
                 and "LEGACY_DB_PATH = BASE_DIR / \"activity.db\"" in activity_storage
-                and "CREATE TABLE" not in activity_storage[activity_storage.index("def init_db():"):activity_storage.index("def resolve_daohao(")]
+                and "CREATE TABLE" not in activity_storage[activity_storage.index("def init_db(conn=None):"):activity_storage.index("def resolve_daohao(")]
             ),
             "state_transaction_services_use_migrated_schema": all(
                 table in activity_transaction_service
@@ -1681,6 +1686,28 @@ def _slice_status() -> dict[str, dict[str, object]]:
                 and "LEGACY_DB_PATH" in activity_storage
             ),
             "status": "claim_all_and_reward_ledgers_cut_over; activity_gameplay_state_migrated_to_game_db; legacy_activity_file_retained_for_config_events_and_backup",
+        },
+        "activity_read_model": {
+            "task_and_pass_matchers_use_feature_application": (
+                "activity_application.read_model.task_progress_text(" in activity_commands
+                and "activity_application.read_model.task_catalog_text()" in activity_commands
+                and "activity_application.read_model.pass_text(" in activity_commands
+                and "build_activity_task_progress_text(" not in activity_commands
+                and "build_activity_pass_text(" not in activity_commands
+            ),
+            "activity_application_composes_read_model": (
+                "self.read_model = ActivityReadModelApplication(database)" in activity_application
+            ),
+            "read_model_repository_is_read_only_and_has_no_ddl": (
+                "DatabaseUnitOfWork(self.database, read_only=True)" in activity_read_model_repository
+                and "CREATE TABLE" not in activity_read_model_repository
+                and "UPDATE " not in activity_read_model_repository
+                and "INSERT INTO " not in activity_read_model_repository
+            ),
+            "read_model_rendering_matches_legacy_contract": (
+                "test_read_model_application_preserves_task_and_pass_output" in activity_read_model_tests
+            ),
+            "status": "activity_task_and_pass_read_models_owned_by_feature_application",
         },
         "dungeon_team": {
             "team_commands_application_owned": all(

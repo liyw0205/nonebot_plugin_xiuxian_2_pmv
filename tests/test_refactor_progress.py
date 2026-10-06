@@ -283,6 +283,11 @@ class RefactorProgressTests(unittest.TestCase):
         self.assertTrue(activity["state_default_reward_and_boss_paths_use_game_db"])
         self.assertTrue(activity["state_web_management_targets_game_db_and_keeps_config_separate"])
         self.assertTrue(activity["state_legacy_projection_cutover_complete_but_source_retained"])
+        read_model = slices["activity_read_model"]
+        self.assertTrue(read_model["task_and_pass_matchers_use_feature_application"])
+        self.assertTrue(read_model["activity_application_composes_read_model"])
+        self.assertTrue(read_model["read_model_repository_is_read_only_and_has_no_ddl"])
+        self.assertTrue(read_model["read_model_rendering_matches_legacy_contract"])
         dungeon_team = slices["dungeon_team"]
         self.assertTrue(dungeon_team["team_commands_application_owned"])
         self.assertTrue(dungeon_team["legacy_team_service_factories_removed"])

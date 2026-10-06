@@ -308,6 +308,18 @@ def connect(database: str | Path, *args, **kwargs) -> SQLiteConnection:
     return SQLiteConnection(raw, db_path)
 
 
+def connect_readonly(database: str | Path, *args, **kwargs) -> SQLiteConnection:
+    _ensure_backend_initialized()
+    db_path = Path(database)
+    uri = f"{db_path.resolve().as_uri()}?mode=ro"
+    kwargs.pop("uri", None)
+    raw = sqlite3.connect(uri, *args, uri=True, **kwargs)
+    raw.execute("PRAGMA busy_timeout=30000")
+    raw.create_function("LEAST", -1, _least)
+    raw.create_function("GREATEST", -1, _greatest)
+    return SQLiteConnection(raw, db_path)
+
+
 @contextmanager
 def connection(database: str | Path, *args, row_factory: Any = Row, **kwargs):
     """统一的短连接入口，供 Web/API 查询和脚本任务复用。"""

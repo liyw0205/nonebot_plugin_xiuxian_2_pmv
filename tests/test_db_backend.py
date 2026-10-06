@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import sqlite3
 import tempfile
 import unittest
 from pathlib import Path
@@ -82,6 +83,21 @@ class DatabaseHelperTests(unittest.TestCase):
         )
 
         self.assertEqual(row, {"name": "Alice", "enabled": 1})
+
+    def test_readonly_connection_does_not_create_missing_database(self) -> None:
+        with self.assertRaises(sqlite3.OperationalError):
+            db_backend.connect_readonly(self.database)
+
+        self.assertFalse(self.database.exists())
+
+    def test_readonly_connection_rejects_writes(self) -> None:
+        db_backend.execute_write(self.database, "CREATE TABLE values_table (value INTEGER)")
+        conn = db_backend.connect_readonly(self.database)
+        try:
+            with self.assertRaises(sqlite3.OperationalError):
+                conn.execute("INSERT INTO values_table VALUES (%s)", (1,))
+        finally:
+            conn.close()
 
     def test_transaction_rolls_back_on_error(self) -> None:
         db_backend.execute_write(self.database, "CREATE TABLE values_table (value INTEGER)")

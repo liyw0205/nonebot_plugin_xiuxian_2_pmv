@@ -72,13 +72,21 @@ def _grant_pass_exp(cur, activity_key: str, user_id: str, pass_cfg: dict, gained
     }
 
 
-def _pass_catchup_state(cur, config: dict, activity_key: str, user_id: str, pass_cfg: dict) -> dict:
+def _pass_catchup_state(
+    cur,
+    config: dict,
+    activity_key: str,
+    user_id: str,
+    pass_cfg: dict,
+    *,
+    balance: dict | None = None,
+) -> dict:
     enabled = bool(pass_cfg.get("catchup_enabled"))
     start_day = max(1, _as_int(pass_cfg.get("catchup_start_day"), 5))
     level_gap = max(1, _as_int(pass_cfg.get("catchup_level_gap"), 3))
     catchup_multiplier = max(1.0, _as_float(pass_cfg.get("catchup_multiplier"), 1.5))
     elapsed_day = _activity_elapsed_days(config)
-    balance = _get_pass_balance(cur, activity_key, user_id, pass_cfg)
+    balance = balance or _get_pass_balance(cur, activity_key, user_id, pass_cfg)
     cur.execute(
         """
         SELECT COALESCE(MAX(level), 0) AS level

@@ -69,6 +69,85 @@ class ActivityConfigEventServiceTests(unittest.TestCase):
         self.assertEqual((second.revision, second.config["name"]), (1, "节日活动"))
         self.assertEqual(self.scalar("SELECT COUNT(*) FROM activity_config_state"), 1)
 
+    def test_read_state_does_not_create_database_or_state_schema(self) -> None:
+        missing_database = Path(self.temp.name) / "not-created.db"
+        reader = ActivityConfigEventService(missing_database)
+
+        self.assertIsNone(reader.read_state())
+        self.assertFalse(missing_database.exists())
+
+        self.service.load_or_import(self.base_config)
+        state = self.service.read_state()
+        self.assertEqual((state.revision, state.config["name"]), (1, "节日活动"))
+        self.assertEqual(self.scalar("SELECT COUNT(*) FROM activity_config_operations"), 0)
+
+    def test_regular_config_read_prefers_event_state_without_legacy_import(self) -> None:
+        config_path = Path(self.temp.name) / "activity_config.json"
+        config_path.write_text('{"name":"陈旧 JSON","enabled":false}', encoding="utf-8")
+        state_database = Path(self.temp.name) / "activity.db"
+        service = ActivityConfigEventService(state_database)
+        service.load_or_import(self.base_config)
+
+        with (
+            patch.object(activity_config, "CONFIG_PATH", config_path),
+            patch.object(activity_config, "_activity_config_event_service", return_value=service),
+        ):
+            config = activity_config.load_config()
+
+        self.assertEqual(config["name"], "节日活动")
+        with db_backend.connection(state_database) as conn:
+            self.assertEqual(
+                conn.execute("SELECT COUNT(*) FROM activity_config_operations").fetchone()[0],
+                0,
+            )
+
+    def test_regular_config_read_with_missing_state_is_read_only(self) -> None:
+        config_path = Path(self.temp.name) / "missing" / "activity_config.json"
+        database = Path(self.temp.name) / "missing" / "activity.db"
+        service = ActivityConfigEventService(database)
+        with (
+            patch.object(activity_config, "CONFIG_PATH", config_path),
+            patch.object(activity_config, "_activity_config_event_service", return_value=service),
+        ):
+            config = activity_config.load_config()
+
+        self.assertEqual(config["template_type"], "festival_sign")
+        self.assertFalse(database.exists())
+        self.assertFalse(config_path.parent.exists())
+
+    def test_read_config_state_returns_legacy_projection_without_import(self) -> None:
+        config_path = Path(self.temp.name) / "missing" / "activity_config.json"
+        database = Path(self.temp.name) / "missing" / "activity.db"
+        service = ActivityConfigEventService(database)
+        with (
+            patch.object(activity_config, "CONFIG_PATH", config_path),
+            patch.object(activity_config, "_activity_config_event_service", return_value=service),
+        ):
+            state = activity_config.read_config_state()
+
+        self.assertEqual(state.revision, 0)
+        self.assertEqual(state.config["template_type"], "festival_sign")
+        self.assertFalse(database.exists())
+        self.assertFalse(config_path.parent.exists())
+
+    def test_replace_initializes_state_from_read_only_revision(self) -> None:
+        result = self.service.replace(
+            "config:first-save",
+            {"action": "replace", "operator_id": "admin-1"},
+            0,
+            self.base_config,
+        )
+
+        self.assertEqual((result.status, result.revision), ("applied", 1))
+        self.assertEqual(result.config, self.base_config)
+        replay = self.service.replace(
+            "config:first-save",
+            {"action": "replace", "operator_id": "admin-1"},
+            0,
+            self.base_config,
+        )
+        self.assertEqual((replay.status, replay.revision), ("duplicate", 1))
+
     def test_replace_versions_config_and_replays_first_snapshot(self) -> None:
         state = self.service.load_or_import(self.base_config)
         first_config = {**state.config, "enabled": False}
@@ -285,6 +364,54 @@ class ActivityConfigEventServiceTests(unittest.TestCase):
         self.assertEqual(captured["operation_id"], "activity-config-web:request-1")
         self.assertEqual(captured["expected_revision"], 3)
         self.assertEqual(captured["request_identity"]["operator_id"], "admin-1")
+
+    def test_web_config_get_uses_read_only_config_state(self) -> None:
+        app.config.update(TESTING=True, SECRET_KEY="activity-config-test")
+        client = app.test_client()
+        with client.session_transaction() as session:
+            session["admin_id"] = "admin-1"
+            session["_csrf_token"] = "csrf-token"
+
+        config_path = Path(self.temp.name) / "missing" / "activity_config.json"
+        database = Path(self.temp.name) / "missing" / "activity.db"
+        service = ActivityConfigEventService(database)
+        with (
+            patch.object(web_core, "ADMIN_IDS", {"admin-1"}),
+            patch.object(activity_config, "CONFIG_PATH", config_path),
+            patch.object(activity_config, "_activity_config_event_service", return_value=service),
+            patch.object(
+                web_activity,
+                "read_activity_config_state",
+                wraps=web_activity.read_activity_config_state,
+            ) as read_state,
+            patch.object(web_activity, "activity_state", return_value=(True, "")),
+            patch.object(web_activity, "activity_runtime_state", return_value={}),
+        ):
+            response = client.get("/api/activity/config")
+            read_state.assert_called_once_with()
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response.get_json()["config_revision"], 0)
+            self.assertFalse(database.exists())
+            self.assertFalse(config_path.parent.exists())
+
+            payload = {
+                "config": response.get_json()["config"],
+                "operation_id": "activity-config-web:first-save",
+                "expected_revision": 0,
+            }
+            headers = {"X-CSRF-Token": "csrf-token"}
+            saved = client.post("/api/activity/config", json=payload, headers=headers)
+            replay = client.post("/api/activity/config", json=payload, headers=headers)
+
+        self.assertEqual(saved.status_code, 200)
+        self.assertEqual(saved.get_json()["config_revision"], 1)
+        self.assertEqual(replay.status_code, 200)
+        self.assertEqual(replay.get_json()["config_revision"], 1)
+        with db_backend.connection(database) as conn:
+            receipt_count = conn.execute(
+                "SELECT COUNT(*) FROM activity_config_operations"
+            ).fetchone()[0]
+        self.assertEqual(receipt_count, 1)
 
 
 if __name__ == "__main__":

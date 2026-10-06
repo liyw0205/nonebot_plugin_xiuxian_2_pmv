@@ -2229,15 +2229,15 @@
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:50 activity_close_cmd = on_command('关闭活动') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:410 _ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:47 activity_close_cmd = on_command('关闭活动') -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:409 _ -> legacy downstream effect not closed in this frozen item"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:50",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:410"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:47",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:409"
       ],
       "source_declaration_found": true,
       "source": {
@@ -3848,15 +3848,15 @@
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:49 activity_open_cmd = on_command('开启活动') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:395 _ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:46 activity_open_cmd = on_command('开启活动') -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:394 _ -> legacy downstream effect not closed in this frozen item"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:49",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:395"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:46",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:394"
       ],
       "source_declaration_found": true,
       "source": {
@@ -5777,15 +5777,15 @@
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:29 activity_info_cmd = on_command('活动') aliases=活动信息,活动日程,活动进度 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:111 _ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:26 activity_info_cmd = on_command('活动') aliases=活动信息,活动日程,活动进度 -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:108 _ -> legacy downstream effect not closed in this frozen item"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:29",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:111"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:26",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:108"
       ],
       "source_declaration_found": true,
       "source": {
@@ -5797,22 +5797,28 @@
       "id": "command:activity:活动任务",
       "kind": "commands",
       "entry": "activity:活动任务 (aliases: 活动日常, 活动目标)",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "Both authenticated progress and public task-catalog paths use ActivityApplication.read_model. ActivityReadModelSqlRepository performs read-only game_db queries; regression tests preserve the legacy task/pass text contract.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:32 activity_tasks_cmd = on_command('活动任务') aliases=活动日常,活动目标 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:159 _ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:29 activity_tasks_cmd = on_command('活动任务') aliases=活动日常,活动目标 -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:156 _ -> ActivityApplication.read_model.task_progress_text / task_catalog_text -> ActivityReadModelApplication -> read-only game_db repository",
+        "authenticated task progress and public task catalog -> ActivityApplication.read_model -> ActivityReadModelApplication",
+        "ActivityReadModelApplication -> ActivityReadModelSqlRepository.task_progress -> read-only game_db UOW; public task catalog reads configuration only"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:32",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:159"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:155-170",
+        "nonebot_plugin_xiuxian_2/features/activity/application.py:8-14",
+        "nonebot_plugin_xiuxian_2/features/activity/read_model_application.py:25-92",
+        "nonebot_plugin_xiuxian_2/features/activity/read_model_repository.py:21-47",
+        "tests/test_activity_read_model.py",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:29",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:156"
       ],
       "source_declaration_found": true,
       "source": {
@@ -5830,8 +5836,8 @@
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:33 activity_task_claim_cmd = on_command('活动任务领取') aliases=领取活动任务 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:176 _ -> handler creates stable task-claim operation ID and calls ActivityApplication.execute(action=claim_activity_tasks)",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:30 activity_task_claim_cmd = on_command('活动任务领取') aliases=领取活动任务 -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:175 _ -> handler creates stable task-claim operation ID and calls ActivityApplication.execute(action=claim_activity_tasks)",
         "ActivityApplication -> ActivityRepository._claim_tasks -> explicit ServicePort adapter forwards the same operation ID to claim_activity_tasks",
         "claim_activity_tasks reads legacy-compatible activity configuration/eligibility and calls ActivityTaskClaimApplication.claim with the same operation ID",
         "ActivityTaskClaimApplication -> ActivityTaskClaimRepository validates current claim state and owns reward mutation, receipt, and retry recovery in game_db",
@@ -5841,8 +5847,6 @@
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:33",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:176",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:175-190",
         "nonebot_plugin_xiuxian_2/features/activity/application.py:9-14",
         "nonebot_plugin_xiuxian_2/features/activity/repository.py:38-40",
@@ -5851,7 +5855,9 @@
         "nonebot_plugin_xiuxian_2/features/activity_reward/task_claim_repository.py:169-220,251-391",
         "nonebot_plugin_xiuxian_2/plugin.py:239-240",
         "tests/test_activity_task_claim_transaction.py",
-        "nonebot_plugin_xiuxian_2/features/activity/tests/test_activity_application.py"
+        "nonebot_plugin_xiuxian_2/features/activity/tests/test_activity_application.py",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:30",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:175"
       ],
       "source_declaration_found": true,
       "source": {
@@ -5870,15 +5876,15 @@
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:40 activity_exchange_cmd = on_command('活动兑换') aliases=集字兑换 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:272 _ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:37 activity_exchange_cmd = on_command('活动兑换') aliases=集字兑换 -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:271 _ -> legacy downstream effect not closed in this frozen item"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:40",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:272"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:37",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:271"
       ],
       "source_declaration_found": true,
       "source": {
@@ -5897,15 +5903,15 @@
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:42 activity_shop_cmd = on_command('活动商店') aliases=积分商店 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:302 _ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:39 activity_shop_cmd = on_command('活动商店') aliases=积分商店 -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:301 _ -> legacy downstream effect not closed in this frozen item"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:42",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:302"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:39",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:301"
       ],
       "source_declaration_found": true,
       "source": {
@@ -5924,15 +5930,15 @@
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:31 activity_rewards_cmd = on_command('活动奖励') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:129 _ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:28 activity_rewards_cmd = on_command('活动奖励') -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:126 _ -> legacy downstream effect not closed in this frozen item"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:31",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:129"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:28",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:126"
       ],
       "source_declaration_found": true,
       "source": {
@@ -5951,15 +5957,15 @@
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:27 activity_help_cmd = on_command('活动帮助') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:81 _ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:24 activity_help_cmd = on_command('活动帮助') -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:78 _ -> legacy downstream effect not closed in this frozen item"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:27",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:81"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:24",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:78"
       ],
       "source_declaration_found": true,
       "source": {
@@ -5971,22 +5977,27 @@
       "id": "command:activity:活动战令",
       "kind": "commands",
       "entry": "activity:活动战令 (aliases: 活动活跃, 活动通行证)",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "The default matcher reads pass balance, claim state, catch-up level, and renders the result through ActivityApplication.read_model. ActivityReadModelSqlRepository uses a read-only game_db UOW; regression tests preserve the legacy response contract.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:34 activity_pass_cmd = on_command('活动战令') aliases=活动活跃,活动通行证 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:194 _ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:31 activity_pass_cmd = on_command('活动战令') aliases=活动活跃,活动通行证 -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:193 _ -> ActivityApplication.read_model.pass_text -> ActivityReadModelApplication -> read-only game_db repository",
+        "activity_pass_cmd handler -> ActivityApplication.read_model.pass_text -> ActivityReadModelSqlRepository.pass_summary"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:34",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:194"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:192-201",
+        "nonebot_plugin_xiuxian_2/features/activity/application.py:8-14",
+        "nonebot_plugin_xiuxian_2/features/activity/read_model_application.py:95-160",
+        "nonebot_plugin_xiuxian_2/features/activity/read_model_repository.py:48-108",
+        "tests/test_activity_read_model.py",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:31",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:193"
       ],
       "source_declaration_found": true,
       "source": {
@@ -6004,8 +6015,8 @@
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:35 activity_pass_claim_cmd = on_command('活动战令领取') aliases=领取活动战令,领取活动通行证 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:206 _ -> handler creates stable pass-claim operation ID and calls ActivityApplication.execute(action=claim_activity_pass_rewards)",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:32 activity_pass_claim_cmd = on_command('活动战令领取') aliases=领取活动战令,领取活动通行证 -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:205 _ -> handler creates stable pass-claim operation ID and calls ActivityApplication.execute(action=claim_activity_pass_rewards)",
         "ActivityApplication -> ActivityRepository._claim_pass -> explicit ServicePort adapter forwards the same operation ID to claim_activity_pass_rewards",
         "claim_activity_pass_rewards reads legacy-compatible activity configuration/eligibility and calls ActivityPassClaimApplication.claim with the same operation ID",
         "ActivityPassClaimApplication -> ActivityPassClaimRepository validates current level/claim state and owns reward mutation, receipt, and retry recovery in game_db",
@@ -6015,8 +6026,6 @@
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:35",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:206",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:205-220",
         "nonebot_plugin_xiuxian_2/features/activity/application.py:9-14",
         "nonebot_plugin_xiuxian_2/features/activity/repository.py:42-44",
@@ -6025,7 +6034,9 @@
         "nonebot_plugin_xiuxian_2/features/activity_reward/pass_claim_repository.py:188-255,269-401",
         "nonebot_plugin_xiuxian_2/plugin.py:241-242",
         "tests/test_activity_pass_claim_transaction.py",
-        "nonebot_plugin_xiuxian_2/features/activity/tests/test_activity_application.py"
+        "nonebot_plugin_xiuxian_2/features/activity/tests/test_activity_application.py",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:32",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:205"
       ],
       "source_declaration_found": true,
       "source": {
@@ -6044,15 +6055,15 @@
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:38 activity_rank_cmd = on_command('活动排行') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:254 _ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:35 activity_rank_cmd = on_command('活动排行') -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:253 _ -> legacy downstream effect not closed in this frozen item"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:38",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:254"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:35",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:253"
       ],
       "source_declaration_found": true,
       "source": {
@@ -6071,15 +6082,15 @@
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:36 activity_gameplay_cmd = on_command('活动玩法') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:224 _ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:33 activity_gameplay_cmd = on_command('活动玩法') -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:223 _ -> legacy downstream effect not closed in this frozen item"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:36",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:224"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:33",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:223"
       ],
       "source_declaration_found": true,
       "source": {
@@ -6098,15 +6109,15 @@
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:41 activity_points_cmd = on_command('活动积分') aliases=积分活动 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:290 _ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:38 activity_points_cmd = on_command('活动积分') aliases=积分活动 -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:289 _ -> legacy downstream effect not closed in this frozen item"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:41",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:290"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:38",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:289"
       ],
       "source_declaration_found": true,
       "source": {
@@ -6125,15 +6136,15 @@
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:37 activity_sign_cmd = on_command('活动签到') aliases=节日签到 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:237 _ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:34 activity_sign_cmd = on_command('活动签到') aliases=节日签到 -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:236 _ -> legacy downstream effect not closed in this frozen item"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:37",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:237"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:34",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:236"
       ],
       "source_declaration_found": true,
       "source": {
@@ -6152,15 +6163,15 @@
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:28 activity_manage_cmd = on_command('活动管理') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:97 _ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:25 activity_manage_cmd = on_command('活动管理') -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:94 _ -> legacy downstream effect not closed in this frozen item"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:28",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:97"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:25",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:94"
       ],
       "source_declaration_found": true,
       "source": {
@@ -6179,15 +6190,15 @@
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:39 activity_bag_cmd = on_command('活动背包') aliases=活动字牌,集字背包 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:260 _ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:36 activity_bag_cmd = on_command('活动背包') aliases=活动字牌,集字背包 -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:259 _ -> legacy downstream effect not closed in this frozen item"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:39",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:260"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:36",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:259"
       ],
       "source_declaration_found": true,
       "source": {
@@ -6206,15 +6217,15 @@
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:46 activity_boss_atk_cmd = on_command('活动讨伐') aliases=使用烟花,使用爆竹,活动首领攻击 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:352 _ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:43 activity_boss_atk_cmd = on_command('活动讨伐') aliases=使用烟花,使用爆竹,活动首领攻击 -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:351 _ -> legacy downstream effect not closed in this frozen item"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:46",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:352"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:43",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:351"
       ],
       "source_declaration_found": true,
       "source": {
@@ -6233,15 +6244,15 @@
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:43 activity_buy_cmd = on_command('活动购买') aliases=活动兑换商品,活动商城兑换 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:314 _ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:40 activity_buy_cmd = on_command('活动购买') aliases=活动兑换商品,活动商城兑换 -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:313 _ -> legacy downstream effect not closed in this frozen item"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:43",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:314"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:40",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:313"
       ],
       "source_declaration_found": true,
       "source": {
@@ -6260,15 +6271,15 @@
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:44 activity_boss_cmd = on_command('活动首领') aliases=活动BOSS,活动Boss -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:332 _ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:41 activity_boss_cmd = on_command('活动首领') aliases=活动BOSS,活动Boss -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:331 _ -> legacy downstream effect not closed in this frozen item"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:44",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:332"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:41",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:331"
       ],
       "source_declaration_found": true,
       "source": {
@@ -6287,15 +6298,15 @@
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:45 activity_boss_rank_cmd = on_command('活动首领排行') aliases=活动BOSS排行,首领伤害榜 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:344 _ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:42 activity_boss_rank_cmd = on_command('活动首领排行') aliases=活动BOSS排行,首领伤害榜 -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:343 _ -> legacy downstream effect not closed in this frozen item"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:45",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:344"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:42",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:343"
       ],
       "source_declaration_found": true,
       "source": {
@@ -6313,8 +6324,8 @@
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:47 activity_boss_claim_cmd = on_command('活动首领领奖') aliases=领取首领奖励,首领领奖 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:376 _ -> handler creates stable boss-claim operation ID and calls ActivityApplication.execute(action=activity_boss.claim_boss_rewards)",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:44 activity_boss_claim_cmd = on_command('活动首领领奖') aliases=领取首领奖励,首领领奖 -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:375 _ -> handler creates stable boss-claim operation ID and calls ActivityApplication.execute(action=activity_boss.claim_boss_rewards)",
         "ActivityApplication -> ActivityRepository._claim_boss -> explicit adapter forwards the operation ID to claim_boss_rewards",
         "claim_boss_rewards derives stable :milestone and :rank child IDs for selected or composite claims",
         "claim_boss_milestone_reward / claim_boss_rank_reward -> ActivityBossMilestoneClaimApplication / ActivityBossRankClaimApplication -> feature-owned repositories own asset writes and receipts",
@@ -6324,8 +6335,6 @@
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:47",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:376",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:375-391",
         "nonebot_plugin_xiuxian_2/features/activity/application.py:9-14",
         "nonebot_plugin_xiuxian_2/features/activity/repository.py:58-64",
@@ -6334,7 +6343,9 @@
         "nonebot_plugin_xiuxian_2/features/activity_reward/boss_rank_claim_application.py",
         "nonebot_plugin_xiuxian_2/plugin.py:243-246",
         "tests/test_activity_boss_reward_claim.py",
-        "nonebot_plugin_xiuxian_2/features/activity/tests/test_activity_application.py"
+        "nonebot_plugin_xiuxian_2/features/activity/tests/test_activity_application.py",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:44",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:375"
       ],
       "source_declaration_found": true,
       "source": {

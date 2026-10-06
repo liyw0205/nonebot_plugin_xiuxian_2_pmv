@@ -7,6 +7,7 @@ from pathlib import Path
 from threading import RLock
 from typing import Any, Mapping
 
+from ...infrastructure.database import DatabaseUnitOfWork
 from ..xiuxian_utils import db_backend
 
 
@@ -131,6 +132,22 @@ class ActivityConfigEventService:
                 conn.rollback()
                 raise
 
+    def read_state(self) -> ActivityConfigState | None:
+        """Read the current projection without creating or locking the legacy DB."""
+        if not self._database.is_file():
+            return None
+        with DatabaseUnitOfWork(self._database, read_only=True) as uow:
+            table = uow.query_one(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='activity_config_state'"
+            )
+            if table is None:
+                return None
+            row = uow.query_one(
+                "SELECT revision,config_json FROM activity_config_state WHERE state_key=?",
+                (self._STATE_KEY,),
+            )
+        return self._state((row["revision"], row["config_json"])) if row else None
+
     def replay(
         self, operation_id, request_identity
     ) -> ActivityConfigMutationResult | None:
@@ -168,8 +185,8 @@ class ActivityConfigEventService:
         operation_id = str(operation_id).strip()
         expected_revision = int(expected_revision)
         result_text = str(result_text)
-        if not operation_id or expected_revision <= 0:
-            raise ValueError("operation and positive expected revision are required")
+        if not operation_id or expected_revision < 0:
+            raise ValueError("operation and nonnegative expected revision are required")
         request_payload = self._request_payload(request_identity)
         normalized, config_payload = self._canonical_config(config)
 
@@ -192,31 +209,44 @@ class ActivityConfigEventService:
                     (self._STATE_KEY,),
                 ).fetchone()
                 if current is None:
-                    conn.commit()
-                    return ActivityConfigMutationResult("state_missing")
-                current_revision = int(current[0])
-                if current_revision != expected_revision:
-                    conn.commit()
-                    return ActivityConfigMutationResult(
-                        "state_changed",
-                        current_revision,
-                        self._decode_config(current[1]),
-                    )
-
-                unchanged = str(current[1]) == config_payload
-                next_revision = current_revision if unchanged else current_revision + 1
-                outcome = "unchanged" if unchanged else "applied"
-                if not unchanged:
+                    if expected_revision != 0:
+                        conn.commit()
+                        return ActivityConfigMutationResult("state_missing")
+                    next_revision = 1
+                    outcome = "applied"
                     conn.execute(
-                        "UPDATE activity_config_state SET revision=%s,config_json=%s,"
-                        "updated_at=CURRENT_TIMESTAMP WHERE state_key=%s AND revision=%s",
+                        "INSERT INTO activity_config_state(state_key,revision,config_json) "
+                        "VALUES(%s,%s,%s)",
                         (
+                            self._STATE_KEY,
                             next_revision,
                             config_payload,
-                            self._STATE_KEY,
-                            current_revision,
                         ),
                     )
+                else:
+                    current_revision = int(current[0])
+                    if current_revision != expected_revision:
+                        conn.commit()
+                        return ActivityConfigMutationResult(
+                            "state_changed",
+                            current_revision,
+                            self._decode_config(current[1]),
+                        )
+
+                    unchanged = str(current[1]) == config_payload
+                    next_revision = current_revision if unchanged else current_revision + 1
+                    outcome = "unchanged" if unchanged else "applied"
+                    if not unchanged:
+                        conn.execute(
+                            "UPDATE activity_config_state SET revision=%s,config_json=%s,"
+                            "updated_at=CURRENT_TIMESTAMP WHERE state_key=%s AND revision=%s",
+                            (
+                                next_revision,
+                                config_payload,
+                                self._STATE_KEY,
+                                current_revision,
+                            ),
+                        )
                 conn.execute(
                     "INSERT INTO activity_config_operations("
                     "operation_id,payload,outcome,revision,result_json,result_text) "

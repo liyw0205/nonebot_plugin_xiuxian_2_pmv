@@ -167,27 +167,35 @@ def _milestone_by_days(config: dict, sign_days: int) -> dict:
     return {}
 
 
-def get_user_sign(user_id: str) -> dict:
-    ensure_activity_files()
-    conn = db_backend.connect(DB_PATH)
+def get_user_sign(user_id: str, cur=None) -> dict:
+    if cur is not None:
+        cur.execute("SELECT * FROM activity_user WHERE user_id=%s", (str(user_id),))
+        row = cur.fetchone()
+        return _user_sign_data(user_id, row)
+    conn = db_backend.connect_readonly(DB_PATH)
     conn.row_factory = db_backend.Row
     try:
+        ensure_activity_files(conn)
         cur = conn.cursor()
         cur.execute("SELECT * FROM activity_user WHERE user_id=%s", (str(user_id),))
         row = cur.fetchone()
-        if row:
-            data = dict(row)
-            data["sign_days"] = _as_int(data.get("sign_days"))
-            data["total_sign_days"] = _as_int(data.get("total_sign_days"), data["sign_days"])
-            return data
-        return {
-            "user_id": str(user_id),
-            "sign_days": 0,
-            "last_sign_date": "",
-            "total_sign_days": 0,
-        }
+        return _user_sign_data(user_id, row)
     finally:
         conn.close()
+
+
+def _user_sign_data(user_id: str, row) -> dict:
+    if row:
+        data = dict(row)
+        data["sign_days"] = _as_int(data.get("sign_days"))
+        data["total_sign_days"] = _as_int(data.get("total_sign_days"), data["sign_days"])
+        return data
+    return {
+        "user_id": str(user_id),
+        "sign_days": 0,
+        "last_sign_date": "",
+        "total_sign_days": 0,
+    }
 
 
 def parse_reward(reward: str) -> list[dict]:
@@ -498,10 +506,10 @@ def record_activity_event(
 
 
 def get_collect_inventory(user_id: str, activity_key: str) -> dict[str, int]:
-    ensure_activity_files()
-    conn = db_backend.connect(DB_PATH)
+    conn = db_backend.connect_readonly(DB_PATH)
     conn.row_factory = db_backend.Row
     try:
+        ensure_activity_files(conn)
         return _get_collect_inventory_map(conn.cursor(), activity_key, str(user_id))
     finally:
         conn.close()
@@ -516,10 +524,10 @@ def build_collect_bag_text(user_id: str) -> str:
         lines.append("暂无集字活动")
         return "\n".join(lines)
 
-    ensure_activity_files()
-    conn = db_backend.connect(DB_PATH)
+    conn = db_backend.connect_readonly(DB_PATH)
     conn.row_factory = db_backend.Row
     try:
+        ensure_activity_files(conn)
         cur = conn.cursor()
         for activity in collect_activities:
             ok, reason = activity_state(activity)
@@ -676,6 +684,22 @@ def _get_point_shop_total_purchase(cur, activity_key: str, item_key: str) -> int
     return max(0, _as_int(row["count"] if row else 0))
 
 
+def _get_point_shop_total_purchase_map(cur, activity_key: str) -> dict[str, int]:
+    cur.execute(
+        """
+        SELECT item_key, COALESCE(SUM(count), 0) AS count
+        FROM activity_point_purchase
+        WHERE activity_key=%s
+        GROUP BY item_key
+        """,
+        (str(activity_key),),
+    )
+    return {
+        str(row["item_key"]): max(0, _as_int(row["count"]))
+        for row in cur.fetchall()
+    }
+
+
 def build_activity_points_text(user_id: str) -> str:
     uid = str(user_id)
     activities = [
@@ -688,10 +712,10 @@ def build_activity_points_text(user_id: str) -> str:
         lines.append("暂无积分活动")
         return "\n".join(lines)
 
-    ensure_activity_files()
-    conn = db_backend.connect(DB_PATH)
+    conn = db_backend.connect_readonly(DB_PATH)
     conn.row_factory = db_backend.Row
     try:
+        ensure_activity_files(conn)
         cur = conn.cursor()
         for activity in activities:
             ok, reason = activity_state(activity)
@@ -726,22 +750,27 @@ def build_activity_shop_text(user_id: str) -> str:
         lines.append("暂无积分商店")
         return "\n".join(lines)
 
-    ensure_activity_files()
-    conn = db_backend.connect(DB_PATH)
+    conn = db_backend.connect_readonly(DB_PATH)
     conn.row_factory = db_backend.Row
     try:
+        ensure_activity_files(conn)
         cur = conn.cursor()
         for activity in activities:
             ok, reason = activity_state(activity)
             point_name = activity.get("point_name") or "活动积分"
             balance = _get_point_balance(cur, activity["key"], uid)
             purchases = _get_point_purchase_map(cur, activity["key"], uid)
+            shop = activity.get("shop") or []
+            stock_purchases = (
+                _get_point_shop_total_purchase_map(cur, activity["key"])
+                if any(_as_int(item.get("stock_limit"), 0) > 0 for item in shop)
+                else {}
+            )
             lines.extend([
                 "",
                 f"【{activity['name']}】{'进行中' if ok else reason}",
                 f"当前{point_name}：{balance['points']}",
             ])
-            shop = activity.get("shop") or []
             if not shop:
                 lines.append("暂无商店商品")
                 continue
@@ -753,7 +782,7 @@ def build_activity_shop_text(user_id: str) -> str:
                 stock_limit = _as_int(item.get("stock_limit"), 0)
                 stock_text = ""
                 if stock_limit > 0:
-                    sold = _get_point_shop_total_purchase(cur, activity["key"], item_key)
+                    sold = stock_purchases.get(item_key, 0)
                     stock_text = f"，全服库存 {sold}/{stock_limit}"
                 lines.append(
                     f"- {item.get('name') or item_key}：{_as_int(item.get('cost'))}{point_name}，"
@@ -773,10 +802,10 @@ def build_activity_task_progress_text(user_id: str) -> str:
         lines.append("暂无活动任务")
         return "\n".join(lines)
 
-    ensure_activity_files()
-    conn = db_backend.connect(DB_PATH)
+    conn = db_backend.connect_readonly(DB_PATH)
     conn.row_factory = db_backend.Row
     try:
+        ensure_activity_files(conn)
         cur = conn.cursor()
         progress_map = _get_task_progress_map(cur, activity_key, str(user_id))
         for scope_type in ("daily", "weekly"):
@@ -807,10 +836,19 @@ def build_activity_task_progress_text(user_id: str) -> str:
         conn.close()
 
 
-def _select_claimable_tasks(cur, config: dict, user_id: str, query: str = "") -> list[tuple[dict, str, str, int]]:
+def _select_claimable_tasks(
+    cur,
+    config: dict,
+    user_id: str,
+    query: str = "",
+    *,
+    progress_map: dict | None = None,
+) -> list[tuple[dict, str, str, int]]:
     activity_key = _activity_config_key(config)
     target_text = _clean_text(query)
     tasks = get_activity_tasks(config)
+    if progress_map is None:
+        progress_map = _get_task_progress_map(cur, activity_key, str(user_id))
     selected: list[tuple[dict, str, str, int]] = []
     for task in tasks:
         scope_type = task["scope_type"]
@@ -822,18 +860,10 @@ def _select_claimable_tasks(cur, config: dict, user_id: str, query: str = "") ->
             _scope_label(scope_type),
         } and target_text not in task["name"]:
             continue
-        cur.execute(
-            """
-            SELECT progress, target, claimed
-            FROM activity_task_progress
-            WHERE activity_key=%s AND user_id=%s AND scope_type=%s AND scope_key=%s AND task_key=%s
-            """,
-            (activity_key, user_id, scope_type, scope_key, task["key"]),
-        )
-        row = cur.fetchone()
-        progress = max(0, _as_int(row["progress"] if row else 0))
-        target = max(1, _as_int(row["target"] if row else task.get("target"), task.get("target", 1)))
-        claimed = bool(_as_int(row["claimed"] if row else 0))
+        state = progress_map.get((scope_type, scope_key, task["key"]), {})
+        progress = max(0, _as_int(state.get("progress"), 0))
+        target = max(1, _as_int(state.get("target"), task.get("target", 1)))
+        claimed = bool(_as_int(state.get("claimed"), 0))
         if claimed or progress < target:
             continue
         selected.append((task, scope_type, scope_key, target))
@@ -858,10 +888,10 @@ def claim_activity_tasks(user_id: str, query: str = "", operation_id: str | None
     if "claim" not in set(runtime.get("features") or []):
         return False, f"当前阶段【{runtime.get('stage_name', '活动阶段')}】不开放活动领奖"
     activity_key = _activity_config_key(cfg)
-    ensure_activity_files()
-    conn = db_backend.connect(DB_PATH)
+    conn = db_backend.connect_readonly(DB_PATH)
     conn.row_factory = db_backend.Row
     try:
+        ensure_activity_files(conn)
         cur = conn.cursor()
         claimable = _select_claimable_tasks(cur, cfg, uid, query)
         if not claimable:
@@ -903,10 +933,10 @@ def build_activity_pass_text(user_id: str) -> str:
         lines.append("活动战令未开启")
         return "\n".join(lines)
     activity_key = _activity_config_key(cfg)
-    ensure_activity_files()
-    conn = db_backend.connect(DB_PATH)
+    conn = db_backend.connect_readonly(DB_PATH)
     conn.row_factory = db_backend.Row
     try:
+        ensure_activity_files(conn)
         cur = conn.cursor()
         balance = _get_pass_balance(cur, activity_key, str(user_id), pass_cfg)
         cur.execute(
@@ -922,7 +952,9 @@ def build_activity_pass_text(user_id: str) -> str:
             f"等级：{balance['level']}/{balance['max_level']}",
             f"{exp_name}：{balance['exp']}/{balance['level_exp']}（累计 {balance['total_exp']}）",
         ])
-        catchup = _pass_catchup_state(cur, cfg, activity_key, str(user_id), pass_cfg)
+        catchup = _pass_catchup_state(
+            cur, cfg, activity_key, str(user_id), pass_cfg, balance=balance
+        )
         if catchup.get("enabled"):
             if catchup.get("active"):
                 lines.append(
@@ -998,11 +1030,11 @@ def claim_activity_pass_rewards(user_id: str, query: str = "", operation_id: str
     activity_key = _activity_config_key(cfg)
     target_text = _clean_text(query)
     target_level = _as_int(target_text, 0) if target_text.isdigit() else 0
-    ensure_activity_files()
-    conn = db_backend.connect(DB_PATH)
+    conn = db_backend.connect_readonly(DB_PATH)
     conn.row_factory = db_backend.Row
     reward_jobs: list[tuple[dict, list[dict]]] = []
     try:
+        ensure_activity_files(conn)
         cur = conn.cursor()
         balance = _get_pass_balance(cur, activity_key, uid, pass_cfg)
         cur.execute(
@@ -1402,10 +1434,10 @@ def get_activity_data_overview(
     uid = _clean_text(user_id)
     row_limit = max(1, min(_as_int(limit, 10), 50))
 
-    ensure_activity_files()
-    conn = db_backend.connect(DB_PATH)
+    conn = db_backend.connect_readonly(DB_PATH)
     conn.row_factory = db_backend.Row
     try:
+        ensure_activity_files(conn)
         cur = conn.cursor()
         sign_summary = {
             "user_count": _fetch_count(cur, "SELECT COUNT(*) AS count FROM activity_user"),
@@ -1978,20 +2010,32 @@ def _append_stage_summary(lines: list[str], cfg: dict, *, detail: bool = False) 
         lines.append("当前阶段主要用于领奖、兑换和结算，不再产出活动积分、字牌或战令经验。")
 
 
-def _append_pass_summary(lines: list[str], cfg: dict, user_id: str | None = None, *, detail: bool = False) -> None:
+def _append_pass_summary(
+    lines: list[str],
+    cfg: dict,
+    user_id: str | None = None,
+    *,
+    detail: bool = False,
+    cur=None,
+    balance: dict | None = None,
+) -> None:
     pass_cfg = _activity_pass_config(cfg)
     if not pass_cfg.get("enabled"):
         return
     lines.append("")
     lines.append(f"【{pass_cfg['name']}】")
     if user_id:
-        ensure_activity_files()
-        conn = db_backend.connect(DB_PATH)
-        conn.row_factory = db_backend.Row
-        try:
-            balance = _get_pass_balance(conn.cursor(), _activity_config_key(cfg), str(user_id), pass_cfg)
-        finally:
-            conn.close()
+        if balance is None:
+            if cur is not None:
+                balance = _get_pass_balance(cur, _activity_config_key(cfg), str(user_id), pass_cfg)
+            else:
+                conn = db_backend.connect_readonly(DB_PATH)
+                conn.row_factory = db_backend.Row
+                try:
+                    ensure_activity_files(conn)
+                    balance = _get_pass_balance(conn.cursor(), _activity_config_key(cfg), str(user_id), pass_cfg)
+                finally:
+                    conn.close()
         lines.append(
             f"等级 {balance['level']}/{balance['max_level']}，"
             f"{pass_cfg['exp_name']} {balance['exp']}/{balance['level_exp']}"
@@ -2009,7 +2053,15 @@ def _append_pass_summary(lines: list[str], cfg: dict, user_id: str | None = None
     lines.append("命令：活动战令 / 活动战令领取")
 
 
-def _append_task_summary(lines: list[str], cfg: dict, user_id: str | None = None, *, detail: bool = False) -> None:
+def _append_task_summary(
+    lines: list[str],
+    cfg: dict,
+    user_id: str | None = None,
+    *,
+    detail: bool = False,
+    cur=None,
+    progress_map: dict | None = None,
+) -> None:
     tasks = get_activity_tasks(cfg)
     if not tasks:
         return
@@ -2023,13 +2075,17 @@ def _append_task_summary(lines: list[str], cfg: dict, user_id: str | None = None
         return
 
     activity_key = _activity_config_key(cfg)
-    ensure_activity_files()
-    conn = db_backend.connect(DB_PATH)
-    conn.row_factory = db_backend.Row
-    try:
-        progress_map = _get_task_progress_map(conn.cursor(), activity_key, str(user_id))
-    finally:
-        conn.close()
+    if progress_map is None:
+        if cur is not None:
+            progress_map = _get_task_progress_map(cur, activity_key, str(user_id))
+        else:
+            conn = db_backend.connect_readonly(DB_PATH)
+            conn.row_factory = db_backend.Row
+            try:
+                ensure_activity_files(conn)
+                progress_map = _get_task_progress_map(conn.cursor(), activity_key, str(user_id))
+            finally:
+                conn.close()
     for scope_type in ("daily", "weekly"):
         scope_tasks = [task for task in tasks if task.get("scope_type") == scope_type]
         if not scope_tasks:
@@ -2070,24 +2126,38 @@ def _append_task_summary(lines: list[str], cfg: dict, user_id: str | None = None
     lines.append("领奖：活动任务领取")
 
 
-def _append_action_summary(lines: list[str], cfg: dict, user_id: str | None = None) -> None:
+def _append_action_summary(
+    lines: list[str],
+    cfg: dict,
+    user_id: str | None = None,
+    *,
+    cur=None,
+    progress_map: dict | None = None,
+    pass_balance: dict | None = None,
+) -> None:
     if not user_id:
         return
     uid = str(user_id)
     activity_key = _activity_config_key(cfg)
     tips: list[str] = []
-    ensure_activity_files()
-    conn = db_backend.connect(DB_PATH)
-    conn.row_factory = db_backend.Row
+    owned_conn = None
+    if cur is None:
+        owned_conn = db_backend.connect_readonly(DB_PATH)
+        owned_conn.row_factory = db_backend.Row
+        cur = owned_conn.cursor()
     try:
-        cur = conn.cursor()
-        claimable_tasks = len(_select_claimable_tasks(cur, cfg, uid))
+        if owned_conn is not None:
+            ensure_activity_files(owned_conn)
+        claimable_tasks = len(
+            _select_claimable_tasks(cur, cfg, uid, progress_map=progress_map)
+        )
         if claimable_tasks:
             tips.append(f"{claimable_tasks}个任务奖励可领")
 
         pass_cfg = _activity_pass_config(cfg)
         if pass_cfg.get("enabled"):
-            balance = _get_pass_balance(cur, activity_key, uid, pass_cfg)
+            if pass_balance is None:
+                pass_balance = _get_pass_balance(cur, activity_key, uid, pass_cfg)
             cur.execute(
                 """
                 SELECT level FROM activity_pass_reward_claim
@@ -2099,12 +2169,14 @@ def _append_action_summary(lines: list[str], cfg: dict, user_id: str | None = No
             pass_claimable = [
                 reward for reward in pass_cfg.get("level_rewards") or []
                 if _as_int(reward.get("level"), 0) > 0
-                and _as_int(reward.get("level"), 0) <= balance["level"]
+                and _as_int(reward.get("level"), 0) <= pass_balance["level"]
                 and _as_int(reward.get("level"), 0) not in claimed
             ]
             if pass_claimable:
                 tips.append(f"{len(pass_claimable)}档战令奖励可领")
-            catchup = _pass_catchup_state(cur, cfg, activity_key, uid, pass_cfg)
+            catchup = _pass_catchup_state(
+                cur, cfg, activity_key, uid, pass_cfg, balance=pass_balance
+            )
             if catchup.get("active"):
                 tips.append(f"战令追赶{catchup['catchup_multiplier']:.2f}x生效")
 
@@ -2124,7 +2196,8 @@ def _append_action_summary(lines: list[str], cfg: dict, user_id: str | None = No
                 tips.append(f"{activity['name']}接近保底：{near_events[0]}")
                 break
     finally:
-        conn.close()
+        if owned_conn is not None:
+            owned_conn.close()
 
     if not tips:
         return
@@ -2197,6 +2270,18 @@ def build_activity_gameplay_text() -> str:
 
 def build_activity_info(user_id: str | None = None) -> str:
     cfg = load_config()
+    if not user_id:
+        return _render_activity_info(cfg, None, None)
+    conn = db_backend.connect_readonly(DB_PATH)
+    conn.row_factory = db_backend.Row
+    try:
+        ensure_activity_files(conn)
+        return _render_activity_info(cfg, str(user_id), conn.cursor())
+    finally:
+        conn.close()
+
+
+def _render_activity_info(cfg: dict, user_id: str | None, cur) -> str:
     ok, reason = activity_state(cfg)
     lines = [
         f"【{cfg.get('name', '节日签到活动')}】",
@@ -2205,13 +2290,24 @@ def build_activity_info(user_id: str | None = None) -> str:
         f"活动时间：{cfg.get('start_time', '0')} 至 {cfg.get('end_time', '无限')}",
         f"签到命令：{cfg.get('sign_command', '活动签到')}",
     ]
+    task_progress_map = None
+    pass_balance = None
     if user_id:
-        user = get_user_sign(str(user_id))
+        user = get_user_sign(str(user_id), cur)
         lines.extend([
             "",
             f"我的累计签到：{int(user.get('sign_days', 0) or 0)} 天",
             f"上次签到：{user.get('last_sign_date') or '暂无'}",
         ])
+        if get_activity_tasks(cfg):
+            task_progress_map = _get_task_progress_map(
+                cur, _activity_config_key(cfg), str(user_id)
+            )
+        pass_cfg = _activity_pass_config(cfg)
+        if pass_cfg.get("enabled"):
+            pass_balance = _get_pass_balance(
+                cur, _activity_config_key(cfg), str(user_id), pass_cfg
+            )
 
     if _activity_info_mode(cfg) == "full":
         _append_stage_summary(lines, cfg, detail=True)
@@ -2252,9 +2348,17 @@ def build_activity_info(user_id: str | None = None) -> str:
                     lines.append(_format_activity_task(task))
 
         _append_gameplay_summary(lines, cfg, detail=True)
-        _append_task_summary(lines, cfg, user_id, detail=True)
-        _append_pass_summary(lines, cfg, user_id, detail=True)
-        _append_action_summary(lines, cfg, user_id)
+        _append_task_summary(
+            lines, cfg, user_id, detail=True, cur=cur,
+            progress_map=task_progress_map,
+        )
+        _append_pass_summary(
+            lines, cfg, user_id, detail=True, cur=cur, balance=pass_balance,
+        )
+        _append_action_summary(
+            lines, cfg, user_id, cur=cur, progress_map=task_progress_map,
+            pass_balance=pass_balance,
+        )
     else:
         lines.extend([
             "",
@@ -2265,20 +2369,28 @@ def build_activity_info(user_id: str | None = None) -> str:
             "玩法说明：活动玩法",
             "个人进度：活动排行 / 活动背包 / 活动积分",
         ])
-        _append_action_summary(lines, cfg, user_id)
+        _append_action_summary(
+            lines, cfg, user_id, cur=cur, progress_map=task_progress_map,
+            pass_balance=pass_balance,
+        )
         _append_stage_summary(lines, cfg, detail=False)
-        _append_task_summary(lines, cfg, user_id, detail=False)
-        _append_pass_summary(lines, cfg, user_id, detail=False)
+        _append_task_summary(
+            lines, cfg, user_id, detail=False, cur=cur,
+            progress_map=task_progress_map,
+        )
+        _append_pass_summary(
+            lines, cfg, user_id, detail=False, cur=cur, balance=pass_balance,
+        )
         _append_gameplay_summary(lines, cfg, detail=False)
 
     return "\n".join(lines).strip()
 
 
 def get_rank(limit: int = 10) -> list[dict]:
-    ensure_activity_files()
-    conn = db_backend.connect(DB_PATH)
+    conn = db_backend.connect_readonly(DB_PATH)
     conn.row_factory = db_backend.Row
     try:
+        ensure_activity_files(conn)
         cur = conn.cursor()
         cur.execute(
             """

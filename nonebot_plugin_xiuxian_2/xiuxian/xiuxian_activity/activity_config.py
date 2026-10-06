@@ -177,12 +177,30 @@ def _load_legacy_config() -> dict:
     return config
 
 
+def _load_config_projection_readonly() -> dict:
+    if not CONFIG_PATH.is_file():
+        return _load_default_config()
+    try:
+        with CONFIG_PATH.open("r", encoding="utf-8") as stream:
+            config = json.load(stream)
+        if not isinstance(config, dict):
+            return _load_default_config()
+    except (FileNotFoundError, json.JSONDecodeError, UnicodeDecodeError):
+        return _load_default_config()
+    return _migrate_config(config)[0]
+
+
 def load_config_state() -> ActivityConfigState:
     return _activity_config_event_service().load_or_import(_load_legacy_config())
 
 
+def read_config_state() -> ActivityConfigState:
+    state = _activity_config_event_service().read_state()
+    return state or ActivityConfigState(0, _load_config_projection_readonly())
+
+
 def load_config() -> dict:
-    return load_config_state().config
+    return read_config_state().config
 
 
 def replay_config_event(

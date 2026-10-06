@@ -13,10 +13,7 @@ from ...infrastructure.ids import UUIDGenerator
 from .service import (
     build_activity_gameplay_text,
     build_activity_info,
-    build_activity_pass_text,
-    build_activity_task_progress_text,
     build_activity_rewards_text,
-    build_activity_tasks_text,
     build_collect_bag_text,
     build_activity_points_text,
     build_activity_shop_text,
@@ -160,9 +157,11 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     await assign_bot(bot=bot, event=event)
     is_user, user_info, msg = await _ensure_user(event)
     if is_user:
-        text = build_activity_task_progress_text(str(user_info["user_id"]))
+        text = activity_application.read_model.task_progress_text(
+            str(user_info["user_id"])
+        )
     else:
-        text = build_activity_tasks_text()
+        text = activity_application.read_model.task_catalog_text()
     await handle_send(
         bot,
         event,
@@ -198,7 +197,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await handle_send(bot, event, msg, md_type="我要修仙")
         return
 
-    text = build_activity_pass_text(str(user_info["user_id"]))
+    text = activity_application.read_model.pass_text(str(user_info["user_id"]))
     await handle_send(bot, event, text)
 
 
