@@ -51,6 +51,28 @@ def _handler_line(source: str, handler: str) -> int:
 
 
 class Phase2LegacyPathGateTests(unittest.TestCase):
+    def test_admin_qqid_has_source_bound_recoverable_batch_owner(self):
+        report = load_phase2_scope_report(include_items=True)
+        item = next(item for item in report["items"] if item["id"] == "command:admin:转换QQID")
+        source = "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py"
+        line = _handler_line(source, "migrate_qqid_cmd_")
+        self.assertEqual(item["status"], "已迁移")
+        self.assertNotIn("unknown_edge", item)
+        edges = [edge for edge in item["call_graph"]
+                 if edge.startswith(f"{source}:{line} migrate_qqid_cmd_ ->")]
+        self.assertEqual(len(edges), 1)
+        for owner in ("AdminQqidApplication.run", "AdminQqidBatchRepository",
+                      "AdminApplication.update_user_id", "AdminIdUpdateSqlRepository"):
+            self.assertIn(owner, edges[0])
+        self.assertIn(f"{source}:{line}", item["evidence"])
+        self.assertIn("tests/test_admin_qqid_conversion.py", item["evidence"])
+        self.assertIn("legacy.admin.008", " ".join(item["call_graph"]))
+        self.assertIn("not globally atomic", item["reason"])
+        self.assertFalse(any(entry["status"] == "受阻" for entry in report["items"]
+                             if (entry.get("source") or {}).get("feature") == "admin"))
+        self.assertTrue(report["frozen_membership_valid"])
+        self.assertEqual(report["integrity_errors"], [])
+
     def test_admin_runtime_controls_have_source_bound_feature_owner_edges(self):
         report = load_phase2_scope_report(include_items=True)
         items = {item["id"]: item for item in report["items"]}
@@ -242,7 +264,7 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
         self.assertEqual(report["path_count"], 496)
         self.assertEqual(
             report["status_counts"],
-            {"不可达": 19, "允许保留的兼容路径": 107, "受阻": 151, "已迁移": 219},
+            {"不可达": 19, "允许保留的兼容路径": 107, "受阻": 150, "已迁移": 220},
         )
         self.assertGreater(report["blocked_count"], 0)
         self.assertTrue(all(item["call_graph"] and item["evidence"] for item in report["items"]))

@@ -63,6 +63,7 @@ from .admin.migrations import (
     apply_admin_id_swap_operations,
     apply_admin_id_swap_receipts,
     apply_admin_player_status_batch_reset,
+    apply_admin_qqid_batch,
 )
 from .compensation.migrations import (
     apply_compensation,
@@ -141,6 +142,7 @@ MIGRATIONS = tuple(
          ("legacy.admin.005", apply_admin_id_update_step_receipts),
          ("legacy.admin.006", apply_admin_id_update_operations),
          ("legacy.admin.007", apply_admin_blackhouse),
+         ("legacy.admin.008", apply_admin_qqid_batch),
          ("legacy.dufang.002", apply_dufang_share),
          ("legacy.dufang.003", apply_dufang_share_player),
          ("legacy.dufang.004", apply_dufang_bet_payout),

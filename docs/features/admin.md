@@ -2,7 +2,11 @@
 
 ## 固定队列与已审边界（2026-10-07）
 
-当前按子插件顺序停在 admin。50 个冻结入口中，开始盘点前已关闭 6 个；剩余 44 个已一次性完成 owner 盘点。配置 6 条、已有资产/重置 13 条、兼容输出 9 条和黑屋 3 条均已验收；黑屋 `dc46515f`、命令管控 `0cbfcabe` 已推送并核对远端。广播 6 条已通过扩大回归与冻结门禁；本组生成秘境、重载items、用户伪装也已通过扩大回归与冻结门禁。全局冻结计数为 `219/107/19/151`，admin 仅剩转换QQID；不跳子插件、不重新从全局 blocker 中挑命令。
+当前按子插件顺序完成 admin 最后一组验收。50 个冻结入口中，开始盘点前已关闭 6 个；剩余 44 个的共同 owner 已一次盘清，现全部完成归类，admin blocker 为 0。配置 6 条、已有资产/重置 13 条、兼容输出 9 条、黑屋 3 条、命令管控 3 条和广播 6 条均已验收；黑屋 `dc46515f`、命令管控 `0cbfcabe` 已推送并核对远端，生成秘境、重载items、用户伪装三项也已在 `80a4e59c` 提交推送并核对远端。本组转换QQID已通过聚焦、扩大回归与冻结门禁，全局冻结计数为 `220/107/19/150`。本组提交推送后按 `allowed_features` 固定顺序进入 arena，再到 back，不跳其它插件、不重审已验收项。
+
+`转换QQID` 由 `AdminQqidApplication` 编排：`AdminQqidCandidateRepository` 只读四库候选，`AdminQqidBatchRepository` 持久保存单活跃批次、冻结解析映射、请求 alias、固定 child operation ID 和逐项进度；恢复不重扫候选或重解析已冻结项，完成批次的旧请求不会误执行另一个活跃批次。实际四库和玩家目录变更仅复用既有 `AdminApplication.update_user_id`，不复制底层写者；重复目标及候选间链环保守拒绝，child 已完成而批次进度失败时用同一 child 回执补记。独立 QQID 批次锁协调线程和进程，不重入单 ID writer 的同一个 flock；`legacy.admin.008` 仅在 game DB 启动建表，请求不建库或补 schema。其它 ID operation 尚未恢复时仍阻止本批；仅明确无写入的 `reconcile_pending` 拒绝可保存新 attempt 后重试，不宣称自动修复所有单条操作。
+
+QQID 本阶段由三名子代理并行实现仓储、应用/兼容层、真实贯通测试，主线程集成并串行验收。首轮聚焦 `91 passed, 55 subtests passed`（pytest 21.92 秒，含隔离初始化进程 28.13 秒）；最终扩大首轮即通过 `694 passed, 55 subtests passed`（pytest 60.58 秒，含隔离初始化进程 66.26 秒，1 个 anyio 预加载 warning），隔离路径 `/tmp/xiuxian-unittest-1jfgl8_n/xiuxian`。四项 QQID 门禁全 true，`admin_blocked=[]`，冻结 membership 有效、`integrity_errors=[]`，静态检查 1.75 秒；Phase2 `--check` 仅因其它 150 项返回 1。分派至首轮检测约 24 分钟，是并行实现与集成的粗粒度墙钟记录，不能据此准确拆出排查/修改占比；聚焦及扩大检测进程分别 28.13 秒和 66.26 秒，可确认主要耗时不在 pytest 执行。应用记录的 scan/resolve/update 只是本次对应阶段耗时，不包含批次锁等待及部分编排开销，不是端到端总耗时，也不混同开发耗时。保留限制：不保证全批或四库整体原子，候选和条目仍全量读取，外部解析仍串行；未做线上提速测量，不能将可恢复性改进等同于已证明提速。
 
 本组由三名子代理分别独占 items 目录 owner、伪装状态 owner 和秘境贯通回归，主线程负责共享入口、门禁、冻结证据及串行验收。首轮聚焦 pytest 21.00 秒，含隔离初始化的进程总计 28.67 秒；8 个失败均来自旧 avatar 静态门禁字符串与新调用路径不符，不是业务行为失败。首轮扩大集 `655 passed, 1 failed, 49 subtests passed`（pytest 51.42 秒，进程 56.81 秒），唯一失败是 `game_events` 预加载后，旧 `test_partial_game_event_projection_replay_reuses_all_effect_ids` 仅 patch `sys.modules`，未 patch 持有函数的实际查询位置；仅修测试 mock lookup，没有重构业务。最终扩大集 `656 passed, 49 subtests passed`（pytest 52.87 秒，含隔离初始化进程 58.29 秒，1 个 anyio 预加载 warning），隔离路径 `/tmp/xiuxian-unittest-hc2axc3q/xiuxian`。四项 admin runtime gate 与 avatar gate 全 true，496 项冻结 membership 有效、`integrity_errors=[]`，静态检查合计 1.21 秒；全局其余 151 项仍受阻。没有完整排查、实现和收尾分段计时，也未进行线上性能实测。
 
@@ -33,7 +37,7 @@
 | 5 | 命令管控 3 条 | 已验收共享 JSON owner 与路由消费者适配，注册表/别名同源，取消命令写后重建；聚焦、扩大回归和四项门禁通过。 |
 | 6 | 广播 6 条 | 已验收进程任务 owner、原子 claim、取消/清空与普通消息补发；只读历史及发送经注入端口，扩大回归和六项门禁通过。 |
 | 7 | 生成秘境、重载items、用户伪装，各 1 条 | 已验收，扩大回归、四项 runtime 门禁与冻结证据通过。复用秘境 SQL owner 并保护投影回放；Items 目录严格完整发布；伪装共享进程映射接入真实身份消费者。 |
-| 8 | 转换QQID 1 条 | 旧四库逐 ID 同步 API 编排待迁；复用已迁移的可恢复 ID 更新，不重复写底层仓储。 |
+| 8 | 转换QQID 1 条 | 已验收，聚焦、扩大回归、四项 QQID 门禁与冻结证据通过。持久批次、请求 alias、冻结映射及 child ID 闭合恢复，复用既有四库 ID writer；admin 50 项全部归类、blocker 为 0，后续固定 arena、back。 |
 
 配置使用原字段 `group/private/root_selection/sect_name/welcome_disabled_groups`，保留未知字段和原 JSON 路径；读缺失文件返回默认值，兼容 `JsonConfig` 构造仍创建默认文件。写入同目录暂存后原子替换，失败不发布缓存；相同开关值不重写。锁只覆盖同一进程内的线程，不提供多进程协调或 operation-ID 回执。全局欢迎关闭时不再谎报本群已开启。notice 的生命周期进程状态不在这六个命令的完成范围内。
 

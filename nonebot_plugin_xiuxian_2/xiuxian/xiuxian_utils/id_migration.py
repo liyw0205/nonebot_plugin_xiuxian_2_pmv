@@ -5,6 +5,12 @@ from ...paths import get_paths
 from . import db_backend
 
 DATABASE = get_paths().data
+_qqid_application = None
+
+
+def configure_qqid_application(application) -> None:
+    global _qqid_application
+    _qqid_application = application
 
 
 _ID_DB_PATHS = {
@@ -132,62 +138,20 @@ def _id_exists(value: str) -> tuple[bool, list[str]]:
     return exists, details
 
 
-def migrate_user_id_to_openid():
-    """将数据库中的 QQ user_id 迁移为真实 ID。"""
+def migrate_user_id_to_openid(*, application=None, operation_id=None, operator_id="compatibility"):
+    """兼容旧入口；批次及单ID写入由已配置的 feature 应用管理。"""
+    from ...features.admin.qqid_application import AdminQqidApplication
+    from ...infrastructure.ids import UUIDGenerator
+
+    owner = application if application is not None else _qqid_application
+    if owner is None:
+        return False, "QQID转换服务尚未就绪，请检查启动配置。"
     try:
-        type_logs = _ensure_id_target_columns_text()
-        all_candidate_ids = _collect_all_candidate_ids()
-        if not all_candidate_ids:
-            return False, "未找到任何可迁移ID"
-
-        from .utils import get_real_id
-        id_map = {}
-        fail_ids = []
-
-        for old_id in all_candidate_ids:
-            try:
-                real_id = get_real_id(old_id)
-                if real_id and str(real_id).strip():
-                    id_map[str(old_id)] = str(real_id).strip()
-                else:
-                    fail_ids.append(old_id)
-            except Exception:
-                fail_ids.append(old_id)
-
-        if not id_map:
-            return False, "真实ID转换全部失败，未执行替换"
-
-        total_updated, data_logs = _update_ids(id_map)
-
-        players_dir = DATABASE / "players"
-        rename_count = 0
-        rename_failures = []
-        if players_dir.exists():
-            for old_id, new_id in id_map.items():
-                old_p = players_dir / str(old_id)
-                new_p = players_dir / str(new_id)
-                if old_p.exists() and (not new_p.exists()):
-                    try:
-                        old_p.rename(new_p)
-                        rename_count += 1
-                    except Exception as exc:
-                        rename_failures.append(f"{old_id}->{new_id}: {exc}")
-                        logger.warning(f"玩家目录 ID 迁移失败 {old_p} -> {new_p}: {exc}")
-
-        msg = (
-            f"QQID转换完成！\n"
-            f"候选ID总数：{len(all_candidate_ids)}\n"
-            f"成功映射：{len(id_map)}\n"
-            f"转换失败：{len(fail_ids)}\n"
-            f"更新总单元格：{total_updated}\n"
-            f"players目录改名：{rename_count}\n"
-            f"players目录改名失败：{len(rename_failures)}\n"
-            f"\n[字段类型阶段]\n" + "\n".join(type_logs) +
-            f"\n\n[数据替换阶段]\n" + "\n".join(data_logs)
-        )
-        return True, msg
-    except Exception as e:
-        return False, f"迁移异常中止：{e}"
+        result = owner.run(operation_id or f"admin-qqid-conversion:{UUIDGenerator().new_id()}", operator_id)
+        return AdminQqidApplication.format_result(result)
+    except Exception as exc:
+        logger.warning("QQID compatibility conversion failed: {}", type(exc).__name__)
+        return False, "QQID转换未确认，请检查服务日志；已开始的批次会在下次请求恢复。"
 
 
 def migrate_single_user_id(old_id: str, new_id: str):

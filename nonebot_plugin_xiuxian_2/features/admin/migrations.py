@@ -66,6 +66,41 @@ def apply_admin_id_update_operations(uow: DatabaseUnitOfWork) -> None:
     )
 
 
+def apply_admin_qqid_batch(uow: DatabaseUnitOfWork) -> None:
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS admin_qqid_batches("
+        "batch_id TEXT PRIMARY KEY,operator_id TEXT NOT NULL,status TEXT NOT NULL DEFAULT 'active',"
+        "total INTEGER NOT NULL CHECK(total>=0),"
+        "created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,"
+        "CHECK(status IN ('active','completed')))"
+    )
+    uow.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS admin_qqid_single_active "
+        "ON admin_qqid_batches(status) WHERE status='active'"
+    )
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS admin_qqid_batch_requests("
+        "request_id TEXT PRIMARY KEY,batch_id TEXT NOT NULL REFERENCES admin_qqid_batches(batch_id))"
+    )
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS admin_qqid_batch_entries("
+        "batch_id TEXT NOT NULL REFERENCES admin_qqid_batches(batch_id),source_id TEXT NOT NULL,"
+        "ordinal INTEGER NOT NULL,target_id TEXT,child_operation_id TEXT NOT NULL UNIQUE,"
+        "attempt INTEGER NOT NULL DEFAULT 0,status TEXT NOT NULL DEFAULT 'pending',result_json TEXT NOT NULL DEFAULT '{}',"
+        "PRIMARY KEY(batch_id,source_id),UNIQUE(batch_id,ordinal),"
+        "CHECK(status IN ('pending','resolved','applied','unchanged','resolve_failed','conflict','failed')))"
+    )
+    uow.execute(
+        "CREATE INDEX IF NOT EXISTS admin_qqid_batch_target "
+        "ON admin_qqid_batch_entries(batch_id,target_id)"
+    )
+    _require_columns(uow, "admin_qqid_batches", {"batch_id", "operator_id", "status", "total", "created_at", "updated_at"})
+    _require_columns(uow, "admin_qqid_batch_requests", {"request_id", "batch_id"})
+    _require_columns(uow, "admin_qqid_batch_entries", {
+        "batch_id", "source_id", "ordinal", "target_id", "child_operation_id", "attempt", "status", "result_json",
+    })
+
+
 def _table_exists(uow: DatabaseUnitOfWork, name: str) -> bool:
     return uow.query_one(
         "SELECT 1 AS present FROM sqlite_master WHERE type='table' AND name=?",
@@ -464,4 +499,4 @@ def apply_admin_blackhouse(uow: DatabaseUnitOfWork) -> None:
         _blackhouse_sync_projection(uow)
 
 
-__all__ = ["apply_admin", "apply_admin_player_status_batch_reset", "apply_admin_blackhouse"]
+__all__ = ["apply_admin", "apply_admin_player_status_batch_reset", "apply_admin_blackhouse", "apply_admin_qqid_batch"]

@@ -17,6 +17,9 @@ from ...features.admin.config_application import AdminConfigApplication
 from ...features.admin.impersonation_application import AdminImpersonationApplication
 from ...features.admin.id_swap_repository import AdminIdSwapSqlRepository
 from ...features.admin.id_update_repository import AdminIdUpdateSqlRepository
+from ...features.admin.qqid_application import AdminQqidApplication
+from ...features.admin.qqid_candidate_repository import AdminQqidCandidateRepository
+from ...features.admin.qqid_batch_repository import AdminQqidBatchRepository
 from ...features.base.application import BaseApplication
 from ...features.work.admin_refresh_reset_application import WorkAdminRefreshResetApplication
 from nonebot.typing import T_State
@@ -55,8 +58,9 @@ from ..xiuxian_rift import create_rift
 from ..xiuxian_utils.xiuxian2_handle import (
     XiuxianDateManage,
     invalidate_all_user_id_cache_if_initialized,
-    migrate_user_id_to_openid,
 )
+from ..xiuxian_utils.id_migration import configure_qqid_application
+from ..xiuxian_utils.external_api import get_real_id
 from ..xiuxian_config import XiuConfig, JsonConfig, convert_rank
 from ..xiuxian_utils.utils import (
     check_user, get_user_profile_by_name, number_to, get_msg_pic, handle_send, send_msg_handler,
@@ -116,6 +120,19 @@ admin_application = AdminApplication(
         invalidate_player_data_cache=invalidate_player_data_cache,
     ),
 )
+admin_qqid_application = AdminQqidApplication(
+    AdminQqidCandidateRepository({
+        "game_db": get_paths().game_db,
+        "impart_db": get_paths().impart_db,
+        "trade_db": get_paths().trade_db,
+        "player_db": get_paths().player_db,
+    }),
+    AdminQqidBatchRepository(get_paths().game_db),
+    admin_application,
+    resolve_id=get_real_id,
+    logger=logger,
+)
+configure_qqid_application(admin_qqid_application)
 admin_base_application = BaseApplication(get_paths().game_db, get_paths().player_db)
 _admin_item_destroy_service_instance = None
 _admin_player_status_reset_service_instance = None
@@ -2605,13 +2622,21 @@ async def impersonate_user_command_(bot: Bot, event: GroupMessageEvent | Private
 async def migrate_qqid_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """将数据库中的QQ user_id迁移为真实ID"""
     bot, _ = await assign_bot(bot=bot, event=event)
-    if XiuConfig().gsk_link:
-        await handle_send(bot, event, "开始执行QQID迁移，正在更新 SQLite 数据库，请稍候...")
-    else:
+    if not str(XiuConfig().gsk_link or "").strip():
         await handle_send(bot, event, "当前gsk地址为空，请先修改配置gsk_link")
         await migrate_qqid_cmd.finish()
-
-    ok, msg = await asyncio.to_thread(migrate_user_id_to_openid)
+        return
+    await handle_send(bot, event, "开始QQID转换，将优先恢复未完成批次，请稍候...")
+    try:
+        result = await asyncio.to_thread(
+            admin_qqid_application.run,
+            _admin_operation_id(event, "qqid-conversion", "all"),
+            str(event.get_user_id()),
+        )
+        _, msg = AdminQqidApplication.format_result(result)
+    except Exception as exc:
+        logger.warning("QQID conversion command failed: {}", type(exc).__name__)
+        msg = "QQID转换未确认，请检查服务日志；再次发送转换QQID可恢复已开始的批次。"
     await handle_send(bot, event, msg)
     await migrate_qqid_cmd.finish()
 

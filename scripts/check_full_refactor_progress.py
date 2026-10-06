@@ -326,6 +326,63 @@ def _admin_broadcast_owner_status(sources: dict[str, str]) -> dict[str, object]:
     return {key: value if key == "status" else bool(value) for key, value in report.items()}
 
 
+def _admin_qqid_owner_status(sources: dict[str, str]) -> dict[str, object]:
+    """Check ownership edges; recovery behavior is exercised with real databases."""
+    trees = {name: ast.parse(source) for name, source in sources.items()}
+
+    def calls(source, function=None):
+        tree = trees[source]
+        if function is not None:
+            tree = next((node for node in ast.walk(tree)
+                         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+                         and node.name == function), ast.Module(body=[], type_ignores=[]))
+        return [node for node in ast.walk(tree) if isinstance(node, ast.Call)]
+
+    def methods(source):
+        return {node.func.attr for node in calls(source) if isinstance(node.func, ast.Attribute)}
+
+    registrations = [node for node in calls("handlers")
+                     if ast.unparse(node.func) == "on_command" and node.args
+                     and isinstance(node.args[0], ast.Constant) and node.args[0].value == "转换QQID"]
+    candidate_uows = [node for node in calls("candidate")
+                      if ast.unparse(node.func) == "DatabaseUnitOfWork"]
+    compatibility_calls = calls("compatibility", "migrate_user_id_to_openid")
+    return {
+        "superuser_handler_and_compatibility_use_feature_application": bool(
+            len(registrations) == 1
+            and any(item.arg == "permission" and ast.unparse(item.value) == "SUPERUSER"
+                    for item in registrations[0].keywords)
+            and any(ast.unparse(node.func) == "asyncio.to_thread" and node.args
+                    and ast.unparse(node.args[0]) == "admin_qqid_application.run"
+                    for node in calls("handlers", "migrate_qqid_cmd_"))
+            and any(isinstance(node.func, ast.Attribute) and node.func.attr == "run"
+                    for node in compatibility_calls)
+            and not any(ast.unparse(node.func) == "_update_ids" for node in compatibility_calls)
+        ),
+        "batch_plans_and_checkpoints_delegate_to_existing_id_writer": (
+            {"exclusive_run", "get_active", "create", "bind_request", "freeze_resolution", "record_result", "update_user_id"}
+            <= methods("application")
+            and not {"connect", "rename", "execute", "executemany"}.intersection(methods("application"))
+            and "admin_qqid_batches" in sources["batch"]
+            and "admin_qqid_batch_entries" in sources["batch"]
+            and "admin_qqid_batch_requests" in sources["batch"]
+        ),
+        "candidate_scan_is_readonly_and_request_paths_do_not_create_schema": bool(
+            candidate_uows and all(any(item.arg == "read_only" and isinstance(item.value, ast.Constant)
+                                      and item.value.value is True for item in node.keywords)
+                                   for node in candidate_uows)
+            and not any(token in sources[name].upper() for name in ("candidate", "batch", "application")
+                        for token in ("CREATE TABLE", "ALTER TABLE"))
+        ),
+        "batch_schema_is_registered_at_startup": (
+            '("legacy.admin.008", apply_admin_qqid_batch)' in sources["registry"]
+            and "def apply_admin_qqid_batch(" in sources["migrations"]
+            and all(table in sources["migrations"] for table in ("admin_qqid_batches", "admin_qqid_batch_entries"))
+        ),
+        "status": "qqid_batch_plan_is_durable_and_reuses_recoverable_single_id_writer",
+    }
+
+
 def _avatar_identity_priority(source: str) -> bool:
     avatar = source.find("_player_avatar().get_active_user_id(original_user_id)")
     impersonation = source.find("get_impersonating_target(original_user_id)")
@@ -5172,6 +5229,17 @@ def _slice_status() -> dict[str, dict[str, object]]:
         },
         "admin_broadcast_owner": _admin_broadcast_owner_status(admin_broadcast_sources),
         "admin_runtime_owner": _admin_runtime_owner_status(admin_runtime_sources),
+        "admin_qqid_owner": _admin_qqid_owner_status({
+            name: (PACKAGE / path).read_text(encoding="utf-8") for name, path in {
+                "handlers": "xiuxian/xiuxian_admin/__init__.py",
+                "compatibility": "xiuxian/xiuxian_utils/id_migration.py",
+                "application": "features/admin/qqid_application.py",
+                "candidate": "features/admin/qqid_candidate_repository.py",
+                "batch": "features/admin/qqid_batch_repository.py",
+                "migrations": "features/admin/migrations.py",
+                "registry": "features/_legacy_migrated.py",
+            }.items()
+        }),
         "admin": {
             "stone_default_application_owned": (
                 "AdminStoneSqlRepository" in admin_asset_application

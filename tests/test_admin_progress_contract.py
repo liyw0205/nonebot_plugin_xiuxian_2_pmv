@@ -2,11 +2,16 @@ import unittest
 
 from scripts.check_full_refactor_progress import (
     PACKAGE, ROOT, _admin_broadcast_owner_status, _admin_runtime_owner_status,
-    _avatar_identity_priority, _slice_status,
+    _admin_qqid_owner_status, _avatar_identity_priority, _slice_status,
 )
 
 
 class AdminProgressContractTests(unittest.TestCase):
+    def test_admin_qqid_uses_durable_batch_and_existing_id_writer(self):
+        for key, value in _slice_status()["admin_qqid_owner"].items():
+            if key != "status":
+                self.assertTrue(value, key)
+
     def test_admin_rift_items_and_impersonation_use_their_feature_owners(self):
         for key, value in _slice_status()["admin_runtime_owner"].items():
             if key != "status":
@@ -74,6 +79,45 @@ class AdminProgressContractTests(unittest.TestCase):
             "item_batch_migration_game_only",
         ):
             self.assertTrue(admin[key], key)
+
+
+class AdminQqidGateMutationTests(unittest.TestCase):
+    def test_owner_gate_rejects_bypasses_and_request_schema_creation(self):
+        files = {
+            "handlers": "xiuxian/xiuxian_admin/__init__.py",
+            "compatibility": "xiuxian/xiuxian_utils/id_migration.py",
+            "application": "features/admin/qqid_application.py",
+            "candidate": "features/admin/qqid_candidate_repository.py",
+            "batch": "features/admin/qqid_batch_repository.py",
+            "migrations": "features/admin/migrations.py",
+            "registry": "features/_legacy_migrated.py",
+        }
+        sources = {name: (PACKAGE / path).read_text(encoding="utf-8") for name, path in files.items()}
+        cases = (
+            ("handlers", "admin_qqid_application.run", "legacy_convert",
+             "superuser_handler_and_compatibility_use_feature_application"),
+            ("application", ".update_user_id(", ".legacy_update_user_id(",
+             "batch_plans_and_checkpoints_delegate_to_existing_id_writer"),
+            ("application", ".freeze_resolution(", ".skip_resolution(",
+             "batch_plans_and_checkpoints_delegate_to_existing_id_writer"),
+            ("application", ".bind_request(", ".skip_request_binding(",
+             "batch_plans_and_checkpoints_delegate_to_existing_id_writer"),
+            ("candidate", "read_only=True", "read_only=False",
+             "candidate_scan_is_readonly_and_request_paths_do_not_create_schema"),
+            ("registry", '("legacy.admin.008", apply_admin_qqid_batch)', '("legacy.admin.008", apply_admin)',
+             "batch_schema_is_registered_at_startup"),
+        )
+        for source, before, after, key in cases:
+            with self.subTest(source=source, mutation=after):
+                self.assertIn(before, sources[source])
+                changed = dict(sources)
+                changed[source] = changed[source].replace(before, after)
+                self.assertFalse(_admin_qqid_owner_status(changed)[key])
+        changed = dict(sources)
+        changed["batch"] += '\nREQUEST_DDL = "CREATE TABLE forbidden(x)"\n'
+        self.assertFalse(_admin_qqid_owner_status(changed)[
+            "candidate_scan_is_readonly_and_request_paths_do_not_create_schema"
+        ])
 
 
 class AdminBroadcastGateMutationTests(unittest.TestCase):
