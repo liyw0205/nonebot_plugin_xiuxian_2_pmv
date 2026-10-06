@@ -1254,6 +1254,51 @@ class UpdateManager:
         self._reload_restored_database_handles(database_names)
         self._compact_pet_storage_after_database_restore()
 
+    def database_backup_database_names(self):
+        return self._sqlite_db_names()
+
+    def database_backup_database_path(self, name):
+        return get_paths().data / name
+
+    def database_backup_snapshot_sqlite(self, source, destination):
+        return self._snapshot_sqlite_db(Path(source), Path(destination))
+
+    def database_backup_validate_sqlite(self, path):
+        return self._validate_sqlite_file(Path(path))
+
+    def database_backup_restore_sqlite(self, source, target, name):
+        self._restore_sqlite_file(Path(source), Path(target), name)
+
+    def database_backup_after_restore(self, names):
+        self._reload_restored_database_handles(names)
+        self._compact_pet_storage_after_database_restore()
+
+    def database_backup_keep_days(self):
+        return self._local_backup_keep_days()
+
+    def database_backup_cloud_enabled(self):
+        return bool(getattr(XiuConfig(), "cloud_backup_enabled", False))
+
+    def database_backup_webdav_paths(self):
+        return self._get_webdav_paths()
+
+    def database_backup_webdav_join_url(self, base_url, relative_path):
+        return self._webdav_join_url(base_url, relative_path)
+
+    def database_backup_webdav_make_directories(self, base_url, relative_path, auth):
+        return self._webdav_mkcol_recursive(base_url, "", relative_path, auth)
+
+    def database_backup_cleanup_cloud(self):
+        return self.cleanup_webdav_old_backups()
+
+    def database_backup_format_time(self, value):
+        return self._gmt_to_cst_str(value)
+
+    def _database_backup_application(self):
+        from ...features.database_backups import build_database_backup_application
+
+        return build_database_backup_application(self)
+
     # =========================
     # 数据库备份/恢复 + 云端
     # =========================
@@ -1633,60 +1678,8 @@ class UpdateManager:
             logger.warning(f"[DB恢复] 加载数据库管理器失败: {e}")
 
     def backup_db_files(self):
-        """备份本地 SQLite 数据库到 data/xiuxian/backups/db_backup/"""
-        try:
-            backup_dir = get_paths().backups / "db_backup"
-            backup_dir.mkdir(parents=True, exist_ok=True)
-
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            zip_name = f"db_backup_{timestamp}.zip"
-            zip_path = backup_dir / zip_name
-
-            added = []
-            temp_dir = Path(tempfile.mkdtemp())
-            try:
-                with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
-                    for db_name in self._sqlite_db_names():
-                        db_path = get_paths().data / db_name
-                        if not db_path.exists():
-                            continue
-                        snapshot_path = temp_dir / db_name
-                        ok, msg = self._snapshot_sqlite_db(db_path, snapshot_path)
-                        if not ok:
-                            raise RuntimeError(msg)
-                        zf.write(snapshot_path, db_name)
-                        added.append(db_name)
-            finally:
-                shutil.rmtree(temp_dir, ignore_errors=True)
-
-            if not added:
-                zip_path.unlink(missing_ok=True)
-                return False, "未找到可备份的 SQLite 数据库文件"
-
-            try:
-                cfg = XiuConfig()
-                if getattr(cfg, "cloud_backup_enabled", False):
-                    ok, msg = self.upload_backup_to_webdav(zip_path)
-                    if ok:
-                        logger.info(f"[DB云备份] {msg}")
-                        c_ok, c_msg = self.cleanup_webdav_old_backups()
-                        if c_ok:
-                            logger.info(c_msg)
-                        else:
-                            logger.warning(c_msg)
-                    else:
-                        logger.warning(f"[DB云备份] 失败: {msg}")
-            except Exception as e:
-                logger.warning(f"[DB云备份] 执行异常: {e}")
-
-            self.clean_old_backups(
-                backup_dir,
-                patterns=("db_backup_*.zip",),
-                keep_days=self._local_backup_keep_days(),
-            )
-            return True, f"数据库备份完成: {zip_name}，已备份: {', '.join(added)}"
-        except Exception as e:
-            return False, f"数据库备份失败: {e}"
+        """Compatibility entrypoint; database backup ownership belongs to the feature."""
+        return self._database_backup_application().create_backup()
 
     @staticmethod
     def _local_backup_keep_days(default: int = 10) -> int:
@@ -1766,20 +1759,8 @@ class UpdateManager:
             return False, f"清理旧备份失败: {e}"
 
     def get_db_backups(self):
-        """获取本地数据库备份列表"""
-        backup_dir = get_paths().backups / "db_backup"
-        backups = []
-        if backup_dir.exists():
-            for f in backup_dir.glob("db_backup_*.zip"):
-                backups.append({
-                    "filename": f.name,
-                    "size": f.stat().st_size,
-                    "created_at": datetime.fromtimestamp(f.stat().st_ctime).isoformat(),
-                    "path": str(f),
-                    "type": "sqlite",
-                })
-        backups.sort(key=lambda x: x["created_at"], reverse=True)
-        return backups
+        """Compatibility entrypoint; list metadata through the database backup feature."""
+        return self._database_backup_application().list_local_backups()
 
     def _normalize_selected_db_names(self, selected_dbs: list):
         aliases = {
@@ -1809,179 +1790,26 @@ class UpdateManager:
         return get_paths().data / safe_name
 
     def restore_db_files(self, backup_filename: str, selected_dbs: list):
-        """从本地 db_backup zip 恢复指定数据库"""
-        temp_dir = None
-        try:
-            backup_filename = _safe_leaf_name(backup_filename)
-            selected_dbs = self._normalize_selected_db_names(selected_dbs)
-            if not selected_dbs:
-                return False, "至少选择一个数据库进行恢复"
-
-            backup_path = _path_under(get_paths().backups / "db_backup", backup_filename)
-            if not backup_path.exists():
-                return False, f"备份文件不存在: {backup_filename}"
-            if not backup_path.is_file():
-                return False, f"无效备份文件: {backup_filename}"
-
-            temp_dir = Path(tempfile.mkdtemp())
-            staged = {}
-            with zipfile.ZipFile(backup_path, 'r') as zf:
-                names = set(zf.namelist())
-                skipped = []
-                failed = []
-                for db_name in selected_dbs:
-                    member_name = None
-                    for candidate in (db_name, f"data/xiuxian/{db_name}"):
-                        if candidate in names:
-                            member_name = candidate
-                            break
-
-                    if member_name:
-                        staged_path = temp_dir / db_name
-                        with zf.open(member_name) as src, open(staged_path, "wb") as dst:
-                            shutil.copyfileobj(src, dst)
-                        for suffix in ("-wal", "-shm"):
-                            for sidecar_member in (f"{member_name}{suffix}", f"{db_name}{suffix}"):
-                                if sidecar_member in names:
-                                    sidecar_path = temp_dir / f"{db_name}{suffix}"
-                                    with zf.open(sidecar_member) as src, open(sidecar_path, "wb") as dst:
-                                        shutil.copyfileobj(src, dst)
-                                    break
-                        clean_path = temp_dir / f"{db_name}.clean"
-                        ok, check_msg = self._snapshot_sqlite_db(staged_path, clean_path)
-                        if ok:
-                            staged[db_name] = clean_path
-                        else:
-                            failed.append(f"{db_name}: {check_msg}")
-                    else:
-                        skipped.append(db_name)
-
-            if failed:
-                return False, f"数据库恢复失败，备份库校验未通过: {'; '.join(failed)}"
-
-            restored = []
-            for db_name, staged_path in staged.items():
-                dst = self._db_path_for_name(db_name)
-                self._restore_sqlite_file(staged_path, dst, db_name)
-                restored.append(db_name)
-
-            if restored:
-                self._reload_restored_database_handles(restored)
-                self._compact_pet_storage_after_database_restore()
-
-            msg = f"恢复完成，已恢复: {restored}"
-            if skipped:
-                msg += f"，备份中不存在: {skipped}"
-            return True, msg
-        except Exception as e:
-            return False, f"数据库恢复失败: {e}"
-        finally:
-            if temp_dir is not None:
-                shutil.rmtree(temp_dir, ignore_errors=True)
+        """Compatibility entrypoint; restore ownership belongs to the database feature."""
+        return self._database_backup_application().restore_local_backup(
+            backup_filename, selected_dbs
+        )
 
     def list_webdav_db_backups(self):
-        """列出云端 db_backup/*.zip"""
-        try:
-            ok, msg, paths = self._get_webdav_paths()
-            if not ok:
-                return False, "未配置 WebDAV 信息"
-
-            base_url = paths["base_url"]
-            auth = paths["auth"]
-            root_url = paths["db_url"]
-
-            headers = {"Depth": "1"}
-            r = requests.request("PROPFIND", root_url, auth=auth, timeout=20, headers=headers)
-            if r.status_code not in (207, 200):
-                return False, f"读取云端目录失败 HTTP {r.status_code}"
-
-            import xml.etree.ElementTree as ET
-            ns = {"d": "DAV:"}
-            root = ET.fromstring(r.text)
-
-            files = []
-            for resp in root.findall("d:response", ns):
-                href_el = resp.find("d:href", ns)
-                if href_el is None or not href_el.text:
-                    continue
-                name = href_el.text.rstrip('/').split('/')[-1]
-                if not name or not name.endswith(".zip"):
-                    continue
-                if not name.startswith("db_backup_"):
-                    continue
-
-                rt = resp.find(".//d:resourcetype", ns)
-                is_collection = (rt is not None and rt.find("d:collection", ns) is not None)
-                if is_collection:
-                    continue
-
-                size_el = resp.find(".//d:getcontentlength", ns)
-                time_el = resp.find(".//d:getlastmodified", ns)
-                raw_modified = time_el.text if time_el is not None else ""
-
-                files.append({
-                    "filename": name,
-                    "size": int(size_el.text) if size_el is not None and str(size_el.text).isdigit() else 0,
-                    "modified": self._gmt_to_cst_str(raw_modified)
-                })
-
-            files.sort(key=lambda x: x["modified"], reverse=True)
-            return True, files
-        except Exception as e:
-            return False, f"读取云端数据库备份失败: {e}"
+        """Compatibility entrypoint; WebDAV listing belongs to the database feature."""
+        return self._database_backup_application().list_cloud_backups()
 
     def download_db_backup_from_webdav(self, filename, overwrite=False):
-        """从云端 db_backup 下载到本地"""
-        try:
-            filename = _safe_leaf_name(filename)
-            ok, msg, paths = self._get_webdav_paths()
-            if not ok:
-                return False, "未配置 WebDAV 信息"
-
-            local_dir = get_paths().backups / "db_backup"
-            local_dir.mkdir(parents=True, exist_ok=True)
-            local_path = _path_under(local_dir, filename)
-
-            if local_path.exists() and not overwrite:
-                return False, "FILE_EXISTS"
-
-            auth = paths["auth"]
-            remote_url = self._webdav_join_url(paths["base_url"], f"{paths['db_rel']}/{filename}")
-
-            r = requests.get(remote_url, auth=auth, timeout=120, stream=True)
-            if r.status_code != 200:
-                return False, f"下载失败 HTTP {r.status_code}"
-
-            tmp_path = local_path.with_name(f"{local_path.name}.tmp")
-            try:
-                with open(tmp_path, "wb") as f:
-                    for chunk in r.iter_content(16384):
-                        if chunk:
-                            f.write(chunk)
-                if not zipfile.is_zipfile(tmp_path):
-                    return False, "下载完成但文件不是有效 zip"
-                os.replace(tmp_path, local_path)
-            finally:
-                if tmp_path.exists():
-                    tmp_path.unlink(missing_ok=True)
-
-            return True, local_path
-        except Exception as e:
-            return False, f"下载数据库备份失败: {e}"
+        """Compatibility entrypoint; cloud downloads belong to the database feature."""
+        return self._database_backup_application().sync_cloud_backup(
+            filename, overwrite=overwrite
+        )
 
     def cloud_restore_db_files(self, filename: str, selected_dbs: list):
-        """云端数据库恢复：本地无则先下，再恢复"""
-        try:
-            filename = _safe_leaf_name(filename)
-            local_path = _path_under(get_paths().backups / "db_backup", filename)
-            ok, msg = self.download_db_backup_from_webdav(filename, overwrite=True)
-            if not ok:
-                if not local_path.exists():
-                    return False, msg
-                logger.warning(f"[DB云恢复] 重新下载失败，尝试使用本地已有备份 {filename}: {msg}")
-            return self.restore_db_files(filename, selected_dbs)
-        except Exception as e:
-            return False, f"云端数据库恢复失败: {e}"
+        """Compatibility entrypoint; cloud restore belongs to the database feature."""
+        return self._database_backup_application().restore_cloud_backup(
+            filename, selected_dbs
+        )
 
     # =========================
     # 云端删除
@@ -1993,19 +1821,5 @@ class UpdateManager:
         return build_plugin_backup_cloud_application(self).delete_cloud_backup(filename)
 
     def delete_webdav_db_backup(self, filename: str):
-        """删除云端数据库备份"""
-        try:
-            filename = _safe_leaf_name(filename)
-            ok, msg, paths = self._get_webdav_paths()
-            if not ok:
-                return False, "未配置 WebDAV 信息"
-
-            auth = paths["auth"]
-            remote_url = self._webdav_join_url(paths["base_url"], f"{paths['db_rel']}/{filename}")
-
-            r = requests.delete(remote_url, auth=auth, timeout=20)
-            if r.status_code in (200, 202, 204):
-                return True, f"已删除云端数据库备份: {filename}"
-            return False, f"删除失败 HTTP {r.status_code}"
-        except Exception as e:
-            return False, f"删除云端数据库备份失败: {e}"
+        """Compatibility entrypoint; cloud deletion belongs to the database feature."""
+        return self._database_backup_application().delete_cloud_backup(filename)

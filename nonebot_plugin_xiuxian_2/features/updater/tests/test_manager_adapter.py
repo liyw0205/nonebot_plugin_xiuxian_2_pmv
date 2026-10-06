@@ -178,6 +178,48 @@ class UpdateManagerAdapterTests(unittest.TestCase):
         )
         self.manager._gmt_to_cst_str.assert_called_once_with("raw")
 
+    def test_database_backup_compatibility_methods_delegate_to_feature_owner(self) -> None:
+        application = Mock()
+        application.create_backup.return_value = (True, "created")
+        application.list_local_backups.return_value = [{"filename": "db.zip"}]
+        application.restore_local_backup.return_value = (True, "restored")
+        application.list_cloud_backups.return_value = (True, [])
+        application.sync_cloud_backup.return_value = (True, Path("db.zip"))
+        application.restore_cloud_backup.return_value = (True, "cloud restored")
+        application.delete_cloud_backup.return_value = (True, "deleted")
+
+        with patch(
+            "nonebot_plugin_xiuxian_2.features.database_backups.build_database_backup_application",
+            return_value=application,
+        ):
+            self.assertEqual(self.manager.backup_db_files(), (True, "created"))
+            self.assertEqual(self.manager.get_db_backups(), [{"filename": "db.zip"}])
+            self.assertEqual(
+                self.manager.restore_db_files("db.zip", ["player"]),
+                (True, "restored"),
+            )
+            self.assertEqual(self.manager.list_webdav_db_backups(), (True, []))
+            self.assertEqual(
+                self.manager.download_db_backup_from_webdav("db.zip", overwrite=True),
+                (True, Path("db.zip")),
+            )
+            self.assertEqual(
+                self.manager.cloud_restore_db_files("db.zip", ["player"]),
+                (True, "cloud restored"),
+            )
+            self.assertEqual(
+                self.manager.delete_webdav_db_backup("db.zip"),
+                (True, "deleted"),
+            )
+
+        application.create_backup.assert_called_once_with()
+        application.list_local_backups.assert_called_once_with()
+        application.restore_local_backup.assert_called_once_with("db.zip", ["player"])
+        application.list_cloud_backups.assert_called_once_with()
+        application.sync_cloud_backup.assert_called_once_with("db.zip", overwrite=True)
+        application.restore_cloud_backup.assert_called_once_with("db.zip", ["player"])
+        application.delete_cloud_backup.assert_called_once_with("db.zip")
+
 
 if __name__ == "__main__":
     unittest.main()

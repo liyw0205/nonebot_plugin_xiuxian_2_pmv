@@ -2,6 +2,7 @@ from .core import (
     Path,
     app,
     datetime,
+    database_backup_application,
     get_paths,
     json,
     jsonify,
@@ -275,7 +276,7 @@ def backups():
 def manual_db_backup():
     if 'admin_id' not in session:
         return jsonify({"success": False, "error": "未登录"})
-    ok, msg = update_manager.backup_db_files()
+    ok, msg = database_backup_application.create_backup()
     return jsonify({"success": ok, "message": msg if ok else "", "error": "" if ok else msg})
 
 
@@ -284,7 +285,7 @@ def get_db_backups():
     if 'admin_id' not in session:
         return jsonify({"success": False, "error": "未登录"})
     try:
-        backups = update_manager.get_db_backups()
+        backups = database_backup_application.list_local_backups()
         return jsonify({"success": True, "backups": backups})
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
@@ -301,7 +302,7 @@ def restore_db_backup():
         return jsonify({"success": False, "error": "未指定备份文件"})
     if not selected_dbs:
         return jsonify({"success": False, "error": "至少选择一个数据库"})
-    ok, msg = update_manager.restore_db_files(backup_filename, selected_dbs)
+    ok, msg = database_backup_application.restore_local_backup(backup_filename, selected_dbs)
     return jsonify({"success": ok, "message": msg if ok else "", "error": "" if ok else msg})
 
 
@@ -309,7 +310,7 @@ def restore_db_backup():
 def get_cloud_db_backups():
     if 'admin_id' not in session:
         return jsonify({"success": False, "error": "未登录"})
-    ok, result = update_manager.list_webdav_db_backups()
+    ok, result = database_backup_application.list_cloud_backups()
     if ok:
         return jsonify({"success": True, "backups": result})
     return jsonify({"success": False, "error": result})
@@ -325,7 +326,7 @@ def sync_cloud_db_backup():
     if not filename:
         return jsonify({"success": False, "error": "文件名不能为空"})
 
-    ok, result = update_manager.download_db_backup_from_webdav(filename, overwrite=overwrite)
+    ok, result = database_backup_application.sync_cloud_backup(filename, overwrite=overwrite)
     if ok:
         return jsonify({"success": True, "message": f"同步成功: {filename}"})
     if result == "FILE_EXISTS":
@@ -345,7 +346,7 @@ def cloud_restore_db_backup():
     if not selected_dbs:
         return jsonify({"success": False, "error": "至少选择一个数据库"})
 
-    ok, msg = update_manager.cloud_restore_db_files(filename, selected_dbs)
+    ok, msg = database_backup_application.restore_cloud_backup(filename, selected_dbs)
     return jsonify({"success": ok, "message": msg if ok else "", "error": "" if ok else msg})
 
 @app.route('/batch_delete_backups', methods=['POST'])
@@ -412,22 +413,7 @@ def batch_delete_db_backups():
         if not filenames or not isinstance(filenames, list):
             return jsonify({"success": False, "error": "请提供待删除文件列表"})
 
-        deleted, failed = [], []
-
-        for name in filenames:
-            safe_name = safe_request_filename(name)
-            if not safe_name:
-                failed.append({"filename": str(name), "reason": "无效文件名"})
-                continue
-            f = backup_path_under("db_backup", safe_name)
-            try:
-                if f.exists() and f.is_file():
-                    f.unlink()
-                    deleted.append(safe_name)
-                else:
-                    failed.append({"filename": safe_name, "reason": "文件不存在"})
-            except Exception as e:
-                failed.append({"filename": safe_name, "reason": str(e)})
+        deleted, failed = database_backup_application.delete_local_backups(filenames)
 
         return jsonify({
             "success": True,
@@ -452,27 +438,9 @@ def batch_sync_cloud_db_backups():
         if not filenames or not isinstance(filenames, list):
             return jsonify({"success": False, "error": "请提供待同步文件列表"})
 
-        synced, exists, failed = [], [], []
-
-        for filename in filenames:
-            safe_name = safe_request_filename(filename)
-            if not safe_name:
-                failed.append({"filename": str(filename), "reason": "无效文件名"})
-                continue
-            local_path = backup_path_under("db_backup", safe_name)
-
-            if local_path.exists() and not overwrite:
-                exists.append(safe_name)
-                continue
-
-            ok, result = update_manager.download_db_backup_from_webdav(safe_name, overwrite=overwrite)
-            if ok:
-                synced.append(safe_name)
-            else:
-                if str(result) == "FILE_EXISTS":
-                    exists.append(safe_name)
-                else:
-                    failed.append({"filename": safe_name, "reason": str(result)})
+        synced, exists, failed = database_backup_application.sync_cloud_backups(
+            filenames, overwrite=overwrite
+        )
 
         return jsonify({
             "success": True,
@@ -520,17 +488,7 @@ def batch_delete_cloud_db_backups():
         if not filenames or not isinstance(filenames, list):
             return jsonify({"success": False, "error": "请提供待删除文件列表"})
 
-        deleted, failed = [], []
-        for name in filenames:
-            safe_name = safe_request_filename(name)
-            if not safe_name:
-                failed.append({"filename": str(name), "reason": "无效文件名"})
-                continue
-            ok, msg = update_manager.delete_webdav_db_backup(safe_name)
-            if ok:
-                deleted.append(safe_name)
-            else:
-                failed.append({"filename": safe_name, "reason": msg})
+        deleted, failed = database_backup_application.delete_cloud_backups(filenames)
 
         return jsonify({
             "success": True,

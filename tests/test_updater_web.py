@@ -125,6 +125,47 @@ class FakePluginBackupCloudApplication:
         return self.delete_batch_result
 
 
+class FakeDatabaseBackupApplication:
+    def __init__(self) -> None:
+        self.calls: list[tuple[object, ...]] = []
+
+    def create_backup(self):
+        self.calls.append(("create",))
+        return True, "created"
+
+    def list_local_backups(self):
+        self.calls.append(("list_local",))
+        return [{"filename": "db_backup_20261006_010203.zip", "size": 10}]
+
+    def restore_local_backup(self, filename, selected):
+        self.calls.append(("restore_local", filename, selected))
+        return True, "restored"
+
+    def list_cloud_backups(self):
+        self.calls.append(("list_cloud",))
+        return True, [{"filename": "db_backup_20261006_010203.zip", "size": 10}]
+
+    def sync_cloud_backup(self, filename, *, overwrite=False):
+        self.calls.append(("sync", filename, overwrite))
+        return True, "downloaded"
+
+    def restore_cloud_backup(self, filename, selected):
+        self.calls.append(("restore_cloud", filename, selected))
+        return True, "cloud restored"
+
+    def delete_local_backups(self, filenames):
+        self.calls.append(("delete_local", filenames))
+        return ["db_backup_20261006_010203.zip"], []
+
+    def sync_cloud_backups(self, filenames, *, overwrite=False):
+        self.calls.append(("sync_many", filenames, overwrite))
+        return ["db_backup_20261006_010203.zip"], [], []
+
+    def delete_cloud_backups(self, filenames):
+        self.calls.append(("delete_cloud_many", filenames))
+        return ["db_backup_20261006_010203.zip"], []
+
+
 class UpdaterWebRouteTests(unittest.TestCase):
     def setUp(self) -> None:
         app.config.update(TESTING=True, SECRET_KEY="test-secret")
@@ -447,6 +488,76 @@ class UpdaterWebRouteTests(unittest.TestCase):
         self.assertEqual(
             cloud.calls,
             [("local_exists", "cloud-export.zip"), ("sync", "cloud-export.zip", False)],
+        )
+
+    def test_database_backup_routes_share_feature_application_and_http_contract(self) -> None:
+        application = FakeDatabaseBackupApplication()
+        filename = "db_backup_20261006_010203.zip"
+        with patch.object(core, "ADMIN_IDS", {"admin-1"}):
+            anonymous = self.client.post("/manual_db_backup")
+            self._login_session()
+            with patch.object(backups, "database_backup_application", application):
+                missing_csrf = self.client.post("/manual_db_backup")
+                created = self.client.post(
+                    "/manual_db_backup", headers={"X-CSRF-Token": "csrf-token"}
+                )
+                local_list = self.client.get("/get_db_backups")
+                local_restore = self.client.post(
+                    "/restore_db_backup",
+                    json={"backup_filename": filename, "selected_dbs": ["player"]},
+                    headers={"X-CSRF-Token": "csrf-token"},
+                )
+                cloud_list = self.client.get("/get_cloud_db_backups")
+                cloud_sync = self.client.post(
+                    "/sync_cloud_db_backup",
+                    json={"filename": filename, "overwrite": True},
+                    headers={"X-CSRF-Token": "csrf-token"},
+                )
+                cloud_restore = self.client.post(
+                    "/cloud_restore_db_backup",
+                    json={"filename": filename, "selected_dbs": ["xiuxian"]},
+                    headers={"X-CSRF-Token": "csrf-token"},
+                )
+                local_delete = self.client.post(
+                    "/batch_delete_db_backups",
+                    json={"filenames": [filename]},
+                    headers={"X-CSRF-Token": "csrf-token"},
+                )
+                cloud_sync_many = self.client.post(
+                    "/batch_sync_cloud_db_backups",
+                    json={"filenames": [filename], "overwrite": False},
+                    headers={"X-CSRF-Token": "csrf-token"},
+                )
+                cloud_delete_many = self.client.post(
+                    "/batch_delete_cloud_db_backups",
+                    json={"filenames": [filename]},
+                    headers={"X-CSRF-Token": "csrf-token"},
+                )
+
+        self.assertEqual(anonymous.status_code, 401)
+        self.assertEqual(missing_csrf.status_code, 403)
+        self.assertEqual(created.get_json(), {"success": True, "message": "created", "error": ""})
+        self.assertEqual(local_list.get_json()["backups"][0]["filename"], filename)
+        self.assertEqual(local_restore.get_json(), {"success": True, "message": "restored", "error": ""})
+        self.assertEqual(cloud_list.get_json()["backups"][0]["filename"], filename)
+        self.assertEqual(cloud_sync.get_json(), {"success": True, "message": f"同步成功: {filename}"})
+        self.assertEqual(cloud_restore.get_json(), {"success": True, "message": "cloud restored", "error": ""})
+        self.assertEqual(local_delete.get_json()["deleted"], [filename])
+        self.assertEqual(cloud_sync_many.get_json()["synced"], [filename])
+        self.assertEqual(cloud_delete_many.get_json()["deleted"], [filename])
+        self.assertEqual(
+            application.calls,
+            [
+                ("create",),
+                ("list_local",),
+                ("restore_local", filename, ["player.db"]),
+                ("list_cloud",),
+                ("sync", filename, True),
+                ("restore_cloud", filename, ["xiuxian.db"]),
+                ("delete_local", [filename]),
+                ("sync_many", [filename], False),
+                ("delete_cloud_many", [filename]),
+            ],
         )
 
 

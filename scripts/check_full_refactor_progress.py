@@ -425,6 +425,13 @@ def _slice_status() -> dict[str, dict[str, object]]:
     plugin_backup_cloud_tests = (PACKAGE / "features" / "plugin_backups" / "tests" / "test_cloud.py").read_text(encoding="utf-8")
     plugin_backup_manager = (PACKAGE / "xiuxian" / "xiuxian_utils" / "download_xiuxian_data.py").read_text(encoding="utf-8")
     backup_routes = (PACKAGE / "xiuxian" / "xiuxian_web" / "backups.py").read_text(encoding="utf-8")
+    database_backup_application = (PACKAGE / "features" / "database_backups" / "application.py").read_text(encoding="utf-8")
+    database_backup_repository = (PACKAGE / "features" / "database_backups" / "repository.py").read_text(encoding="utf-8")
+    database_backup_tests = "\n".join(
+        (PACKAGE / "features" / "database_backups" / "tests" / test_name).read_text(encoding="utf-8")
+        for test_name in ("test_application.py", "test_repository.py")
+    )
+    database_backup_adapter_tests = (PACKAGE / "features" / "updater" / "tests" / "test_manager_adapter.py").read_text(encoding="utf-8")
     plugin_backup_web_tests = (ROOT / "tests" / "test_updater_web.py").read_text(encoding="utf-8")
     activity_help_handler = activity_commands[
         activity_commands.index("@activity_help_cmd.handle"):
@@ -2095,6 +2102,60 @@ def _slice_status() -> dict[str, dict[str, object]]:
                 and "def test_cloud_plugin_backup_routes_keep_admin_csrf_and_batch_contracts" in plugin_backup_web_tests
             ),
             "status": "plugin_backup_cloud_listing_sync_delete_and_restore_fetch_share_a_bounded_owner",
+        },
+        "database_backup_owner": {
+            "database_routes_use_feature_application": (
+                "database_backup_application.create_backup()" in backup_routes
+                and "database_backup_application.list_local_backups()" in backup_routes
+                and "database_backup_application.restore_local_backup(" in backup_routes
+                and "database_backup_application.list_cloud_backups()" in backup_routes
+                and "database_backup_application.sync_cloud_backup(" in backup_routes
+                and "database_backup_application.restore_cloud_backup(" in backup_routes
+                and "database_backup_application.delete_local_backups(filenames)" in backup_routes
+                and "database_backup_application.sync_cloud_backups(" in backup_routes
+                and "database_backup_application.delete_cloud_backups(filenames)" in backup_routes
+                and "update_manager.backup_db_files()" not in backup_routes
+                and "update_manager.restore_db_files(" not in backup_routes
+                and "update_manager.download_db_backup_from_webdav(" not in backup_routes
+            ),
+            "manager_methods_are_compatibility_forwarders": (
+                "return self._database_backup_application().create_backup()" in plugin_backup_manager
+                and "return self._database_backup_application().list_local_backups()" in plugin_backup_manager
+                and "return self._database_backup_application().restore_local_backup(" in plugin_backup_manager
+                and "return self._database_backup_application().list_cloud_backups()" in plugin_backup_manager
+                and "return self._database_backup_application().sync_cloud_backup(" in plugin_backup_manager
+                and "return self._database_backup_application().restore_cloud_backup(" in plugin_backup_manager
+                and "return self._database_backup_application().delete_cloud_backup(filename)" in plugin_backup_manager
+            ),
+            "repository_bounds_zip_restore_and_cloud_io": (
+                "MAX_DATABASE_BACKUP_BATCH = 100" in database_backup_repository
+                and "MAX_DATABASE_RESTORE_MEMBERS" in database_backup_repository
+                and "MAX_DATABASE_RESTORE_BYTES" in database_backup_repository
+                and "O_NOFOLLOW" in database_backup_repository
+                and "database_backup_validate_sqlite" in database_backup_repository
+                and "staged[database] = source_path" in database_backup_repository
+                and "self._backup_directory: payload_size," in database_backup_repository
+                and "zipfile.is_zipfile(temporary_path)" in database_backup_repository
+                and "os.replace(temporary_path, target_path)" in database_backup_repository
+                and "self._read_response(response, MAX_DATABASE_BACKUP_CLOUD_LIST_BYTES)" in database_backup_repository
+                and "PartialDatabaseRestoreError" in database_backup_repository
+            ),
+            "restore_cloud_fallback_batch_bounds_and_behavior_tested": (
+                "self._repository.download_cloud_backup(\n            filename, overwrite=True" in database_backup_application
+                and "self._repository.local_backup_exists(filename)" in database_backup_application
+                and "test_cloud_restore_keeps_local_fallback_after_download_failure" in database_backup_tests
+                and "test_batch_delete_bounds_work_and_rejects_other_zip_files" in database_backup_tests
+                and "test_failed_restore_reconnects_attempted_databases_once" in database_backup_tests
+                and "test_restore_uses_snapshot_recovery_only_after_read_only_check_fails" in database_backup_tests
+                and "assert runtime.snapshot_calls == 0" in database_backup_tests
+                and "test_database_backup_compatibility_methods_delegate_to_feature_owner" in database_backup_adapter_tests
+            ),
+            "database_routes_keep_admin_csrf_and_legacy_contracts_tested": (
+                "def test_database_backup_routes_share_feature_application_and_http_contract" in updater_web_tests
+                and "missing_csrf.status_code, 403" in updater_web_tests
+                and "anonymous.status_code, 401" in updater_web_tests
+            ),
+            "status": "database_zip_local_restore_and_webdav_operations_have_one_feature_owner",
         },
         "activity_static_help": {
             "help_and_manage_remain_static_compatibility_handlers": (
