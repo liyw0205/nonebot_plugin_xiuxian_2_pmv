@@ -414,6 +414,11 @@ def _slice_status() -> dict[str, dict[str, object]]:
     plugin_backup_application = (PACKAGE / "features" / "plugin_backups" / "application.py").read_text(encoding="utf-8")
     plugin_backup_repository = (PACKAGE / "features" / "plugin_backups" / "repository.py").read_text(encoding="utf-8")
     plugin_backup_tests = (PACKAGE / "features" / "plugin_backups" / "tests" / "test_catalog.py").read_text(encoding="utf-8")
+    plugin_backup_file_application = (PACKAGE / "features" / "plugin_backups" / "file_application.py").read_text(encoding="utf-8")
+    plugin_backup_file_repository = (PACKAGE / "features" / "plugin_backups" / "file_repository.py").read_text(encoding="utf-8")
+    plugin_backup_file_tests = (PACKAGE / "features" / "plugin_backups" / "tests" / "test_file_operations.py").read_text(encoding="utf-8")
+    backup_routes = (PACKAGE / "xiuxian" / "xiuxian_web" / "backups.py").read_text(encoding="utf-8")
+    plugin_backup_web_tests = (ROOT / "tests" / "test_updater_web.py").read_text(encoding="utf-8")
     activity_help_handler = activity_commands[
         activity_commands.index("@activity_help_cmd.handle"):
         activity_commands.index("@activity_manage_cmd.handle")
@@ -1977,6 +1982,32 @@ def _slice_status() -> dict[str, dict[str, object]]:
                 and "def test_get_backups_route_requires_admin_and_keeps_legacy_payload" in updater_web_tests
             ),
             "status": "plugin_backup_listing_has_a_read_only_feature_owner",
+        },
+        "plugin_backup_local_file_owner": {
+            "legacy_file_routes_use_feature_application": (
+                "plugin_backup_file_application.open_plugin_backup(filename)" in backup_routes
+                and "plugin_backup_file_application.delete_plugin_backup(str(backup_filename))" in backup_routes
+                and "plugin_backup_file_application.delete_plugin_backups(filenames)" in backup_routes
+            ),
+            "file_operations_share_catalog_filename_policy_and_reject_symlinks": (
+                "is_plugin_backup_filename(filename)" in plugin_backup_file_repository
+                and "is_plugin_backup_filename(entry.name)" in plugin_backup_repository
+                and "path.lstat()" in plugin_backup_file_repository
+                and "O_NOFOLLOW" in plugin_backup_file_repository
+            ),
+            "batch_delete_preserves_partial_result_contract": (
+                "def delete_plugin_backups" in plugin_backup_file_application
+                and "{\"filename\": filename, \"reason\": \"文件不存在\"}" in plugin_backup_file_application
+                and "return deleted, failed" in plugin_backup_file_application
+            ),
+            "file_repository_and_http_contracts_are_tested": (
+                "def test_repository_rejects_symlinks_without_following_or_deleting_target" in plugin_backup_file_tests
+                and "def test_repository_does_not_create_missing_backup_directory" in plugin_backup_file_tests
+                and "def test_application_batch_delete_reports_partial_results" in plugin_backup_file_tests
+                and "def test_plugin_backup_file_routes_keep_auth_csrf_and_response_contracts" in plugin_backup_web_tests
+                and "def test_plugin_backup_download_rejects_invalid_and_missing_archives" in plugin_backup_web_tests
+            ),
+            "status": "local_plugin_backup_list_download_and_delete_share_a_feature_file_boundary",
         },
         "activity_static_help": {
             "help_and_manage_remain_static_compatibility_handlers": (

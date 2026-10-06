@@ -12348,11 +12348,11 @@
       "id": "route:POST:/batch_delete_backups:nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py:batch_delete_backups",
       "kind": "legacy_routes",
       "entry": "POST /batch_delete_backups -> nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py:batch_delete_backups",
-      "status": "受阻",
-      "reason": "The old Flask app and route modules are loaded and its server is enabled by default. Route registration is proven, but each handler's downstream ownership and replacement/compatibility decision is not closed.",
-      "unknown_edge": "route function -> old data/service or feature application -> state effect",
+      "status": "已迁移",
+      "reason": "The legacy route delegates per-file deletion to PluginBackupFileApplication. Batch success/failure entries are preserved, while each operation uses the same backup filename and regular-file policy as the local plugin archive catalog; database, config, and cloud backups remain separate owners.",
+      "unknown_edge": "",
       "call_graph": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py:346 -> Flask app.route(/batch_delete_backups) -> legacy handler -> downstream state effect not closed"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py:348 batch_delete_backups -> plugin_backup_file_application.delete_plugin_backups -> PluginBackupFileApplication.delete_plugin_backups -> PluginBackupFileRepository.delete_plugin_backup -> unlink regular plugin ZIP entries -> legacy partial-result JSON"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
@@ -12360,7 +12360,9 @@
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py:346"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py:348",
+        "nonebot_plugin_xiuxian_2/features/plugin_backups/file_application.py:13-43",
+        "nonebot_plugin_xiuxian_2/features/plugin_backups/file_repository.py:51-67"
       ],
       "source_declaration_found": true,
       "source": {
@@ -12795,11 +12797,11 @@
       "id": "route:POST:/delete_backup:nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py:delete_backup",
       "kind": "legacy_routes",
       "entry": "POST /delete_backup -> nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py:delete_backup",
-      "status": "受阻",
-      "reason": "The old Flask app and route modules are loaded and its server is enabled by default. Route registration is proven, but each handler's downstream ownership and replacement/compatibility decision is not closed.",
-      "unknown_edge": "route function -> old data/service or feature application -> state effect",
+      "status": "已迁移",
+      "reason": "The legacy route delegates deletion to PluginBackupFileApplication. Only catalogued regular plugin ZIP files are eligible; path-like names, symlinks, and non-regular entries are rejected.",
+      "unknown_edge": "",
       "call_graph": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py:831 -> Flask app.route(/delete_backup) -> legacy handler -> downstream state effect not closed"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py:811 delete_backup -> plugin_backup_file_application.delete_plugin_backup -> PluginBackupFileApplication.delete_plugin_backup -> PluginBackupFileRepository.delete_plugin_backup -> unlink one regular plugin ZIP -> legacy JSON response"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
@@ -12807,7 +12809,9 @@
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py:831"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py:811",
+        "nonebot_plugin_xiuxian_2/features/plugin_backups/file_application.py:13-17",
+        "nonebot_plugin_xiuxian_2/features/plugin_backups/file_repository.py:51-67"
       ],
       "source_declaration_found": true,
       "source": {
@@ -12879,11 +12883,11 @@
       "id": "route:GET:/download_backup/<filename>:nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py:download_backup",
       "kind": "legacy_routes",
       "entry": "GET /download_backup/<filename> -> nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py:download_backup",
-      "status": "受阻",
-      "reason": "The old Flask app and route modules are loaded and its server is enabled by default. Route registration is proven, but each handler's downstream ownership and replacement/compatibility decision is not closed.",
-      "unknown_edge": "route function -> old data/service or feature application -> state effect",
+      "status": "已迁移",
+      "reason": "The legacy download route opens catalogued plugin ZIP files through PluginBackupFileApplication and streams the opened regular file as an attachment. Path-like names and symlinks are rejected.",
+      "unknown_edge": "",
       "call_graph": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py:806 -> Flask app.route(/download_backup/<filename>) -> legacy handler -> downstream state effect not closed"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py:793 download_backup -> plugin_backup_file_application.open_plugin_backup -> PluginBackupFileApplication.open_plugin_backup -> PluginBackupFileRepository.open_plugin_backup -> no-follow regular-file stream -> legacy attachment response"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
@@ -12891,7 +12895,9 @@
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py:806"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py:793",
+        "nonebot_plugin_xiuxian_2/features/plugin_backups/file_application.py:13-14",
+        "nonebot_plugin_xiuxian_2/features/plugin_backups/file_repository.py:25-49"
       ],
       "source_declaration_found": true,
       "source": {

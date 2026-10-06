@@ -39,6 +39,8 @@ from ...infrastructure.clock import SystemClock
 from ...features.plugin_backups import (
     PluginBackupCatalogApplication,
     PluginBackupCatalogRepository,
+    PluginBackupFileApplication,
+    PluginBackupFileRepository,
 )
 # --- 消息统计核心导入 ---
 from nonebot.message import event_preprocessor
@@ -94,6 +96,9 @@ update_manager = UpdateManager()
 update_application = UpdateApplication(update_manager)
 backup_catalog_application = PluginBackupCatalogApplication(
     PluginBackupCatalogRepository(get_paths().backups)
+)
+plugin_backup_file_application = PluginBackupFileApplication(
+    PluginBackupFileRepository(get_paths().backups)
 )
 WEB_CONFIG = XiuConfig()
 app = Flask(__name__)

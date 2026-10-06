@@ -1,13 +1,18 @@
 from __future__ import annotations
 
 import unittest
+from io import BytesIO
 from unittest.mock import patch
 
 import nonebot
 
 nonebot.init()
 
-from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_web import app, core, pages
+from nonebot_plugin_xiuxian_2.features.plugin_backups import (
+    InvalidPluginBackupFile,
+    PluginBackupFileNotFound,
+)
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_web import app, backups, core, pages
 
 
 class FakeUpdateApplication:
@@ -47,6 +52,24 @@ class FakeBackupCatalogApplication:
                 "size": 3,
                 "created_at": "2026-10-06T01:02:03",
             }
+        ]
+
+
+class FakePluginBackupFileApplication:
+    def __init__(self) -> None:
+        self.calls: list[tuple[object, ...]] = []
+
+    def open_plugin_backup(self, filename: str):
+        self.calls.append(("open", filename))
+        return BytesIO(b"zip-bytes")
+
+    def delete_plugin_backup(self, filename: str) -> None:
+        self.calls.append(("delete", filename))
+
+    def delete_plugin_backups(self, filenames: list[object]):
+        self.calls.append(("delete_many", filenames))
+        return ["backup_20261006_010203_v2.0.0.zip"], [
+            {"filename": "missing.zip", "reason": "文件不存在"}
         ]
 
 
@@ -122,6 +145,84 @@ class UpdaterWebRouteTests(unittest.TestCase):
         )
         self.assertNotIn("path", response.get_json()["backups"][0])
         self.assertEqual(catalog.calls, 1)
+
+    def test_plugin_backup_file_routes_keep_auth_csrf_and_response_contracts(self) -> None:
+        application = FakePluginBackupFileApplication()
+        archive_name = "backup_20261006_010203_v2.0.0.zip"
+        with patch.object(core, "ADMIN_IDS", {"admin-1"}):
+            anonymous_download = self.client.get(f"/download_backup/{archive_name}")
+            anonymous_delete = self.client.post(
+                "/delete_backup", json={"backup_filename": archive_name}
+            )
+            anonymous_batch = self.client.post(
+                "/batch_delete_backups", json={"filenames": [archive_name]}
+            )
+            self._login_session()
+            with patch.object(backups, "plugin_backup_file_application", application):
+                missing_csrf = self.client.post(
+                    "/delete_backup", json={"backup_filename": archive_name}
+                )
+                missing_batch_csrf = self.client.post(
+                    "/batch_delete_backups", json={"filenames": [archive_name]}
+                )
+                download = self.client.get(f"/download_backup/{archive_name}")
+                deleted = self.client.post(
+                    "/delete_backup",
+                    json={"backup_filename": archive_name},
+                    headers={"X-CSRF-Token": "csrf-token"},
+                )
+                batch = self.client.post(
+                    "/batch_delete_backups",
+                    json={"filenames": [archive_name, "missing.zip"]},
+                    headers={"X-CSRF-Token": "csrf-token"},
+                )
+
+        self.assertEqual(anonymous_download.status_code, 401)
+        self.assertEqual(anonymous_delete.status_code, 401)
+        self.assertEqual(anonymous_batch.status_code, 401)
+        self.assertEqual(missing_csrf.status_code, 403)
+        self.assertEqual(missing_batch_csrf.status_code, 403)
+        self.assertEqual(download.status_code, 200)
+        self.assertEqual(download.data, b"zip-bytes")
+        self.assertIn(archive_name, download.headers["Content-Disposition"])
+        self.assertEqual(
+            deleted.get_json(),
+            {"success": True, "message": f"备份文件 {archive_name} 删除成功"},
+        )
+        self.assertEqual(
+            batch.get_json(),
+            {
+                "success": True,
+                "message": "批量删除完成，成功 1 个，失败 1 个",
+                "deleted": [archive_name],
+                "failed": [{"filename": "missing.zip", "reason": "文件不存在"}],
+            },
+        )
+        self.assertEqual(
+            application.calls,
+            [
+                ("open", archive_name),
+                ("delete", archive_name),
+                ("delete_many", [archive_name, "missing.zip"]),
+            ],
+        )
+
+    def test_plugin_backup_download_rejects_invalid_and_missing_archives(self) -> None:
+        class FileApplication:
+            def open_plugin_backup(self, filename: str):
+                if filename.startswith("backup_"):
+                    raise PluginBackupFileNotFound(filename)
+                raise InvalidPluginBackupFile(filename)
+
+        self._login_session()
+        with patch.object(backups, "plugin_backup_file_application", FileApplication()):
+            missing = self.client.get(
+                "/download_backup/backup_20261006_010203_v2.0.0.zip"
+            )
+            invalid = self.client.get("/download_backup/not-a-backup.zip")
+
+        self.assertEqual(missing.status_code, 404)
+        self.assertEqual(invalid.status_code, 400)
 
 
 if __name__ == "__main__":

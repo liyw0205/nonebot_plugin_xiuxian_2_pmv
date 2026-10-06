@@ -317,6 +317,11 @@ class RefactorProgressTests(unittest.TestCase):
         self.assertTrue(backup_catalog["catalog_preserves_list_contract_without_path_disclosure"])
         self.assertTrue(backup_catalog["catalog_is_read_only_and_handles_missing_entries"])
         self.assertTrue(backup_catalog["catalog_application_and_http_contracts_are_tested"])
+        backup_files = slices["plugin_backup_local_file_owner"]
+        self.assertTrue(backup_files["legacy_file_routes_use_feature_application"])
+        self.assertTrue(backup_files["file_operations_share_catalog_filename_policy_and_reject_symlinks"])
+        self.assertTrue(backup_files["batch_delete_preserves_partial_result_contract"])
+        self.assertTrue(backup_files["file_repository_and_http_contracts_are_tested"])
         activity_static_help = slices["activity_static_help"]
         self.assertTrue(activity_static_help["help_and_manage_remain_static_compatibility_handlers"])
         boss = slices["activity_boss"]

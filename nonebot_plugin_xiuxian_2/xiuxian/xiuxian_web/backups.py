@@ -6,6 +6,7 @@ from .core import (
     json,
     jsonify,
     logger,
+    plugin_backup_file_application,
     redirect,
     render_template,
     request,
@@ -18,6 +19,7 @@ from .core import (
 )
 
 from .config import get_config_values
+from ...features.plugin_backups import InvalidPluginBackupFile, PluginBackupFileNotFound
 
 DB_SELECTION_ALIASES = {
     "xiuxian": "xiuxian.db",
@@ -353,22 +355,7 @@ def batch_delete_backups():
         if not filenames or not isinstance(filenames, list):
             return jsonify({"success": False, "error": "请提供待删除文件列表"})
 
-        deleted, failed = [], []
-
-        for name in filenames:
-            safe_name = safe_request_filename(name)
-            if not safe_name:
-                failed.append({"filename": str(name), "reason": "无效文件名"})
-                continue
-            try:
-                f = backup_path_under(safe_name)
-                if f.exists() and f.is_file():
-                    f.unlink()
-                    deleted.append(safe_name)
-                else:
-                    failed.append({"filename": safe_name, "reason": "文件不存在"})
-            except Exception as e:
-                failed.append({"filename": str(name), "reason": str(e)})
+        deleted, failed = plugin_backup_file_application.delete_plugin_backups(filenames)
 
         return jsonify({
             "success": True,
@@ -807,23 +794,16 @@ def download_backup(filename):
     if 'admin_id' not in session:
         return redirect(url_for('login'))
 
-    safe_name = safe_request_filename(filename)
-    if not safe_name:
-        return "无效文件名", 400
     try:
-        backup_path = backup_path_under(safe_name)
-    except ValueError:
-        return "无效文件名", 400
-    
-    if not backup_path.exists():
+        backup_file = plugin_backup_file_application.open_plugin_backup(filename)
+    except PluginBackupFileNotFound:
         return "备份文件不存在", 404
-    if not backup_path.is_file():
+    except InvalidPluginBackupFile:
         return "无效备份文件", 400
-    
     return send_file(
-        str(backup_path.absolute()),
+        backup_file,
         as_attachment=True,
-        download_name=safe_name,
+        download_name=filename,
         mimetype='application/zip'
     )
 
@@ -833,21 +813,18 @@ def delete_backup():
         return jsonify({"success": False, "error": "未登录"})
     
     try:
-        data = request.get_json()
-        backup_filename = safe_request_filename(data.get('backup_filename'))
+        data = request.get_json() or {}
+        backup_filename = data.get('backup_filename')
         
         if not backup_filename:
             return jsonify({"success": False, "error": "未指定备份文件"})
         
-        backup_path = backup_path_under(backup_filename)
-        
-        if not backup_path.exists():
+        try:
+            plugin_backup_file_application.delete_plugin_backup(str(backup_filename))
+        except PluginBackupFileNotFound:
             return jsonify({"success": False, "error": f"备份文件不存在: {backup_filename}"})
-        if not backup_path.is_file():
+        except InvalidPluginBackupFile:
             return jsonify({"success": False, "error": f"无效备份文件: {backup_filename}"})
-        
-        # 删除备份文件
-        backup_path.unlink()
         
         return jsonify({
             "success": True,

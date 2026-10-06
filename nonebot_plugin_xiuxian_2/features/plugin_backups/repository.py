@@ -7,6 +7,18 @@ from pathlib import Path
 from typing import Any
 
 
+def is_plugin_backup_filename(value: object) -> bool:
+    if (
+        not isinstance(value, str)
+        or not value.startswith("backup_")
+        or not value.endswith(".zip")
+    ):
+        return False
+    if "/" in value or "\\" in value or "\x00" in value:
+        return False
+    return len(Path(value).stem.split("_")) >= 4
+
+
 class PluginBackupCatalogRepository:
     def __init__(self, backup_directory: str | Path) -> None:
         self._backup_directory = Path(backup_directory)
@@ -20,12 +32,10 @@ class PluginBackupCatalogRepository:
 
         with entries:
             for entry in entries:
-                if not (entry.name.startswith("backup_") and entry.name.endswith(".zip")):
+                if not is_plugin_backup_filename(entry.name):
                     continue
 
                 parts = Path(entry.name).stem.split("_")
-                if len(parts) < 4:
-                    continue
 
                 try:
                     metadata = entry.stat(follow_symlinks=False)
@@ -49,4 +59,4 @@ class PluginBackupCatalogRepository:
         return backups
 
 
-__all__ = ["PluginBackupCatalogRepository"]
+__all__ = ["PluginBackupCatalogRepository", "is_plugin_backup_filename"]
