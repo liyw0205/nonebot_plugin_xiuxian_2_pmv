@@ -55,6 +55,7 @@ from ..xiuxian_utils import db_backend
 from ..xiuxian_config import XiuConfig, Xiu_Plugin, convert_rank
 from ..xiuxian_utils.data_source import jsondata
 from ..xiuxian_utils.download_xiuxian_data import UpdateManager
+from ...features.updater.application import UpdateApplication
 from ..xiuxian_utils.xiuxian2_handle import config_impart
 from ..xiuxian_utils.periods import format_duration_full
 from ..infrastructure import settings
@@ -86,6 +87,7 @@ except ImportError:
 
 items = Items()
 update_manager = UpdateManager()
+update_application = UpdateApplication(update_manager)
 WEB_CONFIG = XiuConfig()
 app = Flask(__name__)
 

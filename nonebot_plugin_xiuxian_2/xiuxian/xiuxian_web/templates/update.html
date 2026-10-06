@@ -112,19 +112,30 @@ async function checkForUpdates() {
         const res = await fetch('/check_update');
         const data = await res.json();
         if (data.success) {
+            const panel = document.createElement('div');
             if (data.update_available) {
-                statusDiv.innerHTML = `
-                    <div class="update-available">
-                        <h3 class="success-text"><i class="fas fa-gift"></i> 发现新版本: ${data.latest_version}</h3>
-                        <p>当前: ${data.current_version} ➔ 最新: ${data.latest_version}</p>
-                        <div style="margin: 10px 0;">
-                            <button class="btn btn-sm btn-info" onclick="showChangelog('${data.latest_version}', \`${data.changelog.replace(/`/g, '\\`')}\`)">查看更新内容</button>
-                        </div>
-                        <button onclick="performUpdate('${data.latest_version}')" class="btn btn-success">立即升级并备份</button>
-                    </div>`;
+                panel.className = 'update-available';
+                const heading = document.createElement('h3');
+                heading.className = 'success-text';
+                heading.textContent = `发现新版本: ${data.latest_version}`;
+                const current = document.createElement('p');
+                current.textContent = `当前: ${data.current_version} -> 最新: ${data.latest_version}`;
+                const changelogButton = document.createElement('button');
+                changelogButton.className = 'btn btn-sm btn-info';
+                changelogButton.textContent = '查看更新内容';
+                changelogButton.addEventListener('click', () => showChangelog(data.latest_version, data.changelog));
+                const updateButton = document.createElement('button');
+                updateButton.className = 'btn btn-success';
+                updateButton.textContent = '立即升级并备份';
+                updateButton.addEventListener('click', () => performUpdate(data.latest_version));
+                panel.append(heading, current, changelogButton, updateButton);
             } else {
-                statusDiv.innerHTML = `<div class="no-update"><h3><i class="fas fa-check-circle"></i> 当前已是最新版本 (${data.current_version})</h3></div>`;
+                panel.className = 'no-update';
+                const message = document.createElement('h3');
+                message.textContent = `当前已是最新版本 (${data.current_version})`;
+                panel.append(message);
             }
+            statusDiv.replaceChildren(panel);
         }
     } catch (e) { statusDiv.innerHTML = '<div class="error">检查更新失败，请检查网络连接或稍后重试。</div>'; }
 }
@@ -132,7 +143,10 @@ async function checkForUpdates() {
 function showChangelog(ver, text) {
     const modal = document.getElementById('versionDetailModal');
     document.getElementById('versionDetailTitle').innerText = `版本 ${ver} 更新日志`;
-    document.getElementById('version-detail-content').innerHTML = `<pre class="changelog-box">${text}</pre>`;
+    const changelog = document.createElement('pre');
+    changelog.className = 'changelog-box';
+    changelog.textContent = text;
+    document.getElementById('version-detail-content').replaceChildren(changelog);
     const btn = document.getElementById('modal-update-btn');
     btn.innerText = "执行更新";
     btn.onclick = () => performUpdate(ver);
@@ -281,21 +295,43 @@ async function viewAllReleases() {
         const res = await fetch('/get_releases');
         const data = await res.json();
         if (data.success) {
-            container.innerHTML = data.releases.map(release => {
+            const cards = data.releases.map(release => {
                 const isCurrent = release.tag_name === data.current_version;
-                return `
-                <div class="release-card ${isCurrent ? 'current-release' : ''}">
-                    <div class="release-header">
-                        <div class="release-title">
-                            <h4>${release.name} <span class="tag">${release.tag_name}</span></h4>
-                            <p class="release-date">${new Date(release.published_at).toLocaleString()}</p>
-                        </div>
-                        <div class="release-actions">
-                            ${isCurrent ? '<span class="current-badge">当前运行中</span>' : `<button onclick="performUpdate('${release.tag_name}')" class="btn btn-success btn-sm">强制更新</button>`}
-                        </div>
-                    </div>
-                </div>`;
-            }).join('');
+                const card = document.createElement('div');
+                card.className = `release-card ${isCurrent ? 'current-release' : ''}`;
+                const header = document.createElement('div');
+                header.className = 'release-header';
+                const title = document.createElement('div');
+                title.className = 'release-title';
+                const heading = document.createElement('h4');
+                heading.append(document.createTextNode(`${release.name} `));
+                const tag = document.createElement('span');
+                tag.className = 'tag';
+                tag.textContent = release.tag_name;
+                heading.append(tag);
+                const date = document.createElement('p');
+                date.className = 'release-date';
+                date.textContent = new Date(release.published_at).toLocaleString();
+                title.append(heading, date);
+                const actions = document.createElement('div');
+                actions.className = 'release-actions';
+                if (isCurrent) {
+                    const badge = document.createElement('span');
+                    badge.className = 'current-badge';
+                    badge.textContent = '当前运行中';
+                    actions.append(badge);
+                } else {
+                    const button = document.createElement('button');
+                    button.className = 'btn btn-success btn-sm';
+                    button.textContent = '强制更新';
+                    button.addEventListener('click', () => performUpdate(release.tag_name));
+                    actions.append(button);
+                }
+                header.append(title, actions);
+                card.append(header);
+                return card;
+            });
+            container.replaceChildren(...cards);
         }
     } catch (e) { container.innerHTML = '<div class="error">获取版本列表失败</div>'; }
 }

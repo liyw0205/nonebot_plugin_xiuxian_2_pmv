@@ -8,7 +8,7 @@ from .core import (
     secrets,
     session,
     web_auth_is_enabled,
-    update_manager,
+    update_manager, update_application,
     url_for,
 )
 
@@ -62,24 +62,24 @@ def check_update():
         return jsonify({"success": False, "error": "未登录"})
     
     try:
-        latest_release, message = update_manager.check_update()
+        latest_release, message = update_application.check_update()
         
         if latest_release:
             return jsonify({
                 "success": True,
                 "update_available": True,
-                "current_version": update_manager.current_version,
-                "latest_version": latest_release['tag_name'],
-                "release_name": latest_release['name'],
-                "published_at": latest_release['published_at'],
-                "changelog": latest_release['body'],
+                "current_version": update_application.current_version(),
+                "latest_version": latest_release.get('tag_name', ''),
+                "release_name": latest_release.get('name', ''),
+                "published_at": latest_release.get('published_at', ''),
+                "changelog": latest_release.get('body', ''),
                 "message": message
             })
         else:
             return jsonify({
                 "success": True,
                 "update_available": False,
-                "current_version": update_manager.current_version,
+                "current_version": update_application.current_version(),
                 "message": message
             })
             
@@ -92,12 +92,12 @@ def get_releases():
         return jsonify({"success": False, "error": "未登录"})
     
     try:
-        releases = update_manager.get_latest_releases(10)
+        releases = update_application.latest_releases(10)
         
         return jsonify({
             "success": True,
             "releases": releases,
-            "current_version": update_manager.current_version
+            "current_version": update_application.current_version()
         })
         
     except Exception as e:
@@ -115,7 +115,7 @@ def perform_update():
         if not release_tag:
             return jsonify({"success": False, "error": "未指定release标签"})
         
-        success, message = update_manager.perform_update_with_backup(release_tag)
+        success, message = update_application.perform_update_with_backup(release_tag)
         
         return jsonify({
             "success": success,

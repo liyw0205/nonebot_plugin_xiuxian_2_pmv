@@ -7,13 +7,14 @@ import json
 import requests
 import sqlite3
 import subprocess
-from urllib.parse import quote
+from urllib.parse import quote, urlparse
 import tempfile
 import shutil
 from datetime import datetime, timedelta, timezone
 from pathlib import Path, PurePosixPath
 from nonebot.log import logger
 from ...paths import get_paths
+from ...features.updater.application import UpdateApplication, is_valid_release_tag
 
 from . import db_backend
 from ..xiuxian_config import XiuConfig, Xiu_Plugin
@@ -270,35 +271,64 @@ class UpdateManager:
             return []
 
     def check_update(self):
-        """检查更新"""
-        releases = self.get_latest_releases(1)
-        if not releases:
-            return None, "无法获取更新信息"
+        """Compatibility entrypoint; feature callers use UpdateApplication directly."""
+        return UpdateApplication(self).check_update()
 
-        latest_release = releases[0]
-        latest_version = latest_release['tag_name']
-
-        if latest_version != self.current_version:
-            return latest_release, f"发现新版本 {latest_version}，当前版本 {self.current_version}"
-        else:
-            return None, "当前已是最新版本"
-
-    def download_release(self, release_tag, asset_name="project.tar.gz"):
-        """下载指定的release资源，使用代理加速"""
+    def prepare_release_asset(self, release_tag, asset_name="project.tar.gz"):
+        """Resolve one official release asset before creating any local backups."""
+        if not is_valid_release_tag(release_tag):
+            return False, "无效的release标签"
         try:
-            release_url = f"{self.api_url}/tags/{release_tag}"
+            release_url = f"{self.api_url}/tags/{quote(release_tag, safe='')}"
             response = requests.get(release_url, timeout=10)
             response.raise_for_status()
             release_data = response.json()
+            if not isinstance(release_data, dict) or release_data.get("tag_name") != release_tag:
+                return False, f"未找到版本 {release_tag}"
 
-            target_asset = None
-            for asset in release_data.get('assets', []):
-                if asset.get('name') == asset_name:
-                    target_asset = asset
-                    break
-
-            if not target_asset:
+            target_asset = next(
+                (
+                    asset for asset in release_data.get("assets", [])
+                    if isinstance(asset, dict) and asset.get("name") == asset_name
+                ),
+                None,
+            )
+            if target_asset is None:
                 return False, f"未找到 {asset_name} 资源文件"
+            if not self._is_official_release_asset(target_asset):
+                return False, "更新资源地址不受信任"
+            return True, target_asset
+        except Exception as exc:
+            logger.error(f"获取release资源失败: {exc}")
+            return False, f"获取release资源失败: {exc}"
+
+    def _is_official_release_asset(self, asset):
+        try:
+            parsed = urlparse(str(asset.get("browser_download_url") or ""))
+        except Exception:
+            return False
+        expected_path = f"/{self.repo_owner}/{self.repo_name}/releases/download/"
+        return (
+            parsed.scheme == "https"
+            and parsed.hostname == "github.com"
+            and parsed.path.startswith(expected_path)
+        )
+
+    def download_release(self, release_tag, asset_name="project.tar.gz", *, target_asset=None):
+        """下载指定的release资源，使用代理加速"""
+        temp_dir = None
+        keep_temp_dir = False
+        try:
+            if not target_asset:
+                success, target_asset = self.prepare_release_asset(release_tag, asset_name)
+                if not success:
+                    return False, target_asset
+            if (
+                not isinstance(target_asset, dict)
+                or target_asset.get("name") != asset_name
+                or not self._is_official_release_asset(target_asset)
+            ):
+                return False, "更新资源地址不受信任"
 
             temp_dir = Path(tempfile.mkdtemp())
             download_path = temp_dir / asset_name
@@ -320,6 +350,7 @@ class UpdateManager:
                         )
                         if success:
                             logger.info(f"使用代理 {proxy['url']} 下载成功")
+                            keep_temp_dir = True
                             return True, download_path
                         else:
                             error_messages.append(f"代理 {proxy['url']} 下载失败: {message}")
@@ -331,6 +362,7 @@ class UpdateManager:
                 try:
                     wget.download(target_asset['browser_download_url'], out=str(download_path))
                     logger.info(f"\n直接下载完成: {download_path}")
+                    keep_temp_dir = True
                     return True, download_path
                 except Exception as e:
                     error_messages.append(f"直接下载失败: {str(e)}")
@@ -338,6 +370,9 @@ class UpdateManager:
 
         except Exception as e:
             return False, f"下载失败: {str(e)}"
+        finally:
+            if temp_dir is not None and not keep_temp_dir:
+                shutil.rmtree(temp_dir, ignore_errors=True)
 
     # =========================
     # 代理
@@ -499,10 +534,12 @@ class UpdateManager:
                 target_item.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(item, target_item)
 
-    def extract_update(self, archive_path, backup=True):
+    def extract_update(self, archive_path, backup=True, *, release_tag):
         """解压更新文件"""
         extract_temp = None
         try:
+            if not is_valid_release_tag(release_tag):
+                return False, "无效的release标签"
             if backup:
                 self.backup_current_version()
 
@@ -513,27 +550,22 @@ class UpdateManager:
 
             target_data_dir = get_paths().data_root
             target_plugin_dir = Xiu_Plugin
+            data_source = extract_temp / "." / "data"
+            if not data_source.is_dir():
+                return False, "压缩包中缺少data目录"
+            plugin_source = extract_temp / "." / "nonebot_plugin_xiuxian_2"
+            if not plugin_source.is_dir():
+                return False, "压缩包中缺少插件目录"
 
             target_data_dir.mkdir(parents=True, exist_ok=True)
             target_plugin_dir.parent.mkdir(parents=True, exist_ok=True)
 
-            self.update_version_file()
-
             logger.info("开始覆盖更新文件...")
-
-            data_source = extract_temp / "." / "data"
-            if data_source.exists():
-                logger.info(f"合并更新data目录: {data_source} -> {target_data_dir}")
-                self._merge_directories(data_source, target_data_dir)
-            else:
-                return False, "压缩包中缺少data目录"
-
-            plugin_source = extract_temp / "." / "nonebot_plugin_xiuxian_2"
-            if plugin_source.exists():
-                logger.info(f"合并更新插件目录: {plugin_source} -> {target_plugin_dir}")
-                self._merge_directories(plugin_source, target_plugin_dir)
-            else:
-                return False, "压缩包中缺少插件目录"
+            logger.info(f"合并更新data目录: {data_source} -> {target_data_dir}")
+            self._merge_directories(data_source, target_data_dir)
+            logger.info(f"合并更新插件目录: {plugin_source} -> {target_plugin_dir}")
+            self._merge_directories(plugin_source, target_plugin_dir)
+            self.update_version_file(release_tag)
 
             return True, "更新成功"
 
@@ -546,19 +578,27 @@ class UpdateManager:
             except Exception:
                 pass
 
-    def update_version_file(self):
-        """更新版本文件"""
+    def update_version_file(self, release_tag):
+        """Atomically record the exact release whose files were applied."""
+        if not is_valid_release_tag(release_tag):
+            raise ValueError("无效的release标签")
+        version_file = get_paths().data / "version.txt"
+        version_file.parent.mkdir(parents=True, exist_ok=True)
+        fd, temp_name = tempfile.mkstemp(prefix=".version.txt.", suffix=".tmp", dir=version_file.parent)
+        temp_file = Path(temp_name)
         try:
-            releases = self.get_latest_releases(1)
-            if releases:
-                latest_version = releases[0]['tag_name']
-                version_file = get_paths().data / "version.txt"
-                version_file.parent.mkdir(parents=True, exist_ok=True)
-                with open(version_file, 'w', encoding='utf-8') as f:
-                    f.write(latest_version)
-                logger.info(f"版本文件更新为: {latest_version}")
-        except Exception as e:
-            logger.error(f"更新版本文件失败: {e}")
+            with os.fdopen(fd, "w", encoding="utf-8") as stream:
+                stream.write(release_tag)
+                stream.flush()
+                os.fsync(stream.fileno())
+            os.replace(temp_file, version_file)
+            self.current_version = release_tag
+            logger.info(f"版本文件更新为: {release_tag}")
+        finally:
+            try:
+                temp_file.unlink(missing_ok=True)
+            except OSError:
+                pass
 
     # =========================
     # WebDAV 基础工具
@@ -1186,65 +1226,16 @@ class UpdateManager:
             logger.error(f"配置备份失败: {str(e)}")
             return False, f"配置备份失败: {str(e)}"
 
+    def cleanup_download(self, archive_path):
+        path = Path(archive_path).resolve()
+        temp_root = Path(tempfile.gettempdir()).resolve()
+        if path.parent == temp_root or not path.is_relative_to(temp_root):
+            raise ValueError("更新包临时路径不在系统临时目录内")
+        shutil.rmtree(path.parent, ignore_errors=True)
+
     def perform_update_with_backup(self, release_tag):
-        """执行完整更新流程"""
-        try:
-            logger.info(f"开始更新到版本: {release_tag}")
-
-            logger.info("创建自动插件备份...")
-            plugin_backup_success, plugin_backup_result = self.enhanced_backup_current_version()
-            if not plugin_backup_success:
-                return False, f"插件备份失败: {plugin_backup_result}"
-
-            logger.info("创建自动数据库备份...")
-            db_backup_success, db_backup_result = self.backup_db_files()
-            if not db_backup_success:
-                return False, f"数据库备份失败: {db_backup_result}"
-
-            logger.info("创建自动配置备份...")
-            backup_success, backup_result = self.backup_all_configs()
-            if not backup_success:
-                return False, f"配置备份失败: {backup_result}"
-
-            config_backup_path = backup_result
-
-            logger.info("下载更新包...")
-            success, result = self.download_release(release_tag)
-            if not success:
-                return False, result
-
-            archive_path = result
-            logger.info(f"下载完成: {archive_path}")
-
-            logger.info("解压更新包...")
-            success, result = self.extract_update(archive_path, backup=False)
-
-            if success and backup_success:
-                logger.info("开始恢复配置...")
-                restore_success, restore_message = self.restore_config_from_backup(config_backup_path)
-                if not restore_success:
-                    logger.warning(f"配置恢复失败: {restore_message}")
-                else:
-                    logger.info("配置恢复成功")
-
-            try:
-                if archive_path.exists():
-                    temp_dir = archive_path.parent
-                    if temp_dir.exists():
-                        shutil.rmtree(temp_dir)
-            except Exception as e:
-                logger.warning(f"清理临时文件失败: {e}")
-
-            if success:
-                logger.info("更新成功完成")
-            else:
-                logger.error(f"更新失败: {result}")
-
-            return success, result
-
-        except Exception as e:
-            logger.error(f"更新过程中出现错误: {str(e)}")
-            return False, f"更新过程中出现错误: {str(e)}"
+        """Compatibility entrypoint; feature callers use UpdateApplication directly."""
+        return UpdateApplication(self).perform_update_with_backup(release_tag)
 
     def restore_config_from_backup(self, backup_path):
         """从配置备份恢复"""

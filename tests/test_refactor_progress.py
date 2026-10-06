@@ -306,6 +306,12 @@ class RefactorProgressTests(unittest.TestCase):
         self.assertTrue(web_pages["page_handlers_remain_session_template_or_static_adapters"])
         self.assertTrue(web_pages["page_permissions_and_global_csrf_remain_declared"])
         self.assertTrue(web_pages["browser_session_and_static_http_contracts_are_tested"])
+        updater = slices["updater_owner"]
+        self.assertTrue(updater["status_commands_use_updater_application"])
+        self.assertTrue(updater["web_update_routes_use_updater_application"])
+        self.assertTrue(updater["application_preflights_asset_and_orders_backups_before_update"])
+        self.assertTrue(updater["remote_release_metadata_is_rendered_as_text"])
+        self.assertTrue(updater["updater_application_manager_and_http_contracts_are_tested"])
         activity_static_help = slices["activity_static_help"]
         self.assertTrue(activity_static_help["help_and_manage_remain_static_compatibility_handlers"])
         boss = slices["activity_boss"]

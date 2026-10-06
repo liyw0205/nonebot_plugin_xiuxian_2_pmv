@@ -78,7 +78,7 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
         self.assertEqual(report["path_count"], 496)
         self.assertEqual(
             report["status_counts"],
-            {"不可达": 19, "允许保留的兼容路径": 97, "受阻": 231, "已迁移": 149},
+            {"不可达": 19, "允许保留的兼容路径": 97, "受阻": 225, "已迁移": 155},
         )
         self.assertGreater(report["blocked_count"], 0)
         self.assertTrue(all(item["call_graph"] and item["evidence"] for item in report["items"]))
@@ -234,13 +234,37 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
             self.assertTrue(any(handler_edge in edge for edge in item["call_graph"]))
             self.assertFalse(any("downstream state effect not closed" in edge for edge in item["call_graph"]))
 
-        for route in ("check_update", "get_releases", "perform_update", "get_backups"):
+        for route in ("check_update", "get_releases", "perform_update"):
             item = next(
                 item for item in report["items"]
                 if item.get("source", {}).get("function") == route
                 and item.get("source", {}).get("file") == "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/pages.py"
             )
-            self.assertEqual(item["status"], "受阻")
+            self.assertEqual(item["status"], "已迁移")
+
+        backups = next(
+            item for item in report["items"]
+            if item.get("source", {}).get("function") == "get_backups"
+            and item.get("source", {}).get("file") == "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/pages.py"
+        )
+        self.assertEqual(backups["status"], "受阻")
+
+    def test_updater_routes_have_source_bound_application_edges(self):
+        report = load_phase2_scope_report(include_items=True)
+        expected = {
+            "check_update": ("pages.py:60", "pages.py:60 check_update -> UpdateApplication.check_update"),
+            "get_releases": ("pages.py:90", "pages.py:90 get_releases -> UpdateApplication.latest_releases"),
+            "perform_update": ("pages.py:107", "pages.py:107 perform_update -> UpdateApplication.perform_update_with_backup"),
+        }
+        for function, (source_line, edge) in expected.items():
+            item = next(
+                item for item in report["items"]
+                if item.get("source", {}).get("function") == function
+                and item.get("source", {}).get("file") == "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/pages.py"
+            )
+            self.assertEqual(item["status"], "已迁移")
+            self.assertIn(f"nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/{source_line}", item["evidence"])
+            self.assertTrue(any(edge in call_edge for call_edge in item["call_graph"]))
 
     def test_phase2_completes_when_every_frozen_item_is_closed(self):
         inventory = {"commands": [], "legacy_jobs": [], "legacy_routes": []}

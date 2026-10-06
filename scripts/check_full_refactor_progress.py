@@ -404,6 +404,13 @@ def _slice_status() -> dict[str, dict[str, object]]:
     web_pages = (PACKAGE / "xiuxian" / "xiuxian_web" / "pages.py").read_text(encoding="utf-8")
     web_pages_access = (PACKAGE / "xiuxian" / "xiuxian_web" / "access.py").read_text(encoding="utf-8")
     web_pages_tests = (ROOT / "tests" / "test_web_auth.py").read_text(encoding="utf-8")
+    updater_application = (PACKAGE / "features" / "updater" / "application.py").read_text(encoding="utf-8")
+    updater_application_tests = (PACKAGE / "features" / "updater" / "tests" / "test_application.py").read_text(encoding="utf-8")
+    updater_manager_tests = (PACKAGE / "features" / "updater" / "tests" / "test_manager_adapter.py").read_text(encoding="utf-8")
+    updater_status = (PACKAGE / "xiuxian" / "xiuxian_status" / "__init__.py").read_text(encoding="utf-8")
+    updater_web_core = (PACKAGE / "xiuxian" / "xiuxian_web" / "core.py").read_text(encoding="utf-8")
+    updater_page_template = (PACKAGE / "xiuxian" / "xiuxian_web" / "templates" / "update.html").read_text(encoding="utf-8")
+    updater_web_tests = (ROOT / "tests" / "test_updater_web.py").read_text(encoding="utf-8")
     activity_help_handler = activity_commands[
         activity_commands.index("@activity_help_cmd.handle"):
         activity_commands.index("@activity_manage_cmd.handle")
@@ -1901,6 +1908,46 @@ def _slice_status() -> dict[str, dict[str, object]]:
                 and "def test_logout_clears_admin_session" in web_pages_tests
             ),
             "status": "web_pages_session_templates_and_static_responses_remain_explicit_compatibility",
+        },
+        "updater_owner": {
+            "status_commands_use_updater_application": (
+                "UpdateManager, UpdateApplication" in updater_status
+                and "UpdateApplication(update_manager).latest_releases" in updater_status
+                and "UpdateApplication(update_manager).check_update" in updater_status
+                and "lambda: UpdateApplication(update_manager).perform_update_with_backup(release_tag)" in updater_status
+            ),
+            "web_update_routes_use_updater_application": (
+                "update_application = UpdateApplication(update_manager)" in updater_web_core
+                and "update_application" in web_pages
+                and "update_application.check_update()" in web_pages
+                and "update_application.latest_releases(10)" in web_pages
+                and "update_application.perform_update_with_backup(release_tag)" in web_pages
+                and "update_manager.perform_update_with_backup(" not in web_pages
+            ),
+            "application_preflights_asset_and_orders_backups_before_update": (
+                "prepare_release_asset(release_tag)" in updater_application
+                and "UPDATE_ASSET_NAME" in updater_application
+                and "self._provider.enhanced_backup_current_version" in updater_application
+                and "self._provider.backup_db_files" in updater_application
+                and "self._provider.backup_all_configs" in updater_application
+                and "release_tag=release_tag" in updater_application
+            ),
+            "remote_release_metadata_is_rendered_as_text": (
+                "changelog.textContent = text" in updater_page_template
+                and "heading.append(document.createTextNode(`${release.name} `))" in updater_page_template
+                and "button.addEventListener('click', () => performUpdate(release.tag_name))" in updater_page_template
+                and "showChangelog('${data.latest_version}'" not in updater_page_template
+                and "onclick=\"performUpdate('${release.tag_name}')\"" not in updater_page_template
+            ),
+            "updater_application_manager_and_http_contracts_are_tested": (
+                "def test_backups_run_in_order_and_stop_at_first_failure" in updater_application_tests
+                and "def test_update_passes_verified_asset_and_exact_tag_and_cleans_archive" in updater_application_tests
+                and "def test_release_preflight_requires_requested_official_asset" in updater_manager_tests
+                and "def test_failed_download_removes_temporary_directory" in updater_manager_tests
+                and "def test_invalid_archive_does_not_write_version_or_create_target" in updater_manager_tests
+                and "def test_update_routes_require_admin_and_keep_update_permission" in updater_web_tests
+            ),
+            "status": "updater_commands_and_web_api_use_one_validated_application_boundary",
         },
         "activity_static_help": {
             "help_and_manage_remain_static_compatibility_handlers": (

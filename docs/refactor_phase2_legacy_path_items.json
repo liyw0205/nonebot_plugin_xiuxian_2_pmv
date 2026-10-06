@@ -5350,15 +5350,14 @@
       "id": "command:status:检测更新",
       "kind": "commands",
       "entry": "status:检测更新 (aliases: )",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "The compatibility matcher now delegates release comparison to the updater application; it performs no local state mutation.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_status/__init__.py:92 check_update_cmd = on_command('检测更新') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_status/__init__.py:351 handle_check_update -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_status/__init__.py:351 handle_check_update -> UpdateApplication.check_update -> UpdateManager.get_latest_releases/get_current_version -> message reply"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
@@ -6851,15 +6850,14 @@
       "id": "command:status:版本更新",
       "kind": "commands",
       "entry": "status:版本更新 (aliases: )",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "The compatibility matcher delegates release resolution and the complete backup/download/extract workflow to the updater application; status operation accounting and reply mapping remain at the command boundary.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_status/__init__.py:91 version_update_cmd = on_command('版本更新') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_status/__init__.py:367 handle_version_update -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_status/__init__.py:367 handle_version_update -> _run_status_action -> UpdateApplication.perform_update_with_backup -> release preflight -> ordered backups -> verified download -> extract and version marker"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
@@ -6878,15 +6876,14 @@
       "id": "command:status:版本查询",
       "kind": "commands",
       "entry": "status:版本查询 (aliases: )",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "The compatibility matcher delegates release retrieval to the updater application and only formats the read-only response.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_status/__init__.py:90 version_query_cmd = on_command('版本查询') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_status/__init__.py:335 handle_version_query -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_status/__init__.py:335 handle_version_query -> UpdateApplication.latest_releases -> UpdateManager.get_latest_releases -> message reply"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
@@ -12547,11 +12544,10 @@
       "id": "route:GET:/check_update:nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/pages.py:check_update",
       "kind": "legacy_routes",
       "entry": "GET /check_update -> nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/pages.py:check_update",
-      "status": "受阻",
-      "reason": "The old Flask app and route modules are loaded and its server is enabled by default. Route registration is proven, but each handler's downstream ownership and replacement/compatibility decision is not closed.",
-      "unknown_edge": "route function -> old data/service or feature application -> state effect",
+      "status": "已迁移",
+      "reason": "The authenticated read route delegates release comparison to UpdateApplication; its provider only fetches release metadata.",
       "call_graph": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/pages.py:60 -> Flask app.route(/check_update) -> legacy handler -> downstream state effect not closed"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/pages.py:60 check_update -> UpdateApplication.check_update -> UpdateManager.get_latest_releases/get_current_version -> JSON response"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
@@ -13248,11 +13244,10 @@
       "id": "route:GET:/get_releases:nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/pages.py:get_releases",
       "kind": "legacy_routes",
       "entry": "GET /get_releases -> nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/pages.py:get_releases",
-      "status": "受阻",
-      "reason": "The old Flask app and route modules are loaded and its server is enabled by default. Route registration is proven, but each handler's downstream ownership and replacement/compatibility decision is not closed.",
-      "unknown_edge": "route function -> old data/service or feature application -> state effect",
+      "status": "已迁移",
+      "reason": "The authenticated read route delegates bounded release retrieval to UpdateApplication; its provider only fetches release metadata.",
       "call_graph": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/pages.py:90 -> Flask app.route(/get_releases) -> legacy handler -> downstream state effect not closed"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/pages.py:90 get_releases -> UpdateApplication.latest_releases(10) -> UpdateManager.get_latest_releases -> JSON response"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
@@ -13535,11 +13530,10 @@
       "id": "route:POST:/perform_update:nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/pages.py:perform_update",
       "kind": "legacy_routes",
       "entry": "POST /perform_update -> nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/pages.py:perform_update",
-      "status": "受阻",
-      "reason": "The old Flask app and route modules are loaded and its server is enabled by default. Route registration is proven, but each handler's downstream ownership and replacement/compatibility decision is not closed.",
-      "unknown_edge": "route function -> old data/service or feature application -> state effect",
+      "status": "已迁移",
+      "reason": "The authenticated, CSRF-protected route delegates update orchestration to UpdateApplication, which validates the release asset before backups and applies the requested tag.",
       "call_graph": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/pages.py:107 -> Flask app.route(/perform_update) -> legacy handler -> downstream state effect not closed"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/pages.py:107 perform_update -> UpdateApplication.perform_update_with_backup -> release preflight -> ordered backups -> verified download -> extract and version marker"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
