@@ -117,6 +117,20 @@ class ConfigBackupApplicationTests(unittest.TestCase):
         self.assertEqual(metadata["type"], "config_backup")
         self.assertEqual(metadata["backup_type"], "full")
 
+    def test_full_backup_can_defer_cloud_cleanup_for_manual_orchestration(self) -> None:
+        uploaded: list[str] = []
+        self.repository.upload_cloud_backup = lambda filename: uploaded.append(filename) or (True, "ok")
+
+        success, path, cloud_uploaded = self.application.backup_all_configs_with_details(
+            defer_cloud_cleanup=True
+        )
+
+        self.assertTrue(success)
+        self.assertIsInstance(path, Path)
+        self.assertTrue(cloud_uploaded)
+        self.assertEqual(uploaded, ["config_backup_20261007_020304.json"])
+        self.assertEqual(self.runtime.cleanup_calls, [])
+
     def test_manual_cloud_backup_uploads_only_once_when_auto_cloud_is_enabled(self) -> None:
         uploaded: list[str] = []
         self.repository.upload_cloud_backup = lambda filename: uploaded.append(filename) or (True, "ok")

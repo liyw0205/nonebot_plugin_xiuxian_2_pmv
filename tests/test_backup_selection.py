@@ -7,6 +7,9 @@ import nonebot
 
 nonebot.init()
 
+from nonebot_plugin_xiuxian_2.features.plugin_backups.creation_repository import (
+    _is_transient_data_file,
+)
 from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_utils import (
     download_xiuxian_data as backup_module,
 )
@@ -24,31 +27,31 @@ class BackupSelectionTests(unittest.TestCase):
     def test_full_backup_excludes_transient_databases(self) -> None:
         data_dir = Path("/tmp/data/xiuxian")
         self.assertTrue(
-            backup_module._is_transient_backup_file(
+            _is_transient_data_file(
                 data_dir / "activity" / "activity.db",
                 data_dir,
             )
         )
         self.assertTrue(
-            backup_module._is_transient_backup_file(data_dir / "message.db", data_dir)
+            _is_transient_data_file(data_dir / "message.db", data_dir)
         )
         self.assertTrue(
-            backup_module._is_transient_backup_file(
+            _is_transient_data_file(
                 data_dir / "activity" / "activity.db-wal",
                 data_dir,
             )
         )
         self.assertTrue(
-            backup_module._is_transient_backup_file(data_dir / "message.db-shm", data_dir)
+            _is_transient_data_file(data_dir / "message.db-shm", data_dir)
         )
         self.assertTrue(
-            backup_module._is_transient_backup_file(
+            _is_transient_data_file(
                 data_dir / ".message.db.d13db9f1ee124b2ebc206303aa09bd8e.migrating",
                 data_dir,
             )
         )
         self.assertFalse(
-            backup_module._is_transient_backup_file(data_dir / "player.db", data_dir)
+            _is_transient_data_file(data_dir / "player.db", data_dir)
         )
 
 

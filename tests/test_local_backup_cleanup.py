@@ -1,4 +1,4 @@
-"""本地备份保留天数：库/插件/配置统一 clean_old_backups。"""
+"""本地备份保留天数：库/插件/配置 owner 共用保留配置。"""
 
 from __future__ import annotations
 
@@ -154,9 +154,20 @@ class LocalBackupCleanupTests(unittest.TestCase):
 
     def test_source_wires_three_backup_paths(self) -> None:
         text = MOD_PATH.read_text(encoding="utf-8")
-        self.assertIn('patterns=("backup_*.zip",)', text)
-        self.assertIn('patterns=("config_backup_*.json",)', text)
-        self.assertIn('patterns=("db_backup_*.zip",)', text)
+        for feature, application_file, runtime_prefix in (
+            ("plugin_backups", "creation_application.py", "plugin_backup"),
+            ("config_backups", "application.py", "configuration_backup"),
+            ("database_backups", "application.py", "database_backup"),
+        ):
+            application = (
+                ROOT / "nonebot_plugin_xiuxian_2" / "features" / feature / application_file
+            ).read_text(encoding="utf-8")
+            self.assertIn("self._repository.cleanup_local_backups(", application)
+            self.assertIn(f"self._runtime.{runtime_prefix}_keep_days()", application)
+            self.assertIn(
+                f"def {runtime_prefix}_keep_days(self):\n        return self._local_backup_keep_days()",
+                text,
+            )
         self.assertIn("_local_backup_keep_days", text)
         cfg = (ROOT / "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_config.py").read_text(
             encoding="utf-8"

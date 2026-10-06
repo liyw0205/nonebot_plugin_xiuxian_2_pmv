@@ -156,6 +156,21 @@ class UpdateManagerAdapterTests(unittest.TestCase):
         )
         cloud_application.delete_cloud_backup.assert_called_once_with("backup.zip")
 
+    def test_plugin_backup_creation_compatibility_method_delegates_to_feature_owner(self) -> None:
+        application = Mock()
+        application.create_backup.return_value = (True, Path("backup.zip"))
+
+        with patch(
+            "nonebot_plugin_xiuxian_2.features.plugin_backups.build_plugin_backup_creation_application",
+            return_value=application,
+        ):
+            self.assertEqual(
+                self.manager.enhanced_backup_current_version(),
+                (True, Path("backup.zip")),
+            )
+
+        application.create_backup.assert_called_once_with()
+
     def test_plugin_backup_cloud_runtime_port_keeps_existing_webdav_configuration(self) -> None:
         paths = (True, "ok", {"plugin_rel": "backups/plugin"})
         self.manager._get_webdav_paths = Mock(return_value=paths)

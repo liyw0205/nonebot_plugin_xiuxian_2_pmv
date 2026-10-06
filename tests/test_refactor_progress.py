@@ -345,6 +345,15 @@ class RefactorProgressTests(unittest.TestCase):
         self.assertTrue(config_backup["repository_bounds_json_and_cloud_io"])
         self.assertTrue(config_backup["import_restore_and_manual_cloud_behavior_are_tested"])
         self.assertTrue(config_backup["routes_keep_admin_csrf_and_legacy_contracts_tested"])
+        plugin_backup_creation = slices["plugin_backup_creation_owner"]
+        self.assertTrue(plugin_backup_creation["manager_compatibility_entrypoint_delegates_to_feature_owner"])
+        self.assertTrue(plugin_backup_creation["archive_creation_preserves_exclusions_and_installs_atomically"])
+        self.assertTrue(plugin_backup_creation["cloud_and_local_retention_failures_do_not_invalidate_local_archive"])
+        manual_backup = slices["manual_backup_owner"]
+        self.assertTrue(manual_backup["legacy_route_uses_cross_type_application"])
+        self.assertTrue(manual_backup["application_runs_both_types_and_cleans_shared_cloud_once"])
+        self.assertTrue(manual_backup["legacy_page_is_preserved_as_a_login_gated_template_compatibility_route"])
+        self.assertTrue(manual_backup["manual_route_auth_csrf_and_partial_result_contracts_are_tested"])
         activity_static_help = slices["activity_static_help"]
         self.assertTrue(activity_static_help["help_and_manage_remain_static_compatibility_handlers"])
         boss = slices["activity_boss"]

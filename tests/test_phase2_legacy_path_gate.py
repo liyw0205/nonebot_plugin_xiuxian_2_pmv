@@ -78,7 +78,7 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
         self.assertEqual(report["path_count"], 496)
         self.assertEqual(
             report["status_counts"],
-            {"不可达": 19, "允许保留的兼容路径": 97, "受阻": 196, "已迁移": 184},
+            {"不可达": 19, "允许保留的兼容路径": 98, "受阻": 194, "已迁移": 185},
         )
         self.assertGreater(report["blocked_count"], 0)
         self.assertTrue(all(item["call_graph"] and item["evidence"] for item in report["items"]))
@@ -266,12 +266,12 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
                 "backups.py:316 batch_delete_backups -> plugin_backup_file_application.delete_plugin_backups",
             ),
             "delete_backup": (
-                "backups.py:624",
-                "backups.py:624 delete_backup -> plugin_backup_file_application.delete_plugin_backup",
+                "backups.py:614",
+                "backups.py:614 delete_backup -> plugin_backup_file_application.delete_plugin_backup",
             ),
             "download_backup": (
-                "backups.py:606",
-                "backups.py:606 download_backup -> plugin_backup_file_application.open_plugin_backup",
+                "backups.py:596",
+                "backups.py:596 download_backup -> plugin_backup_file_application.open_plugin_backup",
             ),
         }
         for function, (source_line, handler_edge) in expected.items():
@@ -351,7 +351,7 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
             "backup_config": ("backups.py:513", "create_local_backup"),
             "get_config_backups": ("backups.py:533", "list_local_backups"),
             "restore_config_backup": ("backups.py:546", "restore_local_backup"),
-            "delete_config_backup": ("backups.py:651", "delete_local_backup"),
+            "delete_config_backup": ("backups.py:641", "delete_local_backup"),
         }
         for function, (source_line, application_method) in expected.items():
             item = next(
@@ -367,6 +367,23 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
                 for edge in item["call_graph"]
             ), (function, item["call_graph"]))
             self.assertFalse(any("downstream state effect not closed" in edge for edge in item["call_graph"]))
+
+    def test_backup_feature_has_no_open_routes_and_manual_orchestration_is_source_bound(self):
+        report = load_phase2_scope_report(include_items=True)
+        self.assertEqual(report["integrity_errors"], [])
+        items = [
+            item for item in report["items"]
+            if item.get("source", {}).get("file")
+            == "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py"
+        ]
+        self.assertEqual(len(items), 30)
+        self.assertTrue(all(item["status"] != "受阻" for item in items))
+        page = next(item for item in items if item["source"]["function"] == "backups")
+        manual = next(item for item in items if item["source"]["function"] == "manual_backup")
+        self.assertEqual(page["status"], "允许保留的兼容路径")
+        self.assertEqual(manual["status"], "已迁移")
+        self.assertTrue(any("render_template('backups.html')" in edge for edge in page["call_graph"]))
+        self.assertTrue(any("ManualBackupApplication.create_backup" in edge for edge in manual["call_graph"]))
 
     def test_updater_routes_have_source_bound_application_edges(self):
         report = load_phase2_scope_report(include_items=True)

@@ -42,8 +42,10 @@ from ...features.plugin_backups import (
     PluginBackupCatalogRepository,
     PluginBackupFileApplication,
     PluginBackupFileRepository,
+    build_plugin_backup_creation_application,
     build_plugin_backup_restore_application,
 )
+from ...features.manual_backups import ManualBackupApplication
 from ...features.database_backups import build_database_backup_application
 from ...features.config_backups import build_config_backup_application
 # --- 消息统计核心导入 ---
@@ -104,10 +106,15 @@ backup_catalog_application = PluginBackupCatalogApplication(
 plugin_backup_file_application = PluginBackupFileApplication(
     PluginBackupFileRepository(get_paths().backups)
 )
+plugin_backup_creation_application = build_plugin_backup_creation_application(update_manager)
 plugin_backup_restore_application = build_plugin_backup_restore_application(update_manager)
 plugin_backup_cloud_application = build_plugin_backup_cloud_application(update_manager)
 database_backup_application = build_database_backup_application(update_manager)
 config_backup_application = build_config_backup_application(update_manager)
+manual_backup_application = ManualBackupApplication(
+    plugin_backup_creation_application,
+    config_backup_application,
+)
 WEB_CONFIG = XiuConfig()
 app = Flask(__name__)
 

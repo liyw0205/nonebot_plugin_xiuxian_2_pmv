@@ -3,6 +3,7 @@ from __future__ import annotations
 import unittest
 from io import BytesIO
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import nonebot
@@ -290,6 +291,84 @@ class UpdaterWebRouteTests(unittest.TestCase):
         )
         self.assertNotIn("path", response.get_json()["backups"][0])
         self.assertEqual(catalog.calls, 1)
+
+    def test_backups_page_keeps_database_and_plugin_management_behind_login(self) -> None:
+        with patch.object(core, "ADMIN_IDS", {"admin-1"}):
+            anonymous = self.client.get("/backups")
+            with self.client.session_transaction() as session:
+                session["admin_id"] = "not-admin"
+            denied = self.client.get("/backups")
+            self._login_session()
+            response = self.client.get("/backups")
+
+        self.assertEqual(anonymous.status_code, 302)
+        self.assertIn("/login", anonymous.headers["Location"])
+        self.assertEqual(denied.status_code, 302)
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("数据库备份 / 恢复", response.get_data(as_text=True))
+        self.assertIn("插件备份 / 恢复", response.get_data(as_text=True))
+
+    def test_manual_backup_route_keeps_auth_csrf_and_partial_result_contract(self) -> None:
+        application = SimpleNamespace(
+            results=[
+                SimpleNamespace(
+                    success=True,
+                    plugin_backup=Path("/backups/plugin.zip"),
+                    config_backup=Path("/backups/config.json"),
+                    error="",
+                ),
+                SimpleNamespace(
+                    success=False,
+                    plugin_backup="disk error",
+                    config_backup=Path("/backups/config.json"),
+                    error="插件备份失败: disk error",
+                ),
+            ],
+            calls=0,
+        )
+
+        def create_backup():
+            result = application.results[application.calls]
+            application.calls += 1
+            return result
+
+        application.create_backup = create_backup
+        with patch.object(core, "ADMIN_IDS", {"admin-1"}):
+            anonymous = self.client.post("/manual_backup")
+            with self.client.session_transaction() as session:
+                session["admin_id"] = "not-admin"
+            denied = self.client.post("/manual_backup")
+            self._login_session()
+            missing_csrf = self.client.post("/manual_backup")
+            with patch.object(backups, "manual_backup_application", application):
+                success = self.client.post(
+                    "/manual_backup", headers={"X-CSRF-Token": "csrf-token"}
+                )
+                partial = self.client.post(
+                    "/manual_backup", headers={"X-CSRF-Token": "csrf-token"}
+                )
+
+        self.assertEqual(anonymous.status_code, 401)
+        self.assertEqual(denied.status_code, 401)
+        self.assertEqual(missing_csrf.status_code, 403)
+        self.assertEqual(
+            success.get_json(),
+            {
+                "success": True,
+                "plugin_backup": "/backups/plugin.zip",
+                "config_backup": "/backups/config.json",
+                "message": "手动备份成功完成",
+            },
+        )
+        self.assertEqual(
+            partial.get_json(),
+            {
+                "success": False,
+                "plugin_backup": "disk error",
+                "config_backup": "/backups/config.json",
+                "error": "插件备份失败: disk error",
+            },
+        )
 
     def test_plugin_backup_file_routes_keep_auth_csrf_and_response_contracts(self) -> None:
         application = FakePluginBackupFileApplication()

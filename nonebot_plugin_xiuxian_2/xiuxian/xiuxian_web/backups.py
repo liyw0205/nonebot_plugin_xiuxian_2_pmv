@@ -8,6 +8,7 @@ from .core import (
     json,
     jsonify,
     logger,
+    manual_backup_application,
     plugin_backup_cloud_application,
     plugin_backup_file_application,
     plugin_backup_restore_application,
@@ -18,7 +19,6 @@ from .core import (
     safe_path_under,
     send_file,
     session,
-    update_manager,
     url_for,
 )
 
@@ -574,31 +574,21 @@ def manual_backup():
         return jsonify({"success": False, "error": "未登录"})
     
     try:
-        # 执行插件备份
-        plugin_success, plugin_result = update_manager.enhanced_backup_current_version()
-        
-        # 执行配置备份
-        config_success, config_result = update_manager.backup_all_configs()
-        
-        if plugin_success and config_success:
-            return jsonify({
-                "success": True,
-                "message": "手动备份成功完成",
-                "plugin_backup": str(plugin_result) if isinstance(plugin_result, Path) else plugin_result,
-                "config_backup": str(config_result) if isinstance(config_result, Path) else config_result
-            })
+        result = manual_backup_application.create_backup()
+        payload = {
+            "success": result.success,
+            "plugin_backup": str(result.plugin_backup)
+            if isinstance(result.plugin_backup, Path)
+            else result.plugin_backup,
+            "config_backup": str(result.config_backup)
+            if isinstance(result.config_backup, Path)
+            else result.config_backup,
+        }
+        if result.success:
+            payload["message"] = "手动备份成功完成"
         else:
-            error_msg = []
-            if not plugin_success:
-                error_msg.append(f"插件备份失败: {plugin_result}")
-            if not config_success:
-                error_msg.append(f"配置备份失败: {config_result}")
-            
-            return jsonify({
-                "success": False,
-                "error": "; ".join(error_msg)
-            })
-            
+            payload["error"] = result.error
+        return jsonify(payload)
     except Exception as e:
         return jsonify({"success": False, "error": f"备份过程中出现错误: {str(e)}"})
 

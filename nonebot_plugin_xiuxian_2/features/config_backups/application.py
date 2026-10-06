@@ -82,8 +82,14 @@ class ConfigBackupApplication:
             self._create_lock.release()
 
     def backup_all_configs(self) -> tuple[bool, Path | str]:
+        success, result, _cloud_uploaded = self.backup_all_configs_with_details()
+        return success, result
+
+    def backup_all_configs_with_details(
+        self, *, defer_cloud_cleanup: bool = False
+    ) -> tuple[bool, Path | str, bool]:
         if not self._create_lock.acquire(blocking=False):
-            return False, "已有配置备份任务正在执行"
+            return False, "已有配置备份任务正在执行", False
         try:
             now = self._runtime.configuration_backup_now()
             values = self._runtime.configuration_backup_values()
@@ -98,17 +104,20 @@ class ConfigBackupApplication:
             path = self._repository.create_local_backup(
                 f"config_backup_{now.strftime('%Y%m%d_%H%M%S')}.json", backup_data
             )
+            cloud_uploaded = False
             if self._runtime.configuration_backup_cloud_enabled():
                 uploaded, message = self._repository.upload_cloud_backup(path.name)
                 if uploaded:
-                    self._cleanup_cloud()
+                    cloud_uploaded = True
+                    if not defer_cloud_cleanup:
+                        self._cleanup_cloud()
                 else:
                     _logger.warning("配置云备份失败: %s", message)
             self._cleanup_local(now)
-            return True, path
+            return True, path, cloud_uploaded
         except Exception as exc:
             _logger.exception("配置备份失败")
-            return False, f"配置备份失败: {exc}"
+            return False, f"配置备份失败: {exc}", False
         finally:
             self._create_lock.release()
 

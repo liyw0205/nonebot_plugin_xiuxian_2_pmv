@@ -26,39 +26,6 @@ CORE_SQLITE_DATABASES = (
     "player.db",
     "trade.db",
 )
-TRANSIENT_BACKUP_RELATIVE_PATHS = {
-    PurePosixPath("message.db"),
-    PurePosixPath("activity/activity.db"),
-}
-
-
-def _normalized_relative_path(path: Path, root: Path) -> PurePosixPath | None:
-    try:
-        return PurePosixPath(path.relative_to(root).as_posix())
-    except ValueError:
-        return None
-
-
-def _is_transient_backup_file(file_path: Path, data_dir: Path) -> bool:
-    relative_path = _normalized_relative_path(file_path, data_dir)
-    if relative_path is None:
-        return file_path.name in {"message.db", "message.db-wal", "message.db-shm"}
-    relative_text = relative_path.as_posix()
-    if (
-        relative_path.parent == PurePosixPath(".")
-        and relative_path.name.startswith(".message.db.")
-        and relative_path.name.endswith(".migrating")
-    ):
-        return True
-    for suffix in ("-wal", "-shm"):
-        if relative_text.endswith(suffix):
-            relative_path = PurePosixPath(relative_text[: -len(suffix)])
-            break
-    if relative_path in TRANSIENT_BACKUP_RELATIVE_PATHS:
-        return True
-    return relative_path.name == "message.db"
-
-
 def _safe_leaf_name(filename) -> str:
     name = Path(str(filename or "")).name
     if not name or name in {".", ".."} or "\x00" in name:
@@ -873,89 +840,28 @@ class UpdateManager:
     # 备份/恢复（插件）
     # =========================
     def enhanced_backup_current_version(self):
-        """备份当前版本"""
-        try:
-            backup_dir = get_paths().backups
-            backup_dir.mkdir(parents=True, exist_ok=True)
+        """Compatibility entrypoint; plugin archive creation belongs to its feature."""
+        from ...features.plugin_backups import build_plugin_backup_creation_application
 
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            backup_path = backup_dir / f"backup_{timestamp}_{self.current_version}.zip"
+        return build_plugin_backup_creation_application(self).create_backup()
 
-            # cache / media_parser_cache 均为可重建缓存，不进自动备份
-            skip_dirs = {
-                "backups",
-                "config_backups",
-                "db_backup",
-                "cache",
-                "media_parser_cache",
-                "boss_img",
-                "font",
-                "卡图",
-                "__pycache__",
-            }
+    def plugin_backup_now(self):
+        return datetime.now()
 
-            with zipfile.ZipFile(backup_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
-                data_dir = get_paths().data
-                if data_dir.exists():
-                    for root, dirs, files in os.walk(data_dir):
-                        root_path = Path(root)
-                        if any(skip_dir in root_path.parts for skip_dir in skip_dirs):
-                            continue
-                        for file in files:
-                            file_path = Path(root) / file
-                            if _is_transient_backup_file(file_path, data_dir):
-                                continue
-                            try:
-                                arcname = file_path.relative_to(data_dir.parent.parent)
-                                zipf.write(file_path, arcname)
-                            except Exception as e:
-                                logger.warning(f"备份文件跳过: {file_path}, 错误: {e}")
+    def plugin_backup_version(self):
+        return self.current_version
 
-                plugin_dir = Xiu_Plugin
-                if plugin_dir.exists():
-                    for root, dirs, files in os.walk(plugin_dir):
-                        root_path = Path(root)
-                        if any(skip_dir in root_path.parts for skip_dir in skip_dirs):
-                            continue
-                        for file in files:
-                            file_path = Path(root) / file
-                            try:
-                                arcname = file_path.relative_to(plugin_dir.parent.parent.parent)
-                                zipf.write(file_path, arcname)
-                            except Exception as e:
-                                logger.warning(f"备份文件跳过: {file_path}, 错误: {e}")
+    def plugin_backup_cloud_enabled(self):
+        return bool(getattr(XiuConfig(), "cloud_backup_enabled", False))
 
-            logger.info(f"备份完成: {backup_path}")
+    def plugin_backup_keep_days(self):
+        return self._local_backup_keep_days()
 
-            try:
-                cfg = XiuConfig()
-                if getattr(cfg, "cloud_backup_enabled", False):
-                    up_ok, up_msg = self.upload_backup_to_webdav(backup_path)
-                    if up_ok:
-                        logger.info(f"云备份结果: {up_msg}")
-                        clean_ok, clean_msg = self.cleanup_webdav_old_backups()
-                        if clean_ok:
-                            logger.info(clean_msg)
-                        else:
-                            logger.warning(clean_msg)
-                    else:
-                        logger.warning(f"云备份失败: {up_msg}")
-            except Exception as e:
-                logger.warning(f"云备份执行异常: {e}")
+    def plugin_backup_upload_cloud(self, path):
+        return self.upload_backup_to_webdav(path)
 
-            try:
-                self.clean_old_backups(
-                    backup_dir,
-                    patterns=("backup_*.zip",),
-                    keep_days=self._local_backup_keep_days(),
-                )
-            except Exception as e:
-                logger.warning(f"插件本地旧备份清理异常: {e}")
-
-            return True, backup_path
-        except Exception as e:
-            logger.error(f"备份失败: {e}")
-            return False, str(e)
+    def plugin_backup_cleanup_cloud(self):
+        return self.cleanup_webdav_old_backups()
 
     def backup_all_configs(self):
         return self._config_backup_application().backup_all_configs()

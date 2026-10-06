@@ -423,8 +423,14 @@ def _slice_status() -> dict[str, dict[str, object]]:
     plugin_backup_cloud_application = (PACKAGE / "features" / "plugin_backups" / "cloud_application.py").read_text(encoding="utf-8")
     plugin_backup_cloud_repository = (PACKAGE / "features" / "plugin_backups" / "cloud_repository.py").read_text(encoding="utf-8")
     plugin_backup_cloud_tests = (PACKAGE / "features" / "plugin_backups" / "tests" / "test_cloud.py").read_text(encoding="utf-8")
+    plugin_backup_creation_application = (PACKAGE / "features" / "plugin_backups" / "creation_application.py").read_text(encoding="utf-8")
+    plugin_backup_creation_repository = (PACKAGE / "features" / "plugin_backups" / "creation_repository.py").read_text(encoding="utf-8")
+    plugin_backup_creation_tests = (PACKAGE / "features" / "plugin_backups" / "tests" / "test_creation.py").read_text(encoding="utf-8")
+    manual_backup_application = (PACKAGE / "features" / "manual_backups" / "application.py").read_text(encoding="utf-8")
+    manual_backup_tests = (PACKAGE / "features" / "manual_backups" / "tests" / "test_application.py").read_text(encoding="utf-8")
     plugin_backup_manager = (PACKAGE / "xiuxian" / "xiuxian_utils" / "download_xiuxian_data.py").read_text(encoding="utf-8")
     backup_routes = (PACKAGE / "xiuxian" / "xiuxian_web" / "backups.py").read_text(encoding="utf-8")
+    backup_page_template = (PACKAGE / "xiuxian" / "xiuxian_web" / "templates" / "backups.html").read_text(encoding="utf-8")
     database_backup_application = (PACKAGE / "features" / "database_backups" / "application.py").read_text(encoding="utf-8")
     database_backup_repository = (PACKAGE / "features" / "database_backups" / "repository.py").read_text(encoding="utf-8")
     database_backup_tests = "\n".join(
@@ -2206,6 +2212,54 @@ def _slice_status() -> dict[str, dict[str, object]]:
                 and "anonymous_list.status_code, 401" in plugin_backup_web_tests
             ),
             "status": "configuration_json_backup_import_restore_and_webdav_share_a_bounded_feature_owner",
+        },
+        "plugin_backup_creation_owner": {
+            "manager_compatibility_entrypoint_delegates_to_feature_owner": (
+                "return build_plugin_backup_creation_application(self).create_backup()" in plugin_backup_manager
+                and "def test_plugin_backup_creation_compatibility_method_delegates_to_feature_owner" in updater_manager_tests
+            ),
+            "archive_creation_preserves_exclusions_and_installs_atomically": (
+                "_SKIP_DIRECTORY_NAMES" in plugin_backup_creation_repository
+                and "directories[:] = kept_directories" in plugin_backup_creation_repository
+                and "_is_transient_data_file" in plugin_backup_creation_repository
+                and "os.replace(temporary_path, target)" in plugin_backup_creation_repository
+                and "def test_archive_keeps_legacy_paths_and_skips_transient_and_cache_files" in plugin_backup_creation_tests
+                and "def test_archive_failure_preserves_existing_archive_and_removes_temporary_file" in plugin_backup_creation_tests
+            ),
+            "cloud_and_local_retention_failures_do_not_invalidate_local_archive": (
+                "defer_cloud_cleanup" in plugin_backup_creation_application
+                and "cleanup_local_backups" in plugin_backup_creation_application
+                and "def test_creation_upload_and_cleanup_failures_do_not_fail_local_backup" in plugin_backup_creation_tests
+                and "def test_cleanup_uses_backup_timestamp_and_never_follows_symlinks" in plugin_backup_creation_tests
+            ),
+            "status": "plugin_zip_creation_and_legacy_adapter_have_a_feature_owner",
+        },
+        "manual_backup_owner": {
+            "legacy_route_uses_cross_type_application": (
+                "manual_backup_application.create_backup()" in backup_routes
+                and "update_manager.enhanced_backup_current_version()" not in backup_routes
+                and "update_manager.backup_all_configs()" not in backup_routes
+            ),
+            "application_runs_both_types_and_cleans_shared_cloud_once": (
+                manual_backup_application.index("self._plugin_backup.create_backup_with_details(")
+                < manual_backup_application.index("self._config_backup.backup_all_configs_with_details(")
+                and "if plugin.cloud_uploaded or config_cloud_uploaded" in manual_backup_application
+                and "test_plugin_failure_still_runs_config_backup" in manual_backup_tests
+                and "manual_backup_is_serial_and_cleans_shared_cloud_once" in manual_backup_tests
+            ),
+            "legacy_page_is_preserved_as_a_login_gated_template_compatibility_route": (
+                "@app.route('/backups')" in backup_routes
+                and "return render_template('backups.html')" in backup_routes
+                and "数据库备份 / 恢复" in backup_page_template
+                and "插件备份 / 恢复" in backup_page_template
+                and "def test_backups_page_keeps_database_and_plugin_management_behind_login" in plugin_backup_web_tests
+            ),
+            "manual_route_auth_csrf_and_partial_result_contracts_are_tested": (
+                "def test_manual_backup_route_keeps_auth_csrf_and_partial_result_contract" in plugin_backup_web_tests
+                and "missing_csrf.status_code, 403" in plugin_backup_web_tests
+                and "manual_backup_application" in backup_routes
+            ),
+            "status": "manual_plugin_and_config_backup_orchestration_is_feature_owned",
         },
         "activity_static_help": {
             "help_and_manage_remain_static_compatibility_handlers": (
