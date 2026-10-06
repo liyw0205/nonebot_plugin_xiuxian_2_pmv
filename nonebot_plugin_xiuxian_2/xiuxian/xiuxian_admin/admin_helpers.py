@@ -194,14 +194,19 @@ def parse_broadcast_duration_and_content(raw: str) -> tuple[int, str]:
     if not day_str and not hour_str and not minute_str:
         return 1440, raw
 
-    days = int(day_str or 0)
-    hours = int(hour_str or 0)
-    minutes = int(minute_str or 0)
+    try:
+        days = int(day_str or 0)
+        hours = int(hour_str or 0)
+        minutes = int(minute_str or 0)
+    except ValueError:
+        raise ValueError("broadcast duration is out of range") from None
 
     total_minutes = days * 1440 + hours * 60 + minutes
 
     if total_minutes <= 0:
         total_minutes = 1440
+    if total_minutes > int((datetime.max - datetime.now()).total_seconds() // 60):
+        raise ValueError("broadcast duration is out of range")
 
     content = raw[match.end():].strip()
 

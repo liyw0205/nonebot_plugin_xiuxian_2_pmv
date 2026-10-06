@@ -43,6 +43,46 @@ def _source_projection(inventory: dict, fields: list[str]) -> dict:
 
 
 class Phase2LegacyPathGateTests(unittest.TestCase):
+    def test_admin_broadcast_commands_have_source_bound_feature_owner_edges(self):
+        report = load_phase2_scope_report(include_items=True)
+        items = {item["id"]: item for item in report["items"]}
+        source = "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py"
+        expected = {
+            "群聊广播": (2691, "group_broadcast_cmd_", "start", "create/claim/finish"),
+            "私聊广播": (2733, "private_broadcast_cmd_", "start", "create/claim/finish"),
+            "全局广播": (2775, "global_broadcast_cmd_", "start", "create/claim/finish"),
+            "查看广播": (2817, "view_broadcast_cmd_", "status", "status"),
+            "取消广播": (2831, "cancel_broadcast_cmd_", "cancel", "cancel"),
+            "清空广播": (2848, "clear_broadcast_cmd_", "clear", "clear"),
+        }
+        for name, (line, handler, application_method, repository_method) in expected.items():
+            with self.subTest(command=name):
+                item = items[f"command:admin:{name}"]
+                self.assertEqual(item["status"], "已迁移")
+                self.assertNotIn("unknown_edge", item)
+                self.assertIn(f"{source}:{line}", item["evidence"])
+                edges = [edge for edge in item["call_graph"]
+                         if edge.startswith(f"{source}:{line} {handler} ->")]
+                self.assertEqual(len(edges), 1)
+                self.assertIn("broadcast_manager.", edges[0])
+                self.assertIn(f"AdminBroadcastApplication.{application_method}", edges[0])
+                self.assertIn(f"AdminBroadcastRepository.{repository_method}", edges[0])
+                graph = " ".join(item["call_graph"])
+                self.assertIn("AdminBroadcastHistoryRepository.targets", graph)
+                self.assertIn("read-only" if application_method != "start" else "read_only=True", graph)
+                self.assertIn("sender", graph)
+                self.assertIn("process-local", graph + item["reason"])
+                self.assertIn("in flight", (graph + item["reason"]).replace("-", " "))
+                self.assertNotIn("effect not closed", graph)
+                for evidence in (
+                    "nonebot_plugin_xiuxian_2/features/admin/tests/test_broadcast_application.py",
+                    "nonebot_plugin_xiuxian_2/features/admin/tests/test_broadcast_history_repository.py",
+                    "tests/test_admin_broadcast.py",
+                ):
+                    self.assertIn(evidence, item["evidence"])
+        self.assertTrue(report["frozen_membership_valid"])
+        self.assertEqual(report["integrity_errors"], [])
+
     def test_admin_command_controls_have_source_bound_shared_owner_edges(self):
         report = load_phase2_scope_report(include_items=True)
         items = {item["id"]: item for item in report["items"]}
@@ -168,7 +208,7 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
         self.assertEqual(report["path_count"], 496)
         self.assertEqual(
             report["status_counts"],
-            {"不可达": 19, "允许保留的兼容路径": 107, "受阻": 160, "已迁移": 210},
+            {"不可达": 19, "允许保留的兼容路径": 107, "受阻": 154, "已迁移": 216},
         )
         self.assertGreater(report["blocked_count"], 0)
         self.assertTrue(all(item["call_graph"] and item["evidence"] for item in report["items"]))

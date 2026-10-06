@@ -2,7 +2,15 @@
 
 ## 固定队列与已审边界（2026-10-07）
 
-当前按子插件顺序停在 admin。50 个冻结入口中，开始盘点前已关闭 6 个；剩余 44 个已一次性完成 owner 盘点。配置 6 条、已有资产/重置 13 条、兼容输出 9 条和黑屋 3 条均已验收，黑屋 `dc46515f` 已推送并核对远端。本组命令管控 3 条已通过聚焦、扩大回归与冻结门禁，admin 剩 10 个未关闭项，全局冻结计数为 `210/107/19/160`。下一组是广播 6 条，不跳子插件、不重新从全局 blocker 中挑命令。
+当前按子插件顺序停在 admin。50 个冻结入口中，开始盘点前已关闭 6 个；剩余 44 个已一次性完成 owner 盘点。配置 6 条、已有资产/重置 13 条、兼容输出 9 条和黑屋 3 条均已验收；黑屋 `dc46515f`、命令管控 `0cbfcabe` 已推送并核对远端。本组广播 6 条已通过扩大回归与冻结门禁，admin 剩 4 项，全局冻结计数为 `216/107/19/154`。下一组固定为生成秘境、重载items、用户伪装，最后转换QQID；不跳子插件、不重新从全局 blocker 中挑命令。
+
+广播六条和普通事件补发共用 `AdminBroadcastApplication -> AdminBroadcastRepository`，兼容 facade 和既有 Web 消费者没有私有任务副本。任务保持进程内、重启丢失的原语义；短线程锁只保护状态，发送前原子 claim，网络 await 不持锁。取消、清空、过期阻止后续目标，已发出的请求不能撤回；generation/token 避免旧回执污染同 ID 新任务，失败释放 claim 允许事件补发。QQ `pending_audit` 不再算成功，也不重复补发；没有审核回调，待审核状态保留到取消/过期。错误只记类型，明细最多 50 条且保留累计数；每次 claim 仅复制固定发送字段，不深拷贝持续增长的目标集合。
+
+`AdminBroadcastHistoryRepository` 经 `asyncio.to_thread` 只读查询消息库，严格匹配 adapter 与 bot_id，QQ 取最近一分钟接收记录并在 SQL 中按 scene/target 选最新回复 ID；OB11 保留所有历史 direction、群优先于私聊。查询不建库/表、不读正文，缺库/表返回空目标，缺必要列显式失败；发送前连接已关闭。QQ 和普通 OB11 复用 delivery，保留 QQ Markdown 和 OB11 单节点合并转发；不自行分配 QQ msg_seq。创建失败向 bot/Web 显式报告，不再误包成 Web success；bot 时间参数保护超长数字及日期溢出。Web 自身既有无效数字退回 1440 分钟的解析仍保留，不算已迁移 Web 路由。
+
+三名子代理分别实现状态核心、只读历史仓储、适配层，再接续门禁、冻结证据与普通入口测试，主线程负责真实 handler/facade/端口贯通和串行验收。首轮聚焦 `84 passed`（pytest 4.74 秒，含隔离初始化进程共 11.13 秒，另有预加载 anyio warning）；启动前先 `import tests`，隔离路径 `/tmp/xiuxian-unittest-txytjgvh/xiuxian`。目标及任务列表仍全量读取，广播首轮仍串行发送，任务不持久化、没有跨进程协调或远端 exactly-once 保证；没有线上性能实测，不把结构改进当作已证明的运行提速。
+
+最终扩大集覆盖 admin、feature/admin、command store、Phase2/progress、messaging 和定向 source quality：`538 passed, 32 subtests passed`（pytest 43.59 秒，含隔离初始化 49.36 秒，预加载 anyio warning）；本轮最终临时目录 `/tmp/xiuxian-unittest-utp1dkti/xiuxian`。普通入口测试证明群/私聊屏蔽在补发前生效，Web 创建失败不会被报为成功。六项 broadcast gate 全 true，496 项 membership 有效、`integrity_errors=[]`；静态进度及冻结检查合计 1.71 秒，Phase2 `--check` 仅因其它 154 项返回 1。首轮扩大集唯一失败是证据文字 `in flight` 与 `in-flight` 的断言拼写差异，修正后复验通过，没有重做生产实现。测试执行并非本轮主要耗时，主要工作仍是实现、贯通用例和证据收尾；没有完整分段计时，不能量化三者占比。用户 `boss_info.json` 不纳入提交。
 
 本组指令禁用、指令解禁、指令列表统一经 `AdminCommandControlApplication -> AdminCommandControlRepository`，兼容函数与既有 Web 消费者共享同一个 owner。保留原 `command_disable.json` 路径，兼容 flat 与 `commands` wrapper 两种结构，未知元数据和退役命令保留在文件中，运行期 active 注册表只暴露当前登记命令。缓存、别名和注册表按规范化路径在单进程内共享，写操作使用同一线程锁和原子替换，失败不发布新缓存，相同值不重复落盘。命令写后不再重建路由索引，重建时先成功同步注册表再发布别名；坏 JSON 报错且不覆盖，路由 fail closed 仅拦截 selected 中已路由的非管理员候选，无候选不读文件。保留分页/分组输出并保护超长纯数字页码；旧 `save_command_disable_memory` 只校验当前状态可读，写接口即时持久化，不再有待存的私有内存。热路径仍做文件 stat 检查，但复用 active view，不为每个候选深拷贝整份状态，模块批量写复用 locations。列表仍全量读取，无跨进程锁或 operation-ID 回执；未做线上提速实测，不把上述结构优化表述为已证明运行提速。聚焦集 `73 passed, 17 subtests passed`（4.13 秒）；主线程补真实 rebuild 顺序测试后，扩大集 `411 passed, 17 subtests passed`（34.62 秒，另有预加载 anyio warning）。启动导入先 `import tests`，确认临时目录 `/tmp/xiuxian-unittest-vuh44p85/xiuxian`。四项 command control gate 全 true，496 项冻结 membership 有效、`integrity_errors=[]`；计数为 210 已迁移、107 兼容、19 不可达、160 受阻，`--check` 因其余 160 项返回 1，静态检查合计 0.79 秒。首轮聚焦的三个子断言失败源于绑定刷新合法地为回复说明边绑定 handler，而测试误要求所有 handler 边仅一条；已改为只要求 owner 边恰一条，没有重做黑屋实现。
 
@@ -15,7 +23,7 @@
 | 3 | 兼容输出 9 条：修仙手册、广播帮助、艾特测试、按钮测试、消息信息、取链接、取raw、取reply、全量申请 | 已统一归类为允许保留的兼容路径；行为测试覆盖当前事件解析、分页/按钮边界、共享发送回退和授权 URL 保留，不新建九套 application。共享消息记录不等于零基础设施写入。 |
 | 4 | 黑屋 3 条 | 已验收唯一 SQL 名单 owner，封禁、解除、列表与路由读取共用；修复注册玩家路由失效和失败误报，启动导入、回放、回滚与路由回归通过。 |
 | 5 | 命令管控 3 条 | 已验收共享 JSON owner 与路由消费者适配，注册表/别名同源，取消命令写后重建；聚焦、扩大回归和四项门禁通过。 |
-| 6 | 广播 6 条 | 下一组：进程任务、取消、目标集合及普通消息补发同组，消息历史和发送使用端口。 |
+| 6 | 广播 6 条 | 已验收进程任务 owner、原子 claim、取消/清空与普通消息补发；只读历史及发送经注入端口，扩大回归和六项门禁通过。 |
 | 7 | 生成秘境、重载items、用户伪装，各 1 条 | 秘境已有 feature SQL 写与旧 JSON 投影，不重迁；Items 是共享目录缓存；伪装是共享进程身份映射，分别闭合实际消费者。 |
 | 8 | 转换QQID 1 条 | 旧四库逐 ID 同步 API 编排待迁；复用已迁移的可恢复 ID 更新，不重复写底层仓储。 |
 

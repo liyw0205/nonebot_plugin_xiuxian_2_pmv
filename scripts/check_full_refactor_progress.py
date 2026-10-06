@@ -142,6 +142,190 @@ def _has_production_bank_savef_import() -> bool:
     return False
 
 
+def _admin_broadcast_owner_status(sources: dict[str, str]) -> dict[str, object]:
+    """Check the broadcast ownership edges without importing runtime services."""
+    trees = {name: ast.parse(source) for name, source in sources.items()}
+    functions = {
+        name: {
+            node.name: node for node in ast.walk(tree)
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+        }
+        for name, tree in trees.items()
+    }
+
+    def nodes(source, function):
+        node = functions.get(source, {}).get(function)
+        return list(ast.walk(node)) if node is not None else []
+
+    def calls(source, function, target):
+        return [node for node in nodes(source, function)
+                if isinstance(node, ast.Call) and ast.unparse(node.func) == target]
+
+    def expression(source, function, expected):
+        return any(ast.unparse(node) == expected for node in nodes(source, function))
+
+    def uses_lock(function):
+        return any(
+            isinstance(node, ast.With)
+            and any(ast.unparse(item.context_expr) == "self._lock" for item in node.items)
+            for node in nodes("repository", function)
+        )
+
+    def permission(command):
+        for node in ast.walk(trees["handlers"]):
+            if not isinstance(node, ast.Call) or ast.unparse(node.func) != "on_command" or not node.args:
+                continue
+            if not isinstance(node.args[0], ast.Constant) or node.args[0].value != command:
+                continue
+            return next((ast.unparse(item.value) for item in node.keywords if item.arg == "permission"), "")
+        return None
+
+    def identity_forwarded(function, method):
+        delegated = calls("facade", function, f"_application().{method}")
+        return bool(
+            calls("facade", function, "_get_adapter_name")
+            and calls("facade", function, "_get_bot_self_id")
+            and delegated and delegated[0].args and ast.unparse(delegated[0].args[0]) == "bot"
+            and {item.arg: ast.unparse(item.value) for item in delegated[0].keywords}.items()
+            >= {"adapter": "adapter", "bot_id": "bot_id"}.items()
+            and all(node.args and ast.unparse(node.args[0]) == "bot" for name in ("_get_adapter_name", "_get_bot_self_id")
+                    for node in calls("facade", function, name))
+        )
+
+    def ledger_branch(status, prefix):
+        return any(
+            isinstance(node, ast.If) and ast.unparse(node.test) == f"status == '{status}'"
+            and any(
+                isinstance(child, ast.Call) and isinstance(child.func, ast.Attribute)
+                and child.func.attr == "add" and ast.unparse(child.func.value).startswith(f"task[f'{prefix}_")
+                for statement in node.body for child in ast.walk(statement)
+            )
+            for node in nodes("repository", "finish")
+        )
+
+    def scoped_history(function):
+        queries = calls("history", function, "uow.query_all")
+        literals = " ".join(node.value for node in nodes("history", function)
+                            if isinstance(node, ast.Constant) and isinstance(node.value, str))
+        return bool(queries and "adapter=? AND bot_id=?" in literals and all(
+            len(query.args) >= 2 and isinstance(query.args[1], ast.Tuple)
+            and [ast.unparse(value) for value in query.args[1].elts[:2]] == ["adapter", "bot_id"]
+            for query in queries
+        ))
+
+    handler_edges = {
+        "group_broadcast_cmd_": "start_broadcast", "private_broadcast_cmd_": "start_broadcast",
+        "global_broadcast_cmd_": "start_broadcast", "view_broadcast_cmd_": "format_broadcast_status",
+        "cancel_broadcast_cmd_": "cancel_broadcast", "clear_broadcast_cmd_": "clear_broadcast",
+    }
+    delegates = {
+        "start_broadcast": "start", "format_broadcast_status": "status", "cancel_broadcast": "cancel",
+        "clear_broadcast": "clear", "auto_patch_broadcast_for_event": "patch_event",
+    }
+    facade_constructors = [node for node in ast.walk(trees["facade"])
+                           if isinstance(node, ast.Call) and ast.unparse(node.func) == "AdminBroadcastRepository"]
+    application_constructors = [node for node in ast.walk(trees["facade"])
+                                if isinstance(node, ast.Call) and ast.unparse(node.func) == "AdminBroadcastApplication"]
+    history_calls = calls("application", "start", "self.history")
+    create_calls = calls("application", "start", "self.repository.create")
+    claim_calls = calls("application", "_deliver", "self.repository.claim")
+    send_calls = calls("application", "_deliver", "self.sender")
+    cancellation_handlers = [node for node in nodes("application", "_deliver")
+                             if isinstance(node, ast.ExceptHandler) and node.type is not None
+                             and ast.unparse(node.type) == "asyncio.CancelledError"]
+    readonly_uows = calls("history", "targets", "DatabaseUnitOfWork")
+    qq_literals = " ".join(node.value for node in nodes("history", "_qq_targets")
+                           if isinstance(node, ast.Constant) and isinstance(node.value, str))
+    report = {
+        "six_admin_handlers_and_compatibility_calls_use_one_memory_owner": (
+            all(calls("handlers", handler, target) for handler, target in handler_edges.items())
+            and all(permission(command) == "SUPERUSER" for command in
+                    ("群聊广播", "私聊广播", "全局广播", "查看广播", "取消广播", "清空广播"))
+            and all(calls("facade", function, f"_application().{method}") for function, method in delegates.items())
+            and len(facade_constructors) == len(application_constructors) == 1
+            and bool(application_constructors[0].args)
+            and ast.unparse(application_constructors[0].args[0]) == "_broadcast_repository"
+            and {item.arg: ast.unparse(item.value) for item in application_constructors[0].keywords}.items()
+            >= {"history": "_history_targets", "sender": "_send_broadcast_to_target"}.items()
+            and expression("facade", "_application", "return _broadcast_application")
+            and calls("web", "api_messages_broadcast", "start_broadcast")
+            and calls("web", "api_messages_broadcast_status", "format_broadcast_status")
+            and calls("events", "do_something", "auto_patch_broadcast_for_event")
+            and not any(isinstance(node, ast.Name) and node.id in {"BROADCAST_TASKS", "connect_message_db"}
+                        for node in ast.walk(trees["facade"]))
+        ),
+        "feature_lifecycle_claims_and_inflight_cancellation_are_atomic": (
+            all(uses_lock(name) for name in ("create", "claim", "finish", "cancel", "clear", "status"))
+            and not any(isinstance(node, ast.Await) for node in ast.walk(trees["repository"]))
+            and bool(history_calls and create_calls and history_calls[0].lineno < create_calls[0].lineno)
+            and bool(claim_calls and send_calls and claim_calls[0].lineno < send_calls[0].lineno)
+            and expression("repository", "claim", "task['_generation'] != handle.generation")
+            and expression("repository", "claim", "task['canceled']")
+            and expression("repository", "claim", "task['_inflight'][key] = claim")
+            and expression("repository", "finish", "del task['_inflight'][key]")
+            and expression("repository", "cancel", "task['canceled'] = True")
+            and calls("repository", "claim", "self._cleanup")
+            and not calls("repository", "claim", "self._snapshot")
+            and calls("repository", "_snapshot", "copy.deepcopy")
+        ),
+        "pending_failures_and_cancelled_coroutines_do_not_report_false_success": (
+            ledger_branch("sent", "sent") and ledger_branch("pending_audit", "pending")
+            and expression("repository", "claim", "key in task[f'pending_{bucket}']")
+            and any(
+                any(isinstance(child, ast.Raise) for child in ast.walk(handler))
+                and any(isinstance(child, ast.Call) and ast.unparse(child.func) == "self.repository.finish"
+                        and any(item.arg == "status" and isinstance(item.value, ast.Constant)
+                                and item.value.value == "failed" for item in child.keywords)
+                        for child in ast.walk(handler))
+                for handler in cancellation_handlers
+            )
+            and expression("application", "_deliver", "status not in {'sent', 'pending_audit'}")
+            and not any(ast.unparse(node) == "str(exc)" for node in nodes("application", "_deliver"))
+            and expression("repository", "finish", "del task['errors'][:-50]")
+        ),
+        "history_queries_are_readonly_bot_scoped_and_off_the_event_loop": (
+            bool(readonly_uows) and all(any(item.arg == "read_only" and isinstance(item.value, ast.Constant)
+                                           and item.value.value is True for item in node.keywords)
+                                      for node in readonly_uows)
+            and scoped_history("_qq_targets") and scoped_history("_ob11_targets")
+            and all(token in qq_literals for token in ("direction='recv'", "created_at>=?", "message_id<>''"))
+            and calls("history", "targets", "adapter_family")
+            and calls("facade", "_history_targets", "asyncio.to_thread")
+            and not any(isinstance(node, ast.Constant) and isinstance(node.value, str)
+                        and any(token in node.value.upper() for token in ("CREATE TABLE", "ALTER TABLE", "SELECT *"))
+                        for node in ast.walk(trees["history"]))
+        ),
+        "sender_identity_and_result_status_are_preserved_through_ports": (
+            identity_forwarded("start_broadcast", "start")
+            and identity_forwarded("auto_patch_broadcast_for_event", "patch_event")
+            and expression("repository", "claim", "adapter != task['adapter']")
+            and expression("repository", "claim", "bot_id != task['bot_id']")
+            and calls("facade", "_send_qq_broadcast_by_reply", "delivery_service.send")
+            and any(isinstance(node, ast.Return) and isinstance(node.value, ast.Await)
+                    and isinstance(node.value.value, ast.Call)
+                    and ast.unparse(node.value.value.func) == "delivery_service.send"
+                    for node in nodes("facade", "_send_qq_broadcast_by_reply"))
+            and not any(isinstance(node, ast.ImportFrom) and (node.module or "").startswith("nonebot")
+                        for name in ("application", "repository") for node in ast.walk(trees[name]))
+        ),
+        "entrypoint_and_race_regressions_have_behavioral_tests": (
+            all(name in functions["entry_tests"] for name in (
+                "test_six_handlers_share_facade_and_state_owner",
+                "test_qq_delivery_preserves_reply_markdown_and_pending_state",
+                "test_event_patch_rejects_other_bot_and_sends_new_targets",
+            ))
+            and all(name in functions["core_tests"] for name in (
+                "test_two_patch_events_claim_the_same_target_once",
+                "test_stopping_initial_send_prevents_all_later_targets_but_cannot_revoke_inflight",
+                "test_cancelled_coroutine_releases_claim_and_propagates_cancellation",
+            ))
+            and "test_adapter_and_bot_id_are_strictly_isolated" in functions["history_tests"]
+        ),
+        "status": "broadcast_lifecycle_and_target_claims_are_feature_owned_with_readonly_bot_scoped_history",
+    }
+    return {key: value if key == "status" else bool(value) for key, value in report.items()}
+
+
 @lru_cache(maxsize=1)
 def _slice_status() -> dict[str, dict[str, object]]:
     @lru_cache(maxsize=None)
@@ -1028,6 +1212,18 @@ def _slice_status() -> dict[str, dict[str, object]]:
     }
     admin_command_tests = (ROOT / "tests/test_admin_command_control.py").read_text(encoding="utf-8")
     admin_command_repository_tests = (PACKAGE / "features/admin/tests/test_command_control_repository.py").read_text(encoding="utf-8")
+    admin_broadcast_sources = {
+        "application": (PACKAGE / "features/admin/broadcast_application.py").read_text(encoding="utf-8"),
+        "repository": (PACKAGE / "features/admin/broadcast_repository.py").read_text(encoding="utf-8"),
+        "history": (PACKAGE / "features/admin/broadcast_history_repository.py").read_text(encoding="utf-8"),
+        "facade": (PACKAGE / "xiuxian/broadcast_manager.py").read_text(encoding="utf-8"),
+        "handlers": admin_facade,
+        "web": (PACKAGE / "xiuxian/xiuxian_web/messages.py").read_text(encoding="utf-8"),
+        "events": (PACKAGE / "xiuxian/__init__.py").read_text(encoding="utf-8"),
+        "entry_tests": (ROOT / "tests/test_admin_broadcast.py").read_text(encoding="utf-8"),
+        "core_tests": (PACKAGE / "features/admin/tests/test_broadcast_application.py").read_text(encoding="utf-8"),
+        "history_tests": (PACKAGE / "features/admin/tests/test_broadcast_history_repository.py").read_text(encoding="utf-8"),
+    }
     admin_status_batch_handler = admin_facade[
         admin_facade.index("async def restate_") : admin_facade.index(
             "@set_xiuxian.handle", admin_facade.index("async def restate_")
@@ -4837,6 +5033,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
             ),
             "status": "command_flags_registry_and_aliases_share_atomic_json_owner_with_failure_safe_runtime_view",
         },
+        "admin_broadcast_owner": _admin_broadcast_owner_status(admin_broadcast_sources),
         "admin": {
             "stone_default_application_owned": (
                 "AdminStoneSqlRepository" in admin_asset_application

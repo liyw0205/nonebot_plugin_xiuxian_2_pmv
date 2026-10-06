@@ -2696,7 +2696,11 @@ async def group_broadcast_cmd_(
     bot, _ = await assign_bot(bot=bot, event=event)
 
     raw = str(args).strip()
-    duration_minutes, content = parse_broadcast_duration_and_content(raw)
+    try:
+        duration_minutes, content = parse_broadcast_duration_and_content(raw)
+    except (ValueError, OverflowError):
+        await handle_send(bot, event, "广播时间无效或超出范围，请使用合理的天/小时/分钟数。")
+        return
 
     if not content:
         await handle_send(
@@ -2712,12 +2716,16 @@ async def group_broadcast_cmd_(
         )
         return
 
-    msg = await start_broadcast(
-        bot,
-        "group",
-        fix_mqqapi_inlinecmd_links(content),
-        duration_minutes=duration_minutes,
-    )
+    try:
+        msg = await start_broadcast(
+            bot,
+            "group",
+            fix_mqqapi_inlinecmd_links(content),
+            duration_minutes=duration_minutes,
+        )
+    except Exception as exc:
+        logger.warning("group broadcast creation failed: {}", type(exc).__name__)
+        msg = "广播创建失败，请检查参数、适配器配置及服务日志。"
     await handle_send(bot, event, msg)
 
 
@@ -2730,7 +2738,11 @@ async def private_broadcast_cmd_(
     bot, _ = await assign_bot(bot=bot, event=event)
 
     raw = str(args).strip()
-    duration_minutes, content = parse_broadcast_duration_and_content(raw)
+    try:
+        duration_minutes, content = parse_broadcast_duration_and_content(raw)
+    except (ValueError, OverflowError):
+        await handle_send(bot, event, "广播时间无效或超出范围，请使用合理的天/小时/分钟数。")
+        return
 
     if not content:
         await handle_send(
@@ -2746,12 +2758,16 @@ async def private_broadcast_cmd_(
         )
         return
 
-    msg = await start_broadcast(
-        bot,
-        "private",
-        fix_mqqapi_inlinecmd_links(content),
-        duration_minutes=duration_minutes,
-    )
+    try:
+        msg = await start_broadcast(
+            bot,
+            "private",
+            fix_mqqapi_inlinecmd_links(content),
+            duration_minutes=duration_minutes,
+        )
+    except Exception as exc:
+        logger.warning("private broadcast creation failed: {}", type(exc).__name__)
+        msg = "广播创建失败，请检查参数、适配器配置及服务日志。"
     await handle_send(bot, event, msg)
 
 
@@ -2764,7 +2780,11 @@ async def global_broadcast_cmd_(
     bot, _ = await assign_bot(bot=bot, event=event)
 
     raw = str(args).strip()
-    duration_minutes, content = parse_broadcast_duration_and_content(raw)
+    try:
+        duration_minutes, content = parse_broadcast_duration_and_content(raw)
+    except (ValueError, OverflowError):
+        await handle_send(bot, event, "广播时间无效或超出范围，请使用合理的天/小时/分钟数。")
+        return
 
     if not content:
         await handle_send(
@@ -2780,12 +2800,16 @@ async def global_broadcast_cmd_(
         )
         return
 
-    msg = await start_broadcast(
-        bot,
-        "global",
-        fix_mqqapi_inlinecmd_links(content),
-        duration_minutes=duration_minutes,
-    )
+    try:
+        msg = await start_broadcast(
+            bot,
+            "global",
+            fix_mqqapi_inlinecmd_links(content),
+            duration_minutes=duration_minutes,
+        )
+    except Exception as exc:
+        logger.warning("global broadcast creation failed: {}", type(exc).__name__)
+        msg = "广播创建失败，请检查参数、适配器配置及服务日志。"
     await handle_send(bot, event, msg)
 
 
@@ -2795,7 +2819,12 @@ async def view_broadcast_cmd_(
     event: GroupMessageEvent | PrivateMessageEvent,
 ):
     bot, _ = await assign_bot(bot=bot, event=event)
-    await handle_send(bot, event, format_broadcast_status())
+    try:
+        msg = format_broadcast_status()
+    except Exception as exc:
+        logger.warning("broadcast status failed: {}", type(exc).__name__)
+        msg = "读取广播失败，请检查服务日志。"
+    await handle_send(bot, event, msg)
 
 
 @cancel_broadcast_cmd.handle(parameterless=[Cooldown(cd_time=0)])
@@ -2807,7 +2836,12 @@ async def cancel_broadcast_cmd_(
     bot, _ = await assign_bot(bot=bot, event=event)
 
     bid = args.extract_plain_text().strip()
-    await handle_send(bot, event, cancel_broadcast(bid))
+    try:
+        msg = cancel_broadcast(bid)
+    except Exception as exc:
+        logger.warning("broadcast cancel failed: {}", type(exc).__name__)
+        msg = "取消广播失败，请检查服务日志。"
+    await handle_send(bot, event, msg)
 
 
 @clear_broadcast_cmd.handle(parameterless=[Cooldown(cd_time=0)])
@@ -2821,7 +2855,12 @@ async def clear_broadcast_cmd_(
     raw = args.extract_plain_text().strip()
     kind = parse_clear_broadcast_kind(raw)
 
-    await handle_send(bot, event, clear_broadcast(kind))
+    try:
+        msg = clear_broadcast(kind)
+    except Exception as exc:
+        logger.warning("broadcast clear failed: {}", type(exc).__name__)
+        msg = "清空广播失败，请检查服务日志。"
+    await handle_send(bot, event, msg)
 
 
 @broadcast_help_cmd.handle(parameterless=[Cooldown(cd_time=0)])

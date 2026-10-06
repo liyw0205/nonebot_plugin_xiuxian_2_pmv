@@ -2185,22 +2185,32 @@
       "id": "command:admin:全局广播",
       "kind": "commands",
       "entry": "admin:全局广播 (aliases: )",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "The real SUPERUSER handler starts global broadcasts through the default feature application. A single process-local repository owns tasks and target claims; the history port reads only the current adapter/bot's eligible message targets without schema writes, and the sender port reports sent, pending-audit or failure explicitly. Event backfill shares the same claim owner, avoiding concurrent duplicate sends. This preserves process-local tasks rather than introducing persistence; a network request already in flight cannot be revoked by cancellation or clearing.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:331 global_broadcast_cmd = on_command('全局广播') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2759 global_broadcast_cmd_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2775 global_broadcast_cmd_ -> parse_broadcast_duration_and_content -> broadcast_manager.start_broadcast(kind=global) -> AdminBroadcastApplication.start -> AdminBroadcastRepository.create/claim/finish",
+        "AdminBroadcastApplication.start -> async history port -> AdminBroadcastHistoryRepository.targets -> DatabaseUnitOfWork(message_db, read_only=True); adapter and bot_id are exact filters, QQ uses the legacy one-minute lower bound and latest scene/target reply, OB11 retains history direction semantics and group-before-private ordering; connection closes before sending and target lists remain materialized",
+        "AdminBroadcastApplication._deliver -> repository generation/claim token -> sender port _send_broadcast_to_target -> shared delivery_service or OB11 forwarded-message API -> finish records sent/pending_audit/failure without holding the repository lock over network awaits",
+        "auto_patch_broadcast_for_event -> AdminBroadcastApplication.patch_event -> the same adapter/bot-isolated repository claim; process-local status/cancel/clear prevent subsequent sends but cannot retract already-issued network requests"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:331",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2759"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2775",
+        "nonebot_plugin_xiuxian_2/xiuxian/broadcast_manager.py",
+        "nonebot_plugin_xiuxian_2/features/admin/broadcast_application.py",
+        "nonebot_plugin_xiuxian_2/features/admin/broadcast_repository.py",
+        "nonebot_plugin_xiuxian_2/features/admin/broadcast_history_repository.py",
+        "nonebot_plugin_xiuxian_2/features/admin/tests/test_broadcast_application.py",
+        "nonebot_plugin_xiuxian_2/features/admin/tests/test_broadcast_history_repository.py",
+        "tests/test_admin_broadcast.py",
+        "tests/test_admin_progress_contract.py"
       ],
       "source_declaration_found": true,
       "source": {
@@ -3172,22 +3182,31 @@
       "id": "command:admin:取消广播",
       "kind": "commands",
       "entry": "admin:取消广播 (aliases: )",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "The real SUPERUSER handler cancels tasks through the default feature application and its single process-local repository, not a mutable compatibility dictionary. Cancellation prevents new target claims and is observed by initial delivery and event backfill; the response explicitly reports in-flight sends that cannot be retracted. Task state is intentionally not persisted and detached status snapshots cannot mutate the owner.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:340 cancel_broadcast_cmd = on_command('取消广播') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2802 cancel_broadcast_cmd_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2831 cancel_broadcast_cmd_ -> broadcast_manager.cancel_broadcast -> AdminBroadcastApplication.cancel -> AdminBroadcastRepository.cancel",
+        "AdminBroadcastRepository.cancel -> expiry cleanup and cancelled state under the process-local lock -> subsequent create-loop/event-backfill claims stop; an already-issued sender-port request is not revoked and its in-flight count is reported",
+        "The shared creation path uses AdminBroadcastHistoryRepository.targets with read-only adapter/bot-isolated SQL before any sender-port network await; repository generation/claim tokens prevent stale completions from modifying replacement tasks"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:340",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2802"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2831",
+        "nonebot_plugin_xiuxian_2/xiuxian/broadcast_manager.py",
+        "nonebot_plugin_xiuxian_2/features/admin/broadcast_application.py",
+        "nonebot_plugin_xiuxian_2/features/admin/broadcast_repository.py",
+        "nonebot_plugin_xiuxian_2/features/admin/broadcast_history_repository.py",
+        "nonebot_plugin_xiuxian_2/features/admin/tests/test_broadcast_application.py",
+        "nonebot_plugin_xiuxian_2/features/admin/tests/test_broadcast_history_repository.py",
+        "tests/test_admin_broadcast.py",
+        "tests/test_admin_progress_contract.py"
       ],
       "source_declaration_found": true,
       "source": {
@@ -3897,7 +3916,7 @@
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:355 broadcast_help_cmd = on_command('广播帮助') aliases=广播指令,广播说明 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2828 broadcast_help_cmd_ -> send_help_message compatibility delivery",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2867 broadcast_help_cmd_ -> send_help_message compatibility delivery",
         "shared send_help_message / send_msg_handler / delivery_service.reply / handle_send -> adapter_message_sender -> record_send_message -> queued message history and reply counters; config, ID mapping and rendering resources remain shared compatibility infrastructure"
       ],
       "evidence": [
@@ -3908,7 +3927,7 @@
         "tests/test_admin_output_commands_compat.py",
         "tests/test_admin_progress_contract.py",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:355",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2828"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2867"
       ],
       "source_declaration_found": true,
       "source": {
@@ -4758,14 +4777,14 @@
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/command_controls.py:23",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/command_controls.py:101",
         "nonebot_plugin_xiuxian_2/features/admin/command_control_application.py",
         "nonebot_plugin_xiuxian_2/features/admin/command_control_repository.py",
         "nonebot_plugin_xiuxian_2/xiuxian/command_disable.py",
         "nonebot_plugin_xiuxian_2/features/admin/tests/test_command_control_repository.py",
         "tests/test_admin_command_control.py",
-        "tests/test_command_disable_store.py"
+        "tests/test_command_disable_store.py",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/command_controls.py:23",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/command_controls.py:101"
       ],
       "source_declaration_found": true,
       "source": {
@@ -4792,14 +4811,14 @@
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/command_controls.py:21",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/command_controls.py:28",
         "nonebot_plugin_xiuxian_2/features/admin/command_control_application.py",
         "nonebot_plugin_xiuxian_2/features/admin/command_control_repository.py",
         "nonebot_plugin_xiuxian_2/xiuxian/command_disable.py",
         "nonebot_plugin_xiuxian_2/features/admin/tests/test_command_control_repository.py",
         "tests/test_admin_command_control.py",
-        "tests/test_command_disable_store.py"
+        "tests/test_command_disable_store.py",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/command_controls.py:21",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/command_controls.py:28"
       ],
       "source_declaration_found": true,
       "source": {
@@ -4825,14 +4844,14 @@
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/command_controls.py:22",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/command_controls.py:53",
         "nonebot_plugin_xiuxian_2/features/admin/command_control_application.py",
         "nonebot_plugin_xiuxian_2/features/admin/command_control_repository.py",
         "nonebot_plugin_xiuxian_2/xiuxian/command_disable.py",
         "nonebot_plugin_xiuxian_2/features/admin/tests/test_command_control_repository.py",
         "tests/test_admin_command_control.py",
-        "tests/test_command_disable_store.py"
+        "tests/test_command_disable_store.py",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/command_controls.py:22",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/command_controls.py:53"
       ],
       "source_declaration_found": true,
       "source": {
@@ -5361,22 +5380,31 @@
       "id": "command:admin:查看广播",
       "kind": "commands",
       "entry": "admin:查看广播 (aliases: 广播列表)",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "The real SUPERUSER handler formats detached snapshots from the default feature application and single process-local task repository. The repository performs expiry cleanup and reports known, sent, pending-audit, in-flight and error counts consistently with initial and event-triggered delivery. This is not a persistent task store or a pure no-effect query: expired process-local entries are removed; in-flight network requests cannot be retracted.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:332 view_broadcast_cmd = on_command('查看广播') aliases=广播列表 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2793 view_broadcast_cmd_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2817 view_broadcast_cmd_ -> broadcast_manager.format_broadcast_status -> AdminBroadcastApplication.status -> AdminBroadcastRepository.status",
+        "AdminBroadcastRepository.status -> expiry cleanup under the process-local lock -> detached task snapshots with sent/pending_audit/inflight/error counts -> compatibility formatting and handle_send",
+        "The shared task owner is populated by AdminBroadcastApplication.start/patch_event through read-only AdminBroadcastHistoryRepository.targets and the sender port; status never initializes message schema and does not imply durable or retractable delivery"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:332",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2793"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2817",
+        "nonebot_plugin_xiuxian_2/xiuxian/broadcast_manager.py",
+        "nonebot_plugin_xiuxian_2/features/admin/broadcast_application.py",
+        "nonebot_plugin_xiuxian_2/features/admin/broadcast_repository.py",
+        "nonebot_plugin_xiuxian_2/features/admin/broadcast_history_repository.py",
+        "nonebot_plugin_xiuxian_2/features/admin/tests/test_broadcast_application.py",
+        "nonebot_plugin_xiuxian_2/features/admin/tests/test_broadcast_history_repository.py",
+        "tests/test_admin_broadcast.py",
+        "tests/test_admin_progress_contract.py"
       ],
       "source_declaration_found": true,
       "source": {
@@ -6666,22 +6694,31 @@
       "id": "command:admin:清空广播",
       "kind": "commands",
       "entry": "admin:清空广播 (aliases: 清除广播)",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "The real SUPERUSER handler validates the requested kind and clears matching tasks through the default feature application and single process-local repository. Generation-bound target claims prevent old completions from mutating replacement tasks, and initial/event delivery stops after clearing. Already-issued network requests cannot be retracted and are explicitly counted; this preserves process-local semantics rather than introducing durable task storage.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:347 clear_broadcast_cmd = on_command('清空广播') aliases=清除广播 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2814 clear_broadcast_cmd_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2848 clear_broadcast_cmd_ -> parse_clear_broadcast_kind -> broadcast_manager.clear_broadcast -> AdminBroadcastApplication.clear -> AdminBroadcastRepository.clear",
+        "AdminBroadcastRepository.clear -> validate kind and remove matching process-local tasks under lock -> later initial/event-backfill claims stop; generation and claim tokens reject stale sender completions, while in-flight network requests remain non-retractable",
+        "The shared start path reads message history through AdminBroadcastHistoryRepository.targets with a read-only connection closed before the sender port; clear operates only on the feature-owned process-local task state"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:347",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2814"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2848",
+        "nonebot_plugin_xiuxian_2/xiuxian/broadcast_manager.py",
+        "nonebot_plugin_xiuxian_2/features/admin/broadcast_application.py",
+        "nonebot_plugin_xiuxian_2/features/admin/broadcast_repository.py",
+        "nonebot_plugin_xiuxian_2/features/admin/broadcast_history_repository.py",
+        "nonebot_plugin_xiuxian_2/features/admin/tests/test_broadcast_application.py",
+        "nonebot_plugin_xiuxian_2/features/admin/tests/test_broadcast_history_repository.py",
+        "tests/test_admin_broadcast.py",
+        "tests/test_admin_progress_contract.py"
       ],
       "source_declaration_found": true,
       "source": {
@@ -7493,22 +7530,32 @@
       "id": "command:admin:私聊广播",
       "kind": "commands",
       "entry": "admin:私聊广播 (aliases: )",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "The real SUPERUSER handler starts private broadcasts through the default feature application and single process-local task/target-claim repository. The history port selects only eligible private scenes for the current adapter and bot using a read-only connection, and the sender port distinguishes successful, pending-audit and failed sends. Initial and event delivery share claim deduplication; task state is not persisted and cancellation cannot retract a network request already in flight.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:330 private_broadcast_cmd = on_command('私聊广播') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2725 private_broadcast_cmd_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2733 private_broadcast_cmd_ -> parse_broadcast_duration_and_content -> broadcast_manager.start_broadcast(kind=private) -> AdminBroadcastApplication.start -> AdminBroadcastRepository.create/claim/finish",
+        "AdminBroadcastApplication.start -> async history port -> AdminBroadcastHistoryRepository.targets -> DatabaseUnitOfWork(message_db, read_only=True); exact adapter/bot_id filters and private/channel_private scenes, QQ recent latest reply or OB11 historical targets, no request-time DDL and connection closed before sending; targets remain materialized",
+        "AdminBroadcastApplication._deliver -> generation-bound target claim -> sender port _send_broadcast_to_target -> delivery_service or OB11 private forward API -> repository.finish sent/pending_audit/failure; no repository lock held across network await",
+        "auto_patch_broadcast_for_event -> AdminBroadcastApplication.patch_event -> the same process-local adapter/bot-isolated claim owner; cancel/clear stop future claims but cannot retract in-flight network requests"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:330",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2725"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2733",
+        "nonebot_plugin_xiuxian_2/xiuxian/broadcast_manager.py",
+        "nonebot_plugin_xiuxian_2/features/admin/broadcast_application.py",
+        "nonebot_plugin_xiuxian_2/features/admin/broadcast_repository.py",
+        "nonebot_plugin_xiuxian_2/features/admin/broadcast_history_repository.py",
+        "nonebot_plugin_xiuxian_2/features/admin/tests/test_broadcast_application.py",
+        "nonebot_plugin_xiuxian_2/features/admin/tests/test_broadcast_history_repository.py",
+        "tests/test_admin_broadcast.py",
+        "tests/test_admin_progress_contract.py"
       ],
       "source_declaration_found": true,
       "source": {
@@ -7851,22 +7898,32 @@
       "id": "command:admin:群聊广播",
       "kind": "commands",
       "entry": "admin:群聊广播 (aliases: )",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "The real SUPERUSER handler starts group broadcasts through the default feature application and single process-local task/target-claim repository. Read-only history is restricted to eligible group scenes for the current adapter and bot, with no content-column loading or schema initialization. Explicit send outcomes and shared initial/event claims prevent false success and concurrent duplicates. Task state is not persisted and already-issued network requests cannot be revoked by cancel or clear.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:329 group_broadcast_cmd = on_command('群聊广播') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2691 group_broadcast_cmd_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2691 group_broadcast_cmd_ -> parse_broadcast_duration_and_content -> broadcast_manager.start_broadcast(kind=group) -> AdminBroadcastApplication.start -> AdminBroadcastRepository.create/claim/finish",
+        "AdminBroadcastApplication.start -> async history port -> AdminBroadcastHistoryRepository.targets -> DatabaseUnitOfWork(message_db, read_only=True); exact adapter/bot_id filters and group/channel_group scenes, QQ latest recent reply or OB11 historical targets, required-column projection only, connection closed before sending; targets remain materialized",
+        "AdminBroadcastApplication._deliver -> generation-bound target claim -> sender port _send_broadcast_to_target -> delivery_service or OB11 group forward API -> repository.finish sent/pending_audit/failure; no repository lock held across network await",
+        "auto_patch_broadcast_for_event -> AdminBroadcastApplication.patch_event -> the same process-local adapter/bot-isolated claim owner; cancel/clear stop future claims but cannot retract in-flight network requests"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:329",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2691"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2691",
+        "nonebot_plugin_xiuxian_2/xiuxian/broadcast_manager.py",
+        "nonebot_plugin_xiuxian_2/features/admin/broadcast_application.py",
+        "nonebot_plugin_xiuxian_2/features/admin/broadcast_repository.py",
+        "nonebot_plugin_xiuxian_2/features/admin/broadcast_history_repository.py",
+        "nonebot_plugin_xiuxian_2/features/admin/tests/test_broadcast_application.py",
+        "nonebot_plugin_xiuxian_2/features/admin/tests/test_broadcast_history_repository.py",
+        "tests/test_admin_broadcast.py",
+        "tests/test_admin_progress_contract.py"
       ],
       "source_declaration_found": true,
       "source": {

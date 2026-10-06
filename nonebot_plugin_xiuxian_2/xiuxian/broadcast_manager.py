@@ -1,11 +1,14 @@
-# broadcast_manager.py
-# -*- coding: utf-8 -*-
+"""广播兼容接口及适配器端口；任务状态由 admin feature 独占。"""
 
-import uuid
-from datetime import datetime, timedelta
+import asyncio
+from datetime import datetime
 
 from nonebot.log import logger
 
+from ..features.admin.broadcast_application import AdminBroadcastApplication
+from ..features.admin.broadcast_history_repository import AdminBroadcastHistoryRepository
+from ..features.admin.broadcast_repository import AdminBroadcastRepository, adapter_family
+from ..paths import get_paths
 from .xiuxian_config import XiuConfig
 from .adapter_compat import (
     Bot,
@@ -14,10 +17,7 @@ from .adapter_compat import (
     get_group_id,
     get_user_id,
 )
-from .xiuxian_utils.message_db import connect_message_db
 from .messaging import SendRequest, delivery_service
-
-BROADCAST_TASKS: dict[str, dict] = {}
 
 
 def _now() -> datetime:
@@ -27,76 +27,34 @@ def _now() -> datetime:
 def _parse_dt(text: str) -> datetime | None:
     if not text:
         return None
-
     try:
         return datetime.strptime(str(text), "%Y-%m-%d %H:%M:%S")
-    except Exception:
+    except (ValueError, TypeError):
         return None
 
 
-def _is_task_expired(task: dict) -> bool:
-    expire_at = _parse_dt(str(task.get("expire_at") or ""))
-
-    if not expire_at:
-        return False
-
-    return _now() >= expire_at
-
-
-def _cleanup_expired_tasks():
-    """
-    清理已过期广播任务。
-
-    广播任务只存在内存中，过期后直接移除。
-    """
-    expired_ids = [
-        bid for bid, task in BROADCAST_TASKS.items()
-        if _is_task_expired(task)
-    ]
-
-    for bid in expired_ids:
-        BROADCAST_TASKS.pop(bid, None)
-
-    if expired_ids:
-        logger.info(f"[广播] 已清理过期广播任务: {expired_ids}")
-
-
 def _format_remaining(task: dict) -> str:
-    expire_at = _parse_dt(str(task.get("expire_at") or ""))
-
-    if not expire_at:
-        return "未知"
-
-    delta = expire_at - _now()
-    total_seconds = int(delta.total_seconds())
-
+    total_seconds = task.get("remaining_seconds")
+    if total_seconds is None:
+        expire_at = _parse_dt(str(task.get("expire_at") or ""))
+        if expire_at is None:
+            return "未知"
+        total_seconds = (expire_at - _now()).total_seconds()
+    total_seconds = int(total_seconds)
     if total_seconds <= 0:
         return "已过期"
-
     minutes = total_seconds // 60
     days = minutes // 1440
     hours = minutes % 1440 // 60
     mins = minutes % 60
-
     parts = []
-
     if days:
         parts.append(f"{days}天")
-
     if hours:
         parts.append(f"{hours}小时")
-
     if mins:
         parts.append(f"{mins}分钟")
-
-    if not parts:
-        parts.append("不足1分钟")
-
-    return "".join(parts)
-
-
-def _new_broadcast_id() -> str:
-    return "BC" + uuid.uuid4().hex[:8].upper()
+    return "".join(parts) if parts else "不足1分钟"
 
 
 def _get_adapter_name(bot: Bot) -> str:
@@ -111,16 +69,11 @@ def _get_bot_self_id(bot: Bot) -> str:
 
 
 def _is_ob11_adapter(adapter: str) -> bool:
-    low = str(adapter or "").lower()
-    return "onebot" in low or "ob11" in low or "v11" in low
+    return adapter_family(adapter) == "ob11"
 
 
 def _is_qq_adapter(adapter: str) -> bool:
     return str(adapter or "") == "QQ"
-
-
-def _target_key(scene: str, target_id: str) -> str:
-    return f"{scene}:{target_id}"
 
 
 def _is_group_scene(scene: str) -> bool:
@@ -129,19 +82,6 @@ def _is_group_scene(scene: str) -> bool:
 
 def _is_private_scene(scene: str) -> bool:
     return scene in ("private", "channel_private")
-
-
-def _broadcast_accept_scene(kind: str, scene: str) -> bool:
-    if kind == "group":
-        return _is_group_scene(scene)
-
-    if kind == "private":
-        return _is_private_scene(scene)
-
-    if kind == "global":
-        return _is_group_scene(scene) or _is_private_scene(scene)
-
-    return False
 
 
 def _get_event_target(scene: str, event) -> str:
@@ -153,137 +93,51 @@ def _get_event_target(scene: str, event) -> str:
             or getattr(event, "channel_id", "")
             or ""
         )
-
     if _is_private_scene(scene):
-        return str(
-            get_user_id(event)
-            or getattr(event, "user_id", "")
-            or ""
-        )
-
+        return str(get_user_id(event) or getattr(event, "user_id", "") or "")
     return ""
 
 
 def _get_event_message_id(event) -> str:
-    return str(
-        getattr(event, "message_id", "")
-        or getattr(event, "id", "")
-        or ""
-    )
+    return str(getattr(event, "message_id", "") or getattr(event, "id", "") or "")
 
 
-def _mark_broadcast_sent(task: dict, scene: str, target_id: str):
-    key = _target_key(scene, target_id)
-
-    if _is_group_scene(scene):
-        task["sent_groups"].add(key)
-
-    elif _is_private_scene(scene):
-        task["sent_users"].add(key)
-
-
-def _is_broadcast_sent(task: dict, scene: str, target_id: str) -> bool:
-    key = _target_key(scene, target_id)
-
-    if _is_group_scene(scene):
-        return key in task["sent_groups"]
-
-    if _is_private_scene(scene):
-        return key in task["sent_users"]
-
-    return True
-
-
-def _remember_broadcast_target(task: dict, scene: str, target_id: str):
-    key = _target_key(scene, target_id)
-
-    if _is_group_scene(scene):
-        task["known_groups"].add(key)
-
-    elif _is_private_scene(scene):
-        task["known_users"].add(key)
-
-
-def _query_message_db_rows(sql: str, params: tuple = ()) -> list[dict]:
-    conn = connect_message_db(row_factory=True)
-
-    try:
-        cur = conn.cursor()
-        cur.execute(sql, params)
-        return [dict(r) for r in cur.fetchall()]
-
-    finally:
-        conn.close()
+async def _history_targets(adapter: str, bot_id: str, kind: str, now: datetime) -> list[dict]:
+    repository = AdminBroadcastHistoryRepository(get_paths().message_db)
+    # The synchronous query closes its read-only connection before any send starts.
+    return await asyncio.to_thread(repository.targets, adapter, bot_id, kind, now)
 
 
 def _make_broadcast_message(bot: Bot, task: dict):
     content = task["content"]
-
-    # QQ 适配器：开启 Markdown 时走原生 Markdown
     if task.get("markdown") and _is_qq_adapter(task.get("adapter", "")):
         return MessageSegment.markdown(bot, content)
-
     return content
 
 
 async def _send_ob11_broadcast(bot: Bot, task: dict, scene: str, target_id: str):
-    """
-    OB11 主动发送。
-    markdown_status=True 时使用单节点合并转发。
-    """
-    content = task["content"]
-    use_markdown = bool(task.get("markdown"))
+    if not _is_group_scene(scene) and not _is_private_scene(scene):
+        raise ValueError("unsupported broadcast scene")
+    if not task.get("markdown"):
+        delivery_scene = "group" if _is_group_scene(scene) else "private"
+        return await delivery_service.send(
+            bot, SendRequest(delivery_scene, str(target_id), task["content"])
+        )
 
-    def maybe_int(x: str):
-        return int(x) if str(x).isdigit() else x
-
-    if use_markdown:
-        node_uin = str(getattr(bot, "self_id", "") or "10000")
-        messages = [
-            {
-                "type": "node",
-                "data": {
-                    "name": "系统广播",
-                    "uin": node_uin,
-                    "content": content or " ",
-                },
-            }
-        ]
-
-        if _is_group_scene(scene):
-            await bot.call_api(
-                "send_group_forward_msg",
-                group_id=maybe_int(target_id),
-                messages=messages,
-            )
-
-        elif _is_private_scene(scene):
-            await bot.call_api(
-                "send_private_forward_msg",
-                user_id=maybe_int(target_id),
-                messages=messages,
-            )
-
-        else:
-            raise RuntimeError(f"OB11 不支持 scene={scene}")
-
+    messages = [{
+        "type": "node",
+        "data": {
+            "name": "系统广播",
+            "uin": str(getattr(bot, "self_id", "") or "10000"),
+            "content": task["content"] or " ",
+        },
+    }]
+    target = int(target_id) if str(target_id).isdigit() else target_id
+    if _is_group_scene(scene):
+        await bot.call_api("send_group_forward_msg", group_id=target, messages=messages)
     else:
-        if _is_group_scene(scene):
-            await bot.call_api(
-                "send_group_msg",
-                group_id=maybe_int(target_id),
-                message=content,
-            )
-
-        elif _is_private_scene(scene):
-            await bot.call_api(
-                "send_private_msg",
-                user_id=maybe_int(target_id),
-                message=content,
-            )
-
-        else:
-            raise RuntimeError(f"OB11 不支持 scene={scene}")
+        await bot.call_api("send_private_forward_msg", user_id=target, messages=messages)
+    return {"status": "sent"}
 
 
 async def _send_qq_broadcast_by_reply(
@@ -293,23 +147,16 @@ async def _send_qq_broadcast_by_reply(
     target_id: str,
     source_message_id: str,
 ):
-    """
-    QQ 官方适配器不能纯主动发，因此用当前消息 id 作为 msg_id 回复式发送。
-    """
     if not source_message_id:
-        raise RuntimeError("QQ 广播缺少可回复 message_id")
-
-    message = _make_broadcast_message(bot, task)
-
-    if scene not in {"group", "private", "channel_group", "channel_private"}:
-        raise RuntimeError(f"QQ 不支持 scene={scene}")
-
-    await delivery_service.send(
+        raise ValueError("missing broadcast reply message id")
+    if not _is_group_scene(scene) and not _is_private_scene(scene):
+        raise ValueError("unsupported broadcast scene")
+    return await delivery_service.send(
         bot,
         SendRequest(
             scene,
             str(target_id),
-            message,
+            _make_broadcast_message(bot, task),
             source_message_id=str(source_message_id),
         ),
     )
@@ -322,191 +169,27 @@ async def _send_broadcast_to_target(
     target_id: str,
     source_message_id: str = "",
 ):
-    if task.get("canceled"):
-        return False, "广播已取消"
-
-    if _is_task_expired(task):
-        return False, "广播已过期"
-
-    if not target_id:
-        return False, "target_id为空"
-
-    if not _broadcast_accept_scene(task["kind"], scene):
-        return False, "scene不匹配广播类型"
-
-    if _is_broadcast_sent(task, scene, target_id):
-        return False, "已发送过"
-
-    adapter = task["adapter"]
-
     try:
-        _remember_broadcast_target(task, scene, target_id)
-
-        if _is_qq_adapter(adapter):
-            await _send_qq_broadcast_by_reply(
-                bot=bot,
-                task=task,
-                scene=scene,
-                target_id=target_id,
-                source_message_id=source_message_id,
+        if _is_qq_adapter(task["adapter"]):
+            return await _send_qq_broadcast_by_reply(
+                bot, task, scene, target_id, source_message_id
             )
-
-        elif _is_ob11_adapter(adapter):
-            await _send_ob11_broadcast(
-                bot=bot,
-                task=task,
-                scene=scene,
-                target_id=target_id,
-            )
-
-        else:
-            return False, f"暂不支持适配器: {adapter}"
-
-        _mark_broadcast_sent(task, scene, target_id)
-        return True, "ok"
-
-    except Exception as e:
-        task["errors"].append(
-            {
-                "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                "scene": scene,
-                "target_id": target_id,
-                "error": str(e),
-            }
-        )
-        logger.warning(
-            f"[广播] 发送失败 id={task['id']} scene={scene} target={target_id}: {e}"
-        )
-        return False, str(e)
+        if _is_ob11_adapter(task["adapter"]):
+            return await _send_ob11_broadcast(bot, task, scene, target_id)
+        raise ValueError("unsupported broadcast adapter")
+    except Exception as exc:
+        logger.warning("broadcast delivery failed: {}", type(exc).__name__)
+        raise
 
 
-def _get_qq_recent_targets(adapter: str, kind: str) -> list[dict]:
-    """
-    QQ 初始广播：
-    只读取最近 1 分钟内有 recv 消息且 message_id 不为空的目标。
-    """
-    since = (datetime.now() - timedelta(minutes=1)).strftime("%Y-%m-%d %H:%M:%S")
-
-    scenes = []
-
-    if kind in ("group", "global"):
-        scenes.extend(["group", "channel_group"])
-
-    if kind in ("private", "global"):
-        scenes.extend(["private", "channel_private"])
-
-    if not scenes:
-        return []
-
-    placeholders = ",".join(["%s"] * len(scenes))
-
-    rows = _query_message_db_rows(
-        f"""
-        SELECT *
-        FROM messages
-        WHERE adapter = %s
-          AND direction = 'recv'
-          AND scene IN ({placeholders})
-          AND created_at >= %s
-          AND message_id IS NOT NULL
-          AND message_id != ''
-        ORDER BY created_at DESC, id DESC
-        """,
-        tuple([adapter] + scenes + [since]),
-    )
-
-    result = []
-    seen = set()
-
-    for r in rows:
-        scene = str(r.get("scene") or "")
-
-        if _is_group_scene(scene):
-            target_id = str(r.get("group_id") or "")
-        else:
-            target_id = str(r.get("user_id") or "")
-
-        if not target_id:
-            continue
-
-        key = _target_key(scene, target_id)
-
-        if key in seen:
-            continue
-
-        seen.add(key)
-
-        result.append(
-            {
-                "scene": scene,
-                "target_id": target_id,
-                "message_id": str(r.get("message_id") or ""),
-            }
-        )
-
-    return result
+_broadcast_repository = AdminBroadcastRepository()
+_broadcast_application = AdminBroadcastApplication(
+    _broadcast_repository, history=_history_targets, sender=_send_broadcast_to_target
+)
 
 
-def _get_ob11_history_targets(adapter: str, kind: str) -> list[dict]:
-    """
-    OB11 初始广播：
-    从历史 message.db 中提取群 ID / 用户 ID。
-    """
-    targets = []
-
-    if kind in ("group", "global"):
-        rows = _query_message_db_rows(
-            """
-            SELECT scene, group_id AS target_id, MAX(id) AS latest_id
-            FROM messages
-            WHERE adapter = %s
-              AND scene IN ('group', 'channel_group')
-              AND group_id IS NOT NULL
-              AND group_id != ''
-            GROUP BY scene, group_id
-            ORDER BY latest_id DESC
-            """,
-            (adapter,),
-        )
-
-        targets.extend(
-            [
-                {
-                    "scene": str(r["scene"]),
-                    "target_id": str(r["target_id"]),
-                    "message_id": "",
-                }
-                for r in rows
-            ]
-        )
-
-    if kind in ("private", "global"):
-        rows = _query_message_db_rows(
-            """
-            SELECT scene, user_id AS target_id, MAX(id) AS latest_id
-            FROM messages
-            WHERE adapter = %s
-              AND scene IN ('private', 'channel_private')
-              AND user_id IS NOT NULL
-              AND user_id != ''
-            GROUP BY scene, user_id
-            ORDER BY latest_id DESC
-            """,
-            (adapter,),
-        )
-
-        targets.extend(
-            [
-                {
-                    "scene": str(r["scene"]),
-                    "target_id": str(r["target_id"]),
-                    "message_id": "",
-                }
-                for r in rows
-            ]
-        )
-
-    return targets
+def _application() -> AdminBroadcastApplication:
+    return _broadcast_application
 
 
 async def start_broadcast(
@@ -515,136 +198,79 @@ async def start_broadcast(
     content: str,
     duration_minutes: int = 1440,
 ) -> str:
-    """
-    创建广播任务并进行首轮发送。
-
-    kind:
-    - group
-    - private
-    - global
-
-    duration_minutes:
-    - 广播有效时长，单位分钟。
-    - 默认 1440 分钟，即 1 天。
-    - 到期后不再继续补发，并会被自动清理。
-    """
-    _cleanup_expired_tasks()
-
-    content = str(content or "").strip()
-
-    if not content:
-        return "广播内容不能为空。"
-
-    if kind not in ("group", "private", "global"):
-        return f"广播类型错误：{kind}"
-
-    try:
-        duration_minutes = int(duration_minutes)
-    except Exception:
-        duration_minutes = 1440
-
-    if duration_minutes <= 0:
-        duration_minutes = 1440
-
     adapter = _get_adapter_name(bot)
     bot_id = _get_bot_self_id(bot)
-    bid = _new_broadcast_id()
-
-    expire_at_dt = datetime.now() + timedelta(minutes=duration_minutes)
-
-    task = {
-        "id": bid,
-        "kind": kind,
-        "adapter": adapter,
-        "bot_id": bot_id,
-        "content": content,
-        "markdown": bool(XiuConfig().markdown_status),
-        "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        "duration_minutes": duration_minutes,
-        "expire_at": expire_at_dt.strftime("%Y-%m-%d %H:%M:%S"),
-        "canceled": False,
-
-        "sent_groups": set(),
-        "sent_users": set(),
-
-        "known_groups": set(),
-        "known_users": set(),
-
-        "errors": [],
-    }
-
-    BROADCAST_TASKS[bid] = task
-
-    if _is_qq_adapter(adapter):
-        targets = _get_qq_recent_targets(adapter, kind)
-
-    elif _is_ob11_adapter(adapter):
-        targets = _get_ob11_history_targets(adapter, kind)
-
-    else:
-        targets = []
-
-    success_count = 0
-
-    for t in targets:
-        if _is_task_expired(task):
-            break
-
-        ok, _ = await _send_broadcast_to_target(
-            bot=bot,
-            task=task,
-            scene=t["scene"],
-            target_id=t["target_id"],
-            source_message_id=t.get("message_id", ""),
+    try:
+        result = await _application().start(
+            bot,
+            adapter=adapter,
+            bot_id=bot_id,
+            kind=kind,
+            content=content,
+            duration_minutes=duration_minutes,
+            markdown=bool(XiuConfig().markdown_status),
         )
+    except Exception as exc:
+        logger.warning("broadcast creation failed: {}", type(exc).__name__)
+        raise RuntimeError("广播创建失败，请检查服务日志。") from None
 
-        if ok:
-            success_count += 1
+    status = result["status"]
+    invalid_messages = {
+        "invalid_content": "广播内容不能为空。",
+        "invalid_kind": "广播类型错误。",
+        "invalid_adapter": "当前适配器不支持广播。",
+        "invalid_identity": "广播缺少适配器或机器人标识。",
+        "invalid_duration": "广播时间无效或超出范围。",
+    }
+    if status in invalid_messages:
+        raise ValueError(invalid_messages[status])
+    if status not in {"created", "cancelled", "stopped"}:
+        logger.warning("broadcast creation failed: {}", result.get("error_type", "RuntimeError"))
+        raise RuntimeError("广播创建失败，请检查消息历史与服务状态。")
 
-    if _is_qq_adapter(adapter):
-        mode_tip = "QQ 广播已创建：已向最近 1 分钟内活跃目标发送，后续新消息会自动补发。"
-
-    elif _is_ob11_adapter(adapter):
-        mode_tip = "OB11 广播已创建：已根据历史消息主动发送，后续新目标会自动补发。"
-
+    task = result.get("task")
+    if status == "cancelled":
+        mode_tip = "广播已取消，首轮发送已停止。"
+    elif status == "stopped":
+        mode_tip = "广播已清空或过期，首轮发送已停止。"
+    elif _is_qq_adapter(adapter):
+        mode_tip = "QQ 广播已创建：仅处理最近 1 分钟内活跃目标，后续新消息会自动补发。"
     else:
-        mode_tip = f"广播已创建，但当前适配器暂不支持自动发送：{adapter}"
-
-    return (
-        f"{mode_tip}\n"
-        f"广播ID：{bid}\n"
-        f"类型：{kind}\n"
-        f"适配器：{adapter}\n"
-        f"Markdown：{'开启' if task['markdown'] else '关闭'}\n"
-        f"有效时长：{duration_minutes}分钟\n"
-        f"过期时间：{task['expire_at']}\n"
-        f"本轮成功发送：{success_count}\n"
-        f"已发群：{len(task['sent_groups'])}\n"
-        f"已发用户：{len(task['sent_users'])}"
-    )
+        mode_tip = "OB11 广播已创建：已根据历史消息处理首轮发送，后续新目标会自动补发。"
+    lines = [mode_tip, f"广播ID：{result['id']}"]
+    if task is not None:
+        lines.extend([
+            f"类型：{task['kind']}",
+            f"适配器：{task['adapter']}",
+            f"Markdown：{'开启' if task['markdown'] else '关闭'}",
+            f"有效时长：{task['duration_minutes']}分钟",
+            f"过期时间：{task['expire_at']}",
+        ])
+    lines.extend([
+        f"本轮成功发送：{result['success_count']}",
+        f"本轮待审核：{result['pending_count']}",
+        f"本轮发送失败：{result['failed_count']}",
+    ])
+    if task is not None:
+        lines.extend([
+            f"已发群：{len(task['sent_groups'])}",
+            f"已发用户：{len(task['sent_users'])}",
+        ])
+    return "\n".join(lines)
 
 
 def format_broadcast_status() -> str:
-    _cleanup_expired_tasks()
-
-    if not BROADCAST_TASKS:
+    tasks = _application().status()
+    if not tasks:
         return "当前没有广播。"
-
     lines = ["【当前广播列表】"]
-
-    for bid, task in BROADCAST_TASKS.items():
+    for task in tasks:
         state = "已取消" if task.get("canceled") else "进行中"
-
-        if _is_task_expired(task):
-            state = "已过期"
-
         preview = str(task.get("content") or "").replace("\n", " ").replace("\r", " ")
-
         if len(preview) > 40:
             preview = preview[:40] + "..."
-
         lines.append(
-            f"\nID：{bid}\n"
+            f"\nID：{task['id']}\n"
             f"状态：{state}\n"
             f"类型：{task.get('kind')}\n"
             f"适配器：{task.get('adapter')}\n"
@@ -653,137 +279,61 @@ def format_broadcast_status() -> str:
             f"过期时间：{task.get('expire_at', '未知')}\n"
             f"剩余时间：{_format_remaining(task)}\n"
             f"Markdown：{'开启' if task.get('markdown') else '关闭'}\n"
-            f"已发群：{len(task.get('sent_groups', set()))} / 已发现群：{len(task.get('known_groups', set()))}\n"
-            f"已发用户：{len(task.get('sent_users', set()))} / 已发现用户：{len(task.get('known_users', set()))}\n"
-            f"错误数：{len(task.get('errors', []))}\n"
+            f"已发群：{len(task['sent_groups'])} / 已发现群：{len(task['known_groups'])}\n"
+            f"已发用户：{len(task['sent_users'])} / 已发现用户：{len(task['known_users'])}\n"
+            f"待审核：{len(task['pending_groups']) + len(task['pending_users'])}\n"
+            f"发送中：{len(task['inflight_groups']) + len(task['inflight_users'])}\n"
+            f"错误数：{task['error_count']}\n"
             f"内容预览：{preview}"
         )
-
     return "\n".join(lines)
 
 
+def _inflight_note(result: dict) -> str:
+    count = int(result.get("inflight_count", 0))
+    return f"\n有 {count} 个发送请求已发起，无法撤回。" if count else ""
+
+
 def cancel_broadcast(bid: str) -> str:
-    _cleanup_expired_tasks()
-
-    bid = str(bid or "").strip().upper()
-
-    if not bid:
+    result = _application().cancel(bid)
+    if result["status"] == "missing_id":
         return "请提供广播ID，例如：取消广播 BC12345678"
-
-    task = BROADCAST_TASKS.get(bid)
-
-    if not task:
-        return f"广播ID不存在：{bid}"
-
-    task["canceled"] = True
-    return f"已取消广播：{bid}"
+    if result["status"] == "not_found":
+        return f"广播ID不存在：{result['id']}"
+    if result["status"] != "cancelled":
+        raise RuntimeError("取消广播失败，请检查服务状态。")
+    return f"已取消广播：{result['id']}" + _inflight_note(result)
 
 
 def clear_broadcast(kind: str | None = None) -> str:
-    """
-    清空广播任务。
-
-    kind:
-    - group
-    - private
-    - global
-    - None/all/全部 表示全部
-    """
-    _cleanup_expired_tasks()
-
-    if kind is not None:
-        kind = str(kind or "").strip().lower()
-
-    if kind in ("", "all", "全部", "所有"):
-        kind = None
-
-    if kind is not None and kind not in ("group", "private", "global"):
-        return f"广播类型错误：{kind}"
-
-    if not BROADCAST_TASKS:
+    result = _application().clear(kind)
+    if result["status"] == "invalid_kind":
+        return f"广播类型错误：{result['kind']}"
+    if result["status"] == "empty":
         return "当前没有广播可清空。"
-
-    if kind is None:
-        count = len(BROADCAST_TASKS)
-        BROADCAST_TASKS.clear()
-        return f"已清空全部广播任务，共 {count} 个。"
-
-    to_delete = [
-        bid for bid, task in BROADCAST_TASKS.items()
-        if task.get("kind") == kind
-    ]
-
-    for bid in to_delete:
-        BROADCAST_TASKS.pop(bid, None)
-
-    kind_name = {
-        "group": "群聊",
-        "private": "私聊",
-        "global": "全局",
-    }.get(kind, kind)
-
-    return f"已清空{kind_name}广播任务，共 {len(to_delete)} 个。"
+    if result["status"] != "cleared":
+        raise RuntimeError("清空广播失败，请检查服务状态。")
+    kind_name = {"group": "群聊", "private": "私聊", "global": "全局"}.get(result["kind"], "全部")
+    return f"已清空{kind_name}广播任务，共 {result['count']} 个。" + _inflight_note(result)
 
 
 async def auto_patch_broadcast_for_event(bot: Bot, event):
-    """
-    普通消息触发补发。
-
-    QQ：
-    - 使用当前消息 message_id/id 作为 msg_id 回复式发送。
-
-    OB11：
-    - 直接主动发送。
-    """
-    _cleanup_expired_tasks()
-
-    if not BROADCAST_TASKS:
-        return
-
     adapter = _get_adapter_name(bot)
     bot_id = _get_bot_self_id(bot)
-
     scene = get_chat_scene(event)
-    target_id = _get_event_target(scene, event)
-    source_message_id = _get_event_message_id(event)
-
-    logger.debug(
-        f"[广播补发检查] adapter={adapter}, scene={scene}, "
-        f"target_id={target_id}, source_message_id={source_message_id}, "
-        f"tasks={len(BROADCAST_TASKS)}"
-    )
-
-    if not scene or scene == "unknown":
+    if not _is_group_scene(scene) and not _is_private_scene(scene):
         return
-
+    target_id = _get_event_target(scene, event)
     if not target_id:
         return
-
-    for task in list(BROADCAST_TASKS.values()):
-        if task.get("canceled"):
-            continue
-
-        if _is_task_expired(task):
-            continue
-
-        if task.get("adapter") != adapter:
-            continue
-
-        # 防止多 Bot 重复补发。
-        # 如果你希望不同 bot 都能接力补发，可以删除这一段。
-        if task.get("bot_id") and bot_id and task.get("bot_id") != bot_id:
-            continue
-
-        if not _broadcast_accept_scene(task["kind"], scene):
-            continue
-
-        if _is_broadcast_sent(task, scene, target_id):
-            continue
-
-        await _send_broadcast_to_target(
-            bot=bot,
-            task=task,
+    try:
+        await _application().patch_event(
+            bot,
+            adapter=adapter,
+            bot_id=bot_id,
             scene=scene,
             target_id=target_id,
-            source_message_id=source_message_id,
+            source_message_id=_get_event_message_id(event),
         )
+    except Exception as exc:
+        logger.warning("broadcast event patch failed: {}", type(exc).__name__)
