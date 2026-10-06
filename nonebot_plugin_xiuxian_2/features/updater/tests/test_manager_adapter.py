@@ -106,6 +106,33 @@ class UpdateManagerAdapterTests(unittest.TestCase):
             self.assertEqual((data_dir / "version.txt").read_text(encoding="utf-8"), "v2.0.0")
             self.assertEqual(self.manager.current_version, "v2.0.0")
 
+    def test_plugin_backup_sqlite_restore_stages_on_destination_filesystem(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="updater-sqlite-restore-") as directory:
+            root = Path(directory)
+            source = root / "staged" / "player.db"
+            source.parent.mkdir()
+            source.write_bytes(b"archive snapshot")
+            target = root / "data" / "xiuxian" / "player.db"
+            observations: list[Path] = []
+
+            def snapshot(source_path: Path, clean_path: Path):
+                observations.append(clean_path.parent.parent)
+                clean_path.write_bytes(source_path.read_bytes())
+                return True, ""
+
+            self.manager._snapshot_sqlite_db = snapshot
+            self.manager._backup_current_db_before_restore = Mock()
+            self.manager._close_database_handles = Mock()
+            self.manager._remove_sqlite_sidecars = Mock()
+
+            self.manager.restore_plugin_backup_database(source, target, "player.db")
+
+            self.assertEqual(observations, [target.parent])
+            self.assertEqual(target.read_bytes(), b"archive snapshot")
+            self.manager._backup_current_db_before_restore.assert_called_once_with(
+                target, "player.db"
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

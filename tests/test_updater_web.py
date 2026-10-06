@@ -73,6 +73,31 @@ class FakePluginBackupFileApplication:
         ]
 
 
+class FakePluginBackupRestoreApplication:
+    def __init__(self, local_exists: bool = True, result=(True, "restored")) -> None:
+        self.local_exists = local_exists
+        self.result = result
+        self.calls: list[tuple[object, ...]] = []
+
+    def local_backup_exists(self, filename: str) -> bool:
+        self.calls.append(("exists", filename))
+        return self.local_exists
+
+    def restore_backup(self, filename: str):
+        self.calls.append(("restore", filename))
+        return self.result
+
+
+class FakeWebDavUpdateManager:
+    def __init__(self, result=(True, "downloaded")) -> None:
+        self.result = result
+        self.calls: list[tuple[object, ...]] = []
+
+    def download_from_webdav(self, filename: str):
+        self.calls.append(("download", filename))
+        return self.result
+
+
 class UpdaterWebRouteTests(unittest.TestCase):
     def setUp(self) -> None:
         app.config.update(TESTING=True, SECRET_KEY="test-secret")
@@ -223,6 +248,98 @@ class UpdaterWebRouteTests(unittest.TestCase):
 
         self.assertEqual(missing.status_code, 404)
         self.assertEqual(invalid.status_code, 400)
+
+    def test_plugin_backup_restore_routes_keep_admin_csrf_and_local_contract(self) -> None:
+        application = FakePluginBackupRestoreApplication()
+        archive_name = "backup_20261006_010203_v2.0.0.zip"
+        with patch.object(core, "ADMIN_IDS", {"admin-1"}):
+            anonymous = self.client.post(
+                "/restore_backup", json={"backup_filename": archive_name}
+            )
+            self._login_session()
+            with patch.object(backups, "plugin_backup_restore_application", application):
+                missing_csrf = self.client.post(
+                    "/restore_backup", json={"backup_filename": archive_name}
+                )
+                restored = self.client.post(
+                    "/restore_backup",
+                    json={"backup_filename": archive_name},
+                    headers={"X-CSRF-Token": "csrf-token"},
+                )
+
+        self.assertEqual(anonymous.status_code, 401)
+        self.assertEqual(missing_csrf.status_code, 403)
+        self.assertEqual(restored.get_json(), {"success": True, "message": "restored"})
+        self.assertEqual(application.calls, [("restore", archive_name)])
+
+    def test_cloud_restore_reuses_local_archive_and_keeps_error_contract(self) -> None:
+        application = FakePluginBackupRestoreApplication(
+            local_exists=True, result=(False, "restore rejected")
+        )
+        webdav = FakeWebDavUpdateManager()
+        archive_name = "cloud-export.zip"
+        with patch.object(core, "ADMIN_IDS", {"admin-1"}):
+            self._login_session()
+            with (
+                patch.object(backups, "plugin_backup_restore_application", application),
+                patch.object(backups, "update_manager", webdav),
+            ):
+                missing_csrf = self.client.post(
+                    "/cloud_restore_backup", json={"filename": archive_name}
+                )
+                restored = self.client.post(
+                    "/cloud_restore_backup",
+                    json={"filename": archive_name},
+                    headers={"X-CSRF-Token": "csrf-token"},
+                )
+
+        self.assertEqual(missing_csrf.status_code, 403)
+        self.assertEqual(
+            restored.get_json(),
+            {"success": False, "error": "restore rejected"},
+        )
+        self.assertEqual(application.calls, [("exists", archive_name), ("restore", archive_name)])
+        self.assertEqual(webdav.calls, [])
+
+    def test_cloud_restore_downloads_only_when_local_archive_is_absent(self) -> None:
+        application = FakePluginBackupRestoreApplication(local_exists=False)
+        webdav = FakeWebDavUpdateManager()
+        archive_name = "cloud-export.zip"
+        self._login_session()
+        with (
+            patch.object(backups, "plugin_backup_restore_application", application),
+            patch.object(backups, "update_manager", webdav),
+        ):
+            restored = self.client.post(
+                "/cloud_restore_backup",
+                json={"filename": archive_name},
+                headers={"X-CSRF-Token": "csrf-token"},
+            )
+
+        self.assertEqual(restored.get_json(), {"success": True, "message": "restored"})
+        self.assertEqual(application.calls, [("exists", archive_name), ("restore", archive_name)])
+        self.assertEqual(webdav.calls, [("download", archive_name)])
+
+    def test_cloud_restore_does_not_restore_after_download_failure(self) -> None:
+        application = FakePluginBackupRestoreApplication(local_exists=False)
+        webdav = FakeWebDavUpdateManager((False, "offline"))
+        self._login_session()
+        with (
+            patch.object(backups, "plugin_backup_restore_application", application),
+            patch.object(backups, "update_manager", webdav),
+        ):
+            response = self.client.post(
+                "/cloud_restore_backup",
+                json={"filename": "cloud-export.zip"},
+                headers={"X-CSRF-Token": "csrf-token"},
+            )
+
+        self.assertEqual(
+            response.get_json(),
+            {"success": False, "error": "下载失败: offline"},
+        )
+        self.assertEqual(application.calls, [("exists", "cloud-export.zip")])
+        self.assertEqual(webdav.calls, [("download", "cloud-export.zip")])
 
 
 if __name__ == "__main__":

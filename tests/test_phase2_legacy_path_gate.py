@@ -78,7 +78,7 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
         self.assertEqual(report["path_count"], 496)
         self.assertEqual(
             report["status_counts"],
-            {"不可达": 19, "允许保留的兼容路径": 97, "受阻": 221, "已迁移": 159},
+            {"不可达": 19, "允许保留的兼容路径": 97, "受阻": 219, "已迁移": 161},
         )
         self.assertGreater(report["blocked_count"], 0)
         self.assertTrue(all(item["call_graph"] and item["evidence"] for item in report["items"]))
@@ -262,16 +262,16 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
         report = load_phase2_scope_report(include_items=True)
         expected = {
             "batch_delete_backups": (
-                "backups.py:348",
-                "backups.py:348 batch_delete_backups -> plugin_backup_file_application.delete_plugin_backups",
+                "backups.py:351",
+                "backups.py:351 batch_delete_backups -> plugin_backup_file_application.delete_plugin_backups",
             ),
             "delete_backup": (
-                "backups.py:811",
-                "backups.py:811 delete_backup -> plugin_backup_file_application.delete_plugin_backup",
+                "backups.py:814",
+                "backups.py:814 delete_backup -> plugin_backup_file_application.delete_plugin_backup",
             ),
             "download_backup": (
-                "backups.py:793",
-                "backups.py:793 download_backup -> plugin_backup_file_application.open_plugin_backup",
+                "backups.py:796",
+                "backups.py:796 download_backup -> plugin_backup_file_application.open_plugin_backup",
             ),
         }
         for function, (source_line, handler_edge) in expected.items():
@@ -283,6 +283,29 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
             self.assertEqual(item["status"], "已迁移")
             self.assertIn(f"nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/{source_line}", item["evidence"])
             self.assertTrue(any(handler_edge in edge for edge in item["call_graph"]))
+            self.assertFalse(any("downstream state effect not closed" in edge for edge in item["call_graph"]))
+
+    def test_plugin_backup_restore_routes_have_source_bound_application_edges(self):
+        report = load_phase2_scope_report(include_items=True)
+        expected = {
+            "cloud_restore_backup": (
+                "backups.py:108",
+                "backups.py:108 cloud_restore_backup -> plugin_backup_restore_application.local_backup_exists",
+            ),
+            "restore_backup": (
+                "backups.py:245",
+                "backups.py:245 restore_backup -> plugin_backup_restore_application.restore_backup",
+            ),
+        }
+        for function, (source_line, edge) in expected.items():
+            item = next(
+                item for item in report["items"]
+                if item.get("source", {}).get("function") == function
+                and item.get("source", {}).get("file") == "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py"
+            )
+            self.assertEqual(item["status"], "已迁移")
+            self.assertIn(f"nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/{source_line}", item["evidence"])
+            self.assertTrue(any(edge in call_edge for call_edge in item["call_graph"]))
             self.assertFalse(any("downstream state effect not closed" in edge for edge in item["call_graph"]))
 
     def test_updater_routes_have_source_bound_application_edges(self):

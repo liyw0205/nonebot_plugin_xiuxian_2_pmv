@@ -41,6 +41,7 @@ from ...features.plugin_backups import (
     PluginBackupCatalogRepository,
     PluginBackupFileApplication,
     PluginBackupFileRepository,
+    build_plugin_backup_restore_application,
 )
 # --- 消息统计核心导入 ---
 from nonebot.message import event_preprocessor
@@ -100,6 +101,7 @@ backup_catalog_application = PluginBackupCatalogApplication(
 plugin_backup_file_application = PluginBackupFileApplication(
     PluginBackupFileRepository(get_paths().backups)
 )
+plugin_backup_restore_application = build_plugin_backup_restore_application(update_manager)
 WEB_CONFIG = XiuConfig()
 app = Flask(__name__)
 

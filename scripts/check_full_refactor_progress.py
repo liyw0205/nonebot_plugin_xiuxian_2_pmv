@@ -417,6 +417,9 @@ def _slice_status() -> dict[str, dict[str, object]]:
     plugin_backup_file_application = (PACKAGE / "features" / "plugin_backups" / "file_application.py").read_text(encoding="utf-8")
     plugin_backup_file_repository = (PACKAGE / "features" / "plugin_backups" / "file_repository.py").read_text(encoding="utf-8")
     plugin_backup_file_tests = (PACKAGE / "features" / "plugin_backups" / "tests" / "test_file_operations.py").read_text(encoding="utf-8")
+    plugin_backup_restore_application = (PACKAGE / "features" / "plugin_backups" / "restore_application.py").read_text(encoding="utf-8")
+    plugin_backup_restore_repository = (PACKAGE / "features" / "plugin_backups" / "restore_repository.py").read_text(encoding="utf-8")
+    plugin_backup_restore_tests = (PACKAGE / "features" / "plugin_backups" / "tests" / "test_restore.py").read_text(encoding="utf-8")
     backup_routes = (PACKAGE / "xiuxian" / "xiuxian_web" / "backups.py").read_text(encoding="utf-8")
     plugin_backup_web_tests = (ROOT / "tests" / "test_updater_web.py").read_text(encoding="utf-8")
     activity_help_handler = activity_commands[
@@ -2008,6 +2011,43 @@ def _slice_status() -> dict[str, dict[str, object]]:
                 and "def test_plugin_backup_download_rejects_invalid_and_missing_archives" in plugin_backup_web_tests
             ),
             "status": "local_plugin_backup_list_download_and_delete_share_a_feature_file_boundary",
+        },
+        "plugin_backup_restore_owner": {
+            "both_legacy_restore_routes_share_feature_application": (
+                "plugin_backup_restore_application.restore_backup(filename)" in backup_routes
+                and "plugin_backup_restore_application.restore_backup(backup_filename)" in backup_routes
+                and "update_manager.restore_backup(" not in backup_routes
+            ),
+            "application_owns_restore_order_and_runtime_boundary": (
+                "with self._repository.stage_backup(filename, database_names) as staged:" in plugin_backup_restore_application
+                and "self._repository.merge_data(" in plugin_backup_restore_application
+                and "self._repository.merge_plugin(" in plugin_backup_restore_application
+                and "self._runtime.after_plugin_backup_restore(restored_databases)" in plugin_backup_restore_application
+                and "self._repository.write_version(self._version_file" in plugin_backup_restore_application
+            ),
+            "repository_bounds_and_validates_zip_before_overlay": (
+                "MAX_ARCHIVE_MEMBERS = 100_000" in plugin_backup_restore_repository
+                and "shutil.disk_usage(directory)" in plugin_backup_restore_repository
+                and "_validate_disk_capacity" in plugin_backup_restore_repository
+                and "O_NOFOLLOW" in plugin_backup_restore_repository
+                and "_safe_member_name" in plugin_backup_restore_repository
+                and "_validate_member_type" in plugin_backup_restore_repository
+                and "_ensure_target_directory" in plugin_backup_restore_repository
+                and "os.replace(temporary_path" in plugin_backup_restore_repository
+                and "self._data_root" in plugin_backup_restore_repository
+            ),
+            "restore_behavior_and_failure_boundaries_are_tested": (
+                "def test_restore_overlays_configured_roots_and_reloads_restored_databases" in plugin_backup_restore_tests
+                and "def test_invalid_member_path_is_rejected_before_any_target_is_written" in plugin_backup_restore_tests
+                and "def test_member_count_limit_is_checked_before_extracting" in plugin_backup_restore_tests
+                and "def test_existing_symlink_in_target_tree_is_rejected" in plugin_backup_restore_tests
+                and "def test_restore_failure_does_not_update_version" in plugin_backup_restore_tests
+                and "def test_plugin_backup_restore_routes_keep_admin_csrf_and_local_contract" in plugin_backup_web_tests
+                and "def test_cloud_restore_reuses_local_archive_and_keeps_error_contract" in plugin_backup_web_tests
+                and "def test_cloud_restore_downloads_only_when_local_archive_is_absent" in plugin_backup_web_tests
+                and "def test_cloud_restore_does_not_restore_after_download_failure" in plugin_backup_web_tests
+            ),
+            "status": "local_and_cloud_plugin_zip_restore_share_a_validated_feature_owner",
         },
         "activity_static_help": {
             "help_and_manage_remain_static_compatibility_handlers": (

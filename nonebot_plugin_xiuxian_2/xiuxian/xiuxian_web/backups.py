@@ -7,6 +7,7 @@ from .core import (
     jsonify,
     logger,
     plugin_backup_file_application,
+    plugin_backup_restore_application,
     redirect,
     render_template,
     request,
@@ -114,10 +115,12 @@ def cloud_restore_backup():
     if not filename:
         return jsonify({"success": False, "error": "无效文件名"})
     
-    local_path = backup_path_under(filename)
-    
     # 步骤1：检查本地，没有就同步
-    if not local_path.exists():
+    try:
+        local_exists = plugin_backup_restore_application.local_backup_exists(filename)
+    except ValueError as e:
+        return jsonify({"success": False, "error": str(e)})
+    if not local_exists:
         logger.info(f"本地无备份 {filename}，正在从云端拉取并准备恢复...")
         success, err = update_manager.download_from_webdav(filename)
         if not success:
@@ -126,7 +129,7 @@ def cloud_restore_backup():
         logger.info(f"本地已存在备份 {filename}，直接进行本地恢复流程")
 
     # 步骤2：执行恢复
-    success, message = update_manager.restore_backup(filename)
+    success, message = plugin_backup_restore_application.restore_backup(filename)
     if success:
         return jsonify({"success": True, "message": message})
     else:
@@ -251,7 +254,7 @@ def restore_backup():
             return jsonify({"success": False, "error": "未指定备份文件"})
         
         # 执行恢复操作
-        success, message = update_manager.restore_backup(backup_filename)
+        success, message = plugin_backup_restore_application.restore_backup(backup_filename)
         
         return jsonify({
             "success": success,

@@ -1269,18 +1269,6 @@ class UpdateManager:
         }
         return write_config_values(config_file_path, new_values or {}, field_types)
 
-    def _restore_files_from_backup(self, backup_root):
-        """从备份根目录恢复文件"""
-        data_backup_path = backup_root / "data"
-        if data_backup_path.exists():
-            target_data_dir = Path() / "data"
-            self._merge_directories(data_backup_path, target_data_dir)
-
-        plugin_backup_path = backup_root / "src" / "plugins" / "nonebot_plugin_xiuxian_2"
-        if plugin_backup_path.exists():
-            target_plugin_dir = Xiu_Plugin
-            self._merge_directories(plugin_backup_path, target_plugin_dir)
-
     def get_backups(self):
         """获取所有插件备份"""
         backup_dir = get_paths().backups
@@ -1306,59 +1294,20 @@ class UpdateManager:
         return backups
 
     def restore_backup(self, backup_filename):
-        """从插件备份恢复"""
-        temp_dir = None
-        try:
-            backup_filename = _safe_leaf_name(backup_filename)
-            backup_dir = get_paths().backups
-            backup_path = _path_under(backup_dir, backup_filename)
+        """Compatibility entrypoint; restore ownership belongs to plugin_backups."""
+        from ...features.plugin_backups import build_plugin_backup_restore_application
 
-            if not backup_path.exists():
-                return False, f"备份文件不存在: {backup_filename}"
-            if not backup_path.is_file():
-                return False, f"无效备份文件: {backup_filename}"
+        return build_plugin_backup_restore_application(self).restore_backup(backup_filename)
 
-            logger.info(f"开始从备份恢复: {backup_filename}")
+    def plugin_backup_sqlite_database_names(self):
+        return self._sqlite_db_names()
 
-            temp_dir = Path(tempfile.mkdtemp())
-            with zipfile.ZipFile(backup_path, 'r') as zipf:
-                names = {
-                    _safe_archive_member_name(info.filename)
-                    for info in zipf.infolist()
-                    if _safe_archive_member_name(info.filename)
-                }
-                _safe_extract_zip(zipf, temp_dir)
+    def restore_plugin_backup_database(self, source_path, target_path, database_name):
+        self._restore_sqlite_file(source_path, target_path, database_name)
 
-            self._restore_files_from_backup(temp_dir)
-            shutil.rmtree(temp_dir)
-            temp_dir = None
-
-            restored_dbs = [
-                name
-                for name in self._sqlite_db_names()
-                if name in names or f"data/xiuxian/{name}" in names
-            ]
-            if restored_dbs:
-                self._reload_restored_database_handles(restored_dbs)
-                self._compact_pet_storage_after_database_restore()
-
-            version_match = re.search(r'backup_.*_(v?[\d.]+)\.zip', backup_filename)
-            if version_match:
-                version = version_match.group(1)
-                version_file = get_paths().data / "version.txt"
-                version_file.parent.mkdir(parents=True, exist_ok=True)
-                with open(version_file, 'w', encoding='utf-8') as f:
-                    f.write(version)
-
-            logger.info(f"备份恢复完成: {backup_filename}")
-            return True, f"成功从备份 {backup_filename} 恢复"
-
-        except Exception as e:
-            logger.error(f"恢复备份失败: {str(e)}")
-            return False, f"恢复备份失败: {str(e)}"
-        finally:
-            if temp_dir is not None and temp_dir.exists():
-                shutil.rmtree(temp_dir, ignore_errors=True)
+    def after_plugin_backup_restore(self, database_names):
+        self._reload_restored_database_handles(database_names)
+        self._compact_pet_storage_after_database_restore()
 
     # =========================
     # 数据库备份/恢复 + 云端
@@ -1678,14 +1627,14 @@ class UpdateManager:
             logger.warning(f"[DB恢复] 加载数据库管理器失败: {e}")
 
     def _restore_sqlite_file(self, src_path: Path, dst_path: Path, db_name: str):
-        temp_dir = Path(tempfile.mkdtemp())
+        dst_path.parent.mkdir(parents=True, exist_ok=True)
+        temp_dir = Path(tempfile.mkdtemp(dir=dst_path.parent))
         try:
             clean_path = temp_dir / db_name
             ok, msg = self._snapshot_sqlite_db(src_path, clean_path)
             if not ok:
                 raise RuntimeError(msg)
 
-            dst_path.parent.mkdir(parents=True, exist_ok=True)
             self._backup_current_db_before_restore(dst_path, db_name)
             self._close_database_handles([db_name])
             self._remove_sqlite_sidecars(dst_path)

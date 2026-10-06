@@ -322,6 +322,11 @@ class RefactorProgressTests(unittest.TestCase):
         self.assertTrue(backup_files["file_operations_share_catalog_filename_policy_and_reject_symlinks"])
         self.assertTrue(backup_files["batch_delete_preserves_partial_result_contract"])
         self.assertTrue(backup_files["file_repository_and_http_contracts_are_tested"])
+        backup_restore = slices["plugin_backup_restore_owner"]
+        self.assertTrue(backup_restore["both_legacy_restore_routes_share_feature_application"])
+        self.assertTrue(backup_restore["application_owns_restore_order_and_runtime_boundary"])
+        self.assertTrue(backup_restore["repository_bounds_and_validates_zip_before_overlay"])
+        self.assertTrue(backup_restore["restore_behavior_and_failure_boundaries_are_tested"])
         activity_static_help = slices["activity_static_help"]
         self.assertTrue(activity_static_help["help_and_manage_remain_static_compatibility_handlers"])
         boss = slices["activity_boss"]
