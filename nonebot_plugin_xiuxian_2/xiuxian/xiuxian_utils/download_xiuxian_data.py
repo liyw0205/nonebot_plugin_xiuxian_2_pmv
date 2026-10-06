@@ -850,138 +850,15 @@ class UpdateManager:
     # 配置备份云端（统一到 backups/config_backups）
     # =========================
     def upload_config_backup_to_webdav(self, local_file_path):
-        """上传配置备份到云端 config_backups（统一路径）"""
-        try:
-            ok, msg, paths = self._get_webdav_paths()
-            if not ok:
-                return False, msg
-
-            file_path = Path(local_file_path)
-            if not file_path.exists():
-                return False, f"本地文件不存在: {file_path}"
-
-            auth = paths["auth"]
-
-            mk_ok, mk_msg = self._webdav_mkcol_recursive(paths["base_url"], "", paths["config_rel"], auth)
-            if not mk_ok:
-                return False, mk_msg
-
-            remote_url = self._webdav_join_url(paths["base_url"], f"{paths['config_rel']}/{file_path.name}")
-            with open(file_path, "rb") as f:
-                resp = requests.put(remote_url, data=f, auth=auth, timeout=60)
-
-            if resp.status_code in (200, 201, 204):
-                return True, f"配置备份已上传: {file_path.name}"
-            return False, f"上传失败，HTTP {resp.status_code}: {resp.text[:200]}"
-        except Exception as e:
-            return False, f"上传配置备份失败: {e}"
+        return self._config_backup_application().create_cloud_backup(local_file_path)
 
     def list_webdav_config_backups(self):
-        """列出云端 config_backups 目录中的配置备份（统一路径）"""
-        try:
-            ok, msg, paths = self._get_webdav_paths()
-            if not ok:
-                return False, msg
-
-            auth = paths["auth"]
-            self._webdav_mkcol_recursive(paths["base_url"], "", paths["config_rel"], auth)
-
-            headers = {"Depth": "1"}
-            body = """<?xml version="1.0" encoding="utf-8" ?>
-                <d:propfind xmlns:d="DAV:">
-                    <d:prop>
-                        <d:getlastmodified />
-                        <d:getcontentlength />
-                        <d:displayname />
-                        <d:resourcetype />
-                    </d:prop>
-                </d:propfind>
-            """
-            resp = requests.request(
-                "PROPFIND",
-                paths["config_url"],
-                data=body.encode("utf-8"),
-                headers=headers,
-                auth=auth,
-                timeout=30
-            )
-
-            if resp.status_code not in (207, 200):
-                return False, f"读取云端配置备份失败，HTTP {resp.status_code}"
-
-            import xml.etree.ElementTree as ET
-            ns = {"d": "DAV:"}
-            root = ET.fromstring(resp.text)
-
-            backups = []
-            for r in root.findall("d:response", ns):
-                propstat = r.find("d:propstat", ns)
-                if propstat is None:
-                    continue
-                prop = propstat.find("d:prop", ns)
-                if prop is None:
-                    continue
-
-                displayname = prop.find("d:displayname", ns)
-                resourcetype = prop.find("d:resourcetype", ns)
-                contentlength = prop.find("d:getcontentlength", ns)
-                lastmodified = prop.find("d:getlastmodified", ns)
-
-                name = displayname.text if displayname is not None and displayname.text else ""
-                if not name or name == "config_backups":
-                    continue
-
-                is_dir = (resourcetype is not None and resourcetype.find("d:collection", ns) is not None)
-                if is_dir:
-                    continue
-
-                if not name.endswith(".json"):
-                    continue
-
-                size = int(contentlength.text) if contentlength is not None and contentlength.text and contentlength.text.isdigit() else 0
-                raw_modified = lastmodified.text if lastmodified is not None and lastmodified.text else ""
-                modified = self._gmt_to_cst_str(raw_modified)
-
-                backups.append({
-                    "filename": name,
-                    "size": size,
-                    "modified": modified
-                })
-
-            backups.sort(key=lambda x: x["modified"], reverse=True)
-            return True, backups
-
-        except Exception as e:
-            return False, f"获取云端配置备份失败: {e}"
+        return self._config_backup_application().list_cloud_backups()
 
     def download_config_backup_from_webdav(self, filename, overwrite=False):
-        """从云端下载配置备份到本地 config_backups（统一路径）"""
-        try:
-            filename = _safe_leaf_name(filename)
-            ok, msg, paths = self._get_webdav_paths()
-            if not ok:
-                return False, msg
-
-            auth = paths["auth"]
-
-            local_dir = get_paths().backups / "config_backups"
-            local_dir.mkdir(parents=True, exist_ok=True)
-            local_path = local_dir / filename
-
-            if local_path.exists() and not overwrite:
-                return False, "FILE_EXISTS"
-
-            remote_url = self._webdav_join_url(paths["base_url"], f"{paths['config_rel']}/{filename}")
-            resp = requests.get(remote_url, auth=auth, timeout=60)
-            if resp.status_code != 200:
-                return False, f"下载失败，HTTP {resp.status_code}"
-
-            with open(local_path, "wb") as f:
-                f.write(resp.content)
-
-            return True, local_path
-        except Exception as e:
-            return False, f"下载配置备份失败: {e}"
+        return self._config_backup_application().sync_cloud_backup(
+            filename, overwrite=overwrite
+        )
 
     def upload_config_to_cloud(self, local_path):
         """
@@ -990,37 +867,7 @@ class UpdateManager:
         return self.upload_config_backup_to_webdav(local_path)
 
     def cloud_restore_config_backup(self, filename):
-        """
-        云端配置恢复：
-        1) 本地有则直接读取
-        2) 本地无则先下载
-        3) 返回配置 dict
-        """
-        try:
-            filename = _safe_leaf_name(filename)
-            local_path = _path_under(get_paths().backups / "config_backups", filename)
-            if not local_path.exists():
-                ok, result = self.download_config_backup_from_webdav(filename, overwrite=False)
-                if not ok and result != "FILE_EXISTS":
-                    return False, f"云端下载失败: {result}"
-
-            if not local_path.exists():
-                return False, "本地配置备份文件不存在"
-
-            with open(local_path, "r", encoding="utf-8") as f:
-                backup_data = json.load(f)
-
-            metadata = backup_data.get("_metadata", {})
-            if "_metadata" in backup_data:
-                del backup_data["_metadata"]
-
-            return True, {
-                "data": backup_data,
-                "metadata": metadata,
-                "local_path": str(local_path)
-            }
-        except Exception as e:
-            return False, f"云端恢复配置失败: {e}"
+        return self._config_backup_application().restore_cloud_backup(filename)
 
     # =========================
     # 备份/恢复（插件）
@@ -1111,65 +958,7 @@ class UpdateManager:
             return False, str(e)
 
     def backup_all_configs(self):
-        """备份所有配置"""
-        try:
-            config = XiuConfig()
-            config_values = {}
-            from ..xiuxian_web import CONFIG_EDITABLE_FIELDS
-
-            for field_name in CONFIG_EDITABLE_FIELDS.keys():
-                if hasattr(config, field_name):
-                    config_values[field_name] = getattr(config, field_name)
-
-            backup_dir = get_paths().backups / "config_backups"
-            backup_dir.mkdir(parents=True, exist_ok=True)
-
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            backup_filename = f"config_backup_{timestamp}.json"
-            backup_path = backup_dir / backup_filename
-
-            config_values['_metadata'] = {
-                'backup_time': datetime.now().isoformat(),
-                'backup_fields': list(config_values.keys()),
-                'version': self.current_version,
-                'type': 'config_backup',
-                'backup_type': 'full'
-            }
-
-            with open(backup_path, 'w', encoding='utf-8') as f:
-                json.dump(config_values, f, ensure_ascii=False, indent=2)
-
-            logger.info(f"全选配置备份完成: {backup_filename}")
-
-            try:
-                cfg = XiuConfig()
-                if getattr(cfg, "cloud_backup_enabled", False):
-                    up_ok, up_msg = self.upload_config_backup_to_webdav(backup_path)
-                    if up_ok:
-                        logger.info(f"配置云备份结果: {up_msg}")
-                        clean_ok, clean_msg = self.cleanup_webdav_old_backups()
-                        if clean_ok:
-                            logger.info(clean_msg)
-                        else:
-                            logger.warning(clean_msg)
-                    else:
-                        logger.warning(f"配置云备份失败: {up_msg}")
-            except Exception as e:
-                logger.warning(f"配置云备份执行异常: {e}")
-
-            try:
-                self.clean_old_backups(
-                    backup_dir,
-                    patterns=("config_backup_*.json",),
-                    keep_days=self._local_backup_keep_days(),
-                )
-            except Exception as e:
-                logger.warning(f"配置本地旧备份清理异常: {e}")
-
-            return True, backup_path
-        except Exception as e:
-            logger.error(f"配置备份失败: {str(e)}")
-            return False, f"配置备份失败: {str(e)}"
+        return self._config_backup_application().backup_all_configs()
 
     def cleanup_download(self, archive_path):
         path = Path(archive_path).resolve()
@@ -1183,24 +972,7 @@ class UpdateManager:
         return UpdateApplication(self).perform_update_with_backup(release_tag)
 
     def restore_config_from_backup(self, backup_path):
-        """从配置备份恢复"""
-        try:
-            if not backup_path.exists():
-                return False, "备份文件不存在"
-
-            with open(backup_path, 'r', encoding='utf-8') as f:
-                backup_data = json.load(f)
-
-            if '_metadata' in backup_data:
-                del backup_data['_metadata']
-
-            success, message = self.save_config_values(backup_data)
-            if not success:
-                return False, f"保存配置失败: {message}"
-
-            return True, "配置恢复成功"
-        except Exception as e:
-            return False, f"恢复配置失败: {str(e)}"
+        return self._config_backup_application().restore_config_from_backup(backup_path)
 
     def save_config_values(self, new_values):
         """保存配置到文件（合法字面量 + 写后语法自愈）。"""
@@ -1293,6 +1065,46 @@ class UpdateManager:
 
     def database_backup_format_time(self, value):
         return self._gmt_to_cst_str(value)
+
+    def configuration_backup_values(self):
+        from ..xiuxian_web.config import get_config_values
+
+        return get_config_values()
+
+    def configuration_backup_version(self):
+        return self.current_version
+
+    def configuration_backup_now(self):
+        return datetime.now(timezone.utc)
+
+    def configuration_backup_cloud_enabled(self):
+        return bool(getattr(XiuConfig(), "cloud_backup_enabled", False))
+
+    def configuration_backup_keep_days(self):
+        return self._local_backup_keep_days()
+
+    def configuration_backup_cleanup_cloud(self):
+        return self.cleanup_webdav_old_backups()
+
+    def configuration_backup_save_values(self, values):
+        return self.save_config_values(values)
+
+    def configuration_backup_webdav_paths(self):
+        return self._get_webdav_paths()
+
+    def configuration_backup_webdav_join_url(self, base_url, relative_path):
+        return self._webdav_join_url(base_url, relative_path)
+
+    def configuration_backup_webdav_make_directories(self, base_url, relative_path, auth):
+        return self._webdav_mkcol_recursive(base_url, "", relative_path, auth)
+
+    def configuration_backup_format_time(self, value):
+        return self._gmt_to_cst_str(value)
+
+    def _config_backup_application(self):
+        from ...features.config_backups import build_config_backup_application
+
+        return build_config_backup_application(self)
 
     def _database_backup_application(self):
         from ...features.database_backups import build_database_backup_application

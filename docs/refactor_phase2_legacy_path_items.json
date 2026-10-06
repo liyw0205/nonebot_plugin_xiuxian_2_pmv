@@ -12292,11 +12292,11 @@
       "id": "route:POST:/backup_config:nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py:backup_config",
       "kind": "legacy_routes",
       "entry": "POST /backup_config -> nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py:backup_config",
-      "status": "受阻",
-      "reason": "The old Flask app and route modules are loaded and its server is enabled by default. Route registration is proven, but each handler's downstream ownership and replacement/compatibility decision is not closed.",
-      "unknown_edge": "route function -> old data/service or feature application -> state effect",
+      "status": "已迁移",
+      "reason": "Configuration backup HTTP operations now delegate to the bounded ConfigBackupApplication/ConfigBackupRepository owner; import and restore routes only stage values for the existing /save_config apply path.",
+      "unknown_edge": "",
       "call_graph": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py:649 -> Flask app.route(/backup_config) -> legacy handler -> downstream state effect not closed"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py:513 backup_config -> config_backup_application.create_local_backup -> ConfigBackupApplication.create_local_backup -> ConfigBackupRepository.create_local_backup -> bounded atomic JSON -> legacy backup response"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
@@ -12304,7 +12304,11 @@
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py:649"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py:513",
+        "nonebot_plugin_xiuxian_2/features/config_backups/application.py",
+        "nonebot_plugin_xiuxian_2/features/config_backups/repository.py",
+        "nonebot_plugin_xiuxian_2/features/config_backups/tests/test_application.py",
+        "nonebot_plugin_xiuxian_2/features/config_backups/tests/test_repository.py"
       ],
       "source_declaration_found": true,
       "source": {
@@ -12352,7 +12356,7 @@
       "reason": "The legacy route delegates per-file deletion to PluginBackupFileApplication. Batch success/failure entries are preserved, while each operation uses the same backup filename and regular-file policy as the local plugin archive catalog; database, config, and cloud backups remain separate owners.",
       "unknown_edge": "",
       "call_graph": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py:353 batch_delete_backups -> plugin_backup_file_application.delete_plugin_backups -> PluginBackupFileApplication.delete_plugin_backups -> PluginBackupFileRepository.delete_plugin_backup -> unlink regular plugin ZIP entries -> legacy partial-result JSON"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py:316 batch_delete_backups -> plugin_backup_file_application.delete_plugin_backups -> PluginBackupFileApplication.delete_plugin_backups -> PluginBackupFileRepository.delete_plugin_backup -> unlink regular plugin ZIP entries -> legacy partial-result JSON"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
@@ -12360,7 +12364,7 @@
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py:353",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py:316",
         "nonebot_plugin_xiuxian_2/features/plugin_backups/file_application.py:13-43",
         "nonebot_plugin_xiuxian_2/features/plugin_backups/file_repository.py:51-67"
       ],
@@ -12382,7 +12386,7 @@
       "reason": "The batch cloud-delete route delegates to PluginBackupCloudApplication, which validates bounded filename batches and reports per-file WebDAV failures without changing unrelated remote entries.",
       "unknown_edge": "",
       "call_graph": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py:456 batch_delete_cloud_backups -> plugin_backup_cloud_application.delete_cloud_backups -> PluginBackupCloudApplication.delete_cloud_backups -> PluginBackupCloudRepository.delete_cloud_backup -> bounded WebDAV DELETE -> per-file deleted/failed response"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py:419 batch_delete_cloud_backups -> plugin_backup_cloud_application.delete_cloud_backups -> PluginBackupCloudApplication.delete_cloud_backups -> PluginBackupCloudRepository.delete_cloud_backup -> bounded WebDAV DELETE -> per-file deleted/failed response"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
@@ -12390,7 +12394,7 @@
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py:456",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py:419",
         "nonebot_plugin_xiuxian_2/features/plugin_backups/cloud_application.py:PluginBackupCloudApplication.delete_cloud_backups",
         "nonebot_plugin_xiuxian_2/features/plugin_backups/cloud_repository.py:PluginBackupCloudRepository.delete_cloud_backup"
       ],
@@ -12412,7 +12416,7 @@
       "reason": "The route delegates to DatabaseBackupApplication, which caps each batch at 100 filenames and reports individual WebDAV delete outcomes while preserving the legacy partial-result response.",
       "unknown_edge": "",
       "call_graph": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py:481 batch_delete_cloud_db_backups -> database_backup_application.delete_cloud_backups -> DatabaseBackupApplication.delete_cloud_backups -> DatabaseBackupRepository.delete_cloud_backup -> bounded WebDAV DELETE -> per-file deleted/failed response"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py:444 batch_delete_cloud_db_backups -> database_backup_application.delete_cloud_backups -> DatabaseBackupApplication.delete_cloud_backups -> DatabaseBackupRepository.delete_cloud_backup -> bounded WebDAV DELETE -> per-file deleted/failed response"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
@@ -12420,7 +12424,7 @@
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py:481"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py:444"
       ],
       "source_declaration_found": true,
       "source": {
@@ -12440,7 +12444,7 @@
       "reason": "The route delegates local archive deletion to DatabaseBackupApplication, which accepts only database archive names, rejects non-regular files, caps each batch at 100, and preserves per-file results.",
       "unknown_edge": "",
       "call_graph": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py:406 batch_delete_db_backups -> database_backup_application.delete_local_backups -> DatabaseBackupApplication.delete_local_backups -> DatabaseBackupRepository.delete_local_backup -> unlink one regular database ZIP -> per-file deleted/failed response"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py:369 batch_delete_db_backups -> database_backup_application.delete_local_backups -> DatabaseBackupApplication.delete_local_backups -> DatabaseBackupRepository.delete_local_backup -> unlink one regular database ZIP -> per-file deleted/failed response"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
@@ -12448,7 +12452,7 @@
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py:406"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py:369"
       ],
       "source_declaration_found": true,
       "source": {
@@ -12496,7 +12500,7 @@
       "reason": "The cloud sync route delegates conflict handling and streamed ZIP validation/atomic replacement to PluginBackupCloudApplication and PluginBackupCloudRepository; overwrite and FILE_EXISTS behavior remain explicit.",
       "unknown_edge": "",
       "call_graph": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py:376 batch_sync_cloud_backups -> plugin_backup_cloud_application.sync_cloud_backups -> PluginBackupCloudApplication.sync_cloud_backups -> PluginBackupCloudRepository.download_cloud_backup -> bounded streamed ZIP and atomic local replacement -> partial-result JSON"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py:339 batch_sync_cloud_backups -> plugin_backup_cloud_application.sync_cloud_backups -> PluginBackupCloudApplication.sync_cloud_backups -> PluginBackupCloudRepository.download_cloud_backup -> bounded streamed ZIP and atomic local replacement -> partial-result JSON"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
@@ -12504,7 +12508,7 @@
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py:376",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py:339",
         "nonebot_plugin_xiuxian_2/features/plugin_backups/cloud_application.py:PluginBackupCloudApplication.sync_cloud_backups",
         "nonebot_plugin_xiuxian_2/features/plugin_backups/cloud_repository.py:PluginBackupCloudRepository.download_cloud_backup"
       ],
@@ -12526,7 +12530,7 @@
       "reason": "The route delegates cloud synchronization to DatabaseBackupApplication, which caps work at 100 archives, preserves FILE_EXISTS and reports individual failures while the repository streams, validates, and atomically installs ZIP files.",
       "unknown_edge": "",
       "call_graph": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py:429 batch_sync_cloud_db_backups -> database_backup_application.sync_cloud_backups -> DatabaseBackupApplication.sync_cloud_backups -> DatabaseBackupRepository.download_cloud_backup -> bounded streamed ZIP and atomic local replacement -> partial-result JSON"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py:392 batch_sync_cloud_db_backups -> database_backup_application.sync_cloud_backups -> DatabaseBackupApplication.sync_cloud_backups -> DatabaseBackupRepository.download_cloud_backup -> bounded streamed ZIP and atomic local replacement -> partial-result JSON"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
@@ -12534,7 +12538,7 @@
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py:429"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py:392"
       ],
       "source_declaration_found": true,
       "source": {
@@ -12577,11 +12581,11 @@
       "id": "route:POST:/cloud_backup_config:nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py:cloud_backup_config",
       "kind": "legacy_routes",
       "entry": "POST /cloud_backup_config -> nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py:cloud_backup_config",
-      "status": "受阻",
-      "reason": "The old Flask app and route modules are loaded and its server is enabled by default. Route registration is proven, but each handler's downstream ownership and replacement/compatibility decision is not closed.",
-      "unknown_edge": "route function -> old data/service or feature application -> state effect",
+      "status": "已迁移",
+      "reason": "Configuration backup HTTP operations now delegate to the bounded ConfigBackupApplication/ConfigBackupRepository owner; import and restore routes only stage values for the existing /save_config apply path.",
+      "unknown_edge": "",
       "call_graph": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py:134 -> Flask app.route(/cloud_backup_config) -> legacy handler -> downstream state effect not closed"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py:141 cloud_backup_config -> config_backup_application.backup_cloud_config -> ConfigBackupApplication.backup_cloud_config -> ConfigBackupRepository.create_local_backup/upload_cloud_backup -> one bounded WebDAV upload -> legacy response"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
@@ -12589,7 +12593,11 @@
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py:134"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py:141",
+        "nonebot_plugin_xiuxian_2/features/config_backups/application.py",
+        "nonebot_plugin_xiuxian_2/features/config_backups/repository.py",
+        "nonebot_plugin_xiuxian_2/features/config_backups/tests/test_application.py",
+        "nonebot_plugin_xiuxian_2/features/config_backups/tests/test_repository.py"
       ],
       "source_declaration_found": true,
       "source": {
@@ -12635,11 +12643,11 @@
       "id": "route:POST:/cloud_restore_config_backup:nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py:cloud_restore_config_backup",
       "kind": "legacy_routes",
       "entry": "POST /cloud_restore_config_backup -> nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py:cloud_restore_config_backup",
-      "status": "受阻",
-      "reason": "The old Flask app and route modules are loaded and its server is enabled by default. Route registration is proven, but each handler's downstream ownership and replacement/compatibility decision is not closed.",
-      "unknown_edge": "route function -> old data/service or feature application -> state effect",
+      "status": "已迁移",
+      "reason": "Configuration backup HTTP operations now delegate to the bounded ConfigBackupApplication/ConfigBackupRepository owner; import and restore routes only stage values for the existing /save_config apply path.",
+      "unknown_edge": "",
       "call_graph": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py:214 -> Flask app.route(/cloud_restore_config_backup) -> legacy handler -> downstream state effect not closed"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py:190 cloud_restore_config_backup -> config_backup_application.restore_cloud_backup -> ConfigBackupApplication.restore_cloud_backup -> local-first bounded download when absent -> staged configuration data/metadata -> /save_config remains the only apply path"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
@@ -12647,7 +12655,11 @@
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py:214"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py:190",
+        "nonebot_plugin_xiuxian_2/features/config_backups/application.py",
+        "nonebot_plugin_xiuxian_2/features/config_backups/repository.py",
+        "nonebot_plugin_xiuxian_2/features/config_backups/tests/test_application.py",
+        "nonebot_plugin_xiuxian_2/features/config_backups/tests/test_repository.py"
       ],
       "source_declaration_found": true,
       "source": {
@@ -12667,7 +12679,7 @@
       "reason": "Cloud restore delegates to DatabaseBackupApplication. It first downloads with overwrite; only a failed download falls back to an existing local archive, then the selected databases are staged and validated before runtime restore. Multi-database restore remains non-atomic and reports partial completion.",
       "unknown_edge": "",
       "call_graph": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py:338 cloud_restore_db_backup -> database_backup_application.restore_cloud_backup -> DatabaseBackupApplication.restore_cloud_backup -> DatabaseBackupRepository.download_cloud_backup(overwrite=True) -> local fallback only after failed download -> restore_local_backup and validated staged SQLite replacement"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py:301 cloud_restore_db_backup -> database_backup_application.restore_cloud_backup -> DatabaseBackupApplication.restore_cloud_backup -> DatabaseBackupRepository.download_cloud_backup(overwrite=True) -> local fallback only after failed download -> restore_local_backup and validated staged SQLite replacement"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
@@ -12675,7 +12687,7 @@
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py:338"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py:301"
       ],
       "source_declaration_found": true,
       "source": {
@@ -12807,7 +12819,7 @@
       "reason": "The legacy route delegates deletion to PluginBackupFileApplication. Only catalogued regular plugin ZIP files are eligible; path-like names, symlinks, and non-regular entries are rejected.",
       "unknown_edge": "",
       "call_graph": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py:749 delete_backup -> plugin_backup_file_application.delete_plugin_backup -> PluginBackupFileApplication.delete_plugin_backup -> PluginBackupFileRepository.delete_plugin_backup -> unlink one regular plugin ZIP -> legacy JSON response"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py:624 delete_backup -> plugin_backup_file_application.delete_plugin_backup -> PluginBackupFileApplication.delete_plugin_backup -> PluginBackupFileRepository.delete_plugin_backup -> unlink one regular plugin ZIP -> legacy JSON response"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
@@ -12815,7 +12827,7 @@
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py:749",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py:624",
         "nonebot_plugin_xiuxian_2/features/plugin_backups/file_application.py:13-17",
         "nonebot_plugin_xiuxian_2/features/plugin_backups/file_repository.py:51-67"
       ],
@@ -12833,11 +12845,11 @@
       "id": "route:POST:/delete_config_backup:nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py:delete_config_backup",
       "kind": "legacy_routes",
       "entry": "POST /delete_config_backup -> nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py:delete_config_backup",
-      "status": "受阻",
-      "reason": "The old Flask app and route modules are loaded and its server is enabled by default. Route registration is proven, but each handler's downstream ownership and replacement/compatibility decision is not closed.",
-      "unknown_edge": "route function -> old data/service or feature application -> state effect",
+      "status": "已迁移",
+      "reason": "Configuration backup HTTP operations now delegate to the bounded ConfigBackupApplication/ConfigBackupRepository owner; import and restore routes only stage values for the existing /save_config apply path.",
+      "unknown_edge": "",
       "call_graph": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py:861 -> Flask app.route(/delete_config_backup) -> legacy handler -> downstream state effect not closed"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py:651 delete_config_backup -> config_backup_application.delete_local_backup -> ConfigBackupApplication.delete_local_backup -> no-follow regular-file validation -> unlink -> legacy response"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
@@ -12845,7 +12857,11 @@
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py:861"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py:651",
+        "nonebot_plugin_xiuxian_2/features/config_backups/application.py",
+        "nonebot_plugin_xiuxian_2/features/config_backups/repository.py",
+        "nonebot_plugin_xiuxian_2/features/config_backups/tests/test_application.py",
+        "nonebot_plugin_xiuxian_2/features/config_backups/tests/test_repository.py"
       ],
       "source_declaration_found": true,
       "source": {
@@ -12893,7 +12909,7 @@
       "reason": "The legacy download route opens catalogued plugin ZIP files through PluginBackupFileApplication and streams the opened regular file as an attachment. Path-like names and symlinks are rejected.",
       "unknown_edge": "",
       "call_graph": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py:731 download_backup -> plugin_backup_file_application.open_plugin_backup -> PluginBackupFileApplication.open_plugin_backup -> PluginBackupFileRepository.open_plugin_backup -> no-follow regular-file stream -> legacy attachment response"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py:606 download_backup -> plugin_backup_file_application.open_plugin_backup -> PluginBackupFileApplication.open_plugin_backup -> PluginBackupFileRepository.open_plugin_backup -> no-follow regular-file stream -> legacy attachment response"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
@@ -12901,7 +12917,7 @@
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py:731",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py:606",
         "nonebot_plugin_xiuxian_2/features/plugin_backups/file_application.py:13-14",
         "nonebot_plugin_xiuxian_2/features/plugin_backups/file_repository.py:25-49"
       ],
@@ -13003,11 +13019,11 @@
       "id": "route:POST:/export_config:nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py:export_config",
       "kind": "legacy_routes",
       "entry": "POST /export_config -> nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py:export_config",
-      "status": "受阻",
-      "reason": "The old Flask app and route modules are loaded and its server is enabled by default. Route registration is proven, but each handler's downstream ownership and replacement/compatibility decision is not closed.",
-      "unknown_edge": "route function -> old data/service or feature application -> state effect",
+      "status": "已迁移",
+      "reason": "Configuration backup HTTP operations now delegate to the bounded ConfigBackupApplication/ConfigBackupRepository owner; import and restore routes only stage values for the existing /save_config apply path.",
+      "unknown_edge": "",
       "call_graph": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py:579 -> Flask app.route(/export_config) -> legacy handler -> downstream state effect not closed"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py:467 export_config -> config_backup_application.export_config -> ConfigBackupApplication.export_config -> allowlisted runtime values and bounded metadata -> legacy JSON response"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
@@ -13015,7 +13031,11 @@
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py:579"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py:467",
+        "nonebot_plugin_xiuxian_2/features/config_backups/application.py",
+        "nonebot_plugin_xiuxian_2/features/config_backups/repository.py",
+        "nonebot_plugin_xiuxian_2/features/config_backups/tests/test_application.py",
+        "nonebot_plugin_xiuxian_2/features/config_backups/tests/test_repository.py"
       ],
       "source_declaration_found": true,
       "source": {
@@ -13123,11 +13143,11 @@
       "id": "route:GET:/get_cloud_config_backups:nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py:get_cloud_config_backups",
       "kind": "legacy_routes",
       "entry": "GET /get_cloud_config_backups -> nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py:get_cloud_config_backups",
-      "status": "受阻",
-      "reason": "The old Flask app and route modules are loaded and its server is enabled by default. Route registration is proven, but each handler's downstream ownership and replacement/compatibility decision is not closed.",
-      "unknown_edge": "route function -> old data/service or feature application -> state effect",
+      "status": "已迁移",
+      "reason": "Configuration backup HTTP operations now delegate to the bounded ConfigBackupApplication/ConfigBackupRepository owner; import and restore routes only stage values for the existing /save_config apply path.",
+      "unknown_edge": "",
       "call_graph": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py:162 -> Flask app.route(/get_cloud_config_backups) -> legacy handler -> downstream state effect not closed"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py:153 get_cloud_config_backups -> config_backup_application.list_cloud_backups -> ConfigBackupApplication.list_cloud_backups -> bounded WebDAV PROPFIND/XML -> legacy JSON response"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
@@ -13135,7 +13155,11 @@
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py:162"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py:153",
+        "nonebot_plugin_xiuxian_2/features/config_backups/application.py",
+        "nonebot_plugin_xiuxian_2/features/config_backups/repository.py",
+        "nonebot_plugin_xiuxian_2/features/config_backups/tests/test_application.py",
+        "nonebot_plugin_xiuxian_2/features/config_backups/tests/test_repository.py"
       ],
       "source_declaration_found": true,
       "source": {
@@ -13155,7 +13179,7 @@
       "reason": "The route delegates listing to DatabaseBackupApplication and a bounded WebDAV repository, limiting the PROPFIND body to 2 MiB and the parsed response set to 1000 entries while preserving the legacy envelope.",
       "unknown_edge": "",
       "call_graph": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py:310 get_cloud_db_backups -> database_backup_application.list_cloud_backups -> DatabaseBackupApplication.list_cloud_backups -> DatabaseBackupRepository.list_cloud_backups -> bounded WebDAV PROPFIND/XML -> database archive metadata"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py:273 get_cloud_db_backups -> database_backup_application.list_cloud_backups -> DatabaseBackupApplication.list_cloud_backups -> DatabaseBackupRepository.list_cloud_backups -> bounded WebDAV PROPFIND/XML -> database archive metadata"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
@@ -13163,7 +13187,7 @@
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py:310"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py:273"
       ],
       "source_declaration_found": true,
       "source": {
@@ -13179,11 +13203,11 @@
       "id": "route:GET:/get_config_backups:nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py:get_config_backups",
       "kind": "legacy_routes",
       "entry": "GET /get_config_backups -> nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py:get_config_backups",
-      "status": "受阻",
-      "reason": "The old Flask app and route modules are loaded and its server is enabled by default. Route registration is proven, but each handler's downstream ownership and replacement/compatibility decision is not closed.",
-      "unknown_edge": "route function -> old data/service or feature application -> state effect",
+      "status": "已迁移",
+      "reason": "Configuration backup HTTP operations now delegate to the bounded ConfigBackupApplication/ConfigBackupRepository owner; import and restore routes only stage values for the existing /save_config apply path.",
+      "unknown_edge": "",
       "call_graph": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py:697 -> Flask app.route(/get_config_backups) -> legacy handler -> downstream state effect not closed"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py:533 get_config_backups -> config_backup_application.list_local_backups -> ConfigBackupApplication.list_local_backups -> no-follow regular JSON scan and metadata -> legacy JSON response"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
@@ -13191,7 +13215,11 @@
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py:697"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py:533",
+        "nonebot_plugin_xiuxian_2/features/config_backups/application.py",
+        "nonebot_plugin_xiuxian_2/features/config_backups/repository.py",
+        "nonebot_plugin_xiuxian_2/features/config_backups/tests/test_application.py",
+        "nonebot_plugin_xiuxian_2/features/config_backups/tests/test_repository.py"
       ],
       "source_declaration_found": true,
       "source": {
@@ -13211,7 +13239,7 @@
       "reason": "The route delegates to a read-only local archive catalog that uses lstat, skips symlinks and non-regular files, returns at most 1000 entries, and no longer exposes absolute filesystem paths.",
       "unknown_edge": "",
       "call_graph": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py:284 get_db_backups -> database_backup_application.list_local_backups -> DatabaseBackupApplication.list_local_backups -> DatabaseBackupRepository.list_local_backups -> no-follow regular-file metadata -> legacy backups response"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py:247 get_db_backups -> database_backup_application.list_local_backups -> DatabaseBackupApplication.list_local_backups -> DatabaseBackupRepository.list_local_backups -> no-follow regular-file metadata -> legacy backups response"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
@@ -13219,7 +13247,7 @@
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py:284"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py:247"
       ],
       "source_declaration_found": true,
       "source": {
@@ -13346,11 +13374,11 @@
       "id": "route:POST:/import_config:nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py:import_config",
       "kind": "legacy_routes",
       "entry": "POST /import_config -> nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py:import_config",
-      "status": "受阻",
-      "reason": "The old Flask app and route modules are loaded and its server is enabled by default. Route registration is proven, but each handler's downstream ownership and replacement/compatibility decision is not closed.",
-      "unknown_edge": "route function -> old data/service or feature application -> state effect",
+      "status": "已迁移",
+      "reason": "Configuration backup HTTP operations now delegate to the bounded ConfigBackupApplication/ConfigBackupRepository owner; import and restore routes only stage values for the existing /save_config apply path.",
+      "unknown_edge": "",
       "call_graph": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py:614 -> Flask app.route(/import_config) -> legacy handler -> downstream state effect not closed"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py:482 import_config -> config_backup_application.import_config -> ConfigBackupApplication.import_config -> bounded JSON parse -> staged data only; /save_config remains the apply path"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
@@ -13358,7 +13386,11 @@
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py:614"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py:482",
+        "nonebot_plugin_xiuxian_2/features/config_backups/application.py",
+        "nonebot_plugin_xiuxian_2/features/config_backups/repository.py",
+        "nonebot_plugin_xiuxian_2/features/config_backups/tests/test_application.py",
+        "nonebot_plugin_xiuxian_2/features/config_backups/tests/test_repository.py"
       ],
       "source_declaration_found": true,
       "source": {
@@ -13497,7 +13529,7 @@
       "reason": "The route delegates backup creation to DatabaseBackupApplication, which snapshots only configured core SQLite databases, builds a temporary ZIP and atomically installs it; optional WebDAV upload and existing local/cloud retention behavior remain behind the runtime port.",
       "unknown_edge": "",
       "call_graph": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py:276 manual_db_backup -> database_backup_application.create_backup -> DatabaseBackupApplication.create_backup -> DatabaseBackupRepository.create_local_backup -> SQLite backup API snapshots -> atomically installed ZIP -> legacy JSON response"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py:239 manual_db_backup -> database_backup_application.create_backup -> DatabaseBackupApplication.create_backup -> DatabaseBackupRepository.create_local_backup -> SQLite backup API snapshots -> atomically installed ZIP -> legacy JSON response"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
@@ -13505,7 +13537,7 @@
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py:276"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py:239"
       ],
       "source_declaration_found": true,
       "source": {
@@ -13580,7 +13612,7 @@
       "reason": "The route delegates to PluginBackupRestoreApplication, which validates and stages the ZIP, overlays configured data/plugin roots, delegates only SQLite replacement/reload effects to the runtime port, and updates the version marker after successful restore. Multi-file overlays remain non-atomic; failures are returned and do not advance the version marker.",
       "unknown_edge": "",
       "call_graph": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py:247 restore_backup -> plugin_backup_restore_application.restore_backup -> PluginBackupRestoreApplication.restore_backup -> PluginBackupRestoreRepository.stage_backup/merge_data/merge_plugin -> configured data/plugin roots -> SQLite runtime effects and version marker"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py:210 restore_backup -> plugin_backup_restore_application.restore_backup -> PluginBackupRestoreApplication.restore_backup -> PluginBackupRestoreRepository.stage_backup/merge_data/merge_plugin -> configured data/plugin roots -> SQLite runtime effects and version marker"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
@@ -13588,7 +13620,7 @@
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py:247"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py:210"
       ],
       "source_declaration_found": true,
       "source": {
@@ -13604,11 +13636,11 @@
       "id": "route:POST:/restore_config_backup:nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py:restore_config_backup",
       "kind": "legacy_routes",
       "entry": "POST /restore_config_backup -> nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py:restore_config_backup",
-      "status": "受阻",
-      "reason": "The old Flask app and route modules are loaded and its server is enabled by default. Route registration is proven, but each handler's downstream ownership and replacement/compatibility decision is not closed.",
-      "unknown_edge": "route function -> old data/service or feature application -> state effect",
+      "status": "已迁移",
+      "reason": "Configuration backup HTTP operations now delegate to the bounded ConfigBackupApplication/ConfigBackupRepository owner; import and restore routes only stage values for the existing /save_config apply path.",
+      "unknown_edge": "",
       "call_graph": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py:732 -> Flask app.route(/restore_config_backup) -> legacy handler -> downstream state effect not closed"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py:546 restore_config_backup -> config_backup_application.restore_local_backup -> ConfigBackupApplication.restore_local_backup -> bounded no-follow JSON read -> staged data/metadata only; /save_config remains the apply path"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
@@ -13616,7 +13648,11 @@
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py:732"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py:546",
+        "nonebot_plugin_xiuxian_2/features/config_backups/application.py",
+        "nonebot_plugin_xiuxian_2/features/config_backups/repository.py",
+        "nonebot_plugin_xiuxian_2/features/config_backups/tests/test_application.py",
+        "nonebot_plugin_xiuxian_2/features/config_backups/tests/test_repository.py"
       ],
       "source_declaration_found": true,
       "source": {
@@ -13636,7 +13672,7 @@
       "reason": "The route delegates to DatabaseBackupApplication, which validates selected database aliases, stages only selected archive members, bounds member count/expanded bytes, validates each SQLite snapshot and reports partial restore state. Existing target snapshots and runtime handle reload remain on the UpdateManager runtime port; multiple files are not a cross-database transaction.",
       "unknown_edge": "",
       "call_graph": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py:295 restore_db_backup -> database_backup_application.restore_local_backup -> DatabaseBackupApplication.restore_local_backup -> DatabaseBackupRepository.stage_restore/restore_staged -> validated SQLite snapshots -> UpdateManager runtime restore/reconnect -> partial restore response"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py:258 restore_db_backup -> database_backup_application.restore_local_backup -> DatabaseBackupApplication.restore_local_backup -> DatabaseBackupRepository.stage_restore/restore_staged -> validated SQLite snapshots -> UpdateManager runtime restore/reconnect -> partial restore response"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
@@ -13644,7 +13680,7 @@
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py:295"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py:258"
       ],
       "source_declaration_found": true,
       "source": {
@@ -13839,11 +13875,11 @@
       "id": "route:POST:/sync_cloud_config_backup:nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py:sync_cloud_config_backup",
       "kind": "legacy_routes",
       "entry": "POST /sync_cloud_config_backup -> nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py:sync_cloud_config_backup",
-      "status": "受阻",
-      "reason": "The old Flask app and route modules are loaded and its server is enabled by default. Route registration is proven, but each handler's downstream ownership and replacement/compatibility decision is not closed.",
-      "unknown_edge": "route function -> old data/service or feature application -> state effect",
+      "status": "已迁移",
+      "reason": "Configuration backup HTTP operations now delegate to the bounded ConfigBackupApplication/ConfigBackupRepository owner; import and restore routes only stage values for the existing /save_config apply path.",
+      "unknown_edge": "",
       "call_graph": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py:177 -> Flask app.route(/sync_cloud_config_backup) -> legacy handler -> downstream state effect not closed"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py:165 sync_cloud_config_backup -> config_backup_application.sync_cloud_backup -> ConfigBackupApplication.sync_cloud_backup -> bounded JSON download/validation and atomic installation -> legacy FILE_EXISTS/success response"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
@@ -13851,7 +13887,11 @@
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py:177"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py:165",
+        "nonebot_plugin_xiuxian_2/features/config_backups/application.py",
+        "nonebot_plugin_xiuxian_2/features/config_backups/repository.py",
+        "nonebot_plugin_xiuxian_2/features/config_backups/tests/test_application.py",
+        "nonebot_plugin_xiuxian_2/features/config_backups/tests/test_repository.py"
       ],
       "source_declaration_found": true,
       "source": {
@@ -13871,7 +13911,7 @@
       "reason": "The route delegates cloud synchronization to DatabaseBackupApplication. The repository caps streamed ZIP downloads at 8 GiB, uses the legacy 120-second request timeout, validates archive format and atomically replaces only after complete download; overwrite and FILE_EXISTS responses are preserved.",
       "unknown_edge": "",
       "call_graph": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py:320 sync_cloud_db_backup -> database_backup_application.sync_cloud_backup -> DatabaseBackupApplication.sync_cloud_backup -> DatabaseBackupRepository.download_cloud_backup -> bounded streamed ZIP, validation, and atomic install -> FILE_EXISTS/success response"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py:283 sync_cloud_db_backup -> database_backup_application.sync_cloud_backup -> DatabaseBackupApplication.sync_cloud_backup -> DatabaseBackupRepository.download_cloud_backup -> bounded streamed ZIP, validation, and atomic install -> FILE_EXISTS/success response"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
@@ -13879,7 +13919,7 @@
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py:320"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py:283"
       ],
       "source_declaration_found": true,
       "source": {

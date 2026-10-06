@@ -432,6 +432,12 @@ def _slice_status() -> dict[str, dict[str, object]]:
         for test_name in ("test_application.py", "test_repository.py")
     )
     database_backup_adapter_tests = (PACKAGE / "features" / "updater" / "tests" / "test_manager_adapter.py").read_text(encoding="utf-8")
+    config_backup_application = (PACKAGE / "features" / "config_backups" / "application.py").read_text(encoding="utf-8")
+    config_backup_repository = (PACKAGE / "features" / "config_backups" / "repository.py").read_text(encoding="utf-8")
+    config_backup_tests = "\n".join(
+        (PACKAGE / "features" / "config_backups" / "tests" / test_name).read_text(encoding="utf-8")
+        for test_name in ("test_application.py", "test_repository.py")
+    )
     plugin_backup_web_tests = (ROOT / "tests" / "test_updater_web.py").read_text(encoding="utf-8")
     activity_help_handler = activity_commands[
         activity_commands.index("@activity_help_cmd.handle"):
@@ -2156,6 +2162,50 @@ def _slice_status() -> dict[str, dict[str, object]]:
                 and "anonymous.status_code, 401" in updater_web_tests
             ),
             "status": "database_zip_local_restore_and_webdav_operations_have_one_feature_owner",
+        },
+        "config_backup_owner": {
+            "config_routes_use_feature_application": (
+                "config_backup_application.backup_cloud_config()" in backup_routes
+                and "config_backup_application.list_cloud_backups()" in backup_routes
+                and "config_backup_application.sync_cloud_backup(" in backup_routes
+                and "config_backup_application.restore_cloud_backup(" in backup_routes
+                and "config_backup_application.export_config(" in backup_routes
+                and "config_backup_application.import_config(" in backup_routes
+                and "config_backup_application.create_local_backup(" in backup_routes
+                and "config_backup_application.list_local_backups()" in backup_routes
+                and "config_backup_application.restore_local_backup(" in backup_routes
+                and "config_backup_application.delete_local_backup(" in backup_routes
+            ),
+            "manager_methods_are_compatibility_forwarders": (
+                "return self._config_backup_application().create_cloud_backup(local_file_path)" in plugin_backup_manager
+                and "return self._config_backup_application().list_cloud_backups()" in plugin_backup_manager
+                and "return self._config_backup_application().sync_cloud_backup(" in plugin_backup_manager
+                and "return self._config_backup_application().restore_cloud_backup(filename)" in plugin_backup_manager
+                and "return self._config_backup_application().backup_all_configs()" in plugin_backup_manager
+                and "return self._config_backup_application().restore_config_from_backup(backup_path)" in plugin_backup_manager
+                and "def test_config_backup_compatibility_methods_delegate_to_feature_owner" in database_backup_adapter_tests
+            ),
+            "repository_bounds_json_and_cloud_io": (
+                "MAX_CONFIG_BACKUP_BYTES = 16 * 1024 * 1024" in config_backup_repository
+                and "MAX_CONFIG_CLOUD_LIST_BYTES = 2 * 1024 * 1024" in config_backup_repository
+                and "MAX_CONFIG_CLOUD_LIST_ENTRIES = 1_000" in config_backup_repository
+                and "O_NOFOLLOW" in config_backup_repository
+                and "os.replace(temporary_path, target)" in config_backup_repository
+                and "os.link(temporary_path, target)" in config_backup_repository
+            ),
+            "import_restore_and_manual_cloud_behavior_are_tested": (
+                "test_import_and_restore_routes_only_stage_values_without_writing_config" in config_backup_tests
+                and "test_manual_cloud_backup_uploads_only_once_when_auto_cloud_is_enabled" in config_backup_tests
+                and "test_cloud_restore_prefers_local_backup_and_only_fetches_when_missing" in config_backup_tests
+                and "test_cloud_listing_rejects_entity_xml_and_closes_response" in config_backup_tests
+                and "test_cloud_download_installs_json_atomically_and_preserves_existing_on_error" in config_backup_tests
+            ),
+            "routes_keep_admin_csrf_and_legacy_contracts_tested": (
+                "def test_config_backup_routes_share_feature_application_and_http_contract" in plugin_backup_web_tests
+                and "all(response.status_code == 403 for response in missing_csrf)" in plugin_backup_web_tests
+                and "anonymous_list.status_code, 401" in plugin_backup_web_tests
+            ),
+            "status": "configuration_json_backup_import_restore_and_webdav_share_a_bounded_feature_owner",
         },
         "activity_static_help": {
             "help_and_manage_remain_static_compatibility_handlers": (

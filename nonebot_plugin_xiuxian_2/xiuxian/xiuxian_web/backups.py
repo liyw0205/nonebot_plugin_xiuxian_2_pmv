@@ -2,6 +2,7 @@ from .core import (
     Path,
     app,
     datetime,
+    config_backup_application,
     database_backup_application,
     get_paths,
     json,
@@ -21,7 +22,6 @@ from .core import (
     url_for,
 )
 
-from .config import get_config_values
 from ...features.plugin_backups import InvalidPluginBackupFile, PluginBackupFileNotFound
 
 DB_SELECTION_ALIASES = {
@@ -143,26 +143,10 @@ def cloud_backup_config():
     if 'admin_id' not in session:
         return jsonify({"success": False, "error": "未登录"})
 
-    try:
-        # 1) 先本地备份
-        backup_success, backup_result = update_manager.backup_all_configs()
-        if not backup_success:
-            return jsonify({"success": False, "error": f"本地备份失败: {backup_result}"})
-
-        backup_path = backup_result
-
-        # 2) 上传云端
-        upload_success, upload_msg = update_manager.upload_config_backup_to_webdav(backup_path)
-        if not upload_success:
-            return jsonify({"success": False, "error": upload_msg})
-
-        return jsonify({
-            "success": True,
-            "message": f"配置云备份成功：{Path(backup_path).name}"
-        })
-
-    except Exception as e:
-        return jsonify({"success": False, "error": f"云备份失败: {e}"})
+    success, result = config_backup_application.backup_cloud_config()
+    if not success:
+        return jsonify({"success": False, "error": str(result)})
+    return jsonify({"success": True, "message": f"配置云备份成功：{Path(result).name}"})
 
 
 @app.route('/get_cloud_config_backups')
@@ -171,13 +155,10 @@ def get_cloud_config_backups():
     if 'admin_id' not in session:
         return jsonify({"success": False, "error": "未登录"})
 
-    try:
-        success, result = update_manager.list_webdav_config_backups()
-        if success:
-            return jsonify({"success": True, "backups": result})
-        return jsonify({"success": False, "error": result})
-    except Exception as e:
-        return jsonify({"success": False, "error": f"获取云端配置备份失败: {e}"})
+    success, result = config_backup_application.list_cloud_backups()
+    if success:
+        return jsonify({"success": True, "backups": result})
+    return jsonify({"success": False, "error": result})
 
 
 @app.route('/sync_cloud_config_backup', methods=['POST'])
@@ -186,35 +167,23 @@ def sync_cloud_config_backup():
     if 'admin_id' not in session:
         return jsonify({"success": False, "error": "未登录"})
 
-    try:
-        data = request.get_json()
-        filename = safe_request_filename(data.get('filename'))
-        overwrite = data.get('overwrite', False)
-
-        if not filename:
-            return jsonify({"success": False, "error": "文件名不能为空"})
-
-        local_path = backup_path_under("config_backups", filename)
-        if local_path.exists() and not overwrite:
-            return jsonify({
-                "success": False,
-                "error": "FILE_EXISTS",
-                "message": f"本地已存在同名配置备份 {filename}，是否覆盖下载？"
-            })
-
-        success, result = update_manager.download_config_backup_from_webdav(filename, overwrite=overwrite)
-        if success:
-            return jsonify({"success": True, "message": f"同步成功: {filename}"})
-        else:
-            if result == "FILE_EXISTS":
-                return jsonify({
-                    "success": False,
-                    "error": "FILE_EXISTS",
-                    "message": f"本地已存在同名配置备份 {filename}，是否覆盖下载？"
-                })
-            return jsonify({"success": False, "error": str(result)})
-    except Exception as e:
-        return jsonify({"success": False, "error": f"同步失败: {e}"})
+    data = request.get_json(silent=True) or {}
+    filename = safe_request_filename(data.get('filename'))
+    overwrite = data.get('overwrite', False)
+    if not filename:
+        return jsonify({"success": False, "error": "文件名不能为空"})
+    success, result = config_backup_application.sync_cloud_backup(
+        filename, overwrite=overwrite
+    )
+    if success:
+        return jsonify({"success": True, "message": f"同步成功: {filename}"})
+    if result == "FILE_EXISTS":
+        return jsonify({
+            "success": False,
+            "error": "FILE_EXISTS",
+            "message": f"本地已存在同名配置备份 {filename}，是否覆盖下载？"
+        })
+    return jsonify({"success": False, "error": str(result)})
 
 
 @app.route('/cloud_restore_config_backup', methods=['POST'])
@@ -223,25 +192,19 @@ def cloud_restore_config_backup():
     if 'admin_id' not in session:
         return jsonify({"success": False, "error": "未登录"})
 
-    try:
-        data = request.get_json()
-        filename = safe_request_filename(data.get('filename'))
-        if not filename:
-            return jsonify({"success": False, "error": "未指定备份文件"})
-
-        success, result = update_manager.cloud_restore_config_backup(filename)
-        if not success:
-            return jsonify({"success": False, "error": result})
-
-        return jsonify({
-            "success": True,
-            "data": result["data"],
-            "metadata": result.get("metadata", {}),
-            "message": "云端配置已加载，请点击保存所有配置应用。"
-        })
-
-    except Exception as e:
-        return jsonify({"success": False, "error": f"云恢复失败: {e}"})
+    data = request.get_json(silent=True) or {}
+    filename = safe_request_filename(data.get('filename'))
+    if not filename:
+        return jsonify({"success": False, "error": "未指定备份文件"})
+    success, result = config_backup_application.restore_cloud_backup(filename)
+    if not success:
+        return jsonify({"success": False, "error": result})
+    return jsonify({
+        "success": True,
+        "data": result["data"],
+        "metadata": result.get("metadata", {}),
+        "message": "云端配置已加载，请点击保存所有配置应用。"
+    })
 
 @app.route('/restore_backup', methods=['POST'])
 def restore_backup():
@@ -506,31 +469,11 @@ def export_config():
         return jsonify({"success": False, "error": "未登录"})
     
     try:
-        data = request.get_json()
-        selected_fields = data.get('selected_fields', [])
-        export_all = data.get('export_all', False)
-        
-        config_values = get_config_values()
-        
-        # 如果选择全部导出或者没有选择任何字段，则导出所有配置
-        if export_all or not selected_fields:
-            export_data = config_values
-        else:
-            # 只导出选中的字段
-            export_data = {field: config_values[field] for field in selected_fields if field in config_values}
-        
-        # 添加元数据
-        export_data['_metadata'] = {
-            'backup_time': runtime_clock.now().isoformat(),
-            'backup_fields': list(export_data.keys()) if export_all else selected_fields,
-            'version': update_manager.current_version
-        }
-        
-        return jsonify({
-            "success": True,
-            "data": export_data,
-            "filename": f"xiuxian_config_export_{runtime_clock.now().strftime('%Y%m%d_%H%M%S')}.json"
-        })
+        data = request.get_json(silent=True) or {}
+        export_data, filename = config_backup_application.export_config(
+            data.get('selected_fields', []), export_all=data.get('export_all', False)
+        )
+        return jsonify({"success": True, "data": export_data, "filename": filename})
         
     except Exception as e:
         return jsonify({"success": False, "error": f"导出配置失败: {str(e)}"})
@@ -551,13 +494,7 @@ def import_config():
         if not file.filename.endswith('.json'):
             return jsonify({"success": False, "error": "只支持JSON格式文件"})
         
-        # 读取并解析JSON文件
-        file_content = file.read().decode('utf-8')
-        config_data = json.loads(file_content)
-        
-        # 移除元数据字段
-        if '_metadata' in config_data:
-            del config_data['_metadata']
+        config_data = config_backup_application.import_config(file.filename, file.stream)
         
         return jsonify({
             "success": True,
@@ -567,6 +504,8 @@ def import_config():
         
     except json.JSONDecodeError:
         return jsonify({"success": False, "error": "文件格式错误，不是有效的JSON"})
+    except ValueError as e:
+        return jsonify({"success": False, "error": str(e)})
     except Exception as e:
         return jsonify({"success": False, "error": f"导入配置失败: {str(e)}"})
 
@@ -576,42 +515,14 @@ def backup_config():
         return jsonify({"success": False, "error": "未登录"})
     
     try:
-        data = request.get_json()
-        selected_fields = data.get('selected_fields', [])
-        backup_all = data.get('backup_all', False)
-        
-        config_values = get_config_values()
-        
-        # 如果选择全部备份或者没有选择任何字段，则备份所有配置
-        if backup_all or not selected_fields:
-            backup_data = config_values
-        else:
-            # 只备份选中的字段
-            backup_data = {field: config_values[field] for field in selected_fields if field in config_values}
-        
-        # 创建备份目录
-        backup_dir = get_paths().backups / "config_backups"
-        backup_dir.mkdir(parents=True, exist_ok=True)
-        
-        # 生成备份文件名
-        timestamp = runtime_clock.now().strftime("%Y%m%d_%H%M%S")
-        backup_filename = f"config_backup_{timestamp}.json"
-        backup_path = backup_dir / backup_filename
-        
-        # 添加元数据
-        backup_data['_metadata'] = {
-            'backup_time': runtime_clock.now().isoformat(),
-            'backup_fields': list(backup_data.keys()) if backup_all else selected_fields,
-            'version': update_manager.current_version
-        }
-        
-        # 保存备份文件
-        with open(backup_path, 'w', encoding='utf-8') as f:
-            json.dump(backup_data, f, ensure_ascii=False, indent=2)
+        data = request.get_json(silent=True) or {}
+        backup_path = config_backup_application.create_local_backup(
+            data.get('selected_fields', []), backup_all=data.get('backup_all', False)
+        )
         
         return jsonify({
             "success": True,
-            "message": f"配置备份成功: {backup_filename}",
+            "message": f"配置备份成功: {backup_path.name}",
             "backup_path": str(backup_path)
         })
         
@@ -624,31 +535,9 @@ def get_config_backups():
         return jsonify({"success": False, "error": "未登录"})
     
     try:
-        backup_dir = get_paths().backups / "config_backups"
-        backups = []
-        
-        if backup_dir.exists():
-            for file in backup_dir.glob("config_backup_*.json"):
-                try:
-                    with open(file, 'r', encoding='utf-8') as f:
-                        metadata = json.load(f).get('_metadata', {})
-                    
-                    backups.append({
-                        'filename': file.name,
-                        'path': str(file),
-                        'backup_time': metadata.get('backup_time', ''),
-                        'version': metadata.get('version', 'unknown'),
-                        'size': file.stat().st_size,
-                        'created_at': datetime.fromtimestamp(file.stat().st_ctime).isoformat()
-                    })
-                except Exception:
-                    continue
-        
-        # 按创建时间倒序排列
-        backups.sort(key=lambda x: x['created_at'], reverse=True)
         return jsonify({
             "success": True,
-            "backups": backups
+            "backups": config_backup_application.list_local_backups()
         })
     except Exception as e:
         return jsonify({"success": False, "error": f"获取备份列表失败: {str(e)}"})
@@ -665,28 +554,14 @@ def restore_config_backup():
         if not backup_filename:
             return jsonify({"success": False, "error": "未指定备份文件"})
         
-        backup_path = backup_path_under("config_backups", backup_filename)
-        
-        if not backup_path.exists():
-            return jsonify({"success": False, "error": f"备份文件不存在: {backup_filename}"})
-        if not backup_path.is_file():
-            return jsonify({"success": False, "error": f"无效备份文件: {backup_filename}"})
-        
-        # 读取备份文件
-        with open(backup_path, 'r', encoding='utf-8') as f:
-            backup_data = json.load(f)
-        
-        # 保存元数据
-        metadata = backup_data.get('_metadata', {})
-        
-        # 移除元数据字段
-        if '_metadata' in backup_data:
-            del backup_data['_metadata']
+        success, result = config_backup_application.restore_local_backup(backup_filename)
+        if not success:
+            return jsonify({"success": False, "error": result})
         
         return jsonify({
             "success": True,
-            "data": backup_data,
-            "metadata": metadata,
+            "data": result["data"],
+            "metadata": result["metadata"],
             "message": "配置恢复成功，请点击保存按钮应用配置"
         })
         
@@ -784,16 +659,12 @@ def delete_config_backup():
         if not backup_filename:
             return jsonify({"success": False, "error": "未指定备份文件"})
 
-        backup_path = backup_path_under("config_backups", backup_filename)
-        
-        if not backup_path.exists():
-            return jsonify({"success": False, "error": f"备份文件不存在: {backup_filename}"})
-        
-        # 删除文件
-        backup_path.unlink()
+        success, message = config_backup_application.delete_local_backup(backup_filename)
+        if not success:
+            return jsonify({"success": False, "error": message})
         
         logger.info(f"配置备份文件已删除: {backup_filename}")
-        return jsonify({"success": True, "message": f"配置备份文件删除成功: {backup_filename}"})
+        return jsonify({"success": True, "message": message})
         
     except Exception as e:
         logger.error(f"删除配置备份失败: {str(e)}")

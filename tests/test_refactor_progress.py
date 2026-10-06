@@ -339,6 +339,12 @@ class RefactorProgressTests(unittest.TestCase):
         self.assertTrue(database_backup["repository_bounds_zip_restore_and_cloud_io"])
         self.assertTrue(database_backup["restore_cloud_fallback_batch_bounds_and_behavior_tested"])
         self.assertTrue(database_backup["database_routes_keep_admin_csrf_and_legacy_contracts_tested"])
+        config_backup = slices["config_backup_owner"]
+        self.assertTrue(config_backup["config_routes_use_feature_application"])
+        self.assertTrue(config_backup["manager_methods_are_compatibility_forwarders"])
+        self.assertTrue(config_backup["repository_bounds_json_and_cloud_io"])
+        self.assertTrue(config_backup["import_restore_and_manual_cloud_behavior_are_tested"])
+        self.assertTrue(config_backup["routes_keep_admin_csrf_and_legacy_contracts_tested"])
         activity_static_help = slices["activity_static_help"]
         self.assertTrue(activity_static_help["help_and_manage_remain_static_compatibility_handlers"])
         boss = slices["activity_boss"]

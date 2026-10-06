@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import unittest
 from io import BytesIO
+from pathlib import Path
 from unittest.mock import patch
 
 import nonebot
@@ -164,6 +165,57 @@ class FakeDatabaseBackupApplication:
     def delete_cloud_backups(self, filenames):
         self.calls.append(("delete_cloud_many", filenames))
         return ["db_backup_20261006_010203.zip"], []
+
+
+class FakeConfigBackupApplication:
+    def __init__(self) -> None:
+        self.calls: list[tuple[object, ...]] = []
+
+    def backup_cloud_config(self):
+        self.calls.append(("backup_cloud",))
+        return True, "config_backup_20261007_010203.json"
+
+    def list_cloud_backups(self):
+        self.calls.append(("list_cloud",))
+        return True, [{"filename": "config_backup_20261007_010203.json", "size": 12, "modified": "time"}]
+
+    def sync_cloud_backup(self, filename, *, overwrite=False):
+        self.calls.append(("sync_cloud", filename, overwrite))
+        if not overwrite:
+            return False, "FILE_EXISTS"
+        return True, "downloaded"
+
+    def restore_cloud_backup(self, filename):
+        self.calls.append(("restore_cloud", filename))
+        return True, {
+            "data": {"debug": True},
+            "metadata": {"version": "v2"},
+            "local_path": f"/backups/{filename}",
+        }
+
+    def export_config(self, selected_fields, *, export_all=False):
+        self.calls.append(("export", selected_fields, export_all))
+        return {"debug": True, "_metadata": {"version": "v2"}}, "export.json"
+
+    def import_config(self, filename, stream):
+        self.calls.append(("import", filename, stream.read()))
+        return {"debug": True}
+
+    def create_local_backup(self, selected_fields, *, backup_all=False):
+        self.calls.append(("create_local", selected_fields, backup_all))
+        return Path("/backups/config_backups/config_backup_20261007_010203.json")
+
+    def list_local_backups(self):
+        self.calls.append(("list_local",))
+        return [{"filename": "config_backup_20261007_010203.json", "version": "v2", "size": 12}]
+
+    def restore_local_backup(self, filename):
+        self.calls.append(("restore_local", filename))
+        return True, {"data": {"debug": True}, "metadata": {"version": "v2"}}
+
+    def delete_local_backup(self, filename):
+        self.calls.append(("delete_local", filename))
+        return True, f"配置备份文件删除成功: {filename}"
 
 
 class UpdaterWebRouteTests(unittest.TestCase):
@@ -557,6 +609,105 @@ class UpdaterWebRouteTests(unittest.TestCase):
                 ("delete_local", [filename]),
                 ("sync_many", [filename], False),
                 ("delete_cloud_many", [filename]),
+            ],
+        )
+
+    def test_config_backup_routes_share_feature_application_and_http_contract(self) -> None:
+        application = FakeConfigBackupApplication()
+        filename = "config_backup_20261007_010203.json"
+        post_routes = (
+            "/cloud_backup_config",
+            "/sync_cloud_config_backup",
+            "/cloud_restore_config_backup",
+            "/export_config",
+            "/import_config",
+            "/backup_config",
+            "/restore_config_backup",
+            "/delete_config_backup",
+        )
+        with patch.object(core, "ADMIN_IDS", {"admin-1"}):
+            anonymous_list = self.client.get("/get_config_backups")
+            anonymous_action = self.client.post("/backup_config", json={})
+            self._login_session()
+            with patch.object(backups, "config_backup_application", application):
+                missing_csrf = [self.client.post(route, json={}) for route in post_routes]
+                cloud_backup = self.client.post(
+                    "/cloud_backup_config", headers={"X-CSRF-Token": "csrf-token"}
+                )
+                cloud_list = self.client.get("/get_cloud_config_backups")
+                conflict = self.client.post(
+                    "/sync_cloud_config_backup",
+                    json={"filename": filename},
+                    headers={"X-CSRF-Token": "csrf-token"},
+                )
+                synced = self.client.post(
+                    "/sync_cloud_config_backup",
+                    json={"filename": filename, "overwrite": True},
+                    headers={"X-CSRF-Token": "csrf-token"},
+                )
+                cloud_restore = self.client.post(
+                    "/cloud_restore_config_backup",
+                    json={"filename": filename},
+                    headers={"X-CSRF-Token": "csrf-token"},
+                )
+                exported = self.client.post(
+                    "/export_config",
+                    json={"selected_fields": ["debug"]},
+                    headers={"X-CSRF-Token": "csrf-token"},
+                )
+                imported = self.client.post(
+                    "/import_config",
+                    data={"config_file": (BytesIO(b'{"debug":true}'), "config.json")},
+                    headers={"X-CSRF-Token": "csrf-token"},
+                    content_type="multipart/form-data",
+                )
+                local_backup = self.client.post(
+                    "/backup_config",
+                    json={"selected_fields": ["debug"]},
+                    headers={"X-CSRF-Token": "csrf-token"},
+                )
+                local_list = self.client.get("/get_config_backups")
+                local_restore = self.client.post(
+                    "/restore_config_backup",
+                    json={"backup_filename": filename},
+                    headers={"X-CSRF-Token": "csrf-token"},
+                )
+                deleted = self.client.post(
+                    "/delete_config_backup",
+                    json={"backup_filename": filename},
+                    headers={"X-CSRF-Token": "csrf-token"},
+                )
+
+        self.assertEqual(anonymous_list.status_code, 401)
+        self.assertEqual(anonymous_action.status_code, 401)
+        self.assertTrue(all(response.status_code == 403 for response in missing_csrf))
+        self.assertEqual(cloud_backup.get_json(), {
+            "success": True, "message": f"配置云备份成功：{filename}"
+        })
+        self.assertEqual(cloud_list.get_json()["backups"][0]["filename"], filename)
+        self.assertEqual(conflict.get_json()["error"], "FILE_EXISTS")
+        self.assertEqual(synced.get_json(), {"success": True, "message": f"同步成功: {filename}"})
+        self.assertEqual(cloud_restore.get_json()["data"], {"debug": True})
+        self.assertEqual(exported.get_json()["filename"], "export.json")
+        self.assertEqual(imported.get_json()["data"], {"debug": True})
+        self.assertEqual(local_backup.get_json()["backup_path"], f"/backups/config_backups/{filename}")
+        self.assertEqual(local_list.get_json()["backups"][0]["filename"], filename)
+        self.assertEqual(local_restore.get_json()["metadata"], {"version": "v2"})
+        self.assertTrue(deleted.get_json()["success"])
+        self.assertEqual(
+            application.calls,
+            [
+                ("backup_cloud",),
+                ("list_cloud",),
+                ("sync_cloud", filename, False),
+                ("sync_cloud", filename, True),
+                ("restore_cloud", filename),
+                ("export", ["debug"], False),
+                ("import", "config.json", b'{"debug":true}'),
+                ("create_local", ["debug"], False),
+                ("list_local",),
+                ("restore_local", filename),
+                ("delete_local", filename),
             ],
         )
 

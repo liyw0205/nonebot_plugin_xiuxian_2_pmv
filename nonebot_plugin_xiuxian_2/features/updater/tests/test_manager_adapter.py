@@ -220,6 +220,45 @@ class UpdateManagerAdapterTests(unittest.TestCase):
         application.restore_cloud_backup.assert_called_once_with("db.zip", ["player"])
         application.delete_cloud_backup.assert_called_once_with("db.zip")
 
+    def test_config_backup_compatibility_methods_delegate_to_feature_owner(self) -> None:
+        application = Mock()
+        application.create_cloud_backup.return_value = (True, "uploaded")
+        application.list_cloud_backups.return_value = (True, [])
+        application.sync_cloud_backup.return_value = (True, Path("config.json"))
+        application.restore_cloud_backup.return_value = (True, {"data": {}})
+        application.backup_all_configs.return_value = (True, Path("full.json"))
+        application.restore_config_from_backup.return_value = (True, "restored")
+
+        with patch(
+            "nonebot_plugin_xiuxian_2.features.config_backups.build_config_backup_application",
+            return_value=application,
+        ):
+            self.assertEqual(
+                self.manager.upload_config_backup_to_webdav("config.json"),
+                (True, "uploaded"),
+            )
+            self.assertEqual(self.manager.list_webdav_config_backups(), (True, []))
+            self.assertEqual(
+                self.manager.download_config_backup_from_webdav("config.json", overwrite=True),
+                (True, Path("config.json")),
+            )
+            self.assertEqual(
+                self.manager.cloud_restore_config_backup("config.json"),
+                (True, {"data": {}}),
+            )
+            self.assertEqual(self.manager.backup_all_configs(), (True, Path("full.json")))
+            self.assertEqual(
+                self.manager.restore_config_from_backup(Path("full.json")),
+                (True, "restored"),
+            )
+
+        application.create_cloud_backup.assert_called_once_with("config.json")
+        application.list_cloud_backups.assert_called_once_with()
+        application.sync_cloud_backup.assert_called_once_with("config.json", overwrite=True)
+        application.restore_cloud_backup.assert_called_once_with("config.json")
+        application.backup_all_configs.assert_called_once_with()
+        application.restore_config_from_backup.assert_called_once_with(Path("full.json"))
+
 
 if __name__ == "__main__":
     unittest.main()
