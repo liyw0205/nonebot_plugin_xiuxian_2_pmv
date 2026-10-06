@@ -70,6 +70,22 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
         self.assertFalse(any("legacy downstream effect not closed" in edge for edge in call_graph))
         self.assertIn("legacy/back.py:22", evidence)
 
+    def test_command_binding_refresh_preserves_branch_qualified_edges(self):
+        existing = [
+            "legacy/admin.py:19 reset_ no-argument branch -> BatchRepository.reset",
+            "legacy/admin.py:19 reset_ mention branch -> SingleRepository.reset",
+        ]
+        records = ({
+            "file": "legacy/admin.py", "line": 11, "name": "reset",
+            "matcher_names": ["reset"], "aliases": [],
+            "handlers": [{"name": "reset_", "line": 25}],
+        },)
+        graph, evidence = _refreshed_command_graph(existing, records)
+        for edge in existing:
+            self.assertIn(edge.replace(":19 ", ":25 "), graph)
+        self.assertFalse(any("legacy downstream effect not closed" in edge for edge in graph))
+        self.assertIn("legacy/admin.py:25", evidence)
+
     def test_frozen_repository_scope_has_call_graphs_and_reports_open_paths(self):
         report = load_phase2_scope_report(include_items=True)
 
@@ -78,7 +94,7 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
         self.assertEqual(report["path_count"], 496)
         self.assertEqual(
             report["status_counts"],
-            {"不可达": 19, "允许保留的兼容路径": 98, "受阻": 194, "已迁移": 185},
+            {"不可达": 19, "允许保留的兼容路径": 98, "受阻": 188, "已迁移": 191},
         )
         self.assertGreater(report["blocked_count"], 0)
         self.assertTrue(all(item["call_graph"] and item["evidence"] for item in report["items"]))

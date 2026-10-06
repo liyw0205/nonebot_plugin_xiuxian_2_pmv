@@ -4,6 +4,12 @@ from scripts.check_full_refactor_progress import _slice_status
 
 
 class AdminProgressContractTests(unittest.TestCase):
+    def test_admin_config_commands_share_the_default_state_owner(self):
+        config = _slice_status()["admin_config_owner"]
+        for key, value in config.items():
+            if key != "status":
+                self.assertTrue(value, key)
+
     def test_admin_single_mutations_are_application_owned(self):
         admin = _slice_status()["admin"]
         for key in (

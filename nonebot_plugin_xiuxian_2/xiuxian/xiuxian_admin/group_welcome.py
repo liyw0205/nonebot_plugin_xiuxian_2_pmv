@@ -13,6 +13,7 @@ from __future__ import annotations
 from nonebot import on_notice
 from nonebot.log import logger
 from nonebot.matcher import Matcher
+from ...features.admin.config_application import AdminConfigApplication
 
 from ..adapter_compat import (
     Bot,
@@ -27,6 +28,8 @@ from ..xiuxian_config import JsonConfig, XiuConfig
 from ..xiuxian_utils.lay_out import Cooldown, assign_bot
 from ..xiuxian_utils.message_markdown import strip_md_command_links
 from ..xiuxian_utils.utils import handle_send
+
+admin_config_application = AdminConfigApplication()
 
 
 def _event_type_name(event) -> str:
@@ -320,7 +323,9 @@ async def welcome_enable_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
         await handle_send(bot, event, "仅群主、管理员或超管可开关本群进群欢迎")
         await welcome_enable_cmd.finish()
     group_id = str(getattr(event, "group_id", "") or getattr(event, "group_openid", "") or "")
-    ok, msg = JsonConfig().set_group_welcome(group_id, enabled=True)
+    ok, msg = admin_config_application.set_group_welcome(
+        group_id, enabled=True, globally_enabled=XiuConfig().group_welcome,
+    )
     await handle_send(
         bot,
         event,
@@ -344,7 +349,9 @@ async def welcome_disable_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
         await handle_send(bot, event, "仅群主、管理员或超管可开关本群进群欢迎")
         await welcome_disable_cmd.finish()
     group_id = str(getattr(event, "group_id", "") or getattr(event, "group_openid", "") or "")
-    ok, msg = JsonConfig().set_group_welcome(group_id, enabled=False)
+    ok, msg = admin_config_application.set_group_welcome(
+        group_id, enabled=False, globally_enabled=XiuConfig().group_welcome,
+    )
     await handle_send(
         bot,
         event,

@@ -962,6 +962,14 @@ def _slice_status() -> dict[str, dict[str, object]]:
     ]
     impart_pk_facade = (PACKAGE / "xiuxian" / "xiuxian_impart_pk" / "__init__.py").read_text(encoding="utf-8")
     admin_facade = (PACKAGE / "xiuxian" / "xiuxian_admin" / "__init__.py").read_text(encoding="utf-8")
+    admin_config_handlers = admin_facade[
+        admin_facade.index("@set_xiuxian.handle") : admin_facade.index("@xiuxian_updata_level.handle")
+    ]
+    admin_welcome = (PACKAGE / "xiuxian" / "xiuxian_admin" / "group_welcome.py").read_text(encoding="utf-8")
+    admin_config_application = (PACKAGE / "features" / "admin" / "config_application.py").read_text(encoding="utf-8")
+    admin_config_repository = (PACKAGE / "features" / "admin" / "config_repository.py").read_text(encoding="utf-8")
+    admin_config_compat = (PACKAGE / "xiuxian" / "xiuxian_config.py").read_text(encoding="utf-8")
+    admin_config_tests = (ROOT / "tests" / "test_admin_config_owner.py").read_text(encoding="utf-8")
     admin_status_batch_handler = admin_facade[
         admin_facade.index("async def restate_") : admin_facade.index(
             "@set_xiuxian.handle", admin_facade.index("async def restate_")
@@ -4567,6 +4575,35 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "battle_replay_application_owned": "impart_pk_application.battle_settle(" in impart_pk_facade,
             "legacy_battle_replay_disabled": "_impart_battle_batch_service().get_result(" not in impart_pk_facade,
             "status": "training_closing_enter_settlement_explore_battle_replay_cutover_with_other_impart_pk_compatibility",
+        },
+        "admin_config_owner": {
+            "six_commands_share_feature_application": (
+                admin_config_handlers.count("admin_config_application.set_switch(") == 6
+                and admin_config_handlers.count("admin_config_application.set_group_enabled(") == 2
+                and admin_welcome.count("admin_config_application.set_group_welcome(") == 2
+                and "JsonConfig" not in admin_config_handlers
+                and "AdminConfigRepository(get_paths().data / \"config.json\")" in admin_config_application
+            ),
+            "canonical_switch_keys_and_legacy_readers_share_repository": (
+                all(f'set_switch("{key}",' in admin_config_handlers for key in ("private", "root_selection", "sect_name"))
+                and "class JsonConfig(AdminConfigRepository):" in admin_config_compat
+                and "self.update(change)" in admin_config_compat
+                and 'open(self.config_jsonpath, "w"' not in admin_config_compat
+            ),
+            "serialized_atomic_writes_and_path_aware_cache": (
+                "_LOCK = RLock()" in admin_config_repository
+                and "atomic_write(" in admin_config_repository
+                and "stat.st_ino, stat.st_mtime_ns, stat.st_size" in admin_config_repository
+                and "copy.deepcopy(data)" in admin_config_repository
+                and "if data != before:" in admin_config_repository
+            ),
+            "behavior_failures_concurrency_and_handler_guards_covered": (
+                "def test_real_switch_handlers_disable_reenable_and_report_duplicates" in admin_config_tests
+                and "def test_real_group_and_welcome_handlers_preserve_permission_guards" in admin_config_tests
+                and "def test_failed_replace_and_corrupt_input_do_not_publish_or_destroy_config" in admin_config_tests
+                and "def test_repeated_switch_does_not_write_and_parallel_instances_do_not_lose_groups" in admin_config_tests
+            ),
+            "status": "six_admin_config_commands_feature_owned_with_shared_legacy_json_compatibility",
         },
         "admin": {
             "stone_default_application_owned": (

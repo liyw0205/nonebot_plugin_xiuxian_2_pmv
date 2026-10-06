@@ -13,6 +13,7 @@ from ...paths import get_paths
 from ...features.admin_asset.application import AdminAssetApplication
 from ...features.admin_asset.root_repository import AdminRootChangeSqlRepository
 from ...features.admin.application import AdminApplication
+from ...features.admin.config_application import AdminConfigApplication
 from ...features.admin.id_swap_repository import AdminIdSwapSqlRepository
 from ...features.admin.id_update_repository import AdminIdUpdateSqlRepository
 from ...features.base.application import BaseApplication
@@ -88,6 +89,7 @@ items = Items()
 _sql_message_instance = None
 _admin_exp_adjustment_service_instance = None
 admin_asset_application = AdminAssetApplication(get_paths().game_db)
+admin_config_application = AdminConfigApplication()
 work_admin_refresh_reset_application = WorkAdminRefreshResetApplication(get_paths().game_db)
 admin_application = AdminApplication(
     get_paths().game_db,
@@ -1656,25 +1658,23 @@ async def open_xiuxian_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     """群修仙开关配置（默认开启；禁用列表记录关闭的群）"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     group_msg = str(event.message)
-    group_id = str(event.group_id)
-    conf = JsonConfig()
-    conf_data = conf.read_data()
-    disabled = set(conf_data.get("group", []))
+    group_id = str(getattr(event, "group_id", "") or getattr(event, "group_openid", "") or "")
+    if not group_id:
+        await handle_send(bot, event, "请在群内使用：启用修仙功能/禁用修仙功能")
+        await set_xiuxian.finish()
 
     if "启用" in group_msg:
-        if group_id not in disabled:
+        if not admin_config_application.set_group_enabled(group_id, True):
             msg = "当前群聊修仙模组已启用，请勿重复操作！"
         else:
-            conf.write_data(2, group_id)
             msg = "当前群聊修仙基础模组已启用，快发送 我要修仙 加入修仙世界吧！"
         await handle_send(bot, event, msg, md_type="修仙", k1="我要修仙", v1="我要修仙", k2="修仙帮助", v2="修仙帮助")
         await set_xiuxian.finish()
 
     if "禁用" in group_msg:
-        if group_id in disabled:
+        if not admin_config_application.set_group_enabled(group_id, False):
             msg = "当前群聊修仙模组已禁用，请勿重复操作！"
         else:
-            conf.write_data(1, group_id)
             msg = "当前群聊修仙基础模组已禁用！\n（娱乐功能不受影响；发送【修仙帮助】可查看开启命令）"
         await handle_send(bot, event, msg, md_type="修仙", k1="开启修仙", v1="启用修仙功能", k2="娱乐帮助", v2="娱乐帮助")
         await set_xiuxian.finish()
@@ -1688,19 +1688,15 @@ async def set_private_chat_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     """私聊功能开关配置"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     msg = str(event.message)
-    conf_data = JsonConfig().read_data()
-
     if "启用" in msg:
-        if conf_data["private_enabled"]:
+        if not admin_config_application.set_switch("private", True):
             msg = "私聊修仙功能已启用，请勿重复操作！"
         else:
-            JsonConfig().write_data(3)
             msg = "私聊修仙功能已启用，所有用户现在可以在私聊中使用修仙命令！"
     elif "禁用" in msg:
-        if not conf_data["private_enabled"]:
+        if not admin_config_application.set_switch("private", False):
             msg = "私聊修仙功能已禁用，请勿重复操作！"
         else:
-            JsonConfig().write_data(4)
             msg = "私聊修仙功能已禁用，所有用户的私聊修仙功能已关闭！"
     else:
         msg = "指令错误，请输入：启用私聊功能/禁用私聊功能"
@@ -1713,44 +1709,36 @@ async def set_auto_root_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     """自动选择灵根功能开关配置"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     msg_text = str(event.message)
-    conf_data = JsonConfig().read_data()
-
     if "开启" in msg_text:
-        if conf_data.get("auto_root_selection", False):
+        if not admin_config_application.set_switch("root_selection", True):
             msg = "自动选择灵根功能已启用，请勿重复操作！"
         else:
-            JsonConfig().write_data(5)
             msg = "自动选择灵根功能已启用！新用户将自动选择最佳灵根。"
     elif "关闭" in msg_text:
-        if not conf_data.get("auto_root_selection", False):
+        if not admin_config_application.set_switch("root_selection", False):
             msg = "自动选择灵根功能已关闭，请勿重复操作！"
         else:
-            JsonConfig().write_data(6)
             msg = "自动选择灵根功能已关闭！"
     else:
         msg = "指令错误，请输入：开启自动灵根/关闭自动灵根"
 
     await handle_send(bot, event, msg)
-    await set_auto_root.finish()    
+    await set_auto_root.finish()
 
 @set_auto_sect_name.handle(parameterless=[Cooldown(cd_time=0)])
 async def set_auto_sect_name_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """自动宗名功能开关配置"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     msg_text = str(event.message)
-    conf_data = JsonConfig().read_data()
-
     if "启用" in msg_text:
-        if conf_data.get("auto_sect_name", False):
+        if not admin_config_application.set_switch("sect_name", True):
             msg = "自动宗名功能已启用，请勿重复操作！"
         else:
-            JsonConfig().write_data(7)
             msg = "自动宗名功能已启用！创建宗门时将自动随机命名。"
     elif "禁用" in msg_text:
-        if not conf_data.get("auto_sect_name", False):
+        if not admin_config_application.set_switch("sect_name", False):
             msg = "自动宗名功能已关闭，请勿重复操作！"
         else:
-            JsonConfig().write_data(8)
             msg = "自动宗名功能已关闭！创建宗门将恢复手动选择名称。"
     else:
         msg = "指令错误，请输入：启用自动宗名/禁用自动宗名"

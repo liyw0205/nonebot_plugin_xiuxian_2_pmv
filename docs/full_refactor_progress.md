@@ -2,7 +2,9 @@
 
 状态：进行中。`v1.1.0` 的 P0-P7 发布证据继续保留，但不作为底层全面重构完成证明。
 
-**当前交付与队列（2026-10-07，本段优先于下文历史“下一片”）**：Backups 冻结的 30 条 route 已全部归类（29 已迁移、1 兼容），不再重开已验收的列表、恢复、云端、数据库或配置 owner。本组提交推送后回到 `allowed_features` 的固定顺序，下一子插件为 `admin`，当前仍有 44 个冻结 blocker；先一次盘清该插件全部入口/共用状态，再按事务边界成组实现与提交。不继续临时插入其它 Web 模块，不因发现无关问题扩大本组。
+**当前交付与队列（2026-10-07，本段优先于下文历史“下一片”）**：Backups 已在 `b845ce7d` 提交并推送，远端分支已核对；30 条冻结 route 全部归类，不再重开。当前按 `allowed_features` 固定顺序停在 `admin`，本轮已一次盘清 44 个未关项并记录于 `docs/features/admin.md`。运行配置 6 条命令整组收口后，admin blocker 为 38；下一组是已具有 feature 写终端的 13 条资产/重置命令，只补真实缺失的失败结果契约、仙缘清池测试和调用链证据，不重新搬迁仓储。其后依文档分组推进，admin 未归类完不跳其它子插件或 Web 模块。
+
+**Admin 运行配置 owner（2026-10-07）**：群修仙、私聊、自动灵根、自动宗名、欢迎开/关共 6 个冻结命令统一调用 `AdminConfigApplication -> AdminConfigRepository`。修复 `private_enabled/auto_root_selection/auto_sect_name` 与真实字段不一致导致的 KeyError、关闭失效及重复判断错误；旧 `JsonConfig` 继承同一仓储，备注/置顶/全量群等兼容写入共用单进程锁，保留未知字段和旧字段名。原子替换、路径/inode/mtime/size 缓存键、深拷贝、失败不发布和重复值免写均有回归；不宣称跨进程协调、operation-ID 回执或 notice 生命周期全面迁移。实际 handler 函数抽取执行、临时 JSON、兼容读取、权限及 Web/progress/Phase2 定向集 `70 passed, 2 subtests passed`（4.86 秒），四项 config owner gate 全 true；冻结 membership 有效，integrity errors 为 0，计数 `191/98/19/188`。Phase2 检查约 0.25 秒，仍因其它 188 个 blocker 返回 1，不是本组失败。未运行全量 inventory freshness、线上性能测量或生产数据操作。证据刷新期间复现工具缺陷：带 `no-argument branch` 等说明的 handler 边不会更新行号，导致已关闭条目被追加“未审”边；已修正刷新逻辑并增加回归，没有重开该业务实现。保留用户 `boss_info.json` 修改，选择性提交本组。
 
 **耗时复盘（2026-10-07）**：此前从 Activity 转到 updater/Web/backups，未严格沿 command feature 顺序走；备份又拆为列表、本地文件、恢复、云端、数据库、配置六个相邻提交，造成重复上下文排查、HTTP/旧断言维护和源码行号证据刷新。最新一组停在代码草稿、测试和证据未收尾，并非推送服务拒绝。最终聚焦回归 6.24 秒、静态 scope 检查约 0.24 秒，说明检测执行不是本次长耗时的主要解释；历史没有排查/实现/收尾分段计时，不能给出其占比。后续验收与提交在同一组完成，未关项只记录一次明确原因，已关项无新回归证据不重复修改。
 

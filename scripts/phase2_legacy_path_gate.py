@@ -403,9 +403,13 @@ def _refreshed_command_graph(
             source_file = str(record["file"])
             for handler in record.get("handlers", []):
                 handler_name = str(handler["name"])
-                marker = f" {handler_name} ->"
-                if edge.startswith(f"{source_file}:") and marker in edge:
-                    edge = f"{source_file}:{handler['line']} {edge[edge.index(marker) + 1:]}"
+                _, _, fragment = edge.partition(" ")
+                if (
+                    edge.startswith(f"{source_file}:")
+                    and fragment.startswith(f"{handler_name} ")
+                    and "->" in fragment
+                ):
+                    edge = f"{source_file}:{handler['line']} {fragment}"
                 elif edge.startswith(f"{handler_name} "):
                     edge = f"{source_file}:{handler['line']} {edge}"
                 elif f".{handler_name} " in edge and "->" in edge.split(f".{handler_name} ", 1)[1]:
@@ -926,7 +930,8 @@ def main(argv: list[str] | None = None) -> int:
                 edge = str(edge)
                 is_declaration = "= on_command(" in edge
                 is_handler = any(
-                    f" {handler['name']} ->" in edge
+                    str(edge).partition(" ")[2].startswith(f"{handler['name']} ")
+                    and "->" in str(edge)
                     for record in records
                     for handler in record.get("handlers", [])
                 )
