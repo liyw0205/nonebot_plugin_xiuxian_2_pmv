@@ -5824,22 +5824,34 @@
       "id": "command:activity:活动任务领取",
       "kind": "commands",
       "entry": "activity:活动任务领取 (aliases: 领取活动任务)",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "The default matcher passes a message-scoped operation ID through ActivityApplication and its explicit repository adapter to ActivityTaskClaimApplication. The feature-owned repository validates and commits task reward claims with replay/recovery support; legacy config/eligibility preparation remains an explicit compatibility facade.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:33 activity_task_claim_cmd = on_command('活动任务领取') aliases=领取活动任务 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:176 _ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:176 _ -> handler creates stable task-claim operation ID and calls ActivityApplication.execute(action=claim_activity_tasks)",
+        "ActivityApplication -> ActivityRepository._claim_tasks -> explicit ServicePort adapter forwards the same operation ID to claim_activity_tasks",
+        "claim_activity_tasks reads legacy-compatible activity configuration/eligibility and calls ActivityTaskClaimApplication.claim with the same operation ID",
+        "ActivityTaskClaimApplication -> ActivityTaskClaimRepository validates current claim state and owns reward mutation, receipt, and retry recovery in game_db",
+        "startup activity_reward migrations prepare claim schema/import receipts; reconcile routes recover started claims"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:33",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:176"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:176",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:175-190",
+        "nonebot_plugin_xiuxian_2/features/activity/application.py:9-14",
+        "nonebot_plugin_xiuxian_2/features/activity/repository.py:38-40",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/service.py:843-895",
+        "nonebot_plugin_xiuxian_2/features/activity_reward/task_claim_application.py:85-144",
+        "nonebot_plugin_xiuxian_2/features/activity_reward/task_claim_repository.py:169-220,251-391",
+        "nonebot_plugin_xiuxian_2/plugin.py:239-240",
+        "tests/test_activity_task_claim_transaction.py",
+        "nonebot_plugin_xiuxian_2/features/activity/tests/test_activity_application.py"
       ],
       "source_declaration_found": true,
       "source": {
@@ -5986,22 +5998,34 @@
       "id": "command:activity:活动战令领取",
       "kind": "commands",
       "entry": "activity:活动战令领取 (aliases: 领取活动战令, 领取活动通行证)",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "The default matcher passes a message-scoped operation ID through ActivityApplication and its explicit repository adapter to ActivityPassClaimApplication. The feature-owned repository validates and commits pass reward claims with replay/recovery support; legacy config/eligibility preparation remains an explicit compatibility facade.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:35 activity_pass_claim_cmd = on_command('活动战令领取') aliases=领取活动战令,领取活动通行证 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:206 _ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:206 _ -> handler creates stable pass-claim operation ID and calls ActivityApplication.execute(action=claim_activity_pass_rewards)",
+        "ActivityApplication -> ActivityRepository._claim_pass -> explicit ServicePort adapter forwards the same operation ID to claim_activity_pass_rewards",
+        "claim_activity_pass_rewards reads legacy-compatible activity configuration/eligibility and calls ActivityPassClaimApplication.claim with the same operation ID",
+        "ActivityPassClaimApplication -> ActivityPassClaimRepository validates current level/claim state and owns reward mutation, receipt, and retry recovery in game_db",
+        "startup activity_reward migrations prepare claim schema/import receipts; reconcile routes recover started claims"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:35",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:206"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:206",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:205-220",
+        "nonebot_plugin_xiuxian_2/features/activity/application.py:9-14",
+        "nonebot_plugin_xiuxian_2/features/activity/repository.py:42-44",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/service.py:968-1050",
+        "nonebot_plugin_xiuxian_2/features/activity_reward/pass_claim_application.py:102-146",
+        "nonebot_plugin_xiuxian_2/features/activity_reward/pass_claim_repository.py:188-255,269-401",
+        "nonebot_plugin_xiuxian_2/plugin.py:241-242",
+        "tests/test_activity_pass_claim_transaction.py",
+        "nonebot_plugin_xiuxian_2/features/activity/tests/test_activity_application.py"
       ],
       "source_declaration_found": true,
       "source": {
@@ -6283,22 +6307,34 @@
       "id": "command:activity:活动首领领奖",
       "kind": "commands",
       "entry": "activity:活动首领领奖 (aliases: 领取首领奖励, 首领领奖)",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "The default matcher passes a message-scoped operation ID through ActivityApplication and its explicit repository adapter. The boss reward facade derives stable milestone/rank child IDs and dispatches to feature-owned claim applications/repos, which own asset mutations, receipts, and retry recovery.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:47 activity_boss_claim_cmd = on_command('活动首领领奖') aliases=领取首领奖励,首领领奖 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:376 _ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:376 _ -> handler creates stable boss-claim operation ID and calls ActivityApplication.execute(action=activity_boss.claim_boss_rewards)",
+        "ActivityApplication -> ActivityRepository._claim_boss -> explicit adapter forwards the operation ID to claim_boss_rewards",
+        "claim_boss_rewards derives stable :milestone and :rank child IDs for selected or composite claims",
+        "claim_boss_milestone_reward / claim_boss_rank_reward -> ActivityBossMilestoneClaimApplication / ActivityBossRankClaimApplication -> feature-owned repositories own asset writes and receipts",
+        "startup migrations and reconcile handlers prepare/recover both boss reward claim owners"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:47",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:376"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:376",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:375-391",
+        "nonebot_plugin_xiuxian_2/features/activity/application.py:9-14",
+        "nonebot_plugin_xiuxian_2/features/activity/repository.py:58-64",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/activity_boss.py:628-766",
+        "nonebot_plugin_xiuxian_2/features/activity_reward/boss_milestone_claim_application.py",
+        "nonebot_plugin_xiuxian_2/features/activity_reward/boss_rank_claim_application.py",
+        "nonebot_plugin_xiuxian_2/plugin.py:243-246",
+        "tests/test_activity_boss_reward_claim.py",
+        "nonebot_plugin_xiuxian_2/features/activity/tests/test_activity_application.py"
       ],
       "source_declaration_found": true,
       "source": {

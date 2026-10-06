@@ -427,6 +427,9 @@ def _slice_status() -> dict[str, dict[str, object]]:
         boss_reward_claim_compatibility.index("    def claim_rank("):
     ]
     activity_boss_source = (PACKAGE / "xiuxian" / "xiuxian_activity" / "activity_boss.py").read_text(encoding="utf-8")
+    activity_boss_claim_router = activity_boss_source[
+        activity_boss_source.index("def claim_boss_rewards("):
+    ]
     activity_boss_milestone_claim_entry = activity_boss_source[
         activity_boss_source.index("def claim_boss_milestone_reward("):
         activity_boss_source.index("def claim_boss_rank_reward(")
@@ -1511,6 +1514,15 @@ def _slice_status() -> dict[str, dict[str, object]]:
                 "_finalize_legacy_state" in activity_task_claim_repository
                 and "activity_task_reward_claim_reservations" in activity_task_claim_repository
             ),
+            "task_claim_matcher_operation_id_owned": (
+                '"claim_activity_tasks"' in activity_command_repository
+                and 'str(kwargs.get("operation_id", ""))' in activity_command_repository[
+                    activity_command_repository.index("    def _claim_tasks("):
+                    activity_command_repository.index("    def _claim_pass(")
+                ]
+                and "_activity_task_claim_application().claim(" in activity_service
+                and "operation_id or f\"activity-task:" in activity_service
+            ),
             "pass_game_reward_application_owned": (
                 "claim_application = _activity_pass_claim_application()" in activity_service
                 and "claim_application.claim(" in activity_service
@@ -1541,6 +1553,15 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "pass_claim_all_child_operation_id_stable": (
                 '"pass": lambda child_id: claim_activity_pass_rewards(uid, operation_id=child_id)' in activity_claim_runners
             ),
+            "pass_claim_matcher_operation_id_owned": (
+                '"claim_activity_pass_rewards"' in activity_command_repository
+                and 'str(kwargs.get("operation_id", ""))' in activity_command_repository[
+                    activity_command_repository.index("    def _claim_pass("):
+                    activity_command_repository.index("    def _claim_sign(")
+                ]
+                and "claim_application.claim(" in activity_service
+                and "operation_id or f\"activity-pass:" in activity_service
+            ),
             "boss_milestone_game_reward_application_owned": (
                 "application.claim(" in activity_boss_milestone_claim_entry
                 and "ActivityBossMilestoneClaimRepository" in activity_boss_milestone_claim_repository
@@ -1569,6 +1590,16 @@ def _slice_status() -> dict[str, dict[str, object]]:
             ),
             "boss_milestone_claim_all_child_operation_id_stable": (
                 '"boss_milestone": lambda child_id: claim_boss_milestone_reward(uid, operation_id=child_id)' in activity_claim_runners
+            ),
+            "boss_claim_matcher_operation_id_owned": (
+                '"activity_boss.claim_boss_rewards"' in activity_command_repository
+                and 'str(kwargs.get("operation_id", ""))' in activity_command_repository[
+                    activity_command_repository.index("    def _claim_boss("):
+                    activity_command_repository.index("    def _fight_boss(")
+                ]
+                and "operation_id: str | None = None" in activity_boss_claim_router
+                and 'f"{operation_id}:milestone"' in activity_boss_claim_router
+                and 'f"{operation_id}:rank"' in activity_boss_claim_router
             ),
             "boss_rank_game_reward_application_owned": (
                 "application.claim(" in activity_boss_rank_claim_entry

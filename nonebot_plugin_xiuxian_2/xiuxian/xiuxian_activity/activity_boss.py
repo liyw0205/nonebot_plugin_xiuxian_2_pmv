@@ -742,15 +742,23 @@ def claim_boss_rank_reward(
     return False, messages.get(result.status, f"领取失败（{result.status}）")
 
 
-def claim_boss_rewards(user_id: str, query: str = "") -> tuple[bool, str]:
+def claim_boss_rewards(
+    user_id: str,
+    query: str = "",
+    operation_id: str | None = None,
+) -> tuple[bool, str]:
     text = _clean_text(query)
     if text in {"排行", "排名", "伤害榜"}:
-        return claim_boss_rank_reward(user_id, "")
+        child_id = f"{operation_id}:rank" if operation_id else None
+        return claim_boss_rank_reward(user_id, "", child_id)
     if text in {"进度", "全服", "里程碑", "宝箱"}:
-        return claim_boss_milestone_reward(user_id, "")
+        child_id = f"{operation_id}:milestone" if operation_id else None
+        return claim_boss_milestone_reward(user_id, "", child_id)
     if not text:
-        ok1, m1 = claim_boss_milestone_reward(user_id, "")
-        ok2, m2 = claim_boss_rank_reward(user_id, "")
+        milestone_id = f"{operation_id}:milestone" if operation_id else None
+        rank_id = f"{operation_id}:rank" if operation_id else None
+        ok1, m1 = claim_boss_milestone_reward(user_id, "", milestone_id)
+        ok2, m2 = claim_boss_rank_reward(user_id, "", rank_id)
         parts = []
         if ok1:
             parts.append(m1)
@@ -760,7 +768,14 @@ def claim_boss_rewards(user_id: str, query: str = "") -> tuple[bool, str]:
             return True, "\n".join(parts)
         return False, f"{m1}；{m2}"
     if "排行" in text or "排名" in text:
-        return claim_boss_rank_reward(user_id, text.replace("排行", "").replace("排名", "").strip())
+        child_id = f"{operation_id}:rank" if operation_id else None
+        return claim_boss_rank_reward(
+            user_id,
+            text.replace("排行", "").replace("排名", "").strip(),
+            child_id,
+        )
     if "进度" in text or "全服" in text:
-        return claim_boss_milestone_reward(user_id, text)
-    return claim_boss_rank_reward(user_id, text)
+        child_id = f"{operation_id}:milestone" if operation_id else None
+        return claim_boss_milestone_reward(user_id, text, child_id)
+    child_id = f"{operation_id}:rank" if operation_id else None
+    return claim_boss_rank_reward(user_id, text, child_id)

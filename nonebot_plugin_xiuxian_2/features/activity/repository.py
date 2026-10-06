@@ -57,7 +57,11 @@ class ActivityRepository(ServicePort):
 
     def _claim_boss(self, **kwargs: Any):
         from ...xiuxian.xiuxian_activity.activity_boss import claim_boss_rewards
-        return claim_boss_rewards(str(kwargs.get("user_id", "")), str(kwargs.get("query", "")))
+        return claim_boss_rewards(
+            str(kwargs.get("user_id", "")),
+            str(kwargs.get("query", "")),
+            str(kwargs.get("operation_id", "")),
+        )
 
     def _fight_boss(self, **kwargs: Any):
         from ...xiuxian.xiuxian_activity.activity_boss import fight_cooperative_boss

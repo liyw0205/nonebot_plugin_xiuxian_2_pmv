@@ -50,6 +50,34 @@ class ActivityBossRewardClaimTests(unittest.TestCase):
 
     def tearDown(self): self.tmp.cleanup()
 
+    def test_composite_claim_uses_stable_child_operation_ids(self):
+        from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_activity import activity_boss
+
+        with (
+            patch.object(activity_boss, "claim_boss_milestone_reward", return_value=(True, "进度奖励")) as milestone,
+            patch.object(activity_boss, "claim_boss_rank_reward", return_value=(True, "排行奖励")) as rank,
+        ):
+            ok, message = activity_boss.claim_boss_rewards(
+                "u", operation_id="activity:boss-claim:u:message-1"
+            )
+
+        self.assertTrue(ok)
+        self.assertEqual("进度奖励\n排行奖励", message)
+        milestone.assert_called_once_with("u", "", "activity:boss-claim:u:message-1:milestone")
+        rank.assert_called_once_with("u", "", "activity:boss-claim:u:message-1:rank")
+
+    def test_targeted_claim_uses_matching_stable_child_operation_id(self):
+        from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_activity import activity_boss
+
+        with patch.object(activity_boss, "claim_boss_rank_reward", return_value=(True, "排行奖励")) as rank:
+            self.assertEqual(
+                (True, "排行奖励"),
+                activity_boss.claim_boss_rewards(
+                    "u", "排行", "activity:boss-claim:u:message-2"
+                ),
+            )
+        rank.assert_called_once_with("u", "", "activity:boss-claim:u:message-2:rank")
+
     def test_milestone_assets_receipt_and_reservation_commit_together(self):
         rows = [{"key": "m1", "name": "进度奖", "reward": "灵石x50"}]
         self.assertEqual("applied", self.service.claim_milestones("u", "a", rows, "milestone-op").status)
@@ -239,7 +267,7 @@ class ActivityBossRewardClaimTests(unittest.TestCase):
                 ]}], 100, "cli-retry")
         root = Path(self.tmp.name)
         context = SimpleNamespace(
-            paths=SimpleNamespace(data=root), clock=self.application.clock,
+            paths=SimpleNamespace(data=root, players=root / "players"), clock=self.application.clock,
             database=SimpleNamespace(path=lambda key: self.game if key == "game_db" else root / "player.db"),
         )
         with patch.object(cli, "build_runtime_context", return_value=context), redirect_stdout(StringIO()):
@@ -411,7 +439,7 @@ class ActivityBossRewardClaimTests(unittest.TestCase):
         self.rank_application.repository._finalize_legacy_state = finalize
         root = Path(self.tmp.name)
         context = SimpleNamespace(
-            paths=SimpleNamespace(data=root), clock=self.rank_application.clock,
+            paths=SimpleNamespace(data=root, players=root / "players"), clock=self.rank_application.clock,
             database=SimpleNamespace(path=lambda key: self.game if key == "game_db" else root / "player.db"),
         )
         with patch.object(cli, "build_runtime_context", return_value=context), redirect_stdout(StringIO()):
@@ -431,7 +459,7 @@ class ActivityBossRewardClaimTests(unittest.TestCase):
                 self.rank_application.claim("u", "a", tiers, 100, "rank-ledger-retry")
         root = Path(self.tmp.name)
         context = SimpleNamespace(
-            paths=SimpleNamespace(data=root), clock=self.rank_application.clock,
+            paths=SimpleNamespace(data=root, players=root / "players"), clock=self.rank_application.clock,
             database=SimpleNamespace(path=lambda key: self.game if key == "game_db" else root / "player.db"),
         )
         with patch.object(cli, "build_runtime_context", return_value=context), redirect_stdout(StringIO()):
