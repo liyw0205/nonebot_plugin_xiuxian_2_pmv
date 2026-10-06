@@ -395,6 +395,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
     activity_config_application = (PACKAGE / "features" / "activity" / "config_application.py").read_text(encoding="utf-8")
     activity_config_repository = (PACKAGE / "features" / "activity" / "config_repository.py").read_text(encoding="utf-8")
     activity_config_event_service = (PACKAGE / "xiuxian" / "xiuxian_activity" / "config_event_service.py").read_text(encoding="utf-8")
+    activity_web = (PACKAGE / "xiuxian" / "xiuxian_web" / "activity.py").read_text(encoding="utf-8")
     activity_config_tests = (ROOT / "tests" / "test_activity_config_application.py").read_text(encoding="utf-8")
     activity_config_event_tests = (ROOT / "tests" / "test_activity_config_event_service.py").read_text(encoding="utf-8")
     activity_help_handler = activity_commands[
@@ -1808,6 +1809,30 @@ def _slice_status() -> dict[str, dict[str, object]]:
                 and "def test_replay_lookup_does_not_create_missing_database_or_schema" in activity_config_event_tests
             ),
             "status": "activity_overview_rewards_gameplay_and_config_toggles_owned_by_feature_applications",
+        },
+        "activity_web_config_owner": {
+            "management_and_config_routes_use_feature_config_application": (
+                "def _activity_config_application():" in activity_web
+                and "ActivityApplication(get_paths().game_db)" in activity_web
+                and "_activity_application_instance.config" in activity_web
+                and activity_web.count("_activity_config_application().read()") == 2
+                and "_activity_config_application().replace(" in activity_web
+                and "save_activity_config" not in activity_web
+                and "def read(self) -> ActivityConfigState:" in activity_config_application
+                and "def replace(" in activity_config_application
+            ),
+            "configuration_http_contracts_are_exercised_through_flask_client": (
+                "def test_web_config_and_management_page_read_through_application" in activity_config_event_tests
+                and "def test_web_post_passes_operation_revision_and_operator" in activity_config_event_tests
+                and "def test_web_config_post_requires_csrf_before_application" in activity_config_event_tests
+                and "def test_read_is_non_mutating_and_replace_preserves_web_revision_contract" in activity_config_tests
+            ),
+            "static_template_routes_are_explicit_read_only_compatibility": (
+                "ACTIVITY_TEMPLATE_DEFINITIONS.get(str(template_key))" in activity_web
+                and "GAMEPLAY_TEMPLATE_DEFINITIONS.get(str(template_key))" in activity_web
+                and "def test_static_template_routes_remain_read_only" in activity_config_event_tests
+            ),
+            "status": "activity_management_and_configuration_routes_use_the_config_application",
         },
         "activity_static_help": {
             "help_and_manage_remain_static_compatibility_handlers": (

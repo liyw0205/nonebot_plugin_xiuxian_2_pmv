@@ -294,6 +294,10 @@ class RefactorProgressTests(unittest.TestCase):
         self.assertTrue(config_owner["config_toggle_matchers_use_separate_config_application"])
         self.assertTrue(config_owner["config_owner_uses_activity_event_store_and_repairs_projection_replay"])
         self.assertTrue(config_owner["config_owner_target_replay_conflict_and_revision_contracts_tested"])
+        activity_web_config = slices["activity_web_config_owner"]
+        self.assertTrue(activity_web_config["management_and_config_routes_use_feature_config_application"])
+        self.assertTrue(activity_web_config["configuration_http_contracts_are_exercised_through_flask_client"])
+        self.assertTrue(activity_web_config["static_template_routes_are_explicit_read_only_compatibility"])
         activity_static_help = slices["activity_static_help"]
         self.assertTrue(activity_static_help["help_and_manage_remain_static_compatibility_handlers"])
         boss = slices["activity_boss"]

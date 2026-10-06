@@ -634,9 +634,31 @@ def evaluate_phase2_scope(
                         integrity_errors.append(
                             f"Closed command has no source-bound downstream edge: {feature}:{name}"
                         )
-        elif item.get("kind") == "legacy_routes" and item.get("status") == "受阻":
-            if not _legacy_route_location(source):
-                integrity_errors.append(f"Blocked legacy Web route registration disappeared: {item.get('id')}")
+        elif item.get("kind") == "legacy_routes":
+            location = _legacy_route_location(source)
+            if not location:
+                integrity_errors.append(f"Legacy Web route registration disappeared: {item.get('id')}")
+            elif item.get("status") in {"已迁移", "允许保留的兼容路径"}:
+                function_name = str(source.get("function", ""))
+                evidence = {str(value) for value in item.get("evidence", [])}
+                handler_prefix = f"{location} {function_name} ->"
+                handler_edges = [
+                    str(edge)
+                    for edge in item.get("call_graph", [])
+                    if str(edge).startswith(handler_prefix)
+                ]
+                if location not in evidence or not handler_edges:
+                    integrity_errors.append(
+                        f"Closed legacy Web route has no source-bound handler edge: {item.get('id')}"
+                    )
+                if any(
+                    "downstream state effect not closed" in edge
+                    or "unknown downstream" in edge
+                    for edge in handler_edges
+                ):
+                    integrity_errors.append(
+                        f"Closed legacy Web route retains an unresolved downstream edge: {item.get('id')}"
+                    )
         elif item.get("kind") == "legacy_jobs":
             job_id = str(source.get("job_id", ""))
             manifest_job_ids = _legacy_manifest_job_ids()

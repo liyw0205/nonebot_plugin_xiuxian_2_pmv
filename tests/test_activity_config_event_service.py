@@ -17,6 +17,12 @@ from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_activity import (
 from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_activity.config_event_service import (
     ActivityConfigEventService,
 )
+from nonebot_plugin_xiuxian_2.features.activity.config_application import (
+    ActivityConfigApplication,
+)
+from nonebot_plugin_xiuxian_2.features.activity.config_repository import (
+    ActivityConfigSqlRepository,
+)
 from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_web import app
 from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_web import activity as web_activity
 from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_web import core as web_core
@@ -321,6 +327,10 @@ class ActivityConfigEventServiceTests(unittest.TestCase):
         service_source = (root / "xiuxian_activity/service.py").read_text(
             encoding="utf-8"
         )
+        activity_config_application_source = (
+            Path(__file__).parents[1]
+            / "nonebot_plugin_xiuxian_2/features/activity/config_application.py"
+        ).read_text(encoding="utf-8")
         command_source = (root / "xiuxian_activity/__init__.py").read_text(
             encoding="utf-8"
         )
@@ -336,6 +346,11 @@ class ActivityConfigEventServiceTests(unittest.TestCase):
         self.assertNotIn("activity_config_event_service.replace(", config_source)
         self.assertIn("expected_revision=state.revision", service_source)
         self.assertIn('operation_id=_activity_operation_id(event, "config-open"', command_source)
+        self.assertIn("def read(self) -> ActivityConfigState:", activity_config_application_source)
+        self.assertIn("def replace(", activity_config_application_source)
+        self.assertIn("_activity_config_application().read()", web_source)
+        self.assertIn("_activity_config_application().replace(", web_source)
+        self.assertNotIn("save_activity_config", web_source)
         self.assertIn("expected_revision=expected_revision", web_source)
         self.assertIn("expected_revision: activityConfigRevision", template_source)
 
@@ -348,8 +363,9 @@ class ActivityConfigEventServiceTests(unittest.TestCase):
 
         captured = {}
 
-        def save(config, **kwargs):
+        def replace(**kwargs):
             captured.update(kwargs)
+            config = kwargs["config"]
             return SimpleNamespace(
                 status="applied",
                 succeeded=True,
@@ -365,7 +381,11 @@ class ActivityConfigEventServiceTests(unittest.TestCase):
         with (
             patch.object(web_core, "ADMIN_IDS", {"admin-1"}),
             patch.object(web_activity, "_normalize_activity_config", return_value=normalized),
-            patch.object(web_activity, "save_activity_config", save),
+            patch.object(
+                web_activity,
+                "_activity_config_application",
+                return_value=SimpleNamespace(replace=replace),
+            ),
             patch.object(web_activity, "activity_state", return_value=(True, "")),
             patch.object(web_activity, "activity_runtime_state", return_value={}),
         ):
@@ -383,9 +403,9 @@ class ActivityConfigEventServiceTests(unittest.TestCase):
         self.assertEqual(response.get_json()["config_revision"], 4)
         self.assertEqual(captured["operation_id"], "activity-config-web:request-1")
         self.assertEqual(captured["expected_revision"], 3)
-        self.assertEqual(captured["request_identity"]["operator_id"], "admin-1")
+        self.assertEqual(captured["operator_id"], "admin-1")
 
-    def test_web_config_get_uses_read_only_config_state(self) -> None:
+    def test_web_config_and_management_page_read_through_application(self) -> None:
         app.config.update(TESTING=True, SECRET_KEY="activity-config-test")
         client = app.test_client()
         with client.session_transaction() as session:
@@ -395,24 +415,31 @@ class ActivityConfigEventServiceTests(unittest.TestCase):
         config_path = Path(self.temp.name) / "missing" / "activity_config.json"
         database = Path(self.temp.name) / "missing" / "activity.db"
         service = ActivityConfigEventService(database)
+        repository = ActivityConfigSqlRepository(
+            database,
+            event_service=service,
+            config_loader=activity_config._load_default_config,
+            projection_writer=lambda _config: None,
+        )
+        application = ActivityConfigApplication(repository)
         with (
             patch.object(web_core, "ADMIN_IDS", {"admin-1"}),
-            patch.object(activity_config, "CONFIG_PATH", config_path),
-            patch.object(activity_config, "_activity_config_event_service", return_value=service),
             patch.object(
                 web_activity,
-                "read_activity_config_state",
-                wraps=web_activity.read_activity_config_state,
+                "_activity_config_application",
+                return_value=application,
             ) as read_state,
             patch.object(web_activity, "activity_state", return_value=(True, "")),
             patch.object(web_activity, "activity_runtime_state", return_value={}),
         ):
             response = client.get("/api/activity/config")
-            read_state.assert_called_once_with()
+            page = client.get("/activity")
             self.assertEqual(response.status_code, 200)
+            self.assertEqual(page.status_code, 200)
             self.assertEqual(response.get_json()["config_revision"], 0)
             self.assertFalse(database.exists())
             self.assertFalse(config_path.parent.exists())
+            self.assertEqual(read_state.call_count, 2)
 
             payload = {
                 "config": response.get_json()["config"],
@@ -422,16 +449,70 @@ class ActivityConfigEventServiceTests(unittest.TestCase):
             headers = {"X-CSRF-Token": "csrf-token"}
             saved = client.post("/api/activity/config", json=payload, headers=headers)
             replay = client.post("/api/activity/config", json=payload, headers=headers)
+            changed_config = {**payload["config"], "name": "different config"}
+            conflict = client.post(
+                "/api/activity/config",
+                json={**payload, "config": changed_config},
+                headers=headers,
+            )
+            stale = client.post(
+                "/api/activity/config",
+                json={**payload, "operation_id": "activity-config-web:stale", "expected_revision": 0},
+                headers=headers,
+            )
 
         self.assertEqual(saved.status_code, 200)
         self.assertEqual(saved.get_json()["config_revision"], 1)
         self.assertEqual(replay.status_code, 200)
         self.assertEqual(replay.get_json()["config_revision"], 1)
+        self.assertEqual(conflict.status_code, 409)
+        self.assertEqual(stale.status_code, 409)
+        self.assertEqual(stale.get_json()["config_revision"], 1)
         with db_backend.connection(database) as conn:
             receipt_count = conn.execute(
                 "SELECT COUNT(*) FROM activity_config_operations"
             ).fetchone()[0]
         self.assertEqual(receipt_count, 1)
+        self.assertFalse((Path(self.temp.name) / "xiuxian.db").exists())
+
+    def test_web_config_post_requires_csrf_before_application(self) -> None:
+        app.config.update(TESTING=True, SECRET_KEY="activity-config-test")
+        client = app.test_client()
+        with client.session_transaction() as session:
+            session["admin_id"] = "admin-1"
+            session["_csrf_token"] = "csrf-token"
+
+        application = SimpleNamespace(replace=lambda **_kwargs: self.fail("application called"))
+        with (
+            patch.object(web_core, "ADMIN_IDS", {"admin-1"}),
+            patch.object(web_activity, "_activity_config_application", return_value=application),
+        ):
+            missing = client.post("/api/activity/config", json={"operation_id": "missing-csrf"})
+            wrong = client.post(
+                "/api/activity/config",
+                json={"operation_id": "wrong-csrf"},
+                headers={"X-CSRF-Token": "wrong"},
+            )
+
+        self.assertEqual(missing.status_code, 403)
+        self.assertEqual(wrong.status_code, 403)
+
+    def test_static_template_routes_remain_read_only(self) -> None:
+        app.config.update(TESTING=True, SECRET_KEY="activity-config-test")
+        client = app.test_client()
+        with client.session_transaction() as session:
+            session["admin_id"] = "admin-1"
+
+        with patch.object(web_core, "ADMIN_IDS", {"admin-1"}):
+            activity = client.get("/api/activity/template/festival_sign")
+            gameplay = client.get("/api/activity/gameplay-template/duanwu_collect_words")
+            missing = client.get("/api/activity/template/not-a-template")
+
+        self.assertEqual(activity.status_code, 200)
+        self.assertTrue(activity.get_json()["success"])
+        self.assertEqual(gameplay.status_code, 200)
+        self.assertTrue(gameplay.get_json()["success"])
+        self.assertFalse(missing.get_json()["success"])
 
 
 if __name__ == "__main__":

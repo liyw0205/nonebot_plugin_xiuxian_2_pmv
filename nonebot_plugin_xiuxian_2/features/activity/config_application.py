@@ -7,6 +7,10 @@ from ...xiuxian.xiuxian_activity.activity_config import (
     DEFAULT_ACTIVITY_PASS,
     _migrate_config,
 )
+from ...xiuxian.xiuxian_activity.config_event_service import (
+    ActivityConfigMutationResult,
+    ActivityConfigState,
+)
 from ...xiuxian.xiuxian_activity.activity_utils import _clean_text
 from .config_repository import ActivityConfigSqlRepository
 
@@ -16,6 +20,35 @@ class ActivityConfigApplication:
 
     def __init__(self, repository: ActivityConfigSqlRepository | None = None) -> None:
         self.repository = repository or ActivityConfigSqlRepository()
+
+    def read(self) -> ActivityConfigState:
+        return self.repository.read()
+
+    def replace(
+        self,
+        *,
+        operation_id: str,
+        expected_revision: int,
+        config: dict[str, Any],
+        operator_id: str,
+        result_text: str = "活动配置已保存",
+    ) -> ActivityConfigMutationResult:
+        operation_id = str(operation_id or "").strip()
+        expected_revision = int(expected_revision)
+        if not operation_id or expected_revision < 0:
+            raise ValueError("operation_id and nonnegative expected_revision are required")
+        identity = {
+            "action": "replace",
+            "config": config,
+            "operator_id": str(operator_id),
+        }
+        return self.repository.replace(
+            operation_id,
+            identity,
+            expected_revision,
+            config,
+            result_text=result_text,
+        )
 
     def set_enabled(
         self,
@@ -43,7 +76,7 @@ class ActivityConfigApplication:
                 return "同一消息事件不能用于不同的活动配置操作"
             return previous.result_text
 
-        state = self.repository.read()
+        state = self.read()
         config, _ = _migrate_config(deepcopy(state.config))
 
         def commit(message: str) -> str:

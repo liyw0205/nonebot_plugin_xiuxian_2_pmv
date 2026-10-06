@@ -78,7 +78,7 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
         self.assertEqual(report["path_count"], 496)
         self.assertEqual(
             report["status_counts"],
-            {"不可达": 19, "允许保留的兼容路径": 87, "受阻": 257, "已迁移": 133},
+            {"不可达": 19, "允许保留的兼容路径": 91, "受阻": 240, "已迁移": 146},
         )
         self.assertGreater(report["blocked_count"], 0)
         self.assertTrue(all(item["call_graph"] and item["evidence"] for item in report["items"]))
@@ -477,6 +477,66 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
 
         self.assertTrue(
             any("omits the default manual execution path" in error for error in report["integrity_errors"])
+        )
+
+    def test_closed_legacy_route_requires_source_bound_handler_edge(self):
+        relative = "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/system.py"
+        route = {
+            "methods": ["GET"],
+            "path": "/search_users",
+            "file": relative,
+            "function": "search_users",
+        }
+        inventory = {"commands": [], "legacy_jobs": [], "legacy_routes": [route]}
+        fields = ["commands", "legacy_jobs", "legacy_routes"]
+        location = f"{relative}:262"
+
+        def evaluate(call_graph, evidence):
+            item = {
+                "id": f"route:GET:/search_users:{relative}:search_users",
+                "kind": "legacy_routes",
+                "entry": f"GET /search_users -> {relative}:search_users",
+                "status": "已迁移",
+                "reason": "Delegates to the feature-owned profile query.",
+                "source": {
+                    "file": relative,
+                    "function": "search_users",
+                    "methods": ["GET"],
+                    "path": "/search_users",
+                },
+                "call_graph": call_graph,
+                "evidence": evidence,
+            }
+            scope = {
+                "scope_id": "test-scope",
+                "source_snapshot": {"fields": fields, "sha256": _snapshot_hash(inventory, fields)},
+                "frozen_membership_sha256": _membership_hash([item]),
+            }
+            return evaluate_phase2_scope(
+                scope,
+                inventory,
+                frozen_items=[item],
+                frozen_scope_id="test-scope",
+                frozen_source_projection=_source_projection(inventory, fields),
+            )
+
+        closed = evaluate(
+            [
+                f"{location} search_users -> search_users_application -> "
+                "PlayerProfileApplication.search_users -> PlayerProfileSqlRepository.search_users"
+            ],
+            [location],
+        )
+        self.assertFalse(
+            any("Closed legacy Web route" in error for error in closed["integrity_errors"])
+        )
+
+        unbound = evaluate(
+            ["legacy route -> PlayerProfileApplication.search_users"],
+            [location],
+        )
+        self.assertTrue(
+            any("no source-bound handler edge" in error for error in unbound["integrity_errors"])
         )
 
     def test_new_inventory_entry_is_backlogged_without_expanding_scope(self):

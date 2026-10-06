@@ -31,9 +31,7 @@ from ..xiuxian_activity.service import (
     get_activity_data_overview,
     parse_reward,
     reset_activity_data,
-    save_config as save_activity_config,
 )
-from ..xiuxian_activity.activity_config import read_config_state as read_activity_config_state
 
 
 TASK_TEMPLATES = {
@@ -150,6 +148,18 @@ TASK_TEMPLATES = {
         "events": ["dungeon_clear"],
     },
 }
+
+_activity_application_instance = None
+
+
+def _activity_config_application():
+    global _activity_application_instance
+    if _activity_application_instance is None:
+        from ...features.activity.application import ActivityApplication
+        from ...paths import get_paths
+
+        _activity_application_instance = ActivityApplication(get_paths().game_db)
+    return _activity_application_instance.config
 
 
 def _task_row(key: str, reward: str, *, target: int | None = None, name: str | None = None) -> dict:
@@ -1743,7 +1753,7 @@ def activity_management():
     if "admin_id" not in session:
         return redirect(url_for("login"))
 
-    config_state = read_activity_config_state()
+    config_state = _activity_config_application().read()
     config = _prepare_activity_config(config_state.config)
     ok, reason = activity_state(config)
     runtime = activity_runtime_state(config)
@@ -1766,7 +1776,7 @@ def api_activity_config():
         return api_error("未登录")
 
     if request.method == "GET":
-        config_state = read_activity_config_state()
+        config_state = _activity_config_application().read()
         config = _prepare_activity_config(config_state.config)
         ok, reason = activity_state(config)
         runtime = activity_runtime_state(config)
@@ -1788,16 +1798,11 @@ def api_activity_config():
         expected_revision = int(payload.get("expected_revision") or 0)
         if not operation_id or expected_revision < 0:
             return api_error("缺少活动配置操作标识或版本，请重新载入", status=400)
-        request_identity = {
-            "action": "replace",
-            "config": config,
-            "operator_id": str(session.get("admin_id") or ""),
-        }
-        result = save_activity_config(
-            config,
+        result = _activity_config_application().replace(
+            config=config,
             operation_id=operation_id,
-            request_identity=request_identity,
             expected_revision=expected_revision,
+            operator_id=str(session.get("admin_id") or ""),
             result_text="活动配置已保存",
         )
         if result.status == "operation_conflict":

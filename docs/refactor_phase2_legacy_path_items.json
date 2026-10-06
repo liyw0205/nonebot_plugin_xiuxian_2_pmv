@@ -10854,11 +10854,12 @@
       "id": "route:GET:/activity:nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/activity.py:activity_management",
       "kind": "legacy_routes",
       "entry": "GET /activity -> nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/activity.py:activity_management",
-      "status": "受阻",
-      "reason": "The old Flask app and route modules are loaded and its server is enabled by default. Route registration is proven, but each handler's downstream ownership and replacement/compatibility decision is not closed.",
-      "unknown_edge": "route function -> old data/service or feature application -> state effect",
+      "status": "已迁移",
+      "reason": "The legacy management page keeps its HTML contract, while configuration state is read through ActivityApplication.config and the config event-store repository. The projection/default fallback is read-only and remains separate from game_db.",
       "call_graph": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/activity.py:1742 -> Flask app.route(/activity) -> legacy handler -> downstream state effect not closed"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/activity.py:1752 activity_management -> ActivityApplication.config.read -> ActivityConfigSqlRepository.read -> ActivityConfigEventService.read_state (read-only; legacy projection/default fallback)",
+        "activity_management -> _prepare_activity_config/activity_state/activity_runtime_state -> render_template(activity.html)",
+        "xiuxian_web.core before_request -> admin authorization and declared READ permission; POST CSRF enforcement remains in the existing core boundary"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
@@ -10866,7 +10867,14 @@
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/activity.py:1742"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/activity.py:1752",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/activity.py:1756-1770",
+        "nonebot_plugin_xiuxian_2/features/activity/application.py:11-15",
+        "nonebot_plugin_xiuxian_2/features/activity/config_application.py:18-25",
+        "nonebot_plugin_xiuxian_2/features/activity/config_repository.py:30-42",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/config_event_service.py:135-149",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/core.py:212-225,332-348",
+        "tests/test_activity_config_event_service.py:408-442"
       ],
       "source_declaration_found": true,
       "source": {
@@ -10882,11 +10890,12 @@
       "id": "route:GET,POST:/api/activity/config:nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/activity.py:api_activity_config",
       "kind": "legacy_routes",
       "entry": "GET,POST /api/activity/config -> nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/activity.py:api_activity_config",
-      "status": "受阻",
-      "reason": "The old Flask app and route modules are loaded and its server is enabled by default. Route registration is proven, but each handler's downstream ownership and replacement/compatibility decision is not closed.",
-      "unknown_edge": "route function -> old data/service or feature application -> state effect",
+      "status": "已迁移",
+      "reason": "Both methods use ActivityApplication.config. GET is read-only; POST preserves revision-zero first-write, operator-bound operation identity, duplicate replay, conflict/state-change responses, and JSON projection repair through the config event store without writing game_db.",
       "call_graph": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/activity.py:1764 -> Flask app.route(/api/activity/config) -> legacy handler -> downstream state effect not closed"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/activity.py:1774 api_activity_config -> GET ActivityApplication.config.read -> ActivityConfigSqlRepository.read -> ActivityConfigEventService.read_state (read-only; legacy projection/default fallback)",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/activity.py:1774 api_activity_config -> POST ActivityApplication.config.replace -> ActivityConfigSqlRepository.replace -> ActivityConfigEventService.replace (activity.db immediate transaction and operation receipt) -> legacy JSON projection",
+        "xiuxian_web.core before_request -> admin authorization, DATABASE_WRITE permission, and CSRF check before the POST handler"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
@@ -10894,7 +10903,15 @@
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/activity.py:1764"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/activity.py:1774",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/activity.py:1778-1829",
+        "nonebot_plugin_xiuxian_2/features/activity/application.py:11-15",
+        "nonebot_plugin_xiuxian_2/features/activity/config_application.py:18-51",
+        "nonebot_plugin_xiuxian_2/features/activity/config_repository.py:44-80",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/config_event_service.py:176-276",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/core.py:27-29,212-225,295-348",
+        "tests/test_activity_config_event_service.py:357-498",
+        "tests/test_activity_config_application.py:140-184"
       ],
       "source_declaration_found": true,
       "source": {
@@ -10995,11 +11012,10 @@
       "id": "route:GET:/api/activity/gameplay-template/<template_key>:nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/activity.py:api_activity_gameplay_template",
       "kind": "legacy_routes",
       "entry": "GET /api/activity/gameplay-template/<template_key> -> nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/activity.py:api_activity_gameplay_template",
-      "status": "受阻",
-      "reason": "The old Flask app and route modules are loaded and its server is enabled by default. Route registration is proven, but each handler's downstream ownership and replacement/compatibility decision is not closed.",
-      "unknown_edge": "route function -> old data/service or feature application -> state effect",
+      "status": "允许保留的兼容路径",
+      "reason": "This admin endpoint returns only the in-memory gameplay template definitions and serialized bundle data; it performs no database, filesystem, or business-state access.",
       "call_graph": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/activity.py:1839 -> Flask app.route(/api/activity/gameplay-template/<template_key>) -> legacy handler -> downstream state effect not closed"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/activity.py:1844 api_activity_gameplay_template -> in-memory GAMEPLAY_TEMPLATE_DEFINITIONS/GAMEPLAY_BUNDLE_DEFINITIONS -> _serialize_gameplay_templates -> api_success"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
@@ -11007,7 +11023,9 @@
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/activity.py:1839"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/activity.py:1844",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/activity.py:340-342,939-955,984-1000",
+        "tests/test_activity_config_event_service.py:500-516"
       ],
       "source_declaration_found": true,
       "source": {
@@ -11023,11 +11041,10 @@
       "id": "route:GET:/api/activity/template/<template_key>:nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/activity.py:api_activity_template",
       "kind": "legacy_routes",
       "entry": "GET /api/activity/template/<template_key> -> nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/activity.py:api_activity_template",
-      "status": "受阻",
-      "reason": "The old Flask app and route modules are loaded and its server is enabled by default. Route registration is proven, but each handler's downstream ownership and replacement/compatibility decision is not closed.",
-      "unknown_edge": "route function -> old data/service or feature application -> state effect",
+      "status": "允许保留的兼容路径",
+      "reason": "This admin endpoint returns only the in-memory activity template definitions and serialized data; it performs no database, filesystem, or business-state access.",
       "call_graph": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/activity.py:1828 -> Flask app.route(/api/activity/template/<template_key>) -> legacy handler -> downstream state effect not closed"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/activity.py:1833 api_activity_template -> in-memory ACTIVITY_TEMPLATE_DEFINITIONS -> _serialize_templates -> api_success"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
@@ -11035,7 +11052,9 @@
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/activity.py:1828"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/activity.py:1833",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/activity.py:175-177,972-982",
+        "tests/test_activity_config_event_service.py:500-516"
       ],
       "source_declaration_found": true,
       "source": {
@@ -13715,7 +13734,7 @@
       "status": "已迁移",
       "reason": "The legacy response contract remains available, but its user lookup now delegates to the feature-owned PlayerProfileApplication and read-only repository. The canonical admin API is exposed at /api/v1/info/users/search with a uniform envelope.",
       "call_graph": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/system.py:263 -> Flask app.route(/search_users) -> legacy handler",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/system.py:262 search_users -> Flask app.route(/search_users) -> legacy handler",
         "legacy search_users -> xiuxian.xiuxian_utils.utils.search_users -> PlayerProfileApplication.search_users",
         "PlayerProfileApplication.search_users -> PlayerProfileSqlRepository.search_users -> DatabaseUnitOfWork(read_only=True) SELECT user_id,user_name LIMIT 10",
         "features/info/web.py -> GET /api/v1/info/users/search -> admin guard -> PlayerProfileApplication.search_users -> uniform api_success envelope"
@@ -13726,6 +13745,7 @@
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/system.py:262",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/system.py:263-273",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_utils/utils.py:124-125",
         "nonebot_plugin_xiuxian_2/features/info/profile_application.py:26-27",

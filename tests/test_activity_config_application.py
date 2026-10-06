@@ -137,6 +137,52 @@ class ActivityConfigApplicationTests(unittest.TestCase):
         self.assertEqual("已开启签到活动", result)
         self.assertTrue(projections[-1]["enabled"])
 
+    def test_read_is_non_mutating_and_replace_preserves_web_revision_contract(self) -> None:
+        database = self.root / "activity.db"
+        projections = []
+        application, repository = self._application(
+            database,
+            lambda config: projections.append(copy.deepcopy(config)),
+        )
+
+        initial = application.read()
+        self.assertEqual(initial.revision, 0)
+        self.assertFalse(database.exists())
+
+        config = copy.deepcopy(initial.config)
+        config["name"] = "Web replacement"
+        first = application.replace(
+            operation_id="web-config-1",
+            expected_revision=0,
+            config=config,
+            operator_id="admin-1",
+        )
+        replay = application.replace(
+            operation_id="web-config-1",
+            expected_revision=0,
+            config=config,
+            operator_id="admin-1",
+        )
+        conflict = application.replace(
+            operation_id="web-config-1",
+            expected_revision=0,
+            config={**config, "name": "Different payload"},
+            operator_id="admin-1",
+        )
+        stale = application.replace(
+            operation_id="web-config-stale",
+            expected_revision=0,
+            config=config,
+            operator_id="admin-1",
+        )
+
+        self.assertEqual((first.status, first.revision), ("applied", 1))
+        self.assertEqual((replay.status, replay.revision), ("duplicate", 1))
+        self.assertEqual(conflict.status, "operation_conflict")
+        self.assertEqual(stale.status, "state_changed")
+        self.assertEqual(repository.read().config["name"], "Web replacement")
+        self.assertEqual(len(projections), 2)
+
     def test_conflict_and_stale_revision_do_not_write_projection(self) -> None:
         database = self.root / "activity.db"
         projections = []
