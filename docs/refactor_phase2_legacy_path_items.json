@@ -10826,11 +10826,11 @@
       "id": "route:GET:/:nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/pages.py:home",
       "kind": "legacy_routes",
       "entry": "GET / -> nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/pages.py:home",
-      "status": "受阻",
-      "reason": "The old Flask app and route modules are loaded and its server is enabled by default. Route registration is proven, but each handler's downstream ownership and replacement/compatibility decision is not closed.",
-      "unknown_edge": "route function -> old data/service or feature application -> state effect",
+      "status": "允许保留的兼容路径",
+      "reason": "Retain the legacy page/session adapter: it redirects anonymous users when authentication is enabled and renders home.html for an admin. It has no business-state effect; API owners remain separate frozen paths.",
       "call_graph": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/pages.py:16 -> Flask app.route(/) -> legacy handler -> downstream state effect not closed"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/pages.py:16 home -> web_auth_is_enabled/session check -> render home.html or redirect login",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/core.py:332-352 enforce_web_panel_security -> endpoint permission, session, and CSRF policy"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
@@ -10838,7 +10838,11 @@
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/pages.py:16"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/pages.py:15-19",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/pages.py:16",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/core.py:332-352",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/access.py:20-26",
+        "tests/test_web_auth.py:68-86"
       ],
       "source_declaration_found": true,
       "source": {
@@ -13019,11 +13023,10 @@
       "id": "route:GET:/favicon.ico:nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/pages.py:favicon",
       "kind": "legacy_routes",
       "entry": "GET /favicon.ico -> nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/pages.py:favicon",
-      "status": "受阻",
-      "reason": "The old Flask app and route modules are loaded and its server is enabled by default. Route registration is proven, but each handler's downstream ownership and replacement/compatibility decision is not closed.",
-      "unknown_edge": "route function -> old data/service or feature application -> state effect",
+      "status": "允许保留的兼容路径",
+      "reason": "Retain the public browser-probe response: the route returns an empty 204 and has no state or service dependency.",
       "call_graph": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/pages.py:23 -> Flask app.route(/favicon.ico) -> legacy handler -> downstream state effect not closed"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/pages.py:23 favicon -> empty HTTP 204 compatibility response"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
@@ -13031,7 +13034,9 @@
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/pages.py:23"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/pages.py:22-25",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/pages.py:23",
+        "tests/test_web_auth.py:88-97"
       ],
       "source_declaration_found": true,
       "source": {
@@ -13355,11 +13360,11 @@
       "id": "route:GET,POST:/login:nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/pages.py:login",
       "kind": "legacy_routes",
       "entry": "GET,POST /login -> nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/pages.py:login",
-      "status": "受阻",
-      "reason": "The old Flask app and route modules are loaded and its server is enabled by default. Route registration is proven, but each handler's downstream ownership and replacement/compatibility decision is not closed.",
-      "unknown_edge": "route function -> old data/service or feature application -> state effect",
+      "status": "允许保留的兼容路径",
+      "reason": "Retain the legacy Flask authentication boundary: configured admin IDs establish the signed session and CSRF token; invalid IDs are rejected. This session contract is covered by browser-level tests.",
       "call_graph": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/pages.py:33 -> Flask app.route(/login) -> legacy handler -> downstream state effect not closed"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/pages.py:33 login -> ADMIN_IDS validation -> Flask session admin_id and CSRF token -> home.html or login.html",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/core.py:295-311 _validate_csrf_token -> login POST protection"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
@@ -13367,7 +13372,11 @@
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/pages.py:33"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/pages.py:32-46",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/pages.py:33",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/core.py:295-311",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/access.py:20-24",
+        "tests/test_web_auth.py:28-41,57-66"
       ],
       "source_declaration_found": true,
       "source": {
@@ -13384,11 +13393,10 @@
       "id": "route:GET:/logout:nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/pages.py:logout",
       "kind": "legacy_routes",
       "entry": "GET /logout -> nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/pages.py:logout",
-      "status": "受阻",
-      "reason": "The old Flask app and route modules are loaded and its server is enabled by default. Route registration is proven, but each handler's downstream ownership and replacement/compatibility decision is not closed.",
-      "unknown_edge": "route function -> old data/service or feature application -> state effect",
+      "status": "允许保留的兼容路径",
+      "reason": "Retain the legacy session logout adapter: it clears the Flask admin session and redirects to login; there is no business-state effect.",
       "call_graph": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/pages.py:49 -> Flask app.route(/logout) -> legacy handler -> downstream state effect not closed"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/pages.py:49 logout -> session.clear -> redirect login"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
@@ -13396,7 +13404,10 @@
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/pages.py:49"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/pages.py:48-51",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/pages.py:49",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/access.py:20-26",
+        "tests/test_web_auth.py:99-109"
       ],
       "source_declaration_found": true,
       "source": {
@@ -13664,11 +13675,10 @@
       "id": "route:GET:/robots.txt:nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/pages.py:robots_txt",
       "kind": "legacy_routes",
       "entry": "GET /robots.txt -> nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/pages.py:robots_txt",
-      "status": "受阻",
-      "reason": "The old Flask app and route modules are loaded and its server is enabled by default. Route registration is proven, but each handler's downstream ownership and replacement/compatibility decision is not closed.",
-      "unknown_edge": "route function -> old data/service or feature application -> state effect",
+      "status": "允许保留的兼容路径",
+      "reason": "Retain the public robots response consumed by HTTP clients; it is a fixed text response with no state or service dependency.",
       "call_graph": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/pages.py:29 -> Flask app.route(/robots.txt) -> legacy handler -> downstream state effect not closed"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/pages.py:29 robots_txt -> fixed text/plain compatibility response"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
@@ -13676,7 +13686,9 @@
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/pages.py:29"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/pages.py:28-30",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/pages.py:29",
+        "tests/test_web_auth.py:88-97"
       ],
       "source_declaration_found": true,
       "source": {
@@ -14066,11 +14078,11 @@
       "id": "route:GET:/update:nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/pages.py:update",
       "kind": "legacy_routes",
       "entry": "GET /update -> nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/pages.py:update",
-      "status": "受阻",
-      "reason": "The old Flask app and route modules are loaded and its server is enabled by default. Route registration is proven, but each handler's downstream ownership and replacement/compatibility decision is not closed.",
-      "unknown_edge": "route function -> old data/service or feature application -> state effect",
+      "status": "允许保留的兼容路径",
+      "reason": "Retain the authenticated update-page template adapter only. Update checks, release retrieval, backup listing, and update execution remain separate frozen API owners and are not claimed closed here.",
       "call_graph": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/pages.py:54 -> Flask app.route(/update) -> legacy handler -> downstream state effect not closed"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/pages.py:54 update -> admin session check -> render update.html",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/access.py:20,116 update endpoint -> UPDATE permission"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
@@ -14078,7 +14090,10 @@
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/pages.py:54"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/pages.py:53-57",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/pages.py:54",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/access.py:116",
+        "tests/test_web_auth.py:68-86"
       ],
       "source_declaration_found": true,
       "source": {

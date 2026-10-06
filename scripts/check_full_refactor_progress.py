@@ -401,6 +401,9 @@ def _slice_status() -> dict[str, dict[str, object]]:
     activity_web = (PACKAGE / "xiuxian" / "xiuxian_web" / "activity.py").read_text(encoding="utf-8")
     activity_config_tests = (ROOT / "tests" / "test_activity_config_application.py").read_text(encoding="utf-8")
     activity_config_event_tests = (ROOT / "tests" / "test_activity_config_event_service.py").read_text(encoding="utf-8")
+    web_pages = (PACKAGE / "xiuxian" / "xiuxian_web" / "pages.py").read_text(encoding="utf-8")
+    web_pages_access = (PACKAGE / "xiuxian" / "xiuxian_web" / "access.py").read_text(encoding="utf-8")
+    web_pages_tests = (ROOT / "tests" / "test_web_auth.py").read_text(encoding="utf-8")
     activity_help_handler = activity_commands[
         activity_commands.index("@activity_help_cmd.handle"):
         activity_commands.index("@activity_manage_cmd.handle")
@@ -1872,6 +1875,32 @@ def _slice_status() -> dict[str, dict[str, object]]:
                 and "def test_web_routes_use_application_and_keep_csrf_boundary" in activity_admin_data_tests
             ),
             "status": "activity_admin_overview_reset_and_adjust_use_one_feature_owned_game_db_boundary",
+        },
+        "web_pages_presentation_owner": {
+            "page_handlers_remain_session_template_or_static_adapters": (
+                "return render_template('home.html', admin_id=session['admin_id'])" in web_pages
+                and "return render_template('login.html', error=\"无效的管理员 ID\"), 401" in web_pages
+                and "session['_csrf_token'] = secrets.token_urlsafe(32)" in web_pages
+                and "def logout():\n    session.clear()" in web_pages
+                and "return render_template('update.html')" in web_pages
+                and "return (\"\", 204)" in web_pages
+                and "Disallow: /" in web_pages
+            ),
+            "page_permissions_and_global_csrf_remain_declared": (
+                '"login": WebPermission.PUBLIC' in web_pages_access
+                and '"home": WebPermission.READ' in web_pages_access
+                and '"logout": WebPermission.READ' in web_pages_access
+                and '"update": WebPermission.UPDATE' in web_pages_access
+                and "def _validate_csrf_token():" in (PACKAGE / "xiuxian" / "xiuxian_web" / "core.py").read_text(encoding="utf-8")
+            ),
+            "browser_session_and_static_http_contracts_are_tested": (
+                "def test_login_accepts_configured_superuser" in web_pages_tests
+                and "def test_login_requires_csrf_token" in web_pages_tests
+                and "def test_home_and_update_pages_require_admin_session" in web_pages_tests
+                and "def test_public_static_page_routes_keep_fixed_responses" in web_pages_tests
+                and "def test_logout_clears_admin_session" in web_pages_tests
+            ),
+            "status": "web_pages_session_templates_and_static_responses_remain_explicit_compatibility",
         },
         "activity_static_help": {
             "help_and_manage_remain_static_compatibility_handlers": (

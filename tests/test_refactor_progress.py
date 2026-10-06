@@ -302,6 +302,10 @@ class RefactorProgressTests(unittest.TestCase):
         self.assertTrue(activity_web_admin_data["data_routes_use_feature_owned_admin_data_application"])
         self.assertTrue(activity_web_admin_data["admin_data_uses_read_only_snapshot_and_atomic_existing_schema_writes"])
         self.assertTrue(activity_web_admin_data["admin_data_http_and_legacy_response_contracts_are_tested"])
+        web_pages = slices["web_pages_presentation_owner"]
+        self.assertTrue(web_pages["page_handlers_remain_session_template_or_static_adapters"])
+        self.assertTrue(web_pages["page_permissions_and_global_csrf_remain_declared"])
+        self.assertTrue(web_pages["browser_session_and_static_http_contracts_are_tested"])
         activity_static_help = slices["activity_static_help"]
         self.assertTrue(activity_static_help["help_and_manage_remain_static_compatibility_handlers"])
         boss = slices["activity_boss"]

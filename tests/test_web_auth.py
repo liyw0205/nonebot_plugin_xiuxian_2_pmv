@@ -65,6 +65,49 @@ class WebLoginRouteTests(unittest.TestCase):
             )
         self.assertEqual(response.status_code, 403)
 
+    def test_home_and_update_pages_require_admin_session(self) -> None:
+        with patch.object(core, "ADMIN_IDS", {"admin-1"}):
+            home = self.client.get("/")
+            update = self.client.get("/update")
+        self.assertEqual(home.status_code, 302)
+        self.assertTrue(home.headers["Location"].endswith("/login"))
+        self.assertEqual(update.status_code, 302)
+        self.assertTrue(update.headers["Location"].endswith("/login"))
+
+        with self.client.session_transaction() as session:
+            session["admin_id"] = "admin-1"
+            session["_csrf_token"] = "csrf-token"
+        with patch.object(core, "ADMIN_IDS", {"admin-1"}):
+            home = self.client.get("/")
+            update = self.client.get("/update")
+
+        self.assertEqual(home.status_code, 200)
+        self.assertIn("admin-1", home.get_data(as_text=True))
+        self.assertEqual(update.status_code, 200)
+
+    def test_public_static_page_routes_keep_fixed_responses(self) -> None:
+        with patch.object(core, "ADMIN_IDS", {"admin-1"}):
+            favicon = self.client.get("/favicon.ico")
+            robots = self.client.get("/robots.txt")
+
+        self.assertEqual(favicon.status_code, 204)
+        self.assertEqual(favicon.get_data(), b"")
+        self.assertEqual(robots.status_code, 200)
+        self.assertEqual(robots.get_data(as_text=True), "User-agent: *\nDisallow: /\n")
+        self.assertEqual(robots.mimetype, "text/plain")
+
+    def test_logout_clears_admin_session(self) -> None:
+        with self.client.session_transaction() as session:
+            session["admin_id"] = "admin-1"
+            session["_csrf_token"] = "csrf-token"
+        with patch.object(core, "ADMIN_IDS", {"admin-1"}):
+            response = self.client.get("/logout")
+
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(response.headers["Location"].endswith("/login"))
+        with self.client.session_transaction() as session:
+            self.assertNotIn("admin_id", session)
+
 
 class WebAuthorizationTests(unittest.TestCase):
     def setUp(self) -> None:

@@ -78,7 +78,7 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
         self.assertEqual(report["path_count"], 496)
         self.assertEqual(
             report["status_counts"],
-            {"不可达": 19, "允许保留的兼容路径": 91, "受阻": 237, "已迁移": 149},
+            {"不可达": 19, "允许保留的兼容路径": 97, "受阻": 231, "已迁移": 149},
         )
         self.assertGreater(report["blocked_count"], 0)
         self.assertTrue(all(item["call_graph"] and item["evidence"] for item in report["items"]))
@@ -112,6 +112,7 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
         self.assertEqual(len(interactive), 21)
         self.assertEqual(sum(item["status"] == "已迁移" for item in interactive), 4)
         self.assertEqual(sum(item["status"] == "允许保留的兼容路径" for item in interactive), 17)
+
         for name in ("早安", "晚安", "给点修为", "给点灵石"):
             item = next(entry for entry in interactive if entry["source"]["name"] == name)
             self.assertTrue(any("InteractiveApplication.execute" in edge for edge in item["call_graph"]))
@@ -211,6 +212,35 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
         )
         self.assertEqual(cooldown_risk["source"], "command:entertainment:newapi帮助")
         self.assertEqual(report["p7_gate"]["status"], "independent")
+
+    def test_web_page_session_and_static_routes_are_explicit_compatibility(self):
+        report = load_phase2_scope_report(include_items=True)
+        expected_handlers = {
+            "route:GET:/:nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/pages.py:home": ("pages.py:16", "pages.py:16 home"),
+            "route:GET:/favicon.ico:nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/pages.py:favicon": ("pages.py:23", "pages.py:23 favicon"),
+            "route:GET,POST:/login:nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/pages.py:login": ("pages.py:33", "pages.py:33 login"),
+            "route:GET:/logout:nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/pages.py:logout": ("pages.py:49", "pages.py:49 logout"),
+            "route:GET:/robots.txt:nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/pages.py:robots_txt": ("pages.py:29", "pages.py:29 robots_txt"),
+            "route:GET:/update:nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/pages.py:update": ("pages.py:54", "pages.py:54 update"),
+        }
+        items = {item["id"]: item for item in report["items"]}
+
+        self.assertTrue(expected_handlers.keys() <= items.keys())
+        for item_id, (source_line, handler_edge) in expected_handlers.items():
+            item = items[item_id]
+            self.assertEqual(item["status"], "允许保留的兼容路径")
+            source_location = f"nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/{source_line}"
+            self.assertIn(source_location, item["evidence"])
+            self.assertTrue(any(handler_edge in edge for edge in item["call_graph"]))
+            self.assertFalse(any("downstream state effect not closed" in edge for edge in item["call_graph"]))
+
+        for route in ("check_update", "get_releases", "perform_update", "get_backups"):
+            item = next(
+                item for item in report["items"]
+                if item.get("source", {}).get("function") == route
+                and item.get("source", {}).get("file") == "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/pages.py"
+            )
+            self.assertEqual(item["status"], "受阻")
 
     def test_phase2_completes_when_every_frozen_item_is_closed(self):
         inventory = {"commands": [], "legacy_jobs": [], "legacy_routes": []}
