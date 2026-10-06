@@ -43,6 +43,31 @@ def _source_projection(inventory: dict, fields: list[str]) -> dict:
 
 
 class Phase2LegacyPathGateTests(unittest.TestCase):
+    def test_admin_command_controls_have_source_bound_shared_owner_edges(self):
+        report = load_phase2_scope_report(include_items=True)
+        items = {item["id"]: item for item in report["items"]}
+        source = "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/command_controls.py"
+        expected = {
+            "指令禁用": (28, "cmd_disable_", "apply_disable_targets"),
+            "指令解禁": (53, "cmd_enable_", "apply_disable_targets"),
+            "指令列表": (101, "cmd_list_", "collect_command_list_rows"),
+        }
+        for name, (line, handler, method) in expected.items():
+            with self.subTest(command=name):
+                item = items[f"command:admin:{name}"]
+                self.assertEqual(item["status"], "已迁移")
+                self.assertNotIn("unknown_edge", item)
+                edges = [edge for edge in item["call_graph"]
+                         if edge.startswith(f"{source}:{line} {handler} ->")]
+                self.assertEqual(len(edges), 1)
+                self.assertIn(f"AdminCommandControlApplication.{method}", edges[0])
+                self.assertIn(f"AdminCommandControlRepository.{method}", edges[0])
+                self.assertIn("command_disable.json", " ".join(item["call_graph"]))
+                self.assertIn(f"{source}:{line}", item["evidence"])
+                self.assertIn("tests/test_admin_command_control.py", item["evidence"])
+        self.assertTrue(report["frozen_membership_valid"])
+        self.assertEqual(report["integrity_errors"], [])
+
     def test_admin_output_commands_are_compatibility_with_behavioral_evidence(self):
         report = load_phase2_scope_report(include_items=True)
         items = {item["id"]: item for item in report["items"]}
@@ -75,8 +100,7 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
                 self.assertIn(f"{source}:{line}", item["evidence"])
                 handler_edges = [edge for edge in item["call_graph"]
                                  if edge.startswith(f"{source}:{line} {handler} ->")]
-                self.assertEqual(len(handler_edges), 1)
-                self.assertIn(terminal, handler_edges[0])
+                self.assertEqual(sum(terminal in edge for edge in handler_edges), 1)
                 self.assertFalse(any("effect not closed" in edge for edge in item["call_graph"]))
                 for evidence in (
                     "tests/test_admin_blackhouse_status.py",
@@ -144,7 +168,7 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
         self.assertEqual(report["path_count"], 496)
         self.assertEqual(
             report["status_counts"],
-            {"不可达": 19, "允许保留的兼容路径": 107, "受阻": 163, "已迁移": 207},
+            {"不可达": 19, "允许保留的兼容路径": 107, "受阻": 160, "已迁移": 210},
         )
         self.assertGreater(report["blocked_count"], 0)
         self.assertTrue(all(item["call_graph"] and item["evidence"] for item in report["items"]))

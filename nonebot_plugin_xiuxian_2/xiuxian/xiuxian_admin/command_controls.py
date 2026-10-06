@@ -12,7 +12,7 @@ from nonebot.permission import SUPERUSER
 from ..adapter_compat import Bot, GroupMessageEvent, Message, MessageSegment, PrivateMessageEvent
 from ..command_disable import apply_disable_targets, format_command_list_page
 from ..messaging.delivery import delivery_service
-from ..on_compat import on_command, rebuild_on_compat_index
+from ..on_compat import on_command
 from ..xiuxian_config import XiuConfig
 from ..xiuxian_utils.lay_out import Cooldown, assign_bot
 from ..xiuxian_utils.utils import build_pagination_buttons, handle_send, send_help_message
@@ -32,8 +32,12 @@ async def cmd_disable_(
 ):
     bot, _ = await assign_bot(bot=bot, event=event)
     raw = args.extract_plain_text().strip()
-    changed, errors = apply_disable_targets(raw, disabled=True)
-    rebuild_on_compat_index()
+    try:
+        changed, errors = apply_disable_targets(raw, disabled=True)
+    except Exception as exc:
+        logger.warning("command disable failed: {}", type(exc).__name__)
+        await handle_send(bot, event, "指令禁用失败：配置无法读取或保存，请检查服务日志。")
+        return
     lines: list[str] = []
     if changed:
         lines.append(f"已禁用：{', '.join(changed)}")
@@ -53,8 +57,12 @@ async def cmd_enable_(
 ):
     bot, _ = await assign_bot(bot=bot, event=event)
     raw = args.extract_plain_text().strip()
-    changed, errors = apply_disable_targets(raw, disabled=False)
-    rebuild_on_compat_index()
+    try:
+        changed, errors = apply_disable_targets(raw, disabled=False)
+    except Exception as exc:
+        logger.warning("command enable failed: {}", type(exc).__name__)
+        await handle_send(bot, event, "指令解禁失败：配置无法读取或保存，请检查服务日志。")
+        return
     lines: list[str] = []
     if changed:
         lines.append(f"已解禁：{', '.join(changed)}")
@@ -79,7 +87,10 @@ def _parse_command_list_args(raw: str) -> tuple[bool, int, str]:
             only_disabled = True
             continue
         if re.fullmatch(r"\d+", token):
-            page = max(int(token), 1)
+            try:
+                page = max(int(token), 1)
+            except ValueError:
+                page = 1
             continue
         filter_parts.append(token)
     raw_filter = " ".join(filter_parts).replace(" ", ",")
@@ -95,12 +106,17 @@ async def cmd_list_(
     bot, _ = await assign_bot(bot=bot, event=event)
     raw = args.extract_plain_text().strip()
     only_disabled, page, raw_filter = _parse_command_list_args(raw)
-    msg, page, total_pages = format_command_list_page(
-        raw_filter,
-        only_disabled=only_disabled,
-        page=page,
-        per_page=30,
-    )
+    try:
+        msg, page, total_pages = format_command_list_page(
+            raw_filter,
+            only_disabled=only_disabled,
+            page=page,
+            per_page=30,
+        )
+    except Exception as exc:
+        logger.warning("command list failed: {}", type(exc).__name__)
+        await handle_send(bot, event, "指令列表读取失败：配置无法读取，请检查服务日志。")
+        return
     list_cmd = "指令列表 禁用" if only_disabled else "指令列表"
     if raw_filter.strip():
         list_cmd = f"{list_cmd} {raw_filter.strip().replace(',', ' ')}"

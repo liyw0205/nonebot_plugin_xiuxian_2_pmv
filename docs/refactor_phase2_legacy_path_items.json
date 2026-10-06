@@ -2219,7 +2219,7 @@
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/command_controls.py:24 all_apply_cmd = on_command('全量申请') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/command_controls.py:113 all_apply_cmd_ -> target_url -> shared delivery fallback chain",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/command_controls.py:129 all_apply_cmd_ -> target_url -> shared delivery fallback chain",
         "shared send_help_message / send_msg_handler / delivery_service.reply / handle_send -> adapter_message_sender -> record_send_message -> queued message history and reply counters; config, ID mapping and rendering resources remain shared compatibility infrastructure"
       ],
       "evidence": [
@@ -2230,7 +2230,7 @@
         "tests/test_admin_output_commands_compat.py",
         "tests/test_admin_progress_contract.py",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/command_controls.py:24",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/command_controls.py:113"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/command_controls.py:129"
       ],
       "source_declaration_found": true,
       "source": {
@@ -3806,14 +3806,12 @@
         "AdminBlackhouseSqlRepository.set_banned -> DatabaseUnitOfWork(game_db, immediate=True) -> admin_blackhouse_users membership + user_xiuxian.is_ban projection + admin_blackhouse_status_operations receipt in one transaction; duplicate returns the stored historical result without rewriting current membership",
         "startup legacy.admin.007 -> apply_admin_blackhouse -> bounded legacy blackhouse.json and existing is_ban union -> admin_blackhouse_imports legacy_json_and_is_ban_v1 marker; subsequent runs never reimport stale JSON and request paths perform no DDL",
         "on_compat._filter_blackhoused_matchers -> blackhouse.is_user_blackhoused -> AdminApplication.is_user_blackhoused -> AdminBlackhouseSqlRepository.is_banned reads the same SQL roster; admin and unrouted matchers remain exempt and storage failure fails closed",
-        "blackhouse_ -> validated result status or explicit storage error -> handle_send compatibility delivery; duplicate response does not claim the historical ban is the current state"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:1986 blackhouse_ -> validated result status or explicit storage error -> handle_send compatibility delivery; duplicate response does not claim the historical ban is the current state"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:318",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:1986",
         "nonebot_plugin_xiuxian_2/features/admin/application.py",
         "nonebot_plugin_xiuxian_2/features/admin/blackhouse_repository.py",
         "nonebot_plugin_xiuxian_2/features/admin/migrations.py:388",
@@ -3823,7 +3821,9 @@
         "tests/test_admin_blackhouse_routing.py",
         "tests/test_admin_blackhouse_migration.py",
         "nonebot_plugin_xiuxian_2/features/admin/tests/test_blackhouse_repository.py",
-        "tests/test_admin_progress_contract.py"
+        "tests/test_admin_progress_contract.py",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:318",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:1986"
       ],
       "source_declaration_found": true,
       "source": {
@@ -4744,22 +4744,28 @@
       "id": "command:admin:指令列表",
       "kind": "commands",
       "entry": "admin:指令列表 (aliases: )",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "The SUPERUSER list handler reads the same feature-owned command flags and active registry as command mutations, route filtering and Web compatibility callers. Filtering, grouping and pagination preserve existing output; malformed files report failure without replacing their contents. The list still materializes the active registry and no bounded listing or cross-process coordination is claimed.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/command_controls.py:23 cmd_list = on_command('指令列表') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/command_controls.py:90 cmd_list_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/command_controls.py:101 cmd_list_ -> command_disable.format_command_list_page -> AdminCommandControlApplication.collect_command_list_rows -> AdminCommandControlRepository.collect_command_list_rows",
+        "AdminCommandControlRepository -> shared path-scoped active registry and stat-validated command_disable.json view; dormant entries and unknown metadata stay on disk but do not join the active command list",
+        "command_disable compatibility facade -> shared application/repository for Web groups, single and batch toggles; on_compat._filter_disabled_matchers consumes the same flags and aliases without rebuilding indexes on each mutation"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
-        "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
-        "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
+        "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/command_controls.py:23",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/command_controls.py:90"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/command_controls.py:101",
+        "nonebot_plugin_xiuxian_2/features/admin/command_control_application.py",
+        "nonebot_plugin_xiuxian_2/features/admin/command_control_repository.py",
+        "nonebot_plugin_xiuxian_2/xiuxian/command_disable.py",
+        "nonebot_plugin_xiuxian_2/features/admin/tests/test_command_control_repository.py",
+        "tests/test_admin_command_control.py",
+        "tests/test_command_disable_store.py"
       ],
       "source_declaration_found": true,
       "source": {
@@ -4771,22 +4777,29 @@
       "id": "command:admin:指令禁用",
       "kind": "commands",
       "entry": "admin:指令禁用 (aliases: )",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "The SUPERUSER disable command resolves primary names, modules and aliases through one feature-owned registry and commits all accepted flags in one atomic JSON replacement. Invalid targets remain per-target errors, admin names/aliases/modules are exempt, repeated values avoid writes, and failed writes never publish changed cache state or a success reply. Unknown fields, dormant entries and both historical file shapes are preserved; the lock coordinates only threads in this process, not other processes, and there is no operation-ID ledger.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/command_controls.py:21 cmd_disable = on_command('指令禁用') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/command_controls.py:28 cmd_disable_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/command_controls.py:28 cmd_disable_ -> command_disable.apply_disable_targets(disabled=True) -> AdminCommandControlApplication.apply_disable_targets -> AdminCommandControlRepository.apply_disable_targets",
+        "AdminCommandControlRepository -> path-shared registry/aliases and process lock -> copy-on-write command_disable.json document -> atomic_write -> invalidate cached flags only after successful persistence; duplicate target names are coalesced and unchanged flags do not write",
+        "on_compat._filter_disabled_matchers -> compatibility is_command_disabled/resolve_primary_name -> same repository active view; malformed state fails closed only for selected routed non-admin matchers, leaving admin and unselected/unrouted matchers available",
+        "startup rebuild_on_compat_index -> sync_command_registry then rebuild_alias_index; per-command handlers no longer rebuild or resave the whole registry; Web single and batch compatibility writes use the same owner"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
-        "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
-        "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
+        "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/command_controls.py:21",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/command_controls.py:28"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/command_controls.py:28",
+        "nonebot_plugin_xiuxian_2/features/admin/command_control_application.py",
+        "nonebot_plugin_xiuxian_2/features/admin/command_control_repository.py",
+        "nonebot_plugin_xiuxian_2/xiuxian/command_disable.py",
+        "nonebot_plugin_xiuxian_2/features/admin/tests/test_command_control_repository.py",
+        "tests/test_admin_command_control.py",
+        "tests/test_command_disable_store.py"
       ],
       "source_declaration_found": true,
       "source": {
@@ -4798,22 +4811,28 @@
       "id": "command:admin:指令解禁",
       "kind": "commands",
       "entry": "admin:指令解禁 (aliases: )",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "The SUPERUSER enable command uses the same feature-owned atomic JSON mutation as disable, preserving primary/module/alias parsing, per-target errors and administrator exemptions. File, cache and active routing flags remain unchanged on replacement failure; successful flags are visible to other same-path instances and Web compatibility readers without handler-triggered index rebuild. This absolute-value setter has no operation-ID ledger and does not coordinate separate processes.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/command_controls.py:22 cmd_enable = on_command('指令解禁') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/command_controls.py:49 cmd_enable_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/command_controls.py:53 cmd_enable_ -> command_disable.apply_disable_targets(disabled=False) -> AdminCommandControlApplication.apply_disable_targets -> AdminCommandControlRepository.apply_disable_targets",
+        "AdminCommandControlRepository -> path-shared registry/aliases and process lock -> atomic_write command_disable.json -> publish invalidation only on success; existing unknown metadata and dormant commands survive and unchanged flags skip persistence",
+        "on_compat._filter_disabled_matchers and Web compatibility helpers -> same feature owner; corrupted JSON is not reset, selected routed non-admin matchers fail closed, and mutation handlers send failure instead of success"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
-        "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
-        "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
+        "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/command_controls.py:22",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/command_controls.py:49"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/command_controls.py:53",
+        "nonebot_plugin_xiuxian_2/features/admin/command_control_application.py",
+        "nonebot_plugin_xiuxian_2/features/admin/command_control_repository.py",
+        "nonebot_plugin_xiuxian_2/xiuxian/command_disable.py",
+        "nonebot_plugin_xiuxian_2/features/admin/tests/test_command_control_repository.py",
+        "tests/test_admin_command_control.py",
+        "tests/test_command_disable_store.py"
       ],
       "source_declaration_found": true,
       "source": {
@@ -5313,14 +5332,12 @@
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2060 view_blackhouse_ -> admin_application.list_blackhoused_users -> AdminApplication.list_blackhoused_users -> AdminBlackhouseSqlRepository.list_banned -> DatabaseUnitOfWork(game_db, read_only=True) -> admin_blackhouse_users",
         "startup legacy.admin.007 -> apply_admin_blackhouse -> legacy JSON and is_ban membership union -> admin_blackhouse_imports legacy_json_and_is_ban_v1 marker; no request-time schema creation or repeated legacy import",
         "on_compat._filter_blackhoused_matchers -> blackhouse.is_user_blackhoused -> AdminApplication.is_user_blackhoused -> AdminBlackhouseSqlRepository.is_banned reads the identical SQL roster that ban/unban writes with is_ban projection and operation receipts",
-        "view_blackhouse_ -> roster formatting or explicit storage error -> handle_send compatibility delivery; missing schema/storage failures are not reported as an empty list"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2060 view_blackhouse_ -> roster formatting or explicit storage error -> handle_send compatibility delivery; missing schema/storage failures are not reported as an empty list"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:320",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2060",
         "nonebot_plugin_xiuxian_2/features/admin/application.py",
         "nonebot_plugin_xiuxian_2/features/admin/blackhouse_repository.py",
         "nonebot_plugin_xiuxian_2/features/admin/migrations.py:388",
@@ -5330,7 +5347,9 @@
         "tests/test_admin_blackhouse_routing.py",
         "tests/test_admin_blackhouse_migration.py",
         "nonebot_plugin_xiuxian_2/features/admin/tests/test_blackhouse_repository.py",
-        "tests/test_admin_progress_contract.py"
+        "tests/test_admin_progress_contract.py",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:320",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2060"
       ],
       "source_declaration_found": true,
       "source": {
@@ -8403,14 +8422,12 @@
         "AdminBlackhouseSqlRepository.set_banned -> DatabaseUnitOfWork(game_db, immediate=True) -> admin_blackhouse_users membership deletion + user_xiuxian.is_ban projection + admin_blackhouse_status_operations receipt in one transaction; duplicate returns the stored historical result without modifying a subsequent ban",
         "startup legacy.admin.007 -> apply_admin_blackhouse -> bounded legacy blackhouse.json and existing is_ban union -> admin_blackhouse_imports legacy_json_and_is_ban_v1 marker; subsequent runs never resurrect released users from stale legacy input and requests perform no DDL",
         "on_compat._filter_blackhoused_matchers -> blackhouse.is_user_blackhoused -> AdminApplication.is_user_blackhoused -> AdminBlackhouseSqlRepository.is_banned observes the committed SQL removal immediately; admin and unrouted matchers remain exempt",
-        "unblackhouse_ -> validated result status or explicit storage error -> handle_send compatibility delivery; duplicate response does not claim the historical release is the current state"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2023 unblackhouse_ -> validated result status or explicit storage error -> handle_send compatibility delivery; duplicate response does not claim the historical release is the current state"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:319",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2023",
         "nonebot_plugin_xiuxian_2/features/admin/application.py",
         "nonebot_plugin_xiuxian_2/features/admin/blackhouse_repository.py",
         "nonebot_plugin_xiuxian_2/features/admin/migrations.py:388",
@@ -8420,7 +8437,9 @@
         "tests/test_admin_blackhouse_routing.py",
         "tests/test_admin_blackhouse_migration.py",
         "nonebot_plugin_xiuxian_2/features/admin/tests/test_blackhouse_repository.py",
-        "tests/test_admin_progress_contract.py"
+        "tests/test_admin_progress_contract.py",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:319",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2023"
       ],
       "source_declaration_found": true,
       "source": {

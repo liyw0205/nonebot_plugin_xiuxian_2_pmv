@@ -1019,6 +1019,15 @@ def _slice_status() -> dict[str, dict[str, object]]:
     admin_blackhouse_routing_tests = (ROOT / "tests/test_admin_blackhouse_routing.py").read_text(encoding="utf-8")
     admin_blackhouse_migration_tests = (ROOT / "tests/test_admin_blackhouse_migration.py").read_text(encoding="utf-8")
     admin_blackhouse_repository_tests = (PACKAGE / "features/admin/tests/test_blackhouse_repository.py").read_text(encoding="utf-8")
+    admin_command_application = (PACKAGE / "features/admin/command_control_application.py").read_text(encoding="utf-8")
+    admin_command_repository = (PACKAGE / "features/admin/command_control_repository.py").read_text(encoding="utf-8")
+    admin_command_compat = (PACKAGE / "xiuxian/command_disable.py").read_text(encoding="utf-8")
+    admin_command_handlers = {
+        name: output_function(admin_command_controls, name)
+        for name in ("cmd_disable_", "cmd_enable_", "cmd_list_")
+    }
+    admin_command_tests = (ROOT / "tests/test_admin_command_control.py").read_text(encoding="utf-8")
+    admin_command_repository_tests = (PACKAGE / "features/admin/tests/test_command_control_repository.py").read_text(encoding="utf-8")
     admin_status_batch_handler = admin_facade[
         admin_facade.index("async def restate_") : admin_facade.index(
             "@set_xiuxian.handle", admin_facade.index("async def restate_")
@@ -4779,6 +4788,54 @@ def _slice_status() -> dict[str, dict[str, object]]:
                 ))
             ),
             "status": "blackhouse_commands_and_router_share_atomic_sql_membership_with_startup_legacy_import",
+        },
+        "admin_command_control_owner": {
+            "commands_and_compatibility_consumers_share_feature_owner": (
+                "AdminCommandControlRepository(" in admin_command_application
+                and 'get_paths().data / "command_disable.json"' in admin_command_application
+                and "return AdminCommandControlApplication()" in admin_command_compat
+                and all(f"self.repository.{method}(" in admin_command_application
+                        and f"_application().{method}(" in admin_command_compat
+                        for method in ("apply_disable_targets", "set_command_disabled", "is_command_disabled",
+                                       "sync_command_registry", "rebuild_alias_index", "collect_command_list_rows"))
+                and all(token not in admin_command_compat for token in (
+                    "_COMMAND_ENTRIES", "_ALIAS_TO_PRIMARY", "load_json_file", "save_json_file",
+                ))
+            ),
+            "atomic_file_owner_preserves_state_and_noop_avoids_writes": (
+                "atomic_write(self.path," in admin_command_repository
+                and "if document != before:" in admin_command_repository
+                and all(token in admin_command_repository_tests for token in (
+                    "test_identical_sync_and_toggles_do_not_write",
+                    "test_failed_atomic_replace_keeps_disk_cache_and_registry_unchanged",
+                    "test_wrapped_unknown_data_and_dormant_commands_survive_sync",
+                    "test_multiple_instances_serialize_mutations_without_lost_updates",
+                ))
+            ),
+            "handler_flags_do_not_rebuild_registry_and_failures_are_reported": (
+                "rebuild_on_compat_index" not in admin_command_controls
+                and "load_command_disable_memory" not in admin_blackhouse_router
+                and all("except Exception as exc:" in handler and "type(exc).__name__" in handler
+                        for handler in admin_command_handlers.values())
+                and all("apply_disable_targets(" in admin_command_handlers[name]
+                        for name in ("cmd_disable_", "cmd_enable_"))
+                and "format_command_list_page(" in admin_command_handlers["cmd_list_"]
+                and "test_real_write_failure_preserves_file_cache_and_route_state" in admin_command_tests
+            ),
+            "routing_aliases_exemptions_and_bad_files_have_behavioral_coverage": (
+                all(command_permission(admin_command_controls, name) == "SUPERUSER"
+                    for name in ("指令禁用", "指令解禁", "指令列表"))
+                and "command control lookup failed closed" in admin_blackhouse_router
+                and all(token in admin_command_tests for token in (
+                    "test_real_handlers_deduplicate_primary_alias_and_module_and_apply_to_router_immediately",
+                    "test_real_handler_cannot_disable_admin_by_name_alias_or_module",
+                    "test_web_compatible_single_setter_cannot_disable_admin",
+                    "test_corrupt_file_is_not_replaced_and_router_fails_closed_except_admin_and_unrouted",
+                    "test_real_list_handler_filters_disabled_rows_and_clamps_page",
+                    "test_real_list_handler_handles_overlong_numeric_page",
+                ))
+            ),
+            "status": "command_flags_registry_and_aliases_share_atomic_json_owner_with_failure_safe_runtime_view",
         },
         "admin": {
             "stone_default_application_owned": (

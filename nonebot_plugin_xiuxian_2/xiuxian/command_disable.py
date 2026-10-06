@@ -2,165 +2,55 @@ from __future__ import annotations
 
 from typing import Any
 
-from nonebot.log import logger
-from ..paths import get_paths
-from .xiuxian_utils.json_store import load_json_file, save_json_file
-
-XIUXIAN_DATABASE = get_paths().data
-
-COMMAND_DISABLE_FILE = XIUXIAN_DATABASE / "command_disable.json"
+from ..features.admin.command_control_application import AdminCommandControlApplication
 
 COMMAND_DISABLE_EXEMPT_MODULE = "xiuxian_admin"
-_COMMAND_ENTRIES: dict[str, dict[str, Any]] = {}
-# 触发词（含别名）-> 主指令名
-_ALIAS_TO_PRIMARY: dict[str, str] = {}
 
 
-def _normalize_entry(value: Any, *, module: str = "") -> dict[str, Any]:
-    if isinstance(value, dict):
-        return {
-            "disabled": bool(value.get("disabled", False)),
-            "module": str(value.get("module") or module or ""),
-        }
-    return {"disabled": bool(value), "module": module or ""}
+def _application() -> AdminCommandControlApplication:
+    return AdminCommandControlApplication()
 
 
 def load_command_disable_memory() -> dict[str, dict[str, Any]]:
-    global _COMMAND_ENTRIES, _ALIAS_TO_PRIMARY
-    if not COMMAND_DISABLE_FILE.exists():
-        _COMMAND_ENTRIES = {}
-        return _COMMAND_ENTRIES
-    raw = load_json_file(COMMAND_DISABLE_FILE, {}, dict)
-
-    commands_raw = raw.get("commands", raw)
-    if not isinstance(commands_raw, dict):
-        _COMMAND_ENTRIES = {}
-        return _COMMAND_ENTRIES
-
-    entries: dict[str, dict[str, Any]] = {}
-    for key, value in commands_raw.items():
-        if not isinstance(key, str) or not key.strip():
-            continue
-        entries[key.strip()] = _normalize_entry(value)
-    _COMMAND_ENTRIES = entries
-    return _COMMAND_ENTRIES
+    return _application().read_entries()
 
 
 def save_command_disable_memory() -> None:
-    payload = {
-        "commands": {
-            name: {
-                "disabled": bool(info.get("disabled", False)),
-                "module": str(info.get("module") or ""),
-            }
-            for name, info in sorted(_COMMAND_ENTRIES.items())
-        }
-    }
-    save_json_file(COMMAND_DISABLE_FILE, payload, indent=2)
+    """兼容旧调用：写接口即时持久化，无待存内存；此处仅校验当前状态可读。"""
+    _application().read_entries()
 
 
 def rebuild_alias_index(alias_map: dict[str, str]) -> None:
-    global _ALIAS_TO_PRIMARY
-    cleaned: dict[str, str] = {}
-    for trigger, primary in alias_map.items():
-        t = (trigger or "").strip()
-        p = (primary or "").strip()
-        if t and p:
-            cleaned[t] = p
-    _ALIAS_TO_PRIMARY = cleaned
+    _application().rebuild_alias_index(alias_map)
 
 
 def known_commands() -> frozenset[str]:
-    return frozenset(_COMMAND_ENTRIES.keys())
+    return _application().known_commands()
 
 
 def known_modules() -> frozenset[str]:
-    mods = {
-        str(info.get("module") or "").strip()
-        for info in _COMMAND_ENTRIES.values()
-        if str(info.get("module") or "").strip()
-    }
-    return frozenset(mods)
+    return _application().known_modules()
 
 
 def resolve_primary_name(name: str) -> str:
-    key = (name or "").strip()
-    if not key:
-        return ""
-    return _ALIAS_TO_PRIMARY.get(key, key)
+    return _application().resolve_primary_name(name)
 
 
 def is_command_disabled(name: str) -> bool:
-    primary = resolve_primary_name(name)
-    if not primary:
-        return False
-    entry = _COMMAND_ENTRIES.get(primary)
-    if not entry:
-        return False
-    return bool(entry.get("disabled", False))
+    return _application().is_command_disabled(name)
 
 
 def sync_command_registry(registry: dict[str, str]) -> dict[str, dict[str, Any]]:
     """registry: 主指令名 -> 子模块名（如 xiuxian_arena）。"""
-    global _COMMAND_ENTRIES
-    if not _COMMAND_ENTRIES:
-        load_command_disable_memory()
-
-    previous = {
-        name: {
-            "disabled": bool(info.get("disabled", False)),
-            "module": str(info.get("module") or ""),
-        }
-        for name, info in _COMMAND_ENTRIES.items()
-    }
-
-    merged: dict[str, dict[str, Any]] = {}
-    for name in sorted(registry.keys()):
-        mod = (registry.get(name) or "").strip()
-        old = previous.get(name)
-        if old is not None:
-            merged[name] = {
-                "disabled": bool(old.get("disabled", False)),
-                "module": mod or str(old.get("module") or ""),
-            }
-        else:
-            merged[name] = {"disabled": False, "module": mod}
-
-    removed = set(previous.keys()) - set(merged.keys())
-    added = set(merged.keys()) - set(previous.keys())
-    _COMMAND_ENTRIES = merged
-    save_command_disable_memory()
-
-    if added or removed:
-        logger.info(
-            "[修仙 指令禁用] 已同步指令表 {} 条（新增 {}，移除 {}）",
-            len(merged),
-            len(added),
-            len(removed),
-        )
-    return merged
+    return _application().sync_command_registry(registry)
 
 
 def set_command_disabled(name: str, *, disabled: bool) -> tuple[bool, str]:
-    primary = resolve_primary_name(name)
-    if not primary:
-        return False, "请指定指令名"
-    if primary not in _COMMAND_ENTRIES:
-        return False, f"未登记指令：{primary}"
-    _COMMAND_ENTRIES[primary]["disabled"] = disabled
-    save_command_disable_memory()
-    return True, ""
+    return _application().set_command_disabled(name, disabled=disabled)
 
 
 def commands_in_module(module: str) -> list[str]:
-    mod = (module or "").strip()
-    if not mod or mod == COMMAND_DISABLE_EXEMPT_MODULE:
-        return []
-    return sorted(
-        name
-        for name, info in _COMMAND_ENTRIES.items()
-        if str(info.get("module") or "") == mod
-    )
+    return _application().commands_in_module(module)
 
 
 def _command_list_filter_tokens(raw_filter: str) -> list[str]:
@@ -171,44 +61,13 @@ def _command_list_filter_tokens(raw_filter: str) -> list[str]:
     return [t.strip() for t in normalized.split(",") if t.strip()]
 
 
-def _command_list_match(name: str, mod: str, tokens: list[str]) -> bool:
-    if not tokens:
-        return True
-    for token in tokens:
-        if token == mod:
-            return True
-        if token in name:
-            return True
-        if token in mod:
-            return True
-    return False
-
-
 def collect_command_list_rows(
     raw_filter: str = "",
     *,
     only_disabled: bool = False,
 ) -> list[tuple[str, str, str]]:
     """主指令名、子模块、状态；按子模块再按指令名排序。"""
-    if not _COMMAND_ENTRIES:
-        load_command_disable_memory()
-
-    tokens = _command_list_filter_tokens(raw_filter)
-    rows: list[tuple[str, str, str]] = []
-    for name, info in _COMMAND_ENTRIES.items():
-        mod = str(info.get("module") or "")
-        if mod == COMMAND_DISABLE_EXEMPT_MODULE:
-            continue
-        disabled = bool(info.get("disabled", False))
-        if only_disabled and not disabled:
-            continue
-        if not _command_list_match(name, mod, tokens):
-            continue
-        status = "禁用" if disabled else "启用"
-        rows.append((name, mod, status))
-
-    rows.sort(key=lambda r: ((r[1] or "\uffff"), r[0]))
-    return rows
+    return _application().collect_command_list_rows(raw_filter, only_disabled=only_disabled)
 
 
 def collect_command_list_groups(
@@ -323,61 +182,7 @@ def apply_disable_targets(
     disabled: bool,
 ) -> tuple[list[str], list[str]]:
     """解析 指令禁用/解禁 参数：逗号分隔的指令名或子模块名。"""
-    text = (raw or "").strip()
-    if not text:
-        return [], ["请指定指令名或子模块，多个用英文逗号分隔"]
-
-    tokens = [t.strip() for t in text.replace("，", ",").split(",") if t.strip()]
-    if not tokens:
-        return [], ["请指定指令名或子模块"]
-
-    if not _COMMAND_ENTRIES:
-        load_command_disable_memory()
-
-    changed: list[str] = []
-    errors: list[str] = []
-    seen: set[str] = set()
-
-    for token in tokens:
-        if token == COMMAND_DISABLE_EXEMPT_MODULE:
-            errors.append("xiuxian_admin 不参与指令禁用")
-            continue
-
-        if token in _COMMAND_ENTRIES:
-            if str(_COMMAND_ENTRIES[token].get("module") or "") == COMMAND_DISABLE_EXEMPT_MODULE:
-                errors.append(f"管理员指令不可禁用：{token}")
-                continue
-            if token not in seen:
-                _COMMAND_ENTRIES[token]["disabled"] = disabled
-                changed.append(token)
-                seen.add(token)
-            continue
-
-        mod_cmds = commands_in_module(token)
-        if mod_cmds:
-            for name in mod_cmds:
-                if name in seen:
-                    continue
-                _COMMAND_ENTRIES[name]["disabled"] = disabled
-                changed.append(name)
-                seen.add(name)
-            continue
-
-        resolved = resolve_primary_name(token)
-        if resolved in _COMMAND_ENTRIES and resolved not in seen:
-            _COMMAND_ENTRIES[resolved]["disabled"] = disabled
-            changed.append(resolved)
-            seen.add(resolved)
-            continue
-
-        if token.startswith("xiuxian_"):
-            errors.append(f"子模块 {token} 下无已登记指令")
-        else:
-            errors.append(f"未登记：{token}")
-
-    if changed:
-        save_command_disable_memory()
-    return changed, errors
+    return _application().apply_disable_targets(raw, disabled=disabled)
 
 
 def disabled_command_keys_for_route(

@@ -31,7 +31,6 @@ from .blackhouse import is_user_blackhoused
 from .command_disable import (
     disabled_command_keys_for_route,
     is_command_disabled,
-    load_command_disable_memory,
     rebuild_alias_index,
     resolve_primary_name,
     sync_command_registry,
@@ -332,16 +331,28 @@ def _filter_disabled_matchers(
     command: tuple[str, ...] | None,
     text: str,
 ) -> list[type["Matcher"]]:
-    keys = disabled_command_keys_for_route(command, text)
-    disabled_primaries = {p for p in keys if p and is_command_disabled(p)}
-    if not disabled_primaries:
-        return candidates
-
-    blocked = {
+    controllable = {
         matcher
-        for matcher in selected
-        if _matcher_is_disabled(matcher, disabled_primaries)
+        for matcher in candidates
+        if matcher in selected
+        and matcher in _MATCHER_ROUTES
+        and not _matcher_exempt_command_disable(matcher)
     }
+    if not controllable:
+        return candidates
+    try:
+        keys = disabled_command_keys_for_route(command, text)
+        disabled_primaries = {p for p in keys if p and is_command_disabled(p)}
+        if not disabled_primaries:
+            return candidates
+        blocked = {
+            matcher
+            for matcher in selected
+            if _matcher_is_disabled(matcher, disabled_primaries)
+        }
+    except Exception as exc:
+        logger.warning("command control lookup failed closed: {}", type(exc).__name__)
+        return [matcher for matcher in candidates if matcher not in controllable]
     if blocked:
         label = (
             next(iter(disabled_primaries))
@@ -623,9 +634,8 @@ class XiuxianOnCompatProvider(MatcherProvider):
 
 
 def rebuild_on_compat_index() -> None:
-    load_command_disable_memory()
-    rebuild_alias_index(_collect_alias_to_primary_map())
     sync_command_registry(_collect_registered_command_registry())
+    rebuild_alias_index(_collect_alias_to_primary_map())
     provider = getattr(matchers, "provider", None)
     if isinstance(provider, XiuxianOnCompatProvider):
         provider.rebuild()
