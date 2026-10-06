@@ -146,6 +146,66 @@ class ActivityReadModelTests(unittest.TestCase):
                 service.build_activity_pass_text("user-1"),
             )
 
+    def test_sign_rank_uses_one_read_only_join_and_preserves_display(self) -> None:
+        with DatabaseUnitOfWork(self.database) as uow:
+            uow.execute(
+                "CREATE TABLE user_xiuxian(user_id TEXT PRIMARY KEY,user_name TEXT)"
+            )
+            uow.executemany(
+                "INSERT INTO user_xiuxian(user_id,user_name) VALUES(?,?)",
+                (("user-1", "甲"), ("user-2", "乙")),
+            )
+            uow.execute(
+                "UPDATE activity_user SET sign_days=6,total_sign_days=6,last_sign_date=? "
+                "WHERE user_id='user-1'",
+                ("2026-10-05",),
+            )
+            uow.executemany(
+                "INSERT INTO activity_user(user_id,sign_days,total_sign_days,last_sign_date) "
+                "VALUES(?,?,?,?)",
+                (
+                    ("user-2", 6, 8, "2026-10-04"),
+                    ("member-0003", 5, 7, "2026-10-03"),
+                ),
+            )
+        statements = []
+        from nonebot_plugin_xiuxian_2.features.activity.read_model_repository import (
+            ActivityReadModelSqlRepository,
+        )
+
+        class TracedUnitOfWork(DatabaseUnitOfWork):
+            def __enter__(inner_self):
+                result = super().__enter__()
+                result.connection.set_trace_callback(statements.append)
+                return result
+
+        application = ActivityReadModelApplication(
+            self.database,
+            repository=ActivityReadModelSqlRepository(self.database),
+            config_loader=lambda: {"name": "测试活动"},
+        )
+        with patch(
+            "nonebot_plugin_xiuxian_2.features.activity.read_model_repository.DatabaseUnitOfWork",
+            TracedUnitOfWork,
+        ):
+            text = application.sign_rank_text()
+
+        rank_reads = [
+            sql for sql in statements
+            if sql.lstrip().lower().startswith("select")
+            and "left join user_xiuxian" in sql.lower()
+        ]
+        writes = [
+            sql for sql in statements
+            if sql.lstrip().lower().startswith(("insert", "update", "delete"))
+        ]
+        self.assertEqual(1, len(rank_reads))
+        self.assertEqual([], writes)
+        self.assertIn("【测试活动排行】", text)
+        self.assertIn("1. 乙 累计签到 6 天", text)
+        self.assertIn("2. 甲 累计签到 6 天", text)
+        self.assertIn("3. 修士·0003 累计签到 5 天", text)
+
     def test_limited_shop_stock_is_aggregated_per_activity(self) -> None:
         statements = []
         real_connect = service.db_backend.connect_readonly

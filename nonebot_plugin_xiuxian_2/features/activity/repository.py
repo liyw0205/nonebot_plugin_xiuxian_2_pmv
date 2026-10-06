@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Any
 
 from .._service_port import ServicePort
+from .sign_settlement_repository import ActivitySignSettlementSqlRepository
 
 
 class ActivityRepository(ServicePort):
@@ -21,6 +22,7 @@ class ActivityRepository(ServicePort):
             "set_enabled": self._set_enabled,
         })
         self.database = str(database)
+        self.sign_settlement = ActivitySignSettlementSqlRepository(database)
 
     def _claim_all(self, **kwargs: Any):
         from ...compatibility.legacy_activity_claim_steps import build_legacy_activity_claim_runners
@@ -45,7 +47,11 @@ class ActivityRepository(ServicePort):
 
     def _claim_sign(self, **kwargs: Any):
         from ...xiuxian.xiuxian_activity.service import claim_sign
-        return claim_sign(str(kwargs.get("user_id", "")), str(kwargs.get("operation_id", "")))
+        return claim_sign(
+            str(kwargs.get("user_id", "")),
+            str(kwargs.get("operation_id", "")),
+            settlement_repository=self.sign_settlement,
+        )
 
     def _claim_collect(self, **kwargs: Any):
         from ...xiuxian.xiuxian_activity.service import claim_collect_phrase

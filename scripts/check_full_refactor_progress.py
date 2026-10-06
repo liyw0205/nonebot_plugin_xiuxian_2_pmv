@@ -392,6 +392,9 @@ def _slice_status() -> dict[str, dict[str, object]]:
     activity_read_model_application = (PACKAGE / "features" / "activity" / "read_model_application.py").read_text(encoding="utf-8")
     activity_read_model_repository = (PACKAGE / "features" / "activity" / "read_model_repository.py").read_text(encoding="utf-8")
     activity_read_model_tests = (ROOT / "tests" / "test_activity_read_model.py").read_text(encoding="utf-8")
+    activity_sign_repository = (PACKAGE / "features" / "activity" / "sign_settlement_repository.py").read_text(encoding="utf-8")
+    activity_application_tests = (PACKAGE / "features" / "activity" / "tests" / "test_activity_application.py").read_text(encoding="utf-8")
+    activity_sign_repository_tests = (PACKAGE / "features" / "activity" / "tests" / "test_sign_settlement_repository.py").read_text(encoding="utf-8")
     activity_cli = (PACKAGE / "cli.py").read_text(encoding="utf-8")
     activity_reward_application = (PACKAGE / "features" / "activity_reward" / "application.py").read_text(encoding="utf-8")
     activity_claim_repository = (PACKAGE / "features" / "activity_reward" / "claim_all_repository.py").read_text(encoding="utf-8")
@@ -1707,7 +1710,39 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "read_model_rendering_matches_legacy_contract": (
                 "test_read_model_application_preserves_task_and_pass_output" in activity_read_model_tests
             ),
-            "status": "activity_task_and_pass_read_models_owned_by_feature_application",
+            "sign_rank_matcher_uses_read_model": (
+                "activity_application.read_model.sign_rank_text(10)" in activity_commands
+                and "build_rank_text" not in activity_commands
+                and "def sign_rank_text(" in activity_read_model_application
+            ),
+            "sign_rank_is_bounded_join_and_read_only": (
+                "LEFT JOIN user_xiuxian" in activity_read_model_repository
+                and "ORDER BY activity_user.sign_days DESC" in activity_read_model_repository
+                and "LIMIT ?" in activity_read_model_repository
+                and "test_sign_rank_uses_one_read_only_join_and_preserves_display" in activity_read_model_tests
+            ),
+            "status": "activity_task_pass_and_sign_rank_read_models_owned_by_feature_application",
+        },
+        "activity_sign_in": {
+            "default_matcher_uses_feature_owned_settlement_repository": (
+                "settlement_repository=self.sign_settlement" in activity_command_repository
+                and "ActivitySignSettlementSqlRepository(database)" in activity_command_repository
+                and "ActivitySignSettlementSqlRepository" in activity_sign_repository
+                and "DatabaseUnitOfWork(self.database, immediate=True)" in activity_sign_repository
+            ),
+            "settlement_uses_existing_startup_schema_and_atomic_receipt": (
+                "activity_sign_settlement_operations" in activity_sign_repository
+                and "activity_sign_log" in activity_sign_repository
+                and "CREATE TABLE" not in activity_sign_repository
+                and "activity_sign_settlement_operations" in activity_state_migrations
+                and "test_settlement_and_receipt_are_atomic_and_replay_once" in activity_sign_repository_tests
+            ),
+            "sign_gameplay_event_replay_is_stable_and_retryable": (
+                "event_id=f\"activity-sign:{user_id}:{sign_date}\"" in activity_service
+                and "settlement_repository is not None" in activity_service
+                and "test_sign_projection_failure_replays_with_a_stable_event_receipt" in activity_application_tests
+            ),
+            "status": "sign_settlement_owned_by_activity_feature_repository_with_replayable_event_projection",
         },
         "dungeon_team": {
             "team_commands_application_owned": all(

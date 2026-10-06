@@ -17,7 +17,6 @@ from .service import (
     build_collect_bag_text,
     build_activity_points_text,
     build_activity_shop_text,
-    build_rank_text,
 )
 
 
@@ -252,7 +251,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 @activity_rank_cmd.handle(parameterless=[Cooldown(cd_time=0)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     await assign_bot(bot=bot, event=event)
-    await handle_send(bot, event, build_rank_text(10))
+    await handle_send(bot, event, activity_application.read_model.sign_rank_text(10))
 
 
 @activity_bag_cmd.handle(parameterless=[Cooldown(cd_time=0)])

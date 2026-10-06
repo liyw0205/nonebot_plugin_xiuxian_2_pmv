@@ -121,6 +121,20 @@ class ActivityReadModelApplication:
             lines.append("命令：活动战令 / 活动战令领取")
         return "\n".join(lines).strip()
 
+    def sign_rank_text(self, limit: int = 10) -> str:
+        config = self._config()
+        rows = self.repository.sign_rank(limit)
+        lines = [f"【{config.get('name', '节日签到活动')}排行】"]
+        if not rows:
+            lines.append("暂无排行数据")
+            return "\n".join(lines)
+        for index, row in enumerate(rows, 1):
+            lines.append(
+                f"{index}. {row['display_name']} 累计签到 "
+                f"{max(0, int(row.get('sign_days', 0) or 0))} 天"
+            )
+        return "\n".join(lines)
+
     def pass_text(self, user_id: str) -> str:
         from ...xiuxian.xiuxian_activity.activity_config import (
             _activity_config_key,

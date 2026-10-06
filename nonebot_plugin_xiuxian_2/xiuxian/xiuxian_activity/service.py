@@ -1833,7 +1833,22 @@ def _finish_sign_log(user_id: str, sign_date: str, status: str, message: str):
         conn.close()
 
 
-def claim_sign(user_id: str, operation_id: str | None = None) -> tuple[bool, str]:
+def _record_sign_activity_event(user_id: str, sign_date: str) -> list[str]:
+    event_time = datetime.strptime(f"{sign_date} 12:00:00", TIME_FMT).astimezone()
+    return record_activity_event(
+        user_id,
+        "sign_in",
+        event_id=f"activity-sign:{user_id}:{sign_date}",
+        occurred_at=event_time.isoformat(timespec="seconds"),
+    )
+
+
+def claim_sign(
+    user_id: str,
+    operation_id: str | None = None,
+    *,
+    settlement_repository=None,
+) -> tuple[bool, str]:
     cfg = load_config()
     runtime = activity_runtime_state(cfg)
     if not runtime.get("ok"):
@@ -1844,9 +1859,21 @@ def claim_sign(user_id: str, operation_id: str | None = None) -> tuple[bool, str
     uid = str(user_id)
     today = today_str()
     operation_id = str(operation_id or f"activity-sign:{uid}:{runtime_ids.new_id()}")
+    settlement = settlement_repository or _activity_sign_settlement_service()
+
+    def record_sign_event() -> list[str]:
+        try:
+            return _record_sign_activity_event(uid, today)
+        except Exception as e:
+            logger.warning(f"活动签到记录玩法掉落失败 user_id={uid}: {e}")
+            if settlement_repository is not None:
+                raise
+            return []
+
     # 同事件重放优先回放 operation，避免“今日已签到”前置拦截。
-    previous = _activity_sign_settlement_service().get_result(operation_id)
+    previous = settlement.get_result(operation_id)
     if previous is not None:
+        record_sign_event()
         lines = [
             f"{cfg.get('festival_name', '节日')}签到成功",
             f"累计签到：{previous.sign_days} 天",
@@ -1881,13 +1908,14 @@ def claim_sign(user_id: str, operation_id: str | None = None) -> tuple[bool, str
     finally:
         conn.close()
 
-    result = _activity_sign_settlement_service().settle(
+    result = settlement.settle(
         operation_id, uid, today,
         current_sign_days, current_total_sign_days, daily_reward_items,
         milestone_reward_items, XiuConfig().max_goods_num,
         daily_reward_text, milestone_reward_text,
     )
     if result.status == "duplicate":
+        record_sign_event()
         lines = [
             f"{cfg.get('festival_name', '节日')}签到成功",
             f"累计签到：{result.sign_days} 天",
@@ -1917,10 +1945,7 @@ def claim_sign(user_id: str, operation_id: str | None = None) -> tuple[bool, str
         if milestone_reward_text or milestone_reward.get("name"):
             title = str(milestone_reward.get("name") or f"累计{sign_days}天奖励")
             lines.append(_format_reward_result(title, milestone_reward_text, milestone_msg))
-    try:
-        lines.extend(record_activity_event(uid, "sign_in"))
-    except Exception as e:
-        logger.warning(f"活动签到记录玩法掉落失败 user_id={uid}: {e}")
+    lines.extend(record_sign_event())
     log_lines = list(lines)
     if reply_mode == "minimal":
         log_lines.append(_format_reward_result("今日奖励", daily_reward_text, daily_msg))

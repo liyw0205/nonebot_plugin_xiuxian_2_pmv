@@ -106,5 +106,32 @@ class ActivityReadModelSqlRepository:
             "highest_level": max(0, int((highest_row or {}).get("level") or 0)),
         }
 
+    def sign_rank(self, limit: int = 10) -> list[dict[str, Any]]:
+        if not self.database.is_file():
+            return []
+        limit = max(0, min(int(limit), 100))
+        if limit == 0:
+            return []
+        with DatabaseUnitOfWork(self.database, read_only=True) as uow:
+            self._assert_tables(uow, {"activity_user", "user_xiuxian"})
+            rows = uow.query_all(
+                "SELECT activity_user.user_id,activity_user.sign_days,"
+                "activity_user.total_sign_days,activity_user.last_sign_date,"
+                "user_xiuxian.user_name AS user_name FROM activity_user "
+                "LEFT JOIN user_xiuxian ON user_xiuxian.user_id=activity_user.user_id "
+                "ORDER BY activity_user.sign_days DESC,"
+                "activity_user.total_sign_days DESC,activity_user.last_sign_date ASC "
+                "LIMIT ?",
+                (limit,),
+            )
+        result = []
+        for row in rows:
+            user_id = str(row.get("user_id") or "")
+            name = str(row.get("user_name") or "").strip()
+            if not name:
+                name = f"修士·{user_id[-4:]}" if len(user_id) > 6 else user_id or "无名修士"
+            result.append({**row, "display_name": name})
+        return result
+
 
 __all__ = ["ActivityReadModelSqlRepository"]
