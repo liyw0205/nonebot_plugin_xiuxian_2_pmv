@@ -10928,11 +10928,12 @@
       "id": "route:GET:/api/activity/data:nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/activity.py:api_activity_data",
       "kind": "legacy_routes",
       "entry": "GET /api/activity/data -> nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/activity.py:api_activity_data",
-      "status": "受阻",
-      "reason": "The old Flask app and route modules are loaded and its server is enabled by default. Route registration is proven, but each handler's downstream ownership and replacement/compatibility decision is not closed.",
-      "unknown_edge": "route function -> old data/service or feature application -> state effect",
+      "status": "已迁移",
+      "reason": "The admin data response now comes from ActivityAdminDataApplication and one read-only game_db snapshot. Existing summaries, bounded leaderboards, optional user details, config-derived activity state, and display-name fallbacks remain in the JSON contract; missing schemas fail closed without request-time DDL.",
       "call_graph": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/activity.py:1853 -> Flask app.route(/api/activity/data) -> legacy handler -> downstream state effect not closed"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/activity.py:1858 api_activity_data -> ActivityApplication.admin_data.overview -> ActivityAdminDataApplication.overview -> ActivityAdminDataSqlRepository.overview_snapshot -> DatabaseUnitOfWork(game_db, read_only=True) reads activity_state.001 tables in one snapshot",
+        "ActivityAdminDataSqlRepository.overview_snapshot -> bounded top-user queries (LIMIT 1..50) and batched user_xiuxian name lookup -> existing JSON data envelope",
+        "xiuxian_web.core before_request -> admin authorization and declared READ permission"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
@@ -10940,7 +10941,13 @@
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/activity.py:1853"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/activity.py:1858",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/activity.py:1858-1870",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/access.py:28",
+        "nonebot_plugin_xiuxian_2/features/activity/application.py:5-16",
+        "nonebot_plugin_xiuxian_2/features/activity/admin_data_application.py:32-170",
+        "nonebot_plugin_xiuxian_2/features/activity/admin_data_repository.py:116-434",
+        "tests/test_activity_admin_data.py:171-198,226-264,295-330"
       ],
       "source_declaration_found": true,
       "source": {
@@ -10956,11 +10963,11 @@
       "id": "route:POST:/api/activity/data/adjust:nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/activity.py:api_activity_data_adjust",
       "kind": "legacy_routes",
       "entry": "POST /api/activity/data/adjust -> nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/activity.py:api_activity_data_adjust",
-      "status": "受阻",
-      "reason": "The old Flask app and route modules are loaded and its server is enabled by default. Route registration is proven, but each handler's downstream ownership and replacement/compatibility decision is not closed.",
-      "unknown_edge": "route function -> old data/service or feature application -> state effect",
+      "status": "已迁移",
+      "reason": "Points, collect-word inventory, and activity-pass experience adjustments now delegate to ActivityAdminDataApplication. Existing input validation, nonzero deltas, zero-clamping, cumulative-points behavior, first-character word handling, and response shape are preserved; each write uses an immediate game_db UoW over startup-created schema.",
       "call_graph": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/activity.py:1882 -> Flask app.route(/api/activity/data/adjust) -> legacy handler -> downstream state effect not closed"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/activity.py:1889 api_activity_data_adjust -> ActivityApplication.admin_data.adjust -> ActivityAdminDataApplication.adjust -> ActivityAdminDataSqlRepository.adjust_points/adjust_collect_word/adjust_pass_exp -> DatabaseUnitOfWork(game_db, immediate=True)",
+        "xiuxian_web.core before_request -> admin authorization, DATABASE_WRITE permission, and CSRF check before the POST handler"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
@@ -10968,7 +10975,12 @@
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/activity.py:1882"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/activity.py:1889",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/activity.py:1889-1904",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/access.py:32-33",
+        "nonebot_plugin_xiuxian_2/features/activity/admin_data_application.py:183-235",
+        "nonebot_plugin_xiuxian_2/features/activity/admin_data_repository.py:475-546",
+        "tests/test_activity_admin_data.py:266-293,295-330"
       ],
       "source_declaration_found": true,
       "source": {
@@ -10984,11 +10996,11 @@
       "id": "route:POST:/api/activity/data/reset:nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/activity.py:api_activity_data_reset",
       "kind": "legacy_routes",
       "entry": "POST /api/activity/data/reset -> nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/activity.py:api_activity_data_reset",
-      "status": "受阻",
-      "reason": "The old Flask app and route modules are loaded and its server is enabled by default. Route registration is proven, but each handler's downstream ownership and replacement/compatibility decision is not closed.",
-      "unknown_edge": "route function -> old data/service or feature application -> state effect",
+      "status": "已迁移",
+      "reason": "All legacy reset scopes and affected-row messages now delegate to ActivityAdminDataApplication. Deletes are validated before opening one immediate game_db UoW, remain atomic, preserve activity-key and main-activity-key filtering, and do not create schema or add operation receipts that did not exist in the legacy contract.",
       "call_graph": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/activity.py:1869 -> Flask app.route(/api/activity/data/reset) -> legacy handler -> downstream state effect not closed"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/activity.py:1874 api_activity_data_reset -> ActivityApplication.admin_data.reset -> ActivityAdminDataApplication.reset -> ActivityAdminDataSqlRepository.reset -> DatabaseUnitOfWork(game_db, immediate=True) deletes activity_state.001 rows atomically",
+        "xiuxian_web.core before_request -> admin authorization, DATABASE_WRITE permission, and CSRF check before the POST handler"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
@@ -10996,7 +11008,12 @@
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/activity.py:1869"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/activity.py:1874",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/activity.py:1874-1885",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/access.py:32",
+        "nonebot_plugin_xiuxian_2/features/activity/admin_data_application.py:172-181",
+        "nonebot_plugin_xiuxian_2/features/activity/admin_data_repository.py:436-473",
+        "tests/test_activity_admin_data.py:200-224,295-330"
       ],
       "source_declaration_found": true,
       "source": {

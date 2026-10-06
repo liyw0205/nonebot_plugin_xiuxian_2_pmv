@@ -298,6 +298,10 @@ class RefactorProgressTests(unittest.TestCase):
         self.assertTrue(activity_web_config["management_and_config_routes_use_feature_config_application"])
         self.assertTrue(activity_web_config["configuration_http_contracts_are_exercised_through_flask_client"])
         self.assertTrue(activity_web_config["static_template_routes_are_explicit_read_only_compatibility"])
+        activity_web_admin_data = slices["activity_web_admin_data_owner"]
+        self.assertTrue(activity_web_admin_data["data_routes_use_feature_owned_admin_data_application"])
+        self.assertTrue(activity_web_admin_data["admin_data_uses_read_only_snapshot_and_atomic_existing_schema_writes"])
+        self.assertTrue(activity_web_admin_data["admin_data_http_and_legacy_response_contracts_are_tested"])
         activity_static_help = slices["activity_static_help"]
         self.assertTrue(activity_static_help["help_and_manage_remain_static_compatibility_handlers"])
         boss = slices["activity_boss"]

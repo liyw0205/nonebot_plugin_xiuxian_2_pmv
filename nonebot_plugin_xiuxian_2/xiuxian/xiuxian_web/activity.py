@@ -23,14 +23,9 @@ from ..xiuxian_activity.service import (
     DEFAULT_POINT_EVENT_RULES,
     STAGE_FEATURES,
     STAGE_TYPE_LABELS,
-    adjust_activity_points,
-    adjust_activity_pass_exp,
-    adjust_collect_word,
     activity_runtime_state,
     activity_state,
-    get_activity_data_overview,
     parse_reward,
-    reset_activity_data,
 )
 
 
@@ -160,6 +155,11 @@ def _activity_config_application():
 
         _activity_application_instance = ActivityApplication(get_paths().game_db)
     return _activity_application_instance.config
+
+
+def _activity_admin_data_application():
+    _activity_config_application()
+    return _activity_application_instance.admin_data
 
 
 def _task_row(key: str, reward: str, *, target: int | None = None, name: str | None = None) -> dict:
@@ -1860,7 +1860,7 @@ def api_activity_data():
         return api_error("未登录")
 
     try:
-        data = get_activity_data_overview(
+        data = _activity_admin_data_application().overview(
             activity_key=request.args.get("activity_key"),
             user_id=request.args.get("user_id"),
             limit=request.args.get("limit", 10),
@@ -1877,7 +1877,9 @@ def api_activity_data_reset():
 
     try:
         payload = request.get_json() or {}
-        message = reset_activity_data(payload.get("scope"), payload.get("activity_key"))
+        message = _activity_admin_data_application().reset(
+            payload.get("scope"), payload.get("activity_key")
+        )
         return api_success(message=message)
     except Exception as e:
         return api_error(str(e))
@@ -1890,27 +1892,13 @@ def api_activity_data_adjust():
 
     try:
         payload = request.get_json() or {}
-        adjust_type = _clean_text(payload.get("type"))
-        if adjust_type == "points":
-            result = adjust_activity_points(
-                payload.get("activity_key"),
-                payload.get("user_id"),
-                payload.get("amount"),
-            )
-        elif adjust_type == "word":
-            result = adjust_collect_word(
-                payload.get("activity_key"),
-                payload.get("user_id"),
-                payload.get("word_char"),
-                payload.get("amount"),
-            )
-        elif adjust_type == "pass_exp":
-            result = adjust_activity_pass_exp(
-                payload.get("user_id"),
-                payload.get("amount"),
-            )
-        else:
-            raise ValueError("调整类型无效")
+        result = _activity_admin_data_application().adjust(
+            adjust_type=_clean_text(payload.get("type")),
+            activity_key=payload.get("activity_key"),
+            user_id=payload.get("user_id"),
+            word_char=payload.get("word_char"),
+            amount=payload.get("amount"),
+        )
         return api_success(message="活动数据已调整", result=result)
     except Exception as e:
         return api_error(str(e))

@@ -392,6 +392,9 @@ def _slice_status() -> dict[str, dict[str, object]]:
     activity_read_model_application = (PACKAGE / "features" / "activity" / "read_model_application.py").read_text(encoding="utf-8")
     activity_read_model_repository = (PACKAGE / "features" / "activity" / "read_model_repository.py").read_text(encoding="utf-8")
     activity_read_model_tests = (ROOT / "tests" / "test_activity_read_model.py").read_text(encoding="utf-8")
+    activity_admin_data_application = (PACKAGE / "features" / "activity" / "admin_data_application.py").read_text(encoding="utf-8")
+    activity_admin_data_repository = (PACKAGE / "features" / "activity" / "admin_data_repository.py").read_text(encoding="utf-8")
+    activity_admin_data_tests = (ROOT / "tests" / "test_activity_admin_data.py").read_text(encoding="utf-8")
     activity_config_application = (PACKAGE / "features" / "activity" / "config_application.py").read_text(encoding="utf-8")
     activity_config_repository = (PACKAGE / "features" / "activity" / "config_repository.py").read_text(encoding="utf-8")
     activity_config_event_service = (PACKAGE / "xiuxian" / "xiuxian_activity" / "config_event_service.py").read_text(encoding="utf-8")
@@ -1833,6 +1836,42 @@ def _slice_status() -> dict[str, dict[str, object]]:
                 and "def test_static_template_routes_remain_read_only" in activity_config_event_tests
             ),
             "status": "activity_management_and_configuration_routes_use_the_config_application",
+        },
+        "activity_web_admin_data_owner": {
+            "data_routes_use_feature_owned_admin_data_application": (
+                "def _activity_admin_data_application():" in activity_web
+                and "_activity_application_instance.admin_data" in activity_web
+                and "self.admin_data = ActivityAdminDataApplication(database)" in activity_application
+                and "_activity_admin_data_application().overview(" in activity_web
+                and "_activity_admin_data_application().reset(" in activity_web
+                and "_activity_admin_data_application().adjust(" in activity_web
+                and all(
+                    legacy not in activity_web
+                    for legacy in (
+                        "get_activity_data_overview(",
+                        "reset_activity_data(",
+                        "adjust_activity_points(",
+                        "adjust_collect_word(",
+                        "adjust_activity_pass_exp(",
+                    )
+                )
+            ),
+            "admin_data_uses_read_only_snapshot_and_atomic_existing_schema_writes": (
+                "DatabaseUnitOfWork(self.database, read_only=True)" in activity_admin_data_repository
+                and "DatabaseUnitOfWork(self.database, immediate=True)" in activity_admin_data_repository
+                and "CREATE TABLE" not in activity_admin_data_repository
+                and "activity_state.001 schema_missing" in activity_admin_data_repository
+                and "activity_state.003 schema_missing" in activity_admin_data_repository
+                and "def overview_snapshot(" in activity_admin_data_repository
+            ),
+            "admin_data_http_and_legacy_response_contracts_are_tested": (
+                "def test_overview_matches_legacy_http_projection" in activity_admin_data_tests
+                and "def test_overview_uses_one_read_only_snapshot_and_does_not_create_database" in activity_admin_data_tests
+                and "def test_reset_is_atomic_and_preserves_each_scope" in activity_admin_data_tests
+                and "def test_adjustments_preserve_clamping_and_validation" in activity_admin_data_tests
+                and "def test_web_routes_use_application_and_keep_csrf_boundary" in activity_admin_data_tests
+            ),
+            "status": "activity_admin_overview_reset_and_adjust_use_one_feature_owned_game_db_boundary",
         },
         "activity_static_help": {
             "help_and_manage_remain_static_compatibility_handlers": (
