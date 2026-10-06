@@ -2,7 +2,11 @@
 
 状态：进行中。`v1.1.0` 的 P0-P7 发布证据继续保留，但不作为底层全面重构完成证明。
 
-**当前交付与队列（2026-10-07，本段优先于下文历史“下一片”）**：Backups 已在 `b845ce7d` 提交并推送，远端分支已核对；30 条冻结 route 全部归类，不再重开。当前按 `allowed_features` 固定顺序停在 `admin`，本轮已一次盘清 44 个未关项并记录于 `docs/features/admin.md`。运行配置 6 条命令整组收口后，admin blocker 为 38；下一组是已具有 feature 写终端的 13 条资产/重置命令，只补真实缺失的失败结果契约、仙缘清池测试和调用链证据，不重新搬迁仓储。其后依文档分组推进，admin 未归类完不跳其它子插件或 Web 模块。
+**当前交付与队列（2026-10-07，本段优先于下文历史“下一片”）**：Backups 已在 `b845ce7d` 提交推送，运行配置 6 命令在 `8906c9a7` 提交推送。当前按 `allowed_features` 固定顺序停在 `admin`，44 个未关项的共同 owner 已一次盘清并记录于 `docs/features/admin.md`。已有资产/重置 13 入口本组补真实缺陷、专项测试和证据后收口，admin blocker 为 25；下一组统一归类 9 条无独立业务状态的兼容输出，然后按黑屋、命令管控、广播等组推进，admin 未归类完不跳其它子插件或 Web 模块。
+
+**Admin 既有资产/重置 owner 验收（2026-10-07）**：保留现有 admin_asset/work/tower/boss/base 写终端，一次归类传承、修为、造化、轮回、创造、毁灭、修仙适配、新手、悬赏、塔、BOSS、仙缘、易名 13 个冻结入口，不再新造仓储。两名只读代理分工复核结果契约和仙缘回滚，发现并修复四个真实 helper 的重复 `status` 关键字 TypeError（旧测试只查字符串、事务测试走旧 service）、易名与 BOSS 失败误报、传承全服 in_progress 误报。已关闭的历练重置因新证据显示 schema_missing 被报成功，仅补失败回复，不重迁实现。仙缘新增缺库免创建、缺赠礼者整笔拒绝，补部分领取退剩余、两笔累计超限后的全部退款回滚、空/缺表和重复清空回归；旧 JSON 未导入池、全量目标读取及 operation-ID 清池回执不宣称已解决。最终聚焦集 `271 passed, 1 warning, 2 subtests passed`（16.19 秒，warning 为 pytest 预加载 anyio 不能重写），四项 mutation result gate 通过；冻结 membership 有效、integrity errors 为 0，计数 `204/98/19/175`，Phase2 约 0.21 秒仍因其余 175 个 blocker 返回 1。
+
+**本组验证隔离记录（2026-10-07）**：前期单独跑 rename migration 测试遇到 NoneBot 未初始化/Activity 导入顺序错误；随后 03:26 的一次直接 `nonebot.init(); import ...plugin` 验证漏设测试数据隔离，日志显示连接默认 impart 数据库，不能宣称本组未接触运行数据或排除导入初始化写入。进程已结束，已告知用户，没有执行管理命令，也没有清理、覆盖或回滚运行数据。最终回归严格先 `import tests` 建立临时数据目录，再初始化 NoneBot/插件并调用 pytest，日志确认路径为 `/tmp/xiuxian-unittest-*/xiuxian`；以后需要启动导入的检查必须沿此隔离顺序，不能直接在默认环境 import 生产插件。未执行全量 inventory freshness 或线上性能测量；用户 `boss_info.json` 保持未暂存。
 
 **Admin 运行配置 owner（2026-10-07）**：群修仙、私聊、自动灵根、自动宗名、欢迎开/关共 6 个冻结命令统一调用 `AdminConfigApplication -> AdminConfigRepository`。修复 `private_enabled/auto_root_selection/auto_sect_name` 与真实字段不一致导致的 KeyError、关闭失效及重复判断错误；旧 `JsonConfig` 继承同一仓储，备注/置顶/全量群等兼容写入共用单进程锁，保留未知字段和旧字段名。原子替换、路径/inode/mtime/size 缓存键、深拷贝、失败不发布和重复值免写均有回归；不宣称跨进程协调、operation-ID 回执或 notice 生命周期全面迁移。实际 handler 函数抽取执行、临时 JSON、兼容读取、权限及 Web/progress/Phase2 定向集 `70 passed, 2 subtests passed`（4.86 秒），四项 config owner gate 全 true；冻结 membership 有效，integrity errors 为 0，计数 `191/98/19/188`。Phase2 检查约 0.25 秒，仍因其它 188 个 blocker 返回 1，不是本组失败。未运行全量 inventory freshness、线上性能测量或生产数据操作。证据刷新期间复现工具缺陷：带 `no-argument branch` 等说明的 handler 边不会更新行号，导致已关闭条目被追加“未审”边；已修正刷新逻辑并增加回归，没有重开该业务实现。保留用户 `boss_info.json` 修改，选择性提交本组。
 

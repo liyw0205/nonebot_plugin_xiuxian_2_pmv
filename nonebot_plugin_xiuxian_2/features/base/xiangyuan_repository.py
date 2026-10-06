@@ -407,6 +407,8 @@ class XiangyuanSqlRepository:
         max_goods_num = int(max_goods_num)
         if max_goods_num <= 0:
             raise ValueError("max_goods_num must be positive")
+        if not self._game_database.is_file():
+            return 0, 0, 0, 0
         with self._lock, DatabaseUnitOfWork(self._game_database, immediate=True) as uow:
             conn = uow.connection
             try:
@@ -428,17 +430,22 @@ class XiangyuanSqlRepository:
                 now = self._now()
                 for group_id, gift_id, giver_id, remaining_stone in rows:
                     remaining_stone = int(remaining_stone)
+                    item_rows = conn.execute(
+                        "SELECT goods_id,goods_name,goods_type,quantity FROM xiangyuan_gift_items "
+                        "WHERE group_id=? AND gift_id=? AND quantity>0",
+                        (str(group_id), int(gift_id)),
+                    ).fetchall()
+                    if (remaining_stone > 0 or item_rows) and conn.execute(
+                        "SELECT 1 FROM user_xiuxian WHERE user_id=? LIMIT 1", (str(giver_id),)
+                    ).fetchone() is None:
+                        raise ValueError("user_missing")
                     if remaining_stone > 0:
                         conn.execute(
                             "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)+CAST(? AS REAL) WHERE user_id=?",
                             (remaining_stone, str(giver_id)),
                         )
                         refund_stone += remaining_stone
-                    for item in conn.execute(
-                        "SELECT goods_id,goods_name,goods_type,quantity FROM xiangyuan_gift_items "
-                        "WHERE group_id=? AND gift_id=? AND quantity>0",
-                        (str(group_id), int(gift_id)),
-                    ).fetchall():
+                    for item in item_rows:
                         goods_id, name, item_type, quantity = int(item[0]), str(item[1]), str(item[2]), int(item[3])
                         current = conn.execute(
                             "SELECT COALESCE(goods_num,0) FROM back WHERE user_id=? AND goods_id=?",

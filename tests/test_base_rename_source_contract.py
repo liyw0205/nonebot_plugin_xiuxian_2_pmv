@@ -27,6 +27,9 @@ def test_admin_rename_default_writer_uses_base_application():
     assert "admin_base_application.rename(" in handler
     assert '_admin_operation_id(event, "user-rename", target_user_id)' in handler
     assert "_sql_message().update_user_name(" not in handler
+    assert 'if status == "unchanged":' in handler
+    assert 'elif outcome.ok:' in handler
+    assert 'response = f"道号修改未完成：{message}"' in handler
 
 
 def test_base_rename_migration_routes_only_to_game_database():

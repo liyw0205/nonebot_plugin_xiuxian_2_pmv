@@ -576,7 +576,7 @@
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:340 swap_id_cmd = on_command('ID交换') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2637 swap_id_cmd_ -> AdminApplication.swap_user_ids(operation_id, id1, id2) -> AdminIdSwapSqlRepository.swap",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2653 swap_id_cmd_ -> AdminApplication.swap_user_ids(operation_id, id1, id2) -> AdminIdSwapSqlRepository.swap",
         "repository validates both IDs across configured target columns in game_db/impart_db/trade_db/player_db; it atomically creates the game_db operation plan, operation-ledger entry, and outbox event before starting effects",
         "before user-data writes repository preflights a three-phase WAL workspace budget from the four database file sizes and preserves the shared 64 MiB/10% disk reserve; insufficient capacity leaves the durable plan pending for a later retry",
         "repository applies each database's three-phase temporary-ID replacement in its own immediate UoW with foreign-key checks disabled only for the swap transaction, then commits an admin_id_swap_step_receipts row in that same transaction; SQLite cache is capped at 2 MiB and temp_store uses FILE",
@@ -596,7 +596,7 @@
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_utils/xiuxian2_handle.py:4609-4617",
         "nonebot_plugin_xiuxian_2/features/admin/tests/test_id_swap_repository.py:54-285",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:340",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2637"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2653"
       ],
       "source_declaration_found": true,
       "source": {
@@ -615,7 +615,7 @@
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:339 update_id_cmd = on_command('ID更新') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2608 update_id_cmd_ -> AdminApplication.update_user_id",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2624 update_id_cmd_ -> AdminApplication.update_user_id",
         "AdminApplication.update_user_id -> AdminIdUpdateSqlRepository.update -> shared ID mutation lock -> game operation plan/outbox -> frozen target columns and old/new ID validation",
         "AdminIdUpdateSqlRepository._resume -> each of four SQLite databases: update whitelisted columns + step receipt in one transaction -> game progress receipt",
         "AdminIdUpdateSqlRepository._rename_player_directory -> recoverable players/<old_id> to players/<new_id> rename -> roster/player-data cache invalidation -> ledger/outbox completion",
@@ -635,7 +635,7 @@
         "nonebot_plugin_xiuxian_2/features/admin/tests/test_id_update_repository.py",
         "nonebot_plugin_xiuxian_2/features/admin/tests/test_id_swap_repository.py",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:339",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2608"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2624"
       ],
       "source_declaration_found": true,
       "source": {
@@ -723,7 +723,7 @@
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:334 dm_command = on_command('dm') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2483 dm_command_ -> str(args).strip() -> fix_mqqapi_inlinecmd_links -> MessageSegment.markdown(bot, text) -> delivery_service.reply(bot, event, msg)",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2499 dm_command_ -> str(args).strip() -> fix_mqqapi_inlinecmd_links -> MessageSegment.markdown(bot, text) -> delivery_service.reply(bot, event, msg)",
         "MessageDeliveryService.reply maps group/private/channel events to a SendRequest -> send dispatches to the adapter sender; an unknown event scene calls bot.send directly",
         "successful group/private adapter send -> adapter_message_sender._record_send -> record_send_message -> _insert_message_record -> message_db.insert_message_record -> bounded-count async message DB queue -> messages.content",
         "successful channel send -> MessageDeliveryService._send_channel -> record_send_message -> message DB queue; queue-full drops a history record without blocking delivery",
@@ -740,7 +740,7 @@
         "nonebot_plugin_xiuxian_2/xiuxian/adapter_message_records.py:399-445",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_utils/message_db.py:161-175,422-427,556-604,734-761",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:334",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2483"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2499"
       ],
       "source_declaration_found": true,
       "source": {
@@ -758,10 +758,10 @@
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2347 mb_template_test = on_command('md模板') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2349 mb_template_test_ -> parse operator arguments and in-memory XiuConfig defaults into template_id, button_id, and parameter values",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2349 mb_template_test_ -> MessageSegment.markdown_template(bot, template_id, params, button_id) selects QQ or OneBot v11 message segments; unsupported adapters fail closed",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2349 mb_template_test_ -> delivery_service.reply -> scene-specific SendRequest -> MessageDeliveryService.send -> adapter sender",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2363 mb_template_test = on_command('md模板') -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2365 mb_template_test_ -> parse operator arguments and in-memory XiuConfig defaults into template_id, button_id, and parameter values",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2365 mb_template_test_ -> MessageSegment.markdown_template(bot, template_id, params, button_id) selects QQ or OneBot v11 message segments; unsupported adapters fail closed",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2365 mb_template_test_ -> delivery_service.reply -> scene-specific SendRequest -> MessageDeliveryService.send -> adapter sender",
         "successful adapter send -> record_send_message -> bounded asynchronous message-history queue -> messages.content; the writer applies configured size/age cleanup no more than once per 600 seconds",
         "No call edge from this command to player/game repositories, legacy business writers, or business files"
       ],
@@ -775,8 +775,8 @@
         "nonebot_plugin_xiuxian_2/xiuxian/adapter_message_sender.py:66-82,98-178",
         "nonebot_plugin_xiuxian_2/xiuxian/adapter_message_records.py:399-445",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_utils/message_db.py:161-175,422-427,556-604,734-761",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2347",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2349"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2363",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2365"
       ],
       "source_declaration_found": true,
       "source": {
@@ -1365,14 +1365,14 @@
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_boss/__init__.py:187 boss_integral_use = on_command('世界BOSS兑换') aliases=世界Boss兑换,世界boss兑换 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_boss/__init__.py:1428 boss_integral_use_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_boss/__init__.py:1431 boss_integral_use_ -> legacy downstream effect not closed in this frozen item"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_boss/__init__.py:187",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_boss/__init__.py:1428"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_boss/__init__.py:1431"
       ],
       "source_declaration_found": true,
       "source": {
@@ -1721,22 +1721,28 @@
       "id": "command:admin:传承力量",
       "kind": "commands",
       "entry": "admin:传承力量 (aliases: )",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "The default mutation already terminates in the existing feature application/repository listed below; this review closes the frozen evidence rather than introducing a second implementation. Legacy target/profile/config reads and adapter rendering remain compatibility consumers. Single/batch branches retain their repository-specific failure and replay semantics; whole-roster reads are not claimed to be bounded. Result adapters and failure replies are covered by executed source-function regressions.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:311 ccll_command = on_command('传承力量') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:601 ccll_command_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:607 ccll_command_ -> admin_asset_application.adjust_impart_stone/adjust_impart_stone_batch -> AdminAssetApplication -> AdminImpartStoneSqlRepository / AdminImpartStoneBatchSqlRepository"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
+        "nonebot_plugin_xiuxian_2/features/admin_asset/application.py",
+        "nonebot_plugin_xiuxian_2/features/admin_asset/impart_stone_repository.py",
+        "nonebot_plugin_xiuxian_2/features/admin_asset/impart_stone_batch_repository.py",
+        "tests/test_admin_impart_stone_adjustment.py",
+        "tests/test_admin_impart_stone_batch_adjustment.py",
+        "tests/test_admin_mutation_results.py",
+        "tests/test_admin_progress_contract.py",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:311",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:601"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:607"
       ],
       "source_declaration_found": true,
       "source": {
@@ -1966,22 +1972,26 @@
       "id": "command:admin:修为调整",
       "kind": "commands",
       "entry": "admin:修为调整 (aliases: )",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "The default mutation already terminates in the existing feature application/repository listed below; this review closes the frozen evidence rather than introducing a second implementation. Legacy target/profile/config reads and adapter rendering remain compatibility consumers. Single/batch branches retain their repository-specific failure and replay semantics; whole-roster reads are not claimed to be bounded. Result adapters and failure replies are covered by executed source-function regressions.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:309 adjust_exp_command = on_command('修为调整') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:739 adjust_exp_command_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:749 adjust_exp_command_ -> _adjust_admin_exp -> admin_asset_application.adjust_exp -> AdminAssetApplication -> AdminExpAdjustmentSqlRepository"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
+        "nonebot_plugin_xiuxian_2/features/admin_asset/application.py",
+        "nonebot_plugin_xiuxian_2/features/admin_asset/exp_repository.py",
+        "tests/test_admin_exp_adjustment_transaction.py",
+        "tests/test_admin_mutation_results.py",
+        "tests/test_admin_progress_contract.py",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:309",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:739"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:749"
       ],
       "source_declaration_found": true,
       "source": {
@@ -2001,14 +2011,14 @@
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:320 super_help = on_command('修仙手册') aliases=修仙管理 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2053 super_help_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2069 super_help_ -> legacy downstream effect not closed in this frozen item"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:320",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2053"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2069"
       ],
       "source_declaration_found": true,
       "source": {
@@ -2020,22 +2030,26 @@
       "id": "command:admin:修仙适配",
       "kind": "commands",
       "entry": "admin:修仙适配 (aliases: )",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "The default mutation already terminates in the existing feature application/repository listed below; this review closes the frozen evidence rather than introducing a second implementation. Legacy target/profile/config reads and adapter rendering remain compatibility consumers. Single/batch branches retain their repository-specific failure and replay semantics; whole-roster reads are not claimed to be bounded. Result adapters and failure replies are covered by executed source-function regressions.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:321 xiuxian_updata_level = on_command('修仙适配') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:1750 xiuxian_updata_level_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:1760 xiuxian_updata_level_ -> admin_asset_application.adapt_legacy_realms -> AdminAssetApplication -> AdminLegacyRealmAdaptationSqlRepository.adapt"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
+        "nonebot_plugin_xiuxian_2/features/admin_asset/application.py",
+        "nonebot_plugin_xiuxian_2/features/admin_asset/legacy_realm_adaptation_repository.py",
+        "nonebot_plugin_xiuxian_2/features/admin_asset/tests/test_legacy_realm_adaptation_repository.py",
+        "tests/test_admin_mutation_results.py",
+        "tests/test_admin_progress_contract.py",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:321",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:1750"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:1760"
       ],
       "source_declaration_found": true,
       "source": {
@@ -2176,14 +2190,14 @@
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:343 global_broadcast_cmd = on_command('全局广播') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2731 global_broadcast_cmd_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2747 global_broadcast_cmd_ -> legacy downstream effect not closed in this frozen item"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:343",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2731"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2747"
       ],
       "source_declaration_found": true,
       "source": {
@@ -2314,22 +2328,31 @@
       "id": "command:admin:创造力量",
       "kind": "commands",
       "entry": "admin:创造力量 (aliases: )",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "The default mutation already terminates in the existing feature application/repository listed below; this review closes the frozen evidence rather than introducing a second implementation. Legacy target/profile/config reads and adapter rendering remain compatibility consumers. Single/batch branches retain their repository-specific failure and replay semantics; whole-roster reads are not claimed to be bounded. Result adapters and failure replies are covered by executed source-function regressions.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:313 cz = on_command('创造力量') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:965 cz_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:975 cz_ -> _grant_admin_item/_grant_admin_accessory and admin_asset_application.adjust_item_batch/grant_accessory_batch -> AdminAssetApplication -> AdminItemSqlRepository / AdminItemBatchSqlRepository / AdminAccessorySqlRepository / AdminAccessoryBatchSqlRepository"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
+        "nonebot_plugin_xiuxian_2/features/admin_asset/application.py",
+        "nonebot_plugin_xiuxian_2/features/admin_asset/item_repository.py",
+        "nonebot_plugin_xiuxian_2/features/admin_asset/item_batch_repository.py",
+        "nonebot_plugin_xiuxian_2/features/admin_asset/accessory_repository.py",
+        "nonebot_plugin_xiuxian_2/features/admin_asset/accessory_batch_repository.py",
+        "tests/test_admin_item_grant_transaction.py",
+        "tests/test_admin_accessory_adjustment.py",
+        "tests/test_admin_accessory_batch_adjustment.py",
+        "tests/test_admin_mutation_results.py",
+        "tests/test_admin_progress_contract.py",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:313",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:965"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:975"
       ],
       "source_declaration_found": true,
       "source": {
@@ -3145,14 +3168,14 @@
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:352 cancel_broadcast_cmd = on_command('取消广播') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2774 cancel_broadcast_cmd_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2790 cancel_broadcast_cmd_ -> legacy downstream effect not closed in this frozen item"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:352",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2774"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2790"
       ],
       "source_declaration_found": true,
       "source": {
@@ -3335,7 +3358,7 @@
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:316 set_xiuxian = on_command('启用修仙功能') aliases=禁用修仙功能 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:1657 open_xiuxian_ -> admin_config_application.set_group_enabled -> AdminConfigApplication -> AdminConfigRepository.update -> atomic_write(config.json)",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:1667 open_xiuxian_ -> admin_config_application.set_group_enabled -> AdminConfigApplication -> AdminConfigRepository.update -> atomic_write(config.json)",
         "legacy JsonConfig(AdminConfigRepository) consumers -> same canonical JSON state and path-aware cache; legacy remark/pin/full-message writes use the same serialized update"
       ],
       "evidence": [
@@ -3348,7 +3371,7 @@
         "tests/test_admin_config_owner.py",
         "tests/test_admin_progress_contract.py",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:316",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:1657"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:1667"
       ],
       "source_declaration_found": true,
       "source": {
@@ -3367,7 +3390,7 @@
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:317 set_private_chat = on_command('启用私聊功能') aliases=禁用私聊功能 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:1687 set_private_chat_ -> admin_config_application.set_switch -> AdminConfigApplication -> AdminConfigRepository.update -> atomic_write(config.json)",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:1697 set_private_chat_ -> admin_config_application.set_switch -> AdminConfigApplication -> AdminConfigRepository.update -> atomic_write(config.json)",
         "legacy JsonConfig(AdminConfigRepository) consumers -> same canonical JSON state and path-aware cache; legacy remark/pin/full-message writes use the same serialized update"
       ],
       "evidence": [
@@ -3380,7 +3403,7 @@
         "tests/test_admin_config_owner.py",
         "tests/test_admin_progress_contract.py",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:317",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:1687"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:1697"
       ],
       "source_declaration_found": true,
       "source": {
@@ -3399,7 +3422,7 @@
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:319 set_auto_sect_name = on_command('启用自动宗名') aliases=禁用自动宗名 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:1729 set_auto_sect_name_ -> admin_config_application.set_switch -> AdminConfigApplication -> AdminConfigRepository.update -> atomic_write(config.json)",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:1739 set_auto_sect_name_ -> admin_config_application.set_switch -> AdminConfigApplication -> AdminConfigRepository.update -> atomic_write(config.json)",
         "legacy JsonConfig(AdminConfigRepository) consumers -> same canonical JSON state and path-aware cache; legacy remark/pin/full-message writes use the same serialized update"
       ],
       "evidence": [
@@ -3412,7 +3435,7 @@
         "tests/test_admin_config_owner.py",
         "tests/test_admin_progress_contract.py",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:319",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:1729"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:1739"
       ],
       "source_declaration_found": true,
       "source": {
@@ -3765,14 +3788,14 @@
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:330 blackhouse = on_command('小黑屋') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:1948 _ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:1964 _ -> legacy downstream effect not closed in this frozen item"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:330",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:1948"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:1964"
       ],
       "source_declaration_found": true,
       "source": {
@@ -3847,14 +3870,14 @@
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:367 broadcast_help_cmd = on_command('广播帮助') aliases=广播指令,广播说明 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2800 broadcast_help_cmd_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2816 broadcast_help_cmd_ -> legacy downstream effect not closed in this frozen item"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:367",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2800"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2816"
       ],
       "source_declaration_found": true,
       "source": {
@@ -3905,7 +3928,7 @@
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:318 set_auto_root = on_command('开启自动灵根') aliases=关闭自动灵根 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:1708 set_auto_root_ -> admin_config_application.set_switch -> AdminConfigApplication -> AdminConfigRepository.update -> atomic_write(config.json)",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:1718 set_auto_root_ -> admin_config_application.set_switch -> AdminConfigApplication -> AdminConfigRepository.update -> atomic_write(config.json)",
         "legacy JsonConfig(AdminConfigRepository) consumers -> same canonical JSON state and path-aware cache; legacy remark/pin/full-message writes use the same serialized update"
       ],
       "evidence": [
@@ -3918,7 +3941,7 @@
         "tests/test_admin_config_owner.py",
         "tests/test_admin_progress_contract.py",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:318",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:1708"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:1718"
       ],
       "source_declaration_found": true,
       "source": {
@@ -4779,14 +4802,14 @@
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:335 keyboard_test_cmd = on_command('按钮测试') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2454 keyboard_test_cmd_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2470 keyboard_test_cmd_ -> legacy downstream effect not closed in this frozen item"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:335",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2454"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2470"
       ],
       "source_declaration_found": true,
       "source": {
@@ -5123,20 +5146,25 @@
       "id": "command:admin:易名",
       "kind": "commands",
       "entry": "admin:易名 (aliases: )",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "The default mutation already terminates in the existing feature application/repository listed below; this review closes the frozen evidence rather than introducing a second implementation. Legacy target/profile/config reads and adapter rendering remain compatibility consumers. Single/batch branches retain their repository-specific failure and replay semantics; whole-roster reads are not claimed to be bounded. Result adapters and failure replies are covered by executed source-function regressions.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:337 admin_rename_cmd = on_command('易名') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:405 admin_rename_cmd_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:405 admin_rename_cmd_ -> admin_base_application.rename -> BaseApplication.rename -> BaseRenameSqlRepository.rename (game DB mutation and receipt)"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
+        "nonebot_plugin_xiuxian_2/features/base/application.py",
+        "nonebot_plugin_xiuxian_2/features/base/rename_repository.py",
+        "nonebot_plugin_xiuxian_2/features/base/tests/test_rename_repository.py",
+        "tests/test_base_rename_source_contract.py",
+        "tests/test_admin_mutation_results.py",
+        "tests/test_admin_progress_contract.py",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:337",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:405"
       ],
@@ -5249,14 +5277,14 @@
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:332 view_blackhouse = on_command('查看小黑屋') aliases=小黑屋列表 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2036 _ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2052 _ -> legacy downstream effect not closed in this frozen item"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:332",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2036"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2052"
       ],
       "source_declaration_found": true,
       "source": {
@@ -5276,14 +5304,14 @@
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:344 view_broadcast_cmd = on_command('查看广播') aliases=广播列表 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2765 view_broadcast_cmd_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2781 view_broadcast_cmd_ -> legacy downstream effect not closed in this frozen item"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:344",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2765"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2781"
       ],
       "source_declaration_found": true,
       "source": {
@@ -5437,22 +5465,29 @@
       "id": "command:admin:毁灭力量",
       "kind": "commands",
       "entry": "admin:毁灭力量 (aliases: )",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "The default mutation already terminates in the existing feature application/repository listed below; this review closes the frozen evidence rather than introducing a second implementation. Legacy target/profile/config reads and adapter rendering remain compatibility consumers. Single/batch branches retain their repository-specific failure and replay semantics; whole-roster reads are not claimed to be bounded. Result adapters and failure replies are covered by executed source-function regressions.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:314 hmll = on_command('毁灭力量') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:1271 hmll_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:1281 hmll_ -> _destroy_admin_item/_destroy_admin_accessory and admin_asset_application.adjust_item_batch/destroy_accessory_batch -> AdminAssetApplication -> AdminItemDestroySqlRepository / AdminItemBatchSqlRepository / AdminAccessorySqlRepository / AdminAccessoryBatchSqlRepository"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
+        "nonebot_plugin_xiuxian_2/features/admin_asset/application.py",
+        "nonebot_plugin_xiuxian_2/features/admin_asset/item_destroy_repository.py",
+        "nonebot_plugin_xiuxian_2/features/admin_asset/item_batch_repository.py",
+        "nonebot_plugin_xiuxian_2/features/admin_asset/accessory_repository.py",
+        "nonebot_plugin_xiuxian_2/features/admin_asset/accessory_batch_repository.py",
+        "tests/test_admin_item_destroy_transaction.py",
+        "tests/test_admin_mutation_results.py",
+        "tests/test_admin_progress_contract.py",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:314",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:1271"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:1281"
       ],
       "source_declaration_found": true,
       "source": {
@@ -6474,22 +6509,27 @@
       "id": "command:admin:清空仙缘",
       "kind": "commands",
       "entry": "admin:清空仙缘 (aliases: )",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "The default mutation already terminates in the existing feature application/repository listed below; this review closes the frozen evidence rather than introducing a second implementation. Legacy target/profile/config reads and adapter rendering remain compatibility consumers. Single/batch branches retain their repository-specific failure and replay semantics; whole-roster reads are not claimed to be bounded. Result adapters and failure replies are covered by executed source-function regressions.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:322 clear_xiangyuan = on_command('清空仙缘') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:1805 clear_xiangyuan_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:1815 clear_xiangyuan_ -> clear_all_xiangyuan -> XiangyuanApplication.clear_all -> XiangyuanSqlRepository.clear_all (single game transaction refunds remaining assets then clears pool; no operation-ID receipt)"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_base/xiangyuan.py",
+        "nonebot_plugin_xiuxian_2/features/base/xiangyuan_application.py",
+        "nonebot_plugin_xiuxian_2/features/base/xiangyuan_repository.py",
+        "tests/test_xiangyuan_clear_all.py",
+        "tests/test_admin_mutation_results.py",
+        "tests/test_admin_progress_contract.py",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:322",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:1805"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:1815"
       ],
       "source_declaration_found": true,
       "source": {
@@ -6566,14 +6606,14 @@
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:359 clear_broadcast_cmd = on_command('清空广播') aliases=清除广播 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2786 clear_broadcast_cmd_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2802 clear_broadcast_cmd_ -> legacy downstream effect not closed in this frozen item"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:359",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2786"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2802"
       ],
       "source_declaration_found": true,
       "source": {
@@ -7140,14 +7180,14 @@
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:324 create_new_rift = on_command('生成秘境') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:1834 create_new_rift_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:1844 create_new_rift_ -> legacy downstream effect not closed in this frozen item"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:324",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:1834"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:1844"
       ],
       "source_declaration_found": true,
       "source": {
@@ -7167,14 +7207,14 @@
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:333 impersonate_user_command = on_command('用户伪装') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2516 impersonate_user_command_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2532 impersonate_user_command_ -> legacy downstream effect not closed in this frozen item"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:333",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2516"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2532"
       ],
       "source_declaration_found": true,
       "source": {
@@ -7393,14 +7433,14 @@
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:342 private_broadcast_cmd = on_command('私聊广播') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2697 private_broadcast_cmd_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2713 private_broadcast_cmd_ -> legacy downstream effect not closed in this frozen item"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:342",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2697"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2713"
       ],
       "source_declaration_found": true,
       "source": {
@@ -7751,14 +7791,14 @@
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:341 group_broadcast_cmd = on_command('群聊广播') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2663 group_broadcast_cmd_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2679 group_broadcast_cmd_ -> legacy downstream effect not closed in this frozen item"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:341",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2663"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2679"
       ],
       "source_declaration_found": true,
       "source": {
@@ -8308,14 +8348,14 @@
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:331 unblackhouse = on_command('解除小黑屋') aliases=放出小黑屋,解禁 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:1994 _ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2010 _ -> legacy downstream effect not closed in this frozen item"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:331",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:1994"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2010"
       ],
       "source_declaration_found": true,
       "source": {
@@ -8504,14 +8544,14 @@
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:338 migrate_qqid_cmd = on_command('转换QQID') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2593 migrate_qqid_cmd_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2609 migrate_qqid_cmd_ -> legacy downstream effect not closed in this frozen item"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:338",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2593"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2609"
       ],
       "source_declaration_found": true,
       "source": {
@@ -8523,22 +8563,26 @@
       "id": "command:admin:轮回力量",
       "kind": "commands",
       "entry": "admin:轮回力量 (aliases: )",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "The default mutation already terminates in the existing feature application/repository listed below; this review closes the frozen evidence rather than introducing a second implementation. Legacy target/profile/config reads and adapter rendering remain compatibility consumers. Single/batch branches retain their repository-specific failure and replay semantics; whole-roster reads are not claimed to be bounded. Result adapters and failure replies are covered by executed source-function regressions.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:310 gmm_command = on_command('轮回力量') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:879 gmm_command_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:889 gmm_command_ -> _adjust_admin_root -> admin_asset_application.change_root -> AdminAssetApplication -> AdminRootChangeSqlRepository"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
+        "nonebot_plugin_xiuxian_2/features/admin_asset/application.py",
+        "nonebot_plugin_xiuxian_2/features/admin_asset/root_repository.py",
+        "tests/test_admin_root_change_transaction.py",
+        "tests/test_admin_mutation_results.py",
+        "tests/test_admin_progress_contract.py",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:310",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:879"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:889"
       ],
       "source_declaration_found": true,
       "source": {
@@ -8750,22 +8794,26 @@
       "id": "command:admin:造化力量",
       "kind": "commands",
       "entry": "admin:造化力量 (aliases: )",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "The default mutation already terminates in the existing feature application/repository listed below; this review closes the frozen evidence rather than introducing a second implementation. Legacy target/profile/config reads and adapter rendering remain compatibility consumers. Single/batch branches retain their repository-specific failure and replay semantics; whole-roster reads are not claimed to be bounded. Result adapters and failure replies are covered by executed source-function regressions.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:312 zaohua_xiuxian = on_command('造化力量') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:808 zaohua_xiuxian_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:818 zaohua_xiuxian_ -> _adjust_admin_level -> admin_asset_application.change_level -> AdminAssetApplication -> AdminLevelChangeSqlRepository"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
+        "nonebot_plugin_xiuxian_2/features/admin_asset/application.py",
+        "nonebot_plugin_xiuxian_2/features/admin_asset/level_repository.py",
+        "tests/test_admin_level_change_transaction.py",
+        "tests/test_admin_mutation_results.py",
+        "tests/test_admin_progress_contract.py",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:312",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:808"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:818"
       ],
       "source_declaration_found": true,
       "source": {
@@ -8971,22 +9019,28 @@
       "id": "command:admin:重置世界BOSS",
       "kind": "commands",
       "entry": "admin:重置世界BOSS (aliases: )",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "The default mutation already terminates in the existing feature application/repository listed below; this review closes the frozen evidence rather than introducing a second implementation. Legacy target/profile/config reads and adapter rendering remain compatibility consumers. Single/batch branches retain their repository-specific failure and replay semantics; whole-roster reads are not claimed to be bounded. Result adapters and failure replies are covered by executed source-function regressions.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:327 boss_reset = on_command('重置世界BOSS') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:1925 boss_reset_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:1937 boss_reset_ -> set_boss_limits_reset -> BossApplication.reset_daily_limit -> WorldBossDailyLimitResetSqlRepository.reset (frozen daily roster and chunk receipts in player DB)"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_boss/__init__.py",
+        "nonebot_plugin_xiuxian_2/features/boss/application.py",
+        "nonebot_plugin_xiuxian_2/features/boss/world_boss_repository.py",
+        "tests/test_world_boss_daily_limit_reset.py",
+        "nonebot_plugin_xiuxian_2/features/boss/tests/test_world_boss_repository.py",
+        "tests/test_admin_mutation_results.py",
+        "tests/test_admin_progress_contract.py",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:327",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:1925"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:1937"
       ],
       "source_declaration_found": true,
       "source": {
@@ -9033,7 +9087,7 @@
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:326 training_reset = on_command('重置历练') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:1870 training_reset_ -> run_chunked_until_done -> training_reset_limits -> TrainingApplication.reset_limits -> TrainingResetSqlRepository"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:1880 training_reset_ -> run_chunked_until_done -> training_reset_limits -> TrainingApplication.reset_limits -> TrainingResetSqlRepository"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
@@ -9043,7 +9097,7 @@
         "nonebot_plugin_xiuxian_2/features/training/application.py",
         "nonebot_plugin_xiuxian_2/features/training/reset_repository.py",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:326",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:1870"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:1880"
       ],
       "source_declaration_found": true,
       "source": {
@@ -9082,22 +9136,26 @@
       "id": "command:admin:重置悬赏令",
       "kind": "commands",
       "entry": "admin:重置悬赏令 (aliases: )",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "The default mutation already terminates in the existing feature application/repository listed below; this review closes the frozen evidence rather than introducing a second implementation. Legacy target/profile/config reads and adapter rendering remain compatibility consumers. Single/batch branches retain their repository-specific failure and replay semantics; whole-roster reads are not claimed to be bounded. Result adapters and failure replies are covered by executed source-function regressions.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:325 do_work_cz = on_command('重置悬赏令') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:1840 do_work_cz_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:1850 do_work_cz_ -> work_admin_refresh_reset_application.reset_all -> WorkAdminRefreshResetApplication -> WorkAdminRefreshResetSqlRepository.reset_all"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
+        "nonebot_plugin_xiuxian_2/features/work/admin_refresh_reset_application.py",
+        "nonebot_plugin_xiuxian_2/features/work/admin_refresh_reset_repository.py",
+        "nonebot_plugin_xiuxian_2/features/work/tests/test_admin_refresh_reset_repository.py",
+        "tests/test_admin_mutation_results.py",
+        "tests/test_admin_progress_contract.py",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:325",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:1840"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:1850"
       ],
       "source_declaration_found": true,
       "source": {
@@ -9109,22 +9167,26 @@
       "id": "command:admin:重置新手礼包",
       "kind": "commands",
       "entry": "admin:重置新手礼包 (aliases: )",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "The default mutation already terminates in the existing feature application/repository listed below; this review closes the frozen evidence rather than introducing a second implementation. Legacy target/profile/config reads and adapter rendering remain compatibility consumers. Single/batch branches retain their repository-specific failure and replay semantics; whole-roster reads are not claimed to be bounded. Result adapters and failure replies are covered by executed source-function regressions.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:323 xiuxian_novice = on_command('重置新手礼包') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:1811 xiuxian_novice_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:1821 xiuxian_novice_ -> admin_asset_application.reset_novice_gifts -> AdminAssetApplication -> AdminNoviceResetSqlRepository.reset"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
+        "nonebot_plugin_xiuxian_2/features/admin_asset/application.py",
+        "nonebot_plugin_xiuxian_2/features/admin_asset/novice_reset_repository.py",
+        "nonebot_plugin_xiuxian_2/features/admin_asset/tests/test_novice_reset_repository.py",
+        "tests/test_admin_mutation_results.py",
+        "tests/test_admin_progress_contract.py",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:323",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:1811"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:1821"
       ],
       "source_declaration_found": true,
       "source": {
@@ -9143,9 +9205,9 @@
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:315 restate = on_command('重置状态') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:1553 restate_ no-argument branch -> AdminApplication.find_player_status_batch/reset_player_status_batch -> AdminPlayerStatusBatchResetSqlRepository (bounded feature-owned reset)",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:1553 restate_ mention branch -> AdminApplication.player_status_snapshot/reset_player_status -> AdminPlayerStatusResetSqlRepository (feature-owned snapshot and atomic reset)",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:1553 restate_ text-name branch -> get_user_profile_by_name -> PlayerProfileApplication -> PlayerProfileSqlRepository (read-only first-row lookup)"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:1563 restate_ no-argument branch -> AdminApplication.find_player_status_batch/reset_player_status_batch -> AdminPlayerStatusBatchResetSqlRepository (bounded feature-owned reset)",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:1563 restate_ mention branch -> AdminApplication.player_status_snapshot/reset_player_status -> AdminPlayerStatusResetSqlRepository (feature-owned snapshot and atomic reset)",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:1563 restate_ text-name branch -> get_user_profile_by_name -> PlayerProfileApplication -> PlayerProfileSqlRepository (read-only first-row lookup)"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
@@ -9156,7 +9218,7 @@
         "nonebot_plugin_xiuxian_2/features/info/profile_application.py:11-24",
         "nonebot_plugin_xiuxian_2/features/info/profile_repository.py:32-42",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:315",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:1553"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:1563"
       ],
       "source_declaration_found": true,
       "source": {
@@ -9168,22 +9230,28 @@
       "id": "command:admin:重置通天塔",
       "kind": "commands",
       "entry": "admin:重置通天塔 (aliases: )",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "The default mutation already terminates in the existing feature application/repository listed below; this review closes the frozen evidence rather than introducing a second implementation. Legacy target/profile/config reads and adapter rendering remain compatibility consumers. Single/batch branches retain their repository-specific failure and replay semantics; whole-roster reads are not claimed to be bounded. Result adapters and failure replies are covered by executed source-function regressions.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:328 tower_reset = on_command('重置通天塔') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:1902 tower_reset_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:1914 tower_reset_ -> reset_tower_floors -> TowerLimit.reset_all_floors -> TowerStateApplication.reset_all_floors -> TowerStateRepository.reset_all_floors"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_tower/__init__.py",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_tower/tower_limit.py",
+        "nonebot_plugin_xiuxian_2/features/tower/state_application.py",
+        "nonebot_plugin_xiuxian_2/features/tower/state_repository.py",
+        "tests/test_tower_state_application.py",
+        "tests/test_admin_mutation_results.py",
+        "tests/test_admin_progress_contract.py",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:328",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:1902"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:1914"
       ],
       "source_declaration_found": true,
       "source": {
@@ -9203,14 +9271,14 @@
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:329 items_refresh = on_command('重载items') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:1940 items_refresh_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:1956 items_refresh_ -> legacy downstream effect not closed in this frozen item"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:329",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:1940"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:1956"
       ],
       "source_declaration_found": true,
       "source": {

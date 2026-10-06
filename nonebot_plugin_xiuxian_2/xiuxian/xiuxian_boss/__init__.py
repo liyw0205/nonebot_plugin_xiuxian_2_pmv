@@ -396,10 +396,13 @@ async def set_boss_limits_reset(business_date=None, *, chunk_size=500):
             business_date, chunk_size=chunk_size
         )
         if result.task_status != "running":
-            logger.opt(colors=True).info(
-                f"<green>世界BOSS额度重置完成：{result.completed}/{result.total}，"
-                f"实际变更{result.changed}人，跳过{result.skipped}人</green>"
-            )
+            if result.succeeded:
+                logger.opt(colors=True).info(
+                    f"<green>世界BOSS额度重置完成：{result.completed}/{result.total}，"
+                    f"实际变更{result.changed}人，跳过{result.skipped}人</green>"
+                )
+            else:
+                logger.error(f"世界BOSS额度重置未完成：{result.status}")
             return result
         await asyncio.sleep(0)
 

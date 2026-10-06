@@ -514,9 +514,16 @@ async def reset_xiangyuan_daily():
 
 async def clear_all_xiangyuan():
     """清空所有群的仙缘（超级管理员）"""
-    total_groups, total_gifts, total_refund_stone, total_refund_items = (
-        _xiangyuan_settlement_service().clear_all(XiuConfig().max_goods_num)
-    )
+    try:
+        total_groups, total_gifts, total_refund_stone, total_refund_items = (
+            _xiangyuan_settlement_service().clear_all(XiuConfig().max_goods_num)
+        )
+    except ValueError as exc:
+        if str(exc) == "inventory_full":
+            return "仙缘清空未完成：退款后背包数量将超限，全部退款和记录均已回滚。"
+        if str(exc) == "user_missing":
+            return "仙缘清空未完成：退款目标玩家不存在，全部退款和记录均已回滚，请先修复玩家数据。"
+        raise
     if total_gifts == 0:
         return "当前没有仙缘数据可清空！"
     return f"已清空{total_groups}个群{total_gifts}个记录，退还灵石{number_to(total_refund_stone)}，物品{total_refund_items}个"

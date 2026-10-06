@@ -970,6 +970,8 @@ def _slice_status() -> dict[str, dict[str, object]]:
     admin_config_repository = (PACKAGE / "features" / "admin" / "config_repository.py").read_text(encoding="utf-8")
     admin_config_compat = (PACKAGE / "xiuxian" / "xiuxian_config.py").read_text(encoding="utf-8")
     admin_config_tests = (ROOT / "tests" / "test_admin_config_owner.py").read_text(encoding="utf-8")
+    admin_mutation_tests = (ROOT / "tests" / "test_admin_mutation_results.py").read_text(encoding="utf-8")
+    xiangyuan_clear_tests = (ROOT / "tests" / "test_xiangyuan_clear_all.py").read_text(encoding="utf-8")
     admin_status_batch_handler = admin_facade[
         admin_facade.index("async def restate_") : admin_facade.index(
             "@set_xiuxian.handle", admin_facade.index("async def restate_")
@@ -4604,6 +4606,30 @@ def _slice_status() -> dict[str, dict[str, object]]:
                 and "def test_repeated_switch_does_not_write_and_parallel_instances_do_not_lose_groups" in admin_config_tests
             ),
             "status": "six_admin_config_commands_feature_owned_with_shared_legacy_json_compatibility",
+        },
+        "admin_existing_mutation_results": {
+            "asset_helpers_merge_result_status_once": (
+                "SimpleNamespace(**dict(outcome.data or {}), status=" not in admin_facade
+                and admin_facade.count('"status": outcome.status, "succeeded": outcome.ok') == 4
+                and "def test_real_asset_helpers_call_default_application_for_missing_schema" in admin_mutation_tests
+                and "def test_real_asset_helpers_accept_status_in_application_payload" in admin_mutation_tests
+            ),
+            "rename_and_batch_failure_replies_are_not_success": (
+                'response = f"道号修改未完成：{message}"' in admin_rename_handler
+                and "def test_real_rename_handler_never_prefixes_failure_as_success" in admin_mutation_tests
+                and "def test_real_batch_completion_callbacks_reject_non_success" in admin_mutation_tests
+            ),
+            "world_boss_failure_does_not_log_completion": (
+                'logger.error(f"世界BOSS额度重置未完成：{result.status}")' in activity_boss_entry
+                and "def test_real_boss_reset_loop_logs_failure_instead_of_completion" in admin_mutation_tests
+            ),
+            "xiangyuan_refund_rollback_and_missing_target_are_covered": (
+                'raise ValueError("user_missing")' in base_xiangyuan_repository
+                and "def test_clear_all_rolls_back_every_refund_when_any_inventory_is_full" in xiangyuan_clear_tests
+                and "def test_clear_all_preserves_orphaned_gifts_instead_of_claiming_a_refund" in xiangyuan_clear_tests
+                and "def test_real_clear_all_facade_reports_rolled_back_failure" in admin_mutation_tests
+            ),
+            "status": "existing_feature_mutations_retained_with_executable_adapter_and_refund_contracts",
         },
         "admin": {
             "stone_default_application_owned": (

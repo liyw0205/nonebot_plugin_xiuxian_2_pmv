@@ -2,12 +2,12 @@
 
 ## 固定队列与已审边界（2026-10-07）
 
-当前按子插件顺序停在 admin。50 个冻结入口中，本轮开始前已关闭 6 个；剩余 44 个已一次性完成 owner 盘点，后续按下列组验收，不重新从全局 blocker 中挑命令。
+当前按子插件顺序停在 admin。50 个冻结入口中，开始盘点前已关闭 6 个；剩余 44 个已一次性完成 owner 盘点。配置 6 条和已有资产/重置 13 条均已验收，现剩 25 个未关闭项，后续按下列组验收，不重新从全局 blocker 中挑命令。
 
 | 顺序 | 入口组 | 状态与下一步 |
 | --- | --- | --- |
 | 1 | 运行配置 6 条：群修仙、私聊、自动灵根、自动宗名、欢迎开/关 | 本组接入 `AdminConfigApplication -> AdminConfigRepository`；`JsonConfig` 继承同一仓储，旧读者与 Web 备注/置顶/全量群共享锁与缓存。修复三处字段错配。 |
-| 2 | 已迁移资产/重置 13 条：传承、修为、造化、轮回、创造、毁灭、修仙适配、新手礼包、悬赏、塔、BOSS、仙缘、易名 | 写终端已经属于 admin_asset/work/tower/boss/base，不再重迁。下一组补调用链和专项测试，修正易名/BOSS失败被回复成功；仙缘清池需补退款及回滚测试。全服饰品目标读取仍无界，不宣称已优化。 |
+| 2 | 已迁移资产/重置 13 条：传承、修为、造化、轮回、创造、毁灭、修仙适配、新手礼包、悬赏、塔、BOSS、仙缘、易名 | 已验收现有 admin_asset/work/tower/boss/base 写终端，未重迁。修复 4 个 helper 重复 status 关键字、易名/BOSS误报、传承并发批次误报，补仙缘剩余退款、跨笔回滚、缺失赠礼者保护。全服饰品目标读取仍无界，不宣称已优化。 |
 | 3 | 兼容输出 9 条：修仙手册、广播帮助、艾特测试、按钮测试、消息信息、取链接、取raw、取reply、全量申请 | 已审为无独立业务状态；需补来源绑定及兼容断言后统一归类，勿新建九套 application。共享消息记录不等于零基础设施写入。 |
 | 4 | 黑屋 3 条 | SQL is_ban 与 JSON/_BANNED 双状态；注册玩家封禁未同步路由消费，失败结果亦有误报，必须整组修。 |
 | 5 | 命令管控 3 条 | command_disable.json、别名注册、禁用列表和路由重建同组。 |
@@ -16,6 +16,8 @@
 | 8 | 转换QQID 1 条 | 旧四库逐 ID 同步 API 编排待迁；复用已迁移的可恢复 ID 更新，不重复写底层仓储。 |
 
 配置使用原字段 `group/private/root_selection/sect_name/welcome_disabled_groups`，保留未知字段和原 JSON 路径；读缺失文件返回默认值，兼容 `JsonConfig` 构造仍创建默认文件。写入同目录暂存后原子替换，失败不发布缓存；相同开关值不重写。锁只覆盖同一进程内的线程，不提供多进程协调或 operation-ID 回执。全局欢迎关闭时不再谎报本群已开启。notice 的生命周期进程状态不在这六个命令的完成范围内。
+
+资产结果组定向回归 `271 passed, 2 subtests passed`，覆盖真实 helper/handler 函数抽取执行和默认 feature 仓储。已关闭的历练重置仅因发现 `schema_missing` 被报成功这一明确回归而补失败分支，未重迁其 owner。仙缘清池没有 operation-ID 回执，全量读取及 SQL 历史重复玩家行等边界不在本组性能完成声明内。
 
 ## 用户流程
 The compatibility command remains available while the new application boundary is enabled.

@@ -10,6 +10,9 @@ nonebot.init()
 from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_boss.transaction_service import (
     WorldBossDailyLimitResetService,
 )
+from nonebot_plugin_xiuxian_2.features.boss.world_boss_repository import (
+    WorldBossDailyLimitResetSqlRepository,
+)
 
 
 def create_service(tmp_path):
@@ -162,6 +165,14 @@ def test_empty_table_completes_and_missing_columns_are_migrated(tmp_path):
     assert {"boss_integral", "boss_stone", "boss_battle_count"}.issubset(columns)
 
 
+def test_feature_reset_reports_missing_startup_schema_without_creating_database(tmp_path):
+    database = tmp_path / "missing-player.db"
+    result = WorldBossDailyLimitResetSqlRepository(database).reset("2026-07-14")
+    assert result.status == "schema_missing"
+    assert not result.succeeded
+    assert not database.exists()
+
+
 def test_scheduler_and_admin_entries_share_resumable_daily_service():
     root = Path(__file__).parents[1]
     boss_source = (
@@ -189,6 +200,15 @@ def test_scheduler_and_admin_entries_share_resumable_daily_service():
         )
     ]
     assert "result = await set_boss_limits_reset()" in admin_handler
+    assert 'if result.status == "schema_missing":' in admin_handler
+    assert "elif result.succeeded:" in admin_handler
+    assert "else:\n        msg = f\"世界BOSS额度重置未完成：{result.status}\"" in admin_handler
+
+    reset_body = boss_source[
+        boss_source.index("async def set_boss_limits_reset(") : boss_source.index("@boss_help.handle")
+    ]
+    assert "if result.succeeded:" in reset_body
+    assert 'logger.error(f"世界BOSS额度重置未完成：{result.status}")' in reset_body
 
     limit_source = (
         root / "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_boss/boss_limit.py"

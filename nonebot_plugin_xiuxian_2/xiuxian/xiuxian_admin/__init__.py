@@ -215,7 +215,7 @@ def _destroy_admin_item(event, user_id, goods_id, item_info, quantity, expected_
         item_type=item_info.get("type", ""), quantity=quantity,
         expected_quantity=expected_quantity, target_name=target_name,
     )
-    return SimpleNamespace(**dict(outcome.data or {}), status=outcome.status, succeeded=outcome.ok)
+    return SimpleNamespace(**{**dict(outcome.data or {}), "status": outcome.status, "succeeded": outcome.ok})
 
 
 def _adjust_admin_exp(event, user_id, expected_exp, delta, target_name):
@@ -225,7 +225,7 @@ def _adjust_admin_exp(event, user_id, expected_exp, delta, target_name):
         user_id=str(user_id), expected_exp=expected_exp, requested_delta=delta,
         target_name=target_name,
     )
-    return SimpleNamespace(**dict(outcome.data or {}), status=outcome.status, succeeded=outcome.ok)
+    return SimpleNamespace(**{**dict(outcome.data or {}), "status": outcome.status, "succeeded": outcome.ok})
 
 
 def _adjust_admin_level(event, user_id, expected_state, level, power, spend, root_rate):
@@ -235,7 +235,7 @@ def _adjust_admin_level(event, user_id, expected_state, level, power, spend, roo
         user_id=str(user_id), expected_snapshot=expected_state, new_level=level,
         new_exp=power, level_spend=spend, root_rate=root_rate,
     )
-    return SimpleNamespace(**dict(outcome.data or {}), status=outcome.status, succeeded=outcome.ok)
+    return SimpleNamespace(**{**dict(outcome.data or {}), "status": outcome.status, "succeeded": outcome.ok})
 
 
 def _adjust_admin_root(event, user_id, expected_state, root_id, spend, root_rate):
@@ -245,7 +245,7 @@ def _adjust_admin_root(event, user_id, expected_state, root_id, spend, root_rate
         user_id=str(user_id), expected_snapshot=expected_state, root_id=root_id,
         level_spend=spend, new_root_rate=root_rate,
     )
-    return SimpleNamespace(**dict(outcome.data or {}), status=outcome.status, succeeded=outcome.ok)
+    return SimpleNamespace(**{**dict(outcome.data or {}), "status": outcome.status, "succeeded": outcome.ok})
 
 
 def _grant_admin_accessory(
@@ -466,7 +466,13 @@ async def admin_rename_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
         message = "道友的道号更新成啦~"
     else:
         message = outcome.message or "道号修改未完成，请稍后重试。"
-    await handle_send(bot, event, f"已将 {old_name} 的道号修改为 {new_name}\n{message}")
+    if status == "unchanged":
+        response = message
+    elif outcome.ok:
+        response = f"已将 {old_name} 的道号修改为 {new_name}\n{message}"
+    else:
+        response = f"道号修改未完成：{message}"
+    await handle_send(bot, event, response)
 
 
 # GM加灵石
@@ -677,6 +683,10 @@ async def ccll_command_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
                 return "历史全服传承石任务名单超出安全恢复大小限制，原进度已保留，请联系维护人员处理。"
             if result.status == "operation_conflict":
                 return "本次全服思恋结晶调整与已记录计划冲突"
+            if result.status == "in_progress":
+                return "已有全服思恋结晶调整批次正在执行，请等待完成。"
+            if not result.succeeded:
+                return f"全服思恋结晶调整未完成：{result.status}"
             return (
                 f"全服思恋结晶{action}完成！已处理 "
                 f"{result.completed}/{result.total} 名玩家，"
@@ -1882,6 +1892,8 @@ async def training_reset_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
     def _done(result):
         if result.status == "operation_conflict":
             return "本次历练重置与已记录事件冲突"
+        if not result.succeeded:
+            return f"用户历练状态重置未完成：{result.status}"
         return (
             f"用户历练状态重置完成：已处理 {result.completed}/{result.total} 名玩家，"
             f"重置 {result.changed} 名，跳过 {result.skipped} 名"
@@ -1926,13 +1938,17 @@ async def boss_reset_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """重置所有用户的世界BOSS额度"""
     from ..xiuxian_boss import set_boss_limits_reset
     result = await set_boss_limits_reset()
-    if result.status == "duplicate":
+    if result.status == "schema_missing":
+        msg = "世界BOSS额度重置服务尚未就绪，请检查启动迁移。"
+    elif result.status == "duplicate":
         msg = f"今日世界BOSS额度已重置，共 {result.total} 名玩家"
-    else:
+    elif result.succeeded:
         msg = (
             f"用户世界BOSS额度重置完成：已处理 {result.completed}/{result.total} 名玩家，"
             f"重置 {result.changed} 名，跳过 {result.skipped} 名"
         )
+    else:
+        msg = f"世界BOSS额度重置未完成：{result.status}"
     await handle_send(bot, event, msg)
     await boss_reset.finish()
 
