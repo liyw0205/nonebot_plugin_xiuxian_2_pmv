@@ -1008,6 +1008,17 @@ def _slice_status() -> dict[str, dict[str, object]]:
     admin_event_debug_tests = (ROOT / "tests" / "test_admin_event_debug_compat.py").read_text(encoding="utf-8")
     admin_output_tests = (ROOT / "tests" / "test_admin_output_commands_compat.py").read_text(encoding="utf-8")
     admin_all_apply_handler = output_function(admin_command_controls, "all_apply_cmd_")
+    admin_blackhouse_handlers = {
+        name: output_function(admin_facade, name)
+        for name in ("blackhouse_", "unblackhouse_", "view_blackhouse_")
+    }
+    admin_blackhouse_repository = (PACKAGE / "features/admin/blackhouse_repository.py").read_text(encoding="utf-8")
+    admin_blackhouse_compat = (PACKAGE / "xiuxian/blackhouse.py").read_text(encoding="utf-8")
+    admin_blackhouse_router = (PACKAGE / "xiuxian/on_compat.py").read_text(encoding="utf-8")
+    admin_blackhouse_status_tests = (ROOT / "tests/test_admin_blackhouse_status.py").read_text(encoding="utf-8")
+    admin_blackhouse_routing_tests = (ROOT / "tests/test_admin_blackhouse_routing.py").read_text(encoding="utf-8")
+    admin_blackhouse_migration_tests = (ROOT / "tests/test_admin_blackhouse_migration.py").read_text(encoding="utf-8")
+    admin_blackhouse_repository_tests = (PACKAGE / "features/admin/tests/test_blackhouse_repository.py").read_text(encoding="utf-8")
     admin_status_batch_handler = admin_facade[
         admin_facade.index("async def restate_") : admin_facade.index(
             "@set_xiuxian.handle", admin_facade.index("async def restate_")
@@ -4715,6 +4726,59 @@ def _slice_status() -> dict[str, dict[str, object]]:
                 )
             ),
             "status": "admin_output_commands_keep_legacy_permissions_event_only_debug_reads_shared_delivery_and_url_fallback",
+        },
+        "admin_blackhouse_owner": {
+            "commands_and_router_share_feature_state": (
+                all("admin_application.set_blackhouse_status(" in admin_blackhouse_handlers[name]
+                    and "admin_application.blackhouse_snapshot(" in admin_blackhouse_handlers[name]
+                    for name in ("blackhouse_", "unblackhouse_"))
+                and "admin_application.list_blackhoused_users(" in admin_blackhouse_handlers["view_blackhouse_"]
+                and "blackhouse_repository or AdminBlackhouseSqlRepository(database)" in legacy_admin_application
+                and "self.blackhouse_repository.set_banned(" in legacy_admin_application
+                and "AdminBlackhouseStatusService" not in legacy_admin_application
+                and "AdminApplication(get_paths().game_db)" in admin_blackhouse_compat
+                and "_application().is_user_blackhoused(uid)" in admin_blackhouse_compat
+            ),
+            "runtime_has_no_json_owner_or_request_ddl": (
+                all(token not in admin_blackhouse_compat for token in ("_BANNED", "load_json_file", "save_json_file", "bootstrap_from_user_xiuxian"))
+                and all(token not in admin_blackhouse_repository for token in ("CREATE TABLE", "ALTER TABLE", "blackhouse.json"))
+                and "global_ban_user" not in admin_facade
+                and "global_unban_user" not in admin_facade
+                and "bootstrap_from_user_xiuxian" not in admin_blackhouse_router
+            ),
+            "startup_import_is_game_only_and_required_before_use": (
+                '("legacy.admin.007", apply_admin_blackhouse)' in legacy_migrated
+                and all('"legacy.admin.007"' not in section for section in (
+                    plugin[plugin.index("_GAME_DATABASE_EXCLUDED_MIGRATION_VERSIONS") : plugin.index("_PLAYER_DATABASE_MIGRATION_VERSIONS")],
+                    plugin[plugin.index("_PLAYER_DATABASE_MIGRATION_VERSIONS") : plugin.index("def migrations_for_database")],
+                ))
+                and "legacy_json_and_is_ban_v1" in admin_blackhouse_repository
+                and "admin_blackhouse_imports" in admin_blackhouse_repository
+                and "def test_lifecycle_imports_blackhouse_once_into_game_database" in admin_blackhouse_migration_tests
+                and "def test_migration_merges_json_and_sql_once_without_rewriting_json" in admin_blackhouse_repository_tests
+            ),
+            "membership_projection_and_receipt_are_atomic_and_replay_safe": (
+                "DatabaseUnitOfWork(self.database, immediate=True)" in admin_blackhouse_repository
+                and all(token in admin_blackhouse_repository for token in (
+                    "INSERT INTO admin_blackhouse_users", "UPDATE user_xiuxian SET is_ban=",
+                    "INSERT INTO admin_blackhouse_status_operations", '"operation_conflict"',
+                ))
+                and "def test_receipt_failure_rolls_back_roster_and_player_projection" in admin_blackhouse_status_tests
+                and "def test_parallel_repository_instances_record_one_effect" in admin_blackhouse_status_tests
+                and "def test_old_receipt_replay_never_reverses_a_later_unban" in admin_blackhouse_status_tests
+            ),
+            "real_handlers_routing_and_failures_have_behavioral_coverage": (
+                all(command_permission(admin_facade, name) == "SUPERUSER" for name in ("小黑屋", "解除小黑屋", "查看小黑屋"))
+                and all("elif not result.succeeded" in admin_blackhouse_handlers[name] for name in ("blackhouse_", "unblackhouse_"))
+                and all(token in admin_blackhouse_routing_tests for token in (
+                    "def test_real_handlers_and_router_share_registered_and_unregistered_state",
+                    "def test_failed_write_results_are_never_reported_as_success",
+                    "def test_replayed_ban_after_unban_neither_rebans_nor_claims_current_ban",
+                    "def test_storage_failure_blocks_only_routed_nonadmin_matchers",
+                    "def test_admin_and_unrouted_candidates_skip_lookup_and_remain_available",
+                ))
+            ),
+            "status": "blackhouse_commands_and_router_share_atomic_sql_membership_with_startup_legacy_import",
         },
         "admin": {
             "stone_default_application_owned": (

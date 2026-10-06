@@ -2,15 +2,17 @@
 
 ## 固定队列与已审边界（2026-10-07）
 
-当前按子插件顺序停在 admin。50 个冻结入口中，开始盘点前已关闭 6 个；剩余 44 个已一次性完成 owner 盘点。配置 6 条、已有资产/重置 13 条和兼容输出 9 条均已验收，现剩 16 个未关闭项，后续按下列组验收，不重新从全局 blocker 中挑命令。
+当前按子插件顺序停在 admin。50 个冻结入口中，开始盘点前已关闭 6 个；剩余 44 个已一次性完成 owner 盘点。配置 6 条、已有资产/重置 13 条、兼容输出 9 条和黑屋 3 条均已验收，admin 剩 13 个未关闭项，全局冻结计数为 `207/107/19/163`。下一组是命令管控 3 条，不跳子插件、不重新从全局 blocker 中挑命令。
+
+本组黑屋统一经 `AdminApplication -> AdminBlackhouseSqlRepository`：`admin_blackhouse_users` 是唯一名单，注册玩家 `user_xiuxian.is_ban` 是兼容投影，名单、投影与原 `admin_blackhouse_status_operations` 回执在同一事务提交；未注册用户同样可封禁/解除。`legacy.admin.007` 在启动时一次合并旧 JSON 与 SQL `is_ban=1` 名单，保留原 JSON 和历史回执；导入 marker 必须落盘并纳入运行期就绪检查，避免漏导入或旧名单重放导致已解禁用户复活。请求不建表，路由重建不再加载 JSON 或写黑屋状态；缺 schema/marker 或存储故障时路由 fail closed，但管理命令和未路由 matcher 保持原豁免。重复 operation 返回历史回执，不把历史封禁结果描述为当前状态。聚焦回归 `76 passed`（5.25 秒），隔离 lifecycle 回归 `2 passed`（0.83 秒）；最终 admin、feature/admin、command store 和 Phase2/progress 扩大集 `369 passed, 14 subtests passed`（27.15 秒，另有预加载 anyio warning）。五项黑屋门禁全 true，冻结 membership 有效、integrity errors 为空；其余 163 项仍受阻，不代表全局完成。
 
 | 顺序 | 入口组 | 状态与下一步 |
 | --- | --- | --- |
 | 1 | 运行配置 6 条：群修仙、私聊、自动灵根、自动宗名、欢迎开/关 | 本组接入 `AdminConfigApplication -> AdminConfigRepository`；`JsonConfig` 继承同一仓储，旧读者与 Web 备注/置顶/全量群共享锁与缓存。修复三处字段错配。 |
 | 2 | 已迁移资产/重置 13 条：传承、修为、造化、轮回、创造、毁灭、修仙适配、新手礼包、悬赏、塔、BOSS、仙缘、易名 | 已验收现有 admin_asset/work/tower/boss/base 写终端，未重迁。修复 4 个 helper 重复 status 关键字、易名/BOSS误报、传承并发批次误报，补仙缘剩余退款、跨笔回滚、缺失赠礼者保护。全服饰品目标读取仍无界，不宣称已优化。 |
 | 3 | 兼容输出 9 条：修仙手册、广播帮助、艾特测试、按钮测试、消息信息、取链接、取raw、取reply、全量申请 | 已统一归类为允许保留的兼容路径；行为测试覆盖当前事件解析、分页/按钮边界、共享发送回退和授权 URL 保留，不新建九套 application。共享消息记录不等于零基础设施写入。 |
-| 4 | 黑屋 3 条 | SQL is_ban 与 JSON/_BANNED 双状态；注册玩家封禁未同步路由消费，失败结果亦有误报，必须整组修。 |
-| 5 | 命令管控 3 条 | command_disable.json、别名注册、禁用列表和路由重建同组。 |
+| 4 | 黑屋 3 条 | 已验收唯一 SQL 名单 owner，封禁、解除、列表与路由读取共用；修复注册玩家路由失效和失败误报，启动导入、回放、回滚与路由回归通过。 |
+| 5 | 命令管控 3 条 | 下一组：command_disable.json、别名注册、禁用列表和路由重建同组。 |
 | 6 | 广播 6 条 | 进程任务、取消、目标集合及普通消息补发同组，消息历史和发送使用端口。 |
 | 7 | 生成秘境、重载items、用户伪装，各 1 条 | 秘境已有 feature SQL 写与旧 JSON 投影，不重迁；Items 是共享目录缓存；伪装是共享进程身份映射，分别闭合实际消费者。 |
 | 8 | 转换QQID 1 条 | 旧四库逐 ID 同步 API 编排待迁；复用已迁移的可恢复 ID 更新，不重复写底层仓储。 |
@@ -20,6 +22,8 @@
 资产结果组定向回归 `271 passed, 2 subtests passed`，覆盖真实 helper/handler 函数抽取执行和默认 feature 仓储。已关闭的历练重置仅因发现 `schema_missing` 被报成功这一明确回归而补失败分支，未重迁其 owner。仙缘清池没有 operation-ID 回执，全量读取及 SQL 历史重复玩家行等边界不在本组性能完成声明内。
 
 兼容输出组由 3 名子代理独占交付两套行为测试和 progress gate，主线程修复与验收；admin 和 Phase2 聚焦集 `241 passed, 11 subtests passed`。四个 event 调试命令只提取当前事件，不查历史消息或下载链接。全量申请保持公开命令，只构造授权 URL；键盘群主点击限制不能等同于链接回退的权限保证，目标页面负责实际授权。共享发送基础设施仍有消息记录、回复计数及配置/映射/渲染资源访问，本组未迁移这些共享状态，也不宣称输入解析或发送耗时有界。
+
+黑屋列表仍全量读取，旧 `blackhouse.json` 只作为一次导入来源，不再随新封禁/解除实时同步。回退旧代码需要恢复同一时间点的一致数据库与 JSON 备份，不能直接让旧代码读取已过期 JSON。没有线上性能测量，本组不宣称已证明运行提速。
 
 ## 用户流程
 The compatibility command remains available while the new application boundary is enabled.

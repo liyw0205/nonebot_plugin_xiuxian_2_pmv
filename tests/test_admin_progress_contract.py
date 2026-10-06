@@ -4,6 +4,11 @@ from scripts.check_full_refactor_progress import _slice_status
 
 
 class AdminProgressContractTests(unittest.TestCase):
+    def test_admin_blackhouse_commands_and_router_share_the_state_owner(self):
+        for key, value in _slice_status()["admin_blackhouse_owner"].items():
+            if key != "status":
+                self.assertTrue(value, key)
+
     def test_existing_admin_mutations_report_the_actual_result(self):
         for key, value in _slice_status()["admin_existing_mutation_results"].items():
             if key != "status":

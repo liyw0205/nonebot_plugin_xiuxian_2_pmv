@@ -305,4 +305,163 @@ def apply_admin_player_status_batch_reset(uow: DatabaseUnitOfWork) -> None:
         )
 
 
-__all__ = ["apply_admin", "apply_admin_player_status_batch_reset"]
+def _blackhouse_columns_required(
+    uow: DatabaseUnitOfWork, table: str, required: set[str]
+) -> None:
+    missing = sorted(required - _columns(uow, table))
+    if missing:
+        raise RuntimeError(
+            f"admin blackhouse schema incomplete for {table}: {','.join(missing)}"
+        )
+
+
+def _blackhouse_primary_key_required(uow: DatabaseUnitOfWork, table: str, column: str) -> None:
+    primary_key = {
+        str(row["name"]) for row in uow.query_all(f'PRAGMA table_info("{table}")') if row["pk"]
+    }
+    if primary_key != {column}:
+        raise RuntimeError(f"admin blackhouse schema requires primary key {table}.{column}")
+
+
+def _blackhouse_legacy_users(uow: DatabaseUnitOfWork) -> dict[str, dict[str, str]]:
+    import json
+
+    legacy_file = uow.database.parent / "blackhouse.json"
+    if not legacy_file.exists():
+        return {}
+
+    def unique_object(pairs):
+        result = {}
+        for key, value in pairs:
+            if key in result:
+                raise ValueError("duplicate JSON key")
+            result[key] = value
+        return result
+
+    with legacy_file.open("rb") as stream:
+        payload = stream.read(16 * 1024 * 1024 + 1)
+    if len(payload) > 16 * 1024 * 1024:
+        raise RuntimeError("legacy blackhouse JSON exceeds 16 MiB")
+    try:
+        raw = json.loads(payload, object_pairs_hook=unique_object)
+    except (ValueError, UnicodeError, RecursionError) as exc:
+        raise RuntimeError("legacy blackhouse JSON is invalid") from exc
+    if not isinstance(raw, dict):
+        raise RuntimeError("legacy blackhouse JSON must be an object")
+    users = raw.get("users", raw)
+    if not isinstance(users, dict):
+        raise RuntimeError("legacy blackhouse users must be an object")
+    cleaned: dict[str, dict[str, str]] = {}
+    for key, value in users.items():
+        user_id = key.strip()
+        if not user_id or "\x00" in user_id or user_id in cleaned:
+            raise RuntimeError("legacy blackhouse user id is invalid or duplicated")
+        # Older releases accepted scalar values as membership-only entries.
+        metadata = value if isinstance(value, dict) else {}
+        for field in ("name", "reason", "updated_at"):
+            if isinstance(metadata.get(field), (dict, list)):
+                raise RuntimeError(f"legacy blackhouse {field} must be scalar")
+        cleaned[user_id] = {
+            field: str(metadata.get(field) or "")
+            for field in ("name", "reason", "updated_at")
+        }
+    return cleaned
+
+
+def _blackhouse_sync_projection(uow: DatabaseUnitOfWork) -> None:
+    uow.execute(
+        "UPDATE user_xiuxian SET is_ban=CASE WHEN EXISTS("
+        "SELECT 1 FROM admin_blackhouse_users b WHERE b.user_id=user_xiuxian.user_id"
+        ") THEN 1 ELSE 0 END WHERE is_ban IS NULL OR is_ban<>CASE WHEN EXISTS("
+        "SELECT 1 FROM admin_blackhouse_users b WHERE b.user_id=user_xiuxian.user_id"
+        ") THEN 1 ELSE 0 END"
+    )
+    mismatch = uow.query_one(
+        "SELECT 1 AS present FROM user_xiuxian WHERE is_ban IS NULL OR is_ban<>CASE WHEN EXISTS("
+        "SELECT 1 FROM admin_blackhouse_users b WHERE b.user_id=user_xiuxian.user_id"
+        ") THEN 1 ELSE 0 END LIMIT 1"
+    )
+    if mismatch is not None:
+        raise RuntimeError("admin blackhouse projection synchronization failed")
+
+
+def apply_admin_blackhouse(uow: DatabaseUnitOfWork) -> None:
+    """Import legacy membership once, without modifying its JSON source or receipts."""
+    player_table_exists = _table_exists(uow, "user_xiuxian")
+    if player_table_exists:
+        _blackhouse_columns_required(uow, "user_xiuxian", {"user_id", "is_ban"})
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS admin_blackhouse_users("
+        "user_id TEXT PRIMARY KEY,name TEXT NOT NULL DEFAULT '',"
+        "reason TEXT NOT NULL DEFAULT '',updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)"
+    )
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS admin_blackhouse_status_operations("
+        "operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,result_json TEXT NOT NULL,"
+        "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+    )
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS admin_blackhouse_imports("
+        "import_key TEXT PRIMARY KEY,imported_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)"
+    )
+    for table, columns in (
+        ("admin_blackhouse_users", {"user_id", "name", "reason", "updated_at"}),
+        ("admin_blackhouse_status_operations", {"operation_id", "payload", "result_json", "created_at"}),
+        ("admin_blackhouse_imports", {"import_key", "imported_at"}),
+    ):
+        _blackhouse_columns_required(uow, table, columns)
+    for table, column in (
+        ("admin_blackhouse_users", "user_id"),
+        ("admin_blackhouse_status_operations", "operation_id"),
+        ("admin_blackhouse_imports", "import_key"),
+    ):
+        _blackhouse_primary_key_required(uow, table, column)
+    import_key = "legacy_json_and_is_ban_v1"
+    imported = uow.query_one(
+        "SELECT 1 AS present FROM admin_blackhouse_imports WHERE import_key=?",
+        (import_key,),
+    )
+    if imported is None:
+        users = _blackhouse_legacy_users(uow)
+        uow.executemany(
+            "INSERT OR IGNORE INTO admin_blackhouse_users(user_id,name,reason,updated_at) "
+            "VALUES(?,?,?,?)",
+            (
+                (user_id, metadata["name"], metadata["reason"], metadata["updated_at"])
+                for user_id, metadata in users.items()
+            ),
+        )
+        for user_id in users:
+            if uow.query_one(
+                "SELECT 1 AS present FROM admin_blackhouse_users WHERE user_id=?", (user_id,),
+            ) is None:
+                raise RuntimeError("legacy blackhouse JSON membership import failed")
+        if player_table_exists:
+            name_expression = "user_name" if "user_name" in _columns(uow, "user_xiuxian") else "''"
+            for row in uow.query_all(
+                f"SELECT user_id,{name_expression} AS name FROM user_xiuxian WHERE COALESCE(is_ban,0)=1"
+            ):
+                if row["user_id"] is None:
+                    raise RuntimeError("legacy blackhouse SQL user id is invalid")
+                user_id = str(row["user_id"]).strip()
+                if not user_id or "\x00" in user_id:
+                    raise RuntimeError("legacy blackhouse SQL user id is invalid")
+                uow.execute(
+                    "INSERT OR IGNORE INTO admin_blackhouse_users(user_id,name,reason,updated_at) "
+                    "VALUES(?,?,'legacy_is_ban',CURRENT_TIMESTAMP)",
+                    (user_id, str(row["name"] or "")),
+                )
+                if uow.query_one(
+                    "SELECT 1 AS present FROM admin_blackhouse_users WHERE user_id=?", (user_id,),
+                ) is None:
+                    raise RuntimeError("legacy blackhouse SQL membership import failed")
+        marker = uow.execute("INSERT INTO admin_blackhouse_imports(import_key) VALUES(?)", (import_key,))
+        if marker.rowcount != 1 or uow.query_one(
+            "SELECT 1 AS present FROM admin_blackhouse_imports WHERE import_key=?", (import_key,),
+        ) is None:
+            raise RuntimeError("admin blackhouse import marker was not saved")
+    if player_table_exists:
+        _blackhouse_sync_projection(uow)
+
+
+__all__ = ["apply_admin", "apply_admin_player_status_batch_reset", "apply_admin_blackhouse"]

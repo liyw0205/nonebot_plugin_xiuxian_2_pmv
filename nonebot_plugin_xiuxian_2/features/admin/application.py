@@ -6,6 +6,7 @@ from typing import Any
 from ...core.result import OperationOutcome
 from ...paths import get_paths
 from .._migrated_application import MigratedFeatureApplication
+from .blackhouse_repository import AdminBlackhouseSqlRepository, AdminBlackhouseStatusResult
 from .id_swap_repository import AdminIdSwapSqlRepository
 from .id_update_repository import AdminIdUpdateSqlRepository
 from .player_status_batch_repository import AdminPlayerStatusBatchResetSqlRepository
@@ -26,6 +27,7 @@ class AdminApplication(MigratedFeatureApplication):
         player_status_batch_repository: AdminPlayerStatusBatchResetSqlRepository | None = None,
         id_swap_repository: AdminIdSwapSqlRepository | None = None,
         id_update_repository: AdminIdUpdateSqlRepository | None = None,
+        blackhouse_repository: AdminBlackhouseSqlRepository | None = None,
     ) -> None:
         super().__init__(database, feature="admin", repository=repository or AdminRepository(database))
         self.player_status_reset_repository = (
@@ -38,6 +40,7 @@ class AdminApplication(MigratedFeatureApplication):
         )
         self.id_swap_repository = id_swap_repository
         self.id_update_repository = id_update_repository
+        self.blackhouse_repository = blackhouse_repository or AdminBlackhouseSqlRepository(database)
 
     def player_status_snapshot(
         self, user_id: str
@@ -122,9 +125,18 @@ class AdminApplication(MigratedFeatureApplication):
             operation_id, operator_id, user_ids, item_id, item_name, quantity,
             chunk_size=chunk_size,
         )
-    def set_blackhouse_status(self, *args, **kwargs):
-        from ...xiuxian.xiuxian_admin.transaction_service import AdminBlackhouseStatusService
-        return AdminBlackhouseStatusService(self.database).set_banned(*args, **kwargs)
+
+    def blackhouse_snapshot(self, user_id: str) -> bool:
+        return self.blackhouse_repository.snapshot(user_id)
+
+    def is_user_blackhoused(self, user_id: str) -> bool:
+        return self.blackhouse_repository.is_banned(user_id)
+
+    def list_blackhoused_users(self) -> list[dict[str, str]]:
+        return self.blackhouse_repository.list_banned()
+
+    def set_blackhouse_status(self, *args: Any, **kwargs: Any) -> AdminBlackhouseStatusResult:
+        return self.blackhouse_repository.set_banned(*args, **kwargs)
 
 
 __all__ = ["AdminApplication"]

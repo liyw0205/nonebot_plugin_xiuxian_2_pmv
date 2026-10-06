@@ -58,6 +58,41 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
                 self.assertTrue(any("record_send_message" in edge for edge in item["call_graph"]))
         self.assertEqual(report["integrity_errors"], [])
 
+    def test_admin_blackhouse_commands_have_source_bound_sql_owner_edges(self):
+        report = load_phase2_scope_report(include_items=True)
+        items = {item["id"]: item for item in report["items"]}
+        expected = {
+            "小黑屋": (1986, "blackhouse_", "AdminBlackhouseSqlRepository.snapshot/set_banned"),
+            "解除小黑屋": (2023, "unblackhouse_", "AdminBlackhouseSqlRepository.snapshot/set_banned"),
+            "查看小黑屋": (2060, "view_blackhouse_", "AdminBlackhouseSqlRepository.list_banned"),
+        }
+        source = "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py"
+        for name, (line, handler, terminal) in expected.items():
+            with self.subTest(command=name):
+                item = items[f"command:admin:{name}"]
+                self.assertEqual(item["status"], "已迁移")
+                self.assertNotIn("unknown_edge", item)
+                self.assertIn(f"{source}:{line}", item["evidence"])
+                handler_edges = [edge for edge in item["call_graph"]
+                                 if edge.startswith(f"{source}:{line} {handler} ->")]
+                self.assertEqual(len(handler_edges), 1)
+                self.assertIn(terminal, handler_edges[0])
+                self.assertFalse(any("effect not closed" in edge for edge in item["call_graph"]))
+                for evidence in (
+                    "tests/test_admin_blackhouse_status.py",
+                    "tests/test_admin_blackhouse_routing.py",
+                    "tests/test_admin_blackhouse_migration.py",
+                    "nonebot_plugin_xiuxian_2/features/admin/tests/test_blackhouse_repository.py",
+                ):
+                    self.assertIn(evidence, item["evidence"])
+                graph = " ".join(item["call_graph"])
+                self.assertIn("legacy.admin.007", graph)
+                self.assertIn("legacy_json_and_is_ban_v1", graph)
+                self.assertIn("admin_blackhouse_users", graph)
+                self.assertIn("_filter_blackhoused_matchers", graph)
+        self.assertTrue(report["frozen_membership_valid"])
+        self.assertEqual(report["integrity_errors"], [])
+
     def test_command_binding_refresh_preserves_custom_downstream_edges(self):
         existing_graph = [
             "initialized NoneBot -> old command path",
@@ -109,7 +144,7 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
         self.assertEqual(report["path_count"], 496)
         self.assertEqual(
             report["status_counts"],
-            {"不可达": 19, "允许保留的兼容路径": 107, "受阻": 166, "已迁移": 204},
+            {"不可达": 19, "允许保留的兼容路径": 107, "受阻": 163, "已迁移": 207},
         )
         self.assertGreater(report["blocked_count"], 0)
         self.assertTrue(all(item["call_graph"] and item["evidence"] for item in report["items"]))

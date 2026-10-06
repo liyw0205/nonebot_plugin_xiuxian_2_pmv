@@ -47,7 +47,6 @@ from ..broadcast_manager import (
     clear_broadcast,
 )
 
-from ..blackhouse import ban_user as global_ban_user, unban_user as global_unban_user, list_blackhoused_users
 from ..xiuxian_utils.lay_out import assign_bot, Cooldown
 from ..xiuxian_utils.data_source import jsondata
 from ..xiuxian_base import clear_all_xiangyuan
@@ -79,7 +78,6 @@ from .transaction_service import AdminExpAdjustmentService
 from .transaction_service import AdminItemDestroyService
 from .transaction_service import AdminPlayerStatusResetService
 from .transaction_service import AdminPlayerStatusBatchResetService
-from .transaction_service import AdminBlackhouseStatusService
 from . import command_controls as _command_controls  # noqa: F401
 from . import empty_fallback as _empty_fallback  # noqa: F401
 from . import event_debug as _event_debug  # noqa: F401
@@ -120,7 +118,6 @@ admin_base_application = BaseApplication(get_paths().game_db, get_paths().player
 _admin_item_destroy_service_instance = None
 _admin_player_status_reset_service_instance = None
 _admin_player_status_batch_reset_service_instance = None
-_admin_blackhouse_status_service_instance = None
 
 
 def _sql_message():
@@ -161,15 +158,6 @@ def _admin_player_status_batch_reset_service():
             _admin_player_status_reset_service(),
         )
     return _admin_player_status_batch_reset_service_instance
-
-
-def _admin_blackhouse_status_service():
-    global _admin_blackhouse_status_service_instance
-    if _admin_blackhouse_status_service_instance is None:
-        _admin_blackhouse_status_service_instance = AdminBlackhouseStatusService(
-            get_paths().game_db
-        )
-    return _admin_blackhouse_status_service_instance
 
 
 def _admin_exp_adjustment_service():
@@ -1960,10 +1948,7 @@ async def items_refresh_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     await handle_send(bot, event, msg)
     await items_refresh.finish()
 
-@blackhouse.handle(parameterless=[Cooldown(cd_time=0)])
-async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
-    bot, _ = await assign_bot(bot=bot, event=event)
-
+def _resolve_blackhouse_target(args: Message) -> tuple[str | None, str | None]:
     plain_text = args.extract_plain_text().strip()
     target_user_id = None
     target_name = None
@@ -1987,72 +1972,99 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
             # 允许直接封禁未注册 openid/QQ，作为全局娱乐封禁
             target_user_id = dao_name
             target_name = dao_name
+    return target_user_id, target_name
+
+
+def _blackhouse_storage_error(exc: Exception) -> str:
+    logger.warning("admin blackhouse storage failed: {}", type(exc).__name__)
+    if isinstance(exc, RuntimeError) and str(exc) == "schema_missing":
+        return "小黑屋服务尚未就绪，请检查启动迁移。"
+    return "小黑屋操作失败：存储服务异常，请检查服务日志。"
+
+
+@blackhouse.handle(parameterless=[Cooldown(cd_time=0)])
+async def blackhouse_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
+    bot, _ = await assign_bot(bot=bot, event=event)
+    try:
+        target_user_id, target_name = _resolve_blackhouse_target(args)
+    except Exception as exc:
+        await handle_send(bot, event, _blackhouse_storage_error(exc))
+        return
 
     if not target_user_id:
         await handle_send(bot, event, "未找到目标用户！请正确艾特、输入道号，或直接输入用户ID。")
         return
 
-    expected_banned = _admin_blackhouse_status_service().snapshot(str(target_user_id))
-    result = admin_application.set_blackhouse_status(
-        _admin_operation_id(event, "blackhouse-ban", str(target_user_id)),
-        str(get_user_id(event) or "unknown"), str(target_user_id), expected_banned, True
-    )
+    try:
+        expected_banned = admin_application.blackhouse_snapshot(str(target_user_id))
+        result = admin_application.set_blackhouse_status(
+            _admin_operation_id(event, "blackhouse-ban", str(target_user_id)),
+            str(get_user_id(event) or "unknown"), str(target_user_id), expected_banned, True,
+            name=str(target_name or target_user_id),
+        )
+    except Exception as exc:
+        await handle_send(bot, event, _blackhouse_storage_error(exc))
+        return
     status = result.status
-    if status == "user_missing":
-        status = global_ban_user(str(target_user_id), name=str(target_name or target_user_id))
-    if status in {"unchanged", "duplicate"}:
-        await handle_send(bot, event, f"{target_name} 已在小黑屋中。")
+    if status == "duplicate":
+        msg = "该请求已处理，请查看小黑屋名单确认当前状态。"
+    elif status == "schema_missing":
+        msg = "小黑屋服务尚未就绪，请检查启动迁移。"
+    elif not result.succeeded or status not in {"changed", "unchanged"}:
+        msg = f"小黑屋操作失败：{status}，请重新查询名单后重试。"
+    elif status == "unchanged":
+        msg = f"{target_name} 已在小黑屋中。"
     else:
-        await handle_send(bot, event, f"{target_name} 已被关入小黑屋（全局封禁，含娱乐指令）！")
+        msg = f"{target_name} 已被关入小黑屋（全局封禁，含娱乐指令）！"
+    await handle_send(bot, event, msg)
 
 
 @unblackhouse.handle(parameterless=[Cooldown(cd_time=0)])
-async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
+async def unblackhouse_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     bot, _ = await assign_bot(bot=bot, event=event)
-
-    plain_text = args.extract_plain_text().strip()
-    target_user_id = None
-    target_name = None
-
-    at_qq = get_at_user_id(args)
-    if at_qq:
-        target_user_id = str(at_qq)
-        user = _sql_message().get_user_info_with_id(target_user_id)
-        target_name = (user.get("user_name") if user else None) or target_user_id
-    elif plain_text:
-        tokens = plain_text.split()
-        dao_name = tokens[-1]
-        user = _sql_message().get_user_info_with_name(dao_name)
-        if user:
-            target_user_id = str(user["user_id"])
-            target_name = user.get("user_name") or target_user_id
-        elif re.fullmatch(r"[A-Za-z0-9_\-]{4,64}", dao_name):
-            target_user_id = dao_name
-            target_name = dao_name
+    try:
+        target_user_id, target_name = _resolve_blackhouse_target(args)
+    except Exception as exc:
+        await handle_send(bot, event, _blackhouse_storage_error(exc))
+        return
 
     if not target_user_id:
         await handle_send(bot, event, "未找到目标用户！请正确艾特、输入道号，或直接输入用户ID。")
         return
 
-    expected_banned = _admin_blackhouse_status_service().snapshot(str(target_user_id))
-    result = admin_application.set_blackhouse_status(
-        _admin_operation_id(event, "blackhouse-unban", str(target_user_id)),
-        str(get_user_id(event) or "unknown"), str(target_user_id), expected_banned, False
-    )
+    try:
+        expected_banned = admin_application.blackhouse_snapshot(str(target_user_id))
+        result = admin_application.set_blackhouse_status(
+            _admin_operation_id(event, "blackhouse-unban", str(target_user_id)),
+            str(get_user_id(event) or "unknown"), str(target_user_id), expected_banned, False,
+            name=str(target_name or target_user_id),
+        )
+    except Exception as exc:
+        await handle_send(bot, event, _blackhouse_storage_error(exc))
+        return
     status = result.status
-    if status == "user_missing":
-        status = global_unban_user(str(target_user_id))
-    if status in {"unchanged", "duplicate"}:
-        await handle_send(bot, event, f"{target_name} 当前未被封禁。")
+    if status == "duplicate":
+        msg = "该请求已处理，请查看小黑屋名单确认当前状态。"
+    elif status == "schema_missing":
+        msg = "小黑屋服务尚未就绪，请检查启动迁移。"
+    elif not result.succeeded or status not in {"changed", "unchanged"}:
+        msg = f"小黑屋操作失败：{status}，请重新查询名单后重试。"
+    elif status == "unchanged":
+        msg = f"{target_name} 当前未被封禁。"
     else:
-        await handle_send(bot, event, f"{target_name} 已从小黑屋释放，恢复自由！")
+        msg = f"{target_name} 已从小黑屋释放，恢复自由！"
+    await handle_send(bot, event, msg)
 
 
 @view_blackhouse.handle(parameterless=[Cooldown(cd_time=0)])
-async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+async def view_blackhouse_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     bot, _ = await assign_bot(bot=bot, event=event)
 
-    banned_users = list_blackhoused_users()
+    try:
+        banned_users = admin_application.list_blackhoused_users()
+    except Exception as exc:
+        await handle_send(bot, event, _blackhouse_storage_error(exc))
+        return
     if not banned_users:
         await handle_send(bot, event, "当前小黑屋空空如也～")
         return

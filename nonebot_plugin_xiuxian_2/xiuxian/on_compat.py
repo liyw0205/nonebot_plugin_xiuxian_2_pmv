@@ -27,7 +27,7 @@ from nonebot.plugin.on import (
 from nonebot.rule import TrieRule
 
 from ..bootstrap.legacy import register_legacy_startup
-from .blackhouse import is_user_blackhoused, load_blackhouse_memory, bootstrap_from_user_xiuxian
+from .blackhouse import is_user_blackhoused
 from .command_disable import (
     disabled_command_keys_for_route,
     is_command_disabled,
@@ -372,24 +372,18 @@ def _filter_blackhoused_matchers(
     event: "Event",
 ) -> list[type["Matcher"]]:
     """小黑屋全局封禁：拦截所有 routed matcher，管理模块指令除外。"""
+    blocked = {
+        matcher
+        for matcher in candidates
+        if matcher in _MATCHER_ROUTES and not _matcher_exempt_command_disable(matcher)
+    }
+    if not blocked:
+        return candidates
     uid = _event_user_id(event)
     if not uid or not is_user_blackhoused(uid):
         return candidates
-
-    kept: list[type["Matcher"]] = []
-    blocked_any = False
-    for matcher in candidates:
-        if _matcher_exempt_command_disable(matcher):
-            kept.append(matcher)
-            continue
-        # 仅拦截已纳入 on_compat 路由的指令；未路由 matcher 保持原行为
-        if matcher in _MATCHER_ROUTES:
-            blocked_any = True
-            continue
-        kept.append(matcher)
-    if blocked_any:
-        logger.info("[修仙 小黑屋] 用户 {} 指令已全局封禁", uid)
-    return kept
+    logger.info("[修仙 小黑屋] 用户 {} 指令已全局封禁", uid)
+    return [matcher for matcher in candidates if matcher not in blocked]
 
 
 def _get_plain_text(event: "Event") -> str:
@@ -630,8 +624,6 @@ class XiuxianOnCompatProvider(MatcherProvider):
 
 def rebuild_on_compat_index() -> None:
     load_command_disable_memory()
-    load_blackhouse_memory()
-    bootstrap_from_user_xiuxian()
     rebuild_alias_index(_collect_alias_to_primary_map())
     sync_command_registry(_collect_registered_command_registry())
     provider = getattr(matchers, "provider", None)
