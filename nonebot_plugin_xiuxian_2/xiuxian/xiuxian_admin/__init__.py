@@ -397,7 +397,7 @@ async def at_test_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
     try:
         await delivery_service.reply(bot, event, MessageSegment.markdown_keyboard(bot, msg, rows))
     except Exception as e:
-        logger.error(f"艾特测试按钮发送失败: {e}")
+        logger.error(f"艾特测试按钮发送失败 ({type(e).__name__})")
         await handle_send(bot, event, msg)
 
 
@@ -2482,7 +2482,7 @@ async def keyboard_test_cmd_(
         await delivery_service.reply(bot, event, msg)
     except Exception as e:
         err = str(e)
-        logger.error(f"按钮测试发送失败: {err}")
+        logger.error(f"按钮测试发送失败 ({type(e).__name__})")
 
         reason = "按钮测试发送失败，请确认当前为 QQ 官方适配器且平台支持自定义键盘。"
         m_msg = re.search(r"message=([^,>]+)", err)

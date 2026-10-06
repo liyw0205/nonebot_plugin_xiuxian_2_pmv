@@ -144,6 +144,37 @@ def _has_production_bank_savef_import() -> bool:
 
 @lru_cache(maxsize=1)
 def _slice_status() -> dict[str, dict[str, object]]:
+    @lru_cache(maxsize=None)
+    def output_tree(source: str) -> ast.Module:
+        return ast.parse(source)
+
+    def command_permission(source: str, command: str) -> str | None:
+        """Return a command registration's permission without matching handler text."""
+        try:
+            tree = output_tree(source)
+        except SyntaxError:
+            return None
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Assign) or not isinstance(node.value, ast.Call):
+                continue
+            if not isinstance(node.value.func, ast.Name) or node.value.func.id != "on_command":
+                continue
+            if not node.value.args or not isinstance(node.value.args[0], ast.Constant):
+                continue
+            if node.value.args[0].value != command:
+                continue
+            for keyword in node.value.keywords:
+                if keyword.arg == "permission":
+                    return ast.unparse(keyword.value)
+            return ""
+        return None
+
+    def output_function(source: str, name: str) -> str:
+        return next((
+            ast.unparse(node) for node in output_tree(source).body
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == name
+        ), "")
+
     base = (PACKAGE / "xiuxian" / "xiuxian_base" / "__init__.py").read_text(encoding="utf-8")
     base_root_reroll_handler = base[base.index("@restart.handle"):base.index("@rank.handle")]
     interactive_facade = (PACKAGE / "xiuxian" / "xiuxian_Interactive" / "__init__.py").read_text(encoding="utf-8")
@@ -972,6 +1003,11 @@ def _slice_status() -> dict[str, dict[str, object]]:
     admin_config_tests = (ROOT / "tests" / "test_admin_config_owner.py").read_text(encoding="utf-8")
     admin_mutation_tests = (ROOT / "tests" / "test_admin_mutation_results.py").read_text(encoding="utf-8")
     xiangyuan_clear_tests = (ROOT / "tests" / "test_xiangyuan_clear_all.py").read_text(encoding="utf-8")
+    admin_event_debug = (PACKAGE / "xiuxian" / "xiuxian_admin" / "event_debug.py").read_text(encoding="utf-8")
+    admin_command_controls = (PACKAGE / "xiuxian" / "xiuxian_admin" / "command_controls.py").read_text(encoding="utf-8")
+    admin_event_debug_tests = (ROOT / "tests" / "test_admin_event_debug_compat.py").read_text(encoding="utf-8")
+    admin_output_tests = (ROOT / "tests" / "test_admin_output_commands_compat.py").read_text(encoding="utf-8")
+    admin_all_apply_handler = output_function(admin_command_controls, "all_apply_cmd_")
     admin_status_batch_handler = admin_facade[
         admin_facade.index("async def restate_") : admin_facade.index(
             "@set_xiuxian.handle", admin_facade.index("async def restate_")
@@ -4630,6 +4666,55 @@ def _slice_status() -> dict[str, dict[str, object]]:
                 and "def test_real_clear_all_facade_reports_rolled_back_failure" in admin_mutation_tests
             ),
             "status": "existing_feature_mutations_retained_with_executable_adapter_and_refund_contracts",
+        },
+        "admin_output_compatibility": {
+            "nine_output_commands_keep_permission_boundaries": (
+                all(command_permission(admin_facade, command) == "SUPERUSER" for command in ("修仙手册", "按钮测试", "艾特测试", "广播帮助"))
+                and all(command_permission(admin_event_debug, command) == "SUPERUSER" for command in ("消息信息", "取链接", "取raw", "取reply"))
+                and command_permission(admin_command_controls, "全量申请") == ""
+            ),
+            "event_debug_reads_current_event_without_history_lookup": (
+                all(token in admin_event_debug for token in ("_event_to_dict(event)", "_extract_urls_from_any(event)", "_extract_reply_raw_payload(event)"))
+                and not any(token in admin_event_debug for token in ("get_msg(", "get_history", "message_db", "history_messages"))
+            ),
+            "output_commands_use_shared_delivery_ports": (
+                all(token in output_function(admin_event_debug, "_send_blocks") for token in ("delivery_service.reply", "handle_send"))
+                and all("_send_blocks(" in output_function(admin_event_debug, name) for name in (
+                    "parse_event_cmd_", "fetch_link_cmd_", "fetch_raw_cmd_", "fetch_reply_cmd_",
+                ))
+                and all("send_help_message(" in output_function(admin_facade, name) for name in (
+                    "super_help_", "broadcast_help_cmd_",
+                ))
+                and all(token in output_function(admin_facade, name) for name in (
+                    "at_test_cmd_", "keyboard_test_cmd_",
+                ) for token in ("delivery_service.reply", "handle_send"))
+                and "delivery_service.reply" in admin_all_apply_handler
+            ),
+            "all_apply_fallback_preserves_authorization_url": (
+                "url_msg = f" in admin_all_apply_handler
+                and "授权链接：{target_url}" in admin_all_apply_handler
+                and "MessageSegment.markdown(bot, url_msg)" in admin_all_apply_handler
+                and "handle_send(bot, event, url_msg)" in admin_all_apply_handler
+            ),
+            "output_compatibility_has_behavioral_coverage": (
+                all(
+                    token in admin_event_debug_tests
+                    for token in (
+                        "test_link_handler_extracts_and_deduplicates_current_event_without_fetching",
+                        "test_raw_handler_serializes_current_event_and_truncates_large_output",
+                        "test_reply_handler_prefers_raw_reply_and_supports_adapter_reference_shapes",
+                    )
+                )
+                and all(
+                    token in admin_output_tests
+                    for token in (
+                        "test_output_command_permission_boundaries",
+                        "test_manual_uses_real_pagination_and_shared_help_delivery",
+                        "test_all_apply_markdown_fallback_retains_authorization_url",
+                    )
+                )
+            ),
+            "status": "admin_output_commands_keep_legacy_permissions_event_only_debug_reads_shared_delivery_and_url_fallback",
         },
         "admin": {
             "stone_default_application_owned": (

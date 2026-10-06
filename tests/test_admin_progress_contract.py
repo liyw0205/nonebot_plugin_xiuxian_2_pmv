@@ -15,6 +15,12 @@ class AdminProgressContractTests(unittest.TestCase):
             if key != "status":
                 self.assertTrue(value, key)
 
+    def test_admin_output_commands_keep_compatibility_boundaries(self):
+        output = _slice_status()["admin_output_compatibility"]
+        for key, value in output.items():
+            if key != "status":
+                self.assertTrue(value, key)
+
     def test_admin_single_mutations_are_application_owned(self):
         admin = _slice_status()["admin"]
         for key in (

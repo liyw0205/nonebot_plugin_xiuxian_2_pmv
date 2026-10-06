@@ -118,22 +118,30 @@ async def all_apply_cmd_(
     bot, _ = await assign_bot(bot=bot, event=event)
 
     group_id_str = args.extract_plain_text().strip()
-    if not group_id_str or not group_id_str.isdigit():
+    try:
+        group_code = int(group_id_str) if re.fullmatch(r"[0-9]+", group_id_str) else 0
+    except ValueError:
+        group_code = 0
+    if group_code <= 0:
         await handle_send(bot, event, f"用法：全量申请 [目标群号]\n示例：全量申请 {XiuConfig().qqq}")
         return
 
     config = XiuConfig()
-    bot_uin = getattr(config, "bot_uin", 0)
+    bot_uin_raw = getattr(config, "bot_uin", 0)
     bot_uid = getattr(config, "bot_uid", "")
 
-    if not bot_uin or not bot_uid:
+    try:
+        bot_uin = int(bot_uin_raw)
+    except (TypeError, ValueError, OverflowError):
+        bot_uin = 0
+    if bot_uin <= 0 or not bot_uid:
         await handle_send(bot, event, "错误：请先在 xiu 配置中设置 bot_uin 和 bot_uid！")
         return
 
     info_dict = {
         "page_name": "ai_group_service_agreement_pop_page",
-        "groupCode": int(group_id_str),
-        "botUin": int(bot_uin),
+        "groupCode": group_code,
+        "botUin": bot_uin,
         "botUid": str(bot_uid),
         "screen": 1,
     }
@@ -158,16 +166,16 @@ async def all_apply_cmd_(
         )
         await delivery_service.reply(bot, event, msg)
     except Exception as e:
-        logger.warning(f"全量申请：自定义键盘发送失败，尝试降级原生 MD: {e}")
+        logger.warning(f"全量申请：自定义键盘发送失败，尝试降级原生 MD ({type(e).__name__})")
+        url_msg = (
+            "全量申请授权\n"
+            "请群主点击下方链接完成授权。\n"
+            "提示：需要更新 QQ 到最新版（9.2.90 及以上）。\n"
+            f"授权链接：{target_url}"
+        )
         try:
-            msg = MessageSegment.markdown(bot, md_text)
+            msg = MessageSegment.markdown(bot, url_msg)
             await delivery_service.reply(bot, event, msg)
         except Exception as e2:
-            logger.error(f"全量申请：Markdown 发送失败，降级纯文本: {e2}")
-            fallback_msg = (
-                "全量申请授权\n"
-                "请群主点击下方链接完成授权。\n"
-                "提示：需要更新 QQ 到最新版（9.2.90 及以上）。\n"
-                f"授权链接：{target_url}"
-            )
-            await handle_send(bot, event, fallback_msg)
+            logger.error(f"全量申请：Markdown 发送失败，降级纯文本 ({type(e2).__name__})")
+            await handle_send(bot, event, url_msg)

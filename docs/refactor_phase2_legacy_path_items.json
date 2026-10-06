@@ -2003,22 +2003,25 @@
       "id": "command:admin:修仙手册",
       "kind": "commands",
       "entry": "admin:修仙手册 (aliases: 修仙管理)",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "允许保留的兼容路径",
+      "reason": "This administrator-only command renders static help text and pagination buttons. It does not own business state; delivery remains through the shared help/message adapter and is covered by source-function regression. Retain it as a compatibility output until the independent P7 release gate permits removal.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:320 super_help = on_command('修仙手册') aliases=修仙管理 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2069 super_help_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2069 super_help_ -> paginate_text_blocks -> send_help_message compatibility delivery",
+        "shared send_help_message / send_msg_handler / delivery_service.reply / handle_send -> adapter_message_sender -> record_send_message -> queued message history and reply counters; config, ID mapping and rendering resources remain shared compatibility infrastructure"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:320",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2069"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2069",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_utils/utils.py:1814",
+        "tests/test_admin_output_commands_compat.py",
+        "tests/test_admin_progress_contract.py"
       ],
       "source_declaration_found": true,
       "source": {
@@ -2209,22 +2212,25 @@
       "id": "command:admin:全量申请",
       "kind": "commands",
       "entry": "admin:全量申请 (aliases: )",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "允许保留的兼容路径",
+      "reason": "This public command only builds the QQ group authorization URL and sends it through the keyboard/Markdown/plain-text compatibility fallbacks. It does not submit an authorization request or mutate group state. The keyboard restricts clicking to group owners; link fallbacks rely on authorization at the destination page. URL preservation and invalid-input handling are covered by source-function regression. Retain it until the independent P7 release gate permits removal.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/command_controls.py:24 all_apply_cmd = on_command('全量申请') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/command_controls.py:113 all_apply_cmd_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/command_controls.py:113 all_apply_cmd_ -> target_url -> shared delivery fallback chain",
+        "shared send_help_message / send_msg_handler / delivery_service.reply / handle_send -> adapter_message_sender -> record_send_message -> queued message history and reply counters; config, ID mapping and rendering resources remain shared compatibility infrastructure"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/command_controls.py:24",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/command_controls.py:113"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/command_controls.py:113",
+        "nonebot_plugin_xiuxian_2/xiuxian/messaging/delivery.py:226",
+        "tests/test_admin_output_commands_compat.py",
+        "tests/test_admin_progress_contract.py"
       ],
       "source_declaration_found": true,
       "source": {
@@ -3106,22 +3112,25 @@
       "id": "command:admin:取raw",
       "kind": "commands",
       "entry": "admin:取raw (aliases: 原始JSON)",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "允许保留的兼容路径",
+      "reason": "This administrator-only command serializes and truncates the current event payload, then sends the result through the shared delivery adapter. It does not fetch historical messages or mutate business state; current-event and fallback behavior are covered by source-function regression. Retain it as a compatibility output until the independent P7 release gate permits removal.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/event_debug.py:32 fetch_raw_cmd = on_command('取raw') aliases=原始JSON,原始json,取RAW,取Raw -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/event_debug.py:552 fetch_raw_cmd_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/event_debug.py:552 fetch_raw_cmd_ -> _event_to_dict -> _send_blocks compatibility delivery",
+        "shared send_help_message / send_msg_handler / delivery_service.reply / handle_send -> adapter_message_sender -> record_send_message -> queued message history and reply counters; config, ID mapping and rendering resources remain shared compatibility infrastructure"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/event_debug.py:32",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/event_debug.py:552"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/event_debug.py:552",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/event_debug.py:429",
+        "tests/test_admin_event_debug_compat.py",
+        "tests/test_admin_progress_contract.py"
       ],
       "source_declaration_found": true,
       "source": {
@@ -3133,22 +3142,25 @@
       "id": "command:admin:取reply",
       "kind": "commands",
       "entry": "admin:取reply (aliases: 原始reply, 取引用)",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "允许保留的兼容路径",
+      "reason": "This administrator-only command extracts reply/reference data from the current event and sends the bounded payload through the shared delivery adapter. It does not query message history or mutate business state; adapter-shape and fallback behavior are covered by source-function regression. Retain it as a compatibility output until the independent P7 release gate permits removal.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/event_debug.py:33 fetch_reply_cmd = on_command('取reply') aliases=原始reply,取REPLY,取Reply,取引用 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/event_debug.py:564 fetch_reply_cmd_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/event_debug.py:564 fetch_reply_cmd_ -> _extract_reply_raw_payload -> _send_blocks compatibility delivery",
+        "shared send_help_message / send_msg_handler / delivery_service.reply / handle_send -> adapter_message_sender -> record_send_message -> queued message history and reply counters; config, ID mapping and rendering resources remain shared compatibility infrastructure"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/event_debug.py:33",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/event_debug.py:564"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/event_debug.py:564",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/event_debug.py:429",
+        "tests/test_admin_event_debug_compat.py",
+        "tests/test_admin_progress_contract.py"
       ],
       "source_declaration_found": true,
       "source": {
@@ -3187,22 +3199,25 @@
       "id": "command:admin:取链接",
       "kind": "commands",
       "entry": "admin:取链接 (aliases: 提取链接, 获取链接)",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "允许保留的兼容路径",
+      "reason": "This administrator-only command extracts and de-duplicates URLs from the current event and sends them through the shared delivery adapter. It does not download URLs, fetch historical messages, or mutate business state; current-event and no-link behavior are covered by source-function regression. Retain it as a compatibility output until the independent P7 release gate permits removal.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/event_debug.py:31 fetch_link_cmd = on_command('取链接') aliases=提取链接,获取链接 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/event_debug.py:498 fetch_link_cmd_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/event_debug.py:498 fetch_link_cmd_ -> _extract_urls_from_any -> _send_blocks compatibility delivery",
+        "shared send_help_message / send_msg_handler / delivery_service.reply / handle_send -> adapter_message_sender -> record_send_message -> queued message history and reply counters; config, ID mapping and rendering resources remain shared compatibility infrastructure"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/event_debug.py:31",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/event_debug.py:498"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/event_debug.py:498",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/event_debug.py:429",
+        "tests/test_admin_event_debug_compat.py",
+        "tests/test_admin_progress_contract.py"
       ],
       "source_declaration_found": true,
       "source": {
@@ -3862,22 +3877,25 @@
       "id": "command:admin:广播帮助",
       "kind": "commands",
       "entry": "admin:广播帮助 (aliases: 广播指令, 广播说明)",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "允许保留的兼容路径",
+      "reason": "This administrator-only command renders static broadcast instructions and management buttons; it does not create, cancel, or mutate a broadcast task. Shared help delivery and the no-task behavior are covered by source-function regression. Retain it as a compatibility output until the independent P7 release gate permits removal.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:367 broadcast_help_cmd = on_command('广播帮助') aliases=广播指令,广播说明 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2816 broadcast_help_cmd_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2816 broadcast_help_cmd_ -> send_help_message compatibility delivery",
+        "shared send_help_message / send_msg_handler / delivery_service.reply / handle_send -> adapter_message_sender -> record_send_message -> queued message history and reply counters; config, ID mapping and rendering resources remain shared compatibility infrastructure"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:367",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2816"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2816",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_utils/utils.py:1814",
+        "tests/test_admin_output_commands_compat.py",
+        "tests/test_admin_progress_contract.py"
       ],
       "source_declaration_found": true,
       "source": {
@@ -4794,22 +4812,25 @@
       "id": "command:admin:按钮测试",
       "kind": "commands",
       "entry": "admin:按钮测试 (aliases: )",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "允许保留的兼容路径",
+      "reason": "This administrator-only command parses a test keyboard and sends it through the shared delivery adapter, falling back to a diagnostic message on platform errors. It does not own business state; parser, delivery, and platform-error log redaction are covered by source-function regression. This classification does not claim a bound on input parsing or total message size. Retain it as a compatibility output until the independent P7 release gate permits removal.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:335 keyboard_test_cmd = on_command('按钮测试') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2470 keyboard_test_cmd_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2470 keyboard_test_cmd_ -> _parse_keyboard_test_rows -> shared delivery fallback",
+        "shared send_help_message / send_msg_handler / delivery_service.reply / handle_send -> adapter_message_sender -> record_send_message -> queued message history and reply counters; config, ID mapping and rendering resources remain shared compatibility infrastructure"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:335",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2470"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2470",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/admin_helpers.py:118",
+        "tests/test_admin_output_commands_compat.py",
+        "tests/test_admin_progress_contract.py"
       ],
       "source_declaration_found": true,
       "source": {
@@ -6482,22 +6503,25 @@
       "id": "command:admin:消息信息",
       "kind": "commands",
       "entry": "admin:消息信息 (aliases: )",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "允许保留的兼容路径",
+      "reason": "This administrator-only command renders current event information and truncates its serialized raw section before shared delivery. It does not query historical messages or mutate business state; current-event serialization and fallback behavior are covered by source-function regression. This does not bound pre-serialization work or the basic-info section. Retain it as a compatibility output until the independent P7 release gate permits removal.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/event_debug.py:30 parse_event_cmd = on_command('消息信息') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/event_debug.py:470 parse_event_cmd_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/event_debug.py:470 parse_event_cmd_ -> _build_event_info_blocks -> template _send_blocks / native delivery_service.reply / handle_send compatibility delivery",
+        "shared send_help_message / send_msg_handler / delivery_service.reply / handle_send -> adapter_message_sender -> record_send_message -> queued message history and reply counters; config, ID mapping and rendering resources remain shared compatibility infrastructure"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/event_debug.py:30",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/event_debug.py:470"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/event_debug.py:470",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/event_debug.py:429",
+        "tests/test_admin_event_debug_compat.py",
+        "tests/test_admin_progress_contract.py"
       ],
       "source_declaration_found": true,
       "source": {
@@ -7958,22 +7982,25 @@
       "id": "command:admin:艾特测试",
       "kind": "commands",
       "entry": "admin:艾特测试 (aliases: )",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "允许保留的兼容路径",
+      "reason": "This administrator-only command reports mentions and creates at most 25 test buttons through the shared delivery adapter, falling back to text on platform errors. It does not own business state; mention bounds and error-redaction behavior are covered by source-function regression. Retain it as a compatibility output until the independent P7 release gate permits removal.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:336 at_test_cmd = on_command('艾特测试') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:377 at_test_cmd_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:377 at_test_cmd_ -> bounded keyboard -> shared delivery fallback",
+        "shared send_help_message / send_msg_handler / delivery_service.reply / handle_send -> adapter_message_sender -> record_send_message -> queued message history and reply counters; config, ID mapping and rendering resources remain shared compatibility infrastructure"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:336",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:377"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:377",
+        "nonebot_plugin_xiuxian_2/xiuxian/messaging/delivery.py:226",
+        "tests/test_admin_output_commands_compat.py",
+        "tests/test_admin_progress_contract.py"
       ],
       "source_declaration_found": true,
       "source": {
