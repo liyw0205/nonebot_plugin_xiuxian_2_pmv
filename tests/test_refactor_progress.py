@@ -327,6 +327,12 @@ class RefactorProgressTests(unittest.TestCase):
         self.assertTrue(backup_restore["application_owns_restore_order_and_runtime_boundary"])
         self.assertTrue(backup_restore["repository_bounds_and_validates_zip_before_overlay"])
         self.assertTrue(backup_restore["restore_behavior_and_failure_boundaries_are_tested"])
+        backup_cloud = slices["plugin_backup_cloud_owner"]
+        self.assertTrue(backup_cloud["legacy_cloud_routes_use_feature_application"])
+        self.assertTrue(backup_cloud["cloud_restore_fetch_and_restore_share_feature_owners"])
+        self.assertTrue(backup_cloud["application_bounds_batches_and_preserves_partial_results"])
+        self.assertTrue(backup_cloud["repository_bounds_webdav_and_atomically_installs_archives"])
+        self.assertTrue(backup_cloud["manager_compatibility_methods_and_cloud_contracts_are_tested"])
         activity_static_help = slices["activity_static_help"]
         self.assertTrue(activity_static_help["help_and_manage_remain_static_compatibility_handlers"])
         boss = slices["activity_boss"]

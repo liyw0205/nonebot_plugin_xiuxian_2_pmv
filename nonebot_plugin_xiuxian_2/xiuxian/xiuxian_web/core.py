@@ -38,6 +38,7 @@ from ...paths import get_paths
 from ...infrastructure.clock import SystemClock
 from ...features.plugin_backups import (
     PluginBackupCatalogApplication,
+    build_plugin_backup_cloud_application,
     PluginBackupCatalogRepository,
     PluginBackupFileApplication,
     PluginBackupFileRepository,
@@ -102,6 +103,7 @@ plugin_backup_file_application = PluginBackupFileApplication(
     PluginBackupFileRepository(get_paths().backups)
 )
 plugin_backup_restore_application = build_plugin_backup_restore_application(update_manager)
+plugin_backup_cloud_application = build_plugin_backup_cloud_application(update_manager)
 WEB_CONFIG = XiuConfig()
 app = Flask(__name__)
 

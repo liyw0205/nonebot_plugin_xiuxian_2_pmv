@@ -8,6 +8,12 @@ from .file_repository import (
     PluginBackupFileRepository,
 )
 from .repository import PluginBackupCatalogRepository
+from .cloud_application import PluginBackupCloudApplication
+from .cloud_factory import build_plugin_backup_cloud_application
+from .cloud_repository import (
+    InvalidCloudPluginBackup,
+    PluginBackupCloudRepository,
+)
 from .restore_application import PluginBackupRestoreApplication
 from .restore_factory import build_plugin_backup_restore_application
 from .restore_repository import (
@@ -23,6 +29,10 @@ __all__ = [
     "InvalidPluginBackupFile",
     "PluginBackupFileNotFound",
     "PluginBackupFileRepository",
+    "InvalidCloudPluginBackup",
+    "PluginBackupCloudApplication",
+    "PluginBackupCloudRepository",
+    "build_plugin_backup_cloud_application",
     "InvalidPluginBackupArchive",
     "PluginBackupArchiveNotFound",
     "PluginBackupRestoreApplication",

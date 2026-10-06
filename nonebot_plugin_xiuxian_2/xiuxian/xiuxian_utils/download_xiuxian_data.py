@@ -825,81 +825,26 @@ class UpdateManager:
 
     def list_webdav_backups(self):
         """列出云端插件备份"""
-        try:
-            ok, msg, paths = self._get_webdav_paths()
-            if not ok:
-                return False, "未配置 WebDAV 信息。请前往配置管理设置。"
+        from ...features.plugin_backups import build_plugin_backup_cloud_application
 
-            root_url = paths["plugin_url"]
-            auth = paths["auth"]
-            backup_folder = Path(paths["plugin_rel"]).name if paths["plugin_rel"] else "backups"
-
-            headers = {"Depth": "1"}
-            r = requests.request("PROPFIND", root_url, auth=auth, timeout=15, headers=headers)
-
-            if r.status_code not in (207, 200):
-                return False, f"无法连接到 WebDAV (HTTP {r.status_code})。"
-
-            import xml.etree.ElementTree as ET
-            ns = {"d": "DAV:"}
-            root = ET.fromstring(r.text)
-
-            cloud_files = []
-            for resp in root.findall("d:response", ns):
-                href_el = resp.find("d:href", ns)
-                if href_el is None or not href_el.text:
-                    continue
-                href = href_el.text
-                name = href.rstrip('/').split('/')[-1]
-
-                if not name or name in (backup_folder,):
-                    continue
-
-                # 过滤目录
-                rt = resp.find(".//d:resourcetype", ns)
-                is_collection = (rt is not None and rt.find("d:collection", ns) is not None)
-                if is_collection:
-                    continue
-
-                size_el = resp.find(".//d:getcontentlength", ns)
-                time_el = resp.find(".//d:getlastmodified", ns)
-                raw_modified = time_el.text if time_el is not None else ""
-
-                cloud_files.append({
-                    "filename": name,
-                    "size": int(size_el.text) if size_el is not None and str(size_el.text).isdigit() else 0,
-                    "modified": self._gmt_to_cst_str(raw_modified)
-                })
-
-            return True, sorted(cloud_files, key=lambda x: x['modified'], reverse=True)
-        except Exception as e:
-            return False, f"WebDAV 访问异常: {str(e)}"
+        return build_plugin_backup_cloud_application(self).list_cloud_backups()
 
     def download_from_webdav(self, cloud_filename):
         """下载云端插件备份到本地 backups"""
-        try:
-            cloud_filename = _safe_leaf_name(cloud_filename)
-            ok, msg, paths = self._get_webdav_paths()
-            if not ok:
-                return False, msg
+        from ...features.plugin_backups import build_plugin_backup_cloud_application
 
-            auth = paths["auth"]
-            remote_rel = "/".join(x for x in [paths["plugin_rel"], cloud_filename] if x)
-            remote_url = self._webdav_join_url(paths["base_url"], remote_rel)
+        return build_plugin_backup_cloud_application(self).sync_cloud_backup(
+            cloud_filename, overwrite=True
+        )
 
-            local_path = get_paths().backups / cloud_filename
-            local_path.parent.mkdir(parents=True, exist_ok=True)
+    def plugin_backup_webdav_paths(self):
+        return self._get_webdav_paths()
 
-            r = requests.get(remote_url, auth=auth, timeout=300, stream=True)
-            if r.status_code == 200:
-                with open(local_path, 'wb') as f:
-                    for chunk in r.iter_content(chunk_size=16384):
-                        if chunk:
-                            f.write(chunk)
-                return True, local_path
-            return False, f"下载失败: HTTP {r.status_code}"
-        except Exception as e:
-            return False, f"下载过程中出错: {str(e)}"
+    def plugin_backup_webdav_join_url(self, base_url: str, relative_path: str) -> str:
+        return self._webdav_join_url(base_url, relative_path)
+
+    def plugin_backup_webdav_format_time(self, value: str) -> str:
+        return self._gmt_to_cst_str(value)
 
     # =========================
     # 配置备份云端（统一到 backups/config_backups）
@@ -2043,21 +1988,9 @@ class UpdateManager:
     # =========================
     def delete_webdav_backup(self, filename: str):
         """删除云端插件备份"""
-        try:
-            filename = _safe_leaf_name(filename)
-            ok, msg, paths = self._get_webdav_paths()
-            if not ok:
-                return False, "未配置 WebDAV 信息"
+        from ...features.plugin_backups import build_plugin_backup_cloud_application
 
-            auth = paths["auth"]
-            remote_url = self._webdav_join_url(paths["base_url"], f"{paths['plugin_rel']}/{filename}")
-
-            r = requests.delete(remote_url, auth=auth, timeout=20)
-            if r.status_code in (200, 202, 204):
-                return True, f"已删除云端文件: {filename}"
-            return False, f"删除失败 HTTP {r.status_code}"
-        except Exception as e:
-            return False, f"删除云端文件失败: {e}"
+        return build_plugin_backup_cloud_application(self).delete_cloud_backup(filename)
 
     def delete_webdav_db_backup(self, filename: str):
         """删除云端数据库备份"""

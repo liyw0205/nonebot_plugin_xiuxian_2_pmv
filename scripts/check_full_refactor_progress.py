@@ -420,6 +420,10 @@ def _slice_status() -> dict[str, dict[str, object]]:
     plugin_backup_restore_application = (PACKAGE / "features" / "plugin_backups" / "restore_application.py").read_text(encoding="utf-8")
     plugin_backup_restore_repository = (PACKAGE / "features" / "plugin_backups" / "restore_repository.py").read_text(encoding="utf-8")
     plugin_backup_restore_tests = (PACKAGE / "features" / "plugin_backups" / "tests" / "test_restore.py").read_text(encoding="utf-8")
+    plugin_backup_cloud_application = (PACKAGE / "features" / "plugin_backups" / "cloud_application.py").read_text(encoding="utf-8")
+    plugin_backup_cloud_repository = (PACKAGE / "features" / "plugin_backups" / "cloud_repository.py").read_text(encoding="utf-8")
+    plugin_backup_cloud_tests = (PACKAGE / "features" / "plugin_backups" / "tests" / "test_cloud.py").read_text(encoding="utf-8")
+    plugin_backup_manager = (PACKAGE / "xiuxian" / "xiuxian_utils" / "download_xiuxian_data.py").read_text(encoding="utf-8")
     backup_routes = (PACKAGE / "xiuxian" / "xiuxian_web" / "backups.py").read_text(encoding="utf-8")
     plugin_backup_web_tests = (ROOT / "tests" / "test_updater_web.py").read_text(encoding="utf-8")
     activity_help_handler = activity_commands[
@@ -2048,6 +2052,49 @@ def _slice_status() -> dict[str, dict[str, object]]:
                 and "def test_cloud_restore_does_not_restore_after_download_failure" in plugin_backup_web_tests
             ),
             "status": "local_and_cloud_plugin_zip_restore_share_a_validated_feature_owner",
+        },
+        "plugin_backup_cloud_owner": {
+            "legacy_cloud_routes_use_feature_application": (
+                "plugin_backup_cloud_application.list_cloud_backups()" in backup_routes
+                and "plugin_backup_cloud_application.sync_cloud_backup(" in backup_routes
+                and "plugin_backup_cloud_application.sync_cloud_backups(" in backup_routes
+                and "plugin_backup_cloud_application.delete_cloud_backups(" in backup_routes
+                and "update_manager.list_webdav_backups()" not in backup_routes
+                and "update_manager.download_from_webdav(" not in backup_routes
+                and "update_manager.delete_webdav_backup(" not in backup_routes
+            ),
+            "cloud_restore_fetch_and_restore_share_feature_owners": (
+                "plugin_backup_cloud_application.local_backup_exists(filename)" in backup_routes
+                and "plugin_backup_cloud_application.sync_cloud_backup(" in backup_routes
+                and "plugin_backup_restore_application.restore_backup(filename)" in backup_routes
+            ),
+            "application_bounds_batches_and_preserves_partial_results": (
+                "MAX_CLOUD_BACKUP_BATCH = 100" in plugin_backup_cloud_application
+                and "def sync_cloud_backups(" in plugin_backup_cloud_application
+                and "def delete_cloud_backups(" in plugin_backup_cloud_application
+                and "def local_backup_exists(" in plugin_backup_cloud_application
+                and "return synced, exists, failed" in plugin_backup_cloud_application
+                and "return deleted, failed" in plugin_backup_cloud_application
+            ),
+            "repository_bounds_webdav_and_atomically_installs_archives": (
+                "MAX_CLOUD_LIST_BYTES = 2 * 1024 * 1024" in plugin_backup_cloud_repository
+                and "MAX_CLOUD_LIST_ENTRIES = 1_000" in plugin_backup_cloud_repository
+                and "MAX_PLUGIN_BACKUP_DOWNLOAD_BYTES" in plugin_backup_cloud_repository
+                and "self._read_response(response, MAX_CLOUD_LIST_BYTES)" in plugin_backup_cloud_repository
+                and "zipfile.is_zipfile(temporary_path)" in plugin_backup_cloud_repository
+                and "os.replace(temporary_path, target_path)" in plugin_backup_cloud_repository
+                and "os.link(temporary_path, target_path)" in plugin_backup_cloud_repository
+            ),
+            "manager_compatibility_methods_and_cloud_contracts_are_tested": (
+                "return build_plugin_backup_cloud_application(self).list_cloud_backups()" in plugin_backup_manager
+                and "def test_plugin_backup_cloud_compatibility_methods_delegate_to_feature_owner" in updater_manager_tests
+                and "def test_list_cloud_backups_rejects_oversized_and_entity_xml" in plugin_backup_cloud_tests
+                and "def test_download_writes_valid_zip_atomically_and_closes_response" in plugin_backup_cloud_tests
+                and "def test_bad_download_preserves_existing_file" in plugin_backup_cloud_tests
+                and "def test_batch_sync_and_delete_preserve_partial_results_and_bound_work" in plugin_backup_cloud_tests
+                and "def test_cloud_plugin_backup_routes_keep_admin_csrf_and_batch_contracts" in plugin_backup_web_tests
+            ),
+            "status": "plugin_backup_cloud_listing_sync_delete_and_restore_fetch_share_a_bounded_owner",
         },
         "activity_static_help": {
             "help_and_manage_remain_static_compatibility_handlers": (

@@ -6,6 +6,7 @@ from .core import (
     json,
     jsonify,
     logger,
+    plugin_backup_cloud_application,
     plugin_backup_file_application,
     plugin_backup_restore_application,
     redirect,
@@ -69,7 +70,7 @@ def get_cloud_backups():
     """获取云端备份列表"""
     if 'admin_id' not in session:
         return jsonify({"success": False, "error": "未登录"})
-    success, result = update_manager.list_webdav_backups()
+    success, result = plugin_backup_cloud_application.list_cloud_backups()
     if success:
         return jsonify({"success": True, "backups": result})
     else:
@@ -88,17 +89,15 @@ def sync_cloud_backup():
     if not filename:
         return jsonify({"success": False, "error": "文件名不能为空"})
     
-    local_path = backup_path_under(filename)
-    
-    # 检测本地是否存在
-    if local_path.exists() and not overwrite:
+    success, result = plugin_backup_cloud_application.sync_cloud_backup(
+        filename, overwrite=overwrite
+    )
+    if not success and result == "FILE_EXISTS":
         return jsonify({
             "success": False, 
             "error": "FILE_EXISTS", 
             "message": f"本地已存在同名备份文件 {filename}，是否覆盖下载？"
         })
-
-    success, result = update_manager.download_from_webdav(filename)
     if success:
         return jsonify({"success": True, "message": f"已成功从云端同步: {filename}"})
     else:
@@ -115,14 +114,16 @@ def cloud_restore_backup():
     if not filename:
         return jsonify({"success": False, "error": "无效文件名"})
     
-    # 步骤1：检查本地，没有就同步
+    # A local archive wins; only fetch remotely when it is absent.
     try:
-        local_exists = plugin_backup_restore_application.local_backup_exists(filename)
+        local_exists = plugin_backup_cloud_application.local_backup_exists(filename)
     except ValueError as e:
         return jsonify({"success": False, "error": str(e)})
     if not local_exists:
         logger.info(f"本地无备份 {filename}，正在从云端拉取并准备恢复...")
-        success, err = update_manager.download_from_webdav(filename)
+        success, err = plugin_backup_cloud_application.sync_cloud_backup(
+            filename, overwrite=False
+        )
         if not success:
             return jsonify({"success": False, "error": f"下载失败: {err}"})
     else:
@@ -384,27 +385,11 @@ def batch_sync_cloud_backups():
         if not filenames or not isinstance(filenames, list):
             return jsonify({"success": False, "error": "请提供待同步文件列表"})
 
-        success_list, failed_list, exists_list = [], [], []
-        for filename in filenames:
-            safe_name = safe_request_filename(filename)
-            if not safe_name:
-                failed_list.append({"filename": str(filename), "reason": "无效文件名"})
-                continue
-            local_path = backup_path_under(safe_name)
-
-            # 覆盖检测
-            if local_path.exists() and not overwrite:
-                exists_list.append(safe_name)
-                continue
-
-            ok, result = update_manager.download_from_webdav(safe_name)
-            if ok:
-                success_list.append(safe_name)
-            else:
-                failed_list.append({
-                    "filename": safe_name,
-                    "reason": str(result)
-                })
+        success_list, exists_list, failed_list = (
+            plugin_backup_cloud_application.sync_cloud_backups(
+                filenames, overwrite=overwrite
+            )
+        )
 
         return jsonify({
             "success": True,
@@ -510,17 +495,9 @@ def batch_delete_cloud_backups():
         if not filenames or not isinstance(filenames, list):
             return jsonify({"success": False, "error": "请提供待删除文件列表"})
 
-        deleted, failed = [], []
-        for name in filenames:
-            safe_name = safe_request_filename(name)
-            if not safe_name:
-                failed.append({"filename": str(name), "reason": "无效文件名"})
-                continue
-            ok, msg = update_manager.delete_webdav_backup(safe_name)
-            if ok:
-                deleted.append(safe_name)
-            else:
-                failed.append({"filename": safe_name, "reason": msg})
+        deleted, failed = plugin_backup_cloud_application.delete_cloud_backups(
+            filenames
+        )
 
         return jsonify({
             "success": True,

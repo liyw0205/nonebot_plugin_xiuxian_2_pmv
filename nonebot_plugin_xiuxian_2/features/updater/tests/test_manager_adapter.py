@@ -133,6 +133,51 @@ class UpdateManagerAdapterTests(unittest.TestCase):
                 target, "player.db"
             )
 
+    def test_plugin_backup_cloud_compatibility_methods_delegate_to_feature_owner(self) -> None:
+        cloud_application = Mock()
+        cloud_application.list_cloud_backups.return_value = (True, [])
+        cloud_application.sync_cloud_backup.return_value = (True, Path("backup.zip"))
+        cloud_application.delete_cloud_backup.return_value = (True, "deleted")
+
+        with patch(
+            "nonebot_plugin_xiuxian_2.features.plugin_backups.build_plugin_backup_cloud_application",
+            return_value=cloud_application,
+        ):
+            self.assertEqual(self.manager.list_webdav_backups(), (True, []))
+            self.assertEqual(
+                self.manager.download_from_webdav("backup.zip"),
+                (True, Path("backup.zip")),
+            )
+            self.assertEqual(self.manager.delete_webdav_backup("backup.zip"), (True, "deleted"))
+
+        cloud_application.list_cloud_backups.assert_called_once_with()
+        cloud_application.sync_cloud_backup.assert_called_once_with(
+            "backup.zip", overwrite=True
+        )
+        cloud_application.delete_cloud_backup.assert_called_once_with("backup.zip")
+
+    def test_plugin_backup_cloud_runtime_port_keeps_existing_webdav_configuration(self) -> None:
+        paths = (True, "ok", {"plugin_rel": "backups/plugin"})
+        self.manager._get_webdav_paths = Mock(return_value=paths)
+        self.manager._webdav_join_url = Mock(return_value="https://dav.invalid/a.zip")
+        self.manager._gmt_to_cst_str = Mock(return_value="2026-10-06 09:00:00")
+
+        self.assertEqual(self.manager.plugin_backup_webdav_paths(), paths)
+        self.assertEqual(
+            self.manager.plugin_backup_webdav_join_url(
+                "https://dav.invalid", "backups/plugin/a.zip"
+            ),
+            "https://dav.invalid/a.zip",
+        )
+        self.assertEqual(
+            self.manager.plugin_backup_webdav_format_time("raw"),
+            "2026-10-06 09:00:00",
+        )
+        self.manager._webdav_join_url.assert_called_once_with(
+            "https://dav.invalid", "backups/plugin/a.zip"
+        )
+        self.manager._gmt_to_cst_str.assert_called_once_with("raw")
+
 
 if __name__ == "__main__":
     unittest.main()

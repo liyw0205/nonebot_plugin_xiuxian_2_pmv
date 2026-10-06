@@ -88,14 +88,41 @@ class FakePluginBackupRestoreApplication:
         return self.result
 
 
-class FakeWebDavUpdateManager:
-    def __init__(self, result=(True, "downloaded")) -> None:
-        self.result = result
+class FakePluginBackupCloudApplication:
+    def __init__(self, local_exists: bool = True) -> None:
+        self.local_exists = local_exists
+        self.list_result = (True, [{"filename": "backup_1_2_v1.zip", "size": 3}])
+        self.sync_result = (True, "downloaded")
+        self.sync_batch_result = (
+            ["backup_1_2_ok.zip"],
+            ["backup_1_2_exists.zip"],
+            [{"filename": "backup_1_2_bad.zip", "reason": "offline"}],
+        )
+        self.delete_batch_result = (
+            ["backup_1_2_ok.zip"],
+            [{"filename": "backup_1_2_bad.zip", "reason": "remote failure"}],
+        )
         self.calls: list[tuple[object, ...]] = []
 
-    def download_from_webdav(self, filename: str):
-        self.calls.append(("download", filename))
-        return self.result
+    def list_cloud_backups(self):
+        self.calls.append(("list",))
+        return self.list_result
+
+    def local_backup_exists(self, filename: str) -> bool:
+        self.calls.append(("local_exists", filename))
+        return self.local_exists
+
+    def sync_cloud_backup(self, filename: str, *, overwrite: bool = False):
+        self.calls.append(("sync", filename, overwrite))
+        return self.sync_result
+
+    def sync_cloud_backups(self, filenames: list[object], *, overwrite: bool = False):
+        self.calls.append(("sync_many", filenames, overwrite))
+        return self.sync_batch_result
+
+    def delete_cloud_backups(self, filenames: list[object]):
+        self.calls.append(("delete_many", filenames))
+        return self.delete_batch_result
 
 
 class UpdaterWebRouteTests(unittest.TestCase):
@@ -272,17 +299,91 @@ class UpdaterWebRouteTests(unittest.TestCase):
         self.assertEqual(restored.get_json(), {"success": True, "message": "restored"})
         self.assertEqual(application.calls, [("restore", archive_name)])
 
+    def test_cloud_plugin_backup_routes_keep_admin_csrf_and_batch_contracts(self) -> None:
+        application = FakePluginBackupCloudApplication()
+        with patch.object(core, "ADMIN_IDS", {"admin-1"}):
+            anonymous_list = self.client.get("/get_cloud_backups")
+            anonymous_sync = self.client.post(
+                "/sync_cloud_backup", json={"filename": "backup_1_2_v1.zip"}
+            )
+            anonymous_batch = self.client.post(
+                "/batch_sync_cloud_backups", json={"filenames": ["backup_1_2_v1.zip"]}
+            )
+            self._login_session()
+            with patch.object(backups, "plugin_backup_cloud_application", application):
+                missing_csrf = self.client.post(
+                    "/sync_cloud_backup", json={"filename": "backup_1_2_v1.zip"}
+                )
+                missing_batch_csrf = self.client.post(
+                    "/batch_delete_cloud_backups", json={"filenames": ["backup_1_2_v1.zip"]}
+                )
+                listing = self.client.get("/get_cloud_backups")
+                synced = self.client.post(
+                    "/sync_cloud_backup",
+                    json={"filename": "backup_1_2_v1.zip", "overwrite": True},
+                    headers={"X-CSRF-Token": "csrf-token"},
+                )
+                batch_sync = self.client.post(
+                    "/batch_sync_cloud_backups",
+                    json={"filenames": ["backup_1_2_ok.zip"], "overwrite": False},
+                    headers={"X-CSRF-Token": "csrf-token"},
+                )
+                batch_delete = self.client.post(
+                    "/batch_delete_cloud_backups",
+                    json={"filenames": ["backup_1_2_ok.zip", "backup_1_2_bad.zip"]},
+                    headers={"X-CSRF-Token": "csrf-token"},
+                )
+
+        self.assertEqual(anonymous_list.status_code, 401)
+        self.assertEqual(anonymous_sync.status_code, 401)
+        self.assertEqual(anonymous_batch.status_code, 401)
+        self.assertEqual(missing_csrf.status_code, 403)
+        self.assertEqual(missing_batch_csrf.status_code, 403)
+        self.assertEqual(listing.get_json(), {"success": True, "backups": application.list_result[1]})
+        self.assertEqual(
+            synced.get_json(),
+            {"success": True, "message": "已成功从云端同步: backup_1_2_v1.zip"},
+        )
+        self.assertEqual(
+            batch_sync.get_json(),
+            {
+                "success": True,
+                "message": "批量同步完成：成功 1，已存在 1，失败 1",
+                "synced": ["backup_1_2_ok.zip"],
+                "exists": ["backup_1_2_exists.zip"],
+                "failed": [{"filename": "backup_1_2_bad.zip", "reason": "offline"}],
+            },
+        )
+        self.assertEqual(
+            batch_delete.get_json(),
+            {
+                "success": True,
+                "message": "云端批量删除完成：成功 1，失败 1",
+                "deleted": ["backup_1_2_ok.zip"],
+                "failed": [{"filename": "backup_1_2_bad.zip", "reason": "remote failure"}],
+            },
+        )
+        self.assertEqual(
+            application.calls,
+            [
+                ("list",),
+                ("sync", "backup_1_2_v1.zip", True),
+                ("sync_many", ["backup_1_2_ok.zip"], False),
+                ("delete_many", ["backup_1_2_ok.zip", "backup_1_2_bad.zip"]),
+            ],
+        )
+
     def test_cloud_restore_reuses_local_archive_and_keeps_error_contract(self) -> None:
         application = FakePluginBackupRestoreApplication(
             local_exists=True, result=(False, "restore rejected")
         )
-        webdav = FakeWebDavUpdateManager()
+        cloud = FakePluginBackupCloudApplication(local_exists=True)
         archive_name = "cloud-export.zip"
         with patch.object(core, "ADMIN_IDS", {"admin-1"}):
             self._login_session()
             with (
                 patch.object(backups, "plugin_backup_restore_application", application),
-                patch.object(backups, "update_manager", webdav),
+                patch.object(backups, "plugin_backup_cloud_application", cloud),
             ):
                 missing_csrf = self.client.post(
                     "/cloud_restore_backup", json={"filename": archive_name}
@@ -298,17 +399,17 @@ class UpdaterWebRouteTests(unittest.TestCase):
             restored.get_json(),
             {"success": False, "error": "restore rejected"},
         )
-        self.assertEqual(application.calls, [("exists", archive_name), ("restore", archive_name)])
-        self.assertEqual(webdav.calls, [])
+        self.assertEqual(application.calls, [("restore", archive_name)])
+        self.assertEqual(cloud.calls, [("local_exists", archive_name)])
 
     def test_cloud_restore_downloads_only_when_local_archive_is_absent(self) -> None:
         application = FakePluginBackupRestoreApplication(local_exists=False)
-        webdav = FakeWebDavUpdateManager()
+        cloud = FakePluginBackupCloudApplication(local_exists=False)
         archive_name = "cloud-export.zip"
         self._login_session()
         with (
             patch.object(backups, "plugin_backup_restore_application", application),
-            patch.object(backups, "update_manager", webdav),
+            patch.object(backups, "plugin_backup_cloud_application", cloud),
         ):
             restored = self.client.post(
                 "/cloud_restore_backup",
@@ -317,16 +418,20 @@ class UpdaterWebRouteTests(unittest.TestCase):
             )
 
         self.assertEqual(restored.get_json(), {"success": True, "message": "restored"})
-        self.assertEqual(application.calls, [("exists", archive_name), ("restore", archive_name)])
-        self.assertEqual(webdav.calls, [("download", archive_name)])
+        self.assertEqual(application.calls, [("restore", archive_name)])
+        self.assertEqual(
+            cloud.calls,
+            [("local_exists", archive_name), ("sync", archive_name, False)],
+        )
 
     def test_cloud_restore_does_not_restore_after_download_failure(self) -> None:
         application = FakePluginBackupRestoreApplication(local_exists=False)
-        webdav = FakeWebDavUpdateManager((False, "offline"))
+        cloud = FakePluginBackupCloudApplication(local_exists=False)
+        cloud.sync_result = (False, "offline")
         self._login_session()
         with (
             patch.object(backups, "plugin_backup_restore_application", application),
-            patch.object(backups, "update_manager", webdav),
+            patch.object(backups, "plugin_backup_cloud_application", cloud),
         ):
             response = self.client.post(
                 "/cloud_restore_backup",
@@ -338,8 +443,11 @@ class UpdaterWebRouteTests(unittest.TestCase):
             response.get_json(),
             {"success": False, "error": "下载失败: offline"},
         )
-        self.assertEqual(application.calls, [("exists", "cloud-export.zip")])
-        self.assertEqual(webdav.calls, [("download", "cloud-export.zip")])
+        self.assertEqual(application.calls, [])
+        self.assertEqual(
+            cloud.calls,
+            [("local_exists", "cloud-export.zip"), ("sync", "cloud-export.zip", False)],
+        )
 
 
 if __name__ == "__main__":
