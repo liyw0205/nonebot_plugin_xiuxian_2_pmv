@@ -14,6 +14,7 @@ from ...features.admin_asset.application import AdminAssetApplication
 from ...features.admin_asset.root_repository import AdminRootChangeSqlRepository
 from ...features.admin.application import AdminApplication
 from ...features.admin.config_application import AdminConfigApplication
+from ...features.admin.impersonation_application import AdminImpersonationApplication
 from ...features.admin.id_swap_repository import AdminIdSwapSqlRepository
 from ...features.admin.id_update_repository import AdminIdUpdateSqlRepository
 from ...features.base.application import BaseApplication
@@ -59,7 +60,7 @@ from ..xiuxian_utils.xiuxian2_handle import (
 from ..xiuxian_config import XiuConfig, JsonConfig, convert_rank
 from ..xiuxian_utils.utils import (
     check_user, get_user_profile_by_name, number_to, get_msg_pic, handle_send, send_msg_handler,
-    generate_command, _impersonating_users, send_help_message,
+    generate_command, send_help_message,
     parse_page_arg, paginate_text_blocks, build_pagination_buttons,
     invalidate_player_data_cache,
 )
@@ -88,6 +89,7 @@ _sql_message_instance = None
 _admin_exp_adjustment_service_instance = None
 admin_asset_application = AdminAssetApplication(get_paths().game_db)
 admin_config_application = AdminConfigApplication()
+admin_impersonation_application = AdminImpersonationApplication()
 work_admin_refresh_reset_application = WorkAdminRefreshResetApplication(get_paths().game_db)
 admin_application = AdminApplication(
     get_paths().game_db,
@@ -1943,8 +1945,13 @@ async def boss_reset_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 @items_refresh.handle(parameterless=[Cooldown(cd_time=0)])
 async def items_refresh_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """重载items"""
-    items.refresh()
-    msg = "重载items完成"
+    try:
+        await asyncio.to_thread(items.refresh)
+    except Exception as exc:
+        logger.warning("items reload failed: {}", type(exc).__name__)
+        msg = "重载items失败，仍保留原有物品缓存，请检查数据文件及服务日志。"
+    else:
+        msg = "重载items完成"
     await handle_send(bot, event, msg)
     await items_refresh.finish()
 
@@ -2553,68 +2560,45 @@ async def impersonate_user_command_(bot: Bot, event: GroupMessageEvent | Private
     admin_user_id = str(event.get_user_id())
     arg_text = args.extract_plain_text().strip()
 
-    # 取消伪装
-    if arg_text.lower() in {"取消", "off"}:
-        if admin_user_id in _impersonating_users:
-            del _impersonating_users[admin_user_id]
-            await handle_send(bot, event, "已取消用户伪装。您现在是您自己了。")
+    try:
+        if arg_text.lower() in {"取消", "off"}:
+            previous = admin_impersonation_application.cancel(admin_user_id)
+            msg = "已取消用户伪装。您现在是您自己了。" if previous else "您当前没有伪装任何用户。"
+        elif not arg_text and not has_at_user(args):
+            current_target_id = admin_impersonation_application.get_target(admin_user_id)
+            if current_target_id:
+                target_user_info = _sql_message().get_user_info_with_id(current_target_id)
+                target_name = target_user_info['user_name'] if target_user_info else f"ID: {current_target_id}"
+                msg = f"您当前正在伪装用户：{target_name}。\n发送「用户伪装 取消」停止伪装。"
+            else:
+                msg = "用法：用户伪装 [目标ID/@用户/道号] 或 用户伪装 取消"
         else:
-            await handle_send(bot, event, "您当前没有伪装任何用户。")
-        return
-
-    if not arg_text and not has_at_user(args):
-        current_target_id = _impersonating_users.get(admin_user_id)
-        if current_target_id:
-            target_user_info = _sql_message().get_user_info_with_id(current_target_id)
-            target_name = target_user_info['user_name'] if target_user_info else f"ID: {current_target_id}"
-            await handle_send(bot, event, f"您当前正在伪装用户：{target_name}。\n发送「用户伪装 取消」停止伪装。")
-        else:
-            await handle_send(bot, event, "用法：用户伪装 [目标ID/@用户/道号] 或 用户伪装 取消")
-        return
-
-    target_user_id = None
-    target_user_info = None
-
-    # 1) 优先 @
-    at_qq = get_at_user_id(args)
-
-    if at_qq:
-        target_user_id = str(at_qq)
-        target_user_info = _sql_message().get_user_info_with_id(target_user_id)
-
-    # 2) 再按道号查
-    if not target_user_id and arg_text:
-        info_by_name = _sql_message().get_user_info_with_name(arg_text)
-        if info_by_name:
-            target_user_info = info_by_name
-            target_user_id = str(info_by_name["user_id"])
-
-    # 3) 最后把输入当ID（重点：即使数据库没有，也允许伪装）
-    if not target_user_id and arg_text:
-        target_user_id = str(arg_text)
-        target_user_info = _sql_message().get_user_info_with_id(target_user_id)
-
-    # 兜底
-    if not target_user_id:
-        await handle_send(bot, event, "未找到可伪装目标，请输入目标ID/@用户/道号")
-        return
-
-    # 直接写入伪装映射（不因为数据库不存在而中断）
-    _impersonating_users[admin_user_id] = target_user_id
-
-    if target_user_info:
-        await handle_send(
-            bot, event,
-            f"您已成功伪装成用户：{target_user_info['user_name']} (ID {target_user_id})。\n"
-            f"后续所有修仙命令都将以此用户身份执行，直至您取消伪装。"
-        )
-    else:
-        await handle_send(
-            bot, event,
-            f"您已成功伪装为 ID：{target_user_id}。\n"
-            f"⚠ 该ID当前不在数据库，仅提醒，不影响伪装执行。\n"
-            f"后续所有修仙命令都将以此身份执行，直至您取消伪装。"
-        )
+            reader = _sql_message()
+            target_user_id, target_user_info = admin_impersonation_application.resolve_target(
+                arg_text,
+                mentioned_id=get_at_user_id(args),
+                by_id=reader.get_user_info_with_id,
+                by_name=reader.get_user_info_with_name,
+            )
+            if not target_user_id:
+                msg = "未找到可伪装目标，请输入目标ID/@用户/道号"
+            else:
+                if target_user_info:
+                    msg = (
+                        f"您已成功伪装成用户：{target_user_info['user_name']} (ID {target_user_id})。\n"
+                        "后续所有修仙命令都将以此用户身份执行，直至您取消伪装。"
+                    )
+                else:
+                    msg = (
+                        f"您已成功伪装为 ID：{target_user_id}。\n"
+                        "该ID当前不在数据库，仅提醒，不影响伪装执行。\n"
+                        "后续所有修仙命令都将以此身份执行，直至您取消伪装。"
+                    )
+                admin_impersonation_application.set_target(admin_user_id, target_user_id)
+    except Exception as exc:
+        logger.warning("impersonation command failed: {}", type(exc).__name__)
+        msg = "用户伪装操作失败，请检查服务日志。"
+    await handle_send(bot, event, msg)
 
 
 @migrate_qqid_cmd.handle(parameterless=[Cooldown(cd_time=0)])

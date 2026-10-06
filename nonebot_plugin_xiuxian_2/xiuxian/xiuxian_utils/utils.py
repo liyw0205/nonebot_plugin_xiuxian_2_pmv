@@ -12,6 +12,7 @@ import unicodedata
 from functools import lru_cache
 from nonebot.log import logger
 from ...paths import get_paths
+from ...features.admin.impersonation_application import AdminImpersonationApplication
 from ...features.info.avatar_application import PlayerAvatarApplication
 from ...features.info.profile_application import PlayerProfileApplication
 from ...features.info.activity_application import PlayerActivityApplication
@@ -264,9 +265,9 @@ def _is_onebot_v11_bot(bot: Any) -> bool:
         pass
     return False
 
-# 全局字典，存储管理员正在伪装的用户信息
-# 键为管理员的实际 user_id (str)，值为被伪装的 user_id (str)
-_impersonating_users: Dict[str, str] = {}
+impersonation_application = AdminImpersonationApplication()
+# 保留旧 mapping 接口，不复制 feature 的进程内状态。
+_impersonating_users = impersonation_application.mapping
 
 class MyEncoder(json.JSONEncoder):
     def default(self, obj):
@@ -308,8 +309,8 @@ def check_user_type(user_id, need_type):
     user_id_to_check = _player_avatar().get_active_user_id(actual_user_id)
 
     # 兼容管理员伪装逻辑（优先级高于化身）
-    if actual_user_id in _impersonating_users:
-        user_id_to_check = _impersonating_users[actual_user_id]
+    if (impersonated_id := get_impersonating_target(actual_user_id)) is not None:
+        user_id_to_check = impersonated_id
         logger.warning(f"用户 {actual_user_id} 正在伪装 {user_id_to_check}")
 
     user_cd_message = _sql_message().get_user_cd(user_id_to_check)
@@ -398,8 +399,8 @@ def check_user(event_or_user_id: Union[GroupMessageEvent, PrivateMessageEvent, s
         user_id_to_check = _player_avatar().get_active_user_id(original_user_id)
 
         # 兼容管理员伪装（优先级高于化身）
-        if original_user_id in _impersonating_users:
-            user_id_to_check = _impersonating_users[original_user_id]
+        if (impersonated_id := get_impersonating_target(original_user_id)) is not None:
+            user_id_to_check = impersonated_id
             logger.warning(f"管理员 {original_user_id} 正在伪装用户 {user_id_to_check} 执行命令")
 
     elif isinstance(event_or_user_id, str):
@@ -408,8 +409,8 @@ def check_user(event_or_user_id: Union[GroupMessageEvent, PrivateMessageEvent, s
         user_id_to_check = _player_avatar().get_active_user_id(original_user_id)
 
         # 字符串场景也兼容伪装
-        if original_user_id in _impersonating_users:
-            user_id_to_check = _impersonating_users[original_user_id]
+        if (impersonated_id := get_impersonating_target(original_user_id)) is not None:
+            user_id_to_check = impersonated_id
             logger.warning(f"用户 {original_user_id} 正在伪装用户 {user_id_to_check} 执行命令")
     else:
         return False, None, "传入参数类型错误！请提供event对象或用户QQ号字符串。"
@@ -440,7 +441,7 @@ def get_impersonating_target(user_id: str) -> str | None:
     :param user_id: 管理员真实ID
     :return: 被伪装ID，若未伪装则返回None
     """
-    return _impersonating_users.get(str(user_id))
+    return impersonation_application.get_target(str(user_id))
 
 class Txt2Img:
     """文字转图片"""
@@ -1611,8 +1612,7 @@ async def handle_send_md(bot, event, msg: str, markdown_id=None, shell=None, tit
         shell_param = MessageSegment.markdown_param("s1", " ")
         original_user_id = event.get_user_id()
         if open_id and is_normal_group and XiuConfig().at_sender and at_msg:
-            if original_user_id in _impersonating_users:
-                target_user_id = _impersonating_users[original_user_id]
+            if (target_user_id := get_impersonating_target(original_user_id)) is not None:
                 target_user_info = _sql_message().get_user_info_with_id(target_user_id)
                 target_user_name = target_user_info['user_name'] if target_user_info else f"QQ:{target_user_id}"
                 title = f"<@{open_id}>\r(伪装[{target_user_name}])\r{title}"
@@ -1660,8 +1660,7 @@ async def handle_send_markdown(
         title = " "
 
     if open_id and is_normal_group and XiuConfig().at_sender and at_msg:
-        if original_user_id in _impersonating_users:
-            target_user_id = _impersonating_users[original_user_id]
+        if (target_user_id := get_impersonating_target(original_user_id)) is not None:
             target_user_info = _sql_message().get_user_info_with_id(target_user_id)
             target_user_name = target_user_info['user_name'] if target_user_info else f"ID:{target_user_id}"
             title = f"<@{open_id}>\r(伪装[{target_user_name}])\r{title}"
@@ -1772,8 +1771,7 @@ async def handle_send_native_markdown(
     original_user_id = event.get_user_id()
 
     if open_id and is_normal_group and XiuConfig().at_sender and at_msg:
-        if original_user_id in _impersonating_users:
-            target_user_id = _impersonating_users[original_user_id]
+        if (target_user_id := get_impersonating_target(original_user_id)) is not None:
             target_user_info = _sql_message().get_user_info_with_id(target_user_id)
             target_user_name = target_user_info['user_name'] if target_user_info else f"QQ:{target_user_id}"
             md_text = f"<@{open_id}>\r(伪装[{target_user_name}])\r{md_text}"
@@ -1860,8 +1858,8 @@ def _cached_help_message_payload(
 def check_user_md_type(md_type, event):
     original_user_id = event.get_user_id()
     user_id_to_check = original_user_id
-    if original_user_id in _impersonating_users:
-        user_id_to_check = _impersonating_users[original_user_id]
+    if (impersonated_id := get_impersonating_target(original_user_id)) is not None:
+        user_id_to_check = impersonated_id
         logger.warning(f"用户 {original_user_id} 正在伪装 {user_id_to_check}")
 
     md_type = int(md_type)
@@ -1922,8 +1920,7 @@ async def handle_send_md_type(bot, event, msg: str, md_type, k1, v1, k2, v2, k3,
 
     original_user_id = event.get_user_id()
     if open_id and is_normal_group and XiuConfig().at_sender:
-        if original_user_id in _impersonating_users:
-            target_user_id = _impersonating_users[original_user_id]
+        if (target_user_id := get_impersonating_target(original_user_id)) is not None:
             target_user_info = _sql_message().get_user_info_with_id(target_user_id)
             target_user_name = target_user_info['user_name'] if target_user_info else f"QQ:{target_user_id}"
             msg = f"<@{open_id}>\r(伪装[{target_user_name}])\r{msg}"
@@ -1998,8 +1995,7 @@ async def handle_send_markdown_type(bot, event, msg: str, md_type, k1, v1, k2, v
     original_user_id = event.get_user_id()
 
     if open_id and is_normal_group and XiuConfig().at_sender:
-        if original_user_id in _impersonating_users:
-            target_user_id = _impersonating_users[original_user_id]
+        if (target_user_id := get_impersonating_target(original_user_id)) is not None:
             target_user_info = _sql_message().get_user_info_with_id(target_user_id)
             target_user_name = target_user_info['user_name'] if target_user_info else f"QQ:{target_user_id}"
             msg = f"<@{open_id}>\r(伪装[{target_user_name}])\r{msg}"
@@ -2078,8 +2074,7 @@ async def handle_pic_msg_send(
         # 先处理文本
         if text:
             original_user_id = event.get_user_id()
-            if original_user_id in _impersonating_users:
-                target_user_id = _impersonating_users[original_user_id]
+            if (target_user_id := get_impersonating_target(original_user_id)) is not None:
                 target_user_info = _sql_message().get_user_info_with_id(target_user_id)
                 target_user_name = (
                     target_user_info["user_name"]
@@ -2141,8 +2136,8 @@ def log_message(user_id: str, msg: str):
     clean_old_logs()
     try:
         original_user_id = user_id
-        if original_user_id in _impersonating_users:
-            user_id = _impersonating_users[original_user_id]
+        if (impersonated_id := get_impersonating_target(original_user_id)) is not None:
+            user_id = impersonated_id
             logger.warning(f"用户 {original_user_id} 正在伪装 {user_id}")
         # 确保用户文件夹存在
         user_dir = PLAYERSDATA / str(user_id)
@@ -2212,8 +2207,8 @@ def get_logs(user_id: str, date_str: str = None, page: int = 1, per_page: int = 
     try:
         original_user_id = user_id
         user_id_for_log_query = original_user_id
-        if original_user_id in _impersonating_users:
-            user_id_for_log_query = _impersonating_users[original_user_id]
+        if (impersonated_id := get_impersonating_target(original_user_id)) is not None:
+            user_id_for_log_query = impersonated_id
             logger.warning(f"用户 {original_user_id} 正在伪装 {user_id_for_log_query}")
 
         # 确定日期：优先使用指定日期，否则查找最近有日志的日期
@@ -2380,8 +2375,8 @@ def get_statistics_data(user_id: str, key: str = None):
     try:
         original_user_id = user_id
         user_id_for_stats = original_user_id
-        if original_user_id in _impersonating_users:
-            user_id_for_stats = _impersonating_users[original_user_id]
+        if (impersonated_id := get_impersonating_target(original_user_id)) is not None:
+            user_id_for_stats = impersonated_id
             logger.warning(f"用户 {original_user_id} 正在伪装 {user_id_for_stats}")
         if key:
             return _player_data_manager().get_field_data(str(user_id_for_stats), "statistics", key)
@@ -2400,8 +2395,8 @@ def update_statistics_value(user_id: str, key: str, value: int = None, increment
         original_user_id = str(user_id)
         user_id_for_stats = original_user_id
 
-        if original_user_id in _impersonating_users:
-            user_id_for_stats = _impersonating_users[original_user_id]
+        if (impersonated_id := get_impersonating_target(original_user_id)) is not None:
+            user_id_for_stats = impersonated_id
             logger.warning(f"用户 {original_user_id} 正在伪装 {user_id_for_stats}")
 
         stats_data = _player_data_manager().get_fields(str(user_id_for_stats), "statistics")

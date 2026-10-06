@@ -531,21 +531,54 @@ async def rift_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 
 async def create_rift(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """生成秘境（手动触发，通常由管理员使用）"""
+    from ...core.errors import ConflictError
+
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     operation_id = f"rift-generation:manual:{_event_id(event) or runtime_ids.new_id()}"
-    rift = _build_fixed_rift(operation_id)
-    result = _generation_outcome(
-        rift_application.generate(
+    try:
+        rift = _build_fixed_rift(operation_id)
+        outcome = rift_application.generate(
             operation_id=operation_id,
             rift_key=GLOBAL_RIFT_KEY,
             rift_plan=_rift_world_snapshot(rift),
         )
-    )
-    if not result.succeeded or result.state is None:
-        await handle_send(bot, event, "生成未覆盖：当前已有秘境，或生成请求冲突，本次未改写。")
+        result = _generation_outcome(outcome)
+    except ConflictError:
+        await handle_send(bot, event, "生成请求冲突，本次未改写，请重新查询当前秘境。")
         return
-    rift = _sync_world_projection(result.state)
+    except Exception as exc:
+        logger.error("manual rift generation failed: {}", type(exc).__name__)
+        await handle_send(bot, event, "生成请求未确认：存储或配置异常，请检查服务日志与当前秘境。")
+        return
+    if not result.succeeded or result.state is None:
+        status = outcome.code or result.status
+        if status == "schema_missing":
+            msg = "秘境生成服务尚未就绪，请检查启动迁移。"
+        elif status in {"state_changed", "operation_conflict", "conflict", "superseded"}:
+            msg = "生成请求冲突或已被更新的秘境替代，本次未改写，请查询当前秘境。"
+        else:
+            msg = "生成请求未完成，请检查服务日志与当前秘境。"
+        await handle_send(bot, event, msg)
+        return
+    try:
+        current_state = rift_application.current_world(rift_key=GLOBAL_RIFT_KEY)
+    except Exception as exc:
+        logger.error("manual rift generation state read failed: {}", type(exc).__name__)
+        await handle_send(bot, event, "生成请求已提交，但当前秘境状态读取失败，请检查服务日志；本次未同步兼容缓存。")
+        return
+    if current_state is None or current_state["generation_id"] != result.state.generation_id:
+        await handle_send(bot, event, "该生成请求已处理，当前秘境已更新或结束，本次未改写兼容缓存。")
+        return
+    try:
+        rift = _sync_world_projection(SimpleNamespace(**current_state), save_legacy=False)
+        old_rift_info.save_rift(group_rift)
+    except Exception as exc:
+        logger.error("manual rift generation projection failed: {}", type(exc).__name__)
+        await handle_send(bot, event, "秘境已在数据库生成，但兼容缓存同步失败，请检查服务日志后重试同步。")
+        return
     msg = build_rift_appear_msg(rift)
+    if result.status == "duplicate":
+        msg = "该生成请求已处理，未重复生成。\n" + msg
     await handle_send(bot, event, msg, md_type="秘境", k1="探索", v1="探索秘境", k2="结算", v2="秘境结算", k3="帮助", v3="秘境帮助")
     return
 

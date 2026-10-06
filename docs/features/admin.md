@@ -2,7 +2,15 @@
 
 ## 固定队列与已审边界（2026-10-07）
 
-当前按子插件顺序停在 admin。50 个冻结入口中，开始盘点前已关闭 6 个；剩余 44 个已一次性完成 owner 盘点。配置 6 条、已有资产/重置 13 条、兼容输出 9 条和黑屋 3 条均已验收；黑屋 `dc46515f`、命令管控 `0cbfcabe` 已推送并核对远端。本组广播 6 条已通过扩大回归与冻结门禁，admin 剩 4 项，全局冻结计数为 `216/107/19/154`。下一组固定为生成秘境、重载items、用户伪装，最后转换QQID；不跳子插件、不重新从全局 blocker 中挑命令。
+当前按子插件顺序停在 admin。50 个冻结入口中，开始盘点前已关闭 6 个；剩余 44 个已一次性完成 owner 盘点。配置 6 条、已有资产/重置 13 条、兼容输出 9 条和黑屋 3 条均已验收；黑屋 `dc46515f`、命令管控 `0cbfcabe` 已推送并核对远端。广播 6 条已通过扩大回归与冻结门禁；本组生成秘境、重载items、用户伪装也已通过扩大回归与冻结门禁。全局冻结计数为 `219/107/19/151`，admin 仅剩转换QQID；不跳子插件、不重新从全局 blocker 中挑命令。
+
+本组由三名子代理分别独占 items 目录 owner、伪装状态 owner 和秘境贯通回归，主线程负责共享入口、门禁、冻结证据及串行验收。首轮聚焦 pytest 21.00 秒，含隔离初始化的进程总计 28.67 秒；8 个失败均来自旧 avatar 静态门禁字符串与新调用路径不符，不是业务行为失败。首轮扩大集 `655 passed, 1 failed, 49 subtests passed`（pytest 51.42 秒，进程 56.81 秒），唯一失败是 `game_events` 预加载后，旧 `test_partial_game_event_projection_replay_reuses_all_effect_ids` 仅 patch `sys.modules`，未 patch 持有函数的实际查询位置；仅修测试 mock lookup，没有重构业务。最终扩大集 `656 passed, 49 subtests passed`（pytest 52.87 秒，含隔离初始化进程 58.29 秒，1 个 anyio 预加载 warning），隔离路径 `/tmp/xiuxian-unittest-hc2axc3q/xiuxian`。四项 admin runtime gate 与 avatar gate 全 true，496 项冻结 membership 有效、`integrity_errors=[]`，静态检查合计 1.21 秒；全局其余 151 项仍受阻。没有完整排查、实现和收尾分段计时，也未进行线上性能实测。
+
+`重载items` 经 `Items.refresh -> AdminItemCatalogApplication -> AdminItemCatalogRepository`，按既有分类顺序在临时状态中构建 17 类目录，一次发布物品缓存与礼包来源。初次载入保持宽容，缺失或损坏分类不阻断其余可用数据；显式 reload 全批严格，任何读取、JSON 或结构失败均保留整代旧状态，不写用户 JSON。稳定 Mapping 让既有引用看到新一代目录，加载期间读者仍能读取旧快照；单项与类型查询只复制返回条目，避免调用方原地修改污染共享缓存。保留技能字段转换、拆分礼包优先及重复 ID 顺序。`mixelixirutil.mix_config` 等导入时派生缓存不会自动重建，既有显式写回接口仍保留，不扩展为物品 CRUD 迁移。
+
+`用户伪装` 经 `AdminImpersonationApplication -> AdminImpersonationRepository`，兼容 facade 与身份解析共享同一个进程内原子映射；真实消费者先解析 avatar，再用真实管理员 ID 查询伪装覆盖，最终伪装优先于 avatar，失败不会发布半份映射。状态仍不持久化、不跨进程共享，本组不改 avatar 自身状态 owner，也不把调整旧 avatar 静态调用断言记作再次迁移 avatar 功能。
+
+`生成秘境` 保留既有 `RiftApplication -> RiftGenerationSqlRepository` SQL owner，不重迁生成仓储。真实 admin 入口贯通当前 SQL 状态核对后才更新内存与 JSON 投影；历史回执对应的秘境已被替代或结束时不覆盖新投影，冲突、schema 缺失、状态读取和投影失败分别报告，不误报成功。SQL 已提交但 JSON 失败时允许重试同步；SQL/JSON 不是整体原子操作，也不保证 SQL 状态核对至 projection 写入之间的跨线程一致性。
 
 广播六条和普通事件补发共用 `AdminBroadcastApplication -> AdminBroadcastRepository`，兼容 facade 和既有 Web 消费者没有私有任务副本。任务保持进程内、重启丢失的原语义；短线程锁只保护状态，发送前原子 claim，网络 await 不持锁。取消、清空、过期阻止后续目标，已发出的请求不能撤回；generation/token 避免旧回执污染同 ID 新任务，失败释放 claim 允许事件补发。QQ `pending_audit` 不再算成功，也不重复补发；没有审核回调，待审核状态保留到取消/过期。错误只记类型，明细最多 50 条且保留累计数；每次 claim 仅复制固定发送字段，不深拷贝持续增长的目标集合。
 
@@ -24,7 +32,7 @@
 | 4 | 黑屋 3 条 | 已验收唯一 SQL 名单 owner，封禁、解除、列表与路由读取共用；修复注册玩家路由失效和失败误报，启动导入、回放、回滚与路由回归通过。 |
 | 5 | 命令管控 3 条 | 已验收共享 JSON owner 与路由消费者适配，注册表/别名同源，取消命令写后重建；聚焦、扩大回归和四项门禁通过。 |
 | 6 | 广播 6 条 | 已验收进程任务 owner、原子 claim、取消/清空与普通消息补发；只读历史及发送经注入端口，扩大回归和六项门禁通过。 |
-| 7 | 生成秘境、重载items、用户伪装，各 1 条 | 秘境已有 feature SQL 写与旧 JSON 投影，不重迁；Items 是共享目录缓存；伪装是共享进程身份映射，分别闭合实际消费者。 |
+| 7 | 生成秘境、重载items、用户伪装，各 1 条 | 已验收，扩大回归、四项 runtime 门禁与冻结证据通过。复用秘境 SQL owner 并保护投影回放；Items 目录严格完整发布；伪装共享进程映射接入真实身份消费者。 |
 | 8 | 转换QQID 1 条 | 旧四库逐 ID 同步 API 编排待迁；复用已迁移的可恢复 ID 更新，不重复写底层仓储。 |
 
 配置使用原字段 `group/private/root_selection/sect_name/welcome_disabled_groups`，保留未知字段和原 JSON 路径；读缺失文件返回默认值，兼容 `JsonConfig` 构造仍创建默认文件。写入同目录暂存后原子替换，失败不发布缓存；相同开关值不重写。锁只覆盖同一进程内的线程，不提供多进程协调或 operation-ID 回执。全局欢迎关闭时不再谎报本群已开启。notice 的生命周期进程状态不在这六个命令的完成范围内。

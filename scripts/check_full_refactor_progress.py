@@ -326,6 +326,132 @@ def _admin_broadcast_owner_status(sources: dict[str, str]) -> dict[str, object]:
     return {key: value if key == "status" else bool(value) for key, value in report.items()}
 
 
+def _avatar_identity_priority(source: str) -> bool:
+    avatar = source.find("_player_avatar().get_active_user_id(original_user_id)")
+    impersonation = source.find("get_impersonating_target(original_user_id)")
+    return 0 <= avatar < impersonation
+
+
+def _admin_runtime_owner_status(sources: dict[str, str]) -> dict[str, object]:
+    """Check the three admin runtime commands without loading production state."""
+    trees = {name: ast.parse(source) for name, source in sources.items()}
+    functions = {
+        name: {node.name: node for node in ast.walk(tree)
+               if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))}
+        for name, tree in trees.items()
+    }
+
+    @lru_cache(maxsize=None)
+    def nodes(source, function=None):
+        node = trees[source] if function is None else functions[source].get(function)
+        return list(ast.walk(node)) if node is not None else []
+
+    def calls(source, function, target):
+        return [node for node in nodes(source, function)
+                if isinstance(node, ast.Call) and ast.unparse(node.func) == target]
+
+    def expression(source, function, expected):
+        target = ast.parse(expected).body[0]
+        if isinstance(target, ast.Expr):
+            target = target.value
+        expected_tree = ast.dump(target)
+        return any(type(node) is type(target) and ast.dump(node) == expected_tree
+                   for node in nodes(source, function))
+
+    def assignments(source, function, target):
+        return [node for node in nodes(source, function) if isinstance(node, ast.Assign)
+                and any(ast.unparse(item) == target for item in node.targets)]
+
+    def registered(matcher, command, handler):
+        bindings = assignments("handlers", None, matcher)
+        return bool(
+            len(bindings) == 1 and isinstance(bindings[0].value, ast.Call)
+            and ast.unparse(bindings[0].value.func) == "on_command"
+            and bindings[0].value.args and isinstance(bindings[0].value.args[0], ast.Constant)
+            and bindings[0].value.args[0].value == command
+            and any(item.arg == "permission" and ast.unparse(item.value) == "SUPERUSER"
+                    for item in bindings[0].value.keywords)
+            and calls("handlers", handler, f"{matcher}.handle")
+        )
+
+    catalog_writes = assignments("catalog_repository", "_load", "self._state")
+    catalog_builds = calls("catalog_repository", "_load", "self._normalize_item")
+    current_reads = calls("rift", "create_rift", "rift_application.current_world")
+    projections = calls("rift", "create_rift", "_sync_world_projection")
+    stale_guards = [node for node in nodes("rift", "create_rift") if isinstance(node, ast.If)
+                    and ast.unparse(node.test) ==
+                    "current_state is None or current_state['generation_id'] != result.state.generation_id"]
+    report = {
+        "three_superuser_handlers_reach_feature_owners": (
+            all(registered(*entry) for entry in (
+                ("create_new_rift", "生成秘境", "create_new_rift_"),
+                ("items_refresh", "重载items", "items_refresh_"),
+                ("impersonate_user_command", "用户伪装", "impersonate_user_command_"),
+            ))
+            and expression("handlers", "create_new_rift_", "await create_rift(bot, event)")
+            and expression("handlers", "items_refresh_", "await asyncio.to_thread(items.refresh)")
+            and all(calls("handlers", "impersonate_user_command_", f"admin_impersonation_application.{method}")
+                    for method in ("get_target", "set_target", "cancel", "resolve_target"))
+            and calls("rift", "create_rift", "rift_application.generate")
+            and expression("rift_application", "generate", "repository = RiftGenerationSqlRepository(self.database)")
+            and calls("rift_application", "generate", "repository.generate")
+            and calls("catalog_facade", "refresh", "AdminItemCatalogApplication(self.repository).reload")
+            and expression("catalog_application", "reload", "return self.repository.reload()")
+            and expression("impersonation_application", "set_target", "return self.repository.set(admin_id, target_id)")
+        ),
+        "item_catalog_strict_reload_publishes_once_after_build_without_clearing": (
+            expression("catalog_facade", None, "ITEMS_CACHE = _ITEM_CATALOG_REPOSITORY.items")
+            and expression("catalog_facade", "__init__", "self.repository = _ITEM_CATALOG_REPOSITORY")
+            and expression("catalog_facade", None, "_ITEM_CATALOG_REPOSITORY = get_item_catalog_repository(READPATH)")
+            and calls("catalog_repository", "get_item_catalog_repository", "AdminItemCatalogRepository")
+            and expression("catalog_repository", "reload", "return self._load(strict=True)")
+            and expression("catalog_repository", "ensure_loaded", "return self._load(strict=False)")
+            and len(catalog_writes) == 1 and bool(catalog_builds)
+            and ast.unparse(catalog_writes[0]) == "self._state = (items, sources)"
+            and catalog_writes[0].lineno > max(node.lineno for node in catalog_builds)
+            and any(isinstance(node, ast.With) and any(ast.unparse(item.context_expr) == "self.lock" for item in node.items)
+                    and catalog_writes[0] in list(ast.walk(node)) for node in nodes("catalog_repository", "_load"))
+            and all(any(isinstance(node, ast.If) and ast.unparse(node.test) == "strict"
+                        and any(isinstance(child, ast.Raise) for child in node.body)
+                        for node in ast.walk(handler))
+                    for handler in nodes("catalog_repository", "_load") if isinstance(handler, ast.ExceptHandler))
+            and not any(isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr == "clear"
+                        for source, function in (("catalog_facade", "refresh"), ("catalog_facade", "_load_items"),
+                                                 ("catalog_repository", "reload"), ("catalog_repository", "_load"))
+                        for node in nodes(source, function))
+        ),
+        "impersonation_uses_real_identity_and_one_atomic_shared_mapping": (
+            expression("handlers", None, "admin_impersonation_application = AdminImpersonationApplication()")
+            and expression("handlers", "impersonate_user_command_", "admin_user_id = str(event.get_user_id())")
+            and expression("utils", None, "impersonation_application = AdminImpersonationApplication()")
+            and len(assignments("utils", None, "_impersonating_users")) == 1
+            and expression("utils", None, "_impersonating_users = impersonation_application.mapping")
+            and expression("utils", "get_impersonating_target", "return impersonation_application.get_target(str(user_id))")
+            and expression("impersonation_application", "__init__", "repository if repository is not None else default_impersonation_repository")
+            and expression("impersonation_application", "mapping", "return self.repository")
+            and expression("impersonation_repository", None, "default_impersonation_repository = AdminImpersonationRepository()")
+            and all(any(isinstance(node, ast.With) and any(ast.unparse(item.context_expr) == "self._lock" for item in node.items)
+                        for node in nodes("impersonation_repository", method)) for method in ("get", "set", "cancel"))
+            and all(calls("utils", function, "get_impersonating_target") for function in
+                    ("check_user", "check_user_type", "check_user_md_type", "handle_pic_msg_send",
+                     "log_message", "get_logs", "get_statistics_data", "update_statistics_value"))
+            and not any(isinstance(node, ast.Subscript) and isinstance(node.value, ast.Name)
+                        and node.value.id == "_impersonating_users" for source in ("handlers", "utils")
+                        for node in nodes(source))
+        ),
+        "manual_rift_success_projects_current_world_not_historical_receipt": (
+            len(current_reads) == len(projections) == len(stale_guards) == 1
+            and current_reads[0].lineno < stale_guards[0].lineno < projections[0].lineno
+            and any(isinstance(node, ast.Return) for node in stale_guards[0].body)
+            and ast.unparse(projections[0]) == "_sync_world_projection(SimpleNamespace(**current_state), save_legacy=False)"
+            and expression("rift_application", "current_world", "return RiftGenerationSqlRepository(self.database).get_current(rift_key)")
+            and calls("rift", "create_rift", "old_rift_info.save_rift")
+        ),
+        "status": "admin_runtime_commands_use_feature_owners_with_atomic_catalog_and_current_world_projection",
+    }
+    return {key: value if key == "status" else bool(value) for key, value in report.items()}
+
+
 @lru_cache(maxsize=1)
 def _slice_status() -> dict[str, dict[str, object]]:
     @lru_cache(maxsize=None)
@@ -1223,6 +1349,19 @@ def _slice_status() -> dict[str, dict[str, object]]:
         "entry_tests": (ROOT / "tests/test_admin_broadcast.py").read_text(encoding="utf-8"),
         "core_tests": (PACKAGE / "features/admin/tests/test_broadcast_application.py").read_text(encoding="utf-8"),
         "history_tests": (PACKAGE / "features/admin/tests/test_broadcast_history_repository.py").read_text(encoding="utf-8"),
+    }
+    admin_runtime_sources = {
+        "handlers": admin_facade,
+        **{name: (PACKAGE / path).read_text(encoding="utf-8") for name, path in {
+            "rift": "xiuxian/xiuxian_rift/__init__.py",
+            "rift_application": "features/rift/application.py",
+            "catalog_facade": "xiuxian/xiuxian_utils/item_json.py",
+            "catalog_application": "features/admin/item_catalog_application.py",
+            "catalog_repository": "features/admin/item_catalog_repository.py",
+            "utils": "xiuxian/xiuxian_utils/utils.py",
+            "impersonation_application": "features/admin/impersonation_application.py",
+            "impersonation_repository": "features/admin/impersonation_repository.py",
+        }.items()},
     }
     admin_status_batch_handler = admin_facade[
         admin_facade.index("async def restate_") : admin_facade.index(
@@ -3748,10 +3887,8 @@ def _slice_status() -> dict[str, dict[str, object]]:
                 and "avatar_operation_receipts" in avatar_repository
             ),
             "active_id_reads_use_application_and_preserve_priority": (
-                "_player_avatar().get_active_user_id(original_user_id)" in avatar_utils
+                _avatar_identity_priority(avatar_utils)
                 and "user_id = get_active_user_id(real_user_id)" in avatar_base_facade
-                and avatar_utils.index("_player_avatar().get_active_user_id(original_user_id)")
-                < avatar_utils.index("if original_user_id in _impersonating_users")
             ),
             "initialization_is_player_application_owned_and_recoverable": (
                 "_player_avatar_application().initialize(" in avatar_facade
@@ -5034,6 +5171,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "status": "command_flags_registry_and_aliases_share_atomic_json_owner_with_failure_safe_runtime_view",
         },
         "admin_broadcast_owner": _admin_broadcast_owner_status(admin_broadcast_sources),
+        "admin_runtime_owner": _admin_runtime_owner_status(admin_runtime_sources),
         "admin": {
             "stone_default_application_owned": (
                 "AdminStoneSqlRepository" in admin_asset_application

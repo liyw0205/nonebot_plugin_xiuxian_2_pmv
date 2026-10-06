@@ -2,11 +2,12 @@ try:
     import ujson as json
 except ImportError:
     import json
-import threading
 from pathlib import Path
 from typing import List
 
 from nonebot.log import logger
+from ...features.admin.item_catalog_application import AdminItemCatalogApplication
+from ...features.admin.item_catalog_repository import get_item_catalog_repository
 from ...paths import get_paths
 
 READPATH = get_paths().data
@@ -17,7 +18,8 @@ PACKAGESPATH = READPATH / "礼包"
 XIULIANITEMPATH = READPATH / "修炼物品"
 items_num = "123451234"
 
-ITEMS_CACHE = {}
+_ITEM_CATALOG_REPOSITORY = get_item_catalog_repository(READPATH)
+ITEMS_CACHE = _ITEM_CATALOG_REPOSITORY.items
 
 
 class Items:
@@ -31,10 +33,9 @@ class Items:
         return cls._instance[items_num]
 
     def __init__(self) -> None:
-        global ITEMS_CACHE
         if not self._has_init.get(items_num):
-            self._has_init[items_num] = True
-            self.lock = threading.RLock()
+            self.repository = _ITEM_CATALOG_REPOSITORY
+            self.lock = self.repository.lock
 
             self.mainbuff_jsonpath = SKILLPATH / "主功法.json"
             self.subbuff_jsonpath = SKILLPATH / "辅修功法.json"
@@ -75,23 +76,23 @@ class Items:
             }
 
             self.items = ITEMS_CACHE
-            self.package_source_map = {}
+            self.package_source_map = self.repository.package_source_map
             self._load_items()
+            self._has_init[items_num] = True
             logger.info("载入items完成")
 
     def _load_items(self):
         """首次加载/内部加载"""
-        with self.lock:
-            ITEMS_CACHE.clear()
-            self.export_items_data()
+        result = self.repository.ensure_loaded()
+        if result and result["errors"]:
+            logger.warning("items 初次载入存在 {} 项分类错误，已保留可用数据", len(result["errors"]))
+        return result
 
     def refresh(self):
         """重载物品缓存，供 管理指令/热更新 调用"""
-        with self.lock:
-            ITEMS_CACHE.clear()
-            self.export_items_data()
-            self.items = ITEMS_CACHE
-            logger.info("items 已从原始文件重新加载完成")
+        result = AdminItemCatalogApplication(self.repository).reload()
+        logger.info("items 已从原始文件重新加载完成")
+        return result
 
     def readf(self, filepath: Path):
         try:
@@ -118,52 +119,15 @@ class Items:
 
     def read_json_bundle(self, dirpath: Path, item_type: str):
         """读取目录下多个 json 并合并，主要用于按类拆分后的礼包数据。"""
-        if not dirpath.exists():
-            logger.error(f"目录未找到: {dirpath}")
+        try:
+            return self.repository.read_bundle(dirpath, item_type)[0]
+        except (OSError, ValueError) as exc:
+            logger.error("读取物品分类失败 {}: {}", dirpath, type(exc).__name__)
             return None
-        if not dirpath.is_dir():
-            return self.readf(dirpath)
-
-        bundle_data = {}
-        if item_type == "礼包":
-            self.package_source_map = {}
-
-        json_files = sorted(dirpath.glob("*.json"))
-        if item_type == "礼包":
-            legacy_bundle = dirpath / "礼包.json"
-            split_files = [filepath for filepath in json_files if filepath.name != legacy_bundle.name]
-            if legacy_bundle in json_files and split_files:
-                json_files = split_files
-
-        for filepath in json_files:
-            file_data = self.readf(filepath)
-            if not file_data:
-                continue
-            if not isinstance(file_data, dict):
-                logger.warning(f"{item_type}分类文件格式错误，已跳过: {filepath}")
-                continue
-
-            for item_id, item_data in file_data.items():
-                item_id = str(item_id)
-                if item_id in bundle_data:
-                    logger.warning(f"{item_type}数据ID重复，已跳过 {filepath}: {item_id}")
-                    continue
-                bundle_data[item_id] = item_data
-                if item_type == "礼包":
-                    self.package_source_map[item_id] = filepath
-
-        return bundle_data
 
     def export_items_data(self):
-        """加载所有物品数据到内存缓存"""
-        global ITEMS_CACHE
-        item_types = [
-            "功法", "辅修功法", "神通", "身法", "瞳术",
-            "法器", "防具", "饰品", "丹药", "礼包", "药材",
-            "合成丹药", "炼丹炉", "聚灵旗", "称号", "神物", "特殊物品"
-        ]
-        for item_type in item_types:
-            self.set_item_data(self.get_items_data(item_type), item_type)
+        """严格构建并一次发布全量物品目录。"""
+        return self.refresh()
 
     def revert_to_original_files(self):
         """
@@ -258,30 +222,14 @@ class Items:
         return "综合礼包.json"
 
     def set_item_data(self, dict_data, item_type):
-        global ITEMS_CACHE
-        if not dict_data:
+        if dict_data is None:
             logger.warning(f"{item_type}加载失败！")
             return
-
-        for k, v in dict_data.items():
-            if k in ITEMS_CACHE:
-                logger.warning(f"items：{k}已存在！")
-                continue
-
-            item_data = dict(v)
-
-            if item_type in ['功法', '神通', '辅修功法', '身法', '瞳术']:
-                item_data['type'] = '技能'
-                item_data['rank'], item_data['level'] = item_data['level'], item_data['rank']
-
-            item_data['item_type'] = item_type
-            ITEMS_CACHE[k] = item_data
+        self.repository.merge_items(dict_data, item_type)
 
     def get_data_by_item_id(self, item_id):
         """通过物品ID获取物品数据"""
-        if item_id is None:
-            return None
-        return self.items.get(str(item_id))
+        return self.repository.get_data_by_item_id(item_id)
 
     def get_data_by_item_name(self, item_name):
         """
@@ -289,37 +237,15 @@ class Items:
         如果 item_name 为数字ID，也支持通过ID查找
         返回: (item_id, item_data)
         """
-        if item_name is None:
-            return None, None
-
-        item_name = str(item_name).strip()
-        if item_name.isdigit():
-            item_id = item_name
-            item_data = self.get_data_by_item_id(item_id)
-            if item_data:
-                return int(item_id), item_data
-        else:
-            for item_id, item in self.items.items():
-                if str(item.get('name')) == item_name:
-                    return int(item_id), item
-
-        return None, None
+        return self.repository.get_data_by_item_name(item_name)
 
     def get_fusion_items(self):
         """获取所有可合成的物品名称和类型"""
-        fusion_items = []
-        for _, item_data in self.items.items():
-            if 'fusion' in item_data:
-                fusion_items.append(f"{item_data['name']} ({item_data['item_type']})")
-        return fusion_items
+        return self.repository.get_fusion_items()
 
     def get_data_by_item_type(self, item_type):
         """获取指定类型"""
-        temp_dict = {}
-        for k, v in self.items.items():
-            if v['item_type'] in item_type:
-                temp_dict[k] = v
-        return temp_dict
+        return self.repository.get_data_by_item_type(item_type)
 
     def get_random_id_list_by_rank_and_item_type(
         self,
@@ -329,17 +255,4 @@ class Items:
         """
         获取随机物品ID列表
         """
-        l_id = []
-        for k, v in self.items.items():
-            try:
-                rank = int(v['rank'])
-            except Exception:
-                continue
-
-            if item_type is not None:
-                if v['item_type'] in item_type and rank >= fanil_rank and rank - fanil_rank <= 40:
-                    l_id.append(k)
-            else:
-                if rank >= fanil_rank and rank - fanil_rank <= 40:
-                    l_id.append(k)
-        return l_id
+        return self.repository.get_random_id_list_by_rank_and_item_type(fanil_rank, item_type)

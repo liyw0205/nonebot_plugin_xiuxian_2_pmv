@@ -1,9 +1,17 @@
 import unittest
 
-from scripts.check_full_refactor_progress import PACKAGE, ROOT, _admin_broadcast_owner_status, _slice_status
+from scripts.check_full_refactor_progress import (
+    PACKAGE, ROOT, _admin_broadcast_owner_status, _admin_runtime_owner_status,
+    _avatar_identity_priority, _slice_status,
+)
 
 
 class AdminProgressContractTests(unittest.TestCase):
+    def test_admin_rift_items_and_impersonation_use_their_feature_owners(self):
+        for key, value in _slice_status()["admin_runtime_owner"].items():
+            if key != "status":
+                self.assertTrue(value, key)
+
     def test_admin_broadcast_commands_and_consumers_share_the_state_owner(self):
         for key, value in _slice_status()["admin_broadcast_owner"].items():
             if key != "status":
@@ -114,3 +122,69 @@ class AdminBroadcastGateMutationTests(unittest.TestCase):
         self.assertFalse(_admin_broadcast_owner_status(changed)[
             "six_admin_handlers_and_compatibility_calls_use_one_memory_owner"
         ])
+
+
+class AdminRuntimeGateMutationTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        files = {
+            "handlers": "xiuxian/xiuxian_admin/__init__.py",
+            "rift": "xiuxian/xiuxian_rift/__init__.py",
+            "rift_application": "features/rift/application.py",
+            "catalog_facade": "xiuxian/xiuxian_utils/item_json.py",
+            "catalog_application": "features/admin/item_catalog_application.py",
+            "catalog_repository": "features/admin/item_catalog_repository.py",
+            "utils": "xiuxian/xiuxian_utils/utils.py",
+            "impersonation_application": "features/admin/impersonation_application.py",
+            "impersonation_repository": "features/admin/impersonation_repository.py",
+        }
+        cls.sources = {name: (PACKAGE / path).read_text(encoding="utf-8") for name, path in files.items()}
+
+    def test_avatar_priority_rejects_reversed_or_missing_identity_edges(self):
+        source = self.sources["utils"]
+        avatar = "_player_avatar().get_active_user_id(original_user_id)"
+        impersonation = "get_impersonating_target(original_user_id)"
+        self.assertTrue(_avatar_identity_priority(source))
+        changed = (
+            source.replace(avatar, "missing_avatar_read"),
+            source.replace(impersonation, "missing_impersonation_read"),
+            source.replace(avatar, "__avatar_marker__")
+                  .replace(impersonation, avatar).replace("__avatar_marker__", impersonation),
+        )
+        for index, mutation in enumerate(changed):
+            with self.subTest(mutation=index):
+                self.assertFalse(_avatar_identity_priority(mutation))
+
+    def test_gate_rejects_owner_bypass_partial_publish_and_receipt_projection(self):
+        owner = "three_superuser_handlers_reach_feature_owners"
+        catalog = "item_catalog_strict_reload_publishes_once_after_build_without_clearing"
+        impersonation = "impersonation_uses_real_identity_and_one_atomic_shared_mapping"
+        rift = "manual_rift_success_projects_current_world_not_historical_receipt"
+        cases = (
+            ("handlers", "await create_rift(bot, event)", "await legacy_create_rift(bot, event)", owner),
+            ("handlers", 'on_command("重载items", permission=SUPERUSER', 'on_command("重载items", permission=None', owner),
+            ("catalog_facade", "AdminItemCatalogApplication(self.repository).reload()", "self.repository.reload()", owner),
+            ("catalog_repository", "return self._load(strict=True)", "return self._load(strict=False)", catalog),
+            ("catalog_repository", "self._state = (items, sources)",
+             "self._state = ({}, {})\n            self._state = (items, sources)", catalog),
+            ("utils", "_impersonating_users = impersonation_application.mapping", "_impersonating_users = {}", impersonation),
+            ("impersonation_application", "return self.repository\n", "return self.repository.snapshot()\n", impersonation),
+            ("rift", "_sync_world_projection(SimpleNamespace(**current_state), save_legacy=False)",
+             "_sync_world_projection(result.state, save_legacy=False)", rift),
+            ("rift", 'current_state["generation_id"] != result.state.generation_id',
+             'current_state["generation_id"] == result.state.generation_id', rift),
+        )
+        for source, before, after, gate in cases:
+            with self.subTest(source=source, mutation=after):
+                self.assertIn(before, self.sources[source])
+                changed = dict(self.sources)
+                changed[source] = changed[source].replace(before, after, 1)
+                self.assertFalse(_admin_runtime_owner_status(changed)[gate])
+
+    def test_gate_rejects_reintroduced_impersonation_dictionary_and_direct_lookup(self):
+        gate = "impersonation_uses_real_identity_and_one_atomic_shared_mapping"
+        for addition in ("\n_impersonating_users = {}\n", "\nstale_target = _impersonating_users['admin']\n"):
+            with self.subTest(addition=addition):
+                changed = dict(self.sources)
+                changed["utils"] += addition
+                self.assertFalse(_admin_runtime_owner_status(changed)[gate])

@@ -1,6 +1,7 @@
 import tempfile
 import sys
 import unittest
+from importlib import import_module
 from types import ModuleType
 from pathlib import Path
 from unittest.mock import Mock, patch
@@ -133,11 +134,13 @@ class GameEventProjectionTests(unittest.TestCase):
             "nonebot_plugin_xiuxian_2.xiuxian.xiuxian_activity.service": activity_service,
         }
         game_events_name = "nonebot_plugin_xiuxian_2.xiuxian.xiuxian_utils.game_events"
-        self.addCleanup(sys.modules.pop, game_events_name, None)
         with patch.dict(sys.modules, task_modules):
-            with self.assertRaisesRegex(RuntimeError, "simulate interruption"):
+            game_events = import_module(game_events_name)
+            # The event module may already hold its import-time economy binding.
+            with patch.object(game_events, "safe_log_economy_change", economy_log.safe_log_economy_change):
+                with self.assertRaisesRegex(RuntimeError, "simulate interruption"):
+                    effects.on_outbox_event(record)
                 effects.on_outbox_event(record)
-            effects.on_outbox_event(record)
 
         with DatabaseUnitOfWork(self.player, read_only=True) as uow:
             row = uow.query_one(

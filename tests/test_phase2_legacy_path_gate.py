@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import ast
 import hashlib
 import io
 import json
 import unittest
+from pathlib import Path
 from contextlib import redirect_stdout, redirect_stderr
 from unittest.mock import patch
 
@@ -42,21 +44,52 @@ def _source_projection(inventory: dict, fields: list[str]) -> dict:
     return {field: inventory.get(field) for field in fields}
 
 
+def _handler_line(source: str, handler: str) -> int:
+    path = Path(__file__).resolve().parents[1] / source
+    return next(node.lineno for node in ast.parse(path.read_text(encoding="utf-8")).body
+                if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == handler)
+
+
 class Phase2LegacyPathGateTests(unittest.TestCase):
+    def test_admin_runtime_controls_have_source_bound_feature_owner_edges(self):
+        report = load_phase2_scope_report(include_items=True)
+        items = {item["id"]: item for item in report["items"]}
+        source = "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py"
+        expected = {
+            "生成秘境": ("create_new_rift_", "RiftApplication.generate", "RiftGenerationSqlRepository.generate", "test_admin_rift_generation.py"),
+            "重载items": ("items_refresh_", "AdminItemCatalogApplication.reload", "AdminItemCatalogRepository.reload", "test_admin_items_reload.py"),
+            "用户伪装": ("impersonate_user_command_", "AdminImpersonationApplication", "AdminImpersonationRepository", "test_admin_impersonation.py"),
+        }
+        for name, (handler, application, repository, suite) in expected.items():
+            with self.subTest(command=name):
+                line = _handler_line(source, handler)
+                item = items[f"command:admin:{name}"]
+                self.assertEqual(item["status"], "已迁移")
+                self.assertNotIn("unknown_edge", item)
+                owner_edges = [edge for edge in item["call_graph"]
+                               if edge.startswith(f"{source}:{line} {handler} ->") and application in edge]
+                self.assertEqual(len(owner_edges), 1)
+                self.assertIn(repository, owner_edges[0])
+                self.assertIn(f"{source}:{line}", item["evidence"])
+                self.assertIn("tests/" + suite, item["evidence"])
+        self.assertTrue(report["frozen_membership_valid"])
+        self.assertEqual(report["integrity_errors"], [])
+
     def test_admin_broadcast_commands_have_source_bound_feature_owner_edges(self):
         report = load_phase2_scope_report(include_items=True)
         items = {item["id"]: item for item in report["items"]}
         source = "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py"
         expected = {
-            "群聊广播": (2691, "group_broadcast_cmd_", "start", "create/claim/finish"),
-            "私聊广播": (2733, "private_broadcast_cmd_", "start", "create/claim/finish"),
-            "全局广播": (2775, "global_broadcast_cmd_", "start", "create/claim/finish"),
-            "查看广播": (2817, "view_broadcast_cmd_", "status", "status"),
-            "取消广播": (2831, "cancel_broadcast_cmd_", "cancel", "cancel"),
-            "清空广播": (2848, "clear_broadcast_cmd_", "clear", "clear"),
+            "群聊广播": ("group_broadcast_cmd_", "start", "create/claim/finish"),
+            "私聊广播": ("private_broadcast_cmd_", "start", "create/claim/finish"),
+            "全局广播": ("global_broadcast_cmd_", "start", "create/claim/finish"),
+            "查看广播": ("view_broadcast_cmd_", "status", "status"),
+            "取消广播": ("cancel_broadcast_cmd_", "cancel", "cancel"),
+            "清空广播": ("clear_broadcast_cmd_", "clear", "clear"),
         }
-        for name, (line, handler, application_method, repository_method) in expected.items():
+        for name, (handler, application_method, repository_method) in expected.items():
             with self.subTest(command=name):
+                line = _handler_line(source, handler)
                 item = items[f"command:admin:{name}"]
                 self.assertEqual(item["status"], "已迁移")
                 self.assertNotIn("unknown_edge", item)
@@ -127,13 +160,14 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
         report = load_phase2_scope_report(include_items=True)
         items = {item["id"]: item for item in report["items"]}
         expected = {
-            "小黑屋": (1986, "blackhouse_", "AdminBlackhouseSqlRepository.snapshot/set_banned"),
-            "解除小黑屋": (2023, "unblackhouse_", "AdminBlackhouseSqlRepository.snapshot/set_banned"),
-            "查看小黑屋": (2060, "view_blackhouse_", "AdminBlackhouseSqlRepository.list_banned"),
+            "小黑屋": ("blackhouse_", "AdminBlackhouseSqlRepository.snapshot/set_banned"),
+            "解除小黑屋": ("unblackhouse_", "AdminBlackhouseSqlRepository.snapshot/set_banned"),
+            "查看小黑屋": ("view_blackhouse_", "AdminBlackhouseSqlRepository.list_banned"),
         }
         source = "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py"
-        for name, (line, handler, terminal) in expected.items():
+        for name, (handler, terminal) in expected.items():
             with self.subTest(command=name):
+                line = _handler_line(source, handler)
                 item = items[f"command:admin:{name}"]
                 self.assertEqual(item["status"], "已迁移")
                 self.assertNotIn("unknown_edge", item)
@@ -208,7 +242,7 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
         self.assertEqual(report["path_count"], 496)
         self.assertEqual(
             report["status_counts"],
-            {"不可达": 19, "允许保留的兼容路径": 107, "受阻": 154, "已迁移": 216},
+            {"不可达": 19, "允许保留的兼容路径": 107, "受阻": 151, "已迁移": 219},
         )
         self.assertGreater(report["blocked_count"], 0)
         self.assertTrue(all(item["call_graph"] and item["evidence"] for item in report["items"]))
