@@ -288,6 +288,14 @@ class RefactorProgressTests(unittest.TestCase):
         self.assertTrue(read_model["activity_application_composes_read_model"])
         self.assertTrue(read_model["read_model_repository_is_read_only_and_has_no_ddl"])
         self.assertTrue(read_model["read_model_rendering_matches_legacy_contract"])
+        config_owner = slices["activity_config_owner"]
+        self.assertTrue(config_owner["activity_overview_reward_gameplay_matchers_use_feature_read_model"])
+        self.assertTrue(config_owner["activity_overview_uses_one_read_only_game_snapshot"])
+        self.assertTrue(config_owner["config_toggle_matchers_use_separate_config_application"])
+        self.assertTrue(config_owner["config_owner_uses_activity_event_store_and_repairs_projection_replay"])
+        self.assertTrue(config_owner["config_owner_target_replay_conflict_and_revision_contracts_tested"])
+        activity_static_help = slices["activity_static_help"]
+        self.assertTrue(activity_static_help["help_and_manage_remain_static_compatibility_handlers"])
         boss = slices["activity_boss"]
         self.assertTrue(boss["boss_status_matcher_uses_feature_read_model"])
         self.assertTrue(boss["boss_rank_matcher_uses_feature_read_model"])

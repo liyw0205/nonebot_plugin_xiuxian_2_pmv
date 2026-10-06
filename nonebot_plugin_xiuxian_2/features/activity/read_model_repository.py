@@ -364,5 +364,109 @@ class ActivityReadModelSqlRepository:
             for row in rows
         ]
 
+    def overview_snapshot(
+        self,
+        user_id: str,
+        activity_key: str,
+        *,
+        include_tasks: bool,
+        include_pass: bool,
+        collect_activity_keys: list[str],
+    ) -> dict[str, Any]:
+        """Read all personal overview state within a single game_db snapshot."""
+        empty: dict[str, Any] = {
+            "sign": {},
+            "tasks": {},
+            "pass_total_exp": 0,
+            "pass_claimed_levels": set(),
+            "pass_highest_level": 0,
+            "collect_pity": {},
+        }
+        if not self.database.is_file():
+            return empty
+
+        required = {"activity_user"}
+        if include_tasks:
+            required.add("activity_task_progress")
+        if include_pass:
+            required.update({"activity_pass_balance", "activity_pass_reward_claim"})
+        collect_keys = tuple(dict.fromkeys(str(key) for key in collect_activity_keys if str(key)))
+        if collect_keys:
+            required.add("activity_collect_pity_state")
+
+        with DatabaseUnitOfWork(self.database, read_only=True) as uow:
+            self._assert_tables(uow, required)
+            sign = uow.query_one(
+                "SELECT sign_days,last_sign_date,total_sign_days FROM activity_user "
+                "WHERE user_id=?",
+                (str(user_id),),
+            ) or {}
+            task_rows = []
+            if include_tasks:
+                task_rows = uow.query_all(
+                    "SELECT scope_type,scope_key,task_key,progress,target,claimed,claim_time "
+                    "FROM activity_task_progress WHERE activity_key=? AND user_id=?",
+                    (str(activity_key), str(user_id)),
+                )
+            pass_total_exp = 0
+            claimed_levels: set[int] = set()
+            highest_level = 0
+            if include_pass:
+                pass_row = uow.query_one(
+                    "SELECT total_exp FROM activity_pass_balance "
+                    "WHERE activity_key=? AND user_id=?",
+                    (str(activity_key), str(user_id)),
+                )
+                pass_total_exp = max(0, int((pass_row or {}).get("total_exp") or 0))
+                claimed_levels = {
+                    max(0, int(row["level"] or 0))
+                    for row in uow.query_all(
+                        "SELECT level FROM activity_pass_reward_claim "
+                        "WHERE activity_key=? AND user_id=?",
+                        (str(activity_key), str(user_id)),
+                    )
+                }
+                highest_row = uow.query_one(
+                    "SELECT COALESCE(MAX(level),0) AS level FROM activity_pass_balance "
+                    "WHERE activity_key=?",
+                    (str(activity_key),),
+                )
+                highest_level = max(0, int((highest_row or {}).get("level") or 0))
+            pity_rows = []
+            if collect_keys:
+                placeholders = ",".join("?" for _ in collect_keys)
+                pity_rows = uow.query_all(
+                    "SELECT activity_key,event_key,miss_count FROM activity_collect_pity_state "
+                    f"WHERE activity_key IN ({placeholders}) AND user_id=?",
+                    (*collect_keys, str(user_id)),
+                )
+
+        tasks = {
+            (str(row["scope_type"]), str(row["scope_key"]), str(row["task_key"])): {
+                "progress": max(0, int(row["progress"] or 0)),
+                "target": max(1, int(row["target"] or 1)),
+                "claimed": bool(int(row["claimed"] or 0)),
+                "claim_time": str(row["claim_time"] or "").strip(),
+            }
+            for row in task_rows
+        }
+        return {
+            "sign": {
+                "sign_days": max(0, int(sign.get("sign_days") or 0)),
+                "last_sign_date": str(sign.get("last_sign_date") or "").strip(),
+                "total_sign_days": max(0, int(sign.get("total_sign_days") or 0)),
+            },
+            "tasks": tasks,
+            "pass_total_exp": pass_total_exp,
+            "pass_claimed_levels": claimed_levels,
+            "pass_highest_level": highest_level,
+            "collect_pity": {
+                (str(row["activity_key"]), str(row["event_key"])): max(
+                    0, int(row["miss_count"] or 0)
+                )
+                for row in pity_rows
+            },
+        }
+
 
 __all__ = ["ActivityReadModelSqlRepository"]

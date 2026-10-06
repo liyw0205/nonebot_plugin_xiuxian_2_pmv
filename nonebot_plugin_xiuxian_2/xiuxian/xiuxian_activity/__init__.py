@@ -11,9 +11,6 @@ from ...paths import get_paths
 from ...infrastructure.ids import UUIDGenerator
 
 from .service import (
-    build_activity_gameplay_text,
-    build_activity_info,
-    build_activity_rewards_text,
     build_collect_bag_text,
     build_activity_points_text,
     build_activity_shop_text,
@@ -45,9 +42,8 @@ activity_boss_claim_cmd = on_command("活动首领领奖", aliases={"领取首�
 activity_open_cmd = on_command("开启活动", permission=SUPERUSER, priority=5, block=True)
 activity_close_cmd = on_command("关闭活动", permission=SUPERUSER, priority=5, block=True)
 
-# Commands keep their historical presentation text, while every mutating
-# action crosses the feature application boundary and is recorded in the
-# operation ledger before the legacy service runs.
+# Gameplay mutations use the feature application; configuration has its own
+# database owner and is handled by ActivityApplication.config.
 activity_application = ActivityApplication(get_paths().game_db)
 runtime_ids = UUIDGenerator()
 
@@ -111,7 +107,9 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await handle_send(bot, event, msg, md_type="我要修仙")
         return
 
-    text = build_activity_info(str(user_info["user_id"]))
+    text = activity_application.read_model.activity_info_text(
+        str(user_info["user_id"])
+    )
     await handle_send(
         bot,
         event,
@@ -124,7 +122,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 @activity_rewards_cmd.handle(parameterless=[Cooldown(cd_time=0)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     await assign_bot(bot=bot, event=event)
-    text = build_activity_rewards_text()
+    text = activity_application.read_model.rewards_text()
     await handle_send(
         bot,
         event,
@@ -221,7 +219,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
 @activity_gameplay_cmd.handle(parameterless=[Cooldown(cd_time=0)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     await assign_bot(bot=bot, event=event)
-    text = build_activity_gameplay_text()
+    text = activity_application.read_model.gameplay_text()
     await handle_send(
         bot,
         event,
@@ -391,10 +389,8 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
 async def _(bot: Bot, event: MessageEvent, args: Message = CommandArg()):
     await assign_bot(bot=bot, event=event)
     operator_id = str(event.get_user_id())
-    _, text, _ = _run_activity_action(
-        "set_enabled",
+    text = activity_application.config.set_enabled(
         operation_id=_activity_operation_id(event, "config-open", operator_id),
-        user_id=operator_id,
         enabled=True,
         target=args.extract_plain_text(),
         operator_id=operator_id,
@@ -406,10 +402,8 @@ async def _(bot: Bot, event: MessageEvent, args: Message = CommandArg()):
 async def _(bot: Bot, event: MessageEvent, args: Message = CommandArg()):
     await assign_bot(bot=bot, event=event)
     operator_id = str(event.get_user_id())
-    _, text, _ = _run_activity_action(
-        "set_enabled",
+    text = activity_application.config.set_enabled(
         operation_id=_activity_operation_id(event, "config-close", operator_id),
-        user_id=operator_id,
         enabled=False,
         target=args.extract_plain_text(),
         operator_id=operator_id,

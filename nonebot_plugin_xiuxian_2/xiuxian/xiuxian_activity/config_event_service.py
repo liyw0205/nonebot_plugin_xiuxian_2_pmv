@@ -154,24 +154,31 @@ class ActivityConfigEventService:
         operation_id = str(operation_id).strip()
         if not operation_id:
             raise ValueError("operation is required")
+        if not self._database.is_file():
+            return None
         payload = self._request_payload(request_identity)
-        with self._lock, closing(db_backend.connect(self._database)) as conn:
-            try:
-                conn.execute("BEGIN IMMEDIATE")
-                self._ensure_schema(conn)
-                previous = self._operation(conn, operation_id)
-                if previous is None:
-                    conn.commit()
-                    return None
-                if str(previous[0]) != payload:
-                    conn.commit()
-                    return ActivityConfigMutationResult("operation_conflict")
-                result = self._operation_result(previous)
-                conn.commit()
-                return result
-            except Exception:
-                conn.rollback()
-                raise
+        with DatabaseUnitOfWork(self._database, read_only=True) as uow:
+            table = uow.query_one(
+                "SELECT 1 FROM sqlite_master WHERE type='table' "
+                "AND name='activity_config_operations'"
+            )
+            if table is None:
+                return None
+            previous = uow.query_one(
+                "SELECT payload,outcome,revision,result_json,result_text "
+                "FROM activity_config_operations WHERE operation_id=?",
+                (operation_id,),
+            )
+        if previous is None:
+            return None
+        if str(previous["payload"]) != payload:
+            return ActivityConfigMutationResult("operation_conflict")
+        return ActivityConfigMutationResult(
+            "duplicate",
+            int(previous["revision"]),
+            self._decode_config(previous["result_json"]),
+            str(previous["result_text"]),
+        )
 
     def replace(
         self,

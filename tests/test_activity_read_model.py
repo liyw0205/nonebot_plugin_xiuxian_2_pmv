@@ -146,6 +146,90 @@ class ActivityReadModelTests(unittest.TestCase):
                 service.build_activity_pass_text("user-1"),
             )
 
+    def test_overview_rewards_and_gameplay_match_legacy_text(self) -> None:
+        application = ActivityReadModelApplication(
+            self.database,
+            config_loader=lambda: self.config,
+        )
+        with (
+            patch.object(service, "load_config", return_value=self.config),
+            patch.object(service, "DB_PATH", self.database),
+        ):
+            self.assertEqual(
+                service.build_activity_rewards_text(), application.rewards_text()
+            )
+            self.assertEqual(
+                service.build_activity_gameplay_text(), application.gameplay_text()
+            )
+
+        for mode in ("brief", "full"):
+            config = activity_config._migrate_config(self.config)[0]
+            config.setdefault("extensions", {})["activity_info_mode"] = mode
+            application = ActivityReadModelApplication(
+                self.database,
+                config_loader=lambda config=config: config,
+            )
+            with (
+                patch.object(service, "load_config", return_value=config),
+                patch.object(service, "DB_PATH", self.database),
+            ):
+                self.assertEqual(
+                    service.build_activity_info(),
+                    application.activity_info_text(),
+                )
+                self.assertEqual(
+                    service.build_activity_info("user-1"),
+                    application.activity_info_text("user-1"),
+                )
+
+    def test_overview_uses_one_read_only_snapshot_without_writes(self) -> None:
+        from nonebot_plugin_xiuxian_2.features.activity.read_model_repository import (
+            ActivityReadModelSqlRepository,
+        )
+
+        statements = []
+        units = []
+
+        class TracedUnitOfWork(DatabaseUnitOfWork):
+            def __enter__(inner_self):
+                result = super().__enter__()
+                units.append(inner_self)
+                result.connection.set_trace_callback(statements.append)
+                return result
+
+        application = ActivityReadModelApplication(
+            self.database,
+            repository=ActivityReadModelSqlRepository(self.database),
+            config_loader=lambda: self.config,
+        )
+        with patch(
+            "nonebot_plugin_xiuxian_2.features.activity.read_model_repository.DatabaseUnitOfWork",
+            TracedUnitOfWork,
+        ):
+            application.activity_info_text("user-1")
+
+        writes = [
+            sql for sql in statements
+            if sql.lstrip().lower().startswith(
+                ("insert", "update", "delete", "create", "drop", "alter")
+            )
+        ]
+        self.assertEqual(1, len(units))
+        self.assertTrue(units[0].read_only)
+        self.assertEqual([], writes)
+
+    def test_overview_does_not_create_missing_database(self) -> None:
+        missing_database = Path(self.temp.name) / "missing-overview.db"
+        application = ActivityReadModelApplication(
+            missing_database,
+            config_loader=lambda: self.config,
+        )
+
+        text = application.activity_info_text("user-1")
+
+        self.assertIn("我的累计签到：0 天", text)
+        self.assertFalse(missing_database.exists())
+
     def test_sign_rank_uses_one_read_only_join_and_preserves_display(self) -> None:
         with DatabaseUnitOfWork(self.database) as uow:
             uow.execute(

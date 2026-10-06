@@ -81,6 +81,26 @@ class ActivityConfigEventServiceTests(unittest.TestCase):
         self.assertEqual((state.revision, state.config["name"]), (1, "节日活动"))
         self.assertEqual(self.scalar("SELECT COUNT(*) FROM activity_config_operations"), 0)
 
+    def test_replay_lookup_does_not_create_missing_database_or_schema(self) -> None:
+        missing_database = Path(self.temp.name) / "not-created-for-replay.db"
+        reader = ActivityConfigEventService(missing_database)
+
+        self.assertIsNone(reader.replay("missing-operation", {"action": "toggle"}))
+        self.assertFalse(missing_database.exists())
+
+        with db_backend.connection(self.database) as conn:
+            conn.execute("CREATE TABLE unrelated(value TEXT)")
+        self.assertIsNone(
+            self.service.replay("missing-operation", {"action": "toggle"})
+        )
+        self.assertEqual(
+            self.scalar(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' "
+                "AND name LIKE 'activity_config_%'"
+            ),
+            0,
+        )
+
     def test_regular_config_read_prefers_event_state_without_legacy_import(self) -> None:
         config_path = Path(self.temp.name) / "activity_config.json"
         config_path.write_text('{"name":"陈旧 JSON","enabled":false}', encoding="utf-8")

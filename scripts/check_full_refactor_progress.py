@@ -392,6 +392,27 @@ def _slice_status() -> dict[str, dict[str, object]]:
     activity_read_model_application = (PACKAGE / "features" / "activity" / "read_model_application.py").read_text(encoding="utf-8")
     activity_read_model_repository = (PACKAGE / "features" / "activity" / "read_model_repository.py").read_text(encoding="utf-8")
     activity_read_model_tests = (ROOT / "tests" / "test_activity_read_model.py").read_text(encoding="utf-8")
+    activity_config_application = (PACKAGE / "features" / "activity" / "config_application.py").read_text(encoding="utf-8")
+    activity_config_repository = (PACKAGE / "features" / "activity" / "config_repository.py").read_text(encoding="utf-8")
+    activity_config_event_service = (PACKAGE / "xiuxian" / "xiuxian_activity" / "config_event_service.py").read_text(encoding="utf-8")
+    activity_config_tests = (ROOT / "tests" / "test_activity_config_application.py").read_text(encoding="utf-8")
+    activity_config_event_tests = (ROOT / "tests" / "test_activity_config_event_service.py").read_text(encoding="utf-8")
+    activity_help_handler = activity_commands[
+        activity_commands.index("@activity_help_cmd.handle"):
+        activity_commands.index("@activity_manage_cmd.handle")
+    ]
+    activity_manage_handler = activity_commands[
+        activity_commands.index("@activity_manage_cmd.handle"):
+        activity_commands.index("@activity_info_cmd.handle")
+    ]
+    activity_open_handler = activity_commands[
+        activity_commands.index("@activity_open_cmd.handle"):
+        activity_commands.index("@activity_close_cmd.handle")
+    ]
+    activity_close_handler = activity_commands[
+        activity_commands.index("@activity_close_cmd.handle"):
+        activity_commands.index("ACTIVITY_HELP =")
+    ]
     activity_boss_settlement_repository = (PACKAGE / "features" / "activity" / "boss_settlement_repository.py").read_text(encoding="utf-8")
     activity_boss_feature_tests = "\n".join(
         (
@@ -1750,6 +1771,54 @@ def _slice_status() -> dict[str, dict[str, object]]:
                 and "test_collect_bag_read_model_does_not_create_missing_database" in activity_read_model_tests
             ),
             "status": "activity_task_pass_sign_rank_and_collect_bag_read_models_owned_by_feature_application",
+        },
+        "activity_config_owner": {
+            "activity_overview_reward_gameplay_matchers_use_feature_read_model": (
+                "activity_application.read_model.activity_info_text(" in activity_commands
+                and "activity_application.read_model.rewards_text()" in activity_commands
+                and "activity_application.read_model.gameplay_text()" in activity_commands
+                and "build_activity_info(" not in activity_commands
+                and "build_activity_rewards_text(" not in activity_commands
+                and "build_activity_gameplay_text(" not in activity_commands
+            ),
+            "activity_overview_uses_one_read_only_game_snapshot": (
+                "def overview_snapshot(" in activity_read_model_repository
+                and "DatabaseUnitOfWork(self.database, read_only=True)" in activity_read_model_repository
+                and "def test_overview_uses_one_read_only_snapshot_without_writes" in activity_read_model_tests
+                and "def test_overview_does_not_create_missing_database" in activity_read_model_tests
+                and "def test_overview_rewards_and_gameplay_match_legacy_text" in activity_read_model_tests
+            ),
+            "config_toggle_matchers_use_separate_config_application": (
+                activity_commands.count("activity_application.config.set_enabled(") == 2
+                and "self.config = ActivityConfigApplication()" in activity_application
+                and "ActivityConfigApplication" in activity_application
+                and "service.set_enabled(" not in activity_commands
+            ),
+            "config_owner_uses_activity_event_store_and_repairs_projection_replay": (
+                "get_paths().data / \"activity\" / \"activity.db\"" in activity_config_repository
+                and "ActivityConfigEventService(self.database)" in activity_config_repository
+                and "self.event_service.replace(" in activity_config_repository
+                and "self._write_projection(result.config)" in activity_config_repository
+                and "DatabaseUnitOfWork(self._database, read_only=True)" in activity_config_event_service
+                and "def test_duplicate_replay_repairs_projection_after_commit_failure" in activity_config_tests
+            ),
+            "config_owner_target_replay_conflict_and_revision_contracts_tested": (
+                "def test_enabled_targets_preserve_legacy_mapping_and_only_write_config_store" in activity_config_tests
+                and "def test_conflict_and_stale_revision_do_not_write_projection" in activity_config_tests
+                and "def test_replay_lookup_does_not_create_missing_database_or_schema" in activity_config_event_tests
+            ),
+            "status": "activity_overview_rewards_gameplay_and_config_toggles_owned_by_feature_applications",
+        },
+        "activity_static_help": {
+            "help_and_manage_remain_static_compatibility_handlers": (
+                "send_help_message(" in activity_help_handler
+                and "send_help_message(" in activity_manage_handler
+                and "Cooldown(cd_time=0)" in activity_help_handler
+                and "Cooldown(cd_time=0)" in activity_manage_handler
+                and "activity_application." not in activity_help_handler
+                and "activity_application." not in activity_manage_handler
+            ),
+            "status": "static_activity_help_and_manage_handlers_are_explicit_compatibility_paths",
         },
         "activity_boss": {
             "boss_status_matcher_uses_feature_read_model": (
