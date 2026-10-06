@@ -395,6 +395,9 @@ def _slice_status() -> dict[str, dict[str, object]]:
     activity_sign_repository = (PACKAGE / "features" / "activity" / "sign_settlement_repository.py").read_text(encoding="utf-8")
     activity_collect_repository = (PACKAGE / "features" / "activity" / "collect_exchange_repository.py").read_text(encoding="utf-8")
     activity_collect_tests = (PACKAGE / "features" / "activity" / "tests" / "test_collect_exchange_repository.py").read_text(encoding="utf-8")
+    activity_purchase_repository = (PACKAGE / "features" / "activity" / "point_shop_purchase_repository.py").read_text(encoding="utf-8")
+    activity_purchase_tests = (PACKAGE / "features" / "activity" / "tests" / "test_point_shop_purchase_repository.py").read_text(encoding="utf-8")
+    activity_state_migration_tests = (ROOT / "tests" / "test_activity_state_migration.py").read_text(encoding="utf-8")
     migrated_application = (PACKAGE / "features" / "_migrated_application.py").read_text(encoding="utf-8")
     activity_application_tests = (PACKAGE / "features" / "activity" / "tests" / "test_activity_application.py").read_text(encoding="utf-8")
     activity_sign_repository_tests = (PACKAGE / "features" / "activity" / "tests" / "test_sign_settlement_repository.py").read_text(encoding="utf-8")
@@ -1790,6 +1793,49 @@ def _slice_status() -> dict[str, dict[str, object]]:
                 and "test_backfilled_legacy_receipt_replays_without_duplicate_award" in activity_collect_tests
             ),
             "status": "collect_bag_and_exchange_owned_by_activity_feature_read_and_settlement_repositories",
+        },
+        "activity_points_shop": {
+            "default_read_matchers_use_feature_read_model": (
+                "activity_application.read_model.points_text(" in activity_commands
+                and "activity_application.read_model.point_shop_text(" in activity_commands
+                and "def points_text(" in activity_read_model_application
+                and "def point_shop_text(" in activity_read_model_application
+                and "def point_balances(" in activity_read_model_repository
+                and "def point_shop_state(" in activity_read_model_repository
+                and "test_point_and_shop_read_models_preserve_text_with_bounded_reads" in activity_read_model_tests
+                and "test_point_shop_read_models_do_not_create_missing_database" in activity_read_model_tests
+            ),
+            "default_purchase_uses_feature_owned_repository": (
+                "ActivityPointShopPurchaseSqlRepository(database)" in activity_command_repository
+                and "settlement_repository=self.point_shop_purchase" in activity_command_repository
+                and "settlement_repository=None" in activity_service
+                and "settlement = settlement_repository or _point_shop_purchase_service()" in activity_service
+                and "test_point_shop_action_uses_feature_repository" in activity_application_tests
+            ),
+            "purchase_assets_and_receipt_share_atomic_startup_schema": (
+                "DatabaseUnitOfWork(self.database, immediate=True)" in activity_purchase_repository
+                and all(
+                    table in activity_purchase_repository
+                    for table in (
+                        "activity_point_balance",
+                        "activity_point_purchase",
+                        "activity_point_purchase_operations",
+                        "user_xiuxian",
+                        "back",
+                    )
+                )
+                and "CREATE TABLE" not in activity_purchase_repository
+                and "test_purchase_and_receipt_are_atomic_and_idempotent" in activity_purchase_tests
+                and "test_receipt_write_failure_rolls_back_points_and_rewards" in activity_purchase_tests
+            ),
+            "historical_receipts_replay_without_started_retry": (
+                "retry_started_actions = frozenset({\"claim_collect_phrase\"})" in activity_command_repository
+                and "test_point_shop_started_operation_is_not_blindly_retried" in activity_application_tests
+                and "test_backfilled_purchase_receipt_replays_without_granting_assets_twice" in activity_state_migration_tests
+                and "apply_activity_state_legacy" in activity_state_migrations
+                and 'Migration("activity_state.002"' in plugin
+            ),
+            "status": "activity_points_shop_reads_and_purchase_owned_by_feature_repositories",
         },
         "dungeon_team": {
             "team_commands_application_owned": all(

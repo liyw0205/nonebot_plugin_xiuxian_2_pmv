@@ -215,6 +215,98 @@ class ActivityReadModelApplication:
                 )
         return "\n".join(lines).strip()
 
+    def points_text(self, user_id: str) -> str:
+        from ...xiuxian.xiuxian_activity.activity_config import activity_state
+        from ...xiuxian.xiuxian_activity.activity_rules import get_gameplay_activities
+        from ...xiuxian.xiuxian_activity.activity_utils import _as_int
+        from ...xiuxian.xiuxian_activity.activity_views import ACTIVITY_EVENT_LABELS
+
+        activities = [
+            activity
+            for activity in get_gameplay_activities(self._config())
+            if activity.get("type") == "event_points"
+        ]
+        lines = ["【活动积分】"]
+        if not activities:
+            lines.append("暂无积分活动")
+            return "\n".join(lines)
+
+        balances = self.repository.point_balances(
+            str(user_id), [str(activity["key"]) for activity in activities]
+        )
+        for activity in activities:
+            ok, reason = activity_state(activity)
+            balance = balances.get(str(activity["key"]), {})
+            point_name = activity.get("point_name") or "活动积分"
+            lines.extend(
+                [
+                    "",
+                    f"【{activity['name']}】{'进行中' if ok else reason}",
+                    f"当前{point_name}：{max(0, _as_int(balance.get('points'), 0))}，"
+                    f"累计获得：{max(0, _as_int(balance.get('total_points'), 0))}",
+                ]
+            )
+            rules = activity.get("event_rules") or []
+            if rules:
+                rule_text = "、".join(
+                    f"{ACTIVITY_EVENT_LABELS.get(rule.get('event'), rule.get('event'))}+"
+                    f"{_as_int(rule.get('points'))}"
+                    for rule in rules
+                )
+                lines.append(f"积分来源：{rule_text}")
+        return "\n".join(lines).strip()
+
+    def point_shop_text(self, user_id: str) -> str:
+        from ...xiuxian.xiuxian_activity.activity_config import activity_state
+        from ...xiuxian.xiuxian_activity.activity_rules import get_gameplay_activities
+        from ...xiuxian.xiuxian_activity.activity_utils import _as_int
+
+        activities = [
+            activity
+            for activity in get_gameplay_activities(self._config())
+            if activity.get("type") == "event_points"
+        ]
+        lines = ["【活动商店】"]
+        if not activities:
+            lines.append("暂无积分商店")
+            return "\n".join(lines)
+
+        state = self.repository.point_shop_state(
+            str(user_id), [str(activity["key"]) for activity in activities]
+        )
+        for activity in activities:
+            activity_key = str(activity["key"])
+            ok, reason = activity_state(activity)
+            point_name = activity.get("point_name") or "活动积分"
+            balance = state["balances"].get(activity_key, 0)
+            shop = activity.get("shop") or []
+            lines.extend(
+                [
+                    "",
+                    f"【{activity['name']}】{'进行中' if ok else reason}",
+                    f"当前{point_name}：{balance}",
+                ]
+            )
+            if not shop:
+                lines.append("暂无商店商品")
+                continue
+            for item in shop:
+                item_key = str(item.get("item_key") or "")
+                purchase_key = (activity_key, item_key)
+                bought = state["purchases"].get(purchase_key, 0)
+                limit = _as_int(item.get("limit"), 1)
+                limit_text = "不限" if limit <= 0 else f"{bought}/{limit}"
+                stock_limit = _as_int(item.get("stock_limit"), 0)
+                stock_text = ""
+                if stock_limit > 0:
+                    sold = state["stock"].get(purchase_key, 0)
+                    stock_text = f"，全服库存 {sold}/{stock_limit}"
+                lines.append(
+                    f"- {item.get('name') or item_key}：{_as_int(item.get('cost'))}{point_name}，"
+                    f"已兑换 {limit_text}{stock_text}，奖励：{item.get('reward') or '暂无奖励'}"
+                )
+        return "\n".join(lines).strip()
+
     def pass_text(self, user_id: str) -> str:
         from ...xiuxian.xiuxian_activity.activity_config import (
             _activity_config_key,

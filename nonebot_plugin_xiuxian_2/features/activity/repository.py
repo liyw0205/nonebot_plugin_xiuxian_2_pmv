@@ -5,6 +5,7 @@ from typing import Any
 
 from .._service_port import ServicePort
 from .collect_exchange_repository import ActivityCollectExchangeSqlRepository
+from .point_shop_purchase_repository import ActivityPointShopPurchaseSqlRepository
 from .sign_settlement_repository import ActivitySignSettlementSqlRepository
 
 
@@ -25,6 +26,7 @@ class ActivityRepository(ServicePort):
         self.database = str(database)
         self.sign_settlement = ActivitySignSettlementSqlRepository(database)
         self.collect_exchange = ActivityCollectExchangeSqlRepository(database)
+        self.point_shop_purchase = ActivityPointShopPurchaseSqlRepository(database)
         self.retry_started_actions = frozenset({"claim_collect_phrase"})
 
     def _claim_all(self, **kwargs: Any):
@@ -67,7 +69,12 @@ class ActivityRepository(ServicePort):
 
     def _claim_shop(self, **kwargs: Any):
         from ...xiuxian.xiuxian_activity.service import claim_point_shop_item
-        return claim_point_shop_item(str(kwargs.get("user_id", "")), str(kwargs.get("query", "")), str(kwargs.get("operation_id", "")))
+        return claim_point_shop_item(
+            str(kwargs.get("user_id", "")),
+            str(kwargs.get("query", "")),
+            str(kwargs.get("operation_id", "")),
+            settlement_repository=self.point_shop_purchase,
+        )
 
     def _claim_boss(self, **kwargs: Any):
         from ...xiuxian.xiuxian_activity.activity_boss import claim_boss_rewards

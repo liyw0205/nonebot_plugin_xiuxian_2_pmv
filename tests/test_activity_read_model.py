@@ -308,6 +308,102 @@ class ActivityReadModelTests(unittest.TestCase):
         self.assertIn("【活动背包】", text)
         self.assertFalse(missing_database.exists())
 
+    def test_point_and_shop_read_models_preserve_text_with_bounded_reads(self) -> None:
+        from nonebot_plugin_xiuxian_2.features.activity.read_model_repository import (
+            ActivityReadModelSqlRepository,
+        )
+
+        activity = next(
+            activity
+            for activity in service.get_gameplay_activities(self.config)
+            if activity.get("type") == "event_points"
+        )
+        item = activity["shop"][0]
+        activity_key = str(activity["key"])
+        with DatabaseUnitOfWork(self.database) as uow:
+            uow.execute(
+                "INSERT INTO activity_point_balance(activity_key,user_id,points,total_points) "
+                "VALUES(?,?,?,?)",
+                (activity_key, "user-1", 27, 83),
+            )
+            uow.execute(
+                "INSERT INTO activity_point_purchase(activity_key,user_id,item_key,count) "
+                "VALUES(?,?,?,?)",
+                (activity_key, "user-1", str(item["item_key"]), 1),
+            )
+
+        statements = []
+        units = []
+
+        class TracedUnitOfWork(DatabaseUnitOfWork):
+            def __enter__(inner_self):
+                result = super().__enter__()
+                units.append(inner_self)
+                result.connection.set_trace_callback(statements.append)
+                return result
+
+        application = ActivityReadModelApplication(
+            self.database,
+            repository=ActivityReadModelSqlRepository(self.database),
+            config_loader=lambda: self.config,
+        )
+        with (
+            patch.object(service, "load_config", return_value=self.config),
+            patch.object(service, "DB_PATH", self.database),
+            patch(
+                "nonebot_plugin_xiuxian_2.features.activity.read_model_repository.DatabaseUnitOfWork",
+                TracedUnitOfWork,
+            ),
+        ):
+            points_text = application.points_text("user-1")
+            shop_text = application.point_shop_text("user-1")
+
+        with (
+            patch.object(service, "load_config", return_value=self.config),
+            patch.object(service, "DB_PATH", self.database),
+        ):
+            self.assertEqual(
+                service.build_activity_points_text("user-1"), points_text
+            )
+            self.assertEqual(service.build_activity_shop_text("user-1"), shop_text)
+
+        reads = [
+            sql.lower()
+            for sql in statements
+            if sql.lstrip().lower().startswith("select")
+            and any(
+                table in sql.lower()
+                for table in ("activity_point_balance", "activity_point_purchase")
+            )
+        ]
+        writes = [
+            sql.lower().lstrip()
+            for sql in statements
+            if sql.lower().lstrip().startswith(("insert", "update", "delete", "create", "drop"))
+        ]
+        self.assertEqual(2, len(units))
+        self.assertTrue(all(unit.read_only for unit in units))
+        self.assertEqual(4, len(reads))
+        self.assertEqual([], writes)
+        self.assertIn("当前庆典积分：27，累计获得：83", points_text)
+        self.assertIn("已兑换 1/", shop_text)
+
+    def test_point_shop_read_models_do_not_create_missing_database(self) -> None:
+        from nonebot_plugin_xiuxian_2.features.activity.read_model_repository import (
+            ActivityReadModelSqlRepository,
+        )
+
+        missing_database = Path(self.temp.name) / "missing-points.db"
+        application = ActivityReadModelApplication(
+            missing_database,
+            repository=ActivityReadModelSqlRepository(missing_database),
+            config_loader=lambda: self.config,
+        )
+
+        self.assertIn("活动积分", application.points_text("user-1"))
+        self.assertIn("活动商店", application.point_shop_text("user-1"))
+        self.assertFalse(missing_database.exists())
+
     def test_limited_shop_stock_is_aggregated_per_activity(self) -> None:
         statements = []
         real_connect = service.db_backend.connect_readonly

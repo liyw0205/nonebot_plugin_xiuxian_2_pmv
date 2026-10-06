@@ -1,14 +1,13 @@
 from __future__ import annotations
 
 import json
-import re
 from dataclasses import dataclass
 from datetime import datetime
-from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any
 
 from ...infrastructure.database import DatabaseUnitOfWork
+from ._operation_payload import operation_payload_matches
 
 
 @dataclass(frozen=True)
@@ -31,52 +30,6 @@ class ActivityCollectExchangeSqlRepository:
 
     def __init__(self, database: str | Path) -> None:
         self.database = Path(database)
-
-    @staticmethod
-    def _semantic_value(value: Any) -> Any:
-        if isinstance(value, dict):
-            return {
-                str(key): ActivityCollectExchangeSqlRepository._semantic_value(item)
-                for key, item in value.items()
-            }
-        if isinstance(value, (list, tuple)):
-            return [ActivityCollectExchangeSqlRepository._semantic_value(item) for item in value]
-        if isinstance(value, bool):
-            return int(value)
-        if isinstance(value, int):
-            return value
-        if isinstance(value, float):
-            return int(value) if value.is_integer() else value
-        text = str(value).strip()
-        if not text:
-            return ""
-        if re.fullmatch(r"[+-]?\d+", text):
-            try:
-                return int(text)
-            except (ValueError, OverflowError):
-                return text
-        if re.fullmatch(
-            r"[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?", text
-        ):
-            try:
-                number = Decimal(text)
-                return int(number) if number == number.to_integral_value() else float(number)
-            except (InvalidOperation, ValueError, OverflowError):
-                return text
-        return text
-
-    @classmethod
-    def _payload_matches(cls, stored: Any, expected: str) -> bool:
-        if isinstance(stored, (bytes, bytearray)):
-            stored = stored.decode("utf-8", errors="replace")
-        if isinstance(stored, str):
-            text = stored.strip()
-            if text.startswith(("[", "{")):
-                try:
-                    stored = json.loads(text)
-                except json.JSONDecodeError:
-                    pass
-        return cls._semantic_value(stored) == cls._semantic_value(json.loads(expected))
 
     def lookup_receipt(
         self, operation_id: str, user_id: str
@@ -217,7 +170,7 @@ class ActivityCollectExchangeSqlRepository:
                 (operation_id,),
             )
             if previous is not None:
-                if not self._payload_matches(previous["payload"], payload):
+                if not operation_payload_matches(previous["payload"], payload):
                     return ActivityCollectExchangeResult("operation_conflict")
                 previous_result = json.loads(str(previous["result_json"]))
                 response = str(previous_result[2]) if len(previous_result) > 2 else ""

@@ -292,7 +292,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await handle_send(bot, event, msg, md_type="我要修仙")
         return
 
-    text = build_activity_points_text(str(user_info["user_id"]))
+    text = activity_application.read_model.points_text(str(user_info["user_id"]))
     await handle_send(bot, event, text)
 
 
@@ -304,7 +304,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await handle_send(bot, event, msg, md_type="我要修仙")
         return
 
-    text = build_activity_shop_text(str(user_info["user_id"]))
+    text = activity_application.read_model.point_shop_text(str(user_info["user_id"]))
     await handle_send(bot, event, text)
 
 

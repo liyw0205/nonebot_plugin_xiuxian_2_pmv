@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import sqlite3
 import tempfile
 import unittest
@@ -13,6 +14,9 @@ from nonebot_plugin_xiuxian_2.features.activity.migrations import (
     apply_activity_event_receipts,
 )
 from nonebot_plugin_xiuxian_2.infrastructure.database import DatabaseUnitOfWork
+from nonebot_plugin_xiuxian_2.features.activity.point_shop_purchase_repository import (
+    ActivityPointShopPurchaseSqlRepository,
+)
 
 
 class ActivityStateMigrationTests(unittest.TestCase):
@@ -129,6 +133,87 @@ class ActivityStateMigrationTests(unittest.TestCase):
 
         with DatabaseUnitOfWork(self.database, read_only=True) as uow:
             self.assertIsNotNone(uow.query_one("SELECT 1 FROM sqlite_master WHERE name='activity_event_operations'"))
+
+    def test_backfilled_purchase_receipt_replays_without_granting_assets_twice(self) -> None:
+        payload = json.dumps(
+            ["u0", "fall", "pack", 2, 100, 3, 4, 50, [[101, "活动令", "道具", 2]], 100],
+            ensure_ascii=True,
+            separators=(",", ":"),
+        )
+        with sqlite3.connect(self.legacy_database) as conn:
+            conn.executescript(
+                """
+                CREATE TABLE activity_point_balance(
+                    activity_key TEXT NOT NULL,user_id TEXT NOT NULL,
+                    points INTEGER NOT NULL DEFAULT 0,update_time TEXT DEFAULT '',
+                    PRIMARY KEY(activity_key,user_id)
+                );
+                CREATE TABLE activity_point_purchase(
+                    activity_key TEXT NOT NULL,user_id TEXT NOT NULL,item_key TEXT NOT NULL,
+                    count INTEGER NOT NULL DEFAULT 0,update_time TEXT DEFAULT '',
+                    PRIMARY KEY(activity_key,user_id,item_key)
+                );
+                CREATE TABLE activity_point_purchase_operations(
+                    operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,quantity INTEGER NOT NULL,
+                    cost INTEGER NOT NULL,points INTEGER NOT NULL,personal_count INTEGER NOT NULL,
+                    total_count INTEGER NOT NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                );
+                """
+            )
+            conn.execute(
+                "INSERT INTO activity_point_balance VALUES('fall','u0',800,'')"
+            )
+            conn.execute(
+                "INSERT INTO activity_point_purchase VALUES('fall','u0','pack',2,'')"
+            )
+            conn.execute(
+                "INSERT INTO activity_point_purchase_operations"
+                "(operation_id,payload,quantity,cost,points,personal_count,total_count) "
+                "VALUES('old-purchase',?,2,200,800,2,2)",
+                (payload,),
+            )
+
+        self.migrate()
+        with DatabaseUnitOfWork(self.database) as uow:
+            uow.execute("CREATE TABLE user_xiuxian(user_id TEXT PRIMARY KEY,stone INTEGER)")
+            uow.execute("INSERT INTO user_xiuxian VALUES('u0',60)")
+            uow.execute(
+                "CREATE TABLE back(user_id TEXT,goods_id INTEGER,goods_name TEXT,"
+                "goods_type TEXT,goods_num INTEGER,create_time TEXT,update_time TEXT,"
+                "bind_num INTEGER,UNIQUE(user_id,goods_id))"
+            )
+            uow.execute("INSERT INTO back VALUES('u0',101,'活动令','道具',2,'','',2)")
+
+        result = ActivityPointShopPurchaseSqlRepository(self.database).purchase(
+            operation_id="old-purchase",
+            user_id="u0",
+            activity_key="fall",
+            item_key="pack",
+            quantity=2,
+            unit_cost=100,
+            personal_limit=3,
+            stock_limit=4,
+            rewards=(
+                {"type": "stone", "quantity": 50},
+                {"id": 101, "name": "活动令", "type": "道具", "quantity": 2},
+            ),
+            max_goods_num=100,
+        )
+
+        self.assertEqual("duplicate", result.status)
+        with DatabaseUnitOfWork(self.database, read_only=True) as uow:
+            self.assertEqual(800, uow.query_one(
+                "SELECT points FROM activity_point_balance WHERE user_id='u0'"
+            )["points"])
+            self.assertEqual(2, uow.query_one(
+                "SELECT count FROM activity_point_purchase WHERE user_id='u0'"
+            )["count"])
+            self.assertEqual(60, uow.query_one(
+                "SELECT stone FROM user_xiuxian WHERE user_id='u0'"
+            )["stone"])
+            self.assertEqual(2, uow.query_one(
+                "SELECT goods_num FROM back WHERE user_id='u0'"
+            )["goods_num"])
 
     def test_conflicting_identity_fails_and_rolls_back_backfill(self) -> None:
         self.create_legacy_state()

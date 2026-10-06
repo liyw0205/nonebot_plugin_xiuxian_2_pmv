@@ -12,6 +12,7 @@ from ...infrastructure.ids import UUIDGenerator
 from ..xiuxian_compensation.common import get_item_list, send_reward_to_user
 from ..xiuxian_config import XiuConfig
 from ..xiuxian_utils import db_backend
+from ..xiuxian_utils.utils import number_to
 from ..xiuxian_utils.activity_helpers import as_bool as _as_bool
 from .activity_config import (
     CONFIG_PATH,
@@ -1173,7 +1174,13 @@ def _multiply_reward_items(reward_items: list[dict], quantity: int) -> list[dict
     return items
 
 
-def claim_point_shop_item(user_id: str, query: str, operation_id: str | None = None) -> tuple[bool, str]:
+def claim_point_shop_item(
+    user_id: str,
+    query: str,
+    operation_id: str | None = None,
+    *,
+    settlement_repository=None,
+) -> tuple[bool, str]:
     uid = str(user_id)
     target, quantity = _parse_shop_query(query)
     if not target:
@@ -1202,12 +1209,21 @@ def claim_point_shop_item(user_id: str, query: str, operation_id: str | None = N
     item_key = _clean_text(item.get("item_key"))
     point_name = activity.get("point_name") or "活动积分"
     total_cost = cost * quantity
-    ensure_activity_files()
+    if settlement_repository is None:
+        ensure_activity_files()
     operation_id = str(operation_id or f"activity-shop:{uid}:{activity['key']}:{item_key}:{now_str()}")
-    result = _point_shop_purchase_service().purchase(
-        operation_id, uid, activity["key"], item_key, quantity, cost,
-        _as_int(item.get("limit"), 1), _as_int(item.get("stock_limit"), 0),
-        reward_items, XiuConfig().max_goods_num,
+    settlement = settlement_repository or _point_shop_purchase_service()
+    result = settlement.purchase(
+        operation_id,
+        uid,
+        activity["key"],
+        item_key,
+        quantity,
+        cost,
+        _as_int(item.get("limit"), 1),
+        _as_int(item.get("stock_limit"), 0),
+        reward_items,
+        XiuConfig().max_goods_num,
     )
     if result.status == "points_insufficient":
         return False, f"{point_name}不足，还缺 {max(total_cost - result.points, 0)}"

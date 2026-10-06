@@ -188,5 +188,75 @@ class ActivityReadModelSqlRepository:
             },
         }
 
+    def point_balances(
+        self, user_id: str, activity_keys: list[str]
+    ) -> dict[str, dict[str, int]]:
+        keys = tuple(dict.fromkeys(str(key) for key in activity_keys if str(key)))
+        if not self.database.is_file() or not keys:
+            return {}
+        placeholders = ",".join("?" for _ in keys)
+        with DatabaseUnitOfWork(self.database, read_only=True) as uow:
+            self._assert_tables(uow, {"activity_point_balance"})
+            rows = uow.query_all(
+                "SELECT activity_key,points,total_points FROM activity_point_balance "
+                f"WHERE activity_key IN ({placeholders}) AND user_id=?",
+                (*keys, str(user_id)),
+            )
+        return {
+            str(row["activity_key"]): {
+                "points": max(0, int(row["points"] or 0)),
+                "total_points": max(0, int(row["total_points"] or 0)),
+            }
+            for row in rows
+        }
+
+    def point_shop_state(
+        self, user_id: str, activity_keys: list[str]
+    ) -> dict[str, dict[tuple[str, str], int]]:
+        keys = tuple(dict.fromkeys(str(key) for key in activity_keys if str(key)))
+        empty = {"balances": {}, "purchases": {}, "stock": {}}
+        if not self.database.is_file() or not keys:
+            return empty
+        placeholders = ",".join("?" for _ in keys)
+        params = (*keys, str(user_id))
+        with DatabaseUnitOfWork(self.database, read_only=True) as uow:
+            self._assert_tables(
+                uow, {"activity_point_balance", "activity_point_purchase"}
+            )
+            balance_rows = uow.query_all(
+                "SELECT activity_key,points FROM activity_point_balance "
+                f"WHERE activity_key IN ({placeholders}) AND user_id=?",
+                params,
+            )
+            purchase_rows = uow.query_all(
+                "SELECT activity_key,item_key,count FROM activity_point_purchase "
+                f"WHERE activity_key IN ({placeholders}) AND user_id=?",
+                params,
+            )
+            stock_rows = uow.query_all(
+                "SELECT activity_key,item_key,COALESCE(SUM(count),0) AS count "
+                "FROM activity_point_purchase "
+                f"WHERE activity_key IN ({placeholders}) GROUP BY activity_key,item_key",
+                keys,
+            )
+        return {
+            "balances": {
+                str(row["activity_key"]): max(0, int(row["points"] or 0))
+                for row in balance_rows
+            },
+            "purchases": {
+                (str(row["activity_key"]), str(row["item_key"])): max(
+                    0, int(row["count"] or 0)
+                )
+                for row in purchase_rows
+            },
+            "stock": {
+                (str(row["activity_key"]), str(row["item_key"])): max(
+                    0, int(row["count"] or 0)
+                )
+                for row in stock_rows
+            },
+        }
+
 
 __all__ = ["ActivityReadModelSqlRepository"]

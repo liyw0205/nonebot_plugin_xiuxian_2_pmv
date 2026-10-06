@@ -5886,8 +5886,6 @@
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:36",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:270",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:272-284",
         "nonebot_plugin_xiuxian_2/features/activity/application.py",
         "nonebot_plugin_xiuxian_2/features/activity/repository.py:14-20,60-68",
@@ -5896,7 +5894,9 @@
         "nonebot_plugin_xiuxian_2/features/activity/migrations.py:36-47",
         "nonebot_plugin_xiuxian_2/features/_migrated_application.py",
         "nonebot_plugin_xiuxian_2/features/activity/tests/test_collect_exchange_repository.py",
-        "tests/test_activity_collect_exchange.py"
+        "tests/test_activity_collect_exchange.py",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:36",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:270"
       ],
       "source_declaration_found": true,
       "source": {
@@ -5908,20 +5908,22 @@
       "id": "command:activity:活动商店",
       "kind": "commands",
       "entry": "activity:活动商店 (aliases: 积分商店)",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "The default matcher renders the shop through ActivityApplication.read_model. A feature-owned read repository loads balances, personal purchases, and global stock with bounded read-only game_db queries while preserving the legacy text contract.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:38 activity_shop_cmd = on_command('活动商店') aliases=积分商店 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:300 _ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:300 _ -> ActivityApplication.read_model.point_shop_text -> ActivityReadModelSqlRepository.point_shop_state -> read-only game_db UOW"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
+        "nonebot_plugin_xiuxian_2/features/activity/read_model_application.py",
+        "nonebot_plugin_xiuxian_2/features/activity/read_model_repository.py",
+        "tests/test_activity_read_model.py",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:38",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:300"
       ],
@@ -6116,20 +6118,22 @@
       "id": "command:activity:活动积分",
       "kind": "commands",
       "entry": "activity:活动积分 (aliases: 积分活动)",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "The default matcher renders balances through ActivityApplication.read_model. ActivityReadModelSqlRepository batches balances for active point activities in a read-only game_db query and preserves the legacy text contract.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:37 activity_points_cmd = on_command('活动积分') aliases=积分活动 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:288 _ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:288 _ -> ActivityApplication.read_model.points_text -> ActivityReadModelSqlRepository.point_balances -> read-only game_db UOW"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
+        "nonebot_plugin_xiuxian_2/features/activity/read_model_application.py",
+        "nonebot_plugin_xiuxian_2/features/activity/read_model_repository.py",
+        "tests/test_activity_read_model.py",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:37",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:288"
       ],
@@ -6219,14 +6223,14 @@
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:35",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:258",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:265",
         "nonebot_plugin_xiuxian_2/features/activity/application.py",
         "nonebot_plugin_xiuxian_2/features/activity/read_model_application.py",
         "nonebot_plugin_xiuxian_2/features/activity/read_model_repository.py",
         "nonebot_plugin_xiuxian_2/features/activity/migrations.py:15-18,36-47",
-        "tests/test_activity_read_model.py"
+        "tests/test_activity_read_model.py",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:35",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:258"
       ],
       "source_declaration_found": true,
       "source": {
@@ -6265,20 +6269,24 @@
       "id": "command:activity:活动购买",
       "kind": "commands",
       "entry": "activity:活动购买 (aliases: 活动兑换商品, 活动商城兑换)",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "The default matcher routes settlement through ActivityApplication -> ActivityRepository -> ActivityPointShopPurchaseSqlRepository. The feature repository atomically debits points, checks limits and inventory capacity, grants assets, and writes the existing business receipt in game_db; started ledger records are deliberately not auto-retried without a reply-bearing recovery receipt.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:39 activity_buy_cmd = on_command('活动购买') aliases=活动兑换商品,活动商城兑换 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:312 _ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:312 _ -> ActivityApplication.execute -> ActivityRepository._claim_shop -> ActivityPointShopPurchaseSqlRepository.purchase",
+        "immediate game_db UOW -> balance/purchase state + player assets + activity_point_purchase_operations receipt"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
+        "nonebot_plugin_xiuxian_2/features/activity/repository.py",
+        "nonebot_plugin_xiuxian_2/features/activity/point_shop_purchase_repository.py",
+        "nonebot_plugin_xiuxian_2/features/activity/tests/test_point_shop_purchase_repository.py",
+        "tests/test_activity_state_migration.py",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:39",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:312"
       ],
