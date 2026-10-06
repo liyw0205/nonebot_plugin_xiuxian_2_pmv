@@ -133,5 +133,60 @@ class ActivityReadModelSqlRepository:
             result.append({**row, "display_name": name})
         return result
 
+    def collect_state(
+        self, user_id: str, activity_keys: list[str]
+    ) -> dict[str, dict[tuple[str, str], int]]:
+        keys = tuple(dict.fromkeys(str(key) for key in activity_keys if str(key)))
+        empty = {"inventory": {}, "claims": {}, "pity": {}}
+        if not self.database.is_file() or not keys:
+            return empty
+
+        placeholders = ",".join("?" for _ in keys)
+        params = (*keys, str(user_id))
+        with DatabaseUnitOfWork(self.database, read_only=True) as uow:
+            self._assert_tables(
+                uow,
+                {
+                    "activity_collect_inventory",
+                    "activity_collect_claim",
+                    "activity_collect_pity_state",
+                },
+            )
+            inventory_rows = uow.query_all(
+                "SELECT activity_key,word_char,count FROM activity_collect_inventory "
+                f"WHERE activity_key IN ({placeholders}) AND user_id=?",
+                params,
+            )
+            claim_rows = uow.query_all(
+                "SELECT activity_key,phrase,count FROM activity_collect_claim "
+                f"WHERE activity_key IN ({placeholders}) AND user_id=?",
+                params,
+            )
+            pity_rows = uow.query_all(
+                "SELECT activity_key,event_key,miss_count FROM activity_collect_pity_state "
+                f"WHERE activity_key IN ({placeholders}) AND user_id=?",
+                params,
+            )
+        return {
+            "inventory": {
+                (str(row["activity_key"]), str(row["word_char"])): max(
+                    0, int(row["count"] or 0)
+                )
+                for row in inventory_rows
+            },
+            "claims": {
+                (str(row["activity_key"]), str(row["phrase"])): max(
+                    0, int(row["count"] or 0)
+                )
+                for row in claim_rows
+            },
+            "pity": {
+                (str(row["activity_key"]), str(row["event_key"])): max(
+                    0, int(row["miss_count"] or 0)
+                )
+                for row in pity_rows
+            },
+        }
+
 
 __all__ = ["ActivityReadModelSqlRepository"]

@@ -14,7 +14,8 @@ from nonebot_plugin_xiuxian_2.features._legacy_feature import (
 )
 from nonebot_plugin_xiuxian_2.features._migrated_application import MigratedFeatureApplication
 from nonebot_plugin_xiuxian_2.features._service_port import ServicePort
-from nonebot_plugin_xiuxian_2.infrastructure.database import DatabaseUnitOfWork
+from nonebot_plugin_xiuxian_2.core.errors import ConflictError
+from nonebot_plugin_xiuxian_2.infrastructure.database import DatabaseUnitOfWork, OperationLedger
 from nonebot_plugin_xiuxian_2.plugin import apply_platform_schema
 
 
@@ -193,6 +194,80 @@ class LegacyCompatibilityBoundaryTests(unittest.TestCase):
                     connection.execute("SELECT operation_id FROM legacy_events").fetchone()[0],
                     "op-lock",
                 )
+
+    def test_migrated_application_retries_started_only_for_opted_in_repository_action(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            database = Path(directory) / "game.db"
+            self._prepare_database(database)
+            calls: list[str] = []
+
+            class Repository:
+                retry_started_actions = frozenset({"recoverable"})
+
+                def execute(self, operation_id, user_id, action, payload):
+                    calls.append(operation_id)
+                    return {"status": "applied", "action": action}
+
+                def inspect(self, user_id):
+                    return {"user_id": user_id}
+
+            ledger = OperationLedger()
+            with DatabaseUnitOfWork(database) as uow:
+                ledger.begin(
+                    uow,
+                    "op-interrupted",
+                    "fake.recoverable",
+                    {"user_id": "user-1"},
+                )
+
+            application = MigratedFeatureApplication(
+                database,
+                feature="fake",
+                repository=Repository(),
+            )
+            recovered = application.execute(
+                operation_id="op-interrupted",
+                user_id="user-1",
+                payload={"action": "recoverable"},
+            )
+
+            self.assertTrue(recovered.ok)
+            self.assertEqual(["op-interrupted"], calls)
+
+    def test_migrated_application_keeps_started_conflict_without_repository_opt_in(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            database = Path(directory) / "game.db"
+            self._prepare_database(database)
+            calls: list[str] = []
+
+            class Repository:
+                def execute(self, operation_id, user_id, action, payload):
+                    calls.append(operation_id)
+                    return {"status": "applied", "action": action}
+
+                def inspect(self, user_id):
+                    return {"user_id": user_id}
+
+            with DatabaseUnitOfWork(database) as uow:
+                OperationLedger().begin(
+                    uow,
+                    "op-in-progress",
+                    "fake.execute",
+                    {"user_id": "user-1"},
+                )
+            application = MigratedFeatureApplication(
+                database,
+                feature="fake",
+                repository=Repository(),
+            )
+
+            with self.assertRaises(ConflictError):
+                application.execute(
+                    operation_id="op-in-progress",
+                    user_id="user-1",
+                )
+
+            self.assertEqual([], calls)
 
     def test_migrated_application_uses_feature_service_port_for_bound_callback(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

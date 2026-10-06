@@ -597,9 +597,23 @@ def _find_collect_phrase(config: dict, query: str) -> tuple[dict, dict] | None:
     return None
 
 
-def claim_collect_phrase(user_id: str, query: str, operation_id: str | None = None) -> tuple[bool, str]:
+def claim_collect_phrase(
+    user_id: str,
+    query: str,
+    operation_id: str | None = None,
+    *,
+    settlement_repository=None,
+) -> tuple[bool, str]:
     uid = str(user_id)
     target = _clean_text(query)
+    operation_id = str(operation_id or "")
+    if operation_id and settlement_repository is not None:
+        lookup_receipt = getattr(settlement_repository, "lookup_receipt", None)
+        replay = lookup_receipt(operation_id, uid) if callable(lookup_receipt) else None
+        if replay is not None:
+            if not replay.succeeded:
+                return False, "兑换请求冲突，请重新发送"
+            return True, replay.response
     if not target:
         return False, "请发送：活动兑换 端午安康"
 
@@ -622,16 +636,31 @@ def claim_collect_phrase(user_id: str, query: str, operation_id: str | None = No
     except Exception as e:
         return False, f"兑换奖励配置错误：{e}"
 
-    ensure_activity_files()
-    result = _activity_collect_exchange_service().exchange(
+    feature_settlement = settlement_repository is not None
+    if settlement_repository is None:
+        ensure_activity_files()
+        settlement_repository = _activity_collect_exchange_service()
+    exchange_args = (
+        {
+            "activity_name": _clean_text(activity.get("name")),
+            "phrase_name": _clean_text(phrase.get("name")),
+        }
+        if feature_settlement
+        else {}
+    )
+    result = settlement_repository.exchange(
         operation_id or f"activity-exchange:{uid}:{runtime_ids.new_id()}", uid, activity["key"],
         phrase["phrase"], need, _as_int(phrase.get("limit"), 1), reward_items,
         XiuConfig().max_goods_num,
+        **exchange_args,
     )
     if not result.succeeded:
         if result.status == "tokens_insufficient":
             return False, "字牌不足，还缺：" + "、".join(f"{char}x{count}" for char, count in result.missing)
         return False, {"limit_reached":"该词组已达到兑换次数上限","inventory_full":"背包空间不足，奖励未领取","user_missing":"角色不存在","operation_conflict":"兑换请求冲突，请重新发送"}.get(result.status,"兑换未完成：活动进度已更新，请重新兑换")
+    response = getattr(result, "response", "")
+    if response:
+        return True, response
     reward_text = "，".join(result.rewards)
     if reward_text:
         return True, f"{activity['name']}兑换成功：{phrase['name']}\n{reward_text}"

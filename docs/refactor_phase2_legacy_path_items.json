@@ -5869,22 +5869,34 @@
       "id": "command:activity:活动兑换",
       "kind": "commands",
       "entry": "activity:活动兑换 (aliases: 集字兑换)",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "The default matcher forwards a message-scoped operation ID through ActivityApplication and ActivityRepository to the feature-owned collect exchange repository. The repository atomically spends tokens, grants assets, and writes the existing business receipt in game_db; the legacy service remains only as a configuration and reward parsing facade.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:36 activity_exchange_cmd = on_command('活动兑换') aliases=集字兑换 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:270 _ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:270 _ -> ActivityApplication.execute(action=claim_collect_phrase), creating a message-scoped exchange operation ID",
+        "ActivityApplication -> ActivityRepository._claim_collect -> ActivityCollectExchangeSqlRepository; the operation ID is forwarded to claim_collect_phrase as an explicit settlement repository",
+        "claim_collect_phrase first checks an existing business receipt for interrupted retries; if absent, it validates activity eligibility, phrase and reward configuration before settlement",
+        "ActivityCollectExchangeSqlRepository uses one game_db BEGIN IMMEDIATE transaction for inventory debit, claim count, player asset grant, and the existing activity_collect_exchange_operations receipt",
+        "A matching interrupted started operation may retry only for this repository-declared idempotent action; an existing receipt restores the saved response before current activity configuration is revalidated, and an absent receipt proceeds through settlement once"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:36",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:270"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:270",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:272-284",
+        "nonebot_plugin_xiuxian_2/features/activity/application.py",
+        "nonebot_plugin_xiuxian_2/features/activity/repository.py:14-20,60-68",
+        "nonebot_plugin_xiuxian_2/features/activity/collect_exchange_repository.py",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/service.py:600-642",
+        "nonebot_plugin_xiuxian_2/features/activity/migrations.py:36-47",
+        "nonebot_plugin_xiuxian_2/features/_migrated_application.py",
+        "nonebot_plugin_xiuxian_2/features/activity/tests/test_collect_exchange_repository.py",
+        "tests/test_activity_collect_exchange.py"
       ],
       "source_declaration_found": true,
       "source": {
@@ -6191,22 +6203,30 @@
       "id": "command:activity:活动背包",
       "kind": "commands",
       "entry": "activity:活动背包 (aliases: 活动字牌, 集字背包)",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "The default matcher reads through ActivityApplication.read_model and the feature-owned read repository. Inventory, claims, and pity are loaded from game_db in one read-only snapshot while retaining the legacy text contract.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:35 activity_bag_cmd = on_command('活动背包') aliases=活动字牌,集字背包 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:258 _ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:258 _ -> ActivityApplication.read_model.collect_bag_text after player validation",
+        "ActivityReadModelApplication loads configured collect activities, combines a bounded repository snapshot with configuration, and renders the historical bag text",
+        "ActivityReadModelSqlRepository.collect_state uses one read-only game_db UOW for inventory, claim and pity queries; a missing database returns empty state without creating it",
+        "activity_state.001/.002 startup migrations prepare collect tables; request reads perform no DDL or writes"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:35",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:258"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:258",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:265",
+        "nonebot_plugin_xiuxian_2/features/activity/application.py",
+        "nonebot_plugin_xiuxian_2/features/activity/read_model_application.py",
+        "nonebot_plugin_xiuxian_2/features/activity/read_model_repository.py",
+        "nonebot_plugin_xiuxian_2/features/activity/migrations.py:15-18,36-47",
+        "tests/test_activity_read_model.py"
       ],
       "source_declaration_found": true,
       "source": {

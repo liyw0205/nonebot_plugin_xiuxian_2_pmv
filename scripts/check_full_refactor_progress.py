@@ -393,6 +393,9 @@ def _slice_status() -> dict[str, dict[str, object]]:
     activity_read_model_repository = (PACKAGE / "features" / "activity" / "read_model_repository.py").read_text(encoding="utf-8")
     activity_read_model_tests = (ROOT / "tests" / "test_activity_read_model.py").read_text(encoding="utf-8")
     activity_sign_repository = (PACKAGE / "features" / "activity" / "sign_settlement_repository.py").read_text(encoding="utf-8")
+    activity_collect_repository = (PACKAGE / "features" / "activity" / "collect_exchange_repository.py").read_text(encoding="utf-8")
+    activity_collect_tests = (PACKAGE / "features" / "activity" / "tests" / "test_collect_exchange_repository.py").read_text(encoding="utf-8")
+    migrated_application = (PACKAGE / "features" / "_migrated_application.py").read_text(encoding="utf-8")
     activity_application_tests = (PACKAGE / "features" / "activity" / "tests" / "test_activity_application.py").read_text(encoding="utf-8")
     activity_sign_repository_tests = (PACKAGE / "features" / "activity" / "tests" / "test_sign_settlement_repository.py").read_text(encoding="utf-8")
     activity_cli = (PACKAGE / "cli.py").read_text(encoding="utf-8")
@@ -1721,7 +1724,21 @@ def _slice_status() -> dict[str, dict[str, object]]:
                 and "LIMIT ?" in activity_read_model_repository
                 and "test_sign_rank_uses_one_read_only_join_and_preserves_display" in activity_read_model_tests
             ),
-            "status": "activity_task_pass_and_sign_rank_read_models_owned_by_feature_application",
+            "collect_bag_matcher_uses_read_model": (
+                "activity_application.read_model.collect_bag_text(" in activity_commands
+                and "build_collect_bag_text(" not in activity_commands
+                and "def collect_bag_text(" in activity_read_model_application
+                and "def collect_state(" in activity_read_model_repository
+                and "test_collect_bag_read_model_matches_legacy_text" in activity_read_model_tests
+            ),
+            "collect_bag_uses_bounded_read_only_snapshot": (
+                "DatabaseUnitOfWork(self.database, read_only=True)" in activity_read_model_repository
+                and "activity_collect_inventory" in activity_read_model_repository
+                and "activity_collect_claim" in activity_read_model_repository
+                and "activity_collect_pity_state" in activity_read_model_repository
+                and "test_collect_bag_read_model_does_not_create_missing_database" in activity_read_model_tests
+            ),
+            "status": "activity_task_pass_sign_rank_and_collect_bag_read_models_owned_by_feature_application",
         },
         "activity_sign_in": {
             "default_matcher_uses_feature_owned_settlement_repository": (
@@ -1743,6 +1760,36 @@ def _slice_status() -> dict[str, dict[str, object]]:
                 and "test_sign_projection_failure_replays_with_a_stable_event_receipt" in activity_application_tests
             ),
             "status": "sign_settlement_owned_by_activity_feature_repository_with_replayable_event_projection",
+        },
+        "activity_collect_words": {
+            "default_matchers_use_feature_read_and_settlement_repositories": (
+                "activity_application.read_model.collect_bag_text(" in activity_commands
+                and '"claim_collect_phrase",' in activity_commands
+                and '_activity_operation_id(event, "collect-exchange", user_id)' in activity_commands
+                and "ActivityCollectExchangeSqlRepository(database)" in activity_command_repository
+                and "settlement_repository=self.collect_exchange" in activity_command_repository
+                and "settlement_repository=None" in activity_service
+                and "ActivityCollectExchangeSqlRepository" in activity_collect_repository
+            ),
+            "exchange_is_atomic_receipted_and_reuses_startup_schema": (
+                "DatabaseUnitOfWork(self.database, immediate=True)" in activity_collect_repository
+                and "activity_collect_exchange_operations" in activity_collect_repository
+                and "CREATE TABLE" not in activity_collect_repository
+                and "activity_collect_exchange_operations" in activity_state_migrations
+                and "test_exchange_and_business_receipt_are_atomic_and_replay_once" in activity_collect_tests
+                and "test_receipt_failure_rolls_back_tokens_and_assets" in activity_collect_tests
+            ),
+            "started_exchange_retries_only_with_business_receipt_boundary": (
+                "retry_started_actions = frozenset({\"claim_collect_phrase\"})" in activity_command_repository
+                and "retry_started_actions" in migrated_application
+                and "def lookup_receipt(" in activity_collect_repository
+                and "lookup_receipt(operation_id, uid)" in activity_service
+                and "test_started_recovery_precedes_changed_activity_configuration" in activity_collect_tests
+                and "test_started_retry_without_business_receipt_runs_current_request" in activity_collect_tests
+                and "test_stale_started_ledger_resumes_against_existing_exchange_receipt" in activity_collect_tests
+                and "test_backfilled_legacy_receipt_replays_without_duplicate_award" in activity_collect_tests
+            ),
+            "status": "collect_bag_and_exchange_owned_by_activity_feature_read_and_settlement_repositories",
         },
         "dungeon_team": {
             "team_commands_application_owned": all(

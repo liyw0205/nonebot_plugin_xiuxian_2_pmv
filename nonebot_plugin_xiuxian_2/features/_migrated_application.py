@@ -77,7 +77,23 @@ class MigratedFeatureApplication:
                         previous = existing.outcome()
                         if previous is not None:
                             return previous.replay()
-                        raise ConflictError("操作正在处理中")
+                        retryable_actions = getattr(
+                            self.repository, "retry_started_actions", ()
+                        )
+                        if existing.status == "started" and action in retryable_actions:
+                            # The opted-in repository must commit its unique
+                            # business receipt with the mutation, making this
+                            # same-request retry safe after an interrupted call.
+                            uow.execute(
+                                "UPDATE operation_ledger SET status='needs_reconcile',result_json=NULL "
+                                "WHERE operation_id=? AND action=? AND status='started'",
+                                (operation_id, ledger_action),
+                            )
+                            existing = self.ledger.begin(
+                                uow, operation_id, ledger_action, ledger_request
+                            )
+                        if existing is not None:
+                            raise ConflictError("操作正在处理中")
                 raw = _result_data(self.repository.execute(operation_id, user_id, action, request))
                 status = str(raw.get("status", "failed")).casefold()
                 raw.setdefault("status", status)

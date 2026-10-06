@@ -206,6 +206,108 @@ class ActivityReadModelTests(unittest.TestCase):
         self.assertIn("2. 甲 累计签到 6 天", text)
         self.assertIn("3. 修士·0003 累计签到 5 天", text)
 
+    def test_collect_bag_read_model_matches_legacy_text_and_uses_three_read_queries(self) -> None:
+        from nonebot_plugin_xiuxian_2.features.activity.read_model_repository import (
+            ActivityReadModelSqlRepository,
+        )
+
+        activity = next(
+            activity
+            for activity in service.get_gameplay_activities(self.config)
+            if activity.get("type") == "collect_words"
+        )
+        phrases = service._collect_phrases(activity)
+        letters = service._collect_letters(activity, phrases)
+        with DatabaseUnitOfWork(self.database) as uow:
+            for letter in letters:
+                uow.execute(
+                    "INSERT INTO activity_collect_inventory(activity_key,user_id,word_char,count) "
+                    "VALUES(?,?,?,?)",
+                    (activity["key"], "user-1", letter["char"], 2),
+                )
+            uow.execute(
+                "INSERT INTO activity_collect_claim(activity_key,user_id,phrase,count) "
+                "VALUES(?,?,?,?)",
+                (activity["key"], "user-1", phrases[0]["phrase"], 2),
+            )
+            uow.execute(
+                "INSERT INTO activity_collect_pity_state(activity_key,user_id,event_key,miss_count) "
+                "VALUES(?,?,?,?)",
+                (activity["key"], "user-1", "sign_in", 4),
+            )
+
+        statements = []
+        units = []
+
+        class TracedUnitOfWork(DatabaseUnitOfWork):
+            def __enter__(inner_self):
+                result = super().__enter__()
+                units.append(inner_self)
+                result.connection.set_trace_callback(statements.append)
+                return result
+
+        application = ActivityReadModelApplication(
+            self.database,
+            repository=ActivityReadModelSqlRepository(self.database),
+            config_loader=lambda: self.config,
+        )
+        with (
+            patch.object(service, "load_config", return_value=self.config),
+            patch.object(service, "DB_PATH", self.database),
+            patch(
+                "nonebot_plugin_xiuxian_2.features.activity.read_model_repository.DatabaseUnitOfWork",
+                TracedUnitOfWork,
+            ),
+        ):
+            text = application.collect_bag_text("user-1")
+
+        with (
+            patch.object(service, "load_config", return_value=self.config),
+            patch.object(service, "DB_PATH", self.database),
+        ):
+            legacy_text = service.build_collect_bag_text("user-1")
+
+        collect_selects = [
+            sql.lower()
+            for sql in statements
+            if sql.lstrip().lower().startswith("select")
+            and any(
+                table in sql.lower()
+                for table in (
+                    "activity_collect_inventory",
+                    "activity_collect_claim",
+                    "activity_collect_pity_state",
+                )
+            )
+        ]
+        writes = [
+            sql.lower().lstrip()
+            for sql in statements
+            if sql.lower().lstrip().startswith(("insert", "update", "delete", "create", "drop"))
+        ]
+        self.assertEqual(legacy_text, text)
+        self.assertEqual(1, len(units))
+        self.assertTrue(units[0].read_only)
+        self.assertEqual(3, len(collect_selects))
+        self.assertEqual([], writes)
+
+    def test_collect_bag_read_model_does_not_create_missing_database(self) -> None:
+        from nonebot_plugin_xiuxian_2.features.activity.read_model_repository import (
+            ActivityReadModelSqlRepository,
+        )
+
+        missing_database = Path(self.temp.name) / "missing-game.db"
+        application = ActivityReadModelApplication(
+            missing_database,
+            repository=ActivityReadModelSqlRepository(missing_database),
+            config_loader=lambda: self.config,
+        )
+
+        text = application.collect_bag_text("user-1")
+
+        self.assertIn("【活动背包】", text)
+        self.assertFalse(missing_database.exists())
+
     def test_limited_shop_stock_is_aggregated_per_activity(self) -> None:
         statements = []
         real_connect = service.db_backend.connect_readonly

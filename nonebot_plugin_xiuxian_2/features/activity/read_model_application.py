@@ -135,6 +135,86 @@ class ActivityReadModelApplication:
             )
         return "\n".join(lines)
 
+    def collect_bag_text(self, user_id: str) -> str:
+        from ...xiuxian.xiuxian_activity.activity_config import activity_state
+        from ...xiuxian.xiuxian_activity.activity_progress import _phrase_need_counter
+        from ...xiuxian.xiuxian_activity.activity_rules import (
+            _collect_letters,
+            _collect_phrases,
+            get_gameplay_activities,
+        )
+        from ...xiuxian.xiuxian_activity.activity_utils import _as_int
+        from ...xiuxian.xiuxian_activity.activity_views import ACTIVITY_EVENT_LABELS
+
+        uid = str(user_id)
+        activities = [
+            activity
+            for activity in get_gameplay_activities(self._config())
+            if activity.get("type") == "collect_words"
+        ]
+        lines = ["【活动背包】"]
+        if not activities:
+            lines.append("暂无集字活动")
+            return "\n".join(lines)
+
+        state = self.repository.collect_state(
+            uid, [str(activity["key"]) for activity in activities]
+        )
+        inventory_state = state["inventory"]
+        claim_state = state["claims"]
+        pity_state = state["pity"]
+        for activity in activities:
+            activity_key = str(activity["key"])
+            ok, reason = activity_state(activity)
+            phrases = _collect_phrases(activity)
+            letters = _collect_letters(activity, phrases)
+            inventory = {
+                str(item.get("char") or ""): inventory_state.get(
+                    (activity_key, str(item.get("char") or "")), 0
+                )
+                for item in letters
+            }
+            letter_text = "、".join(
+                f"{item['char']}x{inventory.get(item['char'], 0)}" for item in letters
+            )
+            lines.extend(
+                [
+                    "",
+                    f"【{activity['name']}】{'进行中' if ok else reason}",
+                    "字牌：" + (letter_text or "暂无"),
+                ]
+            )
+            pity_threshold = max(0, _as_int(activity.get("pity_threshold"), 0))
+            if pity_threshold > 0:
+                pity_parts = []
+                for event_key in activity.get("drop_events") or []:
+                    label = ACTIVITY_EVENT_LABELS.get(event_key, event_key)
+                    miss_count = pity_state.get((activity_key, str(event_key)), 0)
+                    pity_parts.append(
+                        f"{label} {min(pity_threshold, miss_count)}/{pity_threshold}"
+                    )
+                if pity_parts:
+                    lines.append("保底进度：" + "、".join(pity_parts))
+            if not phrases:
+                lines.append("暂无兑换词组")
+                continue
+            lines.append("可兑换词组：")
+            for phrase in phrases:
+                need = _phrase_need_counter(phrase["phrase"])
+                owned = sum(
+                    min(inventory.get(word_char, 0), count)
+                    for word_char, count in need.items()
+                )
+                total_need = sum(need.values())
+                claimed = claim_state.get((activity_key, phrase["phrase"]), 0)
+                limit = _as_int(phrase.get("limit"), 1)
+                limit_text = "不限" if limit <= 0 else f"{claimed}/{limit}"
+                lines.append(
+                    f"- {phrase['name']}：{owned}/{total_need}，已兑换 {limit_text}，"
+                    f"兑换：活动兑换 {phrase['name']}"
+                )
+        return "\n".join(lines).strip()
+
     def pass_text(self, user_id: str) -> str:
         from ...xiuxian.xiuxian_activity.activity_config import (
             _activity_config_key,
