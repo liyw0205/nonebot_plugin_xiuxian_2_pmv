@@ -288,6 +288,15 @@ class RefactorProgressTests(unittest.TestCase):
         self.assertTrue(read_model["activity_application_composes_read_model"])
         self.assertTrue(read_model["read_model_repository_is_read_only_and_has_no_ddl"])
         self.assertTrue(read_model["read_model_rendering_matches_legacy_contract"])
+        boss = slices["activity_boss"]
+        self.assertTrue(boss["boss_status_matcher_uses_feature_read_model"])
+        self.assertTrue(boss["boss_rank_matcher_uses_feature_read_model"])
+        self.assertTrue(boss["boss_read_repository_is_read_only_bounded_no_hp_init"])
+        self.assertTrue(boss["boss_attack_application_owned"])
+        self.assertTrue(boss["boss_settlement_atomic_replay_conflict_cas_and_rollback"])
+        self.assertTrue(boss["boss_settlement_uses_existing_state_schema"])
+        self.assertTrue(boss["boss_operation_id_and_item_damage_stable"])
+        self.assertTrue(boss["boss_legacy_settlement_default_path_isolated"])
         points_shop = slices["activity_points_shop"]
         self.assertTrue(points_shop["default_read_matchers_use_feature_read_model"])
         self.assertTrue(points_shop["default_purchase_uses_feature_owned_repository"])

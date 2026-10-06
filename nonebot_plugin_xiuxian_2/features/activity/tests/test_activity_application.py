@@ -5,6 +5,10 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import patch
 
+import nonebot
+
+nonebot.init()
+
 from ..application import ActivityApplication
 from ..migrations import apply_activity
 from ..repository import ActivityRepository
@@ -167,6 +171,78 @@ class ActivityApplicationTest(unittest.TestCase):
                     operation_id="activity:point-shop:u:started",
                     user_id="u",
                     payload={"action": "claim_point_shop_item", "query": "補給"},
+                )
+
+    def test_boss_item_action_uses_feature_settlement_repository(self) -> None:
+        from unittest.mock import patch
+
+        from ....features.activity.migrations import apply_activity_state_schema
+
+        with tempfile.TemporaryDirectory() as directory:
+            database = f"{directory}/game.db"
+            with DatabaseUnitOfWork(database) as uow:
+                apply_activity_state_schema(uow)
+                OperationLedger().ensure_schema(uow)
+                uow.execute("CREATE TABLE user_xiuxian(user_id TEXT PRIMARY KEY,atk INTEGER,user_name TEXT)")
+                uow.execute("INSERT INTO user_xiuxian VALUES('u',100,'道号')")
+                uow.execute(
+                    "INSERT INTO activity_boss_state(activity_key,hp_left,max_hp) VALUES('boss',1000,1000)"
+                )
+                uow.execute(
+                    "INSERT INTO activity_item_inventory(activity_key,user_id,item_id,count) "
+                    "VALUES('boss','u','firework',2)"
+                )
+            activity = {
+                "key": "boss",
+                "type": "activity_boss",
+                "name": "测试首领",
+                "boss_name": "测试首领",
+                "mode": "item_raid",
+                "max_hp": 1000,
+                "daily_fight_limit": 3,
+                "items": [{"id": "firework", "name": "爆竹", "cost": 1, "damage_min": 100, "damage_max": 100}],
+                "server_milestones": [],
+            }
+            application = ActivityApplication(
+                database, repository=ActivityRepository(database)
+            )
+            with (
+                patch(
+                    "nonebot_plugin_xiuxian_2.xiuxian.xiuxian_activity.activity_config.load_config",
+                    return_value={"enabled": True},
+                ),
+                patch(
+                    "nonebot_plugin_xiuxian_2.xiuxian.xiuxian_activity.activity_config.activity_runtime_state",
+                    return_value={"ok": True, "features": ["boss"], "multiplier": 1},
+                ),
+                patch(
+                    "nonebot_plugin_xiuxian_2.xiuxian.xiuxian_activity.activity_rules.get_gameplay_activities",
+                    return_value=[activity],
+                ),
+                patch(
+                    "nonebot_plugin_xiuxian_2.xiuxian.xiuxian_activity.activity_config.activity_state",
+                    return_value=(True, ""),
+                ),
+            ):
+                outcome = application.execute(
+                    operation_id="activity:boss-item:u:1",
+                    user_id="u",
+                    payload={"action": "activity_boss.use_item_on_boss", "query": "firework"},
+                )
+
+            self.assertTrue(outcome.ok)
+            with DatabaseUnitOfWork(database, read_only=True) as uow:
+                self.assertEqual(
+                    1,
+                    uow.query_one(
+                        "SELECT count FROM activity_item_inventory WHERE user_id='u'"
+                    )["count"],
+                )
+                self.assertEqual(
+                    900,
+                    uow.query_one(
+                        "SELECT hp_left FROM activity_boss_state WHERE activity_key='boss'"
+                    )["hp_left"],
                 )
 
     def test_sign_projection_failure_replays_with_a_stable_event_receipt(self) -> None:

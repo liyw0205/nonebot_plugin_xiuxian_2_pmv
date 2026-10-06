@@ -2230,14 +2230,14 @@
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:46 activity_close_cmd = on_command('关闭活动') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:408 _ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:406 _ -> legacy downstream effect not closed in this frozen item"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:46",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:408"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:406"
       ],
       "source_declaration_found": true,
       "source": {
@@ -3849,14 +3849,14 @@
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:45 activity_open_cmd = on_command('开启活动') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:393 _ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:391 _ -> legacy downstream effect not closed in this frozen item"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:45",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:393"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:391"
       ],
       "source_declaration_found": true,
       "source": {
@@ -6242,22 +6242,26 @@
       "id": "command:activity:活动讨伐",
       "kind": "commands",
       "entry": "activity:活动讨伐 (aliases: 使用烟花, 使用爆竹, 活动首领攻击)",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "The default matcher routes through ActivityApplication -> ActivityRepository -> ActivityBossSettlementSqlRepository. Cooperative and item raids use the existing activity_state.001/.002 tables, one immediate game_db transaction, stable operation IDs, CAS snapshots, and the existing business receipt; the legacy settlement facade remains compatibility-only.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:42 activity_boss_atk_cmd = on_command('活动讨伐') aliases=使用烟花,使用爆竹,活动首领攻击 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:350 _ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:350 _ -> ActivityApplication.execute -> ActivityRepository._settle_boss",
+        "ActivityRepository._settle_boss -> ActivityBossSettlementSqlRepository.settle_cooperative/settle_item -> atomic state, inventory, damage, fight log, milestone and receipt"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:42",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:350"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:350",
+        "nonebot_plugin_xiuxian_2/features/activity/repository.py",
+        "nonebot_plugin_xiuxian_2/features/activity/boss_settlement_repository.py",
+        "nonebot_plugin_xiuxian_2/features/activity/migrations.py:28-41,60-69",
+        "tests/test_activity_boss_feature_owner.py"
       ],
       "source_declaration_found": true,
       "source": {
@@ -6300,22 +6304,24 @@
       "id": "command:activity:活动首领",
       "kind": "commands",
       "entry": "activity:活动首领 (aliases: 活动BOSS)",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "The default matcher reads through ActivityApplication.read_model -> ActivityReadModelSqlRepository. The bounded snapshot is read-only, never initializes HP or creates schema, and preserves the historical status text; the legacy builder remains compatibility-only.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:40 activity_boss_cmd = on_command('活动首领') aliases=活动BOSS,活动Boss -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:330 _ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:330 _ -> ActivityApplication.read_model.boss_status_text -> ActivityReadModelSqlRepository.boss_snapshot"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:40",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:330"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:330",
+        "nonebot_plugin_xiuxian_2/features/activity/read_model_application.py",
+        "nonebot_plugin_xiuxian_2/features/activity/read_model_repository.py",
+        "tests/test_activity_read_model.py"
       ],
       "source_declaration_found": true,
       "source": {
@@ -6327,22 +6333,24 @@
       "id": "command:activity:活动首领排行",
       "kind": "commands",
       "entry": "activity:活动首领排行 (aliases: 活动BOSS排行, 首领伤害榜)",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "The default matcher reads through ActivityApplication.read_model -> ActivityReadModelSqlRepository. Rank reads are bounded and join display names in one read-only snapshot; the legacy builder remains compatibility-only.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:41 activity_boss_rank_cmd = on_command('活动首领排行') aliases=活动BOSS排行,首领伤害榜 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:342 _ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:344 _ -> ActivityApplication.read_model.boss_rank_text -> ActivityReadModelSqlRepository.boss_rank"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:41",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:342"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:344",
+        "nonebot_plugin_xiuxian_2/features/activity/read_model_application.py",
+        "nonebot_plugin_xiuxian_2/features/activity/read_model_repository.py",
+        "tests/test_activity_read_model.py"
       ],
       "source_declaration_found": true,
       "source": {
@@ -6361,7 +6369,7 @@
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:43 activity_boss_claim_cmd = on_command('活动首领领奖') aliases=领取首领奖励,首领领奖 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:374 _ -> handler creates stable boss-claim operation ID and calls ActivityApplication.execute(action=activity_boss.claim_boss_rewards)",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:372 _ -> handler creates stable boss-claim operation ID and calls ActivityApplication.execute(action=activity_boss.claim_boss_rewards)",
         "ActivityApplication -> ActivityRepository._claim_boss -> explicit adapter forwards the operation ID to claim_boss_rewards",
         "claim_boss_rewards derives stable :milestone and :rank child IDs for selected or composite claims",
         "claim_boss_milestone_reward / claim_boss_rank_reward -> ActivityBossMilestoneClaimApplication / ActivityBossRankClaimApplication -> feature-owned repositories own asset writes and receipts",
@@ -6371,7 +6379,7 @@
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:375-391",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:372-387",
         "nonebot_plugin_xiuxian_2/features/activity/application.py:9-14",
         "nonebot_plugin_xiuxian_2/features/activity/repository.py:58-64",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/activity_boss.py:628-766",
@@ -6381,7 +6389,7 @@
         "tests/test_activity_boss_reward_claim.py",
         "nonebot_plugin_xiuxian_2/features/activity/tests/test_activity_application.py",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:43",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:374"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py:372"
       ],
       "source_declaration_found": true,
       "source": {

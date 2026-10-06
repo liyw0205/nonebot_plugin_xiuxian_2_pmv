@@ -27,6 +27,121 @@ class ActivityReadModelApplication:
 
         return load_config()
 
+    @staticmethod
+    def _boss_activities(config: dict[str, Any]) -> list[dict[str, Any]]:
+        from ...xiuxian.xiuxian_activity.activity_rules import get_gameplay_activities
+
+        return [
+            activity
+            for activity in get_gameplay_activities(config)
+            if activity.get("type") == "activity_boss"
+        ]
+
+    @staticmethod
+    def _find_boss(activities: list[dict[str, Any]], query: str) -> dict[str, Any] | None:
+        text = str(query or "").strip()
+        if text:
+            for activity in activities:
+                names = {
+                    str(activity.get("key") or ""),
+                    str(activity.get("name") or ""),
+                    str(activity.get("boss_name") or ""),
+                    str(activity.get("template_key") or ""),
+                }
+                if text in names or text in str(activity.get("name") or "") or text in str(activity.get("boss_name") or ""):
+                    return activity
+            return None
+        active = []
+        from ...xiuxian.xiuxian_activity.activity_config import activity_state
+
+        for activity in activities:
+            ok, _ = activity_state(activity)
+            if ok:
+                active.append(activity)
+        return active[0] if len(active) == 1 else None
+
+    @staticmethod
+    def _active_bosses(activities: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        from ...xiuxian.xiuxian_activity.activity_config import activity_state
+
+        return [activity for activity in activities if activity_state(activity)[0]]
+
+    @staticmethod
+    def _status_block(activity: dict[str, Any], row: dict[str, Any]) -> str:
+        from ...xiuxian.xiuxian_utils.utils import number_to
+
+        configured_max = max(1, int(activity.get("max_hp") or 1))
+        stored_max = max(1, int(row.get("stored_max_hp") or configured_max))
+        hp_left = max(0, int(row.get("hp_left") or configured_max))
+        if stored_max != configured_max:
+            hp_left = int(configured_max * hp_left / stored_max)
+        damage = max(0, int(row.get("damage") or 0))
+        used = max(0, int(row.get("fight_count") or 0))
+        pct = 100.0 * hp_left / configured_max if configured_max else 0
+        lines = [
+            f"【{activity.get('boss_name', '活动首领')}】{activity.get('name', '')}",
+            str(activity.get("description") or ""),
+            f"全服血量 {number_to(hp_left)} / {number_to(configured_max)}（{pct:.2f}%）",
+            f"我的累计伤害 {number_to(damage)}",
+        ]
+        if activity.get("mode") in {"cooperative", "both"}:
+            lines.append(f"今日挑战 {used}/{max(1, int(activity.get('daily_fight_limit') or 1))}")
+        inventory = row.get("inventory") or {}
+        items = [
+            f"{item.get('name', item.get('id', '道具'))}x{inventory.get(str(item.get('id')), 0)}"
+            for item in activity.get("items") or []
+            if inventory.get(str(item.get("id")), 0) > 0
+        ]
+        if items:
+            lines.append("活动道具：" + "、".join(items))
+        return "\n".join(lines)
+
+    def boss_status_text(self, user_id: str, query: str = "") -> str:
+        activities = self._boss_activities(self._config())
+        selected = self._find_boss(activities, query)
+        if selected is not None:
+            rows = self.repository.boss_snapshot(
+                str(user_id), [str(selected["key"])], self.clock.now().strftime("%Y-%m-%d")
+            )
+            return self._status_block(selected, rows.get(str(selected["key"]), {}))
+        active = self._active_bosses(activities)
+        if not active:
+            return "当前没有进行中的活动首领玩法"
+        rows = self.repository.boss_snapshot(
+            str(user_id), [str(activity["key"]) for activity in active],
+            self.clock.now().strftime("%Y-%m-%d"),
+        )
+        return "\n\n".join(
+            ["【活动首领】"]
+            + [
+                self._status_block(activity, rows.get(str(activity["key"]), {}))
+                for activity in active
+            ]
+        )
+
+    def boss_rank_text(self, query: str = "", limit: int = 10) -> str:
+        activities = self._boss_activities(self._config())
+        selected = self._find_boss(activities, query)
+        if selected is None:
+            active = self._active_bosses(activities)
+            selected = active[0] if len(active) == 1 else None
+        if selected is None:
+            return "请指定活动首领名称后查询排行"
+        rows = self.repository.boss_rank(str(selected["key"]), limit)
+        lines = [f"【{selected.get('boss_name', '活动首领')}伤害排行】"]
+        if not rows:
+            lines.append("暂无数据")
+            return "\n".join(lines)
+        for index, row in enumerate(rows, 1):
+            user_id = str(row.get("user_id") or "")
+            name = str(row.get("user_name") or "").strip()
+            if not name:
+                name = f"修士·{user_id[-4:]}" if len(user_id) > 6 else user_id or "无名修士"
+            from ...xiuxian.xiuxian_utils.utils import number_to
+
+            lines.append(f"{index}. {name} 伤害 {number_to(max(0, int(row.get('total_damage') or 0)))}")
+        return "\n".join(lines)
+
     def task_progress_text(self, user_id: str) -> str:
         from ...xiuxian.xiuxian_activity.activity_config import _activity_config_key
         from ...xiuxian.xiuxian_activity.activity_rules import (

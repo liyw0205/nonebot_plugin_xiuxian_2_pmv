@@ -333,17 +333,17 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     if not is_user:
         await handle_send(bot, event, msg, md_type="我要修仙")
         return
-    from .activity_boss import build_boss_status_text
-
-    await handle_send(bot, event, build_boss_status_text(str(user_info["user_id"])))
+    await handle_send(
+        bot,
+        event,
+        activity_application.read_model.boss_status_text(str(user_info["user_id"])),
+    )
 
 
 @activity_boss_rank_cmd.handle(parameterless=[Cooldown(cd_time=0)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     await assign_bot(bot=bot, event=event)
-    from .activity_boss import build_boss_rank_text
-
-    await handle_send(bot, event, build_boss_rank_text("", 15))
+    await handle_send(bot, event, activity_application.read_model.boss_rank_text("", 15))
 
 
 @activity_boss_atk_cmd.handle(parameterless=[Cooldown(cd_time=0)])
@@ -353,8 +353,6 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     if not is_user:
         await handle_send(bot, event, msg, md_type="我要修仙")
         return
-    from .activity_boss import fight_cooperative_boss, use_item_on_boss
-
     raw = args.extract_plain_text().strip()
     uid = str(user_info["user_id"])
     operation_id = _activity_operation_id(event, "boss-item" if raw else "boss-coop", uid)

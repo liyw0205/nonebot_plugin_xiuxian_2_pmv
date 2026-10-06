@@ -392,6 +392,14 @@ def _slice_status() -> dict[str, dict[str, object]]:
     activity_read_model_application = (PACKAGE / "features" / "activity" / "read_model_application.py").read_text(encoding="utf-8")
     activity_read_model_repository = (PACKAGE / "features" / "activity" / "read_model_repository.py").read_text(encoding="utf-8")
     activity_read_model_tests = (ROOT / "tests" / "test_activity_read_model.py").read_text(encoding="utf-8")
+    activity_boss_settlement_repository = (PACKAGE / "features" / "activity" / "boss_settlement_repository.py").read_text(encoding="utf-8")
+    activity_boss_feature_tests = "\n".join(
+        (
+            (ROOT / "tests" / "test_activity_read_model.py").read_text(encoding="utf-8"),
+            (PACKAGE / "features" / "activity" / "tests" / "test_boss_settlement_repository.py").read_text(encoding="utf-8"),
+            (PACKAGE / "features" / "activity" / "tests" / "test_activity_application.py").read_text(encoding="utf-8"),
+        )
+    )
     activity_sign_repository = (PACKAGE / "features" / "activity" / "sign_settlement_repository.py").read_text(encoding="utf-8")
     activity_collect_repository = (PACKAGE / "features" / "activity" / "collect_exchange_repository.py").read_text(encoding="utf-8")
     activity_collect_tests = (PACKAGE / "features" / "activity" / "tests" / "test_collect_exchange_repository.py").read_text(encoding="utf-8")
@@ -1742,6 +1750,60 @@ def _slice_status() -> dict[str, dict[str, object]]:
                 and "test_collect_bag_read_model_does_not_create_missing_database" in activity_read_model_tests
             ),
             "status": "activity_task_pass_sign_rank_and_collect_bag_read_models_owned_by_feature_application",
+        },
+        "activity_boss": {
+            "boss_status_matcher_uses_feature_read_model": (
+                "activity_application.read_model.boss_status_text(" in activity_commands
+                and "build_boss_status_text" not in activity_commands
+                and "def boss_status_text(" in activity_read_model_application
+                and "def boss_snapshot(" in activity_read_model_repository
+            ),
+            "boss_rank_matcher_uses_feature_read_model": (
+                "activity_application.read_model.boss_rank_text(" in activity_commands
+                and "build_boss_rank_text" not in activity_commands
+                and "def boss_rank_text(" in activity_read_model_application
+                and "def boss_rank(" in activity_read_model_repository
+            ),
+            "boss_read_repository_is_read_only_bounded_no_hp_init": (
+                "DatabaseUnitOfWork(self.database, read_only=True)" in activity_read_model_repository
+                and "activity_boss_state" in activity_read_model_repository
+                and "LIMIT ?" in activity_read_model_repository
+                and "CREATE TABLE" not in activity_read_model_repository
+                and "UPDATE " not in activity_read_model_repository
+                and "INSERT INTO " not in activity_read_model_repository
+                and "test_boss_status_is_read_only_and_does_not_initialize_hp" in activity_boss_feature_tests
+                and "test_boss_rank_uses_one_batched_display_name_lookup" in activity_boss_feature_tests
+            ),
+            "boss_attack_application_owned": (
+                "ActivityBossSettlementSqlRepository(database)" in activity_command_repository
+                and "_run_activity_action(" in activity_commands
+                and "def _settle_boss(" in activity_command_repository
+                and "from ...xiuxian.xiuxian_activity.activity_boss import fight_cooperative_boss" not in activity_command_repository
+                and "from ...xiuxian.xiuxian_activity.activity_boss import use_item_on_boss" not in activity_command_repository
+            ),
+            "boss_settlement_atomic_replay_conflict_cas_and_rollback": (
+                "DatabaseUnitOfWork(self.database, immediate=True)" in activity_boss_settlement_repository
+                and "activity_boss_settlement_operations" in activity_boss_settlement_repository
+                and "operation_payload_matches" in activity_boss_settlement_repository
+                and "WHERE activity_key=? AND hp_left=? AND max_hp=?" in activity_boss_settlement_repository
+                and "test_cooperative_settlement_is_atomic_and_replayable" in activity_boss_feature_tests
+                and "test_item_settlement_rolls_back_inventory_and_boss_state_on_receipt_failure" in activity_boss_feature_tests
+            ),
+            "boss_settlement_uses_existing_state_schema": (
+                "CREATE TABLE" not in activity_boss_settlement_repository
+                and "activity_state.001 schema_missing" in activity_boss_settlement_repository
+                and "activity_boss_settlement_operations" in activity_state_migrations
+            ),
+            "boss_operation_id_and_item_damage_stable": (
+                "hashlib.sha256(operation_id.encode())" in activity_command_repository
+                and "operation_id=operation_id" in activity_command_repository
+            ),
+            "boss_legacy_settlement_default_path_isolated": (
+                "from ...xiuxian.xiuxian_activity.activity_boss import fight_cooperative_boss" not in activity_command_repository
+                and "from ...xiuxian.xiuxian_activity.activity_boss import use_item_on_boss" not in activity_command_repository
+                and "ActivityBossCoopSettlementService" in activity_transaction_service
+            ),
+            "status": "activity boss status/rank reads and cooperative/item settlement owned by feature repositories",
         },
         "activity_sign_in": {
             "default_matcher_uses_feature_owned_settlement_repository": (
