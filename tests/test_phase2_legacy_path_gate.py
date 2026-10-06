@@ -78,7 +78,7 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
         self.assertEqual(report["path_count"], 496)
         self.assertEqual(
             report["status_counts"],
-            {"不可达": 19, "允许保留的兼容路径": 97, "受阻": 225, "已迁移": 155},
+            {"不可达": 19, "允许保留的兼容路径": 97, "受阻": 224, "已迁移": 156},
         )
         self.assertGreater(report["blocked_count"], 0)
         self.assertTrue(all(item["call_graph"] and item["evidence"] for item in report["items"]))
@@ -247,7 +247,16 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
             if item.get("source", {}).get("function") == "get_backups"
             and item.get("source", {}).get("file") == "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/pages.py"
         )
-        self.assertEqual(backups["status"], "受阻")
+        self.assertEqual(backups["status"], "已迁移")
+        self.assertIn("nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/pages.py:129", backups["evidence"])
+        self.assertTrue(
+            any(
+                "pages.py:129 get_backups -> PluginBackupCatalogApplication.list_plugin_backups"
+                in edge
+                for edge in backups["call_graph"]
+            )
+        )
+        self.assertFalse(any("downstream state effect not closed" in edge for edge in backups["call_graph"]))
 
     def test_updater_routes_have_source_bound_application_edges(self):
         report = load_phase2_scope_report(include_items=True)

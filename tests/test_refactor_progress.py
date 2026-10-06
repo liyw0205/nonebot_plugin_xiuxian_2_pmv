@@ -312,6 +312,11 @@ class RefactorProgressTests(unittest.TestCase):
         self.assertTrue(updater["application_preflights_asset_and_orders_backups_before_update"])
         self.assertTrue(updater["remote_release_metadata_is_rendered_as_text"])
         self.assertTrue(updater["updater_application_manager_and_http_contracts_are_tested"])
+        backup_catalog = slices["plugin_backup_catalog_owner"]
+        self.assertTrue(backup_catalog["legacy_route_uses_catalog_application"])
+        self.assertTrue(backup_catalog["catalog_preserves_list_contract_without_path_disclosure"])
+        self.assertTrue(backup_catalog["catalog_is_read_only_and_handles_missing_entries"])
+        self.assertTrue(backup_catalog["catalog_application_and_http_contracts_are_tested"])
         activity_static_help = slices["activity_static_help"]
         self.assertTrue(activity_static_help["help_and_manage_remain_static_compatibility_handlers"])
         boss = slices["activity_boss"]

@@ -411,6 +411,9 @@ def _slice_status() -> dict[str, dict[str, object]]:
     updater_web_core = (PACKAGE / "xiuxian" / "xiuxian_web" / "core.py").read_text(encoding="utf-8")
     updater_page_template = (PACKAGE / "xiuxian" / "xiuxian_web" / "templates" / "update.html").read_text(encoding="utf-8")
     updater_web_tests = (ROOT / "tests" / "test_updater_web.py").read_text(encoding="utf-8")
+    plugin_backup_application = (PACKAGE / "features" / "plugin_backups" / "application.py").read_text(encoding="utf-8")
+    plugin_backup_repository = (PACKAGE / "features" / "plugin_backups" / "repository.py").read_text(encoding="utf-8")
+    plugin_backup_tests = (PACKAGE / "features" / "plugin_backups" / "tests" / "test_catalog.py").read_text(encoding="utf-8")
     activity_help_handler = activity_commands[
         activity_commands.index("@activity_help_cmd.handle"):
         activity_commands.index("@activity_manage_cmd.handle")
@@ -1948,6 +1951,32 @@ def _slice_status() -> dict[str, dict[str, object]]:
                 and "def test_update_routes_require_admin_and_keep_update_permission" in updater_web_tests
             ),
             "status": "updater_commands_and_web_api_use_one_validated_application_boundary",
+        },
+        "plugin_backup_catalog_owner": {
+            "legacy_route_uses_catalog_application": (
+                "backup_catalog_application.list_plugin_backups()" in web_pages
+                and "update_manager.get_backups()" not in web_pages
+            ),
+            "catalog_preserves_list_contract_without_path_disclosure": (
+                '"filename"' in plugin_backup_repository
+                and '"version"' in plugin_backup_repository
+                and '"created_at"' in plugin_backup_repository
+                and '"size"' in plugin_backup_repository
+                and '"path"' not in plugin_backup_repository
+                and "entry.stat(follow_symlinks=False)" in plugin_backup_repository
+                and "stat.S_ISREG(metadata.st_mode)" in plugin_backup_repository
+            ),
+            "catalog_is_read_only_and_handles_missing_entries": (
+                "except FileNotFoundError" in plugin_backup_repository
+                and "except OSError" in plugin_backup_repository
+                and "mkdir" not in plugin_backup_repository
+            ),
+            "catalog_application_and_http_contracts_are_tested": (
+                "def test_application_delegates_to_catalog_repository" in plugin_backup_tests
+                and "def test_repository_skips_symlinks_and_missing_directory_without_creating_it" in plugin_backup_tests
+                and "def test_get_backups_route_requires_admin_and_keeps_legacy_payload" in updater_web_tests
+            ),
+            "status": "plugin_backup_listing_has_a_read_only_feature_owner",
         },
         "activity_static_help": {
             "help_and_manage_remain_static_compatibility_handlers": (

@@ -13048,19 +13048,24 @@
       "id": "route:GET:/get_backups:nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/pages.py:get_backups",
       "kind": "legacy_routes",
       "entry": "GET /get_backups -> nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/pages.py:get_backups",
-      "status": "受阻",
-      "reason": "The old Flask app and route modules are loaded and its server is enabled by default. Route registration is proven, but each handler's downstream ownership and replacement/compatibility decision is not closed.",
-      "unknown_edge": "route function -> old data/service or feature application -> state effect",
+      "status": "已迁移",
+      "reason": "The legacy response adapter delegates the read-only plugin backup listing to PluginBackupCatalogApplication and PluginBackupCatalogRepository; create, restore, and delete workflows remain separate owners.",
+      "unknown_edge": "",
       "call_graph": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/pages.py:129 -> Flask app.route(/get_backups) -> legacy handler -> downstream state effect not closed"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/pages.py:129 get_backups -> PluginBackupCatalogApplication.list_plugin_backups -> PluginBackupCatalogRepository.list_plugin_backups -> read-only metadata listing -> legacy JSON response"
       ],
       "evidence": [
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/pages.py:129",
+        "nonebot_plugin_xiuxian_2/features/plugin_backups/application.py:9-14",
+        "nonebot_plugin_xiuxian_2/features/plugin_backups/repository.py:10-47",
+        "tests/test_updater_web.py:99-124",
+        "nonebot_plugin_xiuxian_2/features/plugin_backups/tests/test_catalog.py:13-58",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/pages.py:129"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/pages.py:139"
       ],
       "source_declaration_found": true,
       "source": {

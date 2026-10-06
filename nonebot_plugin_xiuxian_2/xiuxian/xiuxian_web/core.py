@@ -36,6 +36,10 @@ from nonebot.log import logger
 from nonebot import get_driver, get_bots, __version__ as nb_version
 from ...paths import get_paths
 from ...infrastructure.clock import SystemClock
+from ...features.plugin_backups import (
+    PluginBackupCatalogApplication,
+    PluginBackupCatalogRepository,
+)
 # --- 消息统计核心导入 ---
 from nonebot.message import event_preprocessor
 from nonebot.adapters import Bot as BaseBot, Event
@@ -88,6 +92,9 @@ except ImportError:
 items = Items()
 update_manager = UpdateManager()
 update_application = UpdateApplication(update_manager)
+backup_catalog_application = PluginBackupCatalogApplication(
+    PluginBackupCatalogRepository(get_paths().backups)
+)
 WEB_CONFIG = XiuConfig()
 app = Flask(__name__)
 

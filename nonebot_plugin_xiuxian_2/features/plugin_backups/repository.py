@@ -1,0 +1,52 @@
+from __future__ import annotations
+
+import os
+import stat
+from datetime import datetime
+from pathlib import Path
+from typing import Any
+
+
+class PluginBackupCatalogRepository:
+    def __init__(self, backup_directory: str | Path) -> None:
+        self._backup_directory = Path(backup_directory)
+
+    def list_plugin_backups(self) -> list[dict[str, Any]]:
+        backups: list[dict[str, Any]] = []
+        try:
+            entries = os.scandir(self._backup_directory)
+        except FileNotFoundError:
+            return backups
+
+        with entries:
+            for entry in entries:
+                if not (entry.name.startswith("backup_") and entry.name.endswith(".zip")):
+                    continue
+
+                parts = Path(entry.name).stem.split("_")
+                if len(parts) < 4:
+                    continue
+
+                try:
+                    metadata = entry.stat(follow_symlinks=False)
+                except OSError:
+                    continue
+                if not stat.S_ISREG(metadata.st_mode):
+                    continue
+
+                timestamp = f"{parts[1]}_{parts[2]}"
+                backups.append(
+                    {
+                        "filename": entry.name,
+                        "timestamp": timestamp,
+                        "version": "_".join(parts[3:]),
+                        "size": metadata.st_size,
+                        "created_at": datetime.fromtimestamp(metadata.st_ctime).isoformat(),
+                    }
+                )
+
+        backups.sort(key=lambda item: item["created_at"], reverse=True)
+        return backups
+
+
+__all__ = ["PluginBackupCatalogRepository"]

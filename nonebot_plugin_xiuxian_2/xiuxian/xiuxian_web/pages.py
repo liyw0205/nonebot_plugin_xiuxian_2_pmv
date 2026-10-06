@@ -8,7 +8,7 @@ from .core import (
     secrets,
     session,
     web_auth_is_enabled,
-    update_manager, update_application,
+    update_manager, update_application, backup_catalog_application,
     url_for,
 )
 
@@ -131,7 +131,7 @@ def get_backups():
         return jsonify({"success": False, "error": "未登录"})
     
     try:
-        backups = update_manager.get_backups()
+        backups = backup_catalog_application.list_plugin_backups()
         return jsonify({
             "success": True,
             "backups": backups

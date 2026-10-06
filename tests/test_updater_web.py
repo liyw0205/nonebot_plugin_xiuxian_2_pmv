@@ -33,6 +33,23 @@ class FakeUpdateApplication:
         return True, "updated"
 
 
+class FakeBackupCatalogApplication:
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def list_plugin_backups(self):
+        self.calls += 1
+        return [
+            {
+                "filename": "backup_20261006_010203_v2.0.0.zip",
+                "timestamp": "20261006_010203",
+                "version": "v2.0.0",
+                "size": 3,
+                "created_at": "2026-10-06T01:02:03",
+            }
+        ]
+
+
 class UpdaterWebRouteTests(unittest.TestCase):
     def setUp(self) -> None:
         app.config.update(TESTING=True, SECRET_KEY="test-secret")
@@ -78,6 +95,33 @@ class UpdaterWebRouteTests(unittest.TestCase):
         self.assertNotIn("onclick=\"performUpdate('${release.tag_name}')\"", source)
         self.assertIn("changelog.textContent = text", source)
         self.assertIn("button.addEventListener('click', () => performUpdate(release.tag_name))", source)
+
+    def test_get_backups_route_requires_admin_and_keeps_legacy_payload(self) -> None:
+        catalog = FakeBackupCatalogApplication()
+        with patch.object(core, "ADMIN_IDS", {"admin-1"}):
+            anonymous = self.client.get("/get_backups")
+            self._login_session()
+            with patch.object(pages, "backup_catalog_application", catalog):
+                response = self.client.get("/get_backups")
+
+        self.assertEqual(anonymous.status_code, 401)
+        self.assertEqual(
+            response.get_json(),
+            {
+                "success": True,
+                "backups": [
+                    {
+                        "filename": "backup_20261006_010203_v2.0.0.zip",
+                        "timestamp": "20261006_010203",
+                        "version": "v2.0.0",
+                        "size": 3,
+                        "created_at": "2026-10-06T01:02:03",
+                    }
+                ],
+            },
+        )
+        self.assertNotIn("path", response.get_json()["backups"][0])
+        self.assertEqual(catalog.calls, 1)
 
 
 if __name__ == "__main__":
