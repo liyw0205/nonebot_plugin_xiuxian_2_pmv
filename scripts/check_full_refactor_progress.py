@@ -1710,12 +1710,18 @@ def _slice_status() -> dict[str, dict[str, object]]:
         buff_facade.index("@del_exp_decimal.handle") : buff_facade.index("@daily_info.handle")
     ]
     impart_facade = (PACKAGE / "xiuxian" / "xiuxian_impart" / "__init__.py").read_text(encoding="utf-8")
+    impart_catalog = (PACKAGE / "features" / "impart" / "catalog.py").read_text(encoding="utf-8")
+    impart_draw_repository = (PACKAGE / "features" / "impart" / "draw_repository.py").read_text(encoding="utf-8")
+    impart_legacy_utils = (PACKAGE / "xiuxian" / "xiuxian_impart" / "impart_uitls.py").read_text(encoding="utf-8")
     impart_prayer_repository = (PACKAGE / "features" / "impart" / "prayer_repository.py").read_text(encoding="utf-8")
     impart_migrations = (PACKAGE / "features" / "impart" / "migrations.py").read_text(encoding="utf-8")
     impart_prayer_handler = impart_facade[
         impart_facade.index("async def use_wishing_stone") : impart_facade.index(
             "async def use_love_sand", impart_facade.index("async def use_wishing_stone")
         )
+    ]
+    impart_paid_draw_handler = impart_facade[
+        impart_facade.index("async def impart_draw2_") : impart_facade.index("async def use_wishing_stone")
     ]
     mixelixir_facade = (PACKAGE / "xiuxian" / "xiuxian_mixelixir" / "__init__.py").read_text(encoding="utf-8")
     mixelixir_application = (PACKAGE / "features" / "mixelixir" / "application.py").read_text(encoding="utf-8")
@@ -5193,6 +5199,41 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "card_compose_application_owned": "impart_application.compose(" in impart_facade,
             "card_disassemble_application_owned": "impart_application.disassemble(" in impart_facade,
             "prayer_application_owned": "impart_application.prayer_settle(" in impart_facade,
+            "paid_draw_application_owned": "impart_application.draw(" in impart_facade,
+            "crystal_draw_application_owned": "impart_application.crystal_draw(" in impart_facade,
+            "paid_draw_pity_resets_after_a_hit": (
+                "probability_wish = int(current_wish)" in impart_paid_draw_handler
+                and '_rank_success({"wish": probability_wish})' in impart_paid_draw_handler
+                and "probability_wish = 0" in impart_paid_draw_handler
+            ),
+            "draw_card_classification_is_transactional": (
+                "existing_card_counts = self._card_counts(uow" in impart_draw_repository
+                and '"传承新卡": len(new_cards)' in impart_draw_repository
+                and '"传承重复卡": duplicate_count' in impart_draw_repository
+            ),
+            "draw_original_request_is_replay_checked": (
+                "requested_pulls: int | None = None" in impart_draw_repository
+                and "prior_requested != int(requested_pulls)" in impart_draw_repository
+            ),
+            "draw_request_paths_have_no_ddl": "CREATE TABLE" not in impart_draw_repository,
+            "card_catalog_does_not_import_legacy_package": (
+                "ast.literal_eval(statement.value)" in impart_catalog
+                and '"xiuxian_impart" / "impart_all.py"' in impart_catalog
+                and "from ...xiuxian.xiuxian_impart.impart_all" not in impart_catalog
+            ),
+            "draw_schema_migrations_are_database_routed": (
+                'Migration("impart.006", "impart_draw_operations"' in plugin
+                and 'Migration("impart.007", "impart_crystal_and_card_operations"' in plugin
+                and 'Migration("impart.008", "impart_draw_player_statistics"' in plugin
+                and '"impart.007"' in plugin[plugin.index("_IMPART_DATABASE_MIGRATION_VERSIONS"):]
+                and '"impart.008"' in plugin[plugin.index("_PLAYER_DATABASE_MIGRATION_VERSIONS"):]
+            ),
+            "legacy_impart_data_initialization_is_lazy": (
+                "def _impart_manager()" in impart_legacy_utils
+                and "def _impart_data_manager()" in impart_legacy_utils
+                and "xiuxian_impart = XIUXIAN_IMPART_BUFF()" not in impart_legacy_utils
+                and "impart_data_json = IMPART_DATA()" not in impart_legacy_utils
+            ),
             "prayer_stats_transaction_owned": (
                 "impart_database=get_paths().impart_db" in impart_facade
                 and "player_database=get_paths().player_db" in impart_prayer_handler
@@ -5207,7 +5248,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
                 and "def apply_impart_prayer_operations(" in impart_migrations
                 and "def apply_impart_prayer_player_statistics(" in impart_migrations
             ),
-            "status": "love_sand_compose_disassemble_prayer_cutover_with_other_impart_compatibility",
+            "status": "read_draw_prayer_love_sand_card_mutations_and_startup_schema_feature_owned_with_remaining_legacy_impart_consumers",
         },
         "mixelixir": {
             "harvest_level_application_owned": "mixelixir_application.harvest_level_upgrade(" in mixelixir_facade,

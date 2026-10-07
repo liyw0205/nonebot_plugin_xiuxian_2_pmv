@@ -1,7 +1,5 @@
 import os
 import random
-import time
-from types import SimpleNamespace
 from collections import Counter
 from ..on_compat import on_command
 from ..adapter_compat import (
@@ -13,6 +11,7 @@ from ..adapter_compat import (
     MessageSegment,
 )
 from nonebot.params import CommandArg
+from nonebot.log import logger
 
 from .. import NICKNAME
 from ...features.impart.application import ImpartApplication
@@ -27,102 +26,38 @@ from ..xiuxian_utils.utils import (
     handle_send,
     send_msg_handler,
     handle_pic_send,
-    update_statistics_value,
+    get_impersonating_target,
     invalidate_player_data_cache,
     send_help_message,
     log_message
 )
-from ..xiuxian_utils.xiuxian2_handle import XIUXIAN_IMPART_BUFF
-from .impart_data import impart_data_json
 from .impart_uitls import (
     get_image_representation,
     get_impart_card_description,
     get_star_rating,
-    get_rank,
     img_path,
-    impart_check,
-    re_impart_data,
-    update_user_impart_data,
 )
-from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage
 from ...paths import get_paths
-from .transaction_service import (
-    ImpartDrawService,
-    CardComposeService,
-    CardDisassembleService,
-    LoveSandUseService,
-    ImpartPrayerSettlementService,
-)
-_sql_message_instance = None
-xiuxian_impart = XIUXIAN_IMPART_BUFF()
-_impart_draw_service_instance = None
-_card_compose_service_instance = None
-_card_disassemble_service_instance = None
-_love_sand_service_instance = None
-_impart_prayer_service_instance = None
 impart_application = ImpartApplication(
     get_paths().game_db,
     impart_database=get_paths().impart_db,
+    player_database=get_paths().player_db,
 )
 runtime_ids = UUIDGenerator()
 
-
-def _sql_message():
-    global _sql_message_instance
-    if _sql_message_instance is None:
-        _sql_message_instance = XiuxianDateManage()
-    return _sql_message_instance
+def _impart_state(user_id: str, *, ensure: bool = False):
+    return impart_application.state(str(user_id), ensure=ensure)
 
 
-def _love_sand_service():
-    global _love_sand_service_instance
-    if _love_sand_service_instance is None:
-        _love_sand_service_instance = LoveSandUseService(get_paths().game_db, get_paths().impart_db, get_paths().player_db)
-    return _love_sand_service_instance
-
-
-def _impart_draw_service():
-    global _impart_draw_service_instance
-    if _impart_draw_service_instance is None:
-        _impart_draw_service_instance = ImpartDrawService(get_paths().game_db, get_paths().impart_db)
-    return _impart_draw_service_instance
-
-
-def _card_compose_service():
-    global _card_compose_service_instance
-    if _card_compose_service_instance is None:
-        _card_compose_service_instance = CardComposeService(get_paths().impart_db)
-    return _card_compose_service_instance
-
-
-def _card_disassemble_service():
-    global _card_disassemble_service_instance
-    if _card_disassemble_service_instance is None:
-        _card_disassemble_service_instance = CardDisassembleService(get_paths().impart_db)
-    return _card_disassemble_service_instance
-
-
-def _impart_prayer_service():
-    global _impart_prayer_service_instance
-    if _impart_prayer_service_instance is None:
-        _impart_prayer_service_instance = ImpartPrayerSettlementService(
-            get_paths().game_db, get_paths().impart_db
-        )
-    return _impart_prayer_service_instance
-
-
-def _run_impart_action(action, operation_id, user_id, call, **payload):
-    outcome = impart_application.execute_legacy_call(
-        operation_id=operation_id,
-        user_id=str(user_id),
-        action=action,
-        payload=payload,
-        call=call,
-    )
-    data = dict(outcome.data or {})
-    data.setdefault("status", outcome.status)
-    data["succeeded"] = outcome.ok
-    return SimpleNamespace(**data)
+def _rank_success(state: dict) -> bool:
+    """Preserve the legacy pity probability without touching the old manager."""
+    count = int(state.get("wish", 0))
+    value = random.randrange(10000)
+    for current in range(count, count + 10):
+        threshold = 60 if current + 1 <= 73 else 60 + 600 * (current + 1 - 73)
+        if value <= threshold or current >= 89:
+            return True
+    return False
 
 
 cache_help = {}
@@ -245,11 +180,6 @@ async def impart_draw_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
         return
 
     user_id = user_info["user_id"]
-    impart_data_draw = await impart_check(user_id)
-    if impart_data_draw is None:
-        await handle_send(bot, event, "发生未知错误！")
-        return
-
     # 解析抽卡次数
     msg_text = args.extract_plain_text().strip()
     times = int(msg_text) if msg_text and 0 < int(msg_text) else 1
@@ -257,18 +187,40 @@ async def impart_draw_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
     # 检查思恋结晶是否足够
     times = times * 10
     required_crystals = times
+    event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
+    operation_id = (
+        f"impart-crystal-draw:{event_id}:{user_id}"
+        if event_id
+        else f"impart-crystal-draw:{user_id}:{runtime_ids.new_id()}"
+    )
+    prior = impart_application.crystal_draw_result(
+        operation_id, str(user_id), required_crystals, times // 10
+    )
+    if prior is not None:
+        if prior.status == "duplicate":
+            await handle_send(bot, event, "道友的传承祈愿已完成，该请求已经处理，无需重复提交。")
+        else:
+            await handle_send(bot, event, "祈愿请求与已处理请求不一致，请重新发起。")
+        return
+
+    impart_data_draw = _impart_state(user_id, ensure=True)
+    if impart_data_draw is None:
+        await handle_send(bot, event, "发生未知错误！")
+        return
     if impart_data_draw["stone_num"] < required_crystals:
         await handle_send(bot, event, f"思恋结晶数量不足，需要{required_crystals}颗!")
         return
 
     # 初始化变量
     summary = f"道友的传承祈愿"
-    img_list = impart_data_json.data_all_keys()
+    card_definitions = impart_application.card_definitions()
+    img_list = tuple(card_definitions)
     if not img_list:
         await handle_send(bot, event, "请检查卡图数据完整！")
         return
 
     current_wish = impart_data_draw["wish"]
+    probability_wish = int(current_wish)
     drawn_cards = []  # 记录所有抽到的卡片
     total_seclusion_time = 0
     total_new_cards = 0
@@ -287,52 +239,68 @@ async def impart_draw_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
             guaranteed_pulls += 1
             total_seclusion_time += 1200  # 保底获得更多闭关时间
             current_wish = 0  # 重置概率计数
-            xiuxian_impart.update_impart_wish(current_wish, user_id)
+            probability_wish = 0
         else:
-            if get_rank(user_id):
+            if _rank_success({"wish": probability_wish}):
                 # 中奖情况
                 reap_img = random.choice(img_list)
                 drawn_cards.append(reap_img)
                 total_seclusion_time += 1200  # 中奖获得更多闭关时间
                 current_wish = 0  # 重置概率计数
-                xiuxian_impart.update_impart_wish(current_wish, user_id)
+                probability_wish = 0
             else:
                 # 未中奖情况
                 total_seclusion_time += 660
 
-    old_card_counts = impart_data_json.data_person_list(user_id) or {}
-    new_cards = list(dict.fromkeys(card for card in drawn_cards if card not in old_card_counts))
-    card_counts = {card: old_card_counts.get(card, 0) + drawn_cards.count(card) for card in set(drawn_cards)}
-    total_new_cards = len(new_cards)
-    total_duplicates = len(drawn_cards) - total_new_cards
-
-    # 计算重复卡片信息（只显示前10个，避免消息过长）
-    duplicate_cards_info = []
-    duplicate_display_limit = 10
-    for card, count in card_counts.items():
-        if card in new_cards:
-            continue
-        if len(duplicate_cards_info) < duplicate_display_limit:
-            duplicate_cards_info.append(f"{card}x{drawn_cards.count(card)}")
-    
-    # 如果有更多重复卡未显示
-    more_duplicates_msg = ""
-    if total_duplicates > duplicate_display_limit:
-        more_duplicates_msg = f"\n(还有{total_duplicates - duplicate_display_limit}张重复卡未显示)"
     total_seclusion_time = total_seclusion_time // 10
     
-    # 更新用户数据
-    xiuxian_impart.update_stone_num(required_crystals, user_id, 2)
-    xiuxian_impart.update_impart_wish(current_wish, user_id)
-    await update_user_impart_data(user_id, total_seclusion_time)
-    impart_data_draw = await impart_check(user_id)
-    update_statistics_value(user_id, "传承祈愿", increment=times)
-    update_statistics_value(user_id, "传承祈愿次数", increment=times // 10)
-    update_statistics_value(user_id, "思恋结晶消耗", increment=required_crystals)
-    update_statistics_value(user_id, "虚神界时间获取", increment=total_seclusion_time)
-    update_statistics_value(user_id, "传承新卡", increment=total_new_cards)
-    update_statistics_value(user_id, "传承重复卡", increment=total_duplicates)
-    update_statistics_value(user_id, "传承保底次数", increment=guaranteed_pulls)
+    result = impart_application.crystal_draw(
+        operation_id=operation_id,
+        user_id=str(user_id),
+        expected_stone=int(impart_data_draw["stone_num"]),
+        expected_wish=int(impart_data_draw["wish"]),
+        cost=required_crystals,
+        new_wish=current_wish,
+        exp_minutes=total_seclusion_time,
+        cards=drawn_cards,
+        card_definitions=card_definitions,
+        statistics_user_id=get_impersonating_target(user_id) or str(user_id),
+        statistics={
+            "传承祈愿": times,
+            "传承祈愿次数": times // 10,
+            "思恋结晶消耗": required_crystals,
+            "虚神界时间获取": total_seclusion_time,
+            "传承保底次数": guaranteed_pulls,
+        },
+    )
+    if result.status == "duplicate":
+        await handle_send(bot, event, "道友的传承祈愿已完成，该请求已经处理，无需重复提交。")
+        return
+    if not result.succeeded:
+        await handle_send(bot, event, "祈愿未结算：传承当前状态已更新，请刷新后重试。")
+        return
+    new_cards = list(result.new_cards)
+    total_new_cards = len(new_cards)
+    total_duplicates = len(drawn_cards) - total_new_cards
+    duplicate_cards_info = [
+        f"{card}x{drawn_cards.count(card)}"
+        for card in dict.fromkeys(drawn_cards)
+        if card in result.existing_cards
+    ][:10]
+    more_duplicates_msg = (
+        f"\n(还有{total_duplicates - 10}张重复卡未显示)"
+        if total_duplicates > 10 else ""
+    )
+    impart_data_draw = {
+        **impart_data_draw,
+        "stone_num": result.stone_num,
+        "wish": result.wish,
+        "exp_day": result.exp_day,
+    }
+    invalidate_player_data_cache(
+        "statistics",
+        ("传承祈愿", "传承祈愿次数", "思恋结晶消耗", "虚神界时间获取", "传承新卡", "传承重复卡", "传承保底次数"),
+    )
     log_message(
         user_id,
         f"[传承祈愿] 消耗思恋结晶{required_crystals}颗，获得虚神界时间{total_seclusion_time}分钟，新卡{total_new_cards}张，重复{total_duplicates}张"
@@ -366,24 +334,26 @@ async def impart_draw2_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
 
     user_id = user_info["user_id"]
     user_stone_num = user_info['stone']
-    impart_data_draw = await impart_check(user_id)
+    msg_text = args.extract_plain_text().strip()
+    requested_times = int(msg_text) if msg_text and msg_text.isdigit() and int(msg_text) > 0 else 1
+    event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
+    operation_id = f"impart-draw:{event_id}:{user_id}" if event_id else f"impart-draw:{user_id}:{runtime_ids.new_id()}"
+    prior = impart_application.draw_result(operation_id, str(user_id), requested_times)
+    if prior is not None:
+        if prior.status == "duplicate":
+            await handle_send(
+                bot, event,
+                f"道友的传承抽卡\n抽卡{prior.draw_count}次已完成。\n该抽卡请求已经处理，无需重复提交。"
+            )
+        else:
+            await handle_send(bot, event, "抽卡请求与已处理请求不一致，请重新发起。")
+        return
+
+    impart_data_draw = _impart_state(user_id, ensure=True)
     if impart_data_draw is None:
         await handle_send(bot, event, "发生未知错误！")
         return
-
-    msg_text = args.extract_plain_text().strip()
-    times = int(msg_text) if msg_text and msg_text.isdigit() and int(msg_text) > 0 else 1
-    event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
-    operation_id = f"impart-draw:{event_id}:{user_id}" if event_id else f"impart-draw:{user_id}:{runtime_ids.new_id()}"
-    # 先回放：成功后每日次数/灵石会挡住同事件幂等。
-    prior = _impart_draw_service().get_result(operation_id)
-    if prior is not None and prior.succeeded:
-        await handle_send(
-            bot, event,
-            f"道友的传承抽卡\n抽卡{prior.draw_count}次已完成。\n"
-            f"该抽卡请求已经处理，无需重复提交。"
-        )
-        return
+    times = requested_times
     if impart_data_draw['impart_num'] >= 100:
         msg = "道友今日抽卡已达上限，请明日再来！"
         await handle_send(bot, event, msg)
@@ -400,12 +370,14 @@ async def impart_draw2_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     
     # 初始化变量
     summary = f"道友的传承抽卡"
-    img_list = impart_data_json.data_all_keys()
+    card_definitions = impart_application.card_definitions()
+    img_list = tuple(card_definitions)
     if not img_list:
         await handle_send(bot, event, "请检查卡图数据完整！")
         return
 
     current_wish = impart_data_draw["wish"]
+    probability_wish = int(current_wish)
     drawn_cards = []  # 记录所有抽到的卡片
     total_new_cards = 0
     total_duplicates = 0
@@ -422,41 +394,35 @@ async def impart_draw2_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
             drawn_cards.append(reap_img)
             guaranteed_pulls += 1
             current_wish = 0  # 重置概率计数
+            probability_wish = 0
         else:
-            if get_rank(user_id):
+            if _rank_success({"wish": probability_wish}):
                 # 中奖情况
                 reap_img = random.choice(img_list)
                 drawn_cards.append(reap_img)
                 current_wish = 0  # 重置概率计数
+                probability_wish = 0
 
     # 批量添加卡片
-    old_card_counts = impart_data_json.data_person_list(user_id) or {}
-    new_cards = list(dict.fromkeys(card for card in drawn_cards if card not in old_card_counts))
-    card_counts = {card: old_card_counts.get(card, 0) + drawn_cards.count(card) for card in set(drawn_cards)}
-    total_new_cards = len(new_cards)
-    total_duplicates = len(drawn_cards) - total_new_cards
-    # 计算重复卡片信息（只显示前10个，避免消息过长）
-    duplicate_cards_info = []
-    duplicate_display_limit = 10
-    for card, count in card_counts.items():
-        if card in new_cards:
-            continue
-        if len(duplicate_cards_info) < duplicate_display_limit:
-            duplicate_cards_info.append(f"{card}x{drawn_cards.count(card)}")
-    
-    # 如果有更多重复卡未显示
-    more_duplicates_msg = ""
-    if total_duplicates > duplicate_display_limit:
-        more_duplicates_msg = f"\n(还有{total_duplicates - duplicate_display_limit}张重复卡未显示)"
-
-    # 更新用户数据
-    result = _run_impart_action(
-        "draw", operation_id, user_id,
-        call=lambda: _impart_draw_service().draw(
-            operation_id, user_id, user_stone_num, impart_data_draw["wish"],
-            impart_data_draw["impart_num"], required_crystals, current_wish, times, drawn_cards,
-        ),
-        quantity=times, required_crystals=required_crystals,
+    result = impart_application.draw(
+        operation_id=operation_id,
+        user_id=user_id,
+        expected_stone=user_stone_num,
+        expected_wish=int(impart_data_draw["wish"]),
+        expected_count=int(impart_data_draw["impart_num"]),
+        cost=required_crystals,
+        new_wish=current_wish,
+        pulls=times,
+        cards=drawn_cards,
+        card_definitions=card_definitions,
+        statistics_user_id=get_impersonating_target(user_id) or str(user_id),
+        requested_pulls=requested_times,
+        statistics={
+            "传承抽卡": times * 10,
+            "传承抽卡次数": times,
+            "传承抽卡灵石消耗": required_crystals,
+            "传承保底次数": guaranteed_pulls,
+        },
     )
     if result.status == "duplicate":
         await handle_send(
@@ -468,14 +434,23 @@ async def impart_draw2_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     if not result.succeeded:
         await handle_send(bot, event, "抽卡未结算：抽卡当前状态已更新，请重新发起。")
         return
-    await re_impart_data(user_id)
-    impart_data_draw = await impart_check(user_id)
-    update_statistics_value(user_id, "传承抽卡", increment=times * 10)
-    update_statistics_value(user_id, "传承抽卡次数", increment=times)
-    update_statistics_value(user_id, "传承抽卡灵石消耗", increment=required_crystals)
-    update_statistics_value(user_id, "传承新卡", increment=total_new_cards)
-    update_statistics_value(user_id, "传承重复卡", increment=total_duplicates)
-    update_statistics_value(user_id, "传承保底次数", increment=guaranteed_pulls)
+    new_cards = list(result.new_cards)
+    total_new_cards = len(new_cards)
+    total_duplicates = len(drawn_cards) - total_new_cards
+    duplicate_cards_info = [
+        f"{card}x{drawn_cards.count(card)}"
+        for card in dict.fromkeys(drawn_cards)
+        if card in result.existing_cards
+    ][:10]
+    more_duplicates_msg = (
+        f"\n(还有{total_duplicates - 10}张重复卡未显示)"
+        if total_duplicates > 10 else ""
+    )
+    invalidate_player_data_cache(
+        "statistics",
+        ("传承抽卡", "传承抽卡次数", "传承抽卡灵石消耗", "传承新卡", "传承重复卡", "传承保底次数"),
+    )
+    impart_data_draw = _impart_state(user_id, ensure=True)
     log_message(
         user_id,
         f"[传承抽卡] 消耗灵石{number_to(required_crystals)}，抽卡{times}次，新卡{total_new_cards}张，重复{total_duplicates}张"
@@ -506,11 +481,12 @@ async def use_wishing_stone(bot: Bot, event: GroupMessageEvent | PrivateMessageE
         return
     user_id = user_info["user_id"]
 
-    impart_data_draw = await impart_check(user_id)
+    impart_data_draw = _impart_state(user_id, ensure=True)
     if impart_data_draw is None:
         await handle_send(bot, event, "发生未知错误！")
         return
-    img_list = impart_data_json.data_all_keys()
+    card_definitions = impart_application.card_definitions()
+    img_list = tuple(card_definitions)
     if not img_list:
         await handle_send(bot, event, "请检查卡图数据完整！")
         return
@@ -526,7 +502,7 @@ async def use_wishing_stone(bot: Bot, event: GroupMessageEvent | PrivateMessageE
         item_id=item_id,
         quantity=quantity,
         cards=drawn_cards,
-        card_definitions=impart_data_json.data_all_(),
+        card_definitions=card_definitions,
     )
     if result.status == "item_missing":
         await handle_send(bot, event, "祈愿石数量不足，未进行祈愿。")
@@ -584,14 +560,14 @@ async def use_love_sand(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         return
         
     # 获取当前思恋结晶数量
-    impart_data_draw = await impart_check(user_id)
+    impart_data_draw = _impart_state(user_id, ensure=True)
     if impart_data_draw is None:
         await handle_send(bot, event, "发生未知错误！")
         return
     
     current_stones = impart_data_draw["stone_num"]
     
-    item_count = _sql_message().goods_num(user_id, item_id)
+    item_count = impart_application.item_count(user_id, item_id)
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
     operation_id = f"love-sand:{event_id}:{user_id}:{item_id}" if event_id else f"love-sand:{runtime_ids.new_id()}:{user_id}:{item_id}"
     total_gained = sum(random.choice([10, 20, 30]) for _ in range(quantity))
@@ -627,12 +603,12 @@ async def impart_back_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
         return
 
     user_id = user_info["user_id"]
-    impart_data_draw = await impart_check(user_id)
+    impart_data_draw = _impart_state(user_id)
     if impart_data_draw is None:
         await handle_send(bot, event, "发生未知错误！")
         return
 
-    card_dict = impart_data_json.data_person_list(user_id)
+    card_dict = impart_application.cards(user_id)
     if not card_dict:
         await handle_send(bot, event, "暂无传承卡片")
         return
@@ -692,14 +668,14 @@ async def re_impart_load_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
         return
 
     user_id = user_info["user_id"]
-    impart_data_draw = await impart_check(user_id)
+    impart_data_draw = _impart_state(user_id)
     if impart_data_draw is None:
         await handle_send(
             bot, event, send_group_id, "发生未知错误！"
         )
         return
     # 更新传承数据
-    info = await re_impart_data(user_id)
+    info = bool(impart_application.refresh(user_id))
     if info:
         msg = "传承数据加载完成！"
     else:
@@ -716,7 +692,7 @@ async def impart_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
         await handle_send(bot, event, msg, md_type="我要修仙")
         return
     user_id = user_info["user_id"]
-    impart_data_draw = await impart_check(user_id)
+    impart_data_draw = _impart_state(user_id)
     if impart_data_draw is None:
         await handle_send(
             bot, event, send_group_id, "发生未知错误！"
@@ -755,7 +731,7 @@ boss战攻击提升
 async def impart_img_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """传承卡图"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
-    img_list = impart_data_json.data_all_keys()
+    img_list = tuple(impart_application.card_definitions())
     img_name = str(args.extract_plain_text().strip())
     if not img_name:
         msg = "请输入正确格式：传承卡图 卡图名"
@@ -795,13 +771,14 @@ async def impart_compose_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
         await handle_send(bot, event, "格式：传承合成 重复卡名 目标卡名")
         return
     source_card, target_card = parts
-    if source_card not in impart_data_json.data_all_keys() or target_card not in impart_data_json.data_all_keys():
+    card_definitions = impart_application.card_definitions()
+    if source_card not in card_definitions or target_card not in card_definitions:
         await handle_send(bot, event, "传承卡名不存在，请检查后重试！")
         return
     user_id = str(user_info["user_id"])
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
     operation_id = f"impart-compose:{event_id}:{user_id}" if event_id else f"impart-compose:{user_id}:{runtime_ids.new_id()}"
-    cards = impart_data_json.data_person_list(user_id) or {}
+    cards = impart_application.cards(user_id)
     outcome = impart_application.compose(
         operation_id=operation_id,
         user_id=user_id,
@@ -810,7 +787,7 @@ async def impart_compose_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
         expected_source_quantity=cards.get(source_card, 0),
         expected_target_quantity=cards.get(target_card, 0),
         cost=5,
-        card_definitions=impart_data_json.data_all_(),
+        card_definitions=card_definitions,
     )
     result = outcome
 
@@ -841,14 +818,15 @@ async def impart_disassemble_(bot: Bot, event: GroupMessageEvent | PrivateMessag
         return
     card_name = parts[0]
     quantity = int(parts[1]) if len(parts) == 2 else 1
-    if card_name not in impart_data_json.data_all_keys() or quantity <= 0:
+    card_definitions = impart_application.card_definitions()
+    if card_name not in card_definitions or quantity <= 0:
         await handle_send(bot, event, "传承卡名或数量无效！")
         return
     user_id = str(user_info["user_id"])
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
     operation_id = f"impart-disassemble:{event_id}:{user_id}" if event_id else f"impart-disassemble:{user_id}:{runtime_ids.new_id()}"
-    cards = impart_data_json.data_person_list(user_id) or {}
-    impart_state = await impart_check(user_id)
+    cards = impart_application.cards(user_id)
+    impart_state = _impart_state(user_id)
     if impart_state is None:
         await handle_send(bot, event, "未找到传承数据！")
         return
@@ -860,7 +838,7 @@ async def impart_disassemble_(bot: Bot, event: GroupMessageEvent | PrivateMessag
         expected_card_quantity=cards.get(card_name, 0),
         expected_stone_quantity=impart_state["stone_num"],
         reward_per_card=2,
-        card_definitions=impart_data_json.data_all_(),
+        card_definitions=card_definitions,
     )
 
     messages = {"card_missing": "卡牌不足；分解后必须至少保留1张！", "state_changed": "卡牌操作未结算：卡牌当前状态已更新，请重新操作。", "user_missing": "未找到传承数据！"}

@@ -20,6 +20,9 @@ from .features.daily_fortune.migrations import apply_daily_fortune
 from .features.illusion.manifest import FEATURE as ILLUSION_FEATURE
 from .features.illusion.migrations import apply_illusion
 from .features.impart.migrations import (
+    apply_impart_crystal_and_card_operations,
+    apply_impart_draw_operations,
+    apply_impart_draw_player_statistics,
     apply_impart_love_sand_operations,
     apply_impart_love_sand_player_statistics,
     apply_impart_prayer_operations,
@@ -353,6 +356,9 @@ def build_migrations() -> tuple[Migration, ...]:
         Migration("impart.003", "impart_prayer_player_statistics", apply_impart_prayer_player_statistics),
         Migration("impart.004", "love_sand_operations", apply_impart_love_sand_operations),
         Migration("impart.005", "love_sand_player_statistics", apply_impart_love_sand_player_statistics),
+        Migration("impart.006", "impart_draw_operations", apply_impart_draw_operations),
+        Migration("impart.007", "impart_crystal_and_card_operations", apply_impart_crystal_and_card_operations),
+        Migration("impart.008", "impart_draw_player_statistics", apply_impart_draw_player_statistics),
         Migration("info.avatar.001", "avatar_player_identity_and_receipts", apply_avatar_identity_player),
         Migration("info.avatar.002", "avatar_initialization_plans", apply_avatar_initialization_player),
         Migration("interactive.001", "interactive_feature_migrations", apply_interactive),
@@ -522,6 +528,8 @@ _GAME_DATABASE_EXCLUDED_MIGRATION_VERSIONS = frozenset(
         "mixelixir.003",
         "impart.003",
         "impart.005",
+        "impart.007",
+        "impart.008",
         "rift.003",
         "sect.012",
         "sect_fairyland.002",
@@ -590,6 +598,7 @@ _PLAYER_DATABASE_MIGRATION_VERSIONS = frozenset(
         "mixelixir.003",
         "impart.003",
         "impart.005",
+        "impart.008",
         "rift.003",
         "sect.012",
         "sect_fairyland.002",
@@ -611,7 +620,7 @@ _PLAYER_DATABASE_MIGRATION_VERSIONS = frozenset(
     }
 )
 _TRADE_DATABASE_MIGRATION_VERSIONS = frozenset({"legacy.admin.003", "legacy.admin.005", "platform.001", "trade.003", "trade.005", "trade.006", "trade.007", "trade.008", "auction.004"})
-_IMPART_DATABASE_MIGRATION_VERSIONS = frozenset({"legacy.admin.003", "legacy.admin.005", "platform.001"})
+_IMPART_DATABASE_MIGRATION_VERSIONS = frozenset({"legacy.admin.003", "legacy.admin.005", "platform.001", "impart.007"})
 
 
 def migrations_for_database(

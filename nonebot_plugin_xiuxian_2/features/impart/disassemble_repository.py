@@ -18,7 +18,8 @@ class ImpartCardDisassembleSqlRepository:
         if not operation_id or not card_name or quantity<=0 or reward_per_card<=0: raise ValueError('invalid disassemble request')
         payload=json.dumps([user_id,card_name,quantity,reward_per_card],separators=(',',':'))
         with DatabaseUnitOfWork(self.database,immediate=True) as uow:
-            uow.execute('CREATE TABLE IF NOT EXISTS impart_card_disassemble_operations(operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,card_quantity INTEGER NOT NULL,stone_quantity INTEGER NOT NULL)')
+            if uow.query_one("SELECT 1 AS present FROM sqlite_master WHERE type='table' AND name='impart_card_disassemble_operations'") is None:
+                return CardDisassembleResult('schema_missing')
             old=uow.query_one('SELECT payload,card_quantity,stone_quantity FROM impart_card_disassemble_operations WHERE operation_id=?',(operation_id,))
             if old is not None:
                 if str(old['payload'])!=payload: return CardDisassembleResult('state_changed',int(old['card_quantity']),int(old['stone_quantity']))

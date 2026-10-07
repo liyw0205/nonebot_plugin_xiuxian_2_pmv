@@ -1062,14 +1062,15 @@ class SourceQualityTests(unittest.TestCase):
         self.assertIn("legacy_work_daily_refresh_reset import", transaction)
         self.assertIn("class WorkDailyRefreshResetService", legacy)
 
-    def test_impart_facade_defers_sql_manager_construction(self) -> None:
+    def test_impart_facade_uses_feature_owned_sql_access(self) -> None:
         source = (SOURCE_ROOT / "xiuxian" / "xiuxian_impart" / "__init__.py").read_text(
             encoding="utf-8"
         )
-        self.assertIn("_sql_message_instance = None", source)
-        self.assertIn("def _sql_message(", source)
-        self.assertIn("_sql_message().goods_num(", source)
-        self.assertNotIn("sql_message = XiuxianDateManage()", source)
+        self.assertIn("def _impart_state(", source)
+        self.assertIn("impart_application.state(", source)
+        self.assertIn("impart_application.item_count(", source)
+        self.assertNotIn("XiuxianDateManage", source)
+        self.assertNotIn("_sql_message", source)
 
     def test_sect_utils_defers_sql_manager_construction(self) -> None:
         source = (SOURCE_ROOT / "xiuxian" / "xiuxian_utils" / "sect_utils.py").read_text(

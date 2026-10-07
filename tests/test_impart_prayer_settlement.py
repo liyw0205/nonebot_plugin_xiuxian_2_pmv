@@ -33,15 +33,21 @@ class ImpartPrayerSettlementTests(unittest.TestCase):
         self.assertIn("impart.003", routed["player_db"])
         self.assertIn("impart.004", routed["game_db"])
         self.assertIn("impart.005", routed["player_db"])
+        self.assertIn("impart.006", routed["game_db"])
+        self.assertIn("impart.007", routed["impart_db"])
+        self.assertIn("impart.008", routed["player_db"])
         self.assertNotIn("impart.002", routed["player_db"])
         self.assertNotIn("impart.003", routed["game_db"])
         self.assertNotIn("impart.004", routed["player_db"])
         self.assertNotIn("impart.005", routed["game_db"])
+        self.assertNotIn("impart.006", routed["player_db"])
+        self.assertNotIn("impart.007", routed["game_db"])
+        self.assertNotIn("impart.008", routed["game_db"])
 
-    def test_impart_facade_defers_prayer_service_construction(self):
+    def test_impart_facade_no_longer_exposes_legacy_prayer_service(self):
         from nonebot_plugin_xiuxian_2.xiuxian import xiuxian_impart
 
-        self.assertIsNone(xiuxian_impart._impart_prayer_service_instance)
+        self.assertFalse(hasattr(xiuxian_impart, "_impart_prayer_service_instance"))
         self.assertEqual(Path(xiuxian_impart.impart_application.repository.database).name, "xiuxian_impart.db")
         self.assertEqual(Path(xiuxian_impart.impart_application.database).name, "xiuxian.db")
 

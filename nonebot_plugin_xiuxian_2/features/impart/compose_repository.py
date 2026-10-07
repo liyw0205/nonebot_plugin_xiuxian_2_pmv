@@ -50,11 +50,11 @@ class ImpartCardComposeSqlRepository:
             separators=(",", ":"),
         )
         with DatabaseUnitOfWork(self.database, immediate=True) as uow:
-            uow.execute(
-                "CREATE TABLE IF NOT EXISTS impart_card_compose_operations("
-                "operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,"
-                "source_quantity INTEGER NOT NULL,target_quantity INTEGER NOT NULL)"
-            )
+            if uow.query_one(
+                "SELECT 1 AS present FROM sqlite_master "
+                "WHERE type='table' AND name='impart_card_compose_operations'"
+            ) is None:
+                return CardComposeResult("schema_missing")
             old = uow.query_one(
                 "SELECT payload,source_quantity,target_quantity "
                 "FROM impart_card_compose_operations WHERE operation_id=?",

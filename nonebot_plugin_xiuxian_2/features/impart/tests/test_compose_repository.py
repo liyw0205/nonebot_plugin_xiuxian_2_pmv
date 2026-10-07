@@ -13,6 +13,11 @@ class ImpartCardComposeRepositoryTests(unittest.TestCase):
                 c.execute('CREATE TABLE impart_cards(user_id TEXT,card_name TEXT,quantity INTEGER,UNIQUE(user_id,card_name))')
                 c.execute("INSERT INTO impart_cards VALUES('u','A',5)")
                 c.execute("INSERT INTO impart_cards VALUES('u','B',1)")
+                c.execute(
+                    'CREATE TABLE impart_card_compose_operations('
+                    'operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,'
+                    'source_quantity INTEGER NOT NULL,target_quantity INTEGER NOT NULL)'
+                )
                 c.execute('CREATE TABLE xiuxian_impart(user_id TEXT PRIMARY KEY,impart_two_exp REAL DEFAULT 0,impart_exp_up REAL DEFAULT 0,impart_atk_per REAL DEFAULT 0,impart_hp_per REAL DEFAULT 0,impart_mp_per REAL DEFAULT 0,boss_atk REAL DEFAULT 0,impart_know_per REAL DEFAULT 0,impart_burst_per REAL DEFAULT 0,impart_mix_per REAL DEFAULT 0,impart_reap_per REAL DEFAULT 0)')
                 c.execute("INSERT INTO xiuxian_impart(user_id) VALUES('u')")
             repo=ImpartCardComposeSqlRepository(db)
