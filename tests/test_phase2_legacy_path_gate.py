@@ -80,7 +80,7 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
                              if (item.get("source") or {}).get("feature") == "sect"))
         self.assertEqual(report["path_count"], 496)
         self.assertEqual(report["status_counts"],
-                         {"不可达": 19, "允许保留的兼容路径": 125, "受阻": 90, "已迁移": 262})
+                         {"不可达": 19, "允许保留的兼容路径": 126, "受阻": 88, "已迁移": 263})
         self.assertTrue(report["frozen_membership_valid"])
         self.assertEqual(report["integrity_errors"], [])
 
@@ -352,6 +352,57 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
         self.assertFalse(any("legacy downstream effect not closed" in edge for edge in graph))
         self.assertIn("legacy/admin.py:25", evidence)
 
+    def test_status_help_compatibility_and_system_info_application_owner(self):
+        report = load_phase2_scope_report(include_items=True)
+        items = {item["id"]: item for item in report["items"]}
+        source = "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_status/__init__.py"
+
+        help_item = items["command:status:插件帮助"]
+        help_line = _handler_line(source, "handle_status")
+        self.assertEqual(help_item["status"], "允许保留的兼容路径")
+        self.assertNotIn("unknown_edge", help_item)
+        help_graph = " ".join(help_item["call_graph"])
+        self.assertIn(f"{source}:89 status_cmd = on_command('插件帮助') -> compatibility matcher", help_graph)
+        self.assertIn(
+            f"{source}:{help_line} handle_status -> static help text/buttons -> send_help_message -> handle_send",
+            help_graph,
+        )
+        self.assertIn("Cooldown(cd_time=0) -> shared config/policy admission", help_graph)
+        self.assertIn("shared message-history delivery", help_graph)
+        self.assertIn(f"{source}:{help_line}", help_item["evidence"])
+        self.assertIn(f"{source}:187", help_item["evidence"])
+        self.assertIn("tests/test_phase2_legacy_path_gate.py", help_item["evidence"])
+        self.assertNotIn("legacy downstream effect not closed", help_graph)
+
+        system_item = items["command:status:系统信息"]
+        system_line = _handler_line(source, "handle_sys_info")
+        self.assertEqual(system_item["status"], "已迁移")
+        self.assertNotIn("unknown_edge", system_item)
+        system_graph = " ".join(system_item["call_graph"])
+        self.assertIn(f"{source}:87 sys_info_cmd = on_command('系统信息') -> compatibility matcher", system_graph)
+        self.assertIn(
+            f"{source}:{system_line} handle_sys_info -> get_system_info -> StatusApplication.system_info -> SystemInfoProvider.snapshot -> SystemInfoSnapshot.render",
+            system_graph,
+        )
+        self.assertIn("SystemInfoProvider.snapshot -> platform and optional psutil host metrics only", system_graph)
+        self.assertIn("no feature persistence, repository, or ledger", system_graph)
+        self.assertIn("handle_sys_info -> handle_send -> shared message-history delivery", system_graph)
+        self.assertIn("Cooldown(cd_time=0) -> shared config/policy admission", system_graph)
+        for evidence in (
+            f"{source}:175",
+            f"{source}:159-161,174-178",
+            "nonebot_plugin_xiuxian_2/features/status/application.py:40-42",
+            "nonebot_plugin_xiuxian_2/features/status/system_info.py:28-38,41-137",
+            "tests/test_status_system_info_contract.py",
+            "tests/test_phase2_legacy_path_gate.py",
+        ):
+            self.assertIn(evidence, system_item["evidence"])
+        self.assertNotIn("legacy downstream effect not closed", system_graph)
+        self.assertEqual(report["status_counts"],
+                         {"不可达": 19, "允许保留的兼容路径": 126, "受阻": 88, "已迁移": 263})
+        self.assertTrue(report["frozen_membership_valid"])
+        self.assertEqual(report["integrity_errors"], [])
+
     def test_frozen_repository_scope_has_call_graphs_and_reports_open_paths(self):
         report = load_phase2_scope_report(include_items=True)
 
@@ -360,7 +411,7 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
         self.assertEqual(report["path_count"], 496)
         self.assertEqual(
             report["status_counts"],
-            {"不可达": 19, "允许保留的兼容路径": 125, "受阻": 90, "已迁移": 262},
+            {"不可达": 19, "允许保留的兼容路径": 126, "受阻": 88, "已迁移": 263},
         )
         self.assertGreater(report["blocked_count"], 0)
         self.assertTrue(all(item["call_graph"] and item["evidence"] for item in report["items"]))

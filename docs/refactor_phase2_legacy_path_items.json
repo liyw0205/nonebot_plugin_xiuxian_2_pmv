@@ -699,7 +699,7 @@
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_status/__init__.py:86 bot_info_cmd = on_command('bot信息') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_status/__init__.py:264 handle_bot_info -> get_bot_info -> status_application.bot_overview -> StatusApplication.bot_overview -> BotOverviewSqlRepository.snapshot",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_status/__init__.py:164 handle_bot_info -> get_bot_info -> status_application.bot_overview -> StatusApplication.bot_overview -> BotOverviewSqlRepository.snapshot",
         "BotOverviewSqlRepository opens short read-only game_db/trade_db UOWs; it counts all user_xiuxian rows, distinct user_cd users for the same local-date windows, SUM(back.goods_num), and the legacy filtered xianshi_item/guishi_item quantities; each call rereads and closes both connections",
         "default on_compat startup -> rebuild_on_compat_index -> bootstrap_from_user_xiuxian -> lazy sql_message resolves XiuxianDateManage and prepares user_xiuxian/user_cd/back before command dispatch",
         "default xiuxian_trade import -> xiuxian2_handle module -> global TradeDataManager initialization prepares xianshi_item/guishi_item; the query itself is read-only and performs no DDL"
@@ -717,7 +717,7 @@
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_trade/__init__.py:27-29",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_utils/db_backend.py:76-77",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_status/__init__.py:86",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_status/__init__.py:264"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_status/__init__.py:164"
       ],
       "source_declaration_found": true,
       "source": {
@@ -1099,24 +1099,24 @@
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_status/__init__.py:88 ping_test_cmd = on_command('ping测试') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_status/__init__.py:281 handle_ping_test -> get_ping_test -> status_application.ping_test",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_status/__init__.py:181 handle_ping_test -> get_ping_test -> status_application.ping_test",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_status/__init__.py:98 get_ping_test -> ping_test_cmd.send(progress) -> StatusApplication.ping_test",
         "nonebot_plugin_xiuxian_2/features/status/application.py:33 StatusApplication.ping_test -> PingProbe.probe_all -> PingSnapshot.render",
         "nonebot_plugin_xiuxian_2/features/status/ping_probe.py:48-57 fixed eight-site allowlist; :108-114 asyncio.gather preserves target order; :123-145 parameterized ping runner, bounded timeout and fail-closed parsing",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_status/__init__.py:282 handle_send -> adapter delivery; no business-state mutation, operation ledger or request-time DDL"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_status/__init__.py:182 handle_send -> adapter delivery; no business-state mutation, operation ledger or request-time DDL"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_status/__init__.py:98-101",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_status/__init__.py:281-283",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_status/__init__.py:181-183",
         "nonebot_plugin_xiuxian_2/features/status/application.py:12-35",
         "nonebot_plugin_xiuxian_2/features/status/ping_probe.py:48-145",
         "nonebot_plugin_xiuxian_2/features/status/tests/test_ping_probe.py:13-118",
         "tests/test_status_ping_source_contract.py:18-53",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_status/__init__.py:88",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_status/__init__.py:281"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_status/__init__.py:181"
       ],
       "source_declaration_found": true,
       "source": {
@@ -5022,22 +5022,25 @@
       "id": "command:status:插件帮助",
       "kind": "commands",
       "entry": "status:插件帮助 (aliases: )",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "允许保留的兼容路径",
+      "reason": "The handler renders static help text and fixed command buttons without accessing status business state. Keep the legacy matcher for compatibility; shared Cooldown config/policy checks and message-history delivery remain transport boundaries, not status-owned effects.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_status/__init__.py:89 status_cmd = on_command('插件帮助') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_status/__init__.py:287 handle_status -> legacy downstream effect not closed in this frozen item"
+        "Cooldown(cd_time=0) -> shared config/policy admission and process-local limiter; not a status business owner",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_status/__init__.py:187 handle_status -> static help text/buttons -> send_help_message -> handle_send -> shared message-history delivery; no status business-state access"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_status/__init__.py:89",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_status/__init__.py:287"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_status/__init__.py:187",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_status/__init__.py:187-224",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_utils/utils.py:1307-1407,1812-1840",
+        "tests/test_phase2_legacy_path_gate.py"
       ],
       "source_declaration_found": true,
       "source": {
@@ -5593,14 +5596,14 @@
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_status/__init__.py:92 check_update_cmd = on_command('检测更新') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_status/__init__.py:351 handle_check_update -> UpdateApplication.check_update -> UpdateManager.get_latest_releases/get_current_version -> message reply"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_status/__init__.py:251 handle_check_update -> UpdateApplication.check_update -> UpdateManager.get_latest_releases/get_current_version -> message reply"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_status/__init__.py:92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_status/__init__.py:351"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_status/__init__.py:251"
       ],
       "source_declaration_found": true,
       "source": {
@@ -7120,14 +7123,14 @@
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_status/__init__.py:91 version_update_cmd = on_command('版本更新') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_status/__init__.py:367 handle_version_update -> _run_status_action -> UpdateApplication.perform_update_with_backup -> release preflight -> ordered backups -> verified download -> extract and version marker"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_status/__init__.py:267 handle_version_update -> _run_status_action -> UpdateApplication.perform_update_with_backup -> release preflight -> ordered backups -> verified download -> extract and version marker"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_status/__init__.py:91",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_status/__init__.py:367"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_status/__init__.py:267"
       ],
       "source_declaration_found": true,
       "source": {
@@ -7146,14 +7149,14 @@
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_status/__init__.py:90 version_query_cmd = on_command('版本查询') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_status/__init__.py:335 handle_version_query -> UpdateApplication.latest_releases -> UpdateManager.get_latest_releases -> message reply"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_status/__init__.py:235 handle_version_query -> UpdateApplication.latest_releases -> UpdateManager.get_latest_releases -> message reply"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_status/__init__.py:90",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_status/__init__.py:335"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_status/__init__.py:235"
       ],
       "source_declaration_found": true,
       "source": {
@@ -7829,22 +7832,29 @@
       "id": "command:status:系统信息",
       "kind": "commands",
       "entry": "status:系统信息 (aliases: )",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "System metrics and presentation now flow through StatusApplication.system_info -> SystemInfoProvider.snapshot -> SystemInfoSnapshot.render. The provider reads only platform and optional psutil host metrics; it performs no feature database/JSON persistence, repository access, ledger operation, or business mutation. Shared Cooldown config/policy checks and message-history delivery remain compatibility transport effects.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_status/__init__.py:87 sys_info_cmd = on_command('系统信息') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_status/__init__.py:275 handle_sys_info -> legacy downstream effect not closed in this frozen item"
+        "Cooldown(cd_time=0) -> shared config/policy admission and process-local limiter; not a status business owner",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_status/__init__.py:175 handle_sys_info -> get_system_info -> StatusApplication.system_info -> SystemInfoProvider.snapshot -> SystemInfoSnapshot.render",
+        "SystemInfoProvider.snapshot -> platform and optional psutil host metrics only; read-only with no feature persistence, repository, or ledger",
+        "handle_sys_info -> handle_send -> shared message-history delivery; compatibility transport effect"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_status/__init__.py:87",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_status/__init__.py:275"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_status/__init__.py:175",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_status/__init__.py:159-161,174-178",
+        "nonebot_plugin_xiuxian_2/features/status/application.py:40-42",
+        "nonebot_plugin_xiuxian_2/features/status/system_info.py:28-38,41-137",
+        "tests/test_status_system_info_contract.py",
+        "tests/test_phase2_legacy_path_gate.py"
       ],
       "source_declaration_found": true,
       "source": {
