@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Any
 
 from .._service_port import ServicePort
+from ...infrastructure.database import DatabaseUnitOfWork
 
 
 class LunhuiRepository(ServicePort):
@@ -29,7 +30,7 @@ class LunhuiRepository(ServicePort):
         player = self.databases[0] if self.databases else self.database
         impart = self.databases[1] if len(self.databases) > 1 else self.database
         return (
-            CultivationResetService(self.database),
+            CultivationResetService(self.database, player_database=player),
             LunhuiRecallService(self.database, player),
             LunhuiSettlementService(self.database, player, impart),
         )
@@ -70,6 +71,48 @@ class LunhuiRepository(ServicePort):
     def settle_result(self, operation_id: str) -> Any:
         self._ensure_services()
         return self._settle_service.get_result(operation_id)
+
+    def get_reincarnation_memory(self, user_id: str) -> dict[str, Any] | None:
+        player_database = Path(self.databases[0] if self.databases else self.database)
+        if not player_database.exists():
+            return None
+
+        try:
+            with DatabaseUnitOfWork(player_database, read_only=True) as uow:
+                row = uow.query_one(
+                    "SELECT * FROM reincarnation_memory WHERE user_id=?",
+                    (str(user_id),),
+                )
+        except Exception as exc:
+            if type(exc).__name__ == "OperationalError" and "no such table" in str(exc).casefold():
+                return None
+            raise
+        if row is None:
+            return None
+
+        data = row
+
+        def as_int(field: str) -> int:
+            try:
+                return int(data.get(field, 0) or 0)
+            except (TypeError, ValueError):
+                return 0
+
+        return {
+            "main_buff": as_int("main_buff"),
+            "sub_buff": as_int("sub_buff"),
+            "sec_buff": as_int("sec_buff"),
+            "effect1_buff": as_int("effect1_buff"),
+            "effect2_buff": as_int("effect2_buff"),
+            "memory_level": data.get("memory_level", ""),
+            "retrieved": {
+                "main": bool(as_int("retrieved_main")),
+                "sub": bool(as_int("retrieved_sub")),
+                "sec": bool(as_int("retrieved_sec")),
+                "effect1": bool(as_int("retrieved_effect1")),
+                "effect2": bool(as_int("retrieved_effect2")),
+            },
+        }
 
 
 __all__ = ["LunhuiRepository"]

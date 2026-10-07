@@ -2,7 +2,9 @@
 
 状态：进行中。`v1.1.0` 的 P0-P7 发布证据继续保留，但不作为底层全面重构完成证明。
 
-**当前交付与队列（2026-10-07，本段优先于下文历史“下一片”）**：Arena 已在 `6b3fdc40` 提交推送，bank 已在 `c6ebdd26` 提交推送并核对远端；beg 三个真实入口、世界 BOSS 兑换、Dungeon 两条命令、Fusion 四项冻结入口和 Illusion 四项冻结入口已通过各自聚焦门禁。共享 matcher family 仍有其它插件受阻，全局计数更新为 `246/112/19/119`，目标仍进行中。下一组按 `allowed_features` 重新选择，不对已关闭功能重复重构。
+**当前交付与队列（2026-10-07，本段优先于下文历史“下一片”）**：Arena 已在 `6b3fdc40` 提交推送，bank 已在 `c6ebdd26` 提交推送并核对远端；beg 三个真实入口、世界 BOSS 兑换、Dungeon 两条命令、Fusion/Illusion 冻结入口、`impart_pk`（`c30cfadf`）、`info`（`a402cfbf`）和本段 `lunhui` 命令批次均已收口。全局 Phase2 计数为 `256/122/19/99`，共享 matcher family 仍有其它插件 blocker。下一组按 `allowed_features` 顺序进入 `past_life`，已无 blocker 的 feature 直接跳过，不按单条命令重复重构。
+
+**Lunhui 七条冻结命令批次（2026-10-07）**：按共用 owner 一次处理 `自废修为`、`确认轮回`、`回忆前世`、`轮回印记`、两种进入轮回和静态帮助，没有把共享 settlement/replay 拆成多次。印记读取经 `LunhuiApplication -> LunhuiRepository` 的只读 UOW；召回 handler 复用一份 memory snapshot，receipt 只检查一次；reset/recall 的计数移动到对应事务服务，与正常 SQL 失败回滚及 operation replay 一起验证。帮助和两种进场命令明确保留兼容路径；进场 invitation 仍是进程内 60 秒临时状态。两名子代理分别交付入口契约测试与事务 owner/风险审计。聚焦集合 `28 passed, 5 subtests passed`（pytest 5.81 秒）；source-quality 全集 `241 passed, 5 failed`，失败是既有 command-disable/dongfu/activity/backup 断言，不涉及 lunhui。Phase2 membership hash `7787a74a...ff51fac` 不变、`integrity_errors=[]`，本批后全局 blocker 为 99；非零 gate 是其它 feature 尚未收口。主库处于 WAL 时 attached SQLite 的普通异常可 rollback，但不保证进程/系统崩溃期间多文件全局原子。本轮没有测线上响应延迟；测试耗时主要受模块级 NoneBot 初始化和 pytest 收集影响。
 
 **Fusion 冻结证据收口（2026-10-07）**：`合成` 与 `强行合成` 的默认 handler 已确认经 `general_fusion -> FusionApplication -> FusionRepository -> FusionService` 持有资产、回执和重放，不重复改写已有单次/批量事务。`合成帮助` 是静态帮助兼容路径，`查看可合成物品` 是共享目录只读展示兼容路径；两者不产生 Fusion 状态或资产副作用。四项冻结调用图刷新为当前 handler 行号，membership hash 不变；状态更新为 `242/112/19/123`（已迁移/兼容/不可达/受阻）。
 

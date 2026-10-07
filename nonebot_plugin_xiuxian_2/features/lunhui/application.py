@@ -19,5 +19,8 @@ class LunhuiApplication(MigratedFeatureApplication):
     def settle_result(self, operation_id: str):
         return self.repository.settle_result(operation_id)
 
+    def get_reincarnation_memory(self, user_id: str):
+        return self.repository.get_reincarnation_memory(user_id)
+
 
 __all__ = ["LunhuiApplication"]

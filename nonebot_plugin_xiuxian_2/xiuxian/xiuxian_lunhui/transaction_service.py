@@ -17,8 +17,15 @@ class CultivationResetResult:
         return self.status in {"applied", "duplicate"}
 
 class CultivationResetService:
-    def __init__(self, database: str | Path, lock: RLock | None = None):
+    def __init__(
+        self,
+        database: str | Path,
+        lock: RLock | None = None,
+        *,
+        player_database: str | Path | None = None,
+    ):
         self._database = Path(database)
+        self._player_database = Path(player_database) if player_database else None
         self._lock = lock or RLock()
 
     def get_result(self, operation_id: str) -> CultivationResetResult | None:
@@ -50,7 +57,11 @@ class CultivationResetService:
         payload = json.dumps([user_id], ensure_ascii=False, separators=(",", ":"))
 
         with self._lock, closing(db_backend.connect(self._database)) as conn:
+            attached_player = False
             try:
+                if self._player_database:
+                    conn.execute("ATTACH DATABASE %s AS player_data", (str(self._player_database),))
+                    attached_player = True
                 conn.execute("BEGIN IMMEDIATE")
                 conn.execute(
                     "CREATE TABLE IF NOT EXISTS cultivation_reset_operations ("
@@ -93,11 +104,19 @@ class CultivationResetService:
                     "INSERT INTO cultivation_reset_operations(operation_id,payload,reset_exp) VALUES(%s,%s,%s)",
                     (operation_id, payload, expected_exp),
                 )
+                if attached_player:
+                    _increment_stat(conn, user_id, "自废修为次数")
                 conn.commit()
                 return CultivationResetResult("applied", expected_exp)
             except Exception:
                 conn.rollback()
                 raise
+            finally:
+                if attached_player:
+                    try:
+                        conn.execute("DETACH DATABASE player_data")
+                    except Exception:
+                        pass
 
 FIELDS = {
     "main_buff": ("retrieved_main", "main_buff"),
@@ -186,6 +205,15 @@ class LunhuiRecallService:
                     f"UPDATE BuffInfo SET {buff_field}=%s WHERE user_id=%s",
                     (expected_skill_id, user_id),
                 )
+                stat_names = {
+                    "main_buff": "主功法",
+                    "sub_buff": "辅修",
+                    "sec_buff": "神通",
+                    "effect1_buff": "身法",
+                    "effect2_buff": "瞳术",
+                }
+                _increment_stat(conn, user_id, "回忆前世次数")
+                _increment_stat(conn, user_id, f"回忆前世{stat_names[skill_type]}")
                 conn.execute(
                     "INSERT INTO lunhui_recall_operations VALUES (%s,%s,%s)",
                     (operation_id, payload, expected_skill_id),

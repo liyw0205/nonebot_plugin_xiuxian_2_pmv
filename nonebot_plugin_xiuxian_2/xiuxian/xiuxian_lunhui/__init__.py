@@ -22,7 +22,6 @@ from ..xiuxian_utils.utils import (
     handle_send,
     send_help_message,
     log_message,
-    update_statistics_value,
     number_to
 )
 from ..xiuxian_impart.impart_uitls import (
@@ -175,7 +174,6 @@ async def resetting_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         msg = f"{user_name}现在是一介凡人了！！"
         if result.status == "applied":
             log_message(user_id, f"[自废修为] 从{user_msg['level']}自废至江湖好手，重置修为{number_to(exp)}")
-            update_statistics_value(user_id, "自废修为次数")
         await handle_send(bot, event, msg)
         await resetting.finish()
     else:
@@ -293,21 +291,9 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     skill_type = type_map[arg]
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
     operation_id = f"lunhui-recall:{event_id}:{user_id}:{skill_type}" if event_id else f"lunhui-recall:{user_id}:{skill_type}:{runtime_ids.new_id()}"
-    # 先回放：成功后 retrieved 标记会挡住同事件幂等。
-    prior = lunhui_application.recall_result(operation_id)
-    if prior is not None and prior.succeeded:
-        skill_name = items.get_data_by_item_id(prior.skill_id).get('name', '未知技能') if prior.skill_id else '未知技能'
-        reason = f"成功回忆前世中的技能：{skill_name}\n该回忆请求已经处理，无需重复提交。"
-        await handle_send(bot, event, reason, md_type="轮回", k1="功法", v1="回忆前世 主功法", k2="辅修", v2="回忆前世 辅修", k3="神通", v3="回忆前世 神通")
-        return
     success, reason = retrieve_reincarnation_skill(user_id, skill_type, operation_id=operation_id)
-    if success:
-        if "无需重复提交" not in reason:
-            # mark duplicate from service
-            pass
+    if success and "无需重复提交" not in reason:
         log_message(user_id, f"[回忆前世] 取回{arg}：{reason}")
-        update_statistics_value(user_id, "回忆前世次数")
-        update_statistics_value(user_id, f"回忆前世{arg}")
 
     await handle_send(bot, event, reason, md_type="轮回", k1="功法", v1="回忆前世 主功法", k2="辅修", v2="回忆前世 辅修", k3="神通", v3="回忆前世 神通")
 
@@ -483,35 +469,15 @@ def save_reincarnation_memory(user_id):
 
 def get_reincarnation_memory(user_id):
     """读取轮回印记"""
-    data = _player_data_manager().get_fields(str(user_id), "reincarnation_memory")
-    if not data:
-        return None
-    
-    memory = {
-        "main_buff": data.get("main_buff", 0),
-        "sub_buff": data.get("sub_buff", 0),
-        "sec_buff": data.get("sec_buff", 0),
-        "effect1_buff": data.get("effect1_buff", 0),
-        "effect2_buff": data.get("effect2_buff", 0),
-        "memory_level": data.get("memory_level", ""),
-        "retrieved": {
-            "main": bool(data.get("retrieved_main", 0)),
-            "sub": bool(data.get("retrieved_sub", 0)),
-            "sec": bool(data.get("retrieved_sec", 0)),
-            "effect1": bool(data.get("retrieved_effect1", 0)),
-            "effect2": bool(data.get("retrieved_effect2", 0))
-        }
-    }
-    
-    return memory
+    return lunhui_application.get_reincarnation_memory(str(user_id))
 
 
-def can_retrieve_skill(user_id, skill_type):
+def can_retrieve_skill(user_id, skill_type, memory=None):
     """
     判断某类技能是否可以取回
     返回 (can_retrieve: bool, reason: str, required_level_name: str or None)
     """
-    memory = get_reincarnation_memory(user_id)
+    memory = memory if memory is not None else get_reincarnation_memory(user_id)
     user_info = _sql_message().get_user_info_with_id(user_id)
     if not memory:
         return False, "你没有任何轮回印记", None
@@ -601,11 +567,11 @@ def retrieve_reincarnation_skill(user_id, skill_type, operation_id=None):
         if prior is not None and prior.succeeded:
             skill_name = items.get_data_by_item_id(prior.skill_id).get('name', '未知技能') if prior.skill_id else '未知技能'
             return True, f"成功回忆前世中的技能：{skill_name}\n该回忆请求已经处理，无需重复提交。"
-    can, reason, _ = can_retrieve_skill(user_id, skill_type)
+    memory = get_reincarnation_memory(user_id)
+    can, reason, _ = can_retrieve_skill(user_id, skill_type, memory=memory)
     if not can:
         return False, reason
     
-    memory = get_reincarnation_memory(user_id)
     skill_id = memory.get(skill_type, 0)
     if skill_id == 0:
         return False, "记忆中没有该技能"

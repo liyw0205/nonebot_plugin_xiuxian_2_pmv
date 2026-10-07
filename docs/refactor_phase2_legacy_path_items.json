@@ -3574,22 +3574,29 @@
       "id": "command:lunhui:回忆前世",
       "kind": "commands",
       "entry": "lunhui:回忆前世 (aliases: 取回记忆)",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "允许保留的兼容路径",
+      "reason": "The application owns the read-only reincarnation memory snapshot and the recall transaction owns BuffInfo, retrieved flags, type/total statistics, and its receipt. The compatibility handler retains the historical convert_rank eligibility policy, current-profile read, result formatting, and applied-only log; duplicate replay checks one receipt before reading memory and cannot increment statistics again.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_lunhui/__init__.py:129 retrieve_memory = on_command('回忆前世') aliases=取回记忆,回忆前世 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_lunhui/__init__.py:269 _ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_lunhui/__init__.py:128 retrieve_memory = on_command('回忆前世') aliases=取回记忆,回忆前世 -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_lunhui/__init__.py:267 _ -> LunhuiApplication.get_reincarnation_memory snapshot -> compatibility convert_rank/current profile eligibility -> retrieve_reincarnation_skill checks one LunhuiApplication.recall_result receipt before reading memory",
+        "retrieve_reincarnation_skill -> _run_lunhui_action('recall') -> LunhuiApplication.execute -> LunhuiRepository._recall -> LunhuiRecallService transaction updates BuffInfo, player_data.reincarnation_memory retrieved flag, player_data.statistics, and lunhui_recall_operations receipt",
+        "applied recall -> compatibility log_message and shared reply formatting; replay returns before logging/statistics"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_lunhui/__init__.py:129",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_lunhui/__init__.py:269"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_lunhui/__init__.py:128",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_lunhui/__init__.py:267",
+        "nonebot_plugin_xiuxian_2/features/lunhui/application.py:22",
+        "nonebot_plugin_xiuxian_2/features/lunhui/repository.py:76-116",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_lunhui/transaction_service.py:161-225,284-299",
+        "tests/test_lunhui_frozen_command_owner.py",
+        "tests/test_lunhui_transaction_owner_regressions.py",
+        "tests/test_lunhui_application_memory_read.py"
       ],
       "source_declaration_found": true,
       "source": {
@@ -7493,22 +7500,28 @@
       "id": "command:lunhui:确认轮回",
       "kind": "commands",
       "entry": "lunhui:确认轮回 (aliases: )",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "The handler replays and settles through LunhuiApplication; LunhuiSettlementService owns the role reset, inventory, impart update, reincarnation memory, statistics, and operation receipt. Legacy role/buff/impart snapshot reads and the expiring invite cache remain adapter inputs; attached SQLite rollback is tested for ordinary failures, not guaranteed atomic across files on process/system crash while the main database uses WAL.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_lunhui/__init__.py:132 confirm_lunhui = on_command('确认轮回') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_lunhui/__init__.py:353 confirm_lunhui_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_lunhui/__init__.py:131 confirm_lunhui = on_command('确认轮回') -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_lunhui/__init__.py:339 confirm_lunhui_ -> LunhuiApplication.settle_result replay -> LunhuiRepository.settle_result -> LunhuiSettlementService.get_result",
+        "confirm_lunhui_ -> _run_lunhui_action('settle') -> LunhuiApplication.execute -> LunhuiRepository._settle -> LunhuiSettlementService.settle -> role/assets/impart/memory/statistics/receipt transaction",
+        "confirm_lunhui_ validates and clears the 60-second process-local invite cache; legacy snapshots supply expected values and the transaction rechecks them before mutation"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_lunhui/__init__.py:132",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_lunhui/__init__.py:353"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_lunhui/__init__.py:131",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_lunhui/__init__.py:339",
+        "nonebot_plugin_xiuxian_2/features/lunhui/application.py:18-20",
+        "nonebot_plugin_xiuxian_2/features/lunhui/repository.py:51-74",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_lunhui/transaction_service.py:302-486",
+        "tests/test_lunhui_frozen_command_owner.py",
+        "tests/test_lunhui_transaction_owner_regressions.py"
       ],
       "source_declaration_found": true,
       "source": {
@@ -8121,22 +8134,28 @@
       "id": "command:lunhui:自废修为",
       "kind": "commands",
       "entry": "lunhui:自废修为 (aliases: )",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "The application owns replay and mutation dispatch; CultivationResetService compare-and-set resets cultivation and writes the player statistic with the operation receipt. The legacy handler retains the profile/name read, response, and log only. Attached SQLite rollback is tested for ordinary failures, not guaranteed atomic across files on process/system crash while the main database uses WAL.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_lunhui/__init__.py:131 resetting = on_command('自废修为') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_lunhui/__init__.py:143 resetting_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_lunhui/__init__.py:130 resetting = on_command('自废修为') -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_lunhui/__init__.py:142 resetting_ -> LunhuiApplication.reset_result replay -> LunhuiRepository.reset_result -> CultivationResetService.get_result",
+        "resetting_ -> _run_lunhui_action('reset') -> LunhuiApplication.execute -> LunhuiRepository._reset -> CultivationResetService.reset compare-and-set plus player_data.statistics increment and cultivation_reset_operations receipt",
+        "resetting_ retains compatibility profile/name read, response formatting, and applied-only log"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_lunhui/__init__.py:131",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_lunhui/__init__.py:143"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_lunhui/__init__.py:130",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_lunhui/__init__.py:142",
+        "nonebot_plugin_xiuxian_2/features/lunhui/application.py:11",
+        "nonebot_plugin_xiuxian_2/features/lunhui/repository.py:43-49,64-66",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_lunhui/transaction_service.py:19-118,284-299",
+        "tests/test_lunhui_frozen_command_owner.py",
+        "tests/test_lunhui_transaction_owner_regressions.py"
       ],
       "source_declaration_found": true,
       "source": {
@@ -8843,22 +8862,26 @@
       "id": "command:lunhui:轮回印记",
       "kind": "commands",
       "entry": "lunhui:轮回印记 (aliases: )",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "The memory snapshot is read by LunhuiApplication through a read-only DatabaseUnitOfWork; missing player storage is not created or repaired by the command. The compatibility handler only resolves item names, formats the snapshot, and sends the existing reply.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_lunhui/__init__.py:130 view_memory = on_command('轮回印记') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_lunhui/__init__.py:315 _ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_lunhui/__init__.py:129 view_memory = on_command('轮回印记') -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_lunhui/__init__.py:301 _ -> get_reincarnation_memory -> LunhuiApplication.get_reincarnation_memory -> LunhuiRepository read-only SELECT from player_data.reincarnation_memory",
+        "view_memory resolves catalog names and formats/sends the existing projection; it has no business-state write"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_lunhui/__init__.py:130",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_lunhui/__init__.py:315"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_lunhui/__init__.py:129",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_lunhui/__init__.py:301",
+        "nonebot_plugin_xiuxian_2/features/lunhui/application.py:22",
+        "nonebot_plugin_xiuxian_2/features/lunhui/repository.py:76-116",
+        "tests/test_lunhui_frozen_command_owner.py",
+        "tests/test_lunhui_application_memory_read.py"
       ],
       "source_declaration_found": true,
       "source": {
@@ -8870,22 +8893,22 @@
       "id": "command:lunhui:轮回重修帮助",
       "kind": "commands",
       "entry": "lunhui:轮回重修帮助 (aliases: 轮回帮助)",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "允许保留的兼容路径",
+      "reason": "The default handler sends the built-in help text and command buttons only. It has no player-state, asset, or external-data effect, so no feature use case is required; retain this static compatibility reply.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_lunhui/__init__.py:126 warring_help = on_command('轮回重修帮助') aliases=轮回帮助 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_lunhui/__init__.py:135 warring_help_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_lunhui/__init__.py:125 warring_help = on_command('轮回重修帮助') aliases=轮回帮助 -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_lunhui/__init__.py:134 warring_help_ -> static __warring_help__ text -> send_help_message -> shared delivery; no Lunhui business state access"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_lunhui/__init__.py:126",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_lunhui/__init__.py:135"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_lunhui/__init__.py:125",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_lunhui/__init__.py:134",
+        "tests/test_lunhui_frozen_command_owner.py"
       ],
       "source_declaration_found": true,
       "source": {
@@ -8897,22 +8920,23 @@
       "id": "command:lunhui:进入无限轮回",
       "kind": "commands",
       "entry": "lunhui:进入无限轮回 (aliases: )",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "允许保留的兼容路径",
+      "reason": "This entry retains the historical root/level eligibility reads and writes only the shared process-local 60-second confirmation invite. It does not persist player state; final state changes go through the separately owned confirmation settlement. Retain the transient invite compatibility adapter.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_lunhui/__init__.py:128 Infinite_reincarnation = on_command('进入无限轮回') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_lunhui/__init__.py:237 Infinite_reincarnation_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_lunhui/__init__.py:127 Infinite_reincarnation = on_command('进入无限轮回') -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_lunhui/__init__.py:235 Infinite_reincarnation_ -> legacy eligibility read -> shared confirm_lunhui_invite process-local cache -> expiry task -> confirmation settlement owner"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_lunhui/__init__.py:128",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_lunhui/__init__.py:237"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_lunhui/__init__.py:127",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_lunhui/__init__.py:235",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_lunhui/__init__.py:413-432",
+        "tests/test_lunhui_frozen_command_owner.py"
       ],
       "source_declaration_found": true,
       "source": {
@@ -8924,22 +8948,23 @@
       "id": "command:lunhui:进入轮回",
       "kind": "commands",
       "entry": "lunhui:进入轮回 (aliases: 开始轮回)",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "允许保留的兼容路径",
+      "reason": "This entry retains the historical root/level eligibility reads and writes only the shared process-local 60-second confirmation invite. It does not persist player state; final state changes go through the separately owned confirmation settlement. Retain the transient invite compatibility adapter.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_lunhui/__init__.py:127 lunhui = on_command('进入轮回') aliases=开始轮回 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_lunhui/__init__.py:187 lunhui_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_lunhui/__init__.py:126 lunhui = on_command('进入轮回') aliases=开始轮回 -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_lunhui/__init__.py:185 lunhui_ -> legacy root/level eligibility read -> shared confirm_lunhui_invite process-local cache -> expiry task -> confirmation settlement owner"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_lunhui/__init__.py:127",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_lunhui/__init__.py:187"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_lunhui/__init__.py:126",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_lunhui/__init__.py:185",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_lunhui/__init__.py:413-432",
+        "tests/test_lunhui_frozen_command_owner.py"
       ],
       "source_declaration_found": true,
       "source": {
