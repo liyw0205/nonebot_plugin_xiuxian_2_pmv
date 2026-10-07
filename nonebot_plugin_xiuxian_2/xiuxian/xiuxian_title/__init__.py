@@ -28,10 +28,12 @@ from .title_data import (
     check_and_unlock_titles, get_user_unlocked_titles,
     get_user_equipped_title,
     refresh_title_cache, find_title_id_by_name_or_id,
-    get_title_achievement_records, find_unlockable_titles
+    get_title_achievement_records, find_unlockable_titles,
+    get_title_condition_snapshot,
 )
 from ...paths import get_paths
 from ...features.title.application import TitleApplication, TitleGrantTargetApplication
+from ...features.title.eligibility import TitleEligibilityApplication
 from .title_transaction_service import TitleTransactionService
 
 _sql_message_instance = None
@@ -53,6 +55,9 @@ def _title_transaction_service():
 
 title_application = TitleApplication(get_paths().player_db)
 title_grant_target_application = TitleGrantTargetApplication(get_paths().game_db)
+title_eligibility_application = TitleEligibilityApplication(
+    get_paths().game_db, get_paths().player_db
+)
 
 
 async def _snapshot_title_grant_targets():
@@ -91,9 +96,12 @@ def _title_operation_id(event, action: str, user_id: str) -> str:
 
 def _unlock_titles_from_event(event, user_id: str):
     expected = get_user_unlocked_titles(user_id)
-    unlockable = find_unlockable_titles(user_id)
+    snapshot = get_title_condition_snapshot(user_id)
+    unlockable = find_unlockable_titles(
+        user_id, snapshot=snapshot, unlocked_title_ids=expected
+    )
     if not unlockable:
-        return []
+        return [], expected, snapshot
     title_ids = [str(title["id"]) for title in unlockable]
     result = _run_title_action(
         "unlock_batch",
@@ -102,7 +110,9 @@ def _unlock_titles_from_event(event, user_id: str):
         expected_unlocked=expected,
         title_ids=title_ids,
     )
-    return unlockable if result.succeeded else []
+    if not result.succeeded:
+        return [], expected, snapshot
+    return unlockable, [*expected, *title_ids], snapshot
 
 # ===== 注册命令 =====
 title_list_cmd = on_command("我的称号", aliases={"称号列表", "查看称号"}, priority=5, block=True)
@@ -173,10 +183,9 @@ async def title_list_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
         page = max(1, int(arg_text))
 
     # 自动检查新称号
-    newly_unlocked = _unlock_titles_from_event(event, user_id)
+    newly_unlocked, unlocked_ids, _ = _unlock_titles_from_event(event, user_id)
 
     # 获取已解锁称号
-    unlocked_ids = get_user_unlocked_titles(user_id)
     equipped_id = get_user_equipped_title(user_id)
     all_titles = get_all_titles()
 
@@ -334,7 +343,7 @@ async def title_check_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
         await title_check_cmd.finish()
 
     user_id = user_info['user_id']
-    newly_unlocked = _unlock_titles_from_event(event, user_id)
+    newly_unlocked, unlocked, _ = _unlock_titles_from_event(event, user_id)
 
     if newly_unlocked:
         msg_text = "🎉 检查完成，恭喜解锁新称号：\n"
@@ -342,7 +351,6 @@ async def title_check_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
             msg_text += f"\n🏅【{t['name']}】\n   {t['desc']}"
         msg_text += "\n\n发送【装备称号 + 名称】装备称号"
     else:
-        unlocked = get_user_unlocked_titles(user_id)
         msg_text = f"检查完成，当前已解锁{len(unlocked)}个称号，暂无新称号解锁。\n继续努力修仙吧！"
 
     await handle_send(bot, event, msg_text, md_type="修仙", k1="称号", v1="我的称号", k2="帮助", v2="称号帮助", k3="存档", v3="我的修仙信息")
@@ -359,8 +367,10 @@ async def achievement_list_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
         await achievement_list_cmd.finish()
 
     user_id = user_info["user_id"]
-    newly_unlocked = _unlock_titles_from_event(event, user_id)
-    records = get_title_achievement_records(user_id)
+    newly_unlocked, unlocked, snapshot = _unlock_titles_from_event(event, user_id)
+    records = get_title_achievement_records(
+        user_id, snapshot=snapshot, unlocked_title_ids=unlocked
+    )
     total_count = len(records)
     unlocked_count = len([record for record in records if record["unlocked"]])
 
@@ -408,8 +418,10 @@ async def achievement_check_(bot: Bot, event: GroupMessageEvent | PrivateMessage
         await achievement_check_cmd.finish()
 
     user_id = user_info["user_id"]
-    newly_unlocked = _unlock_titles_from_event(event, user_id)
-    records = get_title_achievement_records(user_id)
+    newly_unlocked, unlocked, snapshot = _unlock_titles_from_event(event, user_id)
+    records = get_title_achievement_records(
+        user_id, snapshot=snapshot, unlocked_title_ids=unlocked
+    )
     unlocked_count = len([record for record in records if record["unlocked"]])
 
     if newly_unlocked:

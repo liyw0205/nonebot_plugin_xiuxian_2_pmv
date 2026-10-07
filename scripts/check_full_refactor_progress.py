@@ -1109,6 +1109,13 @@ def _slice_status() -> dict[str, dict[str, object]]:
     title_data_source = (PACKAGE / "xiuxian" / "xiuxian_title" / "title_data.py").read_text(encoding="utf-8")
     title_application_source = (PACKAGE / "features" / "title" / "application.py").read_text(encoding="utf-8")
     title_repository_source = (PACKAGE / "features" / "title" / "repository.py").read_text(encoding="utf-8")
+    title_eligibility_source = (PACKAGE / "features" / "title" / "eligibility.py").read_text(encoding="utf-8")
+    title_handler_facade_source = (PACKAGE / "xiuxian" / "xiuxian_title" / "__init__.py").read_text(encoding="utf-8")
+    title_condition_readers = title_data_source[
+        title_data_source.index("def check_condition_for_user") : title_data_source.index(
+            "def check_and_unlock_titles"
+        )
+    ]
     title_state_readers = title_data_source[
         title_data_source.index("def get_user_unlocked_titles") : title_data_source.index(
             "def grant_title_to_user"
@@ -4634,13 +4641,46 @@ def _slice_status() -> dict[str, dict[str, object]]:
             ),
             "title_state_read_legacy_disabled": "xiuxian2_handle" not in title_state_readers and "player_data_manager" not in title_state_readers,
             "title_state_read_has_no_ddl": "CREATE TABLE" not in title_repository_state_reader and "ALTER TABLE" not in title_repository_state_reader,
+            "title_state_and_replay_reads_use_read_only_uow": (
+                "DatabaseUnitOfWork(self.database, read_only=True)" in title_application_source
+                and title_application_source.count("DatabaseUnitOfWork(self.database, read_only=True)") >= 2
+            ),
+            "title_condition_read_application_owned": (
+                "title_eligibility_application.read_snapshot(" in title_condition_readers
+                and "class TitleEligibilityApplication" in title_eligibility_source
+                and "class TitleEligibilitySqlRepository" in title_eligibility_source
+                and "title_eligibility_application = TitleEligibilityApplication(" in title_handler_facade_source
+            ),
+            "title_condition_reads_batch_one_snapshot_per_projection": (
+                title_condition_readers.count(
+                    "snapshot = _read_condition_snapshot(str(user_id), all_conditions)"
+                ) == 2
+                and "_condition_progress(conditions_by_title[str(title_id)], snapshot)" in title_condition_readers
+                and "_condition_matches(conditions, snapshot)" in title_condition_readers
+            ),
+            "title_condition_reads_are_read_only_and_legacy_manager_free": (
+                "DatabaseUnitOfWork(self.game_database, read_only=True)" in title_eligibility_source
+                and "DatabaseUnitOfWork(self.player_database, read_only=True)" in title_eligibility_source
+                and "CREATE TABLE" not in title_eligibility_source
+                and "ALTER TABLE" not in title_eligibility_source
+                and all(token not in title_condition_readers for token in (
+                    "get_statistics_data", "player_data_manager", "sql_message"
+                ))
+            ),
+            "title_check_commands_reuse_condition_snapshot": (
+                "snapshot = get_title_condition_snapshot(user_id)" in title_handler_facade_source
+                and "user_id, snapshot=snapshot, unlocked_title_ids=expected" in title_handler_facade_source
+                and title_handler_facade_source.count(
+                    "user_id, snapshot=snapshot, unlocked_title_ids=unlocked"
+                ) == 2
+            ),
             "mentor_title_grant_application_owned": (
                 "TitleApplication" in partner_facade
                 and "_mentor_title_application().grant(" in partner_facade
             ),
             "mentor_title_state_read_application_owned": "_mentor_title_application().get_state(" in partner_facade,
             "legacy_mentor_title_writer_disabled": "update_or_write_data(" not in partner_facade,
-            "status": "equip_unequip_unlock_and_mentor_grant_cutover",
+            "status": "equip_unequip_unlock_and_mentor_grant_cutover_with_shared_condition_snapshot",
         },
         "info": {
             "dynamic_attribute_application_owned": (

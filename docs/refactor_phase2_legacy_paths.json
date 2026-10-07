@@ -8,20 +8,56 @@
   "scope_boundary": "This is the finite frozen v1 completion denominator, not a claim that every default legacy registration in the repository is listed. The identity hash binds each stable id/kind/entry/source identity; status and reviewed call-graph evidence evolve without changing membership. The gate statically derives an AST startup import closure and reports unlisted command candidates to backlog without adding them to v1 membership. This is source analysis, not an observed live runtime registration count; dynamic imports, conditional registrations, and non-command callbacks still require explicit review. The 40 legacy job items prove the default manifest registry and admin scheduler API path; direct APScheduler decorator callbacks are a separate path and are not implied for every manifest job.",
   "source_snapshot": {
     "path": "docs/refactor_inventory.json",
-    "fields": ["commands", "legacy_jobs", "legacy_routes"],
+    "fields": [
+      "commands",
+      "legacy_jobs",
+      "legacy_routes"
+    ],
     "sha256": "a9874035de2c540b1f86d4ccfd654cd41d9bfb06a0b11c99a051c0fde3cc43d6"
   },
-  "status_values": ["已迁移", "允许保留的兼容路径", "不可达", "受阻"],
+  "status_values": [
+    "已迁移",
+    "允许保留的兼容路径",
+    "不可达",
+    "受阻"
+  ],
   "families": [
     {
       "id": "legacy-command-matchers",
       "source_field": "commands",
       "allowed_features": [
-        "activity", "admin", "arena", "back", "bank", "base", "beg", "boss",
-        "buff", "compensation", "dongfu", "dufang", "dungeon", "entertainment",
-        "fusion", "illusion", "impart", "impart_pk", "info", "interactive",
-        "lunhui", "past_life", "sect", "simulator", "status", "tasks", "tianti",
-        "title", "trade", "training", "work", "world_events"
+        "activity",
+        "admin",
+        "arena",
+        "back",
+        "bank",
+        "base",
+        "beg",
+        "boss",
+        "buff",
+        "compensation",
+        "dongfu",
+        "dufang",
+        "dungeon",
+        "entertainment",
+        "fusion",
+        "illusion",
+        "impart",
+        "impart_pk",
+        "info",
+        "interactive",
+        "lunhui",
+        "past_life",
+        "sect",
+        "simulator",
+        "status",
+        "tasks",
+        "tianti",
+        "title",
+        "trade",
+        "training",
+        "work",
+        "world_events"
       ],
       "status": "受阻",
       "entry_format": "{feature}:{name} (aliases: {aliases})",
@@ -104,64 +140,100 @@
       "feature": "trade",
       "name": "交易",
       "status": "不可达",
-      "call_graph": ["features/trade/manifest.py CommandSpec -> new manifest matcher; no matching legacy on_command declaration in xiuxian_trade"],
-      "evidence": ["nonebot_plugin_xiuxian_2/features/trade/manifest.py:4-6"]
+      "call_graph": [
+        "features/trade/manifest.py CommandSpec -> new manifest matcher; no matching legacy on_command declaration in xiuxian_trade"
+      ],
+      "evidence": [
+        "nonebot_plugin_xiuxian_2/features/trade/manifest.py:4-6"
+      ]
     },
     {
       "feature": "base",
       "name": "修炼",
       "status": "不可达",
-      "call_graph": ["features/base/manifest.py CommandSpec -> new manifest matcher; no matching legacy on_command declaration in xiuxian_base"],
-      "evidence": ["nonebot_plugin_xiuxian_2/features/base/manifest.py:4-6"]
+      "call_graph": [
+        "features/base/manifest.py CommandSpec -> new manifest matcher; no matching legacy on_command declaration in xiuxian_base"
+      ],
+      "evidence": [
+        "nonebot_plugin_xiuxian_2/features/base/manifest.py:4-6"
+      ]
     },
     {
       "feature": "buff",
       "name": "功法",
       "status": "不可达",
-      "call_graph": ["features/buff/manifest.py CommandSpec -> new manifest matcher; no matching legacy on_command declaration in xiuxian_buff"],
-      "evidence": ["nonebot_plugin_xiuxian_2/features/buff/manifest.py:4-6"]
+      "call_graph": [
+        "features/buff/manifest.py CommandSpec -> new manifest matcher; no matching legacy on_command declaration in xiuxian_buff"
+      ],
+      "evidence": [
+        "nonebot_plugin_xiuxian_2/features/buff/manifest.py:4-6"
+      ]
     },
     {
       "feature": "sect",
       "name": "宗门商店兑换",
       "status": "不可达",
-      "call_graph": ["features/sect/manifest.py CommandSpec -> new manifest matcher; no matching legacy on_command declaration in xiuxian_sect"],
-      "evidence": ["nonebot_plugin_xiuxian_2/features/sect/manifest.py:4-9"]
+      "call_graph": [
+        "features/sect/manifest.py CommandSpec -> new manifest matcher; no matching legacy on_command declaration in xiuxian_sect"
+      ],
+      "evidence": [
+        "nonebot_plugin_xiuxian_2/features/sect/manifest.py:4-9"
+      ]
     },
     {
       "feature": "work",
       "name": "悬赏令",
       "status": "不可达",
-      "call_graph": ["features/work/manifest.py CommandSpec -> new manifest matcher; no matching legacy on_command declaration in xiuxian_work"],
-      "evidence": ["nonebot_plugin_xiuxian_2/features/work/manifest.py:4-8"]
+      "call_graph": [
+        "features/work/manifest.py CommandSpec -> new manifest matcher; no matching legacy on_command declaration in xiuxian_work"
+      ],
+      "evidence": [
+        "nonebot_plugin_xiuxian_2/features/work/manifest.py:4-8"
+      ]
     },
     {
       "feature": "bank",
       "name": "灵庄",
       "status": "不可达",
-      "call_graph": ["features/bank/manifest.py CommandSpec -> new manifest matcher; no matching legacy on_command declaration in xiuxian_bank"],
-      "evidence": ["nonebot_plugin_xiuxian_2/features/bank/manifest.py:4-8"]
+      "call_graph": [
+        "features/bank/manifest.py CommandSpec -> new manifest matcher; no matching legacy on_command declaration in xiuxian_bank"
+      ],
+      "evidence": [
+        "nonebot_plugin_xiuxian_2/features/bank/manifest.py:4-8"
+      ]
     },
     {
       "feature": "back",
       "name": "背包",
       "status": "不可达",
-      "call_graph": ["features/back/manifest.py CommandSpec -> new manifest matcher; no matching legacy on_command declaration in xiuxian_back"],
-      "evidence": ["nonebot_plugin_xiuxian_2/features/back/manifest.py:4-6"]
+      "call_graph": [
+        "features/back/manifest.py CommandSpec -> new manifest matcher; no matching legacy on_command declaration in xiuxian_back"
+      ],
+      "evidence": [
+        "nonebot_plugin_xiuxian_2/features/back/manifest.py:4-6"
+      ]
     },
     {
       "feature": "boss",
       "name": "讨伐世界BOSS",
       "status": "不可达",
-      "call_graph": ["features/boss/manifest.py CommandSpec -> new manifest matcher; no matching legacy on_command declaration in xiuxian_boss"],
-      "evidence": ["nonebot_plugin_xiuxian_2/features/boss/manifest.py:4-9"]
+      "call_graph": [
+        "features/boss/manifest.py CommandSpec -> new manifest matcher; no matching legacy on_command declaration in xiuxian_boss"
+      ],
+      "evidence": [
+        "nonebot_plugin_xiuxian_2/features/boss/manifest.py:4-9"
+      ]
     },
     {
       "feature": "sect",
       "name": "领取宗门炼体堂",
       "status": "不可达",
-      "call_graph": ["features/sect/manifest.py CommandSpec -> new manifest matcher; no matching legacy on_command declaration in xiuxian_sect"],
-      "evidence": ["nonebot_plugin_xiuxian_2/features/sect/manifest.py:4-9"]
+      "call_graph": [
+        "features/sect/manifest.py CommandSpec -> new manifest matcher; no matching legacy on_command declaration in xiuxian_sect"
+      ],
+      "evidence": [
+        "nonebot_plugin_xiuxian_2/features/sect/manifest.py:4-9"
+      ]
     }
   ],
   "explicit_paths": [
@@ -215,7 +287,7 @@
         "TitleApplication -> feature-owned repository"
       ],
       "evidence": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_title/__init__.py:91-100,218-269",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_title/__init__.py:95-104,222-273",
         "nonebot_plugin_xiuxian_2/features/title/application.py"
       ]
     },
@@ -230,7 +302,7 @@
         "TitleApplication -> feature-owned repository"
       ],
       "evidence": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_title/__init__.py:91-100,272-307",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_title/__init__.py:95-104,276-311",
         "nonebot_plugin_xiuxian_2/features/title/application.py"
       ]
     },
@@ -245,7 +317,7 @@
         "TitleApplication -> feature-owned repository"
       ],
       "evidence": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_title/__init__.py:75-88,310-332",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_title/__init__.py:79-92,314-332",
         "nonebot_plugin_xiuxian_2/features/title/application.py"
       ]
     },
@@ -263,7 +335,7 @@
         "background worker -> snapshot.iter_user_ids -> get_user_unlocked_titles -> _run_title_action('grant') -> TitleApplication.execute -> player_db TitleRepository"
       ],
       "evidence": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_title/__init__.py:98,54-71,488-556",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_title/__init__.py:102,58-75,492-560",
         "nonebot_plugin_xiuxian_2/features/title/application.py:194-211",
         "nonebot_plugin_xiuxian_2/features/title/repository.py:14-111",
         "nonebot_plugin_xiuxian_2/infrastructure/database/uow.py:17-38,87-92",
@@ -287,7 +359,7 @@
         "_title_transaction_service definition -> no production caller"
       ],
       "evidence": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_title/__init__.py:35,47-51",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_title/__init__.py:39,51-55",
         "repository search for _title_transaction_service() has no production call site"
       ]
     },

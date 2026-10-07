@@ -52,7 +52,7 @@
         "TitleApplication -> feature-owned repository"
       ],
       "evidence": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_title/__init__.py:91-100,218-269",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_title/__init__.py:95-104,222-273",
         "nonebot_plugin_xiuxian_2/features/title/application.py"
       ]
     },
@@ -67,7 +67,7 @@
         "TitleApplication -> feature-owned repository"
       ],
       "evidence": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_title/__init__.py:91-100,272-307",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_title/__init__.py:95-104,276-311",
         "nonebot_plugin_xiuxian_2/features/title/application.py"
       ]
     },
@@ -82,7 +82,7 @@
         "TitleApplication -> feature-owned repository"
       ],
       "evidence": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_title/__init__.py:75-88,310-332",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_title/__init__.py:79-92,314-332",
         "nonebot_plugin_xiuxian_2/features/title/application.py"
       ]
     },
@@ -100,7 +100,7 @@
         "background worker -> snapshot.iter_user_ids -> get_user_unlocked_titles -> _run_title_action('grant') -> TitleApplication.execute -> player_db TitleRepository"
       ],
       "evidence": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_title/__init__.py:98,54-71,488-556",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_title/__init__.py:102,58-75,492-560",
         "nonebot_plugin_xiuxian_2/features/title/application.py:194-211",
         "nonebot_plugin_xiuxian_2/features/title/repository.py:14-111",
         "nonebot_plugin_xiuxian_2/infrastructure/database/uow.py:17-38,87-92",
@@ -124,7 +124,7 @@
         "_title_transaction_service definition -> no production caller"
       ],
       "evidence": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_title/__init__.py:35,47-51",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_title/__init__.py:39,51-55",
         "repository search for _title_transaction_service() has no production call site"
       ]
     },
@@ -2492,22 +2492,25 @@
       "id": "command:title:刷新称号",
       "kind": "commands",
       "entry": "title:刷新称号 (aliases: )",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "允许保留的兼容路径",
+      "reason": "The command only clears the in-memory cache for the static title JSON catalog and reloads that catalog. It does not read or mutate player/game state or perform request-time schema changes, so the cache refresh remains an explicit compatibility path.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_title/__init__.py:112 title_refresh_cmd = on_command('刷新称号') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_title/__init__.py:594 title_refresh_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_title/__init__.py:122 title_refresh_cmd = on_command('刷新称号') -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_title/__init__.py:606 title_refresh_ -> refresh_title_cache clears the in-memory catalog -> get_all_titles reloads the static title JSON -> handle_send",
+        "refresh_title_cache has no player/game database read, state mutation, or request-time DDL"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_title/__init__.py:112",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_title/__init__.py:594"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_title/__init__.py:598-605",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_title/title_data.py:28-43,586-592",
+        "tests/test_phase2_legacy_path_gate.py",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_title/__init__.py:122",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_title/__init__.py:606"
       ],
       "source_declaration_found": true,
       "source": {
@@ -2919,22 +2922,29 @@
       "id": "command:title:卸下称号",
       "kind": "commands",
       "entry": "title:卸下称号 (aliases: 取消称号)",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "The command replays prior operations and reads title state through TitleApplication, then commits unequip and its receipt through the feature-owned TitleRepository. The legacy title writer is not on this command path.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_title/__init__.py:110 title_unequip_cmd = on_command('卸下称号') aliases=取消称号 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_title/__init__.py:290 title_unequip_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_title/__init__.py:120 title_unequip_cmd = on_command('卸下称号') aliases=取消称号 -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_title/__init__.py:299 title_unequip_ -> title_application.get_result/get_state -> TitleApplication read-only state/replay queries",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_title/__init__.py:299 title_unequip_ -> _run_title_action('unequip') -> TitleApplication.execute -> TitleRepository.unequip atomically updates equipped state and operation receipt",
+        "TitleApplication reads use read-only UOWs; title state schema is prepared by startup migration"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_title/__init__.py:110",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_title/__init__.py:290"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_title/__init__.py:294-323",
+        "nonebot_plugin_xiuxian_2/features/title/application.py:31-37,55-102",
+        "nonebot_plugin_xiuxian_2/features/title/repository.py:142-150,228-257",
+        "nonebot_plugin_xiuxian_2/features/title/migrations.py",
+        "nonebot_plugin_xiuxian_2/features/title/tests/test_title_application.py",
+        "tests/test_phase2_legacy_path_gate.py",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_title/__init__.py:120",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_title/__init__.py:299"
       ],
       "source_declaration_found": true,
       "source": {
@@ -4567,22 +4577,29 @@
       "id": "command:title:我的成就",
       "kind": "commands",
       "entry": "title:我的成就 (aliases: 成就列表, 查看成就)",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "Title unlock state and writes use TitleApplication; the achievement projection reads all condition statistics, tower values, and profile fields through one batched TitleEligibilityApplication read-only snapshot. The legacy manager is not called on the command path.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_title/__init__.py:116 achievement_list_cmd = on_command('我的成就') aliases=成就列表,查看成就 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_title/__init__.py:353 achievement_list_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_title/__init__.py:126 achievement_list_cmd = on_command('我的成就') aliases=成就列表,查看成就 -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_title/__init__.py:361 achievement_list_ -> _unlock_titles_from_event -> one TitleApplication.get_state and one TitleEligibilityApplication.read_snapshot -> TitleApplication.execute(unlock_batch) when eligible",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_title/__init__.py:361 achievement_list_ -> get_title_achievement_records reuses the same eligibility snapshot and updated unlocked IDs -> render progress",
+        "TitleEligibilitySqlRepository reads game profile and selected player statistics/tower columns via read-only UOWs; missing columns remain absent and no request-time DDL runs; condition parsing/evaluation remains in the legacy title_data compatibility module"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_title/__init__.py:116",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_title/__init__.py:353"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_title/__init__.py:357-404",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_title/title_data.py:190-230,291-408",
+        "nonebot_plugin_xiuxian_2/features/title/eligibility.py",
+        "nonebot_plugin_xiuxian_2/features/title/tests/test_title_eligibility.py",
+        "tests/test_refactor_progress.py",
+        "tests/test_phase2_legacy_path_gate.py",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_title/__init__.py:126",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_title/__init__.py:361"
       ],
       "source_declaration_found": true,
       "source": {
@@ -4656,22 +4673,30 @@
       "id": "command:title:我的称号",
       "kind": "commands",
       "entry": "title:我的称号 (aliases: 查看称号, 称号列表)",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "Unlock eligibility is evaluated from a single batched TitleEligibilityApplication read-only snapshot, unlocked/equipped state is read through TitleApplication, and unlock writes use TitleApplication.execute. Static title definitions remain a compatibility catalog.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_title/__init__.py:108 title_list_cmd = on_command('我的称号') aliases=查看称号,称号列表 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_title/__init__.py:159 title_list_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_title/__init__.py:118 title_list_cmd = on_command('我的称号') aliases=查看称号,称号列表 -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_title/__init__.py:169 title_list_ -> _unlock_titles_from_event -> one TitleApplication.get_state and one TitleEligibilityApplication.read_snapshot -> TitleApplication.execute(unlock_batch) when eligible",
+        "title_list_ reuses the returned unlocked IDs; TitleApplication.get_state separately reads equipped state; static title JSON supplies presentation only",
+        "TitleEligibilitySqlRepository reads selected statistics/tower fields and the game profile via read-only UOWs; no legacy PlayerDataManager edge or request-time DDL"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_title/__init__.py:108",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_title/__init__.py:159"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_title/__init__.py:163-224",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_title/title_data.py:190-230,415-451",
+        "nonebot_plugin_xiuxian_2/features/title/eligibility.py",
+        "nonebot_plugin_xiuxian_2/features/title/tests/test_title_eligibility.py",
+        "nonebot_plugin_xiuxian_2/features/title/tests/test_title_application.py",
+        "tests/test_refactor_progress.py",
+        "tests/test_phase2_legacy_path_gate.py",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_title/__init__.py:118",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_title/__init__.py:169"
       ],
       "source_declaration_found": true,
       "source": {
@@ -5552,22 +5577,29 @@
       "id": "command:title:检查成就",
       "kind": "commands",
       "entry": "title:检查成就 (aliases: 检测成就)",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "Title unlock eligibility/writes use the shared TitleEligibilityApplication and TitleApplication owners; the displayed achievement completion count uses one batched read-only snapshot. No title command path calls the legacy statistics/player-data manager.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_title/__init__.py:117 achievement_check_cmd = on_command('检查成就') aliases=检测成就 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_title/__init__.py:402 achievement_check_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_title/__init__.py:127 achievement_check_cmd = on_command('检查成就') aliases=检测成就 -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_title/__init__.py:412 achievement_check_ -> _unlock_titles_from_event -> one TitleApplication.get_state and one TitleEligibilityApplication.read_snapshot -> TitleApplication.execute(unlock_batch) when eligible",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_title/__init__.py:412 achievement_check_ -> get_title_achievement_records reuses the same eligibility snapshot and updated unlocked IDs -> render completed/total counts",
+        "TitleEligibilitySqlRepository batches selected statistics/tower fields and the game profile in read-only UOWs without request-time schema changes; condition evaluation remains in the legacy title_data compatibility module"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_title/__init__.py:117",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_title/__init__.py:402"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_title/__init__.py:406-433",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_title/title_data.py:190-230,291-408",
+        "nonebot_plugin_xiuxian_2/features/title/eligibility.py",
+        "nonebot_plugin_xiuxian_2/features/title/tests/test_title_eligibility.py",
+        "tests/test_refactor_progress.py",
+        "tests/test_phase2_legacy_path_gate.py",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_title/__init__.py:127",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_title/__init__.py:412"
       ],
       "source_declaration_found": true,
       "source": {
@@ -5579,22 +5611,29 @@
       "id": "command:title:检查称号",
       "kind": "commands",
       "entry": "title:检查称号 (aliases: 检测称号)",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "Unlock eligibility is evaluated from one batched TitleEligibilityApplication read-only snapshot, current unlocked state uses TitleApplication, and the unlock batch write remains in TitleApplication.execute. No eligibility read uses PlayerDataManager.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_title/__init__.py:113 title_check_cmd = on_command('检查称号') aliases=检测称号 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_title/__init__.py:328 title_check_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_title/__init__.py:123 title_check_cmd = on_command('检查称号') aliases=检测称号 -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_title/__init__.py:337 title_check_ -> _unlock_titles_from_event -> one TitleApplication.get_state and one TitleEligibilityApplication.read_snapshot -> TitleApplication.execute(unlock_batch) when eligible",
+        "title_check_ reuses the returned unlocked IDs for the no-new-title count instead of reading title state again",
+        "TitleEligibilitySqlRepository reads selected statistics/tower fields and profile values via read-only UOWs; no request-time DDL"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_title/__init__.py:113",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_title/__init__.py:328"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_title/__init__.py:332-357",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_title/title_data.py:190-230,415-451",
+        "nonebot_plugin_xiuxian_2/features/title/eligibility.py",
+        "nonebot_plugin_xiuxian_2/features/title/tests/test_title_eligibility.py",
+        "tests/test_refactor_progress.py",
+        "tests/test_phase2_legacy_path_gate.py",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_title/__init__.py:123",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_title/__init__.py:337"
       ],
       "source_declaration_found": true,
       "source": {
@@ -7697,22 +7736,24 @@
       "id": "command:title:称号帮助",
       "kind": "commands",
       "entry": "title:称号帮助 (aliases: )",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "允许保留的兼容路径",
+      "reason": "The command returns a static help string and buttons; it does not access feature or legacy player/game state and has no state owner to migrate.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_title/__init__.py:111 title_help_cmd = on_command('称号帮助') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_title/__init__.py:636 title_help_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_title/__init__.py:121 title_help_cmd = on_command('称号帮助') -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_title/__init__.py:648 title_help_ -> static __title_help__ text/buttons -> send_help_message -> handle_send",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_title/__init__.py:648 title_help_ has no feature persistence, repository, or legacy player/game state access"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_title/__init__.py:111",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_title/__init__.py:636"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_title/__init__.py:608-650",
+        "tests/test_phase2_legacy_path_gate.py",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_title/__init__.py:121",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_title/__init__.py:648"
       ],
       "source_declaration_found": true,
       "source": {
@@ -7724,22 +7765,25 @@
       "id": "command:title:称号详情",
       "kind": "commands",
       "entry": "title:称号详情 (aliases: )",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "允许保留的兼容路径",
+      "reason": "The command resolves an entry from the static title JSON catalog and renders its configured name, description, and condition. It has no player/game state access or mutation.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_title/__init__.py:114 title_info_cmd = on_command('称号详情') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_title/__init__.py:431 title_info_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_title/__init__.py:124 title_info_cmd = on_command('称号详情') -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_title/__init__.py:443 title_info_ -> find_title_id_by_name_or_id/get_title_by_id static catalog lookup -> configured title detail -> handle_send",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_title/__init__.py:443 title_info_ has no player/game state access, feature persistence, or request-time DDL"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_title/__init__.py:114",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_title/__init__.py:431"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_title/__init__.py:435-456",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_title/title_data.py:28-68",
+        "tests/test_phase2_legacy_path_gate.py",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_title/__init__.py:124",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_title/__init__.py:443"
       ],
       "source_declaration_found": true,
       "source": {
@@ -8602,22 +8646,29 @@
       "id": "command:title:装备称号",
       "kind": "commands",
       "entry": "title:装备称号 (aliases: )",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "The command replays prior operations and reads title state through TitleApplication, then commits equip and its receipt through the feature-owned TitleRepository. The legacy title writer is not on this command path.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_title/__init__.py:109 title_equip_cmd = on_command('装备称号') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_title/__init__.py:236 title_equip_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_title/__init__.py:119 title_equip_cmd = on_command('装备称号') -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_title/__init__.py:245 title_equip_ -> title_application.get_result/get_state -> TitleApplication read-only state/replay queries",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_title/__init__.py:245 title_equip_ -> _run_title_action('equip') -> TitleApplication.execute -> TitleRepository.equip atomically updates equipped state and operation receipt",
+        "TitleApplication reads use read-only UOWs; title state schema is prepared by startup migration"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_title/__init__.py:109",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_title/__init__.py:236"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_title/__init__.py:240-286",
+        "nonebot_plugin_xiuxian_2/features/title/application.py:31-37,55-102",
+        "nonebot_plugin_xiuxian_2/features/title/repository.py:142-150,191-227",
+        "nonebot_plugin_xiuxian_2/features/title/migrations.py",
+        "nonebot_plugin_xiuxian_2/features/title/tests/test_title_application.py",
+        "tests/test_phase2_legacy_path_gate.py",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_title/__init__.py:119",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_title/__init__.py:245"
       ],
       "source_declaration_found": true,
       "source": {
@@ -8784,22 +8835,31 @@
       "id": "command:title:赠送称号",
       "kind": "commands",
       "entry": "title:赠送称号 (aliases: )",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "允许保留的兼容路径",
+      "reason": "Title grants and all-user enumeration are feature-owned. Single-target account identity resolution remains an explicit legacy game-profile compatibility read; the command does not use the legacy title writer.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_title/__init__.py:115 title_grant_cmd = on_command('赠送称号') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_title/__init__.py:460 title_grant_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_title/__init__.py:125 title_grant_cmd = on_command('赠送称号') -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_title/__init__.py:472 title_grant_ -> static title catalog lookup -> all-user read-only target snapshot or legacy game-profile lookup for a single target",
+        "single-target lookup -> _sql_message().get_user_info_with_id/get_user_info_with_name -> compatibility profile read only",
+        "all-user target -> TitleGrantTargetApplication.snapshot -> read-only game roster query and bounded disk snapshot",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_title/__init__.py:472 title_grant_ grant branches -> get_user_unlocked_titles -> TitleApplication.get_state -> _run_title_action('grant') -> TitleApplication.execute -> TitleRepository.grant",
+        "TitleApplication reads use read-only UOWs; title state schema is prepared by startup migration"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_title/__init__.py:115",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_title/__init__.py:460"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_title/__init__.py:464-581",
+        "nonebot_plugin_xiuxian_2/features/title/application.py:31-37,194-211",
+        "nonebot_plugin_xiuxian_2/features/title/repository.py:46-110,142-150,259-295",
+        "nonebot_plugin_xiuxian_2/features/title/tests/test_grant_targets.py",
+        "nonebot_plugin_xiuxian_2/features/title/tests/test_title_application.py",
+        "tests/test_phase2_legacy_path_gate.py",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_title/__init__.py:125",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_title/__init__.py:472"
       ],
       "source_declaration_found": true,
       "source": {

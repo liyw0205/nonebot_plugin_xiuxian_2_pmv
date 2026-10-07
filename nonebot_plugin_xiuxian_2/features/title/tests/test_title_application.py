@@ -4,6 +4,7 @@ import json
 import sqlite3
 import tempfile
 import unittest
+from pathlib import Path
 
 from ..application import TitleApplication
 from ..migrations import apply_title_schema
@@ -34,6 +35,7 @@ class TitleApplicationTest(unittest.TestCase):
             app = TitleApplication(database)
             with self.assertRaises(sqlite3.OperationalError):
                 app.get_state("u")
+            self.assertFalse(Path(database).exists())
 
             with sqlite3.connect(database) as conn:
                 tables = {

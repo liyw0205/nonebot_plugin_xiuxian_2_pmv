@@ -80,7 +80,7 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
                              if (item.get("source") or {}).get("feature") == "sect"))
         self.assertEqual(report["path_count"], 496)
         self.assertEqual(report["status_counts"],
-                         {"不可达": 19, "允许保留的兼容路径": 128, "受阻": 80, "已迁移": 269})
+                         {"不可达": 19, "允许保留的兼容路径": 132, "受阻": 70, "已迁移": 275})
         self.assertTrue(report["frozen_membership_valid"])
         self.assertEqual(report["integrity_errors"], [])
 
@@ -399,7 +399,7 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
             self.assertIn(evidence, system_item["evidence"])
         self.assertNotIn("legacy downstream effect not closed", system_graph)
         self.assertEqual(report["status_counts"],
-                         {"不可达": 19, "允许保留的兼容路径": 128, "受阻": 80, "已迁移": 269})
+                         {"不可达": 19, "允许保留的兼容路径": 132, "受阻": 70, "已迁移": 275})
         self.assertTrue(report["frozen_membership_valid"])
         self.assertEqual(report["integrity_errors"], [])
 
@@ -447,7 +447,66 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
         self.assertNotIn("legacy downstream effect not closed", claim_graph)
         self.assertEqual(
             report["status_counts"],
-            {"不可达": 19, "允许保留的兼容路径": 128, "受阻": 80, "已迁移": 269},
+            {"不可达": 19, "允许保留的兼容路径": 132, "受阻": 70, "已迁移": 275},
+        )
+        self.assertTrue(report["frozen_membership_valid"])
+        self.assertEqual(report["integrity_errors"], [])
+
+    def test_title_commands_close_existing_owners_without_reopening_transactions(self):
+        report = load_phase2_scope_report(include_items=True)
+        items = {item["id"]: item for item in report["items"]}
+
+        migrated = {
+            "装备称号": ("TitleRepository.equip", "nonebot_plugin_xiuxian_2/features/title/tests/test_title_application.py"),
+            "卸下称号": ("TitleRepository.unequip", "nonebot_plugin_xiuxian_2/features/title/tests/test_title_application.py"),
+            "我的称号": ("TitleEligibilityApplication.read_snapshot", "nonebot_plugin_xiuxian_2/features/title/tests/test_title_eligibility.py"),
+            "我的成就": ("TitleEligibilityApplication.read_snapshot", "nonebot_plugin_xiuxian_2/features/title/tests/test_title_eligibility.py"),
+            "检查称号": ("TitleEligibilityApplication.read_snapshot", "nonebot_plugin_xiuxian_2/features/title/tests/test_title_eligibility.py"),
+            "检查成就": ("TitleEligibilityApplication.read_snapshot", "nonebot_plugin_xiuxian_2/features/title/tests/test_title_eligibility.py"),
+        }
+        for name, (owner, test_path) in migrated.items():
+            with self.subTest(command=name):
+                item = items[f"command:title:{name}"]
+                graph = " ".join(item["call_graph"])
+                self.assertEqual(item["status"], "已迁移")
+                self.assertNotIn("unknown_edge", item)
+                self.assertNotIn("legacy downstream effect not closed", graph)
+                self.assertIn(owner, graph)
+                if name in {"装备称号", "卸下称号"}:
+                    self.assertIn("title_application.get_result/get_state", graph)
+                elif name in {"我的成就", "检查成就"}:
+                    self.assertIn("get_title_achievement_records", graph)
+                self.assertIn(test_path, item["evidence"])
+                self.assertIn("tests/test_phase2_legacy_path_gate.py", item["evidence"])
+
+        compatible = {
+            "刷新称号": ("refresh_title_cache clears the in-memory catalog", "title_data.py:28-43,586-592"),
+            "称号帮助": ("static __title_help__ text/buttons", "__init__.py:608-650"),
+            "称号详情": ("static catalog lookup", "title_data.py:28-68"),
+            "赠送称号": (
+                "single-target lookup -> _sql_message().get_user_info_with_id/get_user_info_with_name",
+                "features/title/application.py:31-37,194-211",
+            ),
+        }
+        for name, (edge, evidence_suffix) in compatible.items():
+            with self.subTest(command=name):
+                item = items[f"command:title:{name}"]
+                graph = " ".join(item["call_graph"])
+                self.assertEqual(item["status"], "允许保留的兼容路径")
+                self.assertNotIn("unknown_edge", item)
+                self.assertNotIn("legacy downstream effect not closed", graph)
+                self.assertIn(edge, graph)
+                self.assertTrue(any(evidence_suffix in evidence for evidence in item["evidence"]))
+                self.assertIn("tests/test_phase2_legacy_path_gate.py", item["evidence"])
+
+        self.assertFalse(any(
+            items[f"command:title:{name}"]["status"] == "受阻"
+            for name in ("我的称号", "我的成就", "检查称号", "检查成就")
+        ))
+
+        self.assertEqual(
+            report["status_counts"],
+            {"不可达": 19, "允许保留的兼容路径": 132, "受阻": 70, "已迁移": 275},
         )
         self.assertTrue(report["frozen_membership_valid"])
         self.assertEqual(report["integrity_errors"], [])
@@ -496,7 +555,7 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
 
         self.assertEqual(
             report["status_counts"],
-            {"不可达": 19, "允许保留的兼容路径": 128, "受阻": 80, "已迁移": 269},
+            {"不可达": 19, "允许保留的兼容路径": 132, "受阻": 70, "已迁移": 275},
         )
         self.assertTrue(report["frozen_membership_valid"])
         self.assertEqual(report["integrity_errors"], [])
@@ -509,7 +568,7 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
         self.assertEqual(report["path_count"], 496)
         self.assertEqual(
             report["status_counts"],
-            {"不可达": 19, "允许保留的兼容路径": 128, "受阻": 80, "已迁移": 269},
+            {"不可达": 19, "允许保留的兼容路径": 132, "受阻": 70, "已迁移": 275},
         )
         self.assertGreater(report["blocked_count"], 0)
         self.assertTrue(all(item["call_graph"] and item["evidence"] for item in report["items"]))

@@ -28,7 +28,8 @@ def test_title_facade_defers_sql_manager_construction():
     ).read_text(encoding="utf-8")
     assert "_sql_message_instance = None" in source
     assert "def _sql_message(" in source
-    assert "_sql_message().get_all_user_id(" in source
+    assert "title_grant_target_application.snapshot" in source
+    assert "_sql_message().get_all_user_id(" not in source
     assert "_sql_message().get_user_info_with_id(" in source
     assert "_sql_message().get_user_info_with_name(" in source
     assert "sql_message = XiuxianDateManage()" not in source

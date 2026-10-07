@@ -147,67 +147,12 @@ def check_condition_for_user(user_id: str, condition_str: str) -> bool:
     检查用户是否满足指定条件
     condition_str: 如 "修仙签到>=100;历练次数>=50"
     """
-    from ..xiuxian_utils.utils import get_statistics_data
-    from ..xiuxian_utils.xiuxian2_handle import sql_message, player_data_manager
-
     conditions = parse_condition(condition_str)
     if not conditions:
         return False
-
-    user_info = sql_message.get_user_info_with_id(user_id)
-
-    for key, op, value in conditions:
-        # 1. 先尝试从统计数据中查找
-        stats_val = get_statistics_data(user_id, key)
-        if stats_val not in (None, {}):
-            if not _compare(stats_val, op, value):
-                return False
-            continue
-
-        # 2. 兼容已有玩法表中的进度数据
-        if key in {"通天塔最高层", "通天塔积分"}:
-            field = "max_floor" if key == "通天塔最高层" else "score"
-            tower_val = player_data_manager.get_field_data(str(user_id), "tower", field)
-            if tower_val is not None:
-                if not _compare(tower_val, op, value):
-                    return False
-                continue
-
-        # 3. 境界比较增强
-        if key == '境界':
-            if not user_info or not user_info.get("level"):
-                return False
-
-            user_level = user_info["level"]
-            target_level = _normalize_realm_target(value)
-            all_levels = convert_rank("江湖好手")[1]
-            if user_level not in all_levels or target_level not in all_levels:
-                logger.warning(f"境界条件无法识别: user={user_level}, target={value}")
-                return False
-
-            if not _compare_realm(user_level, op, target_level):
-                return False
-            continue
-
-        # 4. 尝试从 user_info 字段中查找
-        if user_info:
-            field_val = user_info.get(key)
-            if field_val is not None:
-                if not _compare(field_val, op, value):
-                    return False
-                continue
-
-        # 称号配置里的普通计数器缺失时按 0 处理，避免每次刷新成就刷屏 warning。
-        if key in get_title_condition_keys():
-            if not _compare(0, op, value):
-                return False
-            continue
-
-        # 真正未声明过的条件键只记录一次 debug 日志，避免污染正常运行日志。
-        _log_unknown_condition_key_once(key)
-        return False
-
-    return True
+    return _condition_matches(
+        conditions, _read_condition_snapshot(str(user_id), conditions)
+    )
 
 
 def _safe_float(value):
@@ -242,25 +187,95 @@ def _compare_realm(user_level: str, operator: str, target_level: str) -> bool:
     return _compare(all_levels.index(user_level), operator, all_levels.index(target_level))
 
 
-def _get_condition_actual_value(user_id: str, key: str, user_info: Optional[dict]):
-    from ..xiuxian_utils.utils import get_statistics_data
-    from ..xiuxian_utils.xiuxian2_handle import player_data_manager
+def _read_condition_snapshot(user_id: str, conditions: List[Tuple[str, str, str]]):
+    from ..xiuxian_utils.utils import get_impersonating_target
+    from . import title_eligibility_application
+
+    statistics_user_id = get_impersonating_target(str(user_id)) or str(user_id)
+    return title_eligibility_application.read_snapshot(
+        user_id=str(user_id),
+        statistics_user_id=str(statistics_user_id),
+        condition_keys=(key for key, _, _ in conditions),
+    )
+
+
+def get_title_condition_snapshot(user_id: str):
+    titles = load_title_data()
+    conditions = [
+        condition
+        for title_data in titles.values()
+        if str(title_data.get("condition", "")).strip()
+        for condition in parse_condition(str(title_data.get("condition", "")).strip())
+    ]
+    if not conditions:
+        return None
+    return _read_condition_snapshot(str(user_id), conditions)
+
+
+def _condition_matches(conditions: List[Tuple[str, str, str]], snapshot) -> bool:
+    for key, op, value in conditions:
+        stats_val = snapshot.statistics.get(key)
+        if stats_val not in (None, {}):
+            if not _compare(stats_val, op, value):
+                return False
+            continue
+
+        if key in {"通天塔最高层", "通天塔积分"}:
+            field = "max_floor" if key == "通天塔最高层" else "score"
+            tower_val = snapshot.tower.get(field)
+            if tower_val is not None:
+                if not _compare(tower_val, op, value):
+                    return False
+                continue
+
+        if key == "境界":
+            user_info = snapshot.profile
+            if not user_info or not user_info.get("level"):
+                return False
+            user_level = user_info["level"]
+            target_level = _normalize_realm_target(value)
+            all_levels = convert_rank("江湖好手")[1]
+            if user_level not in all_levels or target_level not in all_levels:
+                logger.warning(f"境界条件无法识别: user={user_level}, target={value}")
+                return False
+            if not _compare_realm(user_level, op, target_level):
+                return False
+            continue
+
+        if snapshot.profile:
+            field_val = snapshot.profile.get(key)
+            if field_val is not None:
+                if not _compare(field_val, op, value):
+                    return False
+                continue
+
+        if key in get_title_condition_keys():
+            if not _compare(0, op, value):
+                return False
+            continue
+
+        _log_unknown_condition_key_once(key)
+        return False
+    return bool(conditions)
+
+
+def _get_condition_actual_value(key: str, snapshot):
 
     if key == "境界":
-        return user_info.get("level") if user_info else None
+        return snapshot.profile.get("level") if snapshot.profile else None
 
-    stats_val = get_statistics_data(user_id, key)
+    stats_val = snapshot.statistics.get(key)
     if stats_val not in (None, {}):
         return stats_val
 
     if key in {"通天塔最高层", "通天塔积分"}:
         field = "max_floor" if key == "通天塔最高层" else "score"
-        value = player_data_manager.get_field_data(str(user_id), "tower", field)
+        value = snapshot.tower.get(field)
         if value is not None:
             return value
 
-    if user_info:
-        return user_info.get(key)
+    if snapshot.profile:
+        return snapshot.profile.get(key)
     return None
 
 
@@ -281,13 +296,16 @@ def _infer_achievement_category(condition_str: str) -> str:
 
 def get_condition_progress_for_user(user_id: str, condition_str: str) -> List[dict]:
     """返回条件进度，用于成就列表展示。"""
-    from ..xiuxian_utils.xiuxian2_handle import sql_message
+    conditions = parse_condition(condition_str)
+    snapshot = _read_condition_snapshot(str(user_id), conditions)
+    return _condition_progress(conditions, snapshot)
 
-    user_info = sql_message.get_user_info_with_id(user_id)
+
+def _condition_progress(conditions: List[Tuple[str, str, str]], snapshot) -> List[dict]:
     progress = []
 
-    for key, op, expected in parse_condition(condition_str):
-        actual = _get_condition_actual_value(user_id, key, user_info)
+    for key, op, expected in conditions:
+        actual = _get_condition_actual_value(key, snapshot)
 
         if key == "境界":
             if not actual:
@@ -351,21 +369,40 @@ def get_condition_progress_for_user(user_id: str, condition_str: str) -> List[di
     return progress
 
 
-def get_title_achievement_records(user_id: str) -> List[dict]:
+def get_title_achievement_records(
+    user_id: str,
+    *,
+    snapshot=None,
+    unlocked_title_ids=None,
+) -> List[dict]:
     """将有条件的称号视为成就，返回用户解锁和进度状态。"""
-    unlocked_ids = set(str(tid) for tid in get_user_unlocked_titles(user_id))
+    if unlocked_title_ids is None:
+        unlocked_title_ids = get_user_unlocked_titles(user_id)
+    unlocked_ids = set(str(tid) for tid in unlocked_title_ids)
+    titles = load_title_data()
+    conditions_by_title = {
+        str(title_id): parse_condition(str(title_data.get("condition", "")).strip())
+        for title_id, title_data in titles.items()
+        if str(title_data.get("condition", "")).strip()
+    }
+    if snapshot is None and conditions_by_title:
+        all_conditions = [
+            condition for values in conditions_by_title.values() for condition in values
+        ]
+        if all_conditions:
+            snapshot = _read_condition_snapshot(str(user_id), all_conditions)
     records = []
 
     def sort_key(item):
         title_id = str(item[0])
         return int(title_id) if title_id.isdigit() else title_id
 
-    for title_id, title_data in sorted(load_title_data().items(), key=sort_key):
+    for title_id, title_data in sorted(titles.items(), key=sort_key):
         condition = str(title_data.get("condition", "")).strip()
         if not condition:
             continue
 
-        progress = get_condition_progress_for_user(user_id, condition)
+        progress = _condition_progress(conditions_by_title[str(title_id)], snapshot)
         satisfied = bool(progress) and all(item["satisfied"] for item in progress)
         unlocked = str(title_id) in unlocked_ids
         if unlocked or satisfied:
@@ -399,36 +436,39 @@ def format_new_title_message(newly_unlocked: List[dict]) -> str:
     return "\n".join(lines)
 
 
-def find_unlockable_titles(user_id: str) -> List[dict]:
+def find_unlockable_titles(
+    user_id: str,
+    *,
+    snapshot=None,
+    unlocked_title_ids=None,
+) -> List[dict]:
     """
     检查用户是否有新的可解锁称号
     返回: 新解锁的称号列表
     """
-    from ..xiuxian_utils.xiuxian2_handle import player_data_manager
-
     newly_unlocked = []
-
-    # 获取已解锁称号
-    unlocked_str = player_data_manager.get_field_data(str(user_id), "title", "unlocked")
-    unlocked_ids = set()
-    if unlocked_str:
-        if isinstance(unlocked_str, str):
-            try:
-                unlocked_ids = set(json.loads(unlocked_str))
-            except Exception:
-                unlocked_ids = set()
-        elif isinstance(unlocked_str, list):
-            unlocked_ids = set(unlocked_str)
-
-    # 检查所有称号
+    if unlocked_title_ids is None:
+        unlocked_title_ids = get_user_unlocked_titles(user_id)
+    unlocked_ids = set(str(tid) for tid in unlocked_title_ids)
     all_titles = load_title_data()
+    conditions_by_title = {
+        str(title_id): parse_condition(str(title_data.get("condition", "")).strip())
+        for title_id, title_data in all_titles.items()
+        if str(title_data.get("condition", "")).strip()
+    }
+    if snapshot is None and conditions_by_title:
+        all_conditions = [
+            condition for values in conditions_by_title.values() for condition in values
+        ]
+        if all_conditions:
+            snapshot = _read_condition_snapshot(str(user_id), all_conditions)
     for title_id, title_data in all_titles.items():
         if str(title_id) in unlocked_ids:
             continue
-        condition = title_data.get("condition", "")
-        if not condition:
+        conditions = conditions_by_title.get(str(title_id))
+        if not conditions:
             continue
-        if check_condition_for_user(user_id, condition):
+        if _condition_matches(conditions, snapshot):
             # title_data 来自 JSON value，id 在 key 上；补齐 id 供解锁事务使用
             entry = dict(title_data)
             entry["id"] = str(title_id)
