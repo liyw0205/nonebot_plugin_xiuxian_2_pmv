@@ -420,7 +420,6 @@ async def impart_pk_now_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
                 combined_msg += "道友次数已用尽！\n"
                 if xu_world.check_xu_world_user_id(user_id):
                     combined_msg += "已帮助道友退出虚神界！\n"
-                    xu_world.del_xu_world(user_id)
                 break
 
         settlement = impart_pk_application.battle_settle(
@@ -532,7 +531,6 @@ async def impart_pk_now_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
             # 检查对方次数是否用尽
             if player_2_pk_num <= 0:
                 battle_combined_msg += f"道友{player_2_name}次数耗尽，离开了虚神界！\n"
-                xu_world.del_xu_world(player_2)
                 combined_msg += battle_combined_msg
                 break
                 
@@ -553,7 +551,6 @@ async def impart_pk_now_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
                 battle_combined_msg += f"道友{player_1_name}次数耗尽！\n"
                 if xu_world.check_xu_world_user_id(player_1):
                     battle_combined_msg += "已帮助道友退出虚神界！\n"
-                    xu_world.del_xu_world(player_1)
                 combined_msg += battle_combined_msg
                 break
         

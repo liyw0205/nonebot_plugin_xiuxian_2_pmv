@@ -25,6 +25,7 @@ def test_impart_battle_handler_uses_lazy_dual_database_service():
     assert "impart_pk_application.battle_settle(" in handler
     assert "_run_impart_pk_action(" not in handler
     assert "_impart_battle_batch_service().settle(" not in handler
+    assert "xu_world.del_xu_world(" not in handler
     assert "_impart_battle_batch_service_instance = None" in source
     assert "def _impart_battle_batch_service(" in source
     assert "get_paths().impart_db, get_paths().player_db" in source

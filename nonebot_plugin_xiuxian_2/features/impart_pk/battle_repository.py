@@ -20,12 +20,13 @@ class ImpartBattleBatchSqlRepository:
             if old is not None: return ImpartBattleResult('duplicate',*json.loads(old['result_json'])) if str(old['payload'])==payload else ImpartBattleResult('operation_conflict')
             participants=[(challenger_id,expected_challenger_pk_num,challenger_wins,challenger_losses,challenger_stones)]
             if opponent_id is not None: participants.append((opponent_id,expected_opponent_pk_num,opponent_wins,opponent_losses,opponent_stones))
-            remaining=[]
+            remaining=[]; has_membership=uow.query_one("SELECT 1 FROM player_data.sqlite_master WHERE type='table' AND name='impart_project_members'") is not None
             for uid,expected_pk,wins,losses,stones in participants:
                 row=uow.query_one('SELECT pk_num FROM player_data.impart_pk_state WHERE user_id=?',(uid,));
                 if row is None: uow.execute('INSERT INTO player_data.impart_pk_state(user_id,pk_num,win_num) VALUES(?,?,0)',(uid,expected_pk))
                 elif int(row['pk_num'])!=expected_pk: return ImpartBattleResult('state_changed')
                 if uow.query_one('SELECT 1 FROM xiuxian_impart WHERE user_id=?',(uid,)) is None: return ImpartBattleResult('user_missing')
                 if uow.execute('UPDATE player_data.impart_pk_state SET pk_num=pk_num-?,win_num=win_num+? WHERE user_id=? AND pk_num=? AND pk_num>=?',(losses,wins,uid,expected_pk,losses)).rowcount!=1: return ImpartBattleResult('state_changed')
-                uow.execute('UPDATE xiuxian_impart SET stone_num=COALESCE(stone_num,0)+? WHERE user_id=?',(stones,uid)); remaining.append(expected_pk-losses)
+                uow.execute('UPDATE xiuxian_impart SET stone_num=COALESCE(stone_num,0)+? WHERE user_id=?',(stones,uid)); remaining_pk=expected_pk-losses; remaining.append(remaining_pk)
+                if remaining_pk<=0 and has_membership: uow.execute('DELETE FROM player_data.impart_project_members WHERE user_id=?',(uid,))
             saved=[remaining[0],remaining[1] if len(remaining)>1 else None]; uow.execute('INSERT INTO impart_battle_batch_operations(operation_id,payload,result_json) VALUES(?,?,?)',(operation_id,payload,json.dumps(saved,separators=(',',':')))); return ImpartBattleResult('applied',*saved)

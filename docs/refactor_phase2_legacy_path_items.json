@@ -4724,22 +4724,22 @@
       "id": "command:impart_pk:投影虚神界",
       "kind": "commands",
       "entry": "impart_pk:投影虚神界 (aliases: )",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "The default projection handler delegates membership and projection-stat changes to ImpartPkApplication and its feature-owned SQL repository. The repository checks persisted PK allowance before capacity and commits membership, statistics, and the operation receipt together; the adapter retains legacy input checks and response formatting.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_impart_pk/__init__.py:161 impart_pk_project = on_command('投影虚神界') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_impart_pk/__init__.py:219 impart_pk_project_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_impart_pk/__init__.py:219 impart_pk_project_ -> impart_pk_application.project_join -> ImpartPkRepository.project_join -> ImpartProjectJoinSqlRepository.join; exhausted allowance, membership, projection statistic, and operation receipt are handled in the feature transaction"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_impart_pk/__init__.py:161",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_impart_pk/__init__.py:219"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_impart_pk/__init__.py:219",
+        "tests/test_impart_pk_frozen_command_owner.py"
       ],
       "source_declaration_found": true,
       "source": {
@@ -4968,22 +4968,22 @@
       "id": "command:impart_pk:探索虚神界",
       "kind": "commands",
       "entry": "impart_pk:探索虚神界 (aliases: 虚神界探索)",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "The default exploration handler settles daily allowance and state changes through ImpartPkApplication and the feature-owned SQL repository. Encounter selection and message formatting remain in the compatibility adapter; persistent exploration settlement is owned by the feature transaction.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_impart_pk/__init__.py:162 impart_pk_go = on_command('探索虚神界') aliases=虚神界探索 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_impart_pk/__init__.py:821 impart_pk_go_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_impart_pk/__init__.py:818 impart_pk_go_ -> impart_pk_application.explore_settle -> ImpartPkRepository.explore_settle -> ImpartExploreSqlRepository.settle; daily allowance and exploration state are committed by the feature owner"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_impart_pk/__init__.py:162",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_impart_pk/__init__.py:821"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_impart_pk/__init__.py:818",
+        "tests/test_impart_pk_frozen_command_owner.py"
       ],
       "source_declaration_found": true,
       "source": {
@@ -8234,22 +8234,22 @@
       "id": "command:impart_pk:虚神界信息",
       "kind": "commands",
       "entry": "impart_pk:虚神界信息 (aliases: )",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "允许保留的兼容路径",
+      "reason": "This command remains a legacy-backed status projection over daily allowance, impart state, and buff readers. Its existing lazy default/import behavior is retained for the compatibility release; it does not perform a gameplay transition, and removal remains gated by independent P7 evidence.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_impart_pk/__init__.py:163 impart_pk_info = on_command('虚神界信息') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_impart_pk/__init__.py:755 impart_pk_info_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_impart_pk/__init__.py:752 impart_pk_info_ -> _daily_impart_state/impart_pk_check/UserBuffDate -> legacy-backed status projection and response formatting; no gameplay transition"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_impart_pk/__init__.py:163",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_impart_pk/__init__.py:755"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_impart_pk/__init__.py:752",
+        "tests/test_impart_pk_frozen_command_owner.py"
       ],
       "source_declaration_found": true,
       "source": {
@@ -8261,22 +8261,22 @@
       "id": "command:impart_pk:虚神界修炼",
       "kind": "commands",
       "entry": "impart_pk:虚神界修炼 (aliases: )",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "The default training handler calculates the request from compatibility snapshots, while ImpartPkApplication and its feature-owned repository atomically settle exp, exp_day, and daily training counters. User-facing calculations and response formatting remain in the adapter.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_impart_pk/__init__.py:166 impart_pk_exp = on_command('虚神界修炼') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_impart_pk/__init__.py:621 impart_pk_exp_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_impart_pk/__init__.py:618 impart_pk_exp_ -> impart_pk_application.training_settle -> ImpartPkRepository.training_settle -> ImpartTrainingSqlRepository.settle; persistent cultivation and daily counters are committed by the feature owner"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_impart_pk/__init__.py:166",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_impart_pk/__init__.py:621"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_impart_pk/__init__.py:618",
+        "tests/test_impart_pk_frozen_command_owner.py"
       ],
       "source_declaration_found": true,
       "source": {
@@ -8288,22 +8288,22 @@
       "id": "command:impart_pk:虚神界出关",
       "kind": "commands",
       "entry": "impart_pk:虚神界出关 (aliases: )",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "The default exit handler settles impart exp, daily exercise state, and close-session receipts through ImpartPkApplication and its feature-owned SQL repository. The independent task-progress update remains owned by the task feature; response formatting stays in the adapter.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_impart_pk/__init__.py:167 impart_pk_out_closing = on_command('虚神界出关') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_impart_pk/__init__.py:1010 impart_pk_out_closing_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_impart_pk/__init__.py:1007 impart_pk_out_closing_ -> impart_pk_application.closing_settle -> ImpartPkRepository.closing_settle -> ImpartClosingSettlementSqlRepository.settle; close-session and impart state settle under the feature owner"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_impart_pk/__init__.py:167",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_impart_pk/__init__.py:1010"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_impart_pk/__init__.py:1007",
+        "tests/test_impart_pk_frozen_command_owner.py"
       ],
       "source_declaration_found": true,
       "source": {
@@ -8315,22 +8315,22 @@
       "id": "command:impart_pk:虚神界列表",
       "kind": "commands",
       "entry": "impart_pk:虚神界列表 (aliases: )",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "允许保留的兼容路径",
+      "reason": "This command remains a legacy-backed member projection over current world membership, daily PK state, and player names. The compatibility service may import the existing JSON membership snapshot once; the handler does not settle combat or other gameplay effects, and removal remains gated by independent P7 evidence.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_impart_pk/__init__.py:165 impart_pk_list = on_command('虚神界列表') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_impart_pk/__init__.py:293 impart_pk_list_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_impart_pk/__init__.py:293 impart_pk_list_ -> xu_world.all_xu_world_user/impart_pk.find_user_data/_sql_message.get_user_info_with_id -> legacy-backed member projection; compatibility membership import is retained"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_impart_pk/__init__.py:165",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_impart_pk/__init__.py:293"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_impart_pk/__init__.py:293",
+        "tests/test_impart_pk_frozen_command_owner.py"
       ],
       "source_declaration_found": true,
       "source": {
@@ -8342,22 +8342,22 @@
       "id": "command:impart_pk:虚神界对决",
       "kind": "commands",
       "entry": "impart_pk:虚神界对决 (aliases: )",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "The default battle handler delegates PK, stone, statistics, receipt, and exhausted-membership settlement to ImpartPkApplication and the feature-owned repository. Membership is now removed in the settlement transaction only after the battle snapshot succeeds; combat simulation and messaging remain in the adapter.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_impart_pk/__init__.py:164 impart_pk_now = on_command('虚神界对决') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_impart_pk/__init__.py:330 impart_pk_now_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_impart_pk/__init__.py:330 impart_pk_now_ -> impart_pk_application.battle_settle -> ImpartPkRepository.battle_settle -> ImpartBattleBatchSqlRepository.settle; PK, stones, receipt, and exhausted membership update are transactional"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_impart_pk/__init__.py:164",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_impart_pk/__init__.py:330"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_impart_pk/__init__.py:330",
+        "tests/test_impart_pk_frozen_command_owner.py"
       ],
       "source_declaration_found": true,
       "source": {
@@ -8395,22 +8395,22 @@
       "id": "command:impart_pk:虚神界排行榜",
       "kind": "commands",
       "entry": "impart_pk:虚神界排行榜 (aliases: )",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "允许保留的兼容路径",
+      "reason": "This command is an intentionally retained read projection over legacy impart ranking data and player names. It does not mutate player or impart gameplay state; removal remains gated by independent P7 release evidence.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_impart_pk/__init__.py:169 impart_top = on_command('虚神界排行榜') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_impart_pk/__init__.py:260 impart_top_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_impart_pk/__init__.py:260 impart_top_ -> xiuxian_impart.get_impart_rank/_sql_message.get_user_info_with_id -> legacy-backed ranking projection and response formatting; no gameplay state mutation"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_impart_pk/__init__.py:169",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_impart_pk/__init__.py:260"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_impart_pk/__init__.py:260",
+        "tests/test_impart_pk_frozen_command_owner.py"
       ],
       "source_declaration_found": true,
       "source": {
@@ -8422,22 +8422,22 @@
       "id": "command:impart_pk:虚神界闭关",
       "kind": "commands",
       "entry": "impart_pk:虚神界闭关 (aliases: )",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "The default close-entry handler delegates session creation and entry statistics to ImpartPkApplication and the feature-owned SQL repository. Compatibility guards and reply formatting remain in the adapter; state changes commit with the operation receipt.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_impart_pk/__init__.py:168 impart_pk_in_closing = on_command('虚神界闭关') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_impart_pk/__init__.py:976 impart_pk_in_closing_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_impart_pk/__init__.py:973 impart_pk_in_closing_ -> impart_pk_application.closing_enter -> ImpartPkRepository.closing_enter -> ImpartClosingEnterSqlRepository.enter; close session and entry statistic are feature-owned"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_impart_pk/__init__.py:168",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_impart_pk/__init__.py:976"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_impart_pk/__init__.py:973",
+        "tests/test_impart_pk_frozen_command_owner.py"
       ],
       "source_declaration_found": true,
       "source": {
