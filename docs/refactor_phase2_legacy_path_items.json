@@ -11675,19 +11675,21 @@
       "id": "route:POST:/api/config/qq-bind/poll:nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/qq_bind_routes.py:qq_bind_poll",
       "kind": "legacy_routes",
       "entry": "POST /api/config/qq-bind/poll -> nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/qq_bind_routes.py:qq_bind_poll",
-      "status": "受阻",
-      "reason": "The old Flask app and route modules are loaded and its server is enabled by default. Route registration is proven, but each handler's downstream ownership and replacement/compatibility decision is not closed.",
-      "unknown_edge": "route function -> old data/service or feature application -> state effect",
+      "status": "已迁移",
+      "reason": "The Flask endpoint remains as a compatibility adapter with the existing admin/CSRF boundary and response shape; task polling, credential decoding, QQ_BOTS installation, and completion replay are orchestrated by QqBindApplication. Task state remains process-local with the legacy 600-second TTL.",
       "call_graph": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/qq_bind_routes.py:86 -> Flask app.route(/api/config/qq-bind/poll) -> legacy handler -> downstream state effect not closed"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/qq_bind_routes.py:83 qq_bind_poll -> _qq_bind_application.poll -> poll_bind_result -> QQ poll endpoint (15-second client timeout)",
+        "QqBindApplication.poll -> BindTaskStore.completed/get/pop/complete -> decrypt_bind_secret -> merge_qq_bots_env -> backup plus fsync and atomic replacement of QQ_BOTS env file",
+        "The Flask endpoint retains the global admin authorization and CSRF middleware and legacy JSON/status contract; completed responses are cached without the bind key or secret"
       ],
       "evidence": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
-        "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
-        "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
-        "scripts/export_refactor_inventory.py:41-70",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/qq_bind_routes.py:86"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/qq_bind_routes.py:83",
+        "nonebot_plugin_xiuxian_2/features/qq_bind/application.py:81-137",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/qq_bind.py:42-94,193-198",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/qq_bind.py:127-183",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/core.py:324-386",
+        "tests/test_qq_bind_application.py:102-140",
+        "tests/test_qq_bind_routes.py:19-78"
       ],
       "source_declaration_found": true,
       "source": {
@@ -11703,19 +11705,20 @@
       "id": "route:GET:/api/config/qq-bind/qr/<task_id>:nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/qq_bind_routes.py:qq_bind_qr",
       "kind": "legacy_routes",
       "entry": "GET /api/config/qq-bind/qr/<task_id> -> nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/qq_bind_routes.py:qq_bind_qr",
-      "status": "受阻",
-      "reason": "The old Flask app and route modules are loaded and its server is enabled by default. Route registration is proven, but each handler's downstream ownership and replacement/compatibility decision is not closed.",
-      "unknown_edge": "route function -> old data/service or feature application -> state effect",
+      "status": "已迁移",
+      "reason": "The Flask QR endpoint remains as a compatibility adapter; QqBindApplication owns task-expiry validation and QR content generation while the existing authorization boundary and image response are retained.",
       "call_graph": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/qq_bind_routes.py:74 -> Flask app.route(/api/config/qq-bind/qr/<task_id>) -> legacy handler -> downstream state effect not closed"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/qq_bind_routes.py:70 qq_bind_qr -> _qq_bind_application.qr_png -> BindTaskStore.get",
+        "QqBindApplication.qr_png -> bind_page_url -> qr_png_bytes -> PNG image response",
+        "The Flask endpoint requires the existing admin authorization and returns the legacy 404 JSON for missing or expired tasks"
       ],
       "evidence": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
-        "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
-        "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
-        "scripts/export_refactor_inventory.py:41-70",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/qq_bind_routes.py:74"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/qq_bind_routes.py:70",
+        "nonebot_plugin_xiuxian_2/features/qq_bind/application.py:76-79",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/qq_bind.py:42-94,103-111,200-203",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/core.py:270-386",
+        "tests/test_qq_bind_application.py:42-81",
+        "tests/test_qq_bind_routes.py:19-78"
       ],
       "source_declaration_found": true,
       "source": {
@@ -11731,19 +11734,20 @@
       "id": "route:POST:/api/config/qq-bind/restart:nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/qq_bind_routes.py:qq_bind_restart",
       "kind": "legacy_routes",
       "entry": "POST /api/config/qq-bind/restart -> nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/qq_bind_routes.py:qq_bind_restart",
-      "status": "受阻",
-      "reason": "The old Flask app and route modules are loaded and its server is enabled by default. Route registration is proven, but each handler's downstream ownership and replacement/compatibility decision is not closed.",
-      "unknown_edge": "route function -> old data/service or feature application -> state effect",
+      "status": "已迁移",
+      "reason": "The restart POST remains as a compatibility adapter with explicit confirmation and legacy HTTP statuses; QqBindApplication owns capability gating and scheduling through the restart runtime helpers.",
       "call_graph": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/qq_bind_routes.py:166 -> Flask app.route(/api/config/qq-bind/restart) -> legacy handler -> downstream state effect not closed"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/qq_bind_routes.py:101 qq_bind_restart -> _qq_bind_application.restart -> detect_restart",
+        "QqBindApplication.restart -> confirm must be true -> schedule_restart -> daemon restart worker starts the detected command after its delay",
+        "The Flask POST retains global admin authorization and CSRF checks and legacy 400/409/500/success responses"
       ],
       "evidence": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
-        "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
-        "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
-        "scripts/export_refactor_inventory.py:41-70",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/qq_bind_routes.py:166"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/qq_bind_routes.py:101",
+        "nonebot_plugin_xiuxian_2/features/qq_bind/application.py:148-170",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/qq_restart.py:21-76",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/core.py:324-386",
+        "tests/test_qq_bind_application.py:143-169",
+        "tests/test_qq_bind_routes.py:19-78"
       ],
       "source_declaration_found": true,
       "source": {
@@ -11759,19 +11763,20 @@
       "id": "route:GET:/api/config/qq-bind/restart-capability:nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/qq_bind_routes.py:qq_bind_restart_capability",
       "kind": "legacy_routes",
       "entry": "GET /api/config/qq-bind/restart-capability -> nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/qq_bind_routes.py:qq_bind_restart_capability",
-      "status": "受阻",
-      "reason": "The old Flask app and route modules are loaded and its server is enabled by default. Route registration is proven, but each handler's downstream ownership and replacement/compatibility decision is not closed.",
-      "unknown_edge": "route function -> old data/service or feature application -> state effect",
+      "status": "已迁移",
+      "reason": "The authenticated Flask capability endpoint remains for compatibility; QqBindApplication owns the projection of restart detection results into the public response and does not expose the underlying command.",
       "call_graph": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/qq_bind_routes.py:150 -> Flask app.route(/api/config/qq-bind/restart-capability) -> legacy handler -> downstream state effect not closed"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/qq_bind_routes.py:93 qq_bind_restart_capability -> _qq_bind_application.restart_capability -> detect_restart",
+        "QqBindApplication.restart_capability -> public automatic/mode/message projection; detected command data is not returned",
+        "The Flask endpoint retains existing admin authorization"
       ],
       "evidence": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
-        "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
-        "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
-        "scripts/export_refactor_inventory.py:41-70",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/qq_bind_routes.py:150"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/qq_bind_routes.py:93",
+        "nonebot_plugin_xiuxian_2/features/qq_bind/application.py:139-146",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/qq_restart.py:21-53",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/core.py:270-386",
+        "tests/test_qq_bind_application.py:143-169",
+        "tests/test_qq_bind_routes.py:19-78"
       ],
       "source_declaration_found": true,
       "source": {
@@ -11787,19 +11792,20 @@
       "id": "route:POST:/api/config/qq-bind/start:nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/qq_bind_routes.py:qq_bind_start",
       "kind": "legacy_routes",
       "entry": "POST /api/config/qq-bind/start -> nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/qq_bind_routes.py:qq_bind_start",
-      "status": "受阻",
-      "reason": "The old Flask app and route modules are loaded and its server is enabled by default. Route registration is proven, but each handler's downstream ownership and replacement/compatibility decision is not closed.",
-      "unknown_edge": "route function -> old data/service or feature application -> state effect",
+      "status": "已迁移",
+      "reason": "The start endpoint remains as a compatibility adapter with existing admin/CSRF and status semantics; QqBindApplication owns key generation, remote task creation, and process-local task registration.",
       "call_graph": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/qq_bind_routes.py:47 -> Flask app.route(/api/config/qq-bind/start) -> legacy handler -> downstream state effect not closed"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/qq_bind_routes.py:61 qq_bind_start -> _qq_bind_application.start -> create_bind_task -> QQ create-task endpoint (15-second client timeout)",
+        "QqBindApplication.start -> generate 256-bit per-task key -> BindTaskStore.add with the existing 600-second TTL -> legacy task response",
+        "The Flask endpoint retains the global admin authorization and CSRF middleware"
       ],
       "evidence": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
-        "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
-        "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
-        "scripts/export_refactor_inventory.py:41-70",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/qq_bind_routes.py:47"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/qq_bind_routes.py:61",
+        "nonebot_plugin_xiuxian_2/features/qq_bind/application.py:56-74",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/qq_bind.py:42-69,186-190",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/core.py:324-386",
+        "tests/test_qq_bind_application.py:42-81",
+        "tests/test_qq_bind_routes.py:19-78"
       ],
       "source_declaration_found": true,
       "source": {

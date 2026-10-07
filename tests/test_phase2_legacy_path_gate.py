@@ -80,7 +80,7 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
                              if (item.get("source") or {}).get("feature") == "sect"))
         self.assertEqual(report["path_count"], 496)
         self.assertEqual(report["status_counts"],
-                         {"不可达": 19, "允许保留的兼容路径": 132, "受阻": 66, "已迁移": 279})
+                         {"不可达": 19, "允许保留的兼容路径": 133, "受阻": 59, "已迁移": 285})
         self.assertTrue(report["frozen_membership_valid"])
         self.assertEqual(report["integrity_errors"], [])
 
@@ -399,7 +399,7 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
             self.assertIn(evidence, system_item["evidence"])
         self.assertNotIn("legacy downstream effect not closed", system_graph)
         self.assertEqual(report["status_counts"],
-                         {"不可达": 19, "允许保留的兼容路径": 132, "受阻": 66, "已迁移": 279})
+                         {"不可达": 19, "允许保留的兼容路径": 133, "受阻": 59, "已迁移": 285})
         self.assertTrue(report["frozen_membership_valid"])
         self.assertEqual(report["integrity_errors"], [])
 
@@ -447,7 +447,7 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
         self.assertNotIn("legacy downstream effect not closed", claim_graph)
         self.assertEqual(
             report["status_counts"],
-            {"不可达": 19, "允许保留的兼容路径": 132, "受阻": 66, "已迁移": 279},
+            {"不可达": 19, "允许保留的兼容路径": 133, "受阻": 59, "已迁移": 285},
         )
         self.assertTrue(report["frozen_membership_valid"])
         self.assertEqual(report["integrity_errors"], [])
@@ -506,7 +506,7 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
 
         self.assertEqual(
             report["status_counts"],
-            {"不可达": 19, "允许保留的兼容路径": 132, "受阻": 66, "已迁移": 279},
+            {"不可达": 19, "允许保留的兼容路径": 133, "受阻": 59, "已迁移": 285},
         )
 
     def test_world_events_demon_claim_command_owns_atomic_claim_statistic(self):
@@ -538,7 +538,7 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
         self.assertEqual(report["integrity_errors"], [])
         self.assertEqual(
             report["status_counts"],
-            {"不可达": 19, "允许保留的兼容路径": 132, "受阻": 66, "已迁移": 279},
+            {"不可达": 19, "允许保留的兼容路径": 133, "受阻": 59, "已迁移": 285},
         )
         self.assertTrue(report["frozen_membership_valid"])
 
@@ -586,7 +586,7 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
 
         self.assertEqual(
             report["status_counts"],
-            {"不可达": 19, "允许保留的兼容路径": 132, "受阻": 66, "已迁移": 279},
+            {"不可达": 19, "允许保留的兼容路径": 133, "受阻": 59, "已迁移": 285},
         )
         self.assertTrue(report["frozen_membership_valid"])
         self.assertEqual(report["integrity_errors"], [])
@@ -643,7 +643,7 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
         self.assertEqual(report["path_count"], 496)
         self.assertEqual(
             report["status_counts"],
-            {"不可达": 19, "允许保留的兼容路径": 132, "受阻": 66, "已迁移": 279},
+            {"不可达": 19, "允许保留的兼容路径": 133, "受阻": 59, "已迁移": 285},
         )
         self.assertGreater(report["blocked_count"], 0)
         self.assertTrue(all(item["call_graph"] and item["evidence"] for item in report["items"]))
