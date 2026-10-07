@@ -6,7 +6,7 @@ import random
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import nonebot
 
@@ -14,6 +14,13 @@ nonebot.init()
 
 from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_past_life.transaction_service import (
     PastLifeChoiceService,
+)
+from nonebot_plugin_xiuxian_2.features.past_life.application import PastLifeApplication
+from nonebot_plugin_xiuxian_2.features.past_life.choice_repository import (
+    PastLifeChoiceSqlRepository,
+)
+from nonebot_plugin_xiuxian_2.features.past_life.choice_repository import (
+    PastLifeChoiceResult,
 )
 from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_past_life.past_life_data import (
     check_early_death,
@@ -150,6 +157,13 @@ class PastLifeChoiceTests(unittest.TestCase):
             ).fetchone()[0]) if conn.table_exists("past_life_choice_operations") else 0
         return state, count
 
+    def read_operation_table(self):
+        with db_backend.connection(self.game) as conn:
+            return conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' "
+                "AND name='past_life_choice_operations'"
+            ).fetchone()
+
     def test_advance_is_atomic_idempotent_and_replays_reply(self):
         applied = self.advance()
         duplicate = self.advance()
@@ -162,6 +176,47 @@ class PastLifeChoiceTests(unittest.TestCase):
         self.assertEqual("继续前行", json.loads(state[3])[0]["choice_text"])
         self.assertFalse(json.loads(state[4])["early:悟性"]["triggered"])
         self.assertEqual(1, count)
+
+    def test_feature_replay_query_is_read_only_and_handles_missing_table(self):
+        repository = PastLifeChoiceSqlRepository(self.game, self.player)
+        before = self.read_operation_table()
+        self.assertIsNone(repository.get_result("not-created", "u"))
+        self.assertEqual(before, self.read_operation_table())
+
+    def test_feature_replay_query_returns_duplicate_response(self):
+        applied = self.advance("feature-replay")
+        self.assertEqual("applied", applied.status)
+        result = PastLifeApplication(self.game, self.player).choice_result(
+            "feature-replay", "u"
+        )
+        self.assertIsNotNone(result)
+        self.assertEqual("duplicate", result.status)
+        self.assertEqual(applied.response, result.response)
+
+    def test_engine_replay_does_not_construct_legacy_service_by_default(self):
+        from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_past_life import past_life_events
+
+        response = self.response()
+        application = Mock()
+        application.choice_result.return_value = PastLifeChoiceResult(
+            "duplicate", response
+        )
+        with (
+            patch.object(past_life_events, "_past_life_choice_service_instance", None),
+            patch.object(past_life_events, "_past_life_application", application),
+            patch.object(
+                past_life_events,
+                "_past_life_choice_service",
+                side_effect=AssertionError("legacy replay service must not be constructed"),
+            ),
+        ):
+            result = past_life_events.PastLifeEngine().process_choice(
+                "u", 1, "feature-replay-no-legacy"
+            )
+        self.assertEqual("duplicate", result["operation_status"])
+        application.choice_result.assert_called_once_with(
+            "feature-replay-no-legacy", "u"
+        )
 
     def test_stale_full_snapshot_rejects_all_writes(self):
         stale = copy.deepcopy(self.initial)

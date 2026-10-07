@@ -15,6 +15,8 @@ Migration `legacy.past_life.001` records the slice in `game_db`; the feature-own
 ## 事务与失败回滚
 Mutating calls carry an `operation_id` and are recorded in the operation ledger. Disable the feature flag or restore the pre-migration backup to roll back.
 
+Lifecycle writes for `投胎`、`前尘选择`、终局奖励和 `重置前尘` are owned by `PastLifeApplication` repositories. Choice replay reads also use the feature repository in the default path and do not create the legacy receipt table; an explicitly injected legacy service remains compatibility-only. `前尘回忆`、`前尘往事` and static help remain read-only compatibility paths. `前尘排行` uses a read-only schema-aware projection and does not create missing tables or columns.
+
 奖励物品目录只在实际生成终局奖励时按需构造，导入前尘模块不会预加载全量 `Items` 缓存；共享目录不在 feature 内复制或主动清空。
 
 ## 定时任务
@@ -28,6 +30,8 @@ Command and web adapters translate transport input into the application DTO; bus
 
 ## 测试与手工验收
 Run the feature application test and the full architecture gate. Repeat the same operation ID to verify replay.
+
+Focused lifecycle, replay, rank-read and final-history regression tests: `29 passed`.
 
 ## 灰度开关、回滚和已知限制
 Legacy algorithms and schemas remain behind the repository adapter for one complete release cycle; the compatibility hit counter determines when removal is safe.

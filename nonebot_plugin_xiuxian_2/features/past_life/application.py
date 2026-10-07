@@ -7,6 +7,12 @@ class PastLifeApplication(MigratedFeatureApplication):
     def __init__(self,database:str|Path,player_database:str|Path|None=None,*,repository:PastLifeRepository|None=None)->None: super().__init__(database,feature='past_life',repository=repository or PastLifeRepository(database,player_database))
     def start(self,*,operation_id,user_id,**kwargs): return self.repository.start(operation_id=operation_id,user_id=user_id,**kwargs)
     def choice(self,*,operation_id,user_id,choice_idx,expected_state,final_state,response): return self.repository.choice(operation_id=operation_id,user_id=user_id,choice_idx=choice_idx,expected_state=expected_state,final_state=final_state,response=response)
+    def choice_result(self, operation_id, user_id=None):
+        """Read an existing choice receipt without invoking legacy writes."""
+        return self.repository.choice_result(operation_id, user_id)
+    def get_result(self, operation_id, user_id=None):
+        """Compatibility alias for callers that use the generic replay name."""
+        return self.choice_result(operation_id, user_id)
     def reset_one(self,*,operation_id,user_id,clear_history=False):
         outcome=self.repository.reset_one(operation_id=operation_id,user_id=user_id,clear_history=clear_history); return SimpleNamespace(status=outcome.status,data=outcome.data,replayed=outcome.status=='duplicate',ok=outcome.succeeded)
     def reset_all_create(self,*,operation_id,user_id,clear_history=False):

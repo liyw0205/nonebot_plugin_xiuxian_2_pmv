@@ -1,4 +1,5 @@
 from __future__ import annotations
+import sqlite3
 import json
 from dataclasses import dataclass
 from pathlib import Path
@@ -39,6 +40,38 @@ class PastLifeChoiceSqlRepository:
         r=uow.query_one('SELECT * FROM player_data.past_life WHERE user_id=?',(user_id,)); return None if r is None else self._norm(dict(r))
     def _write(self,uow,user_id,state):
         vals=[self._enc(f,state[f]) for f in FIELDS]; uow.execute('UPDATE player_data.past_life SET '+','.join(f'"{f}"=?' for f in FIELDS)+' WHERE user_id=?',(*vals,user_id))
+
+    def get_result(self, operation_id, user_id=None):
+        """Read a choice receipt without creating or changing any schema.
+
+        Replay checks run before the state precondition in the legacy handler,
+        so this path must remain safe on an older database that has not yet
+        received the choice-operation table.
+        """
+        operation_id = str(operation_id).strip()
+        if not operation_id:
+            raise ValueError("operation_id is required")
+        database = Path(self.game_database)
+        if not database.is_file():
+            return None
+        try:
+            with DatabaseUnitOfWork(database, read_only=True) as uow:
+                row = uow.query_one(
+                    "SELECT user_id,response_json FROM past_life_choice_operations "
+                    "WHERE operation_id=?",
+                    (operation_id,),
+                )
+        except sqlite3.OperationalError as exc:
+            if "no such table" in str(exc).lower():
+                return None
+            raise
+        if row is None:
+            return None
+        if user_id is not None and str(row["user_id"]) != str(user_id):
+            return PastLifeChoiceResult("operation_conflict")
+        response = json.loads(str(row["response_json"]))
+        return PastLifeChoiceResult("duplicate", response)
+
     def advance(self,operation_id,user_id,choice_idx,expected_state,final_state,response):
         operation_id,user_id=str(operation_id).strip(),str(user_id).strip(); choice_idx=int(choice_idx); exp=self._norm(expected_state); final=self._norm(final_state); response=dict(response)
         if not operation_id or not user_id or choice_idx<=0 or not response.get('message') or response.get('is_end') is not False or int(exp['state'])!=2 or int(final['state'])!=2 or int(final['stage'])!=int(exp['stage'])+1 or int(final['revision'])!=int(exp['revision'])+1: raise ValueError('valid non-terminal past life choice is required')

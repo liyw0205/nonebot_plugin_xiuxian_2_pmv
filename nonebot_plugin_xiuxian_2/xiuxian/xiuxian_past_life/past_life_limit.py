@@ -3,8 +3,11 @@
 """
 import json
 from datetime import datetime, timedelta
+from pathlib import Path
 from ..xiuxian_utils.xiuxian2_handle import PlayerDataManager
+from ...infrastructure.database import DatabaseUnitOfWork
 from ...infrastructure.clock import SystemClock
+from ...paths import get_paths
 from .past_life_state import PAST_LIFE_FIELDS, new_default_state
 
 _player_data_manager_instance = None
@@ -48,6 +51,57 @@ class PastLifeLimit:
                     pass
             state[f] = val
         return state
+
+    def get_all_field_data(self, field):
+        """Read a past-life column without creating missing tables or fields."""
+        database = Path(get_paths().player_db)
+        if not database.is_file():
+            return []
+
+        field_name = str(field or "").strip()
+        if not field_name:
+            return []
+
+        with DatabaseUnitOfWork(database, read_only=True) as uow:
+            table_name = self.table_name
+            table = uow.query_one(
+                "SELECT name FROM sqlite_master "
+                "WHERE type='table' AND lower(name)=lower(?) LIMIT 1",
+                (table_name,),
+            )
+            if table is None:
+                return []
+
+            columns = {
+                str(row["name"]).casefold(): str(row["name"])
+                for row in uow.query_all(
+                    f"PRAGMA table_info({self._quote_identifier(table_name)})"
+                )
+            }
+            column_name = columns.get(field_name.casefold())
+            if column_name is None or "user_id" not in columns:
+                return []
+
+            rows = uow.query_all(
+                f"SELECT {self._quote_identifier(columns['user_id'])} AS user_id, "
+                f"{self._quote_identifier(column_name)} AS value "
+                f"FROM {self._quote_identifier(table_name)}"
+            )
+
+        result = []
+        for row in rows:
+            value = row["value"]
+            if isinstance(value, str):
+                try:
+                    value = json.loads(value)
+                except (json.JSONDecodeError, TypeError):
+                    pass
+            result.append((row["user_id"], value))
+        return result
+
+    @staticmethod
+    def _quote_identifier(name):
+        return '"' + str(name).replace('"', '""') + '"'
 
     def _parse_run_time(self, value):
         if not value:

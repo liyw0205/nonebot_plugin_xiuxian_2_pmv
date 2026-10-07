@@ -1,6 +1,7 @@
 from __future__ import annotations
 import json
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from ...infrastructure.database import DatabaseUnitOfWork
 
@@ -19,6 +20,9 @@ class PastLifeFinalSettlementSqlRepository:
         for f in FIELDS:
             if f not in cols:uow.execute(f'ALTER TABLE player_data.past_life ADD COLUMN "{f}" {"INTEGER" if f in {"state","stage","revision","total_score","total_runs","best_score","achievement_points"} else "TEXT"} DEFAULT NULL')
         uow.execute('CREATE TABLE IF NOT EXISTS past_life_final_operations(operation_id TEXT PRIMARY KEY,user_id TEXT NOT NULL,payload TEXT NOT NULL,result_json TEXT NOT NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)')
+        operation_columns={str(r['name']) for r in uow.query_all('PRAGMA table_info(past_life_final_operations)')}
+        if 'user_id' not in operation_columns:
+            uow.execute('ALTER TABLE past_life_final_operations ADD COLUMN user_id TEXT')
         uow.execute('CREATE TABLE IF NOT EXISTS economy_log(id INTEGER PRIMARY KEY AUTOINCREMENT,user_id TEXT,source TEXT NOT NULL,action TEXT NOT NULL,stone_delta INTEGER NOT NULL DEFAULT 0,exp_delta INTEGER NOT NULL DEFAULT 0,item_delta TEXT NOT NULL DEFAULT "[]",detail TEXT NOT NULL DEFAULT "{}",trace_id TEXT,created_at TEXT NOT NULL)')
     def _encode(self, field, value):
         return self._canon(value) if field in JSON_FIELDS else value
@@ -40,19 +44,29 @@ class PastLifeFinalSettlementSqlRepository:
             result[field] = raw
         return result
     def settle(self,operation_id,user_id,expected_state,final_state,ending_name,score,exp_reward,stone_reward,achievement_points,item_reward=None,completed_at=None,choice_response=None):
-        operation_id,user_id=str(operation_id).strip(),str(user_id).strip(); score,exp_reward,stone_reward,achievement_points=map(int,(score,exp_reward,stone_reward,achievement_points)); completed_at=str(completed_at or '')
+        operation_id,user_id=str(operation_id).strip(),str(user_id).strip(); score,exp_reward,stone_reward,achievement_points=map(int,(score,exp_reward,stone_reward,achievement_points)); completed_at=str(completed_at or datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
         if not operation_id or min(score,exp_reward,stone_reward,achievement_points)<0: raise ValueError('invalid past life final settlement')
         item=None if not item_reward else {'id':int(item_reward['id']),'name':str(item_reward['name']),'type':str(item_reward['type']),'num':max(0,int(item_reward.get('num',1)))}
         payload=self._canon({'user_id':user_id,'expected':expected_state,'ending':str(ending_name),'score':score,'exp':exp_reward,'stone':stone_reward,'points':achievement_points,'item':item,'completed_at':completed_at,'choice_response':choice_response})
         with DatabaseUnitOfWork(self.game_database,immediate=True) as uow:
             uow.attach_database(self.player_database,'player_data'); self._schema(uow); old=uow.query_one('SELECT user_id,payload,result_json FROM past_life_final_operations WHERE operation_id=?',(operation_id,))
-            if old is not None:return PastLifeFinalResult('duplicate',json.loads(old['result_json'])) if str(old['user_id'])==user_id and str(old['payload'])==payload else PastLifeFinalResult('operation_conflict',{})
+            if old is not None:
+                old_user_id=old['user_id']
+                if old_user_id is None:
+                    try:
+                        old_user_id=json.loads(str(old['payload'])).get('user_id')
+                    except (TypeError, ValueError, json.JSONDecodeError):
+                        old_user_id=None
+                if str(old_user_id) == user_id:
+                    return PastLifeFinalResult('duplicate',json.loads(old['result_json']))
+                return PastLifeFinalResult('operation_conflict',{})
             user=uow.query_one('SELECT exp,stone FROM user_xiuxian WHERE user_id=?',(user_id,)); row=uow.query_one('SELECT * FROM player_data.past_life WHERE user_id=?',(user_id,))
             if user is None or row is None:return PastLifeFinalResult('user_missing',{})
             current=self._normalize(dict(row))
             for f,v in dict(expected_state).items():
                 if self._canon(current.get(f))!=self._canon(v):return PastLifeFinalResult('state_changed',{})
-            persisted=dict(final_state); persisted.update({'state':0,'last_run_time':completed_at,'total_runs':int(expected_state.get('total_runs',0))+1,'best_score':max(int(expected_state.get('best_score',0)),score),'best_ending':str(ending_name),'achievement_points':int(expected_state.get('achievement_points',0))+achievement_points})
+            previous_runs=int(expected_state.get('total_runs',0) or 0); previous_best=int(expected_state.get('best_score',0) or 0); endings_log=list(expected_state.get('endings_log',[]) or []); endings_log.append({'run_number':previous_runs+1,'name':str(ending_name),'score':score,'time':completed_at})
+            persisted=dict(final_state); persisted.update({'state':0,'last_run_time':completed_at,'total_runs':previous_runs+1,'best_score':max(previous_best,score),'best_ending':str(ending_name) if score > previous_best else str(expected_state.get('best_ending','') or ''),'endings_log':endings_log[-10:],'achievement_points':int(expected_state.get('achievement_points',0) or 0)+achievement_points})
             uow.execute('UPDATE user_xiuxian SET exp=COALESCE(exp,0)+?,stone=COALESCE(stone,0)+? WHERE user_id=?',(exp_reward,stone_reward,user_id))
             if item and item['num']:
                 existing=uow.query_one('SELECT goods_num FROM back WHERE user_id=? AND goods_id=?',(user_id,item['id']))

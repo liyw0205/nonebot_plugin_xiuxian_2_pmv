@@ -63,6 +63,18 @@ def _past_life_choice_service():
     return _past_life_choice_service_instance
 
 
+def _past_life_choice_replay(operation_id, user_id):
+    """Read a choice receipt through the feature boundary by default.
+
+    Tests and integrations that explicitly inject the legacy service retain
+    the old result type and behavior; normal command execution never builds
+    that service just to perform a read.
+    """
+    if _past_life_choice_service_instance is not None:
+        return _past_life_choice_service_instance.get_result(operation_id, user_id)
+    return _past_life_application.choice_result(operation_id, user_id)
+
+
 def _past_life_final_settlement_service():
     global _past_life_final_settlement_service_instance
     if _past_life_final_settlement_service_instance is None:
@@ -414,7 +426,7 @@ class PastLifeEngine:
         """
         operation_id = str(operation_id or "").strip()
         if operation_id:
-            replay = _past_life_choice_service().get_result(operation_id, user_id)
+            replay = _past_life_choice_replay(operation_id, user_id)
             if replay is not None:
                 if replay.succeeded:
                     return self._choice_response(replay.response, replay.status)
@@ -564,7 +576,7 @@ class PastLifeEngine:
                     "operation_status": settlement.status,
                 }
             if settlement.status == "duplicate":
-                replay = _past_life_choice_service().get_result(operation_id, user_id)
+                replay = _past_life_choice_replay(operation_id, user_id)
                 if replay is not None and replay.succeeded:
                     return self._choice_response(replay.response, replay.status)
             return self._choice_response(response, settlement.status)
@@ -615,7 +627,7 @@ class PastLifeEngine:
                     "operation_status": settlement.status,
                 }
             if settlement.status == "duplicate":
-                replay = _past_life_choice_service().get_result(operation_id, user_id)
+                replay = _past_life_choice_replay(operation_id, user_id)
                 if replay is not None and replay.succeeded:
                     return self._choice_response(replay.response, replay.status)
             return self._choice_response(response, settlement.status)

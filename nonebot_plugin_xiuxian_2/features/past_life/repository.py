@@ -9,6 +9,8 @@ class PastLifeRepository(ServicePort):
     def __init__(self,database:str|Path,player_database:str|Path|None=None)->None: super().__init__('past_life','nonebot_plugin_xiuxian_2.xiuxian.xiuxian_past_life'); self.database=str(database); self.player_database=str(player_database or database)
     def start(self,*,operation_id,user_id,**kwargs): return PastLifeStartSqlRepository(self.database,self.player_database).start(operation_id,user_id,**kwargs)
     def choice(self,*,operation_id,user_id,choice_idx,expected_state,final_state,response): return PastLifeChoiceSqlRepository(self.database,self.player_database).advance(operation_id,user_id,choice_idx,expected_state,final_state,response)
+    def choice_result(self, operation_id, user_id=None): return PastLifeChoiceSqlRepository(self.database,self.player_database).get_result(operation_id, user_id)
+    def get_result(self, operation_id, user_id=None): return self.choice_result(operation_id, user_id)
     def reset_one(self,*,operation_id,user_id,clear_history=False): return PastLifeResetSqlRepository(self.database,self.player_database).reset_one(operation_id,user_id,clear_history)
     def reset_all_create(self,*,operation_id,clear_history=False): return PastLifeResetSqlRepository(self.database,self.player_database).reset_all_create(operation_id,clear_history)
     def reset_all_batch(self,*,operation_id,batch_size=500): return PastLifeResetSqlRepository(self.database,self.player_database).reset_all_batch(operation_id,batch_size=batch_size)

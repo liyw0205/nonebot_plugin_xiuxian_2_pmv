@@ -266,7 +266,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await handle_send(bot, event, msg, md_type="我要修仙")
         await past_rank_cmd.finish()
 
-    all_scores = player_data_manager.get_all_field_data("past_life", "best_score")
+    all_scores = past_life_limit.get_all_field_data("best_score")
 
     sorted_scores = sorted(
         [(uid, score) for uid, score in all_scores if isinstance(score, (int, float)) and score > 0],
