@@ -44,7 +44,7 @@
 
 ## 适配器差异
 
-命令适配器只组装探索快照，Web 适配器只解析 DTO；领域 application 不依赖 NoneBot、Flask 或 SQLite。
+命令适配器只组装探索快照；成员资料由 `PlayerProfileApplication` 读取，CD 与背包由 `DungeonExploreSnapshotApplication` 的只读 repository 批量读取，缺 schema 时 fail closed；Web 适配器只解析 DTO。领域 application 不依赖 NoneBot 或 Flask，探索快照 repository 是明确的 SQLite 读取边界。
 
 ## 测试与手工验收
 

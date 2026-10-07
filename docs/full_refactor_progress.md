@@ -2,7 +2,11 @@
 
 状态：进行中。`v1.1.0` 的 P0-P7 发布证据继续保留，但不作为底层全面重构完成证明。
 
-**当前交付与队列（2026-10-07，本段优先于下文历史“下一片”）**：Arena 已在 `6b3fdc40` 提交推送，bank 已在 `c6ebdd26` 提交推送并核对远端；beg 三个真实入口和本轮世界 BOSS 兑换入口已通过聚焦回归与门禁。共享 matcher family 仍有其它插件受阻，全局计数更新为 `226/107/19/144`，目标仍进行中。BOSS 本轮只处理 `command:boss:世界BOSS兑换`，不重做已验收的讨伐、周限购或日重置；下一组按 `allowed_features` 重新选择，不对已关闭功能重复重构。
+**当前交付与队列（2026-10-07，本段优先于下文历史“下一片”）**：Arena 已在 `6b3fdc40` 提交推送，bank 已在 `c6ebdd26` 提交推送并核对远端；beg 三个真实入口、世界 BOSS 兑换和 Dungeon 两条命令已通过各自聚焦门禁。共享 matcher family 仍有其它插件受阻，全局计数更新为 `240/110/19/127`，目标仍进行中。下一组按 `allowed_features` 重新选择，不对已关闭功能重复重构。
+
+**Dungeon 探索输入与冻结证据（2026-10-07）**：按队列只收口 `command:dungeon:副本兑换` 与 `command:dungeon:探索副本`。兑换确认现有 `DungeonApplication -> DungeonSessionSqlRepository` 已是唯一资产/回执 owner，仅刷新冻结调用图，不重复重构购买事务。探索新增 `DungeonExploreSnapshotApplication`：成员资料复用只读 `PlayerProfileApplication`，`user_cd` 与背包在单个只读 UOW 中批量读取；缺数据库、表或列 fail closed，不创建库或启用 WAL。命令 handler 只组装快照，intent/prepare/settle 仍由既有 DungeonApplication 持有；战斗、队伍管理和奖励算法不在本片范围。两条冻结项已标记为已迁移，membership hash 仍为 `7787a74a...ff51fac`，全局状态为 `240/110/19/127`（已迁移/兼容/不可达/受阻），其余 blocker 不影响本批交付。
+
+本批聚焦快照测试 `7 passed`，探索操作回归 `21 passed`，Dungeon feature/command 选择集 `117 passed`；其中扩大 Dungeon 集合的 4 个失败是既有 NoneBot/Activity 导入顺序循环，不是本批快照逻辑。source-quality、冻结 owner 契约和 `git diff --check` 已通过；测试时间主要消耗在 NoneBot 导入与收集，未作为线上响应延迟证明。
 
 **世界 BOSS 兑换命令 owner（2026-10-07）**：三名子代理分别交付只读回执仓储、入口/回复适配和真实双 SQLite 贯通测试，主线程实现应用层并串行验收。`boss_integral_use_` 现在只解析正整数、生成原有 `boss-purchase:{event}:{user}`/UUID fallback operation ID、调用 `BossPurchaseCommandApplication` 并渲染回复；不再在 matcher 中读取商品目录、配置、周限购或积分。应用先读 `BossPurchaseCommandRepository.receipt`，再读 profile、商品/配置、weekly 和 integral 快照；请求数量保留在 ledger payload，事务内按剩余周限购裁剪实际数量，`BossApplication.purchase -> BossPurchaseSqlRepository.purchase` 继续负责跨 game/player SQLite 原子扣积分、更新周限购、写背包和回执。成功回放先于所有当前输入，拒绝回执不转成功，started/needs_reconcile、旧表缺 status、坏回执均 fail closed；已确认的回滚 `internal_error` 可用同 operation ID 重试。旧 matcher 与共享消息发送仍是兼容边界，本项不宣称世界 BOSS 战斗结算迁移完成。
 

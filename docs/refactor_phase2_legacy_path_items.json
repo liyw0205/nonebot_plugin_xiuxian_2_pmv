@@ -2654,22 +2654,24 @@
       "id": "command:dungeon:副本兑换",
       "kind": "commands",
       "entry": "dungeon:副本兑换 (aliases: )",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "The command adapter replays through the feature application before reading current catalog/configuration. Purchase effects and the operation receipt are owned by the feature SQL repository; the legacy service remains only behind an explicit rollback compatibility path.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dungeon/__init__.py:340 dungeon_purchase = on_command('副本兑换') aliases=副本购买 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dungeon/__init__.py:1150 handle_dungeon_purchase -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dungeon/__init__.py:346 dungeon_purchase = on_command('副本兑换') aliases=副本购买 -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dungeon/__init__.py:1126 handle_dungeon_purchase -> DungeonApplication.operation_result -> DungeonApplication.purchase -> DungeonSessionSqlRepository.purchase"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dungeon/__init__.py:340",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dungeon/__init__.py:1150"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dungeon/__init__.py:346",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dungeon/__init__.py:1126",
+        "nonebot_plugin_xiuxian_2/features/dungeon/application.py",
+        "nonebot_plugin_xiuxian_2/features/dungeon/repository.py",
+        "tests/test_dungeon_frozen_command_owner.py"
       ],
       "source_declaration_found": true,
       "source": {
@@ -4924,22 +4926,25 @@
       "id": "command:dungeon:探索副本",
       "kind": "commands",
       "entry": "dungeon:探索副本 (aliases: )",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "The command adapter freezes the exploration input snapshot and durable intent through feature-owned read/application boundaries, then prepares and settles through the existing DungeonApplication repository transaction. Combat and reward compatibility helpers remain downstream calculation boundaries.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dungeon/__init__.py:337 explore_dungeon = on_command('探索副本') aliases=副本探索,挑战副本 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dungeon/__init__.py:1247 handle_explore_dungeon -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dungeon/__init__.py:343 explore_dungeon = on_command('探索副本') aliases=副本探索,挑战副本 -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dungeon/__init__.py:1223 handle_explore_dungeon -> DungeonExploreSnapshotApplication.read -> DungeonApplication.prepare_intent -> DungeonApplication.prepare_resolution -> DungeonApplication.settle"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dungeon/__init__.py:337",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dungeon/__init__.py:1247"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dungeon/__init__.py:343",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dungeon/__init__.py:1223",
+        "nonebot_plugin_xiuxian_2/features/dungeon/application.py",
+        "nonebot_plugin_xiuxian_2/features/dungeon/repository.py",
+        "nonebot_plugin_xiuxian_2/features/dungeon/explore_snapshot.py",
+        "tests/test_dungeon_frozen_command_owner.py"
       ],
       "source_declaration_found": true,
       "source": {

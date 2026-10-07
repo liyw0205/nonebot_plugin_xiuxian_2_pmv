@@ -31,7 +31,6 @@ from ..xiuxian_utils.player_fight import (
     pve_fight,
     resolve_final_user_statuses,
 )
-from ..xiuxian_utils import db_backend
 from ..xiuxian_utils.lay_out import assign_bot, Cooldown
 from ..xiuxian_utils.item_json import Items
 from ..xiuxian_config import XiuConfig, convert_rank
@@ -50,6 +49,10 @@ from ...features.dungeon.team_presentation import (
 )
 from ...paths import get_paths
 from ...features.dungeon.application import DungeonApplication
+from ...features.dungeon.explore_snapshot import (
+    DungeonExploreSnapshotApplication,
+    DungeonExploreSnapshotError,
+)
 from ...features.dungeon.team_application import DungeonTeamApplication
 from ...features.dungeon.invite_expiry import DungeonInviteExpiryWorker
 from ...features.dungeon.team_repository import TeamExitResult, TeamMutationResult, TeamStateSnapshot
@@ -60,6 +63,9 @@ _sql_message_instance = None
 items = Items()
 runtime_clock = SystemClock()
 dungeon_application = DungeonApplication(get_paths().game_db, get_paths().player_db, clock=runtime_clock)
+dungeon_explore_snapshot_application = DungeonExploreSnapshotApplication(
+    get_paths().game_db
+)
 dungeon_team_application = DungeonTeamApplication(get_paths().player_db, game_database=get_paths().game_db)
 dungeon_ids = UUIDGenerator()
 
@@ -915,36 +921,6 @@ def build_battle_rewards(
     return msg, rewards
 
 
-def _get_user_cd_type(user_id: str) -> int:
-    with db_backend.connection(get_paths().game_db) as conn:
-        if not conn.table_exists("user_cd"):
-            return 0
-        row = conn.execute(
-            "SELECT COALESCE(type,0) FROM user_cd WHERE user_id=%s "
-            "ORDER BY rowid DESC LIMIT 1",
-            (str(user_id),),
-        ).fetchone()
-    return int(row[0]) if row else 0
-
-
-def _inventory_snapshot(user_ids: list[str]) -> dict[str, dict[str, dict[str, int]]]:
-    snapshot: dict[str, dict[str, dict[str, int]]] = {}
-    with db_backend.connection(get_paths().game_db) as conn:
-        if not conn.table_exists("back"):
-            return {str(user_id): {} for user_id in user_ids}
-        for user_id in user_ids:
-            rows = conn.execute(
-                "SELECT goods_id, COALESCE(goods_num,0), COALESCE(bind_num,0) "
-                "FROM back WHERE user_id=%s",
-                (str(user_id),),
-            ).fetchall()
-            snapshot[str(user_id)] = {
-                str(row[0]): {"goods_num": int(row[1] or 0), "bind_num": int(row[2] or 0)}
-                for row in rows
-            }
-    return snapshot
-
-
 def _explore_response(message: str, battle_messages=None) -> dict:
     return {
         "battle_messages": list(battle_messages or []),
@@ -1357,24 +1333,6 @@ async def handle_explore_dungeon(bot: Bot, event: GroupMessageEvent | PrivateMes
         ):
             await reject("team_invalid", "队伍成员数据异常，请先处理队伍状态。", player_status)
             await explore_dungeon.finish()
-        members_info = []
-        for member_id in member_ids:
-            member_info = _sql_message().get_user_info_with_id(member_id)
-            if member_info is None:
-                await reject(
-                    "member_missing",
-                    f"队伍成员 {member_id} 数据不存在，无法开始探索。",
-                    player_status,
-                )
-                await explore_dungeon.finish()
-            if int(member_info.get("is_ban", 0) or 0) == 1:
-                await reject(
-                    "member_banned",
-                    f"{member_info.get('user_name', member_id)}当前无法参与副本探索。",
-                    player_status,
-                )
-                await explore_dungeon.finish()
-            members_info.append(member_info)
         user_ids_in_battle = member_ids
         team_snapshot = {
             "team_id": str(team_id),
@@ -1384,11 +1342,44 @@ async def handle_explore_dungeon(bot: Bot, event: GroupMessageEvent | PrivateMes
         if "version" in team_info:
             team_snapshot["version"] = int(team_info.get("version", 0) or 0)
 
-    member_cd_types = {}
+    try:
+        explore_snapshot = dungeon_explore_snapshot_application.read(
+            user_ids_in_battle,
+            supplied_profiles={user_id: user_info},
+        )
+    except DungeonExploreSnapshotError:
+        logger.exception("读取副本探索输入快照失败")
+        await reject("snapshot_unavailable", "副本探索数据暂不可用，请稍后重试。", player_status)
+        await explore_dungeon.finish()
+
+    members_info = []
+    profiles = explore_snapshot.get("profiles", {})
+    for member_id in user_ids_in_battle:
+        member_info = profiles.get(str(member_id))
+        if member_info is None:
+            await reject(
+                "member_missing",
+                f"队伍成员 {member_id} 数据不存在，无法开始探索。",
+                player_status,
+            )
+            await explore_dungeon.finish()
+        if int(member_info.get("is_ban", 0) or 0) == 1:
+            await reject(
+                "member_banned",
+                f"{member_info.get('user_name', member_id)}当前无法参与副本探索。",
+                player_status,
+            )
+            await explore_dungeon.finish()
+        members_info.append(member_info)
+
+    member_cd_types = {
+        str(member_id): int(explore_snapshot["cd_types"].get(str(member_id), 0) or 0)
+        for member_id in user_ids_in_battle
+    }
+
     for member in members_info:
         member_id = str(member["user_id"])
-        cd_type = _get_user_cd_type(member_id)
-        member_cd_types[member_id] = cd_type
+        cd_type = member_cd_types[member_id]
         if cd_type != 0:
             await reject(
                 "member_busy",
@@ -1445,7 +1436,10 @@ async def handle_explore_dungeon(bot: Bot, event: GroupMessageEvent | PrivateMes
     live_battle_inputs = _battle_input_snapshot(
         members_info, exp_ratios, attack_buffs
     )
-    live_inventory = _inventory_snapshot(user_ids_in_battle)
+    live_inventory = {
+        str(member_id): dict(explore_snapshot["inventory"].get(str(member_id), {}))
+        for member_id in user_ids_in_battle
+    }
     intent = {
         "seed_version": DUNGEON_EXPLORE_RNG_VERSION,
         "seeds": {
