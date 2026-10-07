@@ -5,8 +5,7 @@ from nonebot.params import CommandArg
 
 from ..adapter_compat import Bot, GroupMessageEvent, Message, PrivateMessageEvent, is_group_event
 from ..xiuxian_utils.lay_out import assign_bot, Cooldown
-from ..xiuxian_utils.utils import check_user, get_impersonating_target, handle_send
-from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage
+from ..xiuxian_utils.utils import check_user, get_impersonating_target, get_user_profile, handle_send
 from ...features.info.avatar_application import PlayerAvatarApplication
 from ...paths import get_paths
 from ...infrastructure.clock import SystemClock
@@ -17,7 +16,6 @@ from ...infrastructure.ids import UUIDGenerator
 avatar_switch_cmd = on_command("身外化身", priority=5, block=True)
 my_id_cmd = on_command("我的ID", aliases={"我的id", "myid", "id"}, priority=5, block=True)
 
-_sql_message_instance = None
 runtime_clock = SystemClock()
 runtime_random = SystemRandom()
 runtime_ids = UUIDGenerator()
@@ -29,13 +27,6 @@ def _player_avatar_application():
     if _player_avatar_application_instance is None:
         _player_avatar_application_instance = PlayerAvatarApplication(get_paths().player_db)
     return _player_avatar_application_instance
-
-
-def _sql_message():
-    global _sql_message_instance
-    if _sql_message_instance is None:
-        _sql_message_instance = XiuxianDateManage()
-    return _sql_message_instance
 
 
 def _avatar_operation_id(event, action: str, user_id: str) -> str:
@@ -89,7 +80,7 @@ async def avatar_switch_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessage
         await avatar_switch_cmd.finish()
 
     # 只校验本号是否已注册，不校验当前 active 化身是否已建档
-    main_info = _sql_message().get_user_info_with_id(main_id)
+    main_info = get_user_profile(main_id)
     if not main_info:
         await handle_send(bot, event, "请先使用【我要修仙】进入修仙世界后再开启身外化身！\n切换回来：身外化身 本体")
         await avatar_switch_cmd.finish()
@@ -106,7 +97,7 @@ async def avatar_switch_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessage
 
     if role == "avatar":
         avatar_id = info.get("avatar_id")
-        avatar_registered = bool(_sql_message().get_user_info_with_id(str(avatar_id)))
+        avatar_registered = bool(get_user_profile(str(avatar_id)))
         extra = (
             "\n（化身已建档，指令将作用于化身）"
             if avatar_registered
@@ -169,7 +160,7 @@ def _generate_unique_avatar_id() -> str:
     """生成不与现有修仙用户冲突的化身ID"""
     while True:
         new_id = str(runtime_random.randint(10_000_000, 9_999_999_999))
-        if not _sql_message().get_user_info_with_id(new_id):
+        if not get_user_profile(new_id):
             return new_id
 
 

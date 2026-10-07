@@ -4392,10 +4392,10 @@
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_info/avatar.py:18 my_id_cmd = on_command('我的ID') aliases=id,myid,我的id -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_info/avatar.py:131 my_id_cmd_ -> get_impersonating_target (in-memory compatibility mapping)",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_info/avatar.py:131 my_id_cmd_ -> PlayerAvatarApplication.get_active_user_id -> AvatarStateSqlRepository.get_active_id -> DatabaseUnitOfWork(read_only=True)",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_info/avatar.py:131 my_id_cmd_ -> handle_send -> adapter delivery; no persistent state mutation"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_info/avatar.py:17 my_id_cmd = on_command('我的ID') aliases=id,myid,我的id -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_info/avatar.py:122 my_id_cmd_ -> get_impersonating_target (in-memory compatibility mapping)",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_info/avatar.py:122 my_id_cmd_ -> PlayerAvatarApplication.get_active_user_id -> AvatarStateSqlRepository.get_active_id -> DatabaseUnitOfWork(read_only=True)",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_info/avatar.py:122 my_id_cmd_ -> handle_send -> adapter delivery; no persistent state mutation"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
@@ -4407,8 +4407,8 @@
         "nonebot_plugin_xiuxian_2/plugin.py:943,1181",
         "nonebot_plugin_xiuxian_2/features/info/tests/test_avatar_application.py:257-275",
         "tests/test_info_avatar_lazy_reader.py:26-40",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_info/avatar.py:18",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_info/avatar.py:131"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_info/avatar.py:17",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_info/avatar.py:122"
       ],
       "source_declaration_found": true,
       "source": {
@@ -4474,22 +4474,24 @@
       "id": "command:info:我的修仙信息",
       "kind": "commands",
       "entry": "info:我的修仙信息 (aliases: 修仙信息, 存档, 我的存档)",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "允许保留的兼容路径",
+      "reason": "Text and image commands share get_user_xiuxian_info. Profile, title, and last-viewed time use existing feature owners, but the attribute facade still wraps legacy calculations and ranking/root/sect/buff/relationship/natal reads remain legacy-backed. BuffInfo access, relationship table setup, and natal default lookup can initialize persistent rows during display; retain and explicitly track these compatibility effects as one shared projection rather than splitting it into duplicate command owners.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_info/user_info.py:32 xiuxian_message = on_command('我的修仙信息') aliases=修仙信息,存档,我的存档 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_info/user_info.py:233 xiuxian_message_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_info/user_info.py:233 xiuxian_message_ -> shared get_user_xiuxian_info projection -> PlayerProfileApplication, TitleApplication, and PlayerActivityApplication wrappers; legacy attribute/rank/root/sect/buff/relationship/natal readers remain, including BuffInfo, relationship-table, and natal-default initialization -> text/markdown delivery"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_info/user_info.py:32",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_info/user_info.py:233"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_info/user_info.py:233",
+        "tests/test_info_frozen_command_owner.py",
+        "tests/test_player_profile_read_contract.py",
+        "tests/test_info_user_lazy_reader.py"
       ],
       "source_declaration_found": true,
       "source": {
@@ -4501,22 +4503,24 @@
       "id": "command:info:我的修仙信息图片版",
       "kind": "commands",
       "entry": "info:我的修仙信息图片版 (aliases: 修仙信息图片版, 存档图片版, 我的存档图片版)",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "允许保留的兼容路径",
+      "reason": "The image command uses the same get_user_xiuxian_info projection as the text command. Profile, title, and last-viewed time use existing feature owners, but the attribute facade still wraps legacy calculations and ranking/root/sect/buff/relationship/natal reads remain legacy-backed. BuffInfo access, relationship table setup, and natal default lookup can initialize persistent rows during display; retain and explicitly track these compatibility effects as one shared projection.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_info/user_info.py:33 xiuxian_message_img = on_command('我的修仙信息图片版') aliases=修仙信息图片版,存档图片版,我的存档图片版 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_info/user_info.py:400 xiuxian_message_img_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_info/user_info.py:400 xiuxian_message_img_ -> shared get_user_xiuxian_info projection -> PlayerProfileApplication, TitleApplication, and PlayerActivityApplication wrappers; legacy attribute/rank/root/sect/buff/relationship/natal readers remain, including BuffInfo, relationship-table, and natal-default initialization -> image renderer and delivery"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_info/user_info.py:33",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_info/user_info.py:400"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_info/user_info.py:400",
+        "tests/test_info_frozen_command_owner.py",
+        "tests/test_player_profile_read_contract.py",
+        "tests/test_info_user_lazy_reader.py"
       ],
       "source_declaration_found": true,
       "source": {
@@ -5342,22 +5346,23 @@
       "id": "command:info:更新日志",
       "kind": "commands",
       "entry": "info:更新日志 (aliases: 更新记录)",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "允许保留的兼容路径",
+      "reason": "The changelog command reads an external commit feed, renders a page image, sends it, and cleans up any temporary image file. It has no player/gameplay state transition or persistent business store; retain this adapter through the compatibility release and gate removal through independent P7 evidence. The HTTP call has a 15-second timeout but no explicit response byte cap, and rendered image size is not bounded.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_info/changelog_command.py:15 changelog = on_command('更新日志') aliases=更新记录 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_info/changelog_command.py:40 changelog_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_info/changelog_command.py:40 changelog_ -> get_commits/create_changelog_image via asyncio.to_thread -> handle_pic_send -> temporary-file cleanup; external changelog presentation only"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_info/changelog_command.py:15",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_info/changelog_command.py:40"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_info/changelog_command.py:40",
+        "tests/test_info_frozen_command_owner.py",
+        "tests/test_changelog_io.py"
       ],
       "source_declaration_found": true,
       "source": {
@@ -8739,22 +8744,25 @@
       "id": "command:info:身外化身",
       "kind": "commands",
       "entry": "info:身外化身 (aliases: )",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "Avatar identity existence and ID collision checks now use PlayerProfileApplication read queries. Initialization, active-role toggles, and restore-to-main mutations are owned by PlayerAvatarApplication and AvatarStateSqlRepository; the command adapter retains transport checks and replies.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_info/avatar.py:17 avatar_switch_cmd = on_command('身外化身') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_info/avatar.py:47 avatar_switch_cmd_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_info/avatar.py:16 avatar_switch_cmd = on_command('身外化身') -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_info/avatar.py:38 avatar_switch_cmd_ -> get_user_profile/PlayerProfileApplication for main/avatar identity reads -> init_avatar_if_needed/toggle_avatar -> PlayerAvatarApplication.initialize/toggle_active/restore_active -> AvatarStateSqlRepository -> response delivery"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_info/avatar.py:17",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_info/avatar.py:47"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_info/avatar.py:16",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_info/avatar.py:38",
+        "nonebot_plugin_xiuxian_2/features/info/avatar_application.py:20-21",
+        "nonebot_plugin_xiuxian_2/features/info/profile_application.py:20-21",
+        "tests/test_info_frozen_command_owner.py",
+        "tests/test_info_avatar_lazy_reader.py"
       ],
       "source_declaration_found": true,
       "source": {
