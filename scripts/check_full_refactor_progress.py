@@ -1058,6 +1058,10 @@ def _slice_status() -> dict[str, dict[str, object]]:
     tasks_entry = (PACKAGE / "xiuxian" / "xiuxian_tasks" / "task_data.py").read_text(encoding="utf-8")
     tasks_command = (PACKAGE / "xiuxian" / "xiuxian_tasks" / "__init__.py").read_text(encoding="utf-8")
     tasks_progress = (PACKAGE / "features" / "tasks" / "progress.py").read_text(encoding="utf-8")
+    tasks_read_states_start = tasks_progress.index("    def read_states(")
+    tasks_read_states = tasks_progress[
+        tasks_read_states_start : tasks_progress.index("    def record(", tasks_read_states_start)
+    ]
     tasks_migrations = (PACKAGE / "features" / "tasks" / "migrations.py").read_text(encoding="utf-8")
     compensation_repository = (PACKAGE / "features" / "compensation" / "reward_claim_repository.py").read_text(encoding="utf-8")
     compensation_invitation_repository = (PACKAGE / "features" / "compensation" / "invitation_repository.py").read_text(encoding="utf-8")
@@ -2139,6 +2143,26 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "progress_application_owned": "TaskProgressApplication(get_paths().player_db)" in tasks_entry,
             "progress_repository_owned": "class TasksProgressRepository" in tasks_progress,
             "progress_request_path_has_no_ddl": "CREATE TABLE" not in tasks_progress and "ALTER TABLE" not in tasks_progress and "TaskProgressEventService(" not in tasks_entry,
+            "status_read_application_owned": (
+                "def read_states(" in tasks_claim_application
+                and "return self.repository.read_states(user_id, periods)" in tasks_claim_application
+            ),
+            "status_commands_use_non_mutating_read": (
+                "self.progress_application.read_states(" in tasks_entry
+                and "self.progress_application.get_states(" not in tasks_entry
+            ),
+            "status_read_uses_read_only_uow": (
+                "DatabaseUnitOfWork(self.database, read_only=True)" in tasks_read_states
+                and "INSERT INTO" not in tasks_read_states
+                and "UPDATE " not in tasks_read_states
+            ),
+            "status_read_missing_schema_fails_closed": (
+                "except (FileNotFoundError, sqlite3.OperationalError) as exc:" in tasks_read_states
+                and all(
+                    marker in tasks_read_states
+                    for marker in ("unable to open database", "no such table", "no such column")
+                )
+            ),
             "progress_migration_registered": 'Migration("tasks.001", "task_progress_schema", apply_task_progress)' in plugin and "def apply_task_progress(" in tasks_migrations,
             "claim_schema_migration_registered": 'Migration("tasks.002", "task_reward_claim_schema", apply_task_claim)' in plugin and "def apply_task_claim(" in tasks_migrations,
             "claim_recovery_migrations_registered": 'Migration("tasks.003", "task_reward_claim_recovery_schema", apply_task_claim_recovery)' in plugin and 'Migration("tasks.004", "task_reward_claim_player_schema", apply_task_claim_player)' in plugin,

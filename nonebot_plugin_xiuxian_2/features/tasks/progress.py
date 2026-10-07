@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
@@ -177,6 +178,48 @@ class TasksProgressRepository:
                 result[cycle] = (progress, claimed, period)
             self._write_states(uow, user_id, states)
             return result
+
+    def read_states(
+        self, user_id: str, periods: Mapping[str, str]
+    ) -> dict[str, tuple[dict[str, int], list[str], str]]:
+        """Read the current projection without request-time writes or DDL."""
+        user_id = str(user_id).strip()
+        selected = tuple(cycle for cycle in self._cycles if cycle in periods)
+        normalized_periods = self._normalize_periods(periods, selected)
+        if not user_id or not selected:
+            raise ValueError("user and selected task periods are required")
+
+        result = {
+            cycle: ({}, [], normalized_periods[cycle])
+            for cycle in selected
+        }
+        fields = [
+            f"{cycle}_{suffix}"
+            for cycle in selected
+            for suffix in ("period", "progress", "claimed")
+        ]
+        try:
+            with DatabaseUnitOfWork(self.database, read_only=True) as uow:
+                row = uow.query_one(
+                    "SELECT " + ",".join(fields) + " FROM xiuxian_tasks WHERE user_id=?",
+                    (user_id,),
+                )
+        except (FileNotFoundError, sqlite3.OperationalError) as exc:
+            message = str(exc).lower()
+            if all(
+                marker not in message
+                for marker in ("unable to open database", "no such table", "no such column")
+            ):
+                raise
+            return result
+
+        if row is None:
+            return result
+        for cycle in selected:
+            period = normalized_periods[cycle]
+            progress, claimed = self._cycle_state(row, cycle, period)
+            result[cycle] = (progress, claimed, period)
+        return result
 
     def record(
         self,

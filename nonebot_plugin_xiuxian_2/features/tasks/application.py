@@ -50,6 +50,12 @@ class TaskProgressApplication:
     ) -> dict[str, tuple[dict[str, int], list[str], str]]:
         return self.repository.get_states(user_id, periods)
 
+    def read_states(
+        self, user_id: str, periods: Mapping[str, str]
+    ) -> dict[str, tuple[dict[str, int], list[str], str]]:
+        """Read task progress without creating rows or normalizing periods."""
+        return self.repository.read_states(user_id, periods)
+
 
 class TaskClaimApplication:
     action = "tasks.claim_rewards"

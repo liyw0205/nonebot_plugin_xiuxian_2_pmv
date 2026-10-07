@@ -3523,22 +3523,26 @@
       "id": "command:tasks:周常任务",
       "kind": "commands",
       "entry": "tasks:周常任务 (aliases: 每周任务)",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "The compatibility handler keeps the historical task catalog and reply buttons, while task progress is read through the feature-owned TaskProgressApplication.read_states -> TasksProgressRepository.read_states boundary. The read projection uses a read-only UOW, does not create rows or roll periods, and missing schema fails closed; shared check_user/Cooldown/message delivery remain adapter boundaries.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_tasks/__init__.py:16 weekly_task = on_command('周常任务') aliases=每周任务 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_tasks/__init__.py:78 weekly_task_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_tasks/__init__.py:78 weekly_task_ -> task_manager.build_status_message(weekly) -> TaskProgressApplication.read_states -> TasksProgressRepository.read_states -> read-only player projection -> legacy-compatible task catalog/reply formatting",
+        "TasksProgressRepository.read_states -> no request-time DDL, INSERT, UPDATE, operation ledger, or reward mutation; missing database/table returns an empty period snapshot"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_tasks/__init__.py:16",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_tasks/__init__.py:78"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_tasks/__init__.py:78",
+        "nonebot_plugin_xiuxian_2/features/tasks/application.py:48-54",
+        "nonebot_plugin_xiuxian_2/features/tasks/progress.py:183-225",
+        "tests/test_tasks_command_owner.py",
+        "tests/test_phase2_legacy_path_gate.py"
       ],
       "source_declaration_found": true,
       "source": {
@@ -4444,22 +4448,25 @@
       "id": "command:tasks:我的任务",
       "kind": "commands",
       "entry": "tasks:我的任务 (aliases: 任务列表, 修仙任务)",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "The compatibility handler keeps the historical task catalog and reply buttons, while both daily and weekly progress states are read through TaskProgressApplication.read_states -> TasksProgressRepository.read_states. The read projection is non-mutating and leaves period rollover to the existing claim/progress writers.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_tasks/__init__.py:14 task_info = on_command('我的任务') aliases=任务列表,修仙任务 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_tasks/__init__.py:30 task_info_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_tasks/__init__.py:30 task_info_ -> task_manager.build_status_message(all cycles) -> TaskProgressApplication.read_states -> TasksProgressRepository.read_states -> read-only player projection -> legacy-compatible task catalog/reply formatting"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_tasks/__init__.py:14",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_tasks/__init__.py:30"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_tasks/__init__.py:30",
+        "nonebot_plugin_xiuxian_2/features/tasks/application.py:48-54",
+        "nonebot_plugin_xiuxian_2/features/tasks/progress.py:183-225",
+        "tests/test_tasks_command_owner.py",
+        "tests/test_phase2_legacy_path_gate.py"
       ],
       "source_declaration_found": true,
       "source": {
@@ -5740,22 +5747,25 @@
       "id": "command:tasks:每日任务",
       "kind": "commands",
       "entry": "tasks:每日任务 (aliases: 今日任务)",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "The compatibility handler keeps the historical daily task presentation, while progress is read through TaskProgressApplication.read_states -> TasksProgressRepository.read_states in a read-only UOW. It does not create a missing player database/row or mutate stale period state.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_tasks/__init__.py:15 daily_task = on_command('每日任务') aliases=今日任务 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_tasks/__init__.py:54 daily_task_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_tasks/__init__.py:54 daily_task_ -> task_manager.build_status_message(daily) -> TaskProgressApplication.read_states -> TasksProgressRepository.read_states -> read-only player projection -> legacy-compatible task catalog/reply formatting"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_tasks/__init__.py:15",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_tasks/__init__.py:54"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_tasks/__init__.py:54",
+        "nonebot_plugin_xiuxian_2/features/tasks/application.py:48-54",
+        "nonebot_plugin_xiuxian_2/features/tasks/progress.py:183-225",
+        "tests/test_tasks_command_owner.py",
+        "tests/test_phase2_legacy_path_gate.py"
       ],
       "source_declaration_found": true,
       "source": {
@@ -9975,22 +9985,28 @@
       "id": "command:tasks:领取任务奖励",
       "kind": "commands",
       "entry": "tasks:领取任务奖励 (aliases: 任务奖励, 领取周常任务奖励, 领取每日任务奖励)",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "The compatibility adapter parses the historical cycle aliases and supplies static task definitions/Items metadata, then delegates the durable claim to TaskClaimApplication. The existing game/player saga owns operation replay, reservation, item grant, claimed confirmation and reconcile; shared input policy and message delivery remain adapter boundaries.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_tasks/__init__.py:17 claim_task = on_command('领取任务奖励') aliases=任务奖励,领取周常任务奖励,领取每日任务奖励 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_tasks/__init__.py:102 claim_task_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_tasks/__init__.py:102 claim_task_ -> task_manager.claim_rewards -> TaskClaimApplication.claim_rewards -> TaskClaimPlayerRepository.prepare/finalize + TaskClaimGameRepository.grant/finalize -> operation ledger/outbox/reconcile -> legacy-compatible reply",
+        "task_data static task definitions and Items reward snapshot remain an explicit adapter; default handler does not call TaskRewardClaimService"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_tasks/__init__.py:17",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_tasks/__init__.py:102"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_tasks/__init__.py:102",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_tasks/task_data.py:330-399",
+        "nonebot_plugin_xiuxian_2/features/tasks/application.py:66-316",
+        "nonebot_plugin_xiuxian_2/features/tasks/claim_repository.py:230-396",
+        "tests/test_task_reward_claim.py",
+        "tests/test_tasks_command_owner.py",
+        "tests/test_phase2_legacy_path_gate.py"
       ],
       "source_declaration_found": true,
       "source": {

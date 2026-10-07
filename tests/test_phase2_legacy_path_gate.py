@@ -80,7 +80,7 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
                              if (item.get("source") or {}).get("feature") == "sect"))
         self.assertEqual(report["path_count"], 496)
         self.assertEqual(report["status_counts"],
-                         {"不可达": 19, "允许保留的兼容路径": 126, "受阻": 88, "已迁移": 263})
+                         {"不可达": 19, "允许保留的兼容路径": 126, "受阻": 84, "已迁移": 267})
         self.assertTrue(report["frozen_membership_valid"])
         self.assertEqual(report["integrity_errors"], [])
 
@@ -399,7 +399,56 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
             self.assertIn(evidence, system_item["evidence"])
         self.assertNotIn("legacy downstream effect not closed", system_graph)
         self.assertEqual(report["status_counts"],
-                         {"不可达": 19, "允许保留的兼容路径": 126, "受阻": 88, "已迁移": 263})
+                         {"不可达": 19, "允许保留的兼容路径": 126, "受阻": 84, "已迁移": 267})
+        self.assertTrue(report["frozen_membership_valid"])
+        self.assertEqual(report["integrity_errors"], [])
+
+    def test_tasks_commands_share_progress_and_claim_application_owners(self):
+        report = load_phase2_scope_report(include_items=True)
+        items = {item["id"]: item for item in report["items"]}
+        source = "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_tasks/__init__.py"
+        expected = {
+            "周常任务": (16, "weekly_task_", 78, "build_status_message(weekly)"),
+            "我的任务": (14, "task_info_", 30, "build_status_message(all cycles)"),
+            "每日任务": (15, "daily_task_", 54, "build_status_message(daily)"),
+        }
+        for name, (declaration, handler, line, edge) in expected.items():
+            with self.subTest(command=name):
+                item = items[f"command:tasks:{name}"]
+                graph = " ".join(item["call_graph"])
+                self.assertEqual(item["status"], "已迁移")
+                self.assertNotIn("unknown_edge", item)
+                self.assertIn(f"{source}:{declaration}", item["evidence"])
+                self.assertIn(f"{source}:{line}", item["evidence"])
+                self.assertIn(
+                    f"{source}:{line} {handler} -> task_manager.{edge} -> "
+                    "TaskProgressApplication.read_states -> TasksProgressRepository.read_states",
+                    graph,
+                )
+                self.assertIn("read-only player projection", graph)
+                self.assertIn("tests/test_tasks_command_owner.py", item["evidence"])
+                self.assertNotIn("legacy downstream effect not closed", graph)
+
+        claim = items["command:tasks:领取任务奖励"]
+        claim_graph = " ".join(claim["call_graph"])
+        self.assertEqual(claim["status"], "已迁移")
+        self.assertNotIn("unknown_edge", claim)
+        self.assertIn(f"{source}:17", claim["evidence"])
+        self.assertIn(f"{source}:102", claim["evidence"])
+        self.assertIn(
+            f"{source}:102 claim_task_ -> task_manager.claim_rewards -> "
+            "TaskClaimApplication.claim_rewards -> TaskClaimPlayerRepository.prepare/finalize + "
+            "TaskClaimGameRepository.grant/finalize",
+            claim_graph,
+        )
+        self.assertIn("operation ledger/outbox/reconcile", claim_graph)
+        self.assertIn("tests/test_task_reward_claim.py", claim["evidence"])
+        self.assertIn("tests/test_tasks_command_owner.py", claim["evidence"])
+        self.assertNotIn("legacy downstream effect not closed", claim_graph)
+        self.assertEqual(
+            report["status_counts"],
+            {"不可达": 19, "允许保留的兼容路径": 126, "受阻": 84, "已迁移": 267},
+        )
         self.assertTrue(report["frozen_membership_valid"])
         self.assertEqual(report["integrity_errors"], [])
 
@@ -411,7 +460,7 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
         self.assertEqual(report["path_count"], 496)
         self.assertEqual(
             report["status_counts"],
-            {"不可达": 19, "允许保留的兼容路径": 126, "受阻": 88, "已迁移": 263},
+            {"不可达": 19, "允许保留的兼容路径": 126, "受阻": 84, "已迁移": 267},
         )
         self.assertGreater(report["blocked_count"], 0)
         self.assertTrue(all(item["call_graph"] and item["evidence"] for item in report["items"]))

@@ -302,7 +302,7 @@ class XiuxianTaskManager:
         title = "修仙任务" if cycle is None else ("每日任务" if cycle == "daily" else "周常任务")
         msg_lines = [f"【{title}】"]
 
-        states = self.progress_application.get_states(
+        states = self.progress_application.read_states(
             str(user_id), {item_cycle: self._period_key(item_cycle) for item_cycle in cycles}
         )
         for item_cycle in cycles:
