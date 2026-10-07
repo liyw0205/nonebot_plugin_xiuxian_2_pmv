@@ -11609,11 +11609,12 @@
       "id": "route:POST:/api/command_registry/bulk_toggle:nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/command_registry_web.py:api_command_registry_bulk_toggle",
       "kind": "legacy_routes",
       "entry": "POST /api/command_registry/bulk_toggle -> nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/command_registry_web.py:api_command_registry_bulk_toggle",
-      "status": "受阻",
-      "reason": "The old Flask app and route modules are loaded and its server is enabled by default. Route registration is proven, but each handler's downstream ownership and replacement/compatibility decision is not closed.",
-      "unknown_edge": "route function -> old data/service or feature application -> state effect",
+      "status": "已迁移",
+      "reason": "The existing Flask compatibility endpoint and response contract remain in place, while module-wide state writes are explicitly owned by AdminCommandControlApplication -> AdminCommandControlRepository -> command_disable.json. This closes the state-owner boundary; it does not claim a cutover to the semantically different v1 registry adapter.",
       "call_graph": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/command_registry_web.py:65 -> Flask app.route(/api/command_registry/bulk_toggle) -> legacy handler -> downstream state effect not closed"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/command_registry_web.py:97 api_command_registry_bulk_toggle -> AdminCommandControlApplication.apply_disable_targets -> AdminCommandControlRepository.apply_disable_targets -> command_disable.json",
+        "Flask core before_request -> admin authorization, DATABASE_WRITE permission, and configured CSRF check -> command_registry_web.api_command_registry_bulk_toggle",
+        "command_registry_web.api_command_registry_bulk_toggle -> AdminCommandControlApplication.apply_disable_targets -> AdminCommandControlRepository.apply_disable_targets -> atomic command_disable.json state; legacy module/count/error response contract retained"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
@@ -11621,7 +11622,11 @@
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/command_registry_web.py:65"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/command_registry_web.py:97",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/command_registry_web.py:96-121",
+        "nonebot_plugin_xiuxian_2/features/admin/command_control_application.py:42-43",
+        "nonebot_plugin_xiuxian_2/features/admin/command_control_repository.py:226-268",
+        "tests/test_command_registry_routes.py:221-281"
       ],
       "source_declaration_found": true,
       "source": {
@@ -11637,11 +11642,12 @@
       "id": "route:POST:/api/command_registry/toggle:nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/command_registry_web.py:api_command_registry_toggle",
       "kind": "legacy_routes",
       "entry": "POST /api/command_registry/toggle -> nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/command_registry_web.py:api_command_registry_toggle",
-      "status": "受阻",
-      "reason": "The old Flask app and route modules are loaded and its server is enabled by default. Route registration is proven, but each handler's downstream ownership and replacement/compatibility decision is not closed.",
-      "unknown_edge": "route function -> old data/service or feature application -> state effect",
+      "status": "已迁移",
+      "reason": "The existing Flask compatibility endpoint and JSON response contract remain in place, while single-command writes are explicitly owned by AdminCommandControlApplication -> AdminCommandControlRepository -> command_disable.json. Alias resolution, admin-module rejection, enabled/disabled precedence, and legacy Python truthiness conversion remain covered; this is not a cutover to the unrelated v1 registry adapter.",
       "call_graph": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/command_registry_web.py:42 -> Flask app.route(/api/command_registry/toggle) -> legacy handler -> downstream state effect not closed"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/command_registry_web.py:72 api_command_registry_toggle -> AdminCommandControlApplication.set_command_disabled -> AdminCommandControlRepository.set_command_disabled -> command_disable.json",
+        "Flask core before_request -> admin authorization, DATABASE_WRITE permission, and configured CSRF check -> command_registry_web.api_command_registry_toggle",
+        "command_registry_web.api_command_registry_toggle -> AdminCommandControlApplication.set_command_disabled -> AdminCommandControlRepository.set_command_disabled -> atomic command_disable.json state; alias/error/response behavior retained"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
@@ -11649,7 +11655,11 @@
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/command_registry_web.py:42"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/command_registry_web.py:72",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/command_registry_web.py:71-93",
+        "nonebot_plugin_xiuxian_2/features/admin/command_control_application.py:39-40",
+        "nonebot_plugin_xiuxian_2/features/admin/command_control_repository.py:206-224",
+        "tests/test_command_registry_routes.py:141-219"
       ],
       "source_declaration_found": true,
       "source": {
@@ -13226,11 +13236,12 @@
       "id": "route:GET:/command_registry:nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/command_registry_web.py:command_registry",
       "kind": "legacy_routes",
       "entry": "GET /command_registry -> nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/command_registry_web.py:command_registry",
-      "status": "受阻",
-      "reason": "The old Flask app and route modules are loaded and its server is enabled by default. Route registration is proven, but each handler's downstream ownership and replacement/compatibility decision is not closed.",
-      "unknown_edge": "route function -> old data/service or feature application -> state effect",
+      "status": "已迁移",
+      "reason": "The legacy HTML page, filters, grouping, and statistics remain as a compatibility UI. Its rows now come from one AdminCommandControlApplication -> AdminCommandControlRepository read and are grouped from that snapshot in the route, closing the state/read owner without claiming the generic v1 registry page replaces this UI.",
       "call_graph": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/command_registry_web.py:22 -> Flask app.route(/command_registry) -> legacy handler -> downstream state effect not closed"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/command_registry_web.py:50 command_registry -> AdminCommandControlApplication.collect_command_list_rows -> AdminCommandControlRepository.collect_command_list_rows -> command_disable.json",
+        "Flask core before_request -> admin authorization and READ permission -> command_registry_web.command_registry",
+        "command_registry_web.command_registry -> one AdminCommandControlApplication.collect_command_list_rows -> AdminCommandControlRepository.collect_command_list_rows -> command_disable.json-backed active registry -> route grouping/statistics -> legacy command_registry.html"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
@@ -13238,7 +13249,11 @@
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/command_registry_web.py:22"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/command_registry_web.py:50",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/command_registry_web.py:18-68",
+        "nonebot_plugin_xiuxian_2/features/admin/command_control_application.py:45-48",
+        "nonebot_plugin_xiuxian_2/features/admin/command_control_repository.py:270-293",
+        "tests/test_command_registry_routes.py:74-120"
       ],
       "source_declaration_found": true,
       "source": {
