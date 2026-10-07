@@ -11,5 +11,5 @@ class SectJoinRepositoryTests(unittest.TestCase):
   self.r=SectRenameSqlRepository(self.db)
  def tearDown(self):self.t.cleanup()
  def test_success_duplicate_and_conflict(self):
-  a=self.r.join('x','new',1);b=self.r.join('x','new',1);c=self.r.join('x','other',1);self.assertEqual((a['status'],b['status'],c['status']),('joined','duplicate','operation_conflict'))
+  a=self.r.join('x','new',1);b=self.r.join('x','new',1);c=self.r.join('x','other',1);self.assertEqual((a['status'],b['status'],c['status']),('joined','duplicate','operation_conflict'));self.assertEqual(b['sect_name'],'宗门')
 if __name__=='__main__':unittest.main()

@@ -7,6 +7,10 @@ from ...infrastructure.database import DatabaseUnitOfWork
 from ...infrastructure.clock import SystemClock
 
 
+class _StateChanged(Exception):
+    """Abort a compare-and-set mutation without turning it into a hard error."""
+
+
 class SectRepository(Protocol):
     def donate(self, *args: Any, **kwargs: Any) -> Any: ...
     def change_position(self, *args: Any, **kwargs: Any) -> Any: ...
@@ -92,6 +96,9 @@ class SectRenameSqlRepository:
             uow.execute("INSERT INTO sect_secbuff_learn_operations(operation_id,user_id,sect_id,buff_id,materials_cost,materials_left) VALUES(?,?,?,?,?,?)",(operation_id,user_id,sect_id,buff_id,materials_cost,left));return {"status":"learned","user_id":user_id,"sect_id":sect_id,"buff_id":buff_id,"materials_cost":materials_cost,"materials_left":left}
     def learn_main(self, operation_id, user_id, sect_id, buff_id, materials_cost, *, expected_catalog, forbidden_positions=(12,14,15)):
         operation_id,user_id=str(operation_id).strip(),str(user_id);sect_id,buff_id,materials_cost=int(sect_id),int(buff_id),int(materials_cost)
+        base = {"user_id": user_id, "sect_id": sect_id, "buff_id": buff_id}
+        if materials_cost < 0:
+            return {"status": "invalid_materials", **base, "materials_cost": materials_cost}
         with DatabaseUnitOfWork(self.database, immediate=True) as uow:
             old=uow.query_one("SELECT user_id,sect_id,buff_id,materials_cost,materials_left FROM sect_mainbuff_learn_operations WHERE operation_id=?",(operation_id,))
             if old:
@@ -106,9 +113,17 @@ class SectRenameSqlRepository:
             if materials<materials_cost:return {"status":"materials_insufficient","user_id":user_id,"sect_id":sect_id,"buff_id":buff_id,"materials_cost":materials_cost,"materials_left":materials}
             if buff is None:return {"status":"buff_missing","user_id":user_id,"sect_id":sect_id,"buff_id":buff_id}
             if int(buff["main_buff"] or 0)==buff_id:return {"status":"already_learned","user_id":user_id,"sect_id":sect_id,"buff_id":buff_id}
-            left=materials-materials_cost;sa=uow.execute("UPDATE sects SET sect_materials=? WHERE sect_id=? AND sect_materials=? AND mainbuff=?",(left,sect_id,materials,str(expected_catalog)));ba=uow.execute("UPDATE BuffInfo SET main_buff=? WHERE user_id=? AND COALESCE(main_buff,0)<>?",(buff_id,user_id,buff_id))
-            if sa.rowcount!=1 or ba.rowcount!=1:return {"status":"state_changed","user_id":user_id,"sect_id":sect_id,"buff_id":buff_id}
-            uow.execute("INSERT INTO sect_mainbuff_learn_operations(operation_id,user_id,sect_id,buff_id,materials_cost,materials_left) VALUES(?,?,?,?,?,?)",(operation_id,user_id,sect_id,buff_id,materials_cost,left));return {"status":"learned","user_id":user_id,"sect_id":sect_id,"buff_id":buff_id,"materials_cost":materials_cost,"materials_left":left}
+            left=materials-materials_cost
+            try:
+                with uow.savepoint("sect_mainbuff_apply"):
+                    sa=uow.execute("UPDATE sects SET sect_materials=? WHERE sect_id=? AND sect_materials=? AND mainbuff=?",(left,sect_id,materials,str(expected_catalog)))
+                    ba=uow.execute("UPDATE BuffInfo SET main_buff=? WHERE user_id=? AND COALESCE(main_buff,0)<>?",(buff_id,user_id,buff_id))
+                    if sa.rowcount!=1 or ba.rowcount!=1:
+                        raise _StateChanged
+                    uow.execute("INSERT INTO sect_mainbuff_learn_operations(operation_id,user_id,sect_id,buff_id,materials_cost,materials_left) VALUES(?,?,?,?,?,?)",(operation_id,user_id,sect_id,buff_id,materials_cost,left))
+            except _StateChanged:
+                return {"status":"state_changed","user_id":user_id,"sect_id":sect_id,"buff_id":buff_id}
+            return {"status":"learned","user_id":user_id,"sect_id":sect_id,"buff_id":buff_id,"materials_cost":materials_cost,"materials_left":left}
     def purchase(self, operation_id, user_id, sect_id, item_id, item_name, item_type, quantity, unit_cost, weekly_limit, legacy_purchased, max_goods_num, week_key=None):
         operation_id,user_id=str(operation_id).strip(),str(user_id);sect_id,item_id,quantity,unit_cost,weekly_limit,legacy_purchased,max_goods_num=int(sect_id),int(item_id),int(quantity),int(unit_cost),int(weekly_limit),int(legacy_purchased),int(max_goods_num);week_key=str(week_key or self.clock.now().strftime('%G-W%V'));payload=f'{user_id}|{sect_id}|{item_id}|{item_name}|{item_type}|{quantity}|{unit_cost}|{weekly_limit}|{week_key}'
         with DatabaseUnitOfWork(self.database, immediate=True) as uow:
@@ -210,11 +225,11 @@ class SectRenameSqlRepository:
         operation_id, user_id = str(operation_id).strip(), str(user_id)
         sect_id, member_position = int(sect_id), int(member_position)
         with DatabaseUnitOfWork(self.database, immediate=True) as uow:
-            old = uow.query_one("SELECT user_id,sect_id,member_count,member_limit FROM sect_member_join_operations WHERE operation_id=?", (operation_id,))
+            old = uow.query_one("SELECT o.user_id,o.sect_id,o.member_count,o.member_limit,s.sect_name FROM sect_member_join_operations o LEFT JOIN sects s ON s.sect_id=o.sect_id WHERE o.operation_id=?", (operation_id,))
             if old:
                 if str(old["user_id"]) != user_id or int(old["sect_id"]) != sect_id:
                     return {"status": "operation_conflict", "user_id": user_id, "sect_id": sect_id}
-                return {"status": "duplicate", "user_id": user_id, "sect_id": sect_id, "member_count": int(old["member_count"]), "member_limit": int(old["member_limit"])}
+                return {"status": "duplicate", "user_id": user_id, "sect_id": sect_id, "sect_name": str(old["sect_name"] or ""), "member_count": int(old["member_count"]), "member_limit": int(old["member_limit"])}
             user = uow.query_one("SELECT sect_id FROM user_xiuxian WHERE user_id=?", (user_id,))
             if user is None: return {"status": "user_missing", "user_id": user_id, "sect_id": sect_id}
             if user["sect_id"] is not None: return {"status": "already_in_sect", "user_id": user_id, "sect_id": sect_id}
@@ -223,7 +238,7 @@ class SectRenameSqlRepository:
             if int(sect["closed"] or 0) == 1: return {"status": "sect_closed", "user_id": user_id, "sect_id": sect_id, "sect_name": str(sect["sect_name"] or "")}
             if int(sect["join_open"] or 0) != 1: return {"status": "join_closed", "user_id": user_id, "sect_id": sect_id, "sect_name": str(sect["sect_name"] or "")}
             limit = self._member_limit(int(sect["sect_scale"] or 0));count = int(uow.query_one("SELECT COUNT(*) AS n FROM user_xiuxian WHERE sect_id=?", (sect_id,))["n"])
-            if count >= limit: return {"status": "sect_full", "user_id": user_id, "sect_id": sect_id, "member_count": count, "member_limit": limit}
+            if count >= limit: return {"status": "sect_full", "user_id": user_id, "sect_id": sect_id, "sect_name": str(sect["sect_name"] or ""), "member_count": count, "member_limit": limit}
             changed = uow.execute("UPDATE user_xiuxian SET sect_id=?,sect_position=? WHERE user_id=? AND sect_id IS NULL", (sect_id,member_position,user_id))
             if changed.rowcount != 1: return {"status": "state_changed", "user_id": user_id, "sect_id": sect_id}
             count += 1

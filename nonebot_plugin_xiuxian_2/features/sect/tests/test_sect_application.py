@@ -43,6 +43,52 @@ class _Repository:
 
 
 class SectApplicationTests(unittest.TestCase):
+    def test_started_ledger_is_retried_by_frozen_mutations(self):
+        cases = (
+            (
+                "sect-join-started",
+                "sect.join",
+                {"user_id": "u", "sect_id": 1, "member_position": 12},
+                lambda app: app.join(
+                    operation_id="sect-join-started", user_id="u", sect_id=1
+                ),
+                "join",
+            ),
+            (
+                "sect-main-started",
+                "sect.learn_main",
+                {
+                    "user_id": "u",
+                    "sect_id": 1,
+                    "buff_id": 2,
+                    "materials_cost": 10,
+                    "expected_catalog": "[]",
+                },
+                lambda app: app.learn_main(
+                    operation_id="sect-main-started",
+                    user_id="u",
+                    sect_id=1,
+                    buff_id=2,
+                    materials_cost=10,
+                    expected_catalog="[]",
+                ),
+                "main",
+            ),
+        )
+        for operation_id, action, payload, invoke, expected_call in cases:
+            with self.subTest(action=action):
+                with tempfile.TemporaryDirectory() as directory:
+                    repository = _Repository()
+                    database = Path(directory) / "game.db"
+                    _prepare_ledger(database)
+                    ledger = OperationLedger()
+                    with DatabaseUnitOfWork(database, immediate=True) as uow:
+                        ledger.begin(uow, operation_id, action, payload)
+                    app = SectApplication(database, repository=repository)
+                    result = invoke(app)
+                    self.assertTrue(result.ok)
+                    self.assertEqual(repository.calls, [expected_call])
+
     def test_join_and_purchase_are_idempotent(self):
         with tempfile.TemporaryDirectory() as directory:
             repository = _Repository()

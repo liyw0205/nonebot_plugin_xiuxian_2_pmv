@@ -374,7 +374,7 @@ class SectApplication:
     def charge_name_refresh(self, operation_id: str, user_id: str, stone_cost: int):
         return SectMutationResult(SectNameRefreshSqlRepository(self.database).charge(operation_id, user_id, stone_cost))
 
-    def _execute(self, *, operation_id: str, user_id: str, action: str, payload: Mapping[str, Any], call) -> OperationOutcome[dict[str, Any]]:
+    def _execute(self, *, operation_id: str, user_id: str, action: str, payload: Mapping[str, Any], call, retry_started: bool = False) -> OperationOutcome[dict[str, Any]]:
         with trace_context(operation_id=operation_id, user_scope=user_id):
             try:
                 with DatabaseUnitOfWork(self.database, immediate=True) as uow:
@@ -383,7 +383,8 @@ class SectApplication:
                         previous = existing.outcome()
                         if previous is not None:
                             return previous.replay()
-                        raise ConflictError("操作正在处理中")
+                        if not retry_started:
+                            raise ConflictError("操作正在处理中")
                 raw = _data(call())
                 status = str(raw.get("status", "failed"))
                 data = {"status": status, **raw}
@@ -404,7 +405,7 @@ class SectApplication:
         if not str(operation_id).strip() or not str(user_id).strip() or int(sect_id) <= 0:
             raise ValidationError("operation_id, user_id and sect_id are required")
         payload = {"user_id": str(user_id), "sect_id": int(sect_id), "member_position": int(member_position)}
-        return self._execute(operation_id=str(operation_id), user_id=str(user_id), action="sect.join", payload=payload, call=lambda: self._repository().join(operation_id, user_id, sect_id, member_position=member_position))
+        return self._execute(operation_id=str(operation_id), user_id=str(user_id), action="sect.join", payload=payload, call=lambda: self._repository().join(operation_id, user_id, sect_id, member_position=member_position), retry_started=True)
 
     def purchase(self, *, operation_id: str, user_id: str, **kwargs: Any) -> OperationOutcome[dict[str, Any]]:
         if not str(operation_id).strip() or not str(user_id).strip():
@@ -422,7 +423,7 @@ class SectApplication:
         if not str(operation_id).strip() or not str(user_id).strip():
             raise ValidationError("operation_id and user_id are required")
         payload = {"user_id": str(user_id), **dict(kwargs)}
-        return self._execute(operation_id=str(operation_id), user_id=str(user_id), action=action, payload=payload, call=lambda: getattr(self._repository(), method)(operation_id, user_id, **dict(kwargs)))
+        return self._execute(operation_id=str(operation_id), user_id=str(user_id), action=action, payload=payload, call=lambda: getattr(self._repository(), method)(operation_id, user_id, **dict(kwargs)), retry_started=action == "sect.learn_main")
 
     def claim_elixir(self, *, operation_id: str, user_id: str, **kwargs: Any) -> OperationOutcome[dict[str, Any]]:
         if not str(operation_id).strip() or not str(user_id).strip():

@@ -2,7 +2,9 @@
 
 状态：进行中。`v1.1.0` 的 P0-P7 发布证据继续保留，但不作为底层全面重构完成证明。
 
-**当前交付与队列（2026-10-07，本段优先于下文历史“下一片”）**：Arena 已在 `6b3fdc40` 提交推送，bank 已在 `c6ebdd26` 提交推送并核对远端；beg 三个真实入口、世界 BOSS 兑换、Dungeon 两条命令、Fusion/Illusion 冻结入口、`impart_pk`（`c30cfadf`）、`info`（`a402cfbf`）和 `lunhui` 命令批次均已收口。本次 `past_life` 按共同 owner 一次处理选择回执、排行只读和终局历史语义，状态更新为 `260/125/19/92`；共享 matcher family 仍有其它插件 blocker。后续按 `allowed_features` 顺序跳过无 blocker 的 feature，不按单条命令重复重构。
+**当前交付与队列（2026-10-08，本段优先于下文历史“下一片”）**：Arena 已在 `6b3fdc40` 提交推送，bank 已在 `c6ebdd26` 提交推送并核对远端；beg 三个真实入口、世界 BOSS 兑换、Dungeon 两条命令、Fusion/Illusion 冻结入口、`impart_pk`（`c30cfadf`）、`info`（`a402cfbf`）、`lunhui` 和 `past_life` 共同 owner 批次均已收口。本次 Sect 按 `allowed_features` 顺序一次处理两个冻结入口，状态更新为 `262/125/19/90`；共享 matcher family 仍有其它插件 blocker。后续按队列跳过无 blocker 的 feature，不按单条命令重复重构。
+
+**Sect 冻结入口收口（2026-10-08）**：按 `allowed_features` 队列一次处理 `加入宗门` 与 `学习宗门功法`，没有把宗门其它 43 个 backlog 命令混入本批。两条默认链均为 legacy matcher -> handler -> `SectApplication` -> `SectRenameSqlRepository`；旧 transaction service 仅显式 compatibility 注入可达。加入宗门移除数字 ID 的重复宗门读取；学习功法复用已有宗门目录快照，移除会初始化旧 `BuffInfo` 的预读。主功法 repository 增加负资材拒绝，并用 savepoint 防止 CAS 第二步失败时提交第一步；两个 mutation 允许同 payload 的 started ledger 重试，由业务 receipt 防止重复落账。Sect 聚焦回归 `20 passed`（pytest 4.41 秒），覆盖 ledger 重试、duplicate payload、负成本和 CAS 回滚；Phase2 计数更新为 `262/125/19/90`，membership hash `7787a74a...ff51fac` 不变。当前代码路径可观察到成功 mutation 分别经过 ledger begin、业务 receipt、ledger finish 三个 UoW，仅记录为潜在额外事务边界；本批未测线上延迟或占比，不能认定为已证实的线上主要瓶颈。后续继续按队列处理，不因这条审计线索重复重构 Sect。
 
 **Past life 共同 owner 批次（2026-10-07）**：`投胎`、`前尘选择`、终局奖励和 `重置前尘` 的默认写路径由 `PastLifeApplication`/feature repositories 持有；选择回执的默认读取改为只读 feature repository，缺表不建表、不写 WAL，显式注入旧 service 才走兼容路径。`前尘排行` 改用 schema-aware 只读投影，缺库/表/列返回空结果；`前尘回忆`、`前尘往事` 和静态帮助明确归类为只读兼容路径。同步修正终局仓储的默认完成时间、最近十世日志和最佳结局保留语义，避免冷却失效及回忆数据丢失。相关回归 `29 passed`（3.30 秒）；用户 `boss_info.json` 未暂存。旧 feature application 空临时库测试仍缺平台 operation ledger 初始化，记录为测试夹具问题，未扩大本批范围。
 

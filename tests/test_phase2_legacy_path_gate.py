@@ -51,6 +51,39 @@ def _handler_line(source: str, handler: str) -> int:
 
 
 class Phase2LegacyPathGateTests(unittest.TestCase):
+    def test_sect_frozen_commands_have_source_bound_owners_and_no_remaining_blocker(self):
+        report = load_phase2_scope_report(include_items=True)
+        items = {item["id"]: item for item in report["items"]}
+        source = "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_sect/__init__.py"
+        expected = {
+            "加入宗门": ("join_sect_", "join", "sect_member_join_operations", "legacy_sect_member_join.py"),
+            "学习宗门功法": ("sect_mainbuff_learn_", "learn_main", "sect_mainbuff_learn_operations", "legacy_sect_main_buff_learn.py"),
+        }
+        for name, (handler, action, receipt, compatibility) in expected.items():
+            with self.subTest(command=name):
+                item = items[f"command:sect:{name}"]
+                line = _handler_line(source, handler)
+                self.assertEqual(item["status"], "已迁移")
+                self.assertNotIn("unknown_edge", item)
+                edges = [edge for edge in item["call_graph"]
+                         if edge.startswith(f"{source}:{line} {handler} ->")]
+                self.assertEqual(len(edges), 1)
+                self.assertIn(f"SectApplication.{action}", edges[0])
+                self.assertIn(f"{source}:{line}", item["evidence"])
+                graph = " ".join(item["call_graph"])
+                self.assertIn(f"SectRenameSqlRepository.{action}", graph)
+                self.assertIn(receipt, graph)
+                self.assertIn("explicit rollback-only", graph)
+                self.assertIn(compatibility, " ".join(item["evidence"]))
+                self.assertNotIn("legacy downstream effect not closed", graph)
+        self.assertFalse(any(item["status"] == "受阻" for item in report["items"]
+                             if (item.get("source") or {}).get("feature") == "sect"))
+        self.assertEqual(report["path_count"], 496)
+        self.assertEqual(report["status_counts"],
+                         {"不可达": 19, "允许保留的兼容路径": 125, "受阻": 90, "已迁移": 262})
+        self.assertTrue(report["frozen_membership_valid"])
+        self.assertEqual(report["integrity_errors"], [])
+
     def test_beg_commands_have_source_bound_command_owners_and_no_remaining_blocker(self):
         report = load_phase2_scope_report(include_items=True)
         items = {item["id"]: item for item in report["items"]}
@@ -327,7 +360,7 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
         self.assertEqual(report["path_count"], 496)
         self.assertEqual(
             report["status_counts"],
-            {"不可达": 19, "允许保留的兼容路径": 125, "受阻": 92, "已迁移": 260},
+            {"不可达": 19, "允许保留的兼容路径": 125, "受阻": 90, "已迁移": 262},
         )
         self.assertGreater(report["blocked_count"], 0)
         self.assertTrue(all(item["call_graph"] and item["evidence"] for item in report["items"]))

@@ -1125,19 +1125,15 @@ async def sect_mainbuff_learn_(bot: Bot, event: GroupMessageEvent | PrivateMessa
                 await handle_send(bot, event, msg, md_type="宗门", k1="搜寻", v1="宗门功法搜寻", k2="宗门", v2="我的宗门", k3="捐献", v3="宗门捐献")
                 await sect_mainbuff_learn.finish()
 
-            sectmainbuffidlist = get_sect_mainbuff_id_list(sect_id)
+            # Reuse the already loaded catalog; the helper would open another read UoW.
+            sectmainbuffidlist = str(sect_info['mainbuff'])[1:-1].split(',')
 
             if msg not in get_mainname_list(sectmainbuffidlist):
                 msg = f"本宗还没有该功法，请发送本宗有的功法进行学习！"
                 await handle_send(bot, event, msg, md_type="宗门", k1="搜寻", v1="宗门功法搜寻", k2="宗门", v2="我的宗门", k3="捐献", v3="宗门捐献")
                 await sect_mainbuff_learn.finish()
 
-            userbuffinfo = UserBuffDate(user_info['user_id']).BuffInfo
             mainbuffid = get_mainnameid(msg, sectmainbuffidlist)
-            if str(userbuffinfo['main_buff']) == str(mainbuffid):
-                msg = f"道友请勿重复学习！"
-                await handle_send(bot, event, msg, md_type="宗门", k1="学习", v1="宗门功法学习", k2="宗门", v2="我的宗门", k3="捐献", v3="宗门捐献")
-                await sect_mainbuff_learn.finish()
 
             mainbuffconfig = config['宗门主功法参数']
             mainbuff = items.get_data_by_item_id(mainbuffid)
@@ -2832,7 +2828,9 @@ async def join_sect_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, a
     # 检查是否已有宗门
     sect_id = user_info['sect_id']
     if user_info['sect_id']:
-        msg = f"道友已经加入了宗门:{sect_application.get_sect_info(sect_id)['sect_name']}，无法再加入其他宗门。"
+        current_sect = sect_application.get_sect_info(sect_id)
+        current_sect_name = current_sect['sect_name'] if current_sect else sect_id
+        msg = f"道友已经加入了宗门:{current_sect_name}，无法再加入其他宗门。"
         await handle_send(bot, event, msg)
         await join_sect.finish()
     
@@ -2847,20 +2845,15 @@ async def join_sect_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, a
     target_sect_name = None
     
     if sect_input.isdigit():
-        # 输入的是数字，按宗门ID处理
+        # 输入的是数字，交给事务仓储做最终存在性和状态校验。
         target_sect_id = int(sect_input)
-        sect_info = sect_application.get_sect_info(target_sect_id)
-        if sect_info:
-            target_sect_name = sect_info['sect_name']
     else:
         # 输入的是字符串，按宗门名处理
         target_sect_id = sect_application.get_sect_id_by_name(sect_input)
-        if target_sect_id:
-            sect_info = sect_application.get_sect_info(target_sect_id)
-            target_sect_name = sect_info['sect_name'] if sect_info else None
+        target_sect_name = sect_input if target_sect_id else None
     
     # 检查宗门是否存在
-    if not target_sect_id or not target_sect_name:
+    if not target_sect_id:
         msg = f"未找到名为【{sect_input}】的宗门，请检查输入是否正确！"
         await handle_send(bot, event, msg, md_type="宗门", k1="加入", v1="宗门加入", k2="列表", v2="宗门列表", k3="帮助", v3="宗门帮助")
         await join_sect.finish()
@@ -2876,9 +2869,10 @@ async def join_sect_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, a
     join_data = join_outcome.data or {}
     result = type("SectJoinView", (), join_data)()
     result.applied = join_outcome.ok
+    target_sect_name = getattr(result, "sect_name", None) or target_sect_name or sect_input
     if result.applied:
         msg = (
-            f"欢迎{user_info['user_name']}道友加入【{result.sect_name or target_sect_name}】！"
+            f"欢迎{user_info['user_name']}道友加入【{target_sect_name}】！"
             f"当前宗门人数：{result.member_count}/{result.member_limit}"
         )
     elif result.status == "already_in_sect":
@@ -2893,6 +2887,8 @@ async def join_sect_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, a
         msg = "加入宗门未完成：宗门成员状态已更新，请重新加入。"
     elif result.status == "user_missing":
         msg = "加入失败：未找到角色数据。"
+    elif result.status == "sect_missing":
+        msg = f"未找到名为【{sect_input}】的宗门，请检查输入是否正确！"
     else:
         msg = f"加入失败（{result.status}）。"
     await handle_send(bot, event, msg, md_type="宗门", k1="宗门", v1="我的宗门", k2="成员", v2="查看宗门成员", k3="帮助", v3="宗门帮助")
