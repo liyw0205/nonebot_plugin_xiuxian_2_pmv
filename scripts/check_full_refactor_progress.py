@@ -637,6 +637,162 @@ def _arena_owner_status(sources: dict[str, str]) -> dict[str, bool]:
     return {key: bool(value) for key, value in report.items()}
 
 
+def _bank_command_owner_status(sources: dict[str, str]) -> dict[str, bool]:
+    """Follow the real regex handler through the command owner to existing writers."""
+    trees = {name: ast.parse(source) for name, source in sources.items()}
+    functions = {
+        name: {node.name: node for node in ast.walk(tree)
+               if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))}
+        for name, tree in trees.items()
+    }
+
+    def nodes(source, function=None):
+        node = trees[source] if function is None else functions[source].get(function)
+        return tuple(ast.walk(node)) if node is not None else ()
+
+    def calls(source, function, target):
+        return [node for node in nodes(source, function)
+                if isinstance(node, ast.Call) and ast.unparse(node.func) == target]
+
+    def literals(source):
+        return " ".join(node.value for node in nodes(source)
+                        if isinstance(node, ast.Constant) and isinstance(node.value, str))
+
+    bindings = {
+        ast.unparse(node.value.func): ast.unparse(node.targets[0])
+        for node in nodes("command", "__init__")
+        if isinstance(node, ast.Assign) and isinstance(node.value, ast.Call)
+    }
+    reachable = {"execute"}
+    pending = ["execute"]
+    while pending:
+        for node in nodes("command", pending.pop()):
+            if (isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
+                    and ast.unparse(node.func.value) == "self"
+                    and node.func.attr in functions["command"] and node.func.attr not in reachable):
+                reachable.add(node.func.attr)
+                pending.append(node.func.attr)
+
+    def owned_calls(class_name, method):
+        binding = bindings.get(class_name)
+        return [] if binding is None else [
+            call for function in reachable for call in calls("command", function, f"{binding}.{method}")
+        ]
+
+    dispatch = calls("handlers", "bank_", "bank_command_application.execute")
+    keywords = {item.arg: ast.unparse(item.value) for item in dispatch[0].keywords} if dispatch else {}
+    handler_calls = [node for node in nodes("handlers", "bank_") if isinstance(node, ast.Call)]
+    facade_owned = bool(
+        any(isinstance(node, ast.Assign) and isinstance(node.value, ast.Call)
+            and ast.unparse(node.value.func) == "BankCommandApplication"
+            and any(isinstance(target, ast.Name) and target.id == "bank_command_application"
+                    for target in node.targets) for node in trees["handlers"].body)
+        and calls("handlers", "bank_", "bank.handle") and dispatch
+        and keywords == {name: name for name in ("operation_id", "user_id", "mode", "argument")}
+        and calls("handlers", "bank_", "render_bank_reply")
+        and not any(ast.unparse(node.func).startswith(("bank_application.", "bank_account_", "bank_deposit_",
+                                                       "bank_withdrawal_", "bank_upgrade_", "bank_interest_"))
+                    for node in handler_calls)
+    )
+    app_methods = {
+        "deposit": ("BankDepositApplication", "deposit", "save_deposit"),
+        "withdrawal": ("BankWithdrawalApplication", "withdraw", "save_withdrawal"),
+        "upgrade": ("BankUpgradeApplication", "upgrade", "save_upgrade"),
+        "interest": ("BankInterestApplication", "settle_interest", "save_interest"),
+    }
+    report = {
+        f"{action}_application_owned": bool(
+            facade_owned and owned_calls(class_name, method)
+            and calls(action, method, f"self.repository.{writer}")
+        )
+        for action, (class_name, method, writer) in app_methods.items()
+    }
+    receipt_calls = owned_calls("BankCommandReceiptRepository", "find")
+    info_calls = owned_calls("BankAccountInfoApplication", "get_info")
+    level_reads = [node for node in nodes("command", "execute") if isinstance(node, ast.Subscript)
+                   and ast.unparse(node.value) == "self.bank_levels"]
+    receipt_first = bool(
+        receipt_calls and info_calls and level_reads
+        and receipt_calls[0].lineno < min(node.lineno for node in [*info_calls, *level_reads])
+        and any(isinstance(node, ast.Assign) and node.value is receipt_calls[0]
+                and any(isinstance(target, ast.Name) and target.id == "previous" for target in node.targets)
+                for node in nodes("command", "execute"))
+        and any(isinstance(node, ast.If) and ast.unparse(node.test) == "previous is not None"
+                and any(isinstance(child, ast.Return) and isinstance(child.value, ast.Name)
+                        and child.value.id == "previous"
+                        for child in node.body)
+                and node.lineno < info_calls[0].lineno for node in nodes("command", "execute"))
+    )
+    reader_uows = calls("receipts", None, "DatabaseUnitOfWork")
+    reader_read_only = bool(reader_uows and all(
+        any(item.arg == "read_only" and isinstance(item.value, ast.Constant) and item.value.value is True
+            for item in call.keywords) for call in reader_uows
+    ) and not any(token in literals("receipts") for token in ("CREATE TABLE", "ALTER TABLE", "INSERT INTO", "UPDATE ")))
+    def resolved_keywords(call):
+        keywords = {item.arg: item.value for item in call.keywords if item.arg is not None}
+        for keyword in call.keywords:
+            if keyword.arg is not None or not isinstance(keyword.value, ast.Name):
+                continue
+            for method in reachable:
+                function = functions["command"].get(method)
+                if function is None or not function.lineno <= call.lineno <= function.end_lineno:
+                    continue
+                assignments = [node for node in nodes("command", method)
+                               if isinstance(node, ast.Assign) and node.lineno < call.lineno
+                               and any(isinstance(target, ast.Name) and target.id == keyword.value.id
+                                       for target in node.targets)]
+                latest = max(assignments, key=lambda node: node.lineno, default=None)
+                if latest is not None and isinstance(latest.value, ast.Dict):
+                    keywords.update({key.value: value for key, value in zip(latest.value.keys, latest.value.values)
+                                     if isinstance(key, ast.Constant) and isinstance(key.value, str)})
+        return keywords
+
+    snapshot_calls = [owned_calls(*app_methods[action][:2]) for action in ("deposit", "withdrawal", "interest")]
+    snapshot_forwarded = all(group and all(
+        {name: ast.unparse(value) for name, value in resolved_keywords(call).items()}.items()
+        >= {"expected_saved_stone": "saved", "expected_saved_at": "saved_at", "bank_level": "level"}.items()
+        for call in group
+    ) for group in snapshot_calls)
+    reply_nodes = nodes("replies", "render_bank_reply")
+    failure_guards = [node for node in reply_nodes if isinstance(node, ast.If)
+                      and ast.unparse(node.test) == "status not in {'applied', 'duplicate'}"
+                      and any(isinstance(child, ast.Return) for child in node.body)]
+    success_indexes = [node for node in reply_nodes if isinstance(node, ast.Subscript)
+                       and ast.unparse(node.value) == "result"]
+    report.update({
+        "command_facade_orchestration_feature_owned": facade_owned and all(report.values()),
+        "command_receipts_precede_live_account_reads": receipt_first and reader_read_only,
+        "command_receipts_validate_original_identity": bool(
+            calls("receipts", "find", "self._unified") and calls("receipts", "find", "self._legacy")
+            and any(isinstance(node, ast.Compare)
+                    and ast.unparse(node) == "(previous_user, previous_action, previous_amount) != (user_id, action, amount)"
+                    for node in nodes("receipts", "find"))
+            and all(table in literals("receipts") for table in (
+                "bank_account_operations", "bank_deposit_operations", "bank_withdrawal_operations",
+                "bank_upgrade_operations", "bank_interest_operations",
+            ))
+        ),
+        "command_snapshot_cas_forwarded_to_existing_writers": snapshot_forwarded and all(
+            calls(action, app_methods[action][1], "self.repository.assert_schema_ready")
+            and "expected_saved_stone" in sources[action] and "expected_saved_at" in sources[action]
+            for action in ("deposit", "withdrawal", "interest")
+        ),
+        "command_automatic_interest_and_account_info_feature_owned": bool(
+            info_calls and any(calls("command", method, "calculate_interest") for method in reachable)
+            and "account_missing" in literals("command") and "info" in literals("command")
+            and any(isinstance(node, ast.If) and ast.unparse(node.test) == "action == 'info'"
+                    and any(isinstance(child, ast.Return) for child in node.body)
+                    for node in nodes("command", "execute"))
+        ),
+        "command_reply_rejections_precede_success_fields": bool(
+            failure_guards and success_indexes
+            and max(node.end_lineno for node in failure_guards) < min(node.lineno for node in success_indexes)
+        ),
+        "legacy_operation_receipts_read_only": bool(receipt_calls and reader_read_only),
+    })
+    return report
+
+
 @lru_cache(maxsize=1)
 def _slice_status() -> dict[str, dict[str, object]]:
     @lru_cache(maxsize=None)
@@ -1096,9 +1252,18 @@ def _slice_status() -> dict[str, dict[str, object]]:
     bank_web_application = (PACKAGE / "features" / "bank" / "application.py").read_text(encoding="utf-8")
     bank_account_info_application = (PACKAGE / "features" / "bank" / "account_info_application.py").read_text(encoding="utf-8")
     bank_account_repository = (PACKAGE / "features" / "bank" / "account_repository.py").read_text(encoding="utf-8")
+    bank_command_sources = {"handlers": bank_facade, **{
+        name: (PACKAGE / "features" / "bank" / filename).read_text(encoding="utf-8")
+        for name, filename in {
+            "command": "command_application.py", "receipts": "command_receipt_repository.py",
+            "replies": "command_replies.py", "deposit": "account_application.py",
+            "withdrawal": "account_withdrawal_application.py", "upgrade": "account_upgrade_application.py",
+            "interest": "account_interest_application.py",
+        }.items()
+    }}
+    bank_command_owner = _bank_command_owner_status(bank_command_sources)
     bank_account_applications = "\n".join(
-        (PACKAGE / "features" / "bank" / name).read_text(encoding="utf-8")
-        for name in ("account_application.py", "account_withdrawal_application.py", "account_upgrade_application.py", "account_interest_application.py")
+        bank_command_sources[name] for name in ("deposit", "withdrawal", "upgrade", "interest")
     )
     bank_upgrade_writer = bank_account_repository[
         bank_account_repository.index("    def save_upgrade(") : bank_account_repository.index("    def save_interest(")
@@ -1106,7 +1271,6 @@ def _slice_status() -> dict[str, dict[str, object]]:
     bank_migrations = (PACKAGE / "features" / "bank" / "migrations.py").read_text(encoding="utf-8")
     bank_import_application = (PACKAGE / "features" / "bank" / "account_import_application.py").read_text(encoding="utf-8")
     bank_legacy_account_repository = (PACKAGE / "features" / "bank" / "legacy_account_repository.py").read_text(encoding="utf-8")
-    bank_legacy_receipts = (PACKAGE / "compatibility" / "legacy_bank_operation_receipts.py").read_text(encoding="utf-8")
     bank_legacy_account_storage = (PACKAGE / "compatibility" / "legacy_bank_account_storage.py").read_text(encoding="utf-8")
     bank_jobs = (PACKAGE / "features" / "bank" / "jobs.py").read_text(encoding="utf-8")
     map_facade = (PACKAGE / "xiuxian" / "xiuxian_map" / "__init__.py").read_text(encoding="utf-8")
@@ -3305,6 +3469,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "status": "team_commands_and_reads_application_owned_with_bounded_member_projection_and_session_schema_boundary",
         },
         "bank": {
+            **bank_command_owner,
             "v1_web_game_db_owned": (
                 '"bank": BankApplication(' in plugin
                 and "LegacyBankRepository" not in plugin
@@ -3337,26 +3502,10 @@ def _slice_status() -> dict[str, dict[str, object]]:
                 and "BankAccountBootstrapApplication" not in bank_facade
                 and 'return "account_missing"' in bank_web_application
             ),
-            "deposit_application_owned": "BankDepositApplication" in bank_facade and "bank_application.deposit(" not in bank_facade,
-            "withdrawal_application_owned": "BankWithdrawalApplication" in bank_facade and "bank_application.withdraw(" not in bank_facade,
-            "upgrade_application_owned": "BankUpgradeApplication" in bank_facade and "bank_application.upgrade(" not in bank_facade,
-            "interest_application_owned": "BankInterestApplication" in bank_facade and "bank_application.settle_interest(" not in bank_facade,
             "legacy_deposit_disabled": "bank_deposit_service.deposit(" not in bank_facade,
             "legacy_withdrawal_disabled": "bank_withdrawal_service.withdraw(" not in bank_facade,
             "legacy_upgrade_disabled": "bank_upgrade_service.upgrade(" not in bank_facade,
             "legacy_interest_disabled": "bank_interest_service.settle(" not in bank_facade,
-            "legacy_operation_receipts_read_only": (
-                "get_deposit_result(operation_id)" in bank_facade
-                and "get_withdrawal_result(operation_id)" in bank_facade
-                and "get_upgrade_result(operation_id)" in bank_facade
-                and "get_interest_result(operation_id)" in bank_facade
-                and "_bank_deposit_service().get_result" not in bank_facade
-                and "_bank_withdrawal_service().get_result" not in bank_facade
-                and "_bank_upgrade_service().get_result" not in bank_facade
-                and "_bank_interest_service().get_result" not in bank_facade
-                and "mode=ro" in bank_legacy_receipts
-                and "CREATE TABLE" not in bank_legacy_receipts
-            ),
             "legacy_account_reads_removed_from_matcher": (
                 "_read_legacy_bankinfo" not in bank_handler
                 and "_legacy_account_record_status" not in bank_handler
@@ -3429,7 +3578,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
                 bank_account_applications.count("self.repository.assert_schema_ready(uow)") == 4
                 and "CREATE TABLE" not in bank_account_applications
             ),
-            "status": "v1_web_and_commands_game_db_owned; startup_backfill_and_explicit_rollback_compatibility_retained",
+            "status": "command_orchestration_and_receipt_reads_feature_owned; existing_game_db_writers_and_explicit_rollback_retained",
         },
         "map": {
             "nearby_display_feature_owned": (

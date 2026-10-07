@@ -52,18 +52,16 @@ def test_transaction_import_identity_is_preserved() -> None:
 
 def test_bank_handlers_use_read_only_legacy_receipt_boundary() -> None:
     source = (PACKAGE / "xiuxian" / "xiuxian_bank" / "__init__.py").read_text(encoding="utf-8")
-    deposit = source.split("if mode == '存灵石'", 1)[1].split("elif mode == '取灵石'", 1)[0]
-    withdrawal = source.split("elif mode == '取灵石'", 1)[1].split("elif mode == '升级会员'", 1)[0]
-    upgrade = source.split("elif mode == '升级会员'", 1)[1].split("elif mode == '信息'", 1)[0]
-    interest = source.split("elif mode == '结算'", 1)[1].split("def get_give_stone", 1)[0]
-    assert "get_deposit_result(operation_id)" in deposit
-    assert "_bank_deposit_service().get_result" not in deposit
-    assert "get_withdrawal_result(operation_id)" in withdrawal
-    assert "_bank_withdrawal_service().get_result" not in withdrawal
-    assert "get_upgrade_result(operation_id)" in upgrade
-    assert "_bank_upgrade_service().get_result" not in upgrade
-    assert "get_interest_result(operation_id)" in interest
-    assert "_bank_interest_service().get_result" not in interest
+    owner = (PACKAGE / "features/bank/command_application.py").read_text(encoding="utf-8")
+    receipts = (PACKAGE / "features/bank/command_receipt_repository.py").read_text(encoding="utf-8")
+    assert "bank_command_application.execute(" in source
+    assert "LegacyBankOperationReceiptRepository" not in source
+    assert "BankCommandReceiptRepository" in owner
+    assert "bank_account_operations" in receipts
+    assert "mode=ro" in receipts or "read_only=True" in receipts
+    assert "CREATE TABLE" not in receipts
+    for action in ("deposit", "withdrawal", "upgrade", "interest"):
+        assert f"_bank_{action}_service().get_result" not in source
 
 
 def test_legacy_bank_receipt_lookup_is_read_only_and_tolerates_missing_tables() -> None:

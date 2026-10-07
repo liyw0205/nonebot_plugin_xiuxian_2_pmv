@@ -2715,21 +2715,20 @@ class SourceQualityTests(unittest.TestCase):
         self.assertNotIn("for user_dir in players_dir.iterdir()", handler)
         self.assertIn("def _migrate_bank_data_sync", source)
 
-    def test_bank_deposit_uses_cross_database_transaction(self) -> None:
-        bank_root = SOURCE_ROOT / "xiuxian" / "xiuxian_bank"
-        source = (bank_root / "__init__.py").read_text(encoding="utf-8")
-        start = source.index("if mode == '存灵石'")
-        handler = source[start:source.index("elif mode == '取灵石'", start)]
-        self.assertIn("BankDepositApplication", handler)
-        self.assertNotIn("bank_application.deposit(", handler)
-        self.assertNotIn("sql_message.update_ls(", handler)
-        self.assertNotIn("savef(user_id, bankinfo)", handler)
+    def test_bank_deposit_command_uses_existing_sql_owner(self) -> None:
+        source = (SOURCE_ROOT / "xiuxian/xiuxian_bank/__init__.py").read_text(encoding="utf-8")
+        owner = (SOURCE_ROOT / "features/bank/command_application.py").read_text(encoding="utf-8")
+        replies = (SOURCE_ROOT / "features/bank/command_replies.py").read_text(encoding="utf-8")
+        self.assertIn("bank_command_application.execute(", source)
+        self.assertIn("BankDepositApplication", owner)
+        self.assertIn(".deposit(", owner)
+        self.assertNotIn("sql_message.update_ls(", source + owner)
+        self.assertNotIn("savef(user_id, bankinfo)", source + owner)
         for status in ("stone_insufficient", "limit_exceeded", "state_changed", "user_missing"):
-            self.assertIn(f'"{status}"', handler)
-        service = (bank_root / "deposit_service.py").read_text(encoding="utf-8")
-        self.assertIn("ATTACH DATABASE", service)
-        self.assertIn("BEGIN IMMEDIATE", service)
-        self.assertIn("bank_deposit_operations", service)
+            self.assertIn(f'"{status}"', replies)
+        writer = (SOURCE_ROOT / "features/bank/account_application.py").read_text(encoding="utf-8")
+        self.assertIn("immediate=True", writer)
+        self.assertIn("self.repository.save_deposit(", writer)
 
     def test_backpack_repair_uses_feature_application(self) -> None:
         source = (SOURCE_ROOT / "xiuxian" / "xiuxian_back" / "__init__.py").read_text(encoding="utf-8")
@@ -2749,53 +2748,44 @@ class SourceQualityTests(unittest.TestCase):
         self.assertIn('"equip", goods_id', handler)
         self.assertIn("back_application.change_equipment(", handler)
 
-    def test_bank_withdrawal_uses_cross_database_transaction(self) -> None:
-        bank_root = SOURCE_ROOT / "xiuxian" / "xiuxian_bank"
-        source = (bank_root / "__init__.py").read_text(encoding="utf-8")
-        start = source.index("elif mode == '取灵石'")
-        handler = source[start:source.index("elif mode == '升级会员'", start)]
-        self.assertIn("BankWithdrawalApplication", handler)
-        self.assertNotIn("bank_application.withdraw(", handler)
-        self.assertNotIn("sql_message.update_ls(", handler)
-        self.assertNotIn("savef(user_id, bankinfo)", handler)
+    def test_bank_withdrawal_command_uses_existing_sql_owner(self) -> None:
+        owner = (SOURCE_ROOT / "features/bank/command_application.py").read_text(encoding="utf-8")
+        replies = (SOURCE_ROOT / "features/bank/command_replies.py").read_text(encoding="utf-8")
+        self.assertIn("BankWithdrawalApplication", owner)
+        self.assertIn(".withdraw(", owner)
+        self.assertNotIn("sql_message.update_ls(", owner)
+        self.assertNotIn("savef(user_id, bankinfo)", owner)
         for status in ("saved_stone_insufficient", "state_changed", "user_missing"):
-            self.assertIn(f'"{status}"', handler)
-        service = (bank_root / "withdrawal_service.py").read_text(encoding="utf-8")
-        self.assertIn("ATTACH DATABASE", service)
-        self.assertIn("BEGIN IMMEDIATE", service)
-        self.assertIn("bank_withdrawal_operations", service)
+            self.assertIn(f'"{status}"', replies)
+        writer = (SOURCE_ROOT / "features/bank/account_withdrawal_application.py").read_text(encoding="utf-8")
+        self.assertIn("immediate=True", writer)
+        self.assertIn("self.repository.save_withdrawal(", writer)
 
-    def test_bank_upgrade_uses_cross_database_transaction(self) -> None:
-        bank_root = SOURCE_ROOT / "xiuxian" / "xiuxian_bank"
-        source = (bank_root / "__init__.py").read_text(encoding="utf-8")
-        start = source.index("elif mode == '升级会员'")
-        handler = source[start:source.index("elif mode == '信息'", start)]
-        self.assertIn("BankUpgradeApplication", handler)
-        self.assertNotIn("bank_application.upgrade(", handler)
-        self.assertNotIn("sql_message.update_ls(", handler)
-        self.assertNotIn("savef(user_id, bankinfo)", handler)
+    def test_bank_upgrade_command_uses_existing_sql_owner(self) -> None:
+        owner = (SOURCE_ROOT / "features/bank/command_application.py").read_text(encoding="utf-8")
+        replies = (SOURCE_ROOT / "features/bank/command_replies.py").read_text(encoding="utf-8")
+        self.assertIn("BankUpgradeApplication", owner)
+        self.assertIn(".upgrade(", owner)
+        self.assertNotIn("sql_message.update_ls(", owner)
+        self.assertNotIn("savef(user_id, bankinfo)", owner)
         for status in ("stone_insufficient", "state_changed", "user_missing"):
-            self.assertIn(f'"{status}"', handler)
-        service = (bank_root / "upgrade_service.py").read_text(encoding="utf-8")
-        self.assertIn("ATTACH DATABASE", service)
-        self.assertIn("BEGIN IMMEDIATE", service)
-        self.assertIn("bank_upgrade_operations", service)
+            self.assertIn(f'"{status}"', replies)
+        writer = (SOURCE_ROOT / "features/bank/account_upgrade_application.py").read_text(encoding="utf-8")
+        self.assertIn("immediate=True", writer)
+        self.assertIn("self.repository.save_upgrade(", writer)
 
-    def test_bank_interest_uses_cross_database_transaction(self) -> None:
-        bank_root = SOURCE_ROOT / "xiuxian" / "xiuxian_bank"
-        source = (bank_root / "__init__.py").read_text(encoding="utf-8")
-        start = source.index("elif mode == '结算'")
-        handler = source[start:source.index("def savef", start)]
-        self.assertIn("BankInterestApplication", handler)
-        self.assertNotIn("bank_application.settle_interest(", handler)
-        self.assertNotIn("sql_message.update_ls(", handler)
-        self.assertNotIn("savef(user_id, bankinfo)", handler)
+    def test_bank_interest_command_uses_existing_sql_owner(self) -> None:
+        owner = (SOURCE_ROOT / "features/bank/command_application.py").read_text(encoding="utf-8")
+        replies = (SOURCE_ROOT / "features/bank/command_replies.py").read_text(encoding="utf-8")
+        self.assertIn("BankInterestApplication", owner)
+        self.assertIn(".settle_interest(", owner)
+        self.assertNotIn("sql_message.update_ls(", owner)
+        self.assertNotIn("savef(user_id, bankinfo)", owner)
         for status in ("state_changed", "user_missing"):
-            self.assertIn(f'"{status}"', handler)
-        service = (bank_root / "interest_service.py").read_text(encoding="utf-8")
-        self.assertIn("ATTACH DATABASE", service)
-        self.assertIn("BEGIN IMMEDIATE", service)
-        self.assertIn("bank_interest_operations", service)
+            self.assertIn(f'"{status}"', replies)
+        writer = (SOURCE_ROOT / "features/bank/account_interest_application.py").read_text(encoding="utf-8")
+        self.assertIn("immediate=True", writer)
+        self.assertIn("self.repository.save_interest(", writer)
 
     def test_bank_replay_services_are_absent_from_default_facade(self) -> None:
         source = (SOURCE_ROOT / "xiuxian" / "xiuxian_bank" / "__init__.py").read_text(encoding="utf-8")
@@ -2812,19 +2802,18 @@ class SourceQualityTests(unittest.TestCase):
         self.assertNotIn("_player_data_manager", source)
         self.assertNotIn("XiuxianDateManage", source)
         self.assertNotIn("sql_message =", source)
-        self.assertIn("get_deposit_result(operation_id)", source)
-        self.assertIn("get_withdrawal_result(operation_id)", source)
+        self.assertIn("bank_command_application.execute(", source)
         self.assertNotIn("_bank_deposit_service().get_result", source)
         self.assertNotIn("_bank_withdrawal_service().get_result", source)
         self.assertNotIn("_bank_upgrade_service().get_result", source)
         self.assertNotIn("_bank_interest_service().get_result", source)
-        self.assertIn("LegacyBankOperationReceiptRepository", source)
+        self.assertNotIn("LegacyBankOperationReceiptRepository", source)
 
     def test_bank_default_application_does_not_construct_legacy_repository(self) -> None:
         source = (SOURCE_ROOT / "xiuxian" / "xiuxian_bank" / "__init__.py").read_text(encoding="utf-8")
         plugin = (SOURCE_ROOT / "plugin.py").read_text(encoding="utf-8")
         self.assertNotIn("LegacyBankRepository", source)
-        self.assertIn("bank_application = BankApplication(", source)
+        self.assertIn("bank_command_application = BankCommandApplication(", source)
         self.assertNotIn("get_paths().player_db", source)
         self.assertNotIn("repository=LegacyBankRepository", source)
         self.assertIn('"bank": BankApplication(', plugin)

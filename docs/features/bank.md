@@ -3,7 +3,9 @@
 ## 当前边界
 
 - v1 Web API 默认由 `BankApplication` 调用 game DB-owned 的存入、取出、升级与结息 application；生产组合根不再注入 `LegacyBankRepository`。该 repository 仍可显式注入供回滚/兼容调用，不进入默认执行图。
-- 默认 `灵庄` matcher 与 Web application 只读取 game DB 的 `bank_accounts`。缺少投影表示新账户：存款、首次升级和结息可在同一 game DB 事务中以 L1/零余额默认账户初始化；取款对未开户账户拒绝。
+- 默认正则 matcher 经 `BankCommandApplication.execute` 编排账户读取、回执查询、自动结息及存入/取出/升级/结息；适配器仅解析消息、构建操作号并调用 `render_bank_reply` 发送结果。v1 Web 保持独立的 `BankApplication` 入口，两个入口复用既有四个 game DB account application，不另造资产 writer。
+- 命令 owner 与 Web application 只读取 game DB 的 `bank_accounts`。缺少投影表示新账户：信息查询返回 L1/零存款而不开户；存款、首次升级和结息可在同一 game DB 事务中初始化；取款对未开户账户拒绝。
+- 命令优先查询同操作号的已提交回执，再读取当前账户、会员等级与结息快照；重放不受此后等级、余额或上限变化影响。存入、取出和结息向既有 writer 传入存款额、更新时间及等级快照，状态变化时拒绝结算。失败回复先按 `status` 分支，不读取仅成功结果才有的字段。
 - v1 存款、取款与结息在 game DB 内核对请求中的存款额、更新时间和会员等级快照；旧账户导入后若快照过期则拒绝结算。空旧账户只接受默认零余额/L1 首次存款；已有但不完整或 schema 无效的旧账户 fail closed，不覆盖历史记录。
 - v1 全局 operation ledger 与账户 application 回执分开提交时，重试会由账户回执防止重复资产变更，并补完 ledger 结果。
 - `bank.003` 在启动阶段从 `player_db.bankinfo` 只读分批回填 game DB，每批最多 200 行；相同账户保留，已有 game DB 操作回执时保留已前进状态，无回执且冲突则中止迁移并回滚。该迁移预估目标表所需空间，低于预留值时拒绝启动，不改写旧表。
@@ -31,7 +33,7 @@
 
 ## 命令与别名
 
-旧 `灵庄` 命令及其别名全部保留；默认 matcher 的新账户路径由 feature application 承载，未被接管的 fallback 仍是兼容边界。
+旧正则命令入口及其操作语法保留；账户编排已集中到 feature command owner，不再由 matcher 直接调用四个 writer 或旧存储。manifest 中的 `灵庄` 及别名仍是声明，不能据此声称存在同名 `on_command` matcher。
 
 ## Web API
 
@@ -47,7 +49,7 @@
 
 ## 定时任务
 
-银行没有自动结息 scheduler；结息只由用户命令或显式 Web 操作触发。`features/bank/jobs.py` 保持空任务表。
+银行没有自动结息 scheduler；命令操作携带的自动结息由 command owner 计算并与账户动作一并提交，显式结息也可由用户命令或 Web 操作触发。`features/bank/jobs.py` 保持空任务表。
 
 ## 配置项
 
@@ -55,15 +57,19 @@
 
 ## 适配器差异
 
-命令适配器负责文案，Web 适配器负责 DTO、权限、CSRF 和 JSON envelope。
+命令适配器负责消息边界，`command_replies.py` 按 feature 返回的 DTO 格式化成功、拒绝与缺账户信息。Web 适配器负责 DTO、权限、CSRF 和 JSON envelope。
 
 ## 测试与手工验收
 
 覆盖四项资产动作的成功、拒绝、异常回滚和重放；使用临时数据目录运行 Flask client 和恢复演练。
 
+`tests/test_bank_progress_contract.py` 绑定实际正则 handler、command owner、回执 reader 与既有账户 application 的源码调用边，并通过内存源码变异防止旧 writer 回流或回执优先级退化。新增实现仍须串行运行对应行为测试和门禁，本文不作为本轮验证通过的记录。
+
 ## 灰度开关、回滚和已知限制
 
 关闭新功能开关后兼容 Web 与命令入口仍保留；显式 `savef` 仅供兼容写入。v1 Web 默认执行切换和历史账户启动回填仍需正式发布迁移、恢复/对账与灰度回滚证据；这些证据完成前不能宣称 bank 全面重构。
+
+冻结 v1 中 bank 没有独立受阻命令成员；manifest-only `灵庄` 保持“不可达”。实际正则 matcher 属于共享 `legacy.matcher.non_command_dispatch`，本次 owner 收口不新增冻结成员，也不代表该跨插件 family 已完成。
 
 ## Manifest 清单
 - `alias: 灵庄存灵石`

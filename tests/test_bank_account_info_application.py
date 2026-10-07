@@ -54,7 +54,18 @@ class BankAccountInfoApplicationTests(unittest.TestCase):
     def test_missing_account_is_explicit(self) -> None:
         with sqlite3.connect(self.database) as connection:
             connection.execute("INSERT INTO user_xiuxian VALUES ('u2', 10)")
-        self.assertEqual(BankAccountInfoApplication(self.database).get_info(user_id="u2")["status"], "account_missing")
+        result = BankAccountInfoApplication(self.database).get_info(user_id="u2")
+        self.assertEqual(result, {"status": "account_missing", "user_id": "u2",
+                                  "wallet_stone": 10, "saved_stone": 0,
+                                  "bank_level": "1", "updated_at": ""})
+        with sqlite3.connect(self.database) as connection:
+            self.assertIsNone(connection.execute("SELECT user_id FROM bank_accounts WHERE user_id='u2'").fetchone())
+
+    def test_missing_database_query_does_not_create_database(self) -> None:
+        database = Path(self.temp.name) / "missing.db"
+        result = BankAccountInfoApplication(database).get_info(user_id="u1")
+        self.assertEqual(result, {"status": "schema_missing", "user_id": "u1"})
+        self.assertFalse(database.exists())
 
     def test_legacy_player_account_is_not_read_during_account_query(self) -> None:
         with sqlite3.connect(self.database) as connection:

@@ -14,14 +14,22 @@ from tests.test_db_backend import db_backend
 
 class BankInterestServiceTests(unittest.TestCase):
     def test_bank_facade_defaults_interest_to_feature_application(self) -> None:
+        import inspect
+        from nonebot_plugin_xiuxian_2.features.bank.account_interest_application import BankInterestApplication
+        from nonebot_plugin_xiuxian_2.features.bank.command_application import BankCommandApplication
         from nonebot_plugin_xiuxian_2.xiuxian import xiuxian_bank
 
         source = Path(xiuxian_bank.__file__).read_text(encoding="utf-8")
-        start = source.index("elif mode == '结算'")
-        handler = source[start:source.index("def savef", start)]
-        self.assertIn("BankInterestApplication", handler)
+        handler = inspect.getsource(xiuxian_bank.bank_)
+        owner = xiuxian_bank.bank_command_application
+        self.assertIsInstance(owner, BankCommandApplication)
+        self.assertIsInstance(owner.interest, BankInterestApplication)
+        self.assertIn("bank_command_application.execute(", handler)
+        self.assertIn("self.interest.settle_interest(", inspect.getsource(BankCommandApplication.execute))
         self.assertNotIn("bank_application.settle_interest(", handler)
         self.assertNotIn("get_legacy_info(", handler)
+        self.assertNotIn("BankInterestService", source)
+        self.assertNotIn("_bank_interest_service", source)
 
     def setUp(self) -> None:
         self.temp_dir = tempfile.TemporaryDirectory()

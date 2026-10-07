@@ -51,6 +51,37 @@ def _handler_line(source: str, handler: str) -> int:
 
 
 class Phase2LegacyPathGateTests(unittest.TestCase):
+    def test_bank_sub_boundary_has_command_owner_but_non_command_family_stays_blocked(self):
+        root = Path(__file__).resolve().parents[1]
+        report = load_phase2_scope_report(include_items=True)
+        family = next(item for item in report["items"] if item["id"] == "legacy.matcher.non_command_dispatch")
+        summary = json.loads((root / "docs/refactor_phase2_legacy_paths.json").read_text(encoding="utf-8"))
+        declared = next(item for item in summary["explicit_paths"] if item["id"] == family["id"])
+        self.assertEqual(family["status"], "受阻")
+        for field in ("status", "reason", "call_graph", "evidence"):
+            self.assertEqual(family[field], declared[field])
+        graph = " ".join(family["call_graph"])
+        for owner in ("bank_ -> BankCommandApplication.execute", "BankCommandReceiptRepository.find",
+                      "BankDepositApplication", "BankWithdrawalApplication", "BankUpgradeApplication",
+                      "BankInterestApplication", "BankAccountInfoApplication.get_info", "render_bank_reply",
+                      "expected_saved_stone", "original expected_saved_at", "calculate_interest"):
+            self.assertIn(owner, graph)
+        self.assertIn("validates user/action/original amount before current account/configuration", graph)
+        self.assertIn("information bypasses mutation receipts", graph)
+        self.assertNotIn("legacy handler still owns result-to-reply mapping", graph)
+        self.assertIn("only the bank sub-boundary, not the matcher family", family["reason"])
+        self.assertIn("savef(sync_snapshot=False)", graph)
+        self.assertIn("handle_group_lifecycle", graph)
+        self.assertIn("media_parse_link", graph)
+        for evidence in ("nonebot_plugin_xiuxian_2/features/bank/command_application.py",
+                         "nonebot_plugin_xiuxian_2/features/bank/command_receipt_repository.py",
+                         "nonebot_plugin_xiuxian_2/features/bank/command_replies.py",
+                         "tests/test_bank_command_ingress.py"):
+            self.assertIn(evidence, family["evidence"])
+        self.assertEqual(len(report["items"]), 496)
+        self.assertTrue(report["frozen_membership_valid"])
+        self.assertEqual(report["integrity_errors"], [])
+
     def test_admin_qqid_has_source_bound_recoverable_batch_owner(self):
         report = load_phase2_scope_report(include_items=True)
         item = next(item for item in report["items"] if item["id"] == "command:admin:转换QQID")

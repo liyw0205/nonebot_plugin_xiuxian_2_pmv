@@ -47,14 +47,20 @@ class BankAccountInfoApplication:
         user_id = str(user_id).strip()
         if not user_id:
             raise ValueError("user_id is required")
-        with DatabaseUnitOfWork(self.database, immediate=False) as uow:
+        if not Path(self.database).is_file():
+            return {"status": "schema_missing", "user_id": user_id}
+        with DatabaseUnitOfWork(self.database, read_only=True) as uow:
             self.repository.assert_schema_ready(uow)
             wallet = uow.query_one("SELECT stone FROM user_xiuxian WHERE user_id=?", (user_id,))
             account = self.repository.existing_account(uow, user_id)
         if wallet is None:
             return {"status": "user_missing", "user_id": user_id}
         if account is None:
-            return {"status": "account_missing", "user_id": user_id}
+            return {
+                "status": "account_missing", "user_id": user_id,
+                "wallet_stone": int(wallet["stone"] or 0), "saved_stone": 0,
+                "bank_level": "1", "updated_at": "",
+            }
         return {
             "status": "ok",
             "user_id": user_id,

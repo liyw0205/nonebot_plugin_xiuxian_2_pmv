@@ -14,13 +14,18 @@ from tests.test_db_backend import db_backend
 
 class BankDepositServiceTests(unittest.TestCase):
     def test_bank_facade_does_not_import_legacy_replay_services(self) -> None:
+        import inspect
+        from nonebot_plugin_xiuxian_2.features.bank.account_application import BankDepositApplication
+        from nonebot_plugin_xiuxian_2.features.bank.command_application import BankCommandApplication
         from nonebot_plugin_xiuxian_2.xiuxian import xiuxian_bank
 
         source = Path(xiuxian_bank.__file__).read_text(encoding="utf-8")
-        handler = source.split("if mode == '存灵石'", 1)[1].split(
-            "if mode == '取灵石'", 1
-        )[0]
-        self.assertIn("BankDepositApplication", handler)
+        handler = inspect.getsource(xiuxian_bank.bank_)
+        owner = xiuxian_bank.bank_command_application
+        self.assertIsInstance(owner, BankCommandApplication)
+        self.assertIsInstance(owner.deposits, BankDepositApplication)
+        self.assertIn("bank_command_application.execute(", handler)
+        self.assertIn("self.deposits.deposit(", inspect.getsource(BankCommandApplication.execute))
         self.assertNotIn("bank_application.deposit(", handler)
         self.assertNotIn("BankDepositService", source)
         self.assertNotIn("BankWithdrawalService", source)

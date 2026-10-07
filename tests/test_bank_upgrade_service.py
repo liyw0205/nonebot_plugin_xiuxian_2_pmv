@@ -14,13 +14,21 @@ from tests.test_db_backend import db_backend
 
 class BankUpgradeServiceTests(unittest.TestCase):
     def test_bank_facade_defaults_upgrade_to_feature_application(self) -> None:
+        import inspect
+        from nonebot_plugin_xiuxian_2.features.bank.account_upgrade_application import BankUpgradeApplication
+        from nonebot_plugin_xiuxian_2.features.bank.command_application import BankCommandApplication
         from nonebot_plugin_xiuxian_2.xiuxian import xiuxian_bank
 
         source = Path(xiuxian_bank.__file__).read_text(encoding="utf-8")
-        start = source.index("elif mode == '升级会员'")
-        handler = source[start:source.index("elif mode == '信息'", start)]
-        self.assertIn("BankUpgradeApplication", handler)
+        handler = inspect.getsource(xiuxian_bank.bank_)
+        owner = xiuxian_bank.bank_command_application
+        self.assertIsInstance(owner, BankCommandApplication)
+        self.assertIsInstance(owner.upgrades, BankUpgradeApplication)
+        self.assertIn("bank_command_application.execute(", handler)
+        self.assertIn("self.upgrades.upgrade(", inspect.getsource(BankCommandApplication.execute))
         self.assertNotIn("bank_application.upgrade(", handler)
+        self.assertNotIn("BankUpgradeService", source)
+        self.assertNotIn("_bank_upgrade_service", source)
 
     def setUp(self) -> None:
         self.temp_dir = tempfile.TemporaryDirectory()

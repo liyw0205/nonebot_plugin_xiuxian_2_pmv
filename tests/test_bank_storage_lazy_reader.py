@@ -17,16 +17,17 @@ class BankStorageLazyReaderTests(unittest.TestCase):
         self.assertIn("legacy_bank_account_storage", source)
 
     def test_commands_use_game_account_application_and_default_first_use(self):
-        source = (
-            Path(__file__).parents[1]
-            / "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_bank/__init__.py"
-        ).read_text(encoding="utf-8")
-        self.assertIn("BankDepositApplication(get_paths().game_db)", source)
-        self.assertIn("BankWithdrawalApplication(get_paths().game_db)", source)
-        self.assertIn("BankUpgradeApplication(get_paths().game_db)", source)
-        self.assertIn("BankInterestApplication(get_paths().game_db)", source)
-        self.assertIn('"bank_level": "1"', source)
-        self.assertIn('"saved_stone": 0', source)
+        package = Path(__file__).parents[1] / "nonebot_plugin_xiuxian_2"
+        source = (package / "xiuxian/xiuxian_bank/__init__.py").read_text(encoding="utf-8")
+        owner = (package / "features/bank/command_application.py").read_text(encoding="utf-8")
+        self.assertIn("BankCommandApplication(get_paths().game_db, BANKLEVEL)", source)
+        self.assertIn("bank_command_application.execute(", source)
+        for name in ("BankDepositApplication", "BankWithdrawalApplication", "BankUpgradeApplication", "BankInterestApplication"):
+            self.assertNotIn(name, source)
+            self.assertIn(name, owner)
+        self.assertIn("expected_saved_stone", owner)
+        self.assertIn("expected_saved_at", owner)
+        self.assertNotIn("calculate_interest", source)
 
 
 if __name__ == "__main__":
