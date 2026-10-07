@@ -3379,22 +3379,32 @@
       "id": "command:dufang:同步鉴石",
       "kind": "commands",
       "entry": "dufang:同步鉴石 (aliases: )",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "The compatibility command retains legacy JSON files only as import sources. Its handler moves filesystem scanning and parsing to asyncio.to_thread; validated snapshots and sharing users are persisted through DufangApplication and feature-owned SQL repositories. Legacy statistics insert only when no SQL row exists, so reruns do not overwrite active projections; sharing imports are deduplicated. The player-database migrations own the destination schema.",
+      "unknown_edge": null,
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dufang/__init__.py:903 unseal_migrate = on_command('同步鉴石') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dufang/__init__.py:977 unseal_migrate_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dufang/__init__.py:977 unseal_migrate_ -> asyncio.to_thread(_migrate_unseal_data_sync)",
+        "_migrate_unseal_data_sync validates legacy JSON and calls save_unseal_data/save_sharing_users -> DufangApplication.import_legacy_player_stats/import_sharing_users -> DufangRepository -> feature SQL repositories",
+        "DufangPlayerStatsSqlRepository.import_legacy_snapshot inserts only missing player rows; DufangSharingPreferencesSqlRepository.import_enabled_users deduplicates; player migrations own both schemas"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dufang/__init__.py:903",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dufang/__init__.py:977"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dufang/__init__.py:977",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dufang/__init__.py:906-973",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dufang/__init__.py:140-144,220-225",
+        "nonebot_plugin_xiuxian_2/features/dufang/application.py:108-114",
+        "nonebot_plugin_xiuxian_2/features/dufang/repository.py:99-102,135-139",
+        "nonebot_plugin_xiuxian_2/features/dufang/player_stats_repository.py:190-231",
+        "nonebot_plugin_xiuxian_2/features/dufang/sharing_preferences_repository.py:66-80",
+        "nonebot_plugin_xiuxian_2/features/dufang/migrations.py:201-231",
+        "nonebot_plugin_xiuxian_2/plugin.py:543-615"
       ],
       "source_declaration_found": true,
       "source": {
