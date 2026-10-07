@@ -3386,15 +3386,15 @@
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dufang/__init__.py:919 unseal_migrate = on_command('同步鉴石') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dufang/__init__.py:991 unseal_migrate_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dufang/__init__.py:903 unseal_migrate = on_command('同步鉴石') -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dufang/__init__.py:977 unseal_migrate_ -> legacy downstream effect not closed in this frozen item"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dufang/__init__.py:919",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dufang/__init__.py:991"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dufang/__init__.py:903",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dufang/__init__.py:977"
       ],
       "source_declaration_found": true,
       "source": {
@@ -9505,22 +9505,29 @@
       "id": "command:dufang:鉴石",
       "kind": "commands",
       "entry": "dufang:鉴石 (aliases: )",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "The compatibility matcher preserves command routing while the handler's durable resolution, bet, payout, recovery and sharing settlement flow through DufangApplication and feature-owned SQL repositories. Bet placement freezes the resolution and debits the wallet atomically; payout uses the frozen plan and emits player-stat outbox events. Shared settlement freezes its recipient batch and is replay-safe. Player statistics projection is reconciled by the feature application.",
+      "unknown_edge": null,
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dufang/__init__.py:250 unseal = on_command('鉴石') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dufang/__init__.py:525 unseal_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dufang/__init__.py:228 unseal = on_command('鉴石') -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dufang/__init__.py:509 unseal_ -> DufangApplication.reconcile_pending, resolution, plan_for_bet, bet and payout; frozen share settlement uses share_settle/resume_share",
+        "DufangApplication -> DufangRepository -> DufangBetSqlRepository.place / DufangPayoutSqlRepository.settle -> atomic wallet and bet state with frozen resolution",
+        "DufangApplication.share_settle/resume_share -> DufangShareSqlRepository -> frozen recipients and replay-safe settlement; player-stat outbox is reconciled by the application"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dufang/__init__.py:250",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dufang/__init__.py:525"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dufang/__init__.py:228",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dufang/__init__.py:509",
+        "nonebot_plugin_xiuxian_2/features/dufang/application.py:31-94,116-139,226-259",
+        "nonebot_plugin_xiuxian_2/features/dufang/repository.py:40-92,104-118",
+        "nonebot_plugin_xiuxian_2/features/dufang/bet_repository.py:142-209",
+        "nonebot_plugin_xiuxian_2/features/dufang/payout_repository.py:82-137",
+        "nonebot_plugin_xiuxian_2/features/dufang/share_repository.py:156-245"
       ],
       "source_declaration_found": true,
       "source": {
@@ -9538,8 +9545,8 @@
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dufang/__init__.py:254 unseal_message = on_command('鉴石信息') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dufang/__init__.py:391 unseal_message_ -> DufangApplication.player_stats_snapshot -> DufangRepository.player_stats_snapshot -> DufangPlayerStatsSqlRepository.snapshot",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dufang/__init__.py:232 unseal_message = on_command('鉴石信息') -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dufang/__init__.py:375 unseal_message_ -> DufangApplication.player_stats_snapshot -> DufangRepository.player_stats_snapshot -> DufangPlayerStatsSqlRepository.snapshot",
         "DufangPlayerStatsSqlRepository.snapshot -> read-only player_db UOW -> PRAGMA schema check + SELECT unseal_data; missing user returns zero values without INSERT/DDL",
         "snapshot schema_missing -> handler sends migration-not-ready response and returns; legacy get_unseal_data/save_unseal_data remains isolated to write/migration paths"
       ],
@@ -9549,11 +9556,11 @@
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dufang/__init__.py:398-402",
         "nonebot_plugin_xiuxian_2/features/dufang/application.py:96-97",
-        "nonebot_plugin_xiuxian_2/features/dufang/repository.py:88-91",
-        "nonebot_plugin_xiuxian_2/features/dufang/player_stats_repository.py:156-198",
-        "nonebot_plugin_xiuxian_2/features/dufang/migrations.py:102-121,180-198",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dufang/__init__.py:254",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dufang/__init__.py:391"
+        "nonebot_plugin_xiuxian_2/features/dufang/repository.py:94-97",
+        "nonebot_plugin_xiuxian_2/features/dufang/player_stats_repository.py:154-188",
+        "nonebot_plugin_xiuxian_2/features/dufang/migrations.py:66-98,182-198",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dufang/__init__.py:232",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dufang/__init__.py:375"
       ],
       "source_declaration_found": true,
       "source": {
@@ -9565,22 +9572,29 @@
       "id": "command:dufang:鉴石共享关闭",
       "kind": "commands",
       "entry": "dufang:鉴石共享关闭 (aliases: )",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "The compatibility handler calls DufangApplication.set_sharing_enabled(false), which routes through DufangRepository to the schema-checked player-database sharing-preferences repository. Table ownership and legacy-list import are registered as player-database migration legacy.dufang.007; missing schema fails closed and the handler only sends an adapter response.",
+      "unknown_edge": null,
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dufang/__init__.py:252 unseal_share_off = on_command('鉴石共享关闭') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dufang/__init__.py:297 unseal_share_off_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dufang/__init__.py:230 unseal_share_off = on_command('鉴石共享关闭') -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dufang/__init__.py:278 unseal_share_off_ -> remove_sharing_user -> DufangApplication.set_sharing_enabled(false) -> DufangRepository -> DufangSharingPreferencesSqlRepository.set_enabled",
+        "DufangSharingPreferencesSqlRepository uses schema-checked player_db SQL only; legacy.dufang.007 owns table creation and legacy global-list backfill"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dufang/__init__.py:252",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dufang/__init__.py:297"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dufang/__init__.py:230",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dufang/__init__.py:278",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dufang/__init__.py:278-295",
+        "nonebot_plugin_xiuxian_2/features/dufang/application.py:99-109",
+        "nonebot_plugin_xiuxian_2/features/dufang/repository.py:120-139",
+        "nonebot_plugin_xiuxian_2/features/dufang/sharing_preferences_repository.py:47-64",
+        "nonebot_plugin_xiuxian_2/features/dufang/migrations.py:201-231",
+        "nonebot_plugin_xiuxian_2/plugin.py:543-615"
       ],
       "source_declaration_found": true,
       "source": {
@@ -9592,22 +9606,29 @@
       "id": "command:dufang:鉴石共享开启",
       "kind": "commands",
       "entry": "dufang:鉴石共享开启 (aliases: )",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "The compatibility handler calls DufangApplication.set_sharing_enabled(true), which routes through DufangRepository to the schema-checked player-database sharing-preferences repository. Table ownership and legacy-list import are registered as player-database migration legacy.dufang.007; missing schema fails closed and the handler only sends an adapter response.",
+      "unknown_edge": null,
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dufang/__init__.py:251 unseal_share_on = on_command('鉴石共享开启') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dufang/__init__.py:279 unseal_share_on_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dufang/__init__.py:229 unseal_share_on = on_command('鉴石共享开启') -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dufang/__init__.py:257 unseal_share_on_ -> add_sharing_user -> DufangApplication.set_sharing_enabled(true) -> DufangRepository -> DufangSharingPreferencesSqlRepository.set_enabled",
+        "DufangSharingPreferencesSqlRepository uses schema-checked player_db SQL only; legacy.dufang.007 owns table creation and legacy global-list backfill"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dufang/__init__.py:251",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dufang/__init__.py:279"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dufang/__init__.py:229",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dufang/__init__.py:257",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dufang/__init__.py:257-274",
+        "nonebot_plugin_xiuxian_2/features/dufang/application.py:99-109",
+        "nonebot_plugin_xiuxian_2/features/dufang/repository.py:120-139",
+        "nonebot_plugin_xiuxian_2/features/dufang/sharing_preferences_repository.py:47-64",
+        "nonebot_plugin_xiuxian_2/features/dufang/migrations.py:201-231",
+        "nonebot_plugin_xiuxian_2/plugin.py:543-615"
       ],
       "source_declaration_found": true,
       "source": {
@@ -9619,22 +9640,23 @@
       "id": "command:dufang:鉴石帮助",
       "kind": "commands",
       "entry": "dufang:鉴石帮助 (aliases: )",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "允许保留的兼容路径",
+      "reason": "This compatibility matcher serves static help text through the shared message adapter and has no feature state or durable side effect to migrate. Keeping the existing command route is the intended compatibility boundary.",
+      "unknown_edge": null,
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dufang/__init__.py:253 unseal_help = on_command('鉴石帮助') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dufang/__init__.py:258 unseal_help_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dufang/__init__.py:231 unseal_help = on_command('鉴石帮助') -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dufang/__init__.py:236 unseal_help_ -> static help response via send_help_message; no feature state/effect owner"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dufang/__init__.py:253",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dufang/__init__.py:258"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dufang/__init__.py:231",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dufang/__init__.py:236",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dufang/__init__.py:236-253"
       ],
       "source_declaration_found": true,
       "source": {

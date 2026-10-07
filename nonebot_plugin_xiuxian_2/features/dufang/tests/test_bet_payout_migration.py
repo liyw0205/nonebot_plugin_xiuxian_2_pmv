@@ -19,6 +19,8 @@ class DufangBetPayoutMigrationTests(unittest.TestCase):
         self.assertNotIn("legacy.dufang.005", player_versions)
         self.assertIn("legacy.dufang.006", player_versions)
         self.assertNotIn("legacy.dufang.006", game_versions)
+        self.assertIn("legacy.dufang.007", player_versions)
+        self.assertNotIn("legacy.dufang.007", game_versions)
 
     def test_migration_is_idempotent_and_preserves_legacy_rows(self):
         with tempfile.TemporaryDirectory() as temp:

@@ -1,3 +1,5 @@
+import json
+
 from ...infrastructure.database import DatabaseUnitOfWork
 
 
@@ -196,6 +198,40 @@ def apply_dufang_player_receipts(uow: DatabaseUnitOfWork) -> None:
         raise RuntimeError("unsupported existing dufang player receipt key")
 
 
+def apply_dufang_sharing_preferences(uow: DatabaseUnitOfWork) -> None:
+    """Move the old global sharing list into a feature-owned player table."""
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS dufang_sharing_preferences("
+        "user_id TEXT PRIMARY KEY,enabled_at TEXT NOT NULL)"
+    )
+    tables = {
+        str(row[0]).casefold()
+        for row in uow.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
+    }
+    if "global" not in tables:
+        return
+    columns = {
+        str(row[1]).casefold()
+        for row in uow.execute('PRAGMA table_info("global")').fetchall()
+    }
+    if not {"user_id", "unseal_sharing"}.issubset(columns):
+        return
+    row = uow.query_one('SELECT unseal_sharing FROM "global" WHERE user_id=?', ("global",))
+    if row is None or row["unseal_sharing"] is None:
+        return
+    raw = row["unseal_sharing"]
+    users = json.loads(raw) if isinstance(raw, str) else raw
+    if isinstance(users, dict):
+        users = users.get("users", [])
+    if not isinstance(users, list):
+        raise RuntimeError("unsupported legacy dufang sharing list")
+    normalized = tuple(dict.fromkeys(str(user_id).strip() for user_id in users if str(user_id).strip()))
+    uow.executemany(
+        "INSERT OR IGNORE INTO dufang_sharing_preferences(user_id,enabled_at) VALUES(?,CURRENT_TIMESTAMP)",
+        ((user_id,) for user_id in normalized),
+    )
+
+
 __all__ = [
     "apply_dufang",
     "apply_dufang_bet_payout",
@@ -203,4 +239,5 @@ __all__ = [
     "apply_dufang_resolution",
     "apply_dufang_share",
     "apply_dufang_share_player",
+    "apply_dufang_sharing_preferences",
 ]

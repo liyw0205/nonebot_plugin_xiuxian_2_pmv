@@ -284,6 +284,8 @@ class DufangShareRepositoryTests(unittest.TestCase):
         self.assertNotIn("legacy.dufang.003", game_versions)
         self.assertIn("legacy.dufang.003", player_versions)
         self.assertNotIn("legacy.dufang.002", player_versions)
+        self.assertNotIn("legacy.dufang.007", game_versions)
+        self.assertIn("legacy.dufang.007", player_versions)
         game_migrations = tuple(item for item in migrations_for_database(migrations, "game_db") if item.version.startswith("legacy.dufang."))
         player_migrations = tuple(item for item in migrations_for_database(migrations, "player_db") if item.version.startswith("legacy.dufang."))
         with DatabaseUnitOfWork(self.game) as uow:
@@ -295,7 +297,7 @@ class DufangShareRepositoryTests(unittest.TestCase):
             self.assertEqual((row["user_id"], row["stone_delta"], row["trace_id"]), ("old", 1, None))
         with DatabaseUnitOfWork(self.player) as uow:
             runner = MigrationRunner(player_migrations)
-            self.assertEqual(runner.apply(uow), ["legacy.dufang.003", "legacy.dufang.006"])
+            self.assertEqual(runner.apply(uow), ["legacy.dufang.003", "legacy.dufang.006", "legacy.dufang.007"])
             self.assertEqual(runner.apply(uow), [])
             row = uow.query_one("SELECT count,total_cost,profit,loss,shared_profit,received_loss FROM unseal_data WHERE user_id='old'")
             self.assertEqual(tuple(row.values()), (2, 40, 5, 6, None, None))

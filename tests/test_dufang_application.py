@@ -9,10 +9,27 @@ import nonebot
 nonebot.init()
 
 from nonebot_plugin_xiuxian_2.features.dufang.application import DufangApplication
-from nonebot_plugin_xiuxian_2.features.dufang.migrations import apply_dufang_bet_payout, apply_dufang_share_player
+from nonebot_plugin_xiuxian_2.features.dufang.migrations import (
+    apply_dufang_bet_payout,
+    apply_dufang_player_receipts,
+    apply_dufang_resolution,
+    apply_dufang_share_player,
+)
 from nonebot_plugin_xiuxian_2.infrastructure.database import DatabaseUnitOfWork
 from nonebot_plugin_xiuxian_2.plugin import apply_platform_schema
 from tests.test_db_backend import db_backend
+
+
+WIN_PLAN = {
+    "entity": {"name": "sealed", "desc": "sealed"},
+    "process": "open",
+    "result_type": "success",
+    "event": {"title": "found", "desc": "found", "outcome": "win"},
+    "payout_outcome": "win",
+    "gain": 600,
+    "requested_loss": 0,
+    "sharing": None,
+}
 
 
 class DufangApplicationTests(unittest.TestCase):
@@ -26,25 +43,30 @@ class DufangApplicationTests(unittest.TestCase):
             uow.execute("INSERT INTO user_xiuxian VALUES (?, ?)", ("user", 1000))
             apply_platform_schema(uow)
             apply_dufang_bet_payout(uow)
+            apply_dufang_resolution(uow)
         with DatabaseUnitOfWork(self.player) as uow:
             apply_dufang_share_player(uow)
+            apply_dufang_player_receipts(uow)
         self.application = DufangApplication(self.game, self.player)
 
     def tearDown(self) -> None:
         self.temp.cleanup()
 
     def test_bet_application_owns_transaction_and_replay(self) -> None:
+        planned = self.application.plan_for_bet("bet-1", draw=lambda: WIN_PLAN)
         first = self.application.bet(
             operation_id="bet-1",
             user_id="user",
             cost=300,
             placed_at="2026-09-17 00:00:00",
+            resolution=planned.resolution,
         )
         duplicate = self.application.bet(
             operation_id="bet-1",
             user_id="user",
             cost=300,
             placed_at="later",
+            resolution=planned.resolution,
         )
 
         self.assertTrue(first.ok)
@@ -57,28 +79,24 @@ class DufangApplicationTests(unittest.TestCase):
         self.assertEqual(tuple(row), (1, 300))
 
     def test_payout_application_owns_transaction_and_replay(self) -> None:
+        planned = self.application.plan_for_bet("bet-for-payout", draw=lambda: WIN_PLAN)
         bet = self.application.bet(
             operation_id="bet-for-payout",
             user_id="user",
             cost=300,
             placed_at="2026-09-17 00:00:00",
+            resolution=planned.resolution,
         )
         first = self.application.payout(
             operation_id="pay-1",
             user_id="user",
             bet_id=bet.data["bet_id"],
-            outcome="win",
-            gain=600,
-            requested_loss=0,
             settled_at="2026-09-17 00:01:00",
         )
         duplicate = self.application.payout(
             operation_id="pay-1",
             user_id="user",
             bet_id=bet.data["bet_id"],
-            outcome="loss",
-            gain=0,
-            requested_loss=999,
             settled_at="later",
         )
 

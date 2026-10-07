@@ -187,6 +187,49 @@ class DufangPlayerStatsSqlRepository:
             last_update=str(row.get("last_update") or ""),
         )
 
+    def import_legacy_snapshot(
+        self, user_id: str, data: Mapping[str, Any], imported_at: str
+    ) -> bool | None:
+        """Import a legacy file only when no SQL projection exists yet."""
+        user_id, imported_at = str(user_id).strip(), str(imported_at).strip()
+        if not user_id or not imported_at or not self.player_database.is_file():
+            return None
+        unseal = data.get("unseal_info", {})
+        sharing = data.get("sharing_info", {})
+        if not isinstance(unseal, Mapping) or not isinstance(sharing, Mapping):
+            raise ValueError("invalid legacy dufang statistics")
+
+        def nonnegative(source: Mapping[str, Any], key: str) -> int:
+            try:
+                value = int(source.get(key, 0) or 0)
+            except (TypeError, ValueError, OverflowError) as exc:
+                raise ValueError("invalid legacy dufang statistics") from exc
+            if value < 0:
+                raise ValueError("invalid legacy dufang statistics")
+            return value
+
+        values = (
+            nonnegative(unseal, "count"),
+            nonnegative(unseal, "total_cost"),
+            nonnegative(unseal, "profit"),
+            nonnegative(unseal, "loss"),
+            nonnegative(sharing, "shared_profit"),
+            nonnegative(sharing, "shared_loss"),
+            nonnegative(sharing, "received_profit"),
+            nonnegative(sharing, "received_loss"),
+            imported_at,
+        )
+        with DatabaseUnitOfWork(self.player_database, immediate=True) as uow:
+            if not self._player_schema_ready(uow):
+                return None
+            changed = uow.execute(
+                "INSERT OR IGNORE INTO unseal_data(user_id,count,total_cost,profit,loss,"
+                "shared_profit,shared_loss,received_profit,received_loss,last_update) "
+                "VALUES(?,?,?,?,?,?,?,?,?,?)",
+                (user_id, *values),
+            ).rowcount
+        return changed == 1
+
     def reconcile(self, *, limit: int = 25, priority_event_id: str = "") -> DufangPlayerStatsResult:
         limit = max(1, min(int(limit), 25))
         if not self.game_database.is_file() or not self.player_database.is_file():

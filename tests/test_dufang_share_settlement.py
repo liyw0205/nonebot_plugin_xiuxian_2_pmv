@@ -56,9 +56,9 @@ class DufangShareSettlementTests(unittest.TestCase):
         self.assertIn("_player_data_manager_instance = None", source)
         self.assertIn("def _player_data_manager(", source)
         self.assertNotIn("player_data_manager = PlayerDataManager()", source)
-        self.assertIn("_player_data_manager().get_field_data(", source)
         self.assertIn("_player_data_manager().get_fields(", source)
-        self.assertIn("_player_data_manager().update_or_write_data(", source)
+        self.assertNotIn("_player_data_manager().get_field_data(", source)
+        self.assertNotIn("_player_data_manager().update_or_write_data(", source)
 
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
@@ -269,9 +269,8 @@ class DufangShareSettlementTests(unittest.TestCase):
         self.assertNotIn("_dufang_share_service().settle(", handler)
         self.assertNotIn("sql_message.update_ls(", handler)
         self.assertNotIn("save_unseal_data(", handler)
-        unseal_share = source.split("# 处理共享事件", 2)[2].split(
-            "# 尘封之物类型", 1
-        )[0]
+        handler_start = source.index("async def unseal_(bot")
+        unseal_share = source[handler_start:source.index("# 尘封之物类型", handler_start)]
         self.assertNotIn('shared_profit"] +=', unseal_share)
         self.assertNotIn('shared_loss"] +=', unseal_share)
 

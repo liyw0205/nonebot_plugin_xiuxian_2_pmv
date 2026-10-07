@@ -13,6 +13,7 @@ from .player_stats_repository import (
     DufangPlayerStatsSqlRepository,
 )
 from .share_repository import DufangShareSqlRepository
+from .sharing_preferences_repository import DufangSharingPreferencesSqlRepository
 
 
 class DufangRepository(ServicePort):
@@ -29,6 +30,11 @@ class DufangRepository(ServicePort):
             None
             if self.player_database is None
             else DufangPlayerStatsSqlRepository(self.database, self.player_database)
+        )
+        self.sharing_preferences = (
+            None
+            if self.player_database is None
+            else DufangSharingPreferencesSqlRepository(self.player_database)
         )
 
     def execute(self, operation_id: str, user_id: str, action: str, payload: dict[str, Any]) -> Any:
@@ -90,6 +96,11 @@ class DufangRepository(ServicePort):
             return DufangPlayerStatsSnapshot("schema_missing")
         return self.player_stats.snapshot(user_id)
 
+    def import_legacy_player_stats(self, user_id: str, data: Mapping[str, Any], imported_at: str) -> bool | None:
+        if self.player_stats is None:
+            return None
+        return self.player_stats.import_legacy_snapshot(user_id, data, imported_at)
+
     def reconcile_player_outbox(
         self, *, limit: int = 25, priority_event_id: str = ""
     ) -> DufangPlayerStatsResult:
@@ -105,6 +116,26 @@ class DufangRepository(ServicePort):
 
     def share_exists(self, operation_id: str) -> bool:
         return self.share is not None and self.share.exists(operation_id)
+
+    def sharing_enabled(self, user_id: str) -> bool | None:
+        if self.sharing_preferences is None:
+            return None
+        return self.sharing_preferences.enabled(user_id)
+
+    def sharing_user_ids(self, excluding_user_id: str = "") -> tuple[str, ...] | None:
+        if self.sharing_preferences is None:
+            return None
+        return self.sharing_preferences.enabled_users(excluding_user_id)
+
+    def set_sharing_enabled(self, user_id: str, enabled: bool, updated_at: str) -> bool | None:
+        if self.sharing_preferences is None:
+            return None
+        return self.sharing_preferences.set_enabled(user_id, enabled, updated_at)
+
+    def import_sharing_users(self, user_ids: tuple[str, ...] | list[str], updated_at: str) -> int | None:
+        if self.sharing_preferences is None:
+            return None
+        return self.sharing_preferences.import_enabled_users(user_ids, updated_at)
 
 
 __all__ = ["DufangRepository"]

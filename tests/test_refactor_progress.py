@@ -124,6 +124,11 @@ class RefactorProgressTests(unittest.TestCase):
         self.assertTrue(dufang["storage_audit_is_read_only_and_bounded"])
         self.assertTrue(dufang["backup_capacity_preflight_is_shared_and_fail_closed"])
         self.assertTrue(dufang["payout_result_is_read_only"])
+        self.assertTrue(dufang["sharing_preference_commands_use_application"])
+        self.assertTrue(dufang["sharing_preferences_repository_is_schema_owned"])
+        self.assertTrue(dufang["sharing_preferences_migration_registered_and_player_db_only"])
+        self.assertTrue(dufang["legacy_stats_import_application_owned_and_idempotent"])
+        self.assertTrue(dufang["legacy_sync_command_keeps_file_io_off_event_loop"])
 
     def test_progress_report_tracks_compensation_claim_cleanup_boundary(self) -> None:
         compensation = _slice_status()["compensation"]

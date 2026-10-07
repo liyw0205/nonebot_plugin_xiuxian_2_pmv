@@ -1529,6 +1529,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
     dufang_bet_repository = (PACKAGE / "features" / "dufang" / "bet_repository.py").read_text(encoding="utf-8")
     dufang_payout_repository = (PACKAGE / "features" / "dufang" / "payout_repository.py").read_text(encoding="utf-8")
     dufang_player_stats_repository = (PACKAGE / "features" / "dufang" / "player_stats_repository.py").read_text(encoding="utf-8")
+    dufang_sharing_preferences_repository = (PACKAGE / "features" / "dufang" / "sharing_preferences_repository.py").read_text(encoding="utf-8")
     dufang_share_repository = (PACKAGE / "features" / "dufang" / "share_repository.py").read_text(encoding="utf-8")
     dufang_migrations = (PACKAGE / "features" / "dufang" / "migrations.py").read_text(encoding="utf-8")
     dufang_storage_audit = (ROOT / "scripts" / "audit_dufang_storage.py").read_text(encoding="utf-8")
@@ -4447,7 +4448,36 @@ def _slice_status() -> dict[str, dict[str, object]]:
                 and '"insufficient_storage"' in backup_capacity_source
             ),
             "payout_result_is_read_only": "DatabaseUnitOfWork(self.game_database, read_only=True)" in dufang_payout_repository,
-            "status": "share_and_bet_payout_schema_owned_with_frozen_resolution_outbox_recovery_and_storage_capacity_gate",
+            "sharing_preference_commands_use_application": (
+                "dufang_application.set_sharing_enabled(" in dufang_facade
+                and "dufang_application.sharing_enabled(" in dufang_facade
+                and "dufang_application.sharing_user_ids(" in dufang_facade
+                and "_player_data_manager().get_field_data(\"global\", \"unseal_sharing\"" not in dufang_facade
+                and "_player_data_manager().update_or_write_data(\"global\", \"unseal_sharing\"" not in dufang_facade
+            ),
+            "sharing_preferences_repository_is_schema_owned": (
+                "DufangSharingPreferencesSqlRepository" in dufang_repository
+                and "CREATE TABLE" not in dufang_sharing_preferences_repository
+                and "ALTER TABLE" not in dufang_sharing_preferences_repository
+            ),
+            "sharing_preferences_migration_registered_and_player_db_only": (
+                "def apply_dufang_sharing_preferences(" in dufang_migrations
+                and "legacy.dufang.007" in legacy_migrated_source
+                and "legacy.dufang.007" in plugin_source
+                and "legacy.dufang.007" in plugin_source[plugin_source.index("_PLAYER_DATABASE_MIGRATION_VERSIONS"):]
+            ),
+            "legacy_stats_import_application_owned_and_idempotent": (
+                "dufang_application.import_legacy_player_stats(" in dufang_facade
+                and "def import_legacy_player_stats(" in dufang_application
+                and "def import_legacy_snapshot(" in dufang_player_stats_repository
+                and "INSERT OR IGNORE INTO unseal_data" in dufang_player_stats_repository
+            ),
+            "legacy_sync_command_keeps_file_io_off_event_loop": (
+                "await asyncio.to_thread(\n        _migrate_unseal_data_sync" in dufang_facade
+                and "dufang_application.import_sharing_users(" in dufang_facade
+                and "dufang_application.import_legacy_player_stats(" in dufang_facade
+            ),
+            "status": "sharing_preferences_and_legacy_import_application_owned_with_share_bet_recovery_and_storage_capacity_gates",
         },
         "fusion": {
             "single_application_owned": "fusion_application.apply(" in fusion_facade,

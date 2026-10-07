@@ -82,6 +82,7 @@ from .dufang.migrations import (
     apply_dufang_resolution,
     apply_dufang_share,
     apply_dufang_share_player,
+    apply_dufang_sharing_preferences,
 )
 from .entertainment.migrations import (
     apply_entertainment,
@@ -148,6 +149,7 @@ MIGRATIONS = tuple(
          ("legacy.dufang.004", apply_dufang_bet_payout),
          ("legacy.dufang.005", apply_dufang_resolution),
          ("legacy.dufang.006", apply_dufang_player_receipts),
+         ("legacy.dufang.007", apply_dufang_sharing_preferences),
          ("legacy.entertainment.002", apply_entertainment_rooms),
          ("legacy.entertainment.003", apply_entertainment_newapi),
          ("legacy.entertainment.004", apply_entertainment_guess_sessions),

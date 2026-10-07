@@ -134,45 +134,35 @@ BANNED_UNSEAL_IDS = XiuConfig().banned_unseal_ids  # 禁止鉴石的群
 
 # 加载共享用户数据
 def load_sharing_users():
-    users = _player_data_manager().get_field_data("global", "unseal_sharing", "users")
-    if not users:
-        return []
-    if isinstance(users, list):
-        return users
-    try:
-        return json.loads(users)
-    except Exception:
-        return []
+    users = dufang_application.sharing_user_ids()
+    return [] if users is None else list(users)
 
 def save_sharing_users(users):
-    _player_data_manager().update_or_write_data("global", "unseal_sharing", "users", users, data_type="TEXT")
+    return dufang_application.import_sharing_users(
+        tuple(str(user_id) for user_id in users),
+        runtime_clock.now().strftime("%Y-%m-%d %H:%M:%S"),
+    )
 
 # 添加共享用户
 def add_sharing_user(user_id):
-    users = load_sharing_users()
-    if user_id not in users:
-        users.append(user_id)
-        save_sharing_users(users)
-        return True
-    return False
+    return dufang_application.set_sharing_enabled(
+        str(user_id), True, runtime_clock.now().strftime("%Y-%m-%d %H:%M:%S")
+    )
 
 # 移除共享用户
 def remove_sharing_user(user_id):
-    users = load_sharing_users()
-    if user_id in users:
-        users.remove(user_id)
-        save_sharing_users(users)
-        return True
-    return False
+    return dufang_application.set_sharing_enabled(
+        str(user_id), False, runtime_clock.now().strftime("%Y-%m-%d %H:%M:%S")
+    )
 
 # 检查是否在共享列表中
 def is_sharing_user(user_id):
-    users = load_sharing_users()
-    return user_id in users
+    return dufang_application.sharing_enabled(str(user_id)) is True
 
 # 获取随机共享用户(排除自己)
 def get_random_sharing_users(user_id, count=3):
-    users = [uid for uid in load_sharing_users() if uid != user_id]
+    users = load_sharing_users()
+    users = [uid for uid in users if uid != str(user_id)]
     if not users:
         return []
     count = min(count, len(users))
@@ -228,23 +218,11 @@ def get_unseal_data(user_id):
 
 
 def save_unseal_data(user_id, data):
-    user_id = str(user_id)
-    data["last_update"] = runtime_clock.now().strftime("%Y-%m-%d %H:%M:%S")
-
-    u = data["unseal_info"]
-    s = data["sharing_info"]
-
-    _player_data_manager().update_or_write_data(user_id, "unseal_data", "count", int(u.get("count", 0)), data_type="INTEGER")
-    _player_data_manager().update_or_write_data(user_id, "unseal_data", "total_cost", int(u.get("total_cost", 0)), data_type="INTEGER")
-    _player_data_manager().update_or_write_data(user_id, "unseal_data", "profit", int(u.get("profit", 0)), data_type="INTEGER")
-    _player_data_manager().update_or_write_data(user_id, "unseal_data", "loss", int(u.get("loss", 0)), data_type="INTEGER")
-
-    _player_data_manager().update_or_write_data(user_id, "unseal_data", "shared_profit", int(s.get("shared_profit", 0)), data_type="INTEGER")
-    _player_data_manager().update_or_write_data(user_id, "unseal_data", "shared_loss", int(s.get("shared_loss", 0)), data_type="INTEGER")
-    _player_data_manager().update_or_write_data(user_id, "unseal_data", "received_profit", int(s.get("received_profit", 0)), data_type="INTEGER")
-    _player_data_manager().update_or_write_data(user_id, "unseal_data", "received_loss", int(s.get("received_loss", 0)), data_type="INTEGER")
-
-    _player_data_manager().update_or_write_data(user_id, "unseal_data", "last_update", data["last_update"], data_type="TEXT")
+    return dufang_application.import_legacy_player_stats(
+        str(user_id),
+        data,
+        runtime_clock.now().strftime("%Y-%m-%d %H:%M:%S"),
+    )
 
 # 鉴石命令
 unseal = on_command("鉴石", priority=9, block=True)
@@ -283,10 +261,13 @@ async def unseal_share_on_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
         return
     
     user_id = user_info['user_id']
-    if is_sharing_user(user_id):
+    changed = add_sharing_user(user_id)
+    if changed is None:
+        await handle_send(bot, event, "鉴石共享配置尚未就绪，请先完成数据迁移。", md_type="鉴石")
+        return
+    if not changed:
         msg = "你已经开启了鉴石结果共享！"
     else:
-        add_sharing_user(user_id)
         msg = "成功开启鉴石结果共享！你的鉴石过程可能会对其他道友产生影响。"
         log_message(user_id, "开启了鉴石结果共享功能")
     
@@ -301,10 +282,13 @@ async def unseal_share_off_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
         return
     
     user_id = user_info['user_id']
-    if not is_sharing_user(user_id):
+    changed = remove_sharing_user(user_id)
+    if changed is None:
+        await handle_send(bot, event, "鉴石共享配置尚未就绪，请先完成数据迁移。", md_type="鉴石")
+        return
+    if not changed:
         msg = "你尚未开启鉴石结果共享！"
     else:
-        remove_sharing_user(user_id)
         msg = "成功关闭鉴石结果共享！你的鉴石过程将不再影响其他道友。"
         log_message(user_id, "关闭了鉴石结果共享功能")
     
@@ -962,9 +946,10 @@ def _migrate_unseal_data_sync(players_dir: Path, sharing_data_path: Path) -> tup
                 },
                 "last_update": raw.get("last_update", runtime_clock.now().strftime("%Y-%m-%d %H:%M:%S")),
             }
-            save_unseal_data(user_id, data)
+            if save_unseal_data(user_id, data) is None:
+                raise RuntimeError("鉴石统计数据 schema 尚未就绪")
             ok += 1
-        except (OSError, json.JSONDecodeError, TypeError, ValueError, AttributeError) as exc:
+        except (OSError, json.JSONDecodeError, TypeError, ValueError, AttributeError, RuntimeError) as exc:
             fail += 1
             logger.warning(f"鉴石数据同步失败 {user_id}: {exc}")
 
@@ -977,10 +962,11 @@ def _migrate_unseal_data_sync(players_dir: Path, sharing_data_path: Path) -> tup
                     raise TypeError("旧共享名单根节点必须是对象")
                 users = sharing_data.get("users", [])
                 if isinstance(users, list):
-                    save_sharing_users(users)
+                    if save_sharing_users(users) is None:
+                        raise RuntimeError("鉴石共享配置 schema 尚未就绪")
                 else:
                     raise TypeError("旧共享名单 users 必须是列表")
-    except (OSError, json.JSONDecodeError, TypeError, AttributeError) as exc:
+    except (OSError, json.JSONDecodeError, TypeError, AttributeError, RuntimeError) as exc:
         fail += 1
         logger.warning(f"鉴石旧共享名单同步失败: {exc}")
 

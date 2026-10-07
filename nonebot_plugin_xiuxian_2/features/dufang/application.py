@@ -96,6 +96,23 @@ class DufangApplication(MigratedFeatureApplication):
     def player_stats_snapshot(self, user_id: str) -> DufangPlayerStatsSnapshot:
         return self.repository.player_stats_snapshot(str(user_id))
 
+    def sharing_enabled(self, user_id: str) -> bool | None:
+        return self.repository.sharing_enabled(str(user_id))
+
+    def sharing_user_ids(self, excluding_user_id: str = "") -> tuple[str, ...] | None:
+        return self.repository.sharing_user_ids(str(excluding_user_id))
+
+    def set_sharing_enabled(self, user_id: str, enabled: bool, updated_at: str) -> bool | None:
+        return self.repository.set_sharing_enabled(str(user_id), bool(enabled), str(updated_at))
+
+    def import_sharing_users(self, user_ids: tuple[str, ...] | list[str], updated_at: str) -> int | None:
+        return self.repository.import_sharing_users(user_ids, str(updated_at))
+
+    def import_legacy_player_stats(
+        self, user_id: str, data: Mapping[str, Any], imported_at: str
+    ) -> bool | None:
+        return self.repository.import_legacy_player_stats(str(user_id), data, str(imported_at))
+
     def reconcile_pending(self, *, limit: int = 5, settled_at: str = "") -> Mapping[str, int]:
         limit = max(1, min(int(limit), 5))
         settled = failed = 0
