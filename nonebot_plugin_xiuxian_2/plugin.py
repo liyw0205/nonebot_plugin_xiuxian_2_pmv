@@ -159,6 +159,7 @@ from .features.world_events.manifest import FEATURE as WORLD_EVENTS_FEATURE
 from .features.world_events.migrations import (
     apply_world_events,
     apply_world_events_claim,
+    apply_world_events_claim_statistics,
     apply_world_events_lifecycle,
     apply_world_events_player,
     apply_world_events_spirit_vein_lifecycle,
@@ -482,6 +483,7 @@ def build_migrations() -> tuple[Migration, ...]:
         Migration("world_events.004", "demon_event_lifecycle_operations", apply_world_events_lifecycle),
         Migration("world_events.005", "demon_wave_refresh_operations", apply_world_events_wave_refresh),
         Migration("world_events.006", "spirit_vein_lifecycle_operations", apply_world_events_spirit_vein_lifecycle),
+        Migration("world_events.007", "demon_claim_statistics", apply_world_events_claim_statistics),
     )
 
 
@@ -542,6 +544,7 @@ _GAME_DATABASE_EXCLUDED_MIGRATION_VERSIONS = frozenset(
         "world_events.004",
         "world_events.005",
         "world_events.006",
+        "world_events.007",
         "legacy.dufang.003",
         "legacy.dufang.006",
         "legacy.dufang.007",
@@ -612,6 +615,7 @@ _PLAYER_DATABASE_MIGRATION_VERSIONS = frozenset(
         "world_events.004",
         "world_events.005",
         "world_events.006",
+        "world_events.007",
         "legacy.dufang.003",
         "legacy.dufang.006",
         "legacy.dufang.007",

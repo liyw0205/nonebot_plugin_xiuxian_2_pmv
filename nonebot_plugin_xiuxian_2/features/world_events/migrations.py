@@ -90,6 +90,13 @@ def apply_world_events_spirit_vein_lifecycle(uow: DatabaseUnitOfWork) -> None:
     )
 
 
+def apply_world_events_claim_statistics(uow: DatabaseUnitOfWork) -> None:
+    uow.execute("CREATE TABLE IF NOT EXISTS statistics (user_id TEXT PRIMARY KEY)")
+    columns = {str(row[1]) for row in uow.execute("PRAGMA table_info(statistics)").fetchall()}
+    if "魔修入侵领奖" not in columns:
+        uow.execute('ALTER TABLE statistics ADD COLUMN "魔修入侵领奖" INTEGER')
+
+
 __all__ = [
     "apply_world_events",
     "apply_world_events_player",
@@ -97,4 +104,5 @@ __all__ = [
     "apply_world_events_lifecycle",
     "apply_world_events_wave_refresh",
     "apply_world_events_spirit_vein_lifecycle",
+    "apply_world_events_claim_statistics",
 ]

@@ -20,7 +20,6 @@ from ..xiuxian_utils.utils import (
     number_to,
     send_help_message,
     send_msg_handler,
-    update_statistics_value,
     update_last_check_info_time,
 )
 from ..xiuxian_utils.item_json import Items
@@ -1614,8 +1613,6 @@ async def claim_demon_reward_(bot: Bot, event: GroupMessageEvent | PrivateMessag
     if not claim_outcome.ok:
         await handle_send(bot, event, claim_outcome.message or "魔修入侵奖励暂时无法领取。")
         await claim_demon_reward.finish()
-
-    update_statistics_value(user_id, "魔修入侵领奖")
 
     contribution_text = f"{raw_contribution * 100:.2f}%"
     if abs(contribution - raw_contribution) > 1e-12:

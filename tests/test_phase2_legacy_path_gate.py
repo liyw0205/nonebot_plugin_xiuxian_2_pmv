@@ -80,7 +80,7 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
                              if (item.get("source") or {}).get("feature") == "sect"))
         self.assertEqual(report["path_count"], 496)
         self.assertEqual(report["status_counts"],
-                         {"不可达": 19, "允许保留的兼容路径": 132, "受阻": 70, "已迁移": 275})
+                         {"不可达": 19, "允许保留的兼容路径": 132, "受阻": 69, "已迁移": 276})
         self.assertTrue(report["frozen_membership_valid"])
         self.assertEqual(report["integrity_errors"], [])
 
@@ -399,7 +399,7 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
             self.assertIn(evidence, system_item["evidence"])
         self.assertNotIn("legacy downstream effect not closed", system_graph)
         self.assertEqual(report["status_counts"],
-                         {"不可达": 19, "允许保留的兼容路径": 132, "受阻": 70, "已迁移": 275})
+                         {"不可达": 19, "允许保留的兼容路径": 132, "受阻": 69, "已迁移": 276})
         self.assertTrue(report["frozen_membership_valid"])
         self.assertEqual(report["integrity_errors"], [])
 
@@ -447,7 +447,7 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
         self.assertNotIn("legacy downstream effect not closed", claim_graph)
         self.assertEqual(
             report["status_counts"],
-            {"不可达": 19, "允许保留的兼容路径": 132, "受阻": 70, "已迁移": 275},
+            {"不可达": 19, "允许保留的兼容路径": 132, "受阻": 69, "已迁移": 276},
         )
         self.assertTrue(report["frozen_membership_valid"])
         self.assertEqual(report["integrity_errors"], [])
@@ -506,10 +506,41 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
 
         self.assertEqual(
             report["status_counts"],
-            {"不可达": 19, "允许保留的兼容路径": 132, "受阻": 70, "已迁移": 275},
+            {"不可达": 19, "允许保留的兼容路径": 132, "受阻": 69, "已迁移": 276},
+        )
+
+    def test_world_events_demon_claim_command_owns_atomic_claim_statistic(self):
+        report = load_phase2_scope_report(include_items=True)
+        item = next(
+            item for item in report["items"]
+            if item["id"] == "command:world_events:领取魔修奖励"
+        )
+        source = "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_world_events/__init__.py"
+        handler_line = _handler_line(source, "claim_demon_reward_")
+        graph = " ".join(item["call_graph"])
+
+        self.assertEqual(item["status"], "已迁移")
+        self.assertNotIn("unknown_edge", item)
+        self.assertIn(f"{source}:191", item["evidence"])
+        self.assertIn(f"{source}:{handler_line}", item["evidence"])
+        self.assertIn(
+            f"{source}:{handler_line} claim_demon_reward_ ->", graph
+        )
+        self.assertIn("DemonClaimApplication.claim", graph)
+        self.assertIn("WorldEventClaimSqlRepository.claim", graph)
+        self.assertIn("player statistics increment", graph)
+        self.assertIn("world_events.007", item["reason"])
+        self.assertIn("tests/test_demon_claim_repository.py", item["evidence"])
+        self.assertNotIn(
+            "update_statistics_value",
+            (Path(__file__).resolve().parents[1] / source).read_text(encoding="utf-8"),
+        )
+        self.assertEqual(report["integrity_errors"], [])
+        self.assertEqual(
+            report["status_counts"],
+            {"不可达": 19, "允许保留的兼容路径": 132, "受阻": 69, "已迁移": 276},
         )
         self.assertTrue(report["frozen_membership_valid"])
-        self.assertEqual(report["integrity_errors"], [])
 
     def test_tianti_display_commands_share_existing_read_owners(self):
         report = load_phase2_scope_report(include_items=True)
@@ -555,7 +586,7 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
 
         self.assertEqual(
             report["status_counts"],
-            {"不可达": 19, "允许保留的兼容路径": 132, "受阻": 70, "已迁移": 275},
+            {"不可达": 19, "允许保留的兼容路径": 132, "受阻": 69, "已迁移": 276},
         )
         self.assertTrue(report["frozen_membership_valid"])
         self.assertEqual(report["integrity_errors"], [])
@@ -568,7 +599,7 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
         self.assertEqual(report["path_count"], 496)
         self.assertEqual(
             report["status_counts"],
-            {"不可达": 19, "允许保留的兼容路径": 132, "受阻": 70, "已迁移": 275},
+            {"不可达": 19, "允许保留的兼容路径": 132, "受阻": 69, "已迁移": 276},
         )
         self.assertGreater(report["blocked_count"], 0)
         self.assertTrue(all(item["call_graph"] and item["evidence"] for item in report["items"]))

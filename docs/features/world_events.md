@@ -14,11 +14,11 @@
 
 ## 数据模型与迁移
 
-`world_events.001` 写入 `world_events_feature_migrations`；`world_events.002` 只在 `player_db` 建立/扩展事件状态、讨伐结算和统计 schema；`world_events.003` 只在 `game_db` 建立或扩展 `demon_claim_operations`，迁移旧表时保留记录并为缺失的 `stone`、`exp` 列补默认值；`world_events.004` 只在 `player_db` 建立 `demon_event_lifecycle_operations`；`world_events.005` 只在 `player_db` 建立 `demon_wave_refresh_operations`。领取、lifecycle 与 wave refresh SQL repositories 均不在请求中执行 DDL。
+`world_events.001` 写入 `world_events_feature_migrations`；`world_events.002` 只在 `player_db` 建立/扩展事件状态、讨伐结算和统计 schema；`world_events.003` 只在 `game_db` 建立或扩展 `demon_claim_operations`，迁移旧表时保留记录并为缺失的 `stone`、`exp` 列补默认值；`world_events.004` 只在 `player_db` 建立 `demon_event_lifecycle_operations`；`world_events.005` 只在 `player_db` 建立 `demon_wave_refresh_operations`；`world_events.006` 只在 `player_db` 建立灵脉生命周期回执；`world_events.007` 只在 `player_db` 预建魔修领奖统计列。领取、lifecycle 与 wave refresh SQL repositories 均不在请求中执行 DDL。
 
 ## 事务与失败回滚
 
-应用层先记录 `operation_ledger`，feature-owned SQL repository 随后使用 `ATTACH DATABASE` 与 `BEGIN IMMEDIATE` 在 `game_db`、`player_db` 中原子更新领奖标记、灵石、修为、物品和领奖 operation。业务拒绝不改变资产，异常由 repository 事务回滚并由应用层记录 failed ledger。超出 SQLite 64 位整数范围的修为/灵石以安全文本参数绑定，并在 SQL 中按历史规则进行数值累加。
+应用层先记录 `operation_ledger`，feature-owned SQL repository 随后使用 `ATTACH DATABASE` 与 `BEGIN IMMEDIATE` 在 `game_db`、`player_db` 中原子更新领奖标记、灵石、修为、物品、魔修领奖统计和领奖 operation。统计仅随首次成功 claim 递增，duplicate/replay 不重复计数；统计写入失败会回滚本次领奖。业务拒绝不改变资产，异常由 repository 事务回滚并由应用层记录 failed ledger。超出 SQLite 64 位整数范围的修为/灵石以安全文本参数绑定，并在 SQL 中按历史规则进行数值累加。
 
 ## 定时任务
 

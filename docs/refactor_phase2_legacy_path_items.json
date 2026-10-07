@@ -10152,22 +10152,27 @@
       "id": "command:world_events:领取魔修奖励",
       "kind": "commands",
       "entry": "world_events:领取魔修奖励 (aliases: )",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "The default handler keeps reward calculation and reply adaptation in the compatibility matcher, while DemonClaimApplication -> WorldEventClaimSqlRepository owns the claim, assets, receipt, and first-success-only reward statistic in the same transaction. Duplicate/replay returns before incrementing; the player statistics column is prepared by world_events.007.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_world_events/__init__.py:192 claim_demon_reward = on_command('领取魔修奖励') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_world_events/__init__.py:1478 claim_demon_reward_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_world_events/__init__.py:191 claim_demon_reward = on_command('领取魔修奖励') -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_world_events/__init__.py:1477 claim_demon_reward_ -> resolves effective user and reward snapshot -> DemonClaimApplication.claim -> WorldEventClaimSqlRepository.claim",
+        "WorldEventClaimSqlRepository immediate UOW attaches player_db and commits claimed state, player statistics increment, game assets, items, and demon_claim_operations receipt together; operation receipt is checked before any effect"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_world_events/__init__.py:192",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_world_events/__init__.py:1478"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_world_events/__init__.py:191",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_world_events/__init__.py:1477",
+        "nonebot_plugin_xiuxian_2/features/world_events/application.py:41-115",
+        "nonebot_plugin_xiuxian_2/features/world_events/repository.py:42-105",
+        "nonebot_plugin_xiuxian_2/features/world_events/migrations.py:93-97",
+        "nonebot_plugin_xiuxian_2/plugin.py:486,547,618",
+        "tests/test_demon_claim_repository.py"
       ],
       "source_declaration_found": true,
       "source": {

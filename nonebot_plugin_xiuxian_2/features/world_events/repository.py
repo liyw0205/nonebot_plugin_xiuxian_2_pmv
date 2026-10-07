@@ -79,6 +79,15 @@ class WorldEventClaimSqlRepository:
                     return self._result("inventory_full")
             current[user_id] = True
             uow.execute("UPDATE player_data.world_event_state SET claimed=? WHERE user_id=?", (json.dumps(current, ensure_ascii=False), event_key))
+            changed = uow.execute(
+                'UPDATE player_data.statistics SET "魔修入侵领奖"=COALESCE("魔修入侵领奖",0)+1 WHERE user_id=?',
+                (user_id,),
+            )
+            if changed.rowcount == 0:
+                uow.execute(
+                    'INSERT INTO player_data.statistics(user_id,"魔修入侵领奖") VALUES(?,1)',
+                    (user_id,),
+                )
             uow.execute("UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)+CAST(? AS REAL), exp=CAST(COALESCE(exp,0) AS REAL)+CAST(? AS REAL) WHERE user_id=?", (stone_param, exp_param, user_id))
             for item_id, name, item_type, amount in rewards:
                 uow.execute("INSERT INTO back(user_id,goods_id,goods_name,goods_type,goods_num,create_time,update_time,bind_num) VALUES(?,?,?,?,?,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP,?) ON CONFLICT(user_id,goods_id) DO UPDATE SET goods_num=back.goods_num+excluded.goods_num,bind_num=COALESCE(back.bind_num,0)+excluded.goods_num,update_time=excluded.update_time", (user_id, item_id, name, item_type, amount, amount))

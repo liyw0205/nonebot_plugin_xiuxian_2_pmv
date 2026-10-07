@@ -9,6 +9,7 @@ from nonebot_plugin_xiuxian_2.core.errors import OperationConflictError
 from nonebot_plugin_xiuxian_2.features.world_events.application import DemonClaimApplication
 from nonebot_plugin_xiuxian_2.features.world_events.migrations import (
     apply_world_events_claim,
+    apply_world_events_claim_statistics,
     apply_world_events_player,
 )
 from nonebot_plugin_xiuxian_2.features.world_events.repository import WorldEventClaimSqlRepository
@@ -31,6 +32,7 @@ def prepare_databases(tmp_path):
         OperationLedger().ensure_schema(uow)
     with DatabaseUnitOfWork(player, immediate=True) as uow:
         apply_world_events_player(uow)
+        apply_world_events_claim_statistics(uow)
         uow.execute(
             "INSERT INTO world_event_state(user_id,event_id,claimed) VALUES(?,?,?)",
             ("global", "event-1", "{}"),
@@ -60,7 +62,8 @@ def read_state(game, player):
         operations = conn.execute("SELECT COUNT(*) FROM demon_claim_operations").fetchone()[0]
     with sqlite3.connect(player) as conn:
         claimed = json.loads(conn.execute("SELECT claimed FROM world_event_state WHERE user_id='global'").fetchone()[0])
-    return balance, item, operations, claimed
+        stat = conn.execute('SELECT "魔修入侵领奖" FROM statistics WHERE user_id=\'u\'').fetchone()
+    return balance, item, operations, claimed, stat[0] if stat else None
 
 
 def test_claim_application_owns_atomic_sql_claim_and_replay(tmp_path):
@@ -74,15 +77,17 @@ def test_claim_application_owns_atomic_sql_claim_and_replay(tmp_path):
     first = app.claim(**claim_kwargs())
     replay = app.get_result("claim-1")
     second = app.claim(**claim_kwargs())
+    repository_duplicate = WorldEventClaimSqlRepository(game, player).claim(**claim_kwargs())
 
     assert first.ok and first.data["status"] == "applied"
     assert replay is not None and replay.ok and replay.replayed
     assert replay.data["stone"] == 100 and replay.data["exp"] == 200
     assert second.replayed
-    assert read_state(game, player) == ((110, 220), (2, 2), 1, {"u": True})
+    assert repository_duplicate.status == "duplicate"
+    assert read_state(game, player) == ((110, 220), (2, 2), 1, {"u": True}, 1)
     with pytest.raises(OperationConflictError):
         app.claim(**claim_kwargs("claim-1", stone=101))
-    assert read_state(game, player) == ((110, 220), (2, 2), 1, {"u": True})
+    assert read_state(game, player) == ((110, 220), (2, 2), 1, {"u": True}, 1)
 
 
 def test_rejected_claim_result_is_replayed_without_mutating_either_database(tmp_path):
@@ -100,7 +105,7 @@ def test_rejected_claim_result_is_replayed_without_mutating_either_database(tmp_
     assert not rejected.ok and rejected.code == "inventory_full"
     assert replay is not None and not replay.ok and replay.replayed
     assert replay.code == "inventory_full"
-    assert read_state(game, player) == ((10, 20), (19, 19), 0, {})
+    assert read_state(game, player) == ((10, 20), (19, 19), 0, {}, None)
 
 
 def test_claim_failure_rolls_back_game_and_player_changes(tmp_path):
@@ -115,7 +120,22 @@ def test_claim_failure_rolls_back_game_and_player_changes(tmp_path):
     with pytest.raises(sqlite3.IntegrityError, match="reject claim operation"):
         app.claim(**claim_kwargs("rollback"))
 
-    assert read_state(game, player) == ((10, 20), None, 0, {})
+    assert read_state(game, player) == ((10, 20), None, 0, {}, None)
+
+
+def test_claim_statistics_failure_rolls_back_the_entire_claim(tmp_path):
+    game, player = prepare_databases(tmp_path)
+    with DatabaseUnitOfWork(player, immediate=True) as uow:
+        uow.execute(
+            'CREATE TRIGGER reject_claim_stat BEFORE INSERT ON statistics '
+            "WHEN NEW.user_id='u' BEGIN SELECT RAISE(ABORT,'reject claim stat'); END"
+        )
+    app = DemonClaimApplication(game, player)
+
+    with pytest.raises(sqlite3.IntegrityError, match="reject claim stat"):
+        app.claim(**claim_kwargs("stat-rollback"))
+
+    assert read_state(game, player) == ((10, 20), None, 0, {}, None)
 
 
 def test_large_claim_reward_uses_overflow_safe_sqlite_binding(tmp_path):
@@ -154,3 +174,22 @@ def test_claim_migration_is_game_only_and_upgrades_legacy_table(tmp_path):
     player_versions = {item.version for item in migrations_for_database(migrations, "player_db")}
     assert "world_events.003" in game_versions
     assert "world_events.003" not in player_versions
+
+
+def test_claim_statistics_migration_preserves_rows_and_routes_to_player_only(tmp_path):
+    player = tmp_path / "player.db"
+    with DatabaseUnitOfWork(player, immediate=True) as uow:
+        uow.execute("CREATE TABLE statistics(user_id TEXT PRIMARY KEY,legacy INTEGER)")
+        uow.execute("INSERT INTO statistics VALUES('u',7)")
+        apply_world_events_claim_statistics(uow)
+
+    with sqlite3.connect(player) as conn:
+        assert conn.execute(
+            'SELECT legacy,"魔修入侵领奖" FROM statistics WHERE user_id=\'u\''
+        ).fetchone() == (7, None)
+
+    migrations = build_migrations()
+    game_versions = {item.version for item in migrations_for_database(migrations, "game_db")}
+    player_versions = {item.version for item in migrations_for_database(migrations, "player_db")}
+    assert "world_events.007" not in game_versions
+    assert "world_events.007" in player_versions
