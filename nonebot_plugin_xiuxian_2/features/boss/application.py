@@ -145,13 +145,17 @@ class BossApplication:
                 self.ledger.record_failure(self.game_database, operation_id, action, payload, str(exc))
                 raise
 
-    def purchase(self, *, operation_id: str, user_id: str, item_id: int, item_name: str, item_type: str, quantity: int, unit_cost: int, weekly_limit: int, expected_integral: int, expected_weekly_purchases: Mapping[str, Any], max_goods_num: int, today: Any = None) -> OperationOutcome[dict[str, Any]]:
+    def purchase(self, *, operation_id: str, user_id: str, item_id: int, item_name: str, item_type: str, quantity: int, unit_cost: int, weekly_limit: int, expected_integral: int, expected_weekly_purchases: Mapping[str, Any], max_goods_num: int, today: Any = None, requested_quantity: int | None = None) -> OperationOutcome[dict[str, Any]]:
         try:
-            request = BossPurchaseRequest(str(operation_id).strip(), str(user_id).strip(), int(item_id), str(item_name), str(item_type), int(quantity), int(unit_cost), int(weekly_limit), int(expected_integral), dict(expected_weekly_purchases or {}), int(max_goods_num), today)
+            request = BossPurchaseRequest(str(operation_id).strip(), str(user_id).strip(), int(item_id), str(item_name), str(item_type), int(quantity), int(unit_cost), int(weekly_limit), int(expected_integral), dict(expected_weekly_purchases or {}), int(max_goods_num), today, None if requested_quantity is None else int(requested_quantity))
             request.validate()
         except (TypeError, ValueError) as exc:
             raise ValidationError(str(exc)) from exc
-        return self._execute(operation_id=request.operation_id, user_id=request.user_id, action="boss.purchase", payload=request.payload(), call=lambda: self._repository().purchase(request.operation_id, request.user_id, request.item_id, request.item_name, request.item_type, request.quantity, request.unit_cost, request.weekly_limit, request.expected_integral, request.expected_weekly_purchases, request.max_goods_num, request.today))
+        payload = request.payload()
+        def call():
+            raw = _data(self._repository().purchase(request.operation_id, request.user_id, request.item_id, request.item_name, request.item_type, request.quantity, request.unit_cost, request.weekly_limit, request.expected_integral, request.expected_weekly_purchases, request.max_goods_num, request.today))
+            return {**raw, "item_id": request.item_id, "item_name": request.item_name, "item_type": request.item_type, "request": payload}
+        return self._execute(operation_id=request.operation_id, user_id=request.user_id, action="boss.purchase", payload=payload, call=call)
 
     def settle(self, *, operation_id: str | None = None, user_id: str | None = None, **kwargs: Any) -> OperationOutcome[dict[str, Any]]:
         kwargs = {**kwargs, "operation_id": operation_id if operation_id is not None else kwargs.get("operation_id", ""), "user_id": user_id if user_id is not None else kwargs.get("user_id", "")}

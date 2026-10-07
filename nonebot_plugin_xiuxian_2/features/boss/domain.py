@@ -18,19 +18,24 @@ class BossPurchaseRequest:
     expected_weekly_purchases: Mapping[str, Any]
     max_goods_num: int
     today: Any = None
+    requested_quantity: int | None = None
 
     def validate(self) -> None:
         if not self.operation_id or not self.user_id or not self.item_name or not self.item_type:
             raise ValueError("operation_id, user_id and item metadata are required")
         if self.item_id <= 0 or self.quantity <= 0:
             raise ValueError("item and quantity must be positive")
+        if self.requested_quantity is not None and self.requested_quantity <= 0:
+            raise ValueError("requested quantity must be positive")
+        if self.requested_quantity is not None and self.requested_quantity < self.quantity:
+            raise ValueError("requested quantity cannot be below executed quantity")
         if min(self.unit_cost, self.weekly_limit, self.expected_integral, self.max_goods_num) < 0:
             raise ValueError("purchase limits must not be negative")
         if not isinstance(self.expected_weekly_purchases, Mapping):
             raise ValueError("expected_weekly_purchases must be an object")
 
     def payload(self) -> dict[str, Any]:
-        return {
+        payload = {
             "user_id": self.user_id,
             "item_id": self.item_id,
             "quantity": self.quantity,
@@ -38,6 +43,9 @@ class BossPurchaseRequest:
             "weekly_limit": self.weekly_limit,
             "max_goods_num": self.max_goods_num,
         }
+        if self.requested_quantity is not None:
+            payload["requested_quantity"] = self.requested_quantity
+        return payload
 
 
 @dataclass(frozen=True)

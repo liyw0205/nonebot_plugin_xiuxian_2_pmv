@@ -1669,6 +1669,10 @@ def _slice_status() -> dict[str, dict[str, object]]:
     boss_facade = (PACKAGE / "xiuxian" / "xiuxian_boss" / "__init__.py").read_text(encoding="utf-8")
     reward_service_source = (PACKAGE / "xiuxian" / "xiuxian_utils" / "reward_service.py").read_text(encoding="utf-8")
     boss_application = (PACKAGE / "features" / "boss" / "application.py").read_text(encoding="utf-8")
+    boss_purchase_application = (PACKAGE / "features" / "boss" / "purchase_command_application.py").read_text(encoding="utf-8")
+    boss_purchase_command_repository = (PACKAGE / "features" / "boss" / "purchase_command_repository.py").read_text(encoding="utf-8")
+    boss_purchase_replies = (PACKAGE / "features" / "boss" / "purchase_command_replies.py").read_text(encoding="utf-8")
+    boss_purchase_execute = boss_purchase_application[boss_purchase_application.index("    def execute("):]
     boss_purchase_repository = (PACKAGE / "features" / "boss" / "repository.py").read_text(encoding="utf-8")
     boss_world_repository = (PACKAGE / "features" / "boss" / "world_boss_repository.py").read_text(encoding="utf-8")
     boss_migrations = (PACKAGE / "features" / "boss" / "migrations.py").read_text(encoding="utf-8")
@@ -5022,7 +5026,8 @@ def _slice_status() -> dict[str, dict[str, object]]:
             ),
             "weekly_purchase_handlers_use_feature_snapshot": (
                 "boss_application.weekly_purchases(user_id)" in boss_shop_handler
-                and "boss_application.weekly_purchases(user_id)" in boss_purchase_handler
+                and "self.application.weekly_purchases(" in boss_purchase_application
+                and "boss_purchase_command_application.execute(" in boss_purchase_handler
                 and "boss_limit.get_weekly_purchases(" not in boss_shop_handler + boss_purchase_handler
                 and "boss_limit._load_data(" not in boss_purchase_handler
             ),
@@ -5036,8 +5041,40 @@ def _slice_status() -> dict[str, dict[str, object]]:
                 'boss = boss or {"weekly": "{}"}' in boss_purchase_write_repository
                 and "INSERT INTO player_data.boss(user_id,weekly_purchases)" in boss_purchase_write_repository
             ),
+            "purchase_command_application_owned": (
+                "class BossPurchaseCommandApplication" in boss_purchase_application
+                and "self.repository.receipt(" in boss_purchase_application
+                and "self.application.purchase(" in boss_purchase_application
+                and "requested_quantity=quantity" in boss_purchase_application
+            ),
+            "purchase_command_receipt_first_and_read_only": (
+                boss_purchase_execute.index("self.repository.receipt(")
+                < boss_purchase_execute.index("self.repository.profile(")
+                < boss_purchase_execute.index("self._config(")
+                and "read_only=True" in boss_purchase_command_repository
+                and "CREATE TABLE" not in boss_purchase_command_repository
+                and "ALTER TABLE" not in boss_purchase_command_repository
+                and "operation_pending" in boss_purchase_command_repository
+                and "receipt_invalid" in boss_purchase_command_repository
+            ),
+            "purchase_command_facade_uses_one_owner": (
+                "boss_purchase_command_application.execute(" in boss_purchase_handler
+                and "boss_application.purchase(" not in boss_purchase_handler
+                and "boss_application.weekly_purchases(" not in boss_purchase_handler
+                and "boss_integral_application.get_integral(" not in boss_purchase_handler
+                and "_items()" not in boss_purchase_handler
+            ),
+            "purchase_command_replies_fail_closed": (
+                "status not in {\"applied\", \"duplicate\"}" in boss_purchase_replies
+                and "receipt_invalid" in boss_purchase_replies
+                and "operation_pending" in boss_purchase_replies
+            ),
+            "purchase_command_ingress_covered": (
+                "test_real_handler_clips_first_quantity" in (ROOT / "tests" / "test_boss_purchase_command_ingress.py").read_text(encoding="utf-8")
+                and "test_sql_failure_rolls_back_assets" in (ROOT / "tests" / "test_boss_purchase_command_ingress.py").read_text(encoding="utf-8")
+            ),
             "legacy_manual_spawn_disabled": "_spawn_world_boss(" not in boss_facade or "boss_application.spawn(" in boss_facade,
-            "status": "manual_spawn_daily_limit_full_refresh_punishment_and_weekly_purchase_snapshot_cutover_with_other_boss_compatibility",
+            "status": "purchase_command_manual_spawn_daily_limit_full_refresh_punishment_and_weekly_purchase_snapshot_cutover_with_other_boss_compatibility",
         },
         "buff": {
             "player_experience_normalization_owned": (

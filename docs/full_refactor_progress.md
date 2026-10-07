@@ -2,7 +2,11 @@
 
 状态：进行中。`v1.1.0` 的 P0-P7 发布证据继续保留，但不作为底层全面重构完成证明。
 
-**当前交付与队列（2026-10-07，本段优先于下文历史“下一片”）**：Arena 已在 `6b3fdc40` 提交推送，bank 已在 `c6ebdd26` 提交推送并核对远端；本轮 beg 三个真实入口已通过扩大回归和门禁，沿用原 `BegApplication/BegRepository` writer。共享 matcher family 仍有其它插件受阻，全局计数更新为 `225/107/19/145`，目标仍进行中。按 `allowed_features` 顺序，back、base 都没有冻结 blocker，已跳过；下一组固定为世界 BOSS 兑换命令，范围只含 `command:boss:世界BOSS兑换`，不重做已验收的讨伐、周限购或日重置。
+**当前交付与队列（2026-10-07，本段优先于下文历史“下一片”）**：Arena 已在 `6b3fdc40` 提交推送，bank 已在 `c6ebdd26` 提交推送并核对远端；beg 三个真实入口和本轮世界 BOSS 兑换入口已通过聚焦回归与门禁。共享 matcher family 仍有其它插件受阻，全局计数更新为 `226/107/19/144`，目标仍进行中。BOSS 本轮只处理 `command:boss:世界BOSS兑换`，不重做已验收的讨伐、周限购或日重置；下一组按 `allowed_features` 重新选择，不对已关闭功能重复重构。
+
+**世界 BOSS 兑换命令 owner（2026-10-07）**：三名子代理分别交付只读回执仓储、入口/回复适配和真实双 SQLite 贯通测试，主线程实现应用层并串行验收。`boss_integral_use_` 现在只解析正整数、生成原有 `boss-purchase:{event}:{user}`/UUID fallback operation ID、调用 `BossPurchaseCommandApplication` 并渲染回复；不再在 matcher 中读取商品目录、配置、周限购或积分。应用先读 `BossPurchaseCommandRepository.receipt`，再读 profile、商品/配置、weekly 和 integral 快照；请求数量保留在 ledger payload，事务内按剩余周限购裁剪实际数量，`BossApplication.purchase -> BossPurchaseSqlRepository.purchase` 继续负责跨 game/player SQLite 原子扣积分、更新周限购、写背包和回执。成功回放先于所有当前输入，拒绝回执不转成功，started/needs_reconcile、旧表缺 status、坏回执均 fail closed；已确认的回滚 `internal_error` 可用同 operation ID 重试。旧 matcher 与共享消息发送仍是兼容边界，本项不宣称世界 BOSS 战斗结算迁移完成。
+
+BOSS 聚焦 `18 passed`；既有 BOSS application/repository/service 选择集 `33 passed`；source-quality 定向 `2 passed`；progress/Phase2 回归 `47 passed, 29 subtests passed`。本轮测试均使用 `.venv` 与 tests 隔离数据目录，未访问生产数据库；测试执行为秒级到数秒级，主要耗时仍在 NoneBot 导入/收集，不把测试时长当作线上延迟提速证据。Phase2 membership/hash 不变，`integrity_errors=[]`；用户 `xiuxian_boss/boss_info.json` 保持未暂存。
 
 **Beg 新手机缘命令 owner（2026-10-07）**：三名子代理分别交付只读回执/profile 仓储、入口/回复适配、贯通测试与门禁文档；主线程实现统一 command application、补共享活动时间 owner、串行验收。三个 matcher 现在只提取身份、保留 `beg-daily:{event}:{user}` / `novice-gift:{event}:{user}` 操作号并调用 `BegCommandApplication`；帮助动态读取配置和时钟，不访问业务数据库。每日机缘和新手礼包先验证 ledger/旧业务回执的原用户、动作、结果与奖励字段，再读 profile；完成回放不读取当前资格、礼包目录、配置、时钟或随机数。新请求分别读取等级/奖励及礼包目录，最后复用已有 `BegApplication/BegRepository` 原子写入资产、领取标志、库存与 ledger；每日活动时间复用 `PlayerActivityApplication`，单独事务，不宣称跨副作用原子。拒绝不读取成功字段、不误报成功；started/needs_reconcile 保守拒绝，只有严格验证的回滚 `internal_error` 可让原 writer 同 ID 重试。保留 daily 按 `timedelta.days` 与 novice 精确 `timedelta` 的既有边界、历史 naive 本地时间解释，无新增 24 小时规则。
 

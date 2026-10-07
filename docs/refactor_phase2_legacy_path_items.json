@@ -1370,22 +1370,27 @@
       "id": "command:boss:世界BOSS兑换",
       "kind": "commands",
       "entry": "boss:世界BOSS兑换 (aliases: )",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "BossPurchaseCommandApplication owns receipt-first orchestration for the frozen exchange command. BossPurchaseCommandRepository reads the ledger/legacy receipt and game profile without DDL; the command then reads the current shop, item, weekly and integral snapshots and passes the original requested quantity plus the transaction-time limit-clamped quantity to BossApplication/BossPurchaseSqlRepository. Successful ledger receipts replay before current inputs, durable rejections stay rejected, started/needs_reconcile and ambiguous legacy rows fail closed, and verified rollback failures can retry with the same operation ID. The legacy matcher remains a transport facade and shared message delivery remains a compatibility boundary; this closes only the frozen exchange command, not world-boss battle settlement.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_boss/__init__.py:187 boss_integral_use = on_command('世界BOSS兑换') aliases=世界Boss兑换,世界boss兑换 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_boss/__init__.py:1431 boss_integral_use_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_boss/__init__.py:196 boss_integral_use = on_command('世界BOSS兑换') aliases=世界Boss兑换,世界boss兑换 -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_boss/__init__.py:1440 boss_integral_use_ -> BossPurchaseCommandApplication.execute -> BossApplication.purchase -> BossPurchaseSqlRepository.purchase -> cross-database SQLite transaction; render_boss_purchase_reply -> shared handle_send"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_boss/__init__.py:187",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_boss/__init__.py:1431"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_boss/__init__.py:196",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_boss/__init__.py:1440",
+        "nonebot_plugin_xiuxian_2/features/boss/purchase_command_application.py",
+        "nonebot_plugin_xiuxian_2/features/boss/purchase_command_repository.py",
+        "nonebot_plugin_xiuxian_2/features/boss/purchase_command_replies.py",
+        "nonebot_plugin_xiuxian_2/features/boss/application.py",
+        "nonebot_plugin_xiuxian_2/features/boss/repository.py",
+        "tests/test_boss_purchase_command_ingress.py"
       ],
       "source_declaration_found": true,
       "source": {

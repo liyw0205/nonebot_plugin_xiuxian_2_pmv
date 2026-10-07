@@ -2873,16 +2873,18 @@ class SourceQualityTests(unittest.TestCase):
     def test_world_boss_purchase_uses_cross_database_transaction(self) -> None:
         boss_root = SOURCE_ROOT / "xiuxian" / "xiuxian_boss"
         source = (boss_root / "__init__.py").read_text(encoding="utf-8")
-        start = source.index("boss_data =", source.index("async def boss_integral_use_"))
-        handler = source[start:source.index('msg = f"道友成功兑换', start)]
-        self.assertIn("boss_application.purchase(", handler)
+        start = source.index("result = boss_purchase_command_application.execute(", source.index("async def boss_integral_use_"))
+        handler = source[start:source.index("await handle_send", start)]
+        self.assertIn("boss_purchase_command_application.execute(", handler)
+        self.assertNotIn("boss_application.purchase(", handler)
         self.assertNotIn("boss_purchase_service.purchase(\n", handler)
         self.assertIn("boss_ids.new_id()", source[source.index("async def boss_integral_use_"):start])
-        self.assertNotIn("save_user_boss_fight_info(", handler)
-        self.assertNotIn("boss_limit.update_weekly_purchase(", handler)
-        self.assertNotIn("sql_message.send_back(", handler)
+        self.assertNotIn("boss_application.weekly_purchases(", handler)
+        self.assertNotIn("boss_integral_application.get_integral(", handler)
+        self.assertNotIn("_items()", handler)
+        replies = (SOURCE_ROOT / "features" / "boss" / "purchase_command_replies.py").read_text(encoding="utf-8")
         for status in ("integral_insufficient", "limit_reached", "inventory_full", "state_changed", "user_missing"):
-            self.assertIn(f'"{status}"', handler)
+            self.assertIn(f'"{status}"', replies)
         service = (boss_root / "transaction_service.py").read_text(encoding="utf-8")
         self.assertIn("ATTACH DATABASE", service)
         self.assertIn("BEGIN IMMEDIATE", service)

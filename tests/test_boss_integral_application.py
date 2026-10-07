@@ -138,9 +138,11 @@ def test_boss_integral_read_handlers_use_feature_snapshot() -> None:
     )
     text = source.read_text(encoding="utf-8")
 
-    assert text.count("boss_integral_application.get_integral(user_id)") == 4
+    # Exchange reads are owned by BossPurchaseCommandApplication; only the
+    # remaining direct read-model handlers stay in this legacy facade.
+    assert text.count("boss_integral_application.get_integral(user_id)") == 3
     assert "get_user_boss_fight_info" not in text
     assert "save_user_boss_fight_info" not in text
     assert "from .boss_limit import DAILY_BATTLE_COUNT" in text
     assert "player_data_manager" not in text
-    assert text.count('if integral_snapshot.status == "schema_missing":') == 2
+    assert text.count('if integral_snapshot.status == "schema_missing":') == 1

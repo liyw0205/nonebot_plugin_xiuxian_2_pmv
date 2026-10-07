@@ -4,6 +4,8 @@
 
 世界BOSS兑换和讨伐结算均通过 application 生成唯一 operation_id。旧 NoneBot 命令通过兼容门面调用新 application，返回字段保持兼容。
 
+`世界BOSS兑换` 由 `BossPurchaseCommandApplication` 负责。命令先读取 ledger/旧回执和用户 profile，再读取商品配置、物品目录、周限购与积分快照；原始请求数量写入 operation payload，实际数量只在事务内按剩余周限购裁剪。成功回放不依赖当前配置、目录、积分或周限购，拒绝和不明确回执不会渲染为成功。回执仓储只读、不执行请求期 DDL；`started`、`needs_reconcile`、旧表缺少明确 status 和坏 JSON 均 fail closed。
+
 ## 命令与别名
 
 - `世界BOSS兑换`：积分商店兑换。
@@ -23,6 +25,8 @@
 ## 事务与失败回滚
 
 资产 application 先写 `operation_ledger`，再执行结算；手动生成使用版本 CAS 与回执幂等，每日限额重置冻结目标并按 chunk 恢复。相同 operation/日期重试只返回首次结果；异常在当前事务回滚并保留可恢复进度。旧 transaction service 仅作为显式兼容/回滚路径。
+
+兑换 writer 复用 `BossApplication.purchase -> BossPurchaseSqlRepository.purchase`，在附加 player DB 的 immediate SQLite 事务中校验积分/周限购/背包容量并同时更新积分、周限购、背包和业务回执；ledger 与业务回执仍保留原 operation identity。已确认的 SQL 回滚记录为 `internal_error`，同 payload 可重试；无法确认的 started/needs_reconcile 不盲目重放。
 
 世界BOSS战斗和“世界BOSS信息”通过 `BossApplication.daily_limit_snapshot` 读取每日讨伐次数、积分和灵石。读取使用只读 UoW，每次最多取一行，不缓存；缺数据库、表、用户行或旧字段时返回零，不创建数据库/表、不补字段，也不插入默认用户行。战斗沿用该快照作为结算 CAS 的期望值；显式限额写入与每日重置仍由各自 mutation 路径负责。
 

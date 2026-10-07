@@ -26,6 +26,7 @@ from ..xiuxian_utils.lay_out import assign_bot, put_bot, layout_bot_dict, Cooldo
 from ..xiuxian_utils.data_source import jsondata
 from nonebot.permission import SUPERUSER
 from nonebot.log import logger
+from ...core.errors import ConflictError
 from ...paths import get_paths
 from ..xiuxian_utils.xiuxian2_handle import (
     XiuxianDateManage,
@@ -48,9 +49,10 @@ from ..xiuxian_utils.utils import (
 )
 from ..xiuxian_title.title_data import check_and_unlock_titles
 from .boss_limit import DAILY_BATTLE_COUNT
-from .transaction_service import BossPurchaseResult
 from ...compatibility.boss import WorldBossBattleSettlementService
 from ...features.boss.application import BossApplication
+from ...features.boss.purchase_command_application import BossPurchaseCommandApplication
+from ...features.boss.purchase_command_replies import render_boss_purchase_reply
 from ...features.boss.integral_application import BossIntegralApplication
 from ...features.player_state.application import PlayerStateApplication
 from ...features.boss.repository import BossPurchaseSqlRepository
@@ -86,6 +88,13 @@ boss_application = BossApplication(
 )
 boss_integral_application = BossIntegralApplication(get_paths().player_db)
 boss_ids = UUIDGenerator()
+boss_purchase_command_application = BossPurchaseCommandApplication(
+    get_paths().game_db,
+    get_paths().player_db,
+    get_boss_config,
+    lambda: _items(),
+    max_goods_num_provider=lambda: XiuConfig().max_goods_num,
+)
 player_state_application = PlayerStateApplication(get_paths().player_db)
 runtime_clock = SystemClock()
 runtime_random = SystemRandom()
@@ -1435,116 +1444,35 @@ async def boss_integral_use_(bot: Bot, event: GroupMessageEvent | PrivateMessage
     if not isUser:
         await handle_send(bot, event, msg, md_type="我要修仙")
         await boss_integral_use.finish()
-
-    user_id = user_info['user_id']
-    msg = args.extract_plain_text().strip()
-    shop_info = re.findall(r"(\d+)\s*(\d*)", msg)
-    
-    if shop_info:
-        shop_id = int(shop_info[0][0])
-        quantity = int(shop_info[0][1]) if shop_info[0][1] else 1
-    else:
-        msg = f"请输入正确的商品编号！"
-        await handle_send(bot, event, msg, md_type="世界BOSS", k1="兑换", v1="世界BOSS兑换", k2="商店", v2="世界BOSS商店", k3="信息", v3="世界BOSS信息")
+    user_id = str(user_info["user_id"])
+    raw = args.extract_plain_text().strip()
+    match = re.fullmatch(r"([0-9]{1,12})(?:\s+([0-9]{1,9}))?", raw) if len(raw) <= 64 else None
+    if match is None:
+        await handle_send(bot, event, "请输入正确的商品编号！", md_type="世界BOSS", k1="兑换", v1="世界BOSS兑换", k2="商店", v2="世界BOSS商店", k3="信息", v3="世界BOSS信息")
         await boss_integral_use.finish()
-
-    boss_integral_shop = config['世界积分商品']
-    is_in = False
-    cost = None
-    item_id = None
-    weekly_limit = None
-    
-    if boss_integral_shop:
-        if str(shop_id) in boss_integral_shop:
-            is_in = True
-            cost = boss_integral_shop[str(shop_id)]['cost']
-            weekly_limit = boss_integral_shop[str(shop_id)].get('weekly_limit', 1)
-            item_id = shop_id
-            item_info = _items().get_data_by_item_id(item_id)
-    else:
-        msg = f"世界积分商店内空空如也！"
-        await handle_send(bot, event, msg)
+        return
+    item_id = int(match.group(1))
+    quantity = int(match.group(2) or "1")
+    if item_id <= 0 or quantity <= 0:
+        await handle_send(bot, event, "请输入正确的商品编号和数量！", md_type="世界BOSS", k1="兑换", v1="世界BOSS兑换", k2="商店", v2="世界BOSS商店", k3="信息", v3="世界BOSS信息")
         await boss_integral_use.finish()
-        
-    if is_in:
-        weekly_purchases = boss_application.weekly_purchases(user_id)
-        if weekly_purchases is None:
-            await handle_send(bot, event, "每周限购数据未就绪，请稍后重试。")
-            await boss_integral_use.finish()
-        event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
-        operation_id = (
-            f"boss-purchase:{event_id}:{user_id}"
-            if event_id
-            else f"boss-purchase:{boss_ids.new_id()}:{user_id}"
+        return
+    event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
+    operation_id = f"boss-purchase:{event_id}:{user_id}" if event_id else f"boss-purchase:{boss_ids.new_id()}:{user_id}"
+    try:
+        result = boss_purchase_command_application.execute(
+            operation_id=operation_id, user_id=user_id, item_id=item_id, quantity=quantity,
         )
-        # 先走 operation：重放必须在限购/积分前置拦截之前完成。
-        already_purchased = int(weekly_purchases.get(str(shop_id), 0) or 0)
-        max_quantity = weekly_limit - already_purchased
-        request_quantity = quantity
-        if request_quantity > max_quantity:
-            request_quantity = max_quantity
-        if request_quantity <= 0 and not event_id:
-            msg = f"{item_info['name']}已到限购无法再购买！"
-            await handle_send(bot, event, msg, md_type="世界BOSS", k1="兑换", v1="世界BOSS兑换", k2="商店", v2="世界BOSS商店", k3="信息", v3="世界BOSS信息")
-            await boss_integral_use.finish()
-        if request_quantity <= 0:
-            request_quantity = max(1, quantity)
-
-        integral_snapshot = boss_integral_application.get_integral(user_id)
-        if integral_snapshot.status == "schema_missing":
-            await handle_send(bot, event, "世界积分数据未就绪，请稍后重试。")
-            await boss_integral_use.finish()
-        purchase_outcome = boss_application.purchase(
-            operation_id=operation_id,
-            user_id=user_id,
-            item_id=item_id,
-            item_name=item_info["name"],
-            item_type=item_info["type"],
-            quantity=request_quantity,
-            unit_cost=cost,
-            weekly_limit=weekly_limit,
-            expected_integral=integral_snapshot.integral,
-            expected_weekly_purchases=weekly_purchases,
-            max_goods_num=XiuConfig().max_goods_num,
-        )
-        purchase_data = purchase_outcome.data or {}
-        purchase_result = BossPurchaseResult(
-            str(purchase_data.get("status", purchase_outcome.code or "failed")),
-            int(purchase_data.get("quantity", 0) or 0),
-            int(purchase_data.get("cost", 0) or 0),
-            int(purchase_data.get("integral", 0) or 0),
-            int(purchase_data.get("purchased", 0) or 0),
-            int(purchase_data.get("inventory", 0) or 0),
-        )
-        if purchase_result.status == "duplicate":
-            msg = "道友成功兑换获得：" + f"{item_info['name']}{purchase_result.quantity}个"
-            await handle_send(bot, event, msg, md_type="世界BOSS", k1="兑换", v1="世界BOSS兑换", k2="商店", v2="世界BOSS商店", k3="信息", v3="世界BOSS信息")
-            await boss_integral_use.finish()
-        if purchase_result.status == "integral_insufficient":
-            await handle_send(bot, event, "兑换失败：世界积分不足。")
-            await boss_integral_use.finish()
-        if purchase_result.status == "limit_reached":
-            await handle_send(bot, event, f"{item_info['name']}已到限购无法再购买！")
-            await boss_integral_use.finish()
-        if purchase_result.status == "inventory_full":
-            await handle_send(bot, event, f"{item_info['name']}持有数量已达上限！")
-            await boss_integral_use.finish()
-        if purchase_result.status == "state_changed":
-            await handle_send(bot, event, "兑换未完成：活动进度已更新，请重新兑换，请重新兑换。")
-            await boss_integral_use.finish()
-        if purchase_result.status == "user_missing":
-            await handle_send(bot, event, "未找到道友数据，世界BOSS兑换失败！")
-            await boss_integral_use.finish()
-        if purchase_result.status != "applied":
-            await handle_send(bot, event, "兑换未完成：活动进度已更新，请重新兑换，请重新兑换。")
-            await boss_integral_use.finish()
-        msg = f"道友成功兑换获得：{item_info['name']}{purchase_result.quantity}个"
-        await handle_send(bot, event, msg, md_type="世界BOSS", k1="兑换", v1="世界BOSS兑换", k2="商店", v2="世界BOSS商店", k3="信息", v3="世界BOSS信息")
-        await boss_integral_use.finish()
-    else:
-        msg = f"该编号不在商品列表内哦，请检查后再兑换"
-        await handle_send(bot, event, msg, md_type="世界BOSS", k1="兑换", v1="世界BOSS兑换", k2="商店", v2="世界BOSS商店", k3="信息", v3="世界BOSS信息")
-        await boss_integral_use.finish()
+        message = render_boss_purchase_reply(result)
+    except ConflictError:
+        await handle_send(bot, event, "兑换请求冲突，本次未结算。", md_type="世界BOSS")
+        return
+    except Exception as exc:
+        logger.warning("boss purchase command failed: {}", type(exc).__name__)
+        await handle_send(bot, event, "世界BOSS兑换异常，暂时无法确认结果，请稍后核查。", md_type="世界BOSS")
+        return
+    await handle_send(bot, event, message, md_type="世界BOSS", k1="兑换", v1="世界BOSS兑换", k2="商店", v2="世界BOSS商店", k3="信息", v3="世界BOSS信息")
+    await boss_integral_use.finish()
 
 @boss_integral_rank.handle(parameterless=[Cooldown(cd_time=0)])
 async def boss_integral_rank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
