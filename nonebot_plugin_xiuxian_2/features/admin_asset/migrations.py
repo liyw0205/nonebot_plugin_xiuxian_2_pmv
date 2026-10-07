@@ -71,6 +71,15 @@ def apply_admin_exp_adjustment(uow: DatabaseUnitOfWork) -> None:
     )
 
 
+def apply_admin_exp_batch_adjustment(uow: DatabaseUnitOfWork) -> None:
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS admin_exp_batch_adjustment_operations("
+        "operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,"
+        "affected_users INTEGER NOT NULL,applied_delta INTEGER NOT NULL,"
+        "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+    )
+
+
 def apply_admin_item_destroy(uow: DatabaseUnitOfWork) -> None:
     uow.execute(
         "CREATE TABLE IF NOT EXISTS admin_item_destroy_operations("
@@ -227,6 +236,7 @@ __all__ = [
     "apply_admin_accessory_operations",
     "apply_admin_accessory_batch",
     "apply_admin_exp_adjustment",
+    "apply_admin_exp_batch_adjustment",
     "apply_admin_item_destroy",
     "apply_admin_item_grant",
     "apply_admin_impart_stone_operations",

@@ -419,7 +419,6 @@ class AdminAccessoryBatchSqlRepository:
         if (
             not operation_id
             or not request["operator_id"]
-            or user_count <= 0
             or request["action"] not in {"grant", "destroy"}
             or request["item_id"] <= 0
             or request["quantity"] <= 0

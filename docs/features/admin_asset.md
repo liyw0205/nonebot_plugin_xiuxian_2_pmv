@@ -10,6 +10,8 @@
 
 `修为调整` 命令调用同一 feature 的 exp repository；操作回执由 game DB 启动迁移预建。
 
+旧 Flask 管理指令页仍保留 `/commands` 静态模板和 `/execute_command` JSON 契约；后者的七种操作统一经 `AdminAssetApplication` 写入 owner。全服物品、饰品、灵石和传承石复用既有可恢复批次 owner；全服修为使用 `.013` set-based 单事务更新和 operation receipt，不逐用户开连接或提交。单人灵根、境界及资产操作复用 CAS/receipt owner。请求路径不再创建 `player_accessory` 表；player-side schema 未就绪时饰品操作 fail closed。Web route 仍会同步推进全服批次到完成后才响应，因此处理量仍随目标数增长；本地测试通过不等于生产延迟已验证。全服传承石零增量现在是无操作，不再为缺少余额行的用户批量插入零值记录。
+
 `毁灭力量` 单人物品扣除由 feature repository 提交；回执和经济审计 schema 在启动期预建，未就绪时拒绝扣除。
 
 `创造力量` 普通单人物品发放经 admin asset application；回执 schema 在 game DB 启动期预建，未就绪时拒绝并记录 operation ledger 结果。
@@ -28,14 +30,17 @@
 
 `POST /api/v1/admin/assets/item` 同样要求 `admin`、CSRF 和幂等键，请求字段为 `operator_id`、`user_id`、`item_id`、`item_name`、`item_type`、`quantity`、`expected_quantity`、`max_goods_num` 和可选 `target_name`。统一响应包含操作号、前后数量和实际发放量。
 
+旧 Flask `POST /execute_command` 继续由原登录/CSRF 中间件保护，并返回 `{success,message}` 或 `{success,error}`。它不是新的 v1 JSON adapter；页面和指令参数名保留，业务写入转交 feature application。管理页发送 `request_id` 并在收到 JSON 响应前将其保存到 session storage；相同表单的网络重试复用同一 operation ID，收到响应后清除。外部调用方可提交同一字段，省略时仍按每次请求生成随机 operation ID。其全服修为 UPDATE 与 `.013` receipt 在同一 game DB transaction 提交，事务整体重放不会重复应用；这保持旧 SQL 可扣为负值的算术语义。
+
 ## 数据模型与迁移
 
-`admin_asset.001` 创建 feature migration 标记；`.002` 至 `.009` 依次预建既有管理员资产回执，其中 `.009` 是单人饰品调整回执；`.010` 预建全服饰品 operation、legacy-compatible progress 和规范化目标表；`.011` 预建全服传承石批次表；`.012` 预建普通物品全服批次 operation、旧 grant progress 和规范化目标表。`.009` 至 `.012` 只路由到 game DB；玩家饰品表由 `accessory_package.player_data.001` 启动迁移管理。全服饰品、传承石和普通物品新任务都把冻结用户写入目标表，operation payload 仅保留请求，恢复时只加载当前处理块；旧 payload 内嵌用户列表的运行任务会在首次恢复时导入目标表，并沿用已完成 progress。普通物品旧进度通过数据库内 set-based 更新导入，不在 Python 中全量读取 progress。默认路径不在请求期执行 DDL，缺少启动 schema 时 fail closed。传承石余额仍由 legacy `impart_db.xiuxian_impart.stone_num` 持有，feature 仓储只校验既有 schema，不创建或补列。全服进度行、目标和 operation receipts 是持久审计/幂等记录，不是可随意清理的缓存；删除前必须制定独立保留策略。批次创建前按名单数量预检磁盘空间并保留 8 MiB 安全余量，不足时 fail closed。
+`admin_asset.001` 创建 feature migration 标记；`.002` 至 `.009` 依次预建既有管理员资产回执，其中 `.009` 是单人饰品调整回执；`.010` 预建全服饰品 operation、legacy-compatible progress 和规范化目标表；`.011` 预建全服传承石批次表；`.012` 预建普通物品全服批次 operation、旧 grant progress 和规范化目标表；`.013` 预建全服修为单事务 operation receipt。`.009` 至 `.013` 只路由到 game DB；玩家饰品表由 `accessory_package.player_data.001` 启动迁移管理。全服饰品、传承石和普通物品新任务都把冻结用户写入目标表，operation payload 仅保留请求，恢复时只加载当前处理块；旧 payload 内嵌用户列表的运行任务会在首次恢复时导入目标表，并沿用已完成 progress。普通物品旧进度通过数据库内 set-based 更新导入，不在 Python 中全量读取 progress。默认路径不在请求期执行 DDL，缺少启动 schema 时 fail closed。传承石余额仍由 legacy `impart_db.xiuxian_impart.stone_num` 持有，feature 仓储只校验既有 schema，不创建或补列。全服进度行、目标和 operation receipts 是持久审计/幂等记录，不是可随意清理的缓存；删除前必须制定独立保留策略。批次创建前按名单数量预检磁盘空间并保留 8 MiB 安全余量，不足时 fail closed。
 
 ## 事务与失败回滚
 
 feature 单人 stone repository 在一个 game DB immediate UoW 中提交余额 CAS、旧格式 operation receipt、`economy_log` 和 trace ID；用户不存在、快照变化、操作号冲突都不会改资产。扣减仍封顶至 0，审计记录实际 delta。统一 operation ledger 若停在 `started`，相同请求可借 repository receipt 安全恢复；晚期 SQL 异常同时回滚余额、receipt 和经济审计。全服调整将首次目标集冻结在 game DB，随后每次最多处理 100 人；每个 chunk 的余额更新与前后值/结果同事务提交。新用户不加入已开始的操作，处理前被删除的用户记为 skipped；增减不封顶，保持旧 SQL 算术。批次创建在 `BEGIN IMMEDIATE` 内检查相同管理员/增量的活动操作；若另一个 operation ID 已有运行批次则返回 `in_progress`，不会再执行一个批次，部分唯一索引提供数据库级兜底。显式注入 `LegacyAdminStoneRepository` 仍可供回滚使用，但不由默认 composition root 创建。
-feature 单人 exp repository 在一个 game DB immediate UoW 中校验 `.002/.004` 启动 schema，再提交修为快照 CAS、exp receipt 和 `economy_log.trace_id`；缺表/缺列返回 `schema_missing`，不在请求时建表。扣减仍封顶至 0，operation replay 不重复记账。
+feature 单人 exp repository 在一个 game DB immediate UoW 中校验 `.002/.004` 启动 schema，再提交修为快照 CAS、exp receipt 和 `economy_log.trace_id`；缺表/缺列返回 `schema_missing`，不在请求时建表。扣减仍封顶至 0，operation replay 不重复记账；Web 成功文案使用 owner 返回的实际 delta。
+全服 Web exp owner 在 game DB immediate UoW 中先确认 `.013` 与 `user_xiuxian.exp` schema，再用单条 set-based UPDATE 改所有现有角色并写批次 receipt；更新或 receipt 写入失败会整体 rollback，重复 operation ID 返回原影响人数/汇总 delta，payload 冲突不再更新。此路径保留旧全服算术且可将 exp 扣成负数。旧 Flask 单人灵石、修为、传承石现在复用 feature single owner，故余额/修为扣减会封顶至 0；这是与旧 Web 直接 SQL 不同的业务语义，需作为已知限制，不得称为字节级行为兼容。
 旧境界适配复用 `admin_asset.007` 的 operation receipt schema，在单一 game DB immediate UoW 中按首条用户行映射并更新境界；回执 replay/conflict 可恢复，晚期回执失败回滚全部等级更新，缺 schema 时不改用户数据，也不遍历或缓存完整用户 ID 列表。
 新手礼包重置在同一 immediate UoW 中统计并归零 `user_xiuxian.is_novice`，ledger/audit 写入失败会回滚状态；缺少既有 platform ledger 或玩家字段时 fail closed，不新增业务表、不执行请求期 DDL。
 单人物品扣除 repository 在 immediate UoW 中校验 `.002/.005` schema，再校验物品快照并原子提交背包扣减、绑定数量更新、receipt 和 `economy_log`；缺表/缺列返回 `schema_missing`，不执行扣减。
@@ -62,4 +67,4 @@ feature 单人 exp repository 在一个 game DB immediate UoW 中校验 `.002/.0
 
 ## 灰度开关、回滚和已知限制
 
-单人及全服灵石、单人修为、单人及全服普通物品、境界和灵根调整，以及单人和全服饰品、全服传承石默认路径已由 feature repositories 承担；普通物品全服批次使用 game-only `.012`，全服传承石批次使用 `.011`，全服饰品使用 `.010`、单人饰品回执使用 `.009`，玩家饰品 schema 继续沿用既有 player-side migration。显式 legacy services 与旧批次记录仍保留作兼容/恢复边界；operation receipts、批次目标和进度属于持久审计数据，不随测试缓存清理。其他管理员资产仍有各自兼容边界。
+单人及全服灵石、单人及全服修为、单人及全服普通物品、境界和灵根调整，以及单人和全服饰品、单人及全服传承石默认路径已由 feature repositories 承担；普通物品全服批次使用 game-only `.012`，全服修为回执使用 game-only `.013`，全服传承石批次使用 `.011`，全服饰品使用 `.010`、单人饰品回执使用 `.009`，玩家饰品 schema 继续沿用既有 player-side migration。显式 legacy services 与旧批次记录仍保留作兼容/恢复边界；operation receipts、批次目标和进度属于持久审计数据，不随测试缓存清理。其他管理员资产仍有各自兼容边界。

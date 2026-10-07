@@ -94,7 +94,7 @@ class AdminAccessoryBatchRepositoryTests(unittest.TestCase):
 
         resumed = self.grant(
             "batch-1",
-            ("new-user", "a", "b"),
+            (),
             create,
             chunk_size=10,
         )

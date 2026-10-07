@@ -109,6 +109,32 @@ function updateConditionalFields(form) {
     });
 }
 
+function newCommandRequestId() {
+    if (window.crypto?.randomUUID) return window.crypto.randomUUID();
+    return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+function commandRequestId(cmdName, signature) {
+    const storageKey = `xiuxian-command-request:${cmdName}`;
+    try {
+        const saved = JSON.parse(sessionStorage.getItem(storageKey) || 'null');
+        if (saved?.signature === signature && saved.requestId) return saved.requestId;
+        const requestId = newCommandRequestId();
+        sessionStorage.setItem(storageKey, JSON.stringify({signature, requestId}));
+        return requestId;
+    } catch (e) {
+        return newCommandRequestId();
+    }
+}
+
+function clearCommandRequestId(cmdName, requestId) {
+    const storageKey = `xiuxian-command-request:${cmdName}`;
+    try {
+        const saved = JSON.parse(sessionStorage.getItem(storageKey) || 'null');
+        if (saved?.requestId === requestId) sessionStorage.removeItem(storageKey);
+    } catch (e) {}
+}
+
 document.querySelectorAll('.command-execute-form').forEach(form => {
     form.querySelectorAll('.param-control').forEach(control => {
         control.addEventListener('change', () => updateConditionalFields(form));
@@ -127,6 +153,9 @@ function executeCommand(cmdName) {
     formData.forEach((value, key) => {
         payload[key] = value;
     });
+    const requestSignature = JSON.stringify(payload);
+    const requestId = commandRequestId(cmdName, requestSignature);
+    payload.request_id = requestId;
 
     resultDiv.hidden = true;
     const executeBtn = form.querySelector('button');
@@ -141,6 +170,7 @@ function executeCommand(cmdName) {
     })
     .then(response => response.json())
     .then(result => {
+        clearCommandRequestId(cmdName, requestId);
         resultDiv.hidden = false;
         if (result.success) {
             resultDiv.innerHTML = `<div class="success"><i class="fas fa-check-circle"></i> ${result.message}</div>`;

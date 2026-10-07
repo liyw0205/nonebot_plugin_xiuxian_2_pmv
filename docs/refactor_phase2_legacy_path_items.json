@@ -13269,11 +13269,11 @@
       "id": "route:GET:/commands:nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/commands.py:commands",
       "kind": "legacy_routes",
       "entry": "GET /commands -> nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/commands.py:commands",
-      "status": "受阻",
-      "reason": "The old Flask app and route modules are loaded and its server is enabled by default. Route registration is proven, but each handler's downstream ownership and replacement/compatibility decision is not closed.",
-      "unknown_edge": "route function -> old data/service or feature application -> state effect",
+      "status": "允许保留的兼容路径",
+      "reason": "Retain the legacy login/session and HTML page contract. The handler only renders the static ADMIN_COMMANDS definition into commands.html; command execution is a separate POST route with its own owner boundary.",
       "call_graph": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/commands.py:38 -> Flask app.route(/commands) -> legacy handler -> downstream state effect not closed"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/commands.py:91 commands -> admin session check -> render_template(commands.html, commands=ADMIN_COMMANDS)",
+        "xiuxian_web.core before_request -> admin authorization and declared READ permission"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
@@ -13281,7 +13281,10 @@
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/commands.py:38"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/commands.py:91",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/commands.py:91-94",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/access.py:73",
+        "tests/test_admin_commands_web.py:24-36"
       ],
       "source_declaration_found": true,
       "source": {
@@ -13529,11 +13532,14 @@
       "id": "route:POST:/execute_command:nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/commands.py:execute_command",
       "kind": "legacy_routes",
       "entry": "POST /execute_command -> nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/commands.py:execute_command",
-      "status": "受阻",
-      "reason": "The old Flask app and route modules are loaded and its server is enabled by default. Route registration is proven, but each handler's downstream ownership and replacement/compatibility decision is not closed.",
-      "unknown_edge": "route function -> old data/service or feature application -> state effect",
+      "status": "已迁移",
+      "reason": "Keep the frozen Flask endpoint, admin session, CSRF and {success,message}/{success,error} response contract. All seven command families now dispatch business writes through AdminAssetApplication and the existing admin_asset repositories; static page rendering remains a separately allowed compatibility path. The page supplies a retry-stable request_id. Single-user stone/exp/impart clamps and zero-impart no-op are documented behavior differences from the old direct SQL.",
       "call_graph": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/commands.py:44 -> Flask app.route(/execute_command) -> legacy handler -> downstream state effect not closed"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/commands.py:98 execute_command -> admin session and request_id validation -> AdminAssetApplication command dispatch",
+        "xiuxian_web.core before_request -> admin authorization, DATABASE_WRITE permission and CSRF check -> commands.py:97-115 request validation",
+        "commands.py:117-534 execute_command -> AdminAssetApplication stone/exp/root/level/item/accessory/impart single or batch owner -> admin_asset repositories and startup migrations",
+        "all-target stone/item/accessory/impart use resumable chunk owners; all-target exp uses one immediate set-based UPDATE plus admin_asset.013 receipt",
+        "commands.html executeCommand -> sessionStorage request_id -> POST /execute_command; repeat of the same pending payload reuses the operation ID"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
@@ -13541,7 +13547,18 @@
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/commands.py:44"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/commands.py:98",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/commands.py:98-534",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/templates/commands.html:120-185",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/access.py:74",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/core.py:361-389",
+        "nonebot_plugin_xiuxian_2/features/admin_asset/application.py:42-450",
+        "nonebot_plugin_xiuxian_2/features/admin_asset/exp_repository.py:100-178",
+        "nonebot_plugin_xiuxian_2/features/admin_asset/accessory_batch_repository.py:172-181,275-360",
+        "nonebot_plugin_xiuxian_2/features/admin_asset/migrations.py:74-80",
+        "tests/test_admin_commands_web.py:24-285",
+        "nonebot_plugin_xiuxian_2/features/admin_asset/tests/test_exp_repository.py:53-103",
+        "nonebot_plugin_xiuxian_2/features/admin_asset/tests/test_accessory_batch_repository.py:66-96"
       ],
       "source_declaration_found": true,
       "source": {
