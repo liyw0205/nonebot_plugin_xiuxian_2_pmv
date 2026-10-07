@@ -33,6 +33,11 @@ class ArenaApplication:
         return self.repository or ArenaChallengePurchaseSqlRepository(self.game_database, self.player_database, clock=self.clock)
 
     def _execute(self, *, operation_id: str, user_id: str, action: str, payload: Mapping[str, Any], call) -> OperationOutcome[dict[str, Any]]:
+        recoverable = action in {"arena.purchase", "arena.settle"} and (
+            self.repository is None or type(self.repository) is ArenaChallengePurchaseSqlRepository
+        )
+        if recoverable and not all(Path(path).is_file() for path in (self.game_database, self.player_database)):
+            raise FileNotFoundError("arena databases are unavailable")
         with trace_context(operation_id=operation_id, user_scope=user_id):
             try:
                 with DatabaseUnitOfWork(self.game_database, immediate=True) as uow:
@@ -41,7 +46,9 @@ class ArenaApplication:
                         previous = existing.outcome()
                         if previous is not None:
                             return previous.replay()
-                        raise ConflictError("操作正在处理中")
+                        # Only these SQL owners atomically persist both effects and receipts.
+                        if not recoverable:
+                            raise ConflictError("操作正在处理中")
                 data = _data(call())
                 status = str(data.get("status", "failed"))
                 if status in {"applied", "duplicate"}:
@@ -57,13 +64,17 @@ class ArenaApplication:
                 self.ledger.record_failure(self.game_database, operation_id, action, payload, str(exc))
                 raise
 
-    def purchase(self, *, operation_id: str, user_id: str, item_id: int, item_name: str, item_type: str, quantity: int, unit_cost: int, weekly_limit: int, expected_honor: int, expected_weekly_purchases: Mapping[str, Any], max_goods_num: int, bind_flag: int = 1, today: Any = None) -> OperationOutcome[dict[str, Any]]:
+    def purchase_result(self, *, operation_id: str, user_id: str, item_id: int, quantity: int) -> dict[str, Any] | None:
+        return self._repository().purchase_result(str(operation_id), str(user_id), int(item_id), int(quantity))
+
+    def purchase(self, *, operation_id: str, user_id: str, item_id: int, item_name: str, item_type: str, quantity: int, unit_cost: int, weekly_limit: int, expected_honor: int, expected_weekly_purchases: Mapping[str, Any], max_goods_num: int, bind_flag: int = 1, today: Any = None, clamp_quantity: bool = False) -> OperationOutcome[dict[str, Any]]:
         try:
-            request = ArenaPurchaseRequest(str(operation_id).strip(), str(user_id).strip(), int(item_id), str(item_name), str(item_type), int(quantity), int(unit_cost), int(weekly_limit), int(expected_honor), dict(expected_weekly_purchases or {}), int(max_goods_num), int(bind_flag))
+            request = ArenaPurchaseRequest(str(operation_id).strip(), str(user_id).strip(), int(item_id), str(item_name), str(item_type), int(quantity), int(unit_cost), int(weekly_limit), int(expected_honor), dict(expected_weekly_purchases or {}), int(max_goods_num), int(bind_flag), bool(clamp_quantity))
             request.validate()
         except (TypeError, ValueError) as exc:
             raise ValidationError(str(exc)) from exc
-        return self._execute(operation_id=request.operation_id, user_id=request.user_id, action="arena.purchase", payload=request.payload(), call=lambda: self._repository().purchase(request.operation_id, request.user_id, request.item_id, request.item_name, request.item_type, request.quantity, request.unit_cost, request.weekly_limit, request.expected_honor, request.expected_weekly_purchases, request.max_goods_num, request.bind_flag, today))
+        options = {"clamp_quantity": True} if request.clamp_quantity else {}
+        return self._execute(operation_id=request.operation_id, user_id=request.user_id, action="arena.purchase", payload=request.payload(), call=lambda: self._repository().purchase(request.operation_id, request.user_id, request.item_id, request.item_name, request.item_type, request.quantity, request.unit_cost, request.weekly_limit, request.expected_honor, request.expected_weekly_purchases, request.max_goods_num, request.bind_flag, today, **options))
 
     def purchase_challenges(self, *, operation_id: str, user_id: str, amount: int, unit_cost: int, daily_limit: int, expected_stone: int, expected_bought: int, expected_extra: int, expected_last_buy_date: str, today: Any = None) -> OperationOutcome[dict[str, Any]]:
         try:

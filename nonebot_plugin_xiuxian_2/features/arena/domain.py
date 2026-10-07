@@ -18,6 +18,7 @@ class ArenaPurchaseRequest:
     expected_weekly_purchases: Mapping[str, Any]
     max_goods_num: int
     bind_flag: int = 1
+    clamp_quantity: bool = False
 
     def validate(self) -> None:
         if not self.operation_id or not self.user_id or not self.item_name or not self.item_type:
@@ -26,7 +27,10 @@ class ArenaPurchaseRequest:
             raise ValueError("arena purchase values must be non-negative")
 
     def payload(self) -> dict[str, Any]:
-        return {"user_id": self.user_id, "item_id": self.item_id, "item_name": self.item_name, "item_type": self.item_type, "quantity": self.quantity, "unit_cost": self.unit_cost, "weekly_limit": self.weekly_limit, "max_goods_num": self.max_goods_num, "bind_flag": self.bind_flag}
+        payload = {"user_id": self.user_id, "item_id": self.item_id, "item_name": self.item_name, "item_type": self.item_type, "quantity": self.quantity, "unit_cost": self.unit_cost, "weekly_limit": self.weekly_limit, "max_goods_num": self.max_goods_num, "bind_flag": self.bind_flag}
+        if self.clamp_quantity:
+            payload["clamp_quantity"] = True
+        return payload
 
 
 @dataclass(frozen=True)

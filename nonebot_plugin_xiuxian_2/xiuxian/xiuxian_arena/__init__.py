@@ -29,6 +29,11 @@ from ...compatibility.legacy_arena_transactions import (
     ArenaChallengeSettlementResult,
 )
 from ...features.arena.application import ArenaApplication
+from ...features.arena.opponent_application import ArenaOpponentApplication
+from ...features.arena.opponent_repository import ArenaOpponentRepository
+from ...features.arena.state_application import ArenaStateApplication
+from ...features.info.profile_application import PlayerProfileApplication
+from ...core.errors import ConflictError
 from ...features.arena.repository import ArenaChallengePurchaseSqlRepository
 from ...features.arena.season_reward_application import ArenaSeasonRewardApplication
 from ...features.arena.weekly_rank_application import ArenaWeeklyRankApplication
@@ -42,6 +47,12 @@ arena_application = ArenaApplication(
 )
 arena_ids = UUIDGenerator()
 runtime_clock = SystemClock()
+arena_state_application = ArenaStateApplication(get_paths().player_db, clock=runtime_clock)
+arena_profile_application = PlayerProfileApplication(get_paths().game_db)
+arena_opponent_application = ArenaOpponentApplication(
+    ArenaOpponentRepository(get_paths().game_db, get_paths().player_db, clock=runtime_clock),
+    arena_state_application,
+)
 arena_weekly_rank_application = ArenaWeeklyRankApplication(
     get_paths().player_db,
     clock=runtime_clock,
@@ -127,15 +138,29 @@ def _arena_challenge_result_message(result):
 
 
 def _arena_purchase_result(outcome) -> ArenaPurchaseResult:
-    data = outcome.data or {}
+    data = outcome if isinstance(outcome, dict) else outcome.data or {}
     return ArenaPurchaseResult(
-        str(data.get("status", outcome.code or "failed")),
+        str(data.get("status") or getattr(outcome, "code", None) or "failed"),
         int(data.get("quantity", 0) or 0),
         int(data.get("cost", 0) or 0),
         int(data.get("honor_points", 0) or 0),
         int(data.get("purchased", 0) or 0),
         int(data.get("inventory", 0) or 0),
     )
+
+
+def _arena_purchase_message(result, item_name):
+    if result.succeeded:
+        return f"成功兑换{item_name}×{result.quantity}，消耗{result.cost}荣誉值！"
+    messages = {
+        "honor_insufficient": "兑换失败：荣誉值不足。",
+        "limit_reached": "该物品已到限购，无法再购买。",
+        "inventory_full": "该物品持有数量已达上限。",
+        "user_missing": "兑换失败：未找到角色数据。",
+        "state_changed": "兑换未完成：活动进度已更新，请重新兑换。",
+        "schema_missing": "竞技场兑换服务尚未就绪，请检查启动迁移。",
+    }
+    return messages.get(result.status, "兑换未结算，请检查原请求和服务日志。")
 
 
 def _arena_challenge_purchase_result(outcome) -> ArenaChallengePurchaseResult:
@@ -156,9 +181,9 @@ def _arena_challenge_ticket_result(outcome) -> ArenaChallengeTicketResult:
 
 
 def _arena_settlement_result(outcome) -> ArenaChallengeSettlementResult:
-    data = outcome.data or {}
+    data = outcome if isinstance(outcome, dict) else outcome.data or {}
     return ArenaChallengeSettlementResult(
-        str(data.get("status", outcome.code or "failed")),
+        str(data.get("status") or getattr(outcome, "code", None) or "failed"),
         str(data.get("outcome", "")),
         int(data.get("challenger_score", 0) or 0),
         str(data.get("challenger_rank", "")),
@@ -230,16 +255,6 @@ __arena_help__ = """
 > +50
 """.strip()
 
-# 竞技场最近查看对手缓存
-# {
-#   user_id: {
-#       "targets": [{"user_id": "...", "score": 1000}, ...],
-#       "expire_time": datetime
-#   }
-# }
-arena_opponent_cache = {}
-ARENA_CACHE_EXPIRE_SECONDS = 180
-
 @arena_help.handle(parameterless=[Cooldown(cd_time=0)])
 async def arena_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """竞技场帮助信息"""
@@ -256,90 +271,66 @@ async def arena_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 async def arena_challenge_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """竞技场挑战，支持挑战最近查看缓存的1/2/3号对手"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
-    isUser, user_info, msg = check_user(event)
-    if not isUser:
-        await handle_send(bot, event, msg, md_type="我要修仙")
-        await arena_challenge.finish()
-    
-    user_id = str(user_info['user_id'])
     arg_text = args.extract_plain_text().strip()
-    event_id = str(
-        getattr(event, "message_id", "")
-        or getattr(event, "id", "")
-        or arena_ids.new_id()
-    )
-    operation_id = f"arena-challenge:{event_id}:{user_id}"
-    previous = None
-    previous_data = arena_application.settlement_result(operation_id=operation_id, challenger_id=user_id)
-    if previous_data is not None:
-        if isinstance(previous_data, dict):
-            previous = ArenaChallengeSettlementResult(**previous_data)
+    if arg_text not in {"", "1", "2", "3"}:
+        await handle_send(bot, event, "格式：竞技场挑战，或竞技场挑战 1/2/3。")
+        return
+    try:
+        isUser, user_info, msg = check_user(event)
+        if not isUser:
+            await handle_send(bot, event, msg, md_type="我要修仙")
+            return
+        user_id = str(user_info["user_id"])
+        event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or arena_ids.new_id())
+        operation_id = f"arena-challenge:{event_id}:{user_id}"
+        previous = arena_application.settlement_result(operation_id=operation_id, challenger_id=user_id)
+        if previous is not None:
+            if isinstance(previous, dict):
+                previous = _arena_settlement_result(previous)
+            message = _arena_challenge_result_message(previous) if previous.succeeded else "竞技场挑战未结算，原请求已被拒绝或回执异常。"
+            await handle_send(bot, event, message)
+            return
+        challenger_player = arena_profile_application.get_user_profile(user_id)
+        if challenger_player is None:
+            await handle_send(bot, event, "未找到可用角色数据，挑战未开始。")
+            return
+        challenger_arena = arena_opponent_application.state(user_id)
+        challenge_cap = arena_limit.daily_challenges + int(challenger_arena.get("daily_extra_challenges", 0))
+        if int(challenger_arena.get("daily_challenges_used", 0)) >= challenge_cap:
+            await handle_send(bot, event, "今日挑战次数已用完，请明日再来！")
+            return
+        if int(challenger_player.get("user_stamina", 0)) < ARENA_CHALLENGE_STAMINA_COST:
+            await handle_send(bot, event, "体力不足，无法发起竞技场挑战。")
+            return
+        use_cached_target = bool(arg_text)
+        if use_cached_target:
+            cache_targets = get_arena_opponent_cache(user_id)
+            if not cache_targets or int(arg_text) > len(cache_targets):
+                await handle_send(bot, event, "最近查看缓存不存在、已过期或没有该对手，请重新发送【竞技场查看】。")
+                return
+            opponent_id = str(cache_targets[int(arg_text) - 1]["user_id"])
         else:
-            previous = previous_data
-    if previous is not None:
-        if not previous.succeeded:
-            await handle_send(bot, event, "竞技场挑战请求冲突。")
-            await arena_challenge.finish()
-        await handle_send(bot, event, _arena_challenge_result_message(previous))
-        await arena_challenge.finish()
-
-    opponent_id = None
-    use_cached_target = False
-
-    # 支持竞技场挑战 1/2/3
-    if arg_text in {"1", "2", "3"}:
-        cache_targets = get_arena_opponent_cache(user_id)
-        if not cache_targets:
-            await handle_send(bot, event, "最近查看缓存不存在或已过期，请先发送【竞技场查看】")
-            await arena_challenge.finish()
-
-        idx = int(arg_text) - 1
-        if idx < 0 or idx >= len(cache_targets):
-            await handle_send(bot, event, f"缓存中没有第{arg_text}位对手，请先重新发送【竞技场查看】")
-            await arena_challenge.finish()
-
-        opponent_id = str(cache_targets[idx]["user_id"])
-        use_cached_target = True
-    else:
-        # 无参数则随机匹配
-        opponent_id = await find_arena_opponent(user_id, operation_id)
-
-    arena_info = arena_limit.get_user_arena_info(user_id)
-    challenger_player = _sql_message().get_user_info_with_id(user_id)
-    challenged_at = runtime_clock.now().strftime("%Y-%m-%d %H:%M:%S.%f")
-    challenge_cap = arena_limit.daily_challenges + int(
-        arena_info.get("daily_extra_challenges", 0)
-    )
-    if int(arena_info.get("daily_challenges_used", 0)) >= challenge_cap:
-        await handle_send(bot, event, "今日挑战次数已用完，请明日再来！")
-        await arena_challenge.finish()
-    if int(challenger_player.get("user_stamina", 0)) < ARENA_CHALLENGE_STAMINA_COST:
-        await handle_send(bot, event, "体力不足，无法发起竞技场挑战。")
-        await arena_challenge.finish()
-    challenger_arena = dict(arena_info)
-    challenger_player = dict(challenger_player)
-    opponent_arena = opponent_player = None
-    outcome, final_challenger = "no_match", (int(challenger_player["hp"]), int(challenger_player["mp"]))
-    final_opponent = (None, None)
-    battle_messages = None
-
-    if opponent_id:
-        opponent_arena = arena_limit.get_user_arena_info(opponent_id)
-        opponent_player = _sql_message().get_user_info_with_id(opponent_id)
-        if opponent_player:
+            opponent_id = await find_arena_opponent(user_id, operation_id)
+        challenged_at = runtime_clock.now().strftime("%Y-%m-%d %H:%M:%S.%f")
+        opponent_arena = opponent_player = None
+        outcome = "no_match"
+        final_challenger = (int(challenger_player["hp"]), int(challenger_player["mp"]))
+        final_opponent = (None, None)
+        battle_messages = None
+        if opponent_id:
+            opponent_player = arena_profile_application.get_user_profile(opponent_id)
+            if opponent_player is None:
+                clear_arena_opponent_cache(user_id)
+                await handle_send(bot, event, "对手角色数据不可用，请重新查看；本次未结算挑战。")
+                return
+            opponent_arena = arena_opponent_application.state(opponent_id)
             battle_messages, winner, status_list = _arena_fight(
                 user_id, opponent_id, bot.self_id, operation_id
             )
             final_challenger = _arena_final_vitals(status_list, user_id, challenger_player)
             final_opponent = _arena_final_vitals(status_list, opponent_id, opponent_player)
             outcome = "win" if winner == 0 else "loss" if winner == 1 else "draw"
-        else:
-            opponent_id = None
-            opponent_arena = None
-
-    # Legacy facade call: arena_challenge_settlement_service.settle(...)
-    settlement = _arena_settlement_result(
-        arena_application.settle(
+        settlement = _arena_settlement_result(arena_application.settle(
             operation_id=operation_id,
             challenger_id=user_id,
             opponent_id=opponent_id,
@@ -358,8 +349,14 @@ async def arena_challenge_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
             win_points=arena_limit.win_points,
             lose_points=arena_limit.lose_points,
             no_match_points=arena_limit.no_match_points,
-        )
-    )
+        ))
+    except ConflictError:
+        await handle_send(bot, event, "竞技场挑战请求冲突，本次未结算。")
+        return
+    except Exception as exc:
+        logger.warning("arena challenge failed: {}", type(exc).__name__)
+        await handle_send(bot, event, "竞技场数据或存储异常，挑战结果未确认，请稍后重试。")
+        return
     if not settlement.succeeded:
         if settlement.status == "limit_reached":
             message = "今日挑战次数已用完，请明日再来！"
@@ -368,7 +365,7 @@ async def arena_challenge_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
         else:
             message = "挑战未结算：战斗当前状态已更新。"
         await handle_send(bot, event, message)
-        await arena_challenge.finish()
+        return
     if use_cached_target:
         clear_arena_opponent_cache(user_id)
     if battle_messages is not None:
@@ -382,86 +379,20 @@ async def arena_challenge_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
 async def arena_view_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """竞技场查看：优先展示缓存，没有缓存才重新生成"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
-    isUser, user_info, msg = check_user(event)
-    if not isUser:
-        await handle_send(bot, event, msg, md_type="我要修仙")
-        await arena_view.finish()
-
-    user_id = str(user_info['user_id'])
-    my_arena_info = arena_limit.get_user_arena_info(user_id)
-    my_score = int(my_arena_info['score'])
-
-    # 先读缓存
-    cache_targets = get_arena_opponent_cache(user_id)
-    from_cache = False
-
-    if cache_targets:
-        nearest_three = []
-        for item in cache_targets:
-            opponent_id = str(item.get("user_id", ""))
-            cached_score = item.get("score", 0)
-
-            opponent_user_info = _sql_message().get_user_info_with_id(opponent_id)
-            if not opponent_user_info:
-                continue
-
-            try:
-                cached_score = int(cached_score)
-            except (TypeError, ValueError):
-                cached_score = 0
-
-            nearest_three.append({
-                "user_id": opponent_id,
-                "user_name": opponent_user_info["user_name"],
-                "score": cached_score,
-                "diff": abs(cached_score - my_score)
-            })
-
-        if nearest_three:
-            from_cache = True
-        else:
-            clear_arena_opponent_cache(user_id)
-            cache_targets = None
-
-    # 没缓存才重新生成
-    if not cache_targets:
-        all_players = _player_data_manager().get_all_field_data("arena", "score")
-        if not all_players:
-            await handle_send(bot, event, "当前竞技场暂无其他对手。")
-            await arena_view.finish()
-
-        candidates = []
-        for opponent_id, opponent_score in all_players:
-            opponent_id = str(opponent_id)
-            if opponent_id == user_id:
-                continue
-
-            try:
-                opponent_score = int(opponent_score)
-            except (TypeError, ValueError):
-                continue
-
-            opponent_user_info = _sql_message().get_user_info_with_id(opponent_id)
-            if not opponent_user_info:
-                continue
-
-            candidates.append({
-                "user_id": opponent_id,
-                "user_name": opponent_user_info["user_name"],
-                "score": opponent_score,
-                "diff": abs(opponent_score - my_score)
-            })
-
-        if not candidates:
-            await handle_send(bot, event, "当前竞技场暂无可挑战的对手。")
-            await arena_view.finish()
-
-        candidates.sort(key=lambda x: (x["diff"], x["score"]))
-        nearest_three = candidates[:3]
-
-        # 写缓存
-        cache_targets = [{"user_id": x["user_id"], "score": x["score"]} for x in nearest_three]
-        set_arena_opponent_cache(user_id, cache_targets)
+    try:
+        isUser, user_info, msg = check_user(event)
+        if not isUser:
+            await handle_send(bot, event, msg, md_type="我要修仙")
+            return
+        view = arena_opponent_application.view(str(user_info["user_id"]))
+    except Exception as exc:
+        logger.warning("arena opponent view failed: {}", type(exc).__name__)
+        await handle_send(bot, event, "竞技场对手数据暂不可用，请稍后重试。")
+        return
+    my_score, nearest_three, from_cache = view["score"], view["targets"], view["from_cache"]
+    if not nearest_three:
+        await handle_send(bot, event, "当前竞技场暂无可挑战的对手。")
+        return
 
     msg_lines = [
         "⚔️ 【竞技场查看】",
@@ -625,108 +556,61 @@ async def arena_shop_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
 async def arena_buy_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """竞技场商店兑换"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
-    isUser, user_info, msg = check_user(event)
-    if not isUser:
-        await handle_send(bot, event, msg, md_type="我要修仙")
-        await arena_buy.finish()
-    
-    user_id = user_info["user_id"]
     msg_text = args.extract_plain_text().strip()
-    
-    # 解析商品编号和数量
-    shop_info = re.findall(r"(\d+|\w+)\s*(\d*)", msg_text)
-    
-    if not shop_info:
-        msg = "请输入正确的商品编号！格式：竞技场兑换 编号 [数量]"
-        await handle_send(bot, event, msg)
-        await arena_buy.finish()
-    
-    shop_id = shop_info[0][0]
-    quantity = int(shop_info[0][1]) if shop_info[0][1] else 1
-    
-    shop_items = arena_shop_data.config["商店商品"]
-    if shop_id not in shop_items:
-        msg = "没有这个商品编号！"
-        await handle_send(bot, event, msg)
-        await arena_buy.finish()
-    
-    item_data = shop_items[shop_id]
-    item_info = items.get_data_by_item_id(shop_id)
-    arena_info = arena_limit.get_user_arena_info(user_id)
-    
-    # 检查段位要求
-    rank_requirement = item_data.get("required_rank", "青铜")
-    if not check_rank_requirement(arena_info["rank"], rank_requirement):
-        msg = f"段位不足！需要{rank_requirement}段位才能购买{item_info['name']}"
-        await handle_send(bot, event, msg)
-        await arena_buy.finish()
-
-    event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
-    operation_id = (
-        f"arena-purchase:{event_id}:{user_id}"
-        if event_id
-        else f"arena-purchase:{arena_ids.new_id()}:{user_id}"
-    )
-    # 先走 operation 事务：重放必须在限购/荣誉值前置拦截之前完成。
-    already_purchased = arena_limit.get_weekly_purchases(user_id, shop_id)
-    max_quantity = item_data["weekly_limit"] - already_purchased
-    request_quantity = quantity
-    if request_quantity > max_quantity:
-        request_quantity = max_quantity
-    if request_quantity <= 0 and not event_id:
-        msg = f"{item_info['name']}已到限购无法再购买！"
-        await handle_send(bot, event, msg)
-        await arena_buy.finish()
-    if request_quantity <= 0:
-        request_quantity = max(1, quantity)
-
-    # Legacy facade call: arena_purchase_service.purchase(...)
-    purchase_result = _arena_purchase_result(
-        arena_application.purchase(
-            operation_id=operation_id,
-            user_id=user_id,
-            item_id=shop_id,
-            item_name=item_info["name"],
-            item_type=item_info["type"],
-            quantity=request_quantity,
-            unit_cost=item_data["cost"],
-            weekly_limit=item_data["weekly_limit"],
-            expected_honor=arena_info["honor_points"],
-            expected_weekly_purchases=arena_info["weekly_purchases"],
-            max_goods_num=XiuConfig().max_goods_num,
-            bind_flag=1,
+    parsed = re.fullmatch(r"([0-9]{1,12})(?:\s+([0-9]{1,9}))?", msg_text) if len(msg_text) <= 64 else None
+    if parsed is None:
+        await handle_send(bot, event, "格式：竞技场兑换 编号 [正整数数量]。")
+        return
+    shop_id = str(int(parsed.group(1)))
+    quantity = int(parsed.group(2) or "1")
+    if quantity <= 0 or int(shop_id) <= 0:
+        await handle_send(bot, event, "商品编号和数量必须为正整数。")
+        return
+    try:
+        isUser, user_info, msg = check_user(event)
+        if not isUser:
+            await handle_send(bot, event, msg, md_type="我要修仙")
+            return
+        user_id = str(user_info["user_id"])
+        event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or arena_ids.new_id()).strip()
+        operation_id = f"arena-purchase:{event_id}:{user_id}"
+        previous = arena_application.purchase_result(
+            operation_id=operation_id, user_id=user_id, item_id=int(shop_id), quantity=quantity,
         )
-    )
-    if purchase_result.status == "duplicate":
-        msg = (
-            f"成功兑换{item_info['name']}×{purchase_result.quantity}，"
-            f"消耗{purchase_result.cost}荣誉值！"
-        )
-        await handle_send(bot, event, msg)
-        await arena_buy.finish()
-    if purchase_result.status == "honor_insufficient":
-        await handle_send(bot, event, "兑换失败：荣誉值不足。")
-        await arena_buy.finish()
-    if purchase_result.status == "limit_reached":
-        await handle_send(bot, event, f"{item_info['name']}已到限购无法再购买！")
-        await arena_buy.finish()
-    if purchase_result.status == "inventory_full":
-        await handle_send(bot, event, f"{item_info['name']}持有数量已达上限！")
-        await arena_buy.finish()
-    if purchase_result.status == "user_missing":
-        await handle_send(bot, event, "兑换失败：未找到角色数据。")
-        await arena_buy.finish()
-    if purchase_result.status == "state_changed":
-        await handle_send(bot, event, "兑换未完成：活动进度已更新，请重新兑换。")
-        await arena_buy.finish()
-    if not purchase_result.succeeded:
-        await handle_send(bot, event, f"兑换未结算（{purchase_result.status}）。")
-        await arena_buy.finish()
-
-    msg = (
-        f"成功兑换{item_info['name']}×{purchase_result.quantity}，"
-        f"消耗{purchase_result.cost}荣誉值！"
-    )
+        if previous is not None:
+            await handle_send(bot, event, _arena_purchase_message(
+                _arena_purchase_result(previous), previous.get("item_name") or f"物品{shop_id}",
+            ))
+            return
+        shop_items = arena_shop_data.config["商店商品"]
+        if shop_id not in shop_items:
+            await handle_send(bot, event, "没有这个商品编号！")
+            return
+        item_data = shop_items[shop_id]
+        item_info = items.get_data_by_item_id(shop_id)
+        if not item_info:
+            await handle_send(bot, event, "商品目录暂不可用，兑换未开始。")
+            return
+        arena_info = arena_opponent_application.state(user_id)
+        rank_requirement = item_data.get("required_rank", "青铜")
+        if not check_rank_requirement(arena_info["rank"], rank_requirement):
+            await handle_send(bot, event, f"段位不足！需要{rank_requirement}段位才能购买{item_info['name']}")
+            return
+        purchase_result = _arena_purchase_result(arena_application.purchase(
+            operation_id=operation_id, user_id=user_id, item_id=int(shop_id),
+            item_name=item_info["name"], item_type=item_info["type"], quantity=quantity,
+            unit_cost=item_data["cost"], weekly_limit=item_data["weekly_limit"],
+            expected_honor=arena_info["honor_points"], expected_weekly_purchases=arena_info["weekly_purchases"],
+            max_goods_num=XiuConfig().max_goods_num, bind_flag=1, clamp_quantity=True,
+        ))
+        msg = _arena_purchase_message(purchase_result, item_info["name"])
+    except ConflictError:
+        await handle_send(bot, event, "竞技场兑换请求冲突，本次未兑换。")
+        return
+    except Exception as exc:
+        logger.warning("arena purchase failed: {}", type(exc).__name__)
+        await handle_send(bot, event, "竞技场数据或存储异常，兑换结果未确认，请稍后重试。")
+        return
     await handle_send(bot, event, msg)
     await arena_buy.finish()
 
@@ -863,75 +747,21 @@ def check_rank_requirement(current_rank, required_rank):
 
 async def find_arena_opponent(user_id, operation_id=None):
     """为玩家寻找合适的竞技场对手，优先积分相近，否则返回最近的一个"""
-    user_id = str(user_id)
-    user_arena_data = arena_limit.get_user_arena_info(user_id)
-    user_score = int(user_arena_data['score'])
-    
-    # 获取所有玩家数据
-    all_players = _player_data_manager().get_all_field_data("arena", "score")
-    if not all_players:
-        return None
-
-    candidates = []
-    close_candidates = []
-
-    for opponent_id, opponent_score in all_players:
-        opponent_id = str(opponent_id)
-        if opponent_id == user_id:
-            continue
-
-        try:
-            opponent_score = int(opponent_score)
-        except (TypeError, ValueError):
-            continue
-
-        opponent_user_info = _sql_message().get_user_info_with_id(opponent_id)
-        if not opponent_user_info:
-            continue
-
-        diff = abs(opponent_score - user_score)
-        candidates.append((opponent_id, opponent_score, diff))
-
-        if diff <= 200:
-            close_candidates.append(opponent_id)
-
-    # 优先随机选取积分接近的
-    if close_candidates:
-        return random.Random(operation_id).choice(close_candidates)
-
-    # 没有接近的，就选最近的一个
-    if candidates:
-        candidates.sort(key=lambda x: x[2])
-        return candidates[0][0]
-
-    return None
+    return arena_opponent_application.find(str(user_id), operation_id)
 
 def set_arena_opponent_cache(user_id: str, targets: list):
     """设置竞技场对手缓存"""
-    arena_opponent_cache[str(user_id)] = {
-        "targets": targets,
-        "expire_time": runtime_clock.now().timestamp() + ARENA_CACHE_EXPIRE_SECONDS
-    }
+    arena_opponent_application.set_cache(str(user_id), targets)
 
 
 def get_arena_opponent_cache(user_id: str):
     """获取竞技场对手缓存，若过期则自动清除"""
-    user_id = str(user_id)
-    cache = arena_opponent_cache.get(user_id)
-    if not cache:
-        return None
-
-    expire_time = cache.get("expire_time", 0)
-    if runtime_clock.now().timestamp() > expire_time:
-        arena_opponent_cache.pop(user_id, None)
-        return None
-
-    return cache.get("targets", [])
+    return arena_opponent_application.get_cache(str(user_id))
 
 
 def clear_arena_opponent_cache(user_id: str):
     """清除竞技场对手缓存"""
-    arena_opponent_cache.pop(str(user_id), None)
+    arena_opponent_application.clear_cache(str(user_id))
 
 async def reset_arena_daily_challenges():
     """每日重置竞技场挑战次数并发放荣誉值奖励"""

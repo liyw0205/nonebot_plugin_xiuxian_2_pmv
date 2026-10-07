@@ -18,6 +18,15 @@ def apply_arena_challenge_ticket(uow: DatabaseUnitOfWork) -> None:
     uow.execute("CREATE TABLE IF NOT EXISTS arena_challenge_ticket_operations(operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,used_tickets INTEGER NOT NULL,item_remaining INTEGER NOT NULL,challenges_used INTEGER NOT NULL,challenges_remaining INTEGER NOT NULL,challenge_cap INTEGER NOT NULL,created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)")
 
 
+def apply_arena_purchase_receipt(uow: DatabaseUnitOfWork) -> None:
+    columns = {str(row[1]) for row in uow.execute("PRAGMA table_info(arena_purchase_operations)").fetchall()}
+    if "status" not in columns:
+        # Historical rows did not distinguish rejection from a successful free purchase.
+        uow.execute("ALTER TABLE arena_purchase_operations ADD COLUMN status TEXT NOT NULL DEFAULT 'needs_reconcile'")
+    if "result_json" not in columns:
+        uow.execute("ALTER TABLE arena_purchase_operations ADD COLUMN result_json TEXT")
+
+
 def apply_arena_settlement(uow: DatabaseUnitOfWork) -> None:
     uow.execute("CREATE TABLE IF NOT EXISTS arena_challenge_settlement_operations(operation_id TEXT PRIMARY KEY,challenger_id TEXT NOT NULL,payload TEXT NOT NULL,result_json TEXT NOT NULL,created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)")
 
@@ -109,4 +118,4 @@ def apply_arena_state(uow: DatabaseUnitOfWork) -> None:
     )
 
 
-__all__ = ["apply_arena", "apply_arena_challenge_purchase", "apply_arena_challenge_ticket", "apply_arena_daily_reward_player", "apply_arena_purchase", "apply_arena_season_reward", "apply_arena_settlement", "apply_arena_state", "apply_arena_weekly_rank_reduction"]
+__all__ = ["apply_arena", "apply_arena_challenge_purchase", "apply_arena_challenge_ticket", "apply_arena_daily_reward_player", "apply_arena_purchase", "apply_arena_purchase_receipt", "apply_arena_season_reward", "apply_arena_settlement", "apply_arena_state", "apply_arena_weekly_rank_reduction"]

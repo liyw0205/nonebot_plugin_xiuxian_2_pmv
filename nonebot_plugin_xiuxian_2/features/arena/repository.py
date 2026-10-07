@@ -1,16 +1,19 @@
 from __future__ import annotations
 
 from pathlib import Path
+from datetime import date
 from typing import Any, Protocol
 
 import json
 
 from ...infrastructure.database import DatabaseUnitOfWork
 from ...infrastructure.clock import SystemClock
+from .state_repository import ArenaStateRepository
 
 
 class ArenaRepository(Protocol):
     def purchase(self, *args: Any, **kwargs: Any) -> Any: ...
+    def purchase_result(self, *args: Any, **kwargs: Any) -> Any: ...
     def purchase_challenges(self, *args: Any, **kwargs: Any) -> Any: ...
     def settle(self, *args: Any, **kwargs: Any) -> Any: ...
     def use_challenge_ticket(self, *args: Any, **kwargs: Any) -> Any: ...
@@ -50,23 +53,33 @@ class ArenaChallengePurchaseSqlRepository(LegacyArenaRepository):
         super().__init__(game_database, player_database)
         self.clock = clock or SystemClock()
 
+    def _require_databases(self) -> None:
+        if not all(Path(path).is_file() for path in (self.game_database, self.player_database)):
+            raise FileNotFoundError("arena databases are unavailable")
+
+    @staticmethod
+    def _replay_result(encoded: Any) -> dict[str, Any]:
+        try:
+            result = json.loads(encoded)
+        except (TypeError, ValueError):
+            return {"status": "operation_conflict"}
+        if not isinstance(result, dict) or not isinstance(result.get("status"), str) or not result["status"]:
+            return {"status": "operation_conflict"}
+        if result["status"] in {"applied", "duplicate"}:
+            result["status"] = "duplicate"
+        return result
+
     def settlement_result(self, operation_id: str, challenger_id: str) -> dict[str, Any] | None:
-        with DatabaseUnitOfWork(self.game_database) as uow:
+        with DatabaseUnitOfWork(self.game_database, read_only=True) as uow:
             row = uow.query_one("SELECT challenger_id,payload,result_json FROM arena_challenge_settlement_operations WHERE operation_id=?", (str(operation_id),))
         if row is None:
             return None
         if str(row["challenger_id"]) != str(challenger_id):
             return {"status": "operation_conflict"}
-        try:
-            result = json.loads(str(row["result_json"] or "{}"))
-        except (TypeError, ValueError):
-            return {"status": "operation_conflict"}
-        if not isinstance(result, dict):
-            return {"status": "operation_conflict"}
-        result["status"] = "duplicate"
-        return result
+        return self._replay_result(row["result_json"])
 
     def settle(self, operation_id, challenger_id, opponent_id, outcome, challenge_cap, stamina_cost, challenged_at, expected_challenger_arena, expected_opponent_arena, expected_challenger_player, expected_opponent_player, final_challenger_hp, final_challenger_mp, final_opponent_hp, final_opponent_mp, win_points, lose_points, no_match_points) -> dict[str, Any]:
+        self._require_databases()
         operation_id, challenger_id = str(operation_id).strip(), str(challenger_id)
         opponent_id = "" if opponent_id is None else str(opponent_id)
         outcome, challenged_at = str(outcome), str(challenged_at)
@@ -92,9 +105,7 @@ class ArenaChallengePurchaseSqlRepository(LegacyArenaRepository):
             if old:
                 if str(old["challenger_id"]) != challenger_id or str(old["payload"]) != payload:
                     return result("operation_conflict")
-                try: saved = json.loads(str(old["result_json"]))
-                except (TypeError, ValueError): return result("operation_conflict")
-                saved["status"] = "duplicate"; return saved
+                return self._replay_result(old["result_json"])
             arena = uow.query_one("SELECT score,total_wins,total_losses,win_streak,max_win_streak,rank,daily_challenges_used,daily_extra_challenges,last_challenge_time FROM player_data.arena WHERE user_id=?", (challenger_id,))
             player = uow.query_one("SELECT COALESCE(hp,0) AS hp,COALESCE(mp,0) AS mp,COALESCE(user_stamina,0) AS user_stamina FROM user_xiuxian WHERE user_id=?", (challenger_id,))
             actual = dict(arena) if arena else None
@@ -156,29 +167,98 @@ class ArenaChallengePurchaseSqlRepository(LegacyArenaRepository):
     @staticmethod
     def _record_ticket(uow,operation_id,payload,result):
         uow.execute("INSERT INTO arena_challenge_ticket_operations(operation_id,payload,used_tickets,item_remaining,challenges_used,challenges_remaining,challenge_cap) VALUES(?,?,?,?,?,?,?)",(operation_id,payload,result["used_tickets"],result["item_remaining"],result["challenges_used"],result["challenges_remaining"],result["challenge_cap"]));return result
-    def purchase(self, operation_id, user_id, item_id, item_name, item_type, quantity, unit_cost, weekly_limit, expected_honor, expected_weekly_purchases, max_goods_num, bind_flag=1, today=None) -> dict[str, Any]:
-        operation_id,user_id,item_name,item_type=str(operation_id).strip(),str(user_id),str(item_name),str(item_type);item_id,quantity,unit_cost,weekly_limit,expected_honor,max_goods_num=map(int,(item_id,quantity,unit_cost,weekly_limit,expected_honor,max_goods_num));payload=json.dumps([user_id,item_id,item_name,item_type,quantity,unit_cost,weekly_limit,max_goods_num,int(bind_flag)],ensure_ascii=True,sort_keys=True);today=today or self.clock.now().date();today_key=today.isoformat() if hasattr(today,"isoformat") else str(today)
-        if not operation_id or quantity<=0 or min(item_id,unit_cost,weekly_limit,expected_honor,max_goods_num)<0: raise ValueError("valid arena purchase is required")
-        with DatabaseUnitOfWork(self.game_database,immediate=True) as uow:
-            uow.attach_database(self.player_database,"player_data")
-            old=uow.query_one("SELECT payload,quantity,cost,honor_points,purchased,inventory FROM arena_purchase_operations WHERE operation_id=?",(operation_id,))
+    def purchase_result(self, operation_id, user_id, item_id, quantity) -> dict[str, Any] | None:
+        with DatabaseUnitOfWork(self.game_database, read_only=True) as uow:
+            row = uow.query_one(
+                "SELECT payload,status,result_json FROM arena_purchase_operations WHERE operation_id=?",
+                (str(operation_id),),
+            )
+        if row is None:
+            return None
+        try:
+            payload = json.loads(row["payload"])
+            if not isinstance(payload, list) or len(payload) not in {9, 10}:
+                return {"status": "operation_conflict"}
+            if (str(payload[0]), int(payload[1]), int(payload[4])) != (str(user_id), int(item_id), int(quantity)):
+                return {"status": "operation_conflict"}
+        except (TypeError, ValueError, OverflowError):
+            return {"status": "operation_conflict"}
+        return self._purchase_replay(row)
+
+    @classmethod
+    def _purchase_replay(cls, row):
+        if row["status"] == "needs_reconcile" or row["result_json"] is None:
+            return {"status": "needs_reconcile"}
+        result = cls._replay_result(row["result_json"])
+        expected_status = "duplicate" if row["status"] in {"applied", "duplicate"} else row["status"]
+        if result["status"] != expected_status:
+            return {"status": "operation_conflict"}
+        return result
+
+    def purchase(self, operation_id, user_id, item_id, item_name, item_type, quantity, unit_cost, weekly_limit, expected_honor, expected_weekly_purchases, max_goods_num, bind_flag=1, today=None, *, clamp_quantity=False) -> dict[str, Any]:
+        self._require_databases()
+        operation_id, user_id = str(operation_id).strip(), str(user_id)
+        item_name, item_type = str(item_name), str(item_type)
+        item_id, quantity, unit_cost, weekly_limit, expected_honor, max_goods_num = map(
+            int, (item_id, quantity, unit_cost, weekly_limit, expected_honor, max_goods_num),
+        )
+        if not operation_id or quantity <= 0 or min(item_id, unit_cost, weekly_limit, expected_honor, max_goods_num) < 0:
+            raise ValueError("valid arena purchase is required")
+        payload_values = [user_id, item_id, item_name, item_type, quantity, unit_cost, weekly_limit, max_goods_num, int(bind_flag)]
+        if clamp_quantity:
+            payload_values.append(True)
+        payload = json.dumps(payload_values, ensure_ascii=True, sort_keys=True)
+        today = today or self.clock.now().date()
+        today_key = today.isoformat() if hasattr(today, "isoformat") else str(today)
+        business_date = date.fromisoformat(today_key)
+
+        def record(uow, status, *, cost=0, honor=expected_honor, purchased=0, inventory=0):
+            result = self._purchase_result(status, quantity, cost, honor, purchased, inventory)
+            result["item_name"] = item_name
+            return self._record_purchase(uow, operation_id, payload, result)
+
+        with DatabaseUnitOfWork(self.game_database, immediate=True) as uow:
+            uow.attach_database(self.player_database, "player_data")
+            old = uow.query_one("SELECT payload,status,result_json FROM arena_purchase_operations WHERE operation_id=?", (operation_id,))
             if old:
-                if str(old["payload"])!=payload:return self._purchase_result("state_changed",quantity,0,expected_honor,0,0)
-                return self._purchase_result("duplicate",int(old["quantity"]),int(old["cost"]),int(old["honor_points"]),int(old["purchased"]),int(old["inventory"]))
-            user=uow.query_one("SELECT 1 FROM user_xiuxian WHERE user_id=?",(user_id,));arena=uow.query_one("SELECT COALESCE(honor_points,0) AS honor,COALESCE(weekly_purchases,'{}') AS weekly FROM player_data.arena WHERE user_id=?",(user_id,))
-            if user is None or arena is None:return self._record_purchase(uow,operation_id,payload,self._purchase_result("user_missing",quantity,0,expected_honor,0,0))
-            try:weekly=json.loads(str(arena["weekly"] or "{}"))
-            except (TypeError,ValueError):weekly={}
-            if not isinstance(weekly,dict) or str(weekly.get("_last_reset", ""))!=today_key:weekly={"_last_reset":today_key}
-            if int(arena["honor"])!=expected_honor or weekly.get(str(item_id),0)!=expected_weekly_purchases.get(str(item_id),0):return self._record_purchase(uow,operation_id,payload,self._purchase_result("state_changed",quantity,0,expected_honor,0,0))
-            purchased=int(weekly.get(str(item_id),0) or 0)
-            if purchased+quantity>weekly_limit:return self._record_purchase(uow,operation_id,payload,self._purchase_result("limit_reached",quantity,0,expected_honor,purchased,0))
-            cost=quantity*unit_cost
-            if expected_honor<cost:return self._record_purchase(uow,operation_id,payload,self._purchase_result("honor_insufficient",quantity,0,expected_honor,purchased,0))
-            item=uow.query_one("SELECT COALESCE(goods_num,0) AS goods_num FROM back WHERE user_id=? AND goods_id=?",(user_id,item_id));inventory=int(item["goods_num"]) if item else 0
-            if inventory+quantity>max_goods_num:return self._record_purchase(uow,operation_id,payload,self._purchase_result("inventory_full",quantity,0,expected_honor,purchased,inventory))
-            honor,purchased,inventory=expected_honor-cost,purchased+quantity,inventory+quantity;weekly[str(item_id)]=purchased
-            uow.execute("UPDATE player_data.arena SET honor_points=?,weekly_purchases=? WHERE user_id=? AND COALESCE(honor_points,0)=?",(honor,json.dumps(weekly,ensure_ascii=True),user_id,expected_honor));now=today_key;uow.execute("INSERT INTO back(user_id,goods_id,goods_name,goods_type,goods_num,create_time,update_time,bind_num) VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(user_id,goods_id) DO UPDATE SET goods_num=back.goods_num+excluded.goods_num,bind_num=COALESCE(back.bind_num,0)+excluded.bind_num,goods_name=excluded.goods_name,goods_type=excluded.goods_type,update_time=excluded.update_time",(user_id,item_id,item_name,item_type,quantity,now,now,quantity if int(bind_flag) else 0));return self._record_purchase(uow,operation_id,payload,self._purchase_result("applied",quantity,cost,honor,purchased,inventory))
+                if str(old["payload"]) != payload:
+                    return self._purchase_result("state_changed", quantity, 0, expected_honor, 0, 0)
+                return self._purchase_replay(old)
+            user = uow.query_one("SELECT 1 FROM user_xiuxian WHERE user_id=?", (user_id,))
+            arena = uow.query_one("SELECT COALESCE(honor_points,0) AS honor,COALESCE(weekly_purchases,'{}') AS weekly FROM player_data.arena WHERE user_id=?", (user_id,))
+            if user is None or arena is None:
+                return record(uow, "user_missing")
+            weekly, _ = ArenaStateRepository._weekly(arena["weekly"], business_date)
+            if int(arena["honor"]) != expected_honor or weekly.get(str(item_id), 0) != expected_weekly_purchases.get(str(item_id), 0):
+                return record(uow, "state_changed")
+            purchased = int(weekly.get(str(item_id), 0) or 0)
+            if clamp_quantity:
+                quantity = min(quantity, max(0, weekly_limit - purchased))
+            if quantity <= 0 or purchased + quantity > weekly_limit:
+                return record(uow, "limit_reached", purchased=purchased)
+            cost = quantity * unit_cost
+            if expected_honor < cost:
+                return record(uow, "honor_insufficient", purchased=purchased)
+            item = uow.query_one("SELECT COALESCE(goods_num,0) AS goods_num FROM back WHERE user_id=? AND goods_id=?", (user_id, item_id))
+            inventory = int(item["goods_num"]) if item else 0
+            if inventory + quantity > max_goods_num:
+                return record(uow, "inventory_full", purchased=purchased, inventory=inventory)
+            honor, purchased, inventory = expected_honor - cost, purchased + quantity, inventory + quantity
+            weekly[str(item_id)] = purchased
+            updated = uow.execute(
+                "UPDATE player_data.arena SET honor_points=?,weekly_purchases=? WHERE user_id=? AND COALESCE(honor_points,0)=?",
+                (honor, json.dumps(weekly, ensure_ascii=True), user_id, expected_honor),
+            )
+            if updated.rowcount != 1:
+                raise RuntimeError("arena purchase state changed")
+            uow.execute(
+                "INSERT INTO back(user_id,goods_id,goods_name,goods_type,goods_num,create_time,update_time,bind_num) "
+                "VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(user_id,goods_id) DO UPDATE SET "
+                "goods_num=back.goods_num+excluded.goods_num,bind_num=COALESCE(back.bind_num,0)+excluded.bind_num,"
+                "goods_name=excluded.goods_name,goods_type=excluded.goods_type,update_time=excluded.update_time",
+                (user_id, item_id, item_name, item_type, quantity, today_key, today_key, quantity if int(bind_flag) else 0),
+            )
+            return record(uow, "applied", cost=cost, honor=honor, purchased=purchased, inventory=inventory)
 
     @staticmethod
     def _purchase_result(status, quantity, cost, honor_points, purchased, inventory):
@@ -186,7 +266,11 @@ class ArenaChallengePurchaseSqlRepository(LegacyArenaRepository):
 
     @staticmethod
     def _record_purchase(uow, operation_id, payload, result):
-        uow.execute("INSERT INTO arena_purchase_operations(operation_id,payload,quantity,cost,honor_points,purchased,inventory) VALUES(?,?,?,?,?,?,?)",(operation_id,payload,result["quantity"],result["cost"],result["honor_points"],result["purchased"],result["inventory"]));return result
+        uow.execute(
+            "INSERT INTO arena_purchase_operations(operation_id,payload,quantity,cost,honor_points,purchased,inventory,status,result_json) VALUES(?,?,?,?,?,?,?,?,?)",
+            (operation_id, payload, result["quantity"], result["cost"], result["honor_points"], result["purchased"], result["inventory"], result["status"], json.dumps(result, ensure_ascii=True, sort_keys=True)),
+        )
+        return result
     def purchase_challenges(self, operation_id, user_id, amount, unit_cost, daily_limit, expected_stone, expected_bought, expected_extra, expected_last_buy_date, today=None) -> dict[str, Any]:
         operation_id, user_id = str(operation_id).strip(), str(user_id)
         amount, unit_cost, daily_limit, expected_stone, expected_bought, expected_extra = map(int, (amount, unit_cost, daily_limit, expected_stone, expected_bought, expected_extra))

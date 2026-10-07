@@ -7632,22 +7632,31 @@
       "id": "command:arena:竞技场兑换",
       "kind": "commands",
       "entry": "arena:竞技场兑换 (aliases: 竞技场商店)",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "The default exchange handler uses feature-owned state reads and the SQL purchase owner, preserving the original positive quantity in the request identity while clamping remaining allowance only inside the transaction. Receipt lookup precedes current catalog/rank/limit reads; status-bearing receipts preserve rejection and recover started purchase operations. Startup arena.010 does not guess success for ambiguous historical receipts. This classification does not expand the frozen scope to shop display, challenge-count purchase, ranking or scheduler commands.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_arena/__init__.py:76 arena_buy = on_command('竞技场兑换') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_arena/__init__.py:625 arena_buy_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_arena/__init__.py:87 arena_buy = on_command('竞技场兑换') -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_arena/__init__.py:556 arena_buy_ -> ArenaApplication.purchase_result -> ArenaChallengePurchaseSqlRepository.purchase_result -> validate user/item/original quantity and replay the stored result before live catalog or rank checks",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_arena/__init__.py:556 arena_buy_ -> ArenaOpponentApplication.state -> ArenaStateApplication.get; validated raw quantity and clamp_quantity=True -> ArenaApplication.purchase -> ArenaChallengePurchaseSqlRepository.purchase",
+        "purchase SQL owner -> normalize ISO weekly purchases -> one attached game/player UOW updates honor and inventory with status/result_json receipt; rejected and successful replay remain distinct",
+        "startup arena.010 -> apply_arena_purchase_receipt adds status/result_json in game_db; ambiguous historical rows remain needs_reconcile, with no request-path DDL or legacy purchase writer fallback"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_arena/__init__.py:76",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_arena/__init__.py:625"
+        "nonebot_plugin_xiuxian_2/features/arena/application.py",
+        "nonebot_plugin_xiuxian_2/features/arena/repository.py",
+        "nonebot_plugin_xiuxian_2/features/arena/state_repository.py",
+        "nonebot_plugin_xiuxian_2/features/arena/migrations.py",
+        "nonebot_plugin_xiuxian_2/plugin.py",
+        "tests/test_arena_command_ingress.py",
+        "tests/test_arena_progress_contract.py",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_arena/__init__.py:87",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_arena/__init__.py:556"
       ],
       "source_declaration_found": true,
       "source": {
@@ -7659,22 +7668,32 @@
       "id": "command:arena:竞技场挑战",
       "kind": "commands",
       "entry": "arena:竞技场挑战 (aliases: 竞技场购买次数)",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "The default challenge handler checks the SQL settlement receipt before matching or battle, reads players/state through feature applications, and shares one feature-owned bounded 180-second opponent cache with the view consumer. Candidate discovery uses read-only joined existing databases, not legacy per-player N+1 lookups. Missing players or storage failure stop rather than award no-match points. Existing BattleSystem remains the battle engine; the SQL settlement owner persists effects and receipts. Other arena commands are not newly claimed migrated by this item.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_arena/__init__.py:70 arena_challenge = on_command('竞技场挑战') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_arena/__init__.py:256 arena_challenge_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_arena/__init__.py:81 arena_challenge = on_command('竞技场挑战') -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_arena/__init__.py:271 arena_challenge_ -> ArenaApplication.settlement_result -> SQL receipt replay before matching, limits or battle",
+        "find_arena_opponent and set/get/clear cache wrappers plus arena_view_ -> ArenaOpponentApplication -> ArenaOpponentRepository single locked 180-second cache, at most three targets per user and 2048 users",
+        "ArenaOpponentRepository.candidates -> read-only existing player/game database JOIN; ArenaStateApplication and PlayerProfileApplication provide snapshots without legacy manager initialization",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_arena/__init__.py:271 arena_challenge_ -> existing BattleSystem -> ArenaApplication.settle -> ArenaChallengePurchaseSqlRepository.settle -> attached UOW commits scores/counts/vitals with the settlement receipt; missing selected opponent or storage exceptions stop before no_match settlement",
+        "ArenaApplication started-operation recovery is restricted to feature SQL purchase/settle owners; rejected or malformed settlement receipts never become successful duplicate results"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_arena/__init__.py:70",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_arena/__init__.py:256"
+        "nonebot_plugin_xiuxian_2/features/arena/application.py",
+        "nonebot_plugin_xiuxian_2/features/arena/repository.py",
+        "nonebot_plugin_xiuxian_2/features/arena/opponent_application.py",
+        "nonebot_plugin_xiuxian_2/features/arena/opponent_repository.py",
+        "nonebot_plugin_xiuxian_2/features/arena/tests/test_opponent_application.py",
+        "tests/test_arena_command_ingress.py",
+        "tests/test_arena_progress_contract.py",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_arena/__init__.py:81",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_arena/__init__.py:271"
       ],
       "source_declaration_found": true,
       "source": {

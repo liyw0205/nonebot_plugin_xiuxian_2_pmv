@@ -509,6 +509,134 @@ def _admin_runtime_owner_status(sources: dict[str, str]) -> dict[str, object]:
     return {key: value if key == "status" else bool(value) for key, value in report.items()}
 
 
+def _arena_owner_status(sources: dict[str, str]) -> dict[str, bool]:
+    """Bind the frozen arena commands to their actual state and receipt owners."""
+    trees = {name: ast.parse(source) for name, source in sources.items()}
+    functions = {
+        name: {node.name: node for node in ast.walk(tree)
+               if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))}
+        for name, tree in trees.items()
+    }
+
+    @lru_cache(maxsize=None)
+    def nodes(source, function=None):
+        node = trees[source] if function is None else functions[source].get(function)
+        return tuple(ast.walk(node)) if node is not None else ()
+
+    def calls(source, function, target):
+        return [node for node in nodes(source, function)
+                if isinstance(node, ast.Call) and ast.unparse(node.func) == target]
+
+    def expression(source, function, expected):
+        target = ast.parse(expected).body[0]
+        if isinstance(target, ast.Expr):
+            target = target.value
+        expected_tree = ast.dump(target)
+        return any(type(node) is type(target) and ast.dump(node) == expected_tree
+                   for node in nodes(source, function))
+
+    def literals(source, function=None):
+        return " ".join(node.value for node in nodes(source, function)
+                        if isinstance(node, ast.Constant) and isinstance(node.value, str))
+
+    def before(source, function, first, second):
+        left, right = calls(source, function, first), calls(source, function, second)
+        return bool(left and right and left[0].lineno < right[0].lineno)
+
+    purchase_calls = calls("handlers", "arena_buy_", "arena_application.purchase")
+    purchase_keywords = {item.arg: ast.unparse(item.value) for item in purchase_calls[0].keywords} if purchase_calls else {}
+    handler_nodes = {name: nodes("handlers", name) for name in ("arena_buy_", "arena_challenge_", "arena_view_")}
+    guarded_returns = all(any(
+        isinstance(node, ast.ExceptHandler) and node.type is not None and ast.unparse(node.type) == error
+        and any(isinstance(child, ast.Return) for child in node.body)
+        for node in handler_nodes[handler]
+    ) for handler in ("arena_buy_", "arena_challenge_") for error in ("ConflictError", "Exception"))
+    cache_methods = ("set_cache", "get_cache", "clear_cache")
+    repository_sql = literals("repository", "_record_purchase")
+    report = {
+        "purchase_and_challenge_handlers_reach_feature_sql_owners": (
+            calls("handlers", "arena_buy_", "arena_buy.handle")
+            and calls("handlers", "arena_challenge_", "arena_challenge.handle")
+            and all(calls("handlers", function, target) for function, target in (
+                ("arena_buy_", "arena_application.purchase_result"),
+                ("arena_buy_", "arena_application.purchase"),
+                ("arena_challenge_", "arena_application.settlement_result"),
+                ("arena_challenge_", "arena_application.settle"),
+                ("arena_challenge_", "arena_profile_application.get_user_profile"),
+            ))
+            and calls("handlers", None, "ArenaChallengePurchaseSqlRepository")
+            and calls("handlers", None, "PlayerProfileApplication")
+            and all(calls("application", method, f"self._repository().{method}")
+                    for method in ("purchase", "purchase_result", "settle", "settlement_result"))
+            and all(not any(isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+                            and node.func.id in {"_sql_message", "_player_data_manager"} for node in tree)
+                    for tree in handler_nodes.values())
+        ),
+        "purchase_replays_before_live_catalog_and_preserves_raw_quantity": (
+            all(before("handlers", "arena_buy_", "arena_application.purchase_result", target)
+                for target in ("items.get_data_by_item_id", "arena_opponent_application.state", "check_rank_requirement"))
+            and calls("handlers", "arena_buy_", "re.fullmatch")
+            and expression("handlers", "arena_buy_", "len(msg_text) <= 64")
+            and expression("handlers", "arena_buy_", "quantity <= 0 or int(shop_id) <= 0")
+            and purchase_keywords.get("quantity") == "quantity"
+            and purchase_keywords.get("clamp_quantity") == "True"
+            and expression("repository", "purchase_result", "(str(payload[0]), int(payload[1]), int(payload[4])) != (str(user_id), int(item_id), int(quantity))")
+            and expression("repository", "purchase", "quantity = min(quantity, max(0, weekly_limit - purchased))")
+            and expression("repository", "purchase", "payload_values = [user_id, item_id, item_name, item_type, quantity, unit_cost, weekly_limit, max_goods_num, int(bind_flag)]")
+            and calls("repository", "purchase", "self._purchase_replay")
+        ),
+        "opponent_queries_and_all_cache_consumers_share_one_bounded_owner": (
+            len(calls("handlers", None, "ArenaOpponentRepository")) == 1
+            and len(calls("handlers", None, "ArenaOpponentApplication")) == 1
+            and calls("handlers", "find_arena_opponent", "arena_opponent_application.find")
+            and calls("handlers", "arena_view_", "arena_opponent_application.view")
+            and all(calls("handlers", wrapper, f"arena_opponent_application.{method}") for wrapper, method in (
+                ("set_arena_opponent_cache", "set_cache"), ("get_arena_opponent_cache", "get_cache"),
+                ("clear_arena_opponent_cache", "clear_cache"),
+            ))
+            and not any(isinstance(node, ast.Name) and node.id == "arena_opponent_cache" for node in nodes("handlers"))
+            and all(calls("opponent_application", method, f"self.repository.{method}") for method in cache_methods)
+            and all(any(isinstance(node, ast.With) and any(ast.unparse(item.context_expr) == "self._lock" for item in node.items)
+                        for node in nodes("opponent_repository", method)) for method in cache_methods)
+            and expression("opponent_repository", "set_cache", "targets[:3]")
+            and expression("opponent_repository", "set_cache", "len(self._cache) > self.capacity")
+            and expression("opponent_repository", "get_cache", "cached[0] <= self.clock.now().timestamp()")
+            and literals("opponent_repository", "_connection").count("mode=ro") == 2
+            and "PRAGMA query_only=ON" in literals("opponent_repository", "_connection")
+            and "JOIN profiles.user_xiuxian" in literals("opponent_repository", "candidates")
+            and expression("opponent_application", "find", "abs(row['score'] - score) <= 200")
+            and calls("opponent_application", "find", "random.Random(operation_id).choice")
+            and calls("opponent_application", "find", "min")
+        ),
+        "challenge_replay_and_failures_cannot_fall_through_to_nomatch_rewards": (
+            guarded_returns
+            and before("handlers", "arena_challenge_", "arena_application.settlement_result", "_arena_fight")
+            and before("handlers", "arena_challenge_", "arena_application.settlement_result", "arena_application.settle")
+            and any(isinstance(node, ast.If) and ast.unparse(node.test) == "opponent_player is None"
+                    and any(isinstance(child, ast.Return) for child in node.body) for node in handler_nodes["arena_challenge_"])
+            and calls("opponent_application", "find", "self.repository.candidates")
+            and not any(isinstance(node, ast.ExceptHandler) for source, function in (
+                ("opponent_application", "find"), ("opponent_repository", "_connection"),
+            ) for node in nodes(source, function))
+            and calls("opponent_repository", "_connection", "self.require_available")
+        ),
+        "atomic_receipts_iso_week_and_scoped_started_recovery_are_feature_owned": (
+            expression("repository", "_replay_result", "result['status'] in {'applied', 'duplicate'}")
+            and expression("repository", "_purchase_replay", "row['status'] == 'needs_reconcile' or row['result_json'] is None")
+            and "INSERT INTO arena_purchase_operations" in repository_sql and "status,result_json" in repository_sql
+            and calls("repository", "purchase", "ArenaStateRepository._weekly")
+            and expression("state_repository", "_weekly", "reset.isocalendar()[:2] != today.isocalendar()[:2]")
+            and expression("application", "_execute", "action in {'arena.purchase', 'arena.settle'}")
+            and expression("application", "_execute", "type(self.repository) is ArenaChallengePurchaseSqlRepository")
+            and expression("application", "_execute", "if not recoverable:\n    raise ConflictError('操作正在处理中')")
+            and "arena.010" in literals("plugin")
+            and "apply_arena_purchase_receipt" in functions["migrations"]
+            and not any(token in literals("repository") for token in ("CREATE TABLE", "ALTER TABLE"))
+        ),
+    }
+    return {key: bool(value) for key, value in report.items()}
+
+
 @lru_cache(maxsize=1)
 def _slice_status() -> dict[str, dict[str, object]]:
     @lru_cache(maxsize=None)
@@ -728,6 +856,14 @@ def _slice_status() -> dict[str, dict[str, object]]:
     arena_legacy_transaction_service = (PACKAGE / "compatibility" / "legacy_arena_transactions.py").read_text(encoding="utf-8")
     arena_repository = (PACKAGE / "features" / "arena" / "repository.py").read_text(encoding="utf-8")
     arena_limit = (PACKAGE / "xiuxian" / "xiuxian_arena" / "arena_limit.py").read_text(encoding="utf-8")
+    arena_owner_sources = {
+        "handlers": arena, "repository": arena_repository, "plugin": plugin,
+        **{name: (PACKAGE / "features/arena" / filename).read_text(encoding="utf-8") for name, filename in {
+            "application": "application.py", "opponent_application": "opponent_application.py",
+            "opponent_repository": "opponent_repository.py", "state_repository": "state_repository.py",
+            "migrations": "migrations.py",
+        }.items()},
+    }
     tower_facade = (PACKAGE / "xiuxian" / "xiuxian_tower" / "__init__.py").read_text(encoding="utf-8")
     tower_limit = (PACKAGE / "xiuxian" / "xiuxian_tower" / "tower_limit.py").read_text(encoding="utf-8")
     tower_state_application = (PACKAGE / "features" / "tower" / "state_application.py").read_text(encoding="utf-8")
@@ -1776,6 +1912,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "status": "NewAPI and guess-session state are owned by Entertainment SQL repositories; legacy JSON is a one-time migration source",
         },
         "arena": {
+            **_arena_owner_status(arena_owner_sources),
             "state_application_owned": "ArenaStateApplication" in arena_limit,
             "legacy_state_owner_disabled": "ArenaStateService" not in arena_limit,
             "legacy_transaction_service_isolated": all(f"class {name}" not in arena_transaction_service for name in ("ArenaStateService", "ArenaPurchaseService", "ArenaChallengePurchaseService", "ArenaChallengeSettlementService", "ArenaBattleSettlementService", "ArenaWeeklyRankReductionService", "ArenaSeasonRewardService")) and "from ...compatibility.legacy_arena_transactions import" in arena_transaction_service and all(f"class {name}" in arena_legacy_transaction_service for name in ("ArenaStateService", "ArenaPurchaseService", "ArenaChallengePurchaseService", "ArenaChallengeSettlementService", "ArenaBattleSettlementService", "ArenaWeeklyRankReductionService", "ArenaSeasonRewardService")),
@@ -1784,7 +1921,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "legacy_scheduler_disabled": "ArenaWeeklyRankReductionService" not in arena and "_arena_weekly_rank_reduction_service" not in arena,
             "daily_reward_application_owned": "arena_season_reward_application.reset_daily()" in arena,
             "legacy_daily_reward_disabled": "ArenaSeasonRewardService" not in arena and "_arena_season_reward_service" not in arena,
-            "status": "state_weekly_rank_and_daily_reward_cutover_with_legacy_transaction_implementation_isolated_for_compatibility",
+            "status": "purchase_challenge_and_shared_opponent_owners_with_state_and_reward_cutovers_and_other_legacy_compatibility",
         },
         "tower": {
             "state_application_owned": "TowerStateApplication" in tower_limit,

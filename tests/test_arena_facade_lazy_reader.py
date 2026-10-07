@@ -11,7 +11,8 @@ class ArenaFacadeLazyReaderTests(unittest.TestCase):
         self.assertIn("_player_data_manager_instance = None", facade)
         self.assertIn("def _player_data_manager(", facade)
         self.assertNotIn("player_data_manager = PlayerDataManager()", facade)
-        self.assertIn("_player_data_manager().get_all_field_data(", facade)
+        self.assertNotIn("_player_data_manager().get_all_field_data(", facade)
+        self.assertIn("arena_opponent_application.find(str(user_id), operation_id)", facade)
 
         self.assertIn("_player_data_manager_instance = None", limit)
         self.assertIn("_state_application_instance = None", limit)

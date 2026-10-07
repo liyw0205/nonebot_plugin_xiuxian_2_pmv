@@ -115,7 +115,7 @@ from .features.rift.migrations import apply_rift, apply_rift_demon_token_operati
 from .features.accessory_package.manifest import FEATURE as ACCESSORY_PACKAGE_FEATURE
 from .features.accessory_package.migrations import apply_accessory_package
 from .features.arena.manifest import FEATURE as ARENA_FEATURE
-from .features.arena.migrations import apply_arena, apply_arena_challenge_purchase, apply_arena_challenge_ticket, apply_arena_daily_reward_player, apply_arena_purchase, apply_arena_season_reward, apply_arena_settlement, apply_arena_state, apply_arena_weekly_rank_reduction
+from .features.arena.migrations import apply_arena, apply_arena_challenge_purchase, apply_arena_challenge_ticket, apply_arena_daily_reward_player, apply_arena_purchase, apply_arena_purchase_receipt, apply_arena_season_reward, apply_arena_settlement, apply_arena_state, apply_arena_weekly_rank_reduction
 from .features.auction.manifest import FEATURE as AUCTION_FEATURE
 from .features.auction.jobs import settle as auction_settle_job
 from .features.bank.manifest import FEATURE as BANK_FEATURE
@@ -268,6 +268,7 @@ def build_migrations() -> tuple[Migration, ...]:
         Migration("arena.007", "arena_season_reward_operations", apply_arena_season_reward),
         Migration("arena.008", "arena_daily_reward_player_schema", apply_arena_daily_reward_player),
         Migration("arena.009", "arena_state_operations", apply_arena_state),
+        Migration("arena.010", "arena_purchase_receipt", apply_arena_purchase_receipt),
         Migration("auction.001", "auction_feature_migrations", apply_auction),
         Migration("auction.002", "auction_session_settlement_schema", apply_auction_settlement),
         Migration("auction.003", "auction_queue_operations", apply_auction_queue_operations),

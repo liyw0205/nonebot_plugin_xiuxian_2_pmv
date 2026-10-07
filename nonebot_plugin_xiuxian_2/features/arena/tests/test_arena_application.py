@@ -5,6 +5,8 @@ import unittest
 from pathlib import Path
 
 from ..application import ArenaApplication
+from ..domain import ArenaPurchaseRequest
+from ....core.errors import ConflictError
 from ....infrastructure.database import DatabaseUnitOfWork, OperationLedger
 
 
@@ -82,6 +84,20 @@ class ArenaApplicationTests(unittest.TestCase):
             app = self.make_app(directory, repository)
             with self.assertRaises(Exception):
                 app.purchase(operation_id="", user_id="u", item_id=1, item_name="x", item_type="y", quantity=1, unit_cost=1, weekly_limit=1, expected_honor=1, expected_weekly_purchases={}, max_goods_num=1)
+            self.assertEqual(repository.calls, [])
+
+    def test_started_custom_repository_does_not_retry_unproven_side_effects(self):
+        with tempfile.TemporaryDirectory() as directory:
+            repository = _Repository()
+            app = self.make_app(directory, repository)
+            request = dict(operation_id="started", user_id="u", item_id=1,
+                           item_name="item", item_type="type", quantity=1,
+                           unit_cost=1, weekly_limit=1, expected_honor=1,
+                           expected_weekly_purchases={}, max_goods_num=99)
+            with DatabaseUnitOfWork(app.game_database) as uow:
+                app.ledger.begin(uow, "started", "arena.purchase", ArenaPurchaseRequest(**request).payload())
+            with self.assertRaises(ConflictError):
+                app.purchase(**request)
             self.assertEqual(repository.calls, [])
 
 

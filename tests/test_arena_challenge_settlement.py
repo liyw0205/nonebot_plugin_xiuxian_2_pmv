@@ -251,7 +251,9 @@ class ArenaChallengeSettlementTests(unittest.TestCase):
         helper = source[source.index("def _arena_fight"):start]
         self.assertIn("random.seed(operation_id)", helper)
         opponent = source[source.index("async def find_arena_opponent"):]
-        self.assertIn("random.Random(operation_id).choice", opponent)
+        self.assertIn("arena_opponent_application.find(str(user_id), operation_id)", opponent)
+        owner = (source_path.parents[2] / "features/arena/opponent_application.py").read_text(encoding="utf-8")
+        self.assertIn("random.Random(operation_id).choice", owner)
 
     def feature_settle(self, operation="feature-challenge", **overrides):
         values = {
@@ -288,6 +290,8 @@ class ArenaChallengeSettlementTests(unittest.TestCase):
 
     def test_feature_repository_rejections_and_rollback(self):
         self.assertEqual("limit_reached", self.feature_settle("limit", cap=2)["status"])
+        self.assertEqual("limit_reached", self.feature_settle("limit", cap=2)["status"])
+        self.assertEqual("limit_reached", self.feature_repository.settlement_result("limit", "user")["status"])
         self.assertEqual("stamina_insufficient", self.feature_settle("stamina", stamina_cost=9)["status"])
         with db_backend.transaction(self.game) as conn:
             conn.execute("CREATE TRIGGER fail_feature_settlement BEFORE INSERT ON arena_challenge_settlement_operations BEGIN SELECT RAISE(ABORT,'failed'); END")
