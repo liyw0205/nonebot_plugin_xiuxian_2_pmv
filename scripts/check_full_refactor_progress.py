@@ -1031,6 +1031,24 @@ def _slice_status() -> dict[str, dict[str, object]]:
     tianti_presentation = (PACKAGE / "features" / "tianti_training" / "presentation.py").read_text(encoding="utf-8")
     tianti_training_repository = (PACKAGE / "features" / "tianti_training" / "repository.py").read_text(encoding="utf-8")
     tianti_training_application = (PACKAGE / "features" / "tianti_training" / "application.py").read_text(encoding="utf-8")
+    tianti_my_profile_handler = tianti_facade[
+        tianti_facade.index("@tianti_info.handle") : tianti_facade.index("@tianti_chongqiao.handle")
+    ]
+    tianti_qiaoxue_profile_handler = tianti_facade[
+        tianti_facade.index("@tiqiao_info.handle") : tianti_facade.index("@tianti_level_help.handle")
+    ]
+    tianti_help_handler = tianti_facade[
+        tianti_facade.index("@tianti_help.handle") : tianti_facade.index("@tianti_settle.handle")
+    ]
+    tianti_level_help_handler = tianti_facade[tianti_facade.index("@tianti_level_help.handle") :]
+    tianti_static_handler_awaits = {
+        "help": re.findall(r"\bawait\s+([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)\s*\(", tianti_help_handler),
+        "level_help": re.findall(r"\bawait\s+([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)\s*\(", tianti_level_help_handler),
+    }
+    tianti_static_handler_calls = {
+        "help": re.findall(r"\b([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)\s*\(", tianti_help_handler),
+        "level_help": re.findall(r"\b([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)\s*\(", tianti_level_help_handler),
+    }
     tianti_training_stone_repository = tianti_training_repository[
         tianti_training_repository.index("class StoneTrainingSqlRepository") : tianti_training_repository.index(
             "class TiantiMedicineBathSqlRepository"
@@ -3892,6 +3910,80 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "status": "map_actions_combat_runner_and_reward_resolution_feature_owned_with_explicit_legacy_adapters",
         },
         "tianti": {
+            "frozen_display_commands_registered": all(
+                marker in tianti_facade
+                for marker in (
+                    'tianti_info = on_command("我的炼体", aliases={"炼体状态"}',
+                    'tiqiao_info = on_command("我的体窍"',
+                    'tianti_help = on_command("炼体帮助"',
+                    'tianti_level_help = on_command("炼体境界"',
+                )
+            ),
+            "frozen_dynamic_profile_commands_use_feature_reader": all(
+                "tianti_training_application.read_profile(user_id)" in handler
+                and "TiantiDataManager" not in handler
+                and "get_user_tianti_info" not in handler
+                for handler in (tianti_my_profile_handler, tianti_qiaoxue_profile_handler)
+            ),
+            "my_tianti_display_uses_feature_presentation": (
+                "calculate_tianti_gain_rate(" in tianti_my_profile_handler
+                and "_get_active_medicine_bath(data, now_t)" in tianti_my_profile_handler
+                and "get_sect_fairyland_bonus(sect_fairyland_level)" in tianti_my_profile_handler
+                and "_get_tianti_sect_fairyland_level(user_info)" in tianti_my_profile_handler
+                and "sect_application.get_sect_info(sect_id)" in tianti_facade[
+                    tianti_facade.index("def _get_tianti_sect_fairyland_level") : tianti_facade.index(
+                        "def _get_active_medicine_bath"
+                    )
+                ]
+                and "return get_active_medicine_bath(data, now_t)" in tianti_facade[
+                    tianti_facade.index("def _get_active_medicine_bath") : tianti_facade.index("def _medicine_bath_slot")
+                ]
+                and all(
+                    name in tianti_facade[: tianti_facade.index("@tianti_info.handle")]
+                    for name in ("calculate_tianti_gain_rate", "get_active_medicine_bath", "get_sect_fairyland_bonus")
+                )
+                and all(
+                    f"def {name}(" in tianti_presentation
+                    for name in ("calculate_tianti_gain_rate", "get_active_medicine_bath", "get_sect_fairyland_bonus")
+                )
+            ),
+            "my_qiaoxue_display_uses_feature_reader_and_static_catalog": (
+                "tianti_training_application.read_profile(user_id)" in tianti_qiaoxue_profile_handler
+                and "get_qiaoxue_pool()" in tianti_qiaoxue_profile_handler
+                and "get_qiaoxue_map()" in tianti_qiaoxue_profile_handler
+                and "TiantiDataManager" not in tianti_qiaoxue_profile_handler
+                and "get_user_tianti_info" not in tianti_qiaoxue_profile_handler
+            ),
+            "my_qiaoxue_display_uses_feature_presentation": (
+                "calc_qiaoxue_bonus(data)" in tianti_qiaoxue_profile_handler
+                and "def calc_qiaoxue_bonus(" in tianti_presentation
+            ),
+            "frozen_static_commands_remain_message_only": (
+                "await send_help_message(" in tianti_help_handler
+                and tianti_static_handler_awaits["help"]
+                and set(tianti_static_handler_awaits["help"]).issubset({"assign_bot", "send_help_message"})
+                and set(tianti_static_handler_calls["help"]).issubset(
+                    {"tianti_help.handle", "Cooldown", "_", "assign_bot", "msg.strip", "send_help_message"}
+                )
+                and "await handle_send(bot, event, msg)" in tianti_level_help_handler
+                and tianti_static_handler_awaits["level_help"]
+                and set(tianti_static_handler_awaits["level_help"]).issubset({"assign_bot", "handle_send"})
+                and set(tianti_static_handler_calls["level_help"]).issubset(
+                    {"tianti_level_help.handle", "Cooldown", "_", "assign_bot", "strip", "handle_send"}
+                )
+                and all(
+                    token not in tianti_help_handler + tianti_level_help_handler
+                    for token in (
+                        "tianti_training_application.",
+                        "tianti_settlement_application.",
+                        "get_user_tianti_info(",
+                        "TiantiDataManager",
+                        "INSERT INTO",
+                        "UPDATE ",
+                        "DELETE FROM",
+                    )
+                )
+            ),
             "settlement_command_application_owned": "tianti_settlement_application.settle(" in tianti_facade,
             "training_command_application_owned": all(
                 f"tianti_training_application.{method}(" in tianti_facade

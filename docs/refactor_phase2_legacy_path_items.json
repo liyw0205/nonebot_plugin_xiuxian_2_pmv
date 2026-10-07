@@ -4478,22 +4478,26 @@
       "id": "command:tianti:我的体窍",
       "kind": "commands",
       "entry": "tianti:我的体窍 (aliases: )",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "The compatibility handler reads Tianti state through TiantiTrainingApplication.read_profile and reuses the feature-owned calc_qiaoxue_bonus presentation rule. The historical qiaoxue JSON catalog remains a static compatibility adapter; the command does not mutate Tianti state.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_tianti/__init__.py:55 tiqiao_info = on_command('我的体窍') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_tianti/__init__.py:727 _ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_tianti/__init__.py:56 tiqiao_info = on_command('我的体窍') -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_tianti/__init__.py:743 _ -> TiantiTrainingApplication.read_profile -> TiantiProfileSqlReader.read -> calc_qiaoxue_bonus -> legacy static qiaoxue catalog adapter -> message delivery"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_tianti/__init__.py:55",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_tianti/__init__.py:727"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_tianti/__init__.py:56",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_tianti/__init__.py:743",
+        "nonebot_plugin_xiuxian_2/features/tianti_training/application.py:57",
+        "nonebot_plugin_xiuxian_2/features/tianti_training/repository.py:179-236",
+        "nonebot_plugin_xiuxian_2/features/tianti_training/presentation.py:20",
+        "tests/test_tianti_frozen_entry_owner.py",
+        "tests/test_phase2_legacy_path_gate.py"
       ],
       "source_declaration_found": true,
       "source": {
@@ -4619,22 +4623,28 @@
       "id": "command:tianti:我的炼体",
       "kind": "commands",
       "entry": "tianti:我的炼体 (aliases: 炼体状态)",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "The compatibility handler reads the Tianti profile through TiantiTrainingApplication.read_profile and delegates gain/bath rules to tianti_training.presentation. Its sect fairyland level uses the existing read-only SectApplication.get_sect_info boundary; shared check_user/Cooldown/message delivery and the spirit-vein provider remain adapter/runtime boundaries.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_tianti/__init__.py:53 tianti_info = on_command('我的炼体') aliases=炼体状态 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_tianti/__init__.py:584 _ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_tianti/__init__.py:54 tianti_info = on_command('我的炼体') aliases=炼体状态 -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_tianti/__init__.py:600 _ -> TiantiTrainingApplication.read_profile -> TiantiProfileSqlReader.read -> calculate_tianti_gain_rate + _get_tianti_sect_fairyland_level -> sect_application.get_sect_info -> feature-owned display rules -> message delivery"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_tianti/__init__.py:53",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_tianti/__init__.py:584"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_tianti/__init__.py:54",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_tianti/__init__.py:600",
+        "nonebot_plugin_xiuxian_2/features/tianti_training/application.py:57,65",
+        "nonebot_plugin_xiuxian_2/features/tianti_training/repository.py:179-236",
+        "nonebot_plugin_xiuxian_2/features/tianti_training/presentation.py:20-90",
+        "nonebot_plugin_xiuxian_2/features/sect/application.py:107",
+        "nonebot_plugin_xiuxian_2/features/sect/sect_info_repository.py:12-20",
+        "tests/test_tianti_frozen_entry_owner.py",
+        "tests/test_phase2_legacy_path_gate.py"
       ],
       "source_declaration_found": true,
       "source": {
@@ -7042,22 +7052,23 @@
       "id": "command:tianti:炼体境界",
       "kind": "commands",
       "entry": "tianti:炼体境界 (aliases: )",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "允许保留的兼容路径",
+      "reason": "The default handler renders a fixed realm-description message and performs no Tianti state, database, or asset access; this message-only compatibility behavior is explicitly retained.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_tianti/__init__.py:56 tianti_level_help = on_command('炼体境界') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_tianti/__init__.py:810 _ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_tianti/__init__.py:57 tianti_level_help = on_command('炼体境界') -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_tianti/__init__.py:816 _ -> static message only; no Tianti state or asset access"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_tianti/__init__.py:56",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_tianti/__init__.py:810"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_tianti/__init__.py:57",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_tianti/__init__.py:816",
+        "tests/test_tianti_frozen_entry_owner.py",
+        "tests/test_phase2_legacy_path_gate.py"
       ],
       "source_declaration_found": true,
       "source": {
@@ -7069,22 +7080,23 @@
       "id": "command:tianti:炼体帮助",
       "kind": "commands",
       "entry": "tianti:炼体帮助 (aliases: )",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "允许保留的兼容路径",
+      "reason": "The default handler renders fixed command help text and performs no Tianti state, database, or asset access; this message-only compatibility behavior is explicitly retained.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_tianti/__init__.py:49 tianti_help = on_command('炼体帮助') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_tianti/__init__.py:179 _ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_tianti/__init__.py:50 tianti_help = on_command('炼体帮助') -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_tianti/__init__.py:195 _ -> static message only; no Tianti state or asset access"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_tianti/__init__.py:49",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_tianti/__init__.py:179"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_tianti/__init__.py:50",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_tianti/__init__.py:195",
+        "tests/test_tianti_frozen_entry_owner.py",
+        "tests/test_phase2_legacy_path_gate.py"
       ],
       "source_declaration_found": true,
       "source": {

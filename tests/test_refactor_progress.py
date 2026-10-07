@@ -31,6 +31,15 @@ class RefactorProgressTests(unittest.TestCase):
         self.assertTrue(mapping["random_nearby_target_fair_cooperative_fail_closed"])
         self.assertTrue(mapping["random_nearby_target_full_list_disabled"])
 
+    def test_progress_report_tracks_tianti_frozen_display_owners(self) -> None:
+        tianti = _slice_status()["tianti"]
+        self.assertTrue(tianti["frozen_display_commands_registered"])
+        self.assertTrue(tianti["frozen_dynamic_profile_commands_use_feature_reader"])
+        self.assertTrue(tianti["my_tianti_display_uses_feature_presentation"])
+        self.assertTrue(tianti["my_qiaoxue_display_uses_feature_reader_and_static_catalog"])
+        self.assertTrue(tianti["my_qiaoxue_display_uses_feature_presentation"])
+        self.assertTrue(tianti["frozen_static_commands_remain_message_only"])
+
     def test_progress_report_tracks_single_named_map_target(self) -> None:
         mapping = _slice_status()["map"]
         self.assertTrue(mapping["named_nearby_target_feature_owned"])

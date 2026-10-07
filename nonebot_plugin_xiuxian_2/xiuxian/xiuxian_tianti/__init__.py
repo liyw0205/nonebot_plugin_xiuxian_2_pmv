@@ -22,6 +22,7 @@ from .tianti_data import (
 from ...features.tianti_settlement.application import TiantiSettlementApplication
 from ...features.tianti_training.application import TiantiTrainingApplication
 from ...features.tianti_training.presentation import (
+    calc_qiaoxue_bonus,
     calculate_tianti_gain_rate,
     get_active_medicine_bath,
     get_sect_fairyland_bonus,
@@ -95,6 +96,21 @@ MEDICINE_BATH_TIME_CONFIG = [
 
 def _get_tianti_cap(data: dict) -> int:
     return tianti_training_application.profile_cap(data)
+
+
+def _get_tianti_sect_fairyland_level(user_info: dict) -> int:
+    sect_id = (user_info or {}).get("sect_id")
+    if not sect_id:
+        return 0
+    from ..xiuxian_sect import sect_application
+
+    sect_info = sect_application.get_sect_info(sect_id)
+    if not sect_info:
+        return 0
+    try:
+        return int(sect_info.get("sect_fairyland", 0) or 0)
+    except (TypeError, ValueError, OverflowError):
+        return 0
 
 
 def _get_active_medicine_bath(data: dict, now_t: datetime):
@@ -610,7 +626,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 
     now_t = runtime_clock.now()
     bath = _get_active_medicine_bath(data, now_t)
-    sect_fairyland_level = _get_user_sect_fairyland_level(user_info)
+    sect_fairyland_level = _get_tianti_sect_fairyland_level(user_info)
     sect_bonus = get_sect_fairyland_bonus(sect_fairyland_level)
     rate_info = calculate_tianti_gain_rate(
         data,
@@ -738,17 +754,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     qmap = get_qiaoxue_map()
     arg = args.extract_plain_text().strip()
 
-    # 计算总加成
-    base_ratio = 0.0
-    gain_pct = 0.0
-    detail_list = data.get("opened_qiaoxue_detail", [])
-    for q in detail_list:
-        et = q.get("effect_type")
-        ev = float(q.get("effect_value", 0))
-        if et == "base_per_min_ratio":
-            base_ratio += ev
-        elif et == "hp_gain_pct":
-            gain_pct += ev
+    base_ratio, gain_pct = calc_qiaoxue_bonus(data)
 
     # 无参数：总览
     if not arg:

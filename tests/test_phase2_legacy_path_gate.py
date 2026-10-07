@@ -80,7 +80,7 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
                              if (item.get("source") or {}).get("feature") == "sect"))
         self.assertEqual(report["path_count"], 496)
         self.assertEqual(report["status_counts"],
-                         {"不可达": 19, "允许保留的兼容路径": 126, "受阻": 84, "已迁移": 267})
+                         {"不可达": 19, "允许保留的兼容路径": 128, "受阻": 80, "已迁移": 269})
         self.assertTrue(report["frozen_membership_valid"])
         self.assertEqual(report["integrity_errors"], [])
 
@@ -399,7 +399,7 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
             self.assertIn(evidence, system_item["evidence"])
         self.assertNotIn("legacy downstream effect not closed", system_graph)
         self.assertEqual(report["status_counts"],
-                         {"不可达": 19, "允许保留的兼容路径": 126, "受阻": 84, "已迁移": 267})
+                         {"不可达": 19, "允许保留的兼容路径": 128, "受阻": 80, "已迁移": 269})
         self.assertTrue(report["frozen_membership_valid"])
         self.assertEqual(report["integrity_errors"], [])
 
@@ -447,7 +447,56 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
         self.assertNotIn("legacy downstream effect not closed", claim_graph)
         self.assertEqual(
             report["status_counts"],
-            {"不可达": 19, "允许保留的兼容路径": 126, "受阻": 84, "已迁移": 267},
+            {"不可达": 19, "允许保留的兼容路径": 128, "受阻": 80, "已迁移": 269},
+        )
+        self.assertTrue(report["frozen_membership_valid"])
+        self.assertEqual(report["integrity_errors"], [])
+
+    def test_tianti_display_commands_share_existing_read_owners(self):
+        report = load_phase2_scope_report(include_items=True)
+        items = {item["id"]: item for item in report["items"]}
+        source = "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_tianti/__init__.py"
+
+        my_tianti = items["command:tianti:我的炼体"]
+        my_tianti_graph = " ".join(my_tianti["call_graph"])
+        self.assertEqual(my_tianti["status"], "已迁移")
+        self.assertNotIn("unknown_edge", my_tianti)
+        self.assertIn(f"{source}:54", my_tianti["evidence"])
+        self.assertIn(f"{source}:600", my_tianti["evidence"])
+        self.assertIn(f"{source}:600 _ -> TiantiTrainingApplication.read_profile", my_tianti_graph)
+        self.assertIn("TiantiProfileSqlReader.read -> calculate_tianti_gain_rate", my_tianti_graph)
+        self.assertIn("_get_tianti_sect_fairyland_level -> sect_application.get_sect_info", my_tianti_graph)
+        self.assertIn("tests/test_tianti_frozen_entry_owner.py", my_tianti["evidence"])
+
+        my_qiaoxue = items["command:tianti:我的体窍"]
+        my_qiaoxue_graph = " ".join(my_qiaoxue["call_graph"])
+        self.assertEqual(my_qiaoxue["status"], "已迁移")
+        self.assertNotIn("unknown_edge", my_qiaoxue)
+        self.assertIn(f"{source}:56", my_qiaoxue["evidence"])
+        self.assertIn(f"{source}:743", my_qiaoxue["evidence"])
+        self.assertIn(f"{source}:743 _ -> TiantiTrainingApplication.read_profile", my_qiaoxue_graph)
+        self.assertIn("TiantiProfileSqlReader.read -> calc_qiaoxue_bonus", my_qiaoxue_graph)
+        self.assertIn("legacy static qiaoxue catalog adapter", my_qiaoxue_graph)
+        self.assertIn("tests/test_tianti_frozen_entry_owner.py", my_qiaoxue["evidence"])
+
+        static_commands = {
+            "炼体帮助": (50, 195),
+            "炼体境界": (57, 816),
+        }
+        for name, (declaration, handler_line) in static_commands.items():
+            with self.subTest(command=name):
+                item = items[f"command:tianti:{name}"]
+                graph = " ".join(item["call_graph"])
+                self.assertEqual(item["status"], "允许保留的兼容路径")
+                self.assertNotIn("unknown_edge", item)
+                self.assertIn(f"{source}:{declaration}", item["evidence"])
+                self.assertIn(f"{source}:{handler_line}", item["evidence"])
+                self.assertIn("static message only; no Tianti state or asset access", graph)
+                self.assertNotIn("legacy downstream effect not closed", graph)
+
+        self.assertEqual(
+            report["status_counts"],
+            {"不可达": 19, "允许保留的兼容路径": 128, "受阻": 80, "已迁移": 269},
         )
         self.assertTrue(report["frozen_membership_valid"])
         self.assertEqual(report["integrity_errors"], [])
@@ -460,7 +509,7 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
         self.assertEqual(report["path_count"], 496)
         self.assertEqual(
             report["status_counts"],
-            {"不可达": 19, "允许保留的兼容路径": 126, "受阻": 84, "已迁移": 267},
+            {"不可达": 19, "允许保留的兼容路径": 128, "受阻": 80, "已迁移": 269},
         )
         self.assertGreater(report["blocked_count"], 0)
         self.assertTrue(all(item["call_graph"] and item["evidence"] for item in report["items"]))
