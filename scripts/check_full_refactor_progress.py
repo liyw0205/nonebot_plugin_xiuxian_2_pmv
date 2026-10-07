@@ -793,6 +793,96 @@ def _bank_command_owner_status(sources: dict[str, str]) -> dict[str, bool]:
     return report
 
 
+def _beg_command_owner_status(sources: dict[str, str]) -> dict[str, bool]:
+    """Check the three frozen entrypoints without reclassifying the daily reset."""
+    trees = {name: ast.parse(source) for name, source in sources.items()}
+    functions = {name: {node.name: node for node in ast.walk(tree)
+                       if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))}
+                 for name, tree in trees.items()}
+
+    def calls(source, function, target):
+        root = trees[source] if function is None else functions[source][function]
+        return [node for node in ast.walk(root)
+                if isinstance(node, ast.Call) and ast.unparse(node.func) == target]
+
+    def code(source, function=None):
+        return ast.unparse(trees[source] if function is None else functions[source][function])
+
+    entries = (("beg_stone_", "beg_stone", "daily_settle"),
+               ("novice_", "novice", "novice_claim"), ("beg_help_", "beg_help", "help"))
+    registrations = {target.id: ast.unparse(node.value) for node in trees["facade"].body if isinstance(node, ast.Assign)
+                     for target in node.targets if isinstance(target, ast.Name)}
+    constructors = calls("facade", None, "BegCommandApplication")
+    lazy_providers = len(constructors) == 1 and len(constructors[0].args) == 4 and (
+        ast.unparse(constructors[0].args[1]) == "XiuConfig"
+        and ast.unparse(constructors[0].args[2]) == "jsondata.level_data"
+        and isinstance(constructors[0].args[3], ast.Lambda)
+    )
+    execute = functions["command"]["execute"]
+    help_branches = [node for node in execute.body if isinstance(node, ast.If)
+                     and ast.unparse(node.test) == "action == 'help'"]
+    mutation = ast.Module(body=[node for node in execute.body if node not in help_branches], type_ignores=[])
+    positions = {ast.unparse(node.func): node.lineno for node in ast.walk(mutation) if isinstance(node, ast.Call)}
+    ordered = ("self.repository.receipt", "self.repository.profile", "self.clock.now",
+               "self.activity.update_last_check_info_time", "self.config_provider", "self.application.execute")
+    receipt_return = any(isinstance(node, ast.If) and ast.unparse(node.test) == "previous is not None"
+                         and len(node.body) == 1 and ast.unparse(node.body[0]) == "return previous"
+                         for node in ast.walk(execute))
+    atomic = [node for node in ast.walk(functions["application"]["execute"]) if isinstance(node, ast.With)
+              and any(ast.unparse(item.context_expr) == "DatabaseUnitOfWork(self.database, immediate=True)" for item in node.items)]
+    reply = functions["replies"]["render_beg_reply"]
+    guards = [node for node in ast.walk(reply) if isinstance(node, ast.If)
+              and ast.unparse(node.test) == "status not in {'applied', 'duplicate'}"
+              and any(isinstance(child, ast.Return) for child in node.body)]
+    assets = [node for node in ast.walk(reply) if isinstance(node, ast.Subscript)
+              and ast.unparse(node.value) == "result" and isinstance(node.slice, ast.Constant)
+              and node.slice.value in {"stone", "stone_reward"}]
+    return {
+        "three_command_handlers_reach_one_feature_owner": bool(
+            lazy_providers and "beg_command_application = BegCommandApplication(" in code("facade")
+            and all(registrations.get(matcher, "").startswith(f"on_command({name!r},")
+                    for matcher, name in (("beg_stone", "仙途奇缘"), ("novice", "新手礼包"), ("beg_help", "仙途奇缘帮助")))
+            and all(calls("facade", handler, f"{matcher}.handle")
+                    and calls("facade", handler, "render_beg_reply")
+                    and any(any(keyword.arg == "action" and isinstance(keyword.value, ast.Constant)
+                                and keyword.value.value == action for keyword in call.keywords)
+                            for call in calls("facade", handler, "beg_command_application.execute"))
+                    for handler, matcher, action in entries)
+            and all(token not in code("facade") for token in ("XiuxianDateManage", "_sql_message", "update_last_check_info_time"))
+        ),
+        "command_receipts_precede_live_inputs_and_activity": bool(
+            receipt_return and all(name in positions for name in ordered)
+            and all(positions[first] < positions[second] for first, second in zip(ordered, ordered[1:]))
+            and all(name in positions and positions["self.repository.receipt"] < positions[name]
+                    for name in ("self.levels_provider", "self.rng.randint", "self._gift"))
+            and "repository or BegCommandRepository(database)" in code("command", "__init__")
+            and "activity or PlayerActivityApplication(database, clock=self.clock)" in code("command", "__init__")
+        ),
+        "command_reads_validate_receipts_without_schema_writes": bool(
+            calls("reads", "receipt", "self._ledger_result") and calls("reads", "profile", "self._read")
+            and "DatabaseUnitOfWork(self.database, read_only=True)" in code("reads", "_read")
+            and "request_hash({'user_id': user_id})" in code("reads", "_ledger_result")
+            and "payload != [user_id]" in code("reads", "receipt")
+            and all(token not in code("reads") for token in ("CREATE TABLE", "ALTER TABLE"))
+        ),
+        "command_reuses_existing_atomic_claim_writers": bool(
+            calls("command", "execute", "self.application.execute")
+            and "application or BegApplication(database)" in code("command", "__init__")
+            and any(all(target in {ast.unparse(child.func) for child in ast.walk(node) if isinstance(child, ast.Call)}
+                        for target in ("self.ledger.begin", "self.repository.settle_daily", "self.repository.claim_novice", "self.ledger.finish"))
+                    for node in atomic)
+        ),
+        "dynamic_help_and_rejected_replies_do_not_need_claim_effects": bool(
+            len(help_branches) == 1
+            and not any(isinstance(node, ast.Call) and ast.unparse(node.func).startswith(
+                ("self.repository.", "self.application.", "self.activity.")) for node in ast.walk(help_branches[0]))
+            and "self.config_provider()" in ast.unparse(help_branches[0])
+            and all(f"result['{field}']" in code("replies", "render_beg_reply") for field in ("max_age_days", "max_level", "current_time"))
+            and guards and assets and max(node.end_lineno for node in guards) < min(node.lineno for node in assets)
+        ),
+    }
+
+
 @lru_cache(maxsize=1)
 def _slice_status() -> dict[str, dict[str, object]]:
     @lru_cache(maxsize=None)
@@ -1419,6 +1509,13 @@ def _slice_status() -> dict[str, dict[str, object]]:
     daily_pill_reset_application = (PACKAGE / "features" / "back" / "daily_pill_usage_reset_application.py").read_text(encoding="utf-8")
     daily_pill_reset_repository = (PACKAGE / "features" / "back" / "daily_pill_usage_reset_repository.py").read_text(encoding="utf-8")
     beg_application = (PACKAGE / "features" / "beg" / "application.py").read_text(encoding="utf-8")
+    beg_command_sources = {
+        "facade": (PACKAGE / "xiuxian/xiuxian_beg/__init__.py").read_text(encoding="utf-8"),
+        "command": (PACKAGE / "features/beg/command_application.py").read_text(encoding="utf-8"),
+        "reads": (PACKAGE / "features/beg/command_repository.py").read_text(encoding="utf-8"),
+        "application": beg_application,
+        "replies": (PACKAGE / "features/beg/command_replies.py").read_text(encoding="utf-8"),
+    }
     beg_daily_reset_repository = (PACKAGE / "features" / "beg" / "daily_reset_repository.py").read_text(encoding="utf-8")
     beg_daily_reset_tests = (PACKAGE / "features" / "beg" / "tests" / "test_daily_reset_repository.py").read_text(encoding="utf-8")
     past_life_events_facade = (PACKAGE / "xiuxian" / "xiuxian_past_life" / "past_life_events.py").read_text(encoding="utf-8")
@@ -4076,6 +4173,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "status": "world_generation_termination_key_event_settlement_entry_speedup_demon_token_damage_event_boss_battle_asset_boundary_engine_provider_boundary_skill_provider_boundary_buff_random_source_boundary_status_writeback_isolation_item_provider_boundary_lazy_items_boundary_treasure_cutover_with_natal_impart_buff_info_accessory_tianti_and_base_provider_boundaries_and_remaining_rift_compatibility",
         },
         "beg": {
+            **_beg_command_owner_status(beg_command_sources),
             "daily_reset_application_owned": (
                 '_run_job("仙途奇缘重置", _daily_beg_reset)' in mixelixir_scheduler
                 and "_sql_message().beg_remake" not in mixelixir_scheduler
@@ -4098,7 +4196,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
                     "rolls_back_flag_and_ledger_when_audit_write_fails",
                 )
             ),
-            "status": "daily_beg_reset_owned_by_application_with_atomic_ledger",
+            "status": "three_commands_feature_owned_with_receipt_first_reads_and_existing_atomic_claims_and_daily_reset",
         },
         "back": {
             "daily_pill_usage_reset_application_owned": (

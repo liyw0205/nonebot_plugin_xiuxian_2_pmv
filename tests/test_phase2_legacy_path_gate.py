@@ -51,6 +51,38 @@ def _handler_line(source: str, handler: str) -> int:
 
 
 class Phase2LegacyPathGateTests(unittest.TestCase):
+    def test_beg_commands_have_source_bound_command_owners_and_no_remaining_blocker(self):
+        report = load_phase2_scope_report(include_items=True)
+        items = {item["id"]: item for item in report["items"]}
+        source = "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_beg/__init__.py"
+        expected = {
+            "仙途奇缘": ("beg_stone_", "daily_settle", "BegRepository.settle_daily"),
+            "仙途奇缘帮助": ("beg_help_", "help", "render_beg_reply"),
+            "新手礼包": ("novice_", "novice_claim", "BegRepository.claim_novice"),
+        }
+        for name, (handler, action, terminal) in expected.items():
+            with self.subTest(command=name):
+                item = items[f"command:beg:{name}"]
+                line = _handler_line(source, handler)
+                self.assertEqual(item["status"], "已迁移")
+                self.assertNotIn("unknown_edge", item)
+                edges = [edge for edge in item["call_graph"] if edge.startswith(f"{source}:{line} {handler} ->")]
+                self.assertEqual(len(edges), 1)
+                self.assertIn(f"BegCommandApplication.execute({action})", edges[0])
+                self.assertIn(terminal, edges[0])
+                self.assertIn(f"{source}:{line}", item["evidence"])
+                self.assertIn("tests/test_beg_command_ingress.py", item["evidence"])
+                if action != "help":
+                    self.assertIn("read-only BegCommandRepository.receipt/profile", edges[0])
+                    self.assertIn("BegApplication.execute", edges[0])
+        self.assertIn("separate activity transaction", " ".join(items["command:beg:仙途奇缘"]["call_graph"]))
+        self.assertIn("without business DB access", " ".join(items["command:beg:仙途奇缘帮助"]["call_graph"]))
+        self.assertFalse(any(item["status"] == "受阻" for item in report["items"]
+                             if (item.get("source") or {}).get("feature") == "beg"))
+        self.assertEqual(len(report["items"]), 496)
+        self.assertTrue(report["frozen_membership_valid"])
+        self.assertEqual(report["integrity_errors"], [])
+
     def test_bank_sub_boundary_has_command_owner_but_non_command_family_stays_blocked(self):
         root = Path(__file__).resolve().parents[1]
         report = load_phase2_scope_report(include_items=True)
@@ -295,7 +327,7 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
         self.assertEqual(report["path_count"], 496)
         self.assertEqual(
             report["status_counts"],
-            {"不可达": 19, "允许保留的兼容路径": 107, "受阻": 148, "已迁移": 222},
+            {"不可达": 19, "允许保留的兼容路径": 107, "受阻": 145, "已迁移": 225},
         )
         self.assertGreater(report["blocked_count"], 0)
         self.assertTrue(all(item["call_graph"] and item["evidence"] for item in report["items"]))

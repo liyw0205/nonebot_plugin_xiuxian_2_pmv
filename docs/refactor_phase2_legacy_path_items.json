@@ -1598,22 +1598,31 @@
       "id": "command:beg:仙途奇缘",
       "kind": "commands",
       "entry": "beg:仙途奇缘 (aliases: )",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "BegCommandApplication owns receipt-first orchestration, current configuration, eligibility inputs and reward rolling. BegCommandRepository reads verified ledger/legacy receipts and the actual player profile without creating schema; durable rejections remain rejected and a verified rolled-back failure may retry through the original writer. The existing BegApplication/BegRepository commits the daily reward, claim flag and ledger in one transaction. PlayerActivityApplication retains a separate shared activity transaction, not atomic with the reward; shared admission and message delivery remain cross-feature boundaries. This closes this frozen command only, not the whole repository.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_beg/__init__.py:85 beg_stone = on_command('仙途奇缘') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_beg/__init__.py:102 beg_stone_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_beg/__init__.py:25 beg_stone = on_command('仙途奇缘') -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_beg/__init__.py:50 beg_stone_ -> BegCommandApplication.execute(daily_settle) -> read-only BegCommandRepository.receipt/profile -> existing BegApplication.execute -> BegRepository.settle_daily commits assets, claim flag and ledger atomically",
+        "BegCommandRepository.receipt verifies original user/action before current eligibility/configuration/RNG; explicit success replays, durable rejection remains rejected, started or malformed receipts fail closed, and verified rolled-back failures require complete startup schema before retry",
+        "BegCommandApplication daily branch -> PlayerActivityApplication.update_last_check_info_time in a separate activity transaction -> current configuration/levels and injected clock/RNG -> original reward writer; render_beg_reply -> shared handle_send"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_beg/__init__.py:85",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_beg/__init__.py:102"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_beg/__init__.py:25",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_beg/__init__.py:50",
+        "nonebot_plugin_xiuxian_2/features/beg/command_application.py",
+        "nonebot_plugin_xiuxian_2/features/beg/command_repository.py",
+        "nonebot_plugin_xiuxian_2/features/beg/command_replies.py",
+        "nonebot_plugin_xiuxian_2/features/beg/application.py",
+        "nonebot_plugin_xiuxian_2/features/beg/repository.py",
+        "nonebot_plugin_xiuxian_2/features/info/activity_application.py",
+        "nonebot_plugin_xiuxian_2/features/beg/tests/test_command_repository.py",
+        "tests/test_beg_command_ingress.py"
       ],
       "source_declaration_found": true,
       "source": {
@@ -1625,22 +1634,25 @@
       "id": "command:beg:仙途奇缘帮助",
       "kind": "commands",
       "entry": "beg:仙途奇缘帮助 (aliases: )",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "BegCommandApplication owns the help result using current configuration and the injected clock on every invocation, and render_beg_reply owns presentation. The help branch does not read player profiles, receipts or business databases and cannot grant rewards. The legacy matcher and shared help/message delivery remain compatibility boundaries; shared delivery infrastructure is not claimed to be free of I/O.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_beg/__init__.py:86 beg_help = on_command('仙途奇缘帮助') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_beg/__init__.py:90 beg_help_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_beg/__init__.py:26 beg_help = on_command('仙途奇缘帮助') -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_beg/__init__.py:31 beg_help_ -> BegCommandApplication.execute(help) reads current configuration and clock without business DB access -> render_beg_reply -> shared send_help_message",
+        "BegCommandApplication help branch returns before BegCommandRepository.receipt/profile and BegApplication.execute; no reward or player-state write is reachable"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_beg/__init__.py:86",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_beg/__init__.py:90"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_beg/__init__.py:26",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_beg/__init__.py:31",
+        "nonebot_plugin_xiuxian_2/features/beg/command_application.py",
+        "nonebot_plugin_xiuxian_2/features/beg/command_replies.py",
+        "tests/test_beg_command_ingress.py"
       ],
       "source_declaration_found": true,
       "source": {
@@ -5139,22 +5151,29 @@
       "id": "command:beg:新手礼包",
       "kind": "commands",
       "entry": "beg:新手礼包 (aliases: )",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "BegCommandApplication owns receipt-first novice-claim orchestration, current profile/configuration reads and gift normalization. BegCommandRepository verifies original user/action and durable result before reading current eligibility or gift data; rejected, incomplete or malformed receipts never become success. The existing BegApplication/BegRepository remains the only asset writer, atomically committing the wallet, bound inventory, novice flag and ledger with rollback on failure. The legacy matcher retains shared admission and delivery only; this does not declare global legacy-path completion.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_beg/__init__.py:87 novice = on_command('新手礼包') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_beg/__init__.py:209 novice_ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_beg/__init__.py:27 novice = on_command('新手礼包') -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_beg/__init__.py:77 novice_ -> BegCommandApplication.execute(novice_claim) -> read-only BegCommandRepository.receipt/profile -> existing BegApplication.execute -> BegRepository.claim_novice atomically commits wallet, bound inventory, novice flag and ledger",
+        "Verified original user/action receipts replay before current profile/configuration/gift lookup; BegCommandApplication validates and normalizes reward rows without replacing the existing inventory writer; render_beg_reply -> shared handle_send"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_beg/__init__.py:87",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_beg/__init__.py:209"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_beg/__init__.py:27",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_beg/__init__.py:77",
+        "nonebot_plugin_xiuxian_2/features/beg/command_application.py",
+        "nonebot_plugin_xiuxian_2/features/beg/command_repository.py",
+        "nonebot_plugin_xiuxian_2/features/beg/command_replies.py",
+        "nonebot_plugin_xiuxian_2/features/beg/application.py",
+        "nonebot_plugin_xiuxian_2/features/beg/repository.py",
+        "nonebot_plugin_xiuxian_2/features/beg/tests/test_command_repository.py",
+        "tests/test_beg_command_ingress.py"
       ],
       "source_declaration_found": true,
       "source": {

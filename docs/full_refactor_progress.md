@@ -2,7 +2,11 @@
 
 状态：进行中。`v1.1.0` 的 P0-P7 发布证据继续保留，但不作为底层全面重构完成证明。
 
-**当前交付与队列（2026-10-07，本段优先于下文历史“下一片”）**：Arena 已在 `6b3fdc40` 提交推送并核对远端；本轮 bank 正则入口已通过扩大回归和门禁，沿用原四个资产 writer，不重复迁移。共享 matcher family 仍受阻，全局计数保持 `222/107/19/148`，目标仍进行中。按 `allowed_features` 顺序，back、base 都没有冻结 blocker，跳过已验收功能；下一组固定为 beg 的仙途奇缘、仙途奇缘帮助、新手礼包三个实际入口，复用现有 `BegApplication/BegRepository`，不返回 admin/arena 或为提高代理利用率重写已关功能。
+**当前交付与队列（2026-10-07，本段优先于下文历史“下一片”）**：Arena 已在 `6b3fdc40` 提交推送，bank 已在 `c6ebdd26` 提交推送并核对远端；本轮 beg 三个真实入口已通过扩大回归和门禁，沿用原 `BegApplication/BegRepository` writer。共享 matcher family 仍有其它插件受阻，全局计数更新为 `225/107/19/145`，目标仍进行中。按 `allowed_features` 顺序，back、base 都没有冻结 blocker，已跳过；下一组固定为世界 BOSS 兑换命令，范围只含 `command:boss:世界BOSS兑换`，不重做已验收的讨伐、周限购或日重置。
+
+**Beg 新手机缘命令 owner（2026-10-07）**：三名子代理分别交付只读回执/profile 仓储、入口/回复适配、贯通测试与门禁文档；主线程实现统一 command application、补共享活动时间 owner、串行验收。三个 matcher 现在只提取身份、保留 `beg-daily:{event}:{user}` / `novice-gift:{event}:{user}` 操作号并调用 `BegCommandApplication`；帮助动态读取配置和时钟，不访问业务数据库。每日机缘和新手礼包先验证 ledger/旧业务回执的原用户、动作、结果与奖励字段，再读 profile；完成回放不读取当前资格、礼包目录、配置、时钟或随机数。新请求分别读取等级/奖励及礼包目录，最后复用已有 `BegApplication/BegRepository` 原子写入资产、领取标志、库存与 ledger；每日活动时间复用 `PlayerActivityApplication`，单独事务，不宣称跨副作用原子。拒绝不读取成功字段、不误报成功；started/needs_reconcile 保守拒绝，只有严格验证的回滚 `internal_error` 可让原 writer 同 ID 重试。保留 daily 按 `timedelta.days` 与 novice 精确 `timedelta` 的既有边界、历史 naive 本地时间解释，无新增 24 小时规则。
+
+Beg 聚焦 `83 passed`（pytest 4.68 秒，隔离初始化进程 9.21 秒）；最终扩大 `173 passed, 37 subtests passed`（pytest 27.21 秒，进程 32.58 秒，anyio 预加载及旧 Web URL 两个 warning），隔离路径 `/tmp/xiuxian-unittest-663janff/xiuxian`。首轮扩大仅两项：冻结计数断言仍为上一组 `222/148`，以及既有平台迁移测试夹具未声明黑屋迁移要求的 `is_ban`；分别更新计数为 `225/145` 和补齐测试 schema 列，未改生产黑屋逻辑。Beg 门禁、inventory freshness 和 Phase2 定向检查均通过；membership 496 项/hash 不变，`integrity_errors=[]`，静态检查 1.60 秒，beg source-quality 定向 `2 passed, 8 subtests`（2.82 秒）。测试执行仍只占几十秒，未完整测量排查/实现/收尾阶段占比，也没有线上延迟提速证据。
 
 **Bank 正则命令 owner（2026-10-07）**：三名子代理独占命令/回执、入口/回复/贯通测试、门禁/文档；实现交付后接续冻结证据、旧断言适配和下一插件有限准备，主线程集成并串行验收。`bank_ -> BankCommandApplication` 统一有界参数校验，先验证统一表和旧四表成功回执的用户、动作、原金额，再读当前账户/配置；拒绝回复不提前读取成功字段。存取款恢复帮助文案约定的自动结息，存/取/息传入原始存款额、时间和等级 CAS，两条命令竞争同一旧快照只能结息一次。新账户信息补齐钱包及默认字段，只读且绕过写回执；时间兼容旧本地 naive 与 ISO/offset，沿用小时两位舍入，未来时间与非有限利率拒绝。默认时钟在执行时取 context，不锁死初始化时钟。没有新 schema 或新资产 writer；仅成功操作持久回执，拒绝不永久冻结；旧 naive 时间仍依赖进程本地时区，没有线上延迟测量。
 

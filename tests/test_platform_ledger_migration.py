@@ -237,7 +237,7 @@ class PlatformLedgerMigrationTests(unittest.TestCase):
                 build_runtime_context(data_dir=data_dir, legacy_startup=False)
             )
             with DatabaseUnitOfWork(context.database.path("game_db"), immediate=True) as uow:
-                uow.execute("CREATE TABLE user_xiuxian(user_id TEXT PRIMARY KEY,stone INTEGER)")
+                uow.execute("CREATE TABLE user_xiuxian(user_id TEXT PRIMARY KEY,stone INTEGER,is_ban INTEGER DEFAULT 0)")
             state = asyncio.run(lifecycle.start())
             try:
                 self.assertEqual(state.phase.value, "ready", state.error)

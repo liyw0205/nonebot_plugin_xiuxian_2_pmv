@@ -51,15 +51,16 @@ class BegDailyRewardServiceTests(unittest.TestCase):
         arguments.update(overrides)
         return self.service.settle(**arguments)
 
-    def test_beg_facade_defers_sql_manager_construction(self):
+    def test_beg_facade_delegates_reads_and_activity_to_feature_command_owner(self):
         from pathlib import Path
         source = Path("nonebot_plugin_xiuxian_2/xiuxian/xiuxian_beg/__init__.py").read_text(encoding="utf-8")
-        self.assertIn("_sql_message_instance = None", source)
-        self.assertIn("def _sql_message(", source)
-        self.assertIn("_sql_message().get_user_info_with_id(", source)
-        self.assertIn("update_last_check_info_time(", source)
-        self.assertNotIn("_sql_message().update_last_check_info_time(", source)
-        self.assertNotIn("sql_message = XiuxianDateManage()", source)
+        owner = Path("nonebot_plugin_xiuxian_2/features/beg/command_application.py").read_text(encoding="utf-8")
+        self.assertIn("beg_command_application.execute(", source)
+        self.assertIn("self.repository.profile(user_id)", owner)
+        self.assertIn("self.activity.update_last_check_info_time(user_id)", owner)
+        self.assertNotIn("_sql_message", source)
+        self.assertNotIn("XiuxianDateManage", source)
+        self.assertNotIn("update_last_check_info_time(", source)
 
     def test_atomic_settlement_records_fixed_reward_and_operation(self):
         result = self.settle()
