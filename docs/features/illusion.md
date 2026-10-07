@@ -10,7 +10,7 @@ The historical package still owns the command names during the adapter transitio
 No new HTTP route is exposed in this migration slice. Existing URLs remain served by the legacy web adapter.
 
 ## 数据模型与迁移
-Migration `illusion.001` records the slice in `game_db`; upgraded installations may also contain the historical `legacy.illusion.001` marker. The repository owns `illusion_choices`, `illusion_choice_stats`, and `illusion_choice_operations`.
+Migrations `illusion.001` and `illusion.002` record the slice and daily state projection in `game_db`; upgraded installations may also contain the historical `legacy.illusion.001` marker. The repository owns `illusion_user_state`, `illusion_legacy_imports`, `illusion_choices`, `illusion_choice_stats`, and `illusion_choice_operations`. Existing per-user JSON and aggregate statistics are imported lazily once; reset markers prevent deleted JSON-era state from being restored.
 
 ## 事务与失败回滚
 Mutating calls carry an `operation_id` and are recorded in the operation ledger in the same `game_db` transaction as the choice and reward projection. Rejected choices leave balances, inventory, and statistics unchanged.
@@ -22,7 +22,7 @@ No new scheduled jobs. Legacy jobs stay registered through the compatibility sch
 `illusion_enabled` controls the application boundary and defaults to true.
 
 ## 适配器差异
-The command adapter translates the historical event into the application DTO; the application and repository do not import NoneBot or Flask.
+The command adapter translates the historical event into the application DTO; the application and repository do not import NoneBot or Flask. Item catalog construction is deferred until an item reward is selected.
 
 ## 测试与手工验收
 Run the feature application test and the full architecture gate. Repeat the same operation ID to verify replay.

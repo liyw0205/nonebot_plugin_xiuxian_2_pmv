@@ -18,7 +18,7 @@ from .bootstrap.platform_manifest import FEATURE as PLATFORM_WEB_FEATURE
 from .features.daily_fortune.manifest import FEATURE as DAILY_FORTUNE_FEATURE
 from .features.daily_fortune.migrations import apply_daily_fortune
 from .features.illusion.manifest import FEATURE as ILLUSION_FEATURE
-from .features.illusion.migrations import apply_illusion
+from .features.illusion.migrations import apply_illusion, apply_illusion_state
 from .features.impart.migrations import (
     apply_impart_crystal_and_card_operations,
     apply_impart_draw_operations,
@@ -352,6 +352,7 @@ def build_migrations() -> tuple[Migration, ...]:
         Migration("fusion.002", "fusion_operation_tables", apply_fusion_operations),
         Migration("game_events.001", "game_event_statistics_projection", apply_game_event_statistics_player),
         Migration("illusion.001", "illusion_feature_migrations", apply_illusion),
+        Migration("illusion.002", "illusion_feature_state_projection", apply_illusion_state),
         Migration("impart.002", "impart_prayer_operations", apply_impart_prayer_operations),
         Migration("impart.003", "impart_prayer_player_statistics", apply_impart_prayer_player_statistics),
         Migration("impart.004", "love_sand_operations", apply_impart_love_sand_operations),

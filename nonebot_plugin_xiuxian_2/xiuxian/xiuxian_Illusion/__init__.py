@@ -29,7 +29,9 @@ from ...features.illusion.application import IllusionApplication
 from ...infrastructure.ids import UUIDGenerator
 
 from .IllusionData import *
-items = Items()
+# Loading the item catalog is expensive; defer it until an item reward is
+# actually selected instead of paying the cost during plugin import.
+_items: Items | None = None
 illusion_application = IllusionApplication(get_paths().game_db)
 runtime_ids = UUIDGenerator()
 
@@ -52,7 +54,8 @@ illusion_reset = on_command("重置幻境", permission=SUPERUSER, priority=5, bl
 illusion_clear = on_command("清空幻境", permission=SUPERUSER, priority=5, block=True)
 
 async def reset_illusion_data():
-    IllusionData.reset_player_data_only()
+    operation_id = f"illusion-scheduler-clear:{runtime_ids.new_id()}"
+    illusion_application.clear(operation_id=operation_id, user_id="scheduler", reset_stats=False)
     logger.opt(colors=True).info("<green>幻境寻心玩家数据已重置</green>")
 
 @illusion_start.handle(parameterless=[Cooldown(cd_time=0)])
@@ -63,14 +66,15 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     if not isUser:
         await handle_send(bot, event, msg, md_type="我要修仙")
         await illusion_start.finish()
-    
+
     user_id = user_info["user_id"]
-    illusion_info = IllusionData.get_or_create_user_illusion_info(user_id)
-    stored_choice = illusion_application.get_choice(user_id, illusion_application.period_key())
-    if stored_choice is not None:
-        illusion_info["question_index"] = stored_choice["question_index"]
-        illusion_info["today_choice"] = stored_choice["selected_option"]
-    
+    period_key = illusion_application.period_key()
+    illusion_info = illusion_application.get_state(
+        user_id,
+        question_count=len(DEFAULT_QUESTIONS),
+        period=period_key,
+        legacy_loader=lambda: IllusionData.get_or_create_user_illusion_info(user_id),
+    )
     # 检查问题索引是否有效
     if illusion_info["question_index"] is None or illusion_info["question_index"] >= len(DEFAULT_QUESTIONS):
         msg = "幻境寻心功能暂时无法使用，请联系管理员检查问题配置"
@@ -159,7 +163,13 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         await handle_send(bot, event, msg)
         await illusion_choice.finish()
 
-    illusion_info = IllusionData.get_or_create_user_illusion_info(user_id)
+    period_key = illusion_application.period_key()
+    illusion_info = illusion_application.get_state(
+        user_id,
+        question_count=len(DEFAULT_QUESTIONS),
+        period=period_key,
+        legacy_loader=lambda: IllusionData.get_or_create_user_illusion_info(user_id),
+    )
     
     # 检查问题索引是否有效
     if illusion_info["question_index"] is None or illusion_info["question_index"] >= len(DEFAULT_QUESTIONS):
@@ -187,9 +197,12 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     selected_option = options[choice_num - 1]  # 获取不带数字的选项文本
     selected_explanation = explanations[choice_num - 1] if choice_num - 1 < len(explanations) else "暂无详细解释"
 
-    stats = IllusionData.get_stats()
-    question_stats = stats["question_stats"][illusion_info["question_index"]]
-    counts = question_stats
+    counts = illusion_application.get_question_stats(
+        period=period_key,
+        question_index=illusion_info["question_index"],
+        option_count=len(options),
+        legacy_loader=lambda: IllusionData.get_stats()["question_stats"],
+    )
     total_choices = sum(counts)
     
     # 计算当前选择的排名
@@ -242,7 +255,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         "choose",
         operation_id,
         user_id,
-        period_key=period_key,
+        period=period_key,
         question_index=illusion_info["question_index"],
         choice_index=choice_num - 1,
         selected_option=selected_option,
@@ -310,9 +323,10 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """重置幻境数据(管理员) - 重置玩家数据和问题统计数据"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     
-    IllusionData.reset_all_data()
-    
-    msg = "所有用户的幻境寻心数据和问题统计数据已重置！"
+    actor = str(getattr(event, "user_id", "system"))
+    event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or runtime_ids.new_id())
+    outcome = _run_illusion_action("reset", f"illusion-reset:{event_id}:{actor}", actor)
+    msg = "所有用户的幻境寻心数据和问题统计数据已重置！" if outcome.succeeded else "幻境数据重置失败，请稍后重试。"
     await handle_send(bot, event, msg)
     await illusion_reset.finish()
 
@@ -321,14 +335,18 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """清空幻境数据(管理员) - 仅清空玩家数据"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     
-    IllusionData.reset_player_data_only()
-    
-    msg = "所有用户的幻境寻心数据已清空！"
+    actor = str(getattr(event, "user_id", "system"))
+    event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or runtime_ids.new_id())
+    outcome = _run_illusion_action("clear", f"illusion-clear:{event_id}:{actor}", actor)
+    msg = "所有用户的幻境寻心数据已清空！" if outcome.succeeded else "幻境玩家数据清空失败，请稍后重试。"
     await handle_send(bot, event, msg)
     await illusion_clear.finish()
 
 def _select_random_item(user_level):
     """Select a random item without mutating inventory."""
+    global _items
+    if _items is None:
+        _items = Items()
     # 随机选择物品类型
     item_types = ["功法", "神通", "药材", "法器", "防具", "身法", "瞳术"]
     item_type = random.choice(item_types)
@@ -338,7 +356,7 @@ def _select_random_item(user_level):
         zx_rank = base_rank(user_level, 5)
 
     # 获取随机物品
-    item_id_list = items.get_random_id_list_by_rank_and_item_type(zx_rank, item_type)
+    item_id_list = _items.get_random_id_list_by_rank_and_item_type(zx_rank, item_type)
 
     # 自定义物品ID列表
     zdyid_list = ["20001", "20005", "20006", "20007", "20010", "20017"]
@@ -351,13 +369,13 @@ def _select_random_item(user_level):
         combined_id_list.extend(zdyid_list)
 
     if not combined_id_list:
-        return "无"
+        return None
 
     item_id = random.choice(combined_id_list)
-    item_info = items.get_data_by_item_id(item_id)
+    item_info = _items.get_data_by_item_id(item_id)
 
     if item_info is None:
-        return "无"
+        return None
 
     return {
         "id": int(item_id),

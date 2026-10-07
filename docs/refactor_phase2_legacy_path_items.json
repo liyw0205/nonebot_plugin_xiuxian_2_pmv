@@ -3918,22 +3918,24 @@
       "id": "command:illusion:幻境寻心",
       "kind": "commands",
       "entry": "illusion:幻境寻心 (aliases: )",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "The adapter reads and assigns the daily question through IllusionApplication and IllusionRepository, then renders the feature-owned choice projection. The legacy JSON state is no longer on the request path.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Illusion/__init__.py:49 illusion_start = on_command('幻境寻心') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Illusion/__init__.py:59 _ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Illusion/__init__.py:51 illusion_start = on_command('幻境寻心') -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Illusion/__init__.py:62 _ -> check_user -> IllusionApplication.get_state/get_choice -> IllusionRepository -> illusion_user_state/illusion_choices -> handle_send"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Illusion/__init__.py:49",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Illusion/__init__.py:59"
+        "nonebot_plugin_xiuxian_2/features/illusion/application.py",
+        "nonebot_plugin_xiuxian_2/features/illusion/repository.py",
+        "tests/test_illusion_frozen_command_owner.py",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Illusion/__init__.py:51",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Illusion/__init__.py:62"
       ],
       "source_declaration_found": true,
       "source": {
@@ -4353,22 +4355,26 @@
       "id": "command:illusion:心境试炼",
       "kind": "commands",
       "entry": "illusion:心境试炼 (aliases: )",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "The handler keeps compatibility preflight and reward selection, then delegates the choice, asset mutation, statistics projection, operation receipt and replay to IllusionApplication and IllusionRepository. The remaining reset commands are separate legacy paths and are not claimed by this item.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Illusion/__init__.py:50 illusion_choice = on_command('心境试炼') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Illusion/__init__.py:110 _ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Illusion/__init__.py:52 illusion_choice = on_command('心境试炼') -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Illusion/__init__.py:114 _ -> compatibility preflight/reward decision -> _run_illusion_action -> IllusionApplication.execute -> OperationLedger + IllusionRepository -> illusion_choices/illusion_choice_stats + user_xiuxian/back"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Illusion/__init__.py:50",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Illusion/__init__.py:110"
+        "nonebot_plugin_xiuxian_2/features/illusion/application.py",
+        "nonebot_plugin_xiuxian_2/features/illusion/repository.py",
+        "nonebot_plugin_xiuxian_2/features/illusion/tests/test_illusion_application.py",
+        "tests/test_illusion_choice_service.py",
+        "tests/test_illusion_frozen_command_owner.py",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Illusion/__init__.py:52",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Illusion/__init__.py:114"
       ],
       "source_declaration_found": true,
       "source": {
@@ -6718,22 +6724,25 @@
       "id": "command:illusion:清空幻境",
       "kind": "commands",
       "entry": "illusion:清空幻境 (aliases: )",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "The administrator command delegates clear semantics, operation receipt and replay-safe state removal to IllusionApplication.clear and IllusionRepository.clear; historical receipts remain retained for recovery.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Illusion/__init__.py:52 illusion_clear = on_command('清空幻境') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Illusion/__init__.py:320 _ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Illusion/__init__.py:54 illusion_clear = on_command('清空幻境') -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Illusion/__init__.py:334 _ -> _run_illusion_action(clear) -> IllusionApplication.clear -> IllusionRepository.clear(reset_stats=False)"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Illusion/__init__.py:52",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Illusion/__init__.py:320"
+        "nonebot_plugin_xiuxian_2/features/illusion/application.py",
+        "nonebot_plugin_xiuxian_2/features/illusion/repository.py",
+        "nonebot_plugin_xiuxian_2/features/illusion/tests/test_illusion_application.py",
+        "tests/test_illusion_frozen_command_owner.py",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Illusion/__init__.py:54",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Illusion/__init__.py:334"
       ],
       "source_declaration_found": true,
       "source": {
@@ -9341,22 +9350,25 @@
       "id": "command:illusion:重置幻境",
       "kind": "commands",
       "entry": "illusion:重置幻境 (aliases: )",
-      "status": "受阻",
-      "reason": "The command is default-reachable and its legacy handler binding is recorded below. This item remains blocked until the handler's downstream state/effect ownership is reviewed; adjacent discoveries remain in backlog rather than expanding the frozen scope.",
-      "unknown_edge": "legacy handler -> downstream state/effect owner",
+      "status": "已迁移",
+      "reason": "The administrator command delegates full reset semantics, operation receipt and replay-safe state removal to IllusionApplication.clear and IllusionRepository.clear; historical receipts remain retained for recovery.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Illusion/__init__.py:51 illusion_reset = on_command('重置幻境') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Illusion/__init__.py:309 _ -> legacy downstream effect not closed in this frozen item"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Illusion/__init__.py:53 illusion_reset = on_command('重置幻境') -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Illusion/__init__.py:322 _ -> _run_illusion_action(reset) -> IllusionApplication.clear -> IllusionRepository.clear(reset_stats=True)"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Illusion/__init__.py:51",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Illusion/__init__.py:309"
+        "nonebot_plugin_xiuxian_2/features/illusion/application.py",
+        "nonebot_plugin_xiuxian_2/features/illusion/repository.py",
+        "nonebot_plugin_xiuxian_2/features/illusion/tests/test_illusion_application.py",
+        "tests/test_illusion_frozen_command_owner.py",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Illusion/__init__.py:53",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Illusion/__init__.py:322"
       ],
       "source_declaration_found": true,
       "source": {

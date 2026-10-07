@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Callable, Mapping
 
 from ...core.errors import ConflictError, DomainError, ValidationError
 from ...core.result import OperationOutcome, ReplyPlan
@@ -35,6 +35,61 @@ class IllusionApplication:
     def get_choice(self, user_id: str, period: str | None = None) -> dict[str, Any] | None:
         with DatabaseUnitOfWork(self.database) as uow:
             return self.repository.get_choice(uow, user_id, period or self.period_key())
+
+    def get_state(
+        self,
+        user_id: str,
+        *,
+        question_count: int,
+        period: str | None = None,
+        legacy_loader: Callable[[], Mapping[str, Any] | None] | None = None,
+    ) -> dict[str, Any]:
+        """Read/assign the daily question through the feature-owned projection."""
+        target_period = period or self.period_key()
+        with DatabaseUnitOfWork(self.database, read_only=True) as uow:
+            current = self.repository.get_state(uow, str(user_id), target_period)
+            if current is not None:
+                choice = self.repository.get_choice(uow, str(user_id), target_period)
+                if choice is not None:
+                    current["today_choice"] = choice["selected_option"]
+                return current
+        with DatabaseUnitOfWork(self.database, immediate=True) as uow:
+            current = self.repository.get_or_create_state(
+                uow,
+                user_id=str(user_id),
+                period=target_period,
+                question_count=question_count,
+                legacy_loader=legacy_loader,
+            )
+            choice = self.repository.get_choice(uow, str(user_id), target_period)
+            if choice is not None:
+                current["today_choice"] = choice["selected_option"]
+            return current
+
+    def get_question_stats(
+        self,
+        *,
+        period: str,
+        question_index: int,
+        option_count: int,
+        legacy_loader: Callable[[], list[list[int]] | None] | None = None,
+    ) -> list[int]:
+        with DatabaseUnitOfWork(self.database, read_only=True) as uow:
+            if self.repository.has_legacy_import(uow, "stats"):
+                return self.repository.get_question_stats(
+                    uow,
+                    period=period,
+                    question_index=question_index,
+                    option_count=option_count,
+                )
+        with DatabaseUnitOfWork(self.database, immediate=True) as uow:
+            return self.repository.get_question_stats(
+                uow,
+                period=period,
+                question_index=question_index,
+                option_count=option_count,
+                legacy_loader=legacy_loader,
+            )
 
     def get_result(self, operation_id: str) -> IllusionChoiceResult | None:
         with DatabaseUnitOfWork(self.database) as uow:
@@ -130,9 +185,56 @@ class IllusionApplication:
                 self.ledger.record_failure(self.database, operation_id, self.action, payload, str(exc))
                 raise
 
+    def clear(
+        self,
+        *,
+        operation_id: str,
+        user_id: str,
+        reset_stats: bool,
+    ) -> OperationOutcome[dict[str, Any]]:
+        """Clear daily state, optionally including aggregate statistics."""
+        operation_id = str(operation_id).strip()
+        user_id = str(user_id).strip() or "system"
+        action = "illusion.reset" if reset_stats else "illusion.clear"
+        payload = {"user_id": user_id, "reset_stats": bool(reset_stats)}
+        if not operation_id:
+            raise ValidationError("operation_id is required")
+        with trace_context(operation_id=operation_id, user_scope=user_id):
+            try:
+                with DatabaseUnitOfWork(self.database, immediate=True) as uow:
+                    existing = self.ledger.begin(uow, operation_id, action, payload)
+                    if existing is not None:
+                        previous = existing.outcome()
+                        if previous is not None:
+                            return previous.replay()
+                        raise ConflictError("操作正在处理中")
+                    data = self.repository.clear(
+                        uow,
+                        reset_stats=bool(reset_stats),
+                    )
+                    outcome = OperationOutcome.applied(
+                        operation_id,
+                        action,
+                        data=data,
+                        audit_category="illusion",
+                    )
+                    self.ledger.finish(uow, outcome)
+                    return outcome
+            except DomainError:
+                raise
+            except Exception as exc:
+                self.ledger.record_failure(self.database, operation_id, action, payload, str(exc))
+                raise
+
     def execute(self, *, operation_id: str, user_id: str, payload: Mapping[str, Any] | None = None) -> OperationOutcome[dict[str, Any]]:
         request = dict(payload or {})
         action = str(request.pop("action", "choose"))
+        if action in {"clear", "reset"}:
+            return self.clear(
+                operation_id=operation_id,
+                user_id=user_id,
+                reset_stats=action == "reset",
+            )
         if action != "choose":
             raise ValidationError(f"unsupported illusion action: {action}")
         return self.choose(

@@ -17,4 +17,12 @@ def apply_illusion(uow: DatabaseUnitOfWork) -> None:
     )
 
 
-__all__ = ["apply_illusion"]
+def apply_illusion_state(uow: DatabaseUnitOfWork) -> None:
+    IllusionRepository().ensure_schema(uow)
+    uow.execute(
+        "INSERT OR IGNORE INTO illusion_feature_migrations(version) VALUES (?)",
+        ("illusion.002",),
+    )
+
+
+__all__ = ["apply_illusion", "apply_illusion_state"]

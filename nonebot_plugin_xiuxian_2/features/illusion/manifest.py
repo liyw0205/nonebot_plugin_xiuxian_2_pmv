@@ -8,7 +8,7 @@ FEATURE = FeatureManifest(
     owner="gameplay",
     commands=commands_for("illusion"),
     config=(ConfigSpec("illusion_enabled", "bool", default=True, reloadable=True, description="Enable Illusion choice"),),
-    migration_version="illusion.001",
+    migration_version="illusion.002",
     test_tag="illusion",
 )
 

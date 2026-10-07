@@ -2,9 +2,11 @@
 
 状态：进行中。`v1.1.0` 的 P0-P7 发布证据继续保留，但不作为底层全面重构完成证明。
 
-**当前交付与队列（2026-10-07，本段优先于下文历史“下一片”）**：Arena 已在 `6b3fdc40` 提交推送，bank 已在 `c6ebdd26` 提交推送并核对远端；beg 三个真实入口、世界 BOSS 兑换、Dungeon 两条命令和 Fusion 单/强行合成已通过各自聚焦门禁。共享 matcher family 仍有其它插件受阻，全局计数更新为 `242/112/19/123`，目标仍进行中。下一组按 `allowed_features` 重新选择，不对已关闭功能重复重构。
+**当前交付与队列（2026-10-07，本段优先于下文历史“下一片”）**：Arena 已在 `6b3fdc40` 提交推送，bank 已在 `c6ebdd26` 提交推送并核对远端；beg 三个真实入口、世界 BOSS 兑换、Dungeon 两条命令、Fusion 四项冻结入口和 Illusion 四项冻结入口已通过各自聚焦门禁。共享 matcher family 仍有其它插件受阻，全局计数更新为 `246/112/19/119`，目标仍进行中。下一组按 `allowed_features` 重新选择，不对已关闭功能重复重构。
 
 **Fusion 冻结证据收口（2026-10-07）**：`合成` 与 `强行合成` 的默认 handler 已确认经 `general_fusion -> FusionApplication -> FusionRepository -> FusionService` 持有资产、回执和重放，不重复改写已有单次/批量事务。`合成帮助` 是静态帮助兼容路径，`查看可合成物品` 是共享目录只读展示兼容路径；两者不产生 Fusion 状态或资产副作用。四项冻结调用图刷新为当前 handler 行号，membership hash 不变；状态更新为 `242/112/19/123`（已迁移/兼容/不可达/受阻）。
+
+**Illusion 冻结证据收口（2026-10-07）**：四个命令入口现在都经过 feature owner：日常问题/选择使用 `illusion_user_state`、`illusion_choices` 和 `illusion_choice_stats`，管理员清空/重置使用带 operation ledger 的 `IllusionApplication.clear`；旧 JSON 只在首次兼容导入时读取，稳态请求不再读写它，旧操作回执保留以保证 reset 后重放安全。除本片所需状态 owner 与延迟物品目录加载外，不重复改写既有 choice 事务。状态更新为 `246/112/19/119`（已迁移/兼容/不可达/受阻）。
 
 **Dungeon 探索输入与冻结证据（2026-10-07）**：按队列只收口 `command:dungeon:副本兑换` 与 `command:dungeon:探索副本`。兑换确认现有 `DungeonApplication -> DungeonSessionSqlRepository` 已是唯一资产/回执 owner，仅刷新冻结调用图，不重复重构购买事务。探索新增 `DungeonExploreSnapshotApplication`：成员资料复用只读 `PlayerProfileApplication`，`user_cd` 与背包在单个只读 UOW 中批量读取；缺数据库、表或列 fail closed，不创建库或启用 WAL。命令 handler 只组装快照，intent/prepare/settle 仍由既有 DungeonApplication 持有；战斗、队伍管理和奖励算法不在本片范围。两条冻结项已标记为已迁移，membership hash 仍为 `7787a74a...ff51fac`，该片完成后全局状态为 `240/110/19/127`（已迁移/兼容/不可达/受阻），其余 blocker 不影响本批交付。
 

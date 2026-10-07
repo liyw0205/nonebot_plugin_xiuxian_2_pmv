@@ -14,6 +14,7 @@ from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_Illusion.IllusionData import (
     DEFAULT_QUESTIONS,
     IllusionData,
 )
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_Illusion import _select_random_item
 
 
 class IllusionDataTests(unittest.TestCase):
@@ -93,6 +94,28 @@ class IllusionDataTests(unittest.TestCase):
         self.assertTrue(self.stats_file.exists())
         self.assertFalse((self.data_path / "user-3.json").exists())
         self.assertEqual(IllusionData.get_stats()["question_stats"][0][0], 1)
+
+    def test_missing_catalog_entry_is_no_item_reward(self) -> None:
+        from unittest.mock import patch
+
+        class EmptyCatalog:
+            def get_random_id_list_by_rank_and_item_type(self, rank, item_type):
+                return []
+
+            def get_data_by_item_id(self, item_id):
+                return None
+
+        with patch(
+            "nonebot_plugin_xiuxian_2.xiuxian.xiuxian_Illusion._items",
+            None,
+        ), patch(
+            "nonebot_plugin_xiuxian_2.xiuxian.xiuxian_Illusion.Items",
+            return_value=EmptyCatalog(),
+        ), patch(
+            "nonebot_plugin_xiuxian_2.xiuxian.xiuxian_Illusion.random.choice",
+            side_effect=["功法", "20001"],
+        ):
+            self.assertIsNone(_select_random_item("结丹境初期"))
 
 
 if __name__ == "__main__":
