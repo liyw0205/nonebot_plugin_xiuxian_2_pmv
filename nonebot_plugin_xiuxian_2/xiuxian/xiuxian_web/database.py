@@ -309,6 +309,9 @@ def batch_edit(table_name):
         return jsonify({"success": False, "error": "批量修改字段不存在"})
     if search_field and search_field not in fields:
         return jsonify({"success": False, "error": "搜索字段不存在"})
+
+    if not apply_to_all and not (search_value and search_value.strip()):
+        return jsonify({"success": False, "error": "请填写搜索内容，或勾选应用到整张表"})
     
     # 如果是全字段搜索但未选择批量修改字段
     if (not search_field or search_field == '') and not batch_field:
