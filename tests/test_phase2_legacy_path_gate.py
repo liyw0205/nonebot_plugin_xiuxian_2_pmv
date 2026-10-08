@@ -80,7 +80,7 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
                              if (item.get("source") or {}).get("feature") == "sect"))
         self.assertEqual(report["path_count"], 496)
         self.assertEqual(report["status_counts"],
-                         {"不可达": 19, "允许保留的兼容路径": 139, "受阻": 15, "已迁移": 323})
+                         {"不可达": 19, "允许保留的兼容路径": 139, "受阻": 14, "已迁移": 324})
         self.assertTrue(report["frozen_membership_valid"])
         self.assertEqual(report["integrity_errors"], [])
 
@@ -399,7 +399,7 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
             self.assertIn(evidence, system_item["evidence"])
         self.assertNotIn("legacy downstream effect not closed", system_graph)
         self.assertEqual(report["status_counts"],
-                         {"不可达": 19, "允许保留的兼容路径": 139, "受阻": 15, "已迁移": 323})
+                         {"不可达": 19, "允许保留的兼容路径": 139, "受阻": 14, "已迁移": 324})
         self.assertTrue(report["frozen_membership_valid"])
         self.assertEqual(report["integrity_errors"], [])
 
@@ -473,7 +473,7 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
                 self.assertNotIn("downstream state effect not closed", graph)
 
         self.assertEqual(report["status_counts"],
-                         {"不可达": 19, "允许保留的兼容路径": 139, "受阻": 15, "已迁移": 323})
+                         {"不可达": 19, "允许保留的兼容路径": 139, "受阻": 14, "已迁移": 324})
         self.assertEqual(report["path_count"], 496)
         self.assertTrue(report["frozen_membership_valid"])
         self.assertEqual(report["integrity_errors"], [])
@@ -522,7 +522,7 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
         self.assertNotIn("legacy downstream effect not closed", claim_graph)
         self.assertEqual(
             report["status_counts"],
-            {"不可达": 19, "允许保留的兼容路径": 139, "受阻": 15, "已迁移": 323},
+            {"不可达": 19, "允许保留的兼容路径": 139, "受阻": 14, "已迁移": 324},
         )
         self.assertTrue(report["frozen_membership_valid"])
         self.assertEqual(report["integrity_errors"], [])
@@ -581,7 +581,7 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
 
         self.assertEqual(
             report["status_counts"],
-            {"不可达": 19, "允许保留的兼容路径": 139, "受阻": 15, "已迁移": 323},
+            {"不可达": 19, "允许保留的兼容路径": 139, "受阻": 14, "已迁移": 324},
         )
 
     def test_world_events_demon_claim_command_owns_atomic_claim_statistic(self):
@@ -613,7 +613,7 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
         self.assertEqual(report["integrity_errors"], [])
         self.assertEqual(
             report["status_counts"],
-            {"不可达": 19, "允许保留的兼容路径": 139, "受阻": 15, "已迁移": 323},
+            {"不可达": 19, "允许保留的兼容路径": 139, "受阻": 14, "已迁移": 324},
         )
         self.assertTrue(report["frozen_membership_valid"])
 
@@ -661,7 +661,7 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
 
         self.assertEqual(
             report["status_counts"],
-            {"不可达": 19, "允许保留的兼容路径": 139, "受阻": 15, "已迁移": 323},
+            {"不可达": 19, "允许保留的兼容路径": 139, "受阻": 14, "已迁移": 324},
         )
         self.assertTrue(report["frozen_membership_valid"])
         self.assertEqual(report["integrity_errors"], [])
@@ -718,7 +718,7 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
         self.assertEqual(report["path_count"], 496)
         self.assertEqual(
             report["status_counts"],
-            {"不可达": 19, "允许保留的兼容路径": 139, "受阻": 15, "已迁移": 323},
+            {"不可达": 19, "允许保留的兼容路径": 139, "受阻": 14, "已迁移": 324},
         )
         self.assertGreater(report["blocked_count"], 0)
         self.assertTrue(all(item["call_graph"] and item["evidence"] for item in report["items"]))
@@ -1548,7 +1548,7 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
         self.assertIn("authenticated reward_center.html", " ".join(page["call_graph"]))
         self.assertEqual(
             report["status_counts"],
-            {"不可达": 19, "允许保留的兼容路径": 139, "受阻": 15, "已迁移": 323},
+            {"不可达": 19, "允许保留的兼容路径": 139, "受阻": 14, "已迁移": 324},
         )
 
     def test_legacy_logs_routes_share_file_and_message_owners(self):
@@ -1578,7 +1578,7 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
         self.assertIn("render_template(logs.html)", " ".join(page["call_graph"]))
         self.assertEqual(
             report["status_counts"],
-            {"不可达": 19, "允许保留的兼容路径": 139, "受阻": 15, "已迁移": 323},
+            {"不可达": 19, "允许保留的兼容路径": 139, "受阻": 14, "已迁移": 324},
         )
 
     def test_messages_routes_record_owner_edges_and_remaining_compatibility(self):
@@ -1616,7 +1616,7 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
 
         compatibility = {
             "api_messages_media_proxy": ("允许保留的兼容路径", "QQ rkey cache", "tests/test_message_media_proxy_safety.py"),
-            "api_messages_bots": ("允许保留的兼容路径", "get_bots", "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:1041"),
+            "api_messages_bots": ("允许保留的兼容路径", "get_bots", "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:641"),
             "messages_page": ("允许保留的兼容路径", "render_template(messages.html)", "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/templates/messages.html"),
         }
         for function, (status, edge, evidence) in compatibility.items():
@@ -1634,14 +1634,17 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
 
         send = next(item for item in items.values() if item.get("source", {}).get("function") == "api_messages_send")
         send_graph = " ".join(send["call_graph"])
-        self.assertEqual(send["status"], "受阻")
+        self.assertEqual(send["status"], "已迁移")
+        self.assertIn("WebMessageSendApplication.send", send_graph)
         self.assertIn("MessageReplyRepository", send_graph)
-        self.assertIn("legacy Flask function still owns", send["reason"])
         self.assertIn("run_async", send_graph)
-        self.assertIn("unknown_edge", send)
+        self.assertNotIn("unknown_edge", send)
+        self.assertTrue(any("features/messages/send_application.py" in value for value in send["evidence"]))
+        self.assertIn("nonebot_plugin_xiuxian_2/features/messages/tests/test_send_application.py", send["evidence"])
+        self.assertIn("tests/test_web_message_send_routes.py", send["evidence"])
         self.assertEqual(
             report["status_counts"],
-            {"不可达": 19, "允许保留的兼容路径": 139, "受阻": 15, "已迁移": 323},
+            {"不可达": 19, "允许保留的兼容路径": 139, "受阻": 14, "已迁移": 324},
         )
         self.assertEqual(len(report["items"]), 496)
         self.assertTrue(report["frozen_membership_valid"])
@@ -1759,7 +1762,7 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
 
         self.assertEqual(
             report["status_counts"],
-            {"不可达": 19, "允许保留的兼容路径": 139, "受阻": 15, "已迁移": 323},
+            {"不可达": 19, "允许保留的兼容路径": 139, "受阻": 14, "已迁移": 324},
         )
         self.assertEqual(report["path_count"], 496)
         self.assertTrue(report["frozen_membership_valid"])
@@ -1834,9 +1837,15 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
             and node.name == "api_messages_send"
         )
         send_handler_source = ast.get_source_segment(messages_text, send_handler) or ""
-        self.assertIn("sticker_application.resolve_sticker_path(sticker_token)", send_handler_source)
+        self.assertIn("_message_send_application().send", send_handler_source)
+        self.assertNotIn("delivery_service.send", send_handler_source)
         self.assertNotIn("from .stickers import resolve_sticker_path", messages_text)
         self.assertIn("sticker_application", messages_text)
+        send_application = (
+            root / "nonebot_plugin_xiuxian_2/features/messages/send_application.py"
+        ).read_text(encoding="utf-8")
+        self.assertIn("self._sticker_application.resolve_sticker_path(sticker_token)", send_application)
+        self.assertIn("await self._transport.send", send_application)
 
         self.assertTrue(report["frozen_membership_valid"])
         self.assertEqual(report["integrity_errors"], [])

@@ -11966,7 +11966,7 @@
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/logs.py:38",
         "nonebot_plugin_xiuxian_2/features/logs/application.py",
         "nonebot_plugin_xiuxian_2/features/logs/message_repository.py",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:55,1808,2129",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:89-149,1219-1243,1343-1462,1464-1531,1534-1560",
         "tests/test_logs_routes.py",
         "nonebot_plugin_xiuxian_2/features/logs/tests/test_logs_application.py"
       ],
@@ -12019,11 +12019,11 @@
       "status": "允许保留的兼容路径",
       "reason": "This authenticated endpoint is a runtime Bot directory projection over NoneBot get_bots; it computes adapter labels and avatar URLs but does not own persistent application state. Keep it as a web compatibility adapter.",
       "call_graph": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:1041 api_messages_bots -> get_bots -> adapter nickname/avatar projection -> legacy JSON envelope"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:641 api_messages_bots -> get_bots -> adapter nickname/avatar projection -> legacy JSON envelope"
       ],
       "evidence": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:1041",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:1041-1095"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:641",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:641-672"
       ],
       "source_declaration_found": true,
       "source": {
@@ -12042,10 +12042,10 @@
       "status": "已迁移",
       "reason": "The authenticated compatibility endpoint parses legacy request fields and delegates task creation, target claiming and delivery orchestration through broadcast_manager to AdminBroadcastApplication and its repositories/ports.",
       "call_graph": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:913 api_messages_broadcast -> broadcast_manager.start_broadcast -> AdminBroadcastApplication.start -> AdminBroadcastRepository and history/sender ports"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:513 api_messages_broadcast -> broadcast_manager.start_broadcast -> AdminBroadcastApplication.start -> AdminBroadcastRepository and history/sender ports"
       ],
       "evidence": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:913",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:513",
         "nonebot_plugin_xiuxian_2/xiuxian/broadcast_manager.py:185-260",
         "nonebot_plugin_xiuxian_2/features/admin/broadcast_application.py",
         "nonebot_plugin_xiuxian_2/features/admin/broadcast_repository.py",
@@ -12068,10 +12068,10 @@
       "status": "已迁移",
       "reason": "The authenticated status endpoint formats the legacy response from broadcast_manager, whose status projection delegates to AdminBroadcastApplication.status.",
       "call_graph": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:968 api_messages_broadcast_status -> format_broadcast_status -> AdminBroadcastApplication.status -> AdminBroadcastRepository"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:568 api_messages_broadcast_status -> format_broadcast_status -> AdminBroadcastApplication.status -> AdminBroadcastRepository"
       ],
       "evidence": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:968",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:568",
         "nonebot_plugin_xiuxian_2/xiuxian/broadcast_manager.py:262-290",
         "nonebot_plugin_xiuxian_2/features/admin/broadcast_application.py",
         "nonebot_plugin_xiuxian_2/features/admin/broadcast_repository.py",
@@ -12094,10 +12094,10 @@
       "status": "已迁移",
       "reason": "The authenticated read route obtains message database retention settings and recording state from AdminConfigApplication, the owner of the legacy configuration projection.",
       "call_graph": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:271 api_messages_config -> AdminConfigApplication.get_message_db_config/is_message_record_enabled -> AdminConfigRepository"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:287 api_messages_config -> AdminConfigApplication.get_message_db_config/is_message_record_enabled -> AdminConfigRepository"
       ],
       "evidence": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:271",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:287",
         "nonebot_plugin_xiuxian_2/features/admin/config_application.py",
         "nonebot_plugin_xiuxian_2/features/admin/config_repository.py",
         "tests/test_admin_config_owner.py"
@@ -12119,10 +12119,10 @@
       "status": "已迁移",
       "reason": "The authenticated update route validates legacy integer bounds and delegates message database settings updates to AdminConfigApplication; the existing JSON envelope is preserved.",
       "call_graph": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:283 api_messages_config_save -> bounds validation -> AdminConfigApplication.update_message_db_config -> AdminConfigRepository"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:299 api_messages_config_save -> bounds validation -> AdminConfigApplication.update_message_db_config -> AdminConfigRepository"
       ],
       "evidence": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:283",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:299",
         "nonebot_plugin_xiuxian_2/features/admin/config_application.py",
         "nonebot_plugin_xiuxian_2/features/admin/config_repository.py",
         "tests/test_admin_config_owner.py"
@@ -12144,10 +12144,10 @@
       "status": "已迁移",
       "reason": "The authenticated dates route delegates filtering and grouped date/count queries to MessageHistoryRepository; localized labels remain route presentation only.",
       "call_graph": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:345 api_messages_dates -> _message_history_repository().dates -> MessageHistoryRepository.dates -> read-only message DB unit of work -> localized date labels"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:361 api_messages_dates -> _message_history_repository().dates -> MessageHistoryRepository.dates -> read-only message DB unit of work -> localized date labels"
       ],
       "evidence": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:345",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:361",
         "nonebot_plugin_xiuxian_2/features/logs/history_repository.py:119-189",
         "tests/test_web_message_history_routes.py",
         "nonebot_plugin_xiuxian_2/features/logs/tests/test_history_repository.py"
@@ -12169,10 +12169,10 @@
       "status": "已迁移",
       "reason": "The authenticated group remark route delegates read and write behavior to AdminConfigApplication; it retains the legacy request aliases and response fields.",
       "call_graph": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:223 api_messages_group_remark -> AdminConfigApplication.set_group_remark/get_group_remark -> AdminConfigRepository"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:239 api_messages_group_remark -> AdminConfigApplication.set_group_remark/get_group_remark -> AdminConfigRepository"
       ],
       "evidence": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:223",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:239",
         "nonebot_plugin_xiuxian_2/features/admin/config_application.py:38-57",
         "nonebot_plugin_xiuxian_2/features/admin/config_repository.py",
         "tests/test_admin_config_owner.py"
@@ -12194,10 +12194,10 @@
       "status": "已迁移",
       "reason": "The authenticated list route delegates SQL filtering, pagination and count behavior to MessageHistoryRepository; row presentation remains a bounded compatibility presenter passed into the read-only query boundary.",
       "call_graph": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:307 api_messages_list -> _message_history_repository().list_messages -> MessageHistoryRepository.list_messages -> read-only message DB unit of work -> _prepare_message_rows"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:323 api_messages_list -> _message_history_repository().list_messages -> MessageHistoryRepository.list_messages -> read-only message DB unit of work -> _prepare_message_rows"
       ],
       "evidence": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:307",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:323",
         "nonebot_plugin_xiuxian_2/features/logs/history_repository.py:22-118",
         "tests/test_web_message_history_routes.py",
         "nonebot_plugin_xiuxian_2/features/logs/tests/test_history_repository.py"
@@ -12219,10 +12219,10 @@
       "status": "已迁移",
       "reason": "The authenticated older-history route delegates bounded page-size cursor querying to MessageHistoryRepository and preserves the legacy JSON response shape.",
       "call_graph": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:440 api_messages_list_before -> _message_history_repository().list_before -> MessageHistoryRepository.list_before -> read-only message DB unit of work -> _prepare_message_rows"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:456 api_messages_list_before -> _message_history_repository().list_before -> MessageHistoryRepository.list_before -> read-only message DB unit of work -> _prepare_message_rows"
       ],
       "evidence": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:440",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:456",
         "nonebot_plugin_xiuxian_2/features/logs/history_repository.py:318-405",
         "tests/test_web_message_history_routes.py",
         "nonebot_plugin_xiuxian_2/features/logs/tests/test_history_repository.py"
@@ -12244,10 +12244,10 @@
       "status": "已迁移",
       "reason": "The authenticated incremental message route delegates cursor filtering to MessageHistoryRepository and preserves route parsing and response compatibility.",
       "call_graph": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:413 api_messages_list_since -> _message_history_repository().list_since -> MessageHistoryRepository.list_since -> read-only message DB unit of work -> _prepare_message_rows"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:429 api_messages_list_since -> _message_history_repository().list_since -> MessageHistoryRepository.list_since -> read-only message DB unit of work -> _prepare_message_rows"
       ],
       "evidence": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:413",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:429",
         "nonebot_plugin_xiuxian_2/features/logs/history_repository.py:274-317",
         "tests/test_web_message_history_routes.py",
         "nonebot_plugin_xiuxian_2/features/logs/tests/test_history_repository.py"
@@ -12269,10 +12269,10 @@
       "status": "已迁移",
       "reason": "The authenticated preview route delegates Markdown conversion and HTML sanitization to the shared web preview adapter and preserves its JSON response envelope.",
       "call_graph": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:1680 api_messages_markdown_preview -> render_markdown_preview -> bounded Markdown conversion and HTML sanitization"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:1280 api_messages_markdown_preview -> render_markdown_preview -> bounded Markdown conversion and HTML sanitization"
       ],
       "evidence": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:1680",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:1280",
         "nonebot_plugin_xiuxian_2/adapters/web/markdown_preview.py",
         "tests/test_markdown_preview_security.py"
       ],
@@ -12293,11 +12293,11 @@
       "status": "允许保留的兼容路径",
       "reason": "The legacy proxy remains the compatibility boundary for QQ rkey cache learning and message database fallback. Its download helper now owns allowlisted URL validation, redirect revalidation and bounded streaming; the route still coordinates rkey retries and response headers.",
       "call_graph": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:1110 api_messages_media_proxy -> is_allowed_media_proxy_url/download_media_bytes -> allowlisted redirects and 30 MiB bounded stream",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:710 api_messages_media_proxy -> is_allowed_media_proxy_url/download_media_bytes -> allowlisted redirects and 30 MiB bounded stream",
         "The compatibility handler applies the daily QQ rkey cache and may learn a fresh rkey from message history before retrying; it then preserves MIME and cache headers"
       ],
       "evidence": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:1110",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:710",
         "nonebot_plugin_xiuxian_2/adapters/web/media_proxy.py",
         "tests/test_message_media_proxy_safety.py"
       ],
@@ -12318,10 +12318,10 @@
       "status": "已迁移",
       "reason": "The authenticated route delegates adapter recall and message-log reconciliation to MessageRecallApplication and MessageRecallRepository; Flask retains input parsing and the existing response envelope.",
       "call_graph": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:986 api_messages_revoke -> MessageRecallApplication.revoke -> delivery_service recall port and MessageRecallRepository log update"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:586 api_messages_revoke -> MessageRecallApplication.revoke -> delivery_service recall port and MessageRecallRepository log update"
       ],
       "evidence": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:986",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:586",
         "nonebot_plugin_xiuxian_2/features/logs/message_recall_application.py",
         "nonebot_plugin_xiuxian_2/features/logs/message_recall_repository.py",
         "nonebot_plugin_xiuxian_2/features/logs/tests/test_message_recall_application.py"
@@ -12340,17 +12340,20 @@
       "id": "route:POST:/api/messages/send:nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:api_messages_send",
       "kind": "legacy_routes",
       "entry": "POST /api/messages/send -> nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:api_messages_send",
-      "status": "受阻",
-      "reason": "The handler has begun delegating QQ reply/reference candidate reads to MessageReplyRepository, but the legacy Flask function still owns send-mode normalization, adapter/scene branching, media handling, direct API calls and synchronous delivery waits. No send application owns that complete orchestration yet, so this path is not marked migrated.",
-      "unknown_edge": "route function -> old data/service or feature application -> state effect",
+      "status": "已迁移",
+      "reason": "The Flask adapter preserves admin-session checking, JSON/multipart parsing, run_async, and the legacy JSON envelope while delegating complete send policy to WebMessageSendApplication. The application reuses MessageReplyRepository, StickerApplication, MessageDeliveryService, upload storage, and the existing OB11 API/recording adapters.",
       "call_graph": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:472 api_messages_send -> legacy request validation and message construction -> adapter/scene-specific direct send orchestration",
-        "QQ reply/reference candidate branches -> MessageReplyRepository -> read-only message DB queries; remaining send branches call delivery_service or adapter APIs synchronously through run_async"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:488 api_messages_send -> admin session and JSON/multipart adapter -> run_async -> WebMessageSendApplication.send",
+        "WebMessageSendApplication.send -> send-mode, adapter/scene, media, quote and QQ reply-candidate policy -> MessageReplyRepository read-only queries, existing StickerApplication, upload saver, MessageDeliveryService.send, or OB11 direct API plus message recorder"
       ],
       "evidence": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:472",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:65-82,487-510",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:488",
+        "nonebot_plugin_xiuxian_2/features/messages/send_application.py:27-57,67-443",
         "nonebot_plugin_xiuxian_2/features/logs/message_reply_repository.py",
         "nonebot_plugin_xiuxian_2/features/logs/tests/test_message_reply_repository.py",
+        "nonebot_plugin_xiuxian_2/features/stickers/runtime.py",
+        "nonebot_plugin_xiuxian_2/features/messages/tests/test_send_application.py",
         "tests/test_web_message_send_routes.py"
       ],
       "source_declaration_found": true,
@@ -12370,10 +12373,10 @@
       "status": "已迁移",
       "reason": "The authenticated pin route delegates pinned-state reads and writes to AdminConfigApplication, preserving explicit set and toggle behavior.",
       "call_graph": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:244 api_messages_session_pin -> AdminConfigApplication.is_session_pinned/set_session_pinned -> AdminConfigRepository"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:260 api_messages_session_pin -> AdminConfigApplication.is_session_pinned/set_session_pinned -> AdminConfigRepository"
       ],
       "evidence": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:244",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:260",
         "nonebot_plugin_xiuxian_2/features/admin/config_application.py:59-66",
         "nonebot_plugin_xiuxian_2/features/admin/config_repository.py",
         "tests/test_admin_config_owner.py"
@@ -12395,10 +12398,10 @@
       "status": "已迁移",
       "reason": "The authenticated session list route delegates query and aggregate behavior to MessageHistoryRepository; display profile and session preferences are projected at the web boundary.",
       "call_graph": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:374 api_messages_sessions -> _message_history_repository().sessions -> MessageHistoryRepository.sessions -> read-only message DB unit of work -> _prepare_session_rows"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:390 api_messages_sessions -> _message_history_repository().sessions -> MessageHistoryRepository.sessions -> read-only message DB unit of work -> _prepare_session_rows"
       ],
       "evidence": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:374",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:390",
         "nonebot_plugin_xiuxian_2/features/logs/history_repository.py:190-198",
         "tests/test_web_message_history_routes.py",
         "nonebot_plugin_xiuxian_2/features/logs/tests/test_history_repository.py"
@@ -12420,10 +12423,10 @@
       "status": "已迁移",
       "reason": "The authenticated session incremental route delegates cursor filtering and query behavior to MessageHistoryRepository; the same presenter prepares display fields.",
       "call_graph": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:390 api_messages_sessions_since -> _message_history_repository().sessions_since -> MessageHistoryRepository.sessions_since -> read-only message DB unit of work -> _prepare_session_rows"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:406 api_messages_sessions_since -> _message_history_repository().sessions_since -> MessageHistoryRepository.sessions_since -> read-only message DB unit of work -> _prepare_session_rows"
       ],
       "evidence": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:390",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:406",
         "nonebot_plugin_xiuxian_2/features/logs/history_repository.py:199-273",
         "tests/test_web_message_history_routes.py",
         "nonebot_plugin_xiuxian_2/features/logs/tests/test_history_repository.py"
@@ -14158,10 +14161,10 @@
       "status": "允许保留的兼容路径",
       "reason": "The authenticated route renders the existing messages.html frontend used by the legacy web application; it is retained as a page/URL compatibility entry rather than claimed as a migrated business owner.",
       "call_graph": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:216 messages_page -> admin_id session check -> render_template(messages.html)"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:232 messages_page -> admin_id session check -> render_template(messages.html)"
       ],
       "evidence": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:216",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:232",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/templates/messages.html"
       ],
       "source_declaration_found": true,

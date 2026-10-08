@@ -2,7 +2,6 @@ import base64
 from urllib.parse import quote
 
 from .core import (
-    ALLOWED_MEDIA_TYPES,
     Response,
     runtime_clock,
     XiuConfig,
@@ -34,13 +33,14 @@ from .core import (
     url_for,
 )
 from ..broadcast_manager import format_broadcast_status, start_broadcast
-from ..messaging import SendRequest, delivery_service
+from ..messaging import delivery_service
 from ..xiuxian_utils.http_proxy import http_client
 from ...features.admin.config_application import AdminConfigApplication
 from ...features.logs.history_repository import MessageHistoryRepository
 from ...features.logs.message_recall_application import MessageRecallApplication
 from ...features.logs.message_recall_repository import MessageRecallRepository
 from ...features.logs.message_reply_repository import MessageReplyRepository
+from ...features.messages import WebMessageSendApplication
 from ...adapters.web.media_proxy import (
     MediaProxyTooLarge,
     download_media_bytes,
@@ -64,6 +64,22 @@ def _message_history_repository() -> MessageHistoryRepository:
 
 def _message_reply_repository() -> MessageReplyRepository:
     return MessageReplyRepository(get_paths().message_db, now=runtime_clock.now)
+
+
+def _message_send_application() -> WebMessageSendApplication:
+    return WebMessageSendApplication(
+        bot_resolver=get_bot_by_adapter,
+        bot_id_resolver=get_bot_id,
+        is_ob11_adapter=is_ob11_adapter_name,
+        message_builder=build_web_message_segment,
+        reply_repository_factory=lambda: _message_reply_repository(),
+        sticker_application=sticker_application,
+        upload_saver=save_uploaded_media,
+        transport=delivery_service,
+        message_id_extractor=extract_result_message_id,
+        web_send_recorder=record_web_send_message,
+        logger=logger,
+    )
 
 
 def _admin_config_application() -> AdminConfigApplication:
@@ -482,426 +498,10 @@ def api_messages_send():
             data = request.get_json() or {}
             upload_file = None
 
-        adapter = str(data.get("adapter", "")).strip()
-        scene = str(data.get("scene", "")).strip()
-        target_id = str(data.get("target_id", "")).strip()
-        content = str(data.get("content", "") or "")
-        send_mode = str(data.get("send_mode", "plain") or "plain").strip()
-        media_type = str(data.get("media_type", "") or "").strip()
-        media_url = str(data.get("media_url", "") or "").strip()
-        sticker_token = str(data.get("sticker", "") or data.get("sticker_token", "") or "").strip()
-        reply_message_id = str(data.get("reply_message_id", "") or "").strip()
-        quote_message_id = str(data.get("quote_message_id", "") or "").strip()
-        quote_reference_id = str(data.get("quote_reference_id", "") or "").strip()
-        active_send = str(data.get("active_send", "") or "").strip().lower() in ("1", "true", "yes", "on")
-
-        reply_from_quote_message_id = False
-        if (
-            quote_message_id
-            and not quote_message_id.startswith("REFIDX")
-            and not reply_message_id
-            and not quote_reference_id
-        ):
-            reply_message_id = quote_message_id
-            reply_from_quote_message_id = True
-
-        if send_mode not in ("plain", "markdown"):
-            send_mode = "plain"
-
-        if send_mode == "markdown":
-            quote_message_id = ""
-            quote_reference_id = ""
-            if reply_from_quote_message_id:
-                reply_message_id = ""
-
-        if media_type and media_type not in ALLOWED_MEDIA_TYPES:
-            return jsonify({"success": False, "error": "无效 media_type"})
-
-        if not adapter:
-            return jsonify({"success": False, "error": "缺少 adapter"})
-
-        if scene not in ("group", "private", "channel_group", "channel_private"):
-            return jsonify({"success": False, "error": "无效 scene"})
-
-        if not target_id:
-            return jsonify({"success": False, "error": "缺少 target_id"})
-
-        if not content and not media_url and not upload_file and not sticker_token:
-            return jsonify({"success": False, "error": "消息不能为空"})
-
-        bot = get_bot_by_adapter(adapter)
-        if not bot:
-            return jsonify({"success": False, "error": f"未找到在线 {adapter} Bot"})
-
-        bot_id = get_bot_id(bot)
-
-        # 处理媒体输入
-        media_input = None
-        saved_file_path = None
-
-        if sticker_token:
-            sticker_path = sticker_application.resolve_sticker_path(sticker_token)
-            if sticker_path is None:
-                return jsonify({"success": False, "error": "表情包不存在或未安装"})
-            media_type = "image"
-            media_input = sticker_path
-            # 贴纸单独发送：忽略正文，避免混发失败
-            content = ""
-            send_mode = "plain"
-        elif media_url:
-            media_input = media_url
-        elif upload_file:
-            saved_file_path = save_uploaded_media(upload_file)
-            media_input = saved_file_path
-
-        # Markdown 模式不混媒体，有媒体时自动降级普通消息
-        if send_mode == "markdown" and media_input is not None:
-            send_mode = "plain"
-
-        # =========================================================
-        # OneBot V11
-        # =========================================================
-        if is_ob11_adapter_name(adapter):
-
-            # -----------------------------------------------------
-            # OB11 Markdown：不走 markdown 消息段，改走单节点合并转发
-            # -----------------------------------------------------
-            if send_mode == "markdown":
-                merged_content = content or " "
-
-                node_name = "聊天记录"
-                node_uin = str(bot_id or getattr(bot, "self_id", "10000") or "10000")
-
-                messages = [
-                    {
-                        "type": "node",
-                        "data": {
-                            "name": node_name,
-                            "uin": node_uin,
-                            "content": merged_content,
-                        },
-                    }
-                ]
-
-                if scene == "group":
-                    result = run_async(
-                        bot.call_api(
-                            "send_group_forward_msg",
-                            group_id=int(target_id),
-                            messages=messages,
-                        )
-                    )
-
-                    message_id = extract_result_message_id(result)
-
-                    record_web_send_message(
-                        bot,
-                        scene="group",
-                        message_id=message_id,
-                        source_message_id="",
-                        group_id=target_id,
-                        user_id="",
-                        message=content,
-                    )
-
-                    return jsonify({
-                        "success": True,
-                        "message": "Markdown 已通过合并转发发送",
-                        "message_id": message_id,
-                    })
-
-                elif scene == "private":
-                    result = run_async(
-                        bot.call_api(
-                            "send_private_forward_msg",
-                            user_id=int(target_id),
-                            messages=messages,
-                        )
-                    )
-
-                    message_id = extract_result_message_id(result)
-
-                    record_web_send_message(
-                        bot,
-                        scene="private",
-                        message_id=message_id,
-                        source_message_id="",
-                        group_id="",
-                        user_id=target_id,
-                        message=content,
-                    )
-
-                    return jsonify({
-                        "success": True,
-                        "message": "Markdown 已通过私聊合并转发发送",
-                        "message_id": message_id,
-                    })
-
-                else:
-                    return jsonify({
-                        "success": False,
-                        "error": "OneBot V11 Markdown 合并转发暂只支持 group/private",
-                    })
-
-            # -----------------------------------------------------
-            # OB11 普通消息：统一使用 call_api
-            # -----------------------------------------------------
-            message_obj = build_web_message_segment(
-                bot,
-                content=content,
-                send_mode="plain",
-                media_type=media_type,
-                media_input=media_input,
-            )
-
-            if scene == "group":
-                send_result = run_async(
-                    delivery_service.send(
-                        bot,
-                        SendRequest("group", target_id, message_obj),
-                    )
-                )
-
-                return jsonify({
-                    "success": True,
-                    "message": "发送成功",
-                    "message_id": send_result.message_id,
-                })
-
-            elif scene == "private":
-                send_result = run_async(
-                    delivery_service.send(
-                        bot,
-                        SendRequest("private", target_id, message_obj),
-                    )
-                )
-
-                return jsonify({
-                    "success": True,
-                    "message": "发送成功",
-                    "message_id": send_result.message_id,
-                })
-
-            return jsonify({
-                "success": False,
-                "error": "OneBot V11 暂只支持 group/private 主动发送",
-            })
-
-        # =========================================================
-        # 非 OB11：先构造消息段
-        # QQ Markdown 仍然可以走 MessageSegment.markdown
-        # =========================================================
-        message_obj = build_web_message_segment(
-            bot,
-            content=content,
-            send_mode=send_mode,
-            media_type=media_type,
-            media_input=media_input,
-            quote_message_id="" if adapter == "QQ" else quote_message_id,
+        result = run_async(
+            _message_send_application().send(data, upload_file=upload_file)
         )
-
-        # =========================================================
-        # QQ：主动发送 / 回复式发送
-        # =========================================================
-        if adapter == "QQ":
-            reply_repository = _message_reply_repository()
-
-            def build_qq_message_obj(reference_id: str = ""):
-                return build_web_message_segment(
-                    bot,
-                    content=content,
-                    send_mode=send_mode,
-                    media_type=media_type,
-                    media_input=media_input,
-                    quote_message_id=reference_id,
-                )
-
-            def resolve_qq_quote_reference_id() -> tuple[str, str]:
-                if quote_reference_id:
-                    ref_candidate = reply_repository.get_specific_reference_candidate_for_qq(
-                        scene=scene,
-                        target_id=target_id,
-                        reference_id=quote_reference_id,
-                    )
-                    if ref_candidate:
-                        return str(ref_candidate.get("reference_id") or quote_reference_id), ""
-                    return "", "指定引用消息不可用：可能不属于当前会话，或消息记录已不存在"
-
-                if not quote_message_id:
-                    return "", ""
-
-                if quote_message_id.startswith("REFIDX"):
-                    return quote_message_id, ""
-
-                ref_candidate = reply_repository.get_specific_reference_candidate_for_qq(
-                    scene=scene,
-                    target_id=target_id,
-                    message_id=quote_message_id,
-                )
-                if ref_candidate:
-                    ref_id = str(ref_candidate.get("reference_id") or "")
-                    if ref_id:
-                        return ref_id, ""
-                    if scene in ("channel_group", "channel_private"):
-                        return str(ref_candidate.get("message_id") or ""), ""
-
-                if scene in ("channel_group", "channel_private"):
-                    return quote_message_id, ""
-
-                return "", ""
-
-            message_reference_id, reference_error = resolve_qq_quote_reference_id()
-            if reference_error:
-                return jsonify({
-                    "success": False,
-                    "error": reference_error,
-                })
-
-            if active_send:
-                try:
-                    source_message_id = ""
-                    if reply_message_id:
-                        candidate = reply_repository.get_specific_reply_candidate_for_qq(
-                            scene=scene,
-                            target_id=target_id,
-                            message_id=reply_message_id,
-                        )
-                        if not candidate:
-                            return jsonify({
-                                "success": False,
-                                "error": "指定 msg_id 不可用：可能已过期、超过回复次数，或不属于当前会话",
-                            })
-                        source_message_id = str(candidate.get("message_id") or "")
-
-                    qq_message_obj = build_qq_message_obj(message_reference_id)
-
-                    if scene not in ("group", "private", "channel_group", "channel_private"):
-                        return jsonify({
-                            "success": False,
-                            "error": "无效 QQ scene",
-                        })
-
-                    send_result = run_async(
-                        delivery_service.send(
-                            bot,
-                            SendRequest(
-                                scene,
-                                target_id,
-                                qq_message_obj,
-                                reference_id=message_reference_id or None,
-                                source_message_id=source_message_id or None,
-                                record_message=f"<sticker[{sticker_token}]>" if sticker_token else None,
-                            ),
-                        )
-                    )
-
-                    return jsonify({
-                        "success": True,
-                        "message": "QQ 主动发送成功",
-                        "message_id": send_result.message_id,
-                        "reference_id": send_result.reference_id,
-                        "source_message_id": source_message_id,
-                        "quote_reference_id": message_reference_id,
-                    })
-
-                except Exception as e:
-                    logger.warning(
-                        f"QQ Web 主动发送失败: scene={scene}, "
-                        f"target_id={target_id}, error={e}"
-                    )
-                    return jsonify({
-                        "success": False,
-                        "error": f"QQ 主动发送失败：{e}",
-                    })
-
-            if reply_message_id:
-                candidate = reply_repository.get_specific_reply_candidate_for_qq(
-                    scene=scene,
-                    target_id=target_id,
-                    message_id=reply_message_id,
-                )
-
-                if not candidate:
-                    return jsonify({
-                        "success": False,
-                        "error": "指定回复消息不可用：可能已过期、超过回复次数，或不属于当前会话",
-                    })
-
-                candidates = [candidate]
-
-            else:
-                candidates = reply_repository.get_latest_reply_candidates_for_qq(
-                    scene=scene,
-                    target_id=target_id,
-                    limit=3,
-                )
-
-            if not candidates:
-                return jsonify({
-                    "success": False,
-                    "error": "QQ 适配器无法发送：非主动发送需要 4 分钟内可用 msg_id，请选择“使用 msg_id”或开启主动发送",
-                })
-
-            last_error = ""
-
-            for candidate in candidates:
-                source_message_id = str(candidate.get("message_id", "") or "")
-                if not source_message_id:
-                    continue
-
-                try:
-                    source_reference_id = str(candidate.get("reference_id") or "")
-                    qq_message_obj = build_qq_message_obj(message_reference_id)
-
-                    if scene not in ("group", "private", "channel_group", "channel_private"):
-                        return jsonify({
-                            "success": False,
-                            "error": "无效 QQ scene",
-                        })
-
-                    send_result = run_async(
-                        delivery_service.send(
-                            bot,
-                            SendRequest(
-                                scene,
-                                target_id,
-                                qq_message_obj,
-                                reference_id=message_reference_id or None,
-                                source_message_id=source_message_id,
-                                record_message=f"<sticker[{sticker_token}]>" if sticker_token else None,
-                            ),
-                        )
-                    )
-
-                    return jsonify({
-                        "success": True,
-                        "message": "发送成功",
-                        "message_id": send_result.message_id,
-                        "reference_id": send_result.reference_id,
-                        "source_message_id": source_message_id,
-                        "source_reference_id": source_reference_id,
-                        "quote_reference_id": message_reference_id,
-                    })
-
-                except Exception as e:
-                    last_error = str(e)
-                    logger.warning(
-                        f"QQ Web 发送失败，尝试下一条候选: "
-                        f"scene={scene}, target_id={target_id}, "
-                        f"source_message_id={source_message_id}, error={e}"
-                    )
-                    continue
-
-            return jsonify({
-                "success": False,
-                "error": f"QQ 回复式发送失败，最后错误: {last_error}",
-            })
-
-        return jsonify({
-            "success": False,
-            "error": f"暂不支持适配器: {adapter}",
-        })
-
+        return jsonify(result.to_dict())
     except Exception as e:
         logger.error(f"Web 消息发送失败: {e}")
         return jsonify({
