@@ -15,7 +15,11 @@ game receipt；`buff.012`/`buff.013` 分别路由 game/player。handler 保留�
 命令及清理 `transaction_service` 均留在 backlog。该切片的 source/application/repository/
 handler 聚焦集合已 `29 passed`；Phase 2 gate 同步复核为 `ready=true`、`338/139/19/0`、
 `496` 项 membership 有效、`integrity_errors=[]`，聚合 progress `exit_ready=true`。最终
-提交/推送证据仍由主代理收尾记录。
+最终 focused 回归为 `39 passed`（11.50 秒）；`git diff --check`、目标
+`compileall`、Phase 2 gate 和聚合 progress 均通过。提交 `e5a3980e` 已包含该切片，
+随后提交 `dad293a7` 加固 malformed receipt replay；当前两提交均已推送，
+本地 HEAD 与 `origin/refactor/full-bottom-layer` 一致。工作树仅保留用户已有的
+`nonebot_plugin_xiuxian_2/xiuxian/xiuxian_boss/boss_info.json` 修改，未纳入提交。
 
 **Non-command matcher 收口（2026-10-09）**：`group_welcome` 的 notice 注册改由 `on_compat.on_notice -> _nb_on("notice") -> _register_route`，保留 NoneBot notice 类型权限、优先级、`matcher.finish()`、QQ `event_id` 被动发送和管理员开关命令；`GroupLifecycleNoticeApplication` 复用事件预处理器已写入的 `xiuxian_lifecycle_result`，避免同一生命周期事件被状态注册表重复计数。新增 exactly-once 回归，group lifecycle 聚焦测试 `6 passed`。Phase 2 冻结清单现为 `338/139/19/0`，membership 有效且 `integrity_errors=[]`，唯一非命令 matcher blocker 已关闭。三名子代理并行完成 runtime、迁移设计和 gate 证据审计，主线程整合接口、串行回归、文档、提交和推送。
 
