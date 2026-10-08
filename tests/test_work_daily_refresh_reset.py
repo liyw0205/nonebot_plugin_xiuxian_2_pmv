@@ -31,7 +31,7 @@ class WorkDailyRefreshResetTests(unittest.TestCase):
 
         source = Path(xiuxian_work.__file__).read_text(encoding="utf-8")
         handler = source.split("async def resetrefreshnum", 1)[1].split(
-            "async def delayed_reminder", 1
+            "async def _send_work_reminder", 1
         )[0]
         self.assertIn("work_daily_refresh_application.reset(", handler)
         self.assertNotIn("_work_daily_refresh_reset_service().reset(", handler)
@@ -198,7 +198,7 @@ class WorkDailyRefreshResetTests(unittest.TestCase):
             / "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_work/__init__.py"
         ).read_text(encoding="utf-8")
         handler = source.split("async def resetrefreshnum", 1)[1].split(
-            "async def delayed_reminder", 1
+            "async def _send_work_reminder", 1
         )[0]
         self.assertIn("work_daily_refresh_application.reset(", handler)
         self.assertNotIn("_work_daily_refresh_reset_service().reset(", handler)

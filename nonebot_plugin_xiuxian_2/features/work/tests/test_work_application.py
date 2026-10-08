@@ -14,6 +14,8 @@ class _Repository:
     def __init__(self, status="applied"):
         self.status = status
         self.calls = 0
+        self.settle_args = None
+        self.settle_kwargs = None
 
     def claim(self, operation_id, user_id, expected_count, expected_offer, task_index, started_at):
         self.calls += 1
@@ -21,6 +23,8 @@ class _Repository:
 
     def settle(self, *args, **kwargs):
         self.calls += 1
+        self.settle_args = args
+        self.settle_kwargs = kwargs
         return {
             "status": self.status,
             "exp": 120,
@@ -148,6 +152,96 @@ class WorkClaimApplicationTests(unittest.TestCase):
             self.assertTrue(second.replayed)
             self.assertEqual(first.data["exp"], 120)
             self.assertEqual(repository.calls, 1)
+
+    def test_settlement_replays_when_retry_redraws_reward(self):
+        with tempfile.TemporaryDirectory() as directory:
+            repository = _Repository()
+            app = self._application(
+                WorkSettlementApplication, Path(directory) / "game.db", repository
+            )
+            base = {
+                "operation_id": "work-settle-redraw",
+                "user_id": "u",
+                "expected_work": {"create_time": "start", "scheduled_time": "采药"},
+                "max_exp": 999,
+                "max_goods_num": 99,
+            }
+            first = app.settle(
+                **base,
+                exp_gain=120,
+                item={"id": 1, "name": "灵草", "type": "药材"},
+                success_kind="ok",
+                item_msg="一品:灵草",
+            )
+            replay = app.settle(
+                **{
+                    **base,
+                    "exp_gain": 60,
+                    "item": None,
+                    "max_exp": 1,
+                    "max_goods_num": 1,
+                    "success_kind": "half",
+                    "item_msg": "",
+                }
+            )
+
+            self.assertTrue(first.ok)
+            self.assertTrue(replay.replayed)
+            self.assertEqual(replay.data["exp"], first.data["exp"])
+            self.assertEqual(repository.calls, 1)
+
+    def test_repository_duplicate_is_replay_without_grants(self):
+        with tempfile.TemporaryDirectory() as directory:
+            repository = _Repository("duplicate")
+            app = self._application(
+                WorkSettlementApplication, Path(directory) / "game.db", repository
+            )
+            outcome = app.settle(
+                operation_id="work-settle-receipt-replay",
+                user_id="u",
+                expected_work={"create_time": "start", "scheduled_time": "采药"},
+                exp_gain=120,
+                item={"id": 1, "name": "灵草", "type": "药材"},
+                max_exp=999,
+                max_goods_num=99,
+            )
+
+            self.assertTrue(outcome.ok)
+            self.assertTrue(outcome.replayed)
+            self.assertEqual(outcome.data["status"], "duplicate")
+            self.assertEqual(dict(outcome.granted), {})
+
+    def test_settlement_forwards_frozen_reward_decision_without_recomputing(self):
+        with tempfile.TemporaryDirectory() as directory:
+            repository = _Repository()
+            app = self._application(
+                WorkSettlementApplication, Path(directory) / "game.db", repository
+            )
+            app.settle(
+                operation_id="work-settle-frozen-input",
+                user_id="u",
+                expected_work={"create_time": "start", "scheduled_time": "采药"},
+                exp_gain=37,
+                item={"id": 9, "name": "定奖", "type": "药材"},
+                max_exp=999,
+                max_goods_num=99,
+                success_kind="half",
+                item_msg="一品:定奖",
+            )
+
+            self.assertEqual(repository.settle_args[0:7], (
+                "work-settle-frozen-input",
+                "u",
+                {"create_time": "start", "scheduled_time": "采药"},
+                37,
+                {"id": 9, "name": "定奖", "type": "药材"},
+                999,
+                99,
+            ))
+            self.assertEqual(
+                repository.settle_kwargs,
+                {"success_kind": "half", "item_msg": "一品:定奖"},
+            )
 
     def test_settlement_clears_legacy_projection_only_after_new_success(self):
         with tempfile.TemporaryDirectory() as directory:

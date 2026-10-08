@@ -2,7 +2,11 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from ..migrations import apply_work_settlement_operations
+from ..migrations import (
+    apply_work_abort_cleanup,
+    apply_work_offer_snapshots,
+    apply_work_settlement_operations,
+)
 from ..settlement_repository import WorkSettlementSqlRepository
 from ....infrastructure.database import DatabaseUnitOfWork
 from tests.test_db_backend import db_backend
@@ -19,12 +23,30 @@ class WorkSettlementRepositoryTests(unittest.TestCase):
                 conn.execute("INSERT INTO user_cd VALUES('u',2,'2026-01-01','任务')")
                 conn.execute("CREATE TABLE back(user_id TEXT,goods_id INTEGER,goods_name TEXT,goods_type TEXT,goods_num INTEGER,create_time TEXT,update_time TEXT,bind_num INTEGER,UNIQUE(user_id,goods_id))")
             with DatabaseUnitOfWork(db) as uow:
+                apply_work_offer_snapshots(uow)
+                apply_work_abort_cleanup(uow)
                 apply_work_settlement_operations(uow)
+                uow.execute(
+                    "INSERT INTO work_active_snapshots(user_id,snapshot,updated_at) VALUES(?,?,?)",
+                    ("u", "{\"scheduled_time\":\"任务\"}", "2026-01-01"),
+                )
+                uow.execute(
+                    "INSERT INTO work_offer_snapshots(user_id,snapshot,updated_at) VALUES(?,?,?)",
+                    ("u", "{\"status\":2}", "2026-01-01"),
+                )
             repo = WorkSettlementSqlRepository(db)
             first = repo.settle("s1", "u", {"create_time":"2026-01-01","scheduled_time":"任务"}, 10, {"goods_id":1,"goods_name":"奖励","goods_type":"物品","quantity":2}, 100)
             duplicate = repo.settle("s1", "u", {"create_time":"2026-01-01","scheduled_time":"任务"}, 99, None, 100)
             stale = repo.settle("s2", "u", {"create_time":"old","scheduled_time":"任务"}, 10, None, 100)
             self.assertEqual((first.status, duplicate.status, stale.status), ("applied", "duplicate", "state_changed"))
+            with db_backend.connection(db) as conn:
+                active = conn.execute(
+                    "SELECT COUNT(*) FROM work_active_snapshots WHERE user_id='u'"
+                ).fetchone()[0]
+                offer = conn.execute(
+                    "SELECT COUNT(*) FROM work_offer_snapshots WHERE user_id='u'"
+                ).fetchone()[0]
+            self.assertEqual((active, offer), (0, 0))
 
     def test_application_reward_shape_and_result_metadata_are_persisted(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -36,6 +58,8 @@ class WorkSettlementRepositoryTests(unittest.TestCase):
                 conn.execute("INSERT INTO user_cd VALUES('u',2,'2026-01-01','任务')")
                 conn.execute("CREATE TABLE back(user_id TEXT,goods_id INTEGER,goods_name TEXT,goods_type TEXT,goods_num INTEGER,create_time TEXT,update_time TEXT,bind_num INTEGER,UNIQUE(user_id,goods_id))")
             with DatabaseUnitOfWork(db) as uow:
+                apply_work_offer_snapshots(uow)
+                apply_work_abort_cleanup(uow)
                 apply_work_settlement_operations(uow)
 
             result = WorkSettlementSqlRepository(db).settle(
@@ -63,6 +87,8 @@ class WorkSettlementRepositoryTests(unittest.TestCase):
                 conn.execute("CREATE TABLE back(user_id TEXT,goods_id INTEGER,goods_name TEXT,goods_type TEXT,goods_num INTEGER,create_time TEXT,update_time TEXT,bind_num INTEGER,UNIQUE(user_id,goods_id))")
                 conn.execute("INSERT INTO back(user_id,goods_id,goods_name,goods_type,goods_num,bind_num) VALUES('u',1,'已有','物品',2,0)")
             with DatabaseUnitOfWork(db) as uow:
+                apply_work_offer_snapshots(uow)
+                apply_work_abort_cleanup(uow)
                 apply_work_settlement_operations(uow)
 
             result = WorkSettlementSqlRepository(db).settle(
@@ -76,6 +102,53 @@ class WorkSettlementRepositoryTests(unittest.TestCase):
                 cd = conn.execute("SELECT type FROM user_cd WHERE user_id='u'").fetchone()[0]
                 operations = conn.execute("SELECT COUNT(*) FROM work_settlement_operations").fetchone()[0]
             self.assertEqual((exp, cd, operations), (90, 2, 0))
+
+    def test_receipt_failure_rolls_back_snapshot_cleanup(self):
+        with tempfile.TemporaryDirectory() as temp:
+            db = Path(temp) / "game.db"
+            with db_backend.transaction(db) as conn:
+                conn.execute("CREATE TABLE user_xiuxian(user_id TEXT PRIMARY KEY,exp INTEGER)")
+                conn.execute("INSERT INTO user_xiuxian VALUES('u',90)")
+                conn.execute("CREATE TABLE user_cd(user_id TEXT PRIMARY KEY,type INTEGER,create_time TEXT,scheduled_time TEXT)")
+                conn.execute("INSERT INTO user_cd VALUES('u',2,'2026-01-01','任务')")
+                conn.execute("CREATE TABLE back(user_id TEXT,goods_id INTEGER,goods_name TEXT,goods_type TEXT,goods_num INTEGER,create_time TEXT,update_time TEXT,bind_num INTEGER,UNIQUE(user_id,goods_id))")
+            with DatabaseUnitOfWork(db) as uow:
+                apply_work_offer_snapshots(uow)
+                apply_work_abort_cleanup(uow)
+                apply_work_settlement_operations(uow)
+                uow.execute(
+                    "INSERT INTO work_active_snapshots(user_id,snapshot,updated_at) VALUES(?,?,?)",
+                    ("u", "{}", "now"),
+                )
+                uow.execute(
+                    "INSERT INTO work_offer_snapshots(user_id,snapshot,updated_at) VALUES(?,?,?)",
+                    ("u", "{}", "now"),
+                )
+                uow.execute(
+                    "CREATE TRIGGER fail_settlement BEFORE INSERT ON work_settlement_operations "
+                    "BEGIN SELECT RAISE(ABORT,'failed'); END"
+                )
+
+            with self.assertRaises(db_backend.IntegrityError):
+                WorkSettlementSqlRepository(db).settle(
+                    "rollback", "u", {"create_time": "2026-01-01", "scheduled_time": "任务"},
+                    10, None, 100, 99,
+                )
+
+            with db_backend.connection(db) as conn:
+                state = conn.execute(
+                    "SELECT exp FROM user_xiuxian WHERE user_id='u'"
+                ).fetchone()[0]
+                work = conn.execute(
+                    "SELECT type FROM user_cd WHERE user_id='u'"
+                ).fetchone()[0]
+                active = conn.execute(
+                    "SELECT COUNT(*) FROM work_active_snapshots WHERE user_id='u'"
+                ).fetchone()[0]
+                offer = conn.execute(
+                    "SELECT COUNT(*) FROM work_offer_snapshots WHERE user_id='u'"
+                ).fetchone()[0]
+            self.assertEqual((state, work, active, offer), (90, 2, 1, 1))
 
     def test_missing_startup_schema_is_not_created_by_request(self):
         with tempfile.TemporaryDirectory() as temp:

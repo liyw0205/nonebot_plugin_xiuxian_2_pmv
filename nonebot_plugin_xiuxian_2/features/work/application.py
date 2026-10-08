@@ -177,11 +177,29 @@ class WorkSettlementApplication:
 
     def __init__(self, database: str | Path, *, repository: WorkSettlementRepository | None = None,
                  ledger: OperationLedger | None = None,
-                 legacy_projection_deleter: Callable[[str], None] | None = None) -> None:
+                 legacy_projection_deleter: Callable[[str], None] | None = None,
+                 effects: Any | None = None) -> None:
         self.database = str(database)
         self.repository = repository
         self.ledger = ledger or OperationLedger()
         self.legacy_projection_deleter = legacy_projection_deleter
+        self.effects = effects
+
+    def apply_effects(
+        self,
+        outcome: OperationOutcome[dict[str, Any]],
+        *,
+        user_id: str,
+        message: str,
+    ) -> None:
+        """Apply compatibility effects only for a newly committed result."""
+        if outcome.status != "applied" or outcome.replayed or self.effects is None:
+            return
+        self.effects.apply(
+            user_id=str(user_id),
+            message=str(message),
+            operation_id=str(outcome.operation_id),
+        )
 
     def settle(
         self,
@@ -196,6 +214,13 @@ class WorkSettlementApplication:
         success_kind: str = "",
         item_msg: str = "",
     ) -> OperationOutcome[dict[str, Any]]:
+        """Apply a caller-frozen reward decision exactly once.
+
+        ``exp_gain``, ``item``, ``success_kind`` and ``item_msg`` are inputs
+        selected before entering this transaction.  The application never
+        samples randomness or derives a second result, so a retry can replay
+        the persisted receipt instead of producing a different reward.
+        """
         try:
             request = WorkSettlementRequest(
                 str(operation_id).strip(),
@@ -235,16 +260,31 @@ class WorkSettlementApplication:
                 )
                 data = _data(raw)
                 status = str(data.get("status", "failed"))
+                replay_success_kind = (
+                    str(data.get("success_kind") or "")
+                    if status == "duplicate"
+                    else str(data.get("success_kind") or request.success_kind)
+                )
+                replay_item_msg = (
+                    str(data.get("item_msg") or "")
+                    if status == "duplicate"
+                    else str(data.get("item_msg") or request.item_msg)
+                )
+                replay_scheduled_time = (
+                    str(data.get("scheduled_time") or "")
+                    if status == "duplicate"
+                    else str(data.get("scheduled_time") or request.expected_work.get("scheduled_time") or "")
+                )
                 normalized = {
                     "status": status,
                     "operation_id": request.operation_id,
                     "exp": int(data.get("exp", 0) or 0),
                     "item_awarded": bool(data.get("item_awarded", False)),
-                    "success_kind": str(data.get("success_kind") or request.success_kind),
-                    "item_msg": str(data.get("item_msg") or request.item_msg),
-                    "scheduled_time": str(data.get("scheduled_time") or request.expected_work.get("scheduled_time") or ""),
+                    "success_kind": replay_success_kind,
+                    "item_msg": replay_item_msg,
+                    "scheduled_time": replay_scheduled_time,
                 }
-                if status in {"applied", "duplicate"}:
+                if status == "applied":
                     outcome = OperationOutcome.applied(
                         request.operation_id,
                         self.action,
@@ -255,6 +295,18 @@ class WorkSettlementApplication:
                         },
                         audit_category="work",
                     )
+                elif status == "duplicate":
+                    # A repository receipt can predate this application
+                    # ledger (for example after an explicit recovery).  Surface
+                    # its frozen result as a replay and never expose grants
+                    # that a caller could apply a second time.
+                    outcome = OperationOutcome.applied(
+                        request.operation_id,
+                        self.action,
+                        data=normalized,
+                        granted={},
+                        audit_category="work",
+                    ).replay()
                 else:
                     messages = {
                         "inventory_full": "背包物品已达上限，悬赏奖励尚未结算。",

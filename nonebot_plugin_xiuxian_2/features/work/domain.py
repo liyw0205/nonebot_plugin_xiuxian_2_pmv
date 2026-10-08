@@ -56,15 +56,12 @@ class WorkSettlementRequest:
                 raise ValueError("item id, name and type are required")
 
     def payload(self) -> dict[str, Any]:
+        # The operation identity is the settlement event and its expected
+        # state. Reward fields and capacity limits are execution inputs: the
+        # first committed outcome is authoritative for all later retries.
         return {
             "user_id": self.user_id,
             "expected_work": dict(self.expected_work),
-            "exp_gain": self.exp_gain,
-            "item": dict(self.item) if self.item is not None else None,
-            "max_exp": self.max_exp,
-            "max_goods_num": self.max_goods_num,
-            "success_kind": self.success_kind,
-            "item_msg": self.item_msg,
         }
 
 

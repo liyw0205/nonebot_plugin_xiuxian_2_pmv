@@ -30,6 +30,17 @@ def _payload_matches(stored: Any, expected: str) -> bool:
         return False
 
 
+def _result_from_receipt(raw: Any) -> dict[str, Any]:
+    """Decode old receipts without making replay depend on result_json."""
+    if not raw:
+        return {}
+    try:
+        value = json.loads(str(raw))
+    except (TypeError, ValueError):
+        return {}
+    return value if isinstance(value, dict) else {}
+
+
 class WorkSettlementResult:
     def __init__(
         self,
@@ -61,10 +72,20 @@ class WorkSettlementSqlRepository:
 
     @staticmethod
     def _schema_ready(uow: DatabaseUnitOfWork) -> bool:
-        table = uow.query_one(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name='work_settlement_operations'"
-        )
-        if table is None:
+        required_tables = {
+            "work_active_snapshots",
+            "work_offer_snapshots",
+            "work_settlement_operations",
+        }
+        tables = {
+            str(row["name"])
+            for row in uow.query_all(
+                "SELECT name FROM sqlite_master WHERE type='table' "
+                "AND name IN ('work_active_snapshots','work_offer_snapshots',"
+                "'work_settlement_operations')"
+            )
+        }
+        if tables != required_tables:
             return False
         columns = {
             str(row["name"])
@@ -98,6 +119,8 @@ class WorkSettlementSqlRepository:
             reward = (int(item_id), str(item_name), str(item_type), max(1, int(item.get("quantity", 1))))
         if not operation_id or exp_gain < 0 or max_exp < 0 or max_goods_num < 0 or not expected.get("scheduled_time"):
             raise ValueError("valid operation, work state and rewards are required")
+        # Historical receipts use user identity only.  Keep that identity so
+        # replays remain compatible when a caller re-supplies a frozen result.
         payload = json.dumps([user_id], ensure_ascii=False, separators=(",", ":"))
         if not Path(self.database).is_file():
             return WorkSettlementResult("schema_missing")
@@ -108,7 +131,7 @@ class WorkSettlementSqlRepository:
             if previous is not None:
                 if not _payload_matches(previous["payload"], payload):
                     return WorkSettlementResult("state_changed")
-                result = json.loads(previous["result_json"] or "{}")
+                result = _result_from_receipt(previous["result_json"])
                 return WorkSettlementResult(
                     "duplicate",
                     int(previous["exp"]),
@@ -161,6 +184,8 @@ class WorkSettlementSqlRepository:
                 "UPDATE user_cd SET type=0,create_time=0,scheduled_time=NULL WHERE user_id=?",
                 (user_id,),
             )
+            uow.execute("DELETE FROM work_active_snapshots WHERE user_id=?", (user_id,))
+            uow.execute("DELETE FROM work_offer_snapshots WHERE user_id=?", (user_id,))
             result["exp"] = applied_exp
             uow.execute(
                 "INSERT INTO work_settlement_operations "

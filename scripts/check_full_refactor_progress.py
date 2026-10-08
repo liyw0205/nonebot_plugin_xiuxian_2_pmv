@@ -1217,7 +1217,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
     ]
     work_item_use_projection_wiring = work_facade[
         work_facade.index("work_item_use_application = WorkItemUseApplication(") : work_facade.index(
-            "runtime_clock = SystemClock()"
+            "work_daily_refresh_application = WorkDailyRefreshResetApplication("
         )
     ]
     activity_service = (PACKAGE / "xiuxian" / "xiuxian_activity" / "service.py").read_text(encoding="utf-8")

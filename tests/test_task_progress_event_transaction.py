@@ -304,6 +304,7 @@ def test_production_entries_use_batched_idempotent_task_events() -> None:
     buff_source = (root / "xiuxian_buff/__init__.py").read_text(encoding="utf-8")
     impart_source = (root / "xiuxian_impart_pk/__init__.py").read_text(encoding="utf-8")
     work_source = (root / "xiuxian_work/__init__.py").read_text(encoding="utf-8")
+    work_effects_source = (root.parent / "features/work/effects.py").read_text(encoding="utf-8")
     pet_source = (root / "xiuxian_pet/__init__.py").read_text(encoding="utf-8")
     closing_effects_source = (root.parent / "compatibility/buff_closing_effects.py").read_text(encoding="utf-8")
     task_repository_source = (root.parent / "features/sign_in/tasks.py").read_text(encoding="utf-8")
@@ -320,8 +321,9 @@ def test_production_entries_use_batched_idempotent_task_events() -> None:
     assert "task_progress_event_operations" in progress_repository_source
     assert "CREATE TABLE" not in progress_repository_source
     assert "record_task_progress" not in base_source
-    for source in (impart_source, work_source):
+    for source in (impart_source, work_effects_source):
         assert "operation_id=f\"task-progress:" in source
+    assert "record_task_progress" not in work_source
     assert 'operation_id=f"task-progress:{operation_id}"' in closing_effects_source
     assert "def _grant_pet_travel_rewards" not in pet_source
     travel_handler = pet_source[pet_source.index("@pet_travel_claim.handle"):]

@@ -6,6 +6,9 @@ from .abort_cleanup_application import WorkAbortCleanupApplication
 from .refresh_application import WorkRefreshApplication
 from .status_application import WorkStatusApplication
 from .work_item_use_application import WorkItemUseApplication
+from .effects import WorkSettlementEffects
+from .reminder_application import WorkReminderApplication
+from .reward_application import WorkRewardApplication, WorkSettlementDecision
 
 __all__ = [
     "WorkAbortCleanupApplication",
@@ -14,4 +17,8 @@ __all__ = [
     "WorkRefreshApplication",
     "WorkStatusApplication",
     "WorkItemUseApplication",
+    "WorkRewardApplication",
+    "WorkSettlementDecision",
+    "WorkSettlementEffects",
+    "WorkReminderApplication",
 ]

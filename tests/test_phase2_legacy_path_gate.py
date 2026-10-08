@@ -134,9 +134,13 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
         self.assertIn("validates user/action/original amount before current account/configuration", graph)
         self.assertIn("information bypasses mutation receipts", graph)
         self.assertNotIn("legacy handler still owns result-to-reply mapping", graph)
-        self.assertIn("Work matcher still owns offer generation", family["reason"])
-        self.assertIn("deletes the canonical work_offer_snapshots row", family["reason"])
-        self.assertIn("direct on_notice route adapter", family["reason"])
+        self.assertIn("remaining blocker is the direct group lifecycle on_notice route adapter", family["reason"])
+        self.assertNotIn("Work matcher still owns offer generation", family["reason"])
+        self.assertNotIn("deletes the canonical work_offer_snapshots row", family["reason"])
+        self.assertIn("WorkRewardApplication.resolve_settlement", graph)
+        self.assertIn("WorkReminderApplication", graph)
+        self.assertNotIn("workhandle.do_work", graph)
+        self.assertIn("on_notice route adapter outside on_compat", family["reason"])
         for owner in (
             "WorkStatusApplication",
             "EmptyFallbackApplication",

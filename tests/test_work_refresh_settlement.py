@@ -237,7 +237,13 @@ class WorkSettlementHandlerTests(unittest.IsolatedAsyncioTestCase):
             replayed=False,
             data={"status": "applied", "exp": 10, "item_awarded": False},
         )
-        calculator = SimpleNamespace(do_work=Mock(return_value=("完成", 10, True, 0, False)))
+        decision = SimpleNamespace(
+            exp_gain=10,
+            success=True,
+            big_success=False,
+            success_kind="ok",
+            item_id=0,
+        )
         event = SimpleNamespace(message_id="settle-1")
 
         with (
@@ -245,7 +251,11 @@ class WorkSettlementHandlerTests(unittest.IsolatedAsyncioTestCase):
             patch.object(xiuxian_work, "_sql_message", return_value=SimpleNamespace(
                 get_user_info_with_id=lambda user_id: {"level": "筑基", "exp": 0}
             )),
-            patch.object(xiuxian_work, "workhandle", return_value=calculator),
+            patch.object(
+                xiuxian_work.work_reward_application,
+                "resolve_settlement",
+                return_value=decision,
+            ) as resolve,
             patch.object(
                 xiuxian_work.work_status_application,
                 "get_offer",
@@ -256,9 +266,7 @@ class WorkSettlementHandlerTests(unittest.IsolatedAsyncioTestCase):
                 closing_exp_upper_limit=100, max_goods_num=99
             )),
             patch.object(xiuxian_work.work_settlement_application, "settle", return_value=outcome),
-            patch.object(xiuxian_work, "log_message"),
-            patch.object(xiuxian_work, "update_statistics_value"),
-            patch.object(xiuxian_work, "record_task_progress"),
+            patch.object(xiuxian_work.work_settlement_application, "apply_effects"),
             patch.object(xiuxian_work, "handle_send", new=AsyncMock()),
             patch.object(xiuxian_work, "number_to", side_effect=str),
         ):
@@ -267,8 +275,8 @@ class WorkSettlementHandlerTests(unittest.IsolatedAsyncioTestCase):
                 {"create_time": "2026-10-04 10:00:00", "scheduled_time": "采药"},
             )
 
-        calculator.do_work.assert_called_once()
-        self.assertIs(calculator.do_work.call_args.kwargs["offer_snapshot"], active)
+        resolve.assert_called_once()
+        self.assertIs(resolve.call_args.kwargs["offer_snapshot"], active)
 
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()

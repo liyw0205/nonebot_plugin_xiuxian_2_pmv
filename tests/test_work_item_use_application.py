@@ -13,6 +13,8 @@ from unittest.mock import AsyncMock, Mock, patch
 import nonebot
 from nonebot.exception import FinishedException
 
+nonebot.init()
+
 from nonebot_plugin_xiuxian_2.infrastructure.database import DatabaseUnitOfWork
 from nonebot_plugin_xiuxian_2.plugin import build_migrations, migrations_for_database
 from tests.test_db_backend import db_backend
@@ -443,7 +445,8 @@ class WorkItemUseApplicationTests(unittest.TestCase):
         )
         fake_bot = SimpleNamespace(self_id="bot")
         fake_event = SimpleNamespace(message_id="work-capture-message")
-        generated_offer = self.offer()
+        # The feature generator returns the already-multiplied snapshot.
+        generated_offer = self.offer(90)
         project = Mock()
         application = self.application.__class__(
             self.database,
@@ -485,8 +488,8 @@ class WorkItemUseApplicationTests(unittest.TestCase):
             patch.object(back_module, "items") as items,
             patch.object(back_module, "_sql_message", return_value=message_data),
             patch.object(work_module, "_sql_message", return_value=message_data),
-            patch.object(work_module, "workhandle") as workhandle,
             patch.object(work_module, "runtime_random", SimpleNamespace(randint=lambda low, high: 3)),
+            patch.object(work_module.work_reward_application, "generate_capture_offer", return_value=("work message", generated_offer, 3)),
             patch.object(work_module, "work_item_use_application", application),
             patch.object(back_module, "handle_send", new=AsyncMock()),
             patch.object(work_module, "handle_send", new=send_feedback),
@@ -495,7 +498,6 @@ class WorkItemUseApplicationTests(unittest.TestCase):
             patch.object(application, "capture", wraps=application.capture) as capture,
         ):
             items.get_data_by_item_name.return_value = (20015, {"type": "特殊道具", "name": "追捕令"})
-            workhandle.return_value.do_work.return_value = ("work message", generated_offer)
             with self.assertRaises(FinishedException):
                 asyncio.run(registered_handler.call(fake_bot, fake_event, args="追捕令"))
 
