@@ -90,7 +90,7 @@ def main(argv: list[str] | None = None) -> int:
             from .features.buff.application import BuffApplication
             from .features.base.application import BaseApplication
             from .compatibility.base_breakthrough_effects import LegacyDirectBreakthroughEffects
-            from .compatibility.buff_closing_effects import LegacyBuffClosingEffects
+            from .features.buff.closing_effects_application import ClosingEffectsApplication
             from .compatibility.game_event_effects import LegacyGameEventEffects
             from .features.map.application import MapApplication
             from .features.pet.application import PetApplication
@@ -121,7 +121,7 @@ def main(argv: list[str] | None = None) -> int:
             buff = BuffApplication(
                 game_db,
                 player_db,
-                closing_effects=LegacyBuffClosingEffects(player_db),
+                closing_effects=ClosingEffectsApplication(player_db),
             )
             game_event_effects = LegacyGameEventEffects(game_db, player_db, clock=context.clock)
             base = BaseApplication(

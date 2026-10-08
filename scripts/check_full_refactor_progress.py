@@ -1771,7 +1771,10 @@ def _slice_status() -> dict[str, dict[str, object]]:
     buff_closing_repository = (PACKAGE / "features" / "buff" / "closing_repository.py").read_text(encoding="utf-8")
     buff_closing_enter_repository = (PACKAGE / "features" / "buff" / "closing_enter_repository.py").read_text(encoding="utf-8")
     buff_closing_reward = (PACKAGE / "features" / "buff" / "closing_reward.py").read_text(encoding="utf-8")
-    buff_closing_effects = (PACKAGE / "compatibility" / "buff_closing_effects.py").read_text(encoding="utf-8")
+    buff_closing_effects = (
+        (PACKAGE / "features" / "buff" / "closing_effects_application.py").read_text(encoding="utf-8")
+        + (PACKAGE / "features" / "buff" / "closing_log.py").read_text(encoding="utf-8")
+    )
     buff_migrations = (PACKAGE / "features" / "buff" / "migrations.py").read_text(encoding="utf-8")
     buff_normalize_experience_handler = buff_facade[
         buff_facade.index("@del_exp_decimal.handle") : buff_facade.index("@daily_info.handle")
@@ -5487,12 +5490,48 @@ def _slice_status() -> dict[str, dict[str, object]]:
                 and '"buff.closing.effects": buff.reconcile_outbox_event' in activity_cli
                 and "def reconcile_outbox_event(" in buff_application_source
             ),
+            "closing_effects_application_feature_owned": (
+                "class ClosingEffectsApplication" in buff_closing_effects
+                and "self.statistics.record(" in buff_closing_effects
+                and "self._task_progress(" in buff_closing_effects
+                and "self._activity_event(" in buff_closing_effects
+            ),
+            "closing_effects_default_runtime_feature_owned": (
+                "from .features.buff.closing_effects_application import ClosingEffectsApplication" in plugin
+                and "ClosingEffectsApplication(context.database.path(\"player_db\"))" in plugin
+                and "from .features.buff.closing_effects_application import ClosingEffectsApplication" in cli_source
+                and "ClosingEffectsApplication(player_db)" in cli_source
+            ),
             "closing_effect_projections_have_stable_receipts": (
                 "class ClosingStatisticsRepository" in (PACKAGE / "features" / "buff" / "closing_statistics.py").read_text(encoding="utf-8")
                 and '"event_id": str(event_id)' in buff_closing_effects
                 and "record_task_progress_event_strict(" in buff_closing_effects
                 and "event_id=f\"{event_id}:activity:out_closing\"" in buff_closing_effects
                 and "activity_event_operations" in activity_storage
+            ),
+            "closing_effects_legacy_receipts_remain_explicit": (
+                "if not event_id" in buff_application_source
+                and "if not event_id:" in buff_application_source
+                and "Historical receipts predate the outbox" in buff_application_source
+            ),
+            "closing_effects_scope_backlog_and_virtual_world_excluded": all(
+                token in (
+                    (ROOT / "docs" / "features" / "buff.md").read_text(encoding="utf-8")
+                    + (ROOT / "docs" / "full_refactor_progress.md").read_text(encoding="utf-8")
+                    + (ROOT / "docs" / "refactor_slice_execution_protocol.md").read_text(encoding="utf-8")
+                )
+                for token in (
+                    "scope_id=phase3-player-lifecycle-v3",
+                    "command:buff:出关:effects-reconcile",
+                    "虚神界出关",
+                    "game CAS",
+                    "跨库恢复",
+                )
+            ),
+            "closing_effects_phase2_membership_unchanged": (
+                "Phase 2 `496`" in (ROOT / "docs" / "refactor_slice_execution_protocol.md").read_text(encoding="utf-8")
+                and "7787a74a3e0c15c220a5f257921693b14706ef23b224bac9f3dad55a1ff51fac"
+                in (ROOT / "docs" / "refactor_slice_execution_protocol.md").read_text(encoding="utf-8")
             ),
             "closing_effects_migrations_routed": (
                 '"buff.008"' in plugin

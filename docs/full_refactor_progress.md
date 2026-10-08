@@ -13,6 +13,18 @@ game mutation/receipt、outbox effects、player 统计/任务/活动投影或跨
 Phase 2 `496` 项 membership/hash `7787a74a3e0c15c220a5f257921693b14706ef23b224bac9f3dad55a1ff51fac`
 保持不变；只新增 Phase 3 source contract，不修改 Phase 2 清单或分母。
 
+**2026-10-09 Phase 3 普通出关 effects reconcile scope（v3）**：冻结
+`scope_id=phase3-player-lifecycle-v3`、`stable_id=command:buff:出关:effects-reconcile`。
+普通出关 core 成功后，`BuffApplication` 的 outbox dispatch/reconcile 由
+`features.buff.ClosingEffectsApplication` 统一编排，统计、日志、任务、活动投影各自沿用
+稳定 event/operation receipt；失败可从 outbox 重试，历史 ledger receipt 缺少
+`effects_event_id` 时不虚构投影。plugin 和 CLI 默认路径已切换到 feature application，旧
+`LegacyBuffClosingEffects` 仅保留兼容导出。任务/活动底层 legacy sink 仍属于明确兼容边界，
+不宣称跨库恢复或底层存储 owner 已完成；game CAS/receipt mutation、请求期隐式初始化、
+`虚神界出关`、`虚神界闭关` 和 impart_pk 其它命令排除在本片之外。现有 `buff.008/.009`、
+`tasks.001`、`activity_state.003` 启动迁移继续复用，Phase 2 `496` 项及 membership/hash
+保持不变。
+
 **2026-10-09 Phase 3 scope upgrade 与普通闭关切片（已冻结）**：Phase 2 `496` 项冻结
 membership/hash 不变。本轮冻结 `scope_id=phase3-player-lifecycle-v1`、
 `stable_id=command:buff:闭关`，默认入口为

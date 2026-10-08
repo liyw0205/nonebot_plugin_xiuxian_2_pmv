@@ -909,7 +909,7 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
         from .features.sect.application import SectApplication
         from .features.natal_treasure.application import NatalTreasureApplication
         from .features.buff.application import BuffApplication
-        from .compatibility.buff_closing_effects import LegacyBuffClosingEffects
+        from .features.buff.closing_effects_application import ClosingEffectsApplication
         from .compatibility.base_breakthrough_effects import LegacyDirectBreakthroughEffects
         from .compatibility.game_event_effects import LegacyGameEventEffects
         from .features.base.application import BaseApplication
@@ -1141,7 +1141,7 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
             "buff": BuffApplication(
                 str(context.database.path("game_db")),
                 str(context.database.path("player_db")),
-                closing_effects=LegacyBuffClosingEffects(context.database.path("player_db")),
+                closing_effects=ClosingEffectsApplication(context.database.path("player_db")),
                 clock=context.clock,
             ),
             "base": BaseApplication(

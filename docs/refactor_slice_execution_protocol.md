@@ -22,6 +22,15 @@ replay-first 的 legacy snapshot adapter 与 `ClosingRewardCalculator` 纯收益
 为完整出关迁移。Phase 2 `496` 项及 membership hash
 `7787a74a3e0c15c220a5f257921693b14706ef23b224bac9f3dad55a1ff51fac` 保持不变。
 
+2026-10-09 scope-v3：普通 `出关` core settlement 后的 effects 单独冻结为
+`scope_id=phase3-player-lifecycle-v3`、`stable_id=command:buff:出关:effects-reconcile`。
+本片由 `ClosingEffectsApplication` 拥有 outbox dispatch/reconcile 编排，统计、日志、任务、
+活动 projection 使用稳定 receipt 并支持 failed/retry/sent 与部分失败恢复；旧
+compatibility 类仅作为显式兼容导出。任务/活动底层 legacy sink、game CAS/receipt mutation、
+请求期隐式初始化和跨库恢复不在本片；`虚神界出关`、`虚神界闭关`、impart_pk 其它路径也不
+属于本 scope，必须进入后续 backlog。现有 `buff.008/.009`、`tasks.001`、
+`activity_state.003` migrations 已注册并复用，不修改 Phase 2 `496` membership/hash。
+
 核心 API、真实 handler 调用、operation ID、game/player 所有权和启动迁移已落地：
 `BuffApplication.closing_enter` 以 attached game/player UoW 包住 ledger、状态 CAS、
 统计 upsert 和 `closing_enter_operations` 回执；`buff.012` 建 game receipt，

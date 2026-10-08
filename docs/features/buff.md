@@ -31,6 +31,18 @@ operation ID 使用独立的 `buff-closing-settle:` 前缀，两个命令走同�
 本 scope 不覆盖 game CAS/receipt、outbox effects、player 统计/任务/活动投影、跨事务
 恢复，也不覆盖 `虚神界出关`、`虚神界闭关` 或 impart_pk 其它命令；这些保留 backlog。
 Phase 2 的 `496` 项 membership/hash 不变。
+
+### Phase 3 普通出关 effects reconcile scope（v3）
+`scope_id=phase3-player-lifecycle-v3`、`stable_id=command:buff:出关:effects-reconcile`
+只处理普通 `出关` core settlement 成功后的 `buff.closing.effects` outbox dispatch、统计、
+日志、任务、活动投影编排和 CLI/runtime reconcile。默认 `BuffApplication` 现在注入
+feature-owned `ClosingEffectsApplication`；每个 projection 都使用稳定的 event/operation
+ID，可在 `pending -> failed -> retry -> sent` 和部分失败后重放。旧
+`compatibility.buff_closing_effects.LegacyBuffClosingEffects` 只保留兼容名称，不再是默认
+owner；任务和活动底层 legacy sink 仍是显式兼容依赖，不宣称其存储实现已整体迁移。
+本 scope 不覆盖 v2 的 reward calculator，不覆盖 game CAS/receipt mutation、请求期隐式
+初始化、跨库恢复，也不覆盖 `虚神界出关`、`虚神界闭关` 或 impart_pk 其它命令；这些继续
+进入 backlog。Phase 2 `496` 项 membership/hash 不变。
 ## 事务与失败回滚
 统一 operation ledger 和审计，旧事务异常可重试。
 ## 定时任务
