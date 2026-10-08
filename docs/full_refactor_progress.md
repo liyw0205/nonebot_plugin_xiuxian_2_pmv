@@ -2,6 +2,17 @@
 
 状态：进行中。`v1.1.0` 的 P0-P7 发布证据继续保留，但不作为底层全面重构完成证明。
 
+**2026-10-09 Phase 3 普通出关收益 adapter 子切片（scope-v2）**：新增冻结
+`scope_id=phase3-player-lifecycle-v2`、`stable_id=command:buff:出关`，覆盖普通
+`出关` 与 `灵石出关` alias 的 replay-first adapter 和确定性收益计算。handler 使用
+独立 `buff-closing-settle:` operation ID，读取一次 legacy snapshot 后调用
+`BuffApplication.calculate_closing_reward -> ClosingRewardCalculator`，返回不可变
+`ClosingRewardSnapshot`，再把结果交给既有 `BuffApplication.closing_settle`。本片不宣称
+game mutation/receipt、outbox effects、player 统计/任务/活动投影或跨事务恢复已收口；这些
+仍是普通出关后续 backlog。`虚神界出关`、`虚神界闭关` 及 impart_pk 其它命令明确排除。
+Phase 2 `496` 项 membership/hash `7787a74a3e0c15c220a5f257921693b14706ef23b224bac9f3dad55a1ff51fac`
+保持不变；只新增 Phase 3 source contract，不修改 Phase 2 清单或分母。
+
 **2026-10-09 Phase 3 scope upgrade 与普通闭关切片（已冻结）**：Phase 2 `496` 项冻结
 membership/hash 不变。本轮冻结 `scope_id=phase3-player-lifecycle-v1`、
 `stable_id=command:buff:闭关`，默认入口为

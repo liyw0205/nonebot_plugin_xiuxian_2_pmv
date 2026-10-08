@@ -1757,6 +1757,11 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "@out_closing.handle", buff_facade.index("async def in_closing_")
         )
     ]
+    buff_closing_handler = buff_facade[
+        buff_facade.index("async def out_closing_") : buff_facade.index(
+            "@mind_state.handle", buff_facade.index("async def out_closing_")
+        )
+    ]
     buff_training_handler = buff_facade[
         buff_facade.index("async def up_exp_") : buff_facade.index("@stone_exp.handle")
     ]
@@ -1765,6 +1770,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
     buff_training_complete_repository = (PACKAGE / "features" / "buff" / "training_complete_repository.py").read_text(encoding="utf-8")
     buff_closing_repository = (PACKAGE / "features" / "buff" / "closing_repository.py").read_text(encoding="utf-8")
     buff_closing_enter_repository = (PACKAGE / "features" / "buff" / "closing_enter_repository.py").read_text(encoding="utf-8")
+    buff_closing_reward = (PACKAGE / "features" / "buff" / "closing_reward.py").read_text(encoding="utf-8")
     buff_closing_effects = (PACKAGE / "compatibility" / "buff_closing_effects.py").read_text(encoding="utf-8")
     buff_migrations = (PACKAGE / "features" / "buff" / "migrations.py").read_text(encoding="utf-8")
     buff_normalize_experience_handler = buff_facade[
@@ -5423,6 +5429,49 @@ def _slice_status() -> dict[str, dict[str, object]]:
                 and "def apply_closing_enter_player(" in buff_migrations
                 and '"buff.013"' in plugin[plugin.index("_GAME_DATABASE_EXCLUDED_MIGRATION_VERSIONS"):plugin.index("_PLAYER_DATABASE_MIGRATION_VERSIONS")]
                 and '"buff.013"' in plugin[plugin.index("_PLAYER_DATABASE_MIGRATION_VERSIONS"):plugin.index("_TRADE_DATABASE_MIGRATION_VERSIONS")]
+            ),
+            "closing_reward_handler_application_owned": (
+                'out_closing = on_command("出关", aliases={"灵石出关"}' in buff_facade
+                and "buff_application.calculate_closing_reward(" in buff_closing_handler
+                and "buff_application.closing_settle(" in buff_closing_handler
+                and "_closing_settlement_service().settle(" not in buff_closing_handler
+            ),
+            "closing_reward_snapshot_calculation_owned": (
+                "class ClosingRewardSnapshot" in buff_closing_reward
+                and "class ClosingRewardCalculator" in buff_closing_reward
+                and "def calculate(" in buff_closing_reward
+                and "def calculate_closing_reward(" in buff_application_source
+            ),
+            "closing_reward_replay_before_snapshot_reads": (
+                buff_closing_handler.index("buff_application.closing_replay(")
+                < buff_closing_handler.index("_sql_message().get_user_info_with_id(")
+            ),
+            "closing_reward_operation_identity_event_stable": (
+                'return f"buff-closing-settle:{event_id}:{user_id}"' in buff_facade
+                and 'return f"buff-closing-settle:{user_id}:{runtime_ids.new_id()}"' in buff_facade
+            ),
+            "closing_reward_stone_alias_uses_same_application_path": (
+                'str(event.message) == "灵石出关"' in buff_closing_handler
+                and "stone_exit=" in buff_closing_handler
+                and "buff_application.calculate_closing_reward(" in buff_closing_handler
+            ),
+            "closing_reward_scope_backlog_and_virtual_world_excluded": all(
+                token in (
+                    (ROOT / "docs" / "features" / "buff.md").read_text(encoding="utf-8")
+                    + (ROOT / "docs" / "full_refactor_progress.md").read_text(encoding="utf-8")
+                    + (ROOT / "docs" / "refactor_slice_execution_protocol.md").read_text(encoding="utf-8")
+                )
+                for token in (
+                    "scope_id=phase3-player-lifecycle-v2",
+                    "buff-closing-settle:",
+                    "虚神界出关",
+                    "跨事务恢复",
+                )
+            ),
+            "closing_reward_phase2_membership_unchanged": (
+                "Phase 2 `496`" in (ROOT / "docs" / "refactor_slice_execution_protocol.md").read_text(encoding="utf-8")
+                and "7787a74a3e0c15c220a5f257921693b14706ef23b224bac9f3dad55a1ff51fac"
+                in (ROOT / "docs" / "refactor_slice_execution_protocol.md").read_text(encoding="utf-8")
             ),
             "closing_settlement_application_owned": "buff_application.closing_settle(" in buff_facade,
             "closing_settlement_replay_application_owned": (

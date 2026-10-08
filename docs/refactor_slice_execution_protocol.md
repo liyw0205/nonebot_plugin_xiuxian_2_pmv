@@ -13,6 +13,15 @@
 XiuxianDateManage.in_closing(game.user_cd) -> update_statistics_value(player.statistics)`；
 伪灵根、缺用户、非空闲状态和兼容回复均属于该入口的行为边界。
 
+2026-10-09 scope-v2：普通 `出关` 与 `灵石出关` alias 单独冻结为
+`scope_id=phase3-player-lifecycle-v2`、`stable_id=command:buff:出关`。本片只收口
+replay-first 的 legacy snapshot adapter 与 `ClosingRewardCalculator` 纯收益计算；
+`BuffApplication.closing_settle` 仍是既有 mutation owner。独立 operation ID 前缀为
+`buff-closing-settle:`。game receipt/CAS、outbox effects、player projections、跨事务恢复
+和虚神界/impart_pk 路径不属于本 scope，必须进入后续 backlog，不得被 v2 的计算测试冒充
+为完整出关迁移。Phase 2 `496` 项及 membership hash
+`7787a74a3e0c15c220a5f257921693b14706ef23b224bac9f3dad55a1ff51fac` 保持不变。
+
 核心 API、真实 handler 调用、operation ID、game/player 所有权和启动迁移已落地：
 `BuffApplication.closing_enter` 以 attached game/player UoW 包住 ledger、状态 CAS、
 统计 upsert 和 `closing_enter_operations` 回执；`buff.012` 建 game receipt，

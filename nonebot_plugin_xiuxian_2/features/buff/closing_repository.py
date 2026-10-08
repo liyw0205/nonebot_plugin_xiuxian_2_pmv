@@ -6,6 +6,7 @@ from typing import Any
 
 from ...infrastructure.clock import SystemClock
 from ...infrastructure.database import DatabaseUnitOfWork, OutboxStore
+from ...xiuxian.xiuxian_utils.cd_time import cd_time_matches, is_blank_cd_time
 
 
 class ClosingSettlementResult:
@@ -151,7 +152,9 @@ class ClosingSettlementSqlRepository:
             )
             if user is None or cd is None:
                 return ClosingSettlementResult("user_missing")
-            if int(cd["type"] or 0) != 1 or str(cd["create_time"]) != str(expected_create_time):
+            if int(cd["type"] or 0) != 1 or not cd_time_matches(
+                cd["create_time"], expected_create_time
+            ):
                 return ClosingSettlementResult("state_changed")
             if int(user["stone"]) < values[1]:
                 return ClosingSettlementResult("stone_insufficient")
@@ -162,12 +165,20 @@ class ClosingSettlementSqlRepository:
                 "WHERE user_id=? ORDER BY rowid LIMIT 1) AND stone>=?",
                 (values[0], values[1], values[2], values[3], values[4], values[5], user_id, values[1]),
             )
-            cleared = uow.execute(
-                "UPDATE user_cd SET type=0,create_time=0,scheduled_time=NULL "
-                "WHERE rowid=(SELECT rowid FROM user_cd WHERE user_id=? ORDER BY rowid LIMIT 1) "
-                "AND type=1 AND CAST(create_time AS TEXT)=?",
-                (user_id, str(expected_create_time)),
-            )
+            if is_blank_cd_time(cd["create_time"]) or is_blank_cd_time(expected_create_time):
+                cleared = uow.execute(
+                    "UPDATE user_cd SET type=0,create_time=0,scheduled_time=NULL "
+                    "WHERE rowid=(SELECT rowid FROM user_cd WHERE user_id=? ORDER BY rowid LIMIT 1) "
+                    "AND type=1",
+                    (user_id,),
+                )
+            else:
+                cleared = uow.execute(
+                    "UPDATE user_cd SET type=0,create_time=0,scheduled_time=NULL "
+                    "WHERE rowid=(SELECT rowid FROM user_cd WHERE user_id=? ORDER BY rowid LIMIT 1) "
+                    "AND type=1 AND CAST(create_time AS TEXT)=?",
+                    (user_id, str(expected_create_time)),
+                )
             if changed.rowcount != 1 or cleared.rowcount != 1:
                 return ClosingSettlementResult("state_changed")
 

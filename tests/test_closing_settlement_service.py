@@ -24,7 +24,7 @@ def test_buff_closing_handler_uses_application_replay_and_settlement():
     assert "buff_application.closing_replay(" in handler
     assert "_closing_settlement_service().get_result(" not in handler
     assert "buff_application.closing_settle(" in handler
-    assert "expected_create_time=create_time" in handler
+    assert "expected_create_time=expected_create_time" in handler
     assert "if not result.ok:" in handler
     assert "_closing_settlement_service_instance = None" in source
     assert "def _closing_settlement_service(" in source

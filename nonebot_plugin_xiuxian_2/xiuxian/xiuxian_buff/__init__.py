@@ -173,6 +173,63 @@ def _closing_enter_operation_id(event, user_id):
     return f"buff-closing-enter:{user_id}:{runtime_ids.new_id()}"
 
 
+def _closing_settlement_operation_id(event, user_id):
+    """Build a stable id for ordinary ``出关`` settlement only."""
+    event_id = str(
+        getattr(event, "message_id", "") or getattr(event, "id", "") or ""
+    ).strip()
+    if event_id:
+        return f"buff-closing-settle:{event_id}:{user_id}"
+    return f"buff-closing-settle:{user_id}:{runtime_ids.new_id()}"
+
+
+def _closing_reward_inputs(user_id, user_mes, user_cd_message):
+    """Read the legacy snapshot once before the feature-owned calculation."""
+    from ..xiuxian_world_events import (
+        get_spirit_vein_exp_bonus_msg,
+        get_spirit_vein_exp_multiplier,
+    )
+    from ..xiuxian_utils.cd_time import (
+        elapsed_minutes_from_cd_time,
+        normalize_cd_time_token,
+    )
+    from ..xiuxian_utils.numeric_bind import as_int_like
+
+    level = user_mes["level"]
+    current_exp = as_int_like(user_mes["exp"])
+    exp_cap = max(
+        0,
+        int(OtherSet().set_closing_type(level)) * XiuConfig().closing_exp_upper_limit
+        - current_exp,
+    )
+    create_time = normalize_cd_time_token(user_cd_message.get("create_time"))
+    exp_time = elapsed_minutes_from_cd_time(
+        user_cd_message.get("create_time"), on_error=0
+    )
+    level_rate = _sql_message().get_root_rate(user_mes["root_type"], user_id)
+    realm_rate = jsondata.level_data()[level]["spend"]
+    user_buff_data = UserBuffDate(user_id)
+    blessed_rate = user_buff_data.BuffInfo["blessed_spot"] * 0.5
+    main = user_buff_data.get_user_main_buff_data() or {}
+    return {
+        "expected_create_time": create_time,
+        "exp_time": exp_time,
+        "current_exp": current_exp,
+        "current_stone": user_mes.get("stone", 0),
+        "current_hp": user_mes.get("hp", 0),
+        "current_mp": user_mes.get("mp", 0),
+        "exp_cap": exp_cap,
+        "closing_exp": XiuConfig().closing_exp,
+        "level_rate": level_rate,
+        "realm_rate": realm_rate,
+        "main_rate": main.get("ratebuff", 0),
+        "closing_rate": main.get("clo_exp", 0),
+        "blessed_rate": blessed_rate,
+        "spirit_vein_multiplier": get_spirit_vein_exp_multiplier(),
+        "spirit_vein_message": get_spirit_vein_exp_bonus_msg(),
+    }
+
+
 def _normal_training_operation_id(event, user_id):
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
     if event_id:
@@ -763,9 +820,7 @@ async def out_closing_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
         await handle_send(bot, event, msg, md_type="我要修仙")
         await out_closing.finish()
     user_id = user_info["user_id"]
-    closing_operation_id = _blessed_spot_operation_id(
-        event, "closing-settle", user_id
-    )
+    closing_operation_id = _closing_settlement_operation_id(event, user_id)
     try:
         previous = buff_application.closing_replay(closing_operation_id)
     except Exception:
@@ -802,48 +857,23 @@ async def out_closing_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
         await handle_send(bot, event, msg, md_type="1", k2="修仙帮助", v2="修仙帮助", k3="闭关", v3="闭关")
         await out_closing.finish()
 
-    level = user_mes["level"]
-    from ..xiuxian_utils.cd_time import elapsed_minutes_from_cd_time, normalize_cd_time_token
-    from ..xiuxian_utils.numeric_bind import as_int_like
-    use_exp = as_int_like(user_mes["exp"])
-    max_exp = int(OtherSet().set_closing_type(level)) * XiuConfig().closing_exp_upper_limit
-    user_get_exp_max = max(0, as_int_like(max_exp) - use_exp)
-    # 坏 create_time（0/空/脏数据）→ 时长 0，仍允许按 type=1 出关清状态
-    create_time = normalize_cd_time_token(user_cd_message.get("create_time"))
-    exp_time = elapsed_minutes_from_cd_time(user_cd_message.get("create_time"), on_error=0)
-    level_rate = _sql_message().get_root_rate(user_mes["root_type"], user_id)
-    realm_rate = jsondata.level_data()[level]["spend"]
-    user_buff_data = UserBuffDate(user_id)
-    blessed_rate = user_buff_data.BuffInfo["blessed_spot"] * 0.5
-    main = user_buff_data.get_user_main_buff_data() or {}
-    main_rate = main.get("ratebuff", 0)
-    closing_rate = main.get("clo_exp", 0)
-    base_exp = int(
-        exp_time * XiuConfig().closing_exp
-        * level_rate * realm_rate * (1 + main_rate) * (1 + closing_rate) * (1 + blessed_rate)
+    snapshot = _closing_reward_inputs(user_id, user_mes, user_cd_message)
+    expected_create_time = snapshot.pop("expected_create_time")
+    reward = buff_application.calculate_closing_reward(
+        **snapshot,
+        stone_exit=str(event.message) == "灵石出关",
     )
-    exp, spirit_vein_msg = _apply_spirit_vein_exp_bonus(base_exp, user_get_exp_max)
-    reached_limit = exp >= user_get_exp_max
-    stone_cost = 0
-    if reached_limit:
-        exp = user_get_exp_max
-    elif str(event.message) == "灵石出关":
-        stone_cost = min(base_exp, max(0, int(user_mes["stone"] or 0)))
-        exp, spirit_vein_msg = _apply_spirit_vein_exp_bonus(base_exp + stone_cost, user_get_exp_max)
-
-    new_exp = use_exp + exp
-    hp_gain = int(use_exp / 10 * exp_time)
-    mp_gain = int(use_exp / 20 * exp_time)
-    new_hp = min(int(user_mes["hp"] or 0) + hp_gain, int(new_exp / 2))
-    new_mp = min(int(user_mes["mp"] or 0) + mp_gain, new_exp)
-    new_atk = int(new_exp / 10)
-    new_power = int(new_exp * level_rate * realm_rate)
     try:
         result = buff_application.closing_settle(
             operation_id=closing_operation_id, user_id=str(user_id),
-            expected_create_time=create_time, exp_gain=exp, stone_cost=stone_cost,
-            new_hp=new_hp, new_mp=new_mp, new_atk=new_atk, new_power=new_power,
-            exp_time=exp_time,
+            expected_create_time=expected_create_time,
+            exp_gain=reward.exp_gain,
+            stone_cost=reward.stone_cost,
+            new_hp=reward.new_hp,
+            new_mp=reward.new_mp,
+            new_atk=reward.new_atk,
+            new_power=reward.new_power,
+            exp_time=reward.exp_time,
         )
     except Exception:
         await handle_send(bot, event, "出关结算失败：结算过程异常。")
@@ -852,14 +882,22 @@ async def out_closing_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
         await handle_send(bot, event, "闭关操作未完成：闭关状态或资源已更新，请重新查看。")
         await out_closing.finish()
 
-    hp_msg = ",气血已回满！" if new_hp >= int(new_exp / 2) else f",回复气血：{number_to(hp_gain)}"
-    mp_msg = ",真元已回满！" if new_mp >= new_exp else f",回复真元：{number_to(mp_gain)}"
-    efficiency = f"{int((level_rate + main_rate + closing_rate + blessed_rate) * 100)}%"
-    if reached_limit:
-        msg = f"闭关结束，本次闭关到达上限，共增加修为：{number_to(exp)}{hp_msg}{mp_msg}{spirit_vein_msg}"
+    hp_msg = (
+        ",气血已回满！"
+        if reward.new_hp >= int(reward.new_exp / 2)
+        else f",回复气血：{number_to(reward.hp_gain)}"
+    )
+    mp_msg = (
+        ",真元已回满！"
+        if reward.new_mp >= reward.new_exp
+        else f",回复真元：{number_to(reward.mp_gain)}"
+    )
+    efficiency = f"{int(reward.efficiency * 100)}%"
+    if reward.reached_limit:
+        msg = f"闭关结束，本次闭关到达上限，共增加修为：{number_to(reward.exp_gain)}{hp_msg}{mp_msg}{reward.spirit_vein_message}"
     else:
-        cost_msg = f"，消耗灵石{stone_cost}枚" if stone_cost else ""
-        msg = f"闭关结束，共闭关{exp_time}分钟，本次闭关增加修为：{number_to(exp)}(修炼效率：{efficiency}){cost_msg}{hp_msg}{mp_msg}{spirit_vein_msg}"
+        cost_msg = f"，消耗灵石{reward.stone_cost}枚" if reward.stone_cost else ""
+        msg = f"闭关结束，共闭关{reward.exp_time}分钟，本次闭关增加修为：{number_to(reward.exp_gain)}(修炼效率：{efficiency}){cost_msg}{hp_msg}{mp_msg}{reward.spirit_vein_message}"
     if result.message:
         msg += f"\n{result.message}"
     await handle_send(bot, event, msg, md_type="buff", k1="闭关", v1="闭关", k2="存档", v2="我的修仙信息", k3="修为", v3="我的修为")

@@ -24,6 +24,7 @@ from .closing_repository import ClosingSettlementSqlRepository
 from .stone_training_repository import StoneTrainingSqlRepository
 from .pvp_repository import NormalPvpSqlRepository
 from .closing_enter_repository import ClosingEnterSqlRepository, ClosingEnterResult
+from .closing_reward import ClosingRewardCalculator, ClosingRewardSnapshot
 
 
 class _TrainingSchemaMissing(RuntimeError):
@@ -301,6 +302,11 @@ class BuffApplication(LegacyApplication):
         if self._explicit_repository is None:
             return self._closing_settle(operation_id=operation_id, user_id=user_id, **kwargs)
         return self._action("closing_settle", operation_id=operation_id, user_id=user_id, **kwargs)
+
+    @staticmethod
+    def calculate_closing_reward(**kwargs: Any) -> ClosingRewardSnapshot:
+        """Calculate normal closing rewards from a caller-owned read snapshot."""
+        return ClosingRewardCalculator.calculate(**kwargs)
 
     @staticmethod
     def _closing_data(result: Any) -> dict[str, Any]:

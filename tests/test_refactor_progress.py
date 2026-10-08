@@ -121,6 +121,16 @@ class RefactorProgressTests(unittest.TestCase):
         self.assertTrue(buff["closing_enter_request_path_has_no_ddl"])
         self.assertTrue(buff["closing_enter_migrations_registered_and_routed"])
 
+    def test_progress_report_tracks_normal_closing_reward_scope_v2(self) -> None:
+        buff = _slice_status()["buff"]
+        self.assertTrue(buff["closing_reward_handler_application_owned"])
+        self.assertTrue(buff["closing_reward_snapshot_calculation_owned"])
+        self.assertTrue(buff["closing_reward_replay_before_snapshot_reads"])
+        self.assertTrue(buff["closing_reward_operation_identity_event_stable"])
+        self.assertTrue(buff["closing_reward_stone_alias_uses_same_application_path"])
+        self.assertTrue(buff["closing_reward_scope_backlog_and_virtual_world_excluded"])
+        self.assertTrue(buff["closing_reward_phase2_membership_unchanged"])
+
     def test_progress_report_tracks_avatar_identity_cutover(self) -> None:
         avatar = _slice_status()["avatar_identity"]
         self.assertTrue(avatar["migration_is_player_db_only"])

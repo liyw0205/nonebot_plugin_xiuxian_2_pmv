@@ -55,6 +55,37 @@ class ClosingSettlementRepositoryTests(unittest.TestCase):
                 self.assertEqual(45, __import__("json").loads(event["payload_json"])["exp_time"])
                 self.assertEqual(120, uow.query_one("SELECT exp FROM user_xiuxian WHERE user_id='u'")["exp"])
 
+    def test_blank_create_time_does_not_block_type_clear(self):
+        with tempfile.TemporaryDirectory() as temp:
+            db = Path(temp) / "game.db"
+            with db_backend.transaction(db) as conn:
+                conn.execute(
+                    "CREATE TABLE user_xiuxian(user_id TEXT PRIMARY KEY,exp INTEGER,stone INTEGER,hp INTEGER,mp INTEGER,atk INTEGER,power INTEGER)"
+                )
+                conn.execute(
+                    "CREATE TABLE user_cd(user_id TEXT PRIMARY KEY,type INTEGER,create_time TEXT,scheduled_time TEXT)"
+                )
+                conn.execute("INSERT INTO user_xiuxian VALUES('u',100,50,1,2,3,4)")
+                conn.execute("INSERT INTO user_cd VALUES('u',1,NULL,NULL)")
+            with DatabaseUnitOfWork(db) as uow:
+                OperationLedger().ensure_schema(uow)
+                OutboxStore().ensure_schema(uow)
+                apply_closing_settlement_game(uow)
+
+            result = ClosingSettlementSqlRepository(db).settle(
+                "bad-time", "u", "0", 5, 0, 10, 20, 11, 12, 0
+            )
+            self.assertEqual("applied", result.status)
+            with db_backend.connection(db) as conn:
+                self.assertEqual(
+                    (0, "0"),
+                    tuple(
+                        conn.execute(
+                            "SELECT type,create_time FROM user_cd WHERE user_id='u'"
+                        ).fetchone()
+                    ),
+                )
+
     def test_missing_schema_fails_closed_without_request_ddl(self):
         with tempfile.TemporaryDirectory() as temp:
             db = Path(temp) / "game.db"

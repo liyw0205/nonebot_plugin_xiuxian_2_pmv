@@ -20,6 +20,17 @@ receipt `buff.012` 与 player statistics `buff.013`；handler 只负责身份、
 ID 和兼容回复。进度 checker 的 `closing_enter_*` source contract 是该 scope 的静态证据，
 application/repository/handler/source 聚焦回归为 `29 passed`；NoneBot composition-root
 迁移导入不纳入该数字，避免既有 Activity 循环导入掩盖业务结果。
+
+### Phase 3 普通出关收益计算 scope（v2，收益 adapter 子切片）
+`scope_id=phase3-player-lifecycle-v2`、`stable_id=command:buff:出关` 只覆盖普通
+`出关` 及其 `灵石出关` alias 的收益快照读取适配和纯计算。handler 先用
+`BuffApplication.closing_replay` 做 replay-first 检查，再把一次 legacy read snapshot
+交给 `BuffApplication.calculate_closing_reward`，由 `ClosingRewardCalculator` 返回不可变
+`ClosingRewardSnapshot`；结算 mutation 仍由既有 `BuffApplication.closing_settle` 承担。
+operation ID 使用独立的 `buff-closing-settle:` 前缀，两个命令走同一 application path。
+本 scope 不覆盖 game CAS/receipt、outbox effects、player 统计/任务/活动投影、跨事务
+恢复，也不覆盖 `虚神界出关`、`虚神界闭关` 或 impart_pk 其它命令；这些保留 backlog。
+Phase 2 的 `496` 项 membership/hash 不变。
 ## 事务与失败回滚
 统一 operation ledger 和审计，旧事务异常可重试。
 ## 定时任务
