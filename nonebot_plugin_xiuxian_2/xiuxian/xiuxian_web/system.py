@@ -22,7 +22,6 @@ from .core import (
     render_template,
     request,
     run_async,
-    safe_path_under,
     select,
     send_file,
     session,
@@ -30,6 +29,12 @@ from .core import (
     time,
     url_for,
     web_auth_is_enabled,
+)
+from ...features.cache_files.application import CacheFileApplication
+from ...features.cache_files.repository import (
+    CacheFileNotFound,
+    CacheFileNotRegular,
+    CacheFileOutsideRoot,
 )
 from ...features.status.application import StatusApplication
 from ..xiuxian_utils.utils import search_users as search_users_application
@@ -39,6 +44,7 @@ status_application = StatusApplication(
     DATABASE,
     message_database=get_paths().message_db,
 )
+cache_file_application = CacheFileApplication()
 
 
 def _collect_dashboard_stats():
@@ -154,14 +160,11 @@ def search_users():
 def download_file(filepath):
     cache_dir = get_paths().cache
     try:
-        full_path = safe_path_under(cache_dir, filepath)
-    except ValueError:
+        full_path = cache_file_application.resolve_download(cache_dir, filepath)
+    except (CacheFileOutsideRoot, CacheFileNotRegular):
         abort(403)
-
-    if not full_path.exists():
+    except CacheFileNotFound:
         abort(404)
-    if not full_path.is_file():
-        abort(403)
 
     return send_file(str(full_path))
 

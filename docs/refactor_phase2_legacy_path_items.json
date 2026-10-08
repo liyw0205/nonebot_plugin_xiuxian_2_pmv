@@ -11824,13 +11824,13 @@
       "status": "已迁移",
       "reason": "The authenticated summary route preserves its nested response contract while composing the status-owned counter, host-metrics, and process-snapshot readers. This closes the shared dashboard read boundary only; it does not claim measured latency improvement or a bounded process enumeration.",
       "call_graph": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/system.py:125 api_dashboard_summary -> _collect_dashboard_stats -> StatusApplication.dashboard_stats -> DashboardStatsSqlRepository.snapshot -> read-only game/message database UOWs",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/system.py:125 api_dashboard_summary -> _collect_system_snapshot -> StatusApplication.system_info -> SystemInfoProvider.snapshot",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/system.py:125 api_dashboard_summary -> _collect_process_snapshot(5) -> StatusApplication.process_info -> ProcessInfoProvider.snapshot -> legacy process row shape"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/system.py:131 api_dashboard_summary -> _collect_dashboard_stats -> StatusApplication.dashboard_stats -> DashboardStatsSqlRepository.snapshot -> read-only game/message database UOWs",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/system.py:131 api_dashboard_summary -> _collect_system_snapshot -> StatusApplication.system_info -> SystemInfoProvider.snapshot",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/system.py:131 api_dashboard_summary -> _collect_process_snapshot(5) -> StatusApplication.process_info -> ProcessInfoProvider.snapshot -> legacy process row shape"
       ],
       "evidence": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/system.py:38-41,74-86,124-138",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/system.py:125",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/system.py:39-46,80-88,130-144",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/system.py:131",
         "nonebot_plugin_xiuxian_2/features/status/application.py:43-45,48-66",
         "nonebot_plugin_xiuxian_2/features/status/dashboard_stats_repository.py:10-20,31-89",
         "nonebot_plugin_xiuxian_2/features/status/system_info.py:28-38,41-137",
@@ -13338,23 +13338,31 @@
         "path": "/commands"
       }
     },
-    {
-      "id": "route:GET:/config:nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/config.py:config_management",
+  {
+    "id": "route:GET:/config:nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/config.py:config_management",
       "kind": "legacy_routes",
       "entry": "GET /config -> nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/config.py:config_management",
-      "status": "受阻",
-      "reason": "The old Flask app and route modules are loaded and its server is enabled by default. Route registration is proven, but each handler's downstream ownership and replacement/compatibility decision is not closed.",
-      "unknown_edge": "route function -> old data/service or feature application -> state effect",
-      "call_graph": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/config.py:736 -> Flask app.route(/config) -> legacy handler -> downstream state effect not closed"
-      ],
-      "evidence": [
+    "status": "已迁移",
+    "reason": "The legacy configuration page delegates its editable schema and XiuConfig projection to PluginConfigApplication; UpdateManager configuration backup callbacks share the same owner. The old URL, template, and response adapter remain compatible.",
+    "call_graph": [
+      "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/config.py:41 config_management -> PluginConfigApplication.config_by_category -> PluginConfigApplication.get_values -> XiuConfig",
+      "UpdateManager.configuration_backup_values -> PluginConfigApplication.get_values -> XiuConfig"
+    ],
+    "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
-        "scripts/export_refactor_inventory.py:41-70",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/config.py:736"
+      "scripts/export_refactor_inventory.py:41-70",
+      "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/config.py:41",
+      "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/config.py:40-47",
+      "nonebot_plugin_xiuxian_2/features/plugin_config/schema.py",
+      "nonebot_plugin_xiuxian_2/features/plugin_config/application.py:34-75",
+      "nonebot_plugin_xiuxian_2/features/plugin_config/runtime.py",
+      "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_utils/download_xiuxian_data.py:968-971",
+      "tests/test_plugin_config_owner.py",
+      "tests/test_local_backup_cleanup.py",
+      "nonebot_plugin_xiuxian_2/features/config_backups/tests/test_application.py"
       ],
       "source_declaration_found": true,
       "source": {
@@ -13456,23 +13464,27 @@
         "path": "/delete_config_backup"
       }
     },
-    {
-      "id": "route:GET:/download/<path:filepath>:nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/system.py:download_file",
+  {
+    "id": "route:GET:/download/<path:filepath>:nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/system.py:download_file",
       "kind": "legacy_routes",
       "entry": "GET /download/<path:filepath> -> nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/system.py:download_file",
-      "status": "受阻",
-      "reason": "The old Flask app and route modules are loaded and its server is enabled by default. Route registration is proven, but each handler's downstream ownership and replacement/compatibility decision is not closed.",
-      "unknown_edge": "route function -> old data/service or feature application -> state effect",
-      "call_graph": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/system.py:272 -> Flask app.route(/download/<path:filepath>) -> legacy handler -> downstream state effect not closed"
+    "status": "已迁移",
+    "reason": "The compatibility route delegates cache-root containment, symlink resolution, existence, and regular-file checks to CacheFileApplication/CacheFileRepository, then preserves Flask send_file behavior.",
+    "call_graph": [
+      "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/system.py:160 download_file -> CacheFileApplication.resolve_download -> CacheFileRepository.resolve_download -> normalized cache-root containment and regular-file checks -> Flask send_file"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
-        "scripts/export_refactor_inventory.py:41-70",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/system.py:272"
+      "scripts/export_refactor_inventory.py:41-70",
+      "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/system.py:160",
+      "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/system.py:159-169",
+      "nonebot_plugin_xiuxian_2/features/cache_files/application.py",
+      "nonebot_plugin_xiuxian_2/features/cache_files/repository.py",
+      "nonebot_plugin_xiuxian_2/features/cache_files/tests/test_cache_file_application.py",
+      "tests/test_cache_file_routes.py"
       ],
       "source_declaration_found": true,
       "source": {
@@ -13863,12 +13875,12 @@
       "status": "已迁移",
       "reason": "The authenticated route delegates process collection to the status-owned ProcessInfoProvider while preserving psutil-unavailable errors, sorting, top-five limit, and response row fields. The provider still enumerates the process list before sorting, so this is an ownership closure rather than a claim of bounded scan cost.",
       "call_graph": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/system.py:110 get_process_info -> status_application.process_info_available -> ProcessInfoProvider.available",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/system.py:110 get_process_info -> _collect_process_snapshot(5) -> StatusApplication.process_info -> ProcessInfoProvider.snapshot -> enumerate/sort/slice process rows -> api_success"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/system.py:116 get_process_info -> status_application.process_info_available -> ProcessInfoProvider.available",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/system.py:116 get_process_info -> _collect_process_snapshot(5) -> StatusApplication.process_info -> ProcessInfoProvider.snapshot -> enumerate/sort/slice process rows -> api_success"
       ],
       "evidence": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/system.py:85-86,109-121",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/system.py:110",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/system.py:91-93,115-127",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/system.py:116",
         "nonebot_plugin_xiuxian_2/features/status/application.py:59-66",
         "nonebot_plugin_xiuxian_2/features/status/process_info.py:9-57",
         "nonebot_plugin_xiuxian_2/features/status/tests/test_process_info.py",
@@ -13919,12 +13931,12 @@
       "status": "已迁移",
       "reason": "The authenticated stats route delegates counters to the status-owned DashboardStatsSqlRepository and retains the legacy response fields plus bot/runtime presentation. Reads use separate read-only game and message database UOWs; no production latency measurement is claimed.",
       "call_graph": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/system.py:90 get_stats -> _collect_dashboard_stats -> StatusApplication.dashboard_stats -> DashboardStatsSqlRepository.snapshot -> read-only game/message database UOWs",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/system.py:96 get_stats -> _collect_dashboard_stats -> StatusApplication.dashboard_stats -> DashboardStatsSqlRepository.snapshot -> read-only game/message database UOWs",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/system.py:44-71 _collect_dashboard_stats -> bot adapter list, bot uptime, and NoneBot version response projection"
       ],
       "evidence": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/system.py:38-41,44-71,89-99",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/system.py:90",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/system.py:40-41,50-78,95-105",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/system.py:96",
         "nonebot_plugin_xiuxian_2/features/status/application.py:23-49",
         "nonebot_plugin_xiuxian_2/features/status/dashboard_stats_repository.py:10-20,31-89",
         "nonebot_plugin_xiuxian_2/features/status/tests/test_dashboard_stats_repository.py",
@@ -13948,11 +13960,11 @@
       "status": "已迁移",
       "reason": "The authenticated route uses the existing status-owned SystemInfoProvider through StatusApplication and adapts its snapshot to the established grouped JSON fields. Host metric fallback behavior remains in the provider.",
       "call_graph": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/system.py:102 get_system_info_extended -> _collect_system_snapshot -> StatusApplication.system_info -> SystemInfoProvider.snapshot -> grouped legacy JSON response"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/system.py:108 get_system_info_extended -> _collect_system_snapshot -> StatusApplication.system_info -> SystemInfoProvider.snapshot -> grouped legacy JSON response"
       ],
       "evidence": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/system.py:74-82,101-107",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/system.py:102",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/system.py:80-88,107-113",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/system.py:108",
         "nonebot_plugin_xiuxian_2/features/status/application.py:51-56",
         "nonebot_plugin_xiuxian_2/features/status/system_info.py:28-38,41-137",
         "tests/test_status_system_info_contract.py",
@@ -14351,23 +14363,31 @@
         "path": "/robots.txt"
       }
     },
-    {
-      "id": "route:POST:/save_config:nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/config.py:save_config",
+  {
+    "id": "route:POST:/save_config:nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/config.py:save_config",
       "kind": "legacy_routes",
       "entry": "POST /save_config -> nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/config.py:save_config",
-      "status": "受阻",
-      "reason": "The old Flask app and route modules are loaded and its server is enabled by default. Route registration is proven, but each handler's downstream ownership and replacement/compatibility decision is not closed.",
-      "unknown_edge": "route function -> old data/service or feature application -> state effect",
-      "call_graph": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/config.py:795 -> Flask app.route(/save_config) -> legacy handler -> downstream state effect not closed"
+    "status": "已迁移",
+    "reason": "The legacy save route delegates field writing to PluginConfigApplication, which owns the editable schema and uses the existing literal writer for xiuxian_config.py. UpdateManager backup restore calls the same owner; legacy URL, auth, CSRF, and JSON response behavior remain in the adapters.",
+    "call_graph": [
+      "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/config.py:50 save_config -> save_config_values -> PluginConfigApplication.save_values -> write_config_values -> xiuxian_config.py",
+      "UpdateManager.configuration_backup_save_values -> save_config_values -> PluginConfigApplication.save_values -> write_config_values -> xiuxian_config.py"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
-        "scripts/export_refactor_inventory.py:41-70",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/config.py:795"
+      "scripts/export_refactor_inventory.py:41-70",
+      "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/config.py:50",
+      "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/config.py:49-66",
+      "nonebot_plugin_xiuxian_2/features/plugin_config/schema.py",
+      "nonebot_plugin_xiuxian_2/features/plugin_config/application.py:93-108",
+      "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_utils/config_literal.py:225-249",
+      "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_utils/download_xiuxian_data.py:883-886,988-989",
+      "tests/test_plugin_config_owner.py",
+      "tests/test_updater_web.py",
+      "nonebot_plugin_xiuxian_2/features/config_backups/tests/test_application.py"
       ],
       "source_declaration_found": true,
       "source": {
@@ -14413,7 +14433,7 @@
       "status": "已迁移",
       "reason": "The legacy response contract remains available, but its user lookup now delegates to the feature-owned PlayerProfileApplication and read-only repository. The canonical admin API is exposed at /api/v1/info/users/search with a uniform envelope.",
       "call_graph": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/system.py:141 search_users -> Flask app.route(/search_users) -> legacy handler",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/system.py:147 search_users -> Flask app.route(/search_users) -> legacy handler",
         "legacy search_users -> xiuxian.xiuxian_utils.utils.search_users -> PlayerProfileApplication.search_users",
         "PlayerProfileApplication.search_users -> PlayerProfileSqlRepository.search_users -> DatabaseUnitOfWork(read_only=True) SELECT user_id,user_name LIMIT 10",
         "features/info/web.py -> GET /api/v1/info/users/search -> admin guard -> PlayerProfileApplication.search_users -> uniform api_success envelope"
@@ -14424,8 +14444,8 @@
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/system.py:141",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/system.py:142-151",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/system.py:147",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/system.py:146-157",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_utils/utils.py:124-125",
         "nonebot_plugin_xiuxian_2/features/info/profile_application.py:26-27",
         "nonebot_plugin_xiuxian_2/features/info/profile_repository.py:48-78",

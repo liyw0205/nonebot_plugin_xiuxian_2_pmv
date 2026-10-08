@@ -881,16 +881,9 @@ class UpdateManager:
         return self._config_backup_application().restore_config_from_backup(backup_path)
 
     def save_config_values(self, new_values):
-        """保存配置到文件（合法字面量 + 写后语法自愈）。"""
-        from ..xiuxian_utils.config_literal import write_config_values
-        from ..xiuxian_web import CONFIG_EDITABLE_FIELDS
+        from ...features.plugin_config.runtime import plugin_config_application
 
-        config_file_path = Xiu_Plugin / "xiuxian" / "xiuxian_config.py"
-        field_types = {
-            name: meta.get("type", "str")
-            for name, meta in CONFIG_EDITABLE_FIELDS.items()
-        }
-        return write_config_values(config_file_path, new_values or {}, field_types)
+        return plugin_config_application.save_values(new_values)
 
     def get_backups(self):
         """获取所有插件备份"""
@@ -973,9 +966,9 @@ class UpdateManager:
         return self._gmt_to_cst_str(value)
 
     def configuration_backup_values(self):
-        from ..xiuxian_web.config import get_config_values
+        from ...features.plugin_config.runtime import plugin_config_application
 
-        return get_config_values()
+        return plugin_config_application.get_values()
 
     def configuration_backup_version(self):
         return self.current_version

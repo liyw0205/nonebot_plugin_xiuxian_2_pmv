@@ -173,10 +173,16 @@ class LocalBackupCleanupTests(unittest.TestCase):
             encoding="utf-8"
         )
         self.assertIn("local_backup_keep_days = 10", cfg)
-        web = (ROOT / "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/config.py").read_text(
-            encoding="utf-8"
+        config_schema = (
+            ROOT / "nonebot_plugin_xiuxian_2/features/plugin_config/schema.py"
+        ).read_text(encoding="utf-8")
+        self.assertIn('"local_backup_keep_days": {', config_schema)
+        self.assertIn(
+            "def configuration_backup_values(self):\n"
+            "        from ...features.plugin_config.runtime import plugin_config_application\n\n"
+            "        return plugin_config_application.get_values()",
+            text,
         )
-        self.assertIn('"local_backup_keep_days"', web)
 
 
 if __name__ == "__main__":
