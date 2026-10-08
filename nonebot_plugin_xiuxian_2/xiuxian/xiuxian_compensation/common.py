@@ -175,6 +175,14 @@ def upsert_reward_definition(
     record_id: str,
     record: Dict[str, Any],
 ):
+    if config["type_key"] == "补偿":
+        return _compensation_application().upsert_compensation_definition(
+            operation_id,
+            request_identity,
+            record_id,
+            record,
+            expected_version=record.get("_definition_version"),
+        )
     return _compensation_application().upsert_reward_definition(
         operation_id,
         config["type_key"],
@@ -183,6 +191,10 @@ def upsert_reward_definition(
         record,
         expected_version=record.get("_definition_version"),
     )
+
+
+def reward_center_records(config: Dict[str, Any]) -> List[dict]:
+    return _compensation_application().reward_center_records(config["type_key"])
 
 
 def load_claimed_data(config: Dict[str, Any]) -> Dict[str, List[str]]:

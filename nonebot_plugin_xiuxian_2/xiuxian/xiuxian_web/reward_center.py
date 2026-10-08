@@ -17,14 +17,12 @@ from ..xiuxian_compensation.common import (
     create_item_message,
     delete_record,
     generate_unique_id,
-    get_claim_count,
     get_item_list,
     get_reward_definition,
-    get_reward_used_count,
     load_data,
     runtime_ids,
-    save_data,
     upsert_reward_definition,
+    reward_center_records,
 )
 
 
@@ -85,10 +83,6 @@ def _normalize_record_id(kind: str, value: str, data: dict) -> str:
     return record_id
 
 
-def _claimed_count(config: dict, record_id: str) -> int:
-    return get_claim_count(config, record_id)
-
-
 def _editable_reward_text(items: list[dict]) -> str:
     parts = []
     for item in items or []:
@@ -99,14 +93,17 @@ def _editable_reward_text(items: list[dict]) -> str:
     return ",".join(parts)
 
 
-def _serialize_record(kind: str, record_id: str, record: dict, config: dict) -> dict:
+def _serialize_record(
+    kind: str,
+    record_id: str,
+    record: dict,
+    *,
+    used_count: int,
+    claimed_count: int,
+) -> dict:
     items = record.get("items") or []
     item_names = create_item_message(items)
     usage_limit = int(record.get("usage_limit") or 0)
-    used_count = get_reward_used_count(
-        config, record_id, int(record.get("used_count") or 0)
-    )
-    claimed_count = _claimed_count(config, record_id)
     return {
         "id": record_id,
         "kind": kind,
@@ -127,10 +124,15 @@ def _serialize_record(kind: str, record_id: str, record: dict, config: dict) -> 
 def _serialize_records(kind: str) -> list[dict]:
     meta = _reward_config(kind)
     config = meta["data_config"]
-    data = load_data(config)
     return [
-        _serialize_record(kind, record_id, record, config)
-        for record_id, record in sorted(data.items(), key=lambda item: item[0])
+        _serialize_record(
+            kind,
+            row["id"],
+            row["record"],
+            used_count=row["used_count"],
+            claimed_count=row["claimed_count"],
+        )
+        for row in reward_center_records(config)
     ]
 
 
@@ -239,39 +241,34 @@ def api_save_reward_record():
         kind, record_id, record = _normalize_payload(payload)
         meta = _reward_config(kind)
         config = meta["data_config"]
-        if kind == "compensation":
-            data = load_data(config)
-            data[record_id] = record
-            save_data(config, data)
-            saved_record = load_data(config)[record_id]
-        else:
-            idempotency_key = _clean_text(
-                request.headers.get("Idempotency-Key") or payload.get("operation_id")
+        idempotency_key = _clean_text(
+            request.headers.get("Idempotency-Key") or payload.get("operation_id")
+        )
+        operation_id = (
+            f"reward-center:{session['admin_id']}:{idempotency_key}"
+            if idempotency_key
+            else f"reward-center:{session['admin_id']}:{runtime_ids.new_id()}"
+        )
+        request_identity = json.dumps(
+            payload, ensure_ascii=True, sort_keys=True, separators=(",", ":")
+        )
+        result = upsert_reward_definition(
+            config, operation_id, request_identity, record_id, record
+        )
+        if not result.succeeded:
+            message = (
+                "奖励定义已变化，请刷新后重试"
+                if result.status == "definition_changed"
+                else f"奖励定义保存失败：{result.status}"
             )
-            operation_id = (
-                f"reward-center:{session['admin_id']}:{idempotency_key}"
-                if idempotency_key
-                else f"reward-center:{session['admin_id']}:{runtime_ids.new_id()}"
-            )
-            request_identity = json.dumps(
-                payload, ensure_ascii=True, sort_keys=True, separators=(",", ":")
-            )
-            result = upsert_reward_definition(
-                config, operation_id, request_identity, record_id, record
-            )
-            if not result.succeeded:
-                message = (
-                    "奖励定义已变化，请刷新后重试"
-                    if result.status == "definition_changed"
-                    else f"奖励定义保存失败：{result.status}"
-                )
-                return api_error(message)
-            saved_record = dict(result.record or {})
+            return api_error(message)
+        records = _serialize_records(kind)
+        saved_record = next((item for item in records if item["id"] == record_id), None)
         return api_success(
             message=f"{meta['title']}已保存",
             kind=kind,
-            record=_serialize_record(kind, record_id, saved_record, config),
-            records=_serialize_records(kind),
+            record=saved_record,
+            records=records,
         )
     except Exception as e:
         return api_error(str(e))

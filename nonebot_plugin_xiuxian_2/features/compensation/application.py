@@ -22,6 +22,9 @@ class CompensationApplication(MigratedFeatureApplication):
     def compensation_catalog_version(self):
         return self.repository.compensation_catalog_version()
 
+    def reward_center_records(self, reward_type):
+        return self.repository.reward_center_records(reward_type)
+
     def replay_compensation_definition_upsert(self, operation_id, request_identity):
         return self.repository.replay_compensation_definition_upsert(
             operation_id, request_identity

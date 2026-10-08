@@ -1906,12 +1906,13 @@ class SourceQualityTests(unittest.TestCase):
         )[0]
         self.assertIn("upsert_reward_definition(", save_body)
         self.assertIn("_normalize_payload(payload)", save_body)
-        self.assertIn('if kind == "compensation":', save_body)
-        self.assertNotIn("save_data(config, data)", save_body.split("else:", 1)[1])
+        self.assertIn("result = upsert_reward_definition(", save_body)
+        self.assertNotIn("save_data(config, data)", save_body)
         common_source = (
             SOURCE_ROOT / "xiuxian" / "xiuxian_compensation" / "common.py"
         ).read_text(encoding="utf-8")
         self.assertIn("expected_version=record.get(\"_definition_version\")", common_source)
+        self.assertIn("_compensation_application().upsert_compensation_definition(", common_source)
         self.assertGreaterEqual(save_body.count("if not result.succeeded:"), 1)
 
     def test_dungeon_team_json_fields_use_typed_normalization(self) -> None:

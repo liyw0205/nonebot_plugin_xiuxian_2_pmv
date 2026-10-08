@@ -80,7 +80,7 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
                              if (item.get("source") or {}).get("feature") == "sect"))
         self.assertEqual(report["path_count"], 496)
         self.assertEqual(report["status_counts"],
-                         {"不可达": 19, "允许保留的兼容路径": 133, "受阻": 55, "已迁移": 289})
+                         {"不可达": 19, "允许保留的兼容路径": 134, "受阻": 50, "已迁移": 293})
         self.assertTrue(report["frozen_membership_valid"])
         self.assertEqual(report["integrity_errors"], [])
 
@@ -399,7 +399,7 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
             self.assertIn(evidence, system_item["evidence"])
         self.assertNotIn("legacy downstream effect not closed", system_graph)
         self.assertEqual(report["status_counts"],
-                         {"不可达": 19, "允许保留的兼容路径": 133, "受阻": 55, "已迁移": 289})
+                         {"不可达": 19, "允许保留的兼容路径": 134, "受阻": 50, "已迁移": 293})
         self.assertTrue(report["frozen_membership_valid"])
         self.assertEqual(report["integrity_errors"], [])
 
@@ -473,7 +473,7 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
                 self.assertNotIn("downstream state effect not closed", graph)
 
         self.assertEqual(report["status_counts"],
-                         {"不可达": 19, "允许保留的兼容路径": 133, "受阻": 55, "已迁移": 289})
+                         {"不可达": 19, "允许保留的兼容路径": 134, "受阻": 50, "已迁移": 293})
         self.assertEqual(report["path_count"], 496)
         self.assertTrue(report["frozen_membership_valid"])
         self.assertEqual(report["integrity_errors"], [])
@@ -522,7 +522,7 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
         self.assertNotIn("legacy downstream effect not closed", claim_graph)
         self.assertEqual(
             report["status_counts"],
-            {"不可达": 19, "允许保留的兼容路径": 133, "受阻": 55, "已迁移": 289},
+            {"不可达": 19, "允许保留的兼容路径": 134, "受阻": 50, "已迁移": 293},
         )
         self.assertTrue(report["frozen_membership_valid"])
         self.assertEqual(report["integrity_errors"], [])
@@ -581,7 +581,7 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
 
         self.assertEqual(
             report["status_counts"],
-            {"不可达": 19, "允许保留的兼容路径": 133, "受阻": 55, "已迁移": 289},
+            {"不可达": 19, "允许保留的兼容路径": 134, "受阻": 50, "已迁移": 293},
         )
 
     def test_world_events_demon_claim_command_owns_atomic_claim_statistic(self):
@@ -613,7 +613,7 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
         self.assertEqual(report["integrity_errors"], [])
         self.assertEqual(
             report["status_counts"],
-            {"不可达": 19, "允许保留的兼容路径": 133, "受阻": 55, "已迁移": 289},
+            {"不可达": 19, "允许保留的兼容路径": 134, "受阻": 50, "已迁移": 293},
         )
         self.assertTrue(report["frozen_membership_valid"])
 
@@ -661,7 +661,7 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
 
         self.assertEqual(
             report["status_counts"],
-            {"不可达": 19, "允许保留的兼容路径": 133, "受阻": 55, "已迁移": 289},
+            {"不可达": 19, "允许保留的兼容路径": 134, "受阻": 50, "已迁移": 293},
         )
         self.assertTrue(report["frozen_membership_valid"])
         self.assertEqual(report["integrity_errors"], [])
@@ -718,7 +718,7 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
         self.assertEqual(report["path_count"], 496)
         self.assertEqual(
             report["status_counts"],
-            {"不可达": 19, "允许保留的兼容路径": 133, "受阻": 55, "已迁移": 289},
+            {"不可达": 19, "允许保留的兼容路径": 134, "受阻": 50, "已迁移": 293},
         )
         self.assertGreater(report["blocked_count"], 0)
         self.assertTrue(all(item["call_graph"] and item["evidence"] for item in report["items"]))
@@ -1509,6 +1509,47 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
         )
 
         self.assertTrue(any("Explicit path summary differs from frozen entry: explicit" in error for error in report["integrity_errors"]))
+
+    def test_reward_center_routes_share_compensation_owner_and_page_is_compatibility(self):
+        report = load_phase2_scope_report(include_items=True)
+        items = {item["id"]: item for item in report["items"]}
+        expected = {
+            "route:GET:/api/reward-center/records:nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/reward_center.py:api_reward_records": (
+                "RewardCenterSqlRepository.list_records",
+                "tests/test_reward_definition_repository.py",
+            ),
+            "route:POST:/api/reward-center/records:nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/reward_center.py:api_save_reward_record": (
+                "CompensationApplication.upsert_compensation_definition",
+                "tests/test_web_auth.py",
+            ),
+            "route:DELETE:/api/reward-center/records/<kind>/<record_id>:nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/reward_center.py:api_delete_reward_record": (
+                "delete_reward_definition",
+                "tests/test_web_auth.py",
+            ),
+            "route:POST:/api/reward-center/records/<kind>/clear:nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/reward_center.py:api_clear_reward_records": (
+                "clear_reward_definitions",
+                "tests/test_web_auth.py",
+            ),
+        }
+        for item_id, (owner, test_path) in expected.items():
+            with self.subTest(route=item_id):
+                item = items[item_id]
+                graph = " ".join(item["call_graph"])
+                self.assertEqual(item["status"], "已迁移")
+                self.assertNotIn("unknown_edge", item)
+                self.assertIn(owner, graph)
+                self.assertNotIn("downstream state effect not closed", graph)
+                self.assertTrue(any(test_path in evidence for evidence in item["evidence"]))
+
+        page_id = "route:GET:/reward-center:nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/reward_center.py:reward_center"
+        page = items[page_id]
+        self.assertEqual(page["status"], "允许保留的兼容路径")
+        self.assertNotIn("unknown_edge", page)
+        self.assertIn("authenticated reward_center.html", " ".join(page["call_graph"]))
+        self.assertEqual(
+            report["status_counts"],
+            {"不可达": 19, "允许保留的兼容路径": 134, "受阻": 50, "已迁移": 293},
+        )
 
     def test_check_cli_returns_nonzero_for_incomplete_frozen_scope(self):
         report = {

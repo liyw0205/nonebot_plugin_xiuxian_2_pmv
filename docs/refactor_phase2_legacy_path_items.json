@@ -12582,11 +12582,10 @@
       "id": "route:GET:/api/reward-center/records:nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/reward_center.py:api_reward_records",
       "kind": "legacy_routes",
       "entry": "GET /api/reward-center/records -> nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/reward_center.py:api_reward_records",
-      "status": "受阻",
-      "reason": "The old Flask app and route modules are loaded and its server is enabled by default. Route registration is proven, but each handler's downstream ownership and replacement/compatibility decision is not closed.",
-      "unknown_edge": "route function -> old data/service or feature application -> state effect",
+      "status": "已迁移",
       "call_graph": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/reward_center.py:221 -> Flask app.route(/api/reward-center/records) -> legacy handler -> downstream state effect not closed"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/reward_center.py:223 api_reward_records -> reward_center_records -> CompensationApplication.reward_center_records",
+        "CompensationApplication.reward_center_records -> CompensationRepository.reward_center_records -> RewardCenterSqlRepository.list_records -> one read-only UOW joins definitions, claim counters and claims"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
@@ -12594,7 +12593,13 @@
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/reward_center.py:221"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/reward_center.py:223",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/reward_center.py:124-136,222-231",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/common.py:196-197",
+        "nonebot_plugin_xiuxian_2/features/compensation/application.py:25-26",
+        "nonebot_plugin_xiuxian_2/features/compensation/repository.py:14-79,90-91",
+        "nonebot_plugin_xiuxian_2/features/compensation/tests/test_reward_definition_repository.py:84-116",
+        "tests/test_web_auth.py:131-175"
       ],
       "source_declaration_found": true,
       "source": {
@@ -12610,11 +12615,10 @@
       "id": "route:POST:/api/reward-center/records:nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/reward_center.py:api_save_reward_record",
       "kind": "legacy_routes",
       "entry": "POST /api/reward-center/records -> nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/reward_center.py:api_save_reward_record",
-      "status": "受阻",
-      "reason": "The old Flask app and route modules are loaded and its server is enabled by default. Route registration is proven, but each handler's downstream ownership and replacement/compatibility decision is not closed.",
-      "unknown_edge": "route function -> old data/service or feature application -> state effect",
+      "status": "已迁移",
       "call_graph": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/reward_center.py:233 -> Flask app.route(/api/reward-center/records) -> legacy handler -> downstream state effect not closed"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/reward_center.py:235 api_save_reward_record -> upsert_reward_definition compatibility adapter",
+        "upsert_reward_definition -> CompensationApplication.upsert_compensation_definition or upsert_reward_definition -> version-checked transactional definition repository; operation ID and request identity are preserved"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
@@ -12622,7 +12626,13 @@
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/reward_center.py:233"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/reward_center.py:235",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/reward_center.py:234-274",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/common.py:171-193",
+        "nonebot_plugin_xiuxian_2/features/compensation/application.py:33-45,86-99",
+        "nonebot_plugin_xiuxian_2/features/compensation/tests/test_reward_definition_repository.py:153-213",
+        "tests/test_web_auth.py:177-208",
+        "tests/test_source_quality.py:1900-1920"
       ],
       "source_declaration_found": true,
       "source": {
@@ -12638,11 +12648,9 @@
       "id": "route:DELETE:/api/reward-center/records/<kind>/<record_id>:nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/reward_center.py:api_delete_reward_record",
       "kind": "legacy_routes",
       "entry": "DELETE /api/reward-center/records/<kind>/<record_id> -> nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/reward_center.py:api_delete_reward_record",
-      "status": "受阻",
-      "reason": "The old Flask app and route modules are loaded and its server is enabled by default. Route registration is proven, but each handler's downstream ownership and replacement/compatibility decision is not closed.",
-      "unknown_edge": "route function -> old data/service or feature application -> state effect",
+      "status": "已迁移",
       "call_graph": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/reward_center.py:281 -> Flask app.route(/api/reward-center/records/<kind>/<record_id>) -> legacy handler -> downstream state effect not closed"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/reward_center.py:278 api_delete_reward_record -> delete_record -> CompensationApplication.delete_compensation_definition or delete_reward_definition"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
@@ -12650,7 +12658,11 @@
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/reward_center.py:281"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/reward_center.py:278",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/reward_center.py:277-300",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/common.py:748-766",
+        "nonebot_plugin_xiuxian_2/features/compensation/tests/test_reward_definition_repository.py:233-247",
+        "tests/test_web_auth.py:210-232"
       ],
       "source_declaration_found": true,
       "source": {
@@ -12666,11 +12678,9 @@
       "id": "route:POST:/api/reward-center/records/<kind>/clear:nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/reward_center.py:api_clear_reward_records",
       "kind": "legacy_routes",
       "entry": "POST /api/reward-center/records/<kind>/clear -> nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/reward_center.py:api_clear_reward_records",
-      "status": "受阻",
-      "reason": "The old Flask app and route modules are loaded and its server is enabled by default. Route registration is proven, but each handler's downstream ownership and replacement/compatibility decision is not closed.",
-      "unknown_edge": "route function -> old data/service or feature application -> state effect",
+      "status": "已迁移",
       "call_graph": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/reward_center.py:307 -> Flask app.route(/api/reward-center/records/<kind>/clear) -> legacy handler -> downstream state effect not closed"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/reward_center.py:304 api_clear_reward_records -> clear_records -> CompensationApplication.clear_compensation_definitions or clear_reward_definitions"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
@@ -12678,7 +12688,11 @@
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/reward_center.py:307"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/reward_center.py:304",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/reward_center.py:303-328",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/common.py:769-790",
+        "nonebot_plugin_xiuxian_2/features/compensation/tests/test_reward_definition_repository.py:233-247",
+        "tests/test_web_auth.py:210-232"
       ],
       "source_declaration_found": true,
       "source": {
@@ -14270,11 +14284,10 @@
       "id": "route:GET:/reward-center:nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/reward_center.py:reward_center",
       "kind": "legacy_routes",
       "entry": "GET /reward-center -> nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/reward_center.py:reward_center",
-      "status": "受阻",
-      "reason": "The old Flask app and route modules are loaded and its server is enabled by default. Route registration is proven, but each handler's downstream ownership and replacement/compatibility decision is not closed.",
-      "unknown_edge": "route function -> old data/service or feature application -> state effect",
+      "status": "允许保留的兼容路径",
+      "reason": "Keep the existing authenticated HTML editor as a compatibility adapter; all reads and mutations in its reward-center workflow are owned by the Compensation application and repository routes.",
       "call_graph": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/reward_center.py:207 -> Flask app.route(/reward-center) -> legacy handler -> downstream state effect not closed"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/reward_center.py:209 reward_center -> authenticated reward_center.html template; data actions call the feature-owned reward-center API routes"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
@@ -14282,7 +14295,10 @@
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/reward_center.py:207"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/reward_center.py:209",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/reward_center.py:208-219",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/templates/reward_center.html:1-3",
+        "tests/test_web_auth.py:131-232"
       ],
       "source_declaration_found": true,
       "source": {

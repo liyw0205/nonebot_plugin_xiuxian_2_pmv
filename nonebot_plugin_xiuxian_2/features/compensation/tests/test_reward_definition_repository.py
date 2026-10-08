@@ -4,9 +4,11 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from ..application import CompensationApplication
 from ..migrations import (
+    apply_compensation_definition_schema,
     apply_compensation_reward_claim_schema,
     apply_compensation_reward_catalog_schema,
 )
@@ -23,6 +25,15 @@ class CompensationRewardDefinitionRepositoryTests(unittest.TestCase):
         self.gift_claims = self.root / "gift-claims.json"
         self.redeem_definitions = self.root / "redeem.json"
         self.redeem_claims = self.root / "redeem-claims.json"
+        self.compensation_definitions = self.root / "compensation.json"
+        self.compensation_claims = self.root / "compensation-claims.json"
+        self.compensation_definitions.write_text(
+            json.dumps({"C1": {"items": [], "reason": "maintenance"}}),
+            encoding="utf-8",
+        )
+        self.compensation_claims.write_text(
+            json.dumps({"u1": ["C1"], "u2": ["C1"]}), encoding="utf-8"
+        )
         self.gift_definitions.write_text(
             json.dumps({"G1": {"items": [], "reason": "old gift"}}),
             encoding="utf-8",
@@ -55,6 +66,12 @@ class CompensationRewardDefinitionRepositoryTests(unittest.TestCase):
         with DatabaseUnitOfWork(self.database) as uow:
             apply_compensation_reward_claim_schema(uow)
             OperationLedger().ensure_schema(uow)
+            apply_compensation_definition_schema(
+                uow,
+                self.compensation_definitions,
+                self.compensation_claims,
+                occurred_at="2026-10-02 12:00:00",
+            )
             apply_compensation_reward_catalog_schema(
                 uow,
                 self.gift_definitions,
@@ -63,6 +80,40 @@ class CompensationRewardDefinitionRepositoryTests(unittest.TestCase):
                 self.redeem_claims,
                 occurred_at="2026-10-02 12:00:00",
             )
+
+    def test_reward_center_snapshot_aggregates_claim_counts_in_one_read_unit(self) -> None:
+        from .. import repository as compensation_repository
+
+        opened = []
+        original_uow = DatabaseUnitOfWork
+
+        def track_uow(database, **kwargs):
+            opened.append(kwargs)
+            return original_uow(database, **kwargs)
+
+        with patch.object(
+            compensation_repository,
+            "DatabaseUnitOfWork",
+            side_effect=track_uow,
+        ):
+            compensation = self.application.reward_center_records("补偿")
+            gift = self.application.reward_center_records("礼包")
+            redeem = self.application.reward_center_records("兑换码")
+
+        self.assertEqual(len(opened), 3)
+        self.assertTrue(all(call == {"read_only": True} for call in opened))
+        self.assertEqual(
+            (compensation[0]["id"], compensation[0]["claimed_count"], compensation[0]["used_count"]),
+            ("C1", 2, 2),
+        )
+        self.assertEqual(
+            (gift[0]["id"], gift[0]["claimed_count"], gift[0]["used_count"]),
+            ("G1", 2, 2),
+        )
+        self.assertEqual(
+            (redeem[0]["id"], redeem[0]["claimed_count"], redeem[0]["used_count"]),
+            ("R1", 2, 3),
+        )
 
     def scalar(self, sql: str, params: tuple = ()) -> int:
         with DatabaseUnitOfWork(self.database, read_only=True) as uow:
