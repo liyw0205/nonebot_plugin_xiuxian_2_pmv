@@ -2,6 +2,21 @@
 
 状态：进行中。`v1.1.0` 的 P0-P7 发布证据继续保留，但不作为底层全面重构完成证明。
 
+**2026-10-09 Phase 3 scope upgrade 与普通闭关切片（已冻结）**：Phase 2 `496` 项冻结
+membership/hash 不变。本轮冻结 `scope_id=phase3-player-lifecycle-v1`、
+`stable_id=command:buff:闭关`，默认入口为
+`nonebot_plugin_xiuxian_2/xiuxian/xiuxian_buff/__init__.py::in_closing_`。现状调用链仍是
+legacy handler 曾执行 `check_user/check_user_type`，再分别写 game `user_cd` 和
+player statistics；现已切换到 `BuffApplication.closing_enter`。该 application 在 attached
+game/player UoW 内维护 `buff.closing_enter` ledger、`user_cd` CAS、`闭关次数` upsert 和
+game receipt；`buff.012`/`buff.013` 分别路由 game/player。handler 保留伪灵根、忙状态、
+缺 schema、replay/conflict 的兼容回复，且不再直写旧 service。`check_full_refactor_progress.py`
+新增 `closing_enter_*` source contract 与 progress tests；`出关`、`虚神界闭关`、其它 buff
+命令及清理 `transaction_service` 均留在 backlog。该切片的 source/application/repository/
+handler 聚焦集合已 `29 passed`；Phase 2 gate 同步复核为 `ready=true`、`338/139/19/0`、
+`496` 项 membership 有效、`integrity_errors=[]`，聚合 progress `exit_ready=true`。最终
+提交/推送证据仍由主代理收尾记录。
+
 **Non-command matcher 收口（2026-10-09）**：`group_welcome` 的 notice 注册改由 `on_compat.on_notice -> _nb_on("notice") -> _register_route`，保留 NoneBot notice 类型权限、优先级、`matcher.finish()`、QQ `event_id` 被动发送和管理员开关命令；`GroupLifecycleNoticeApplication` 复用事件预处理器已写入的 `xiuxian_lifecycle_result`，避免同一生命周期事件被状态注册表重复计数。新增 exactly-once 回归，group lifecycle 聚焦测试 `6 passed`。Phase 2 冻结清单现为 `338/139/19/0`，membership 有效且 `integrity_errors=[]`，唯一非命令 matcher blocker 已关闭。三名子代理并行完成 runtime、迁移设计和 gate 证据审计，主线程整合接口、串行回归、文档、提交和推送。
 
 **Work owner 收口（2026-10-09，notice 收口前快照）**：同一 `xiuxian_work` source module 的 offer 生成、追捕令倍率、结算随机结果、结算 effects、提醒 task lifecycle 与 settlement snapshot cleanup 一次闭合。`WorkRewardApplication` 生成并冻结 offer/settlement decision，`WorkSettlementApplication` 的 operation identity 只绑定用户和悬赏快照，奖励字段与容量限制作为首份随机决定/执行输入持久化并在重试时回放，避免 matcher 重抽导致 `operation_conflict`；`WorkSettlementEffects` 统一日志/统计/任务进度，`WorkReminderApplication` 统一 schedule/cancel/consume，SQL settlement UoW 原子清理 active/offer snapshots，legacy JSON 仅保留兼容投影删除。聚焦回归 `138 passed, 91 subtests passed`（9.13 秒），Work reward/application 子集 `13 passed`（1.26 秒），独立 item-use handler 回归 `17 passed`（4.85 秒），`git diff --check`、目标 compileall 通过；item-use 与 feature tests 合并收集仍受既有 Activity 循环导入顺序影响，未把该收集错误计入业务失败。当时 Phase 2 为 `337/139/19/1`，membership 有效、`integrity_errors=[]`；性能排查显示冷启动旧插件导入+AST 检测约 7 秒，缓存命中约 0.45 秒，architecture audit 约 6--7 秒，五库 migration apply 约 1.8--2.0 秒，而实际 SQL/文件修改约 85--87ms；主要固定成本在导入/静态检测，不是数据库写入。上述均为本地工具或隔离测试耗时，未测生产命令端到端延迟。盘点/编码/集成分段耗时未知。

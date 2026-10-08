@@ -1,3 +1,7 @@
+import json
+import os
+import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -6,6 +10,9 @@ from ....infrastructure.database import DatabaseUnitOfWork, OperationLedger, Out
 from ..migrations import apply_closing_settlement_game
 from ..closing_repository import ClosingSettlementSqlRepository
 from tests.test_db_backend import db_backend
+
+
+ROOT = Path(__file__).resolve().parents[4]
 
 
 class ClosingSettlementRepositoryTests(unittest.TestCase):
@@ -60,11 +67,36 @@ class ClosingSettlementRepositoryTests(unittest.TestCase):
                 self.assertIsNone(uow.query_one("SELECT 1 FROM sqlite_master WHERE name='closing_settlement_operations'"))
 
     def test_migration_routing_assigns_projection_schema_to_owners(self):
-        from ....plugin import build_migrations, migrations_for_database
-
-        catalog = build_migrations()
-        game = {item.version for item in migrations_for_database(catalog, "game_db")}
-        player = {item.version for item in migrations_for_database(catalog, "player_db")}
+        # Import the complete plugin graph in a clean interpreter.  Importing
+        # it in this unittest process can collide with partially initialized
+        # feature modules loaded by neighboring repository tests.
+        script = """
+import json
+import nonebot
+nonebot.init()
+from nonebot_plugin_xiuxian_2.plugin import build_migrations, migrations_for_database
+catalog = build_migrations()
+print(json.dumps({
+    key: [item.version for item in migrations_for_database(catalog, key)]
+    for key in ("game_db", "player_db")
+}, ensure_ascii=False))
+"""
+        result = subprocess.run(
+            [sys.executable, "-c", script],
+            cwd=ROOT,
+            env={
+                **os.environ,
+                "PYTHONDONTWRITEBYTECODE": "1",
+                "XIUXIAN_AUTO_DOWNLOAD_RESOURCES": "false",
+                "XIUXIAN_WEB_STATUS": "false",
+            },
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        payload = json.loads(result.stdout.splitlines()[-1])
+        game = set(payload["game_db"])
+        player = set(payload["player_db"])
         self.assertIn("buff.008", game)
         self.assertNotIn("buff.008", player)
         self.assertIn("buff.009", player)

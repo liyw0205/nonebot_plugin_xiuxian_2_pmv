@@ -111,6 +111,16 @@ class RefactorProgressTests(unittest.TestCase):
         self.assertTrue(buff["closing_effect_projections_have_stable_receipts"])
         self.assertTrue(buff["closing_effects_migrations_routed"])
 
+    def test_progress_report_tracks_normal_closing_enter_scope(self) -> None:
+        buff = _slice_status()["buff"]
+        self.assertTrue(buff["closing_enter_handler_application_owned"])
+        self.assertTrue(buff["closing_enter_operation_identity_event_stable"])
+        self.assertTrue(buff["closing_enter_application_owns_attached_uow_and_ledger"])
+        self.assertTrue(buff["closing_enter_repository_cas_and_statistics_owned"])
+        self.assertTrue(buff["closing_enter_rejection_and_replay_statuses_explicit"])
+        self.assertTrue(buff["closing_enter_request_path_has_no_ddl"])
+        self.assertTrue(buff["closing_enter_migrations_registered_and_routed"])
+
     def test_progress_report_tracks_avatar_identity_cutover(self) -> None:
         avatar = _slice_status()["avatar_identity"]
         self.assertTrue(avatar["migration_is_player_db_only"])

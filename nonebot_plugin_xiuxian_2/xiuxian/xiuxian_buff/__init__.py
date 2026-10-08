@@ -163,6 +163,16 @@ def _blessed_spot_operation_id(event, action, user_id):
     return f"blessed-spot:{action}:{user_id}:{runtime_ids.new_id()}"
 
 
+def _closing_enter_operation_id(event, user_id):
+    """Build a stable id for one inbound ``闭关`` command."""
+    event_id = str(
+        getattr(event, "message_id", "") or getattr(event, "id", "") or ""
+    ).strip()
+    if event_id:
+        return f"buff-closing-enter:{event_id}:{user_id}"
+    return f"buff-closing-enter:{user_id}:{runtime_ids.new_id()}"
+
+
 def _normal_training_operation_id(event, user_id):
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
     if event_id:
@@ -711,27 +721,39 @@ async def stone_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, a
 async def in_closing_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """闭关"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
-    user_type = 1  # 状态0为无事件
     isUser, user_info, msg = check_user(event)
     if not isUser:
         await handle_send(bot, event, msg, md_type="我要修仙")
         await in_closing.finish()
     user_id = user_info['user_id']
-    is_type, msg = check_user_type(user_id, 0)
-    if user_info['root_type'] == '伪灵根':
+
+    # The application owns the type/root checks and the game/player transaction;
+    # keep this adapter limited to operation identity and reply rendering.
+    result = buff_application.closing_enter(
+        operation_id=_closing_enter_operation_id(event, user_id),
+        user_id=str(user_id),
+        started_at=runtime_clock.now().strftime("%Y-%m-%d %H:%M:%S.%f"),
+    )
+    result_data = result.data if isinstance(result.data, dict) else {}
+    result_status = str(result_data.get("status") or result.code or result.status)
+
+    if result_status == "ineligible":
         msg = "凡人无法闭关！"
         await handle_send(bot, event, msg, md_type="buff", k1="重入仙途", v1="重入仙途", k2="存档", v2="我的修仙信息", k3="修为", v3="我的修为")
         await in_closing.finish()
-    if is_type:  # 符合
-        _sql_message().in_closing(user_id, user_type)
-        msg = "进入闭关状态，如需出关，发送【出关】！"
-        log_message(user_id, "[闭关] 进入闭关状态")
-        update_statistics_value(user_id, "闭关次数")
+    if result_status == "duplicate" or result.replayed:
+        msg = "进入闭关状态，如需出关，发送【出关】！\n该闭关请求已经处理，无需重复提交。"
         await handle_send(bot, event, msg, md_type="buff", k1="出关", v1="出关", k2="存档", v2="我的修仙信息", k3="修为", v3="我的修为")
         await in_closing.finish()
-    else:
-        await handle_send(bot, event, msg, md_type="0", k2="修仙帮助", v2="修仙帮助", k3="闭关", v3="闭关")
+    if result.ok:
+        msg = "进入闭关状态，如需出关，发送【出关】！"
+        log_message(user_id, "[闭关] 进入闭关状态")
+        await handle_send(bot, event, msg, md_type="buff", k1="出关", v1="出关", k2="存档", v2="我的修仙信息", k3="修为", v3="我的修为")
         await in_closing.finish()
+
+    msg = result.message or "当前状态无法进入闭关。"
+    await handle_send(bot, event, msg, md_type="0", k2="修仙帮助", v2="修仙帮助", k3="闭关", v3="闭关")
+    await in_closing.finish()
 @out_closing.handle(parameterless=[Cooldown(cd_time=0)])
 async def out_closing_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """结算闭关收益、恢复和灵石消耗。"""

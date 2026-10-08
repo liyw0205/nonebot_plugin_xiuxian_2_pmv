@@ -3,6 +3,24 @@
 状态：执行中
 适用范围：全面底层重构第二阶段
 
+**Phase 3 scope upgrade（已冻结，2026-10-09）**：Phase 2 冻结清单
+`phase2-default-runtime-legacy-paths-v1` 及其 `496` 项 membership/hash 保持不变，
+本切片不向 Phase 2 JSON 追加条目，也不改变 Phase 2 的完成分母。已冻结
+`scope_id=phase3-player-lifecycle-v1`，仅覆盖默认可达命令 `command:buff:闭关`，
+稳定入口为 `nonebot_plugin_xiuxian_2/xiuxian/xiuxian_buff/__init__.py` 的
+`in_closing` matcher/handler（声明约在 190 行，处理函数约在 710-734 行）。
+当前旧调用链是 `in_closing_ -> check_user/check_user_type ->
+XiuxianDateManage.in_closing(game.user_cd) -> update_statistics_value(player.statistics)`；
+伪灵根、缺用户、非空闲状态和兼容回复均属于该入口的行为边界。
+
+核心 API、真实 handler 调用、operation ID、game/player 所有权和启动迁移已落地：
+`BuffApplication.closing_enter` 以 attached game/player UoW 包住 ledger、状态 CAS、
+统计 upsert 和 `closing_enter_operations` 回执；`buff.012` 建 game receipt，
+`buff.013` 建 player statistics。source contract 已加入 progress checker，覆盖无请求期
+DDL、replay/conflict、伪灵根/忙状态/缺 schema 拒绝边界。普通 `出关`、`虚神界闭关`、
+功法/洞天福地其它命令、`transaction_service` 全量清理均不在本切片；发现的跨功能问题
+只记 backlog。`phase2_legacy_path_gate.py` 和 Phase 2 membership/hash 仍不可修改。
+
 **2026-10-09 notice route 收口**：`group_welcome` 已经由 `on_compat.on_notice` 注册，生命周期应用复用预处理器结果，Phase 2 现为 `338/139/19/0`，`phase2_legacy_path_gate.py --check` 返回通过。已知固定成本仍在旧插件导入、AST/架构静态检测和进度扫描；本轮迁移 apply 的 SQL/文件修改约 `85--87ms`，未测生产 notice handler 延迟。三名子代理并行完成 runtime、迁移设计和 gate 证据审计，主线程整合代码、串行回归、文档、提交和推送。
 
 **2026-10-09 Work owner 收口与耗时复核（notice 收口前快照）**：按同一 `xiuxian_work` source module 的共同状态/副作用 owner 一次处理 offer 生成、追捕令倍率、结算随机决定、结算 effects、提醒生命周期和 settlement snapshot cleanup；不是按指令逐条重构，也不是按子插件目录顺序推进。`WorkRewardApplication` 冻结随机输入，settlement operation identity 不再包含可重抽的奖励字段，重试回放首份 receipt；`WorkSettlementEffects`、`WorkReminderApplication` 和 settlement UoW 分别拥有副作用、task lifecycle 与 active/offer snapshot 清理。聚焦 Work/handler/facade/gate 回归 `138 passed, 91 subtests passed`（9.13 秒），reward/application 子集 `13 passed`（1.26 秒），独立 item-use handler 回归 `17 passed`（4.85 秒），目标 compileall 与 diff check 通过。当时 Phase 2 为 `337/139/19/1`，membership 有效且 `integrity_errors=[]`；耗时拆分：冷启动旧插件导入+AST 检测约 7 秒，缓存命中约 0.45 秒，architecture audit 约 6--7 秒，五库 migration apply 约 1.8--2.0 秒，SQL/文件实际修改约 85--87ms；主要延迟来自导入和静态检测，不是写库。开发盘点/编码/集成 wall time 未记录；未测生产端到端延迟。用户 `nonebot_plugin_xiuxian_2/xiuxian/xiuxian_boss/boss_info.json` 明确排除提交。

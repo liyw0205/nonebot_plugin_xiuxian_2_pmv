@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import json
+import os
+import subprocess
+import sys
 import tempfile
 import unittest
 from datetime import datetime
@@ -12,6 +15,9 @@ nonebot.init()
 
 from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_buff.transaction_service import NormalTrainingLifecycleService
 from tests.test_db_backend import db_backend
+
+
+ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_buff_training_handler_uses_feature_application_for_start_and_completion():
@@ -30,11 +36,35 @@ def test_buff_training_handler_uses_feature_application_for_start_and_completion
 
 
 def test_normal_training_migrations_are_routed_to_game_and_player_owners():
-    from nonebot_plugin_xiuxian_2.plugin import build_migrations, migrations_for_database
-
-    catalog = build_migrations()
-    game = {item.version for item in migrations_for_database(catalog, "game_db")}
-    player = {item.version for item in migrations_for_database(catalog, "player_db")}
+    # The full plugin graph can be partially initialized by this module's
+    # legacy command imports.  Inspect the startup catalog in a clean process.
+    script = """
+import json
+import nonebot
+nonebot.init()
+from nonebot_plugin_xiuxian_2.plugin import build_migrations, migrations_for_database
+catalog = build_migrations()
+print(json.dumps({
+    key: [item.version for item in migrations_for_database(catalog, key)]
+    for key in ("game_db", "player_db")
+}, ensure_ascii=False))
+"""
+    result = subprocess.run(
+        [sys.executable, "-c", script],
+        cwd=ROOT,
+        env={
+            **os.environ,
+            "PYTHONDONTWRITEBYTECODE": "1",
+            "XIUXIAN_AUTO_DOWNLOAD_RESOURCES": "false",
+            "XIUXIAN_WEB_STATUS": "false",
+        },
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    payload = json.loads(result.stdout.splitlines()[-1])
+    game = set(payload["game_db"])
+    player = set(payload["player_db"])
     assert "buff.010" in game
     assert "buff.010" not in player
     assert "buff.011" in player

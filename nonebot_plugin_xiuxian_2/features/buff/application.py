@@ -5,10 +5,15 @@ from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
-from ...core.errors import ConflictError, ValidationError
+from ...core.errors import ConflictError, OperationConflictError, ValidationError
 from ...core.result import OperationOutcome
 from ...infrastructure.clock import SystemClock
-from ...infrastructure.database import DatabaseUnitOfWork, OperationLedger, OutboxStore
+from ...infrastructure.database import (
+    AttachedDatabaseUnitOfWork,
+    DatabaseUnitOfWork,
+    OperationLedger,
+    OutboxStore,
+)
 from .._legacy_application import LegacyApplication
 from .repository import BuffRepository, LegacyBuffRepository
 from .rename_repository import BlessedSpotRenameSqlRepository
@@ -18,6 +23,7 @@ from .training_complete_repository import NormalTrainingCompleteSqlRepository
 from .closing_repository import ClosingSettlementSqlRepository
 from .stone_training_repository import StoneTrainingSqlRepository
 from .pvp_repository import NormalPvpSqlRepository
+from .closing_enter_repository import ClosingEnterSqlRepository, ClosingEnterResult
 
 
 class _TrainingSchemaMissing(RuntimeError):
@@ -52,6 +58,134 @@ class BuffApplication(LegacyApplication):
         return self._execute(operation_id=operation_id, user_id=user_id, action=f"buff.{action}", payload={"user_id": user_id, **kwargs}, call=lambda: self.repository.invoke(action, operation_id, user_id, **kwargs))
 
     def open(self, *, operation_id: str, user_id: str, **kwargs: Any): return self._action("open", operation_id=operation_id, user_id=user_id, **kwargs)
+
+    @staticmethod
+    def _closing_enter_ledger_ready(uow: AttachedDatabaseUnitOfWork) -> bool:
+        def rows(table: str) -> list[dict[str, Any]]:
+            return uow.query_all(f'PRAGMA main.table_info("{table}")')
+
+        ledger_rows = rows("operation_ledger")
+        audit_rows = rows("operation_audit")
+        ledger_columns = {str(row["name"]) for row in ledger_rows}
+        audit_columns = {str(row["name"]) for row in audit_rows}
+
+        return {
+            "operation_id", "action", "request_hash", "status", "result_json",
+            "created_at", "updated_at",
+        }.issubset(ledger_columns) and {
+            "operation_id", "action", "status", "before_json", "after_json",
+            "consumed_json", "granted_json", "category", "occurred_at", "created_at",
+        }.issubset(audit_columns) and any(
+            str(row["name"]) == "operation_id" and int(row["pk"] or 0) == 1
+            for row in ledger_rows
+        ) and any(
+            str(row["name"]) == "action" and int(row["pk"] or 0) == 2
+            for row in ledger_rows
+        )
+
+    @staticmethod
+    def _closing_enter_data(result: ClosingEnterResult) -> dict[str, Any]:
+        return result.as_data()
+
+    def closing_enter(
+        self,
+        *,
+        operation_id: str,
+        user_id: str,
+        started_at: str,
+    ) -> OperationOutcome[dict[str, Any]]:
+        """Enter normal ``闭关`` with one game/player transaction boundary."""
+        operation_id = str(operation_id).strip()
+        user_id = str(user_id).strip()
+        started_at = str(started_at).strip()
+        if not operation_id or not user_id or not started_at:
+            raise ValidationError("operation_id, user_id and started_at are required")
+        action = "buff.closing_enter"
+        payload = {"user_id": user_id}
+        repository = ClosingEnterSqlRepository(
+            self.game_database, self.player_database, clock=self.clock
+        )
+        if not Path(self.game_database).is_file() or not Path(self.player_database).is_file():
+            return OperationOutcome.rejected(
+                operation_id,
+                action,
+                "闭关数据结构尚未就绪。",
+                code="schema_missing",
+                data={"status": "schema_missing"},
+                audit_category="buff",
+                clock=self.clock,
+            )
+        try:
+            with AttachedDatabaseUnitOfWork(
+                self.game_database,
+                attachments={"player_data": self.player_database},
+                immediate=True,
+            ) as uow:
+                if not repository.schema_ready(uow) or not self._closing_enter_ledger_ready(uow):
+                    return OperationOutcome.rejected(
+                        operation_id,
+                        action,
+                        "闭关数据结构尚未就绪。",
+                        code="schema_missing",
+                        data={"status": "schema_missing"},
+                        audit_category="buff",
+                        clock=self.clock,
+                    )
+                try:
+                    existing = self.ledger.begin(uow, operation_id, action, payload)
+                except OperationConflictError:
+                    return OperationOutcome.rejected(
+                        operation_id,
+                        action,
+                        "该闭关请求号已用于其他请求。",
+                        code="operation_conflict",
+                        data={"status": "operation_conflict"},
+                        audit_category="buff",
+                        clock=self.clock,
+                    )
+                if existing is not None:
+                    previous = existing.outcome()
+                    if previous is not None:
+                        return previous.replay()
+                    return OperationOutcome.rejected(
+                        operation_id,
+                        action,
+                        "闭关操作正在处理中，请稍后重试。",
+                        code="operation_conflict",
+                        data={"status": "operation_conflict"},
+                        audit_category="buff",
+                        clock=self.clock,
+                    )
+
+                result = repository.enter_in_uow(
+                    uow, operation_id, user_id, started_at
+                )
+                data = self._closing_enter_data(result)
+                if result.status in {"applied", "duplicate"}:
+                    outcome = OperationOutcome.applied(
+                        operation_id,
+                        action,
+                        data=data,
+                        audit_category="buff",
+                        clock=self.clock,
+                    )
+                else:
+                    outcome = OperationOutcome.rejected(
+                        operation_id,
+                        action,
+                        "当前状态无法进入闭关。",
+                        code=result.status,
+                        data=data,
+                        audit_category="buff",
+                        clock=self.clock,
+                    )
+                self.ledger.finish(uow, outcome)
+                return outcome
+        except Exception as exc:
+            self.ledger.record_failure(
+                self.game_database, operation_id, action, payload, str(exc)
+            )
+            raise
     def upgrade_field(self, *, operation_id: str, user_id: str, **kwargs: Any):
         if self._explicit_repository is None:
             if "expected_level" not in kwargs or "stone_cost" not in kwargs:

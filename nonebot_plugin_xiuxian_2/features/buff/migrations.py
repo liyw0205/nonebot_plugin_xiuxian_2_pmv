@@ -138,6 +138,40 @@ def apply_normal_training_player(uow: DatabaseUnitOfWork) -> None:
             uow.execute(f'ALTER TABLE statistics ADD COLUMN "{name}" INTEGER DEFAULT 0')
 
 
+def apply_closing_enter_game(uow: DatabaseUnitOfWork) -> None:
+    """Install the game-owned receipt for normal ``闭关`` entry."""
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS closing_enter_operations("
+        "operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,result_json TEXT NOT NULL,"
+        "created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)"
+    )
+    rows = uow.query_all('PRAGMA table_info("closing_enter_operations")')
+    columns = {str(row["name"]).casefold() for row in rows}
+    if (
+        not {"operation_id", "payload", "result_json"}.issubset(columns)
+        or not any(
+            str(row["name"]).casefold() == "operation_id"
+            and int(row["pk"] or 0) == 1
+            for row in rows
+        )
+    ):
+        raise RuntimeError("closing_enter_operations has an unsupported schema")
+
+
+def apply_closing_enter_player(uow: DatabaseUnitOfWork) -> None:
+    """Install the player-owned normal ``闭关`` entry statistic."""
+    uow.execute("CREATE TABLE IF NOT EXISTS statistics(user_id TEXT PRIMARY KEY)")
+    rows = uow.query_all('PRAGMA table_info("statistics")')
+    columns = {str(row["name"]).casefold() for row in rows}
+    if not any(
+        str(row["name"]).casefold() == "user_id" and int(row["pk"] or 0) == 1
+        for row in rows
+    ):
+        raise RuntimeError("statistics has an unsupported schema")
+    if "闭关次数" not in columns:
+        uow.execute('ALTER TABLE statistics ADD COLUMN "闭关次数" INTEGER DEFAULT 0')
+
+
 __all__ = [
     "apply_buff",
     "apply_partner_token_operations",
@@ -150,4 +184,6 @@ __all__ = [
     "apply_closing_effects_player",
     "apply_normal_training_game",
     "apply_normal_training_player",
+    "apply_closing_enter_game",
+    "apply_closing_enter_player",
 ]

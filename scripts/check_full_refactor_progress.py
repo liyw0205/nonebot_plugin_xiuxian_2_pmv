@@ -1752,6 +1752,11 @@ def _slice_status() -> dict[str, dict[str, object]]:
         )
     ]
     buff_facade = (PACKAGE / "xiuxian" / "xiuxian_buff" / "__init__.py").read_text(encoding="utf-8")
+    buff_closing_enter_handler = buff_facade[
+        buff_facade.index("async def in_closing_") : buff_facade.index(
+            "@out_closing.handle", buff_facade.index("async def in_closing_")
+        )
+    ]
     buff_training_handler = buff_facade[
         buff_facade.index("async def up_exp_") : buff_facade.index("@stone_exp.handle")
     ]
@@ -1759,6 +1764,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
     buff_training_start_repository = (PACKAGE / "features" / "buff" / "training_start_repository.py").read_text(encoding="utf-8")
     buff_training_complete_repository = (PACKAGE / "features" / "buff" / "training_complete_repository.py").read_text(encoding="utf-8")
     buff_closing_repository = (PACKAGE / "features" / "buff" / "closing_repository.py").read_text(encoding="utf-8")
+    buff_closing_enter_repository = (PACKAGE / "features" / "buff" / "closing_enter_repository.py").read_text(encoding="utf-8")
     buff_closing_effects = (PACKAGE / "compatibility" / "buff_closing_effects.py").read_text(encoding="utf-8")
     buff_migrations = (PACKAGE / "features" / "buff" / "migrations.py").read_text(encoding="utf-8")
     buff_normalize_experience_handler = buff_facade[
@@ -5364,6 +5370,59 @@ def _slice_status() -> dict[str, dict[str, object]]:
                 and '"weekly_out_closing"' in buff_training_complete_repository
                 and "self.ledger.finish(uow, outcome)" in buff_application_source
                 and "def _training_lifecycle_execute(" in buff_application_source
+            ),
+            "closing_enter_handler_application_owned": (
+                "buff_application.closing_enter(" in buff_closing_enter_handler
+                and "operation_id=_closing_enter_operation_id(event, user_id)" in buff_closing_enter_handler
+                and "started_at=runtime_clock.now().strftime" in buff_closing_enter_handler
+                and "_sql_message().in_closing(" not in buff_closing_enter_handler
+                and "check_user_type(" not in buff_closing_enter_handler
+                and "update_statistics_value(" not in buff_closing_enter_handler
+            ),
+            "closing_enter_operation_identity_event_stable": (
+                'return f"buff-closing-enter:{event_id}:{user_id}"' in buff_facade
+                and 'return f"buff-closing-enter:{user_id}:{runtime_ids.new_id()}"' in buff_facade
+            ),
+            "closing_enter_application_owns_attached_uow_and_ledger": (
+                "def closing_enter(" in buff_application_source
+                and "ClosingEnterSqlRepository(" in buff_application_source
+                and "AttachedDatabaseUnitOfWork(" in buff_application_source
+                and 'action = "buff.closing_enter"' in buff_application_source
+                and "self.ledger.begin(uow, operation_id, action, payload)" in buff_application_source
+                and "self.ledger.finish(uow, outcome)" in buff_application_source
+                and "repository.enter_in_uow(" in buff_application_source
+            ),
+            "closing_enter_repository_cas_and_statistics_owned": (
+                "class ClosingEnterSqlRepository" in buff_closing_enter_repository
+                and "UPDATE user_cd SET type=1" in buff_closing_enter_repository
+                and "COALESCE(type,0)=0" in buff_closing_enter_repository
+                and 'INSERT INTO player_data.statistics(user_id,"闭关次数")' in buff_closing_enter_repository
+                and "ON CONFLICT(user_id) DO UPDATE" in buff_closing_enter_repository
+                and "INSERT INTO closing_enter_operations" in buff_closing_enter_repository
+            ),
+            "closing_enter_rejection_and_replay_statuses_explicit": (
+                all(
+                    f'ClosingEnterResult("{status}")' in buff_closing_enter_repository
+                    for status in (
+                        "schema_missing", "user_missing", "ineligible", "busy", "state_changed",
+                    )
+                )
+                and "operation_conflict" in buff_application_source
+                and "previous.replay()" in buff_application_source
+                and 'result_status == "ineligible"' in buff_closing_enter_handler
+                and 'result_status == "duplicate" or result.replayed' in buff_closing_enter_handler
+            ),
+            "closing_enter_request_path_has_no_ddl": all(
+                token not in buff_closing_enter_repository
+                for token in ("CREATE TABLE", "ALTER TABLE")
+            ),
+            "closing_enter_migrations_registered_and_routed": (
+                'Migration("buff.012", "closing_enter_operations", apply_closing_enter_game)' in plugin
+                and 'Migration("buff.013", "closing_enter_player_statistics", apply_closing_enter_player)' in plugin
+                and "def apply_closing_enter_game(" in buff_migrations
+                and "def apply_closing_enter_player(" in buff_migrations
+                and '"buff.013"' in plugin[plugin.index("_GAME_DATABASE_EXCLUDED_MIGRATION_VERSIONS"):plugin.index("_PLAYER_DATABASE_MIGRATION_VERSIONS")]
+                and '"buff.013"' in plugin[plugin.index("_PLAYER_DATABASE_MIGRATION_VERSIONS"):plugin.index("_TRADE_DATABASE_MIGRATION_VERSIONS")]
             ),
             "closing_settlement_application_owned": "buff_application.closing_settle(" in buff_facade,
             "closing_settlement_replay_application_owned": (
