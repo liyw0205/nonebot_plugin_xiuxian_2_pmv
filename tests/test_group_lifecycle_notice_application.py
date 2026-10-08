@@ -115,6 +115,19 @@ class GroupLifecycleNoticeApplicationTests(unittest.TestCase):
             {"bot_join_group": 1},
         )
 
+    def test_preprocessed_lifecycle_result_is_not_applied_twice(self) -> None:
+        event = FakeQQEvent("GROUP_ADD_ROBOT", "group-1")
+        event.xiuxian_lifecycle_result = self.registry.apply(self.bot, event)
+
+        decision = asyncio.run(self.app.handle(self.bot, event))
+
+        self.assertTrue(decision.finish_matcher)
+        self.assertEqual(self.registry.get_action_count("bot-1", "bot_join_group"), 1)
+        self.assertEqual(
+            self.registry.get_group_state("bot-1", "group-1").event_counts,
+            {"bot_join_group": 1},
+        )
+
     def test_policy_denial_and_group_welcome_switch_suppress_delivery(self) -> None:
         event = FakeQQEvent("GROUP_MEMBER_ADD", "group-1")
         self.settings.shield_group = ("other-group",)

@@ -10,7 +10,7 @@ Markdown 开关与其它指令一致：
 
 from __future__ import annotations
 
-from nonebot import on_notice
+
 from nonebot.log import logger
 from nonebot.matcher import Matcher
 from ...features.admin.config_application import AdminConfigApplication
@@ -22,7 +22,7 @@ from ..adapter_compat import (
     PrivateMessageEvent,
     is_group_admin_or_owner,
 )
-from ..on_compat import on_command
+from ..on_compat import on_command, on_notice
 from ..xiuxian_config import XiuConfig
 from ..xiuxian_utils.lay_out import Cooldown, assign_bot
 from ..xiuxian_utils.utils import handle_send

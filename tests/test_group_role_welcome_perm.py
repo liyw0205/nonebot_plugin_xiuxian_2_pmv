@@ -85,3 +85,16 @@ def test_welcome_commands_not_superuser_only():
     assert "permission=SUPERUSER" not in block
     assert "_can_toggle_welcome" in block
     assert "is_group_admin_or_owner" in block
+
+
+def test_lifecycle_notice_uses_compat_registration():
+    text = (
+        Path(__file__).parents[1]
+        / "nonebot_plugin_xiuxian_2"
+        / "xiuxian"
+        / "xiuxian_admin"
+        / "group_welcome.py"
+    ).read_text(encoding="utf-8")
+    assert "from nonebot import on_notice" not in text
+    assert "from ..on_compat import on_command, on_notice" in text
+    assert "lifecycle_notice = on_notice(priority=5, block=False)" in text

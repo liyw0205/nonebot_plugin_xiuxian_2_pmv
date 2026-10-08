@@ -132,13 +132,13 @@
       "id": "legacy.matcher.non_command_dispatch",
       "kind": "matcher-family",
       "entry": "default old on_message/on_regex/on_startswith and other non-command matcher handlers",
-      "status": "受阻",
-      "reason": "The seven default matcher registrations now have explicit behavior owners for fallback, bank, media parsing and group lifecycle handling. Work status, refresh, claim, capture, settlement, reminder and abort/cleanup paths now delegate their state, random decisions, compatibility effects and task lifecycle to feature-owned applications; canonical active/offer snapshots are cleaned in the settlement UoW, while legacy JSON remains an explicit projection or historical fallback. The remaining blocker is the direct group lifecycle on_notice route adapter outside on_compat. Keep this matcher family blocked until that transport route is migrated; do not add members automatically, and put out-of-scope discoveries in backlog for explicit review.",
+      "status": "已迁移",
+      "reason": "The seven default matcher registrations now have explicit behavior owners for fallback, bank, media parsing and group lifecycle handling. Work status, refresh, claim, capture, settlement, reminder and abort/cleanup paths now delegate their state, random decisions, compatibility effects and task lifecycle to feature-owned applications; canonical active/offer snapshots are cleaned in the settlement UoW, while legacy JSON remains an explicit projection or historical fallback. The group lifecycle notice route now registers through on_compat.on_notice, while NoneBot retains notice-type permission dispatch; lifecycle results preprocessed by the runtime are reused to avoid double application. Keep transport and out-of-scope discoveries in backlog for explicit review.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized enumerates non-internal xiuxian modules -> load_all_plugins imports modules and evaluates their decorators",
         "six on_compat message/regex registrations: empty_fallback.on_message; work.do_work and bank.bank on_regex; three media_parse_link on_regex handlers -> NoneBot matcher constructor -> _register_route",
         "only on_command checks the explicit _MIGRATED_COMMAND_KEYS suppression set; the six confirmed non-command registrations bypass that suppression -> XiuxianOnCompatProvider dispatches matching indexed/generic routes",
-        "admin.group_welcome is explicitly imported by xiuxian_admin and registers direct nonebot.on_notice at group_welcome.py:34 -> handle_group_lifecycle at :38 -> GroupLifecycleNoticeApplication.handle; lifecycle/config/send orchestration is feature-owned, while the direct notice route remains outside on_compat",
+        "admin.group_welcome is explicitly imported by xiuxian_admin and registers on_compat.on_notice at group_welcome.py:34 -> on_compat.on_notice -> _nb_on('notice') -> _register_route -> handle_group_lifecycle at :37 -> GroupLifecycleNoticeApplication.handle; NoneBot notice permission keeps event-type dispatch, while lifecycle/config/send orchestration is feature-owned",
         "bank.bank on_regex -> bank_ -> BankCommandApplication.execute owns bounded intent parsing and validation -> existing BankDepositApplication/BankWithdrawalApplication/BankUpgradeApplication/BankInterestApplication -> BankAccountRepository; render_bank_reply owns result-to-reply mapping before handle_send",
         "BankCommandApplication mutation branches -> BankCommandReceiptRepository.find reads bank_account_operations and legacy receipt tables without DDL -> validates user/action/original amount before current account/configuration reads; information bypasses mutation receipts -> BankAccountInfoApplication.get_info read-only account and wallet/defaults",
         "BankCommandApplication deposit/withdrawal/interest -> calculate_interest -> existing account application with expected_saved_stone, original expected_saved_at and bank_level snapshot CAS; deposits and withdrawals automatically settle interest, upgrade receipts replay before current level/configuration, and invalid or conflicting receipts never become success",
@@ -151,7 +151,7 @@
         "work.do_work refresh/capture/reminder -> WorkRewardApplication.generate_offer/generate_capture_offer owns offer generation, WorkRefreshApplication owns refresh mutation, and WorkReminderApplication owns per-user reminder state/tasks",
         "empty_fallback.on_message -> EmptyFallbackApplication.should_respond/respond owns eligibility and reply orchestration; config, cooldown, route, image, and send APIs remain adapters",
         "three media_parse_link regex handlers -> EntertainmentMediaParserMessageApplication owns deduplication, parsing and result sending; media transport remains callbacks",
-        "group_welcome.on_notice -> GroupLifecycleNoticeApplication.handle owns event policy and welcome effects; direct on_notice registration is a retained route adapter"
+        "group_welcome.on_compat.on_notice -> _nb_on('notice') -> _register_route -> GroupLifecycleNoticeApplication.handle owns event policy and welcome effects; preprocessed lifecycle results are reused"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
@@ -199,7 +199,7 @@
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/media_parse_link.py:18-104",
         "nonebot_plugin_xiuxian_2/features/entertainment/media_parser_messages.py",
         "nonebot_plugin_xiuxian_2/features/entertainment/tests/test_media_parser_messages.py",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/group_welcome.py:13,34-48",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/group_welcome.py:25,34,37-49",
         "nonebot_plugin_xiuxian_2/features/group_lifecycle/notice_application.py:77,240",
         "tests/test_group_lifecycle_notice_application.py"
       ]

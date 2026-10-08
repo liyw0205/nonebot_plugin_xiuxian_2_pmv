@@ -241,7 +241,12 @@ class GroupLifecycleNoticeApplication:
         settings = self.settings_provider()
         group_id = _extract_group_id(event)
         if is_lifecycle_event(event):
-            result = self.lifecycle_applier(bot, event)
+            # The event preprocessor may already have applied this lifecycle
+            # event. Reuse its result so state counters and transitions happen
+            # once per delivered event.
+            result = getattr(event, "xiuxian_lifecycle_result", None)
+            if result is None:
+                result = self.lifecycle_applier(bot, event)
             action = result.context.action
             group_id = result.context.group_id or group_id
         else:

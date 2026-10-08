@@ -810,6 +810,11 @@ def on(*args, _depth: int = 0, **kwargs):
     return _register_route(matcher, _RouteMeta(generic=True))
 
 
+def on_notice(*args, _depth: int = 0, **kwargs):
+    """Register a notice matcher through the compatibility provider."""
+    return on("notice", *args, _depth=_depth + 1, **kwargs)
+
+
 def on_message(*args, _depth: int = 0, **kwargs):
     install_on_compat()
     if not _ON_MESSAGE_SUPPORTS_FORCE_WHITESPACE:
@@ -978,6 +983,7 @@ __all__ = [
     "install_on_compat",
     "rebuild_on_compat_index",
     "on",
+    "on_notice",
     "on_message",
     "on_command",
     "on_shell_command",
