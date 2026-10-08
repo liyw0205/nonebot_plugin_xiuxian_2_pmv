@@ -38,6 +38,8 @@ from ...features.cache_files.repository import (
 )
 from ...features.qq_image_upload.application import QqImageUploadApplication
 from ...features.status.application import StatusApplication
+from ...features.terminal.application import TerminalApplication, TerminalUnavailable
+from ...bootstrap.legacy import register_legacy_shutdown
 from ..xiuxian_utils.utils import search_users as search_users_application
 
 
@@ -172,58 +174,14 @@ def download_file(filepath):
 
     return send_file(str(full_path))
 
-# 全局存储终端会话：admin_id -> {'fd': master_fd, 'pid': child_pid}
-terminal_sessions = {}
+terminal_application = TerminalApplication(
+    secret_provider=lambda: os.environ.get("XIUXIAN_WEB_TERMINAL_PASSWORD"),
+)
 
-def get_terminal_session(admin_id):
-    """获取或创建一个持久的 bash 会话，仅支持 Linux/Unix"""
-    if IS_WINDOWS:
-        raise RuntimeError("Web终端功能仅支持 Linux/Unix 环境，Windows 不支持。")
 
-    if admin_id in terminal_sessions:
-        # 检查进程是否还在运行
-        pid = terminal_sessions[admin_id]['pid']
-        try:
-            os.kill(pid, 0)
-            return terminal_sessions[admin_id]
-        except OSError:
-            # 进程已死，清理
-            try:
-                os.close(terminal_sessions[admin_id]['fd'])
-            except Exception:
-                pass
-            del terminal_sessions[admin_id]
-
-    # 创建新的伪终端对
-    master_fd, slave_fd = pty.openpty()
-
-    # 启动 bash 子进程
-    pid = os.fork()
-
-    if pid == 0:  # 子进程
-        os.setsid()
-        os.dup2(slave_fd, 0)
-        os.dup2(slave_fd, 1)
-        os.dup2(slave_fd, 2)
-        os.close(master_fd)
-
-        env = os.environ.copy()
-        env["TERM"] = "xterm-256color"
-        env["LANG"] = "zh_CN.UTF-8"
-        env["PS1"] = "\\[\\033[01;32m\\]\\u\\[\\033[00m\\]:\\[\\033[01;34m\\]\\w\\[\\033[00m\\]\\$ "
-
-        os.execve("/bin/bash", ["/bin/bash", "--login", "-i"], env)
-
-    # 父进程
-    os.close(slave_fd)
-
-    # 设置非阻塞
-    fl = fcntl.fcntl(master_fd, fcntl.F_GETFL)
-    fcntl.fcntl(master_fd, fcntl.F_SETFL, fl | os.O_NONBLOCK)
-
-    session_data = {'fd': master_fd, 'pid': pid}
-    terminal_sessions[admin_id] = session_data
-    return session_data
+@register_legacy_shutdown
+def shutdown_terminal_application() -> None:
+    terminal_application.close_all()
 
 
 @app.route('/terminal/confirm', methods=['GET', 'POST'])
@@ -232,8 +190,16 @@ def terminal_confirm():
         return redirect(url_for('terminal'))
     if terminal_authorization_is_valid():
         return redirect(url_for('terminal'))
-    session['terminal_authorized_until'] = time.time() + 300
-    return redirect(url_for('terminal'))
+    if request.method == 'GET':
+        return render_template('terminal_confirm.html')
+    if not terminal_application.password_configured():
+        return render_template(
+            'terminal_confirm.html',
+            error="终端密码尚未配置，请设置 XIUXIAN_WEB_TERMINAL_PASSWORD。",
+        ), 503
+    if terminal_application.authorize(session, request.form.get('password', '')):
+        return redirect(url_for('terminal'))
+    return render_template('terminal_confirm.html', error="密码错误。"), 401
 
 
 @app.route('/terminal')
@@ -247,34 +213,16 @@ def terminal():
 
 @app.route('/terminal/output')
 def terminal_output():
-    """流式读取终端输出的 Generator"""
+    """流式读取 feature-owned 终端会话输出。"""
     if 'admin_id' not in session:
         return "Unauthorized", 401
     if IS_WINDOWS:
         return "Windows 不支持该功能", 400
-
     admin_id = session['admin_id']
-    term = get_terminal_session(admin_id)
-
-    def generate():
-        fd = term['fd']
-        while True:
-            r, _, _ = select.select([fd], [], [], 0.5)
-            if r:
-                try:
-                    data = os.read(fd, 1024 * 16)
-                    if not data:
-                        break
-                    yield data.decode('utf-8', errors='replace')
-                except (OSError, Exception):
-                    break
-            try:
-                os.kill(term['pid'], 0)
-            except OSError:
-                yield "\n[Session Terminated]\n"
-                break
-
-    return Response(generate(), mimetype='text/plain')
+    try:
+        return Response(terminal_application.output(admin_id), mimetype='text/plain')
+    except TerminalUnavailable as exc:
+        return str(exc), 400
 
 
 @app.route('/terminal/write', methods=['POST'])
@@ -284,17 +232,14 @@ def terminal_write():
         return jsonify({"success": False, "error": "Not logged in"})
     if IS_WINDOWS:
         return jsonify({"success": False, "error": "Windows 不支持该功能"})
-
     admin_id = session['admin_id']
     data = request.get_json() or {}
     input_str = data.get('input', '')
-
-    term = get_terminal_session(admin_id)
     try:
-        os.write(term['fd'], input_str.encode('utf-8'))
+        terminal_application.write(admin_id, input_str)
         return jsonify({"success": True})
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)})
+    except (TerminalUnavailable, ValueError) as exc:
+        return jsonify({"success": False, "error": str(exc)})
 
 
 @app.route('/terminal/pwd')
@@ -303,16 +248,8 @@ def terminal_pwd():
         return jsonify({"cwd": "/"})
     if IS_WINDOWS:
         return jsonify({"cwd": "Windows not supported"})
-
     admin_id = session['admin_id']
-    if admin_id in terminal_sessions:
-        pid = terminal_sessions[admin_id]['pid']
-        try:
-            cwd = os.readlink(f"/proc/{pid}/cwd")
-            return jsonify({"cwd": cwd})
-        except Exception:
-            pass
-    return jsonify({"cwd": "~"})
+    return jsonify({"cwd": terminal_application.cwd(admin_id)})
 
 @app.route('/upload_image', methods=['POST'])
 def upload_api_image():

@@ -21,6 +21,8 @@
 
 会话密钥：`XIUXIAN_WEB_SECRET_KEY` 环境变量优先，否则配置项，未配置时写入 `data/xiuxian/web_secret_key`。
 
+终端二次确认：必须单独设置环境变量 `XIUXIAN_WEB_TERMINAL_PASSWORD`。该密码仅从进程环境读取，不进入配置文件、配置面板或日志；未配置时终端确认会拒绝授权。确认页 GET 只渲染页面，只有携带正确密码的 POST 才能授权。PTY 会话是单进程 worker 本地资源，多 worker 部署不会共享会话，应使用单 worker 或在外部做明确的路由粘滞与隔离。
+
 ## QQ 官方机器人扫码绑定
 
 在管理面板 `/config` 可选择“开始扫码绑定”展示本机二维码，或点击旁边的“快捷绑定”由浏览器打开 QQ 官方 connect 页面并申请跳转 QQ。QQ 返回 `status=2` 即协议确认完成；面板会立即停止轮询、缓存完成状态并原子写入配置，避免重复查询又显示未完成。当前项目 `.env.dev` 的 `QQ_BOTS` 会被替换为本次 AppID/Secret，启用 `use_websocket=true`，并自动设置 `c2c_group_at_messages=true`、`direct_message=true`。

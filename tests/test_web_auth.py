@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import unittest
+import os
 from unittest.mock import patch
 
 import nonebot
@@ -247,13 +248,39 @@ class WebAuthorizationTests(unittest.TestCase):
 
     def test_terminal_confirmation_uses_superuser_session(self) -> None:
         self._login_session()
-        with patch.object(core, "ADMIN_IDS", {"admin-1"}):
+        with patch.object(core, "ADMIN_IDS", {"admin-1"}), patch.dict(os.environ, {}, clear=False):
+            os.environ.pop("XIUXIAN_WEB_TERMINAL_PASSWORD", None)
             response = self.client.get("/terminal")
             self.assertEqual(response.status_code, 302)
             self.assertTrue(response.headers["Location"].endswith("/terminal/confirm"))
 
             response = self.client.get("/terminal/confirm")
+            self.assertEqual(response.status_code, 200)
+            self.assertIn("终端密码", response.get_data(as_text=True))
+            with self.client.session_transaction() as session:
+                self.assertNotIn("terminal_authorized_until", session)
+
+            response = self.client.post(
+                "/terminal/confirm",
+                data={"password": "anything", "_csrf_token": "csrf-token"},
+            )
+            self.assertEqual(response.status_code, 503)
+
+            os.environ["XIUXIAN_WEB_TERMINAL_PASSWORD"] = "terminal-secret"
+            response = self.client.post(
+                "/terminal/confirm",
+                data={"password": "wrong", "_csrf_token": "csrf-token"},
+            )
+            self.assertEqual(response.status_code, 401)
+            with self.client.session_transaction() as session:
+                self.assertNotIn("terminal_authorized_until", session)
+
+            response = self.client.post(
+                "/terminal/confirm",
+                data={"password": "terminal-secret", "_csrf_token": "csrf-token"},
+            )
             self.assertEqual(response.status_code, 302)
+            self.assertTrue(response.headers["Location"].endswith("/terminal"))
 
             with self.client.session_transaction() as session:
                 self.assertGreater(session["terminal_authorized_until"], core.time.time())

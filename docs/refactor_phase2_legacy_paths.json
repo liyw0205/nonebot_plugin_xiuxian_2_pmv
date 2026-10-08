@@ -110,7 +110,7 @@
       "status": "受阻",
       "entry_format": "{methods} {path} -> {file}:{function}",
       "target_format": "legacy Flask route handler {file}:{function}",
-      "reason": "The legacy Flask app remains enabled by default. The 22 frozen /messages entries are individually reviewed (19 migrated behind feature owners and 3 retained compatibility paths). The broader 116-route family remains blocked by other unresolved route members; per-route decisions remain in the frozen item file.",
+      "reason": "The legacy Flask app remains enabled by default. The 22 frozen /messages entries are individually reviewed (19 migrated behind feature owners and 3 retained compatibility paths). The four frozen database-console routes now delegate to the DatabaseConsoleApplication/Repository owner, and the five terminal/PTY routes delegate to TerminalApplication. The broader 116-route family remains blocked by other unresolved route members; per-route decisions remain in the frozen item file.",
       "unknown_edge": "unreviewed route functions -> route-specific effects not yet assigned",
       "call_graph": [
         "xiuxian/xiuxian_web/__init__.py imports route modules -> Flask @app.route registers each route",
