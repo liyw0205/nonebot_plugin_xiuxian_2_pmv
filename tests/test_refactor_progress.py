@@ -2,10 +2,23 @@ from __future__ import annotations
 
 import unittest
 
-from scripts.check_full_refactor_progress import _slice_status
+from scripts.check_full_refactor_progress import _parse_source, _slice_status, _walk
 
 
 class RefactorProgressTests(unittest.TestCase):
+    def test_progress_ast_cache_reuses_immutable_source_traversals(self) -> None:
+        _parse_source.cache_clear()
+        _walk.cache_clear()
+
+        source = "value = 1\n"
+        tree = _parse_source(source)
+        self.assertIs(tree, _parse_source(source))
+        self.assertIs(_walk(tree), _walk(tree))
+        self.assertEqual(1, _parse_source.cache_info().misses)
+        self.assertEqual(1, _parse_source.cache_info().hits)
+        self.assertEqual(1, _walk.cache_info().misses)
+        self.assertEqual(1, _walk.cache_info().hits)
+
     def test_progress_report_tracks_interactive_command_ownership(self) -> None:
         interactive = _slice_status()["interactive"]
         self.assertTrue(interactive["static_commands_remain_message_only"])

@@ -46,6 +46,18 @@ _PRODUCTION_AST_TOKENS = (
 )
 
 
+@lru_cache(maxsize=512)
+def _parse_source(source: str) -> ast.Module:
+    """Parse one source string once for all slice checks in this process."""
+    return ast.parse(source)
+
+
+@lru_cache(maxsize=512)
+def _walk(tree: ast.AST) -> tuple[ast.AST, ...]:
+    """Materialize an AST traversal once; checks never mutate their trees."""
+    return tuple(ast.walk(tree))
+
+
 @lru_cache(maxsize=None)
 def _read_source(path: Path) -> str | None:
     """Read a package source file once during one progress report."""
@@ -87,12 +99,12 @@ def _production_ast_index() -> tuple[tuple[Path, frozenset[str], bool], ...]:
         if not any(token in source for token in _PRODUCTION_AST_TOKENS):
             continue
         try:
-            tree = ast.parse(source)
+            tree = _parse_source(source)
         except SyntaxError:
             continue
         call_targets: set[str] = set()
         bank_savef_import = False
-        for node in ast.walk(tree):
+        for node in _walk(tree):
             if isinstance(node, ast.Call):
                 target = node.func.id if isinstance(node.func, ast.Name) else (
                     node.func.attr if isinstance(node.func, ast.Attribute) else ""
@@ -144,10 +156,10 @@ def _has_production_bank_savef_import() -> bool:
 
 def _admin_broadcast_owner_status(sources: dict[str, str]) -> dict[str, object]:
     """Check the broadcast ownership edges without importing runtime services."""
-    trees = {name: ast.parse(source) for name, source in sources.items()}
+    trees = {name: _parse_source(source) for name, source in sources.items()}
     functions = {
         name: {
-            node.name: node for node in ast.walk(tree)
+            node.name: node for node in _walk(tree)
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
         }
         for name, tree in trees.items()
@@ -155,7 +167,7 @@ def _admin_broadcast_owner_status(sources: dict[str, str]) -> dict[str, object]:
 
     def nodes(source, function):
         node = functions.get(source, {}).get(function)
-        return list(ast.walk(node)) if node is not None else []
+        return list(_walk(node)) if node is not None else []
 
     def calls(source, function, target):
         return [node for node in nodes(source, function)
@@ -172,7 +184,7 @@ def _admin_broadcast_owner_status(sources: dict[str, str]) -> dict[str, object]:
         )
 
     def permission(command):
-        for node in ast.walk(trees["handlers"]):
+        for node in _walk(trees["handlers"]):
             if not isinstance(node, ast.Call) or ast.unparse(node.func) != "on_command" or not node.args:
                 continue
             if not isinstance(node.args[0], ast.Constant) or node.args[0].value != command:
@@ -198,7 +210,7 @@ def _admin_broadcast_owner_status(sources: dict[str, str]) -> dict[str, object]:
             and any(
                 isinstance(child, ast.Call) and isinstance(child.func, ast.Attribute)
                 and child.func.attr == "add" and ast.unparse(child.func.value).startswith(f"task[f'{prefix}_")
-                for statement in node.body for child in ast.walk(statement)
+                for statement in node.body for child in _walk(statement)
             )
             for node in nodes("repository", "finish")
         )
@@ -222,9 +234,9 @@ def _admin_broadcast_owner_status(sources: dict[str, str]) -> dict[str, object]:
         "start_broadcast": "start", "format_broadcast_status": "status", "cancel_broadcast": "cancel",
         "clear_broadcast": "clear", "auto_patch_broadcast_for_event": "patch_event",
     }
-    facade_constructors = [node for node in ast.walk(trees["facade"])
+    facade_constructors = [node for node in _walk(trees["facade"])
                            if isinstance(node, ast.Call) and ast.unparse(node.func) == "AdminBroadcastRepository"]
-    application_constructors = [node for node in ast.walk(trees["facade"])
+    application_constructors = [node for node in _walk(trees["facade"])
                                 if isinstance(node, ast.Call) and ast.unparse(node.func) == "AdminBroadcastApplication"]
     history_calls = calls("application", "start", "self.history")
     create_calls = calls("application", "start", "self.repository.create")
@@ -252,11 +264,11 @@ def _admin_broadcast_owner_status(sources: dict[str, str]) -> dict[str, object]:
             and calls("web", "api_messages_broadcast_status", "format_broadcast_status")
             and calls("events", "do_something", "auto_patch_broadcast_for_event")
             and not any(isinstance(node, ast.Name) and node.id in {"BROADCAST_TASKS", "connect_message_db"}
-                        for node in ast.walk(trees["facade"]))
+                        for node in _walk(trees["facade"]))
         ),
         "feature_lifecycle_claims_and_inflight_cancellation_are_atomic": (
             all(uses_lock(name) for name in ("create", "claim", "finish", "cancel", "clear", "status"))
-            and not any(isinstance(node, ast.Await) for node in ast.walk(trees["repository"]))
+            and not any(isinstance(node, ast.Await) for node in _walk(trees["repository"]))
             and bool(history_calls and create_calls and history_calls[0].lineno < create_calls[0].lineno)
             and bool(claim_calls and send_calls and claim_calls[0].lineno < send_calls[0].lineno)
             and expression("repository", "claim", "task['_generation'] != handle.generation")
@@ -272,11 +284,11 @@ def _admin_broadcast_owner_status(sources: dict[str, str]) -> dict[str, object]:
             ledger_branch("sent", "sent") and ledger_branch("pending_audit", "pending")
             and expression("repository", "claim", "key in task[f'pending_{bucket}']")
             and any(
-                any(isinstance(child, ast.Raise) for child in ast.walk(handler))
+                any(isinstance(child, ast.Raise) for child in _walk(handler))
                 and any(isinstance(child, ast.Call) and ast.unparse(child.func) == "self.repository.finish"
                         and any(item.arg == "status" and isinstance(item.value, ast.Constant)
                                 and item.value.value == "failed" for item in child.keywords)
-                        for child in ast.walk(handler))
+                        for child in _walk(handler))
                 for handler in cancellation_handlers
             )
             and expression("application", "_deliver", "status not in {'sent', 'pending_audit'}")
@@ -293,7 +305,7 @@ def _admin_broadcast_owner_status(sources: dict[str, str]) -> dict[str, object]:
             and calls("facade", "_history_targets", "asyncio.to_thread")
             and not any(isinstance(node, ast.Constant) and isinstance(node.value, str)
                         and any(token in node.value.upper() for token in ("CREATE TABLE", "ALTER TABLE", "SELECT *"))
-                        for node in ast.walk(trees["history"]))
+                        for node in _walk(trees["history"]))
         ),
         "sender_identity_and_result_status_are_preserved_through_ports": (
             identity_forwarded("start_broadcast", "start")
@@ -306,7 +318,7 @@ def _admin_broadcast_owner_status(sources: dict[str, str]) -> dict[str, object]:
                     and ast.unparse(node.value.value.func) == "delivery_service.send"
                     for node in nodes("facade", "_send_qq_broadcast_by_reply"))
             and not any(isinstance(node, ast.ImportFrom) and (node.module or "").startswith("nonebot")
-                        for name in ("application", "repository") for node in ast.walk(trees[name]))
+                        for name in ("application", "repository") for node in _walk(trees[name]))
         ),
         "entrypoint_and_race_regressions_have_behavioral_tests": (
             all(name in functions["entry_tests"] for name in (
@@ -328,15 +340,15 @@ def _admin_broadcast_owner_status(sources: dict[str, str]) -> dict[str, object]:
 
 def _admin_qqid_owner_status(sources: dict[str, str]) -> dict[str, object]:
     """Check ownership edges; recovery behavior is exercised with real databases."""
-    trees = {name: ast.parse(source) for name, source in sources.items()}
+    trees = {name: _parse_source(source) for name, source in sources.items()}
 
     def calls(source, function=None):
         tree = trees[source]
         if function is not None:
-            tree = next((node for node in ast.walk(tree)
+            tree = next((node for node in _walk(tree)
                          if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
                          and node.name == function), ast.Module(body=[], type_ignores=[]))
-        return [node for node in ast.walk(tree) if isinstance(node, ast.Call)]
+        return [node for node in _walk(tree) if isinstance(node, ast.Call)]
 
     def methods(source):
         return {node.func.attr for node in calls(source) if isinstance(node.func, ast.Attribute)}
@@ -391,9 +403,9 @@ def _avatar_identity_priority(source: str) -> bool:
 
 def _admin_runtime_owner_status(sources: dict[str, str]) -> dict[str, object]:
     """Check the three admin runtime commands without loading production state."""
-    trees = {name: ast.parse(source) for name, source in sources.items()}
+    trees = {name: _parse_source(source) for name, source in sources.items()}
     functions = {
-        name: {node.name: node for node in ast.walk(tree)
+        name: {node.name: node for node in _walk(tree)
                if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))}
         for name, tree in trees.items()
     }
@@ -401,14 +413,14 @@ def _admin_runtime_owner_status(sources: dict[str, str]) -> dict[str, object]:
     @lru_cache(maxsize=None)
     def nodes(source, function=None):
         node = trees[source] if function is None else functions[source].get(function)
-        return list(ast.walk(node)) if node is not None else []
+        return list(_walk(node)) if node is not None else []
 
     def calls(source, function, target):
         return [node for node in nodes(source, function)
                 if isinstance(node, ast.Call) and ast.unparse(node.func) == target]
 
     def expression(source, function, expected):
-        target = ast.parse(expected).body[0]
+        target = _parse_source(expected).body[0]
         if isinstance(target, ast.Expr):
             target = target.value
         expected_tree = ast.dump(target)
@@ -467,10 +479,10 @@ def _admin_runtime_owner_status(sources: dict[str, str]) -> dict[str, object]:
             and ast.unparse(catalog_writes[0]) == "self._state = (items, sources)"
             and catalog_writes[0].lineno > max(node.lineno for node in catalog_builds)
             and any(isinstance(node, ast.With) and any(ast.unparse(item.context_expr) == "self.lock" for item in node.items)
-                    and catalog_writes[0] in list(ast.walk(node)) for node in nodes("catalog_repository", "_load"))
+                    and catalog_writes[0] in _walk(node) for node in nodes("catalog_repository", "_load"))
             and all(any(isinstance(node, ast.If) and ast.unparse(node.test) == "strict"
                         and any(isinstance(child, ast.Raise) for child in node.body)
-                        for node in ast.walk(handler))
+                        for node in _walk(handler))
                     for handler in nodes("catalog_repository", "_load") if isinstance(handler, ast.ExceptHandler))
             and not any(isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr == "clear"
                         for source, function in (("catalog_facade", "refresh"), ("catalog_facade", "_load_items"),
@@ -511,9 +523,9 @@ def _admin_runtime_owner_status(sources: dict[str, str]) -> dict[str, object]:
 
 def _arena_owner_status(sources: dict[str, str]) -> dict[str, bool]:
     """Bind the frozen arena commands to their actual state and receipt owners."""
-    trees = {name: ast.parse(source) for name, source in sources.items()}
+    trees = {name: _parse_source(source) for name, source in sources.items()}
     functions = {
-        name: {node.name: node for node in ast.walk(tree)
+        name: {node.name: node for node in _walk(tree)
                if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))}
         for name, tree in trees.items()
     }
@@ -521,14 +533,14 @@ def _arena_owner_status(sources: dict[str, str]) -> dict[str, bool]:
     @lru_cache(maxsize=None)
     def nodes(source, function=None):
         node = trees[source] if function is None else functions[source].get(function)
-        return tuple(ast.walk(node)) if node is not None else ()
+        return _walk(node) if node is not None else ()
 
     def calls(source, function, target):
         return [node for node in nodes(source, function)
                 if isinstance(node, ast.Call) and ast.unparse(node.func) == target]
 
     def expression(source, function, expected):
-        target = ast.parse(expected).body[0]
+        target = _parse_source(expected).body[0]
         if isinstance(target, ast.Expr):
             target = target.value
         expected_tree = ast.dump(target)
@@ -639,16 +651,16 @@ def _arena_owner_status(sources: dict[str, str]) -> dict[str, bool]:
 
 def _bank_command_owner_status(sources: dict[str, str]) -> dict[str, bool]:
     """Follow the real regex handler through the command owner to existing writers."""
-    trees = {name: ast.parse(source) for name, source in sources.items()}
+    trees = {name: _parse_source(source) for name, source in sources.items()}
     functions = {
-        name: {node.name: node for node in ast.walk(tree)
+        name: {node.name: node for node in _walk(tree)
                if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))}
         for name, tree in trees.items()
     }
 
     def nodes(source, function=None):
         node = trees[source] if function is None else functions[source].get(function)
-        return tuple(ast.walk(node)) if node is not None else ()
+        return _walk(node) if node is not None else ()
 
     def calls(source, function, target):
         return [node for node in nodes(source, function)
@@ -795,14 +807,14 @@ def _bank_command_owner_status(sources: dict[str, str]) -> dict[str, bool]:
 
 def _beg_command_owner_status(sources: dict[str, str]) -> dict[str, bool]:
     """Check the three frozen entrypoints without reclassifying the daily reset."""
-    trees = {name: ast.parse(source) for name, source in sources.items()}
-    functions = {name: {node.name: node for node in ast.walk(tree)
+    trees = {name: _parse_source(source) for name, source in sources.items()}
+    functions = {name: {node.name: node for node in _walk(tree)
                        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))}
                  for name, tree in trees.items()}
 
     def calls(source, function, target):
         root = trees[source] if function is None else functions[source][function]
-        return [node for node in ast.walk(root)
+        return [node for node in _walk(root)
                 if isinstance(node, ast.Call) and ast.unparse(node.func) == target]
 
     def code(source, function=None):
@@ -822,19 +834,19 @@ def _beg_command_owner_status(sources: dict[str, str]) -> dict[str, bool]:
     help_branches = [node for node in execute.body if isinstance(node, ast.If)
                      and ast.unparse(node.test) == "action == 'help'"]
     mutation = ast.Module(body=[node for node in execute.body if node not in help_branches], type_ignores=[])
-    positions = {ast.unparse(node.func): node.lineno for node in ast.walk(mutation) if isinstance(node, ast.Call)}
+    positions = {ast.unparse(node.func): node.lineno for node in _walk(mutation) if isinstance(node, ast.Call)}
     ordered = ("self.repository.receipt", "self.repository.profile", "self.clock.now",
                "self.activity.update_last_check_info_time", "self.config_provider", "self.application.execute")
     receipt_return = any(isinstance(node, ast.If) and ast.unparse(node.test) == "previous is not None"
                          and len(node.body) == 1 and ast.unparse(node.body[0]) == "return previous"
-                         for node in ast.walk(execute))
-    atomic = [node for node in ast.walk(functions["application"]["execute"]) if isinstance(node, ast.With)
+                         for node in _walk(execute))
+    atomic = [node for node in _walk(functions["application"]["execute"]) if isinstance(node, ast.With)
               and any(ast.unparse(item.context_expr) == "DatabaseUnitOfWork(self.database, immediate=True)" for item in node.items)]
     reply = functions["replies"]["render_beg_reply"]
-    guards = [node for node in ast.walk(reply) if isinstance(node, ast.If)
+    guards = [node for node in _walk(reply) if isinstance(node, ast.If)
               and ast.unparse(node.test) == "status not in {'applied', 'duplicate'}"
               and any(isinstance(child, ast.Return) for child in node.body)]
-    assets = [node for node in ast.walk(reply) if isinstance(node, ast.Subscript)
+    assets = [node for node in _walk(reply) if isinstance(node, ast.Subscript)
               and ast.unparse(node.value) == "result" and isinstance(node.slice, ast.Constant)
               and node.slice.value in {"stone", "stone_reward"}]
     return {
@@ -868,14 +880,14 @@ def _beg_command_owner_status(sources: dict[str, str]) -> dict[str, bool]:
         "command_reuses_existing_atomic_claim_writers": bool(
             calls("command", "execute", "self.application.execute")
             and "application or BegApplication(database)" in code("command", "__init__")
-            and any(all(target in {ast.unparse(child.func) for child in ast.walk(node) if isinstance(child, ast.Call)}
+            and any(all(target in {ast.unparse(child.func) for child in _walk(node) if isinstance(child, ast.Call)}
                         for target in ("self.ledger.begin", "self.repository.settle_daily", "self.repository.claim_novice", "self.ledger.finish"))
                     for node in atomic)
         ),
         "dynamic_help_and_rejected_replies_do_not_need_claim_effects": bool(
             len(help_branches) == 1
             and not any(isinstance(node, ast.Call) and ast.unparse(node.func).startswith(
-                ("self.repository.", "self.application.", "self.activity.")) for node in ast.walk(help_branches[0]))
+                ("self.repository.", "self.application.", "self.activity.")) for node in _walk(help_branches[0]))
             and "self.config_provider()" in ast.unparse(help_branches[0])
             and all(f"result['{field}']" in code("replies", "render_beg_reply") for field in ("max_age_days", "max_level", "current_time"))
             and guards and assets and max(node.end_lineno for node in guards) < min(node.lineno for node in assets)
@@ -887,7 +899,7 @@ def _beg_command_owner_status(sources: dict[str, str]) -> dict[str, bool]:
 def _slice_status() -> dict[str, dict[str, object]]:
     @lru_cache(maxsize=None)
     def output_tree(source: str) -> ast.Module:
-        return ast.parse(source)
+        return _parse_source(source)
 
     def command_permission(source: str, command: str) -> str | None:
         """Return a command registration's permission without matching handler text."""
@@ -895,7 +907,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
             tree = output_tree(source)
         except SyntaxError:
             return None
-        for node in ast.walk(tree):
+        for node in _walk(tree):
             if not isinstance(node, ast.Assign) or not isinstance(node.value, ast.Call):
                 continue
             if not isinstance(node.value.func, ast.Name) or node.value.func.id != "on_command":
@@ -926,7 +938,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
     interactive_application_tests = (PACKAGE / "features" / "interactive" / "tests" / "test_interactive_application.py").read_text(encoding="utf-8")
     interactive_plugin_source = (PACKAGE / "plugin.py").read_text(encoding="utf-8")
     interactive_command_adapter_source = (PACKAGE / "adapters" / "nonebot" / "commands.py").read_text(encoding="utf-8")
-    interactive_tree = ast.parse(interactive_facade)
+    interactive_tree = _parse_source(interactive_facade)
     interactive_functions = {
         node.name: node
         for node in interactive_tree.body
@@ -939,7 +951,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
             return set()
         names: set[str] = set()
         for statement in handler.body:
-            for node in ast.walk(statement):
+            for node in _walk(statement):
                 if not isinstance(node, ast.Call):
                     continue
                 if isinstance(node.func, ast.Name):
@@ -959,7 +971,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
             and node.args
             and isinstance(node.args[0], ast.Constant)
             and node.args[0].value == action
-            for node in ast.walk(handler)
+            for node in _walk(handler)
         )
 
     interactive_static_handlers = (
