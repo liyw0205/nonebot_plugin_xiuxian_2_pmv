@@ -4,8 +4,8 @@ import asyncio
 from pathlib import Path
 from types import SimpleNamespace
 
-from nonebot_plugin_xiuxian_2.features.messages import WebMessageSendApplication
-from nonebot_plugin_xiuxian_2.xiuxian.messaging import SendResult
+from .. import WebMessageSendApplication
+from ....xiuxian.messaging import SendResult
 
 
 class ReplyRepositoryFake:
