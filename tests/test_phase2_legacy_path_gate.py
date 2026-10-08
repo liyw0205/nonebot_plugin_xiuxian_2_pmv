@@ -80,7 +80,7 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
                              if (item.get("source") or {}).get("feature") == "sect"))
         self.assertEqual(report["path_count"], 496)
         self.assertEqual(report["status_counts"],
-                         {"不可达": 19, "允许保留的兼容路径": 135, "受阻": 42, "已迁移": 300})
+                         {"不可达": 19, "允许保留的兼容路径": 138, "受阻": 25, "已迁移": 314})
         self.assertTrue(report["frozen_membership_valid"])
         self.assertEqual(report["integrity_errors"], [])
 
@@ -399,7 +399,7 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
             self.assertIn(evidence, system_item["evidence"])
         self.assertNotIn("legacy downstream effect not closed", system_graph)
         self.assertEqual(report["status_counts"],
-                         {"不可达": 19, "允许保留的兼容路径": 135, "受阻": 42, "已迁移": 300})
+                         {"不可达": 19, "允许保留的兼容路径": 138, "受阻": 25, "已迁移": 314})
         self.assertTrue(report["frozen_membership_valid"])
         self.assertEqual(report["integrity_errors"], [])
 
@@ -473,7 +473,7 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
                 self.assertNotIn("downstream state effect not closed", graph)
 
         self.assertEqual(report["status_counts"],
-                         {"不可达": 19, "允许保留的兼容路径": 135, "受阻": 42, "已迁移": 300})
+                         {"不可达": 19, "允许保留的兼容路径": 138, "受阻": 25, "已迁移": 314})
         self.assertEqual(report["path_count"], 496)
         self.assertTrue(report["frozen_membership_valid"])
         self.assertEqual(report["integrity_errors"], [])
@@ -522,7 +522,7 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
         self.assertNotIn("legacy downstream effect not closed", claim_graph)
         self.assertEqual(
             report["status_counts"],
-            {"不可达": 19, "允许保留的兼容路径": 135, "受阻": 42, "已迁移": 300},
+            {"不可达": 19, "允许保留的兼容路径": 138, "受阻": 25, "已迁移": 314},
         )
         self.assertTrue(report["frozen_membership_valid"])
         self.assertEqual(report["integrity_errors"], [])
@@ -581,7 +581,7 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
 
         self.assertEqual(
             report["status_counts"],
-            {"不可达": 19, "允许保留的兼容路径": 135, "受阻": 42, "已迁移": 300},
+            {"不可达": 19, "允许保留的兼容路径": 138, "受阻": 25, "已迁移": 314},
         )
 
     def test_world_events_demon_claim_command_owns_atomic_claim_statistic(self):
@@ -613,7 +613,7 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
         self.assertEqual(report["integrity_errors"], [])
         self.assertEqual(
             report["status_counts"],
-            {"不可达": 19, "允许保留的兼容路径": 135, "受阻": 42, "已迁移": 300},
+            {"不可达": 19, "允许保留的兼容路径": 138, "受阻": 25, "已迁移": 314},
         )
         self.assertTrue(report["frozen_membership_valid"])
 
@@ -661,7 +661,7 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
 
         self.assertEqual(
             report["status_counts"],
-            {"不可达": 19, "允许保留的兼容路径": 135, "受阻": 42, "已迁移": 300},
+            {"不可达": 19, "允许保留的兼容路径": 138, "受阻": 25, "已迁移": 314},
         )
         self.assertTrue(report["frozen_membership_valid"])
         self.assertEqual(report["integrity_errors"], [])
@@ -718,7 +718,7 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
         self.assertEqual(report["path_count"], 496)
         self.assertEqual(
             report["status_counts"],
-            {"不可达": 19, "允许保留的兼容路径": 135, "受阻": 42, "已迁移": 300},
+            {"不可达": 19, "允许保留的兼容路径": 138, "受阻": 25, "已迁移": 314},
         )
         self.assertGreater(report["blocked_count"], 0)
         self.assertTrue(all(item["call_graph"] and item["evidence"] for item in report["items"]))
@@ -1548,7 +1548,7 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
         self.assertIn("authenticated reward_center.html", " ".join(page["call_graph"]))
         self.assertEqual(
             report["status_counts"],
-            {"不可达": 19, "允许保留的兼容路径": 135, "受阻": 42, "已迁移": 300},
+            {"不可达": 19, "允许保留的兼容路径": 138, "受阻": 25, "已迁移": 314},
         )
 
     def test_legacy_logs_routes_share_file_and_message_owners(self):
@@ -1578,8 +1578,74 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
         self.assertIn("render_template(logs.html)", " ".join(page["call_graph"]))
         self.assertEqual(
             report["status_counts"],
-            {"不可达": 19, "允许保留的兼容路径": 135, "受阻": 42, "已迁移": 300},
+            {"不可达": 19, "允许保留的兼容路径": 138, "受阻": 25, "已迁移": 314},
         )
+
+    def test_messages_routes_record_owner_edges_and_remaining_compatibility(self):
+        report = load_phase2_scope_report(include_items=True)
+        items = {item["id"]: item for item in report["items"]}
+        source = "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py"
+        migrated = {
+            "api_messages_list": ("MessageHistoryRepository.list_messages", "tests/test_web_message_history_routes.py"),
+            "api_messages_dates": ("MessageHistoryRepository.dates", "tests/test_web_message_history_routes.py"),
+            "api_messages_sessions": ("MessageHistoryRepository.sessions", "tests/test_web_message_history_routes.py"),
+            "api_messages_sessions_since": ("MessageHistoryRepository.sessions_since", "tests/test_web_message_history_routes.py"),
+            "api_messages_list_since": ("MessageHistoryRepository.list_since", "tests/test_web_message_history_routes.py"),
+            "api_messages_list_before": ("MessageHistoryRepository.list_before", "tests/test_web_message_history_routes.py"),
+            "api_messages_config": ("AdminConfigApplication.get_message_db_config", "tests/test_admin_config_owner.py"),
+            "api_messages_config_save": ("AdminConfigApplication.update_message_db_config", "tests/test_admin_config_owner.py"),
+            "api_messages_group_remark": ("AdminConfigApplication.set_group_remark", "tests/test_admin_config_owner.py"),
+            "api_messages_session_pin": ("AdminConfigApplication.is_session_pinned/set_session_pinned", "tests/test_admin_config_owner.py"),
+            "api_messages_markdown_preview": ("render_markdown_preview", "tests/test_markdown_preview_security.py"),
+            "api_messages_revoke": ("MessageRecallApplication.revoke", "nonebot_plugin_xiuxian_2/features/logs/tests/test_message_recall_application.py"),
+            "api_messages_broadcast": ("AdminBroadcastApplication.start", "tests/test_admin_broadcast.py"),
+            "api_messages_broadcast_status": ("AdminBroadcastApplication.status", "tests/test_admin_broadcast.py"),
+        }
+        for function, (owner, test_path) in migrated.items():
+            item = next(item for item in items.values() if item.get("source", {}).get("function") == function)
+            graph = " ".join(item["call_graph"])
+            location = f"{source}:{_handler_line(source, function)}"
+            with self.subTest(route=function):
+                self.assertEqual(item["status"], "已迁移")
+                self.assertIn(f"{location} {function} ->", graph)
+                self.assertIn(owner, graph)
+                self.assertIn(location, item["evidence"])
+                self.assertIn(test_path, item["evidence"])
+                self.assertNotIn("downstream state effect not closed", graph)
+                self.assertNotIn("unknown_edge", item)
+
+        compatibility = {
+            "api_messages_media_proxy": ("允许保留的兼容路径", "QQ rkey cache", "tests/test_message_media_proxy_safety.py"),
+            "api_messages_bots": ("允许保留的兼容路径", "get_bots", "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:1041"),
+            "messages_page": ("允许保留的兼容路径", "render_template(messages.html)", "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/templates/messages.html"),
+        }
+        for function, (status, edge, evidence) in compatibility.items():
+            item = next(item for item in items.values() if item.get("source", {}).get("function") == function)
+            graph = " ".join(item["call_graph"])
+            location = f"{source}:{_handler_line(source, function)}"
+            with self.subTest(route=function):
+                self.assertEqual(item["status"], status)
+                self.assertIn(f"{location} {function} ->", graph)
+                self.assertIn(edge, graph)
+                self.assertIn(location, item["evidence"])
+                self.assertIn(evidence, item["evidence"])
+                self.assertNotIn("downstream state effect not closed", graph)
+                self.assertNotIn("unknown_edge", item)
+
+        send = next(item for item in items.values() if item.get("source", {}).get("function") == "api_messages_send")
+        send_graph = " ".join(send["call_graph"])
+        self.assertEqual(send["status"], "受阻")
+        self.assertIn("MessageReplyRepository", send_graph)
+        self.assertIn("legacy Flask function still owns", send["reason"])
+        self.assertIn("run_async", send_graph)
+        self.assertIn("unknown_edge", send)
+        self.assertEqual(
+            report["status_counts"],
+            {"不可达": 19, "允许保留的兼容路径": 138, "受阻": 25, "已迁移": 314},
+        )
+        self.assertEqual(len(report["items"]), 496)
+        self.assertTrue(report["frozen_membership_valid"])
+        self.assertEqual(report["integrity_errors"], [])
 
     def test_check_cli_returns_nonzero_for_incomplete_frozen_scope(self):
         report = {

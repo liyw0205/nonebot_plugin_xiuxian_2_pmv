@@ -127,6 +127,72 @@ class AdminConfigRepository:
 
         return self.update(change)
 
+    def is_full_message_group(self, group_id) -> bool:
+        identity = str(group_id or "").strip()
+        return bool(identity and identity in set(self.read_data()["full_message_groups"]))
+
+    def set_full_message_group(self, group_id, enabled: bool) -> bool:
+        identity = str(group_id or "").strip()
+        if not identity:
+            return False
+        return self.set_list_member("full_message_groups", identity, bool(enabled))
+
+    def get_group_remark(self, group_id) -> str:
+        identity = str(group_id or "").strip()
+        if not identity:
+            return ""
+        return self.read_data()["group_remarks"].get(identity, "")
+
+    def get_group_remarks(self) -> dict[str, str]:
+        return dict(self.read_data()["group_remarks"])
+
+    def set_group_remark(self, group_id, remark: str) -> tuple[bool, str]:
+        identity = str(group_id or "").strip()
+        if not identity:
+            return False, "缺少群ID"
+        text = str(remark or "").strip()
+
+        def change(data):
+            if text:
+                data["group_remarks"][identity] = text[:32]
+                return True, f"已备注：{text[:32]}"
+            data["group_remarks"].pop(identity, None)
+            return True, "已清除备注"
+
+        return self.update(change)
+
+    @staticmethod
+    def session_pin_key(scene: str, target_id: str) -> str:
+        return f"{str(scene or '').strip()}:{str(target_id or '').strip()}"
+
+    def get_pinned_sessions(self) -> list[str]:
+        return list(self.read_data()["pinned_sessions"])
+
+    def is_session_pinned(self, scene: str, target_id: str) -> bool:
+        key = self.session_pin_key(scene, target_id)
+        if key.endswith(":") or key.startswith(":"):
+            return False
+        return key in set(self.get_pinned_sessions())
+
+    def set_session_pinned(self, scene: str, target_id: str, pinned: bool) -> tuple[bool, str]:
+        key = self.session_pin_key(scene, target_id)
+        if key.endswith(":") or key.startswith(":"):
+            return False, "缺少会话标识"
+
+        def change(data):
+            pins = data["pinned_sessions"]
+            if pinned:
+                if key in pins:
+                    return False, "已置顶"
+                pins.insert(0, key)
+                return True, "已置顶"
+            if key not in pins:
+                return False, "未置顶"
+            pins.remove(key)
+            return True, "已取消置顶"
+
+        return self.update(change)
+
     def write_data(self, key, id=None):
         switches = {3: ("private", True), 4: ("private", False),
                     5: ("root_selection", True), 6: ("root_selection", False),

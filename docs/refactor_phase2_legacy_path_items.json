@@ -12016,19 +12016,14 @@
       "id": "route:GET:/api/messages/bots:nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:api_messages_bots",
       "kind": "legacy_routes",
       "entry": "GET /api/messages/bots -> nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:api_messages_bots",
-      "status": "受阻",
-      "reason": "The old Flask app and route modules are loaded and its server is enabled by default. Route registration is proven, but each handler's downstream ownership and replacement/compatibility decision is not closed.",
-      "unknown_edge": "route function -> old data/service or feature application -> state effect",
+      "status": "允许保留的兼容路径",
+      "reason": "This authenticated endpoint is a runtime Bot directory projection over NoneBot get_bots; it computes adapter labels and avatar URLs but does not own persistent application state. Keep it as a web compatibility adapter.",
       "call_graph": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:1457 -> Flask app.route(/api/messages/bots) -> legacy handler -> downstream state effect not closed"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:1041 api_messages_bots -> get_bots -> adapter nickname/avatar projection -> legacy JSON envelope"
       ],
       "evidence": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
-        "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
-        "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
-        "scripts/export_refactor_inventory.py:41-70",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:1457"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:1041",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:1041-1095"
       ],
       "source_declaration_found": true,
       "source": {
@@ -12044,19 +12039,17 @@
       "id": "route:POST:/api/messages/broadcast:nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:api_messages_broadcast",
       "kind": "legacy_routes",
       "entry": "POST /api/messages/broadcast -> nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:api_messages_broadcast",
-      "status": "受阻",
-      "reason": "The old Flask app and route modules are loaded and its server is enabled by default. Route registration is proven, but each handler's downstream ownership and replacement/compatibility decision is not closed.",
-      "unknown_edge": "route function -> old data/service or feature application -> state effect",
+      "status": "已迁移",
+      "reason": "The authenticated compatibility endpoint parses legacy request fields and delegates task creation, target claiming and delivery orchestration through broadcast_manager to AdminBroadcastApplication and its repositories/ports.",
       "call_graph": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:1301 -> Flask app.route(/api/messages/broadcast) -> legacy handler -> downstream state effect not closed"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:913 api_messages_broadcast -> broadcast_manager.start_broadcast -> AdminBroadcastApplication.start -> AdminBroadcastRepository and history/sender ports"
       ],
       "evidence": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
-        "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
-        "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
-        "scripts/export_refactor_inventory.py:41-70",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:1301"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:913",
+        "nonebot_plugin_xiuxian_2/xiuxian/broadcast_manager.py:185-260",
+        "nonebot_plugin_xiuxian_2/features/admin/broadcast_application.py",
+        "nonebot_plugin_xiuxian_2/features/admin/broadcast_repository.py",
+        "tests/test_admin_broadcast.py"
       ],
       "source_declaration_found": true,
       "source": {
@@ -12072,19 +12065,17 @@
       "id": "route:GET:/api/messages/broadcast/status:nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:api_messages_broadcast_status",
       "kind": "legacy_routes",
       "entry": "GET /api/messages/broadcast/status -> nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:api_messages_broadcast_status",
-      "status": "受阻",
-      "reason": "The old Flask app and route modules are loaded and its server is enabled by default. Route registration is proven, but each handler's downstream ownership and replacement/compatibility decision is not closed.",
-      "unknown_edge": "route function -> old data/service or feature application -> state effect",
+      "status": "已迁移",
+      "reason": "The authenticated status endpoint formats the legacy response from broadcast_manager, whose status projection delegates to AdminBroadcastApplication.status.",
       "call_graph": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:1356 -> Flask app.route(/api/messages/broadcast/status) -> legacy handler -> downstream state effect not closed"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:968 api_messages_broadcast_status -> format_broadcast_status -> AdminBroadcastApplication.status -> AdminBroadcastRepository"
       ],
       "evidence": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
-        "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
-        "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
-        "scripts/export_refactor_inventory.py:41-70",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:1356"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:968",
+        "nonebot_plugin_xiuxian_2/xiuxian/broadcast_manager.py:262-290",
+        "nonebot_plugin_xiuxian_2/features/admin/broadcast_application.py",
+        "nonebot_plugin_xiuxian_2/features/admin/broadcast_repository.py",
+        "tests/test_admin_broadcast.py"
       ],
       "source_declaration_found": true,
       "source": {
@@ -12100,19 +12091,16 @@
       "id": "route:GET:/api/messages/config:nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:api_messages_config",
       "kind": "legacy_routes",
       "entry": "GET /api/messages/config -> nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:api_messages_config",
-      "status": "受阻",
-      "reason": "The old Flask app and route modules are loaded and its server is enabled by default. Route registration is proven, but each handler's downstream ownership and replacement/compatibility decision is not closed.",
-      "unknown_edge": "route function -> old data/service or feature application -> state effect",
+      "status": "已迁移",
+      "reason": "The authenticated read route obtains message database retention settings and recording state from AdminConfigApplication, the owner of the legacy configuration projection.",
       "call_graph": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:228 -> Flask app.route(/api/messages/config) -> legacy handler -> downstream state effect not closed"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:271 api_messages_config -> AdminConfigApplication.get_message_db_config/is_message_record_enabled -> AdminConfigRepository"
       ],
       "evidence": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
-        "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
-        "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
-        "scripts/export_refactor_inventory.py:41-70",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:228"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:271",
+        "nonebot_plugin_xiuxian_2/features/admin/config_application.py",
+        "nonebot_plugin_xiuxian_2/features/admin/config_repository.py",
+        "tests/test_admin_config_owner.py"
       ],
       "source_declaration_found": true,
       "source": {
@@ -12128,19 +12116,16 @@
       "id": "route:POST:/api/messages/config:nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:api_messages_config_save",
       "kind": "legacy_routes",
       "entry": "POST /api/messages/config -> nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:api_messages_config_save",
-      "status": "受阻",
-      "reason": "The old Flask app and route modules are loaded and its server is enabled by default. Route registration is proven, but each handler's downstream ownership and replacement/compatibility decision is not closed.",
-      "unknown_edge": "route function -> old data/service or feature application -> state effect",
+      "status": "已迁移",
+      "reason": "The authenticated update route validates legacy integer bounds and delegates message database settings updates to AdminConfigApplication; the existing JSON envelope is preserved.",
       "call_graph": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:240 -> Flask app.route(/api/messages/config) -> legacy handler -> downstream state effect not closed"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:283 api_messages_config_save -> bounds validation -> AdminConfigApplication.update_message_db_config -> AdminConfigRepository"
       ],
       "evidence": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
-        "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
-        "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
-        "scripts/export_refactor_inventory.py:41-70",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:240"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:283",
+        "nonebot_plugin_xiuxian_2/features/admin/config_application.py",
+        "nonebot_plugin_xiuxian_2/features/admin/config_repository.py",
+        "tests/test_admin_config_owner.py"
       ],
       "source_declaration_found": true,
       "source": {
@@ -12156,19 +12141,16 @@
       "id": "route:GET:/api/messages/dates:nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:api_messages_dates",
       "kind": "legacy_routes",
       "entry": "GET /api/messages/dates -> nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:api_messages_dates",
-      "status": "受阻",
-      "reason": "The old Flask app and route modules are loaded and its server is enabled by default. Route registration is proven, but each handler's downstream ownership and replacement/compatibility decision is not closed.",
-      "unknown_edge": "route function -> old data/service or feature application -> state effect",
+      "status": "已迁移",
+      "reason": "The authenticated dates route delegates filtering and grouped date/count queries to MessageHistoryRepository; localized labels remain route presentation only.",
       "call_graph": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:380 -> Flask app.route(/api/messages/dates) -> legacy handler -> downstream state effect not closed"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:345 api_messages_dates -> _message_history_repository().dates -> MessageHistoryRepository.dates -> read-only message DB unit of work -> localized date labels"
       ],
       "evidence": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
-        "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
-        "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
-        "scripts/export_refactor_inventory.py:41-70",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:380"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:345",
+        "nonebot_plugin_xiuxian_2/features/logs/history_repository.py:119-189",
+        "tests/test_web_message_history_routes.py",
+        "nonebot_plugin_xiuxian_2/features/logs/tests/test_history_repository.py"
       ],
       "source_declaration_found": true,
       "source": {
@@ -12184,19 +12166,16 @@
       "id": "route:POST:/api/messages/group_remark:nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:api_messages_group_remark",
       "kind": "legacy_routes",
       "entry": "POST /api/messages/group_remark -> nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:api_messages_group_remark",
-      "status": "受阻",
-      "reason": "The old Flask app and route modules are loaded and its server is enabled by default. Route registration is proven, but each handler's downstream ownership and replacement/compatibility decision is not closed.",
-      "unknown_edge": "route function -> old data/service or feature application -> state effect",
+      "status": "已迁移",
+      "reason": "The authenticated group remark route delegates read and write behavior to AdminConfigApplication; it retains the legacy request aliases and response fields.",
       "call_graph": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:182 -> Flask app.route(/api/messages/group_remark) -> legacy handler -> downstream state effect not closed"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:223 api_messages_group_remark -> AdminConfigApplication.set_group_remark/get_group_remark -> AdminConfigRepository"
       ],
       "evidence": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
-        "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
-        "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
-        "scripts/export_refactor_inventory.py:41-70",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:182"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:223",
+        "nonebot_plugin_xiuxian_2/features/admin/config_application.py:38-57",
+        "nonebot_plugin_xiuxian_2/features/admin/config_repository.py",
+        "tests/test_admin_config_owner.py"
       ],
       "source_declaration_found": true,
       "source": {
@@ -12212,19 +12191,16 @@
       "id": "route:GET:/api/messages/list:nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:api_messages_list",
       "kind": "legacy_routes",
       "entry": "GET /api/messages/list -> nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:api_messages_list",
-      "status": "受阻",
-      "reason": "The old Flask app and route modules are loaded and its server is enabled by default. Route registration is proven, but each handler's downstream ownership and replacement/compatibility decision is not closed.",
-      "unknown_edge": "route function -> old data/service or feature application -> state effect",
+      "status": "已迁移",
+      "reason": "The authenticated list route delegates SQL filtering, pagination and count behavior to MessageHistoryRepository; row presentation remains a bounded compatibility presenter passed into the read-only query boundary.",
       "call_graph": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:263 -> Flask app.route(/api/messages/list) -> legacy handler -> downstream state effect not closed"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:307 api_messages_list -> _message_history_repository().list_messages -> MessageHistoryRepository.list_messages -> read-only message DB unit of work -> _prepare_message_rows"
       ],
       "evidence": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
-        "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
-        "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
-        "scripts/export_refactor_inventory.py:41-70",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:263"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:307",
+        "nonebot_plugin_xiuxian_2/features/logs/history_repository.py:22-118",
+        "tests/test_web_message_history_routes.py",
+        "nonebot_plugin_xiuxian_2/features/logs/tests/test_history_repository.py"
       ],
       "source_declaration_found": true,
       "source": {
@@ -12240,19 +12216,16 @@
       "id": "route:GET:/api/messages/list_before:nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:api_messages_list_before",
       "kind": "legacy_routes",
       "entry": "GET /api/messages/list_before -> nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:api_messages_list_before",
-      "status": "受阻",
-      "reason": "The old Flask app and route modules are loaded and its server is enabled by default. Route registration is proven, but each handler's downstream ownership and replacement/compatibility decision is not closed.",
-      "unknown_edge": "route function -> old data/service or feature application -> state effect",
+      "status": "已迁移",
+      "reason": "The authenticated older-history route delegates bounded page-size cursor querying to MessageHistoryRepository and preserves the legacy JSON response shape.",
       "call_graph": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:773 -> Flask app.route(/api/messages/list_before) -> legacy handler -> downstream state effect not closed"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:440 api_messages_list_before -> _message_history_repository().list_before -> MessageHistoryRepository.list_before -> read-only message DB unit of work -> _prepare_message_rows"
       ],
       "evidence": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
-        "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
-        "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
-        "scripts/export_refactor_inventory.py:41-70",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:773"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:440",
+        "nonebot_plugin_xiuxian_2/features/logs/history_repository.py:318-405",
+        "tests/test_web_message_history_routes.py",
+        "nonebot_plugin_xiuxian_2/features/logs/tests/test_history_repository.py"
       ],
       "source_declaration_found": true,
       "source": {
@@ -12268,19 +12241,16 @@
       "id": "route:GET:/api/messages/list_since:nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:api_messages_list_since",
       "kind": "legacy_routes",
       "entry": "GET /api/messages/list_since -> nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:api_messages_list_since",
-      "status": "受阻",
-      "reason": "The old Flask app and route modules are loaded and its server is enabled by default. Route registration is proven, but each handler's downstream ownership and replacement/compatibility decision is not closed.",
-      "unknown_edge": "route function -> old data/service or feature application -> state effect",
+      "status": "已迁移",
+      "reason": "The authenticated incremental message route delegates cursor filtering to MessageHistoryRepository and preserves route parsing and response compatibility.",
       "call_graph": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:707 -> Flask app.route(/api/messages/list_since) -> legacy handler -> downstream state effect not closed"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:413 api_messages_list_since -> _message_history_repository().list_since -> MessageHistoryRepository.list_since -> read-only message DB unit of work -> _prepare_message_rows"
       ],
       "evidence": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
-        "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
-        "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
-        "scripts/export_refactor_inventory.py:41-70",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:707"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:413",
+        "nonebot_plugin_xiuxian_2/features/logs/history_repository.py:274-317",
+        "tests/test_web_message_history_routes.py",
+        "nonebot_plugin_xiuxian_2/features/logs/tests/test_history_repository.py"
       ],
       "source_declaration_found": true,
       "source": {
@@ -12296,19 +12266,15 @@
       "id": "route:POST:/api/messages/markdown_preview:nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:api_messages_markdown_preview",
       "kind": "legacy_routes",
       "entry": "POST /api/messages/markdown_preview -> nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:api_messages_markdown_preview",
-      "status": "受阻",
-      "reason": "The old Flask app and route modules are loaded and its server is enabled by default. Route registration is proven, but each handler's downstream ownership and replacement/compatibility decision is not closed.",
-      "unknown_edge": "route function -> old data/service or feature application -> state effect",
+      "status": "已迁移",
+      "reason": "The authenticated preview route delegates Markdown conversion and HTML sanitization to the shared web preview adapter and preserves its JSON response envelope.",
       "call_graph": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:2092 -> Flask app.route(/api/messages/markdown_preview) -> legacy handler -> downstream state effect not closed"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:1680 api_messages_markdown_preview -> render_markdown_preview -> bounded Markdown conversion and HTML sanitization"
       ],
       "evidence": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
-        "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
-        "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
-        "scripts/export_refactor_inventory.py:41-70",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:2092"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:1680",
+        "nonebot_plugin_xiuxian_2/adapters/web/markdown_preview.py",
+        "tests/test_markdown_preview_security.py"
       ],
       "source_declaration_found": true,
       "source": {
@@ -12324,19 +12290,16 @@
       "id": "route:GET:/api/messages/media_proxy:nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:api_messages_media_proxy",
       "kind": "legacy_routes",
       "entry": "GET /api/messages/media_proxy -> nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:api_messages_media_proxy",
-      "status": "受阻",
-      "reason": "The old Flask app and route modules are loaded and its server is enabled by default. Route registration is proven, but each handler's downstream ownership and replacement/compatibility decision is not closed.",
-      "unknown_edge": "route function -> old data/service or feature application -> state effect",
+      "status": "允许保留的兼容路径",
+      "reason": "The legacy proxy remains the compatibility boundary for QQ rkey cache learning and message database fallback. Its download helper now owns allowlisted URL validation, redirect revalidation and bounded streaming; the route still coordinates rkey retries and response headers.",
       "call_graph": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:1550 -> Flask app.route(/api/messages/media_proxy) -> legacy handler -> downstream state effect not closed"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:1110 api_messages_media_proxy -> is_allowed_media_proxy_url/download_media_bytes -> allowlisted redirects and 30 MiB bounded stream",
+        "The compatibility handler applies the daily QQ rkey cache and may learn a fresh rkey from message history before retrying; it then preserves MIME and cache headers"
       ],
       "evidence": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
-        "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
-        "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
-        "scripts/export_refactor_inventory.py:41-70",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:1550"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:1110",
+        "nonebot_plugin_xiuxian_2/adapters/web/media_proxy.py",
+        "tests/test_message_media_proxy_safety.py"
       ],
       "source_declaration_found": true,
       "source": {
@@ -12352,19 +12315,16 @@
       "id": "route:POST:/api/messages/revoke:nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:api_messages_revoke",
       "kind": "legacy_routes",
       "entry": "POST /api/messages/revoke -> nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:api_messages_revoke",
-      "status": "受阻",
-      "reason": "The old Flask app and route modules are loaded and its server is enabled by default. Route registration is proven, but each handler's downstream ownership and replacement/compatibility decision is not closed.",
-      "unknown_edge": "route function -> old data/service or feature application -> state effect",
+      "status": "已迁移",
+      "reason": "The authenticated route delegates adapter recall and message-log reconciliation to MessageRecallApplication and MessageRecallRepository; Flask retains input parsing and the existing response envelope.",
       "call_graph": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:1374 -> Flask app.route(/api/messages/revoke) -> legacy handler -> downstream state effect not closed"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:986 api_messages_revoke -> MessageRecallApplication.revoke -> delivery_service recall port and MessageRecallRepository log update"
       ],
       "evidence": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
-        "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
-        "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
-        "scripts/export_refactor_inventory.py:41-70",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:1374"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:986",
+        "nonebot_plugin_xiuxian_2/features/logs/message_recall_application.py",
+        "nonebot_plugin_xiuxian_2/features/logs/message_recall_repository.py",
+        "nonebot_plugin_xiuxian_2/features/logs/tests/test_message_recall_application.py"
       ],
       "source_declaration_found": true,
       "source": {
@@ -12381,18 +12341,17 @@
       "kind": "legacy_routes",
       "entry": "POST /api/messages/send -> nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:api_messages_send",
       "status": "受阻",
-      "reason": "The old Flask app and route modules are loaded and its server is enabled by default. Route registration is proven, but each handler's downstream ownership and replacement/compatibility decision is not closed.",
+      "reason": "The handler has begun delegating QQ reply/reference candidate reads to MessageReplyRepository, but the legacy Flask function still owns send-mode normalization, adapter/scene branching, media handling, direct API calls and synchronous delivery waits. No send application owns that complete orchestration yet, so this path is not marked migrated.",
       "unknown_edge": "route function -> old data/service or feature application -> state effect",
       "call_graph": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:862 -> Flask app.route(/api/messages/send) -> legacy handler -> downstream state effect not closed"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:472 api_messages_send -> legacy request validation and message construction -> adapter/scene-specific direct send orchestration",
+        "QQ reply/reference candidate branches -> MessageReplyRepository -> read-only message DB queries; remaining send branches call delivery_service or adapter APIs synchronously through run_async"
       ],
       "evidence": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
-        "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
-        "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
-        "scripts/export_refactor_inventory.py:41-70",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:862"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:472",
+        "nonebot_plugin_xiuxian_2/features/logs/message_reply_repository.py",
+        "nonebot_plugin_xiuxian_2/features/logs/tests/test_message_reply_repository.py",
+        "tests/test_web_message_send_routes.py"
       ],
       "source_declaration_found": true,
       "source": {
@@ -12408,19 +12367,16 @@
       "id": "route:POST:/api/messages/session_pin:nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:api_messages_session_pin",
       "kind": "legacy_routes",
       "entry": "POST /api/messages/session_pin -> nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:api_messages_session_pin",
-      "status": "受阻",
-      "reason": "The old Flask app and route modules are loaded and its server is enabled by default. Route registration is proven, but each handler's downstream ownership and replacement/compatibility decision is not closed.",
-      "unknown_edge": "route function -> old data/service or feature application -> state effect",
+      "status": "已迁移",
+      "reason": "The authenticated pin route delegates pinned-state reads and writes to AdminConfigApplication, preserving explicit set and toggle behavior.",
       "call_graph": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:202 -> Flask app.route(/api/messages/session_pin) -> legacy handler -> downstream state effect not closed"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:244 api_messages_session_pin -> AdminConfigApplication.is_session_pinned/set_session_pinned -> AdminConfigRepository"
       ],
       "evidence": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
-        "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
-        "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
-        "scripts/export_refactor_inventory.py:41-70",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:202"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:244",
+        "nonebot_plugin_xiuxian_2/features/admin/config_application.py:59-66",
+        "nonebot_plugin_xiuxian_2/features/admin/config_repository.py",
+        "tests/test_admin_config_owner.py"
       ],
       "source_declaration_found": true,
       "source": {
@@ -12436,19 +12392,16 @@
       "id": "route:GET:/api/messages/sessions:nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:api_messages_sessions",
       "kind": "legacy_routes",
       "entry": "GET /api/messages/sessions -> nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:api_messages_sessions",
-      "status": "受阻",
-      "reason": "The old Flask app and route modules are loaded and its server is enabled by default. Route registration is proven, but each handler's downstream ownership and replacement/compatibility decision is not closed.",
-      "unknown_edge": "route function -> old data/service or feature application -> state effect",
+      "status": "已迁移",
+      "reason": "The authenticated session list route delegates query and aggregate behavior to MessageHistoryRepository; display profile and session preferences are projected at the web boundary.",
       "call_graph": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:479 -> Flask app.route(/api/messages/sessions) -> legacy handler -> downstream state effect not closed"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:374 api_messages_sessions -> _message_history_repository().sessions -> MessageHistoryRepository.sessions -> read-only message DB unit of work -> _prepare_session_rows"
       ],
       "evidence": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
-        "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
-        "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
-        "scripts/export_refactor_inventory.py:41-70",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:479"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:374",
+        "nonebot_plugin_xiuxian_2/features/logs/history_repository.py:190-198",
+        "tests/test_web_message_history_routes.py",
+        "nonebot_plugin_xiuxian_2/features/logs/tests/test_history_repository.py"
       ],
       "source_declaration_found": true,
       "source": {
@@ -12464,19 +12417,16 @@
       "id": "route:GET:/api/messages/sessions_since:nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:api_messages_sessions_since",
       "kind": "legacy_routes",
       "entry": "GET /api/messages/sessions_since -> nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:api_messages_sessions_since",
-      "status": "受阻",
-      "reason": "The old Flask app and route modules are loaded and its server is enabled by default. Route registration is proven, but each handler's downstream ownership and replacement/compatibility decision is not closed.",
-      "unknown_edge": "route function -> old data/service or feature application -> state effect",
+      "status": "已迁移",
+      "reason": "The authenticated session incremental route delegates cursor filtering and query behavior to MessageHistoryRepository; the same presenter prepares display fields.",
       "call_graph": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:590 -> Flask app.route(/api/messages/sessions_since) -> legacy handler -> downstream state effect not closed"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:390 api_messages_sessions_since -> _message_history_repository().sessions_since -> MessageHistoryRepository.sessions_since -> read-only message DB unit of work -> _prepare_session_rows"
       ],
       "evidence": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
-        "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
-        "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
-        "scripts/export_refactor_inventory.py:41-70",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:590"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:390",
+        "nonebot_plugin_xiuxian_2/features/logs/history_repository.py:199-273",
+        "tests/test_web_message_history_routes.py",
+        "nonebot_plugin_xiuxian_2/features/logs/tests/test_history_repository.py"
       ],
       "source_declaration_found": true,
       "source": {
@@ -14163,19 +14113,14 @@
       "id": "route:GET:/messages:nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:messages_page",
       "kind": "legacy_routes",
       "entry": "GET /messages -> nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:messages_page",
-      "status": "受阻",
-      "reason": "The old Flask app and route modules are loaded and its server is enabled by default. Route registration is proven, but each handler's downstream ownership and replacement/compatibility decision is not closed.",
-      "unknown_edge": "route function -> old data/service or feature application -> state effect",
+      "status": "允许保留的兼容路径",
+      "reason": "The authenticated route renders the existing messages.html frontend used by the legacy web application; it is retained as a page/URL compatibility entry rather than claimed as a migrated business owner.",
       "call_graph": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:175 -> Flask app.route(/messages) -> legacy handler -> downstream state effect not closed"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:216 messages_page -> admin_id session check -> render_template(messages.html)"
       ],
       "evidence": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
-        "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
-        "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
-        "scripts/export_refactor_inventory.py:41-70",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:175"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:216",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/templates/messages.html"
       ],
       "source_declaration_found": true,
       "source": {

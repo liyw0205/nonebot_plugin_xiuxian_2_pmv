@@ -62,6 +62,65 @@ def test_group_and_welcome_defaults_duplicates_and_global_gate(config):
         application.set_switch("private_enabled", True)
 
 
+def test_message_group_config_methods_preserve_legacy_behavior(config):
+    application, repository = config
+
+    assert not application.is_full_message_group("")
+    assert not application.set_full_message_group("", enabled=True)
+    assert application.set_full_message_group(" g1 ", enabled=True)
+    assert application.is_full_message_group("g1")
+    assert repository.read_data()["full_message_groups"] == ["g1"]
+    assert not application.set_full_message_group("g1", enabled=True)
+    assert application.set_full_message_group("g1", enabled=False)
+    assert not application.is_full_message_group("g1")
+
+    assert application.set_group_remark(" g1 ", "  " + "仙" * 40 + "  ") == (True, f"已备注：{'仙' * 32}")
+    assert application.get_group_remark("g1") == "仙" * 32
+    assert application.get_group_remarks() == {"g1": "仙" * 32}
+    assert application.set_group_remark("g1", " ") == (True, "已清除备注")
+    assert application.get_group_remarks() == {}
+    assert application.set_group_remark("", "备注") == (False, "缺少群ID")
+
+    assert application.set_session_pinned("group", "g1", True) == (True, "已置顶")
+    assert application.set_session_pinned("private", "u1", True) == (True, "已置顶")
+    assert application.get_pinned_sessions() == ["private:u1", "group:g1"]
+    assert application.is_session_pinned("group", "g1")
+    assert application.set_session_pinned("group", "g1", True) == (False, "已置顶")
+    assert application.set_session_pinned("group", "g1", False) == (True, "已取消置顶")
+    assert not application.is_session_pinned("group", "g1")
+    assert application.set_session_pinned("", "g1", True) == (False, "缺少会话标识")
+    assert application.set_session_pinned("group", "", True) == (False, "缺少会话标识")
+
+
+def test_message_database_config_application_uses_existing_owner(tmp_path, monkeypatch):
+    from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_utils import message_db
+
+    path = tmp_path / "message_db_config.json"
+    monkeypatch.setattr(message_db, "_message_db_config_path", lambda: path)
+    monkeypatch.setattr(message_db, "message_db_max_size_mb", 1000)
+    monkeypatch.setattr(message_db, "message_group_keep_days", 0)
+    monkeypatch.setattr(message_db, "message_private_keep_days", 0)
+    application = AdminConfigApplication(AdminConfigRepository(tmp_path / "config.json"))
+
+    assert application.get_message_db_config() == {
+        "message_db_max_size_mb": 1000,
+        "message_group_keep_days": 0,
+        "message_private_keep_days": 0,
+    }
+    saved = application.update_message_db_config({
+        "message_db_max_size_mb": 0,
+        "message_group_keep_days": 14,
+        "message_private_keep_days": 30,
+    })
+    assert saved == {
+        "message_db_max_size_mb": 0,
+        "message_group_keep_days": 14,
+        "message_private_keep_days": 30,
+    }
+    assert not application.is_message_record_enabled()
+    assert json.loads(path.read_text(encoding="utf-8")) == saved
+
+
 def test_legacy_metadata_and_unknown_keys_survive_switch_updates(config):
     application, repository = config
     legacy = xiuxian_config.JsonConfig()

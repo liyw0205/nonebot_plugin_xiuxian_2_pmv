@@ -110,19 +110,22 @@
       "status": "受阻",
       "entry_format": "{methods} {path} -> {file}:{function}",
       "target_format": "legacy Flask route handler {file}:{function}",
-      "reason": "The old Flask app and route modules are loaded and its server is enabled by default. Route registration is proven, but each handler's downstream ownership and replacement/compatibility decision is not closed.",
-      "unknown_edge": "route function -> old data/service or feature application -> state effect",
+      "reason": "The legacy Flask app remains enabled by default. Route-level ownership and compatibility decisions for the 18 frozen /messages paths are recorded in the frozen item file; the message send handler still owns its send-policy orchestration, and other route handlers remain unresolved. This route family remains blocked until those remaining handlers are reviewed.",
+      "unknown_edge": "unreviewed route functions -> route-specific effects not yet assigned",
       "call_graph": [
         "xiuxian/xiuxian_web/__init__.py imports route modules -> Flask @app.route registers each route",
         "register_legacy_startup(start_web_server_on_startup) -> start_web_server -> _web_enabled -> make_server(host, port, app)",
-        "web_enabled_from_env uses XIUXIAN_WEB_STATUS default true"
+        "web_enabled_from_env uses XIUXIAN_WEB_STATUS default true",
+        "Per-route decisions are tracked in docs/refactor_phase2_legacy_path_items.json; reviewed message routes do not close the wider legacy route family"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-18",
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
-        "scripts/export_refactor_inventory.py:41-70"
+        "scripts/export_refactor_inventory.py:41-70",
+        "docs/refactor_phase2_legacy_path_items.json",
+        "tests/test_phase2_legacy_path_gate.py"
       ]
     }
   ],
