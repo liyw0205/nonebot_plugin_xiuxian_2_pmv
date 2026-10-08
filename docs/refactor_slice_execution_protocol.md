@@ -3,6 +3,8 @@
 状态：执行中
 适用范围：全面底层重构第二阶段
 
+2026-10-08 QQ image upload owner 收尾：在既有 `/upload_image` application/route 实现上补 source-bound Phase 2 证据；同文件新增 owner imports 使 dashboard、search-users、download 六条既有 route 的绑定行号同步移动，已一并刷新 gate evidence。全局 `before_request` 的 `LOCAL_UPLOAD` auth/CSRF、loopback 豁免和 session 契约保持；handler 的 `file.read()` 仍无大小限制，按明确风险记录，不能视为有界内存。upload owner/HTTP/Phase 2 联测 `54 passed, 91 subtests passed`（7.72 秒）；计数 `328/139/19/10`，496 项 membership hash `7787a74a3e0c15c220a5f257921693b14706ef23b224bac9f3dad55a1ff51fac` 有效且不变，`integrity_errors=[]`。Phase 2 `--check` 仍因剩余 10 个 blocker 返回 1。盘点、编码、集成和文档编辑 wall time 未分开记录；仅记录可直接观察到的测试耗时，不据此估算开发时间或生产延迟。
+
 2026-10-08 执行校正：本轮运维日志验收复跑 `.venv/bin/pytest -q nonebot_plugin_xiuxian_2/features/logs/tests/test_logs_application.py tests/test_logs_routes.py tests/test_phase2_legacy_path_gate.py`，结果 `49 passed, 68 subtests passed`（5.37 秒）；补测了已登录 `/logs` 模板渲染，修正之前清单证据只覆盖未登录重定向的问题。Phase 2 `--check` 约 0.35 秒，按预期仅因 42 个冻结 blocker 返回 1。全量 source-quality `241 passed, 5 failed`，5 项均在本批之外（command-disable、dongfu 两条、activity JSON、旧 backup 测试绝对导入）。并行验收拆给 3 个只读子代理，分别处理测试、gate 和 diff/暂存边界；代码修改仍集中集成，用户 `boss_info.json` 明确排除。
 
 2026-10-08 队列校正：冻结 Phase 2 清单跨 commands/jobs/routes，不是子插件顺序；实际历史有同一大模块分批的重复触碰（status system-info 与 dashboard 分属不同提交），说明仅写“按 owner 分组”还不够。每批开始先按受阻项 source module 与共同 owner 计数，选择可在一个批次完整闭合的 feature 边界，并解释独立事务/风险例外；贴纸四 API 与 scheduler 五 API 已按 source module 收口，messages.py 最后一个 send orchestration blocker 随后单独抽出完整 owner。download 和 config 两组已分别归入 cache-file、plugin-config owner；当前 11 个 blocker 分布为 system（6，终端与上传）、database（4）和 non-command matcher family（1）。system 同源文件内仍有 PTY shell 会话和 QQ 上传两个独立副作用 owner，不能为了同批而合成一个业务 feature。下一批继续先盘 source module 中全部冻结入口，再明确共同 owner 与独立事务/风险例外，不按 URL 或子插件目录机械拆片。

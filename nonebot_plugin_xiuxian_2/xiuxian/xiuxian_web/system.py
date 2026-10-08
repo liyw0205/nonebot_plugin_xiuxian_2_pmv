@@ -36,6 +36,7 @@ from ...features.cache_files.repository import (
     CacheFileNotRegular,
     CacheFileOutsideRoot,
 )
+from ...features.qq_image_upload.application import QqImageUploadApplication
 from ...features.status.application import StatusApplication
 from ..xiuxian_utils.utils import search_users as search_users_application
 
@@ -45,6 +46,9 @@ status_application = StatusApplication(
     message_database=get_paths().message_db,
 )
 cache_file_application = CacheFileApplication()
+qq_image_upload_application = QqImageUploadApplication(
+    MessageSegment.upload_image_and_get_url
+)
 
 
 def _collect_dashboard_stats():
@@ -329,22 +333,17 @@ def upload_api_image():
 
     # 获取在线的 QQBot 实例
     bots = get_bots()
-    target_bot = None
-    for b in bots.values():
-        if b.adapter.get_name() == "QQ":
-            target_bot = b
-            break
+    target_bot = qq_image_upload_application.select_qq_bot(bots)
     
     if not target_bot:
         return jsonify({"success": False, "error": "未找到在线的 QQBot 实例"}), 500
 
     try:
         url = run_async(
-            MessageSegment.upload_image_and_get_url(
+            qq_image_upload_application.upload_image(
                 bot=target_bot,
-                channel_id=str(channel_id),
+                channel_id=channel_id,
                 image=image_bytes,
-                mode="md5"
             )
         )
         
