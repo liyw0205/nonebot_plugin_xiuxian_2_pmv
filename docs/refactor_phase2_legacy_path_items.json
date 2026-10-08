@@ -11854,11 +11854,11 @@
       "id": "route:GET:/api/logs/files:nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/logs.py:api_logs_files",
       "kind": "legacy_routes",
       "entry": "GET /api/logs/files -> nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/logs.py:api_logs_files",
-      "status": "受阻",
-      "reason": "The old Flask app and route modules are loaded and its server is enabled by default. Route registration is proven, but each handler's downstream ownership and replacement/compatibility decision is not closed.",
-      "unknown_edge": "route function -> old data/service or feature application -> state effect",
+      "status": "已迁移",
+      "reason": "The authenticated legacy endpoint delegates discovery and file metadata to the bounded LogFileRepository catalog. Root discovery and catalog results are cached for three seconds and capped at 32 roots and 512 files.",
       "call_graph": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/logs.py:579 -> Flask app.route(/api/logs/files) -> legacy handler -> downstream state effect not closed"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/logs.py:63 api_logs_files -> admin session -> LogsApplication.files",
+        "LogsApplication.files -> LogFileRepository.files -> cached root/catalog snapshot -> bounded file metadata DTO"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
@@ -11866,7 +11866,11 @@
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/logs.py:579"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/logs.py:63",
+        "nonebot_plugin_xiuxian_2/features/logs/application.py",
+        "nonebot_plugin_xiuxian_2/features/logs/file_repository.py",
+        "tests/test_logs_routes.py",
+        "nonebot_plugin_xiuxian_2/features/logs/tests/test_logs_application.py"
       ],
       "source_declaration_found": true,
       "source": {
@@ -11882,11 +11886,11 @@
       "id": "route:GET:/api/logs/read:nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/logs.py:api_logs_read",
       "kind": "legacy_routes",
       "entry": "GET /api/logs/read -> nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/logs.py:api_logs_read",
-      "status": "受阻",
-      "reason": "The old Flask app and route modules are loaded and its server is enabled by default. Route registration is proven, but each handler's downstream ownership and replacement/compatibility decision is not closed.",
-      "unknown_edge": "route function -> old data/service or feature application -> state effect",
+      "status": "已迁移",
+      "reason": "The authenticated legacy endpoint delegates filtered log pagination to LogFileRepository. It streams lines, keeps only the requested page, caps scans at 512 MiB and responses at 4 MiB, and caches a bounded sparse-row offset index by file signature and filters.",
       "call_graph": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/logs.py:699 -> Flask app.route(/api/logs/read) -> legacy handler -> downstream state effect not closed"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/logs.py:70 api_logs_read -> admin session and legacy query parameters -> LogsApplication.read",
+        "LogsApplication.read -> LogFileRepository.read -> allowlisted catalog file -> streamed filtering and bounded page/index result"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
@@ -11894,7 +11898,11 @@
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/logs.py:699"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/logs.py:70",
+        "nonebot_plugin_xiuxian_2/features/logs/application.py",
+        "nonebot_plugin_xiuxian_2/features/logs/file_repository.py",
+        "tests/test_logs_routes.py",
+        "nonebot_plugin_xiuxian_2/features/logs/tests/test_logs_application.py"
       ],
       "source_declaration_found": true,
       "source": {
@@ -11910,11 +11918,11 @@
       "id": "route:GET:/api/logs/tail:nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/logs.py:api_logs_tail",
       "kind": "legacy_routes",
       "entry": "GET /api/logs/tail -> nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/logs.py:api_logs_tail",
-      "status": "受阻",
-      "reason": "The old Flask app and route modules are loaded and its server is enabled by default. Route registration is proven, but each handler's downstream ownership and replacement/compatibility decision is not closed.",
-      "unknown_edge": "route function -> old data/service or feature application -> state effect",
+      "status": "已迁移",
+      "reason": "The authenticated legacy endpoint delegates incremental reads to LogFileRepository. Reads are byte- and line-bounded, incomplete trailing lines keep their starting offset, and inode/truncate changes reset stale offsets.",
       "call_graph": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/logs.py:787 -> Flask app.route(/api/logs/tail) -> legacy handler -> downstream state effect not closed"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/logs.py:85 api_logs_tail -> admin session and legacy offset/filter parameters -> LogsApplication.tail",
+        "LogsApplication.tail -> LogFileRepository.tail -> bounded complete-line offset read -> rotation/truncate offset reset"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
@@ -11922,7 +11930,11 @@
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/logs.py:787"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/logs.py:85",
+        "nonebot_plugin_xiuxian_2/features/logs/application.py",
+        "nonebot_plugin_xiuxian_2/features/logs/file_repository.py",
+        "tests/test_logs_routes.py",
+        "nonebot_plugin_xiuxian_2/features/logs/tests/test_logs_application.py"
       ],
       "source_declaration_found": true,
       "source": {
@@ -11938,11 +11950,12 @@
       "id": "route:GET:/api/logs/user_messages:nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/logs.py:api_logs_user_messages",
       "kind": "legacy_routes",
       "entry": "GET /api/logs/user_messages -> nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/logs.py:api_logs_user_messages",
-      "status": "受阻",
-      "reason": "The old Flask app and route modules are loaded and its server is enabled by default. Route registration is proven, but each handler's downstream ownership and replacement/compatibility decision is not closed.",
-      "unknown_edge": "route function -> old data/service or feature application -> state effect",
+      "status": "已迁移",
+      "reason": "The authenticated endpoint delegates filtered/paged message reads and game-profile lookup to MessageLogsRepository through read-only UoWs. Existing message display formatting is retained while nickname and mention reads are batched on the same read-only connection.",
       "call_graph": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/logs.py:286 -> Flask app.route(/api/logs/user_messages) -> legacy handler -> downstream state effect not closed"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/logs.py:38 api_logs_user_messages -> admin session and legacy filters -> LogsApplication.user_messages",
+        "LogsApplication.user_messages -> MessageLogsRepository.user_messages -> message/game read-only UoWs -> paged message rows and profile DTO",
+        "legacy response adapter -> read-only message UoW -> _prepare_message_rows -> batched nickname/mention queries"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
@@ -11950,7 +11963,12 @@
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/logs.py:286"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/logs.py:38",
+        "nonebot_plugin_xiuxian_2/features/logs/application.py",
+        "nonebot_plugin_xiuxian_2/features/logs/message_repository.py",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py:55,1808,2129",
+        "tests/test_logs_routes.py",
+        "nonebot_plugin_xiuxian_2/features/logs/tests/test_logs_application.py"
       ],
       "source_declaration_found": true,
       "source": {
@@ -11966,11 +11984,11 @@
       "id": "route:GET:/api/logs/users:nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/logs.py:api_logs_users",
       "kind": "legacy_routes",
       "entry": "GET /api/logs/users -> nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/logs.py:api_logs_users",
-      "status": "受阻",
-      "reason": "The old Flask app and route modules are loaded and its server is enabled by default. Route registration is proven, but each handler's downstream ownership and replacement/compatibility decision is not closed.",
-      "unknown_edge": "route function -> old data/service or feature application -> state effect",
+      "status": "已迁移",
+      "reason": "The authenticated endpoint delegates candidate merge and user summary construction to MessageLogsRepository using game/message read-only UoWs. Profiles, linked bot replies, and human-name preferences are loaded with a fixed set of batched queries instead of per-user calls.",
       "call_graph": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/logs.py:237 -> Flask app.route(/api/logs/users) -> legacy handler -> downstream state effect not closed"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/logs.py:28 api_logs_users -> admin session and query/limit -> LogsApplication.users",
+        "LogsApplication.users -> MessageLogsRepository candidate/merge/enrich reads -> batched read-only game/message queries -> legacy rows envelope"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
@@ -11978,7 +11996,11 @@
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/logs.py:237"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/logs.py:28",
+        "nonebot_plugin_xiuxian_2/features/logs/application.py",
+        "nonebot_plugin_xiuxian_2/features/logs/message_repository.py",
+        "tests/test_logs_routes.py",
+        "nonebot_plugin_xiuxian_2/features/logs/tests/test_logs_application.py"
       ],
       "source_declaration_found": true,
       "source": {
@@ -14051,11 +14073,10 @@
       "id": "route:GET:/logs:nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/logs.py:logs",
       "kind": "legacy_routes",
       "entry": "GET /logs -> nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/logs.py:logs",
-      "status": "受阻",
-      "reason": "The old Flask app and route modules are loaded and its server is enabled by default. Route registration is proven, but each handler's downstream ownership and replacement/compatibility decision is not closed.",
-      "unknown_edge": "route function -> old data/service or feature application -> state effect",
+      "status": "允许保留的兼容路径",
+      "reason": "This authenticated legacy route only renders logs.html and owns no business state. Retain it until the legacy logs page is replaced; its page rendering is covered by the legacy route contract tests.",
       "call_graph": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/logs.py:27 -> Flask app.route(/logs) -> legacy handler -> downstream state effect not closed"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/logs.py:21 logs -> admin session -> render_template(logs.html)"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
@@ -14063,7 +14084,8 @@
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/logs.py:27"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/logs.py:21",
+        "tests/test_logs_routes.py"
       ],
       "source_declaration_found": true,
       "source": {

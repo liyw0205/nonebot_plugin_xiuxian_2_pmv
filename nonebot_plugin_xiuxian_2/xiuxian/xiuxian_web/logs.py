@@ -1,27 +1,21 @@
-from .core import (
-    DATABASE,
-    Path,
-    app,
-    datetime,
-    get_db_connection,
-    get_message_db_connection,
-    get_user_by_id,
-    jsonify,
-    os,
-    re,
-    redirect,
-    render_template,
-    request,
-    runtime_clock,
-    session,
-    url_for,
-)
-from .messages import (  # noqa: E402
+from ...features.logs import LogsApplication
+from ...infrastructure.database import DatabaseUnitOfWork
+from ..xiuxian_utils.message_db import get_message_db_path
+from .core import DATABASE, app, jsonify, redirect, render_template, request, runtime_clock, session, url_for
+from .messages import (
     _prepare_message_rows as _prepare_web_message_rows,
     build_user_avatar_url,
-    get_latest_human_name_by_user_id,
-    pick_human_display_name,
 )
+
+
+logs_application = LogsApplication(
+    DATABASE,
+    get_message_db_path(),
+    __file__,
+    user_avatar_builder=build_user_avatar_url,
+    year_provider=lambda: runtime_clock.now().year,
+)
+
 
 @app.route('/logs')
 def logs():
@@ -30,256 +24,14 @@ def logs():
     return render_template('logs.html')
 
 
-def _safe_int(value, default: int, minimum: int, maximum: int) -> int:
-    try:
-        return min(maximum, max(minimum, int(value)))
-    except Exception:
-        return default
-
-
-def _get_xiuxian_user_candidates(query: str, limit: int) -> list[dict]:
-    """
-    从修仙主库按道号/ID 搜索用户。
-    """
-    conn = None
-    try:
-        conn = get_db_connection(DATABASE)
-        if not conn.table_exists("user_xiuxian"):
-            return []
-
-        cur = conn.cursor()
-        if query:
-            like = f"%{query}%"
-            cur.execute(
-                """
-                SELECT user_id, user_name, level, root_type
-                FROM user_xiuxian
-                WHERE CAST(user_id AS TEXT) = %s
-                   OR CAST(user_id AS TEXT) LIKE %s
-                   OR COALESCE(user_name, '') LIKE %s
-                ORDER BY
-                    CASE
-                        WHEN CAST(user_id AS TEXT) = %s THEN 0
-                        WHEN user_name = %s THEN 1
-                        ELSE 2
-                    END,
-                    user_name ASC,
-                    user_id ASC
-                LIMIT %s
-                """,
-                (query, like, like, query, query, limit),
-            )
-        else:
-            cur.execute(
-                """
-                SELECT user_id, user_name, level, root_type
-                FROM user_xiuxian
-                WHERE user_id IS NOT NULL
-                ORDER BY user_id ASC
-                LIMIT %s
-                """,
-                (limit,),
-            )
-
-        return [dict(row) for row in cur.fetchall()]
-    except Exception:
-        return []
-    finally:
-        if conn is not None:
-            conn.close()
-
-
-def _get_message_user_candidates(query: str, limit: int) -> list[dict]:
-    """
-    从 message.db 搜索出现过消息记录的用户，用于补齐没有修仙档案的会话用户。
-    """
-    conn = None
-    try:
-        conn = get_message_db_connection()
-        cur = conn.cursor()
-
-        where = ["user_id IS NOT NULL", "user_id != ''"]
-        params = []
-        if query:
-            like = f"%{query}%"
-            where.append(
-                """
-                (
-                    user_id = %s
-                    OR user_id LIKE %s
-                    OR username LIKE %s
-                    OR nickname LIKE %s
-                )
-                """
-            )
-            params.extend([query, like, like, like])
-
-        cur.execute(
-            f"""
-            SELECT user_id, MAX(id) AS last_row_id, MAX(created_at) AS last_time
-            FROM messages
-            WHERE {' AND '.join(where)}
-            GROUP BY user_id
-            ORDER BY last_row_id DESC
-            LIMIT %s
-            """,
-            params + [limit],
-        )
-        return [dict(row) for row in cur.fetchall()]
-    except Exception:
-        return []
-    finally:
-        if conn is not None:
-            conn.close()
-
-
-def _get_log_user_message_summary(conn, user_id: str) -> dict:
-    cur = conn.cursor()
-    cur.execute(
-        """
-        SELECT
-            COUNT(*) AS message_count,
-            SUM(CASE WHEN direction = 'recv' THEN 1 ELSE 0 END) AS recv_count,
-            SUM(CASE WHEN direction = 'send' THEN 1 ELSE 0 END) AS send_count,
-            MAX(created_at) AS last_time,
-            MAX(id) AS last_row_id
-        FROM messages
-        WHERE user_id = %s
-           OR (
-                direction = 'send'
-                AND COALESCE(source_message_id, '') != ''
-                AND source_message_id IN (
-                    SELECT message_id
-                    FROM messages
-                    WHERE user_id = %s
-                      AND direction = 'recv'
-                      AND COALESCE(message_id, '') != ''
-                )
-           )
-        """,
-        (user_id, user_id),
-    )
-    row = cur.fetchone()
-    return dict(row) if row else {}
-
-
-def _get_log_user_latest_profile(conn, user_id: str) -> dict:
-    cur = conn.cursor()
-    cur.execute(
-        """
-        SELECT adapter, bot_id, user_id, username, nickname, avatar
-        FROM messages
-        WHERE user_id = %s
-          AND direction = 'recv'
-        ORDER BY id DESC
-        LIMIT 1
-        """,
-        (user_id,),
-    )
-    row = cur.fetchone()
-    return dict(row) if row else {}
-
-
-def _build_log_user_row(base: dict, conn) -> dict:
-    user_id = str(base.get("user_id") or "").strip()
-    user_name = str(base.get("user_name") or "").strip()
-    profile = _get_log_user_latest_profile(conn, user_id) if user_id else {}
-    summary = _get_log_user_message_summary(conn, user_id) if user_id else {}
-
-    human_name = ""
-    if user_id:
-        human_name = get_latest_human_name_by_user_id(conn, user_id)
-    if not human_name:
-        human_name = pick_human_display_name(
-            profile.get("username"),
-            profile.get("nickname"),
-            user_id,
-        )
-
-    title = user_name or human_name or user_id or "未知用户"
-    subtitle_bits = []
-    if user_name:
-        subtitle_bits.append(f"道号: {user_name}")
-    if human_name and human_name != user_name:
-        subtitle_bits.append(f"昵称: {human_name}")
-    if user_id:
-        subtitle_bits.append(f"ID: {user_id}")
-
-    adapter = str(profile.get("adapter") or "")
-    bot_id = str(profile.get("bot_id") or "")
-    avatar = build_user_avatar_url(
-        adapter,
-        bot_id,
-        user_id,
-        str(profile.get("avatar") or ""),
-    )
-
-    return {
-        "user_id": user_id,
-        "user_name": user_name,
-        "title": title,
-        "subtitle": " ｜ ".join(subtitle_bits),
-        "level": base.get("level") or "",
-        "root_type": base.get("root_type") or "",
-        "adapter": adapter,
-        "bot_id": bot_id,
-        "avatar": avatar,
-        "avatar_text": str(title)[:1] if title else "人",
-        "message_count": int(summary.get("message_count") or 0),
-        "recv_count": int(summary.get("recv_count") or 0),
-        "send_count": int(summary.get("send_count") or 0),
-        "last_time": summary.get("last_time") or base.get("last_time") or "",
-        "last_row_id": int(summary.get("last_row_id") or base.get("last_row_id") or 0),
-    }
-
-
 @app.route('/api/logs/users')
 def api_logs_users():
     if 'admin_id' not in session:
         return jsonify({"success": False, "error": "未登录"})
-
-    query = request.args.get("query", "").strip()
-    limit = _safe_int(request.args.get("limit", 20), 20, 5, 50)
-
-    conn = None
-    try:
-        xiuxian_rows = _get_xiuxian_user_candidates(query, limit)
-        message_rows = _get_message_user_candidates(query, limit * 2)
-
-        ordered = xiuxian_rows + message_rows if query else message_rows + xiuxian_rows
-        merged: dict[str, dict] = {}
-        order: list[str] = []
-        for row in ordered:
-            user_id = str(row.get("user_id") or "").strip()
-            if not user_id:
-                continue
-            if user_id not in merged:
-                merged[user_id] = dict(row)
-                order.append(user_id)
-            else:
-                merged[user_id].update({k: v for k, v in row.items() if v not in (None, "")})
-
-        conn = get_message_db_connection()
-        rows = [_build_log_user_row(merged[user_id], conn) for user_id in order[:limit]]
-
-        if query:
-            rows.sort(
-                key=lambda r: (
-                    0 if r["user_id"] == query else 1,
-                    0 if r["user_name"] == query else 1,
-                    -int(r.get("message_count") or 0),
-                    str(r.get("title") or ""),
-                )
-            )
-        else:
-            rows.sort(key=lambda r: int(r.get("last_row_id") or 0), reverse=True)
-
-        return jsonify({"success": True, "rows": rows[:limit]})
-    except Exception as e:
-        return jsonify({"success": False, "error": f"搜索用户失败：{e}"})
-    finally:
-        if conn is not None:
-            conn.close()
+    return jsonify(logs_application.users(
+        query=request.args.get("query", "").strip(),
+        limit=request.args.get("limit", 20),
+    ))
 
 
 @app.route('/api/logs/user_messages')
@@ -287,616 +39,59 @@ def api_logs_user_messages():
     if 'admin_id' not in session:
         return jsonify({"success": False, "error": "未登录"})
 
-    user_id = request.args.get("user_id", "").strip()
-    if not user_id:
-        return jsonify({"success": False, "error": "缺少 user_id"})
-
-    scene = request.args.get("scene", "ALL").strip()
-    direction = request.args.get("direction", "ALL").strip()
-    keyword = request.args.get("keyword", "").strip()
-    adapter = request.args.get("adapter", "").strip()
-    start = request.args.get("start", "").strip()
-    end = request.args.get("end", "").strip()
-
-    page = _safe_int(request.args.get("page", 1), 1, 1, 1000000)
-    page_size = _safe_int(request.args.get("page_size", 200), 200, 20, 500)
-    offset = (page - 1) * page_size
-
-    conn = None
-    try:
-        where = [
-            """
-            (
-                user_id = %s
-                OR (
-                    direction = 'send'
-                    AND COALESCE(source_message_id, '') != ''
-                    AND source_message_id IN (
-                        SELECT message_id
-                        FROM messages
-                        WHERE user_id = %s
-                          AND direction = 'recv'
-                          AND COALESCE(message_id, '') != ''
-                    )
-                )
-            )
-            """
-        ]
-        params = [user_id, user_id]
-
-        if scene and scene != "ALL":
-            if scene not in ("group", "private", "channel_group", "channel_private"):
-                return jsonify({"success": False, "error": "无效 scene"})
-            where.append("scene = %s")
-            params.append(scene)
-
-        if direction and direction != "ALL":
-            if direction not in ("recv", "send"):
-                return jsonify({"success": False, "error": "无效 direction"})
-            where.append("direction = %s")
-            params.append(direction)
-
-        if adapter:
-            where.append("adapter = %s")
-            params.append(adapter)
-
-        if keyword:
-            where.append(
-                """
-                (
-                    content LIKE %s
-                    OR username LIKE %s
-                    OR nickname LIKE %s
-                    OR group_name LIKE %s
-                    OR group_id LIKE %s
-                    OR user_id LIKE %s
-                )
-                """
-            )
-            like = f"%{keyword}%"
-            params.extend([like, like, like, like, like, like])
-
-        if start:
-            where.append("created_at >= %s")
-            params.append(start.replace("T", " "))
-
-        if end:
-            where.append("created_at <= %s")
-            params.append(end.replace("T", " "))
-
-        where_sql = " WHERE " + " AND ".join(where)
-        conn = get_message_db_connection()
-        cur = conn.cursor()
-
-        cur.execute(f"SELECT COUNT(*) AS c FROM messages {where_sql}", params)
-        total = int(cur.fetchone()["c"] or 0)
-
-        cur.execute(
-            f"""
-            SELECT *
-            FROM messages
-            {where_sql}
-            ORDER BY created_at DESC, id DESC
-            LIMIT %s OFFSET %s
-            """,
-            params + [page_size, offset],
-        )
-        rows = _prepare_web_message_rows([dict(r) for r in cur.fetchall()])
-        user_info = get_user_by_id(user_id) or {}
-
-        return jsonify({
-            "success": True,
-            "user": {
-                "user_id": user_id,
-                "user_name": user_info.get("user_name", ""),
-                "level": user_info.get("level", ""),
-                "root_type": user_info.get("root_type", ""),
-            },
-            "total": total,
-            "page": page,
-            "page_size": page_size,
-            "rows": rows,
-        })
-    except Exception as e:
-        return jsonify({"success": False, "error": f"获取用户消息失败：{e}"})
-    finally:
-        if conn is not None:
-            conn.close()
-
-
-def _resolve_existing_path(path) -> Path | None:
-    try:
-        p = Path(path).expanduser()
-        if not p.exists():
-            return None
-        if p.is_file():
-            p = p.parent
-        return p.resolve()
-    except Exception:
-        return None
-
-
-def _looks_like_xiuxian_project(path: Path) -> bool:
-    indicators = (
-        ".env",
-        ".env.dev",
-        "bot.py",
-        "pyproject.toml",
-        "requirements.txt",
+    result = logs_application.user_messages(
+        user_id=request.args.get("user_id", "").strip(),
+        scene=request.args.get("scene", "ALL").strip(),
+        direction=request.args.get("direction", "ALL").strip(),
+        keyword=request.args.get("keyword", "").strip(),
+        adapter=request.args.get("adapter", "").strip(),
+        start=request.args.get("start", "").strip(),
+        end=request.args.get("end", "").strip(),
+        page=request.args.get("page", 1),
+        page_size=request.args.get("page_size", 200),
     )
-    if any((path / name).exists() for name in indicators):
-        return True
-    if (path / "data" / "xiuxian").exists():
-        return True
-    if any((path / name).exists() for name in ("bot", "server", "xiuxianbot", "xiuxianserver")):
-        return True
-    return False
-
-
-def _add_log_root(roots: list[Path], seen: set[str], path) -> None:
-    p = _resolve_existing_path(path)
-    if not p:
-        return
-    key = str(p)
-    if key not in seen:
-        seen.add(key)
-        roots.append(p)
-
-
-def _get_log_roots() -> list[Path]:
-    """
-    日志根目录候选。
-    一键脚本会把 screen 日志写在项目根目录的 <项目名>.log，xiuxian3 脚本写在项目根 logs/。
-    这里只扫描明确的项目目录和常见安装目录，不递归扫整个 HOME。
-    """
-    roots: list[Path] = []
-    seen: set[str] = set()
-
-    project_dir = os.environ.get("XIUXIAN_PROJECT_DIR")
-    if project_dir:
-        _add_log_root(roots, seen, project_dir)
-
-    cwd = Path().resolve()
-    _add_log_root(roots, seen, cwd)
-    if cwd.name.lower() in {"bot", "server", "xiuxianbot", "xiuxianserver"}:
-        _add_log_root(roots, seen, cwd.parent)
-
-    try:
-        db_root = DATABASE.resolve().parents[2]
-        _add_log_root(roots, seen, db_root)
-    except Exception:
-        pass
-
-    try:
-        for parent in Path(__file__).resolve().parents:
-            if _looks_like_xiuxian_project(parent):
-                _add_log_root(roots, seen, parent)
-    except Exception:
-        pass
-
-    try:
-        home = Path.home().resolve()
-        for name in ("xiu2", "xiuxian", "xiuxian3", "nonebot_plugin_xiuxian_2_pmv"):
-            _add_log_root(roots, seen, home / name)
-
-        for child in home.iterdir():
-            if not child.is_dir():
-                continue
-            lower_name = child.name.lower()
-            if "xiu" in lower_name or "nonebot" in lower_name:
-                _add_log_root(roots, seen, child)
-    except Exception:
-        pass
-
-    expanded = list(roots)
-    for root in roots:
-        for child_name in ("bot", "server", "xiuxianbot", "xiuxianserver"):
-            child = root / child_name
-            if child.exists() and child.is_dir():
-                _add_log_root(expanded, seen, child)
-
-    return expanded
-
-
-def _is_supported_log_file(path: Path) -> bool:
-    if not path.is_file():
-        return False
-    if path.suffix.lower() in {".gz", ".zip", ".xz", ".bz2", ".7z"}:
-        return False
-    name = path.name.lower()
-    return ".log" in name or path.parent.name == "logs"
-
-
-def _get_log_candidates(roots: list[Path] | None = None) -> list[Path]:
-    """
-    日志候选：
-    1) 项目根目录下 *.log / *.log.*
-    2) 项目根 logs/ 目录下所有普通文本日志
-    """
-    roots = roots or _get_log_roots()
-    files: list[Path] = []
-
-    for root in roots:
+    if result.get("success"):
         try:
-            for pattern in ("*.log", "*.log.*"):
-                files.extend([p for p in root.glob(pattern) if _is_supported_log_file(p)])
-
-            logs_dir = root / "logs"
-            if logs_dir.exists() and logs_dir.is_dir():
-                files.extend([p for p in logs_dir.glob("*") if _is_supported_log_file(p)])
-        except Exception:
-            continue
-
-    uniq: dict[str, Path] = {}
-    for p in files:
-        try:
-            uniq[str(p.resolve())] = p
-        except Exception:
-            continue
-
-    result = list(uniq.values())
-
-    def _mtime(path: Path) -> float:
-        try:
-            return path.stat().st_mtime
-        except Exception:
-            return 0
-
-    result.sort(key=_mtime, reverse=True)
-    return result
-
-
-def _log_display_name(path: Path, roots: list[Path] | None = None) -> str:
-    roots = roots or _get_log_roots()
-    resolved = path.resolve()
-    best = str(resolved)
-    for root in roots:
-        try:
-            rel = resolved.relative_to(root.resolve())
-        except Exception:
-            continue
-        label = f"{root.name}/{rel.as_posix()}" if root.name else rel.as_posix()
-        if len(label) < len(best):
-            best = label
-    return best
-
-
-def _get_log_file_map() -> dict[str, Path]:
-    file_map: dict[str, Path] = {}
-    roots = _get_log_roots()
-    for p in _get_log_candidates(roots):
-        try:
-            resolved = str(p.resolve())
-        except Exception:
-            continue
-        file_map[resolved] = p
-        file_map.setdefault(p.name, p)
-        file_map.setdefault(_log_display_name(p, roots), p)
-    return file_map
+            with DatabaseUnitOfWork(logs_application.message_database, read_only=True) as uow:
+                result["rows"] = _prepare_web_message_rows(result["rows"], conn=uow.connection)
+        except Exception as exc:
+            result = {"success": False, "error": f"获取用户消息失败：{exc}"}
+    return jsonify(result)
 
 
 @app.route('/api/logs/files')
 def api_logs_files():
     if 'admin_id' not in session:
         return jsonify({"success": False, "error": "未登录"})
-
-    try:
-        roots = _get_log_roots()
-        files = _get_log_candidates(roots)
-        data = []
-        for p in files:
-            try:
-                st = p.stat()
-                resolved = str(p.resolve())
-            except Exception:
-                continue
-            data.append({
-                "id": resolved,
-                "name": p.name,
-                "display_name": _log_display_name(p, roots),
-                "path": resolved,
-                "size": st.st_size,
-                "mtime": datetime.fromtimestamp(st.st_mtime).strftime("%Y-%m-%d %H:%M:%S")
-            })
-        return jsonify({
-            "success": True,
-            "files": data,
-            "searched_roots": [str(p) for p in roots],
-        })
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)})
-
-def _parse_dt_flexible(s: str):
-    """
-    宽松时间解析：
-    支持
-    - 2026-03-03 06:35:00
-    - 2026-03-03 06:35
-    - 2026-03-03
-    - 2026-03-03T06:35
-    - 2026-03-03T06:35:00
-    """
-    if not s:
-        return None
-    s = str(s).strip().replace("T", " ")
-    fmts = [
-        "%Y-%m-%d %H:%M:%S",
-        "%Y-%m-%d %H:%M",
-        "%Y-%m-%d",
-    ]
-    for fmt in fmts:
-        try:
-            return datetime.strptime(s, fmt)
-        except ValueError:
-            continue
-    raise ValueError(f"time data '{s}' does not match supported formats")
-
-
-def _strip_ansi_for_parse(line: str):
-    """
-    去掉 ANSI 控制符，便于做时间/级别解析与面板展示。
-    兼容：
-    - 标准 ESC 序列：\\x1b[31m / \\033[1;31m
-    - 丢了 ESC 只剩 [31m / [1;31m（xiu2 日志常见）
-    """
-    if not line:
-        return ""
-    text = str(line)
-    # OSC / 其它 ESC 序列（尽量清掉）
-    text = re.sub(r"\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)?", "", text)
-    # CSI 完整序列：ESC[ ... 字母
-    text = re.sub(r"\x1b\[[0-9;?]*[ -/]*[@-~]", "", text)
-    # 裸 ESC
-    text = re.sub(r"\x1b.", "", text)
-    # 残缺 CSI（无 ESC）：[31m / [1;31m
-    text = re.sub(r"\[[0-9;]*m", "", text)
-    # 偶发字面量 \\x1b[31m
-    text = re.sub(r"\\x1b\[[0-9;]*m", "", text, flags=re.I)
-    return text
-
-
-def _display_log_text(line: str) -> str:
-    """面板展示用：去色后的纯文本，避免前端 CDN/ansi_up 失败时露出 [31m。"""
-    return _strip_ansi_for_parse(line)
-
-
-def _parse_level(line: str):
-    levels = ["TRACE", "DEBUG", "INFO", "SUCCESS", "WARNING", "ERROR", "CRITICAL"]
-    up = (line or "").upper()
-    for lv in levels:
-        if lv in up:
-            return lv
-    return "UNKNOWN"
-
-
-def _parse_line_time(line: str):
-    """
-    从日志行提取时间，兼容：
-    1) YYYY-mm-dd HH:MM:SS
-    2) mm-dd HH:MM:SS (自动补当前年)
-    """
-    clean = _strip_ansi_for_parse(line)
-
-    m1 = re.search(r'(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})', clean)
-    if m1:
-        try:
-            return datetime.strptime(m1.group(1), "%Y-%m-%d %H:%M:%S")
-        except ValueError:
-            pass
-
-    m2 = re.search(r'(\d{2}-\d{2} \d{2}:\d{2}:\d{2})', clean)
-    if m2:
-        try:
-            now_year = runtime_clock.now().year
-            return datetime.strptime(f"{now_year}-{m2.group(1)}", "%Y-%m-%d %H:%M:%S")
-        except ValueError:
-            pass
-
-    return None
+    return jsonify(logs_application.files())
 
 
 @app.route('/api/logs/read')
 def api_logs_read():
     if 'admin_id' not in session:
         return jsonify({"success": False, "error": "未登录"})
+    return jsonify(logs_application.read(
+        file=request.args.get("file", "").strip(),
+        keyword=request.args.get("keyword", "").strip(),
+        level=request.args.get("level", "ALL").strip(),
+        start=request.args.get("start", "").strip(),
+        end=request.args.get("end", "").strip(),
+        page=request.args.get("page", 1),
+        page_size=request.args.get("page_size", 200),
+    ))
 
-    file_name = request.args.get("file", "").strip()
-    keyword = request.args.get("keyword", "").strip()
-    level = request.args.get("level", "ALL").strip().upper()
-
-    start_dt = request.args.get("start", "").strip()
-    end_dt = request.args.get("end", "").strip()
-
-    try:
-        page = int(request.args.get("page", 1))
-    except Exception:
-        page = 1
-    try:
-        page_size = int(request.args.get("page_size", 200))
-    except Exception:
-        page_size = 200
-
-    page = max(page, 1)
-    page_size = min(max(page_size, 50), 1000)
-
-    try:
-        # 仅允许候选日志
-        file_map = _get_log_file_map()
-        if file_name not in file_map:
-            return jsonify({"success": False, "error": "日志文件不存在或不允许访问"})
-
-        target = file_map[file_name]
-        roots = _get_log_roots()
-
-        # 宽松解析起止时间（修复你报错的核心）
-        start_obj = _parse_dt_flexible(start_dt) if start_dt else None
-        end_obj = _parse_dt_flexible(end_dt) if end_dt else None
-
-        # 若只填日期（00:00:00），通常希望结束时间覆盖整天，这里可选扩展：
-        # 如果 end_dt 只有日期，自动放到 23:59:59
-        if end_dt and re.fullmatch(r"\d{4}-\d{2}-\d{2}", end_dt):
-            end_obj = end_obj.replace(hour=23, minute=59, second=59)
-
-        matched = []
-        with open(target, "r", encoding="utf-8", errors="ignore") as f:
-            for line in f:
-                raw = line.rstrip("\n")
-                clean_for_match = _strip_ansi_for_parse(raw)
-
-                # 关键字（对清洗后的文本匹配，更稳定）
-                if keyword and keyword not in clean_for_match:
-                    continue
-
-                lv = _parse_level(clean_for_match)
-                if level and level != "ALL" and lv != level:
-                    continue
-
-                t = _parse_line_time(raw)
-                if start_obj and t and t < start_obj:
-                    continue
-                if end_obj and t and t > end_obj:
-                    continue
-
-                matched.append({
-                    "time": t.strftime("%Y-%m-%d %H:%M:%S") if t else "",
-                    "level": lv,
-                    # 返回去色文本：前端即便 ansi_up 挂了也不会露出 [31m 原始码
-                    "text": _display_log_text(raw),
-                })
-
-        total = len(matched)
-        start_idx = (page - 1) * page_size
-        end_idx = start_idx + page_size
-        rows = matched[start_idx:end_idx] if start_idx < total else []
-
-        return jsonify({
-            "success": True,
-            "file": str(target.resolve()),
-            "name": target.name,
-            "display_name": _log_display_name(target, roots),
-            "total": total,
-            "page": page,
-            "page_size": page_size,
-            "rows": rows
-        })
-
-    except Exception as e:
-        return jsonify({"success": False, "error": f"读取失败：{str(e)}"})
 
 @app.route('/api/logs/tail')
 def api_logs_tail():
-    """
-    增量读取日志（按字节 offset）：
-    参数：
-      file               日志文件名
-      offset             上次读取位置（字节）
-      keyword            包含关键字（可空）
-      level              日志级别过滤，ALL 表示不过滤
-      start/end          时间过滤（可空）
-      ignore_unknown     1/0，是否忽略 UNKNOWN
-      ignore_keywords    使用 | 分隔的忽略关键字（可空）
-    返回：
-      {
-        success, file, offset, next_offset,
-        lines: [{time, level, text}, ...]
-      }
-    """
     if 'admin_id' not in session:
         return jsonify({"success": False, "error": "未登录"})
-
-    file_name = request.args.get("file", "").strip()
-
-    try:
-        offset = int(request.args.get("offset", 0))
-    except Exception:
-        offset = 0
-
-    keyword = request.args.get("keyword", "").strip()
-    level = request.args.get("level", "ALL").strip().upper()
-    start_dt = request.args.get("start", "").strip()
-    end_dt = request.args.get("end", "").strip()
-
-    # 新增：忽略项
-    ignore_unknown = request.args.get("ignore_unknown", "0") == "1"
-    ignore_keywords_raw = request.args.get("ignore_keywords", "").strip()
-    ignore_keywords = [x.strip() for x in ignore_keywords_raw.split("|") if x.strip()]
-
-    try:
-        file_map = _get_log_file_map()
-        if file_name not in file_map:
-            return jsonify({"success": False, "error": "日志文件不存在或不允许访问"})
-
-        target = file_map[file_name]
-        roots = _get_log_roots()
-        file_size = target.stat().st_size
-
-        # 日志轮转/截断处理：offset 越界则回到 0
-        if offset < 0 or offset > file_size:
-            offset = 0
-
-        # 时间解析
-        start_obj = _parse_dt_flexible(start_dt) if start_dt else None
-        end_obj = _parse_dt_flexible(end_dt) if end_dt else None
-        if end_dt and re.fullmatch(r"\d{4}-\d{2}-\d{2}", end_dt):
-            end_obj = end_obj.replace(hour=23, minute=59, second=59)
-
-        lines = []
-        next_offset = offset
-
-        import codecs
-        decoder = codecs.getincrementaldecoder('utf-8')('replace')
-
-        with open(target, "rb") as f:
-            f.seek(offset)
-            chunk = f.read()
-            next_offset = f.tell()
-
-        text = decoder.decode(chunk, final=True)
-        raw_lines = text.splitlines()
-
-        for raw in raw_lines:
-            clean_for_match = _strip_ansi_for_parse(raw)
-
-            # 正向关键字（包含）
-            if keyword and keyword not in clean_for_match:
-                continue
-
-            lv = _parse_level(clean_for_match)
-
-            # 级别过滤
-            if level and level != "ALL" and lv != level:
-                continue
-
-            # 忽略 UNKNOWN
-            if ignore_unknown and lv == "UNKNOWN":
-                continue
-
-            # 忽略关键字（命中任意一个就忽略）——用去色文本匹配
-            if ignore_keywords and any(k in clean_for_match for k in ignore_keywords):
-                continue
-
-            # 时间过滤
-            t = _parse_line_time(raw)
-            if start_obj and t and t < start_obj:
-                continue
-            if end_obj and t and t > end_obj:
-                continue
-
-            lines.append({
-                "time": t.strftime("%Y-%m-%d %H:%M:%S") if t else "",
-                "level": lv,
-                "text": _display_log_text(raw),
-            })
-
-        return jsonify({
-            "success": True,
-            "file": str(target.resolve()),
-            "name": target.name,
-            "display_name": _log_display_name(target, roots),
-            "offset": offset,
-            "next_offset": next_offset,
-            "lines": lines
-        })
-
-    except Exception as e:
-        return jsonify({"success": False, "error": f"tail失败：{str(e)}"})
+    return jsonify(logs_application.tail(
+        file=request.args.get("file", "").strip(),
+        offset=request.args.get("offset", 0),
+        keyword=request.args.get("keyword", "").strip(),
+        level=request.args.get("level", "ALL").strip(),
+        start=request.args.get("start", "").strip(),
+        end=request.args.get("end", "").strip(),
+        ignore_unknown=request.args.get("ignore_unknown", "0") == "1",
+        ignore_keywords=request.args.get("ignore_keywords", "").strip(),
+    ))

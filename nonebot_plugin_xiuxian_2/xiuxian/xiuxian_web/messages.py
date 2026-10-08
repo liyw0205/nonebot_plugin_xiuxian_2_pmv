@@ -53,7 +53,7 @@ def _parse_message_config_int(data, key: str, minimum: int, maximum: int) -> int
 
 
 def _prepare_message_rows(rows: list[dict], conn=None) -> list[dict]:
-    rows = fill_private_username_from_group(rows)
+    rows = fill_private_username_from_group(rows, conn=conn)
     rows = fill_message_display_profiles(rows)
 
     mention_ids = set()
@@ -1805,7 +1805,7 @@ def extract_mention_user_ids_from_text(text: str) -> set[str]:
     }
 
 
-def get_latest_human_names_by_user_ids(conn, user_ids) -> dict[str, str]:
+def get_latest_human_names_by_user_ids(conn, user_ids, *, include_private: bool = True) -> dict[str, str]:
     ids = [str(user_id or "").strip() for user_id in (user_ids or [])]
     ids = sorted({user_id for user_id in ids if user_id})
     if not ids:
@@ -1816,9 +1816,49 @@ def get_latest_human_names_by_user_ids(conn, user_ids) -> dict[str, str]:
         conn = get_message_db_connection()
 
     try:
-        result = {}
+        result: dict[str, str] = {}
+        history: dict[str, dict[int, str]] = {}
+        for start in range(0, len(ids), 200):
+            chunk = ids[start : start + 200]
+            placeholders = ",".join("?" for _ in chunk)
+            cur = conn.cursor()
+            cur.execute(
+                f"SELECT user_id,username FROM user_nicknames WHERE user_id IN ({placeholders})",
+                chunk,
+            )
+            for row in cur.fetchall():
+                user_id = str(row["user_id"] or "")
+                name = pick_human_display_name(row["username"], user_id=user_id)
+                if name:
+                    result[user_id] = name
+
+            scenes = "'group','channel_group','private','channel_private'" if include_private else "'group','channel_group'"
+            cur.execute(
+                f"SELECT user_id,scene,username,nickname FROM ("
+                f"SELECT user_id,scene,username,nickname,"
+                f"CASE WHEN scene IN ('group','channel_group') THEN 0 ELSE 1 END AS scene_rank,"
+                f"ROW_NUMBER() OVER(PARTITION BY user_id,"
+                f"CASE WHEN scene IN ('group','channel_group') THEN 0 ELSE 1 END "
+                f"ORDER BY created_at DESC,id DESC) AS rn "
+                f"FROM messages WHERE user_id IN ({placeholders}) AND direction='recv' "
+                f"AND scene IN ({scenes}) AND ("
+                f"(TRIM(COALESCE(username,''))!='' AND username!='Bot' AND username!=user_id) OR "
+                f"(TRIM(COALESCE(nickname,''))!='' AND nickname!='Bot' AND nickname!=user_id))) "
+                "WHERE rn=1 ORDER BY user_id,scene_rank",
+                chunk,
+            )
+            for row in cur.fetchall():
+                user_id = str(row["user_id"] or "")
+                rank = 0 if row["scene"] in ("group", "channel_group") else 1
+                name = pick_human_display_name(row["username"], row["nickname"], user_id)
+                if name:
+                    history.setdefault(user_id, {}).setdefault(rank, name)
+
         for user_id in ids:
-            name = get_latest_human_name_by_user_id(conn, user_id)
+            if user_id in result:
+                continue
+            choices = history.get(user_id, {})
+            name = choices.get(0) or choices.get(1)
             if name:
                 result[user_id] = name
         return result
@@ -2126,7 +2166,7 @@ def api_messages_markdown_preview():
         })
 
 
-def fill_private_username_from_group(rows: list[dict]) -> list[dict]:
+def fill_private_username_from_group(rows: list[dict], conn=None) -> list[dict]:
     """
     私聊消息 username 为空时：
     1. 优先从 user_nicknames 表读取缓存昵称
@@ -2146,49 +2186,11 @@ def fill_private_username_from_group(rows: list[dict]) -> list[dict]:
     if not user_ids:
         return rows
 
-    conn = get_message_db_connection()
+    owns_conn = conn is None
+    if owns_conn:
+        conn = get_message_db_connection()
     try:
-        cur = conn.cursor()
-        name_map = {}
-
-        # 1. 优先读取昵称缓存表
-        for uid in user_ids:
-            cur.execute(
-                """
-                SELECT username
-                FROM user_nicknames
-                WHERE user_id = %s
-                LIMIT 1
-                """,
-                (uid,),
-            )
-            row = cur.fetchone()
-            if row and pick_human_display_name(row["username"], user_id=uid):
-                name_map[uid] = row["username"]
-
-        # 2. 没缓存的，再从群聊消息中找
-        for uid in user_ids:
-            if uid in name_map:
-                continue
-
-            cur.execute("""
-                SELECT username, nickname
-                FROM messages
-                WHERE user_id = %s
-                  AND scene IN ('group', 'channel_group')
-                  AND direction = 'recv'
-                  AND (
-                    (username IS NOT NULL AND username != '' AND username != %s AND username != 'Bot')
-                    OR (nickname IS NOT NULL AND nickname != '' AND nickname != %s AND nickname != 'Bot')
-                  )
-                ORDER BY created_at DESC, id DESC
-                LIMIT 1
-            """, (uid, uid, uid))
-            row = cur.fetchone()
-            if row:
-                name = pick_human_display_name(row["username"], row["nickname"], uid)
-                if name:
-                    name_map[uid] = name
+        name_map = get_latest_human_names_by_user_ids(conn, user_ids, include_private=False)
 
         for r in rows:
             if r.get("scene") in ("private", "channel_private"):
@@ -2202,7 +2204,8 @@ def fill_private_username_from_group(rows: list[dict]) -> list[dict]:
         return rows
 
     finally:
-        conn.close()
+        if owns_conn:
+            conn.close()
 
 
 def extract_markdown_content_from_repr(text: str) -> tuple[str, str]:
