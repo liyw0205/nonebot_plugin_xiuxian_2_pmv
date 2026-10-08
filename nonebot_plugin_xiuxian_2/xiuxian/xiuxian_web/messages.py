@@ -48,7 +48,7 @@ from ...adapters.web.media_proxy import (
 )
 from ...paths import get_paths
 from ...adapters.web.markdown_preview import render_markdown_preview
-from .stickers import resolve_sticker_path
+from ...features.stickers.runtime import sticker_application
 
 
 def _parse_message_config_int(data, key: str, minimum: int, maximum: int) -> int:
@@ -540,7 +540,7 @@ def api_messages_send():
         saved_file_path = None
 
         if sticker_token:
-            sticker_path = resolve_sticker_path(sticker_token)
+            sticker_path = sticker_application.resolve_sticker_path(sticker_token)
             if sticker_path is None:
                 return jsonify({"success": False, "error": "表情包不存在或未安装"})
             media_type = "image"

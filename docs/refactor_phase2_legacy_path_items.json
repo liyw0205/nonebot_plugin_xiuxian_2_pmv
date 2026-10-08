@@ -12442,11 +12442,11 @@
       "id": "route:GET:/api/messages/stickers:nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/stickers.py:api_messages_stickers",
       "kind": "legacy_routes",
       "entry": "GET /api/messages/stickers -> nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/stickers.py:api_messages_stickers",
-      "status": "受阻",
-      "reason": "The old Flask app and route modules are loaded and its server is enabled by default. Route registration is proven, but each handler's downstream ownership and replacement/compatibility decision is not closed.",
-      "unknown_edge": "route function -> old data/service or feature application -> state effect",
+      "status": "已迁移",
+      "reason": "The authenticated legacy Flask URL remains as a compatibility adapter. StickerApplication owns the catalog operation and forwards refresh to the cached remote-catalog repository; forced refresh can still perform synchronous network I/O and update the remote manifest cache.",
       "call_graph": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/stickers.py:609 -> Flask app.route(/api/messages/stickers) -> legacy handler -> downstream state effect not closed"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/stickers.py:23 api_messages_stickers -> _require_admin -> sticker_application.catalog(force_refresh=refresh)",
+        "sticker_application from features.stickers.runtime -> StickerApplication.catalog -> StickerRepository.fetch_remote_catalog -> cached remote manifest or bounded fixed-release fetch + atomic cache write -> StickerRepository.build_merged_catalog -> jsonify(existing catalog envelope)"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
@@ -12454,7 +12454,14 @@
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/stickers.py:609"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/stickers.py:23",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/stickers.py:9,22-36",
+        "nonebot_plugin_xiuxian_2/features/stickers/runtime.py:1-6",
+        "nonebot_plugin_xiuxian_2/features/stickers/factory.py:12-20",
+        "nonebot_plugin_xiuxian_2/features/stickers/application.py:15-35",
+        "nonebot_plugin_xiuxian_2/features/stickers/repository.py:263-277,343-383",
+        "tests/test_web_stickers_routes.py",
+        "nonebot_plugin_xiuxian_2/features/stickers/tests/test_sticker_application.py"
       ],
       "source_declaration_found": true,
       "source": {
@@ -12470,11 +12477,11 @@
       "id": "route:GET:/api/messages/stickers/file/<pack_id>/<path:filename>:nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/stickers.py:api_messages_stickers_file",
       "kind": "legacy_routes",
       "entry": "GET /api/messages/stickers/file/<pack_id>/<path:filename> -> nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/stickers.py:api_messages_stickers_file",
-      "status": "受阻",
-      "reason": "The old Flask app and route modules are loaded and its server is enabled by default. Route registration is proven, but each handler's downstream ownership and replacement/compatibility decision is not closed.",
-      "unknown_edge": "route function -> old data/service or feature application -> state effect",
+      "status": "已迁移",
+      "reason": "The authenticated legacy file URL remains as a compatibility adapter. StickerApplication.resolve_file and StickerRepository.resolve_file validate the pack/file names and require the resolved regular file to remain under that pack's root; the route preserves the image/webp response and private cache headers.",
       "call_graph": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/stickers.py:656 -> Flask app.route(/api/messages/stickers/file/<pack_id>/<path:filename>) -> legacy handler -> downstream state effect not closed"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/stickers.py:74 api_messages_stickers_file -> _require_admin + pack/file syntax checks -> sticker_application.resolve_file(pack_id, filename) -> send_file(image/webp, private max-age=86400)",
+        "sticker_application from features.stickers.runtime -> StickerApplication.resolve_file -> StickerRepository.resolve_file -> resolved file contained by resolved pack root"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
@@ -12482,7 +12489,14 @@
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/stickers.py:656"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/stickers.py:74",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/stickers.py:9,73-91",
+        "nonebot_plugin_xiuxian_2/features/stickers/runtime.py:1-6",
+        "nonebot_plugin_xiuxian_2/features/stickers/factory.py:12-20",
+        "nonebot_plugin_xiuxian_2/features/stickers/application.py:101-102",
+        "nonebot_plugin_xiuxian_2/features/stickers/repository.py:608-621",
+        "tests/test_web_stickers_routes.py",
+        "nonebot_plugin_xiuxian_2/features/stickers/tests/test_sticker_application.py"
       ],
       "source_declaration_found": true,
       "source": {
@@ -12498,11 +12512,11 @@
       "id": "route:POST:/api/messages/stickers/install:nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/stickers.py:api_messages_stickers_install",
       "kind": "legacy_routes",
       "entry": "POST /api/messages/stickers/install -> nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/stickers.py:api_messages_stickers_install",
-      "status": "受阻",
-      "reason": "The old Flask app and route modules are loaded and its server is enabled by default. Route registration is proven, but each handler's downstream ownership and replacement/compatibility decision is not closed.",
-      "unknown_edge": "route function -> old data/service or feature application -> state effect",
+      "status": "已迁移",
+      "reason": "The authenticated legacy endpoint remains as a compatibility adapter and preserves the existing 202/running response. StickerApplication owns install-job deduplication and execution; its job map is process-local and not persisted, while StickerRepository owns bounded download, archive validation and pack/manifest replacement with rollback.",
       "call_graph": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/stickers.py:622 -> Flask app.route(/api/messages/stickers/install) -> legacy handler -> downstream state effect not closed"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/stickers.py:40 api_messages_stickers_install -> _require_admin + pack/force parsing -> sticker_application.start_install(pack_id=pack_id, force=force) -> jsonify(job, 202 when running)",
+        "sticker_application from features.stickers.runtime -> StickerApplication.start_install -> process-local locked job map + daemon thread -> StickerRepository.install_pack -> bounded fixed-release download + sha256/archive validation + staged pack/manifest replace and rollback"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
@@ -12510,7 +12524,14 @@
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/stickers.py:622"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/stickers.py:40",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/stickers.py:9,39-59",
+        "nonebot_plugin_xiuxian_2/features/stickers/runtime.py:1-6",
+        "nonebot_plugin_xiuxian_2/features/stickers/factory.py:12-20",
+        "nonebot_plugin_xiuxian_2/features/stickers/application.py:15-91",
+        "nonebot_plugin_xiuxian_2/features/stickers/repository.py:385-490,491-606",
+        "tests/test_web_stickers_routes.py",
+        "nonebot_plugin_xiuxian_2/features/stickers/tests/test_sticker_application.py"
       ],
       "source_declaration_found": true,
       "source": {
@@ -12526,11 +12547,11 @@
       "id": "route:GET:/api/messages/stickers/install/<job_id>:nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/stickers.py:api_messages_stickers_install_status",
       "kind": "legacy_routes",
       "entry": "GET /api/messages/stickers/install/<job_id> -> nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/stickers.py:api_messages_stickers_install_status",
-      "status": "受阻",
-      "reason": "The old Flask app and route modules are loaded and its server is enabled by default. Route registration is proven, but each handler's downstream ownership and replacement/compatibility decision is not closed.",
-      "unknown_edge": "route function -> old data/service or feature application -> state effect",
+      "status": "已迁移",
+      "reason": "The authenticated legacy status URL remains as a compatibility adapter. StickerApplication owns lookup in its locked, process-local job map; unknown or post-restart job IDs still return the existing 404 response because job state is not durable.",
       "call_graph": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/stickers.py:645 -> Flask app.route(/api/messages/stickers/install/<job_id>) -> legacy handler -> downstream state effect not closed"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/stickers.py:63 api_messages_stickers_install_status -> _require_admin -> sticker_application.install_status(job_id) -> jsonify(job) or existing 404 envelope",
+        "sticker_application from features.stickers.runtime -> StickerApplication.install_status -> locked process-local job-map lookup (no persistence/recovery)"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
@@ -12538,7 +12559,12 @@
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/stickers.py:645"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/stickers.py:63",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/stickers.py:9,62-70",
+        "nonebot_plugin_xiuxian_2/features/stickers/runtime.py:1-6",
+        "nonebot_plugin_xiuxian_2/features/stickers/application.py:15-27,93-96",
+        "tests/test_web_stickers_routes.py",
+        "nonebot_plugin_xiuxian_2/features/stickers/tests/test_sticker_application.py"
       ],
       "source_declaration_found": true,
       "source": {

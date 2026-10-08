@@ -110,13 +110,13 @@
       "status": "受阻",
       "entry_format": "{methods} {path} -> {file}:{function}",
       "target_format": "legacy Flask route handler {file}:{function}",
-      "reason": "The legacy Flask app remains enabled by default. Route-level ownership and compatibility decisions for the 18 frozen /messages paths are recorded in the frozen item file; the message send handler still owns its send-policy orchestration, and other route handlers remain unresolved. This route family remains blocked until those remaining handlers are reviewed.",
+      "reason": "The legacy Flask app remains enabled by default. The 22 frozen /messages entries are individually reviewed (18 migrated behind feature owners, 3 retained compatibility paths, and /api/messages/send blocked because its handler still owns send-policy orchestration). The broader 116-route family remains blocked by that send path and other unresolved route members; per-route decisions remain in the frozen item file.",
       "unknown_edge": "unreviewed route functions -> route-specific effects not yet assigned",
       "call_graph": [
         "xiuxian/xiuxian_web/__init__.py imports route modules -> Flask @app.route registers each route",
         "register_legacy_startup(start_web_server_on_startup) -> start_web_server -> _web_enabled -> make_server(host, port, app)",
         "web_enabled_from_env uses XIUXIAN_WEB_STATUS default true",
-        "Per-route decisions are tracked in docs/refactor_phase2_legacy_path_items.json; reviewed message routes do not close the wider legacy route family"
+        "Per-route decisions are tracked in docs/refactor_phase2_legacy_path_items.json; the 22 frozen /messages entries comprise 18 owner-routed, 3 compatibility and 1 send blocker, and do not close the wider legacy route family"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
@@ -125,7 +125,8 @@
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
         "docs/refactor_phase2_legacy_path_items.json",
-        "tests/test_phase2_legacy_path_gate.py"
+        "tests/test_phase2_legacy_path_gate.py",
+        "tests/test_web_stickers_routes.py"
       ]
     }
   ],

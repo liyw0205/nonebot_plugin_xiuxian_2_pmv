@@ -80,7 +80,7 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
                              if (item.get("source") or {}).get("feature") == "sect"))
         self.assertEqual(report["path_count"], 496)
         self.assertEqual(report["status_counts"],
-                         {"不可达": 19, "允许保留的兼容路径": 138, "受阻": 25, "已迁移": 314})
+                         {"不可达": 19, "允许保留的兼容路径": 138, "受阻": 21, "已迁移": 318})
         self.assertTrue(report["frozen_membership_valid"])
         self.assertEqual(report["integrity_errors"], [])
 
@@ -399,7 +399,7 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
             self.assertIn(evidence, system_item["evidence"])
         self.assertNotIn("legacy downstream effect not closed", system_graph)
         self.assertEqual(report["status_counts"],
-                         {"不可达": 19, "允许保留的兼容路径": 138, "受阻": 25, "已迁移": 314})
+                         {"不可达": 19, "允许保留的兼容路径": 138, "受阻": 21, "已迁移": 318})
         self.assertTrue(report["frozen_membership_valid"])
         self.assertEqual(report["integrity_errors"], [])
 
@@ -473,7 +473,7 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
                 self.assertNotIn("downstream state effect not closed", graph)
 
         self.assertEqual(report["status_counts"],
-                         {"不可达": 19, "允许保留的兼容路径": 138, "受阻": 25, "已迁移": 314})
+                         {"不可达": 19, "允许保留的兼容路径": 138, "受阻": 21, "已迁移": 318})
         self.assertEqual(report["path_count"], 496)
         self.assertTrue(report["frozen_membership_valid"])
         self.assertEqual(report["integrity_errors"], [])
@@ -522,7 +522,7 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
         self.assertNotIn("legacy downstream effect not closed", claim_graph)
         self.assertEqual(
             report["status_counts"],
-            {"不可达": 19, "允许保留的兼容路径": 138, "受阻": 25, "已迁移": 314},
+            {"不可达": 19, "允许保留的兼容路径": 138, "受阻": 21, "已迁移": 318},
         )
         self.assertTrue(report["frozen_membership_valid"])
         self.assertEqual(report["integrity_errors"], [])
@@ -581,7 +581,7 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
 
         self.assertEqual(
             report["status_counts"],
-            {"不可达": 19, "允许保留的兼容路径": 138, "受阻": 25, "已迁移": 314},
+            {"不可达": 19, "允许保留的兼容路径": 138, "受阻": 21, "已迁移": 318},
         )
 
     def test_world_events_demon_claim_command_owns_atomic_claim_statistic(self):
@@ -613,7 +613,7 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
         self.assertEqual(report["integrity_errors"], [])
         self.assertEqual(
             report["status_counts"],
-            {"不可达": 19, "允许保留的兼容路径": 138, "受阻": 25, "已迁移": 314},
+            {"不可达": 19, "允许保留的兼容路径": 138, "受阻": 21, "已迁移": 318},
         )
         self.assertTrue(report["frozen_membership_valid"])
 
@@ -661,7 +661,7 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
 
         self.assertEqual(
             report["status_counts"],
-            {"不可达": 19, "允许保留的兼容路径": 138, "受阻": 25, "已迁移": 314},
+            {"不可达": 19, "允许保留的兼容路径": 138, "受阻": 21, "已迁移": 318},
         )
         self.assertTrue(report["frozen_membership_valid"])
         self.assertEqual(report["integrity_errors"], [])
@@ -718,7 +718,7 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
         self.assertEqual(report["path_count"], 496)
         self.assertEqual(
             report["status_counts"],
-            {"不可达": 19, "允许保留的兼容路径": 138, "受阻": 25, "已迁移": 314},
+            {"不可达": 19, "允许保留的兼容路径": 138, "受阻": 21, "已迁移": 318},
         )
         self.assertGreater(report["blocked_count"], 0)
         self.assertTrue(all(item["call_graph"] and item["evidence"] for item in report["items"]))
@@ -1548,7 +1548,7 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
         self.assertIn("authenticated reward_center.html", " ".join(page["call_graph"]))
         self.assertEqual(
             report["status_counts"],
-            {"不可达": 19, "允许保留的兼容路径": 138, "受阻": 25, "已迁移": 314},
+            {"不可达": 19, "允许保留的兼容路径": 138, "受阻": 21, "已迁移": 318},
         )
 
     def test_legacy_logs_routes_share_file_and_message_owners(self):
@@ -1578,7 +1578,7 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
         self.assertIn("render_template(logs.html)", " ".join(page["call_graph"]))
         self.assertEqual(
             report["status_counts"],
-            {"不可达": 19, "允许保留的兼容路径": 138, "受阻": 25, "已迁移": 314},
+            {"不可达": 19, "允许保留的兼容路径": 138, "受阻": 21, "已迁移": 318},
         )
 
     def test_messages_routes_record_owner_edges_and_remaining_compatibility(self):
@@ -1641,9 +1641,85 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
         self.assertIn("unknown_edge", send)
         self.assertEqual(
             report["status_counts"],
-            {"不可达": 19, "允许保留的兼容路径": 138, "受阻": 25, "已迁移": 314},
+            {"不可达": 19, "允许保留的兼容路径": 138, "受阻": 21, "已迁移": 318},
         )
         self.assertEqual(len(report["items"]), 496)
+        self.assertTrue(report["frozen_membership_valid"])
+        self.assertEqual(report["integrity_errors"], [])
+
+    def test_sticker_routes_and_send_resolution_share_sticker_application_owner(self):
+        report = load_phase2_scope_report(include_items=True)
+        items = {item["id"]: item for item in report["items"]}
+        root = Path(__file__).resolve().parents[1]
+        source = "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/stickers.py"
+        source_text = (root / source).read_text(encoding="utf-8")
+        source_tree = ast.parse(source_text)
+        application = "nonebot_plugin_xiuxian_2/features/stickers/application.py"
+        repository = "nonebot_plugin_xiuxian_2/features/stickers/repository.py"
+        owner_test = "nonebot_plugin_xiuxian_2/features/stickers/tests/test_sticker_application.py"
+        expected = {
+            "api_messages_stickers": (
+                "route:GET:/api/messages/stickers:nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/stickers.py:api_messages_stickers",
+                "catalog",
+                "force_refresh=refresh",
+            ),
+            "api_messages_stickers_file": (
+                "route:GET:/api/messages/stickers/file/<pack_id>/<path:filename>:nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/stickers.py:api_messages_stickers_file",
+                "resolve_file",
+                "filename",
+            ),
+            "api_messages_stickers_install": (
+                "route:POST:/api/messages/stickers/install:nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/stickers.py:api_messages_stickers_install",
+                "start_install",
+                "pack_id",
+            ),
+            "api_messages_stickers_install_status": (
+                "route:GET:/api/messages/stickers/install/<job_id>:nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/stickers.py:api_messages_stickers_install_status",
+                "install_status",
+                "job_id",
+            ),
+        }
+        for function, (item_id, method, arguments) in expected.items():
+            item = items[item_id]
+            line = _handler_line(source, function)
+            location = f"{source}:{line}"
+            graph = " ".join(item["call_graph"])
+            handler = next(
+                node
+                for node in source_tree.body
+                if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == function
+            )
+            handler_source = ast.get_source_segment(source_text, handler) or ""
+            with self.subTest(route=function):
+                self.assertEqual(item["status"], "已迁移")
+                self.assertNotIn("unknown_edge", item)
+                self.assertIn("sticker_application", handler_source)
+                self.assertIn(f"sticker_application.{method}", handler_source)
+                self.assertIn(arguments, handler_source)
+                self.assertIn(f"{location} {function} ->", graph)
+                self.assertIn(f"StickerApplication.{method}", graph)
+                self.assertIn("_require_admin", handler_source)
+                self.assertIn(location, item["evidence"])
+                self.assertTrue(any(value.startswith(application + ":") for value in item["evidence"]))
+                if method != "install_status":
+                    self.assertTrue(any(value.startswith(repository + ":") for value in item["evidence"]))
+                self.assertIn("tests/test_web_stickers_routes.py", item["evidence"])
+                self.assertIn(owner_test, item["evidence"])
+                self.assertNotIn("downstream state effect not closed", graph)
+
+        messages_source = "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py"
+        messages_text = (root / messages_source).read_text(encoding="utf-8")
+        send_handler = next(
+            node
+            for node in ast.parse(messages_text).body
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+            and node.name == "api_messages_send"
+        )
+        send_handler_source = ast.get_source_segment(messages_text, send_handler) or ""
+        self.assertIn("sticker_application.resolve_sticker_path(sticker_token)", send_handler_source)
+        self.assertNotIn("from .stickers import resolve_sticker_path", messages_text)
+        self.assertIn("sticker_application", messages_text)
+
         self.assertTrue(report["frozen_membership_valid"])
         self.assertEqual(report["integrity_errors"], [])
 
