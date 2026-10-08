@@ -1,22 +1,12 @@
 from __future__ import annotations
 
-import ast
 import unittest
+import ast
 from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[4]
 ENTERTAINMENT = ROOT / "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment"
-
-
-def _function(source: str, name: str):
-    tree = ast.parse(source)
-    return next(
-        node
-        for node in tree.body
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
-        and node.name == name
-    )
 
 
 class MediaParseHandlerContractTests(unittest.TestCase):
@@ -39,35 +29,71 @@ class MediaParseHandlerContractTests(unittest.TestCase):
             encoding="utf-8"
         )
         for contract in (
-            "cfg.should_parse_message(text)",
-            "cfg.auto_parse",
-            '"原始链接：" in text',
-            "fun_media_message_has_embedded_share_url(text)",
-            "fun_media_has_supported_link(text)",
-            "fun_media_send_parse_result(bot, event, text)",
+            "handle_command_url(bot, event)",
+            "handle_embedded_share(",
+            "handle_any_http(bot, event)",
         ):
             self.assertIn(contract, matcher_source)
 
-        command_source = (ENTERTAINMENT / "command.py").read_text(encoding="utf-8")
-        send_handler = _function(command_source, "fun_media_send_parse_result")
-        attributes = {
-            node.attr for node in ast.walk(send_handler) if isinstance(node, ast.Attribute)
-        }
-        self.assertIn("parse_and_build_messages", attributes)
-        self.assertIn(
-            "fun_media_should_skip_duplicate_event",
-            {
-                node.func.id
-                for node in ast.walk(send_handler)
-                if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
-            },
+        owner_source = (
+            ROOT / "nonebot_plugin_xiuxian_2/features/entertainment/media_parser_messages.py"
+        ).read_text(encoding="utf-8")
+        for contract in (
+            "should_parse_message(text)",
+            "self._config().auto_parse",
+            '"原始链接：" in text',
+            "should_skip_duplicate(self._event_key(event))",
+            "parse_and_build_messages(",
+            "send_card_with_text",
+            "send_markdown",
+        ):
+            self.assertIn(contract, owner_source)
+
+    def test_explicit_command_is_a_thin_forwarder_to_the_shared_message_owner(self):
+        command_source = (ENTERTAINMENT / "command.py").read_text(
+            encoding="utf-8"
         )
-        dedupe = _function(command_source, "fun_media_should_skip_duplicate_event")
-        self.assertIn(
-            "should_skip_duplicate",
-            {node.attr for node in ast.walk(dedupe) if isinstance(node, ast.Attribute)},
+        tree = ast.parse(command_source)
+        helper = next(
+            node
+            for node in tree.body
+            if isinstance(node, ast.AsyncFunctionDef)
+            and node.name == "fun_media_send_parse_result"
         )
-        self.assertNotIn("run_parse_and_build_messages", command_source)
+        statements = [
+            statement
+            for statement in helper.body
+            if not (
+                isinstance(statement, ast.Expr)
+                and isinstance(statement.value, ast.Constant)
+                and isinstance(statement.value.value, str)
+            )
+        ]
+        self.assertEqual(len(statements), 1)
+        statement = statements[0]
+        self.assertIsInstance(statement, ast.Expr)
+        self.assertIsInstance(statement.value, ast.Await)
+        call = statement.value.value
+        self.assertIsInstance(call, ast.Call)
+        self.assertEqual(
+            ast.unparse(call.func),
+            "entertainment_application.media_parser_messages.send_parse_result",
+        )
+        self.assertEqual(
+            [ast.unparse(argument) for argument in call.args],
+            ["bot", "event", "source_text"],
+        )
+        self.assertNotIn("parse_and_build_messages", ast.unparse(helper))
+
+        matcher_source = (ENTERTAINMENT / "mod/media_parse_link.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn(
+            "fun_media_send_parse_result(bot, event, arg_text)", matcher_source
+        )
+        self.assertIn(
+            "fun_media_send_parse_result(bot, event, plain)", matcher_source
+        )
 
     def test_parser_service_is_only_a_compatibility_facade(self):
         source = (

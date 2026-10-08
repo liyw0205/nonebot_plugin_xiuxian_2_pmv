@@ -8,7 +8,7 @@ import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, Mock, patch
 
 import nonebot
 from nonebot.exception import FinishedException
@@ -188,6 +188,33 @@ class WorkItemUseApplicationTests(unittest.TestCase):
         self.assertEqual(tuple(item), (1, 0))
         self.assertEqual(json.loads(snapshot[0]), self.offer())
         self.assertEqual(snapshot[1], "2026-07-13 11:00:00.000000")
+
+    def test_capture_replay_reprojects_canonical_offer_to_repair_failed_projection(self) -> None:
+        with db_backend.transaction(self.database) as conn:
+            conn.execute("UPDATE user_cd SET type=0,create_time='0',scheduled_time=NULL WHERE user_id='u'")
+        project = Mock(side_effect=[RuntimeError("projection failed"), None])
+        application = self.application.__class__(
+            self.database,
+            legacy_projection_writer=project,
+        )
+
+        with self.assertRaisesRegex(RuntimeError, "projection failed"):
+            application.capture(
+                "capture-projection", "u", 20015, 2, 0, self.offer(30), 3
+            )
+        replay = application.capture(
+            "capture-projection", "u", 20015, 2, 0, self.offer(150), 5
+        )
+        conflict = application.capture(
+            "capture-projection", "u", 20015, 1, 0, self.offer(150), 5
+        )
+
+        self.assertEqual((replay.status, conflict.status), ("duplicate", "operation_conflict"))
+        self.assertEqual(project.call_count, 2)
+        self.assertEqual(
+            [call.args for call in project.call_args_list],
+            [("u", self.offer(30)), ("u", self.offer(30))],
+        )
 
     def test_offer_snapshot_migration_preserves_existing_rows(self) -> None:
         from nonebot_plugin_xiuxian_2.features.work.migrations import apply_work_offer_snapshots
@@ -417,6 +444,11 @@ class WorkItemUseApplicationTests(unittest.TestCase):
         fake_bot = SimpleNamespace(self_id="bot")
         fake_event = SimpleNamespace(message_id="work-capture-message")
         generated_offer = self.offer()
+        project = Mock()
+        application = self.application.__class__(
+            self.database,
+            legacy_projection_writer=project,
+        )
         with db_backend.transaction(self.database) as conn:
             conn.execute("UPDATE user_cd SET type=0,create_time='0',scheduled_time=NULL WHERE user_id='u'")
 
@@ -455,13 +487,12 @@ class WorkItemUseApplicationTests(unittest.TestCase):
             patch.object(work_module, "_sql_message", return_value=message_data),
             patch.object(work_module, "workhandle") as workhandle,
             patch.object(work_module, "runtime_random", SimpleNamespace(randint=lambda low, high: 3)),
-            patch.object(work_module, "work_item_use_application", self.application),
-            patch.object(work_module, "savef") as savef,
+            patch.object(work_module, "work_item_use_application", application),
             patch.object(back_module, "handle_send", new=AsyncMock()),
             patch.object(work_module, "handle_send", new=send_feedback),
             patch.object(work_module, "send_work_message", new=AsyncMock()),
             patch.object(work_module, "generate_work_message", return_value="work offer message"),
-            patch.object(self.application, "capture", wraps=self.application.capture) as capture,
+            patch.object(application, "capture", wraps=application.capture) as capture,
         ):
             items.get_data_by_item_name.return_value = (20015, {"type": "特殊道具", "name": "追捕令"})
             workhandle.return_value.do_work.return_value = ("work message", generated_offer)
@@ -470,9 +501,7 @@ class WorkItemUseApplicationTests(unittest.TestCase):
 
         self.assertEqual(capture.call_count, 1)
         self.assertEqual(capture.call_args.args[-1], 3)
-        self.assertTrue(savef.called)
-        self.assertEqual(savef.call_args.args[1], self.offer(90))
-        self.assertFalse(savef.call_args.kwargs.get("sync_snapshot", True))
+        project.assert_called_once_with("u", self.offer(90))
         self.assertIn("提升3倍", send_feedback.await_args.args[2])
         with db_backend.connection(self.database) as conn:
             item_count = conn.execute(

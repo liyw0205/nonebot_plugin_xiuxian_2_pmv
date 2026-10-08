@@ -1174,6 +1174,11 @@ def _slice_status() -> dict[str, dict[str, object]]:
     workmake_source = (PACKAGE / "xiuxian" / "xiuxian_work" / "workmake.py").read_text(encoding="utf-8")
     work_reward_source = (PACKAGE / "xiuxian" / "xiuxian_work" / "reward_data_source.py").read_text(encoding="utf-8")
     work_claim_repository = (PACKAGE / "features" / "work" / "claim_repository.py").read_text(encoding="utf-8")
+    work_claim_application_source = (PACKAGE / "features" / "work" / "application.py").read_text(encoding="utf-8")
+    work_refresh_application_source = (PACKAGE / "features" / "work" / "refresh_application.py").read_text(encoding="utf-8")
+    work_status_application_source = (PACKAGE / "features" / "work" / "status_application.py").read_text(encoding="utf-8")
+    work_item_use_application_source = (PACKAGE / "features" / "work" / "work_item_use_application.py").read_text(encoding="utf-8")
+    work_legacy_offer_adapter = (PACKAGE / "compatibility" / "legacy_work_offer_json.py").read_text(encoding="utf-8")
     work_settlement_repository = (PACKAGE / "features" / "work" / "settlement_repository.py").read_text(encoding="utf-8")
     work_admin_reset_repository = (PACKAGE / "features" / "work" / "admin_refresh_reset_repository.py").read_text(encoding="utf-8")
     work_admin_reset_tests = (PACKAGE / "features" / "work" / "tests" / "test_admin_refresh_reset_repository.py").read_text(encoding="utf-8")
@@ -1194,6 +1199,26 @@ def _slice_status() -> dict[str, dict[str, object]]:
     ]
     work_capture_handler = work_facade[
         work_facade.index("async def use_work_capture_order") :
+    ]
+    work_claim_projection_wiring = work_facade[
+        work_facade.index("work_claim_application = WorkClaimApplication(") : work_facade.index(
+            "work_settlement_application = WorkSettlementApplication("
+        )
+    ]
+    work_refresh_projection_wiring = work_facade[
+        work_facade.index("work_refresh_application = WorkRefreshApplication(") : work_facade.index(
+            "work_status_application = WorkStatusApplication("
+        )
+    ]
+    work_status_projection_wiring = work_facade[
+        work_facade.index("work_status_application = WorkStatusApplication(") : work_facade.index(
+            "work_abort_cleanup_application = WorkAbortCleanupApplication("
+        )
+    ]
+    work_item_use_projection_wiring = work_facade[
+        work_facade.index("work_item_use_application = WorkItemUseApplication(") : work_facade.index(
+            "runtime_clock = SystemClock()"
+        )
     ]
     activity_service = (PACKAGE / "xiuxian" / "xiuxian_activity" / "service.py").read_text(encoding="utf-8")
     activity_commands = (PACKAGE / "xiuxian" / "xiuxian_activity" / "__init__.py").read_text(encoding="utf-8")
@@ -2410,7 +2435,43 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "legacy_item_accelerate_disabled": "_work_item_use_service().accelerate(" not in work_accelerate_handler,
             "capture_application_owned": "work_item_use_application.capture(" in work_capture_handler,
             "legacy_item_capture_disabled": "_work_item_use_service().capture(" not in work_capture_handler,
-            "capture_json_projection_only": "savef(user_id, work_data, sync_snapshot=False)" in work_capture_handler,
+            "offer_projection_adapter_wired_to_each_application": (
+                "legacy_work_offer_json = LegacyWorkOfferJsonAdapter()" in work_facade
+                and "def project(self, user_id: str" in work_legacy_offer_adapter
+                and "legacy_projection_writer=legacy_work_offer_json.project" in work_claim_projection_wiring
+                and "legacy_projection_writer=legacy_work_offer_json.project" in work_refresh_projection_wiring
+                and "legacy_projection_writer=legacy_work_offer_json.project" in work_status_projection_wiring
+                and "legacy_projection_writer=legacy_work_offer_json.project" in work_item_use_projection_wiring
+            ),
+            "status_application_owns_offer_projection": (
+                "self.repository.mark_offer_expired(" in work_status_application_source
+                and "self._project(user_id, offer)" in work_status_application_source
+            ),
+            "refresh_application_owns_offer_projection": (
+                'if result.status == "applied" and isinstance(result.offer, dict):' in work_refresh_application_source
+                and "self._project_legacy(request.user_id, result.offer)" in work_refresh_application_source
+            ),
+            "claim_application_owns_offer_projection": (
+                'if status == "applied" and self.legacy_projection_writer is not None:' in work_claim_application_source
+                and "self.legacy_projection_writer(" in work_claim_application_source
+            ),
+            "capture_json_projection_application_owned": (
+                "savef(" not in work_capture_handler
+                and 'if result.status in {"applied", "duplicate"}' in work_item_use_application_source
+                and "self._project_legacy(user_id, offer)" in work_item_use_application_source
+            ),
+            "offer_projection_applications_own_legacy_json": (
+                "legacy_work_offer_json = LegacyWorkOfferJsonAdapter()" in work_facade
+                and "legacy_projection_writer=legacy_work_offer_json.project" in work_claim_projection_wiring
+                and "legacy_projection_writer=legacy_work_offer_json.project" in work_refresh_projection_wiring
+                and "legacy_projection_writer=legacy_work_offer_json.project" in work_status_projection_wiring
+                and "legacy_projection_writer=legacy_work_offer_json.project" in work_item_use_projection_wiring
+                and "self._project(user_id, offer)" in work_status_application_source
+                and "self._project_legacy(request.user_id, result.offer)" in work_refresh_application_source
+                and "self.legacy_projection_writer(" in work_claim_application_source
+                and "self._project_legacy(user_id, offer)" in work_item_use_application_source
+                and "savef(" not in work_capture_handler
+            ),
             "offer_generation_reuses_profile_snapshot": "workmake(level, exp, level," in work_handle_source,
             "offer_generation_has_no_legacy_handle_import": "xiuxian2_handle" not in work_handle_source and "xiuxian2_handle" not in workmake_source,
             "unused_item_cache_not_constructed": "items = Items()" not in work_handle_source and "from ..xiuxian_utils.item_json import Items" not in work_handle_source,

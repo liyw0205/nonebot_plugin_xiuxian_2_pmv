@@ -133,27 +133,40 @@
       "kind": "matcher-family",
       "entry": "default old on_message/on_regex/on_startswith and other non-command matcher handlers",
       "status": "受阻",
-      "reason": "A source inventory confirms seven default matcher registrations here: five regex, one message, and one notice matcher. Their effects are mixed: work claim now atomically commits user_cd, the status=2 work_offer_snapshots projection, the selected work_active_snapshots payload and its receipt; settlement prefers a read-only feature active snapshot, with the legacy read path retained only when no active snapshot is available. Expiration now uses WorkRefreshApplication.mark_offer_expired -> WorkRefreshSqlRepository.mark_offer_expired to compare-and-set the database snapshot; savef(sync_snapshot=False) afterward writes only the JSON file projection. Refresh and claim also retain JSON projections, so the compatibility boundary is still open. The bank regex boundary now delegates bounded parsing, validation and orchestration to BankCommandApplication and result mapping to render_bank_reply; verified mutation receipts precede current account/configuration reads, the original four account writers retain atomic writes and snapshot CAS, and information queries remain read-only. This closes only the bank sub-boundary, not the matcher family. Media parsing and fallback retain legacy callbacks; group lifecycle notices remain a separate old event path. Keep the family blocked until every handler and remaining projection has a closed owner; do not add members automatically, and put out-of-scope discoveries in backlog for explicit review.",
+      "reason": "The seven default matcher registrations now have explicit behavior owners for fallback, bank, media parsing and group lifecycle handling. Work status, refresh, claim, capture and abort/cleanup database boundaries also delegate to feature applications, but Work still blocks the family: refresh/claim/status/capture project legacy JSON through callbacks, status may read historical JSON when no SQL snapshot exists, and successful settlement deletes the canonical work_offer_snapshots row through the compatibility adapter after the settlement transaction. The Work matcher still owns offer generation, settlement random/result calculation, post-settlement logging/statistics/task progress, and delayed-reminder task state. Group lifecycle retains a direct on_notice route adapter outside on_compat. Keep this matcher family blocked until the remaining Work algorithms/effects and canonical snapshot cleanup have one feature transaction owner; do not add members automatically, and put out-of-scope discoveries in backlog for explicit review.",
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized enumerates non-internal xiuxian modules -> load_all_plugins imports modules and evaluates their decorators",
         "six on_compat message/regex registrations: empty_fallback.on_message; work.do_work and bank.bank on_regex; three media_parse_link on_regex handlers -> NoneBot matcher constructor -> _register_route",
         "only on_command checks the explicit _MIGRATED_COMMAND_KEYS suppression set; the six confirmed non-command registrations bypass that suppression -> XiuxianOnCompatProvider dispatches matching indexed/generic routes",
-        "admin.group_welcome is explicitly imported by xiuxian_admin and registers direct nonebot.on_notice -> handle_group_lifecycle -> lifecycle/config/send behavior outside on_compat",
+        "admin.group_welcome is explicitly imported by xiuxian_admin and registers direct nonebot.on_notice at group_welcome.py:34 -> handle_group_lifecycle at :38 -> GroupLifecycleNoticeApplication.handle; lifecycle/config/send orchestration is feature-owned, while the direct notice route remains outside on_compat",
         "bank.bank on_regex -> bank_ -> BankCommandApplication.execute owns bounded intent parsing and validation -> existing BankDepositApplication/BankWithdrawalApplication/BankUpgradeApplication/BankInterestApplication -> BankAccountRepository; render_bank_reply owns result-to-reply mapping before handle_send",
         "BankCommandApplication mutation branches -> BankCommandReceiptRepository.find reads bank_account_operations and legacy receipt tables without DDL -> validates user/action/original amount before current account/configuration reads; information bypasses mutation receipts -> BankAccountInfoApplication.get_info read-only account and wallet/defaults",
         "BankCommandApplication deposit/withdrawal/interest -> calculate_interest -> existing account application with expected_saved_stone, original expected_saved_at and bank_level snapshot CAS; deposits and withdrawals automatically settle interest, upgrade receipts replay before current level/configuration, and invalid or conflicting receipts never become success",
-        "work.do_work -> do_work_ -> work_refresh_application.refresh -> WorkRefreshSqlRepository commits offer/count/receipt -> savef(sync_snapshot=False) still writes players/<id>/workinfo.json",
-        "work.do_work -> do_work_ -> work_claim_application.claim -> WorkClaimSqlRepository commits user_cd, status=2 work_offer_snapshots, selected work_active_snapshots and claim receipt atomically -> savef(sync_snapshot=False) writes only players/<id>/workinfo.json",
+        "work.do_work -> do_work_ -> WorkRefreshApplication.refresh -> WorkRefreshSqlRepository commits offer/count/receipt -> feature callback LegacyWorkOfferJsonAdapter.project writes players/<id>/workinfo.json as a compatibility projection",
+        "work.do_work -> do_work_ -> WorkClaimApplication.claim -> WorkClaimSqlRepository commits user_cd, status=2 work_offer_snapshots, selected work_active_snapshots and claim receipt atomically -> feature callback LegacyWorkOfferJsonAdapter.project writes the legacy JSON projection",
         "work.do_work settlement branch -> settle_work -> WorkClaimApplication.get_active_snapshot -> read-only WorkClaimSqlRepository joins the active snapshot to user_cd; new status=2 snapshots are used directly and historical status=1 snapshots are derived in memory -> workhandle.do_work(offer_snapshot=...) -> WorkSettlementApplication/WorkSettlementSqlRepository settles assets",
-        "work.do_work settlement branch falls back to readf only when no active feature snapshot exists; the legacy projection is still needed for historical users outside the active-snapshot table",
-        "work.do_work status checks -> has_unaccepted_work -> readf prefers work_offer_snapshots and falls back to legacy JSON without importing it -> _mark_work_offer_expired -> WorkRefreshApplication.mark_offer_expired -> WorkRefreshSqlRepository.mark_offer_expired compare-and-set -> savef(sync_snapshot=False) writes only the JSON projection"
+        "work.do_work settlement branch falls back to WorkStatusApplication.get_offer only when no active feature snapshot exists; the legacy JSON read remains a historical compatibility fallback",
+        "work.do_work status checks -> WorkStatusApplication reads user_cd and SQL offer snapshots, falling back to legacy JSON for historical rows; expiration compare-and-sets SQL then projects JSON through LegacyWorkOfferJsonAdapter",
+        "work.do_work settlement -> matcher still calls workhandle().do_work for random outcome/result calculation and owns post-settlement log/statistics/task-progress effects; WorkSettlementApplication commits the asset settlement, then its compatibility callback removes the canonical offer snapshot in a separate connection",
+        "work.do_work refresh/reminder -> matcher still generates offers and owns per-user reminder dictionaries/asyncio tasks; refresh mutation itself is WorkRefreshApplication-owned",
+        "empty_fallback.on_message -> EmptyFallbackApplication.should_respond/respond owns eligibility and reply orchestration; config, cooldown, route, image, and send APIs remain adapters",
+        "three media_parse_link regex handlers -> EntertainmentMediaParserMessageApplication owns deduplication, parsing and result sending; media transport remains callbacks",
+        "group_welcome.on_notice -> GroupLifecycleNoticeApplication.handle owns event policy and welcome effects; direct on_notice registration is a retained route adapter"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:69-82,135-139,214-227,486-537,789-971",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:80,82",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/empty_fallback.py:10,95-103",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_work/__init__.py:71-76,130-134,202-205,257-320,471-477,522-536,598-636,694-724,749-763,825-875,945-955",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/empty_fallback.py:12-28",
+        "nonebot_plugin_xiuxian_2/features/fallback/application.py:79-134",
+        "nonebot_plugin_xiuxian_2/features/fallback/tests/test_application.py",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_work/__init__.py:44-70,241-359,565-711,716-912,945-1010",
+        "nonebot_plugin_xiuxian_2/features/work/application.py:30-145,175-285",
+        "nonebot_plugin_xiuxian_2/features/work/refresh_application.py",
+        "nonebot_plugin_xiuxian_2/features/work/status_application.py",
+        "nonebot_plugin_xiuxian_2/features/work/work_item_use_application.py",
+        "nonebot_plugin_xiuxian_2/features/work/abort_cleanup_application.py",
+        "nonebot_plugin_xiuxian_2/compatibility/legacy_work_offer_json.py",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_work/reward_data_source.py:58-88,90-106,127-167",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_work/work_handle.py:8,76-87",
         "nonebot_plugin_xiuxian_2/features/work/refresh_repository.py:94-142,155-184",
@@ -177,8 +190,12 @@
         "nonebot_plugin_xiuxian_2/features/bank/tests/test_bank_command_application.py",
         "tests/test_bank_command_ingress.py",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/__init__.py:40",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/media_parse_link.py:45-126",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/group_welcome.py:13,229-270"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/media_parse_link.py:18-104",
+        "nonebot_plugin_xiuxian_2/features/entertainment/media_parser_messages.py",
+        "nonebot_plugin_xiuxian_2/features/entertainment/tests/test_media_parser_messages.py",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/group_welcome.py:13,34-48",
+        "nonebot_plugin_xiuxian_2/features/group_lifecycle/notice_application.py:77,240",
+        "tests/test_group_lifecycle_notice_application.py"
       ]
     },
     {
@@ -676,7 +693,7 @@
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/__init__.py:1-24",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/command.py:923-945",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/command.py:608-630",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/io_runtime.py:36-74",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_utils/http_proxy.py:187-225",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/steam_plus_one.py:4",
@@ -1528,7 +1545,7 @@
         "nonebot_plugin_xiuxian_2/features/entertainment/external_query.py:28-220",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/command.py:924-959,1056-1070",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/command.py:609-658",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/io_runtime.py:36-73",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/bangumi_calendar.py:196",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/bangumi_calendar.py:212"
@@ -1558,7 +1575,7 @@
         "nonebot_plugin_xiuxian_2/features/entertainment/external_query.py:28-220",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/command.py:924-959,1056-1070",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/command.py:609-658",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/io_runtime.py:36-73",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/today_wife.py:2",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/today_wife.py:13"
@@ -1588,7 +1605,7 @@
         "nonebot_plugin_xiuxian_2/features/entertainment/external_query.py:28-220",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/command.py:924-959,1056-1070",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/command.py:609-658",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/io_runtime.py:36-73",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/today_superpower.py:2",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/today_superpower.py:6"
@@ -2312,8 +2329,8 @@
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/group_welcome.py:297 welcome_disable_cmd = on_command('关闭进群欢迎') aliases=关掉进群欢迎,禁用进群欢迎 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/group_welcome.py:343 welcome_disable_ -> admin_config_application.set_group_welcome -> AdminConfigApplication -> AdminConfigRepository.update -> atomic_write(config.json)",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/group_welcome.py:59 welcome_disable_cmd = on_command('关闭进群欢迎') aliases=关掉进群欢迎,禁用进群欢迎 -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/group_welcome.py:105 welcome_disable_ -> admin_config_application.set_group_welcome -> AdminConfigApplication -> AdminConfigRepository.update -> atomic_write(config.json)",
         "legacy JsonConfig(AdminConfigRepository) consumers -> same canonical JSON state and path-aware cache; legacy remark/pin/full-message writes use the same serialized update"
       ],
       "evidence": [
@@ -2325,8 +2342,8 @@
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_config.py",
         "tests/test_admin_config_owner.py",
         "tests/test_admin_progress_contract.py",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/group_welcome.py:297",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/group_welcome.py:343"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/group_welcome.py:59",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/group_welcome.py:105"
       ],
       "source_declaration_found": true,
       "source": {
@@ -2850,7 +2867,7 @@
         "nonebot_plugin_xiuxian_2/features/entertainment/external_query.py:28-220",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/command.py:924-959,1056-1070",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/command.py:609-658",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/io_runtime.py:36-73",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/anime_reaction.py:131",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/anime_reaction.py:185"
@@ -2971,7 +2988,7 @@
         "nonebot_plugin_xiuxian_2/features/entertainment/external_query.py:28-220",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/command.py:924-959,1056-1070",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/command.py:609-658",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/io_runtime.py:36-73",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/history_today.py:3",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/history_today.py:7"
@@ -3579,7 +3596,7 @@
         "nonebot_plugin_xiuxian_2/features/entertainment/external_query.py:28-220",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/command.py:924-959,1056-1070",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/command.py:609-658",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/io_runtime.py:36-73",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/random_hakimi.py:3",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/random_hakimi.py:11"
@@ -3791,7 +3808,7 @@
         "nonebot_plugin_xiuxian_2/features/entertainment/external_query.py:28-220",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/command.py:924-959,1056-1070",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/command.py:609-658",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/io_runtime.py:36-73",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/pokemon_box.py:176",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/pokemon_box.py:201"
@@ -3847,7 +3864,7 @@
         "nonebot_plugin_xiuxian_2/features/entertainment/external_query.py:28-220",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/command.py:924-959,1056-1070",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/command.py:609-658",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/io_runtime.py:36-73",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/pokemon_box.py:175",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/pokemon_box.py:181"
@@ -4085,8 +4102,8 @@
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/group_welcome.py:291 welcome_enable_cmd = on_command('开启进群欢迎') aliases=启用进群欢迎,打开进群欢迎 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/group_welcome.py:317 welcome_enable_ -> admin_config_application.set_group_welcome -> AdminConfigApplication -> AdminConfigRepository.update -> atomic_write(config.json)",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/group_welcome.py:53 welcome_enable_cmd = on_command('开启进群欢迎') aliases=启用进群欢迎,打开进群欢迎 -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/group_welcome.py:79 welcome_enable_ -> admin_config_application.set_group_welcome -> AdminConfigApplication -> AdminConfigRepository.update -> atomic_write(config.json)",
         "legacy JsonConfig(AdminConfigRepository) consumers -> same canonical JSON state and path-aware cache; legacy remark/pin/full-message writes use the same serialized update"
       ],
       "evidence": [
@@ -4098,8 +4115,8 @@
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_config.py",
         "tests/test_admin_config_owner.py",
         "tests/test_admin_progress_contract.py",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/group_welcome.py:291",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/group_welcome.py:317"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/group_welcome.py:53",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/group_welcome.py:79"
       ],
       "source_declaration_found": true,
       "source": {
@@ -4348,7 +4365,7 @@
         "nonebot_plugin_xiuxian_2/features/entertainment/external_query.py:28-220",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/command.py:924-959,1056-1070",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/command.py:609-658",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/io_runtime.py:36-73",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/ruozhiba_qa.py:3",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/ruozhiba_qa.py:7"
@@ -5109,7 +5126,7 @@
         "nonebot_plugin_xiuxian_2/features/entertainment/external_query.py:28-220",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/command.py:924-959,1056-1070",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/command.py:609-658",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/io_runtime.py:36-73",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/random_duanzi.py:3",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/random_duanzi.py:7"
@@ -5139,7 +5156,7 @@
         "nonebot_plugin_xiuxian_2/features/entertainment/external_query.py:28-220",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/command.py:924-959,1056-1070",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/command.py:609-658",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/io_runtime.py:36-73",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/moyu_calendar.py:9",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/moyu_calendar.py:69"
@@ -5751,7 +5768,7 @@
         "nonebot_plugin_xiuxian_2/features/entertainment/external_query.py:28-220",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/command.py:924-959,1056-1070",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/command.py:609-658",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/io_runtime.py:36-73",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/daily_60s_image.py:3",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/daily_60s_image.py:12"
@@ -5781,7 +5798,7 @@
         "nonebot_plugin_xiuxian_2/features/entertainment/external_query.py:28-220",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/command.py:924-959,1056-1070",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/command.py:609-658",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/io_runtime.py:36-73",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/daily_bing.py:3",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/daily_bing.py:7"
@@ -7162,7 +7179,7 @@
         "nonebot_plugin_xiuxian_2/features/entertainment/external_query.py:28-220",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/command.py:924-959,1056-1070",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/command.py:609-658",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/io_runtime.py:36-73",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/hot_rank_image.py:3",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/hot_rank_image.py:12"
@@ -7509,7 +7526,7 @@
         "nonebot_plugin_xiuxian_2/features/entertainment/external_query.py:28-220",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/command.py:924-959,1056-1070",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/command.py:609-658",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/io_runtime.py:36-73",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/bangumi_calendar.py:203",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/bangumi_calendar.py:244"
@@ -7539,7 +7556,7 @@
         "nonebot_plugin_xiuxian_2/features/entertainment/external_query.py:28-220",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/command.py:924-959,1056-1070",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/command.py:609-658",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/io_runtime.py:36-73",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/random_anime_box.py:7",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/random_anime_box.py:90"
@@ -7883,7 +7900,7 @@
         "nonebot_plugin_xiuxian_2/features/entertainment/external_query.py:28-220",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/command.py:924-959,1056-1070",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/command.py:609-658",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/io_runtime.py:36-73",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/answer_book.py:8",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/answer_book.py:17"
@@ -8181,7 +8198,7 @@
         "nonebot_plugin_xiuxian_2/features/entertainment/external_query.py:28-220",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/command.py:924-959,1056-1070",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/command.py:609-658",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/io_runtime.py:36-73",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/kfc_copywriting.py:3",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/kfc_copywriting.py:7"
@@ -8211,7 +8228,7 @@
         "nonebot_plugin_xiuxian_2/features/entertainment/external_query.py:28-220",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/command.py:924-959,1056-1070",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/command.py:609-658",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/io_runtime.py:36-73",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/brainteasers.py:3",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/brainteasers.py:7"
@@ -8274,7 +8291,7 @@
         "nonebot_plugin_xiuxian_2/features/entertainment/external_query.py:28-220",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/command.py:924-959,1056-1070",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/command.py:609-658",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/io_runtime.py:36-73",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/tiangou_diary.py:3",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/tiangou_diary.py:7"
@@ -9844,14 +9861,18 @@
       "kind": "commands",
       "entry": "entertainment:链接解析 (aliases: 流媒体解析, 视频解析, 解析视频, 解析链接)",
       "status": "已迁移",
-      "reason": "The default-reachable compatibility matchers preserve command, alias, priority, cooldown and auto-parse filtering behavior. Parsing, bounded message dedupe, result aggregation, card generation, video probing/download and parser-cache cleanup now flow through EntertainmentApplication.media_parser and its feature-owned provider/output/cache owners. Parser-specific legacy algorithms remain behind a provider proxy; shared Bot delivery remains an adapter boundary. Automatic retries are disabled in the shared HTTP client; Xiaoheihe retains one bounded curl_cffi-to-provider fallback. Limits are 3 links/message, 24 HTTP attempts/parse, 8 seconds/request, 30 seconds/parse and 4 MiB/response; downloaded videos are limited to 20 MiB.",
+      "reason": "The default-reachable compatibility matchers preserve command, alias, priority, cooldown and auto-parse filtering behavior. The explicit on_command helper now forwards to the same EntertainmentMediaParserMessageApplication owner as the three regex matchers; bounded message dedupe, result aggregation, card/image/video delivery and parser-cache cleanup share that path and the feature-owned parser/provider/output/cache owners. Parser-specific legacy algorithms remain behind a provider proxy; shared Bot delivery remains an adapter boundary. Automatic retries are disabled in the shared HTTP client; Xiaoheihe retains one bounded curl_cffi-to-provider fallback. Limits are 3 links/message, 24 HTTP attempts/parse, 8 seconds/request, 30 seconds/parse and 4 MiB/response; downloaded videos are limited to 20 MiB.",
       "unknown_edge": null,
       "call_graph": [
         "initialized NoneBot -> _load_legacy_plugins_if_initialized -> load_all_plugins imports the legacy plugin package",
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/media_parse_link.py:4 link_parse_cmd = on_command('链接解析') aliases=流媒体解析,视频解析,解析视频,解析链接 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/media_parse_link.py:13 link_parse_cmd_ and :45/:68/:105 regex handlers -> command.py:458 fun_media_send_parse_result -> EntertainmentApplication.media_parser.parse_and_build_messages",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/media_parse_link.py:10 link_parse_cmd = on_command('链接解析') aliases=流媒体解析,视频解析,解析视频,解析链接 -> compatibility matcher",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/media_parse_link.py:19 link_parse_cmd_ -> command.py:431 fun_media_send_parse_result -> EntertainmentApplication.media_parser_messages.send_parse_result -> EntertainmentMediaParserMessageApplication.send_parse_result (explicit on_command compatibility path)",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/media_parse_link.py:60 media_parse_cmd_url_ -> EntertainmentMediaParserMessageApplication.handle_command_url -> send_parse_result",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/media_parse_link.py:79 media_share_link_regex_ -> EntertainmentMediaParserMessageApplication.handle_embedded_share -> should_parse_embedded_share -> send_parse_result",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/media_parse_link.py:99 media_any_http_regex_ -> EntertainmentMediaParserMessageApplication.handle_any_http -> should_parse_any_http -> send_parse_result",
+        "EntertainmentMediaParserMessageApplication.send_parse_result -> event dedupe -> EntertainmentMediaParserApplication.parse_and_build_messages -> injected Bot delivery adapter",
         "EntertainmentMediaParserApplication._parse_sync -> native.parse_text_native(max_links=3) -> feature-owned EntertainmentMediaParserProvider -> existing platform parser algorithms -> bounded metadata and media URLs",
         "EntertainmentMediaParserApplication -> media_parser_outputs probe/download and media_parser_cache cleanup; shared Bot/media send remains in the existing adapter"
       ],
@@ -9859,10 +9880,14 @@
         "nonebot_plugin_xiuxian_2/__init__.py:89-121",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/media_parse_link.py:4",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/media_parse_link.py:13",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/command.py:458",
-        "nonebot_plugin_xiuxian_2/features/entertainment/application.py:42",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/media_parse_link.py:10",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/media_parse_link.py:19",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/media_parse_link.py:60",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/media_parse_link.py:79",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/media_parse_link.py:99",
+        "nonebot_plugin_xiuxian_2/features/entertainment/media_parser_messages.py:110-205",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/command.py:431",
+        "nonebot_plugin_xiuxian_2/features/entertainment/application.py:46",
         "nonebot_plugin_xiuxian_2/features/entertainment/media_parser_application.py:133",
         "nonebot_plugin_xiuxian_2/features/entertainment/media_parser_provider.py:87",
         "nonebot_plugin_xiuxian_2/features/entertainment/media_parser_outputs.py:27",
@@ -9894,7 +9919,7 @@
         "nonebot_plugin_xiuxian_2/features/entertainment/external_query.py:28-220",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/command.py:924-959,1056-1070",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/command.py:609-658",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/io_runtime.py:36-73",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/hitokoto.py:3",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/hitokoto.py:7"
@@ -9924,7 +9949,7 @@
         "nonebot_plugin_xiuxian_2/features/entertainment/external_query.py:28-220",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/command.py:924-959,1056-1070",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/command.py:609-658",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/io_runtime.py:36-73",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/anime_reaction.py:125",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/anime_reaction.py:146"
@@ -9954,7 +9979,7 @@
         "nonebot_plugin_xiuxian_2/features/entertainment/external_query.py:28-220",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/command.py:924-959,1056-1070",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/command.py:609-658",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/io_runtime.py:36-73",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/random_girl_video.py:9",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/random_girl_video.py:130"
@@ -9984,7 +10009,7 @@
         "nonebot_plugin_xiuxian_2/features/entertainment/external_query.py:28-220",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/command.py:924-959,1056-1070",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/command.py:609-658",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/io_runtime.py:36-73",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/click_music.py:4",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/click_music.py:19"
@@ -10042,7 +10067,7 @@
         "nonebot_plugin_xiuxian_2/features/entertainment/external_query.py:28-220",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:486-537,749-773",
         "nonebot_plugin_xiuxian_2/xiuxian/on_compat.py:819-849",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/command.py:924-959,1056-1070",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/command.py:609-658",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/io_runtime.py:36-73",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/random_voice.py:6",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/random_voice.py:15"

@@ -4,6 +4,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import Mock
 
 from ..abort_cleanup_application import WorkAbortCleanupApplication
 from ..migrations import apply_work_abort_cleanup, apply_work_offer_snapshots
@@ -78,6 +79,18 @@ class WorkAbortCleanupRepositoryTests(unittest.TestCase):
         self.assertEqual((duplicate.status, duplicate.penalty, duplicate.stone_remaining), ("duplicate", 4_000_000, 1_000_000))
         self.assertEqual(conflict.status, "operation_conflict")
         self.assertEqual(stale.status, "state_changed")
+
+    def test_legacy_projection_is_removed_after_applied_and_duplicate_cleanup(self):
+        deleter = Mock()
+        application = WorkAbortCleanupApplication(
+            self.database, legacy_projection_deleter=deleter
+        )
+        self.application = application
+
+        self.assertEqual(self.cleanup("projection-cleanup").status, "applied")
+        self.assertEqual(self.cleanup("projection-cleanup").status, "duplicate")
+
+        self.assertEqual(deleter.call_args_list, [(('u',), {}), (('u',), {})])
 
     def test_offer_abort_expiry_and_reset_do_not_charge_penalty(self):
         with DatabaseUnitOfWork(self.database, immediate=True) as uow:

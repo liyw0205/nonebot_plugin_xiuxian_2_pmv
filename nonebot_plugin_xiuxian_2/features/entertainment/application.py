@@ -11,6 +11,7 @@ from .schemas import NewApiAccountListResult, NewApiCheckinTargetsResult
 from .external_query import EntertainmentExternalQueryProvider
 from .music_application import EntertainmentMusicApplication
 from .media_parser_application import EntertainmentMediaParserApplication
+from .media_parser_messages import EntertainmentMediaParserMessageApplication
 from .media_parser_provider import EntertainmentMediaParserProvider
 from .webdav_repository import WebDavRepository
 
@@ -41,6 +42,9 @@ class EntertainmentApplication(MigratedFeatureApplication):
         )
         self.media_parser = media_parser_application or EntertainmentMediaParserApplication(
             media_parser_provider
+        )
+        self.media_parser_messages = EntertainmentMediaParserMessageApplication(
+            self.media_parser
         )
 
     def external_json(

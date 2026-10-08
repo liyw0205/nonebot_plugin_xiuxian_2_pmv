@@ -25,7 +25,7 @@ from ..xiuxian_utils.utils import check_user, check_user_type, get_msg_pic, hand
 from ..xiuxian_utils.status_card import nav_kwargs, result_card
 from ..xiuxian_tasks.task_data import record_task_progress
 from nonebot.log import logger
-from .reward_data_source import PLAYERSDATA, readf, savef, delete_work_file, has_unaccepted_work
+from .reward_data_source import PLAYERSDATA, savef
 from ..xiuxian_utils.item_json import Items
 from ..xiuxian_config import convert_rank, XiuConfig
 from pathlib import Path
@@ -36,18 +36,39 @@ from ...infrastructure.ids import UUIDGenerator
 from ...features.work.application import WorkClaimApplication, WorkSettlementApplication
 from ...features.work.abort_cleanup_application import WorkAbortCleanupApplication
 from ...features.work.refresh_application import WorkRefreshApplication
+from ...features.work.status_application import WorkStatusApplication
 from ...features.work.work_item_use_application import WorkItemUseApplication
 from ...features.work.maintenance_application import WorkDailyRefreshResetApplication
+from ...compatibility.legacy_work_offer_json import LegacyWorkOfferJsonAdapter
 
+legacy_work_offer_json = LegacyWorkOfferJsonAdapter()
 work_claim_application = WorkClaimApplication(
     get_paths().game_db,
+    legacy_projection_writer=legacy_work_offer_json.project,
 )
 work_settlement_application = WorkSettlementApplication(
     get_paths().game_db,
+    legacy_projection_deleter=lambda user_id: legacy_work_offer_json.remove(
+        user_id, delete_snapshot=True
+    ),
 )
-work_refresh_application = WorkRefreshApplication(get_paths().game_db)
-work_abort_cleanup_application = WorkAbortCleanupApplication(get_paths().game_db)
-work_item_use_application = WorkItemUseApplication(get_paths().game_db)
+work_refresh_application = WorkRefreshApplication(
+    get_paths().game_db,
+    legacy_projection_writer=legacy_work_offer_json.project,
+)
+work_status_application = WorkStatusApplication(
+    get_paths().game_db,
+    legacy_offer_reader=legacy_work_offer_json.read,
+    legacy_projection_writer=legacy_work_offer_json.project,
+)
+work_abort_cleanup_application = WorkAbortCleanupApplication(
+    get_paths().game_db,
+    legacy_projection_deleter=legacy_work_offer_json.remove,
+)
+work_item_use_application = WorkItemUseApplication(
+    get_paths().game_db,
+    legacy_projection_writer=legacy_work_offer_json.project,
+)
 runtime_clock = SystemClock()
 runtime_random = SystemRandom()
 runtime_ids = UUIDGenerator()
@@ -66,15 +87,6 @@ def _sql_message():
     if _sql_message_instance is None:
         _sql_message_instance = XiuxianDateManage()
     return _sql_message_instance
-
-
-def _mark_work_offer_expired(user_id: str, expected_offer: dict[str, Any]):
-    return work_refresh_application.mark_offer_expired(
-        user_id=user_id,
-        expected_offer=expected_offer,
-        updated_at=runtime_clock.now().strftime("%Y-%m-%d %H:%M:%S.%f"),
-    )
-
 
 
 def format_reward_item(item_id: int) -> str:
@@ -180,35 +192,7 @@ def get_user_work_status(user_id: str) -> Tuple[int, Any]:
         3 - 未过期的悬赏令
         4 - 已过期的悬赏令
     """
-    # 先检查是否有进行中的悬赏
-    user_cd_message = _sql_message().get_user_cd(user_id)
-    if user_cd_message and user_cd_message['type'] == 2:
-        try:
-            remaining_minutes, _, _ = calculate_remaining_time(
-                user_cd_message['create_time'],
-                user_cd_message['scheduled_time'],
-                user_id
-            )
-            
-            if remaining_minutes > 0:
-                return 1, user_cd_message  # 进行中的悬赏
-            else:
-                return 2, user_cd_message  # 可结算的悬赏
-        except (KeyError, TypeError, ValueError) as e:
-            logger.error(f"解析悬赏令时间失败: {e}, 数据: {user_cd_message}")
-            # 如果时间解析失败，视为可结算状态
-            return 2, user_cd_message
-
-    # 使用新的 has_unaccepted_work 函数检查未接取悬赏令
-    has_work, work_info = has_unaccepted_work(
-        user_id, mark_expired=_mark_work_offer_expired
-    )
-    if has_work:
-        return 3, work_info  # 未过期的悬赏令
-    elif work_info:  # 有数据但已过期或已接取
-        return 4, work_info  # 已过期的悬赏令
-
-    return 0, None  # 无悬赏
+    return work_status_application.get_user_work_status(user_id)
 
 async def get_work_status_message(user_id: str, work_data: dict) -> str:
     """获取悬赏令状态消息"""
@@ -260,7 +244,11 @@ async def settle_work(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
     operation_id = f"work-settlement:{user_id}:{event_message_id or runtime_ids.new_id()}"
 
     active_snapshot = work_claim_application.get_active_snapshot(user_id)
-    settlement_offer = active_snapshot if active_snapshot is not None else readf(user_id)
+    settlement_offer = (
+        active_snapshot
+        if active_snapshot is not None
+        else work_status_application.get_offer(user_id)
+    )
     task_name = str(work_data.get("scheduled_time") or "")
     offer_tasks = settlement_offer.get("tasks") if isinstance(settlement_offer, dict) else None
     active_matches_cd = active_snapshot is None or (
@@ -355,7 +343,6 @@ async def settle_work(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
         await handle_send(bot, event, msg, md_type="悬赏令", k1="查看", v1="悬赏令查看", k2="刷新", v2="悬赏令刷新", k3="帮助", v3="悬赏令帮助")
         return msg
 
-    delete_work_file(user_id)
     msg = (
         f"**悬赏结算**\n---\n{success_msg}\n"
         f"悬赏名称\n> {work_data['scheduled_time']}\n"
@@ -472,10 +459,8 @@ async def delayed_reminder(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
     try:
         await asyncio.sleep(180)
         if user_id in user_reminder_status and user_reminder_status[user_id]["pending"]:
-            has_work, work_data = has_unaccepted_work(
-                user_id, mark_expired=_mark_work_offer_expired
-            )
-            if has_work:
+            status, work_data = get_user_work_status(user_id)
+            if status == 3:
                 remaining_minutes = (runtime_clock.now() - user_reminder_status[user_id]["refresh_time"]).total_seconds() / 60
                 remaining_minutes = max(WORK_EXPIRE_MINUTES - remaining_minutes, 0)
                 reminder_msg = (
@@ -594,11 +579,8 @@ async def do_work_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
             await handle_send(bot, event, msg)
             await do_work.finish()
         
-        # 检查是否已有未接取的悬赏令
-        has_work, work_data = has_unaccepted_work(
-            user_id, mark_expired=_mark_work_offer_expired
-        )
-        if has_work:
+        # Reuse the SQL-backed status read above instead of reading the same offer again.
+        if status == 3:
             # 取消任何现有的延迟提醒任务
             if user_id in user_reminder_tasks:
                 user_reminder_tasks[user_id].cancel()  # 取消任务
@@ -646,7 +628,6 @@ async def do_work_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
             if result.status == "operation_conflict":
                 await handle_send(bot, event, result_card("悬赏令", kind="warn", summary="刷新请求已失效，请重新刷新悬赏。"), **nav_kwargs("work", md_type="悬赏令"))
                 await do_work.finish()
-            savef(user_id, result.offer, sync_snapshot=False)
             msg = generate_work_message(work_msg, result.remaining_count)
             
             # 取消任何现有的延迟提醒任务
@@ -691,7 +672,7 @@ async def do_work_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
             user_reminder_tasks[user_id].cancel()  # 取消任务
             del user_reminder_tasks[user_id]
         
-        expected_offer = readf(user_id)
+        expected_offer = work_status_application.get_offer(user_id)
         work_msg, new_offer = _prepare_work_offer(
             operation_id, user_id, user_level, user_info['exp']
         )
@@ -717,7 +698,6 @@ async def do_work_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
         if result.status == "operation_conflict":
             await handle_send(bot, event, result_card("悬赏令", kind="warn", summary="刷新请求已失效，请重新刷新悬赏。"), **nav_kwargs("work", md_type="悬赏令"))
             await do_work.finish()
-        savef(user_id, result.offer, sync_snapshot=False)
         msg = generate_work_message(work_msg, result.remaining_count)
         
         # 设置新悬赏令的提醒状态
@@ -768,7 +748,7 @@ async def do_work_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
                 user_id,
                 "active_abort",
                 _work_cd_snapshot(user_id),
-                readf(user_id),
+                work_status_application.get_offer(user_id),
                 int(user_info["stone"]),
                 stone,
             )
@@ -803,7 +783,6 @@ async def do_work_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
             msg = "没有查到您的悬赏令信息！"
             await handle_send(bot, event, msg)
             await do_work.finish()
-        delete_work_file(user_id, delete_snapshot=False)
         await handle_send(bot, event, msg, md_type="悬赏令", k1="查看", v1="悬赏令查看", k2="刷新", v2="悬赏令确认刷新", k3="帮助", v3="悬赏令帮助")
         await do_work.finish()
 
@@ -879,10 +858,6 @@ async def do_work_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
             await handle_send(bot, event, outcome.message or "悬赏令接取未完成。")
             await do_work.finish()
 
-        # JSON 文件仅保留为旧读取路径的投影，权威状态已由事务服务落库。
-        work_data["status"] = 2
-        savef(user_id, work_data, sync_snapshot=False)
-                
         msg = (
             f"成功接取悬赏令！\n"
             f"悬赏名称：{result_task_name}\n"
@@ -897,7 +872,7 @@ async def do_work_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
             user_id,
             "reset",
             _work_cd_snapshot(user_id),
-            readf(user_id),
+            work_status_application.get_offer(user_id),
         )
         if result.status == "schema_missing":
             await handle_send(bot, event, "悬赏数据结构尚未完成升级，请联系管理员。")
@@ -905,7 +880,6 @@ async def do_work_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
         if not result.succeeded:
             await handle_send(bot, event, result_card("悬赏令", kind="warn", summary="悬赏信息已更新，请先发送【悬赏令】再操作。"), **nav_kwargs("work", md_type="悬赏令"))
             await do_work.finish()
-        delete_work_file(user_id, delete_snapshot=False)
         msg = "已重置悬赏令"
         await handle_send(bot, event, msg, md_type="悬赏令", k1="查看", v1="悬赏令查看", k2="刷新", v2="悬赏令确认刷新", k3="帮助", v3="悬赏令帮助")
 
@@ -1017,7 +991,6 @@ async def use_work_capture_order(bot: Bot, event: GroupMessageEvent | PrivateMes
         await handle_send(bot, event, result_card("悬赏令", kind="warn", summary="悬赏信息已更新，请重新查看悬赏后再操作。"), **nav_kwargs("work", md_type="悬赏令"))
         return
     work_data = dict(result.result_snapshot["offer"])
-    savef(user_id, work_data, sync_snapshot=False)
     
     # 更新work_msg显示数据
     updated_work_msg = []

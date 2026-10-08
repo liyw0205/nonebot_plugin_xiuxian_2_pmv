@@ -15,6 +15,40 @@ from tests.test_db_backend import db_backend
 
 
 class WorkClaimRepositoryTests(unittest.TestCase):
+    def test_claim_uses_display_order_after_sorted_snapshot_round_trip(self):
+        with tempfile.TemporaryDirectory() as temp:
+            db = Path(temp) / "game.db"
+            with db_backend.transaction(db) as conn:
+                conn.execute("CREATE TABLE user_xiuxian(user_id TEXT PRIMARY KEY,work_num INTEGER)")
+                conn.execute("INSERT INTO user_xiuxian VALUES('u',3)")
+                conn.execute("CREATE TABLE user_cd(user_id TEXT PRIMARY KEY,type INTEGER,create_time TEXT,scheduled_time TEXT)")
+                conn.execute("INSERT INTO user_cd VALUES('u',0,'0',NULL)")
+            with DatabaseUnitOfWork(db) as uow:
+                apply_work_abort_cleanup(uow)
+                apply_work_offer_snapshots(uow)
+                apply_work_claim_operations(uow)
+
+            offer = {
+                "tasks": {
+                    "采药": {"time": 5},
+                    "镇妖": {"time": 8},
+                    "炼器": {"time": 12},
+                },
+                "task_order": ["镇妖", "炼器", "采药"],
+                "status": 1,
+            }
+            # Refresh persists snapshots with sort_keys=True, which reorders tasks.
+            persisted_offer = json.loads(json.dumps(offer, sort_keys=True))
+            self.assertNotEqual(list(persisted_offer["tasks"]), offer["task_order"])
+
+            result = WorkClaimSqlRepository(db).claim(
+                "ordered-claim", "u", 3, persisted_offer, 1, "started"
+            )
+
+            self.assertEqual(result.task_name, "镇妖")
+            active = WorkClaimSqlRepository(db).get_active_snapshot("u")
+            self.assertEqual(active["scheduled_time"], "镇妖")
+
     def test_applied_duplicate_and_state_changed(self):
         with tempfile.TemporaryDirectory() as temp:
             db = Path(temp) / "game.db"

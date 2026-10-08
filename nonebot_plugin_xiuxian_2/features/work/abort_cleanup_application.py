@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Callable, Mapping
 
 from ...core.errors import ValidationError
 from ...infrastructure.observability import trace_context
@@ -18,8 +18,10 @@ class WorkAbortCleanupApplication:
         database: str | Path,
         *,
         repository: WorkAbortCleanupRepository | None = None,
+        legacy_projection_deleter: Callable[[str], None] | None = None,
     ) -> None:
         self.repository = repository or WorkAbortCleanupSqlRepository(database)
+        self.legacy_projection_deleter = legacy_projection_deleter
 
     def cleanup(
         self,
@@ -46,7 +48,7 @@ class WorkAbortCleanupApplication:
             raise ValidationError(str(exc)) from exc
 
         with trace_context(operation_id=request.operation_id, user_scope=request.user_id):
-            return self.repository.cleanup(
+            result = self.repository.cleanup(
                 request.operation_id,
                 request.user_id,
                 request.reason,
@@ -55,6 +57,9 @@ class WorkAbortCleanupApplication:
                 request.expected_stone,
                 request.penalty,
             )
+            if result.succeeded and self.legacy_projection_deleter is not None:
+                self.legacy_projection_deleter(request.user_id)
+            return result
 
 
 __all__ = ["WorkAbortCleanupApplication"]

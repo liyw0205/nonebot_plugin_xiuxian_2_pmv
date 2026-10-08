@@ -73,6 +73,15 @@ class RefactorProgressTests(unittest.TestCase):
         self.assertTrue(beg["daily_reset_atomic_no_request_ddl"])
         self.assertTrue(beg["daily_reset_replay_rollback_and_missing_schema_covered"])
 
+    def test_progress_report_tracks_work_offer_projection_owners(self) -> None:
+        work = _slice_status()["work"]
+        self.assertTrue(work["offer_projection_adapter_wired_to_each_application"])
+        self.assertTrue(work["status_application_owns_offer_projection"])
+        self.assertTrue(work["refresh_application_owns_offer_projection"])
+        self.assertTrue(work["claim_application_owns_offer_projection"])
+        self.assertTrue(work["capture_json_projection_application_owned"])
+        self.assertTrue(work["offer_projection_applications_own_legacy_json"])
+
     def test_progress_report_tracks_replay_safe_map_and_pet_claim_effects(self) -> None:
         claims = _slice_status()["game_event_claims"]
         self.assertTrue(claims["pet_travel_claim_effects_outbox_owned"])
@@ -233,7 +242,7 @@ class RefactorProgressTests(unittest.TestCase):
         self.assertTrue(work["legacy_item_accelerate_disabled"])
         self.assertTrue(work["capture_application_owned"])
         self.assertTrue(work["legacy_item_capture_disabled"])
-        self.assertTrue(work["capture_json_projection_only"])
+        self.assertTrue(work["capture_json_projection_application_owned"])
         self.assertTrue(work["offer_generation_reuses_profile_snapshot"])
         self.assertTrue(work["offer_generation_has_no_legacy_handle_import"])
         self.assertTrue(work["unused_item_cache_not_constructed"])

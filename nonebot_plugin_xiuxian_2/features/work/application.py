@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import asdict, is_dataclass
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Callable, Mapping
 
 from ...core.errors import ConflictError, DomainError, ValidationError
 from ...core.result import OperationOutcome, ReplyPlan
@@ -30,10 +30,18 @@ def _data(raw: Any) -> dict[str, Any]:
 class WorkClaimApplication:
     action = "work.claim"
 
-    def __init__(self, database: str | Path, *, repository: WorkClaimRepository | None = None, ledger: OperationLedger | None = None) -> None:
+    def __init__(
+        self,
+        database: str | Path,
+        *,
+        repository: WorkClaimRepository | None = None,
+        ledger: OperationLedger | None = None,
+        legacy_projection_writer: Callable[[str, Mapping[str, Any]], None] | None = None,
+    ) -> None:
         self.database = str(database)
         self.repository = repository
         self.ledger = ledger or OperationLedger()
+        self.legacy_projection_writer = legacy_projection_writer
 
     def get_active_snapshot(self, user_id: str) -> dict[str, Any] | None:
         repository = self.repository or WorkClaimSqlRepository(self.database)
@@ -110,12 +118,28 @@ class WorkClaimApplication:
                     )
                 with DatabaseUnitOfWork(self.database, immediate=True) as uow:
                     self.ledger.finish(uow, outcome)
+                if status == "applied" and self.legacy_projection_writer is not None:
+                    self.legacy_projection_writer(
+                        request.user_id, self._claim_offer_projection(request.expected_offer)
+                    )
                 return outcome
             except DomainError:
                 raise
             except Exception as exc:
                 self.ledger.record_failure(self.database, request.operation_id, self.action, payload, str(exc))
                 raise
+
+    @staticmethod
+    def _claim_offer_projection(offer: Mapping[str, Any]) -> dict[str, Any]:
+        tasks = dict(offer.get("tasks", {}))
+        task_order = offer.get("task_order") or list(tasks)
+        return {
+            "tasks": tasks,
+            "task_order": list(task_order),
+            "status": 2,
+            "refresh_time": offer.get("refresh_time"),
+            "user_level": offer.get("user_level"),
+        }
 
     def reply(self, **kwargs: Any) -> ReplyPlan:
         return ReplyPlan(self.claim(**kwargs).data, reference=True)
@@ -152,10 +176,12 @@ class WorkSettlementApplication:
     action = "work.settle"
 
     def __init__(self, database: str | Path, *, repository: WorkSettlementRepository | None = None,
-                 ledger: OperationLedger | None = None) -> None:
+                 ledger: OperationLedger | None = None,
+                 legacy_projection_deleter: Callable[[str], None] | None = None) -> None:
         self.database = str(database)
         self.repository = repository
         self.ledger = ledger or OperationLedger()
+        self.legacy_projection_deleter = legacy_projection_deleter
 
     def settle(
         self,
@@ -246,6 +272,8 @@ class WorkSettlementApplication:
                     )
                 with DatabaseUnitOfWork(self.database, immediate=True) as uow:
                     self.ledger.finish(uow, outcome)
+                if status == "applied" and self.legacy_projection_deleter is not None:
+                    self.legacy_projection_deleter(request.user_id)
                 return outcome
             except DomainError:
                 raise

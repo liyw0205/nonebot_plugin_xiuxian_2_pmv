@@ -134,15 +134,33 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
         self.assertIn("validates user/action/original amount before current account/configuration", graph)
         self.assertIn("information bypasses mutation receipts", graph)
         self.assertNotIn("legacy handler still owns result-to-reply mapping", graph)
-        self.assertIn("only the bank sub-boundary, not the matcher family", family["reason"])
-        self.assertIn("savef(sync_snapshot=False)", graph)
+        self.assertIn("Work matcher still owns offer generation", family["reason"])
+        self.assertIn("deletes the canonical work_offer_snapshots row", family["reason"])
+        self.assertIn("direct on_notice route adapter", family["reason"])
+        for owner in (
+            "WorkStatusApplication",
+            "EmptyFallbackApplication",
+            "EntertainmentMediaParserMessageApplication",
+            "GroupLifecycleNoticeApplication.handle",
+        ):
+            self.assertIn(owner, graph)
+        self.assertIn("LegacyWorkOfferJsonAdapter.project", graph)
         self.assertIn("handle_group_lifecycle", graph)
+        self.assertIn("GroupLifecycleNoticeApplication.handle", graph)
         self.assertIn("media_parse_link", graph)
         for evidence in ("nonebot_plugin_xiuxian_2/features/bank/command_application.py",
                          "nonebot_plugin_xiuxian_2/features/bank/command_receipt_repository.py",
                          "nonebot_plugin_xiuxian_2/features/bank/command_replies.py",
                          "tests/test_bank_command_ingress.py"):
             self.assertIn(evidence, family["evidence"])
+        welcome_source = "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/group_welcome.py"
+        self.assertIn(f"{welcome_source}:13,34-48", family["evidence"])
+        self.assertIn(
+            "nonebot_plugin_xiuxian_2/features/group_lifecycle/notice_application.py:77,240",
+            family["evidence"],
+        )
+        self.assertIn("tests/test_group_lifecycle_notice_application.py", family["evidence"])
+        self.assertIn("direct notice route remains outside on_compat", graph)
         self.assertEqual(len(report["items"]), 496)
         self.assertTrue(report["frozen_membership_valid"])
         self.assertEqual(report["integrity_errors"], [])
@@ -852,6 +870,68 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
         )
         self.assertEqual(cooldown_risk["source"], "command:entertainment:newapi帮助")
         self.assertEqual(report["p7_gate"]["status"], "independent")
+
+    def test_media_parse_command_and_regex_evidence_are_source_bound(self):
+        root = Path(__file__).resolve().parents[1]
+        source = "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/media_parse_link.py"
+        tree = ast.parse((root / source).read_text(encoding="utf-8"))
+        declaration_line = next(
+            node.lineno
+            for node in tree.body
+            if isinstance(node, ast.Assign)
+            and any(
+                isinstance(target, ast.Name) and target.id == "link_parse_cmd"
+                for target in node.targets
+            )
+            and isinstance(node.value, ast.Call)
+            and isinstance(node.value.func, ast.Name)
+            and node.value.func.id == "on_command"
+        )
+        handler_line = _handler_line(source, "link_parse_cmd_")
+        report = load_phase2_scope_report(include_items=True)
+        item = next(
+            entry
+            for entry in report["items"]
+            if entry["id"] == "command:entertainment:链接解析"
+        )
+        graph = item["call_graph"]
+
+        self.assertEqual(item["status"], "已迁移")
+        self.assertIn(f"{source}:{declaration_line}", item["evidence"])
+        self.assertIn(f"{source}:{handler_line}", item["evidence"])
+        self.assertTrue(
+            any(
+                edge.startswith(f"{source}:{handler_line} link_parse_cmd_ ->")
+                for edge in graph
+            )
+        )
+        for handler, owner in (
+            ("media_parse_cmd_url_", "handle_command_url"),
+            ("media_share_link_regex_", "handle_embedded_share"),
+            ("media_any_http_regex_", "handle_any_http"),
+        ):
+            line = _handler_line(source, handler)
+            self.assertIn(f"{source}:{line}", item["evidence"])
+            self.assertTrue(
+                any(
+                    edge.startswith(f"{source}:{line} {handler} ->")
+                    and owner in edge
+                    for edge in graph
+                )
+            )
+        self.assertTrue(
+            any("EntertainmentMediaParserMessageApplication.send_parse_result" in edge for edge in graph)
+        )
+        self.assertTrue(
+            any(
+                "command.py:431 fun_media_send_parse_result -> "
+                "EntertainmentApplication.media_parser_messages.send_parse_result "
+                "-> EntertainmentMediaParserMessageApplication.send_parse_result"
+                in edge
+                for edge in graph
+            )
+        )
+        self.assertEqual(report["integrity_errors"], [])
 
     def test_web_page_session_and_static_routes_are_explicit_compatibility(self):
         report = load_phase2_scope_report(include_items=True)

@@ -246,13 +246,16 @@ class WorkSettlementHandlerTests(unittest.IsolatedAsyncioTestCase):
                 get_user_info_with_id=lambda user_id: {"level": "筑基", "exp": 0}
             )),
             patch.object(xiuxian_work, "workhandle", return_value=calculator),
-            patch.object(xiuxian_work, "readf", side_effect=AssertionError("legacy offer read used")),
+            patch.object(
+                xiuxian_work.work_status_application,
+                "get_offer",
+                side_effect=AssertionError("offer fallback read used"),
+            ),
             patch.object(xiuxian_work, "OtherSet", return_value=SimpleNamespace(set_closing_type=lambda level: 1)),
             patch.object(xiuxian_work, "XiuConfig", return_value=SimpleNamespace(
                 closing_exp_upper_limit=100, max_goods_num=99
             )),
             patch.object(xiuxian_work.work_settlement_application, "settle", return_value=outcome),
-            patch.object(xiuxian_work, "delete_work_file"),
             patch.object(xiuxian_work, "log_message"),
             patch.object(xiuxian_work, "update_statistics_value"),
             patch.object(xiuxian_work, "record_task_progress"),

@@ -65,6 +65,23 @@ class WorkClaimSqlRepository:
                 snapshot.setdefault("create_time", create_time)
             return snapshot
 
+    @staticmethod
+    def _ordered_task_names(expected_offer: Mapping) -> list[str]:
+        tasks = dict(expected_offer.get("tasks", {}))
+        task_order = expected_offer.get("task_order")
+        if not isinstance(task_order, list) or not task_order:
+            return list(tasks)
+
+        names: list[str] = []
+        seen: set[str] = set()
+        for name in task_order:
+            key = str(name)
+            if key in tasks and key not in seen:
+                names.append(key)
+                seen.add(key)
+        names.extend(name for name in tasks if name not in seen)
+        return names
+
     def claim(
         self,
         operation_id: str,
@@ -79,7 +96,7 @@ class WorkClaimSqlRepository:
         tasks = dict(expected_offer.get("tasks", {}))
         if not operation_id or expected_count < 0 or task_index < 1 or task_index > len(tasks):
             raise ValueError("valid operation, count, task and offer are required")
-        names = list(tasks)
+        names = self._ordered_task_names(expected_offer)
         task_name = names[task_index - 1]
         payload = json.dumps([user_id, task_index], ensure_ascii=False, separators=(",", ":"))
         if not Path(self.database).is_file():

@@ -87,6 +87,15 @@ def savef(user_id, data, sync_snapshot=True):
         os.makedirs(PLAYERSDATA / user_id)
     save_json_file(FILEPATH, save_data)
 
+
+def read_legacy_json_offer(user_id):
+    """Read only the historical JSON file; SQL ownership stays in the feature repository."""
+    FILEPATH = PLAYERSDATA / str(user_id) / "workinfo.json"
+    if not os.path.exists(FILEPATH):
+        return None
+    data = load_json_file(FILEPATH, {}, dict)
+    return data or None
+
 def readf(user_id):
     """Read the database snapshot, falling back to the legacy JSON without importing it."""
     user_id = str(user_id)
@@ -100,10 +109,7 @@ def readf(user_id):
                 ).fetchone()
                 if row is not None:
                     return json.loads(str(row[0]))
-    if not os.path.exists(FILEPATH):
-        return None
-    data = load_json_file(FILEPATH, {}, dict)
-    return data or None
+    return read_legacy_json_offer(user_id)
 
 def delete_work_file(user_id, delete_snapshot=True):
     """删除数据库悬赏快照及兼容 JSON。"""

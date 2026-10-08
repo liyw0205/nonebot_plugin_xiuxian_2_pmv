@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Mapping
+from typing import Any, Callable, Mapping
 
 from .work_item_use_repository import WorkItemUseResult, WorkItemUseSqlRepository
 
@@ -14,8 +14,10 @@ class WorkItemUseApplication:
         database: str | Path,
         *,
         repository: WorkItemUseSqlRepository | None = None,
+        legacy_projection_writer: Callable[[str, Mapping[str, Any]], None] | None = None,
     ) -> None:
         self.repository = repository or WorkItemUseSqlRepository(database)
+        self.legacy_projection_writer = legacy_projection_writer
 
     def accelerate(
         self,
@@ -45,7 +47,7 @@ class WorkItemUseApplication:
         new_offer: Mapping[str, object],
         reward_multiplier: int | None = None,
     ) -> WorkItemUseResult:
-        return self.repository.capture(
+        result = self.repository.capture(
             operation_id,
             user_id,
             item_id,
@@ -54,6 +56,15 @@ class WorkItemUseApplication:
             new_offer,
             reward_multiplier,
         )
+        snapshot = result.result_snapshot
+        offer = snapshot.get("offer") if isinstance(snapshot, Mapping) else None
+        if result.status in {"applied", "duplicate"} and isinstance(offer, Mapping):
+            self._project_legacy(user_id, offer)
+        return result
+
+    def _project_legacy(self, user_id: str, offer: Mapping[str, Any]) -> None:
+        if self.legacy_projection_writer is not None:
+            self.legacy_projection_writer(str(user_id), dict(offer))
 
 
 __all__ = ["WorkItemUseApplication", "WorkItemUseResult"]
