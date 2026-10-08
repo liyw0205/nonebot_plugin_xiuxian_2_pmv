@@ -12706,19 +12706,22 @@
       "id": "route:GET:/api/scheduler/jobs:nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/scheduler.py:api_scheduler_jobs",
       "kind": "legacy_routes",
       "entry": "GET /api/scheduler/jobs -> nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/scheduler.py:api_scheduler_jobs",
-      "status": "受阻",
-      "reason": "The old Flask app and route modules are loaded and its server is enabled by default. Route registration is proven, but each handler's downstream ownership and replacement/compatibility decision is not closed.",
-      "unknown_edge": "route function -> old data/service or feature application -> state effect",
+      "status": "已迁移",
+      "reason": "The legacy API route delegates job listing to SchedulerAdminApplication, which preserves the existing APScheduler JobManager DTO semantics; this does not replace the distinct /api/v1/scheduler contract.",
       "call_graph": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/scheduler.py:13 -> Flask app.route(/api/scheduler/jobs) -> legacy handler -> downstream state effect not closed"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/scheduler.py:13 api_scheduler_jobs -> scheduler_admin_application.list_jobs -> SchedulerAdminApplication.list_jobs -> existing JobManager.list_jobs -> APScheduler job catalog and legacy job DTO"
       ],
       "evidence": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
-        "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
-        "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
-        "scripts/export_refactor_inventory.py:41-70",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/scheduler.py:13"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/scheduler.py:13",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/scheduler.py:13-14",
+        "nonebot_plugin_xiuxian_2/features/scheduler/application.py:18-25",
+        "nonebot_plugin_xiuxian_2/features/scheduler/runtime.py:6-13",
+        "nonebot_plugin_xiuxian_2/features/scheduler/apscheduler_manager.py:469-475",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_scheduler/job_manager.py:4-8",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/access.py:67-72",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/core.py:270-305,324-377",
+        "nonebot_plugin_xiuxian_2/features/scheduler/tests/test_scheduler_application.py:11-60",
+        "tests/test_web_scheduler_routes.py:80-104"
       ],
       "source_declaration_found": true,
       "source": {
@@ -12734,19 +12737,22 @@
       "id": "route:POST:/api/scheduler/jobs/<job_id>/enabled:nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/scheduler.py:api_scheduler_job_enabled",
       "kind": "legacy_routes",
       "entry": "POST /api/scheduler/jobs/<job_id>/enabled -> nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/scheduler.py:api_scheduler_job_enabled",
-      "status": "受阻",
-      "reason": "The old Flask app and route modules are loaded and its server is enabled by default. Route registration is proven, but each handler's downstream ownership and replacement/compatibility decision is not closed.",
-      "unknown_edge": "route function -> old data/service or feature application -> state effect",
+      "status": "已迁移",
+      "reason": "The legacy API route delegates enable/disable to SchedulerAdminApplication and the existing JobManager, which updates APScheduler and persists the enabled override in its JSON store; /api/v1/scheduler semantics are unchanged and separate.",
       "call_graph": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/scheduler.py:18 -> Flask app.route(/api/scheduler/jobs/<job_id>/enabled) -> legacy handler -> downstream state effect not closed"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/scheduler.py:18 api_scheduler_job_enabled -> scheduler_admin_application.set_enabled -> SchedulerAdminApplication.set_enabled -> JobManager.set_enabled -> APScheduler pause/resume + persisted JSON enabled override -> legacy response"
       ],
       "evidence": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
-        "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
-        "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
-        "scripts/export_refactor_inventory.py:41-70",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/scheduler.py:18"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/scheduler.py:18",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/scheduler.py:17-26",
+        "nonebot_plugin_xiuxian_2/features/scheduler/application.py:18-28",
+        "nonebot_plugin_xiuxian_2/features/scheduler/runtime.py:6-13",
+        "nonebot_plugin_xiuxian_2/features/scheduler/apscheduler_manager.py:477-488",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_scheduler/job_manager.py:4-8",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/access.py:67-72",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/core.py:270-305,324-377",
+        "nonebot_plugin_xiuxian_2/features/scheduler/tests/test_scheduler_application.py:11-49",
+        "tests/test_web_scheduler_routes.py:107-142"
       ],
       "source_declaration_found": true,
       "source": {
@@ -12762,19 +12768,23 @@
       "id": "route:POST:/api/scheduler/jobs/<job_id>/run:nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/scheduler.py:api_scheduler_job_run",
       "kind": "legacy_routes",
       "entry": "POST /api/scheduler/jobs/<job_id>/run -> nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/scheduler.py:api_scheduler_job_run",
-      "status": "受阻",
-      "reason": "The old Flask app and route modules are loaded and its server is enabled by default. Route registration is proven, but each handler's downstream ownership and replacement/compatibility decision is not closed.",
-      "unknown_edge": "route function -> old data/service or feature application -> state effect",
+      "status": "已迁移",
+      "reason": "The legacy manual-run API delegates to SchedulerAdminApplication and queues the registered APScheduler job through JobManager; it does not switch to the distinct synchronous /api/v1/scheduler/<job_id>/run executor semantics.",
       "call_graph": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/scheduler.py:39 -> Flask app.route(/api/scheduler/jobs/<job_id>/run) -> legacy handler -> downstream state effect not closed"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/scheduler.py:39 api_scheduler_job_run -> scheduler_admin_application.queue_manual_run -> SchedulerAdminApplication.queue_manual_run -> JobManager.queue_manual_run -> APScheduler date job + in-memory queued run record"
       ],
       "evidence": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
-        "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
-        "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
-        "scripts/export_refactor_inventory.py:41-70",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/scheduler.py:39"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/scheduler.py:39",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/scheduler.py:38-43",
+        "nonebot_plugin_xiuxian_2/features/scheduler/application.py:18-34",
+        "nonebot_plugin_xiuxian_2/features/scheduler/runtime.py:6-13",
+        "nonebot_plugin_xiuxian_2/features/scheduler/apscheduler_manager.py:507-551",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_scheduler/job_manager.py:4-8",
+        "nonebot_plugin_xiuxian_2/adapters/web/blueprints/scheduler.py:16-32",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/access.py:67-72",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/core.py:270-305,324-377",
+        "nonebot_plugin_xiuxian_2/features/scheduler/tests/test_scheduler_application.py:11-49",
+        "tests/test_web_scheduler_routes.py:166-198"
       ],
       "source_declaration_found": true,
       "source": {
@@ -12790,19 +12800,22 @@
       "id": "route:POST:/api/scheduler/jobs/<job_id>/schedule:nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/scheduler.py:api_scheduler_job_schedule",
       "kind": "legacy_routes",
       "entry": "POST /api/scheduler/jobs/<job_id>/schedule -> nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/scheduler.py:api_scheduler_job_schedule",
-      "status": "受阻",
-      "reason": "The old Flask app and route modules are loaded and its server is enabled by default. Route registration is proven, but each handler's downstream ownership and replacement/compatibility decision is not closed.",
-      "unknown_edge": "route function -> old data/service or feature application -> state effect",
+      "status": "已迁移",
+      "reason": "The legacy reschedule route delegates to SchedulerAdminApplication and persists the trigger override through the existing JobManager JSON store while retaining APScheduler behavior; /api/v1/scheduler remains a separate contract.",
       "call_graph": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/scheduler.py:30 -> Flask app.route(/api/scheduler/jobs/<job_id>/schedule) -> legacy handler -> downstream state effect not closed"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/scheduler.py:30 api_scheduler_job_schedule -> scheduler_admin_application.reschedule -> SchedulerAdminApplication.reschedule -> JobManager.reschedule -> APScheduler reschedule + persisted JSON trigger override -> legacy response"
       ],
       "evidence": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
-        "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
-        "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
-        "scripts/export_refactor_inventory.py:41-70",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/scheduler.py:30"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/scheduler.py:30",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/scheduler.py:29-35",
+        "nonebot_plugin_xiuxian_2/features/scheduler/application.py:18-31",
+        "nonebot_plugin_xiuxian_2/features/scheduler/runtime.py:6-13",
+        "nonebot_plugin_xiuxian_2/features/scheduler/apscheduler_manager.py:490-505,560-583",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_scheduler/job_manager.py:4-8",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/access.py:67-72",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/core.py:270-305,324-377",
+        "nonebot_plugin_xiuxian_2/features/scheduler/tests/test_scheduler_application.py:11-49",
+        "tests/test_web_scheduler_routes.py:145-163"
       ],
       "source_declaration_found": true,
       "source": {
@@ -12818,19 +12831,22 @@
       "id": "route:GET:/api/scheduler/runs/<run_id>:nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/scheduler.py:api_scheduler_run",
       "kind": "legacy_routes",
       "entry": "GET /api/scheduler/runs/<run_id> -> nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/scheduler.py:api_scheduler_run",
-      "status": "受阻",
-      "reason": "The old Flask app and route modules are loaded and its server is enabled by default. Route registration is proven, but each handler's downstream ownership and replacement/compatibility decision is not closed.",
-      "unknown_edge": "route function -> old data/service or feature application -> state effect",
+      "status": "已迁移",
+      "reason": "The legacy run-status endpoint delegates to SchedulerAdminApplication and reads JobManager's existing in-memory manual-run history; it does not adopt the separate /api/v1/scheduler result contract.",
       "call_graph": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/scheduler.py:47 -> Flask app.route(/api/scheduler/runs/<run_id>) -> legacy handler -> downstream state effect not closed"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/scheduler.py:47 api_scheduler_run -> scheduler_admin_application.get_run -> SchedulerAdminApplication.get_run -> JobManager.get_run -> existing in-memory manual-run record -> legacy response"
       ],
       "evidence": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
-        "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
-        "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
-        "scripts/export_refactor_inventory.py:41-70",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/scheduler.py:47"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/scheduler.py:47",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/scheduler.py:46-51",
+        "nonebot_plugin_xiuxian_2/features/scheduler/application.py:18-37",
+        "nonebot_plugin_xiuxian_2/features/scheduler/runtime.py:6-13",
+        "nonebot_plugin_xiuxian_2/features/scheduler/apscheduler_manager.py:553-558",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_scheduler/job_manager.py:4-8",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/access.py:67-72",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/core.py:270-305,324-377",
+        "nonebot_plugin_xiuxian_2/features/scheduler/tests/test_scheduler_application.py:11-49",
+        "tests/test_web_scheduler_routes.py:166-198"
       ],
       "source_declaration_found": true,
       "source": {
@@ -14364,19 +14380,18 @@
       "id": "route:GET:/scheduler:nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/scheduler.py:scheduler_management",
       "kind": "legacy_routes",
       "entry": "GET /scheduler -> nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/scheduler.py:scheduler_management",
-      "status": "受阻",
-      "reason": "The old Flask app and route modules are loaded and its server is enabled by default. Route registration is proven, but each handler's downstream ownership and replacement/compatibility decision is not closed.",
-      "unknown_edge": "route function -> old data/service or feature application -> state effect",
+      "status": "允许保留的兼容路径",
+      "reason": "This authenticated legacy page only renders the existing scheduler.html template; scheduler state is loaded and changed through the separately classified scheduler API handlers.",
       "call_graph": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/scheduler.py:8 -> Flask app.route(/scheduler) -> legacy handler -> downstream state effect not closed"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/scheduler.py:8 scheduler_management -> render_template(scheduler.html) -> compatibility page"
       ],
       "evidence": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
-        "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
-        "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
-        "scripts/export_refactor_inventory.py:41-70",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/scheduler.py:8"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/scheduler.py:8",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/scheduler.py:7-9",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/templates/scheduler.html",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/access.py:67-72",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/core.py:270-305",
+        "tests/test_web_scheduler_routes.py:80-104"
       ],
       "source_declaration_found": true,
       "source": {

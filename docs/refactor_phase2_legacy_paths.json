@@ -84,7 +84,7 @@
       "status": "允许保留的兼容路径",
       "entry_format": "job:{id}",
       "target_format": "resolved by legacy_job_handler({id}) through _TARGETS/_ALIASES or xiuxian.xiuxian_scheduler fallback",
-      "reason": "The default job registry keeps the legacy handlers reachable through its admin-only scheduler API. Where an old APScheduler decorator is declared, its original function is separately activated through the deferred bridge; that automatic callback does not pass through legacy_job_handler. Retain the compatibility handler through the release period; P7 independently governs removal and this allowance does not assert feature-owned internals.",
+      "reason": "The default job registry keeps legacy handlers reachable through its admin-only scheduler execution path. The legacy Flask /api/scheduler/* controls now delegate through SchedulerAdminApplication to the existing APScheduler JobManager; this is distinct from the /api/v1/scheduler registry/JobExecutor contract. Where an old APScheduler decorator is declared, its original function is separately activated through the deferred bridge; that automatic callback does not pass through legacy_job_handler. Retain the compatibility handler through the release period; P7 independently governs removal and this allowance does not assert feature-owned internals.",
       "call_graph": [
         "production startup -> plugin.ensure_jobs -> register legacy scheduler manifest JobSpec with handler=legacy_job_handler(job.id)",
         "admin POST /api/v1/scheduler/<job_id>/run -> scheduler blueprint -> JobExecutor.run_sync -> JobExecutor.run -> registered legacy_job_handler",

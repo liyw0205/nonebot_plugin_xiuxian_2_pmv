@@ -80,7 +80,7 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
                              if (item.get("source") or {}).get("feature") == "sect"))
         self.assertEqual(report["path_count"], 496)
         self.assertEqual(report["status_counts"],
-                         {"不可达": 19, "允许保留的兼容路径": 138, "受阻": 21, "已迁移": 318})
+                         {"不可达": 19, "允许保留的兼容路径": 139, "受阻": 15, "已迁移": 323})
         self.assertTrue(report["frozen_membership_valid"])
         self.assertEqual(report["integrity_errors"], [])
 
@@ -399,7 +399,7 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
             self.assertIn(evidence, system_item["evidence"])
         self.assertNotIn("legacy downstream effect not closed", system_graph)
         self.assertEqual(report["status_counts"],
-                         {"不可达": 19, "允许保留的兼容路径": 138, "受阻": 21, "已迁移": 318})
+                         {"不可达": 19, "允许保留的兼容路径": 139, "受阻": 15, "已迁移": 323})
         self.assertTrue(report["frozen_membership_valid"])
         self.assertEqual(report["integrity_errors"], [])
 
@@ -473,7 +473,7 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
                 self.assertNotIn("downstream state effect not closed", graph)
 
         self.assertEqual(report["status_counts"],
-                         {"不可达": 19, "允许保留的兼容路径": 138, "受阻": 21, "已迁移": 318})
+                         {"不可达": 19, "允许保留的兼容路径": 139, "受阻": 15, "已迁移": 323})
         self.assertEqual(report["path_count"], 496)
         self.assertTrue(report["frozen_membership_valid"])
         self.assertEqual(report["integrity_errors"], [])
@@ -522,7 +522,7 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
         self.assertNotIn("legacy downstream effect not closed", claim_graph)
         self.assertEqual(
             report["status_counts"],
-            {"不可达": 19, "允许保留的兼容路径": 138, "受阻": 21, "已迁移": 318},
+            {"不可达": 19, "允许保留的兼容路径": 139, "受阻": 15, "已迁移": 323},
         )
         self.assertTrue(report["frozen_membership_valid"])
         self.assertEqual(report["integrity_errors"], [])
@@ -581,7 +581,7 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
 
         self.assertEqual(
             report["status_counts"],
-            {"不可达": 19, "允许保留的兼容路径": 138, "受阻": 21, "已迁移": 318},
+            {"不可达": 19, "允许保留的兼容路径": 139, "受阻": 15, "已迁移": 323},
         )
 
     def test_world_events_demon_claim_command_owns_atomic_claim_statistic(self):
@@ -613,7 +613,7 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
         self.assertEqual(report["integrity_errors"], [])
         self.assertEqual(
             report["status_counts"],
-            {"不可达": 19, "允许保留的兼容路径": 138, "受阻": 21, "已迁移": 318},
+            {"不可达": 19, "允许保留的兼容路径": 139, "受阻": 15, "已迁移": 323},
         )
         self.assertTrue(report["frozen_membership_valid"])
 
@@ -661,7 +661,7 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
 
         self.assertEqual(
             report["status_counts"],
-            {"不可达": 19, "允许保留的兼容路径": 138, "受阻": 21, "已迁移": 318},
+            {"不可达": 19, "允许保留的兼容路径": 139, "受阻": 15, "已迁移": 323},
         )
         self.assertTrue(report["frozen_membership_valid"])
         self.assertEqual(report["integrity_errors"], [])
@@ -718,7 +718,7 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
         self.assertEqual(report["path_count"], 496)
         self.assertEqual(
             report["status_counts"],
-            {"不可达": 19, "允许保留的兼容路径": 138, "受阻": 21, "已迁移": 318},
+            {"不可达": 19, "允许保留的兼容路径": 139, "受阻": 15, "已迁移": 323},
         )
         self.assertGreater(report["blocked_count"], 0)
         self.assertTrue(all(item["call_graph"] and item["evidence"] for item in report["items"]))
@@ -1548,7 +1548,7 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
         self.assertIn("authenticated reward_center.html", " ".join(page["call_graph"]))
         self.assertEqual(
             report["status_counts"],
-            {"不可达": 19, "允许保留的兼容路径": 138, "受阻": 21, "已迁移": 318},
+            {"不可达": 19, "允许保留的兼容路径": 139, "受阻": 15, "已迁移": 323},
         )
 
     def test_legacy_logs_routes_share_file_and_message_owners(self):
@@ -1578,7 +1578,7 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
         self.assertIn("render_template(logs.html)", " ".join(page["call_graph"]))
         self.assertEqual(
             report["status_counts"],
-            {"不可达": 19, "允许保留的兼容路径": 138, "受阻": 21, "已迁移": 318},
+            {"不可达": 19, "允许保留的兼容路径": 139, "受阻": 15, "已迁移": 323},
         )
 
     def test_messages_routes_record_owner_edges_and_remaining_compatibility(self):
@@ -1641,9 +1641,127 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
         self.assertIn("unknown_edge", send)
         self.assertEqual(
             report["status_counts"],
-            {"不可达": 19, "允许保留的兼容路径": 138, "受阻": 21, "已迁移": 318},
+            {"不可达": 19, "允许保留的兼容路径": 139, "受阻": 15, "已迁移": 323},
         )
         self.assertEqual(len(report["items"]), 496)
+        self.assertTrue(report["frozen_membership_valid"])
+        self.assertEqual(report["integrity_errors"], [])
+
+    def test_scheduler_admin_routes_have_application_owner_and_global_web_security(self):
+        report = load_phase2_scope_report(include_items=True)
+        items = {item["id"]: item for item in report["items"]}
+        root = Path(__file__).resolve().parents[1]
+        source = "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/scheduler.py"
+        source_text = (root / source).read_text(encoding="utf-8")
+        source_tree = ast.parse(source_text)
+        application = "nonebot_plugin_xiuxian_2/features/scheduler/application.py"
+        runtime = "nonebot_plugin_xiuxian_2/features/scheduler/runtime.py"
+        manager = "nonebot_plugin_xiuxian_2/features/scheduler/apscheduler_manager.py"
+        legacy_manager = "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_scheduler/job_manager.py"
+        route_tests = "tests/test_web_scheduler_routes.py"
+        expected = {
+            "api_scheduler_jobs": (
+                "list_jobs",
+                "route:GET:/api/scheduler/jobs:nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/scheduler.py:api_scheduler_jobs",
+                f"{route_tests}:80-104",
+            ),
+            "api_scheduler_job_enabled": (
+                "set_enabled",
+                "route:POST:/api/scheduler/jobs/<job_id>/enabled:nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/scheduler.py:api_scheduler_job_enabled",
+                f"{route_tests}:107-142",
+            ),
+            "api_scheduler_job_run": (
+                "queue_manual_run",
+                "route:POST:/api/scheduler/jobs/<job_id>/run:nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/scheduler.py:api_scheduler_job_run",
+                f"{route_tests}:166-198",
+            ),
+            "api_scheduler_job_schedule": (
+                "reschedule",
+                "route:POST:/api/scheduler/jobs/<job_id>/schedule:nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/scheduler.py:api_scheduler_job_schedule",
+                f"{route_tests}:145-163",
+            ),
+            "api_scheduler_run": (
+                "get_run",
+                "route:GET:/api/scheduler/runs/<run_id>:nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/scheduler.py:api_scheduler_run",
+                f"{route_tests}:166-198",
+            ),
+        }
+        for function, (method, item_id, test_evidence) in expected.items():
+            item = items[item_id]
+            handler = next(
+                node
+                for node in source_tree.body
+                if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == function
+            )
+            handler_source = ast.get_source_segment(source_text, handler) or ""
+            location = f"{source}:{_handler_line(source, function)}"
+            graph = " ".join(item["call_graph"])
+            with self.subTest(route=function):
+                self.assertEqual(item["status"], "已迁移")
+                self.assertNotIn("unknown_edge", item)
+                self.assertIn(f"scheduler_admin_application.{method}", handler_source)
+                self.assertIn(f"{location} {function} ->", graph)
+                self.assertIn(f"SchedulerAdminApplication.{method}", graph)
+                self.assertIn("JobManager.", graph)
+                self.assertIn(location, item["evidence"])
+                self.assertTrue(any(value.startswith(application + ":") for value in item["evidence"]))
+                self.assertTrue(any(value.startswith(runtime + ":") for value in item["evidence"]))
+                self.assertTrue(any(value.startswith(manager + ":") for value in item["evidence"]))
+                self.assertTrue(any(value.startswith(legacy_manager + ":") for value in item["evidence"]))
+                self.assertIn(test_evidence, item["evidence"])
+                self.assertTrue(any("access.py:67-72" in value for value in item["evidence"]))
+                self.assertTrue(any("core.py:270-305,324-377" in value for value in item["evidence"]))
+                self.assertNotIn("/api/v1/scheduler", item["entry"])
+
+        access_source = (root / "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/access.py").read_text(
+            encoding="utf-8"
+        )
+        core_source = (root / "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/core.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn('"scheduler_management": WebPermission.SCHEDULER', access_source)
+        for endpoint in (
+            "api_scheduler_jobs",
+            "api_scheduler_job_enabled",
+            "api_scheduler_job_schedule",
+            "api_scheduler_job_run",
+            "api_scheduler_run",
+        ):
+            self.assertIn(f'"{endpoint}": WebPermission.SCHEDULER', access_source)
+        self.assertIn("@app.before_request", core_source)
+        self.assertIn("authorization_error = _authorization_error()", core_source)
+        self.assertIn("csrf_error = _validate_csrf_token()", core_source)
+        legacy_manager_source = (
+            root / "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_scheduler/job_manager.py"
+        ).read_text(encoding="utf-8")
+        manager_source = (
+            root / "nonebot_plugin_xiuxian_2/features/scheduler/apscheduler_manager.py"
+        ).read_text(encoding="utf-8")
+        self.assertIn("from ...features.scheduler.apscheduler_manager import", legacy_manager_source)
+        self.assertIn("class SchedulerJobManager:", manager_source)
+
+        page = items[
+            "route:GET:/scheduler:nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/scheduler.py:scheduler_management"
+        ]
+        page_handler = next(
+            node
+            for node in source_tree.body
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+            and node.name == "scheduler_management"
+        )
+        page_source = ast.get_source_segment(source_text, page_handler) or ""
+        page_location = f"{source}:{_handler_line(source, 'scheduler_management')}"
+        self.assertEqual(page["status"], "允许保留的兼容路径")
+        self.assertNotIn("unknown_edge", page)
+        self.assertIn('render_template("scheduler.html")', page_source)
+        self.assertIn(f"{page_location} scheduler_management -> render_template(scheduler.html)", " ".join(page["call_graph"]))
+        self.assertIn("nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/templates/scheduler.html", page["evidence"])
+
+        self.assertEqual(
+            report["status_counts"],
+            {"不可达": 19, "允许保留的兼容路径": 139, "受阻": 15, "已迁移": 323},
+        )
+        self.assertEqual(report["path_count"], 496)
         self.assertTrue(report["frozen_membership_valid"])
         self.assertEqual(report["integrity_errors"], [])
 

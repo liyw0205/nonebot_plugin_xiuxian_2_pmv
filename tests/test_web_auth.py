@@ -286,7 +286,7 @@ class WebAuthorizationTests(unittest.TestCase):
         self.assertEqual(response.status_code, 401)
 
     def test_scheduler_api_can_toggle_and_queue_registered_job(self) -> None:
-        class FakeJobManager:
+        class FakeSchedulerApplication:
             def list_jobs(self):
                 return [{"id": "daily-reset", "enabled": True}]
 
@@ -305,7 +305,7 @@ class WebAuthorizationTests(unittest.TestCase):
         self._login_session()
         with (
             patch.object(core, "ADMIN_IDS", {"admin-1"}),
-            patch.object(scheduler, "job_manager", FakeJobManager()),
+            patch.object(scheduler, "scheduler_admin_application", FakeSchedulerApplication()),
         ):
             response = self.client.get("/api/scheduler/jobs")
             self.assertEqual(response.status_code, 200)
