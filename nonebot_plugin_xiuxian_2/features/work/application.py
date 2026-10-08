@@ -37,11 +37,13 @@ class WorkClaimApplication:
         repository: WorkClaimRepository | None = None,
         ledger: OperationLedger | None = None,
         legacy_projection_writer: Callable[[str, Mapping[str, Any]], None] | None = None,
+        settlement_application: WorkSettlementApplication | None = None,
     ) -> None:
         self.database = str(database)
         self.repository = repository
         self.ledger = ledger or OperationLedger()
         self.legacy_projection_writer = legacy_projection_writer
+        self.settlement_application = settlement_application
 
     def get_active_snapshot(self, user_id: str) -> dict[str, Any] | None:
         repository = self.repository or WorkClaimSqlRepository(self.database)
@@ -158,8 +160,20 @@ class WorkClaimApplication:
         item_msg: str = "",
     ) -> OperationOutcome[dict[str, Any]]:
         """Expose settlement on the feature facade used by the Web adapter."""
+        if self.settlement_application is not None:
+            return self.settlement_application.settle(
+                operation_id=operation_id,
+                user_id=user_id,
+                expected_work=expected_work,
+                exp_gain=exp_gain,
+                item=item,
+                max_exp=max_exp,
+                max_goods_num=max_goods_num,
+                success_kind=success_kind,
+                item_msg=item_msg,
+            )
         repository = self.repository if self.repository is not None and hasattr(self.repository, "settle") else None
-        return WorkSettlementApplication(self.database, repository=repository).settle(
+        return WorkSettlementApplication(self.database, repository=repository, ledger=self.ledger).settle(
             operation_id=operation_id,
             user_id=user_id,
             expected_work=expected_work,

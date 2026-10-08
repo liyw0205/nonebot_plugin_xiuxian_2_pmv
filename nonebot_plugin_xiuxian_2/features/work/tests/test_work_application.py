@@ -153,6 +153,34 @@ class WorkClaimApplicationTests(unittest.TestCase):
             self.assertEqual(first.data["exp"], 120)
             self.assertEqual(repository.calls, 1)
 
+    def test_claim_facade_delegates_settlement_to_composed_application(self):
+        with tempfile.TemporaryDirectory() as directory:
+            repository = _Repository()
+            settlement = Mock()
+            expected = object()
+            settlement.settle.return_value = expected
+            app = self._application(
+                WorkClaimApplication,
+                Path(directory) / "game.db",
+                repository,
+                settlement_application=settlement,
+            )
+            kwargs = {
+                "operation_id": "work-settle-composed",
+                "user_id": "u",
+                "expected_work": {"create_time": "start", "scheduled_time": "采药"},
+                "exp_gain": 120,
+                "item": None,
+                "max_exp": 999,
+                "max_goods_num": 99,
+                "success_kind": "ok",
+                "item_msg": "",
+            }
+
+            self.assertIs(app.settle(**kwargs), expected)
+            settlement.settle.assert_called_once_with(**kwargs)
+            self.assertEqual(repository.calls, 0)
+
     def test_settlement_replays_when_retry_redraws_reward(self):
         with tempfile.TemporaryDirectory() as directory:
             repository = _Repository()

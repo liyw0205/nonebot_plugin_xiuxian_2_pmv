@@ -892,7 +892,9 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
         from .features.sect_fairyland.application import SectFairylandApplication
         from .features.world_events.application import DemonClaimApplication
         from .features.world_events.repository import WorldEventClaimSqlRepository
-        from .features.work.application import WorkClaimApplication
+        from .features.work.application import WorkClaimApplication, WorkSettlementApplication
+        from .features.work.effects import WorkSettlementEffects
+        from .compatibility.legacy_work_offer_json import LegacyWorkOfferJsonAdapter
         from .features.mixelixir.application import MixelixirApplication
         from .features.puppet.application import PuppetApplication
         from .features.boss.application import BossApplication
@@ -966,6 +968,15 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
             from .xiuxian.xiuxian_world_events import get_spirit_vein_tianti_multiplier
 
             return get_spirit_vein_tianti_multiplier()
+
+        work_offer_adapter = LegacyWorkOfferJsonAdapter()
+        work_settlement_application = WorkSettlementApplication(
+            str(context.database.path("game_db")),
+            legacy_projection_deleter=lambda user_id: work_offer_adapter.remove(
+                user_id, delete_snapshot=False
+            ),
+            effects=WorkSettlementEffects(),
+        )
 
         context.services = {
             "player_profile": PlayerProfileApplication(str(context.database.path("game_db"))),
@@ -1081,6 +1092,7 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
             ),
             "work": WorkClaimApplication(
                 str(context.database.path("game_db")),
+                settlement_application=work_settlement_application,
             ),
             "mixelixir": MixelixirApplication(
                 str(context.database.path("game_db")),
