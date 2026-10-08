@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import unittest
-from types import SimpleNamespace
 from unittest.mock import patch
 
 import nonebot
@@ -145,32 +144,19 @@ class WebAuthorizationTests(unittest.TestCase):
             response = self.client.get("/terminal/pwd")
             self.assertEqual(response.status_code, 403)
 
-    def test_dashboard_process_snapshot_uses_imported_psutil(self) -> None:
-        class FakeProcess:
-            pid = 1001
+    def test_dashboard_process_snapshot_delegates_to_status_owner(self) -> None:
+        class FakeStatusApplication:
+            def process_info(self, limit=5):
+                self.limit = limit
+                return [{"pid": 1001, "name": "fake-process", "memory_mb": 8.0}]
 
-            def memory_info(self):
-                return SimpleNamespace(rss=8 * 1024 * 1024)
-
-            def create_time(self):
-                return core.time.time() - 60
-
-            def name(self):
-                return "fake-process"
-
-        fake_psutil = SimpleNamespace(
-            process_iter=lambda attrs: [FakeProcess()],
-            NoSuchProcess=RuntimeError,
-            AccessDenied=PermissionError,
-        )
-        with (
-            patch.object(system, "psutil_available", True),
-            patch.object(system, "psutil", fake_psutil),
-        ):
+        status_application = FakeStatusApplication()
+        with patch.object(system, "status_application", status_application):
             processes = system._collect_process_snapshot(5)
 
         self.assertEqual(processes[0]["name"], "fake-process")
         self.assertEqual(processes[0]["memory_mb"], 8.0)
+        self.assertEqual(status_application.limit, 5)
 
     def test_local_upload_uses_direct_peer_address(self) -> None:
         with patch.object(core, "ADMIN_IDS", {"admin-1"}):

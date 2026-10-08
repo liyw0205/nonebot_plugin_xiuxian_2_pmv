@@ -11821,19 +11821,24 @@
       "id": "route:GET:/api/dashboard/summary:nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/system.py:api_dashboard_summary",
       "kind": "legacy_routes",
       "entry": "GET /api/dashboard/summary -> nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/system.py:api_dashboard_summary",
-      "status": "受阻",
-      "reason": "The old Flask app and route modules are loaded and its server is enabled by default. Route registration is proven, but each handler's downstream ownership and replacement/compatibility decision is not closed.",
-      "unknown_edge": "route function -> old data/service or feature application -> state effect",
+      "status": "已迁移",
+      "reason": "The authenticated summary route preserves its nested response contract while composing the status-owned counter, host-metrics, and process-snapshot readers. This closes the shared dashboard read boundary only; it does not claim measured latency improvement or a bounded process enumeration.",
       "call_graph": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/system.py:245 -> Flask app.route(/api/dashboard/summary) -> legacy handler -> downstream state effect not closed"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/system.py:125 api_dashboard_summary -> _collect_dashboard_stats -> StatusApplication.dashboard_stats -> DashboardStatsSqlRepository.snapshot -> read-only game/message database UOWs",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/system.py:125 api_dashboard_summary -> _collect_system_snapshot -> StatusApplication.system_info -> SystemInfoProvider.snapshot",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/system.py:125 api_dashboard_summary -> _collect_process_snapshot(5) -> StatusApplication.process_info -> ProcessInfoProvider.snapshot -> legacy process row shape"
       ],
       "evidence": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
-        "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
-        "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
-        "scripts/export_refactor_inventory.py:41-70",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/system.py:245"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/system.py:38-41,74-86,124-138",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/system.py:125",
+        "nonebot_plugin_xiuxian_2/features/status/application.py:43-45,48-66",
+        "nonebot_plugin_xiuxian_2/features/status/dashboard_stats_repository.py:10-20,31-89",
+        "nonebot_plugin_xiuxian_2/features/status/system_info.py:28-38,41-137",
+        "nonebot_plugin_xiuxian_2/features/status/process_info.py:9-57",
+        "nonebot_plugin_xiuxian_2/features/status/tests/test_dashboard_stats_repository.py",
+        "nonebot_plugin_xiuxian_2/features/status/tests/test_process_info.py",
+        "tests/test_dashboard_system_routes.py",
+        "tests/test_phase2_legacy_path_gate.py"
       ],
       "source_declaration_found": true,
       "source": {
@@ -13824,19 +13829,20 @@
       "id": "route:GET:/get_process_info:nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/system.py:get_process_info",
       "kind": "legacy_routes",
       "entry": "GET /get_process_info -> nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/system.py:get_process_info",
-      "status": "受阻",
-      "reason": "The old Flask app and route modules are loaded and its server is enabled by default. Route registration is proven, but each handler's downstream ownership and replacement/compatibility decision is not closed.",
-      "unknown_edge": "route function -> old data/service or feature application -> state effect",
+      "status": "已迁移",
+      "reason": "The authenticated route delegates process collection to the status-owned ProcessInfoProvider while preserving psutil-unavailable errors, sorting, top-five limit, and response row fields. The provider still enumerates the process list before sorting, so this is an ownership closure rather than a claim of bounded scan cost.",
       "call_graph": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/system.py:230 -> Flask app.route(/get_process_info) -> legacy handler -> downstream state effect not closed"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/system.py:110 get_process_info -> status_application.process_info_available -> ProcessInfoProvider.available",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/system.py:110 get_process_info -> _collect_process_snapshot(5) -> StatusApplication.process_info -> ProcessInfoProvider.snapshot -> enumerate/sort/slice process rows -> api_success"
       ],
       "evidence": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
-        "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
-        "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
-        "scripts/export_refactor_inventory.py:41-70",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/system.py:230"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/system.py:85-86,109-121",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/system.py:110",
+        "nonebot_plugin_xiuxian_2/features/status/application.py:59-66",
+        "nonebot_plugin_xiuxian_2/features/status/process_info.py:9-57",
+        "nonebot_plugin_xiuxian_2/features/status/tests/test_process_info.py",
+        "tests/test_dashboard_system_routes.py",
+        "tests/test_phase2_legacy_path_gate.py"
       ],
       "source_declaration_found": true,
       "source": {
@@ -13879,19 +13885,20 @@
       "id": "route:GET:/get_stats:nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/system.py:get_stats",
       "kind": "legacy_routes",
       "entry": "GET /get_stats -> nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/system.py:get_stats",
-      "status": "受阻",
-      "reason": "The old Flask app and route modules are loaded and its server is enabled by default. Route registration is proven, but each handler's downstream ownership and replacement/compatibility decision is not closed.",
-      "unknown_edge": "route function -> old data/service or feature application -> state effect",
+      "status": "已迁移",
+      "reason": "The authenticated stats route delegates counters to the status-owned DashboardStatsSqlRepository and retains the legacy response fields plus bot/runtime presentation. Reads use separate read-only game and message database UOWs; no production latency measurement is claimed.",
       "call_graph": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/system.py:210 -> Flask app.route(/get_stats) -> legacy handler -> downstream state effect not closed"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/system.py:90 get_stats -> _collect_dashboard_stats -> StatusApplication.dashboard_stats -> DashboardStatsSqlRepository.snapshot -> read-only game/message database UOWs",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/system.py:44-71 _collect_dashboard_stats -> bot adapter list, bot uptime, and NoneBot version response projection"
       ],
       "evidence": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
-        "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
-        "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
-        "scripts/export_refactor_inventory.py:41-70",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/system.py:210"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/system.py:38-41,44-71,89-99",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/system.py:90",
+        "nonebot_plugin_xiuxian_2/features/status/application.py:23-49",
+        "nonebot_plugin_xiuxian_2/features/status/dashboard_stats_repository.py:10-20,31-89",
+        "nonebot_plugin_xiuxian_2/features/status/tests/test_dashboard_stats_repository.py",
+        "tests/test_dashboard_system_routes.py",
+        "tests/test_phase2_legacy_path_gate.py"
       ],
       "source_declaration_found": true,
       "source": {
@@ -13907,19 +13914,19 @@
       "id": "route:GET:/get_system_info_extended:nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/system.py:get_system_info_extended",
       "kind": "legacy_routes",
       "entry": "GET /get_system_info_extended -> nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/system.py:get_system_info_extended",
-      "status": "受阻",
-      "reason": "The old Flask app and route modules are loaded and its server is enabled by default. Route registration is proven, but each handler's downstream ownership and replacement/compatibility decision is not closed.",
-      "unknown_edge": "route function -> old data/service or feature application -> state effect",
+      "status": "已迁移",
+      "reason": "The authenticated route uses the existing status-owned SystemInfoProvider through StatusApplication and adapts its snapshot to the established grouped JSON fields. Host metric fallback behavior remains in the provider.",
       "call_graph": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/system.py:222 -> Flask app.route(/get_system_info_extended) -> legacy handler -> downstream state effect not closed"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/system.py:102 get_system_info_extended -> _collect_system_snapshot -> StatusApplication.system_info -> SystemInfoProvider.snapshot -> grouped legacy JSON response"
       ],
       "evidence": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
-        "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
-        "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
-        "scripts/export_refactor_inventory.py:41-70",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/system.py:222"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/system.py:74-82,101-107",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/system.py:102",
+        "nonebot_plugin_xiuxian_2/features/status/application.py:51-56",
+        "nonebot_plugin_xiuxian_2/features/status/system_info.py:28-38,41-137",
+        "tests/test_status_system_info_contract.py",
+        "tests/test_dashboard_system_routes.py",
+        "tests/test_phase2_legacy_path_gate.py"
       ],
       "source_declaration_found": true,
       "source": {
@@ -14379,7 +14386,7 @@
       "status": "已迁移",
       "reason": "The legacy response contract remains available, but its user lookup now delegates to the feature-owned PlayerProfileApplication and read-only repository. The canonical admin API is exposed at /api/v1/info/users/search with a uniform envelope.",
       "call_graph": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/system.py:262 search_users -> Flask app.route(/search_users) -> legacy handler",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/system.py:141 search_users -> Flask app.route(/search_users) -> legacy handler",
         "legacy search_users -> xiuxian.xiuxian_utils.utils.search_users -> PlayerProfileApplication.search_users",
         "PlayerProfileApplication.search_users -> PlayerProfileSqlRepository.search_users -> DatabaseUnitOfWork(read_only=True) SELECT user_id,user_name LIMIT 10",
         "features/info/web.py -> GET /api/v1/info/users/search -> admin guard -> PlayerProfileApplication.search_users -> uniform api_success envelope"
@@ -14390,8 +14397,8 @@
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
         "scripts/export_refactor_inventory.py:41-70",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/system.py:262",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/system.py:263-273",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/system.py:141",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/system.py:142-151",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_utils/utils.py:124-125",
         "nonebot_plugin_xiuxian_2/features/info/profile_application.py:26-27",
         "nonebot_plugin_xiuxian_2/features/info/profile_repository.py:48-78",

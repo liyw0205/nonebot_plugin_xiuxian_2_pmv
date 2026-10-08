@@ -80,7 +80,7 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
                              if (item.get("source") or {}).get("feature") == "sect"))
         self.assertEqual(report["path_count"], 496)
         self.assertEqual(report["status_counts"],
-                         {"不可达": 19, "允许保留的兼容路径": 133, "受阻": 59, "已迁移": 285})
+                         {"不可达": 19, "允许保留的兼容路径": 133, "受阻": 55, "已迁移": 289})
         self.assertTrue(report["frozen_membership_valid"])
         self.assertEqual(report["integrity_errors"], [])
 
@@ -399,7 +399,82 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
             self.assertIn(evidence, system_item["evidence"])
         self.assertNotIn("legacy downstream effect not closed", system_graph)
         self.assertEqual(report["status_counts"],
-                         {"不可达": 19, "允许保留的兼容路径": 133, "受阻": 59, "已迁移": 285})
+                         {"不可达": 19, "允许保留的兼容路径": 133, "受阻": 55, "已迁移": 289})
+        self.assertTrue(report["frozen_membership_valid"])
+        self.assertEqual(report["integrity_errors"], [])
+
+    def test_dashboard_web_routes_share_status_application_owners(self):
+        report = load_phase2_scope_report(include_items=True)
+        items = {item["id"]: item for item in report["items"]}
+        source = "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/system.py"
+        expected = {
+            "get_stats": (
+                "/get_stats",
+                ("_collect_dashboard_stats", "StatusApplication.dashboard_stats", "DashboardStatsSqlRepository.snapshot"),
+                (
+                    "nonebot_plugin_xiuxian_2/features/status/dashboard_stats_repository.py",
+                    "nonebot_plugin_xiuxian_2/features/status/tests/test_dashboard_stats_repository.py",
+                ),
+            ),
+            "get_system_info_extended": (
+                "/get_system_info_extended",
+                ("_collect_system_snapshot", "StatusApplication.system_info", "SystemInfoProvider.snapshot"),
+                (
+                    "nonebot_plugin_xiuxian_2/features/status/system_info.py",
+                    "tests/test_status_system_info_contract.py",
+                ),
+            ),
+            "get_process_info": (
+                "/get_process_info",
+                ("_collect_process_snapshot(5)", "StatusApplication.process_info", "ProcessInfoProvider.snapshot"),
+                (
+                    "nonebot_plugin_xiuxian_2/features/status/process_info.py",
+                    "nonebot_plugin_xiuxian_2/features/status/tests/test_process_info.py",
+                ),
+            ),
+            "api_dashboard_summary": (
+                "/api/dashboard/summary",
+                (
+                    "_collect_dashboard_stats",
+                    "StatusApplication.dashboard_stats",
+                    "DashboardStatsSqlRepository.snapshot",
+                    "_collect_system_snapshot",
+                    "StatusApplication.system_info",
+                    "_collect_process_snapshot(5)",
+                    "StatusApplication.process_info",
+                ),
+                (
+                    "nonebot_plugin_xiuxian_2/features/status/dashboard_stats_repository.py",
+                    "nonebot_plugin_xiuxian_2/features/status/system_info.py",
+                    "nonebot_plugin_xiuxian_2/features/status/process_info.py",
+                ),
+            ),
+        }
+
+        for handler, (route_path, owners, evidence_paths) in expected.items():
+            with self.subTest(route=route_path):
+                item = items[f"route:GET:{route_path}:{source}:{handler}"]
+                line = _handler_line(source, handler)
+                self.assertEqual(item["status"], "已迁移")
+                self.assertNotIn("unknown_edge", item)
+                graph = " ".join(item["call_graph"])
+                self.assertIn(f"{source}:{line} {handler} ->", graph)
+                for owner in owners:
+                    self.assertIn(owner, graph)
+                self.assertIn(f"{source}:{line}", item["evidence"])
+                self.assertIn("tests/test_dashboard_system_routes.py", item["evidence"])
+                for evidence_path in evidence_paths:
+                    self.assertTrue(
+                        any(
+                            evidence == evidence_path or evidence.startswith(f"{evidence_path}:")
+                            for evidence in item["evidence"]
+                        )
+                    )
+                self.assertNotIn("downstream state effect not closed", graph)
+
+        self.assertEqual(report["status_counts"],
+                         {"不可达": 19, "允许保留的兼容路径": 133, "受阻": 55, "已迁移": 289})
+        self.assertEqual(report["path_count"], 496)
         self.assertTrue(report["frozen_membership_valid"])
         self.assertEqual(report["integrity_errors"], [])
 
@@ -447,7 +522,7 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
         self.assertNotIn("legacy downstream effect not closed", claim_graph)
         self.assertEqual(
             report["status_counts"],
-            {"不可达": 19, "允许保留的兼容路径": 133, "受阻": 59, "已迁移": 285},
+            {"不可达": 19, "允许保留的兼容路径": 133, "受阻": 55, "已迁移": 289},
         )
         self.assertTrue(report["frozen_membership_valid"])
         self.assertEqual(report["integrity_errors"], [])
@@ -506,7 +581,7 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
 
         self.assertEqual(
             report["status_counts"],
-            {"不可达": 19, "允许保留的兼容路径": 133, "受阻": 59, "已迁移": 285},
+            {"不可达": 19, "允许保留的兼容路径": 133, "受阻": 55, "已迁移": 289},
         )
 
     def test_world_events_demon_claim_command_owns_atomic_claim_statistic(self):
@@ -538,7 +613,7 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
         self.assertEqual(report["integrity_errors"], [])
         self.assertEqual(
             report["status_counts"],
-            {"不可达": 19, "允许保留的兼容路径": 133, "受阻": 59, "已迁移": 285},
+            {"不可达": 19, "允许保留的兼容路径": 133, "受阻": 55, "已迁移": 289},
         )
         self.assertTrue(report["frozen_membership_valid"])
 
@@ -586,7 +661,7 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
 
         self.assertEqual(
             report["status_counts"],
-            {"不可达": 19, "允许保留的兼容路径": 133, "受阻": 59, "已迁移": 285},
+            {"不可达": 19, "允许保留的兼容路径": 133, "受阻": 55, "已迁移": 289},
         )
         self.assertTrue(report["frozen_membership_valid"])
         self.assertEqual(report["integrity_errors"], [])
@@ -643,7 +718,7 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
         self.assertEqual(report["path_count"], 496)
         self.assertEqual(
             report["status_counts"],
-            {"不可达": 19, "允许保留的兼容路径": 133, "受阻": 59, "已迁移": 285},
+            {"不可达": 19, "允许保留的兼容路径": 133, "受阻": 55, "已迁移": 289},
         )
         self.assertGreater(report["blocked_count"], 0)
         self.assertTrue(all(item["call_graph"] and item["evidence"] for item in report["items"]))
@@ -1244,7 +1319,7 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
         }
         inventory = {"commands": [], "legacy_jobs": [], "legacy_routes": [route]}
         fields = ["commands", "legacy_jobs", "legacy_routes"]
-        location = f"{relative}:262"
+        location = f"{relative}:{_handler_line(relative, 'search_users')}"
 
         def evaluate(call_graph, evidence):
             item = {
