@@ -37,6 +37,9 @@ class ActivityBossRankClaimRepository:
         self.game_database = str(game_database)
         self.activity_database = str(activity_database)
         self.clock = clock or SystemClock()
+        self._same_database = (
+            Path(self.game_database).resolve() == Path(self.activity_database).resolve()
+        )
 
     @staticmethod
     def _assert_schema(uow: DatabaseUnitOfWork) -> None:
@@ -235,8 +238,11 @@ class ActivityBossRankClaimRepository:
                 "VALUES(?,?,?,'{}','started','started')",
                 (operation_id, payload, _json(request)),
             )
-            with DatabaseUnitOfWork(self.activity_database, read_only=True) as legacy:
-                rank, status, snapshot = self._rank_snapshot(legacy, request)
+            if self._same_database:
+                rank, status, snapshot = self._rank_snapshot(uow, request)
+            else:
+                with DatabaseUnitOfWork(self.activity_database, read_only=True) as legacy:
+                    rank, status, snapshot = self._rank_snapshot(legacy, request)
             if status:
                 return self._reject(uow, operation_id, status, rank), False
             request = {**request, **snapshot}
@@ -296,6 +302,85 @@ class ActivityBossRankClaimRepository:
             existing["quantity"] += quantity
         return stone, [items[key] for key in sorted(items)]
 
+    def _apply_started_operation(
+        self,
+        game: DatabaseUnitOfWork,
+        operation_id: str,
+        request: Mapping[str, Any],
+    ) -> bool:
+        """Apply assets and mark an operation granted on an already-open UoW."""
+        stone, items = self._aggregate_rewards(request)
+        operation = game.query_one(
+            "SELECT status FROM activity_boss_rank_claim_operations WHERE operation_id=?",
+            (operation_id,),
+        )
+        if operation is None or str(operation["status"]) != "started":
+            raise RuntimeError("activity boss rank operation state changed")
+        owner = game.query_one(
+            "SELECT operation_id FROM activity_boss_rank_claim_reservations "
+            "WHERE activity_key=? AND user_id=? AND tier_key=?",
+            (request["activity_key"], request["user_id"], request["tier_key"]),
+        )
+        if owner is None or str(owner["operation_id"]) != operation_id:
+            raise RuntimeError("activity boss rank reservation is missing or changed")
+        if game.query_one("SELECT 1 AS present FROM user_xiuxian WHERE user_id=?", (request["user_id"],)) is None:
+            self._reject(game, operation_id, "user_missing", int(request["rank"]))
+            return False
+        for item in items:
+            row = game.query_one(
+                "SELECT COALESCE(goods_num,0) AS quantity FROM back WHERE user_id=? AND goods_id=?",
+                (request["user_id"], item["id"]),
+            )
+            if (int(row["quantity"]) if row else 0) + int(item["quantity"]) > int(request["max_goods_num"]):
+                self._reject(game, operation_id, "inventory_full", int(request["rank"]))
+                return False
+        now = self.clock.now().isoformat()
+        if stone:
+            changed = game.execute(
+                "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)+? WHERE user_id=?",
+                (stone, request["user_id"]),
+            )
+            if changed.rowcount != 1:
+                self._reject(game, operation_id, "user_missing", int(request["rank"]))
+                return False
+        columns = {str(row["name"]) for row in game.query_all("PRAGMA table_info(back)")}
+        for item in items:
+            existing = game.query_one(
+                "SELECT COALESCE(goods_num,0) AS quantity FROM back WHERE user_id=? AND goods_id=?",
+                (request["user_id"], item["id"]),
+            )
+            if existing is None:
+                names = ["user_id", "goods_id", "goods_name", "goods_type", "goods_num"]
+                values: list[Any] = [request["user_id"], item["id"], item["name"], item["type"], item["quantity"]]
+                for field in ("create_time", "update_time"):
+                    if field in columns:
+                        names.append(field)
+                        values.append(now)
+                if "bind_num" in columns:
+                    names.append("bind_num")
+                    values.append(item["quantity"])
+                game.execute(
+                    f"INSERT INTO back({','.join(names)}) VALUES({','.join('?' for _ in values)})",
+                    tuple(values),
+                )
+            else:
+                assignments = "goods_name=?,goods_type=?,goods_num=COALESCE(goods_num,0)+?"
+                values = [item["name"], item["type"], item["quantity"]]
+                if "update_time" in columns:
+                    assignments += ",update_time=?"
+                    values.append(now)
+                if "bind_num" in columns:
+                    assignments += ",bind_num=COALESCE(bind_num,0)+?"
+                    values.append(item["quantity"])
+                values.extend((request["user_id"], item["id"]))
+                game.execute(f"UPDATE back SET {assignments} WHERE user_id=? AND goods_id=?", tuple(values))
+        game.execute(
+            "UPDATE activity_boss_rank_claim_operations SET status='granted',result_status='applied',"
+            "result_json=?,updated_at=? WHERE operation_id=? AND status='started'",
+            (_json({"name": request["name"], "rank": request["rank"]}), now, operation_id),
+        )
+        return True
+
     def claim(self, operation_id: str, user_id: str, activity_key: str, tiers: Any, max_goods_num: int, *, newly_prepared: bool = False) -> ActivityBossRankClaimResult:
         operation_id = str(operation_id).strip()
         _, payload, request = self._normalize(operation_id, user_id, activity_key, tiers, max_goods_num)
@@ -328,81 +413,24 @@ class ActivityBossRankClaimRepository:
                     (operation_id,),
                 )
         elif status == "started":
-            with DatabaseUnitOfWork(self.activity_database, immediate=True) as legacy:
-                changed = self._legacy_rank_still_claimable(legacy, request)
-                if changed:
-                    with DatabaseUnitOfWork(self.game_database, immediate=True) as game:
-                        result = self._reject(game, operation_id, changed, int(request["rank"]))
-                    return result
-                stone, items = self._aggregate_rewards(request)
+            if self._same_database:
                 with DatabaseUnitOfWork(self.game_database, immediate=True) as game:
-                    operation = game.query_one(
-                        "SELECT status FROM activity_boss_rank_claim_operations WHERE operation_id=?",
-                        (operation_id,),
-                    )
-                    if operation is None or str(operation["status"]) != "started":
-                        raise RuntimeError("activity boss rank operation state changed")
-                    owner = game.query_one(
-                        "SELECT operation_id FROM activity_boss_rank_claim_reservations "
-                        "WHERE activity_key=? AND user_id=? AND tier_key=?",
-                        (request["activity_key"], request["user_id"], request["tier_key"]),
-                    )
-                    if owner is None or str(owner["operation_id"]) != operation_id:
-                        raise RuntimeError("activity boss rank reservation is missing or changed")
-                    if game.query_one("SELECT 1 AS present FROM user_xiuxian WHERE user_id=?", (request["user_id"],)) is None:
-                        return self._reject(game, operation_id, "user_missing", int(request["rank"]))
-                    for item in items:
-                        row = game.query_one(
-                            "SELECT COALESCE(goods_num,0) AS quantity FROM back WHERE user_id=? AND goods_id=?",
-                            (request["user_id"], item["id"]),
-                        )
-                        if (int(row["quantity"]) if row else 0) + int(item["quantity"]) > int(request["max_goods_num"]):
-                            return self._reject(game, operation_id, "inventory_full", int(request["rank"]))
-                    now = self.clock.now().isoformat()
-                    if stone:
-                        changed = game.execute(
-                            "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)+? WHERE user_id=?",
-                            (stone, request["user_id"]),
-                        )
-                        if changed.rowcount != 1:
-                            return self._reject(game, operation_id, "user_missing", int(request["rank"]))
-                    columns = {str(row["name"]) for row in game.query_all("PRAGMA table_info(back)")}
-                    for item in items:
-                        existing = game.query_one(
-                            "SELECT COALESCE(goods_num,0) AS quantity FROM back WHERE user_id=? AND goods_id=?",
-                            (request["user_id"], item["id"]),
-                        )
-                        if existing is None:
-                            names = ["user_id", "goods_id", "goods_name", "goods_type", "goods_num"]
-                            values: list[Any] = [request["user_id"], item["id"], item["name"], item["type"], item["quantity"]]
-                            for field in ("create_time", "update_time"):
-                                if field in columns:
-                                    names.append(field)
-                                    values.append(now)
-                            if "bind_num" in columns:
-                                names.append("bind_num")
-                                values.append(item["quantity"])
-                            game.execute(
-                                f"INSERT INTO back({','.join(names)}) VALUES({','.join('?' for _ in values)})",
-                                tuple(values),
-                            )
-                        else:
-                            assignments = "goods_name=?,goods_type=?,goods_num=COALESCE(goods_num,0)+?"
-                            values = [item["name"], item["type"], item["quantity"]]
-                            if "update_time" in columns:
-                                assignments += ",update_time=?"
-                                values.append(now)
-                            if "bind_num" in columns:
-                                assignments += ",bind_num=COALESCE(bind_num,0)+?"
-                                values.append(item["quantity"])
-                            values.extend((request["user_id"], item["id"]))
-                            game.execute(f"UPDATE back SET {assignments} WHERE user_id=? AND goods_id=?", tuple(values))
-                    game.execute(
-                        "UPDATE activity_boss_rank_claim_operations SET status='granted',result_status='applied',"
-                        "result_json=?,updated_at=? WHERE operation_id=? AND status='started'",
-                        (_json({"name": request["name"], "rank": request["rank"]}), now, operation_id),
-                    )
-                self._finalize_legacy_state(request, legacy)
+                    changed = self._legacy_rank_still_claimable(game, request)
+                    if changed:
+                        return self._reject(game, operation_id, changed, int(request["rank"]))
+                    if self._apply_started_operation(game, operation_id, request):
+                        self._finalize_legacy_state(request, game)
+            else:
+                with DatabaseUnitOfWork(self.activity_database, immediate=True) as legacy:
+                    changed = self._legacy_rank_still_claimable(legacy, request)
+                    if changed:
+                        with DatabaseUnitOfWork(self.game_database, immediate=True) as game:
+                            result = self._reject(game, operation_id, changed, int(request["rank"]))
+                        return result
+                    with DatabaseUnitOfWork(self.game_database, immediate=True) as game:
+                        applied = self._apply_started_operation(game, operation_id, request)
+                    if applied:
+                        self._finalize_legacy_state(request, legacy)
         with DatabaseUnitOfWork(self.game_database, read_only=True) as game:
             row = game.query_one(
                 "SELECT result_json,result_status,status FROM activity_boss_rank_claim_operations WHERE operation_id=?",

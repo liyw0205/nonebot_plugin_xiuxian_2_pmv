@@ -334,6 +334,41 @@ class ActivityBossRewardClaimTests(unittest.TestCase):
         with db_backend.connection(self.game) as conn:
             self.assertEqual(80, conn.execute("SELECT stone FROM user_xiuxian").fetchone()[0])
 
+    def test_rank_claim_same_database_does_not_nest_write_transactions(self):
+        with db_backend.transaction(self.game) as conn:
+            conn.execute(
+                "CREATE TABLE activity_boss_damage(activity_key TEXT,user_id TEXT,total_damage INTEGER,"
+                "update_time TEXT,PRIMARY KEY(activity_key,user_id))"
+            )
+            conn.execute(
+                "CREATE TABLE activity_boss_rank_claim(activity_key TEXT,user_id TEXT,tier_key TEXT,"
+                "create_time TEXT,PRIMARY KEY(activity_key,user_id,tier_key))"
+            )
+            conn.execute("INSERT INTO activity_boss_damage VALUES('same','u',100,'')")
+
+        from nonebot_plugin_xiuxian_2.features.activity_reward import boss_rank_claim_repository
+
+        base_uow = boss_rank_claim_repository.DatabaseUnitOfWork
+
+        class FastUow(base_uow):
+            def __init__(self, database, **kwargs):
+                kwargs.setdefault("timeout", 0.05)
+                super().__init__(database, **kwargs)
+
+        application = ActivityBossRankClaimApplication(self.game, self.game)
+        with patch.object(boss_rank_claim_repository, "DatabaseUnitOfWork", FastUow):
+            result = application.claim(
+                "u", "same", [{"rank_min": 1, "rank_max": 1, "name": "第一名", "reward_items": [
+                    {"type": "stone", "quantity": 80},
+                ]}], 100, "same-db-rank",
+            )
+        self.assertEqual("applied", result.status)
+        with db_backend.connection(self.game) as conn:
+            self.assertEqual(80, conn.execute("SELECT stone FROM user_xiuxian").fetchone()[0])
+            self.assertEqual(1, conn.execute(
+                "SELECT COUNT(*) FROM activity_boss_rank_claim WHERE activity_key='same'"
+            ).fetchone()[0])
+
     def test_rank_claim_preserves_tier_reclaim_after_rank_changes(self):
         tiers = [
             {"rank_min": 1, "rank_max": 1, "name": "第一名", "reward": "灵石x80"},

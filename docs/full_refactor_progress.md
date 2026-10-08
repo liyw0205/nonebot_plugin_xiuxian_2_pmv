@@ -2,6 +2,14 @@
 
 状态：进行中。`v1.1.0` 的 P0-P7 发布证据继续保留，但不作为底层全面重构完成证明。
 
+**2026-10-09 activity boss rank 同库事务锁修复**：首领排行领取已经由
+`ActivityBossRankClaimApplication` 承担，本轮没有重复迁移该功能；审计发现生产 wiring
+把 `game_db` 同时作为 game/activity 数据库，旧实现会在同一 SQLite 文件内嵌套
+`BEGIN IMMEDIATE`，第二个写事务可能按默认 30 秒超时。现在同库路径在单一 immediate
+UoW 内完成排行快照、资产写入和 claim marker，准备阶段也复用传入 UoW；分离数据库仍保留
+原有两阶段恢复语义。新增同库回归并用短 timeout 证明不再等待锁。该修复不改变 Phase 2
+`496` 项 membership/hash，也不新增迁移。
+
 **2026-10-09 Phase 3 普通出关收益 adapter 子切片（scope-v2）**：新增冻结
 `scope_id=phase3-player-lifecycle-v2`、`stable_id=command:buff:出关`，覆盖普通
 `出关` 与 `灵石出关` alias 的 replay-first adapter 和确定性收益计算。handler 使用
