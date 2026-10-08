@@ -99,13 +99,17 @@ class ClosingEnterSqlRepository:
         except (TypeError, ValueError):
             return ClosingEnterResult("operation_conflict")
         if isinstance(saved, dict):
-            return ClosingEnterResult(
-                status,
-                str(saved.get("started_at") or ""),
-                int(saved.get("entry_count") or 0),
-            )
+            try:
+                entry_count = int(saved.get("entry_count") or 0)
+            except (TypeError, ValueError):
+                return ClosingEnterResult("operation_conflict")
+            return ClosingEnterResult(status, str(saved.get("started_at") or ""), entry_count)
         if isinstance(saved, (list, tuple)) and len(saved) >= 2:
-            return ClosingEnterResult(status, str(saved[0]), int(saved[1]))
+            try:
+                entry_count = int(saved[1])
+            except (TypeError, ValueError):
+                return ClosingEnterResult("operation_conflict")
+            return ClosingEnterResult(status, str(saved[0]), entry_count)
         return ClosingEnterResult("operation_conflict")
 
     def enter_in_uow(
