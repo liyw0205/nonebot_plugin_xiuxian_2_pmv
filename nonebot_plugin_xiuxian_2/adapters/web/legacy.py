@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import warnings
 
-from flask import Blueprint, redirect
+from flask import Blueprint, redirect, request
 
 from ...compatibility.commands import record_compatibility_hit
 from .blueprints._common import guard
@@ -16,6 +16,7 @@ LEGACY_REDIRECTS = {
     "/activity": "/pages/activity",
     "/logs": "/pages/logs",
     "/economy_logs": "/pages/economy_logs",
+    "/economy_logs/export": "/api/v1/economy-logs/export",
     "/commands": "/pages/commands",
     "/command_registry": "/pages/command_registry",
     "/reward-center": "/pages/reward_center",
@@ -35,7 +36,8 @@ def create_legacy_blueprint(permission=None):
                 stacklevel=2,
             )
             record_compatibility_hit(f"web:{source}")
-            return redirect(target, code=308)
+            query = request.query_string.decode("latin-1")
+            return redirect(f"{target}?{query}" if query else target, code=308)
 
         blueprint.add_url_rule(source, f"legacy_redirect_{index}", redirect_endpoint, methods=("GET",))
     return blueprint

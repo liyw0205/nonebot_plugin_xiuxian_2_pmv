@@ -13501,19 +13501,19 @@
       "id": "route:GET:/economy_logs:nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/economy_logs.py:economy_logs",
       "kind": "legacy_routes",
       "entry": "GET /economy_logs -> nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/economy_logs.py:economy_logs",
-      "status": "受阻",
-      "reason": "The old Flask app and route modules are loaded and its server is enabled by default. Route registration is proven, but each handler's downstream ownership and replacement/compatibility decision is not closed.",
-      "unknown_edge": "route function -> old data/service or feature application -> state effect",
+      "status": "已迁移",
+      "reason": "The legacy URL retains its admin-session check and 308 redirect with query parameters; the destination page reads through EconomyLedgerApplication and EconomyLedgerSqlRepository using a read-only UoW. The Flask compatibility route performs no SQL or request-time schema changes.",
       "call_graph": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/economy_logs.py:669 -> Flask app.route(/economy_logs) -> legacy handler -> downstream state effect not closed"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/economy_logs.py:22 economy_logs -> admin session check -> 308 redirect preserving query -> economy_logs.page",
+        "nonebot_plugin_xiuxian_2/adapters/web/blueprints/economy_logs.py:26 page -> EconomyLedgerApplication.query_page -> EconomyLedgerSqlRepository.query_page -> read-only DatabaseUnitOfWork -> render economy_logs.html"
       ],
       "evidence": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
-        "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
-        "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
-        "scripts/export_refactor_inventory.py:41-70",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/economy_logs.py:669"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/economy_logs.py:21-25",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/economy_logs.py:22",
+        "nonebot_plugin_xiuxian_2/adapters/web/blueprints/economy_logs.py:24-46",
+        "nonebot_plugin_xiuxian_2/features/economy_ledger/application.py:93-121",
+        "nonebot_plugin_xiuxian_2/features/economy_ledger/repository.py:365-416",
+        "tests/test_economy_ledger_web.py:59-68"
       ],
       "source_declaration_found": true,
       "source": {
@@ -13529,19 +13529,19 @@
       "id": "route:GET:/economy_logs/export:nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/economy_logs.py:economy_logs_export",
       "kind": "legacy_routes",
       "entry": "GET /economy_logs/export -> nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/economy_logs.py:economy_logs_export",
-      "status": "受阻",
-      "reason": "The old Flask app and route modules are loaded and its server is enabled by default. Route registration is proven, but each handler's downstream ownership and replacement/compatibility decision is not closed.",
-      "unknown_edge": "route function -> old data/service or feature application -> state effect",
+      "status": "已迁移",
+      "reason": "The legacy export keeps its admin-session check and CSV attachment contract while delegating row selection to EconomyLedgerApplication and EconomyLedgerSqlRepository. Export uses a read-only UoW, fetchmany(256), and the fixed legacy CSV fields; the adapter spools the response instead of materializing all rows in memory.",
       "call_graph": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/economy_logs.py:690 -> Flask app.route(/economy_logs/export) -> legacy handler -> downstream state effect not closed"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/economy_logs.py:29 economy_logs_export -> admin session check -> build_csv_response(ledger, request.args)",
+        "nonebot_plugin_xiuxian_2/adapters/web/economy_ledger_csv.py:12 build_csv_response -> EconomyLedgerApplication.iter_export_rows -> EconomyLedgerSqlRepository.iter_export_rows -> read-only DatabaseUnitOfWork and fetchmany(256) -> fixed-field CSV attachment"
       ],
       "evidence": [
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
-        "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
-        "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
-        "scripts/export_refactor_inventory.py:41-70",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/economy_logs.py:690"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/economy_logs.py:28-32",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/economy_logs.py:29",
+        "nonebot_plugin_xiuxian_2/adapters/web/economy_ledger_csv.py:12-53",
+        "nonebot_plugin_xiuxian_2/features/economy_ledger/application.py:133-134",
+        "nonebot_plugin_xiuxian_2/features/economy_ledger/repository.py:418-440",
+        "tests/test_economy_ledger_web.py:70-94"
       ],
       "source_declaration_found": true,
       "source": {

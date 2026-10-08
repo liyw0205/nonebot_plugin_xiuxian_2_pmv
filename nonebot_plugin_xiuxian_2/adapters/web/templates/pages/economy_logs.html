@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>经济流水</title>
+    <style>
+        :root { color-scheme: light; font-family: system-ui, sans-serif; color: #1f2933; background: #f4f6f8; }
+        * { box-sizing: border-box; }
+        body { margin: 0; }
+        main { max-width: 1440px; margin: 0 auto; padding: 20px; }
+        a { color: #176b62; }
+        .page-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 16px; }
+        h1 { margin: 0; font-size: 22px; font-weight: 650; }
+        .subtitle, .muted { color: #66737f; font-size: 13px; }
+        .button { display: inline-flex; align-items: center; min-height: 36px; padding: 0 12px; border: 1px solid #176b62; border-radius: 5px; background: #176b62; color: #fff; text-decoration: none; font-size: 13px; }
+        .filters { display: grid; grid-template-columns: repeat(6, minmax(130px, 1fr)); gap: 10px 12px; padding: 14px; border: 1px solid #d7dee3; border-radius: 6px; background: #fff; }
+        label { display: grid; gap: 5px; color: #42515c; font-size: 12px; }
+        input, select { width: 100%; min-height: 34px; padding: 6px 8px; border: 1px solid #c7d0d6; border-radius: 4px; background: #fff; color: inherit; font: inherit; font-size: 13px; }
+        .check { display: flex; align-items: center; gap: 7px; min-height: 34px; padding-top: 18px; }
+        .check input { width: 15px; min-height: 15px; }
+        .filter-actions { display: flex; align-items: end; gap: 8px; grid-column: span 2; }
+        .filter-actions button, .filter-actions a { display: inline-flex; align-items: center; justify-content: center; min-height: 34px; padding: 0 12px; border: 1px solid #c7d0d6; border-radius: 4px; background: #fff; color: #33434e; text-decoration: none; font: inherit; font-size: 13px; cursor: pointer; }
+        .filter-actions button { border-color: #176b62; background: #176b62; color: #fff; }
+        .notice { margin: 12px 0; padding: 9px 12px; border-left: 3px solid #b7791f; background: #fff8e7; color: #684f1a; font-size: 13px; }
+        .notice.error { border-left-color: #b93838; background: #fff0ef; color: #802e2e; }
+        .summary { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); margin: 14px 0; border: 1px solid #d7dee3; border-radius: 6px; background: #fff; }
+        .metric { min-width: 0; padding: 12px 14px; border-right: 1px solid #e4e9ec; border-bottom: 1px solid #e4e9ec; }
+        .metric:nth-child(5n) { border-right: 0; }
+        .metric span { display: block; color: #66737f; font-size: 12px; }
+        .metric strong { display: block; margin-top: 4px; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; font-size: 17px; }
+        .rankings { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin: 14px 0; }
+        .rank-section { min-width: 0; }
+        h2 { margin: 0 0 8px; font-size: 15px; font-weight: 620; }
+        .table-wrap { max-width: 100%; overflow-x: auto; border: 1px solid #d7dee3; border-radius: 6px; background: #fff; }
+        table { width: 100%; border-collapse: collapse; font-size: 12px; }
+        th, td { padding: 8px 9px; border-bottom: 1px solid #e7ecef; text-align: left; vertical-align: top; }
+        th { background: #eef2f4; color: #42515c; font-weight: 600; white-space: nowrap; }
+        tbody tr:last-child td { border-bottom: 0; }
+        .number { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+        .positive { color: #177245; }
+        .negative { color: #b93838; }
+        .detail { max-width: 260px; overflow-wrap: anywhere; }
+        details summary { color: #176b62; cursor: pointer; }
+        pre { max-width: 420px; max-height: 180px; margin: 6px 0; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font: 12px/1.45 ui-monospace, monospace; }
+        .pagination { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 12px; padding: 10px 12px; color: #66737f; font-size: 12px; }
+        .pagination a { text-decoration: none; }
+        @media (max-width: 980px) { .filters { grid-template-columns: repeat(3, minmax(0, 1fr)); } .rankings { grid-template-columns: 1fr; } }
+        @media (max-width: 600px) { main { padding: 12px; } .page-head { align-items: flex-start; } .filters { grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 10px; } .filter-actions { grid-column: 1 / -1; } .summary { grid-template-columns: repeat(2, minmax(0, 1fr)); } .metric:nth-child(5n) { border-right: 1px solid #e4e9ec; } .metric:nth-child(2n) { border-right: 0; } h1 { font-size: 19px; } }
+    </style>
+</head>
+<body>
+<main>
+    {% set filters = result.get('filters') or {} %}
+    {% set summary = result.get('summary') or {} %}
+    <header class="page-head">
+        <div>
+            <h1>经济流水</h1>
+            <div class="subtitle">{{ result.get('total', 0) }} 条记录 · 第 {{ result.get('page', 1) }} / {{ result.get('total_pages', 1) }} 页</div>
+        </div>
+        <a class="button" href="{{ export_url }}">导出 CSV</a>
+    </header>
+
+    <form class="filters" method="get" action="/pages/economy_logs">
+        <label>用户 ID<input name="user_id" value="{{ filters.get('user_id', '') }}"></label>
+        <label>宗门 ID<input name="sect_id" value="{{ filters.get('sect_id', '') }}"></label>
+        <label>来源
+            <select name="source"><option value="">全部来源</option>{% for option in result.get('source_options', []) %}<option value="{{ option }}" {% if filters.get('source') == option %}selected{% endif %}>{{ option }}</option>{% endfor %}</select>
+        </label>
+        <label>动作
+            <select name="action"><option value="">全部动作</option>{% for option in result.get('action_options', []) %}<option value="{{ option }}" {% if filters.get('action') == option %}selected{% endif %}>{{ option }}</option>{% endfor %}</select>
+        </label>
+        <label>链路 ID<input name="trace_id" value="{{ filters.get('trace_id', '') }}"></label>
+        <label>时间预设
+            <select name="preset"><option value="">全部</option><option value="today" {% if filters.get('preset') == 'today' %}selected{% endif %}>今天</option><option value="7d" {% if filters.get('preset') == '7d' %}selected{% endif %}>近 7 天</option><option value="30d" {% if filters.get('preset') == '30d' %}selected{% endif %}>近 30 天</option></select>
+        </label>
+        <label>开始时间<input name="start_time" value="{{ filters.get('start_time', '') }}" placeholder="YYYY-MM-DD HH:MM:SS"></label>
+        <label>结束时间<input name="end_time" value="{{ filters.get('end_time', '') }}" placeholder="YYYY-MM-DD HH:MM:SS"></label>
+        <label>最小灵石变动<input type="number" min="0" name="min_abs_stone_delta" value="{{ filters.get('min_abs_stone_delta', '') }}"></label>
+        <label>异常阈值<input type="number" min="0" name="anomaly_stone_delta" value="{{ filters.get('anomaly_stone_delta', '') }}"></label>
+        <label>每页条数<input type="number" min="1" max="500" name="page_size" value="{{ result.get('page_size', 100) }}"></label>
+        <label class="check"><input type="checkbox" name="has_item_delta" value="1" {% if filters.get('has_item_delta') %}checked{% endif %}>只看物品变动</label>
+        <label class="check"><input type="checkbox" name="anomaly_only" value="1" {% if filters.get('anomaly_only') %}checked{% endif %}>只看异常</label>
+        <div class="filter-actions"><button type="submit">筛选</button><a href="/pages/economy_logs">重置</a></div>
+    </form>
+
+    {% if result.get('notice') %}<div class="notice">{{ result.get('notice') }}</div>{% endif %}
+    {% if result.get('error') %}<div class="notice error">{{ result.get('error') }}</div>{% endif %}
+
+    <section class="summary" aria-label="经济流水汇总">
+        <div class="metric"><span>记录数</span><strong>{{ summary.get('records', 0) }}</strong></div>
+        <div class="metric"><span>涉及玩家</span><strong>{{ summary.get('unique_users', 0) }}</strong></div>
+        <div class="metric"><span>灵石收入</span><strong class="positive">{{ summary.get('stone_in', 0) }}</strong></div>
+        <div class="metric"><span>灵石支出</span><strong class="negative">{{ summary.get('stone_out', 0) }}</strong></div>
+        <div class="metric"><span>灵石净额</span><strong>{{ summary.get('stone_net', 0) }}</strong></div>
+        <div class="metric"><span>经验变化</span><strong>{{ summary.get('exp_total', 0) }}</strong></div>
+        <div class="metric"><span>宗门贡献</span><strong>{{ summary.get('sect_contribution_total', 0) }}</strong></div>
+        <div class="metric"><span>宗门规模</span><strong>{{ summary.get('sect_scale_total', 0) }}</strong></div>
+        <div class="metric"><span>宗门材料</span><strong>{{ summary.get('sect_materials_total', 0) }}</strong></div>
+        <div class="metric"><span>物品变动记录</span><strong>{{ summary.get('item_change_records', 0) }}</strong></div>
+    </section>
+
+    <section class="rankings">
+        <div class="rank-section">
+            <h2>来源排行</h2>
+            <div class="table-wrap"><table><thead><tr><th>来源 / 动作</th><th class="number">记录</th><th class="number">灵石净额</th></tr></thead><tbody>
+                {% for row in result.get('source_stats', []) %}<tr><td>{{ row.get('source', '') }} / {{ row.get('action', '') }}</td><td class="number">{{ row.get('records', 0) }}</td><td class="number">{{ row.get('stone_net', 0) }}</td></tr>{% else %}<tr><td colspan="3" class="muted">暂无排行</td></tr>{% endfor %}
+            </tbody></table></div>
+        </div>
+        <div class="rank-section">
+            <h2>玩家排行</h2>
+            <div class="table-wrap"><table><thead><tr><th>玩家</th><th class="number">记录</th><th class="number">灵石净额</th></tr></thead><tbody>
+                {% for row in result.get('user_stats', []) %}<tr><td>{{ row.get('user_name') or row.get('user_id', '') }}</td><td class="number">{{ row.get('records', 0) }}</td><td class="number">{{ row.get('stone_net', 0) }}</td></tr>{% else %}<tr><td colspan="3" class="muted">暂无排行</td></tr>{% endfor %}
+            </tbody></table></div>
+        </div>
+        <div class="rank-section">
+            <h2>宗门排行</h2>
+            <div class="table-wrap"><table><thead><tr><th>宗门</th><th class="number">记录</th><th class="number">灵石净额</th></tr></thead><tbody>
+                {% for row in result.get('sect_stats', []) %}<tr><td>{{ row.get('sect_name') or row.get('sect_id', '') }}</td><td class="number">{{ row.get('records', 0) }}</td><td class="number">{{ row.get('stone_net', 0) }}</td></tr>{% else %}<tr><td colspan="3" class="muted">暂无排行</td></tr>{% endfor %}
+            </tbody></table></div>
+        </div>
+    </section>
+
+    <section>
+        <h2>流水明细</h2>
+        <div class="table-wrap">
+            <table>
+                <thead><tr><th>ID</th><th>时间</th><th>玩家</th><th>宗门</th><th>来源</th><th>动作</th><th class="number">灵石</th><th class="number">经验</th><th class="number">宗门贡献</th><th class="number">宗门规模</th><th class="number">宗门材料</th><th>物品变动</th><th>详情</th><th>链路 ID</th></tr></thead>
+                <tbody>
+                    {% for row in result.get('rows', []) %}
+                    <tr>
+                        <td>{{ row.get('id', '') }}</td><td>{{ row.get('created_at', '') }}</td><td>{{ row.get('user_id', '') }}</td><td>{{ row.get('sect_id', '') }}</td><td>{{ row.get('source', '') }}</td><td>{{ row.get('action', '') }}</td>
+                        <td class="number {% if row.get('stone_delta', 0)|int > 0 %}positive{% elif row.get('stone_delta', 0)|int < 0 %}negative{% endif %}">{{ row.get('stone_delta', 0) }}</td>
+                        <td class="number">{{ row.get('exp_delta', 0) }}</td><td class="number">{{ row.get('sect_contribution_delta', 0) }}</td><td class="number">{{ row.get('sect_scale_delta', 0) }}</td><td class="number">{{ row.get('sect_materials_delta', 0) }}</td>
+                        <td class="detail">{% if row.get('item_delta') %}<details><summary>查看</summary><pre>{{ row.get('item_delta') }}</pre></details>{% endif %}</td>
+                        <td class="detail">{% if row.get('detail') %}<details><summary>查看</summary><pre>{{ row.get('detail') }}</pre></details>{% endif %}</td><td>{{ row.get('trace_id', '') }}</td>
+                    </tr>
+                    {% else %}<tr><td colspan="14" class="muted">当前筛选下没有流水记录</td></tr>{% endfor %}
+                </tbody>
+            </table>
+            <nav class="pagination" aria-label="分页">
+                <span>共 {{ result.get('total', 0) }} 条 · 第 {{ result.get('page', 1) }} / {{ result.get('total_pages', 1) }} 页</span>
+                {% if result.get('has_prev') %}<a href="{{ page_links.first }}">首页</a><a href="{{ page_links.previous }}">上一页</a>{% endif %}
+                {% if result.get('has_next') %}<a href="{{ page_links.next }}">下一页</a><a href="{{ page_links.last }}">末页</a>{% endif %}
+            </nav>
+        </div>
+    </section>
+</main>
+</body>
+</html>

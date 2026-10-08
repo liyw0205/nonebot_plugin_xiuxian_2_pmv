@@ -37,6 +37,8 @@ from ...features.trade.web import blueprint as trade_blueprint
 from ...features.map.web import blueprint as map_blueprint
 from ...features.rift.web import blueprint as rift_blueprint
 from ...features.info.web import blueprint as info_blueprint
+from ...features.economy_ledger.application import EconomyLedgerApplication
+from .blueprints.economy_logs import create_blueprint as economy_logs_blueprint
 from .api import api_error, api_success
 from .auth import csrf_token
 from .auth import HostPolicy
@@ -482,6 +484,10 @@ def create_app(
     app.register_blueprint(activity_blueprint(context=context, permission=has_permission))
     app.register_blueprint(messages_blueprint(context=context, permission=has_permission))
     app.register_blueprint(logs_blueprint(context=context, permission=has_permission))
+    economy_ledger = (context.services or {}).get("economy_ledger") or EconomyLedgerApplication(
+        str(context.database.path("game_db")), clock=context.clock
+    )
+    app.register_blueprint(economy_logs_blueprint(application=economy_ledger, permission=has_permission))
     app.register_blueprint(pages_blueprint(context=context, permission=has_permission))
     app.register_blueprint(create_legacy_blueprint(has_permission))
     for blueprint in feature_blueprints:

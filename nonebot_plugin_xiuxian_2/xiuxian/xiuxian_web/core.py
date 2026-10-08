@@ -293,7 +293,7 @@ def _authorization_error():
         if endpoint in {
             "home", "logout", "update", "backups", "database", "commands", "logs",
             "messages_page", "activity_management", "reward_center", "command_registry",
-            "config_management", "economy_logs", "terminal", "terminal_confirm",
+            "config_management", "economy_logs", "economy_logs.page", "terminal", "terminal_confirm",
             "scheduler_management",
         }:
             return redirect(url_for("login"))

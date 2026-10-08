@@ -19,7 +19,6 @@ PAGE_ENDPOINTS = {
     "logs": "/api/v1/logs",
     "commands": "/api/v1/registry",
     "command_registry": "/api/v1/registry",
-    "economy_logs": "/api/v1/activity",
     "reward_center": "/api/v1/activity",
     "update": "/api/v1/dashboard",
 }
