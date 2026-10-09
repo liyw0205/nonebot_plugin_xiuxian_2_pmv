@@ -5,6 +5,17 @@ from typing import Any
 
 from ...xiuxian.xiuxian_utils.numeric_bind import parse_web_number
 from .repository import DatabaseConsoleRepository
+from .schemas import (
+    BATCH_ADD_OPERATION,
+    BATCH_SET_OPERATION,
+    BATCH_SUBTRACT_OPERATION,
+    DEFAULT_PRIMARY_KEY,
+    DYNAMIC_TABLE_PRIMARY_KEY,
+    IMPART_CARDS_PRIMARY_KEYS,
+    IMPART_CARDS_TABLE,
+    LIKE_SEARCH_OPERATOR,
+    RANGE_SEARCH_OPERATORS,
+)
 
 
 class DatabaseConsoleApplication:
@@ -24,14 +35,17 @@ class DatabaseConsoleApplication:
 
     def row_key(self, table_name: str, table_info: Mapping[str, Any], row_id: str) -> tuple[dict[str, str], list[str], bool]:
         is_dynamic_table = bool(table_info.get("is_dynamic", False))
-        primary_key = table_info.get("primary_key", "user_id" if is_dynamic_table else "id")
+        primary_key = table_info.get(
+            "primary_key", DYNAMIC_TABLE_PRIMARY_KEY if is_dynamic_table else DEFAULT_PRIMARY_KEY
+        )
         is_composite_key = isinstance(primary_key, list)
         primary_fields = primary_key if is_composite_key else [primary_key]
-        if table_name == "impart_cards":
+        if table_name == IMPART_CARDS_TABLE:
             key_parts = row_id.split("_")
             if len(key_parts) < 2:
                 raise ValueError("无效的主键格式")
-            conditions = {"user_id": key_parts[0], "card_name": "_".join(key_parts[1:])}
+            user_field, card_field = IMPART_CARDS_PRIMARY_KEYS
+            conditions = {user_field: key_parts[0], card_field: "_".join(key_parts[1:])}
         elif is_composite_key:
             key_parts = row_id.split("_")
             if len(key_parts) != len(primary_fields):
@@ -96,7 +110,7 @@ class DatabaseConsoleApplication:
             return {"success": False, "error": f"表不存在：{table_name}"}
         search_field = form.get("search_field")
         search_value = form.get("search_value")
-        search_condition = form.get("search_condition", "=")
+        search_condition = form.get("search_condition", LIKE_SEARCH_OPERATOR)
         batch_field = form.get("batch_field")
         operation = form.get("operation")
         value = form.get("value")
@@ -124,18 +138,18 @@ class DatabaseConsoleApplication:
         try:
             table_sql = self.repository.quote_identifier(table_name)
             field_sql = self.repository.quote_identifier(batch_field)
-            if operation == "set":
+            if operation == BATCH_SET_OPERATION:
                 sql = f"UPDATE {table_sql} SET {field_sql} = %s"
-            elif operation == "add":
+            elif operation == BATCH_ADD_OPERATION:
                 sql = f"UPDATE {table_sql} SET {field_sql} = {field_sql} + %s"
-            elif operation == "subtract":
+            elif operation == BATCH_SUBTRACT_OPERATION:
                 sql = f"UPDATE {table_sql} SET {field_sql} = {field_sql} - %s"
             else:
                 return {"success": False, "error": "无效的操作类型"}
             params: list[Any] = [parsed_value]
             if not apply_to_all:
                 if search_field and search_value:
-                    if search_condition == "=":
+                    if search_condition == LIKE_SEARCH_OPERATOR:
                         values = search_value.split()
                         if len(values) > 1:
                             sql += " WHERE (" + " OR ".join(
@@ -145,7 +159,7 @@ class DatabaseConsoleApplication:
                         else:
                             sql += f" WHERE {self.repository.like_text(search_field)}"
                             params.append(f"%{search_value}%")
-                    elif search_condition in (">", "<"):
+                    elif search_condition in RANGE_SEARCH_OPERATORS:
                         values = search_value.split()
                         if len(values) == 1:
                             if not search_value.replace(".", "", 1).isdigit():
@@ -157,7 +171,7 @@ class DatabaseConsoleApplication:
                                 return {"success": False, "error": "第一个搜索值必须是数值"}
                             if not values[1]:
                                 return {"success": False, "error": "第二个搜索值不能为空"}
-                            primary_key = table_info.get("primary_key", "user_id")
+                            primary_key = table_info.get("primary_key", DYNAMIC_TABLE_PRIMARY_KEY)
                             primary_keys = set(primary_key if isinstance(primary_key, list) else [primary_key])
                             searchable = [field for field in fields if field not in primary_keys]
                             if searchable:
@@ -172,7 +186,7 @@ class DatabaseConsoleApplication:
                     else:
                         return {"success": False, "error": "无效的搜索条件"}
                 elif search_value:
-                    primary_key = table_info.get("primary_key", "user_id")
+                    primary_key = table_info.get("primary_key", DYNAMIC_TABLE_PRIMARY_KEY)
                     primary_keys = set(primary_key if isinstance(primary_key, list) else [primary_key])
                     searchable = [field for field in fields if field not in primary_keys]
                     if not searchable:

@@ -1,18 +1,8 @@
 from __future__ import annotations
 
-from typing import Any, Protocol
+from typing import Any
 
-
-class SchedulerAdminManager(Protocol):
-    def list_jobs(self) -> list[dict[str, Any]]: ...
-
-    def set_enabled(self, job_id: str, enabled: bool) -> dict[str, Any]: ...
-
-    def reschedule(self, job_id: str, trigger_spec: object) -> dict[str, Any]: ...
-
-    def queue_manual_run(self, job_id: str) -> dict[str, Any]: ...
-
-    def get_run(self, run_id: str) -> dict[str, Any]: ...
+from .repository import SchedulerAdminManager
 
 
 class SchedulerAdminApplication:

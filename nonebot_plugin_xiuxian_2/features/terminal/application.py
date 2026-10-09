@@ -22,6 +22,24 @@ try:
 except ImportError:  # pragma: no cover - exercised by Windows deployments
     pty = None
 
+from .repository import OsAdapterPort, PasswordProvider, PtySessionFactory, SelectPort
+from .schemas import (
+    AUTHORIZATION_SESSION_KEY,
+    AUTHORIZATION_TTL_SECONDS,
+    PROCESS_POLL_WAIT_SECONDS,
+    PROCESS_REAP_WAIT_SECONDS,
+    PTY_LANGUAGE,
+    PTY_PROMPT,
+    PTY_READ_BYTES,
+    PTY_SELECT_TIMEOUT_SECONDS,
+    PTY_SESSION_TERMINATED_NOTICE,
+    PTY_SHELL_ARGUMENTS,
+    PTY_TERMINAL_TYPE,
+    TERMINAL_PASSWORD_ENVIRONMENT_VARIABLE,
+    UNKNOWN_WORKING_DIRECTORY,
+    WORKING_DIRECTORY_LINK_TEMPLATE,
+)
+
 
 class TerminalError(RuntimeError):
     """Base error for terminal lifecycle and I/O failures."""
@@ -54,17 +72,17 @@ class SubprocessPtyRunner:
         master_fd, slave_fd = pty.openpty()
         env = dict(self.environ if self.environ is not None else os.environ)
         # The authorization secret is process configuration, never shell data.
-        env.pop("XIUXIAN_WEB_TERMINAL_PASSWORD", None)
+        env.pop(TERMINAL_PASSWORD_ENVIRONMENT_VARIABLE, None)
         env.update(
             {
-                "TERM": "xterm-256color",
-                "LANG": "zh_CN.UTF-8",
-                "PS1": r"\[\033[01;32m\]\u\[\033[00m\]:\[\033[01;34m\]\w\[\033[00m\]\$ ",
+                "TERM": PTY_TERMINAL_TYPE,
+                "LANG": PTY_LANGUAGE,
+                "PS1": PTY_PROMPT,
             }
         )
         try:
             process = subprocess.Popen(
-                ["/bin/bash", "--login", "-i"],
+                [*PTY_SHELL_ARGUMENTS],
                 stdin=slave_fd,
                 stdout=slave_fd,
                 stderr=slave_fd,
@@ -88,7 +106,7 @@ class SubprocessPtyRunner:
                 os.close(master_fd)
             finally:
                 process.terminate()
-                process.wait(timeout=1)
+                process.wait(timeout=PROCESS_REAP_WAIT_SECONDS)
             raise
         return TerminalSession(fd=master_fd, pid=process.pid, process=process)
 
@@ -103,20 +121,20 @@ class _DefaultOsAdapter:
 class TerminalApplication:
     """Own terminal authorization and process-local PTY sessions."""
 
-    AUTHORIZATION_TTL = 300
+    AUTHORIZATION_TTL = AUTHORIZATION_TTL_SECONDS
 
     def __init__(
         self,
         *,
-        secret_provider: Callable[[], str | None] | None = None,
-        runner: Callable[[str], TerminalSession] | None = None,
-        session_factory: Callable[[str], TerminalSession] | None = None,
-        os_adapter: Any | None = None,
-        select_fn: Callable[..., Any] | None = None,
+        secret_provider: PasswordProvider | None = None,
+        runner: PtySessionFactory | None = None,
+        session_factory: PtySessionFactory | None = None,
+        os_adapter: OsAdapterPort | None = None,
+        select_fn: SelectPort | None = None,
         owner_pid: int | None = None,
         clock: Callable[[], float] | None = None,
     ) -> None:
-        self._secret_provider = secret_provider or (lambda: os.environ.get("XIUXIAN_WEB_TERMINAL_PASSWORD"))
+        self._secret_provider = secret_provider or (lambda: os.environ.get(TERMINAL_PASSWORD_ENVIRONMENT_VARIABLE))
         if runner is not None and session_factory is not None:
             raise ValueError("runner and session_factory are mutually exclusive")
         self._runner = session_factory or runner or SubprocessPtyRunner()
@@ -145,7 +163,7 @@ class TerminalApplication:
             return False
         if not hmac.compare_digest(str(password or ""), secret):
             return False
-        session["terminal_authorized_until"] = self._clock() + self.AUTHORIZATION_TTL
+        session[AUTHORIZATION_SESSION_KEY] = self._clock() + self.AUTHORIZATION_TTL
         return True
 
     @staticmethod
@@ -168,7 +186,7 @@ class TerminalApplication:
             wait = getattr(session.process, "wait", None)
             if callable(wait):
                 try:
-                    wait(timeout=1)
+                    wait(timeout=PROCESS_REAP_WAIT_SECONDS)
                 except (TypeError, TimeoutError, subprocess.TimeoutExpired):
                     kill = getattr(session.process, "kill", None)
                     if callable(kill):
@@ -183,7 +201,7 @@ class TerminalApplication:
         wait = getattr(session.process, "wait", None)
         if callable(wait):
             try:
-                wait(timeout=0)
+                wait(timeout=PROCESS_POLL_WAIT_SECONDS)
             except (TypeError, TimeoutError, subprocess.TimeoutExpired):
                 # A process already observed as dead should be reapable without
                 # blocking the request; live processes are terminated by close_all.
@@ -219,7 +237,7 @@ class TerminalApplication:
         def generate():
             while True:
                 try:
-                    ready, _, _ = self._select([session.fd], [], [], 0.5)
+                    ready, _, _ = self._select([session.fd], [], [], PTY_SELECT_TIMEOUT_SECONDS)
                 except (OSError, ValueError):
                     with self._lock:
                         self._close_locked(str(admin_id), session)
@@ -229,7 +247,7 @@ class TerminalApplication:
                         with self._lock:
                             if self._sessions.get(str(admin_id)) is not session:
                                 break
-                            data = self._os.read(session.fd, 1024 * 16)
+                            data = self._os.read(session.fd, PTY_READ_BYTES)
                     except (OSError, ValueError):
                         with self._lock:
                             self._close_locked(str(admin_id), session)
@@ -244,7 +262,7 @@ class TerminalApplication:
                     if self._sessions.get(str(admin_id)) is not session:
                         break
                     if not self._refresh_locked(str(admin_id), session):
-                        yield "\n[Session Terminated]\n"
+                        yield PTY_SESSION_TERMINATED_NOTICE
                         break
 
         return generate()
@@ -265,11 +283,11 @@ class TerminalApplication:
         with self._lock:
             session = self._sessions.get(str(admin_id))
             if session is None or not self._refresh_locked(str(admin_id), session):
-                return "~"
+                return UNKNOWN_WORKING_DIRECTORY
             try:
-                return self._os.readlink(f"/proc/{session.pid}/cwd")
+                return self._os.readlink(WORKING_DIRECTORY_LINK_TEMPLATE.format(pid=session.pid))
             except (OSError, ValueError):
-                return "~"
+                return UNKNOWN_WORKING_DIRECTORY
 
     def close_all(self) -> None:
         """Terminate, reap, and close every session owned by this worker."""
@@ -285,7 +303,7 @@ class TerminalApplication:
                 wait = getattr(session.process, "wait", None)
                 if callable(wait):
                     try:
-                        wait(timeout=1)
+                        wait(timeout=PROCESS_REAP_WAIT_SECONDS)
                     except (TypeError, TimeoutError, subprocess.TimeoutExpired):
                         kill = getattr(session.process, "kill", None)
                         if callable(kill):
@@ -294,7 +312,7 @@ class TerminalApplication:
                             except OSError:
                                 pass
                         try:
-                            wait(timeout=1)
+                            wait(timeout=PROCESS_REAP_WAIT_SECONDS)
                         except (TypeError, TimeoutError, subprocess.TimeoutExpired):
                             pass
                 self._close_locked(admin_id, session)

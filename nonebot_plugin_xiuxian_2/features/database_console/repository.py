@@ -4,6 +4,15 @@ from collections.abc import Callable, Iterable, Mapping
 from typing import Any
 
 from ...xiuxian.xiuxian_utils.numeric_bind import format_plain_number
+from .schemas import (
+    DEFAULT_PRIMARY_KEY,
+    DEFAULT_TABLE_PAGE_SIZE,
+    LIKE_SEARCH_OPERATOR,
+    MAX_RANGE_SEARCH_VALUES,
+    MAX_TABLE_PAGE_SIZE,
+    MIN_TABLE_PAGE_SIZE,
+    RANGE_SEARCH_OPERATORS,
+)
 
 
 class DatabaseConsoleRepository:
@@ -59,26 +68,26 @@ class DatabaseConsoleRepository:
         table_name: str,
         *,
         page: int = 1,
-        per_page: int = 10,
+        per_page: int = DEFAULT_TABLE_PAGE_SIZE,
         search_field: str | None = None,
         search_value: str | None = None,
-        search_condition: str = "=",
+        search_condition: str = LIKE_SEARCH_OPERATOR,
     ) -> dict[str, Any]:
         try:
-            page = max(1, int(page))
+            page = max(MIN_TABLE_PAGE_SIZE, int(page))
         except Exception:
             page = 1
         try:
-            per_page = min(200, max(1, int(per_page)))
+            per_page = min(MAX_TABLE_PAGE_SIZE, max(MIN_TABLE_PAGE_SIZE, int(per_page)))
         except Exception:
-            per_page = 10
+            per_page = DEFAULT_TABLE_PAGE_SIZE
         offset = (page - 1) * per_page
 
         table_info = self._database_tables_provider(db_path).get(table_name, {})
         if not table_info:
             return self._empty_result("表不存在", page, per_page)
 
-        primary_key = table_info.get("primary_key", "id")
+        primary_key = table_info.get("primary_key", DEFAULT_PRIMARY_KEY)
         primary_keys = set(primary_key if isinstance(primary_key, list) else [primary_key])
         fields = table_info.get("fields", [])
         if not fields:
@@ -92,7 +101,7 @@ class DatabaseConsoleRepository:
         where_clauses: list[str] = []
 
         if search_field and search_value:
-            if search_condition == "=":
+            if search_condition == LIKE_SEARCH_OPERATOR:
                 values = search_value.split()
                 if len(values) > 1:
                     where_clauses.append(
@@ -102,9 +111,9 @@ class DatabaseConsoleRepository:
                 else:
                     where_clauses.append(self._sql_like_text(search_field))
                     params.append(f"%{search_value}%")
-            elif search_condition in (">", "<"):
+            elif search_condition in RANGE_SEARCH_OPERATORS:
                 values = search_value.split()
-                if len(values) > 2:
+                if len(values) > MAX_RANGE_SEARCH_VALUES:
                     return self._empty_result("搜索值过多", page, per_page)
                 if len(values) == 1:
                     if not search_value.replace(".", "", 1).isdigit():

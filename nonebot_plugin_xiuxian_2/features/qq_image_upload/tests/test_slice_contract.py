@@ -5,7 +5,7 @@ import typing
 import unittest
 from typing import Any
 
-from nonebot_plugin_xiuxian_2.features.qq_image_upload import (
+from .. import (
     application,
     commands,
     jobs,
@@ -14,7 +14,7 @@ from nonebot_plugin_xiuxian_2.features.qq_image_upload import (
     schemas,
     web,
 )
-from nonebot_plugin_xiuxian_2.features.qq_image_upload.manifest import FEATURE
+from ..manifest import FEATURE
 from tests.slice_contract import assert_contract_is_single_source, assert_no_autonomous_surface
 
 SCHEMA_NAMES = ("QQ_ADAPTER_NAME", "UPLOAD_FILE_MODE")

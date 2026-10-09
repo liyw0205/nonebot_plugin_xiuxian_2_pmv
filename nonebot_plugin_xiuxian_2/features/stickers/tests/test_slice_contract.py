@@ -3,7 +3,7 @@ from __future__ import annotations
 import unittest
 from pathlib import Path
 
-from nonebot_plugin_xiuxian_2.features.stickers import (
+from .. import (
     application,
     commands,
     jobs,
@@ -12,7 +12,7 @@ from nonebot_plugin_xiuxian_2.features.stickers import (
     schemas,
     web,
 )
-from nonebot_plugin_xiuxian_2.features.stickers.manifest import FEATURE
+from ..manifest import FEATURE
 from tests.slice_contract import assert_contract_is_single_source, assert_no_autonomous_surface
 
 SCHEMA_NAMES = (

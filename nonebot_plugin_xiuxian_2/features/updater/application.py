@@ -1,47 +1,19 @@
 from __future__ import annotations
 
 import logging
-import re
 import threading
 from pathlib import Path
-from typing import Mapping, Protocol, Sequence
+from typing import Mapping, Sequence
 
+from .repository import Release, ReleaseAsset, UpdateProvider
+from .schemas import DEFAULT_RELEASE_LIST_COUNT, UPDATE_ASSET_NAME
+from .schemas import RELEASE_TAG_PATTERN as _RELEASE_TAG_RE
 
-Release = Mapping[str, object]
-ReleaseAsset = Mapping[str, object]
-UPDATE_ASSET_NAME = "project.tar.gz"
-_RELEASE_TAG_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._+-]{0,127}\Z")
 _logger = logging.getLogger(__name__)
 
 
 def is_valid_release_tag(value: object) -> bool:
     return isinstance(value, str) and _RELEASE_TAG_RE.fullmatch(value) is not None
-
-
-class UpdateProvider(Protocol):
-    def get_current_version(self) -> str: ...
-
-    def get_latest_releases(self, count: int) -> Sequence[Release]: ...
-
-    def prepare_release_asset(self, tag: str) -> tuple[bool, ReleaseAsset | str]: ...
-
-    def enhanced_backup_current_version(self) -> tuple[bool, object]: ...
-
-    def backup_db_files(self) -> tuple[bool, object]: ...
-
-    def backup_all_configs(self) -> tuple[bool, Path | str]: ...
-
-    def download_release(
-        self, tag: str, *, target_asset: ReleaseAsset
-    ) -> tuple[bool, Path | str]: ...
-
-    def extract_update(
-        self, archive: Path, backup: bool = False, *, release_tag: str
-    ) -> tuple[bool, str]: ...
-
-    def restore_config_from_backup(self, path: Path) -> tuple[bool, str]: ...
-
-    def cleanup_download(self, path: Path) -> None: ...
 
 
 class UpdateApplication:
@@ -53,7 +25,7 @@ class UpdateApplication:
     def current_version(self) -> str:
         return self._provider.get_current_version()
 
-    def latest_releases(self, count: int = 10) -> Sequence[Release]:
+    def latest_releases(self, count: int = DEFAULT_RELEASE_LIST_COUNT) -> Sequence[Release]:
         return self._provider.get_latest_releases(count)
 
     def check_update(self) -> tuple[Release | None, str]:

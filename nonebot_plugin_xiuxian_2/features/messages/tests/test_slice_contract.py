@@ -3,7 +3,7 @@ from __future__ import annotations
 import typing
 import unittest
 
-from nonebot_plugin_xiuxian_2.features.messages import (
+from .. import (
     application,
     commands,
     jobs,
@@ -13,7 +13,7 @@ from nonebot_plugin_xiuxian_2.features.messages import (
     send_application,
     web,
 )
-from nonebot_plugin_xiuxian_2.features.messages.manifest import FEATURE
+from ..manifest import FEATURE
 from tests.slice_contract import assert_contract_is_single_source, assert_no_autonomous_surface
 
 SCHEMA_NAMES = (

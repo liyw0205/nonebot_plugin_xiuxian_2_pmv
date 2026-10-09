@@ -18,14 +18,21 @@ from apscheduler.triggers.interval import IntervalTrigger
 
 from ...paths import get_paths
 from ...xiuxian.xiuxian_utils.json_store import load_json_file, save_json_file
+from .schemas import (
+    CRON_TRIGGER_FIELDS,
+    MANUAL_RUN_ID_PREFIX,
+    MIN_TRIGGER_INTERVAL_SECONDS,
+    RUN_HISTORY_LIMIT,
+    SCHEDULE_STORE_NAME,
+    SCHEDULE_STORE_SCHEMA_VERSION,
+)
 
 logger = logging.getLogger(__name__)
 
-SCHEDULE_STORE = get_paths().data / "scheduler_overrides.json"
-_DEFAULT_STORE = {"version": 1, "jobs": {}}
-_CRON_FIELDS = ("year", "month", "day", "week", "day_of_week", "hour", "minute", "second")
-_MANUAL_PREFIX = "web-manual:"
-_RUN_HISTORY_LIMIT = 100
+# ``SCHEDULE_STORE`` stays a module attribute: the default argument below and the
+# compatibility re-export in ``xiuxian_scheduler.job_manager`` both read it.
+SCHEDULE_STORE = get_paths().data / SCHEDULE_STORE_NAME
+_DEFAULT_STORE = {"version": SCHEDULE_STORE_SCHEMA_VERSION, "jobs": {}}
 
 # 前端展示用中文名（按 job.id / 函数名匹配）
 _JOB_TITLES: dict[str, str] = {
@@ -226,7 +233,7 @@ class SchedulerJobManager:
     def _load_store(self) -> dict[str, Any]:
         data = load_json_file(self._store_path, _DEFAULT_STORE, dict)
         jobs = data.get("jobs") if isinstance(data, dict) else None
-        return {"version": 1, "jobs": jobs if isinstance(jobs, dict) else {}}
+        return {"version": SCHEDULE_STORE_SCHEMA_VERSION, "jobs": jobs if isinstance(jobs, dict) else {}}
 
     def _save_store(self, data: dict[str, Any]) -> None:
         save_json_file(self._store_path, data)
@@ -251,7 +258,7 @@ class SchedulerJobManager:
                 "fields": ordered or {field.name: str(field) for field in trigger.fields},
             }
         if isinstance(trigger, IntervalTrigger):
-            seconds = max(int(trigger.interval.total_seconds()), 1)
+            seconds = max(int(trigger.interval.total_seconds()), MIN_TRIGGER_INTERVAL_SECONDS)
             return {
                 "type": "interval",
                 "seconds": seconds,
@@ -407,7 +414,7 @@ class SchedulerJobManager:
                 raise ValueError("Cron 定时配置缺少 fields")
             fields = {}
             for name, value in raw_fields.items():
-                if name not in _CRON_FIELDS:
+                if name not in CRON_TRIGGER_FIELDS:
                     raise ValueError(f"不支持的 Cron 字段：{name}")
                 text = str(value).strip()
                 if not text or len(text) > 64:
@@ -430,7 +437,7 @@ class SchedulerJobManager:
 
     def _get_job(self, job_id: str):
         job = self._scheduler.get_job(str(job_id))
-        if job is None or str(job.id).startswith(_MANUAL_PREFIX):
+        if job is None or str(job.id).startswith(MANUAL_RUN_ID_PREFIX):
             raise ValueError("定时任务不存在")
         return job
 
@@ -472,7 +479,7 @@ class SchedulerJobManager:
             return [
                 self._job_data(job)
                 for job in sorted(self._scheduler.get_jobs(), key=lambda item: str(item.id))
-                if not str(job.id).startswith(_MANUAL_PREFIX)
+                if not str(job.id).startswith(MANUAL_RUN_ID_PREFIX)
             ]
 
     def set_enabled(self, job_id: str, enabled: bool) -> dict[str, Any]:
@@ -508,14 +515,14 @@ class SchedulerJobManager:
     def queue_manual_run(self, job_id: str) -> dict[str, Any]:
         with self._lock:
             job = self._get_job(job_id)
-            manual_id = f"{_MANUAL_PREFIX}{job.id}"
+            manual_id = f"{MANUAL_RUN_ID_PREFIX}{job.id}"
             if (
                 manual_id in self._manual_jobs
                 or self._scheduler.get_job(manual_id) is not None
             ):
                 raise ValueError("该任务已有一次手动执行正在排队或运行")
             run_id = uuid4().hex
-            while len(self._runs) >= _RUN_HISTORY_LIMIT:
+            while len(self._runs) >= RUN_HISTORY_LIMIT:
                 self._runs.pop(next(iter(self._runs)))
             run = {
                 "run_id": run_id,

@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from nonebot_plugin_xiuxian_2.features.cache_files import (
+from .. import (
     application,
     commands,
     jobs,
@@ -13,7 +13,7 @@ from nonebot_plugin_xiuxian_2.features.cache_files import (
     schemas,
     web,
 )
-from nonebot_plugin_xiuxian_2.features.cache_files.manifest import FEATURE
+from ..manifest import FEATURE
 from tests.slice_contract import assert_contract_is_single_source, assert_no_autonomous_surface
 
 SCHEMA_NAMES = ("CacheFileNotFound", "CacheFileNotRegular", "CacheFileOutsideRoot")

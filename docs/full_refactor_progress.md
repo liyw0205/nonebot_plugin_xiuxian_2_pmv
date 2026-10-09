@@ -2,6 +2,44 @@
 
 状态：进行中。`v1.1.0` 的 P0-P7 发布证据继续保留，但不作为底层全面重构完成证明。
 
+**2026-10-09 运维控制面 owner 垂直切片（scheduler / updater / database_console / terminal）**：本片起点
+`scripts/check_architecture.py` 剩 `90` 项，全部在 `feature_contracts`；本片关闭其中四个 owner（统一
+`owner="operations"`、`migration_version=None`、`test_tag=key`，命令/路由/任务/配置四个表面显式空），
+`90 -> 58`，剩余 `58` 项 = `48` 缺件 + `7` 缺 `docs/features/<name>.md` + `3` 缺 `tests/test_*.py`，正好落在
+`economy_ledger/fallback/game_events/group_lifecycle/logs/plugin_config/qq_bind` 这 7 个目录。注册表
+`97 -> 101`，`docs/refactor_inventory.json` 重导后只新增这 4 个 feature key、`database_tables` 零新增
+（新增注释与 docstring 同样避开 `from/into/update <word>` 句式，`_TABLE_RE` 会把它扫成表名）。
+
+单点化的契约值：`features/scheduler/schemas.py` 收 override 文件名与 `version 1`、手动 run 前缀
+`web-manual:`、run 历史上限 `100`、cron 字段白名单、interval 下限 `1` 秒；`features/updater/schemas.py`
+收 `project.tar.gz`、发布 tag 正则、release 列表默认条数 `10`；`features/database_console/schemas.py` 收
+分页 `1/10/200`、`search_condition` 白名单 `=` 与 `>`/`<`、区间值上限 `2`、`set/add/subtract`、默认主键
+`id`、动态表主键 `user_id` 与 `impart_cards` 组合键；`features/terminal/schemas.py` 收口令环境变量名、
+授权 session 键与 `300` 秒 TTL、PTY shell 参数/`TERM`/`LANG`/`PS1`、`16KiB` 读块、`0.5` 秒 select 超时、
+`[Session Terminated]` 标记、回收 `wait` 超时、`/proc/{pid}/cwd` 模板与 `~` 回退。端口同步归位到各目录
+`repository.py`：`SchedulerAdminManager`、`UpdateProvider`（连 `Release`/`ReleaseAsset`）从 `application.py`
+迁出并原样再导出（对象同一，patch 点与测试路径不变），`terminal` 新增 `PasswordProvider`/
+`PtySessionFactory`/`OsAdapterPort`/`SelectPort` 四个注入端口 Protocol。
+
+`16` 条旧入口只记委托、不动旧层：scheduler 五条 API、updater 三条、database_console 四条、terminal 四条，
+目标全是 application 公开方法；新增 `tests/test_operations_console_slice_manifests.py` 逐条验证 registry
+持有同一 manifest 对象、四表面全空、文档九节齐备且含 path 与 target 原文、委托可 `getattr` 解析且
+path 全局唯一（恰 `16` 条）。`GET /database` 已由 `runtime_web` 声明，测试把这条重叠写成显式白名单，
+其余路径一律禁止二次声明。`jobs.py`/`commands.py` 的空声明带理由：40 个 legacy job id 的唯一 owner 是
+`compatibility/legacy_manifest.py` 的 `legacy_scheduler`，`版本查询/版本更新/检测更新` 经
+`commands_for("status")` 归 `status`，重复声明即 `FeatureRegistry.validate()` 报错。terminal 的口令环境
+变量故意不声明成 `ConfigSpec`，否则口令会进配置面板与配置导出。已知重复留在旧层：
+`xiuxian/xiuxian_web/database.py:69` 另有写死的 `200`/默认 `20`，与 `schemas` 的默认 `10` 并存，属旧层
+自有分页语义，本切片不改。
+
+新增 `terminal/tests/`（此前该目录连包都不存在）与 `scheduler/tests/__init__.py`（63 个 feature 里唯一
+缺它的目录），四目录各一份 `tests/test_slice_contract.py` 走 `tests/slice_contract.py` 的单一来源断言，
+除契约外还钉住真实行为：override 落盘版本号、`interval` 序列化不会写 `0` 秒、tag 守卫拒绝路径型 tag、
+资源名不符即拒绝且锁必被释放、分页在取连接之前就被夹取、`impart_cards` 组合键切分、授权只写声明键的
+截止时间、口令缺失 fail-closed、读块大小与 select 超时按声明值传参、子进程死亡产出声明标记、`cwd` 用
+声明模板且回退 `~`。
+
+
 **2026-10-09 出站媒体 owner 垂直切片（cache_files / qq_image_upload / stickers / messages）**：本片起点
 `scripts/check_architecture.py` 剩 `121` 项，全部在 `feature_contracts`；本片关闭其中四个 owner（统一
 `owner="operations"`、`migration_version=None`、`test_tag=key`，命令/路由/任务/配置四个表面显式空），
