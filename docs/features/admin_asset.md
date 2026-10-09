@@ -67,4 +67,4 @@ feature 单人 exp repository 在一个 game DB immediate UoW 中校验 `.002/.0
 
 ## 灰度开关、回滚和已知限制
 
-单人及全服灵石、单人及全服修为、单人及全服普通物品、境界和灵根调整，以及单人和全服饰品、单人及全服传承石默认路径已由 feature repositories 承担；普通物品全服批次使用 game-only `.012`，全服修为回执使用 game-only `.013`，全服传承石批次使用 `.011`，全服饰品使用 `.010`、单人饰品回执使用 `.009`，玩家饰品 schema 继续沿用既有 player-side migration。显式 legacy services 与旧批次记录仍保留作兼容/恢复边界；operation receipts、批次目标和进度属于持久审计数据，不随测试缓存清理。其他管理员资产仍有各自兼容边界。
+单人及全服灵石、单人及全服修为、单人及全服普通物品、境界和灵根调整，以及单人和全服饰品、单人及全服传承石默认路径已由 feature repositories 承担；普通物品全服批次使用 game-only `.012`，全服修为回执使用 game-only `admin_asset.013`，全服传承石批次使用 `.011`，全服饰品使用 `.010`、单人饰品回执使用 `.009`，玩家饰品 schema 继续沿用既有 player-side migration。显式 legacy services 与旧批次记录仍保留作兼容/恢复边界；operation receipts、批次目标和进度属于持久审计数据，不随测试缓存清理。其他管理员资产仍有各自兼容边界。

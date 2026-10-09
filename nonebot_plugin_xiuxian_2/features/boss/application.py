@@ -44,6 +44,10 @@ def _data(raw: Any) -> dict[str, Any]:
     return dict(vars(raw))
 
 
+# Weekly purchase counters are a read of already settled purchases.
+READ_ONLY_METHODS = ("weekly_purchases",)
+
+
 class BossApplication:
     def __init__(self, game_database: str | Path, player_database: str | Path, *, activity_database: str | Path | None = None, repository: BossRepository | None = None, world_boss_repository: Any | None = None, manual_spawn_repository: Any | None = None, full_refresh_repository: Any | None = None, full_refresh_config_loader=None, ledger: OperationLedger | None = None, clock=None) -> None:
         self.game_database = str(game_database)

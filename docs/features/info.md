@@ -7,7 +7,7 @@ The compatibility command remains available while the new application boundary i
 The historical package owns command names during the compatibility release. New names are added only through this feature manifest.
 
 ## Web API
-No new HTTP route is exposed in this migration slice. Existing URLs remain served by the legacy web adapter.
+`GET /api/v1/info/users/search` 是唯一的新路由，权限 `admin`，由 `adapters/web/blueprints/info.py` 注册、`features/info/web.py` 转发，只读走 `PlayerProfileApplication.search_users`；其余历史 URL 继续由旧 Web 适配器提供。
 
 ## 数据模型与迁移
 Migration `legacy.info.001` records the slice in `game_db`; the feature-owned repository and explicit service port now own the operation boundary while legacy tables remain the compatibility data source. Shared player profile reads, including ID/道号 lookups used by base commands and identity fields in the info projection, now use `PlayerProfileApplication -> PlayerProfileSqlRepository` in read-only mode; missing database/schema is fail-closed and never creates tables during a request.

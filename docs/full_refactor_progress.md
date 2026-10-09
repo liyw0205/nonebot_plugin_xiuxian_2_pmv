@@ -2,6 +2,72 @@
 
 状态：进行中。`v1.1.0` 的 P0-P7 发布证据继续保留，但不作为底层全面重构完成证明。
 
+**2026-10-09 架构门禁口径校准与框架/适配器边界收口**：以命令输出为准重建观测基线——
+`scripts/check_architecture.py` 在本片开始时的 `d8cd9e2a` 上是 `ok=false`、`211` 项错误，
+进度页此前多处“architecture CLI `ok=true`”的记录与仓库实际不符，已在
+`docs/refactor_architecture.md` 作废并改写口径。真实缺陷修复：`features/activity/__init__.py`
+改为按需解析 `ActivityApplication/FEATURE`，消除
+`plugin.py -> features.activity.migrations -> features.activity.application ->
+xiuxian_activity/__init__ -> features.activity.application` 导入环（新增子进程回归，冷解释器不初始化
+NoneBot 也能导入该切片）；`scripts/refactor_completion_audit.py` 不再在 `nonebot.init()` 之前导入插件包
+（此前既让 NoneBot 跳过插件加载，又把插件诊断写进 JSON 通道），改为 `audit()` 统一 stderr 重定向，
+`scripts/check_architecture.py` 中 9 个会导入插件包的检查改为先 `_ensure_nonebot_initialized()`，
+P1/P4/P5 由红转绿；`bootstrap/platform_manifest.py` 补声明
+`GET /api/v1/economy-logs`、`GET /api/v1/economy-logs/export`、`GET /economy_logs/export`，
+undeclared route 与 missing permission 各 `3` 项归零；`features/info/web.py` 的 Flask blueprint
+迁到 `adapters/web/blueprints/info.py`，feature 侧只转发，与 `features/bank/web.py` 约定一致；
+`entertainment/media_parser_cache.py`、`fallback/application.py`、
+`scheduler/apscheduler_manager.py`、`group_lifecycle/notice_application.py` 的
+`from nonebot.log import logger` 改回 stdlib `logging.getLogger(__name__)`，feature 层不再导入消息框架；
+`BegApplication.reset_daily_claim_flag` 增加可选 `operation_id`（缺省仍为
+`beg.daily-reset:{business_date}`），手工重试可用独立幂等身份，scheduler 调用形式不变，
+进度门禁既有源码锚点仍成立。
+
+门禁准确性同步：只读 facade 用模块内 `READ_ONLY_METHODS` 显式声明，门禁改为“声明 + 结构证据”，
+出现写 SQL、`immediate=True` UoW 或 ledger `begin/finish/commit/connect` 即失败，
+`pet.reconcile_travel_claim_operation`、`map.reconcile_mission_claim_operation`、
+`boss.weekly_purchases`、`compensation.compensation_claimed_data/invitation_claimed_thresholds`
+据此关闭 `5` 项误报；`check_feature_connections` 收窄为“自行开连接或导入 NoneBot/Flask”才报错，
+仅使用 `sqlite3` 异常/上限常量、连接由共享 `DatabaseUnitOfWork` 提供的 repository 不再误报
+（`16 -> 3`，剩余 `arena/opponent_repository.py`、`logs/message_recall_repository.py`、
+`admin/qqid_batch_repository.py` 是真实手工建连，列入下一片）；
+`check_migrated_legacy_entrypoints` 接受已核对的 facade 模块
+（`features.beg.command_application`、`features.info.avatar_application/profile_application`）
+与 `_xxx_application().method()` 惰性工厂调用形式，`4` 项归零。文档契约：
+`docs/features/arena.md`、`docs/features/beg.md` 补齐 9 个固定小节，
+`admin_asset.md`/`base.md`/`info.md` 分别补 `admin_asset.013`、`base.012`、
+`GET /api/v1/info/users/search`，`check_manifest_documentation` 与文档小节检查全绿。
+
+验证：新增 `tests/architecture/test_architecture_gate_checks.py` `10 passed`（门禁口径、
+facade 声明、feature 层不导入 NoneBot、activity 冷导入环）；Phase 2 `--check` 仍
+`ready=true`、`496` 项、`blocked=0`、membership 有效；`check_full_refactor_progress.py --json`
+仍 `exit_ready=true`、`exit_blockers=[]`；`check_architecture.py` 从 `211` 降到 `153`
+（`150` 项 feature 垂直切片缺件 + `3` 项手工建连 + inventory 需随改动重跑）。
+`python -m unittest discover -s tests -q` 与同机 HEAD 工作树基线逐条比对：
+`2875` 项、`failures=9, errors=10`，失败/错误名单与基线完全一致，本片不新增失败；
+其中 `test_activity_admin_data`、`test_source_quality` 绝对导入、lazy-reader 与 inventory
+等条目为既有失败，未借本片扩大修复面。
+
+未做与 backlog：未访问运行数据库/WAL/SHM，未跑五库恢复演练、真实 live 冒烟与 P7 发布证据；
+`refactor_completion_audit.py` 的 P7 仍需 `--data-dir/--current-release/--evidence` 真实发布周期证据；
+`19` 个 feature 目录（`cache_files`、`config_backups`、`database_backups`、`database_console`、
+`economy_ledger`、`fallback`、`game_events`、`group_lifecycle`、`logs`、`manual_backups`、
+`messages`、`plugin_backups`、`plugin_config`、`qq_bind`、`qq_image_upload`、`scheduler`、
+`stickers`、`terminal`、`updater`）缺 `manifest/schemas/migrations/commands/web/jobs`、
+feature 内测试或 `docs/features/<name>.md`，按 owner 分批补真实声明与“无命令/无路由/无任务”占位，
+不得以空文件充数；`3` 处 feature 手工建连需迁到共享 UoW（含缺库不建库、零锁等待与 ATTACH 语义）；
+全局 `legacy transaction services`、`xiuxian2_handle` 与正式发布迁移仍开放。
+
+子代理与资源：本轮按文档先后委派 `5` 次只读审计（3 次为继承模型不支持 web search 配置错误与
+`429`，2 次为 distributor `503` 无可用渠道），全部未运行成功、未产生任何写入，改由主线程完成
+盘点、实现、串行验收与文档；已关闭全部失败代理。资源收尾：清理仓库内 `3781` 个 `.pyc`、
+`218` 个 `__pycache__`、`.pytest_cache` 以及上一批遗留的 `25` 个 `/tmp/codex-*` 专用目录
+（RAM available 由 `1279 MiB` 回升至 `1416 MiB`，磁盘可用 `13G`，未清 page cache、业务共享缓存、
+`.venv`、`.git`、仓库 `data/`、运行库或其他项目 `/tmp` 目录）；本轮临时产物集中在
+`/tmp/codex-archgate-20261009`（含 HEAD 对照工作树与 basetemp），验收后清理。
+用户 `nonebot_plugin_xiuxian_2/xiuxian/xiuxian_boss/boss_info.json` 继续排除在提交之外。
+
+
 **2026-10-09 activity boss rank 同库事务锁修复**：首领排行领取已经由
 `ActivityBossRankClaimApplication` 承担，本轮没有重复迁移该功能；审计发现生产 wiring
 把 `game_db` 同时作为 game/activity 数据库，旧实现会在同一 SQLite 文件内嵌套

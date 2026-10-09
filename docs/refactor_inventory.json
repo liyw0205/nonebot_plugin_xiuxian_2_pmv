@@ -2685,6 +2685,7 @@
     "arena_state_operations",
     "arena_weekly_rank_reduction_operations",
     "arena_weekly_rank_reduction_targets",
+    "array",
     "asdict",
     "asyncio",
     "auction_bid_operations",
@@ -2736,6 +2737,7 @@
     "buffinfo",
     "buffinfo_base",
     "character",
+    "closing_enter_operations",
     "closing_settlement_operations",
     "closing_statistics_events",
     "collections",
@@ -2749,6 +2751,7 @@
     "compensation_reward_definition_revisions",
     "compensation_reward_definitions",
     "concurrent",
+    "consuming",
     "contextlib",
     "contextvars",
     "continuous_breakthrough_operations",
@@ -2828,6 +2831,7 @@
     "error",
     "eternal",
     "exc",
+    "feature",
     "filtered",
     "first_users",
     "flask",
@@ -2837,6 +2841,7 @@
     "fusion_batch_operations",
     "fusion_feature_migrations",
     "fusion_operations",
+    "game",
     "game_data",
     "game_event_statistics_events",
     "global",
@@ -2978,6 +2983,7 @@
     "odd",
     "of",
     "on",
+    "one",
     "operation_audit",
     "operation_ledger",
     "orchestration",
@@ -3033,10 +3039,12 @@
     "puppet_operations",
     "pydantic",
     "random",
+    "ranked",
     "ranked_targets",
     "realm_map",
     "recovery_item_operations",
     "reincarnation_memory",
+    "relevant",
     "request",
     "reward_claim_counters",
     "reward_claims",
@@ -3095,6 +3103,7 @@
     "sect_weekly_goal",
     "sect_weekly_reward_operations",
     "sects",
+    "selected",
     "self",
     "set",
     "sign_in_effect_operations",
@@ -3103,6 +3112,7 @@
     "sign_in_statistics_projection",
     "sign_in_task_events",
     "sign_in_task_projection",
+    "silently",
     "simulator_feature_migrations",
     "skill_learning_operations",
     "spirit_vein_lifecycle_operations",
@@ -3127,6 +3137,7 @@
     "tasks_feature_migrations",
     "team_cd",
     "teams",
+    "tempfile",
     "tests",
     "the",
     "their",
@@ -5074,6 +5085,22 @@
       "permission": "user"
     },
     {
+      "feature": "runtime_web",
+      "methods": [
+        "GET"
+      ],
+      "path": "/api/v1/economy-logs",
+      "permission": "admin"
+    },
+    {
+      "feature": "runtime_web",
+      "methods": [
+        "GET"
+      ],
+      "path": "/api/v1/economy-logs/export",
+      "permission": "admin"
+    },
+    {
       "feature": "info",
       "methods": [
         "GET"
@@ -5647,6 +5674,14 @@
         "GET"
       ],
       "path": "/economy_logs",
+      "permission": "admin"
+    },
+    {
+      "feature": "runtime_web",
+      "methods": [
+        "GET"
+      ],
+      "path": "/economy_logs/export",
       "permission": "admin"
     },
     {

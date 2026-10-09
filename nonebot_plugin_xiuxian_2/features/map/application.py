@@ -27,6 +27,10 @@ class MapCombatRunner(Protocol):
     ) -> Awaitable[tuple[Any, str, dict[str, Any]]]: ...
 
 
+# Receipt reconciliation replays an already committed claim; it never writes.
+READ_ONLY_METHODS = ("reconcile_mission_claim_operation",)
+
+
 class MapApplication(LegacyApplication):
     def __init__(
         self,

@@ -42,17 +42,24 @@ def check_no_flask_or_nonebot_import_in_core() -> list[str]:
     return check_core_imports()
 
 
+_FRAMEWORK_ROOTS = {"nonebot", "flask"}
+# Feature repositories receive connections from the shared unit of work, but they
+# still need driver exception and limit constants; only opening a connection (or
+# importing a message/web framework) breaks the adapter boundary.
+_CONNECT_TOKENS = ("sqlite3.connect", "db_backend.connect", "db_backend.connection")
+
+
 def check_feature_connections() -> list[str]:
     errors: list[str] = []
     for path in (PACKAGE / "features").rglob("*.py"):
         if "tests" in path.parts:
             continue
         source = path.read_text(encoding="utf-8")
-        if not any(token in source for token in ("sqlite3", "nonebot", "flask", "db_backend.connect", "db_backend.connection")):
+        if not any(token in source for token in _CONNECT_TOKENS) and not any(
+            name.split(".", 1)[0] in _FRAMEWORK_ROOTS for name in _imports(path)
+        ):
             continue
-        names = _imports(path)
-        if any(name.split(".", 1)[0] in {"sqlite3", "nonebot", "flask"} for name in names) or any(token in source for token in ("db_backend.connect", "db_backend.connection", "sqlite3.connect")):
-            errors.append(f"{path.relative_to(ROOT)} imports a framework/database driver")
+        errors.append(f"{path.relative_to(ROOT)} imports a framework/database driver")
     return errors
 
 
@@ -138,6 +145,7 @@ def check_all_web_endpoints_have_permission() -> list[str]:
 
 def check_manifest_ids_are_unique() -> list[str]:
     try:
+        _ensure_nonebot_initialized()
         from nonebot_plugin_xiuxian_2.plugin import build_registry
 
         build_registry().validate()
@@ -159,6 +167,7 @@ def _ensure_nonebot_initialized() -> None:
 def check_legacy_scheduler_manifest_alignment() -> list[str]:
     """Ensure every legacy scheduler declaration has a stable manifest ID."""
     try:
+        _ensure_nonebot_initialized()
         from nonebot_plugin_xiuxian_2.compatibility.legacy_manifest import FEATURE
 
         declared = {job.id for job in FEATURE.jobs}
@@ -194,6 +203,7 @@ def check_legacy_scheduler_manifest_alignment() -> list[str]:
 
 def check_migration_versions_are_monotonic() -> list[str]:
     try:
+        _ensure_nonebot_initialized()
         from nonebot_plugin_xiuxian_2.plugin import build_registry
 
         versions = [feature.migration_version for feature in build_registry().features if feature.migration_version]
@@ -204,24 +214,88 @@ def check_migration_versions_are_monotonic() -> list[str]:
         return [f"migration monotonicity check failed: {type(exc).__name__}: {exc}"]
 
 
+_WRITE_SQL_PATTERN = re.compile(
+    r"\b(INSERT\s+INTO|REPLACE\s+INTO|UPDATE\s+\S+\s+SET|DELETE\s+FROM|ALTER\s+TABLE|"
+    r"CREATE\s+(?:TABLE|INDEX|TRIGGER)|DROP\s+(?:TABLE|INDEX|TRIGGER)|TRUNCATE)\b",
+    re.IGNORECASE,
+)
+_WRITE_CALL_NAMES = frozenset({"begin", "finish", "record_failure", "commit", "executescript", "connect"})
+_MUTATING_NAME_TOKENS = ("claim", "purchase", "grant", "settle", "transfer", "withdraw", "deposit")
+_READ_ONLY_NAME_PREFIXES = ("get_", "has_", "is_", "read_", "list_")
+
+
+def _call_name(node: ast.Call) -> str:
+    if isinstance(node.func, ast.Attribute):
+        return node.func.attr
+    if isinstance(node.func, ast.Name):
+        return node.func.id
+    return ""
+
+
+def _mutating_evidence(node: ast.FunctionDef | ast.AsyncFunctionDef) -> list[str]:
+    """Structural proof that a method really stays read-only."""
+    evidence: set[str] = set()
+    documentation = ast.get_docstring(node)
+    for child in ast.walk(node):
+        if isinstance(child, ast.Constant) and isinstance(child.value, str) and child.value != documentation:
+            if _WRITE_SQL_PATTERN.search(child.value):
+                evidence.add("write sql")
+        elif isinstance(child, ast.Call):
+            name = _call_name(child)
+            if name in _WRITE_CALL_NAMES:
+                evidence.add(f"call {name}")
+            for keyword in child.keywords:
+                if keyword.arg == "immediate" and getattr(keyword.value, "value", None) is True:
+                    evidence.add("immediate unit of work")
+    return sorted(evidence)
+
+
+def _read_only_declarations(tree: ast.AST) -> set[str]:
+    """Collect explicit READ_ONLY_METHODS declarations in one application module."""
+    declared: set[str] = set()
+    for node in ast.walk(tree):
+        targets: list[ast.expr] = []
+        if isinstance(node, ast.Assign):
+            targets = list(node.targets)
+        elif isinstance(node, ast.AnnAssign) and node.value is not None:
+            targets = [node.target]
+        for target in targets:
+            if isinstance(target, ast.Name) and target.id == "READ_ONLY_METHODS" and node.value is not None:
+                try:
+                    declared.update(str(item) for item in ast.literal_eval(node.value))
+                except ValueError:
+                    continue
+    return declared
+
+
 def check_operation_id_on_asset_writes() -> list[str]:
-    """Flag new application services that expose mutating methods without an operation ID."""
+    """Flag application services that expose mutating methods without an operation ID."""
     errors: list[str] = []
     for path in (PACKAGE / "features").rglob("application.py"):
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        declared = _read_only_declarations(tree)
         for node in ast.walk(tree):
             if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) or node.name.startswith("_"):
                 continue
             names = {argument.arg for argument in node.args.args + node.args.kwonlyargs}
-            read_only_name = node.name.startswith(("get_", "has_", "is_", "read_", "list_")) or node.name in {
-                "invitation_claimed_thresholds",
-            }
-            if any(token in node.name.casefold() for token in ("claim", "purchase", "grant", "settle", "transfer", "withdraw", "deposit")) and not read_only_name and "operation_id" not in names:
-                errors.append(f"{path.relative_to(ROOT)}:{node.lineno} mutating method lacks operation_id: {node.name}")
+            if not any(token in node.name.casefold() for token in _MUTATING_NAME_TOKENS):
+                continue
+            if "operation_id" in names or node.name.startswith(_READ_ONLY_NAME_PREFIXES):
+                continue
+            if node.name in declared:
+                evidence = _mutating_evidence(node)
+                if evidence:
+                    errors.append(
+                        f"{path.relative_to(ROOT)}:{node.lineno} {node.name} declares READ_ONLY_METHODS "
+                        f"but contains {', '.join(evidence)}"
+                    )
+                continue
+            errors.append(f"{path.relative_to(ROOT)}:{node.lineno} mutating method lacks operation_id: {node.name}")
     return errors
 
 
 def _legacy_migrated_features():
+    _ensure_nonebot_initialized()
     from nonebot_plugin_xiuxian_2.features._legacy_migrated import FEATURES
 
     return FEATURES
@@ -242,6 +316,7 @@ def check_migrated_command_inventory() -> list[str]:
 
 def check_legacy_command_manifest_alignment() -> list[str]:
     """Compare primary ``on_command`` names with each migrated manifest."""
+    _ensure_nonebot_initialized()
     from nonebot_plugin_xiuxian_2.compatibility.command_inventory import legacy_command_names
 
     errors: list[str] = []
@@ -259,6 +334,7 @@ def check_legacy_command_manifest_alignment() -> list[str]:
 
 def check_migrated_command_aliases() -> list[str]:
     """Ensure aliases of migrated commands remain registered by new slices."""
+    _ensure_nonebot_initialized()
     from nonebot_plugin_xiuxian_2.compatibility.command_inventory import legacy_migrated_command_names
     from nonebot_plugin_xiuxian_2.plugin import build_registry
 
@@ -298,7 +374,8 @@ def check_migrated_legacy_entrypoints() -> list[str]:
     package_names = {
         "activity": ("xiuxian_activity", "features.activity.application"),
         "interactive": ("xiuxian_Interactive", "features.interactive.application"),
-        "beg": ("xiuxian_beg", "features.beg.application"),
+        # beg keeps its command facade in features.beg.command_application.
+        "beg": ("xiuxian_beg", ("features.beg.application", "features.beg.command_application")),
         "tasks": ("xiuxian_tasks", "features.tasks.application"),
         "training": ("xiuxian_training", "features.training.application"),
         "title": ("xiuxian_title", "features.title.application"),
@@ -312,7 +389,11 @@ def check_migrated_legacy_entrypoints() -> list[str]:
         "fusion": ("xiuxian_fusion", "features.fusion.application"),
         "impart": ("xiuxian_impart", "features.impart.application"),
         "impart_pk": ("xiuxian_impart_pk", "features.impart_pk.application"),
-        "info": ("xiuxian_info", "features.info.application"),
+        # info writes live in the profile/avatar applications, not one facade module.
+        "info": (
+            "xiuxian_info",
+            ("features.info.application", "features.info.avatar_application", "features.info.profile_application"),
+        ),
         "past_life": ("xiuxian_past_life", "features.past_life.application"),
         "status": ("xiuxian_status", "features.status.application"),
         "tianti": (
@@ -335,7 +416,11 @@ def check_migrated_legacy_entrypoints() -> list[str]:
         )
         if not any(application_import in sources for application_import in application_imports):
             errors.append(f"{path.relative_to(ROOT)} does not import one of {application_imports}")
-        if not re.search(r"\b\w+_application\.(?:execute|execute_legacy_call|[a-z_]+)\s*\(", sources):
+        # Lazy factory helpers (``_compensation_application().grant_stone(...)``) are the
+        # documented compatibility pattern, so they count as application dispatch too.
+        if not re.search(
+            r"\b\w*_application(?:\(\))?\.(?:execute|execute_legacy_call|[a-z_]+)\s*\(", sources
+        ):
             errors.append(f"{path.relative_to(ROOT)} does not dispatch mutations through application")
 
     # No historical simulator package is checked in.  The new simulator
@@ -418,6 +503,7 @@ def check_manifest_documentation() -> list[str]:
     required here as well.
     """
     try:
+        _ensure_nonebot_initialized()
         from nonebot_plugin_xiuxian_2.plugin import build_registry
     except Exception as exc:
         return [f"manifest documentation check failed: {type(exc).__name__}: {exc}"]
@@ -595,6 +681,7 @@ def check_documented_migration_count() -> list[str]:
     docs = [ROOT / "docs" / "refactor_architecture.md", ROOT / "docs" / "refactor_baseline.md"]
     pattern = re.compile(r"(\d+)\s*项(?:迁移)?(?:dry-run|清单)")
     try:
+        _ensure_nonebot_initialized()
         from nonebot_plugin_xiuxian_2.plugin import build_migrations
 
         actual = len(build_migrations())
@@ -630,6 +717,9 @@ def check_refactor_inventory() -> list[str]:
     if not path.is_file():
         return ["docs/refactor_inventory.json is missing"]
     try:
+        # The exporter reads live manifests, so a standalone audit run has to
+        # initialize the framework before the first plugin import.
+        _ensure_nonebot_initialized()
         actual = json.loads(path.read_text(encoding="utf-8"))
         if not isinstance(actual, dict) or actual.get("schema") != 1:
             return ["refactor inventory has an unsupported schema"]

@@ -50,3 +50,39 @@
 - `command: 仙途奇缘`
 - `command: 仙途奇缘帮助`
 - `command: 新手礼包`
+
+## 用户流程
+
+玩家在群里发送每日机缘或新手礼包命令，适配器只提取身份并构造操作 ID；资格判断、随机奖励、礼包解析和回复文案分别由 `BegCommandApplication` 与 `BegApplication` 完成，重复消息按回执直接回放首次结果。
+
+## 命令与别名
+
+`仙途奇缘`、`仙途奇缘帮助`、`新手礼包` 三个入口来自 `commands_for("beg")`，不新增触发词；帮助命令不要求玩家资料与操作 ID。
+
+## Web API
+
+本切片不暴露新的 HTTP 路由，`features/beg/web.py` 明确返回 `None`，旧 Web 面板继续由兼容适配器提供页面。
+
+## 数据模型与迁移
+
+`beg.001` 在启动迁移中创建每日机缘与新手礼包两类业务回执表，并登记 `legacy.beg.001` 标记；平台启动迁移负责 ledger 与审计表。只读命令 repository 只校验所需结构，缺 schema 返回失败而不建表。
+
+## 事务与失败回滚
+
+领取在 game DB immediate UoW 内登记 ledger、核对玩家与领取标志、写灵石与礼包库存、保存业务回执并完成审计，中途异常回滚领取效果。活动时间更新是独立的 feature 事务，不宣称与奖励原子提交；`started`、`needs_reconcile` 与已拒绝回执都不会被推测成成功。
+
+## 定时任务
+
+`features/beg/jobs.py` 的 `JOBS` 为空。既有 `daily_reset_beg` 仍在兼容调度器上调用 `BegApplication.reset_daily_claim_flag(business_date)`，操作 ID 由业务日期推导，同日重放不会重复清除领取标志。
+
+## 配置项
+
+`beg_enabled` 控制新命令/应用边界是否注册，默认开启且可热重载；`beg_max_days` 由 `XiuConfig` 提供，用于资格期限与帮助文案展示。
+
+## 适配器差异
+
+matcher 在 `xiuxian_beg` 注册，只负责解析上下文与发送回复；随机与礼包目录 provider 惰性注入，物品目录不在模块导入期构造。旧事务 facade 仅作显式兼容边界。
+
+## 测试与手工验收
+
+`python -m unittest nonebot_plugin_xiuxian_2.features.beg.tests.test_beg_application nonebot_plugin_xiuxian_2.features.beg.tests.test_command_application nonebot_plugin_xiuxian_2.features.beg.tests.test_daily_reset_repository -q`；`python -m unittest tests.test_beg_command_ingress tests.test_beg_daily_reward_settlement tests.test_beg_progress_contract -q`。手工验收覆盖回放先于当前输入、拒绝不误报成功、缺 schema 不建表与动态帮助。

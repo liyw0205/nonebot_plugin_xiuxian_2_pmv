@@ -1,10 +1,9 @@
 from __future__ import annotations
 
+import logging
 import time
 from pathlib import Path
 from typing import Any
-
-from nonebot.log import logger
 
 from ...paths import get_paths
 from ...xiuxian.xiuxian_entertainment.media_parser.config import (
@@ -12,6 +11,7 @@ from ...xiuxian.xiuxian_entertainment.media_parser.config import (
     media_parser_cache_dir,
 )
 
+logger = logging.getLogger(__name__)
 
 def _iter_cache_files(roots: list[Path]):
     for root in roots:

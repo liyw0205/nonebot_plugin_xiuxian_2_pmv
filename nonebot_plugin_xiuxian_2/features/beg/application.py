@@ -125,12 +125,17 @@ class BegApplication:
                 self.ledger.record_failure(self.database, operation_id, action, ledger_payload, str(exc))
                 raise
 
-    def reset_daily_claim_flag(self, business_date: str | date):
+    def reset_daily_claim_flag(
+        self, business_date: str | date, *, operation_id: str | None = None
+    ):
         try:
             normalized_date = date.fromisoformat(str(business_date)).isoformat()
         except (TypeError, ValueError) as exc:
             raise ValidationError("invalid business_date") from exc
-        operation_id = f"beg.daily-reset:{normalized_date}"
+        # A caller-supplied id keeps manual retries independent from the daily job.
+        operation_id = str(operation_id or f"beg.daily-reset:{normalized_date}").strip()
+        if not operation_id:
+            raise ValidationError("operation_id is required")
         return BegDailyResetSqlRepository(self.database, ledger=self.ledger).reset(
             operation_id, normalized_date
         )

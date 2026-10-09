@@ -1,16 +1,16 @@
 from __future__ import annotations
 
+import logging
 import asyncio
 from collections.abc import Awaitable, Callable
 from typing import Any
-
-from nonebot.log import logger
 
 from ...xiuxian.adapter_compat import GroupMessageEvent, PrivateMessageEvent
 from ...xiuxian.xiuxian_config import XiuConfig
 from ...xiuxian.xiuxian_utils.http_proxy import http_client
 from ...xiuxian.xiuxian_utils.utils import handle_pic_msg_send, handle_send
 
+logger = logging.getLogger(__name__)
 
 def get_random_acg_pic_url(timeout: int = 5) -> str | None:
     """Fetch a random image URL for the configured fallback reply."""

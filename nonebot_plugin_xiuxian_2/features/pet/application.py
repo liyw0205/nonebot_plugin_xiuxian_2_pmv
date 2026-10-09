@@ -22,6 +22,11 @@ def _data(raw: Any) -> dict[str, Any]:
     return dict(vars(raw))
 
 
+# Facade reads whose names still carry a mutating verb; the architecture gate
+# verifies they keep a read-only unit of work and no ledger mutation.
+READ_ONLY_METHODS = ("reconcile_travel_claim_operation",)
+
+
 class PetApplication:
     def __init__(self, game_database: str | Path, player_database: str | Path, *, repository: PetRepository | None = None, ledger: OperationLedger | None = None, clock: Any | None = None, game_event_effects: Any | None = None) -> None:
         self.game_database = str(game_database)

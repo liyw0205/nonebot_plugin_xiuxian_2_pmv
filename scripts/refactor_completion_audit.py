@@ -19,6 +19,7 @@ if str(ROOT) not in sys.path:
 with redirect_stdout(sys.stderr):
     try:
         from check_architecture import (  # type: ignore[import-not-found]
+            _ensure_nonebot_initialized,
             check_adr_coverage,
             check_all_web_endpoints_have_permission,
             check_browser_smoke_contract,
@@ -47,6 +48,7 @@ with redirect_stdout(sys.stderr):
         )
     except ModuleNotFoundError:  # importing as ``scripts.refactor_completion_audit``
         from scripts.check_architecture import (
+            _ensure_nonebot_initialized,
             check_adr_coverage,
             check_all_web_endpoints_have_permission,
             check_browser_smoke_contract,
@@ -73,7 +75,6 @@ with redirect_stdout(sys.stderr):
             check_remote_smoke_contract,
             check_runtime_files,
         )
-    from nonebot_plugin_xiuxian_2.compatibility.release_gate import CompatibilityReleaseGate
 
 _STDOUT = sys.stdout
 
@@ -115,7 +116,7 @@ def _missing_files(label: str, *paths: Path) -> list[str]:
     return [f"{label}: missing {path.relative_to(ROOT)}" for path in paths if not path.is_file()]
 
 
-def audit(
+def _collect_stages(
     *,
     data_dir: str | Path | None = None,
     current_release: str | None = None,
@@ -123,6 +124,10 @@ def audit(
     recovery_evidence: str | Path | None = None,
 ) -> dict[str, object]:
     data_dir = _validated_data_dir(data_dir)
+    # Every stage shares one interpreter; the plugin package needs the framework
+    # ready before the first check imports it, otherwise a failed import leaves
+    # partially initialized modules behind.
+    _ensure_nonebot_initialized()
     stages: dict[str, dict[str, object]] = {}
     for stage, checks in _static_requirements().items():
         errors: list[str] = []
@@ -142,6 +147,7 @@ def audit(
         }
     else:
         try:
+            from nonebot_plugin_xiuxian_2.compatibility.release_gate import CompatibilityReleaseGate
             from nonebot_plugin_xiuxian_2.plugin import build_migrations
 
             report = CompatibilityReleaseGate(data_dir).evaluate(
@@ -163,6 +169,23 @@ def audit(
             }
 
     return {"ready": all(bool(stage["ready"]) for stage in stages.values()), "stages": stages}
+
+
+def audit(
+    *,
+    data_dir: str | Path | None = None,
+    current_release: str | None = None,
+    logs: tuple[str, ...] = (),
+    recovery_evidence: str | Path | None = None,
+) -> dict[str, object]:
+    """Collect the P0-P7 report with plugin diagnostics kept off the JSON channel."""
+    with redirect_stdout(sys.stderr):
+        return _collect_stages(
+            data_dir=data_dir,
+            current_release=current_release,
+            logs=logs,
+            recovery_evidence=recovery_evidence,
+        )
 
 
 def main(argv: list[str] | None = None) -> int:

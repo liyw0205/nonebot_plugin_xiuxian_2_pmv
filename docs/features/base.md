@@ -9,7 +9,7 @@
 ## 数据模型与迁移
 迁移 `base.001` 创建 feature 标记，`base.002` 在 game DB 启动时预建改名回执表并为旧表补充可空 `payload` 列；`base.003` 预建灵石争夺回执表，并为旧表补齐 theft 字段；`base.004` 在 game DB 预建抢劫回执表，`base.005` 在 player DB 预建抢劫成功/失败统计列；`base.006` 在 game DB 预建仙缘池与操作回执表，`base.007` 在 player DB 预建仙缘发送/领取限额表；`base.008` 仅在 game DB 预建重入仙途操作回执表。玩家奖励经济写入复用既有 `user_xiuxian` schema，由 `PlayerEconomyApplication -> PlayerEconomySqlRepository` 做运行时只读 schema 检查，不新增迁移。历史玩家/修炼表仍由既有 schema owner 持有。
 ## 事务与失败回滚
-`base.009` 在 game DB 预建直接突破核心回执，保留旧回执并补齐 payload；`base.010` 在 game DB 保存冻结计划和关系奖励回执，`base.011` 在 player DB 预建关系预留回执及统计/历史字段。迁移不为历史无 outbox 回执猜测或补造副作用。
+`base.009` 在 game DB 预建直接突破核心回执，保留旧回执并补齐 payload；`base.010` 在 game DB 保存冻结计划和关系奖励回执，`base.011` 在 player DB 预建关系预留回执及统计/历史字段；`base.012` 仅在 game DB 预建 `player_stamina_operations` 体力扣减回执表，缺少 `operation_id` 主键等不支持的既有 schema 会让迁移失败并在请求期返回 `schema_missing`，不静默改写。迁移不为历史无 outbox 回执猜测或补造副作用。
 
 `直接突破`（别名 `破`）在冷却检查前查同消息回执，在 game 写事务内冻结成功/失败、惩罚和关系奖励计划，并原子提交核心资产、回执和 `base.direct_breakthrough.effects` outbox。师徒次数先在独立 player 事务中与 prepared 回执一起预留，再提交 game 奖励/回执，最后 player 统计、历史和 applied 回执一起提交；不依赖 WAL 下跨文件 ATTACH 崩溃原子性。中断重放不重抽、不重复计数或发奖，换绑后恢复不覆盖新 count；奖励受当前及冻结修为上限约束，无法兑现时保持待恢复，不取消已预留的旧承诺。
 

@@ -6,6 +6,10 @@ from .._migrated_application import MigratedFeatureApplication
 from .repository import CompensationRepository
 
 
+# Claim-state lookups are reads over the claim ledger, not claim mutations.
+READ_ONLY_METHODS = ("compensation_claimed_data", "invitation_claimed_thresholds")
+
+
 class CompensationApplication(MigratedFeatureApplication):
     def __init__(self, database: str | Path, *, repository: CompensationRepository | None = None) -> None:
         super().__init__(database, feature="compensation", repository=repository or CompensationRepository(database))

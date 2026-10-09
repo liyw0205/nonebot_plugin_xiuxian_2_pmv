@@ -47,3 +47,43 @@ Web API 保留 `/api/v1/arena/purchase`、`/challenge-purchase`、`/settle`，�
 本组新增 `tests/test_arena_command_ingress.py`、`features/arena/tests/test_opponent_application.py` 和 `tests/test_arena_progress_contract.py`，并补充回执、迁移及恢复测试。进度门禁从真实源码验证 owner、重放先行、原始数量、共享缓存和恢复范围，并以变异用例检查回退。
 
 主线程隔离验收：聚焦 67 项、扩大回归 197 项通过，另有 38 个 subtest；arena 源码门禁全 true、冻结完整性错误为空。具体耗时、首轮失败原因及后续队列见 `docs/full_refactor_progress.md`。没有线上性能实测。
+
+## 用户流程
+
+玩家兑换荣誉商品或购买挑战次数，再发起竞技场挑战并取回结算回复。兑换与挑战先查持久回执，只有未处理过的新请求才进入匹配、战斗与结算；查看对手只走候选只读查询和进程内有界缓存，不写玩家资产。
+
+## 命令与别名
+
+`竞技场挑战`（别名 `竞技场购买次数`）与 `竞技场兑换`（别名 `竞技场商店`）保持历史触发词；matcher 仍由 `xiuxian_arena` 注册，资格、限购和结算规则由 `ArenaApplication` 承担。
+
+## Web API
+
+- `POST /api/v1/arena/purchase`
+- `POST /api/v1/arena/challenge-purchase`
+- `POST /api/v1/arena/settle`
+
+三条路由由 `adapters/web/blueprints/arena.py` 注册，`features/arena/web.py` 只负责转发；沿用统一 write guard：`user` 权限、CSRF 与 `Idempotency-Key` 幂等回放。
+
+## 数据模型与迁移
+
+`arena.001` 在启动迁移中登记 `arena_feature_migrations` 版本标记，`arena.010` 为 game DB 的 `arena_purchase_operations` 补 `status` 与 `result_json`；历史无状态记录保持 `needs_reconcile`，不按数量或费用猜测成功。请求路径不执行 DDL，缺表或缺列一律拒绝。
+
+## 事务与失败回滚
+
+兑换与结算在 game DB immediate UoW 内完成 ledger 登记、资产写入、业务回执与审计，异常整体回滚。`started` 维持处理中、`needs_reconcile` 维持待核查；只有同 payload 的 `arena.purchase`、`arena.settle` 才允许沿业务回执继续，已拒绝回执不会被重放成成功。
+
+## 定时任务
+
+本 feature 无自有任务，`features/arena/jobs.py` 不导出 job；排行榜与赛季任务仍由兼容调度器执行。
+
+## 配置项
+
+`arena_enabled` 控制新 application 与 Web 路由是否注册，默认开启且可热重载；关闭开关不会撤销已提交的结算数据。
+
+## 适配器差异
+
+战斗继续复用既有 `BattleSystem` 与属性/增益处理，旧跨库事务保留在 `compatibility/legacy_arena_transactions.py`；HTTP 适配在 `adapters/web`，命令适配在 `xiuxian_arena`，feature 层不自行打开数据库连接。
+
+## 测试与手工验收
+
+`python -m unittest nonebot_plugin_xiuxian_2.features.arena.tests.test_arena_application nonebot_plugin_xiuxian_2.features.arena.tests.test_opponent_application -q`；`python -m unittest tests.test_arena_command_ingress tests.test_arena_progress_contract -q`。手工验收覆盖兑换幂等重放、剩余额度裁剪、无有效候选拒绝与结算回执回放。

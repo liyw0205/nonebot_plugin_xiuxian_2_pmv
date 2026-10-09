@@ -140,6 +140,15 @@ def _json_files() -> list[str]:
 
 
 def _registry_export() -> dict[str, Any]:
+    # The live manifests read framework configuration, so a standalone export
+    # run has to initialize NoneBot before the first plugin import.
+    import nonebot
+
+    try:
+        nonebot.get_driver()
+    except ValueError:
+        nonebot.init()
+
     from nonebot_plugin_xiuxian_2.plugin import build_registry
 
     return build_registry().export()

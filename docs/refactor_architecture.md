@@ -666,6 +666,8 @@ PR 描述必须包含：影响 feature、数据迁移、兼容入口、权限变
 - 旧 `xiuxian_*` 包已登记为 `compatibility/feature_inventory.py`，每项都声明迁移目标和删除发布版本；旧 shim 发出 `DeprecationWarning`，并把命中次数持久化到数据目录的 `compatibility_hits.json`（内存计数仅作为写入失败时的降级）。兼容模块的启动/关闭回调通过 `bootstrap.legacy` 显式登记，由组合根统一按顺序执行和逆序停止，不再直接向 NoneBot driver 注册 hook；旧调度声明也通过 `compatibility/scheduler.py` 延迟到 `jobs` 生命周期阶段激活。它们仍需至少一个完整发布周期的运行数据后才能按第 7 节删除，不在本轮静默移除。
 - `features/_legacy_feature.py` 的通用兼容仓储也统一发出 `DeprecationWarning` 并记录 `feature:<key>` 命中，避免未包装的旧玩法 application 绕过 P7 观测。
 - `features/_service_port.py` 的 `execute_callback` 为已预组装参数的旧事务提供显式端口；迁移 application 优先通过该端口执行，避免 callback 直接越过 repository，同时保留可观测的兼容命中记录。
-- `scripts/check_architecture.py` 已提供可独立调用的门禁：核心层导入、feature 直连数据库、生命周期 hook、Web 权限、manifest ID、迁移版本、资产操作号、运行时文件、legacy 命令 AST/manifest 与迁移别名、兼容仓储占位结果和旧入口 application 边界检查；当前所有检查均为绿色。
+- `scripts/check_architecture.py` 已提供可独立调用的门禁：核心层导入、feature 直连数据库、生命周期 hook、Web 权限、manifest ID、迁移版本、资产操作号、运行时文件、legacy 命令 AST/manifest 与迁移别名、兼容仓储占位结果和旧入口 application 边界检查。
+- 门禁口径（2026-10-09 校准，之前“所有检查均为绿色”的记录与命令输出不符，已作废）：feature 层只在“自行打开 SQLite 连接”或“导入 NoneBot/Flask”时报错，仅使用 `sqlite3` 异常与上限常量、连接由共享 `DatabaseUnitOfWork` 提供的 repository 不再算违规；资产写方法必须带 `operation_id`，名称含 `claim/purchase/grant/settle/transfer/withdraw/deposit` 的只读 facade 方法改为在模块内显式声明 `READ_ONLY_METHODS`，门禁再用结构证据核验（出现写 SQL、`immediate=True` UoW 或 ledger `begin/finish/commit/connect` 即失败）；旧入口检查接受 `features.<x>.command_application`/`avatar_application`/`profile_application` 等真实 facade 模块与 `_xxx_application().method()` 惰性工厂调用形式。
+- 门禁仍红≠通过：`check_feature_contracts` 的 feature 垂直切片缺件、3 处 feature 手工建连和 P7 发布证据是当前明确 backlog，逐批关闭，见 `docs/full_refactor_progress.md`。
 - `scripts/recovery_smoke.py` 覆盖完整迁移清单（含 legacy slice），会执行备份、恢复、迁移和对账；当前恢复演练结果为零未处理 operation/outbox/dead event。
 - `ReconcileService.run` 支持按 action 注册补偿处理器，能够实际收敛 `failed/needs_reconcile` 操作和 outbox 事件；`JobExecutor.run_sync` 可安全从 Flask/CLI 或已有事件循环调用。

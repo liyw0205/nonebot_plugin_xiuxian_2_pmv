@@ -1,9 +1,8 @@
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from typing import Any, Callable
-
-from nonebot.log import logger
 
 from ...xiuxian.adapter_compat import MessageSegment
 from ...xiuxian.qq_compat.lifecycle import apply_lifecycle_event, is_lifecycle_event
@@ -11,6 +10,7 @@ from ...xiuxian.xiuxian_config import XiuConfig
 from ...xiuxian.xiuxian_utils.message_markdown import strip_md_command_links
 from ...xiuxian.xiuxian_utils.utils import handle_send
 
+logger = logging.getLogger(__name__)
 
 async def _assign_default_bot(**kwargs):
     from ...xiuxian.xiuxian_utils.lay_out import assign_bot

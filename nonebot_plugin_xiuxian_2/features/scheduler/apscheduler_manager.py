@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from datetime import datetime
 from pathlib import Path
 from threading import RLock
@@ -14,11 +15,11 @@ from apscheduler.events import (
 )
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
-from nonebot.log import logger
 
 from ...paths import get_paths
 from ...xiuxian.xiuxian_utils.json_store import load_json_file, save_json_file
 
+logger = logging.getLogger(__name__)
 
 SCHEDULE_STORE = get_paths().data / "scheduler_overrides.json"
 _DEFAULT_STORE = {"version": 1, "jobs": {}}
