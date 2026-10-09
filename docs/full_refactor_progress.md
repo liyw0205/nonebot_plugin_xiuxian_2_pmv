@@ -2,6 +2,54 @@
 
 状态：进行中。`v1.1.0` 的 P0-P7 发布证据继续保留，但不作为底层全面重构完成证明。
 
+**2026-10-09 出站媒体 owner 垂直切片（cache_files / qq_image_upload / stickers / messages）**：本片起点
+`scripts/check_architecture.py` 剩 `121` 项，全部在 `feature_contracts`；本片关闭其中四个 owner（统一
+`owner="operations"`、`migration_version=None`、`test_tag=key`，命令/路由/任务/配置四个表面显式空），
+`121 -> 90`，剩余 90 项正好落在 `database_console/economy_ledger/fallback/game_events/group_lifecycle/logs/
+plugin_config/qq_bind/scheduler/terminal/updater` 这 11 个目录。注册表 `93 -> 97`，`docs/refactor_inventory.json`
+重导后只新增 4 个 feature key、`database_tables` 零新增（新增注释与 docstring 一律避开 `from <word>` 句式，
+`_TABLE_RE` 会把它扫成表名）。验收：`phase2_legacy_path_gate.py --check` `ready=True paths=496 blocked=0
+frozen_membership_valid=True`，`check_full_refactor_progress.py --json` `exit_ready=true` 且 `_slice_status()`
+假项仍只剩既有 4 条，`refactor_completion_audit.py` P3 错误数 `90`。
+新增件：`cache_files` 补 `manifest/migrations/commands/jobs/schemas/web` 并在 `__init__.py` 导出
+`CacheFileApplication`（原先该包零导出，`LEGACY_ROUTES` 的目标解析需要它）；`qq_image_upload` 补
+`manifest/migrations/commands/jobs/schemas/web/repository`（`UploadImageAndResolve` Protocol 取代裸
+`Callable[..., Awaitable[str | None]]` 标注）；`stickers` 补 `manifest/migrations/commands/jobs/schemas/web`；
+`messages` 补 `manifest/migrations/commands/jobs/schemas/repository/web` 与 `application.py` 门面。
+契约单一来源：`cache_files` 的 `CacheFileOutsideRoot/NotFound/NotRegular` 进 `schemas.py`，`repository.py`
+只再导出（旧 Web 层 `xiuxian/xiuxian_web/system.py:34-38` 仍按 repository 路径导入它们，改导入面等于改旧层）；
+`stickers/repository.py` 的 26 行常量块整块换成 `from .schemas import (...)`（替换前后行数不变，避免 `fetch_remote_catalog/
+_extract_to_staging/resolve_file` 的行号证据漂移），并把原先散写的三处字面量一并收口：manifest 超时 `20`、归档超时
+`60`、镜像前缀 `https://ghproxy.net/`（两处）、UA `xiuxian-web-stickers/1.0`（两处）、首跳主机集合
+`{"github.com", "ghproxy.net"}`，正则与主机集合以 `X as _X` 别名沿用模块内既有私有拼写，20 个使用点一行未动；
+`messages` 的 `ALLOWED_MEDIA_TYPES/SCENES/SEND_MODES/DEFAULT_SEND_MODE/ACTIVE_SEND_TRUE_VALUES/
+STICKER_MEDIA_TYPE` 与响应信封 `MessageSendResult` 进 `schemas.py`，`send_application.py` 内 `active_send`
+真值元组、`("plain","markdown")`、贴纸分支的 `media_type = "image"` 与 `send_mode` 默认值全部改为引用契约；
+四目录的 `tests/test_slice_contract.py` 复用 `tests/slice_contract.py` 以 AST 拦住“schemas 只是装饰品”的回退。
+迁移结论：四目录（排除 tests 与 `__pycache__`）对 `CREATE TABLE|ALTER TABLE|sqlite3|db_backend|migration`
+与 `on_command|on_message|on_matcher|on_regex|on_startswith` 双零命中，故 `MIGRATIONS = ()`、`COMMANDS = ()`
+有据；`messages` 表确实存在但 DDL/读写都在 `xiuxian/xiuxian_utils/message_db.py:285,321,610` 与
+`features/logs/message_reply_repository.py`，不归本 owner。Web 现实：`ROUTES = ()`，`LEGACY_ROUTES` 共 `7`
+条（cache_files 1、qq_image_upload 1、stickers 4、messages 1），全部写成 `Class.method`，由
+`tests/test_operations_media_slice_manifests.py` 逐条 `getattr` 验证目标公开可调用、path 全局唯一、且未被任何
+`RouteSpec` 双声明；同文件断言四篇文档九节齐全并逐条含 path 与目标。
+门面而非搬家：`messages` 的实现留在 `send_application.py`，`application.py` 只做再导出并加 `assertIs` 身份断言——
+`phase2_legacy_path_gate.py` 把 `POST /api/messages/send` 的证据与调用图绑在该模块的源码行上，账本重锚之前移动实现
+会让整片 closed-route 绑定失效。测试现实与修正：`stickers`（9 例）与 `messages`（8 例）既有测试是 pytest 函数式，
+`unittest discover` 收集不到，四篇文档的验收段因此都写明两条命令都要跑；`docs/refactor_phase2_legacy_path_items.json`
+里 `download_file` 的 owner 测试写成 `features/cache_files/tests/test_cache_file_application.py`（该文件从未存在，
+实际是 `test_application.py`），gate 只校验 `tests/test_cache_file_routes.py` 才长期没被拦下，本片按“行号证据可刷新”
+的既有口径把这条 evidence 改成真实路径，改后 gate 仍 `ready=True`。
+子代理：本轮 2 名只读审计（未改文件、未跑测试）。复核成立并采纳的有——`cache_files/__init__.py` 零导出会挡住
+delegation 解析（已补）、贴纸 catalog 的 `url` 前缀与旧层 `_PACK_ID_RE/_STICKER_FILE_RE`（`xiuxian/xiuxian_web/
+stickers.py:12-13`）各是第二份实现、`xiuxian/xiuxian_web/core.py:465` 的 `ALLOWED_MEDIA_TYPES` 与 `:515` 的 `"QQ"`
+是无人引用的第三份副本、`system.py:269` 用 `file.read()` 无界读入、`cleanup_media_parser_cache_job` 与本切片共享
+`data/cache` 根但完全不调用它（job 归 `entertainment`，故 `JOBS = ()` 仍成立）；上述五处都涉及被 phase2 行锚绑定的
+旧 Web 层或他人 owner，本片只把它们如实写进文档边界，不动代码。审计结论需修正的有一处：它把 catalog 的 URL 前缀
+行号报成 `repository.py:318/331`，当前工作树实测 `:322/:335`（本片把 `_read_limited` 调用改成多行后整体 +4），
+文档按实测值写。全量回归：`python -B -m unittest discover -s tests -q` 与上轮基线一致（8 failures + 10 errors，
+名单未扩大）。
+
 **2026-10-09 备份 owner 垂直切片（config/database/plugin/manual backups）**：本片起点
 `scripts/check_architecture.py` `ok=false`、`150` 项，全部集中在 `feature_contracts`（19 个 feature 目录缺
 垂直切片文件与文档），`manifest_documentation` 为 `0`；本片关闭其中四个备份 owner，`150 -> 121`。

@@ -2,17 +2,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-
-class CacheFileOutsideRoot(ValueError):
-    """Raised when a resolved cache path escapes its configured root."""
-
-
-class CacheFileNotFound(FileNotFoundError):
-    """Raised when a requested cache file does not exist."""
-
-
-class CacheFileNotRegular(ValueError):
-    """Raised when a requested cache path is not a regular file."""
+# The refusal types are the slice contract; they are declared once in schemas.py
+# and re-exported here because the legacy Web module imports them at this path.
+from .schemas import CacheFileNotFound, CacheFileNotRegular, CacheFileOutsideRoot
 
 
 class CacheFileRepository:

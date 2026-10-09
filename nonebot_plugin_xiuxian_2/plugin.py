@@ -214,6 +214,10 @@ from .features.config_backups.manifest import FEATURE as CONFIG_BACKUPS_FEATURE
 from .features.database_backups.manifest import FEATURE as DATABASE_BACKUPS_FEATURE
 from .features.manual_backups.manifest import FEATURE as MANUAL_BACKUPS_FEATURE
 from .features.plugin_backups.manifest import FEATURE as PLUGIN_BACKUPS_FEATURE
+from .features.cache_files.manifest import FEATURE as CACHE_FILES_FEATURE
+from .features.messages.manifest import FEATURE as MESSAGES_FEATURE
+from .features.qq_image_upload.manifest import FEATURE as QQ_IMAGE_UPLOAD_FEATURE
+from .features.stickers.manifest import FEATURE as STICKERS_FEATURE
 from .features._legacy_migrated import (
     APPLICATIONS as LEGACY_MIGRATED_APPLICATIONS,
     FEATURES as LEGACY_MIGRATED_FEATURES,
@@ -758,6 +762,10 @@ def build_registry(*, disabled: set[str] | frozenset[str] | tuple[str, ...] = ()
     registry.register(DATABASE_BACKUPS_FEATURE)
     registry.register(MANUAL_BACKUPS_FEATURE)
     registry.register(PLUGIN_BACKUPS_FEATURE)
+    registry.register(CACHE_FILES_FEATURE)
+    registry.register(MESSAGES_FEATURE)
+    registry.register(QQ_IMAGE_UPLOAD_FEATURE)
+    registry.register(STICKERS_FEATURE)
     registry.register(LEGACY_SCHEDULER_FEATURE)
     registry.register_many(LEGACY_FEATURES)
     return registry

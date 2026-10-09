@@ -13519,7 +13519,7 @@
       "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/system.py:163-173",
       "nonebot_plugin_xiuxian_2/features/cache_files/application.py",
       "nonebot_plugin_xiuxian_2/features/cache_files/repository.py",
-      "nonebot_plugin_xiuxian_2/features/cache_files/tests/test_cache_file_application.py",
+      "nonebot_plugin_xiuxian_2/features/cache_files/tests/test_application.py",
       "tests/test_cache_file_routes.py"
       ],
       "source_declaration_found": true,

@@ -19,30 +19,30 @@ from urllib.request import HTTPRedirectHandler, Request, build_opener
 from ...infrastructure.filesystem import atomic_write
 
 
-FILE_REPO_OWNER = "liyw0205"
-FILE_REPO_NAME = "nonebot_plugin_xiuxian_2_pmv_file"
-STICKERS_RELEASE_TAG = "stickers-latest"
-STICKERS_MANIFEST_NAME = "stickers-manifest.json"
-
-MAX_STICKER_ARCHIVE_BYTES = 64 * 1024 * 1024
-MAX_MANIFEST_BYTES = 2 * 1024 * 1024
-MAX_STICKER_FILES = 2048
-MAX_STICKER_ARCHIVE_MEMBERS = 4096
-MAX_STICKER_FILE_BYTES = 16 * 1024 * 1024
-MAX_STICKER_UNCOMPRESSED_BYTES = 128 * 1024 * 1024
-DOWNLOAD_CHUNK_BYTES = 64 * 1024
-
-_PACK_ID_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,31}$")
-_STICKER_FILE_RE = re.compile(r"^[A-Za-z0-9._-]+\.webp$")
-_ZIP_NAME_RE = re.compile(r"^[A-Za-z0-9._-]+\.zip$")
-_SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
-_STICKER_TOKEN_RE = re.compile(r"^([a-z0-9][a-z0-9_-]{0,31})/([A-Za-z0-9._-]+)$")
-_ALLOWED_HOSTS = {
-    "github.com",
-    "ghproxy.net",
-    "objects.githubusercontent.com",
-    "release-assets.githubusercontent.com",
-}
+from .schemas import (
+    ALLOWED_DOWNLOAD_HOSTS as _ALLOWED_HOSTS,
+    ARCHIVE_TIMEOUT_SECONDS,
+    DOWNLOAD_CHUNK_BYTES,
+    DOWNLOAD_PROXY_PREFIX,
+    DOWNLOAD_USER_AGENT,
+    FILE_REPO_NAME,
+    FILE_REPO_OWNER,
+    INITIAL_REQUEST_HOSTS,
+    MANIFEST_TIMEOUT_SECONDS,
+    MAX_MANIFEST_BYTES,
+    MAX_STICKER_ARCHIVE_BYTES,
+    MAX_STICKER_ARCHIVE_MEMBERS,
+    MAX_STICKER_FILE_BYTES,
+    MAX_STICKER_FILES,
+    MAX_STICKER_UNCOMPRESSED_BYTES,
+    PACK_ID_PATTERN as _PACK_ID_RE,
+    SHA256_PATTERN as _SHA256_RE,
+    STICKER_FILE_PATTERN as _STICKER_FILE_RE,
+    STICKER_TOKEN_PATTERN as _STICKER_TOKEN_RE,
+    STICKERS_MANIFEST_NAME,
+    STICKERS_RELEASE_TAG,
+    ZIP_NAME_PATTERN as _ZIP_NAME_RE,
+)
 _LOGGER = logging.getLogger(__name__)
 _INSTALL_LOCK = threading.RLock()
 
@@ -72,7 +72,7 @@ def _validate_download_url(url: str, *, initial: bool = False) -> None:
         or port not in (None, 443)
     ):
         raise RuntimeError("远端下载来源不在允许范围内")
-    if initial and host not in {"github.com", "ghproxy.net"}:
+    if initial and host not in INITIAL_REQUEST_HOSTS:
         raise RuntimeError("远端下载来源不在允许范围内")
 
 
@@ -133,13 +133,13 @@ class StickerRepository:
         )
 
     def _read_limited(self, url: str, limit: int, timeout: int) -> bytes:
-        candidates = (url, f"https://ghproxy.net/{url}")
+        candidates = (url, f"{DOWNLOAD_PROXY_PREFIX}{url}")
         errors: list[Exception] = []
         for candidate in candidates:
             response = None
             try:
                 _validate_download_url(candidate, initial=True)
-                request = Request(candidate, headers={"User-Agent": "xiuxian-web-stickers/1.0"})
+                request = Request(candidate, headers={"User-Agent": DOWNLOAD_USER_AGENT})
                 response = self._open_url(request, timeout)
                 _validate_download_url(response.geturl())
                 total = int(response.headers.get("Content-Length") or 0)
@@ -176,7 +176,7 @@ class StickerRepository:
         progress: Callable[[int, int], None] | None = None,
         max_bytes: int = MAX_STICKER_ARCHIVE_BYTES,
     ) -> str:
-        candidates = (url, f"https://ghproxy.net/{url}")
+        candidates = (url, f"{DOWNLOAD_PROXY_PREFIX}{url}")
         errors: list[Exception] = []
         for candidate in candidates:
             response = None
@@ -184,8 +184,8 @@ class StickerRepository:
             digest = hashlib.sha256()
             try:
                 _validate_download_url(candidate, initial=True)
-                request = Request(candidate, headers={"User-Agent": "xiuxian-web-stickers/1.0"})
-                response = self._open_url(request, 60)
+                request = Request(candidate, headers={"User-Agent": DOWNLOAD_USER_AGENT})
+                response = self._open_url(request, ARCHIVE_TIMEOUT_SECONDS)
                 _validate_download_url(response.geturl())
                 total = int(response.headers.get("Content-Length") or 0)
                 if total > max_bytes:
@@ -264,7 +264,11 @@ class StickerRepository:
         cached = self.load_remote_catalog_cache()
         if cached is not None and not force:
             return cached
-        raw = self._read_limited(self.remote_manifest_url(), MAX_MANIFEST_BYTES, 20)
+        raw = self._read_limited(
+            self.remote_manifest_url(),
+            MAX_MANIFEST_BYTES,
+            MANIFEST_TIMEOUT_SECONDS,
+        )
         try:
             remote = self._validate_remote_manifest(json.loads(raw.decode("utf-8")))
         except (UnicodeDecodeError, ValueError, TypeError) as exc:

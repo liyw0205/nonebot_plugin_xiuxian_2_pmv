@@ -1,27 +1,25 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 from typing import Any, Callable, Mapping
 
 from ...xiuxian.messaging import SendRequest
-
-
-ALLOWED_MEDIA_TYPES = {"image", "video", "audio", "file"}
-SCENES = {"group", "private", "channel_group", "channel_private"}
-
-
-@dataclass(frozen=True)
-class MessageSendResult:
-    """JSON body returned by the legacy Web message-send endpoint."""
-
-    body: dict[str, Any]
-
-    def to_dict(self) -> dict[str, Any]:
-        return dict(self.body)
-
-    @classmethod
-    def failure(cls, error: str) -> "MessageSendResult":
-        return cls({"success": False, "error": error})
+from .repository import (
+    MessageReplyLookupPort,
+    MessageTransportPort,
+    StickerPathResolverPort,
+    WebSendRecorderPort,
+)
+# Every accepted request shape, the refusal strings and the response envelope are
+# declared once in schemas.py; the legacy console keeps parsing that dict shape.
+from .schemas import (
+    ACTIVE_SEND_TRUE_VALUES,
+    ALLOWED_MEDIA_TYPES,
+    DEFAULT_SEND_MODE,
+    SCENES,
+    SEND_MODES,
+    STICKER_MEDIA_TYPE,
+    MessageSendResult,
+)
 
 
 class WebMessageSendApplication:
@@ -34,12 +32,12 @@ class WebMessageSendApplication:
         bot_id_resolver: Callable[[Any], Any],
         is_ob11_adapter: Callable[[str], bool],
         message_builder: Callable[..., Any],
-        reply_repository_factory: Callable[[], Any],
-        sticker_application: Any,
+        reply_repository_factory: Callable[[], MessageReplyLookupPort],
+        sticker_application: StickerPathResolverPort,
         upload_saver: Callable[[Any], Any],
-        transport: Any,
+        transport: MessageTransportPort,
         message_id_extractor: Callable[[Any], Any],
-        web_send_recorder: Callable[..., Any],
+        web_send_recorder: WebSendRecorderPort,
         direct_api: Callable[..., Any] | None = None,
         logger: Any = None,
     ) -> None:
@@ -87,7 +85,7 @@ class WebMessageSendApplication:
         scene = str(data.get("scene", "")).strip()
         target_id = str(data.get("target_id", "")).strip()
         content = str(data.get("content", "") or "")
-        send_mode = str(data.get("send_mode", "plain") or "plain").strip()
+        send_mode = str(data.get("send_mode", DEFAULT_SEND_MODE) or DEFAULT_SEND_MODE).strip()
         media_type = str(data.get("media_type", "") or "").strip()
         media_url = str(data.get("media_url", "") or "").strip()
         sticker_token = str(
@@ -96,11 +94,8 @@ class WebMessageSendApplication:
         reply_message_id = str(data.get("reply_message_id", "") or "").strip()
         quote_message_id = str(data.get("quote_message_id", "") or "").strip()
         quote_reference_id = str(data.get("quote_reference_id", "") or "").strip()
-        active_send = str(data.get("active_send", "") or "").strip().lower() in (
-            "1",
-            "true",
-            "yes",
-            "on",
+        active_send = (
+            str(data.get("active_send", "") or "").strip().lower() in ACTIVE_SEND_TRUE_VALUES
         )
 
         reply_from_quote_message_id = False
@@ -113,8 +108,8 @@ class WebMessageSendApplication:
             reply_message_id = quote_message_id
             reply_from_quote_message_id = True
 
-        if send_mode not in ("plain", "markdown"):
-            send_mode = "plain"
+        if send_mode not in SEND_MODES:
+            send_mode = DEFAULT_SEND_MODE
 
         if send_mode == "markdown":
             quote_message_id = ""
@@ -143,7 +138,7 @@ class WebMessageSendApplication:
             sticker_path = self._sticker_application.resolve_sticker_path(sticker_token)
             if sticker_path is None:
                 return MessageSendResult.failure("表情包不存在或未安装")
-            media_type = "image"
+            media_type = STICKER_MEDIA_TYPE
             media_input = sticker_path
             content = ""
             send_mode = "plain"
