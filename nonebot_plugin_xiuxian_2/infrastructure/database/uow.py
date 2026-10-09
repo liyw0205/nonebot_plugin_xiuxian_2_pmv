@@ -18,12 +18,16 @@ class DatabaseUnitOfWork:
         immediate: bool = False,
         read_only: bool = False,
         foreign_keys: bool = True,
+        require_exists: bool = False,
+        query_only: bool = False,
     ) -> None:
         self.database = Path(database)
         self.timeout = timeout
         self.immediate = bool(immediate)
         self.read_only = bool(read_only)
         self.foreign_keys = bool(foreign_keys)
+        self.require_exists = bool(require_exists)
+        self.query_only = bool(query_only)
         self.connection: sqlite3.Connection | None = None
         self._attached_schemas: set[str] = set()
 
@@ -31,6 +35,16 @@ class DatabaseUnitOfWork:
         if self.read_only:
             self.connection = sqlite3.connect(
                 f"{self.database.resolve().as_uri()}?mode=ro",
+                timeout=self.timeout,
+                uri=True,
+            )
+        elif self.require_exists:
+            # mode=rw keeps an explicit existence check free of the create-on-open
+            # race, so a missing business database never becomes an empty file.
+            if not self.database.is_file():
+                raise FileNotFoundError(f"database is unavailable: {self.database}")
+            self.connection = sqlite3.connect(
+                f"{self.database.resolve().as_uri()}?mode=rw",
                 timeout=self.timeout,
                 uri=True,
             )
@@ -43,6 +57,8 @@ class DatabaseUnitOfWork:
                 self.connection.execute("PRAGMA journal_mode=WAL")
             self.connection.execute(f"PRAGMA busy_timeout={max(int(self.timeout * 1000), 0)}")
             self.connection.execute(f"PRAGMA foreign_keys={'ON' if self.foreign_keys else 'OFF'}")
+            if self.query_only:
+                self.connection.execute("PRAGMA query_only=ON")
             self.connection.execute(
                 "BEGIN IMMEDIATE" if self.immediate and not self.read_only else "BEGIN"
             )
@@ -92,10 +108,13 @@ class DatabaseUnitOfWork:
     def query_all(self, sql: str, params: Any = ()) -> list[Mapping[str, Any]]:
         return [dict(row) for row in self.execute(sql, params).fetchall()]
 
-    def attach_database(self, database: str | Path, schema: str) -> None:
+    def attach_database(self, database: str | Path, schema: str, *, read_only: bool = False) -> None:
         """Attach a catalogued secondary database to this transaction."""
         safe_schema = "".join(char if char.isalnum() or char == "_" else "_" for char in schema)
-        self.execute(f'ATTACH DATABASE ? AS "{safe_schema}"', (str(database),))
+        target = database
+        if read_only:
+            target = f"{Path(database).resolve().as_uri()}?mode=ro"
+        self.execute(f'ATTACH DATABASE ? AS "{safe_schema}"', (str(target),))
         self._attached_schemas.add(safe_schema)
 
     def detach_database(self, schema: str) -> None:

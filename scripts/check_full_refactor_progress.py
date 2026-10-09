@@ -555,6 +555,14 @@ def _arena_owner_status(sources: dict[str, str]) -> dict[str, bool]:
         left, right = calls(source, function, first), calls(source, function, second)
         return bool(left and right and left[0].lineno < right[0].lineno)
 
+    opponent_connection_keywords = [
+        {keyword.arg: ast.unparse(keyword.value) for keyword in node.keywords if keyword.arg}
+        for node in calls("opponent_repository", "_connection", "DatabaseUnitOfWork")
+    ]
+    opponent_attach_keywords = [
+        {keyword.arg: ast.unparse(keyword.value) for keyword in node.keywords if keyword.arg}
+        for node in calls("opponent_repository", "_connection", "uow.attach_database")
+    ]
     purchase_calls = calls("handlers", "arena_buy_", "arena_application.purchase")
     purchase_keywords = {item.arg: ast.unparse(item.value) for item in purchase_calls[0].keywords} if purchase_calls else {}
     handler_nodes = {name: nodes("handlers", name) for name in ("arena_buy_", "arena_challenge_", "arena_view_")}
@@ -613,8 +621,12 @@ def _arena_owner_status(sources: dict[str, str]) -> dict[str, bool]:
             and expression("opponent_repository", "set_cache", "targets[:3]")
             and expression("opponent_repository", "set_cache", "len(self._cache) > self.capacity")
             and expression("opponent_repository", "get_cache", "cached[0] <= self.clock.now().timestamp()")
-            and literals("opponent_repository", "_connection").count("mode=ro") == 2
-            and "PRAGMA query_only=ON" in literals("opponent_repository", "_connection")
+            and len(opponent_connection_keywords) == 1
+            and opponent_connection_keywords[0].get("read_only") == "True"
+            and opponent_connection_keywords[0].get("query_only") == "True"
+            and len(opponent_attach_keywords) == 1
+            and opponent_attach_keywords[0].get("read_only") == "True"
+            and "profiles" in literals("opponent_repository", "_connection")
             and "JOIN profiles.user_xiuxian" in literals("opponent_repository", "candidates")
             and expression("opponent_application", "find", "abs(row['score'] - score) <= 200")
             and calls("opponent_application", "find", "random.Random(operation_id).choice")

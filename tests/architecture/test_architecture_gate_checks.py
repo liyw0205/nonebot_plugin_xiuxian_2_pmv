@@ -8,8 +8,10 @@ from __future__ import annotations
 import ast
 import subprocess
 import sys
+import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
@@ -67,16 +69,33 @@ class ReadOnlyDeclarationTests(unittest.TestCase):
 
 
 class FeatureConnectionRuleTests(unittest.TestCase):
-    def test_only_connection_creation_and_frameworks_are_reported(self) -> None:
-        reported = gates.check_feature_connections()
-        self.assertTrue(reported, "direct connection owners must stay visible")
-        for error in reported:
-            path = ROOT / error.split(" ", 1)[0]
-            source = path.read_text(encoding="utf-8")
-            self.assertTrue(
-                any(token in source for token in gates._CONNECT_TOKENS),
-                f"{path.relative_to(ROOT)} reported without a connection call",
+    def test_feature_tree_opens_no_connection_and_imports_no_framework(self) -> None:
+        # The last hand-rolled connections (arena candidates, message recall and
+        # QQID batches) moved to the shared unit of work, so this rule is now a
+        # tree-wide invariant rather than a list of still-visible owners.
+        self.assertEqual(gates.check_feature_connections(), [])
+
+    def test_connection_creation_and_framework_imports_are_still_reported(self) -> None:
+        # The tree is clean, so the rule itself is proven on a scratch package:
+        # opening a connection or importing a framework is reported, driver
+        # constants alone are not.
+        with tempfile.TemporaryDirectory(prefix="arch-connections-") as directory:
+            root = Path(directory)
+            feature = root / "features" / "demo"
+            feature.mkdir(parents=True)
+            (feature / "repository.py").write_text(
+                "import sqlite3\n\nCONNECTION = sqlite3.connect('demo.db')\n", encoding="utf-8"
             )
+            (feature / "matcher.py").write_text("from nonebot import on_command\n", encoding="utf-8")
+            (feature / "cache.py").write_text(
+                "import sqlite3\n\nMAX_BLOB = sqlite3.SQLITE_TOOBIG\n", encoding="utf-8"
+            )
+            with patch.object(gates, "PACKAGE", root), patch.object(gates, "ROOT", root):
+                reported = gates.check_feature_connections()
+        self.assertEqual(
+            sorted(error.split(" ", 1)[0] for error in reported),
+            ["features/demo/matcher.py", "features/demo/repository.py"],
+        )
 
     def test_driver_exception_imports_are_not_reported(self) -> None:
         # These repositories only use sqlite3 error/limit constants and take their

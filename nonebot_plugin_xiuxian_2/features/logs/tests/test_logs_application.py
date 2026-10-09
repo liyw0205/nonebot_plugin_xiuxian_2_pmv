@@ -114,7 +114,8 @@ class LogsApplicationTests(unittest.TestCase):
                 prepared = web_messages._prepare_message_rows(rows, conn=uow.connection)
 
         self.assertEqual(names, {"u1": "缓存昵称", "u2": "私聊昵称"})
-        self.assertEqual(name_query_count, 2)
+        # One sqlite_master probe plus the batched nickname and history queries.
+        self.assertEqual(name_query_count, 3)
         self.assertEqual(prepared[0]["display_content"], "needle")
         self.assertEqual(prepared[0]["username"], "私聊昵称")
         self.assertEqual(prepared[0]["mention_names"], {})

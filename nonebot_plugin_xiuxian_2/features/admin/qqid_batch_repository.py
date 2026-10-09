@@ -3,11 +3,12 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-import sqlite3
 from contextlib import contextmanager
 from pathlib import Path
 from threading import RLock
 from typing import Iterator
+
+from ...infrastructure.database import DatabaseUnitOfWork
 
 
 _RUN_LOCK = RLock()
@@ -33,28 +34,23 @@ class AdminQqidBatchRepository:
         self.database = Path(game_db)
 
     @contextmanager
-    def _connection(self, *, write: bool = False) -> Iterator[sqlite3.Connection]:
+    def _connection(self, *, write: bool = False) -> Iterator[DatabaseUnitOfWork]:
         if not self.database.is_file():
             raise QqidBatchSchemaError("QQID batch database missing")
-        mode = "rw" if write else "ro"
-        connection = sqlite3.connect(
-            f"{self.database.resolve().as_uri()}?mode={mode}", uri=True, timeout=30,
+        uow = DatabaseUnitOfWork(
+            self.database,
+            timeout=30,
+            immediate=write,
+            read_only=not write,
+            foreign_keys=True,
+            require_exists=True,
         )
-        connection.row_factory = sqlite3.Row
-        try:
-            connection.execute("PRAGMA foreign_keys=ON")
-            connection.execute("BEGIN IMMEDIATE" if write else "BEGIN")
+        with uow:
             for table, required in _REQUIRED_COLUMNS.items():
-                columns = {str(row["name"]) for row in connection.execute(f"PRAGMA table_info({table})")}
+                columns = {str(row["name"]) for row in uow.execute(f"PRAGMA table_info({table})")}
                 if not required.issubset(columns):
                     raise QqidBatchSchemaError(f"QQID batch schema missing: {table}")
-            yield connection
-            connection.commit()
-        except BaseException:
-            connection.rollback()
-            raise
-        finally:
-            connection.close()
+            yield uow
 
     @contextmanager
     def exclusive_run(self) -> Iterator[None]:

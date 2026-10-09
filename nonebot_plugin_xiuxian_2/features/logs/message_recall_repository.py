@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-import sqlite3
 from pathlib import Path
+
+from ...infrastructure.database import DatabaseUnitOfWork
 
 
 class MessageRecallRepository:
@@ -21,19 +22,16 @@ class MessageRecallRepository:
         if not self.database.is_file():
             raise FileNotFoundError("消息日志数据库不存在")
 
-        # mode=rw prevents SQLite from silently creating a database between the
-        # existence check and connection open.
-        connection = sqlite3.connect(
-            f"{self.database.resolve().as_uri()}?mode=rw", uri=True
-        )
-        try:
+        # require_exists opens mode=rw, so a database deleted after the
+        # existence check above is rejected instead of re-created.
+        with DatabaseUnitOfWork(self.database, require_exists=True) as uow:
             if str(row_id or "").strip():
-                cursor = connection.execute(
+                cursor = uow.execute(
                     "UPDATE messages SET content=? WHERE id=?",
                     ("[该消息已撤回]", str(row_id).strip()),
                 )
             else:
-                cursor = connection.execute(
+                cursor = uow.execute(
                     "UPDATE messages SET content=? "
                     "WHERE adapter=? AND scene=? AND message_id=?",
                     (
@@ -43,13 +41,7 @@ class MessageRecallRepository:
                         str(message_id or "").strip(),
                     ),
                 )
-            connection.commit()
             return int(cursor.rowcount)
-        except Exception:
-            connection.rollback()
-            raise
-        finally:
-            connection.close()
 
 
 __all__ = ["MessageRecallRepository"]

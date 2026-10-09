@@ -2,6 +2,50 @@
 
 状态：进行中。`v1.1.0` 的 P0-P7 发布证据继续保留，但不作为底层全面重构完成证明。
 
+**2026-10-09 feature 手工建连清零（共享 UoW 收口）**：本片起点 `scripts/check_architecture.py`
+`ok=false`、`153` 项，其中 `feature_connections` 三项是 feature 层自行 `sqlite3.connect`。
+`infrastructure/database/uow.py` 增加两个显式开关：`require_exists`（库文件缺失直接
+`FileNotFoundError`，存在时以 `mode=rw` URI 打开，关掉“先 `is_file()` 再连接”之间的隐式建库窗口）和
+`query_only`（`PRAGMA query_only=ON`）；`attach_database()` 增加 `read_only=True`，以 `?mode=ro` URI
+ATTACH，退出仍自动 DETACH。三处手工建连迁入同一事务：`features/arena/opponent_repository.py` 用
+`DatabaseUnitOfWork(player_db, read_only=True, query_only=True)` 加 `attach_database(game_db, "profiles", read_only=True)`，
+候选 JOIN、缺库 `FileNotFoundError`、不吞异常语义不变；`features/logs/message_recall_repository.py`
+以 `require_exists=True` 取代裸 `mode=rw` URI，缺库文案与“不建库”结论不变；
+`features/admin/qqid_batch_repository.py` 用 UoW 表达读 `mode=ro` / 写 `BEGIN IMMEDIATE` + `foreign_keys=ON`
++ 三表列校验，`exclusive_run` 的独立 flock 路径未动。测试：`tests/test_uow_attach.py` 新增只读 ATTACH
+主副库均拒写、`require_exists` 缺库不建库也不建父目录、已存在库正常写、异常回滚保留旧值共 4 例；
+arena 只读证据测试的 patch 目标由 `opponent_repository.sqlite3.connect` 改为
+`infrastructure.database.uow.sqlite3.connect`，断言不变（单条 SELECT、ATTACH 带 `mode=ro`、无写语句）；
+`tests/architecture/test_architecture_gate_checks.py` 把已过期的“直连 owner 必须可见”改为全树不变量
+`check_feature_connections() == []`，另用临时包（同时 patch `PACKAGE`/`ROOT`）证明规则仍会报告直连与
+nonebot/flask 导入、仍不报告只用 sqlite3 常量或异常的模块。契约锚点同步：
+`scripts/check_full_refactor_progress.py` 的 arena `opponent_queries_and_all_cache_consumers_share_one_bounded_owner`
+不再匹配文本 `mode=ro`，改为 AST 断言主连接 `read_only=True, query_only=True` 与 ATTACH `read_only=True`
+各唯一；`tests/test_arena_progress_contract.py` 用“主库改读写”和“去掉 ATTACH 只读”两种变异替换原
+`mode=ro` 变异。顺带修掉两处与代码脱节的既有断言：`features/logs/tests/test_logs_application.py` 的昵称
+批量查询语句数 `2` 改 `3`（`get_latest_human_names_by_user_ids` 早先加了 `sqlite_master` 探测，与本片无关），
+`docs/refactor_inventory.json` 重导出去掉由注释文字 `SQLite from silently creating` 被 `_TABLE_RE` 误判出的
+假表名 `silently`（教训：exporter 的表名正则扫全文，注释里的 `from <word>` 会污染清单，后续切片改注释需重跑
+`--check`）。验收：`check_architecture.py` `153 -> 150`，`feature_connections` 与 `manifest_documentation`
+均为 `0`，剩余 150 项全部是 19 个 feature 目录缺垂直切片文件/文档（含 `terminal/plugin_config/qq_bind/group_lifecycle`
+缺 `tests/test_*.py`）；`refactor_completion_audit.py` P2 由 `false` 转 `true`，P0/P1/P2/P4/P5/P6 全绿；
+`phase2_legacy_path_gate.py --check` 仍 `ready=True paths=496 blocked=0 frozen_membership_valid=True`；
+`check_full_refactor_progress.py --json` 仍 `exit_ready=true`、`exit_blockers=[]`、arena 切片无 false 项；
+全量 `python -m unittest discover -s tests -q` `2890 tests`，失败集合为既有 10 errors + 9 failures，
+其中 `test_registration_batch.test_concurrent_submits_are_coalesced_into_one_batch` 单独复跑 6 次全绿，
+属依赖 `flush_delay=0.02` 的计时抖动（高负载下 10 个 submit 跨过 flush 边界），列测试稳定性 backlog，未借机改测试。
+子代理：本轮 2 名只读审计（10 + 9 个 feature 目录的命令/路由/任务/表/配置盘点），未改文件、未跑测试、
+未访问数据库；其“`docs/features/` 不存在”“7 个 feature 有 `manifest_documentation` 错误”两条与实测冲突
+（实测 54 篇文档、门禁该项为 `0`），已证伪弃用，其余条目仅作下一批线索：这 19 个目录的真实 HTTP 表面全部
+仍由旧 `xiuxian/xiuxian_web/` 的 `@app.route` 承载且未进 `RouteSpec`，新 `/api/v1/*` 由 `adapters/web/blueprints/*`
+另接一套实现，垂直切片收口时必须按 owner 决定归属后再声明，避免与 `runtime_web` 现有声明重复触发
+`registry.validate()` duplicate route。边界：P7 仍不能收口——`CompatibilityReleaseGate` 以真实 git tag 为锚
+（仓库现有 `v1.0.0/v1.1.0`），而 `data/xiuxian/compatibility_hits.json` 仍记录 `runtime:legacy_package_load=120`
+等命中且部署目录没有 `compatibility_release_gate.json`，在真实部署周期内执行 `start()` 之前伪造基线等同伪造证据；
+全局 `legacy transaction services`、`xiuxian2_handle` 与真实 live 冒烟仍开放。收尾只清本轮 `.pyc/__pycache__/.pytest_cache`
+与 `/tmp/codex-uow-20261009`，`.venv`、`.git`、`data/` 运行库与用户 `boss_info.json` 未动。
+
+
 **2026-10-09 架构门禁口径校准与框架/适配器边界收口**：以命令输出为准重建观测基线——
 `scripts/check_architecture.py` 在本片开始时的 `d8cd9e2a` 上是 `ok=false`、`211` 项错误，
 进度页此前多处“architecture CLI `ok=true`”的记录与仓库实际不符，已在

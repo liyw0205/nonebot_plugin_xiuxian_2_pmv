@@ -1,12 +1,13 @@
 from __future__ import annotations
 
-import sqlite3
 from collections import OrderedDict
+from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
 from threading import RLock
 
 from ...infrastructure.clock import SystemClock
+from ...infrastructure.database import DatabaseUnitOfWork
 
 
 class ArenaOpponentRepository:
@@ -26,16 +27,11 @@ class ArenaOpponentRepository:
             raise FileNotFoundError("arena opponent databases are unavailable")
 
     @contextmanager
-    def _connection(self):
+    def _connection(self) -> Iterator[DatabaseUnitOfWork]:
         self.require_available()
-        connection = sqlite3.connect(f"{self.player_db.resolve().as_uri()}?mode=ro", uri=True)
-        connection.row_factory = sqlite3.Row
-        try:
-            connection.execute("ATTACH DATABASE ? AS profiles", (f"{self.game_db.resolve().as_uri()}?mode=ro",))
-            connection.execute("PRAGMA query_only=ON")
-            yield connection
-        finally:
-            connection.close()
+        with DatabaseUnitOfWork(self.player_db, read_only=True, query_only=True) as uow:
+            uow.attach_database(self.game_db, "profiles", read_only=True)
+            yield uow
 
     def candidates(self, user_id, *, target_ids=None):
         parameters = [str(user_id)]

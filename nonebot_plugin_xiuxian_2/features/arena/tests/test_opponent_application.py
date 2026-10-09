@@ -51,7 +51,7 @@ def test_candidates_use_one_readonly_join_and_exclude_self_or_missing_profiles(r
         connection.set_trace_callback(statements.append)
         return connection
 
-    with patch("nonebot_plugin_xiuxian_2.features.arena.opponent_repository.sqlite3.connect", side_effect=traced):
+    with patch("nonebot_plugin_xiuxian_2.infrastructure.database.uow.sqlite3.connect", side_effect=traced):
         candidates = runtime.repository.candidates("self")
     assert {row["user_id"] for row in candidates} == {"near1", "near2", "far"}
     assert sum(statement.startswith("SELECT") for statement in statements) == 1
