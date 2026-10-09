@@ -42,11 +42,16 @@ undeclared route 与 missing permission 各 `3` 项归零；`features/info/web.p
 facade 声明、feature 层不导入 NoneBot、activity 冷导入环）；Phase 2 `--check` 仍
 `ready=true`、`496` 项、`blocked=0`、membership 有效；`check_full_refactor_progress.py --json`
 仍 `exit_ready=true`、`exit_blockers=[]`；`check_architecture.py` 从 `211` 降到 `153`
-（`150` 项 feature 垂直切片缺件 + `3` 项手工建连 + inventory 需随改动重跑）。
-`python -m unittest discover -s tests -q` 与同机 HEAD 工作树基线逐条比对：
-`2875` 项、`failures=9, errors=10`，失败/错误名单与基线完全一致，本片不新增失败；
-其中 `test_activity_admin_data`、`test_source_quality` 绝对导入、lazy-reader 与 inventory
-等条目为既有失败，未借本片扩大修复面。
+（`150` 项 feature 垂直切片缺件 + `3` 项 feature 手工建连，其余检查全绿）；
+`scripts/export_refactor_inventory.py` 在独立运行时也先初始化框架，重新生成的
+`docs/refactor_inventory.json` 补齐了 `closing_enter_operations` 等既有 drift（HEAD 上
+`test_refactor_inventory` 本已失败，现随本片转绿）。
+`python -m unittest discover -s tests -q` 与同机 HEAD 工作树基线逐条比对：基线
+`2875` 项、`failures=9, errors=10`；本片收尾为 `2885` 项、`failures=8, errors=10`，
+唯一差异是既有失败的 `test_refactor_inventory` 随 inventory 重跑转绿，其余失败/错误
+名单逐条一致，本片不新增失败。`test_activity_admin_data`、`test_source_quality`
+绝对导入、lazy-reader、`architecture.test_*` 单模块加载等条目为既有失败，
+未借本片扩大修复面。
 
 未做与 backlog：未访问运行数据库/WAL/SHM，未跑五库恢复演练、真实 live 冒烟与 P7 发布证据；
 `refactor_completion_audit.py` 的 P7 仍需 `--data-dir/--current-release/--evidence` 真实发布周期证据；
