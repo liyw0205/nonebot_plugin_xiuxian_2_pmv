@@ -31,7 +31,7 @@
 
 ## 事务与失败回滚
 
-`create_local_backup`、`backup_all_configs_with_details`、`backup_cloud_config` 共享 `_create_lock` 非阻塞单飞锁，抢不到锁直接返回“正在执行”结果，不排队也不并发写同一目录。写快照先落临时文件再原子替换，写入前用 `MAX_CONFIG_BACKUP_BYTES` 拒绝超限内容；恢复只在快照校验通过后调用配置写入端口，端口失败时原配置保持不变，不产生半成品文件。
+`create_local_backup`、`backup_all_configs_with_details`、`backup_cloud_config` 共享 `_create_lock` 非阻塞单飞锁，抢不到锁直接返回“正在执行”结果，不排队也不并发写同一目录。写快照先落临时文件再原子替换，写入前用 `MAX_CONFIG_BACKUP_BYTES` 拒绝超限内容；恢复只在快照校验通过后调用配置写入端口，端口返回失败时本切片不写任何文件，已校验的快照原样保留。配置落盘本身属于 `plugin_config` owner：`xiuxian/xiuxian_utils/config_literal.py:233-249` 先 `compile()` 语法校验再写入，组合出非法内容时不会落笔，但真正写入用的是裸 `write_text`，不是临时文件加 `os.replace`，因此进程在写入中途被杀仍可能截断配置文件——这条边界归 `plugin_config` 收口，本切片不声称配置文件写入是原子的。
 
 ## 定时任务
 

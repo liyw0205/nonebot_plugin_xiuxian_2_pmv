@@ -70,7 +70,8 @@ Protocol 的 `defer_cloud_cleanup` 默认值同步对齐实现）、`/backups` �
 其二，`features/plugin_backups/tests/test_slice_contract.py` 的一句注释写着
 `derived from those two affixes`，被 `export_refactor_inventory.py` 的 `_TABLE_RE`（扫全文含注释）
 解析成假表名 `those`，`check_architecture.py` 随即报 `refactor_inventory` 陈旧；措辞改为
-`built by the two affixes above` 后重导清单，`--check` 通过。修完 `_slice_status()` 的 false 项
+`built by the two affixes above` 后重导清单，`--check` 通过。其三，同一轮复核还抓到一处文档越界：`docs/features/config_backups.md` 写过“端口失败时原配置保持不变，不产生半成品文件”，但配置写入端口 `config_literal.write_config_values`（`233-249` 行）只用裸 `write_text`，并非临时文件加 `os.replace`，已改为如实写明“本切片快照写入原子、配置落盘非原子，该边界归 `plugin_config`”。
+修完 `_slice_status()` 的 false 项
 从 9 回到 4，剩下 4 项（`compensation.reward_web_counts_use_sql_aggregates`、
 `sign_in` 三项）本片之前就存在，与备份 owner 无关，未借机改。
 
