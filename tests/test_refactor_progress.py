@@ -894,6 +894,8 @@ class RefactorProgressTests(unittest.TestCase):
         self.assertTrue(boss["full_refresh_legacy_service_not_default"])
         self.assertTrue(boss["battle_application_owned"])
         self.assertTrue(boss["legacy_battle_settlement_disabled"])
+        self.assertTrue(boss["player_state_composition_owner"])
+        self.assertTrue(boss["player_state_default_fails_closed_without_legacy_fallback"])
         buff = slices["buff"]
         self.assertTrue(buff["blessed_open_application_owned"])
         self.assertTrue(buff["legacy_blessed_open_disabled"])

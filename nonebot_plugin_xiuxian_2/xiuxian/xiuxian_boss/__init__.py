@@ -95,7 +95,9 @@ boss_purchase_command_application = BossPurchaseCommandApplication(
     lambda: _items(),
     max_goods_num_provider=lambda: XiuConfig().max_goods_num,
 )
-player_state_application = PlayerStateApplication(get_paths().player_db)
+# Player vital state is owned by the game database; the composition root may
+# replace this instance during startup with the shared application.
+player_state_application = PlayerStateApplication(get_paths().game_db)
 runtime_clock = SystemClock()
 runtime_random = SystemRandom()
 _world_boss_battle_settlement_service_instance = None
@@ -109,14 +111,24 @@ def _sql_message():
 
 
 def _initialize_player_state(user_id: str, profile=None):
-    # Compatibility fallback remains available as _sql_message().update_user_hp(user_id).
-    result = player_state_application.initialize_if_empty(
-        user_id,
-        fallback=lambda value: _sql_message().update_user_hp(value),
-    )
+    result = player_state_application.initialize_if_empty(user_id)
     if profile is not None and result.hp is not None:
         profile["hp"], profile["mp"], profile["atk"] = result.hp, result.mp, result.atk
     return result
+
+
+def _legacy_initialize_player_state(user_id: str):
+    """Explicit rollback-only bridge for callers outside the default command path."""
+    return player_state_application.initialize_if_empty(
+        user_id,
+        fallback=lambda value: _sql_message().update_user_hp(value),
+    )
+
+
+def configure_player_state_application(application: PlayerStateApplication) -> None:
+    """Bind the composition-root player-state owner used by boss commands."""
+    global player_state_application
+    player_state_application = application
 
 
 def _items():
@@ -599,7 +611,11 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
         await battle.finish()
 
     if user_info['hp'] is None or user_info['hp'] == 0:
-        _initialize_player_state(user_id, user_info)
+        state = _initialize_player_state(user_id, user_info)
+        if state.status in {"schema_missing", "user_missing"} or state.hp is None:
+            battle_flag[GLOBAL_BOSS_KEY] = False
+            await handle_send(bot, event, "玩家状态数据未就绪，请稍后重试。")
+            await battle.finish()
         user_info = _sql_message().get_user_info_with_id(user_id)
 
     if user_info['hp'] <= user_info['exp'] / 10:
@@ -1024,7 +1040,10 @@ async def challenge_scarecrow_(bot: Bot, event: GroupMessageEvent | PrivateMessa
 
     # 检查用户状态
     if user_info['hp'] is None or user_info['hp'] == 0:
-        _initialize_player_state(user_id, user_info)
+        state = _initialize_player_state(user_id, user_info)
+        if state.status in {"schema_missing", "user_missing"} or state.hp is None:
+            await handle_send(bot, event, "玩家状态数据未就绪，请稍后重试。")
+            await challenge_scarecrow.finish()
     if user_info['hp'] <= user_info['exp'] / 10:
         time = leave_harm_time(user_id)
         msg = f"重伤未愈，动弹不得！距离脱离危险还需要{time}分钟！\n"
@@ -1084,7 +1103,10 @@ async def challenge_training_puppet_(bot: Bot, event: GroupMessageEvent | Privat
 
     # 检查用户状态
     if user_info['hp'] is None or user_info['hp'] == 0:
-        _initialize_player_state(user_id, user_info)
+        state = _initialize_player_state(user_id, user_info)
+        if state.status in {"schema_missing", "user_missing"} or state.hp is None:
+            await handle_send(bot, event, "玩家状态数据未就绪，请稍后重试。")
+            await challenge_training_puppet.finish()
     if user_info['hp'] <= user_info['exp'] / 10:
         time = leave_harm_time(user_id)
         msg = f"重伤未愈，动弹不得！距离脱离危险还需要{time}分钟！\n"

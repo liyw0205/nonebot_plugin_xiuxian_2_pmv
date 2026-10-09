@@ -1227,6 +1227,7 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
                 configure_activity_boss_milestone_claim_application,
                 configure_activity_boss_rank_claim_application,
             )
+            from .xiuxian.xiuxian_boss import configure_player_state_application as configure_boss_player_state_application
 
             configure_sign_in_application(context.services["sign_in"])
             configure_direct_breakthrough_application(context.services["base"])
@@ -1235,6 +1236,7 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
             configure_player_activity_application(context.services["player_activity"])
             configure_player_attribute_application(context.services["player_attributes"])
             configure_player_state_application(context.services["player_state"])
+            configure_boss_player_state_application(context.services["player_state"])
             configure_buff_application(context.services["buff"])
             configure_map_application(context.services["map"])
             configure_pet_application(context.services["pet"])

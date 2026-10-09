@@ -10,6 +10,15 @@ UoW 内完成排行快照、资产写入和 claim marker，准备阶段也复用
 原有两阶段恢复语义。新增同库回归并用短 timeout 证明不再等待锁。该修复不改变 Phase 2
 `496` 项 membership/hash，也不新增迁移。
 
+**2026-10-09 `scope_id=world-boss-player-state-owner`**：世界 BOSS、稻草人和训练傀儡
+三个默认入口共用的空 HP 初始化原先错误绑定 `player_db`，而 composition root 的玩家状态
+owner 实际是 `game_db`；schema 缺失时因此经默认 fallback 回到旧
+`XiuxianDateManage.update_user_hp`。现在 Boss facade 支持 composition-root 注入并默认使用
+`game_db` application，三个入口在 `schema_missing/user_missing` 时 fail closed；旧 fallback
+仅保留为显式 rollback helper。该 scope 不修改世界 BOSS 结算、排行领取或 `old_boss_info`
+读写边界；新增 boss source contract 与 progress gate，Phase 2 `496` 项 membership/hash
+保持不变。
+
 **2026-10-09 Phase 3 普通出关收益 adapter 子切片（scope-v2）**：新增冻结
 `scope_id=phase3-player-lifecycle-v2`、`stable_id=command:buff:出关`，覆盖普通
 `出关` 与 `灵石出关` alias 的 replay-first adapter 和确定性收益计算。handler 使用

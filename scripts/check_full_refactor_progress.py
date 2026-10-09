@@ -5285,6 +5285,16 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "full_refresh_legacy_service_not_default": "WorldBossFullRefreshService" not in boss_facade,
             "battle_application_owned": "boss_application.settle_compat(" in boss_facade,
             "legacy_battle_settlement_disabled": "_world_boss_battle_settlement_service().settle(" not in boss_facade,
+            "player_state_composition_owner": (
+                "PlayerStateApplication(get_paths().game_db)" in boss_facade
+                and "def configure_player_state_application(" in boss_facade
+                and "configure_boss_player_state_application(context.services[\"player_state\"])" in plugin
+            ),
+            "player_state_default_fails_closed_without_legacy_fallback": (
+                "def _legacy_initialize_player_state(" in boss_facade
+                and "fallback=" not in boss_facade[:boss_facade.index("def _legacy_initialize_player_state(")]
+                and "initialize_if_empty(user_id)" in boss_facade
+            ),
             "punishment_application_owned": "boss_application.punish(" in boss_facade and "boss_application.punishment_snapshot(" in boss_facade,
             "item_catalog_lazy": (
                 "_items_instance = None" in boss_facade
