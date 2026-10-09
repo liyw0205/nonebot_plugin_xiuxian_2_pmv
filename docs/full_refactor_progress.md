@@ -2,6 +2,86 @@
 
 状态：进行中。`v1.1.0` 的 P0-P7 发布证据继续保留，但不作为底层全面重构完成证明。
 
+**2026-10-09 备份 owner 垂直切片（config/database/plugin/manual backups）**：本片起点
+`scripts/check_architecture.py` `ok=false`、`150` 项，全部集中在 `feature_contracts`（19 个 feature 目录缺
+垂直切片文件与文档），`manifest_documentation` 为 `0`；本片关闭其中四个备份 owner，`150 -> 121`。
+新增件：每目录 `schemas.py/migrations.py/commands.py/web.py/jobs.py/manifest.py`，`manual_backups` 另加
+`repository.py`（`PluginBackupCreationPort`/`ConfigBackupProvider` 两个 Protocol，替换应用对兄弟切片具体类的
+直接导入），`database_backups/tests/__init__.py` 补上（缺它时 `unittest discover` 直接报 not importable）。
+manifest 统一 `owner="operations"`、`migration_version=None`、`test_tag=key`，命令/路由/任务/配置四个表面显式空；
+`plugin.py:build_registry()` 注册 4 个 `FEATURE`，注册表 `89 -> 93`，`docs/refactor_inventory.json` 同步重导。
+迁移结论：四个目录（排除 tests 与 `__pycache__`）对 `CREATE TABLE|ALTER TABLE|sqlite3|db_backend|migration`
+零命中，SQLite 交互全部经 `database_backup_snapshot_sqlite`/`restore_plugin_backup_database` 等端口委托，
+故 `MIGRATIONS = ()` 与 `migration_version=None` 有据。Web 现实：`ROUTES = ()`，新增 `LEGACY_ROUTES` 记录
+仍由旧 `xiuxian/xiuxian_web/backups.py`（管理员会话 + CSRF 守卫）注册的 29 条 `@app.route`，加 `pages.py:128`
+的 `GET /get_backups`（读备份目录）共 `30` 条，config 10 / database 9 / plugin 10 / manual 1，目标统一写成
+`Class.method`；`tests/test_backup_slice_manifests.py` 逐条 `getattr` 解析目标并断言其为公开可调用、
+断言 30 条 path 的 owner 全局唯一、断言这些 path 未被 `RouteSpec` 声明（避免与 `runtime_web` 的
+`/api/v1/backups*`、`/backups` 撞 `registry.validate()`），另断言文档逐条含 path 与目标。契约单一来源：
+26 个上限/模式常量与 `is_config_backup_filename` 在仓库内只剩 `schemas.py` 一处顶层定义，本片进一步把
+`CONFIG_BACKUP_PREFIX/SUFFIX`、`ARCHIVE_PREFIX/SUFFIX`、`DATABASE_BACKUP_PREFIX/SUFFIX` 也收进 schemas，
+并让归档正则、目录 glob、文件名生成从这两对常量派生（实测派生正则与 `backup_.*_(v?[\d.]+)\.zip\Z`、
+`db_backup_.+\.zip\Z` 对样本集判定完全一致），`RESTORE_DISK_RESERVE_BYTES` 原先在云端与恢复仓储重复定义，现仅一处；
+`tests/slice_contract.py` + 每目录 `test_slice_contract.py` 用 AST 拦住回退。文档：`docs/features/{config_backups,
+database_backups,plugin_backups,manual_backups}.md` 四篇九节齐全，其中三处“只由 Web 控制台触发”与“无定时任务”
+的写法已按运行时事实修正（见下）。子代理：本轮 1 名只读审计（未改文件、未跑测试），6 项判定里 4 项经我复核
+成立并修复——`xiuxian/xiuxian_scheduler/__init__.py:523-544` 确有 APScheduler cron `hour="*/4" minute=10`
+的 `backup_database_files` 经 `UpdateManager.backup_db_files` 调本切片 `create_backup`（job 归属
+`compatibility/legacy_manifest.py` 的 `legacy_scheduler`，故 `JOBS = ()` 仍成立，但 `jobs.py` 与文档的
+“nothing runs on a timer/无任务”文案改为如实描述该驱动）、“恢复前每个库都有独立空间预检”只在
+`database_backup_validate_sqlite` 失败后的重建分支成立（常规路径是解压前一次合计预检 `_preflight_restore_space`）、
+`manual_backups/repository.py` 缺 `from pathlib import Path` 使 `"Path | str"` 注解不可解析（已补导入并去掉引号，
+Protocol 的 `defer_cloud_cleanup` 默认值同步对齐实现）、`/backups` 页面归属写错（旧页面注册在
+`xiuxian/xiuxian_web/backups.py:232`，`platform_manifest.py:48` 又把它声明给 `runtime_web`，属新旧双轨，
+等 `runtime_web` 收口消重）。该审计还独立命中 LEGACY_ROUTES 写法不统一、`/get_backups` 漏项、
+`"backup_"/".zip"` 字面量硬编码三处，均已改。它建议把旧 Web 层的 `DB_SELECTION_ALIASES` 改为复用
+`features/database_backups/schemas.DATABASE_ALIASES`：实测一改，`phase2_legacy_path_gate.py --check` 立刻
+报 30 条 `Closed legacy Web route has no source-bound handler edge`（该 gate 绑定了 `backups.py` 的源文件行锚），
+已回退该处改动并列为 backlog：消这类旧 Web 层重复定义前，必须先给 phase2 gate 换成非行锚绑定。
+顺带修正两处文档越界：`config_backups` 的保留期清理只在 `backup_all_configs_with_details` 与
+`backup_cloud_config` 内发生，`create_local_backup` 不清理；`plugin_backups` 的“临时目录”实为同目录
+`tempfile.mkstemp` + `os.replace`。测试：`pytest -p no:cacheprovider` 跑四目录 `74 passed + 2 subtests`；
+`unittest discover` 每目录只能收到 unittest 写法的那部分（config 16、database 4、plugin 30、manual 4），
+因为 `database_backups/tests/test_{application,repository}.py`、`plugin_backups/tests/test_creation.py`、
+`manual_backups/tests/test_application.py` 是函数式写法——已在三篇文档写明必须用 pytest 运行，
+函数式用例迁移列测试收敛 backlog；`tests/test_backup_slice_manifests.py` 4 例；
+`tests/architecture` 16 例仍只有既有 `test_legacy_application_contract`、`test_refactor_architecture`
+两个 loader error；全量 `python -B -m unittest discover -s tests -q` `2898 tests`（上轮基线 2890 加本批
+8 条新契约用例），失败集合回到既有名单 8 failures + 10 errors，未借机扩大修复；
+过程中一度出现 9 failures，多出的那条正是本片自己的门禁锚点回归（见下），修完即消失。验收：`check_architecture.py` `150 -> 121`，
+除 `feature_contracts` 外全部为 `0`；`refactor_completion_audit.py` `P0/P1/P2/P4/P5/P6` 绿、
+`P3 errors 150 -> 121`、`P7` 仍差真实发布周期证据；`phase2_legacy_path_gate.py --check` 回到
+`ready=True paths=496 blocked=0 frozen_membership_valid=True`；`check_full_refactor_progress.py --json`
+`exit_ready=true`、`phase2_complete=true`、`exit_blockers=[]`。本轮自查另抓到两条由本片自己引入的回归，都已修到位而不是绕过：
+其一，`scripts/check_full_refactor_progress.py` 用「消费模块源码含 `NAME = 字面量`」证明上限归属，
+常量迁入 `schemas.py` 后这种文本不再是任何证据，实测 5 个备份 owner 的 flag 同时变假
+（`tests/test_refactor_progress.py` 抓到 1 条，其余 4 条靠 `_slice_status()` 逐 flag 核对才找全）。
+改法是新增结构证据 helper `_schema_constant_bound(contract_source, consumer_source, name, value)`，
+要求同一名字满足三件事：`schemas.py` 模块级声明且折叠后等于门禁钉住的值、消费模块存在
+`from .schemas import ...` 的包内相对导入、模块体内真的引用该名；配套 `_constant_value`
+自行折叠 `16 * 1024 * 1024` 这类算术表达式（`ast.literal_eval` 不接受乘法，早先只折出 `1_000` 一类
+纯数字，导致 3 个 flag 仍假）。顺带把 3 处只写裸名（`MAX_PLUGIN_BACKUP_DOWNLOAD_BYTES`、
+`MAX_DATABASE_RESTORE_MEMBERS`、`MAX_DATABASE_RESTORE_BYTES`）的弱锚点一并升级成同一 helper，
+并把 `MAX_DATABASE_BACKUP_BATCH` 的绑定改到真正实施批量上限的 `database_backups/application.py`
+——仓储只是把它再导出一次却从不使用，已删掉这条死再导出（import 与 `__all__`），
+契约测试的名单同步改成只在 `APPLICATION_NAMES` 断言。新增
+`tests/test_backup_progress_contract.py`（4 例）：5 个 flag 为真、11 个上限逐一绑定成立、
+改 schemas 值即假、抽掉 schemas 导入即假、只导入不使用也假，防住装饰性锚点。
+其二，`features/plugin_backups/tests/test_slice_contract.py` 的一句注释写着
+`derived from those two affixes`，被 `export_refactor_inventory.py` 的 `_TABLE_RE`（扫全文含注释）
+解析成假表名 `those`，`check_architecture.py` 随即报 `refactor_inventory` 陈旧；措辞改为
+`built by the two affixes above` 后重导清单，`--check` 通过。修完 `_slice_status()` 的 false 项
+从 9 回到 4，剩下 4 项（`compensation.reward_web_counts_use_sql_aggregates`、
+`sign_in` 三项）本片之前就存在，与备份 owner 无关，未借机改。
+
+剩余 backlog：15 个目录仍缺垂直切片件
+（`cache_files, database_console, economy_ledger, fallback, game_events, group_lifecycle, logs, messages,
+plugin_config, qq_bind, qq_image_upload, scheduler, stickers, terminal, updater`），其中
+`terminal/plugin_config/qq_bind/group_lifecycle` 连 `tests/test_*.py` 都没有（`group_lifecycle` 无 `tests/`
+目录也缺包 `__init__.py`，`scheduler/tests` 缺 `__init__.py`）；配置键
+`cloud_backup_enabled/local_backup_keep_days/webdav_*` 的真正 owner 是 `plugin_config`，本批四篇文档只声明
+“经端口注入、本切片不拥有配置键”，未夺归属；`/backups` 双轨与旧 Web 层重复常量待 `runtime_web` 收口。
+
 **2026-10-09 feature 手工建连清零（共享 UoW 收口）**：本片起点 `scripts/check_architecture.py`
 `ok=false`、`153` 项，其中 `feature_connections` 三项是 feature 层自行 `sqlite3.connect`。
 `infrastructure/database/uow.py` 增加两个显式开关：`require_exists`（库文件缺失直接

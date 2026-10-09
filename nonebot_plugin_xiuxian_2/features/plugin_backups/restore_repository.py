@@ -12,10 +12,13 @@ from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Callable, Iterator
 
+from .schemas import (
+    ARCHIVE_SUFFIX,
+    MAX_ARCHIVE_MEMBERS,
+    PLUGIN_ARCHIVE_ROOT,
+    RESTORE_DISK_RESERVE_BYTES,
+)
 
-PLUGIN_ARCHIVE_ROOT = PurePosixPath("src/plugins/nonebot_plugin_xiuxian_2")
-MAX_ARCHIVE_MEMBERS = 100_000
-RESTORE_DISK_RESERVE_BYTES = 64 * 1024 * 1024
 _WINDOWS_DRIVE = re.compile(r"^[A-Za-z]:")
 
 
@@ -124,7 +127,7 @@ class PluginBackupRestoreRepository:
             or "\\" in name
             or "\x00" in name
             or _WINDOWS_DRIVE.match(name)
-            or not name.lower().endswith(".zip")
+            or not name.lower().endswith(ARCHIVE_SUFFIX)
         ):
             raise InvalidPluginBackupArchive("无效备份文件名")
         return self._backup_directory / name

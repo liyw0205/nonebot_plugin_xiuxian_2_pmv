@@ -9,9 +9,7 @@ from .restore_repository import (
     PluginBackupArchiveNotFound,
     PluginBackupRestoreRepository,
 )
-
-
-_BACKUP_VERSION_RE = re.compile(r"backup_.*_(v?[\d.]+)\.zip\Z")
+from .schemas import ARCHIVE_NAME_PATTERN as _BACKUP_VERSION_RE
 
 
 class PluginBackupRestoreRuntime(Protocol):

@@ -14,11 +14,16 @@ from xml.etree import ElementTree as ET
 
 import requests
 
+from .schemas import (
+    CONFIG_BACKUP_PREFIX,
+    CONFIG_BACKUP_SUFFIX,
+    MAX_CONFIG_BACKUP_BYTES,
+    MAX_CONFIG_CLOUD_LIST_BYTES,
+    MAX_CONFIG_CLOUD_LIST_ENTRIES,
+    is_config_backup_filename,
+)
 
-MAX_CONFIG_BACKUP_BYTES = 16 * 1024 * 1024
-MAX_CONFIG_CLOUD_LIST_BYTES = 2 * 1024 * 1024
-MAX_CONFIG_CLOUD_LIST_ENTRIES = 1_000
-_CONFIG_BACKUP_PREFIX = "config_backup_"
+
 _DAV_NS = {"d": "DAV:"}
 
 
@@ -34,20 +39,6 @@ class ConfigBackupRuntime(Protocol):
     def configuration_backup_webdav_make_directories(self, base_url: str, relative_path: str, auth): ...
 
     def configuration_backup_format_time(self, value: str) -> str: ...
-
-
-def is_config_backup_filename(value: object) -> bool:
-    if not isinstance(value, str) or len(value.encode("utf-8")) > 255:
-        return False
-    return bool(
-        value
-        and value not in {".", ".."}
-        and "/" not in value
-        and "\\" not in value
-        and "\x00" not in value
-        and Path(value).name == value
-        and value.lower().endswith(".json")
-    )
 
 
 class ConfigBackupRepository:
@@ -88,7 +79,7 @@ class ConfigBackupRepository:
             temporary_path.unlink(missing_ok=True)
 
     def parse_uploaded_config(self, filename: object, stream: Any) -> Any:
-        if not isinstance(filename, str) or not filename.lower().endswith(".json"):
+        if not isinstance(filename, str) or not filename.lower().endswith(CONFIG_BACKUP_SUFFIX):
             raise InvalidConfigBackup("只支持JSON格式文件")
         payload = self._read_limited_stream(stream, MAX_CONFIG_BACKUP_BYTES)
         try:
@@ -105,7 +96,7 @@ class ConfigBackupRepository:
             return backups
         with entries:
             for entry in entries:
-                if not entry.name.startswith(_CONFIG_BACKUP_PREFIX) or not entry.name.lower().endswith(".json"):
+                if not entry.name.startswith(CONFIG_BACKUP_PREFIX) or not entry.name.lower().endswith(CONFIG_BACKUP_SUFFIX):
                     continue
                 try:
                     metadata = entry.stat(follow_symlinks=False)
@@ -171,7 +162,7 @@ class ConfigBackupRepository:
         deadline = now.timestamp() - timedelta(days=keep_days).total_seconds()
         with entries:
             for entry in entries:
-                if not entry.name.startswith(_CONFIG_BACKUP_PREFIX) or not entry.name.lower().endswith(".json"):
+                if not entry.name.startswith(CONFIG_BACKUP_PREFIX) or not entry.name.lower().endswith(CONFIG_BACKUP_SUFFIX):
                     continue
                 try:
                     metadata = entry.stat(follow_symlinks=False)
@@ -328,7 +319,7 @@ class ConfigBackupRepository:
         return self._backup_directory / str(filename)
 
     def _validate_local_filename(self, filename: str) -> None:
-        if not is_config_backup_filename(filename) or not filename.startswith(_CONFIG_BACKUP_PREFIX):
+        if not is_config_backup_filename(filename) or not filename.startswith(CONFIG_BACKUP_PREFIX):
             raise InvalidConfigBackup("无效配置备份文件名")
 
     def _ensure_directory_parent(self) -> None:

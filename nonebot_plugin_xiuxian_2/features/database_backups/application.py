@@ -6,26 +6,16 @@ from pathlib import Path
 from typing import Any, Protocol
 
 from .repository import (
-    MAX_DATABASE_BACKUP_BATCH,
     DatabaseBackupNotFound,
     DatabaseBackupRepository,
     InvalidDatabaseBackup,
     PartialDatabaseRestoreError,
     is_database_backup_archive_name,
 )
+from .schemas import DATABASE_ALIASES, MAX_DATABASE_BACKUP_BATCH
 
 
 _logger = logging.getLogger(__name__)
-_DATABASE_ALIASES = {
-    "xiuxian": "xiuxian.db",
-    "xiuxian.db": "xiuxian.db",
-    "xiuxian_impart": "xiuxian_impart.db",
-    "xiuxian_impart.db": "xiuxian_impart.db",
-    "player": "player.db",
-    "player.db": "player.db",
-    "trade": "trade.db",
-    "trade.db": "trade.db",
-}
 
 
 class DatabaseBackupRuntime(Protocol):
@@ -238,7 +228,7 @@ class DatabaseBackupApplication:
         seen: set[str] = set()
         for value in values or []:
             alias = Path(str(value)).name
-            name = _DATABASE_ALIASES.get(alias)
+            name = DATABASE_ALIASES.get(alias)
             if name and name not in seen:
                 seen.add(name)
                 normalized.append(name)

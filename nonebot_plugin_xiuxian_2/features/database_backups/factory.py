@@ -45,4 +45,4 @@ def build_database_backup_application(
     return DatabaseBackupApplication(repository, provider)
 
 
-__all__ = ["build_database_backup_application"]
+__all__ = ["DatabaseBackupProvider", "build_database_backup_application"]

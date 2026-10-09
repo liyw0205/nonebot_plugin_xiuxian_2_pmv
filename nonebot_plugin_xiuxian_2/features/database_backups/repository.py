@@ -18,15 +18,18 @@ from xml.etree import ElementTree as ET
 import requests
 
 from ...infrastructure.database.backup_capacity import preflight_capacity
+from .schemas import (
+    DATABASE_BACKUP_ARCHIVE_PATTERN,
+    DATABASE_BACKUP_PREFIX,
+    DATABASE_BACKUP_SUFFIX,
+    MAX_DATABASE_BACKUP_CLOUD_LIST_BYTES,
+    MAX_DATABASE_BACKUP_CLOUD_LIST_ENTRIES,
+    MAX_DATABASE_BACKUP_DOWNLOAD_BYTES,
+    MAX_DATABASE_RESTORE_BYTES,
+    MAX_DATABASE_RESTORE_MEMBERS,
+)
 
 
-MAX_DATABASE_BACKUP_BATCH = 100
-MAX_DATABASE_BACKUP_CLOUD_LIST_BYTES = 2 * 1024 * 1024
-MAX_DATABASE_BACKUP_CLOUD_LIST_ENTRIES = 1_000
-MAX_DATABASE_BACKUP_DOWNLOAD_BYTES = 8 * 1024 * 1024 * 1024
-MAX_DATABASE_RESTORE_MEMBERS = 256
-MAX_DATABASE_RESTORE_BYTES = 16 * 1024 * 1024 * 1024
-_DB_ARCHIVE_RE = re.compile(r"db_backup_.+\.zip\Z", re.IGNORECASE)
 _WINDOWS_DRIVE = re.compile(r"^[A-Za-z]:")
 _DAV_NS = {"d": "DAV:"}
 
@@ -229,7 +232,7 @@ class DatabaseBackupRepository:
 
             cutoff = self._now().timestamp() - keep_days * 24 * 60 * 60
             deleted = 0
-            for path in self._backup_directory.glob("db_backup_*.zip"):
+            for path in self._backup_directory.glob(f"{DATABASE_BACKUP_PREFIX}*{DATABASE_BACKUP_SUFFIX}"):
                 try:
                     metadata = path.lstat()
                     if not stat.S_ISREG(metadata.st_mode):
@@ -248,7 +251,7 @@ class DatabaseBackupRepository:
         if not self._backup_directory.exists():
             return []
         entries: list[dict[str, Any]] = []
-        for path in self._backup_directory.glob("db_backup_*.zip"):
+        for path in self._backup_directory.glob(f"{DATABASE_BACKUP_PREFIX}*{DATABASE_BACKUP_SUFFIX}"):
             try:
                 metadata = path.lstat()
             except FileNotFoundError:
@@ -716,7 +719,7 @@ class DatabaseBackupRepository:
             or "\\" in name
             or "\x00" in name
             or _WINDOWS_DRIVE.match(name)
-            or not name.lower().endswith(".zip")
+            or not name.lower().endswith(DATABASE_BACKUP_SUFFIX)
         ):
             raise InvalidDatabaseBackup("无效数据库备份文件名")
         return name
@@ -740,10 +743,16 @@ class DatabaseBackupRepository:
         return result
 
     def _unique_archive_path(self, stamp: str) -> Path:
-        candidate = self._backup_directory / f"db_backup_{stamp}.zip"
+        candidate = (
+                self._backup_directory
+                / f"{DATABASE_BACKUP_PREFIX}{stamp}{DATABASE_BACKUP_SUFFIX}"
+            )
         suffix = 1
         while candidate.exists():
-            candidate = self._backup_directory / f"db_backup_{stamp}_{suffix}.zip"
+            candidate = (
+                    self._backup_directory
+                    / f"{DATABASE_BACKUP_PREFIX}{stamp}_{suffix}{DATABASE_BACKUP_SUFFIX}"
+                )
             suffix += 1
         return candidate
 
@@ -776,14 +785,13 @@ def is_database_backup_archive_name(value: object) -> bool:
         or _WINDOWS_DRIVE.match(value)
     ):
         return False
-    return _DB_ARCHIVE_RE.fullmatch(value) is not None
+    return DATABASE_BACKUP_ARCHIVE_PATTERN.fullmatch(value) is not None
 
 
 __all__ = [
     "DatabaseBackupNotFound",
     "DatabaseBackupRepository",
     "InvalidDatabaseBackup",
-    "MAX_DATABASE_BACKUP_BATCH",
     "MAX_DATABASE_BACKUP_CLOUD_LIST_BYTES",
     "MAX_DATABASE_BACKUP_CLOUD_LIST_ENTRIES",
     "MAX_DATABASE_BACKUP_DOWNLOAD_BYTES",

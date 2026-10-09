@@ -208,6 +208,12 @@ from .features.auction.migrations import (
     apply_auction_settlement_game_effects,
     apply_auction_settlement_statistics,
 )
+# Operational slices without SQLite schemas still declare their surface here so
+# the registry stays the complete inventory of feature boundaries.
+from .features.config_backups.manifest import FEATURE as CONFIG_BACKUPS_FEATURE
+from .features.database_backups.manifest import FEATURE as DATABASE_BACKUPS_FEATURE
+from .features.manual_backups.manifest import FEATURE as MANUAL_BACKUPS_FEATURE
+from .features.plugin_backups.manifest import FEATURE as PLUGIN_BACKUPS_FEATURE
 from .features._legacy_migrated import (
     APPLICATIONS as LEGACY_MIGRATED_APPLICATIONS,
     FEATURES as LEGACY_MIGRATED_FEATURES,
@@ -748,6 +754,10 @@ def build_registry(*, disabled: set[str] | frozenset[str] | tuple[str, ...] = ()
         registry.register(WORK_FEATURE)
     if WORLD_EVENTS_FEATURE.key not in disabled:
         registry.register(WORLD_EVENTS_FEATURE)
+    registry.register(CONFIG_BACKUPS_FEATURE)
+    registry.register(DATABASE_BACKUPS_FEATURE)
+    registry.register(MANUAL_BACKUPS_FEATURE)
+    registry.register(PLUGIN_BACKUPS_FEATURE)
     registry.register(LEGACY_SCHEDULER_FEATURE)
     registry.register_many(LEGACY_FEATURES)
     return registry

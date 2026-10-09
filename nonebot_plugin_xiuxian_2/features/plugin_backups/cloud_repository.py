@@ -13,11 +13,14 @@ from xml.etree import ElementTree as ET
 
 import requests
 
+from .schemas import (
+    ARCHIVE_SUFFIX,
+    MAX_CLOUD_LIST_BYTES,
+    MAX_CLOUD_LIST_ENTRIES,
+    MAX_PLUGIN_BACKUP_DOWNLOAD_BYTES,
+    RESTORE_DISK_RESERVE_BYTES,
+)
 
-MAX_CLOUD_LIST_BYTES = 2 * 1024 * 1024
-MAX_CLOUD_LIST_ENTRIES = 1_000
-MAX_PLUGIN_BACKUP_DOWNLOAD_BYTES = 4 * 1024 * 1024 * 1024
-RESTORE_DISK_RESERVE_BYTES = 64 * 1024 * 1024
 _WINDOWS_DRIVE = re.compile(r"^[A-Za-z]:")
 _DAV_NS = {"d": "DAV:"}
 
@@ -47,7 +50,7 @@ def is_cloud_plugin_backup_filename(value: object) -> bool:
         or Path(value).name != value
     ):
         return False
-    return value.lower().endswith(".zip")
+    return value.lower().endswith(ARCHIVE_SUFFIX)
 
 
 class PluginBackupCloudRepository:

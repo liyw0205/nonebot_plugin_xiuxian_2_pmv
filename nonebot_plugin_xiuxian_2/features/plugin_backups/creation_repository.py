@@ -9,27 +9,17 @@ import zipfile
 from datetime import datetime
 from pathlib import Path, PurePosixPath
 
+from .schemas import (
+    ARCHIVE_PREFIX,
+    ARCHIVE_SUFFIX,
+    ARCHIVE_TIMESTAMP_PATTERN as _TIMESTAMP,
+    SKIP_DIRECTORY_NAMES as _SKIP_DIRECTORY_NAMES,
+    TRANSIENT_DATA_PATHS as _TRANSIENT_DATA_PATHS,
+    VERSION_SAFE_PATTERN as _SAFE_VERSION,
+)
+
 
 _logger = logging.getLogger(__name__)
-_SKIP_DIRECTORY_NAMES = frozenset(
-    {
-        "backups",
-        "config_backups",
-        "db_backup",
-        "cache",
-        "media_parser_cache",
-        "boss_img",
-        "font",
-        "卡图",
-        "__pycache__",
-    }
-)
-_TRANSIENT_DATA_PATHS = {
-    PurePosixPath("message.db"),
-    PurePosixPath("activity/activity.db"),
-}
-_TIMESTAMP = re.compile(r"\d{8}_\d{6}")
-_SAFE_VERSION = re.compile(r"[^A-Za-z0-9._+-]+")
 
 
 def _is_transient_data_file(path: Path, data_root: Path) -> bool:
@@ -74,7 +64,10 @@ class PluginBackupCreationRepository:
         self._archive_root = Path(archive_root)
 
     def create_local_backup(self, now: datetime, version: object) -> Path:
-        filename = f"backup_{now.strftime('%Y%m%d_%H%M%S')}_{_version_component(version)}.zip"
+        filename = (
+            f"{ARCHIVE_PREFIX}{now.strftime('%Y%m%d_%H%M%S')}"
+            f"_{_version_component(version)}{ARCHIVE_SUFFIX}"
+        )
         self._backup_directory.mkdir(parents=True, exist_ok=True)
         target = self._backup_directory / filename
         descriptor, temporary_name = tempfile.mkstemp(
@@ -104,7 +97,7 @@ class PluginBackupCreationRepository:
         deleted = 0
         with entries:
             for entry in entries:
-                if not entry.name.startswith("backup_") or not entry.name.endswith(".zip"):
+                if not entry.name.startswith(ARCHIVE_PREFIX) or not entry.name.endswith(ARCHIVE_SUFFIX):
                     continue
                 try:
                     metadata = entry.stat(follow_symlinks=False)

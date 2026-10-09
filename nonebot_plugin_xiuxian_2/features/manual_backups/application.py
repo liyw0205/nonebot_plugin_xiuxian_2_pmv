@@ -1,25 +1,9 @@
 from __future__ import annotations
 
 import threading
-from dataclasses import dataclass
-from pathlib import Path
-from typing import Protocol
 
-from ..plugin_backups.creation_application import PluginBackupCreationApplication
-
-
-class ConfigBackupProvider(Protocol):
-    def backup_all_configs_with_details(
-        self, *, defer_cloud_cleanup: bool = False
-    ) -> tuple[bool, Path | str, bool]: ...
-
-
-@dataclass(frozen=True, slots=True)
-class ManualBackupResult:
-    success: bool
-    plugin_backup: Path | str
-    config_backup: Path | str
-    error: str = ""
+from .repository import ConfigBackupProvider, PluginBackupCreationPort
+from .schemas import ManualBackupResult
 
 
 class ManualBackupApplication:
@@ -27,7 +11,7 @@ class ManualBackupApplication:
 
     def __init__(
         self,
-        plugin_backup: PluginBackupCreationApplication,
+        plugin_backup: PluginBackupCreationPort,
         config_backup: ConfigBackupProvider,
     ) -> None:
         self._plugin_backup = plugin_backup

@@ -12,6 +12,7 @@ import argparse
 import ast
 from functools import lru_cache
 import json
+import operator
 import re
 from pathlib import Path
 
@@ -56,6 +57,84 @@ def _parse_source(source: str) -> ast.Module:
 def _walk(tree: ast.AST) -> tuple[ast.AST, ...]:
     """Materialize an AST traversal once; checks never mutate their trees."""
     return tuple(ast.walk(tree))
+
+
+_FOLDED_OPERATORS = {
+    ast.Add: operator.add,
+    ast.Sub: operator.sub,
+    ast.Mult: operator.mul,
+    ast.FloorDiv: operator.floordiv,
+    ast.Div: operator.truediv,
+    ast.Mod: operator.mod,
+    ast.Pow: operator.pow,
+    ast.LShift: operator.lshift,
+    ast.RShift: operator.rshift,
+    ast.BitOr: operator.or_,
+    ast.BitXor: operator.xor,
+}
+
+
+def _constant_value(node: ast.AST) -> object:
+    """Fold a literal or arithmetic-on-literals expression, else return ``None``.
+
+    Byte caps are written as ``16 * 1024 * 1024``; ``ast.literal_eval`` refuses
+    multiplication, so the gate folds those binary operations itself instead of
+    falling back to comparing the source text of the expression.
+    """
+    if isinstance(node, ast.Constant) and isinstance(node.value, (int, float, str, bytes, bool, tuple)):
+        return node.value
+    if isinstance(node, ast.UnaryOp) and isinstance(node.op, (ast.USub, ast.UAdd)):
+        inner = _constant_value(node.operand)
+        if not isinstance(inner, (int, float)) or isinstance(inner, bool):
+            return None
+        return -inner if isinstance(node.op, ast.USub) else +inner
+    if isinstance(node, ast.BinOp) and type(node.op) in _FOLDED_OPERATORS:
+        left, right = _constant_value(node.left), _constant_value(node.right)
+        numbers = (int, float)
+        if isinstance(left, numbers) and isinstance(right, numbers):
+            try:
+                return _FOLDED_OPERATORS[type(node.op)](left, right)
+            except (ValueError, ZeroDivisionError, OverflowError):
+                return None
+    return None
+
+
+def _schema_constant_bound(contract_source: str, consumer_source: str, name: str, value: object) -> bool:
+    """Prove one durable cap is declared in ``schemas.py`` and consumed from there.
+
+    These caps used to be proven by matching their literal definition inside the
+    implementing module.  Once a slice moved a cap into its ``schemas.py`` that
+    text stopped being evidence, so the gate now binds three facts instead: the
+    single declaration with the expected value, the package-relative import in the
+    consumer, and a real use site so an unused import cannot pass.
+    """
+    try:
+        contract_tree = _parse_source(contract_source)
+        consumer_tree = _parse_source(consumer_source)
+    except SyntaxError:
+        return False
+    declared = False
+    for node in contract_tree.body:
+        targets = (
+            [node.target] if isinstance(node, ast.AnnAssign) else list(node.targets)
+            if isinstance(node, ast.Assign)
+            else []
+        )
+        if not any(isinstance(target, ast.Name) and target.id == name for target in targets):
+            continue
+        declared = _constant_value(node.value) == value
+        break
+    imported = any(
+        isinstance(node, ast.ImportFrom)
+        and node.level == 1
+        and node.module == "schemas"
+        and any(alias.name == name for alias in node.names)
+        for node in _walk(consumer_tree)
+    )
+    used = any(
+        isinstance(node, ast.Name) and node.id == name for node in _walk(consumer_tree)
+    )
+    return declared and imported and used
 
 
 @lru_cache(maxsize=None)
@@ -1298,6 +1377,9 @@ def _slice_status() -> dict[str, dict[str, object]]:
     database_backup_adapter_tests = (PACKAGE / "features" / "updater" / "tests" / "test_manager_adapter.py").read_text(encoding="utf-8")
     config_backup_application = (PACKAGE / "features" / "config_backups" / "application.py").read_text(encoding="utf-8")
     config_backup_repository = (PACKAGE / "features" / "config_backups" / "repository.py").read_text(encoding="utf-8")
+    plugin_backup_schemas = (PACKAGE / "features" / "plugin_backups" / "schemas.py").read_text(encoding="utf-8")
+    database_backup_schemas = (PACKAGE / "features" / "database_backups" / "schemas.py").read_text(encoding="utf-8")
+    config_backup_schemas = (PACKAGE / "features" / "config_backups" / "schemas.py").read_text(encoding="utf-8")
     config_backup_tests = "\n".join(
         (PACKAGE / "features" / "config_backups" / "tests" / test_name).read_text(encoding="utf-8")
         for test_name in ("test_application.py", "test_repository.py")
@@ -3065,7 +3147,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
                 and "self._repository.write_version(self._version_file" in plugin_backup_restore_application
             ),
             "repository_bounds_and_validates_zip_before_overlay": (
-                "MAX_ARCHIVE_MEMBERS = 100_000" in plugin_backup_restore_repository
+                _schema_constant_bound(plugin_backup_schemas, plugin_backup_restore_repository, "MAX_ARCHIVE_MEMBERS", 100_000)
                 and "shutil.disk_usage(directory)" in plugin_backup_restore_repository
                 and "_validate_disk_capacity" in plugin_backup_restore_repository
                 and "O_NOFOLLOW" in plugin_backup_restore_repository
@@ -3104,7 +3186,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
                 and "plugin_backup_restore_application.restore_backup(filename)" in backup_routes
             ),
             "application_bounds_batches_and_preserves_partial_results": (
-                "MAX_CLOUD_BACKUP_BATCH = 100" in plugin_backup_cloud_application
+                _schema_constant_bound(plugin_backup_schemas, plugin_backup_cloud_application, "MAX_CLOUD_BACKUP_BATCH", 100)
                 and "def sync_cloud_backups(" in plugin_backup_cloud_application
                 and "def delete_cloud_backups(" in plugin_backup_cloud_application
                 and "def local_backup_exists(" in plugin_backup_cloud_application
@@ -3112,9 +3194,9 @@ def _slice_status() -> dict[str, dict[str, object]]:
                 and "return deleted, failed" in plugin_backup_cloud_application
             ),
             "repository_bounds_webdav_and_atomically_installs_archives": (
-                "MAX_CLOUD_LIST_BYTES = 2 * 1024 * 1024" in plugin_backup_cloud_repository
-                and "MAX_CLOUD_LIST_ENTRIES = 1_000" in plugin_backup_cloud_repository
-                and "MAX_PLUGIN_BACKUP_DOWNLOAD_BYTES" in plugin_backup_cloud_repository
+                _schema_constant_bound(plugin_backup_schemas, plugin_backup_cloud_repository, "MAX_CLOUD_LIST_BYTES", 2 * 1024 * 1024)
+                and _schema_constant_bound(plugin_backup_schemas, plugin_backup_cloud_repository, "MAX_CLOUD_LIST_ENTRIES", 1_000)
+                and _schema_constant_bound(plugin_backup_schemas, plugin_backup_cloud_repository, "MAX_PLUGIN_BACKUP_DOWNLOAD_BYTES", 4 * 1024 * 1024 * 1024)
                 and "self._read_response(response, MAX_CLOUD_LIST_BYTES)" in plugin_backup_cloud_repository
                 and "zipfile.is_zipfile(temporary_path)" in plugin_backup_cloud_repository
                 and "os.replace(temporary_path, target_path)" in plugin_backup_cloud_repository
@@ -3156,9 +3238,9 @@ def _slice_status() -> dict[str, dict[str, object]]:
                 and "return self._database_backup_application().delete_cloud_backup(filename)" in plugin_backup_manager
             ),
             "repository_bounds_zip_restore_and_cloud_io": (
-                "MAX_DATABASE_BACKUP_BATCH = 100" in database_backup_repository
-                and "MAX_DATABASE_RESTORE_MEMBERS" in database_backup_repository
-                and "MAX_DATABASE_RESTORE_BYTES" in database_backup_repository
+                _schema_constant_bound(database_backup_schemas, database_backup_application, "MAX_DATABASE_BACKUP_BATCH", 100)
+                and _schema_constant_bound(database_backup_schemas, database_backup_repository, "MAX_DATABASE_RESTORE_MEMBERS", 256)
+                and _schema_constant_bound(database_backup_schemas, database_backup_repository, "MAX_DATABASE_RESTORE_BYTES", 16 * 1024 * 1024 * 1024)
                 and "O_NOFOLLOW" in database_backup_repository
                 and "database_backup_validate_sqlite" in database_backup_repository
                 and "staged[database] = source_path" in database_backup_repository
@@ -3208,9 +3290,9 @@ def _slice_status() -> dict[str, dict[str, object]]:
                 and "def test_config_backup_compatibility_methods_delegate_to_feature_owner" in database_backup_adapter_tests
             ),
             "repository_bounds_json_and_cloud_io": (
-                "MAX_CONFIG_BACKUP_BYTES = 16 * 1024 * 1024" in config_backup_repository
-                and "MAX_CONFIG_CLOUD_LIST_BYTES = 2 * 1024 * 1024" in config_backup_repository
-                and "MAX_CONFIG_CLOUD_LIST_ENTRIES = 1_000" in config_backup_repository
+                _schema_constant_bound(config_backup_schemas, config_backup_repository, "MAX_CONFIG_BACKUP_BYTES", 16 * 1024 * 1024)
+                and _schema_constant_bound(config_backup_schemas, config_backup_repository, "MAX_CONFIG_CLOUD_LIST_BYTES", 2 * 1024 * 1024)
+                and _schema_constant_bound(config_backup_schemas, config_backup_repository, "MAX_CONFIG_CLOUD_LIST_ENTRIES", 1_000)
                 and "O_NOFOLLOW" in config_backup_repository
                 and "os.replace(temporary_path, target)" in config_backup_repository
                 and "os.link(temporary_path, target)" in config_backup_repository

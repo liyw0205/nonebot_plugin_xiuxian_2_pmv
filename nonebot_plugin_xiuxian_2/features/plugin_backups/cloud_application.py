@@ -3,14 +3,11 @@ from __future__ import annotations
 from typing import Any
 
 from .cloud_repository import (
-    MAX_CLOUD_LIST_ENTRIES,
     InvalidCloudPluginBackup,
     PluginBackupCloudRepository,
     is_cloud_plugin_backup_filename,
 )
-
-
-MAX_CLOUD_BACKUP_BATCH = 100
+from .schemas import MAX_CLOUD_BACKUP_BATCH, MAX_CLOUD_LIST_ENTRIES
 
 
 class PluginBackupCloudApplication:

@@ -6,12 +6,14 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from .schemas import ARCHIVE_PREFIX, ARCHIVE_SUFFIX
+
 
 def is_plugin_backup_filename(value: object) -> bool:
     if (
         not isinstance(value, str)
-        or not value.startswith("backup_")
-        or not value.endswith(".zip")
+        or not value.startswith(ARCHIVE_PREFIX)
+        or not value.endswith(ARCHIVE_SUFFIX)
     ):
         return False
     if "/" in value or "\\" in value or "\x00" in value:
