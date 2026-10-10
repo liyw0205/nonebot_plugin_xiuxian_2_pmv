@@ -73,7 +73,8 @@ async def _run(source: str) -> dict[str, Any]:
 
     diagnostics = get_adapter_diagnostics(source)
 
-    from nonebot.adapters.qq import Bot
+    from nonebot.adapters.qq import Adapter, Bot
+    from nonebot.adapters.qq.models.payload import Dispatch
     from nonebot.adapters.qq.event import (
         C2CMessageCreateEvent,
         GroupAddRobotEvent,
@@ -94,6 +95,40 @@ async def _run(source: str) -> dict[str, Any]:
         "channel": MessageCreateEvent(**fixtures["channel"]),
         "interaction": InteractionCreateEvent(**fixtures["interaction"]),
         "lifecycle": GroupAddRobotEvent(**fixtures["lifecycle"]),
+    }
+
+    from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_adapter.early_inject import (
+        force_builtin_qq_adapter,
+    )
+
+    guarded = force_builtin_qq_adapter()
+    parser = Adapter.payload_to_event
+    force_builtin_qq_adapter()
+    resumed = Dispatch(op=0, t="RESUMED", d="resume-fixture", s=1, id="resume-1")
+    resumed_event = Adapter.payload_to_event(resumed)
+    message = Dispatch(op=0, t=events["group"].__type__, d=fixtures["group"], s=3)
+    message_before = dict(message.data)
+    message_event = Adapter.payload_to_event(message)
+    try:
+        Adapter.payload_to_event(Dispatch(op=0, t="GROUP_AT_MESSAGE_CREATE", d={}, s=4))
+    except Exception as exc:
+        invalid_event_error = type(exc).__name__
+    else:
+        invalid_event_error = None
+
+    from nonebot.adapters.qq import Adapter as adapter_after_patch
+
+    payload_guard = {
+        "enabled": guarded["payload_guard_forced"],
+        "adapter_identity_preserved": Adapter is adapter_after_patch,
+        "idempotent": parser is Adapter.payload_to_event,
+        "resumed_type": resumed_event.__type__,
+        "resumed_id": resumed_event.event_id,
+        "resumed_input_unchanged": resumed.data == "resume-fixture",
+        "message_matches_fixture": message_event == events["group"],
+        "message_input_unchanged": message.data == message_before,
+        "invalid_event_error": invalid_event_error,
+        "loaded_file": guarded["qq_adapter_file"],
     }
 
     contexts = {
@@ -127,6 +162,7 @@ async def _run(source: str) -> dict[str, Any]:
 
     return {
         "diagnostics": diagnostics,
+        "payload_guard": payload_guard,
         "contexts": contexts,
         "interaction": {
             "interaction_id": interaction.interaction_id,

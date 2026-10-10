@@ -92,6 +92,26 @@ class QQAdapterContractTests(unittest.TestCase):
             "installed",
         )
 
+    def test_payload_guard_handles_preloaded_adapters_without_hiding_invalid_events(self) -> None:
+        for source in ("vendor", "installed"):
+            with self.subTest(source=source):
+                guard = getattr(self, source)["payload_guard"]
+                for key in (
+                    "enabled",
+                    "adapter_identity_preserved",
+                    "idempotent",
+                    "resumed_input_unchanged",
+                    "message_matches_fixture",
+                    "message_input_unchanged",
+                ):
+                    self.assertTrue(guard[key], key)
+                self.assertEqual(guard["resumed_type"], "RESUMED")
+                self.assertEqual(guard["resumed_id"], "resume-1")
+                self.assertEqual(guard["invalid_event_error"], "ValidationError")
+                loaded = guard["loaded_file"]
+                self.assertEqual("/vendor/" in loaded, source == "vendor")
+                self.assertEqual("/site-packages/" in loaded, source == "installed")
+
     def test_auto_diagnostics_report_actual_installed_source(self) -> None:
         automatic = _run_contract("auto")
         self.assertEqual(automatic["diagnostics"]["selection"]["requested"], "auto")

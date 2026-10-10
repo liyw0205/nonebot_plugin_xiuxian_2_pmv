@@ -255,22 +255,55 @@ def force_group_member_events() -> bool:
     )
 
 
+def force_payload_mapping_guard() -> bool:
+    """给已预加载的 QQ 类补上 vendor 的字符串 Dispatch 保护。"""
+    try:
+        from nonebot.adapters.qq import Adapter
+    except ImportError:
+        return False
+
+    original = Adapter.payload_to_event
+    if getattr(original, "__xiuxian_payload_mapping_guard__", False):
+        return True
+
+    def payload_to_event(payload):  # type: ignore[no-untyped-def]
+        # RESUMED 的 data 可以是字符串；保留原始 payload 供连接状态处理。
+        if not isinstance(payload.data, dict):
+            copy_payload = getattr(payload, "model_copy", None) or payload.copy
+            payload = copy_payload(update={"data": {}})
+        return original(payload)
+
+    payload_to_event.__xiuxian_payload_mapping_guard__ = True  # type: ignore[attr-defined]
+    Adapter.payload_to_event = staticmethod(payload_to_event)
+    return True
+
+
 def force_builtin_qq_adapter() -> dict[str, Any]:
-    """一站式：路径注入 + intent + 事件补丁。"""
+    """一站式：路径注入 + intent + 事件与解析补丁。"""
     injected = inject_vendor_adapter_paths()
     intent_ok = force_group_members_intent()
     events_ok = force_group_member_events()
+    payload_ok = force_payload_mapping_guard()
+    try:
+        from nonebot.adapters.qq import adapter as qq_adapter
+
+        adapter_file = str(qq_adapter.__file__ or "")
+    except ImportError:
+        adapter_file = ""
     result = {
         "vendor_paths": injected,
         "intent_forced": intent_ok,
         "member_events_forced": events_ok,
+        "payload_guard_forced": payload_ok,
+        "qq_adapter_file": adapter_file,
     }
     try:
         from nonebot.log import logger
 
         logger.opt(colors=True).info(
             f"<green>[xiuxian_adapter]</green> 强制内置适配能力: "
-            f"vendor={len(injected)} intent={intent_ok} member_events={events_ok}"
+            f"vendor={len(injected)} intent={intent_ok} member_events={events_ok} "
+            f"payload_guard={payload_ok} qq_file={adapter_file}"
         )
     except Exception:
         pass
