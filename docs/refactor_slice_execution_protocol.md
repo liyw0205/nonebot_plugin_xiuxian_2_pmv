@@ -76,6 +76,30 @@ membership SHA256 为
 - 记录实际命令、基线、结果、环境和未运行项，不把测试耗时写成开发工时或生产延迟。
   旧记录只能说明当时结果；任何“通过”必须注明本轮是否复跑。
 
+## 适配器与共享业务的验证范围
+
+- 已迁移入口的 [`CommandContext`](../nonebot_plugin_xiuxian_2/adapters/nonebot/context.py)
+  归一化 QQ/OneBot 事件，[统一命令](../nonebot_plugin_xiuxian_2/adapters/nonebot/commands.py)
+  将业务参数交给同一 application/repository；例如送灵石进入
+  [`StoneGiftApplication`](../nonebot_plugin_xiuxian_2/features/stone_gift/application.py)。
+  对此类已证明共用业务 owner、规则与持久化路径的长链只保留一份完整验收，
+  不因平台名称再跑一遍成长、账本或恢复流程。复用证据须记录对应业务、内容、配置和依赖状态。
+- 旧入口通过 [`adapter_compat`](../nonebot_plugin_xiuxian_2/xiuxian/adapter_compat.py)
+  的 `patch_context` 兼容事件和发送；普通闭关已调用 `BuffApplication.closing_enter`，
+  但旧玩法仍含 legacy owner，不能宣称全仓都经过统一 application/repository。
+  去重前核对目标命令的实际调用链；平台或旧路径仍有业务分叉时保留差异回归，
+  不为本规则另开重构切片，也不通过删行为断言、skip/xfail/ignore 去除失败。
+- 两种适配器各保留短合同测试：命令解析与路由，用户/群/频道身份和权限归一化，
+  事件到 operation_id 的稳定映射、重复事件，回复和错误映射；QQ 的 interaction ACK、
+  lifecycle、Markdown/keyboard 与降级，以及发送路由、msg_seq/retry/引用等平台特有行为
+  按实际变化补验。QQ openid 和 OneBot 数字 ID 不因格式归一化而视为同一账号。
+  现有 [`QQ 事件合同`](../tests/test_qq_compat.py) 与
+  [`QQ 适配器合同`](../tests/test_qq_adapter_contracts.py) 是本地模拟/安装包证据，不能冒充真实平台联调。
+- 共享业务变化跑一次受影响业务验证；接入变化跑对应适配器短合同并证明仍调用共享 owner，
+  同时改变身份、权限、操作标识或事务语义时补对应跨边界回归。
+  已有完整验收仍有效且本次只改此策略时，只检查文档链接、必要 token 和 diff，
+  不重跑根目录全量、unittest 全量或双平台业务长链。P7 发布条件仍独立判断。
+
 ## 验收与资源边界
 
 C3 包含改动回归、最终根目录全量测试实际执行通过、架构/P0-P6、inventory freshness、
