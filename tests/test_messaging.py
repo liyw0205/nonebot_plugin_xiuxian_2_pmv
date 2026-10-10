@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 import unittest
 import json
 import importlib
@@ -35,6 +36,26 @@ from nonebot_plugin_xiuxian_2.xiuxian.qq_compat import (
     QQCapabilities,
     QQCapabilityRegistry,
 )
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_utils.message_markdown import (
+    build_help_native_markdown,
+)
+
+
+def _read_stripped_string_assignment(relative_path: str, name: str) -> str:
+    root = Path(__file__).resolve().parents[1]
+    tree = ast.parse((root / relative_path).read_text(encoding="utf-8"))
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Assign):
+            continue
+        if not any(isinstance(target, ast.Name) and target.id == name for target in node.targets):
+            continue
+        value = node.value
+        if isinstance(value, ast.Call) and isinstance(value.func, ast.Attribute) and value.func.attr == "strip":
+            value = value.func.value
+        result = ast.literal_eval(value)
+        if isinstance(result, str):
+            return result.strip()
+    raise AssertionError(f"string assignment not found: {relative_path}:{name}")
 
 
 def test_delivery_facade_defers_message_delivery_service_construction() -> None:
@@ -156,8 +177,90 @@ class MessageResultTests(unittest.TestCase):
                 r"道友 \*甲\* 已上线",
             )
 
+    def test_player_help_templates_keep_heading_and_list_hierarchy(self) -> None:
+        cases = (
+            (
+                "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_puppet/__init__.py",
+                "__puppet_help__",
+                "傀儡帮助",
+                [("购买", "购买灵田傀儡"), ("开启", "灵田傀儡开启"), ("灵田", "我的灵田")],
+                "[购买灵田傀儡](mqqapi://aio/inlinecmd?",
+            ),
+            (
+                "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_title/__init__.py",
+                "__title_help__",
+                "称号帮助",
+                [("我的称号", "我的称号"), ("检查称号", "检查称号"), ("关系", "关系帮助"), ("存档", "我的修仙信息")],
+                "[我的称号](mqqapi://aio/inlinecmd?",
+            ),
+        )
+        for path, name, heading, buttons, linked_command in cases:
+            with self.subTest(name=name):
+                template = _read_stripped_string_assignment(path, name)
+                rendered = build_help_native_markdown(template, buttons)
+                self.assertIn(f"**{heading}**", rendered)
+                self.assertIn(linked_command, rendered)
+                self.assertNotRegex(template, r"(?m)^[ \t]*(?:>|#{1,6}[ \t]+|---+[ \t]*$)")
+                self.assertNotIn("\n> ", rendered)
+                self.assertEqual(rendered.count("\n---\n"), 1)
+
+        trade_source = (
+            Path(__file__).resolve().parents[1]
+            / "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_trade/trade_help.py"
+        ).read_text(encoding="utf-8")
+        self.assertNotRegex(trade_source, r"(?m)^[ \t]*(?:>|---+[ \t]*$)")
+
+    def test_help_formatter_markdown_snapshot(self) -> None:
+        text = "**交易帮助**\n\n**分类**\n- 仙肆帮助：全服交易市场"
+        rendered = build_help_native_markdown(text, [("鬼市", "鬼市帮助")])
+        self.assertEqual(
+            rendered,
+            "**交易帮助**\n\n**分类**\n"
+            "- [仙肆帮助](mqqapi://aio/inlinecmd?command=%E4%BB%99%E8%82%86%E5%B8%AE%E5%8A%A9&enter=false&reply=false)：全服交易市场\n\n"
+            "---\n"
+            "[鬼市](mqqapi://aio/inlinecmd?command=%E9%AC%BC%E5%B8%82%E5%B8%AE%E5%8A%A9&enter=false&reply=false)",
+        )
+
 
 class DeliveryServiceTests(unittest.IsolatedAsyncioTestCase):
+    async def test_help_markdown_uses_qq_markdown_keyboard_segment(self) -> None:
+        service = MessageDeliveryService()
+        bot = SimpleNamespace(self_id="bot-1")
+        event = object()
+        markdown = "**傀儡帮助**\n- 购买灵田傀儡：消耗 1000 万灵石"
+        keyboard_rows = [[("购买", "购买灵田傀儡")]]
+        markdown_segment = object()
+        with (
+            patch(
+                "nonebot_plugin_xiuxian_2.xiuxian.messaging.delivery.is_qq_bot",
+                return_value=True,
+            ),
+            patch(
+                "nonebot_plugin_xiuxian_2.xiuxian.adapter_compat.MessageSegment.markdown_keyboard",
+                return_value=markdown_segment,
+            ) as build_segment,
+            patch.object(
+                service,
+                "reply",
+                new=AsyncMock(return_value=SendResult("message-help", None, {})),
+            ) as reply,
+        ):
+            await service.reply_enhanced(
+                bot,
+                event,
+                markdown=markdown,
+                fallback_text="傀儡帮助\n- 购买灵田傀儡：消耗 1000 万灵石",
+                keyboard_rows=keyboard_rows,
+            )
+
+        build_segment.assert_called_once_with(bot, markdown, keyboard_rows)
+        reply.assert_awaited_once_with(
+            bot,
+            event,
+            markdown_segment,
+            include_reference=False,
+        )
+
     async def test_qq_sender_maps_source_message_to_adapter_reply_id(self) -> None:
         bot = SimpleNamespace(
             send_to_c2c=AsyncMock(return_value={"id": "message-0"})
