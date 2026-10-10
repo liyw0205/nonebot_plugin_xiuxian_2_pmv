@@ -9,15 +9,18 @@
 
 当前结果：八项 collection、两项 Dongfu 旧断言及全量揭示的必要失败已修复，
 默认根目录全量为 6148 passed、304 subtests passed；P0-P6、inventory 和 Phase 2 通过。
-CONTRIBUTING 检查已通过，本提交按白名单交付 `origin/refactor/full-bottom-layer`；
-普通推送及远端 HEAD 核验以最终交付回执记录，核验成功后才 complete。
+CONTRIBUTING 检查已通过；提交 `4c0150cc6892178ac56a4fc1a0a2c209aede8f6b`
+已按白名单普通推送到 `origin/refactor/full-bottom-layer`，独立 `git ls-remote`
+核验与本地 HEAD 一致。C1-C4 和本地交付已完成；P7 仍受外部发布证据阻塞。
 用户 `boss_info.json` 不暂存；P7 独立受阻，不称全部重构或当前发布已完成。
 下方分开记录 2026-10-09 失败历史和 2026-10-10 实际复验，不把旧失败状态当作当前状态。
 
 ## 当前证据
 
-- 停止时分支为 `refactor/full-bottom-layer`，HEAD
-  `e17cbec8fb6645c806288fe99e4a93b553f5613e`；保留未提交批次和用户修改。
+- 本地交付推送前的整合基线为 `e17cbec8fb6645c806288fe99e4a93b553f5613e`；
+  后续文档交付 HEAD 为 `4c0150cc6892178ac56a4fc1a0a2c209aede8f6b`，
+  `origin/refactor/full-bottom-layer` 在该交付后经 `git ls-remote` 核验与其一致。
+  用户 `boss_info.json` 改动保留且不暂存。
   主线程核对该分支相对 `main` 已有 2120 个提交（HEAD 历史共 3566 个）；
   提交数只说明现状，不是收口指标，也不授权继续增加玩法切片。
 - 本轮 P0-P6 均为 `ready=true/errors=[]`；inventory freshness 已修复并复验。
@@ -40,7 +43,7 @@ CONTRIBUTING 检查已通过，本提交按白名单交付 `origin/refactor/full
 | C2 | 通过 | 九个固定边界及本轮完整失败集合均经回归验证；旧四项报告原始 traceback 缺失的历史事实保留 |
 | C3 | 通过 | 6148 passed、304 subtests passed；unittest 2946 tests OK；编译/架构/P0-P6/inventory/Phase 2/diff 通过 |
 | C4 | 通过 | 本轮最终全量复跑五库/config 恢复及两项 Activity recovery smoke；仅隔离合成数据，不作为发布证据 |
-| C5 | P7 受阻；本地交付验收通过 | 白名单和用户文件边界已审查；本提交交付当前重构分支，普通 push 和远端 HEAD 由最终回执核验 |
+| C5 | P7 受外部证据阻塞；本地交付通过 | 白名单和用户文件边界已审查；提交 `4c0150cc6892178ac56a4fc1a0a2c209aede8f6b` 普通推送完成，远端 HEAD 与本地一致 |
 
 后续直接更新本表和结果段，注明具体命令、结果、环境和未运行项；
 不重新把历史流水搬回本文件，不为延期/backlog自动创建下一切片。
@@ -84,7 +87,7 @@ adapter 委托与真实 application/repository 一致，未添加第二套 match
 - 根目录既有测试 14 个：`tests/architecture/test_legacy_application_contract.py`、`tests/test_{activity_admin_data,activity_config_application,base_facade_lazy_reader,bounded_http_json,cache_boundaries,entertainment_delete_contract,map_resource_reward_service,source_quality,status_lazy_reader,task_progress_event_transaction,tower_storage_lazy_reader,training_storage_lazy_reader,admin_broadcast_ingress}.py`。
 - 新增测试包标记 2 个：`features/natal_treasure/tests/__init__.py`、`features/trade/tests/__init__.py`（同一 package 前缀）；没有新增玩法或扩大冻结 membership。
 
-交付基线 SHA 不冒充交付 SHA；当前提交 SHA 和远端 HEAD 由最终回执及 `git log` 核验。
+交付基线 SHA 不冒充交付 SHA；上述交付 SHA 与远端 HEAD 已在交付后独立核验。
 
 ## C2 行为与修改
 
@@ -300,11 +303,15 @@ filesystem/database/migrations/repositories/jobs/web 六项全 true；显式 `le
 2026-10-09 交付是“固定清单核验与阻塞报告”，当时不是技术收口完成。
 上轮将根 collection 和 Dongfu 旧证据划为清单外；2026-10-10 已作为 C3 必需项修复，
 当前根全量、恢复回归和必需交付检查实际通过，技术收口完成、待发布。
-本提交按白名单交付 `refactor/full-bottom-layer`，只普通推送，不强推、不合 main、不发版；
-最终回执记录当前提交和 `git ls-remote --heads origin refs/heads/refactor/full-bottom-layer`
-的同一 SHA，成功后结束本轮 goal，不自动开启旧“下一片”。
+上述白名单提交已普通推送到 `refactor/full-bottom-layer`；独立命令
+`git ls-remote origin refs/heads/refactor/full-bottom-layer` 返回
+`4c0150cc6892178ac56a4fc1a0a2c209aede8f6b`，与本地交付 HEAD 一致。
+不强推、不合 main、不发版；本固定范围已停止，不自动开启旧“下一片”。
 发布证据仍需当前发布流程提供，不能冒充 P7 通过，也不免除本地验收或提交推送；
 无范围/证据变化不重跑全仓审计，不自动开启 v2/v3 出关、其它玩法或历史下一片。
+新的开发工作必须先明确范围和验收；OneBot WebSocket 共享业务链只验一次，QQ 只跑消息
+格式、Markdown、蓝字、按钮、回调 ACK 与降级短合同，不重复业务长链。官方客户端呈现和
+权限未实测不得宣称通过。
 
 ## 清理与保护复核
 
@@ -343,4 +350,4 @@ runner、JUnit/JSON/日志及 compileall 的专属 pycache。结果已归纳于�
 运行数据及已有用户改动均不由文档整理修改。
 静态检查通过：7 份入口/导航文档的 48 个本地链接、10 个旧 source-contract token、
 冻结项数量 496；6 份门禁/JSON 文件指纹保持不变，两份归档 SHA256 与停止时原文一致。
-以上仅为文档整理验证，不替代 C2-C5 的业务、技术和发布验收。
+以上记录此前文档整理的验证边界；C1-C4 技术收口和本地交付现已完成，P7 仍受外部证据阻塞。

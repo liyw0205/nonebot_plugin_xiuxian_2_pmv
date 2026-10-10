@@ -126,14 +126,14 @@ OneBot 的 pip 版本、启动顺序和真实协议端点仍未在本工作区�
 | 差异 | 短合同 | 已有证据/边界 |
 |---|---|---|
 | vendor/installed/auto 选择和缓存来源 | `tests/test_adapter_selector.py`；隔离 `__file__`/类来源探针 | 已证明路径选择；预加载 pip 场景需保留来源断言 |
-| QQ 与 OneBot 身份、群/私聊/频道路由、权限归一化 | 各自事件到 context/operation 的短合同 | QQ 现有 `tests/test_qq_compat.py`、`tests/test_qq_adapter_contracts.py`；当前没有等价 OneBot 专门矩阵，需补短合同后才可声称覆盖 |
-| QQ reply/REFIDX、引用、msg_seq/40054005 重试 | `tests/test_messaging.py` 的 sender/retry/ref 合同，加 `test_qq_adapter_contracts.py` fake router | fake router 不进入真实 HTTP；平台重试和返回字段另验 |
-| QQ interaction ACK、lifecycle、Markdown/keyboard/降级 | `tests/test_qq_compat.py` 与 adapter contract | 本地模拟/安装包证据，不是真实平台联调 |
-| OneBot 导入排序/规范导出 | 最小 import/export 和 message/event 序列化短合同 | 本轮未重跑；固定 B/L 无行为差异，真实 OneBot 待验 |
-| 统一 application/repository 的共享业务长链 | 受影响业务只完整验一份 | 不因 QQ/OneBot 名称重复跑成长、账本、恢复；接入变化只证明仍调用共同 owner |
+| OneBot WebSocket 共享业务长链 | 只选一条代表性链路，验证事件经 WS 接入共同 application/repository | 不因 QQ 接入重复跑相同业务长链；其它共享业务按变化选一份验收 |
+| QQ 格式与富消息 | 消息段格式、Markdown、蓝字、按钮的本地短合同 | 不据此声称 QQ 官方客户端呈现或平台权限已通过；真实平台待验 |
+| QQ 回调和能力降级 | interaction callback ACK、Markdown/按钮能力缺失时的 fallback 短合同 | `tests/test_qq_compat.py` 为本地模拟；不重复共享业务长链 |
+| 统一 application/repository 的共享业务长链 | 受影响业务只完整验一份 | OneBot WS 代表性链路作为一次共享链验收；QQ 只验接入专属短合同 |
 
-不得把本表的“已有证据”写成真实平台通过。真实平台待验至少包括 QQ Gateway/API/auth
-端点、引用/附件/扩展消息、成员事件 intent，及 OneBot 实际安装版本、driver 和协议端点。
+不得把本表的“已有证据”写成真实平台通过。QQ 官方客户端呈现、蓝字/按钮效果和权限
+均未实测，不得宣称通过；真实平台待验还包括 Gateway/API/auth 端点、引用/附件/扩展消息、
+成员事件 intent，及 OneBot 实际安装版本、driver 和 WebSocket 协议端点。
 
 ## 限制和后续边界
 
