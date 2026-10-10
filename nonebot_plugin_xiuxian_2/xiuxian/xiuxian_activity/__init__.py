@@ -117,7 +117,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         event,
         text,
         native_markdown=True,
-        fallback_msg=strip_md_command_links(text),
+        fallback_msg=text,
     )
 
 
@@ -132,7 +132,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         event,
         text,
         native_markdown=True,
-        fallback_msg=text,
+        fallback_msg=strip_md_command_links(text),
     )
 
 
