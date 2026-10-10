@@ -69,7 +69,7 @@ ensure_docker() {
 
 download_one() {
   local url="$1" dest="$2"
-  local url_proxy="https://ghproxy.net/${url}"
+  local url_proxy="https://gh-proxy.com/${url}"
   if command -v curl >/dev/null 2>&1; then
     if ! curl -fL --retry 3 --retry-delay 2 --connect-timeout 20 -o "$dest" "$url"; then
       warn "直连失败，尝试代理: $(basename "$dest")"
@@ -204,7 +204,7 @@ tag=os.environ.get("XIUXIAN_DOCKER_RELEASE_TAG","docker-latest")
 
 def download(name, dest: Path):
     url=f"https://github.com/{owner}/{repo}/releases/download/{tag}/{name}"
-    proxy="https://ghproxy.net/"+url
+    proxy="https://gh-proxy.com/"+url
     for u in (url, proxy):
         r=subprocess.run(["curl","-fL","--retry","3","--retry-delay","2","--connect-timeout","20","-o",str(dest),u])
         if r.returncode==0 and dest.exists() and dest.stat().st_size>0:
@@ -274,7 +274,7 @@ def md5(p: Path)->str:
 
 def download(name, dest: Path):
     url=f"https://github.com/{owner}/{repo}/releases/download/{tag}/{name}"
-    proxy="https://ghproxy.net/"+url
+    proxy="https://gh-proxy.com/"+url
     for u in (url, proxy):
         r=subprocess.run(["curl","-fL","--retry","3","--retry-delay","2","--connect-timeout","20","-o",str(dest),u])
         if r.returncode==0 and dest.exists() and dest.stat().st_size>0:

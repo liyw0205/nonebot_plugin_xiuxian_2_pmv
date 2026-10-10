@@ -433,11 +433,9 @@ set "PS_MEASURE_PROXY=JABzAHcAIAA9ACAAWwBTAHkAcwB0AGUAbQAuAEQAaQBhAGcAbgBvAHMAdA
 
 for %%P in (
     https://gh-proxy.com/
-    https://gh.jasonzeng.dev/
-    https://git.yylx.win/
-    https://wget.la/
-    https://github.dpik.top/
-    https://ghproxy.imciel.com/
+    https://ghfast.top/
+    https://ghproxy.vip/
+    https://gh-proxy.org/
 ) do (
     set "PS_MEASURE_URL=%%P%test_url%"
     for /f %%T in ('powershell.exe -NoP -NonI -EP Bypass -EncodedCommand "%PS_MEASURE_PROXY%"') do (

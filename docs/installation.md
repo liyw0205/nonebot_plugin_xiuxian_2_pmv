@@ -1,5 +1,14 @@
 # 安装、更新与 QQ 连接
 
+## 发布资产和下载回退
+
+发布 tag 固定为 `vMAJOR.MINOR.PATCH`，资产固定为 `project.tar.gz`。安装器默认使用
+`https://github.com/liyw0205/nonebot_plugin_xiuxian_2_pmv/releases/latest/download/project.tar.gz`；
+可通过 `XIUXIAN_RELEASE_TAG=vX.Y.Z` 固定版本。加速源仅使用测速通过的
+`gh-proxy.com`、`ghfast.top`、`ghproxy.vip`、`gh-proxy.org`，每次下载都会验证 tar.gz
+目录；代理失败后回退官方 GitHub 直连，全部失败则停止，不覆盖数据目录。当前已核实
+远端正式 Release 为 `v1.0.0`，其资产名为 `project.tar.gz`。
+
 新部署优先使用一键脚本。项目使用本地 SQLite，无需单独安装数据库服务。
 
 ## Docker

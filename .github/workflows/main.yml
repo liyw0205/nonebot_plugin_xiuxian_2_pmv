@@ -71,13 +71,23 @@ jobs:
         run: |
           if [ -n "$REQUESTED_TAG" ]; then
             tag_name="$REQUESTED_TAG"
-          else
+          elif [[ "$GITHUB_REF" == refs/tags/v* ]]; then
             tag_name="$GITHUB_REF_NAME"
+          else
+            echo "workflow_dispatch 必须提供 tag_name；推送发布使用 vMAJOR.MINOR.PATCH tag。" >&2
+            exit 2
+          fi
+          if [[ ! "$tag_name" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "release tag 必须匹配 vMAJOR.MINOR.PATCH: $tag_name" >&2
+            exit 2
           fi
           echo "tag_name=$tag_name" >> "$GITHUB_OUTPUT"
 
       - name: Build source archive
-        run: git archive --format=tar.gz --output=project.tar.gz HEAD
+        run: |
+          git archive --format=tar.gz --output=project.tar.gz "$GITHUB_SHA"
+          tar -tzf project.tar.gz >/dev/null
+          test "$(basename project.tar.gz)" = "project.tar.gz"
 
       - name: Prepare release notes
         run: git log -1 --pretty=%B > release-notes.md

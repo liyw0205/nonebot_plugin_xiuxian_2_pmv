@@ -12,8 +12,14 @@ NC='\033[0m'
 
 REPO_OWNER="liyw0205"
 REPO_NAME="nonebot_plugin_xiuxian_2_pmv"
-RELEASE_TAG="latest"
+RELEASE_TAG="${XIUXIAN_RELEASE_TAG:-latest}"
 RELEASE_ASSET="project.tar.gz"
+ACCELERATED_PROXIES=(
+    "https://gh-proxy.com/"
+    "https://ghfast.top/"
+    "https://ghproxy.vip/"
+    "https://gh-proxy.org/"
+)
 DEFAULT_PROJECT_NAME="xiu2"
 
 TERMUX_HOME="${HOME:-/data/data/com.termux/files/home}"
@@ -353,14 +359,7 @@ test_proxy_url() {
 
 select_proxy() {
     local release_url="https://github.com/$REPO_OWNER/$REPO_NAME/releases/$RELEASE_TAG/download/$RELEASE_ASSET"
-    local proxies=(
-        "https://gh-proxy.com/"
-        "https://gh.jasonzeng.dev/"
-        "https://git.yylx.win/"
-        "https://wget.la/"
-        "https://github.dpik.top/"
-        "https://ghproxy.imciel.com/"
-    )
+    local proxies=("${ACCELERATED_PROXIES[@]}")
     local best_proxy=""
     local best_time=999999
     local cost
@@ -396,12 +395,21 @@ download_release_resource() {
     show_progress "下载 release 资源文件"
     for url in "${urls[@]}"; do
         ui_print cyan "尝试下载: $url"
-        if curl -fL --connect-timeout 15 --retry 2 -o "$download_path" "$url"; then
+        if curl -fL --connect-timeout 15 --retry 2 -o "$download_path" "$url" \
+            && tar -tzf "$download_path" >/dev/null 2>&1; then
             return 0
         fi
         rm -f "$download_path"
     done
     return 1
+}
+
+validate_release_reference() {
+    if [[ "$RELEASE_TAG" != "latest" && ! "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        ui_print red "无效 release tag：$RELEASE_TAG"
+        return 1
+    fi
+    [[ "$RELEASE_ASSET" == "project.tar.gz" ]]
 }
 
 extract_release_resource() {
@@ -865,5 +873,6 @@ main() {
 }
 
 if [[ "${XIUXIAN_INSTALLER_LIBRARY_ONLY:-0}" != "1" ]]; then
+    validate_release_reference || exit 2
     main "$@"
 fi

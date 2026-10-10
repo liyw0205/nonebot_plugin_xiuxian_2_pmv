@@ -13,8 +13,14 @@ NC='\033[0m'
 # 全局变量
 REPO_OWNER="liyw0205"
 REPO_NAME="nonebot_plugin_xiuxian_2_pmv"
-RELEASE_TAG="latest" # 默认获取最新版本
-RELEASE_ASSET="project.tar.gz" # GitHub Release打包的文件名
+RELEASE_TAG="${XIUXIAN_RELEASE_TAG:-latest}" # latest 或明确的 vMAJOR.MINOR.PATCH
+RELEASE_ASSET="project.tar.gz" # 固定的 GitHub Release 资产名
+ACCELERATED_PROXIES=(
+    "https://gh-proxy.com/"
+    "https://ghfast.top/"
+    "https://ghproxy.vip/"
+    "https://gh-proxy.org/"
+)
 
 # 备份相关
 TEMP_OLD_CONFIG_DATA="" # 临时文件用于存储旧配置
@@ -281,14 +287,7 @@ test_proxy() {
 
 # 获取可用代理列表
 get_available_proxies() {
-    local proxies=(
-        "https://gh-proxy.com/"
-        "https://gh.jasonzeng.dev/"
-        "https://git.yylx.win/"
-        "https://wget.la/"
-        "https://github.dpik.top/"
-        "https://ghproxy.imciel.com/"
-    )
+    local proxies=("${ACCELERATED_PROXIES[@]}")
 
     local proxy_latency=()
     local total=${#proxies[@]}
@@ -413,13 +412,10 @@ download_release_resource() {
     show_progress "下载release资源文件"
 
     local proxy_array=()
-    if [[ -z "$proxy_urls" || "$proxy_urls" == " " ]]; then
-        proxy_array=("") # 直连
-    elif [[ "$proxy_urls" == "("*")" ]]; then
-        # shellcheck disable=SC2206
-        proxy_array=(${proxy_urls//[()]/})
+    if [[ -n "$proxy_urls" && "$proxy_urls" != " " ]]; then
+        proxy_array=("$proxy_urls" "")
     else
-        proxy_array=("$proxy_urls")
+        proxy_array=("")
     fi
 
     for proxy_url in "${proxy_array[@]}"; do
@@ -433,11 +429,13 @@ download_release_resource() {
         fi
 
         if command -v wget &> /dev/null; then
-            if wget -q -O "$download_path" "$download_full_url"; then
+            if wget -q -O "$download_path" "$download_full_url" \
+                && tar -tzf "$download_path" >/dev/null 2>&1; then
                 return 0
             fi
         elif command -v curl &> /dev/null; then
-            if curl -s -L -o "$download_path" "$download_full_url"; then
+            if curl -sSfL -o "$download_path" "$download_full_url" \
+                && tar -tzf "$download_path" >/dev/null 2>&1; then
                 return 0
             fi
         else
@@ -450,6 +448,14 @@ download_release_resource() {
     done
 
     return 1 # 所有方式都失败
+}
+
+validate_release_reference() {
+    if [[ "$RELEASE_TAG" != "latest" && ! "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        ui_print "red" "无效 release tag：$RELEASE_TAG"
+        return 1
+    fi
+    [[ "$RELEASE_ASSET" == "project.tar.gz" ]]
 }
 
 # 解压资源
@@ -724,6 +730,8 @@ apply_old_config_values() {
 if [[ "${XIUXIAN_INSTALLER_LIBRARY_ONLY:-0}" == "1" ]]; then
     return 0 2>/dev/null || exit 0
 fi
+
+validate_release_reference || exit 2
 
 # --- 主流程开始 ---
 

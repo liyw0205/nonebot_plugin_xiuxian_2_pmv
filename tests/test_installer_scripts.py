@@ -21,6 +21,34 @@ class InstallerScriptTests(unittest.TestCase):
                 cwd=ROOT,
             )
 
+    def test_release_contract_and_proxy_fallback_are_explicit(self) -> None:
+        install = (SCRIPTS / "install.sh").read_text(encoding="utf-8")
+        termux = (SCRIPTS / "install_termux.sh").read_text(encoding="utf-8")
+        workflow = (ROOT / ".github" / "workflows" / "main.yml").read_text(encoding="utf-8")
+        for source in (install, termux):
+            self.assertIn('RELEASE_TAG="${XIUXIAN_RELEASE_TAG:-latest}"', source)
+            self.assertIn('RELEASE_ASSET="project.tar.gz"', source)
+            self.assertIn(r"^v[0-9]+\.[0-9]+\.[0-9]+$", source)
+            self.assertIn("validate_release_reference", source)
+            self.assertIn("https://gh-proxy.com/", source)
+            self.assertIn("https://ghfast.top/", source)
+            self.assertIn("https://ghproxy.vip/", source)
+            self.assertIn("https://gh-proxy.org/", source)
+            self.assertNotIn("gh.jasonzeng.dev", source)
+            self.assertNotIn("ghproxy.imciel.com", source)
+            self.assertIn("tar -tzf", source)
+        bat = (SCRIPTS / "install.bat").read_text(encoding="utf-8")
+        self.assertIn("https://ghfast.top/", bat)
+        self.assertIn("https://ghproxy.vip/", bat)
+        self.assertIn("https://gh-proxy.org/", bat)
+        self.assertNotIn("ghproxy.imciel.com", bat)
+        docker = (SCRIPTS / "install_docker.sh").read_text(encoding="utf-8")
+        self.assertIn("https://gh-proxy.com/", docker)
+        self.assertNotIn("https://ghproxy.net/", docker)
+        self.assertIn("^v[0-9]+\\.[0-9]+\\.[0-9]+$", workflow)
+        self.assertIn("workflow_dispatch 必须提供 tag_name", workflow)
+        self.assertIn("project.tar.gz", workflow)
+
     def test_installers_are_maintained_in_this_repository(self) -> None:
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
         termux = (SCRIPTS / "install_termux.sh").read_text(encoding="utf-8")
