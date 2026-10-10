@@ -1,3 +1,4 @@
 from .application import QqBindApplication, QqBindResponse
+from .manifest import FEATURE
 
-__all__ = ["QqBindApplication", "QqBindResponse"]
+__all__ = ["FEATURE", "QqBindApplication", "QqBindResponse"]

@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from .test_admin_broadcast import ROOT, _bot, _load, runtime
+from tests.test_admin_broadcast import ROOT, _bot, _load, runtime
 
 
 class PrivateEvent(SimpleNamespace):

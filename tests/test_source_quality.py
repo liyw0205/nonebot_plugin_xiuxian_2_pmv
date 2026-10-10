@@ -217,7 +217,7 @@ class SourceQualityTests(unittest.TestCase):
         facade = (
             SOURCE_ROOT / "xiuxian" / "xiuxian_dongfu" / "__init__.py"
         ).read_text(encoding="utf-8")
-        handler_start = facade.index('operation_id = f"dongfu-infiltrate-success:')
+        handler_start = facade.index("async def _settle_infiltration_plan(")
         handler = facade[
             handler_start : facade.index(
                 'if result.status == "inventory_full":', handler_start
@@ -230,6 +230,9 @@ class SourceQualityTests(unittest.TestCase):
             / "infiltrate_success_repository.py"
         ).read_text(encoding="utf-8")
         self.assertIn("dongfu_application.infiltrate_success(", handler)
+        self.assertIn('operation_id = str(plan["operation_id"])', handler)
+        self.assertIn("operation_id=operation_id,", handler)
+        self.assertIn("await _settle_infiltration_plan(bot, event,", facade)
         self.assertNotIn("_dongfu_infiltrate_success_service().settle(", handler)
         self.assertNotIn("_run_dongfu_action(", handler)
         self.assertNotIn("transaction_service", repository)
@@ -238,9 +241,9 @@ class SourceQualityTests(unittest.TestCase):
         facade = (
             SOURCE_ROOT / "xiuxian" / "xiuxian_dongfu" / "__init__.py"
         ).read_text(encoding="utf-8")
-        handler_start = facade.index('operation_id = f"dongfu-infiltrate-failure:')
+        handler_start = facade.index("async def _settle_infiltration_plan(")
         handler = facade[
-            handler_start : facade.index("    stealth_penalty =", handler_start)
+            handler_start : facade.index("    result = dongfu_application.infiltrate_success(", handler_start)
         ]
         repository = (
             SOURCE_ROOT
@@ -249,6 +252,9 @@ class SourceQualityTests(unittest.TestCase):
             / "infiltrate_failure_repository.py"
         ).read_text(encoding="utf-8")
         self.assertIn("dongfu_application.infiltrate_failure(", handler)
+        self.assertIn('operation_id = str(plan["operation_id"])', handler)
+        self.assertIn("operation_id=operation_id,", handler)
+        self.assertIn("await _settle_infiltration_plan(bot, event,", facade)
         self.assertNotIn("_dongfu_infiltrate_failure_service().settle(", handler)
         self.assertNotIn("_run_dongfu_action(", handler)
         self.assertNotIn("transaction_service", repository)
@@ -2020,8 +2026,14 @@ class SourceQualityTests(unittest.TestCase):
         self.assertNotIn("json.loads(", source)
         self.assertNotIn("json.dumps(", source)
         self.assertNotIn("with open(", source)
-        self.assertIn("load_json_file(", source)
-        self.assertIn("save_json_file(", source)
+        self.assertIn("return _application().read_entries()", source)
+        self.assertIn("AdminCommandControlApplication()", source)
+        application = (SOURCE_ROOT / "features/admin/command_control_application.py").read_text(encoding="utf-8")
+        repository = (SOURCE_ROOT / "features/admin/command_control_repository.py").read_text(encoding="utf-8")
+        self.assertIn("return self.repository.read_entries()", application)
+        self.assertIn("return self.repository.set_command_disabled(name, disabled=disabled)", application)
+        self.assertIn("with _LOCK:", repository)
+        self.assertIn("atomic_write(self.path, json.dumps(document, ensure_ascii=False, indent=2).encode(\"utf-8\"))", repository)
 
     def test_sect_fairyland_upgrade_uses_transactional_service(self) -> None:
         sect_root = SOURCE_ROOT / "xiuxian" / "xiuxian_sect"

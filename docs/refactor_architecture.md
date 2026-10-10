@@ -1,7 +1,7 @@
 # 修仙插件全面重构与新功能接入规范
 
-> 状态：P0-P7 发布门禁已完成；全面底层重构第二阶段进行中。上一阶段的 facade、manifest、静态守门和发布证据不等于旧玩法底层已迁移。详细进度见 `docs/full_refactor_progress.md`。
-> 适用版本：当前 `nonebot_plugin_xiuxian_2_pmv` 主分支。  
+> 当前执行以[有限收口协议](refactor_slice_execution_protocol.md)及[固定清单](refactor_closeout_scope_v1.md)为准，状态见[当前进度](full_refactor_progress.md)。本篇保存架构与验收契约，不驱动逐玩法循环。旧 `v1.1.0` 的 P0-P7 通过是历史发布结果，不能替代当前重构发布的 P7；Phase 2 通过不代表全部重构完成。
+> 适用范围：`nonebot_plugin_xiuxian_2_pmv`；当前收口分支为 `refactor/full-bottom-layer`。
 > 目标：在不一次性重写全部玩法、不丢失现有玩家数据的前提下，建立可测试、可回滚、可扩展的后端与 Web 结构。
 
 ## 1. 为什么要重构

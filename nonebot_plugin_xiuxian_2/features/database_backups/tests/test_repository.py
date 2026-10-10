@@ -4,7 +4,7 @@ import io
 import zipfile
 from pathlib import Path
 
-from nonebot_plugin_xiuxian_2.features.database_backups.repository import (
+from ..repository import (
     DatabaseBackupRepository,
 )
 

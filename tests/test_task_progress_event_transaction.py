@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 import json
 import sqlite3
 from pathlib import Path
@@ -327,5 +328,17 @@ def test_production_entries_use_batched_idempotent_task_events() -> None:
     assert 'operation_id=f"task-progress:{operation_id}"' in closing_effects_source
     assert "def _grant_pet_travel_rewards" not in pet_source
     travel_handler = pet_source[pet_source.index("@pet_travel_claim.handle"):]
-    assert '"trace_id": operation_id' in travel_handler
-    assert "safe_record_game_event(" in travel_handler
+    assert "claim_outcome = pet_application.claim_travel(" in travel_handler
+    assert "operation_id=operation_id," in travel_handler
+    assert "safe_record_game_event(" not in travel_handler
+    pet_application = (root.parent / "features/pet/application.py").read_text(encoding="utf-8")
+    pet_repository = (root.parent / "features/pet/repository.py").read_text(encoding="utf-8")
+    assert "PetTravelClaimSqlRepository(self.game_database, self.player_database" in pet_application
+    tree = ast.parse(pet_repository)
+    owner = next(node for node in tree.body if isinstance(node, ast.ClassDef) and node.name == "PetTravelClaimSqlRepository")
+    method = next(node for node in owner.body if isinstance(node, ast.FunctionDef) and node.name == "claim")
+    claim = ast.get_source_segment(pet_repository, method)
+    assert "self.outbox.append(" in claim
+    assert 'event_type="game_event.projection"' in claim
+    assert '"event_key": "pet_travel_claim"' in claim
+    assert '"trace_id": operation_id' in claim

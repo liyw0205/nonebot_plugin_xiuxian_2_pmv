@@ -3,7 +3,7 @@ from copy import deepcopy
 from datetime import datetime
 from pathlib import Path
 from ...paths import get_paths
-from ..xiuxian_utils.json_store import load_json_file, save_json_file
+from ..xiuxian_utils.json_store import load_json_file, safe_json_loads, save_json_file
 from .config_event_service import (
     ActivityConfigEventService,
     ActivityConfigMutationResult,
@@ -181,8 +181,9 @@ def _load_config_projection_readonly() -> dict:
     if not CONFIG_PATH.is_file():
         return _load_default_config()
     try:
-        with CONFIG_PATH.open("r", encoding="utf-8") as stream:
-            config = json.load(stream)
+        config = safe_json_loads(
+            CONFIG_PATH.read_text(encoding="utf-8"), _load_default_config(), dict
+        )
         if not isinstance(config, dict):
             return _load_default_config()
     except (FileNotFoundError, json.JSONDecodeError, UnicodeDecodeError):

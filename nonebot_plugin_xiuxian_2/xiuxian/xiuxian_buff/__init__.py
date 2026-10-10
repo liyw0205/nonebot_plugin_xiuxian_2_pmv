@@ -798,7 +798,7 @@ async def in_closing_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         msg = "凡人无法闭关！"
         await handle_send(bot, event, msg, md_type="buff", k1="重入仙途", v1="重入仙途", k2="存档", v2="我的修仙信息", k3="修为", v3="我的修为")
         await in_closing.finish()
-    if result_status == "duplicate" or result.replayed:
+    if result.ok and (result_status == "duplicate" or result.replayed):
         msg = "进入闭关状态，如需出关，发送【出关】！\n该闭关请求已经处理，无需重复提交。"
         await handle_send(bot, event, msg, md_type="buff", k1="出关", v1="出关", k2="存档", v2="我的修仙信息", k3="修为", v3="我的修为")
         await in_closing.finish()

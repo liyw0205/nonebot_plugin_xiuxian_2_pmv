@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import copy
+import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from nonebot_plugin_xiuxian_2.features.activity.config_application import (
     ActivityConfigApplication,
@@ -34,6 +36,20 @@ class ActivityConfigApplicationTests(unittest.TestCase):
 
     def tearDown(self) -> None:
         self.temp.cleanup()
+
+    def test_readonly_projection_uses_json_store_without_rewriting_source(self) -> None:
+        projection = self.root / "projection.json"
+        with patch.object(activity_config, "CONFIG_PATH", projection):
+            self.assertEqual(activity_config._load_default_config(), activity_config._load_config_projection_readonly())
+            self.assertFalse(projection.exists())
+            for payload in (b'{invalid', b'[]', b'\xff', json.dumps(self.initial).encode("utf-8")):
+                with self.subTest(payload=payload[:10]):
+                    projection.write_bytes(payload)
+                    result = activity_config._load_config_projection_readonly()
+                    expected = self.initial if payload.startswith(b'{"') else activity_config._load_default_config()
+                    self.assertEqual(activity_config._migrate_config(expected)[0], result)
+                    self.assertEqual(payload, projection.read_bytes())
+                    self.assertEqual([projection], list(self.root.iterdir()))
 
     def _application(self, database: Path, projection_writer=None):
         event_service = ActivityConfigEventService(database)

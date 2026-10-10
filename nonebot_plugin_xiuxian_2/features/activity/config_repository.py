@@ -1,14 +1,15 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Callable, Mapping
+from typing import Any, Callable, Mapping, TYPE_CHECKING
 
 from ...paths import get_paths
-from ...xiuxian.xiuxian_activity.config_event_service import (
-    ActivityConfigEventService,
-    ActivityConfigMutationResult,
-    ActivityConfigState,
-)
+if TYPE_CHECKING:
+    from ...xiuxian.xiuxian_activity.config_event_service import (
+        ActivityConfigEventService,
+        ActivityConfigMutationResult,
+        ActivityConfigState,
+    )
 
 
 class ActivityConfigSqlRepository:
@@ -23,9 +24,17 @@ class ActivityConfigSqlRepository:
         projection_writer: Callable[[dict[str, Any]], None] | None = None,
     ) -> None:
         self.database = Path(database or get_paths().data / "activity" / "activity.db")
-        self.event_service = event_service or ActivityConfigEventService(self.database)
+        self._event_service = event_service
         self.config_loader = config_loader
         self.projection_writer = projection_writer
+
+    @property
+    def event_service(self) -> ActivityConfigEventService:
+        if self._event_service is None:
+            from ...xiuxian.xiuxian_activity.config_event_service import ActivityConfigEventService
+
+            self._event_service = ActivityConfigEventService(self.database)
+        return self._event_service
 
     def read(self) -> ActivityConfigState:
         state = self.event_service.read_state()
@@ -39,6 +48,8 @@ class ActivityConfigSqlRepository:
             )
 
             config = _load_config_projection_readonly()
+        from ...xiuxian.xiuxian_activity.config_event_service import ActivityConfigState
+
         return ActivityConfigState(0, config)
 
     def replay(

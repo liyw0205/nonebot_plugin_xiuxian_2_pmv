@@ -8,8 +8,8 @@ from pathlib import Path
 
 import pytest
 
-from nonebot_plugin_xiuxian_2.features.database_backups.application import DatabaseBackupApplication
-from nonebot_plugin_xiuxian_2.features.database_backups.repository import (
+from ..application import DatabaseBackupApplication
+from ..repository import (
     DatabaseBackupRepository,
     InvalidDatabaseBackup,
     PartialDatabaseRestoreError,

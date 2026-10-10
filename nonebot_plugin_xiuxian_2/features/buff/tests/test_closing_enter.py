@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import ast
+import asyncio
 import concurrent.futures
 import tempfile
 import unittest
 from datetime import datetime
 from pathlib import Path
+from types import SimpleNamespace
 
 from ....infrastructure.database import DatabaseUnitOfWork, OperationLedger
 from ..application import BuffApplication
@@ -93,6 +96,97 @@ class ClosingEnterApplicationTests(unittest.TestCase):
         self.assertEqual(("ineligible", "busy"), (ineligible.code, busy.code))
         self.assertEqual(((0, "0", None), None), self.state("mortal"))
         self.assertEqual(((5, "old", None), None), self.state("busy"))
+
+    def _handler_replies(self, user_id):
+        # Execute the real adapter without importing the legacy plugin graph.
+        source_path = Path(__file__).resolve().parents[3] / "xiuxian/xiuxian_buff/__init__.py"
+        tree = ast.parse(source_path.read_text(encoding="utf-8"))
+        functions = []
+        for node in tree.body:
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name in {
+                "in_closing_", "_closing_enter_operation_id",
+            }:
+                node.decorator_list = []
+                node.returns = None
+                for arg in node.args.args:
+                    arg.annotation = None
+                functions.append(node)
+
+        class Finished(Exception):
+            pass
+
+        messages, logs, outcomes = [], [], []
+
+        async def assign_bot(**kwargs):
+            return kwargs["bot"], None
+
+        async def handle_send(bot, event, message, **kwargs):
+            messages.append(message)
+
+        async def finish():
+            raise Finished
+
+        def closing_enter(**kwargs):
+            result = self.application.closing_enter(**kwargs)
+            outcomes.append(result)
+            return result
+
+        namespace = {
+            "assign_bot": assign_bot,
+            "handle_send": handle_send,
+            "check_user": lambda event: (True, {"user_id": user_id}, ""),
+            "runtime_clock": FixedClock(),
+            "buff_application": SimpleNamespace(closing_enter=closing_enter),
+            "in_closing": SimpleNamespace(finish=finish),
+            "log_message": lambda *args: logs.append(args),
+        }
+        exec(compile(ast.Module(body=functions, type_ignores=[]), str(source_path), "exec"), namespace)
+        event = SimpleNamespace(message_id="closing-handler-replay")
+        for _ in range(2):
+            with self.assertRaises(Finished):
+                asyncio.run(namespace["in_closing_"](SimpleNamespace(), event))
+        return messages, logs, outcomes
+
+    def _assert_rejected_handler_replay(self, user_id, code):
+        before = self.state(user_id)
+        messages, logs, outcomes = self._handler_replies(user_id)
+        self.assertEqual([code, code], [outcome.code for outcome in outcomes])
+        self.assertTrue(all(not outcome.ok and outcome.status == "rejected" for outcome in outcomes))
+        self.assertFalse(outcomes[0].replayed)
+        self.assertTrue(outcomes[1].replayed)
+        self.assertEqual([outcomes[0].message] * 2, messages)
+        self.assertTrue(all("进入闭关状态" not in message for message in messages))
+        self.assertEqual([], logs)
+        self.assertEqual(before, self.state(user_id))
+        with db_backend.connection(self.game) as conn:
+            self.assertEqual(0, conn.execute("SELECT COUNT(*) FROM closing_enter_operations").fetchone()[0])
+            self.assertEqual(1, conn.execute("SELECT COUNT(*) FROM operation_ledger").fetchone()[0])
+
+    def test_handler_busy_replay_remains_rejected(self):
+        self._assert_rejected_handler_replay("busy", "busy")
+
+    def test_handler_missing_user_replay_remains_rejected(self):
+        with db_backend.transaction(self.game) as conn:
+            conn.execute("DELETE FROM user_xiuxian WHERE user_id='u'")
+        self._assert_rejected_handler_replay("u", "user_missing")
+
+    def test_handler_failed_cas_replay_remains_rejected(self):
+        with db_backend.transaction(self.game) as conn:
+            conn.execute(
+                "CREATE TRIGGER ignore_closing_enter BEFORE UPDATE OF type ON user_cd "
+                "BEGIN SELECT RAISE(IGNORE); END"
+            )
+        self._assert_rejected_handler_replay("u", "state_changed")
+
+    def test_handler_success_replay_preserves_single_entry_and_log(self):
+        messages, logs, outcomes = self._handler_replies("u")
+        self.assertTrue(all(outcome.ok for outcome in outcomes))
+        self.assertFalse(outcomes[0].replayed)
+        self.assertTrue(outcomes[1].replayed)
+        self.assertTrue(all("进入闭关状态" in message for message in messages))
+        self.assertIn("该闭关请求已经处理", messages[1])
+        self.assertEqual(1, len(logs))
+        self.assertEqual(((1, "2026-01-05 12:00:00.000000", None), 1), self.state())
 
     def test_two_operation_ids_only_one_wins_the_cas(self):
         def enter(operation_id):

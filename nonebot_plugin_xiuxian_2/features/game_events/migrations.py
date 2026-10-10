@@ -1,5 +1,7 @@
 from ...infrastructure.database import DatabaseUnitOfWork
 
+MIGRATION_VERSION = "game_events.001"
+
 
 def apply_game_event_statistics_player(uow: DatabaseUnitOfWork) -> None:
     uow.execute("CREATE TABLE IF NOT EXISTS statistics(user_id TEXT PRIMARY KEY)")
@@ -13,3 +15,9 @@ def apply_game_event_statistics_player(uow: DatabaseUnitOfWork) -> None:
         "increment INTEGER NOT NULL,created_at TEXT NOT NULL,"
         "PRIMARY KEY(event_id,event_key))"
     )
+
+
+MIGRATIONS = (MIGRATION_VERSION,)
+
+
+__all__ = ["MIGRATION_VERSION", "MIGRATIONS", "apply_game_event_statistics_player"]

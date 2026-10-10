@@ -17,7 +17,8 @@ class BaseFacadeLazyReaderTests(unittest.TestCase):
         self.assertIn("_player_data_manager_instance = None", source)
         self.assertIn("def _player_data_manager(", source)
         self.assertNotIn("player_data_manager = PlayerDataManager()", source)
-        self.assertIn("_player_data_manager().get_field_data(", source)
+        self.assertIn("player_data_manager = _LazyPlayerDataManager()", source)
+        self.assertIn("return getattr(_resolve_player_data_manager(), name)", source)
         self.assertIn("RegistrationBatcher(_sql_message)", source)
 
     def test_registration_batcher_accepts_lazy_manager_resolver(self):

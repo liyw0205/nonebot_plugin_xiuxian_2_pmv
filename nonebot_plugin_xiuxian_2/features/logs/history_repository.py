@@ -6,11 +6,12 @@ from pathlib import Path
 from typing import Any, Callable
 
 from ...infrastructure.database import DatabaseUnitOfWork
+from .schemas import LOG_SCENES
 
 
 MessagePresenter = Callable[[list[dict[str, Any]], sqlite3.Connection], list[dict[str, Any]]]
 SessionPresenter = Callable[[list[dict[str, Any]], sqlite3.Connection], list[dict[str, Any]]]
-_VALID_SCENES = ("group", "private", "channel_group", "channel_private")
+_VALID_SCENES = LOG_SCENES
 
 
 class MessageHistoryRepository:

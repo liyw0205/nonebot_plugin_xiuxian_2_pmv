@@ -612,7 +612,7 @@
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:347 swap_id_cmd = on_command('ID交换') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2674 swap_id_cmd_ -> AdminApplication.swap_user_ids(operation_id, id1, id2) -> AdminIdSwapSqlRepository.swap",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2615 swap_id_cmd_ -> AdminApplication.swap_user_ids(operation_id, id1, id2) -> AdminIdSwapSqlRepository.swap",
         "repository validates both IDs across configured target columns in game_db/impart_db/trade_db/player_db; it atomically creates the game_db operation plan, operation-ledger entry, and outbox event before starting effects",
         "before user-data writes repository preflights a three-phase WAL workspace budget from the four database file sizes and preserves the shared 64 MiB/10% disk reserve; insufficient capacity leaves the durable plan pending for a later retry",
         "repository applies each database's three-phase temporary-ID replacement in its own immediate UoW with foreign-key checks disabled only for the swap transaction, then commits an admin_id_swap_step_receipts row in that same transaction; SQLite cache is capped at 2 MiB and temp_store uses FILE",
@@ -632,7 +632,7 @@
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_utils/xiuxian2_handle.py:4609-4617",
         "nonebot_plugin_xiuxian_2/features/admin/tests/test_id_swap_repository.py:54-285",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:347",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2674"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2615"
       ],
       "source_declaration_found": true,
       "source": {
@@ -651,7 +651,7 @@
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:346 update_id_cmd = on_command('ID更新') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2645 update_id_cmd_ -> AdminApplication.update_user_id",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2586 update_id_cmd_ -> AdminApplication.update_user_id",
         "AdminApplication.update_user_id -> AdminIdUpdateSqlRepository.update -> shared ID mutation lock -> game operation plan/outbox -> frozen target columns and old/new ID validation",
         "AdminIdUpdateSqlRepository._resume -> each of four SQLite databases: update whitelisted columns + step receipt in one transaction -> game progress receipt",
         "AdminIdUpdateSqlRepository._rename_player_directory -> recoverable players/<old_id> to players/<new_id> rename -> roster/player-data cache invalidation -> ledger/outbox completion",
@@ -671,7 +671,7 @@
         "nonebot_plugin_xiuxian_2/features/admin/tests/test_id_update_repository.py",
         "nonebot_plugin_xiuxian_2/features/admin/tests/test_id_swap_repository.py",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:346",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2645"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2586"
       ],
       "source_declaration_found": true,
       "source": {
@@ -759,7 +759,7 @@
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:341 dm_command = on_command('dm') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2535 dm_command_ -> str(args).strip() -> fix_mqqapi_inlinecmd_links -> MessageSegment.markdown(bot, text) -> delivery_service.reply(bot, event, msg)",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2476 dm_command_ -> str(args).strip() -> fix_mqqapi_inlinecmd_links -> MessageSegment.markdown(bot, text) -> delivery_service.reply(bot, event, msg)",
         "MessageDeliveryService.reply maps group/private/channel events to a SendRequest -> send dispatches to the adapter sender; an unknown event scene calls bot.send directly",
         "successful group/private adapter send -> adapter_message_sender._record_send -> record_send_message -> _insert_message_record -> message_db.insert_message_record -> bounded-count async message DB queue -> messages.content",
         "successful channel send -> MessageDeliveryService._send_channel -> record_send_message -> message DB queue; queue-full drops a history record without blocking delivery",
@@ -776,7 +776,7 @@
         "nonebot_plugin_xiuxian_2/xiuxian/adapter_message_records.py:399-445",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_utils/message_db.py:161-175,422-427,556-604,734-761",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:341",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2535"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2476"
       ],
       "source_declaration_found": true,
       "source": {
@@ -2237,7 +2237,7 @@
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:350 global_broadcast_cmd = on_command('全局广播') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2784 global_broadcast_cmd_ -> parse_broadcast_duration_and_content -> broadcast_manager.start_broadcast(kind=global) -> AdminBroadcastApplication.start -> AdminBroadcastRepository.create/claim/finish",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2725 global_broadcast_cmd_ -> parse_broadcast_duration_and_content -> broadcast_manager.start_broadcast(kind=global) -> AdminBroadcastApplication.start -> AdminBroadcastRepository.create/claim/finish",
         "AdminBroadcastApplication.start -> async history port -> AdminBroadcastHistoryRepository.targets -> DatabaseUnitOfWork(message_db, read_only=True); adapter and bot_id are exact filters, QQ uses the legacy one-minute lower bound and latest scene/target reply, OB11 retains history direction semantics and group-before-private ordering; connection closes before sending and target lists remain materialized",
         "AdminBroadcastApplication._deliver -> repository generation/claim token -> sender port _send_broadcast_to_target -> shared delivery_service or OB11 forwarded-message API -> finish records sent/pending_audit/failure without holding the repository lock over network awaits",
         "auto_patch_broadcast_for_event -> AdminBroadcastApplication.patch_event -> the same adapter/bot-isolated repository claim; process-local status/cancel/clear prevent subsequent sends but cannot retract already-issued network requests"
@@ -2255,7 +2255,7 @@
         "tests/test_admin_broadcast.py",
         "tests/test_admin_progress_contract.py",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:350",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2784"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2725"
       ],
       "source_declaration_found": true,
       "source": {
@@ -3251,7 +3251,7 @@
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:359 cancel_broadcast_cmd = on_command('取消广播') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2840 cancel_broadcast_cmd_ -> broadcast_manager.cancel_broadcast -> AdminBroadcastApplication.cancel -> AdminBroadcastRepository.cancel",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2781 cancel_broadcast_cmd_ -> broadcast_manager.cancel_broadcast -> AdminBroadcastApplication.cancel -> AdminBroadcastRepository.cancel",
         "AdminBroadcastRepository.cancel -> expiry cleanup and cancelled state under the process-local lock -> subsequent create-loop/event-backfill claims stop; an already-issued sender-port request is not revoked and its in-flight count is reported",
         "The shared creation path uses AdminBroadcastHistoryRepository.targets with read-only adapter/bot-isolated SQL before any sender-port network await; repository generation/claim tokens prevent stale completions from modifying replacement tasks"
       ],
@@ -3268,7 +3268,7 @@
         "tests/test_admin_broadcast.py",
         "tests/test_admin_progress_contract.py",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:359",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2840"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2781"
       ],
       "source_declaration_found": true,
       "source": {
@@ -4015,7 +4015,7 @@
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:374 broadcast_help_cmd = on_command('广播帮助') aliases=广播指令,广播说明 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2876 broadcast_help_cmd_ -> send_help_message compatibility delivery",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2817 broadcast_help_cmd_ -> send_help_message compatibility delivery",
         "shared send_help_message / send_msg_handler / delivery_service.reply / handle_send -> adapter_message_sender -> record_send_message -> queued message history and reply counters; config, ID mapping and rendering resources remain shared compatibility infrastructure"
       ],
       "evidence": [
@@ -4026,7 +4026,7 @@
         "tests/test_admin_output_commands_compat.py",
         "tests/test_admin_progress_contract.py",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:374",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2876"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2817"
       ],
       "source_declaration_found": true,
       "source": {
@@ -5007,7 +5007,7 @@
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:342 keyboard_test_cmd = on_command('按钮测试') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2506 keyboard_test_cmd_ -> _parse_keyboard_test_rows -> shared delivery fallback",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2447 keyboard_test_cmd_ -> _parse_keyboard_test_rows -> shared delivery fallback",
         "shared send_help_message / send_msg_handler / delivery_service.reply / handle_send -> adapter_message_sender -> record_send_message -> queued message history and reply counters; config, ID mapping and rendering resources remain shared compatibility infrastructure"
       ],
       "evidence": [
@@ -5018,7 +5018,7 @@
         "tests/test_admin_output_commands_compat.py",
         "tests/test_admin_progress_contract.py",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:342",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2506"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2447"
       ],
       "source_declaration_found": true,
       "source": {
@@ -5540,7 +5540,7 @@
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:351 view_broadcast_cmd = on_command('查看广播') aliases=广播列表 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2826 view_broadcast_cmd_ -> broadcast_manager.format_broadcast_status -> AdminBroadcastApplication.status -> AdminBroadcastRepository.status",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2767 view_broadcast_cmd_ -> broadcast_manager.format_broadcast_status -> AdminBroadcastApplication.status -> AdminBroadcastRepository.status",
         "AdminBroadcastRepository.status -> expiry cleanup under the process-local lock -> detached task snapshots with sent/pending_audit/inflight/error counts -> compatibility formatting and handle_send",
         "The shared task owner is populated by AdminBroadcastApplication.start/patch_event through read-only AdminBroadcastHistoryRepository.targets and the sender port; status never initializes message schema and does not imply durable or retractable delivery"
       ],
@@ -5557,7 +5557,7 @@
         "tests/test_admin_broadcast.py",
         "tests/test_admin_progress_contract.py",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:351",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2826"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2767"
       ],
       "source_declaration_found": true,
       "source": {
@@ -6874,7 +6874,7 @@
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:366 clear_broadcast_cmd = on_command('清空广播') aliases=清除广播 -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2857 clear_broadcast_cmd_ -> parse_clear_broadcast_kind -> broadcast_manager.clear_broadcast -> AdminBroadcastApplication.clear -> AdminBroadcastRepository.clear",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2798 clear_broadcast_cmd_ -> parse_clear_broadcast_kind -> broadcast_manager.clear_broadcast -> AdminBroadcastApplication.clear -> AdminBroadcastRepository.clear",
         "AdminBroadcastRepository.clear -> validate kind and remove matching process-local tasks under lock -> later initial/event-backfill claims stop; generation and claim tokens reject stale sender completions, while in-flight network requests remain non-retractable",
         "The shared start path reads message history through AdminBroadcastHistoryRepository.targets with a read-only connection closed before the sender port; clear operates only on the feature-owned process-local task state"
       ],
@@ -6891,7 +6891,7 @@
         "tests/test_admin_broadcast.py",
         "tests/test_admin_progress_contract.py",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:366",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2857"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2798"
       ],
       "source_declaration_found": true,
       "source": {
@@ -7492,7 +7492,7 @@
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:340 impersonate_user_command = on_command('用户伪装') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2568 impersonate_user_command_ -> AdminImpersonationApplication.resolve_target/get_target/set_target/cancel -> AdminImpersonationRepository locked process-local state",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2509 impersonate_user_command_ -> AdminImpersonationApplication.resolve_target/get_target/set_target/cancel -> AdminImpersonationRepository locked process-local state",
         "utils._impersonating_users -> the same default repository mapping; get_impersonating_target -> one lookup used by check_user, check_user_type and reply/statistics consumers, avoiding contains-then-index races",
         "avatar, game_events and compatibility effect readers retain the shared identity mapping; player-name/ID resolution uses existing injected read ports and does not create new player SQL state"
       ],
@@ -7505,7 +7505,7 @@
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_utils/utils.py",
         "tests/test_admin_impersonation.py",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:340",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2568"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2509"
       ],
       "source_declaration_found": true,
       "source": {
@@ -7729,7 +7729,7 @@
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:349 private_broadcast_cmd = on_command('私聊广播') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2742 private_broadcast_cmd_ -> parse_broadcast_duration_and_content -> broadcast_manager.start_broadcast(kind=private) -> AdminBroadcastApplication.start -> AdminBroadcastRepository.create/claim/finish",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2683 private_broadcast_cmd_ -> parse_broadcast_duration_and_content -> broadcast_manager.start_broadcast(kind=private) -> AdminBroadcastApplication.start -> AdminBroadcastRepository.create/claim/finish",
         "AdminBroadcastApplication.start -> async history port -> AdminBroadcastHistoryRepository.targets -> DatabaseUnitOfWork(message_db, read_only=True); exact adapter/bot_id filters and private/channel_private scenes, QQ recent latest reply or OB11 historical targets, no request-time DDL and connection closed before sending; targets remain materialized",
         "AdminBroadcastApplication._deliver -> generation-bound target claim -> sender port _send_broadcast_to_target -> delivery_service or OB11 private forward API -> repository.finish sent/pending_audit/failure; no repository lock held across network await",
         "auto_patch_broadcast_for_event -> AdminBroadcastApplication.patch_event -> the same process-local adapter/bot-isolated claim owner; cancel/clear stop future claims but cannot retract in-flight network requests"
@@ -7747,7 +7747,7 @@
         "tests/test_admin_broadcast.py",
         "tests/test_admin_progress_contract.py",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:349",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2742"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2683"
       ],
       "source_declaration_found": true,
       "source": {
@@ -8128,7 +8128,7 @@
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:348 group_broadcast_cmd = on_command('群聊广播') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2700 group_broadcast_cmd_ -> parse_broadcast_duration_and_content -> broadcast_manager.start_broadcast(kind=group) -> AdminBroadcastApplication.start -> AdminBroadcastRepository.create/claim/finish",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2641 group_broadcast_cmd_ -> parse_broadcast_duration_and_content -> broadcast_manager.start_broadcast(kind=group) -> AdminBroadcastApplication.start -> AdminBroadcastRepository.create/claim/finish",
         "AdminBroadcastApplication.start -> async history port -> AdminBroadcastHistoryRepository.targets -> DatabaseUnitOfWork(message_db, read_only=True); exact adapter/bot_id filters and group/channel_group scenes, QQ latest recent reply or OB11 historical targets, required-column projection only, connection closed before sending; targets remain materialized",
         "AdminBroadcastApplication._deliver -> generation-bound target claim -> sender port _send_broadcast_to_target -> delivery_service or OB11 group forward API -> repository.finish sent/pending_audit/failure; no repository lock held across network await",
         "auto_patch_broadcast_for_event -> AdminBroadcastApplication.patch_event -> the same process-local adapter/bot-isolated claim owner; cancel/clear stop future claims but cannot retract in-flight network requests"
@@ -8146,7 +8146,7 @@
         "tests/test_admin_broadcast.py",
         "tests/test_admin_progress_contract.py",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:348",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2700"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2641"
       ],
       "source_declaration_found": true,
       "source": {
@@ -8931,7 +8931,7 @@
         "legacy on_command registration -> xiuxian/on_compat.py:on_command -> _nb_on_command -> _register_route",
         "XiuxianOnCompatProvider selects the indexed command matcher -> NoneBot dispatches its handle() handler",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:345 migrate_qqid_cmd = on_command('转换QQID') -> compatibility matcher",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2622 migrate_qqid_cmd_ -> asyncio.to_thread(AdminQqidApplication.run) -> AdminQqidBatchRepository durable plan and checkpoints -> AdminApplication.update_user_id -> AdminIdUpdateSqlRepository.update/_resume",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2563 migrate_qqid_cmd_ -> asyncio.to_thread(AdminQqidApplication.run) -> AdminQqidBatchRepository durable plan and checkpoints -> AdminApplication.update_user_id -> AdminIdUpdateSqlRepository.update/_resume",
         "AdminQqidCandidateRepository.snapshot -> four read_only=True databases using the existing DATABASE_ORDER/TARGET_COLUMNS; missing schema fails without creating databases",
         "AdminQqidApplication.run -> independent batch lock -> resume existing active batch before scanning -> freeze source/target and child_operation_id before any mutation; unchanged, duplicate targets and occupied candidates never merge",
         "legacy.admin.008 -> game-only admin_qqid_batches/admin_qqid_batch_entries startup schema; request path does not create tables; batch source_id/target_id avoid the single-ID writer target columns",
@@ -8950,7 +8950,7 @@
         "nonebot_plugin_xiuxian_2/features/_legacy_migrated.py",
         "tests/test_admin_qqid_conversion.py",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:345",
-        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2622"
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py:2563"
       ],
       "source_declaration_found": true,
       "source": {
@@ -13372,31 +13372,31 @@
         "path": "/commands"
       }
     },
-  {
-    "id": "route:GET:/config:nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/config.py:config_management",
+    {
+      "id": "route:GET:/config:nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/config.py:config_management",
       "kind": "legacy_routes",
       "entry": "GET /config -> nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/config.py:config_management",
-    "status": "已迁移",
-    "reason": "The legacy configuration page delegates its editable schema and XiuConfig projection to PluginConfigApplication; UpdateManager configuration backup callbacks share the same owner. The old URL, template, and response adapter remain compatible.",
-    "call_graph": [
-      "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/config.py:41 config_management -> PluginConfigApplication.config_by_category -> PluginConfigApplication.get_values -> XiuConfig",
-      "UpdateManager.configuration_backup_values -> PluginConfigApplication.get_values -> XiuConfig"
-    ],
-    "evidence": [
+      "status": "已迁移",
+      "reason": "The legacy configuration page delegates its editable schema and XiuConfig projection to PluginConfigApplication; UpdateManager configuration backup callbacks share the same owner. The old URL, template, and response adapter remain compatible.",
+      "call_graph": [
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/config.py:41 config_management -> PluginConfigApplication.config_by_category -> PluginConfigApplication.get_values -> XiuConfig",
+        "UpdateManager.configuration_backup_values -> PluginConfigApplication.get_values -> XiuConfig"
+      ],
+      "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
-      "scripts/export_refactor_inventory.py:41-70",
-      "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/config.py:41",
-      "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/config.py:40-47",
-      "nonebot_plugin_xiuxian_2/features/plugin_config/schema.py",
-      "nonebot_plugin_xiuxian_2/features/plugin_config/application.py:34-75",
-      "nonebot_plugin_xiuxian_2/features/plugin_config/runtime.py",
-      "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_utils/download_xiuxian_data.py:968-971",
-      "tests/test_plugin_config_owner.py",
-      "tests/test_local_backup_cleanup.py",
-      "nonebot_plugin_xiuxian_2/features/config_backups/tests/test_application.py"
+        "scripts/export_refactor_inventory.py:41-70",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/config.py:41",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/config.py:40-47",
+        "nonebot_plugin_xiuxian_2/features/plugin_config/schema.py",
+        "nonebot_plugin_xiuxian_2/features/plugin_config/application.py:34-75",
+        "nonebot_plugin_xiuxian_2/features/plugin_config/runtime.py",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_utils/download_xiuxian_data.py:968-971",
+        "tests/test_plugin_config_owner.py",
+        "tests/test_local_backup_cleanup.py",
+        "nonebot_plugin_xiuxian_2/features/config_backups/tests/test_application.py"
       ],
       "source_declaration_found": true,
       "source": {
@@ -13500,27 +13500,27 @@
         "path": "/delete_config_backup"
       }
     },
-  {
-    "id": "route:GET:/download/<path:filepath>:nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/system.py:download_file",
+    {
+      "id": "route:GET:/download/<path:filepath>:nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/system.py:download_file",
       "kind": "legacy_routes",
       "entry": "GET /download/<path:filepath> -> nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/system.py:download_file",
-    "status": "已迁移",
-    "reason": "The compatibility route delegates cache-root containment, symlink resolution, existence, and regular-file checks to CacheFileApplication/CacheFileRepository, then preserves Flask send_file behavior.",
-    "call_graph": [
-      "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/system.py:166 download_file -> CacheFileApplication.resolve_download -> CacheFileRepository.resolve_download -> normalized cache-root containment and regular-file checks -> Flask send_file"
+      "status": "已迁移",
+      "reason": "The compatibility route delegates cache-root containment, symlink resolution, existence, and regular-file checks to CacheFileApplication/CacheFileRepository, then preserves Flask send_file behavior.",
+      "call_graph": [
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/system.py:166 download_file -> CacheFileApplication.resolve_download -> CacheFileRepository.resolve_download -> normalized cache-root containment and regular-file checks -> Flask send_file"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
-      "scripts/export_refactor_inventory.py:41-70",
-      "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/system.py:166",
-      "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/system.py:163-173",
-      "nonebot_plugin_xiuxian_2/features/cache_files/application.py",
-      "nonebot_plugin_xiuxian_2/features/cache_files/repository.py",
-      "nonebot_plugin_xiuxian_2/features/cache_files/tests/test_application.py",
-      "tests/test_cache_file_routes.py"
+        "scripts/export_refactor_inventory.py:41-70",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/system.py:166",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/system.py:163-173",
+        "nonebot_plugin_xiuxian_2/features/cache_files/application.py",
+        "nonebot_plugin_xiuxian_2/features/cache_files/repository.py",
+        "nonebot_plugin_xiuxian_2/features/cache_files/tests/test_application.py",
+        "tests/test_cache_file_routes.py"
       ],
       "source_declaration_found": true,
       "source": {
@@ -14399,31 +14399,31 @@
         "path": "/robots.txt"
       }
     },
-  {
-    "id": "route:POST:/save_config:nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/config.py:save_config",
+    {
+      "id": "route:POST:/save_config:nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/config.py:save_config",
       "kind": "legacy_routes",
       "entry": "POST /save_config -> nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/config.py:save_config",
-    "status": "已迁移",
-    "reason": "The legacy save route delegates field writing to PluginConfigApplication, which owns the editable schema and uses the existing literal writer for xiuxian_config.py. UpdateManager backup restore calls the same owner; legacy URL, auth, CSRF, and JSON response behavior remain in the adapters.",
-    "call_graph": [
-      "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/config.py:50 save_config -> save_config_values -> PluginConfigApplication.save_values -> write_config_values -> xiuxian_config.py",
-      "UpdateManager.configuration_backup_save_values -> save_config_values -> PluginConfigApplication.save_values -> write_config_values -> xiuxian_config.py"
+      "status": "已迁移",
+      "reason": "The legacy save route delegates field writing to PluginConfigApplication, which owns the editable schema and uses the existing literal writer for xiuxian_config.py. UpdateManager backup restore calls the same owner; legacy URL, auth, CSRF, and JSON response behavior remain in the adapters.",
+      "call_graph": [
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/config.py:50 save_config -> save_config_values -> PluginConfigApplication.save_values -> write_config_values -> xiuxian_config.py",
+        "UpdateManager.configuration_backup_save_values -> save_config_values -> PluginConfigApplication.save_values -> write_config_values -> xiuxian_config.py"
       ],
       "evidence": [
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/__init__.py:27-38,48-66,88-92",
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/web_runtime.py:9-17",
         "nonebot_plugin_xiuxian_2/bootstrap/legacy.py:48-56",
         "nonebot_plugin_xiuxian_2/plugin.py:1239-1240",
-      "scripts/export_refactor_inventory.py:41-70",
-      "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/config.py:50",
-      "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/config.py:49-66",
-      "nonebot_plugin_xiuxian_2/features/plugin_config/schema.py",
-      "nonebot_plugin_xiuxian_2/features/plugin_config/application.py:93-108",
-      "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_utils/config_literal.py:225-249",
-      "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_utils/download_xiuxian_data.py:883-886,988-989",
-      "tests/test_plugin_config_owner.py",
-      "tests/test_updater_web.py",
-      "nonebot_plugin_xiuxian_2/features/config_backups/tests/test_application.py"
+        "scripts/export_refactor_inventory.py:41-70",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/config.py:50",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/config.py:49-66",
+        "nonebot_plugin_xiuxian_2/features/plugin_config/schema.py",
+        "nonebot_plugin_xiuxian_2/features/plugin_config/application.py:93-108",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_utils/config_literal.py:225-249",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_utils/download_xiuxian_data.py:883-886,988-989",
+        "tests/test_plugin_config_owner.py",
+        "tests/test_updater_web.py",
+        "nonebot_plugin_xiuxian_2/features/config_backups/tests/test_application.py"
       ],
       "source_declaration_found": true,
       "source": {

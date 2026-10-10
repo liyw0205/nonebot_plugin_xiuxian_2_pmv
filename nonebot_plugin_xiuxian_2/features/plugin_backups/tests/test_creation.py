@@ -6,10 +6,10 @@ from datetime import datetime
 from pathlib import Path
 from unittest.mock import patch
 
-from nonebot_plugin_xiuxian_2.features.plugin_backups.creation_application import (
+from ..creation_application import (
     PluginBackupCreationApplication,
 )
-from nonebot_plugin_xiuxian_2.features.plugin_backups.creation_repository import (
+from ..creation_repository import (
     PluginBackupCreationRepository,
 )
 

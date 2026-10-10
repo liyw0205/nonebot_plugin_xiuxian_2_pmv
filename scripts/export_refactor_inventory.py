@@ -116,7 +116,21 @@ def _database_tables() -> list[str]:
     tables: set[str] = set()
     for path in _iter_python_files(PACKAGE):
         source = path.read_text(encoding="utf-8")
-        tables.update(match.group(1).lower() for match in _TABLE_RE.finditer(source))
+        tree = ast.parse(source, filename=str(path))
+        docstrings = {
+            id(node.body[0].value)
+            for node in ast.walk(tree)
+            if isinstance(node, (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef))
+            and node.body
+            and isinstance(node.body[0], ast.Expr)
+            and isinstance(node.body[0].value, ast.Constant)
+            and isinstance(node.body[0].value.value, str)
+        }
+        # SQL lives in string literals; Python imports, comments and docstrings
+        # must not become table names when source changes.
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Constant) and isinstance(node.value, str) and id(node) not in docstrings:
+                tables.update(match.group(1).lower() for match in _TABLE_RE.finditer(node.value))
     return sorted(tables)
 
 

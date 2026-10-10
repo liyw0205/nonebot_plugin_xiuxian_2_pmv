@@ -3,6 +3,11 @@ from __future__ import annotations
 from ...infrastructure.database import DatabaseUnitOfWork
 
 
+# The composition root owns execution; this tuple records the feature's
+# startup migration without creating a second migration runner.
+MIGRATIONS = ("economy_ledger.001",)
+
+
 def apply_economy_ledger_read_indexes(uow: DatabaseUnitOfWork) -> None:
     table = uow.query_one(
         "SELECT 1 AS present FROM sqlite_master WHERE type='table' AND name='economy_log'"
@@ -46,4 +51,4 @@ def apply_economy_ledger_read_indexes(uow: DatabaseUnitOfWork) -> None:
             uow.execute(statement)
 
 
-__all__ = ["apply_economy_ledger_read_indexes"]
+__all__ = ["MIGRATIONS", "apply_economy_ledger_read_indexes"]

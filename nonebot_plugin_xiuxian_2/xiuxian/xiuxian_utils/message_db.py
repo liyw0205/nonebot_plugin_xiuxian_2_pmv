@@ -8,6 +8,7 @@ import os
 from pathlib import Path
 import queue
 import sqlite3
+import sys
 import threading
 from typing import Any
 from uuid import uuid4
@@ -158,8 +159,44 @@ def _env_int(name: str, default: int, minimum: int) -> int:
         return default
 
 
-_message_db_jobs: queue.Queue[tuple[str, dict[str, Any]]] = queue.Queue(
-    maxsize=_env_int("XIUXIAN_MESSAGE_DB_QUEUE_MAXSIZE", 100000, 1000)
+class _MessageDbJobQueue(queue.Queue[tuple[str, dict[str, Any]]]):
+    """Bound queued and in-flight message jobs by count and retained bytes."""
+
+    def __init__(self, maxsize: int, max_bytes: int):
+        super().__init__(maxsize=maxsize)
+        self.max_bytes = max_bytes
+        self.reserved_bytes = 0
+        self._job_sizes: dict[int, int] = {}
+
+    @staticmethod
+    def _job_size(item: tuple[str, dict[str, Any]]) -> int:
+        kind, payload = item
+        # Jobs are flat dicts of string fields; count the tuple, dict and retained values.
+        return (
+            sys.getsizeof(item)
+            + sys.getsizeof(kind)
+            + sys.getsizeof(payload)
+            + sum(sys.getsizeof(key) + sys.getsizeof(value) for key, value in payload.items())
+        )
+
+    def _put(self, item: tuple[str, dict[str, Any]]) -> None:
+        size = self._job_size(item)
+        if self.reserved_bytes + size > self.max_bytes:
+            raise queue.Full
+        super()._put(item)
+        self._job_sizes[id(item)] = size
+        self.reserved_bytes += size
+
+    def release(self, item: tuple[str, dict[str, Any]]) -> None:
+        with self.mutex:
+            size = self._job_sizes.pop(id(item), 0)
+            self.reserved_bytes -= size
+            self.not_full.notify_all()
+
+
+_message_db_jobs = _MessageDbJobQueue(
+    maxsize=_env_int("XIUXIAN_MESSAGE_DB_QUEUE_MAXSIZE", 100000, 1000),
+    max_bytes=_env_int("XIUXIAN_MESSAGE_DB_QUEUE_MAX_BYTES", 64 * 1024 * 1024, 1024),
 )
 _message_db_last_drop_log_ts = 0.0
 _message_db_dropped_jobs = 0
@@ -736,8 +773,7 @@ def _message_db_writer_loop():
     conn = None
 
     while True:
-        kind, payload = _message_db_jobs.get()
-        jobs = [(kind, payload)]
+        jobs = [_message_db_jobs.get()]
 
         while len(jobs) < _MESSAGE_DB_BATCH_SIZE:
             try:
@@ -774,8 +810,12 @@ def _message_db_writer_loop():
                 conn = None
 
         finally:
-            for _ in jobs:
+            for job in jobs:
+                _message_db_jobs.release(job)
                 _message_db_jobs.task_done()
+            # Release payload references before the next blocking queue read.
+            jobs.clear()
+            job = job_payload = None
 
 
 def insert_message_record(

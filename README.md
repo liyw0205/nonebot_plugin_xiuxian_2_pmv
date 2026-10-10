@@ -139,6 +139,7 @@ http://服务器地址:5888/
 | 文档 | 说明 |
 |:-----|:-----|
 | [开发与交付](CONTRIBUTING.md) | 测试、提交边界和发布要求 |
+| [重构有限收口执行入口](docs/refactor_slice_execution_protocol.md) | 固定 C1-C5、当前状态与历史归档；Phase 2、技术验收和 P7 分开判断 |
 | [全面重构与新功能接入规范](docs/refactor_architecture.md) | 分阶段架构重构、数据迁移、前后端验收和功能接入模板 |
 | [插件模块索引](nonebot_plugin_xiuxian_2/xiuxian/README.md) | 目录职责 |
 | [跨适配器兼容层](docs/adapter_compat.md) | 消息段、事件和发送门面 |

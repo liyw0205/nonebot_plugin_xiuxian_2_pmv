@@ -1,0 +1,4 @@
+ROUTES = ()
+LEGACY_ROUTES = ()
+
+__all__ = ["LEGACY_ROUTES", "ROUTES"]

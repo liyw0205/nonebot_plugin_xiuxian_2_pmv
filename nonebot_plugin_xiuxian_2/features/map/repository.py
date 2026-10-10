@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Protocol
 import json
@@ -606,6 +607,7 @@ class MapInteractiveStartSqlRepository:
         expected = {key: str(dict(expected_position)[key]) for key in ("realm", "heaven", "node_id")}
         daily = {str(key): str(value) for key, value in dict(expected_daily).items()}
         expected_stamina, stamina_cost, daily_limit = int(expected_stamina), int(stamina_cost), int(daily_limit)
+        expected_cooldown = "" if expected_cooldown is None else str(expected_cooldown)
         action = dict(action)
         required = {"action_id", "action", "start_ts", "ready_ts", "expire_ts", "cooldown_sec"}
         if not operation_id or not user_id or not action_type or min(expected_stamina, stamina_cost, daily_limit) < 0 or not daily.get("date") or not required.issubset(action) or str(action["action_id"]) != operation_id or str(action["action"]) != action_type:
@@ -630,12 +632,35 @@ class MapInteractiveStartSqlRepository:
             limit_row = uow.query_one("SELECT date,gather_count,resource_total_count FROM player_data.map_daily_limit WHERE user_id=?", (user_id,))
             if not status and (limit_row is None or (str(limit_row["date"]), str(limit_row["gather_count"]), str(limit_row["resource_total_count"])) != (daily["date"], daily.get("gather_count", "0"), daily.get("resource_total_count", "0"))): status = "state_changed"
             if not status and limit_row is not None and int(limit_row["gather_count"] or 0) >= daily_limit: status = "limit_reached"
-            if not status and stamina < stamina_cost: status = "stamina_insufficient"
             if not status:
-                active = uow.query_one("SELECT action_id,state_json,expires_at FROM player_data.map_interactive_actions WHERE user_id=? AND status='active'", (user_id,))
-                if active is not None: status, action = "already_running", json.loads(str(active["state_json"]))
+                cooldown_row = uow.query_one("SELECT gather_cd_until FROM player_data.map_cooldown WHERE user_id=?", (user_id,))
+                current_cooldown = "" if cooldown_row is None or cooldown_row["gather_cd_until"] is None else str(cooldown_row["gather_cd_until"])
+                if current_cooldown != expected_cooldown:
+                    status = "state_changed"
+                elif current_cooldown and current_cooldown > str(action["start_ts"]):
+                    status, action = "cooldown", {"cooldown_until": current_cooldown}
+            if not status:
+                active = uow.query_one("SELECT action_id,state_json,expires_at,cooldown_seconds FROM player_data.map_interactive_actions WHERE user_id=? AND status='active'", (user_id,))
+                if active is not None:
+                    try:
+                        previous_action = json.loads(str(active["state_json"]))
+                    except json.JSONDecodeError:
+                        previous_action = {}
+                    try:
+                        expires_at = datetime.strptime(str(active["expires_at"]), "%Y-%m-%d %H:%M:%S")
+                        start_at = datetime.strptime(str(action["start_ts"]), "%Y-%m-%d %H:%M:%S")
+                    except (TypeError, ValueError):
+                        expires_at = start_at = None
+                    if expires_at is None or start_at is None or expires_at > start_at:
+                        status, action = "already_running", previous_action
+                    else:
+                        cooldown_until = (start_at + timedelta(seconds=int(active["cooldown_seconds"] or 0))).strftime("%Y-%m-%d %H:%M:%S")
+                        uow.execute("UPDATE player_data.map_interactive_actions SET status='expired',updated_at=? WHERE user_id=? AND action_id=? AND status='active'", (str(action["start_ts"]), user_id, str(active["action_id"])))
+                        uow.execute("INSERT INTO player_data.map_cooldown(user_id,gather_cd_until) VALUES(?,?) ON CONFLICT(user_id) DO UPDATE SET gather_cd_until=excluded.gather_cd_until", (user_id, cooldown_until))
+                        status, action = "cooldown", {"cooldown_until": cooldown_until}
+            if not status and stamina < stamina_cost: status = "stamina_insufficient"
             uow.execute("INSERT INTO map_interactive_start_operations(operation_id,payload,result_status,stamina,action_json) VALUES(?,?,?,?,?)", (operation_id, identity, status or "applied", stamina - stamina_cost if not status else stamina, action_json if not status else json.dumps(action, ensure_ascii=True, sort_keys=True)))
-            if status: return {"status": status, "stamina": stamina, "action": action if status == "already_running" else {}}
+            if status: return {"status": status, "stamina": stamina, "action": action if status in {"already_running", "cooldown"} else {}}
             remaining = stamina - stamina_cost
             uow.execute("UPDATE user_xiuxian SET user_stamina=? WHERE user_id=?", (remaining, user_id))
             uow.execute("INSERT INTO player_data.map_interactive_actions(user_id,action_id,action_type,status,state_json,settlement_json,ready_at,expires_at,cooldown_seconds,updated_at) VALUES(?,?,?,'active',?,'',?,?,?,?) ON CONFLICT(user_id) DO UPDATE SET action_id=excluded.action_id,action_type=excluded.action_type,status='active',state_json=excluded.state_json,settlement_json='',ready_at=excluded.ready_at,expires_at=excluded.expires_at,cooldown_seconds=excluded.cooldown_seconds,updated_at=excluded.updated_at", (user_id, operation_id, action_type, action_json, str(action["ready_ts"]), str(action["expire_ts"]), int(action["cooldown_sec"]), str(action["start_ts"])))

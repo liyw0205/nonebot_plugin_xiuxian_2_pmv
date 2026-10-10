@@ -9,7 +9,9 @@ from flask import Flask
 from ....adapters.web.app import create_app
 from ....bootstrap import build_runtime_context
 from ....infrastructure.database import DatabaseUnitOfWork
+from ....plugin import apply_platform_schema
 from ..application import SignInApplication
+from ..migrations import apply_sign_in
 from ..web import blueprint
 
 
@@ -48,6 +50,8 @@ class SignInAdapterTests(unittest.TestCase):
             with DatabaseUnitOfWork(context.database.path("game_db")) as uow:
                 uow.execute("CREATE TABLE user_xiuxian (user_id TEXT, is_sign INTEGER DEFAULT 0, stone INTEGER DEFAULT 0)")
                 uow.execute("INSERT INTO user_xiuxian(user_id, is_sign, stone) VALUES (?, 0, 0)", ("u1",))
+                apply_platform_schema(uow)
+                apply_sign_in(uow)
             app = create_app(context=context)
             with app.test_client() as client:
                 token = client.get("/api/v1/csrf").json["data"]["token"]

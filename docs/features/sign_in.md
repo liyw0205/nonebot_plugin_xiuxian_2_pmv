@@ -9,7 +9,7 @@
 - `修仙签到`
 - `签到`
 
-旧 NoneBot handler 保留原消息格式和鸿运抽奖副作用，但资产变更转发到 `SignInApplication`。
+旧 NoneBot handler 仅保留兼容消息适配；资产变更转发到 `SignInApplication`，签到后的鸿运、统计和任务投影由 feature-owned effects/application 处理。
 
 ## Web API
 
@@ -50,4 +50,4 @@
 
 ## 灰度开关、回滚和已知限制
 
-灰度开关关闭后保留旧签到入口；鸿运抽奖仍由兼容适配器维护。
+关闭 `XIUXIAN_SIGN_IN_ENABLED` 只禁用新签到入口，不会自动启用旧 matcher；兼容回滚还需显式设置 `XIUXIAN_SIGN_IN_LEGACY_HANDLER=true`。默认 lottery 使用 `LotteryApplication`。`settle_lottery` 仍接受显式 `legacy_settle` callable，供旧安装或人工回滚使用，不由默认 composition root 注入旧 lottery service。

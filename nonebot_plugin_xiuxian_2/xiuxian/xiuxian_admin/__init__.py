@@ -72,10 +72,10 @@ from ..xiuxian_utils.bg_jobs import spawn_admin_job, run_chunked_until_done
 from ..xiuxian_utils.item_json import Items
 from ..xiuxian_back import ACCESSORY_BAG_LIMIT, create_accessory_instance
 from .admin_helpers import (
-    _admin_economy_context,
-    _extract_keyboard_command,
+    _admin_economy_context, _extract_keyboard_command,
+    MarkdownTemplateInputError,
     _parse_keyboard_test_rows,
-    fix_mqqapi_inlinecmd_links,
+    fix_mqqapi_inlinecmd_links, parse_markdown_template_args,
     parse_broadcast_duration_and_content,
     parse_clear_broadcast_kind,
 )
@@ -2402,87 +2402,28 @@ async def mb_template_test_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     """
     使用自定义Markdown模板发送消息，并支持按钮
     """
-    args_str = re.sub(r'mqqapi:/aio', 'mqqapi://aio', args.extract_plain_text())
-    args_str = args_str.replace("\\r", "\r").replace('\\"', '"').replace(':/', '://').replace(':///', '://')
-    if not args_str:
+    raw_args = args.extract_plain_text()
+    if not raw_args:
         await delivery_service.reply(bot, event, "请提供模板参数，格式如下：mid=模板ID bid=按钮ID k=a,v=\"xx\" k=b k=c,v=x k=d,v=[\"xx\",\"xx\"] button_id=按钮ID")
         return
 
     config = XiuConfig()
-
-    id_match = re.search(r'mid=([^\s]+)', args_str)
-    template_id_input = id_match.group(1) if id_match else None
-    button_id_match = re.search(r'bid=([^\s]+)', args_str)
-    button_id_input = button_id_match.group(1) if button_id_match else None
-
-    template_id = None
-    if template_id_input:
-        if template_id_input == '1':
-            template_id = config.markdown_id
-        elif template_id_input == '2':
-            template_id = config.markdown_id2
+    try:
+        template_id, button_id, params = parse_markdown_template_args(
+            raw_args,
+            markdown_id=config.markdown_id,
+            markdown_id2=config.markdown_id2,
+            button_id=config.button_id,
+            button_id2=config.button_id2,
+        )
+    except MarkdownTemplateInputError as exc:
+        if exc.reason == "missing_args":
+            await delivery_service.reply(bot, event, "请提供模板参数，格式如下：mid=模板ID bid=按钮ID k=a,v=\"xx\" k=b k=c,v=x k=d,v=[\"xx\",\"xx\"] button_id=按钮ID")
+        elif exc.reason == "missing_template_id":
+            await delivery_service.reply(bot, event, "请提供模板ID (mid=模板ID)")
         else:
-            template_id = template_id_input
-
-    button_id = None
-    if button_id_input:
-        if button_id_input == '1':
-            button_id = config.button_id
-        elif button_id_input == '2':
-            button_id = config.button_id2
-        else:
-            button_id = button_id_input
-
-
-    if id_match:
-        args_str = args_str.replace(id_match.group(0), '').strip()
-    if button_id_match:
-        args_str = args_str.replace(button_id_match.group(0), '').strip()
-
-    if not template_id:
-        await delivery_service.reply(bot, event, "请提供模板ID (mid=模板ID)")
+            await delivery_service.reply(bot, event, "Markdown模板参数超出限制，已拒绝处理。")
         return
-
-    arg_parts = re.split(r'\s+(?=\w+=)', args_str.strip())  # 仅在键前分割
-
-    params: List[Dict[str, Any]] = []
-    def replace_url_format(input_str):
-        if not input_str:
-            return " "
-        pattern = r'(\w+)\]\(([^)]+)\)'
-        def replacer(match):
-            param_a = match.group(1)
-            param_b = match.group(2)
-            if '://' in param_b:
-                return f'{param_a}]({param_b})'
-            return f'{param_a}](mqqapi://aio/inlinecmd?command={param_b}&enter=false&reply=false)'
-        return re.sub(pattern, replacer, input_str)
-    
-    for arg in arg_parts:
-        if '=' not in arg:
-            continue
-    
-        key, raw_value = arg.split('=', 1)
-        key = key.strip()
-
-        # 处理值中的特殊字符
-        value = raw_value.replace("\\'", "'").replace('\\"', '"').replace("\\=", "=")  # 处理单引号和双引号
-        if value.startswith('\r'):
-            value = value.strip()
-            value = '\r' + value
-        else:
-            value = value.strip()
-        value = value.replace('\n', '\r')
-
-        if value.startswith('[') and value.endswith(']'):
-            # 处理列表值
-            inner_values = [replace_url_format(v.strip().strip('\'"')) for v in value[1:-1].split(',')]
-            params.append({"key": key, "values": inner_values})
-        else:
-            # 处理普通值
-            if not value:
-                value = " "
-            params.append({"key": key, "values": [value]})
 
     try:
         msg = MessageSegment.markdown_template(bot, template_id, params, button_id)

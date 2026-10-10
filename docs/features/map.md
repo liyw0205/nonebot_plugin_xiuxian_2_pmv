@@ -17,6 +17,7 @@
 地图平台 schema 与各 asset operation schema 由启动迁移 `map.001` 至 `map.016` 管理，按 game/player 数据库路由；请求路径不依赖旧 transaction service 创建回执表。
 ## 事务与失败回滚
 默认 repository 保留各动作的 operation replay、状态快照校验和失败回滚。旧事务实现集中在 `compatibility/legacy_map_transactions.py`；历史 `xiuxian/xiuxian_map/transaction_service.py` 只 re-export 旧名字。默认路径不调用这些实现；显式注入的 `LegacyMapRepository`、`LegacyCombatSettlementRepository` 或旧 `*_service` wrappers 仍可调用。此隔离未改变 ledger/schema，不需要数据库回滚。
+采集开始在同一 immediate UoW 比较 `map_cooldown.gather_cd_until` 快照并阻止仍有效的冷却；若发现到期的 active action，则先原子标记为 `expired` 并记录冷却，再返回冷却回执，不扣新行动体力。相同 operation ID 重放保留原结果与 `cooldown_until`。
 ## 定时任务
 无。
 ## 配置项
@@ -24,7 +25,7 @@
 ## 适配器差异
 消息层不包含战斗算法。
 ## 测试与手工验收
-覆盖体力不足、状态变化、背包容量和幂等重放。
+覆盖体力不足、状态变化、背包容量、采集冷却快照、过期 active action 恢复和幂等重放。
 ## 灰度开关、回滚和已知限制
 战斗引擎、Items/配置解析和静态地图 JSON 仍由显式旧 provider/transport adapter 提供；这不把事务 service 计入默认执行图。旧 service 仍可经 shim 导入，显式 rollback repositories 保持可用。此切片无 migration；既有 `map.001` 至 `map.016` 若需回退，应先恢复代码版本，不删除迁移数据。
 

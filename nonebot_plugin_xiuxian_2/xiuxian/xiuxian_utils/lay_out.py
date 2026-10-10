@@ -1,14 +1,16 @@
 import os
 import random
 import time
+import threading
+from dataclasses import dataclass
+from weakref import WeakSet
 from nonebot.log import logger
 from nonebot.rule import Rule
 from nonebot import get_driver
 from nonebot import get_bots, get_bot, require
 from enum import IntEnum, auto
-from collections import defaultdict
 from asyncio import get_running_loop
-from typing import DefaultDict, Dict, Any
+from typing import Dict
 from nonebot.matcher import Matcher
 from nonebot.params import Depends
 from ..adapter_compat import (
@@ -23,6 +25,7 @@ from ..adapter_compat import (
 )
 from ..messaging.delivery import delivery_service
 from ..xiuxian_config import XiuConfig, JsonConfig
+from ...bootstrap.legacy import register_legacy_shutdown
 from .utils import check_user, consume_player_stamina, get_msg_pic, get_user_profile, handle_send, recover_player_stamina
 
 
@@ -30,8 +33,13 @@ ADMIN_IDS = get_driver().config.superusers
 limit_all_message = require("nonebot_plugin_apscheduler").scheduler
 limit_all_stamina = require("nonebot_plugin_apscheduler").scheduler
 
-limit_all_data: Dict[str, Any] = {}
+_LIMIT_ALL_DATA_MAX_KEYS = 100000
+_RATE_LIMIT_KEY_MAX_LENGTH = 512
+_RATE_LIMIT_BLOCKED = -1
+limit_all_data: Dict[str, int] = {}
 limit_num = 99999
+_limit_all_data_lock = threading.Lock()
+_limit_all_capacity_warned = False
 
 
 @limit_all_message.scheduled_job(
@@ -43,9 +51,10 @@ limit_num = 99999
     misfire_grace_time=30,
 )
 def limit_all_message_():
-    # 重置消息字典
-    global limit_all_data
-    limit_all_data  = {}
+    global _limit_all_capacity_warned
+    with _limit_all_data_lock:
+        limit_all_data.clear()
+        _limit_all_capacity_warned = False
     logger.opt(colors=True).success(f"<green>已重置消息字典！</green>")
 
 @limit_all_stamina.scheduled_job(
@@ -75,30 +84,41 @@ def limit_all_stamina_():
         logger.warning(f"体力恢复定时任务耗时过长：{elapsed:.2f}s，更新用户数：{updated}")
 
 def limit_all_run(user_id: str):
-    global limit_all_data
+    global _limit_all_capacity_warned
     user_id = str(user_id)
-    num = None
-    tip = None
-    try:
-        num = limit_all_data[user_id]["num"]
-        tip = limit_all_data[user_id]["tip"]
-    except Exception:
-        limit_all_data[user_id] = {"num": 0,
-                                   "tip" : False}
-        num = 0
-        tip = False
-    num += 1    
-    if num > limit_num and tip == False:
-        tip = True
-        limit_all_data[user_id]["num"] = num
-        limit_all_data[user_id]["tip"] = tip
-        return True
-    if num > limit_num and tip == True:
-        limit_all_data[user_id]["num"] = num
+    if len(user_id) > _RATE_LIMIT_KEY_MAX_LENGTH:
         return False
-    else:
-        limit_all_data[user_id]["num"] = num
-        return None
+
+    should_warn = False
+    with _limit_all_data_lock:
+        count = limit_all_data.get(user_id)
+        if count == _RATE_LIMIT_BLOCKED:
+            return False
+        if count is None:
+            if len(limit_all_data) >= _LIMIT_ALL_DATA_MAX_KEYS:
+                if not _limit_all_capacity_warned:
+                    _limit_all_capacity_warned = True
+                    should_warn = True
+                result = False
+            else:
+                count = 0
+                result = None
+        else:
+            result = None
+
+        if count is not None:
+            count += 1
+            if count > limit_num:
+                limit_all_data[user_id] = _RATE_LIMIT_BLOCKED
+                result = True
+            else:
+                limit_all_data[user_id] = count
+
+    if should_warn:
+        logger.warning(
+            "消息限流用户表达到容量上限；新用户将在下次重置前被静默拒绝"
+        )
+    return result
 
 
 def format_time(seconds: int) -> str:
@@ -213,6 +233,78 @@ class CooldownIsolateLevel(IntEnum):
     USER = auto()
     GROUP_USER = auto()
 
+
+class _CooldownKeyBudget:
+    def __init__(self, max_keys: int):
+        self.max_keys = max_keys
+        self._active_keys = 0
+        self._lock = threading.Lock()
+        self._capacity_warned = False
+
+    def reserve(self) -> bool:
+        with self._lock:
+            if self._active_keys >= self.max_keys:
+                return False
+            self._active_keys += 1
+            return True
+
+    def release(self) -> None:
+        with self._lock:
+            if self._active_keys > 0:
+                self._active_keys -= 1
+
+    def should_warn_capacity(self) -> bool:
+        with self._lock:
+            if self._capacity_warned:
+                return False
+            self._capacity_warned = True
+            return True
+
+    @property
+    def active_keys(self) -> int:
+        with self._lock:
+            return self._active_keys
+
+
+_COOLDOWN_MAX_ACTIVE_KEYS = 65536
+_cooldown_key_budget = _CooldownKeyBudget(_COOLDOWN_MAX_ACTIVE_KEYS)
+
+
+@dataclass(slots=True)
+class _CooldownState:
+    remaining: int
+    started_at: int | None = None
+
+
+class _CooldownRuntime:
+    """Own active cooldown timers so lifecycle shutdown can release closures."""
+
+    def __init__(self) -> None:
+        self.running: Dict[str, _CooldownState] = {}
+        self.handles: set[object] = set()
+
+    def clear(self) -> None:
+        for handle in tuple(self.handles):
+            cancel = getattr(handle, "cancel", None)
+            if callable(cancel):
+                cancel()
+        self.handles.clear()
+        released = len(self.running)
+        self.running.clear()
+        for _ in range(released):
+            _cooldown_key_budget.release()
+
+
+_cooldown_runtimes: WeakSet[_CooldownRuntime] = WeakSet()
+
+
+def _shutdown_cooldown_runtimes() -> None:
+    for runtime in tuple(_cooldown_runtimes):
+        runtime.clear()
+
+
+register_legacy_shutdown(_shutdown_cooldown_runtimes)
+
 def Cooldown(
         cd_time: float = 0.5,
         isolate_level: CooldownIsolateLevel = CooldownIsolateLevel.USER,
@@ -241,15 +333,17 @@ def Cooldown(
             f"invalid isolate level: {isolate_level!r}, "
             "isolate level must use provided enumerate value."
         )
-    running: DefaultDict[str, int] = defaultdict(lambda: parallel)
-    time_sy: Dict[str, int] = {}
-    
+    runtime = _CooldownRuntime()
+    _cooldown_runtimes.add(runtime)
+    running = runtime.running
 
-    def increase(key: str, value: int = 1):
-        running[key] += value
-        if running[key] >= parallel:
+    def increase(key: str, state: _CooldownState):
+        if running.get(key) is not state:
+            return
+        state.remaining += 1
+        if state.remaining >= parallel:
             del running[key]
-            del time_sy[key]
+            _cooldown_key_budget.release()
         return
 
     async def dependency(bot: Bot, matcher: Matcher, event: MessageEvent | PrivateMessageEvent):
@@ -323,6 +417,9 @@ def Cooldown(
             )
         else:
             key = CooldownIsolateLevel.GLOBAL.name
+
+        if len(key) > _RATE_LIMIT_KEY_MAX_LENGTH:
+            await matcher.finish()
 
         # 修仙开关：默认开启；禁用列表里的群仅限制修仙，不限制娱乐
         if (
@@ -409,12 +506,26 @@ def Cooldown(
                     await matcher.finish()
         if cd_time <= 0:
             return
-        if running[key] <= 0:
+
+        state = running.get(key)
+        if state is None:
+            if not _cooldown_key_budget.reserve():
+                if _cooldown_key_budget.should_warn_capacity():
+                    logger.warning(
+                        "命令冷却状态达到进程级容量上限；新 key 将被静默拒绝"
+                    )
+                await matcher.finish()
+            state = _CooldownState(remaining=parallel)
+            running[key] = state
+
+        if state.remaining <= 0:
             if cd_time >= 1.5:
                 # 全量群：闲聊/表情静默；正常艾特/指令保留冷却提示
                 if _should_silence_full_group_notice(conf, group_id, event, matcher):
                     await matcher.finish()
-                time = int(cd_time - (loop.time() - time_sy[key]))
+                if state.started_at is None:
+                    await matcher.finish()
+                time = int(cd_time - (loop.time() - state.started_at))
                 if time <= 1:
                     time = 1
                 formatted_time = format_time(time)
@@ -424,9 +535,22 @@ def Cooldown(
             else:
                 await matcher.finish()
         else:
-            time_sy[key] = int(loop.time())
-            running[key] -= 1
-            loop.call_later(cd_time, lambda: increase(key))
+            state.started_at = int(loop.time())
+            state.remaining -= 1
+            timer_ref: list[object | None] = [None]
+
+            def on_timer() -> None:
+                timer_handle = timer_ref[0]
+                if timer_handle is not None:
+                    runtime.handles.discard(timer_handle)
+                increase(key, state)
+
+            timer_handle = loop.call_later(cd_time, on_timer)
+            # TimerHandle is intentionally kept only until it fires or shutdown;
+            # this lets shutdown cancel callbacks that still capture event data.
+            if timer_handle is not None:
+                runtime.handles.add(timer_handle)
+            timer_ref[0] = timer_handle
         return
 
     return Depends(dependency)

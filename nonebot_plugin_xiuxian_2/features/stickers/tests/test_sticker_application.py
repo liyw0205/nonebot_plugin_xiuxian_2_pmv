@@ -10,8 +10,8 @@ from urllib.request import Request
 
 import pytest
 
-from nonebot_plugin_xiuxian_2.features.stickers.factory import build_sticker_application
-from nonebot_plugin_xiuxian_2.features.stickers.repository import (
+from ..factory import build_sticker_application
+from ..repository import (
     MAX_STICKER_ARCHIVE_BYTES,
     MAX_STICKER_ARCHIVE_MEMBERS,
     StickerRepository,
@@ -251,7 +251,7 @@ def test_archive_download_byte_limit_is_enforced(tmp_path: Path):
 
 
 def test_application_deduplicates_running_jobs():
-    from nonebot_plugin_xiuxian_2.features.stickers.application import StickerApplication
+    from ..application import StickerApplication
 
     app = StickerApplication(StickerRepository("/unused"), thread_starter=lambda target: None)
     first = app.start_install("memes")

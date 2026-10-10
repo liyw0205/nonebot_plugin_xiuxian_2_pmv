@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import ast
 import inspect
+import textwrap
 import tempfile
 import unittest
 from pathlib import Path
@@ -74,6 +76,16 @@ class LegacyApplicationContractTests(unittest.TestCase):
                 and method != "reroll_root"
                 and not method.startswith("replay_")
                 and not method.endswith("_replay")
+                # Native SQL owners have dedicated state/parameter fixtures;
+                # this contract exercises the injected legacy dispatch port.
+                and any(
+                    isinstance(node, ast.Call)
+                    and isinstance(node.func, ast.Attribute)
+                    and isinstance(node.func.value, ast.Name)
+                    and node.func.value.id == "self"
+                    and node.func.attr == "_action"
+                    for node in ast.walk(ast.parse(textwrap.dedent(inspect.getsource(value))))
+                )
                 and {"operation_id", "user_id"}.issubset(
                     inspect.signature(value).parameters
                 )
@@ -98,13 +110,14 @@ class LegacyApplicationContractTests(unittest.TestCase):
                     replay = getattr(service, action)(operation_id=f"{application.__name__}-{index}", user_id="user")
                     self.assertEqual(replay.status, "replayed", (application.__name__, action, replay))
 
-                repository.status = "rejected"
-                rejected = getattr(service, actions[0])(operation_id="rejected", user_id="user")
-                self.assertFalse(rejected.ok)
+                    repository.status = "rejected"
+                    rejected = getattr(service, action)(operation_id=f"rejected-{index}", user_id="user")
+                    self.assertFalse(rejected.ok, (application.__name__, action, rejected))
 
-                repository.status = "error"
-                with self.assertRaises(RuntimeError):
-                    getattr(service, actions[0])(operation_id="failed", user_id="user")
+                    repository.status = "error"
+                    with self.assertRaises(RuntimeError):
+                        getattr(service, action)(operation_id=f"failed-{index}", user_id="user")
+                    repository.status = "applied"
 
 
 if __name__ == "__main__":

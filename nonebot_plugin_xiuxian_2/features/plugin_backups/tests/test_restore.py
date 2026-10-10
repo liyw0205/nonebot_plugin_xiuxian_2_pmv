@@ -8,12 +8,12 @@ from types import SimpleNamespace
 from pathlib import Path
 from unittest.mock import patch
 
-from nonebot_plugin_xiuxian_2.features.plugin_backups import (
+from .. import (
     InvalidPluginBackupArchive,
     PluginBackupRestoreApplication,
     PluginBackupRestoreRepository,
 )
-from nonebot_plugin_xiuxian_2.features.plugin_backups import restore_repository
+from .. import restore_repository
 
 
 PLUGIN_ROOT = "src/plugins/nonebot_plugin_xiuxian_2"

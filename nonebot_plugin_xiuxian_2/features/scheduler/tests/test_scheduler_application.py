@@ -4,7 +4,7 @@ from unittest.mock import Mock
 
 import pytest
 
-from nonebot_plugin_xiuxian_2.features.scheduler.application import SchedulerAdminApplication
+from ..application import SchedulerAdminApplication
 
 
 _CASES = (

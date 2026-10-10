@@ -1,3 +1,4 @@
+import ast
 from pathlib import Path
 
 
@@ -5,17 +6,26 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_sticker_download_archive_is_removed_after_extraction() -> None:
-    source = (ROOT / "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/stickers.py").read_text(
+    source = (ROOT / "nonebot_plugin_xiuxian_2/features/stickers/repository.py").read_text(
         encoding="utf-8"
     )
-    install = source[source.index("def install_stickers(") : source.index("def _run_install_job", source.index("def install_stickers("))]
+    tree = ast.parse(source)
+    method = next(node for node in ast.walk(tree) if isinstance(node, ast.FunctionDef) and node.name == "install_pack")
+    install = ast.get_source_segment(source, method)
     assert "try:" in install
-    assert "meta = _extract_pack_zip(cache_path, selected_id)" in install
-    assert "cache_path.unlink(missing_ok=True)" in install
+    assert "self._extract_to_staging(archive_path, selected_id)" in install
+    cleanup = [ast.unparse(statement) for node in ast.walk(method) if isinstance(node, ast.Try) for statement in node.finalbody]
+    assert "archive_path.unlink(missing_ok=True)" in cleanup
     assert "MAX_STICKER_ARCHIVE_BYTES" in source
     assert "MAX_STICKER_UNCOMPRESSED_BYTES" in source
-    assert "source.read(64 * 1024)" in source
+    assert "source.read(DOWNLOAD_CHUNK_BYTES)" in source
+    schemas = (ROOT / "nonebot_plugin_xiuxian_2/features/stickers/schemas.py").read_text(encoding="utf-8")
+    assert "DOWNLOAD_CHUNK_BYTES = 64 * 1024" in schemas
     assert "def _download_file(" in source
+    facade = (ROOT / "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/stickers.py").read_text(encoding="utf-8")
+    application = (ROOT / "nonebot_plugin_xiuxian_2/features/stickers/application.py").read_text(encoding="utf-8")
+    assert "sticker_application.start_install(" in facade
+    assert "self._repository.install_pack(" in application
 
 
 def test_web_upload_cache_has_age_and_count_bounds() -> None:

@@ -1,18 +1,15 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from typing import Any
+from typing import Any, TYPE_CHECKING
 
-from ...xiuxian.xiuxian_activity.activity_config import (
-    DEFAULT_ACTIVITY_PASS,
-    _migrate_config,
-)
-from ...xiuxian.xiuxian_activity.config_event_service import (
-    ActivityConfigMutationResult,
-    ActivityConfigState,
-)
-from ...xiuxian.xiuxian_activity.activity_utils import _clean_text
 from .config_repository import ActivityConfigSqlRepository
+
+if TYPE_CHECKING:
+    from ...xiuxian.xiuxian_activity.config_event_service import (
+        ActivityConfigMutationResult,
+        ActivityConfigState,
+    )
 
 
 class ActivityConfigApplication:
@@ -58,6 +55,9 @@ class ActivityConfigApplication:
         target: str | None = None,
         operator_id: str = "",
     ) -> str:
+        from ...xiuxian.xiuxian_activity.activity_config import DEFAULT_ACTIVITY_PASS, _migrate_config
+        from ...xiuxian.xiuxian_activity.activity_utils import _clean_text
+
         operation_id = str(operation_id or "").strip()
         if not operation_id:
             raise ValueError("operation_id is required")

@@ -5,33 +5,13 @@ from pathlib import Path
 from typing import Any, Iterator, Mapping
 
 from ...infrastructure.database import DatabaseUnitOfWork
-
-ECONOMY_LOG_FIELDS = (
-    "id",
-    "user_id",
-    "sect_id",
-    "source",
-    "action",
-    "stone_delta",
-    "exp_delta",
-    "sect_contribution_delta",
-    "sect_scale_delta",
-    "sect_materials_delta",
-    "item_delta",
-    "detail",
-    "trace_id",
-    "created_at",
+from .schemas import (
+    DEFAULT_ANOMALY_STONE_DELTA,
+    DELTA_FIELDS,
+    ECONOMY_LOG_FIELDS,
+    FILTER_FIELDS,
+    QUICK_PRESETS,
 )
-FILTER_FIELDS = ("user_id", "sect_id", "source", "action", "trace_id")
-DELTA_FIELDS = (
-    "stone_delta",
-    "exp_delta",
-    "sect_contribution_delta",
-    "sect_scale_delta",
-    "sect_materials_delta",
-)
-DEFAULT_ANOMALY_STONE_DELTA = 100000000
-QUICK_PRESETS = {"today": ("今天", 0), "7d": ("近7天", 6), "30d": ("近30天", 29)}
 _BASE_COLUMNS = frozenset(ECONOMY_LOG_FIELDS)
 
 

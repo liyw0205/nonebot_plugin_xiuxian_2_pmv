@@ -7,10 +7,10 @@ import zipfile
 from pathlib import Path
 from unittest.mock import patch
 
-from nonebot_plugin_xiuxian_2.features.plugin_backups.cloud_application import (
+from ..cloud_application import (
     PluginBackupCloudApplication,
 )
-from nonebot_plugin_xiuxian_2.features.plugin_backups.cloud_repository import (
+from ..cloud_repository import (
     InvalidCloudPluginBackup,
     PluginBackupCloudRepository,
 )

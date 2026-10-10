@@ -15,6 +15,13 @@ class WorkSettlementEffects:
         statistics: Callable[[str, str], object] | None = None,
         progress: Callable[..., object] | None = None,
     ) -> None:
+        self._logger = logger
+        self._statistics = statistics
+        self._progress = progress
+
+    def apply(self, *, user_id: str, message: str, operation_id: str) -> None:
+        # Maintenance startup builds the owner without loading command matchers.
+        logger, statistics, progress = self._logger, self._statistics, self._progress
         if logger is None or statistics is None:
             from ...xiuxian.xiuxian_utils.utils import log_message, update_statistics_value
 
@@ -28,7 +35,6 @@ class WorkSettlementEffects:
         self._statistics = statistics
         self._progress = progress
 
-    def apply(self, *, user_id: str, message: str, operation_id: str) -> None:
         self._logger(str(user_id), str(message))
         self._statistics(str(user_id), "悬赏令结算次数")
         self._progress(

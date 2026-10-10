@@ -175,6 +175,7 @@ class ActivityAdminDataTests(unittest.TestCase):
                 stack.enter_context(context)
             stack.enter_context(patch.object(service, "load_config", return_value=self.config))
             stack.enter_context(patch.object(service, "DB_PATH", self.database))
+            stack.enter_context(patch.object(service, "today_str", return_value="2026-10-06"))
             stack.enter_context(
                 patch.object(
                     service,

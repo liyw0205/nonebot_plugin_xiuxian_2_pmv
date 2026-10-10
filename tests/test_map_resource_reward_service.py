@@ -21,7 +21,9 @@ class MapResourceRewardServiceTests(unittest.TestCase):
         self.assertNotIn("XiuxianDateManage", source)
         self.assertNotIn("PlayerDataManager", source)
         self.assertNotIn("transaction_service", source)
-        self.assertIn("map_application.nearby_players(", source)
+        self.assertIn("await map_application.nearby_display(", source)
+        self.assertIn("map_application.nearby_target(", source)
+        self.assertIn("await map_application.random_nearby_target(", source)
         self.assertIn("map_application.map_status(", source)
         self.assertIn("map_application.save_status(", source)
 

@@ -6,13 +6,22 @@ from pathlib import Path
 
 from ....core.errors import OperationConflictError
 from ....infrastructure.database import DatabaseUnitOfWork
+from ....plugin import apply_platform_schema
 from ..application import DailyFortuneApplication
+from ..migrations import apply_daily_fortune
+
+
+def _application(database: Path) -> DailyFortuneApplication:
+    with DatabaseUnitOfWork(database) as uow:
+        apply_platform_schema(uow)
+        apply_daily_fortune(uow)
+    return DailyFortuneApplication(str(database))
 
 
 class DailyFortuneServiceTests(unittest.TestCase):
     def test_claim_is_idempotent(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            app = DailyFortuneApplication(str(Path(directory) / "game.db"))
+            app = _application(Path(directory) / "game.db")
             first = app.claim(user_id="u", operation_id="op", date="2026-09-12")
             replay = app.claim(user_id="u", operation_id="op", date="2026-09-12")
             self.assertEqual(first.status, "applied")
@@ -20,7 +29,7 @@ class DailyFortuneServiceTests(unittest.TestCase):
 
     def test_same_day_and_rejected_replay_do_not_mutate_twice(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            app = DailyFortuneApplication(str(Path(directory) / "game.db"))
+            app = _application(Path(directory) / "game.db")
             first = app.claim(user_id="u", operation_id="first", date="2026-09-12")
             rejected = app.claim(user_id="u", operation_id="second", date="2026-09-12")
             replay = app.claim(user_id="u", operation_id="second", date="2026-09-12")
@@ -31,7 +40,7 @@ class DailyFortuneServiceTests(unittest.TestCase):
 
     def test_operation_payload_conflict_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            app = DailyFortuneApplication(str(Path(directory) / "game.db"))
+            app = _application(Path(directory) / "game.db")
             app.claim(user_id="u", operation_id="same", date="2026-09-12")
             with self.assertRaises(OperationConflictError):
                 app.claim(user_id="other", operation_id="same", date="2026-09-12")
@@ -39,9 +48,8 @@ class DailyFortuneServiceTests(unittest.TestCase):
     def test_database_failure_rolls_back_and_is_retryable(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             database = Path(directory) / "game.db"
-            app = DailyFortuneApplication(str(database))
+            app = _application(database)
             with DatabaseUnitOfWork(database) as uow:
-                uow.execute("CREATE TABLE daily_fortune_claims (user_id TEXT, fortune_date TEXT, score INTEGER, title TEXT, message TEXT, operation_id TEXT, created_at TEXT, PRIMARY KEY(user_id, fortune_date))")
                 uow.execute("CREATE TRIGGER fail_fortune BEFORE INSERT ON daily_fortune_claims BEGIN SELECT RAISE(ABORT, 'blocked'); END")
             with self.assertRaisesRegex(Exception, "blocked"):
                 app.claim(user_id="u", operation_id="retry", date="2026-09-12")

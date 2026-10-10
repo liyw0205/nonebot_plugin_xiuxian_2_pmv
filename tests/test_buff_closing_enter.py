@@ -30,7 +30,7 @@ def test_closing_enter_adapter_keeps_replay_and_eligibility_replies() -> None:
     handler = _closing_handler_source()
 
     assert 'if result_status == "ineligible"' in handler
-    assert 'if result_status == "duplicate" or result.replayed' in handler
+    assert 'if result.ok and (result_status == "duplicate" or result.replayed)' in handler
     assert "进入闭关状态，如需出关，发送【出关】！" in handler
     assert "该闭关请求已经处理，无需重复提交。" in handler
     assert "凡人无法闭关！" in handler

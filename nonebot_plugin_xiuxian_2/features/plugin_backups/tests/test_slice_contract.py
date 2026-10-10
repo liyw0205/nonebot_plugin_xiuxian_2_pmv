@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unittest
 
-from nonebot_plugin_xiuxian_2.features.plugin_backups import (
+from .. import (
     cloud_application,
     cloud_repository,
     commands,
@@ -15,7 +15,7 @@ from nonebot_plugin_xiuxian_2.features.plugin_backups import (
     schemas,
     web,
 )
-from nonebot_plugin_xiuxian_2.features.plugin_backups.manifest import FEATURE
+from ..manifest import FEATURE
 from tests.slice_contract import assert_contract_is_single_source, assert_no_autonomous_surface
 
 CLOUD_APPLICATION_NAMES = ("MAX_CLOUD_BACKUP_BATCH", "MAX_CLOUD_LIST_ENTRIES")

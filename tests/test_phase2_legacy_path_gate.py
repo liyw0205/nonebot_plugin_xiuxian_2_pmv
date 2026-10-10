@@ -748,7 +748,7 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
         self.assertTrue(all(item["call_graph"] and item["evidence"] for item in report["items"]))
         self.assertEqual(report["default_legacy_command_count"], 637)
         self.assertEqual(report["default_legacy_command_backlog_count"], 323)
-        self.assertEqual(len(report["backlog"]), 328)
+        self.assertEqual(len(report["backlog"]), 327)
         self.assertEqual(
             report["default_legacy_command_discovery"],
             "static_ast_startup_import_closure_not_live_runtime_observation",
@@ -871,10 +871,9 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
         self.assertTrue(
             any("shared operational message-history writer" in edge for edge in newapi_help["call_graph"])
         )
-        cooldown_risk = next(
-            item for item in report["backlog"] if item["id"] == "legacy-cooldown-rate-map-cardinality"
+        self.assertFalse(
+            any(item["id"] == "legacy-cooldown-rate-map-cardinality" for item in report["backlog"])
         )
-        self.assertEqual(cooldown_risk["source"], "command:entertainment:newapi帮助")
         self.assertEqual(report["p7_gate"]["status"], "independent")
 
     def test_media_parse_command_and_regex_evidence_are_source_bound(self):

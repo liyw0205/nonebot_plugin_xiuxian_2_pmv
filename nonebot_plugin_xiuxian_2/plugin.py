@@ -222,6 +222,13 @@ from .features.scheduler.manifest import FEATURE as SCHEDULER_FEATURE
 from .features.updater.manifest import FEATURE as UPDATER_FEATURE
 from .features.database_console.manifest import FEATURE as DATABASE_CONSOLE_FEATURE
 from .features.terminal.manifest import FEATURE as TERMINAL_FEATURE
+from .features.plugin_config.manifest import FEATURE as PLUGIN_CONFIG_FEATURE
+from .features.qq_bind.manifest import FEATURE as QQ_BIND_FEATURE
+from .features.group_lifecycle.manifest import FEATURE as GROUP_LIFECYCLE_FEATURE
+from .features.fallback.manifest import FEATURE as FALLBACK_FEATURE
+from .features.game_events.manifest import FEATURE as GAME_EVENTS_FEATURE
+from .features.economy_ledger.manifest import FEATURE as ECONOMY_LEDGER_FEATURE
+from .features.logs.manifest import FEATURE as LOGS_FEATURE
 from .features._legacy_migrated import (
     APPLICATIONS as LEGACY_MIGRATED_APPLICATIONS,
     FEATURES as LEGACY_MIGRATED_FEATURES,
@@ -719,6 +726,9 @@ def build_registry(*, disabled: set[str] | frozenset[str] | tuple[str, ...] = ()
         registry.register(DAILY_FORTUNE_FEATURE)
     if DUNGEON_FEATURE.key not in disabled:
         registry.register(DUNGEON_FEATURE)
+    registry.register(ECONOMY_LEDGER_FEATURE)
+    if GAME_EVENTS_FEATURE.key not in disabled:
+        registry.register(GAME_EVENTS_FEATURE)
     if ILLUSION_FEATURE.key not in disabled:
         registry.register(ILLUSION_FEATURE)
     if INTERACTIVE_FEATURE.key not in disabled:
@@ -774,6 +784,11 @@ def build_registry(*, disabled: set[str] | frozenset[str] | tuple[str, ...] = ()
     registry.register(UPDATER_FEATURE)
     registry.register(DATABASE_CONSOLE_FEATURE)
     registry.register(TERMINAL_FEATURE)
+    registry.register(PLUGIN_CONFIG_FEATURE)
+    registry.register(QQ_BIND_FEATURE)
+    registry.register(GROUP_LIFECYCLE_FEATURE)
+    registry.register(FALLBACK_FEATURE)
+    registry.register(LOGS_FEATURE)
     registry.register(LEGACY_SCHEDULER_FEATURE)
     registry.register_many(LEGACY_FEATURES)
     return registry
@@ -965,8 +980,8 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
         lottery_service = None
         lottery_application_type = None
         if context.legacy_startup:
-            # Keep historical lottery/statistics/task behavior at the adapter
-            # boundary while the side effects are migrated independently.
+            # Legacy startup only supplies the adapter-owned dependencies;
+            # lottery, statistics, and task projections stay feature-owned.
             try:
                 from nonebot import get_driver
 

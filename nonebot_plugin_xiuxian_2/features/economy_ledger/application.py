@@ -5,13 +5,15 @@ from pathlib import Path
 from typing import Any, Mapping
 
 from ...infrastructure.clock import SystemClock
-from .repository import EconomyLedgerSqlRepository, QUICK_PRESETS
-
-FILTER_FIELDS = ("user_id", "sect_id", "source", "action", "trace_id")
-TIME_FILTER_FIELDS = ("start_time", "end_time")
-DEFAULT_PAGE_SIZE = 100
-MAX_PAGE_SIZE = 500
-DEFAULT_ANOMALY_STONE_DELTA = 100000000
+from .repository import EconomyLedgerSqlRepository
+from .schemas import (
+    DEFAULT_ANOMALY_STONE_DELTA,
+    DEFAULT_PAGE_SIZE,
+    FILTER_FIELDS,
+    MAX_PAGE_SIZE,
+    QUICK_PRESETS,
+    TIME_FILTER_FIELDS,
+)
 
 
 def _parse_positive_int(raw_value: Any, default: int, min_value: int = 1, max_value: int | None = None) -> int:

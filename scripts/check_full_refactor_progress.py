@@ -1162,6 +1162,8 @@ def _slice_status() -> dict[str, dict[str, object]]:
     tianti_settlement_application = (PACKAGE / "features" / "tianti_settlement" / "application.py").read_text(encoding="utf-8")
     sect_fairyland_claim_repository = (PACKAGE / "features" / "sect_fairyland" / "claim_repository.py").read_text(encoding="utf-8")
     sign_effects = (PACKAGE / "features" / "sign_in" / "application_effects.py").read_text(encoding="utf-8")
+    sign_task_effects = (PACKAGE / "features" / "sign_in" / "task_effects.py").read_text(encoding="utf-8")
+    sign_commands = (PACKAGE / "features" / "sign_in" / "commands.py").read_text(encoding="utf-8")
     sign_application = (PACKAGE / "features" / "sign_in" / "application.py").read_text(encoding="utf-8")
     sign_daily_reset_repository = (PACKAGE / "features" / "sign_in" / "daily_reset_repository.py").read_text(encoding="utf-8")
     sign_daily_reset_tests = (PACKAGE / "features" / "sign_in" / "tests" / "test_daily_reset_repository.py").read_text(encoding="utf-8")
@@ -1185,6 +1187,8 @@ def _slice_status() -> dict[str, dict[str, object]]:
     ]
     tasks_migrations = (PACKAGE / "features" / "tasks" / "migrations.py").read_text(encoding="utf-8")
     compensation_repository = (PACKAGE / "features" / "compensation" / "reward_claim_repository.py").read_text(encoding="utf-8")
+    compensation_repository_owner = (PACKAGE / "features" / "compensation" / "repository.py").read_text(encoding="utf-8")
+    compensation_application = (PACKAGE / "features" / "compensation" / "application.py").read_text(encoding="utf-8")
     compensation_invitation_repository = (PACKAGE / "features" / "compensation" / "invitation_repository.py").read_text(encoding="utf-8")
     compensation_migrations = (PACKAGE / "features" / "compensation" / "migrations.py").read_text(encoding="utf-8")
     compensation_legacy_migrated = (PACKAGE / "features" / "_legacy_migrated.py").read_text(encoding="utf-8")
@@ -1535,6 +1539,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
     map_legacy_shim = (PACKAGE / "xiuxian" / "xiuxian_map" / "transaction_service.py").read_text(encoding="utf-8")
     map_compatibility = (PACKAGE / "compatibility" / "legacy_map_transactions.py").read_text(encoding="utf-8")
     map_repository = (PACKAGE / "features" / "map" / "repository.py").read_text(encoding="utf-8")
+    map_interactive_start_tests = (PACKAGE / "features" / "map" / "tests" / "test_map_interactive_start_repository.py").read_text(encoding="utf-8")
     map_random_repository = (PACKAGE / "features" / "map" / "random_target_repository.py").read_text(encoding="utf-8")
     map_random_query = (PACKAGE / "features" / "map" / "random_target_query.py").read_text(encoding="utf-8")
     map_display_repository = (PACKAGE / "features" / "map" / "nearby_display_repository.py").read_text(encoding="utf-8")
@@ -2243,8 +2248,18 @@ def _slice_status() -> dict[str, dict[str, object]]:
                 and "DELETE FROM reward_claim_counters" in compensation_migrations
             ),
             "reward_web_counts_use_sql_aggregates": (
-                "return get_claim_count(config, record_id)" in compensation_reward_center
-                and "get_reward_used_count(" in compensation_reward_center
+                "def _serialize_records(kind: str)" in compensation_reward_center
+                and "for row in reward_center_records(config)" in compensation_reward_center
+                and "records=_serialize_records(kind)" in compensation_reward_center
+                and 'return _compensation_application().reward_center_records(config["type_key"])' in compensation_common
+                and "def reward_center_records(self, reward_type)" in compensation_application
+                and "return self.repository.reward_center_records(reward_type)" in compensation_application
+                and "def reward_center_records(self, reward_type)" in compensation_repository_owner
+                and "return self.reward_center.list_records(reward_type)" in compensation_repository_owner
+                and "COUNT(*) AS claimed_count" in compensation_repository_owner
+                and "GROUP BY record_id" in compensation_repository_owner
+                and "LEFT JOIN" in compensation_repository_owner
+                and "DatabaseUnitOfWork(self.database, read_only=True)" in compensation_repository_owner
                 and "load_claimed_data" not in compensation_reward_center
             ),
             "reward_web_definition_saves_use_sql": (
@@ -2276,9 +2291,23 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "lottery_service_isolated": "class LotterySettlementService" not in legacy_transaction and (PACKAGE / "compatibility" / "legacy_base_lottery.py").is_file(),
             "effects_application_owned": "SignInApplicationEffects" in sign_effects and "SignInApplicationEffects(" in plugin,
             "effects_outbox_reconcile_owned": '"sign_in.effects"' in plugin and "reconcile_outbox_event" in sign_application,
-            "task_core_legacy": "SignInTaskEffects(record_task_progress)" in plugin,
-            "lottery_core_default_legacy": "LotteryApplication(" not in plugin or "LotterySettlementService" in plugin,
-            "lottery_compatibility_fallback": "XIUXIAN_SIGN_IN_LEGACY_LOTTERY" in plugin and "LotterySettlementService" in plugin,
+            "task_application_owned": (
+                "class ApplicationSignInTaskEffects" in sign_task_effects
+                and "ApplicationSignInTaskEffects" in plugin
+                and "tasks=ApplicationSignInTaskEffects(" in plugin
+                and "SignInTaskEffects(record_task_progress)" not in plugin
+            ),
+            "lottery_application_owned": (
+                "lottery_service = LotteryApplication(" in plugin
+                and "LotterySettlementService" not in plugin
+            ),
+            "legacy_fallback_explicit_only": (
+                "legacy_settle: Any | None = None" in sign_commands
+                and "return legacy_settle(" in sign_commands
+                and "legacy_settle=" not in base
+                and "XIUXIAN_SIGN_IN_LEGACY_LOTTERY" not in plugin
+                and "LotterySettlementService" not in plugin
+            ),
             "lottery_scheduler_application_owned": "_lottery_application().snapshot(" in base and "lottery_settlement_service" not in base,
             "legacy_lottery_scheduler_disabled": "lottery_settlement_service" not in base,
             "daily_reset_application_owned": (
@@ -2308,7 +2337,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
                 and "首次重置任务若延迟到用户已签到之后" in sign_in_docs
                 and "scheduler timezone 由部署配置决定" in sign_in_docs
             ),
-            "status": "cutover_with_compatibility_rollback_side_effects_retained",
+            "status": "application_owned_effects_with_explicit_compatibility_rollback",
         },
         "tasks": {
             "progress_application_owned": "TaskProgressApplication(get_paths().player_db)" in tasks_entry,
@@ -4023,6 +4052,21 @@ def _slice_status() -> dict[str, dict[str, object]]:
                 and "_get_all_in_same_node" not in map_record_handler
             ),
             "interactive_application_owned": "map_application.interactive_settlement(" in map_facade and "map_application.interactive_start(" in map_facade,
+            "interactive_start_default_sql_cooldown_and_expiry_recovery_covered": (
+                "MapInteractiveStartSqlRepository(self.game_database, self.player_database).start" in map_application
+                and "current_cooldown != expected_cooldown" in map_repository
+                and "current_cooldown > str(action[\"start_ts\"])" in map_repository
+                and "expires_at > start_at" in map_repository
+                and "SET status='expired'" in map_repository
+                and all(
+                    marker in map_interactive_start_tests
+                    for marker in (
+                        "test_active_cooldown_is_enforced_and_replayed",
+                        "test_expired_active_action_is_closed_and_cooldown_started",
+                        "test_stale_cooldown_snapshot_rejected",
+                    )
+                )
+            ),
             "resource_application_owned": "map_application.resource_reward(" in map_facade,
             "combat_engine_injected": (
                 "await map_application.combat_battle(" in map_combat_handler
@@ -4096,7 +4140,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
                 ]
             ),
             "map_dtos_feature_owned": "features.map.schemas import" in map_facade and "class MapInteractiveActionResult" in (PACKAGE / "features" / "map" / "schemas.py").read_text(encoding="utf-8"),
-            "status": "map_actions_combat_runner_and_reward_resolution_feature_owned_with_explicit_legacy_adapters",
+            "status": "map_actions_with_interactive_cooldown_recovery_combat_runner_and_reward_resolution_feature_owned_with_explicit_legacy_adapters",
         },
         "tianti": {
             "frozen_display_commands_registered": all(
@@ -5535,7 +5579,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
                 and "operation_conflict" in buff_application_source
                 and "previous.replay()" in buff_application_source
                 and 'result_status == "ineligible"' in buff_closing_enter_handler
-                and 'result_status == "duplicate" or result.replayed' in buff_closing_enter_handler
+                and 'if result.ok and (result_status == "duplicate" or result.replayed)' in buff_closing_enter_handler
             ),
             "closing_enter_request_path_has_no_ddl": all(
                 token not in buff_closing_enter_repository

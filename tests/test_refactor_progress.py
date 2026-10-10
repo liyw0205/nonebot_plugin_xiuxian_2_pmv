@@ -215,7 +215,9 @@ class RefactorProgressTests(unittest.TestCase):
         self.assertTrue(arena["legacy_scheduler_disabled"])
         self.assertTrue(arena["daily_reward_application_owned"])
         self.assertTrue(arena["legacy_daily_reward_disabled"])
-        self.assertFalse(slices["sign_in"]["lottery_compatibility_fallback"])
+        self.assertTrue(slices["sign_in"]["legacy_fallback_explicit_only"])
+        self.assertTrue(slices["sign_in"]["task_application_owned"])
+        self.assertTrue(slices["sign_in"]["lottery_application_owned"])
         self.assertTrue(slices["sign_in"]["effects_outbox_reconcile_owned"])
         tasks = slices["tasks"]
         self.assertTrue(tasks["progress_application_owned"])

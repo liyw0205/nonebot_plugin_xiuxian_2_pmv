@@ -1,7 +1,7 @@
 """链接解析：指令 + 正则（文案内嵌短链）+ 自动提链。"""
 from ..command import *
 from ..room_store import entertainment_application
-from nonebot_plugin_xiuxian_2.features.entertainment.media_parser_messages import (
+from ....features.entertainment.media_parser_messages import (
     ANY_HTTP_RE,
     COMMAND_WITH_URL_RE,
     EMBEDDED_SHARE_MATCH_RE,

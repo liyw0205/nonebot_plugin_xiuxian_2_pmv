@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unittest
 
-from nonebot_plugin_xiuxian_2.features.config_backups import (
+from .. import (
     commands,
     jobs,
     migrations,
@@ -10,7 +10,7 @@ from nonebot_plugin_xiuxian_2.features.config_backups import (
     schemas,
     web,
 )
-from nonebot_plugin_xiuxian_2.features.config_backups.manifest import FEATURE
+from ..manifest import FEATURE
 from tests.slice_contract import assert_contract_is_single_source, assert_no_autonomous_surface
 
 REPOSITORY_NAMES = (

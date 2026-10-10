@@ -90,15 +90,14 @@ def test_get_json_rejects_streamed_overflow_without_content_length() -> None:
 
 
 def test_entertainment_json_helper_passes_response_limit() -> None:
-    from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_entertainment.command import (
-        _get_json_api_sync,
-    )
+    from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_entertainment import command
 
-    with patch(
-        "nonebot_plugin_xiuxian_2.xiuxian.xiuxian_entertainment.command.http_client.get_json",
+    with patch.object(
+        command.entertainment_application.external_query_provider.http_client,
+        "get_json",
         return_value={"data": []},
     ) as get_json:
-        result = _get_json_api_sync(
+        result = command._get_json_api_sync(
             "https://example.invalid/data", timeout=15, max_bytes=1024
         )
 

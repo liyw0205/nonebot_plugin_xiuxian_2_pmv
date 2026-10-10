@@ -6,16 +6,23 @@ from pathlib import Path
 
 from flask import Flask
 
+from ....infrastructure.database import DatabaseUnitOfWork
+from ....plugin import apply_platform_schema
 from ..application import DailyFortuneApplication
+from ..migrations import apply_daily_fortune
 from ..web import blueprint
 
 
 class DailyFortuneAdapterTests(unittest.TestCase):
     def test_api_uses_uniform_response_shape(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
+            database = Path(directory) / "game.db"
+            with DatabaseUnitOfWork(database) as uow:
+                apply_platform_schema(uow)
+                apply_daily_fortune(uow)
             app = Flask(__name__)
             app.secret_key = "test"
-            app.register_blueprint(blueprint(DailyFortuneApplication(str(Path(directory) / "game.db"))))
+            app.register_blueprint(blueprint(DailyFortuneApplication(str(database))))
             with app.test_client() as client:
                 response = client.get("/api/v1/daily-fortune?user_id=u")
                 self.assertEqual(response.status_code, 200)

@@ -3,8 +3,19 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Callable
 
-from ...xiuxian.xiuxian_activity.activity_storage import now_str, today_str
 from .admin_data_repository import ActivityAdminDataSqlRepository
+
+
+def _today_str() -> str:
+    from ...xiuxian.xiuxian_activity.activity_storage import today_str
+
+    return today_str()
+
+
+def _now_str() -> str:
+    from ...xiuxian.xiuxian_activity.activity_storage import now_str
+
+    return now_str()
 
 
 class ActivityAdminDataApplication:
@@ -19,8 +30,8 @@ class ActivityAdminDataApplication:
     ) -> None:
         self.repository = repository or ActivityAdminDataSqlRepository(database)
         self.config_loader = config_loader
-        self.today_provider = today_provider or today_str
-        self.timestamp_provider = timestamp_provider or now_str
+        self.today_provider = today_provider or _today_str
+        self.timestamp_provider = timestamp_provider or _now_str
 
     def _config(self) -> dict[str, Any]:
         if self.config_loader is not None:

@@ -6,6 +6,119 @@ from urllib.parse import quote, unquote
 from ..adapter_compat import get_user_id
 
 
+MARKDOWN_TEMPLATE_MAX_INPUT_BYTES = 64 * 1024
+MARKDOWN_TEMPLATE_MAX_PARAMS = 32
+MARKDOWN_TEMPLATE_MAX_LIST_VALUES = 32
+
+
+class MarkdownTemplateInputError(ValueError):
+    """Raised when a diagnostic Markdown template request exceeds its budget."""
+
+    def __init__(self, reason: str):
+        super().__init__(reason)
+        self.reason = reason
+
+
+def parse_markdown_template_args(
+    raw: str,
+    *,
+    markdown_id: str | None = None,
+    markdown_id2: str | None = None,
+    button_id: str | None = None,
+    button_id2: str | None = None,
+) -> tuple[str | None, str | None, list[dict[str, object]]]:
+    """Normalize and bound the arguments accepted by the ``md模板`` command."""
+    args_str = str(raw or "")
+    if len(args_str.encode("utf-8")) > MARKDOWN_TEMPLATE_MAX_INPUT_BYTES:
+        raise MarkdownTemplateInputError("input_bytes")
+
+    args_str = re.sub(r"mqqapi:/aio", "mqqapi://aio", args_str)
+    args_str = args_str.replace("\\r", "\r").replace('\\"', '"')
+    args_str = args_str.replace(":/", "://").replace(":///", "://")
+    if not args_str:
+        raise MarkdownTemplateInputError("missing_args")
+
+    id_match = re.search(r"mid=([^\s]+)", args_str)
+    button_id_match = re.search(r"bid=([^\s]+)", args_str)
+    template_id_input = id_match.group(1) if id_match else None
+    button_id_input = button_id_match.group(1) if button_id_match else None
+
+    template_id = None
+    if template_id_input:
+        if template_id_input == "1":
+            template_id = markdown_id
+        elif template_id_input == "2":
+            template_id = markdown_id2
+        else:
+            template_id = template_id_input
+
+    resolved_button_id = None
+    if button_id_input:
+        if button_id_input == "1":
+            resolved_button_id = button_id
+        elif button_id_input == "2":
+            resolved_button_id = button_id2
+        else:
+            resolved_button_id = button_id_input
+
+    if id_match:
+        args_str = args_str.replace(id_match.group(0), "").strip()
+    if button_id_match:
+        args_str = args_str.replace(button_id_match.group(0), "").strip()
+
+    if not template_id:
+        raise MarkdownTemplateInputError("missing_template_id")
+
+    arg_parts = re.split(r"\s+(?=\w+=)", args_str.strip())
+    params: list[dict[str, object]] = []
+
+    def replace_url_format(input_str: str) -> str:
+        if not input_str:
+            return " "
+        pattern = r"(\w+)\]\(([^)]+)\)"
+
+        def replacer(match):
+            param_a = match.group(1)
+            param_b = match.group(2)
+            if "://" in param_b:
+                return f"{param_a}]({param_b})"
+            return f"{param_a}](mqqapi://aio/inlinecmd?command={param_b}&enter=false&reply=false)"
+
+        return re.sub(pattern, replacer, input_str)
+
+    for arg in arg_parts:
+        if "=" not in arg:
+            continue
+        if len(params) >= MARKDOWN_TEMPLATE_MAX_PARAMS:
+            raise MarkdownTemplateInputError("param_count")
+
+        key, raw_value = arg.split("=", 1)
+        key = key.strip()
+        value = raw_value.replace("\\'", "'").replace('\\"', '"').replace("\\=", "=")
+        if value.startswith("\r"):
+            value = value.strip()
+            value = "\r" + value
+        else:
+            value = value.strip()
+        value = value.replace("\n", "\r")
+
+        if value.startswith("[") and value.endswith("]"):
+            list_values = value[1:-1].split(",")
+            if len(list_values) > MARKDOWN_TEMPLATE_MAX_LIST_VALUES:
+                raise MarkdownTemplateInputError("list_count")
+            inner_values = [
+                replace_url_format(item.strip().strip("'\""))
+                for item in list_values
+            ]
+            params.append({"key": key, "values": inner_values})
+        else:
+            if not value:
+                value = " "
+            params.append({"key": key, "values": [value]})
+
+    return template_id, resolved_button_id, params
+
+
 def _admin_economy_context(event, action: str, **detail):
     operator_id = str(get_user_id(event))
     return {

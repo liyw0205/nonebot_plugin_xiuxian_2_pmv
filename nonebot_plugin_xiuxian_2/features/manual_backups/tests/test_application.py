@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from nonebot_plugin_xiuxian_2.features.manual_backups import ManualBackupApplication
-from nonebot_plugin_xiuxian_2.features.plugin_backups.creation_application import (
+from .. import ManualBackupApplication
+from ...plugin_backups.creation_application import (
     PluginBackupCreationResult,
 )
 
