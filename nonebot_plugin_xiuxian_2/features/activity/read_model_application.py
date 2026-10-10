@@ -137,6 +137,56 @@ class ActivityReadModelApplication:
             tasks, pass_config, gameplay,
         )
 
+    def activity_center_text(self, user_id: str | None = None) -> str:
+        """Render the small activity-center view through the shared message path."""
+        from ...xiuxian.xiuxian_activity.activity_rules import (
+            _activity_pass_config,
+            get_activity_tasks,
+            get_gameplay_activities,
+        )
+        from ...xiuxian.xiuxian_activity.activity_utils import _as_int
+        from ...xiuxian.xiuxian_utils.message_markdown import build_md_command_link
+        from .center import build_activity_center_items, claimable_reward_count
+
+        config = self._config()
+        tasks = get_activity_tasks(config)
+        pass_config = _activity_pass_config(config)
+        now = self.clock.now().astimezone().replace(tzinfo=None)
+        snapshot = {
+            "tasks": {},
+            "pass_total_exp": 0,
+            "pass_claimed_levels": set(),
+        }
+        if user_id:
+            activity_key = self._overview_helpers()["_activity_config_key"](config)
+            collect_keys = [
+                str(activity.get("key") or "")
+                for activity in get_gameplay_activities(config)
+                if activity.get("type") == "collect_words"
+                and _as_int(activity.get("pity_threshold"), 0) > 0
+            ]
+            snapshot = self.repository.overview_snapshot(
+                str(user_id),
+                activity_key,
+                include_tasks=bool(tasks),
+                include_pass=bool(pass_config.get("enabled")),
+                collect_activity_keys=collect_keys,
+            )
+        claimable = bool(user_id and claimable_reward_count(config, snapshot, now))
+        lines = ["**活动中心**"]
+        for item in build_activity_center_items(config, now, claimable=claimable):
+            lines.extend(("", f"**{item.name}** · {item.status}"))
+            if item.description:
+                lines.append(item.description)
+            lines.append(f"奖励：{item.reward_hint}")
+            links = " | ".join(
+                build_md_command_link(label, command)
+                for label, command in item.commands
+            )
+            if links:
+                lines.append(links)
+        return "\n".join(lines).strip()
+
     @staticmethod
     def _append_stage_summary(
         lines, config, runtime_fn, as_float, helpers, *, detail=False

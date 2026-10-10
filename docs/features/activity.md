@@ -3,6 +3,17 @@
 ## 用户流程
 The compatibility command remains available while the new application boundary is enabled.
 
+## 当前垂直切片：活动中心
+
+`活动中心`（别名 `活动大厅`）是本阶段的最小只读入口。它从版本化活动配置和一次
+玩家活动快照生成活动卡片，显示 `未开始`、`进行中`、`已结束` 或当前玩家存在可领取
+任务/战令奖励时的 `奖励领取`。活动名称、时间、描述和奖励摘要均来自配置数据，handler
+不内嵌具体活动内容；奖励领取仍交给既有任务、战令和统一活动领取入口。
+
+QQ 使用现有原生 Markdown、蓝字命令链接和可选键盘提取；OneBot 或 Markdown 不可用时，
+同一文案经公共发送入口降级为纯文本。此切片只读，不新增表、不执行奖励发放、不引入
+后台任务，也不覆盖集字、积分商店或活动首领的既有结算逻辑。
+
 ## 命令与别名
 The historical package owns command names during the compatibility release. New names are added only through this feature manifest.
 
@@ -31,10 +42,15 @@ Command and web adapters translate transport input into the application DTO; bus
 ## 测试与手工验收
 Run the feature application test and the full architecture gate. Repeat the same operation ID to verify replay.
 
+本阶段轻量回归：`tests/test_activity_center.py` 覆盖四种生命周期状态、配置驱动活动卡片、
+奖励可领取状态和 Markdown 链接的纯文本降级；未运行全量长测或真实 QQ 消息发送。
+
 ## 灰度开关、回滚和已知限制
 Legacy algorithms and schemas remain behind the repository adapter for one complete release cycle; the compatibility hit counter determines when removal is safe.
 
 ## Manifest 清单
+- `command: 活动中心`
+- `alias: 活动大厅`
 - `command: 关闭活动`
 - `command: 开启活动`
 - `command: 活动`

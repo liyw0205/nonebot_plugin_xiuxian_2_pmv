@@ -5,6 +5,7 @@ import time
 from ..adapter_compat import Bot, GroupMessageEvent, Message, MessageEvent, PrivateMessageEvent
 from ..on_compat import on_command
 from ..xiuxian_utils.lay_out import Cooldown, assign_bot
+from ..xiuxian_utils.message_markdown import strip_md_command_links
 from ..xiuxian_utils.utils import check_user, handle_send, send_help_message
 from ...features.activity.application import ActivityApplication
 from ...paths import get_paths
@@ -20,6 +21,7 @@ from .service import (
 activity_help_cmd = on_command("活动帮助", priority=7, block=True)
 activity_manage_cmd = on_command("活动管理", permission=SUPERUSER, priority=5, block=True)
 activity_info_cmd = on_command("活动", aliases={"活动信息", "活动进度", "活动日程"}, priority=10, block=True)
+activity_center_cmd = on_command("活动中心", aliases={"活动大厅"}, priority=10, block=True)
 activity_claim_cmd = on_command("活动领取", aliases={"活动一键领取", "领取活动奖励", "活动领奖"}, priority=10, block=True)
 activity_rewards_cmd = on_command("活动奖励", priority=10, block=True)
 activity_tasks_cmd = on_command("活动任务", aliases={"活动目标", "活动日常"}, priority=10, block=True)
@@ -110,6 +112,21 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     text = activity_application.read_model.activity_info_text(
         str(user_info["user_id"])
     )
+    await handle_send(
+        bot,
+        event,
+        text,
+        native_markdown=True,
+        fallback_msg=strip_md_command_links(text),
+    )
+
+
+@activity_center_cmd.handle(parameterless=[Cooldown(cd_time=0)])
+async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    await assign_bot(bot=bot, event=event)
+    is_user, user_info, msg = await _ensure_user(event)
+    user_id = str(user_info["user_id"]) if is_user else None
+    text = activity_application.read_model.activity_center_text(user_id)
     await handle_send(
         bot,
         event,
@@ -415,6 +432,8 @@ ACTIVITY_HELP = """
 **活动帮助**
 ---
 **查看**
+- 活动中心 / 活动大厅
+> 查看活动状态、奖励和快捷入口
 - 活动 / 活动信息
 > 查看活动概览
 - 活动奖励
