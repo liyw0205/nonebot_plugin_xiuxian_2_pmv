@@ -87,6 +87,8 @@ NapCat 的 WebSocket 客户端默认连接：
 ws://127.0.0.1:8080/onebot/v11/ws
 ```
 
+OneBot V11 access token 是可选鉴权，默认无需生成或填写。若需要启用，在 `.env.dev` 设置 `ONEBOT_V11_ACCESS_TOKEN`，并在 NapCat WebSocket 客户端配置相同值；凭据不要提交到 Git。详见 [配置文档](docs/configuration.md)。
+
 ## Web 管理面板
 
 默认地址：

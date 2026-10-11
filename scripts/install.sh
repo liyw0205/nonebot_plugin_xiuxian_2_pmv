@@ -344,6 +344,20 @@ get_available_proxies() {
 
 # 选择代理
 get_proxy_choice() {
+    PROXY=""
+    case "${MIRROR_MODE:-auto}" in
+        direct) return 0 ;;
+        accelerated)
+            PROXY="${ACCELERATED_PROXIES[0]}"
+            return 0
+            ;;
+        custom)
+            PROXY="$MIRROR_URL"
+            return 0
+            ;;
+        auto) ;;
+    esac
+
     ui_print "yellow" "请选择是否使用下载代理："
     ui_print "white" "1：自动选择最低延迟可用代理（默认）"
     ui_print "white" "2：手动选择可用代理"
@@ -353,7 +367,6 @@ get_proxy_choice() {
 
     read_or PROXY_CHOICE "请选择代理选项 (1-4)" "1"
 
-    PROXY="" # 最终选择的代理URL
     case "$PROXY_CHOICE" in
         1)
             check_bc_command # 确保bc或awk可用
@@ -739,6 +752,29 @@ validate_release_reference || exit 2
 DEFAULT_PROJECT_NAME="xiu2"
 ACTION="install"
 TARGET_INPUT="$DEFAULT_PROJECT_NAME"
+SOURCE_MODE="release"
+SOURCE_DIR=""
+MIRROR_MODE="auto"
+MIRROR_URL=""
+INSTALL_YES=0
+LOG_LINES=80
+MANAGER_ARGS=()
+
+usage() {
+    cat <<EOF
+用法: $0 [install|update|uninstall|start|stop|restart|status|logs|login] [--target PATH] [选项]
+
+选项:
+  --source-mode release|source  Release 下载或本地 Git 源码（默认 release）
+  --source PATH                 本地源码 checkout 目录
+  --mirror auto|direct|accelerated|custom
+  --mirror-url URL              custom 镜像前缀
+  --target PATH                 安装目录
+  --venv PATH                   Python 虚拟环境目录（默认 /root/myenv）
+  --yes                         确认卸载
+  --help                        显示帮助
+EOF
+}
 
 show_main_menu() {
     ui_print "green" "========================================"
@@ -778,48 +814,78 @@ show_main_menu() {
     read_or TARGET_INPUT "请输入项目名或绝对路径" "$DEFAULT_PROJECT_NAME"
 }
 
-# 根据参数判断动作和目标
-if [ $# -eq 0 ]; then
+if (($# == 0)); then
     show_main_menu
-elif [ $# -eq 1 ]; then
-    case "$1" in
-        install)
-            ACTION="install"
-            TARGET_INPUT="$DEFAULT_PROJECT_NAME"
-            ;;
-        reinstall)
-            ACTION="reinstall"
-            TARGET_INPUT="$DEFAULT_PROJECT_NAME"
-            ;;
-        update)
-            ACTION="update"
-            TARGET_INPUT="$DEFAULT_PROJECT_NAME"
-            ;;
-        update-deps|deps|upgrade-deps)
-            ACTION="update-deps"
-            TARGET_INPUT="$DEFAULT_PROJECT_NAME"
-            ;;
-        *)
-            ACTION="install"
-            TARGET_INPUT="$1"
-            ;;
-    esac
 else
-    case "$1" in
-        install|reinstall|update|update-deps|deps|upgrade-deps)
-            ACTION="$1"
-            if [[ "$ACTION" == "deps" || "$ACTION" == "upgrade-deps" ]]; then
-                ACTION="update-deps"
-            fi
-            TARGET_INPUT="$2"
-            ;;
-        *)
-            ui_print "red" "参数错误: 第一个参数只能是 install、reinstall、update 或 update-deps"
-            ui_print "yellow" "用法: $0 [install|reinstall|update|update-deps] [project_name|/abs/path]"
-            ui_print "yellow" "兼容用法: $0 [project_name|/abs/path]"
-            exit 127
-            ;;
-    esac
+    ACTION_SET=0
+    while (($#)); do
+        case "$1" in
+            install|reinstall|update|update-deps|deps|upgrade-deps|uninstall|start|stop|restart|status|logs|login)
+                ((ACTION_SET == 0)) || { ui_print red "只能指定一个动作"; exit 2; }
+                ACTION=$1
+                ACTION_SET=1
+                shift
+                ;;
+            --target|--directory)
+                (($# >= 2)) || { ui_print red "$1 需要路径"; exit 2; }
+                TARGET_INPUT=$2
+                shift 2
+                ;;
+            --venv)
+                (($# >= 2)) || { ui_print red "--venv 需要路径"; exit 2; }
+                VENV_PATH=$2
+                shift 2
+                ;;
+            --source-mode)
+                (($# >= 2)) || { ui_print red "--source-mode 需要值"; exit 2; }
+                SOURCE_MODE=$2
+                shift 2
+                ;;
+            --source)
+                (($# >= 2)) || { ui_print red "--source 需要路径"; exit 2; }
+                SOURCE_DIR=$2
+                shift 2
+                ;;
+            --mirror)
+                (($# >= 2)) || { ui_print red "--mirror 需要值"; exit 2; }
+                MIRROR_MODE=$2
+                shift 2
+                ;;
+            --mirror-url)
+                (($# >= 2)) || { ui_print red "--mirror-url 需要 URL"; exit 2; }
+                MIRROR_URL=$2
+                shift 2
+                ;;
+            --lines)
+                (($# >= 2)) || { ui_print red "--lines 需要正整数"; exit 2; }
+                [[ $2 =~ ^[1-9][0-9]*$ ]] || { ui_print red "--lines 需要正整数"; exit 2; }
+                LOG_LINES=$2
+                shift 2
+                ;;
+            --yes) INSTALL_YES=1; shift ;;
+            -h|--help|help) usage; exit 0 ;;
+            install|reinstall|update|update-deps|deps|upgrade-deps|uninstall|start|stop|restart|status|logs|login)
+                ui_print red "动作只能放在参数开头"; exit 2
+                ;;
+            -*) ui_print red "未知选项: $1"; usage; exit 2 ;;
+            *)
+                [[ "$TARGET_INPUT" == "$DEFAULT_PROJECT_NAME" ]] || { ui_print red "只能指定一个目标目录"; exit 2; }
+                TARGET_INPUT=$1
+                shift
+                ;;
+        esac
+    done
+fi
+
+case "$SOURCE_MODE" in release|source) ;; *) ui_print red "--source-mode 必须是 release 或 source"; exit 2 ;; esac
+case "$MIRROR_MODE" in auto|direct|accelerated|custom) ;; *) ui_print red "无效 --mirror: $MIRROR_MODE"; exit 2 ;; esac
+if [[ "$MIRROR_MODE" == custom && -z "$MIRROR_URL" ]]; then
+    ui_print red "--mirror custom 必须同时指定 --mirror-url"
+    exit 2
+fi
+if [[ "$SOURCE_MODE" == source && -z "$SOURCE_DIR" ]]; then
+    ui_print red "--source-mode source 必须同时指定 --source PATH"
+    exit 2
 fi
 
 # 确定安装目录和项目名称
@@ -834,6 +900,39 @@ fi
 # 如果项目名为空，使用默认值
 if [[ -z "$PROJECT_NAME" ]]; then
     PROJECT_NAME="$DEFAULT_PROJECT_NAME"
+fi
+
+if [[ "$ACTION" == start || "$ACTION" == stop || "$ACTION" == restart || "$ACTION" == status || "$ACTION" == logs || "$ACTION" == login ]]; then
+    manager="/bin/$PROJECT_NAME"
+    [[ -x "$manager" ]] || { ui_print red "未找到管理命令: $manager"; exit 1; }
+    MANAGER_ARGS=(--target "$DIR" --venv "$VENV_PATH" --source-mode "$SOURCE_MODE" --mirror "$MIRROR_MODE" --lines "$LOG_LINES")
+    [[ -z "$SOURCE_DIR" ]] || MANAGER_ARGS+=(--source "$SOURCE_DIR")
+    [[ "$MIRROR_MODE" != custom ]] || MANAGER_ARGS+=(--mirror-url "$MIRROR_URL")
+    ((INSTALL_YES == 0)) || MANAGER_ARGS+=(--yes)
+    exec "$manager" "$ACTION" "${MANAGER_ARGS[@]}"
+fi
+
+if [[ "$ACTION" == uninstall ]]; then
+    [[ "$DIR" != / && "$DIR" != /root && "$DIR" != "$HOME" ]] || {
+        ui_print red "拒绝卸载危险目录: $DIR"
+        exit 2
+    }
+    [[ -d "$DIR/src/plugins/nonebot_plugin_xiuxian_2" ]] || {
+        ui_print red "未找到受管理的修仙2安装: $DIR"
+        exit 1
+    }
+    if ((INSTALL_YES == 0)); then
+        [[ -t 0 ]] || { ui_print red "非交互卸载必须指定 --yes"; exit 2; }
+        read_or uninstall_confirm "卸载将删除安装目录及其中的数据；输入 YES 确认" "NO"
+        [[ "$uninstall_confirm" == YES ]] || { ui_print yellow "已取消卸载"; exit 0; }
+    fi
+    "/bin/$PROJECT_NAME" stop >/dev/null 2>&1 || true
+    [[ ! -f "/etc/logrotate.d/$PROJECT_NAME" ]] || rm -f "/etc/logrotate.d/$PROJECT_NAME"
+    [[ ! -f "/etc/cron.d/${PROJECT_NAME}_logrotate" ]] || rm -f "/etc/cron.d/${PROJECT_NAME}_logrotate"
+    rm -f "/bin/$PROJECT_NAME" "/bin/${PROJECT_NAME}_start"
+    rm -rf -- "$DIR"
+    ui_print green "已卸载: $DIR"
+    exit 0
 fi
 
 # 设置 xiuxian_config.py 的绝对路径
@@ -957,7 +1056,10 @@ EOF
 fi
 
 # 获取代理选择
-get_proxy_choice
+PROXY=""
+if [[ "$SOURCE_MODE" == release ]]; then
+    get_proxy_choice
+fi
 
 # 如果是更新模式，先进行备份和旧配置提取
 if [[ "$ACTION" == "update" ]]; then
@@ -975,18 +1077,37 @@ LOCAL_RELEASE_TEMP_PATH="$DIR/${REPO_NAME}_${RELEASE_ASSET}"
 TEMP_EXTRACT_DIR="$DIR/temp_extract"
 
 # PROXY 变量在 get_proxy_choice 中设置
-if download_release_resource "https://github.com/$REPO_OWNER/$REPO_NAME/releases/$RELEASE_TAG/download/$RELEASE_ASSET" "$LOCAL_RELEASE_TEMP_PATH" "$PROXY"; then
-    show_status "下载 release 资源文件" "success"
+if [[ "$SOURCE_MODE" == source ]]; then
+    [[ -d "$SOURCE_DIR/.git" ]] || { ui_print red "--source 必须指向 Git checkout: $SOURCE_DIR"; exit 2; }
+    [[ -z "$(git -C "$SOURCE_DIR" status --porcelain --untracked-files=no)" ]] || {
+        ui_print red "源码 checkout 存在未提交的跟踪文件修改，拒绝打包: $SOURCE_DIR"
+        exit 2
+    }
+    rm -rf -- "$TEMP_EXTRACT_DIR"
+    ensure_dir "$TEMP_EXTRACT_DIR" || exit 127
+    git -C "$SOURCE_DIR" archive --format=tar HEAD | tar -xf - -C "$TEMP_EXTRACT_DIR" || {
+        ui_print red "无法从源码 checkout 构建安装文件: $SOURCE_DIR"
+        exit 127
+    }
+    [[ -f "$TEMP_EXTRACT_DIR/nonebot_plugin_xiuxian_2/__init__.py" ]] || {
+        ui_print red "源码 checkout 缺少 nonebot_plugin_xiuxian_2/__init__.py"
+        exit 127
+    }
+    show_status "从本地 checkout 准备源码" "success"
 else
-    show_status "下载 release 资源文件" "failure"
-    exit 127
-fi
+    if download_release_resource "https://github.com/$REPO_OWNER/$REPO_NAME/releases/$RELEASE_TAG/download/$RELEASE_ASSET" "$LOCAL_RELEASE_TEMP_PATH" "$PROXY"; then
+        show_status "下载 release 资源文件" "success"
+    else
+        show_status "下载 release 资源文件" "failure"
+        exit 127
+    fi
 
-if extract_release_resource "$LOCAL_RELEASE_TEMP_PATH" "$TEMP_EXTRACT_DIR"; then
-    show_status "解压 release 资源文件" "success"
-else
-    show_status "解压 release 资源文件" "failure"
-    exit 127
+    if extract_release_resource "$LOCAL_RELEASE_TEMP_PATH" "$TEMP_EXTRACT_DIR"; then
+        show_status "解压 release 资源文件" "success"
+    else
+        show_status "解压 release 资源文件" "failure"
+        exit 127
+    fi
 fi
 
 # --- 移动文件到安装目录 (覆盖安装或更新) ---
@@ -1128,6 +1249,19 @@ EOF
 
     # 创建管理脚本
     cat <<EOF > "/bin/$PROJECT_NAME"
+PROJECT_DIR="$DIR"
+VENV_DIR="$VENV_PATH"
+SOURCE_MODE="release"
+SOURCE_DIR=""
+MIRROR_MODE="auto"
+MIRROR_URL=""
+YES=0
+LOG_LINES=80
+FORMAT_LOG=""
+MIRROR_ARGS=()
+YES_ARGS=()
+RUN_ARGS=()
+
 formatlog() {
     local LOG_FILE="\$1"
     awk '{
@@ -1140,14 +1274,67 @@ formatlog() {
     }' "\$LOG_FILE" > "\$LOG_FILE.format.log"
 }
 
-if [ "\$#" -eq 0 ]; then
-    set -- start
-fi
+ACTION=\${1:-start}
+if [ "\$#" -gt 0 ]; then shift; fi
+while [ "\$#" -gt 0 ]; do
+    case "\$1" in
+        --target|--directory) PROJECT_DIR=\${2:?--target 需要路径}; shift 2 ;;
+        --venv) VENV_DIR=\${2:?--venv 需要路径}; shift 2 ;;
+        --source-mode) SOURCE_MODE=\${2:?--source-mode 需要值}; shift 2 ;;
+        --source) SOURCE_DIR=\${2:?--source 需要路径}; shift 2 ;;
+        --mirror) MIRROR_MODE=\${2:?--mirror 需要值}; shift 2 ;;
+        --mirror-url) MIRROR_URL=\${2:?--mirror-url 需要 URL}; shift 2 ;;
+        --yes) YES=1; shift ;;
+        --lines)
+            LOG_LINES=\${2:?--lines 需要正整数}
+            [[ "\$LOG_LINES" =~ ^[1-9][0-9]*\$ ]] || { echo "--lines 需要正整数" >&2; exit 2; }
+            shift 2
+            ;;
+        *) FORMAT_LOG=\$1; shift ;;
+    esac
+done
+LOG_FILE="\$PROJECT_DIR/${PROJECT_NAME}.log"
 
-case "\$1" in
+run_installer() {
+    local action="\$1" installer temporary result
+    shift
+    if [ "\$SOURCE_MODE" = source ]; then
+        [ -n "\$SOURCE_DIR" ] || { echo "--source-mode source requires --source PATH" >&2; return 2; }
+        installer="\$SOURCE_DIR/scripts/install.sh"
+        [ -f "\$installer" ] || { echo "installer not found: \$installer" >&2; return 2; }
+        bash "\$installer" "\$action" --target "\$PROJECT_DIR" --venv "\$VENV_DIR" \\
+            --source-mode source --source "\$SOURCE_DIR" --mirror "\$MIRROR_MODE" \\
+            "\${MIRROR_ARGS[@]}" "\${YES_ARGS[@]}" "\${RUN_ARGS[@]}" "\$@"
+    else
+        temporary=\$(mktemp)
+        if ! curl -fsSL "https://raw.githubusercontent.com/$REPO_OWNER/$REPO_NAME/main/scripts/install.sh" -o "\$temporary"; then
+            rm -f "\$temporary"
+            echo "无法获取官方安装器" >&2
+            return 1
+        fi
+        bash "\$temporary" "\$action" --target "\$PROJECT_DIR" --venv "\$VENV_DIR" \\
+            --source-mode release --mirror "\$MIRROR_MODE" \\
+            "\${MIRROR_ARGS[@]}" "\${YES_ARGS[@]}" "\${RUN_ARGS[@]}" "\$@"
+        result=\$?
+        rm -f "\$temporary"
+        return "\$result"
+    fi
+}
+
+case "\$SOURCE_MODE" in release|source) ;; *) echo "invalid --source-mode: \$SOURCE_MODE" >&2; exit 2 ;; esac
+case "\$MIRROR_MODE" in auto|direct|accelerated|custom) ;; *) echo "invalid --mirror: \$MIRROR_MODE" >&2; exit 2 ;; esac
+if [ "\$MIRROR_MODE" = custom ] && [ -z "\$MIRROR_URL" ]; then
+    echo "--mirror custom requires --mirror-url" >&2
+    exit 2
+fi
+[ "\$MIRROR_MODE" != custom ] || MIRROR_ARGS+=(--mirror-url "\$MIRROR_URL")
+[ "\$YES" != 1 ] || YES_ARGS+=(--yes)
+[ "\$ACTION" != logs ] || RUN_ARGS+=(--lines "\$LOG_LINES")
+
+case "\$ACTION" in
     start)
-        if [ ! -d "$DIR/logs" ]; then
-            mkdir -p "$DIR/logs"
+        if [ ! -d "\$PROJECT_DIR/logs" ]; then
+            mkdir -p "\$PROJECT_DIR/logs"
         fi
         mkdir -p /etc/logrotate.d /etc/cron.d /var/lib/logrotate
         if [ ! -f "/etc/logrotate.d/$PROJECT_NAME" ]; then
@@ -1178,7 +1365,7 @@ CRON_EOF
             echo "$PROJECT_NAME 已在后台运行"
         else
             echo "正在后台启动 $PROJECT_NAME..."
-            screen -U -dmS "$PROJECT_NAME" -L -Logfile "$DIR/${PROJECT_NAME}.log" bash -c '${PROJECT_NAME}_start'
+            screen -U -dmS "$PROJECT_NAME" -L -Logfile "\$LOG_FILE" bash -c '${PROJECT_NAME}_start'
             echo "已后台启动，使用 '$PROJECT_NAME status' 查看日志或管理"
         fi
         ;;
@@ -1197,13 +1384,29 @@ CRON_EOF
         ;;
     status)
         if screen -list | grep -q "\b$PROJECT_NAME\b"; then
-            screen -U -r "$PROJECT_NAME"
+            echo "$PROJECT_NAME 正在运行"
+            echo "日志: \$LOG_FILE"
         else
             echo "$PROJECT_NAME 未在运行"
         fi
         ;;
+    logs)
+        [[ "\$LOG_LINES" =~ ^[1-9][0-9]*\$ ]] || { echo "--lines 必须是正整数" >&2; exit 2; }
+        if [ -f "\$LOG_FILE" ]; then tail -n "\$LOG_LINES" "\$LOG_FILE"; else echo "日志尚不存在: \$LOG_FILE"; fi
+        ;;
+    login)
+        echo "QQ 官方机器人配置入口: http://127.0.0.1:5888/config"
+        echo "请在登录后的 Web 管理面板完成扫码绑定；OneBot 登录仍由 NapCat 客户端处理。"
+        ;;
+    install|reinstall|update|uninstall)
+        if [ "\$ACTION" = uninstall ] && [ "\$YES" != 1 ]; then
+            echo "uninstall 会删除安装目录和其中的数据；请确认备份后添加 --yes。" >&2
+            exit 2
+        fi
+        run_installer "\$ACTION" "\${YES_ARGS[@]}"
+        ;;
     update-deps|deps|upgrade-deps)
-        PYTHON_BIN="$VENV_PATH/bin/python"
+        PYTHON_BIN="\$VENV_DIR/bin/python"
         if [ ! -x "\$PYTHON_BIN" ]; then
             echo "错误：未找到虚拟环境 Python: \$PYTHON_BIN"
             exit 1
@@ -1216,8 +1419,8 @@ CRON_EOF
             "nonebot-adapter-onebot" \
             "nonebot-adapter-qq" \
             "nonebot_plugin_apscheduler" || exit 1
-        if [ -f "$DIR/requirements.txt" ]; then
-            "\$PYTHON_BIN" -m pip install -U --upgrade-strategy eager -r "$DIR/requirements.txt" || exit 1
+        if [ -f "\$PROJECT_DIR/requirements.txt" ]; then
+            "\$PYTHON_BIN" -m pip install -U --upgrade-strategy eager -r "\$PROJECT_DIR/requirements.txt" || exit 1
         fi
         "\$PYTHON_BIN" - <<'PY'
 import importlib.util
@@ -1250,15 +1453,14 @@ for package, module_name in packages.items():
 PY
         ;;
     format)
-        if [ -n "\$2" ]; then
-            if [ -f "\$2" ]; then
-                formatlog "\$2"
-                echo "已输出格式化日志到: \$2.format.log"
+        if [ -n "\$FORMAT_LOG" ]; then
+            if [ -f "\$FORMAT_LOG" ]; then
+                formatlog "\$FORMAT_LOG"
+                echo "已输出格式化日志到: \$FORMAT_LOG.format.log"
             else
-                echo "错误：日志文件不存在: \$2"
+                echo "错误：日志文件不存在: \$FORMAT_LOG"
             fi
         else
-            LOG_FILE="$DIR/${PROJECT_NAME}.log"
             if [ -f "\$LOG_FILE" ]; then
                 formatlog "\$LOG_FILE"
                 echo "已输出格式化日志到: \$LOG_FILE.format.log"
@@ -1268,7 +1470,7 @@ PY
         fi
         ;;
     *)
-        echo "用法: $PROJECT_NAME [start|stop|restart|status|update-deps|format [log_file]]"
+        echo "用法: $PROJECT_NAME [install|update|uninstall|start|stop|restart|status|logs|login|update-deps|format [log_file]] [--source-mode release|source] [--source PATH] [--mirror MODE] [--target PATH] [--venv PATH]"
         ;;
 esac
 EOF

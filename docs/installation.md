@@ -88,13 +88,28 @@ curl -fsSL https://raw.githubusercontent.com/liyw0205/nonebot_plugin_xiuxian_2_p
 常用管理命令：
 
 ```text
+xiu2 install
+xiu2 update
+xiu2 uninstall --yes
 xiu2 start
 xiu2 stop
 xiu2 restart
 xiu2 status
+xiu2 logs --lines 100
+xiu2 login
 xiu2 update-deps
 xiu2 format [log_file]
 ```
+
+Linux / Termux 安装器统一接受 `--source-mode release|source`、`--source PATH`、`--mirror auto|direct|accelerated|custom`、`--target PATH` 和 `--venv PATH`。自定义镜像前缀使用 `--mirror-url URL`。例如：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/liyw0205/nonebot_plugin_xiuxian_2_pmv/main/scripts/install.sh \
+  | bash -s -- install --source-mode release --mirror accelerated \
+      --target "$HOME/xiuxian" --venv "$HOME/myenv"
+```
+
+checkout 模式从本地 Git `HEAD` 打包，只接受没有已跟踪未提交改动的 checkout。`uninstall` 会删除安装目录及其中的数据，需要显式 `--yes`；先备份数据和配置。`login` 输出 QQ 官方机器人绑定面板地址，OneBot 登录仍由 NapCat 等客户端完成。
 
 Linux 与 Termux 的插件环境变量保存在项目根 `runtime.env`，Docker 保存在 `config/runtime.env`。例如关闭 Web 面板：
 
@@ -115,6 +130,14 @@ curl -fsSL https://raw.githubusercontent.com/liyw0205/nonebot_plugin_xiuxian_2_p
 ```bash
 curl -fsSL https://raw.githubusercontent.com/liyw0205/nonebot_plugin_xiuxian_2_pmv/main/scripts/install_termux.sh \
   | bash -s -- install "$HOME/xiuxian"
+```
+
+也可显式指定共同参数：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/liyw0205/nonebot_plugin_xiuxian_2_pmv/main/scripts/install_termux.sh \
+  | bash -s -- install --source-mode release --mirror accelerated \
+      --target "$HOME/xiuxian" --venv "$HOME/myenv"
 ```
 
 更新和依赖：
@@ -155,5 +178,7 @@ ws://127.0.0.1:8080/onebot/v11/ws
 ```
 
 NapCat WebUI 中新增并启用“WebSocket 客户端”，填入上述地址。若 NapCat 与 xiu2 不在同一主机，将 `127.0.0.1` 替换为 xiu2 主机地址，并检查防火墙。
+
+OneBot V11 access token 为可选鉴权，默认不需要生成或配置。若启用，在 NoneBot `.env.dev` 设置 `ONEBOT_V11_ACCESS_TOKEN`，并在 NapCat WebSocket 客户端设置相同值；不启用时应限制在本机或可信网络中连接。
 
 Web 管理面板使用独立端口 `5888`，不要与 OneBot 的 `8080` 混用。

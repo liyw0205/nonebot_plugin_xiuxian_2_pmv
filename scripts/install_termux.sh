@@ -24,7 +24,13 @@ DEFAULT_PROJECT_NAME="xiu2"
 
 TERMUX_HOME="${HOME:-/data/data/com.termux/files/home}"
 TERMUX_PREFIX="${PREFIX:-/data/data/com.termux/files/usr}"
-VENV_PATH="$TERMUX_HOME/myenv"
+VENV_PATH="${VENV_PATH:-$TERMUX_HOME/myenv}"
+SOURCE_MODE="release"
+SOURCE_DIR=""
+MIRROR_MODE="auto"
+MIRROR_URL=""
+INSTALL_YES=0
+LOG_LINES=80
 
 CORE_PIP_PACKAGES=(
     "nb-cli"
@@ -131,10 +137,12 @@ detect_termux() {
 
 usage() {
     cat <<EOF
-用法: $0 [install|reinstall|update|update-deps] [project_name|/abs/path]
+用法: $0 [install|update|uninstall|start|stop|restart|status|logs|login] [--target PATH] [选项]
 
 默认安装到: $TERMUX_HOME/$DEFAULT_PROJECT_NAME
 默认虚拟环境: $VENV_PATH
+选项: --source-mode release|source --source PATH --mirror auto|direct|accelerated|custom
+      --mirror-url URL --target PATH --venv PATH --yes
 EOF
 }
 
@@ -185,28 +193,71 @@ parse_args() {
         return 0
     fi
 
-    case "$1" in
-        install|reinstall|update|update-deps|deps|upgrade-deps)
-            ACTION="$1"
-            [[ "$ACTION" == "deps" || "$ACTION" == "upgrade-deps" ]] && ACTION="update-deps"
-            if [[ $# -ge 2 ]]; then
+    local action_set=0
+    while (($#)); do
+        case "$1" in
+            install|reinstall|update|update-deps|deps|upgrade-deps|uninstall|start|stop|restart|status|logs|login)
+                ((action_set == 0)) || { ui_print red "只能指定一个动作"; exit 2; }
+                ACTION="$1"
+                action_set=1
+                shift
+                ;;
+            --target|--directory)
+                (($# >= 2)) || { ui_print red "$1 需要路径"; exit 2; }
                 TARGET_INPUT="$2"
-            fi
-            ;;
-        -h|--help|help)
-            usage
-            exit 0
-            ;;
-        *)
-            if [[ $# -eq 1 ]]; then
+                shift 2
+                ;;
+            --venv)
+                (($# >= 2)) || { ui_print red "--venv 需要路径"; exit 2; }
+                VENV_PATH="$2"
+                shift 2
+                ;;
+            --source-mode)
+                (($# >= 2)) || { ui_print red "--source-mode 需要值"; exit 2; }
+                SOURCE_MODE="$2"
+                shift 2
+                ;;
+            --source)
+                (($# >= 2)) || { ui_print red "--source 需要路径"; exit 2; }
+                SOURCE_DIR="$2"
+                shift 2
+                ;;
+            --mirror)
+                (($# >= 2)) || { ui_print red "--mirror 需要值"; exit 2; }
+                MIRROR_MODE="$2"
+                shift 2
+                ;;
+            --mirror-url)
+                (($# >= 2)) || { ui_print red "--mirror-url 需要 URL"; exit 2; }
+                MIRROR_URL="$2"
+                shift 2
+                ;;
+            --lines)
+                (($# >= 2)) && [[ "$2" =~ ^[1-9][0-9]*$ ]] || { ui_print red "--lines 需要正整数"; exit 2; }
+                LOG_LINES="$2"
+                shift 2
+                ;;
+            --yes) INSTALL_YES=1; shift ;;
+            -h|--help|help) usage; exit 0 ;;
+            -*) ui_print red "未知选项: $1"; usage; exit 2 ;;
+            *)
+                [[ "$TARGET_INPUT" == "$DEFAULT_PROJECT_NAME" ]] || { ui_print red "只能指定一个目标目录"; exit 2; }
                 TARGET_INPUT="$1"
-            else
-                ui_print red "参数错误"
-                usage
-                exit 127
-            fi
-            ;;
-    esac
+                shift
+                ;;
+        esac
+    done
+
+    case "$SOURCE_MODE" in release|source) ;; *) ui_print red "--source-mode 必须是 release 或 source"; exit 2 ;; esac
+    case "$MIRROR_MODE" in auto|direct|accelerated|custom) ;; *) ui_print red "无效 --mirror: $MIRROR_MODE"; exit 2 ;; esac
+    if [[ "$MIRROR_MODE" == custom && -z "$MIRROR_URL" ]]; then
+        ui_print red "--mirror custom 必须同时指定 --mirror-url"
+        exit 2
+    fi
+    if [[ "$SOURCE_MODE" == source && -z "$SOURCE_DIR" ]]; then
+        ui_print red "--source-mode source 必须同时指定 --source PATH"
+        exit 2
+    fi
 }
 
 resolve_paths() {
@@ -363,6 +414,13 @@ select_proxy() {
     local best_proxy=""
     local best_time=999999
     local cost
+
+    case "$MIRROR_MODE" in
+        direct) PROXY=""; return 0 ;;
+        accelerated) PROXY="${ACCELERATED_PROXIES[0]}"; return 0 ;;
+        custom) PROXY="$MIRROR_URL"; return 0 ;;
+        auto) ;;
+    esac
 
     ui_print yellow "正在自动选择可用代理，请稍候..."
     for proxy in "${proxies[@]}"; do
@@ -559,18 +617,37 @@ install_release_files() {
     local temp_extract_dir="$DIR/temp_extract"
     local local_release_temp_path="$DIR/${REPO_NAME}_${RELEASE_ASSET}"
 
-    select_proxy
-    download_release_resource "$local_release_temp_path" || {
-        show_status "下载 release 资源文件" "failure"
-        exit 127
-    }
-    show_status "下载 release 资源文件" "success"
+    if [[ "$SOURCE_MODE" == source ]]; then
+        [[ -d "$SOURCE_DIR/.git" ]] || { ui_print red "--source 必须指向 Git checkout: $SOURCE_DIR"; exit 2; }
+        [[ -z "$(git -C "$SOURCE_DIR" status --porcelain --untracked-files=no)" ]] || {
+            ui_print red "源码 checkout 存在未提交的跟踪文件修改，拒绝打包: $SOURCE_DIR"
+            exit 2
+        }
+        rm -rf -- "$temp_extract_dir"
+        ensure_dir "$temp_extract_dir"
+        git -C "$SOURCE_DIR" archive --format=tar HEAD | tar -xf - -C "$temp_extract_dir" || {
+            ui_print red "无法从源码 checkout 构建安装文件: $SOURCE_DIR"
+            exit 127
+        }
+        [[ -f "$temp_extract_dir/nonebot_plugin_xiuxian_2/__init__.py" ]] || {
+            ui_print red "源码 checkout 缺少 nonebot_plugin_xiuxian_2/__init__.py"
+            exit 127
+        }
+        show_status "从本地 checkout 准备源码" "success"
+    else
+        select_proxy
+        download_release_resource "$local_release_temp_path" || {
+            show_status "下载 release 资源文件" "failure"
+            exit 127
+        }
+        show_status "下载 release 资源文件" "success"
 
-    extract_release_resource "$local_release_temp_path" "$temp_extract_dir" || {
-        show_status "解压 release 资源文件" "failure"
-        exit 127
-    }
-    show_status "解压 release 资源文件" "success"
+        extract_release_resource "$local_release_temp_path" "$temp_extract_dir" || {
+            show_status "解压 release 资源文件" "failure"
+            exit 127
+        }
+        show_status "解压 release 资源文件" "success"
+    fi
 
     show_progress "移动文件到安装目录"
     replace_plugin_source "$temp_extract_dir/nonebot_plugin_xiuxian_2" || {
@@ -666,6 +743,16 @@ PROJECT_NAME="$PROJECT_NAME"
 DIR="$DIR"
 VENV_PATH="$VENV_PATH"
 START_PATH="$START_PATH"
+PROJECT_DIR="\$DIR"
+VENV_DIR="\$VENV_PATH"
+SOURCE_MODE=release
+SOURCE_DIR=
+MIRROR_MODE=auto
+MIRROR_URL=
+YES=0
+LOG_LINES=80
+FORMAT_LOG=
+MIRROR_ARGS=()
 
 formatlog() {
     local LOG_FILE="\$1"
@@ -679,11 +766,59 @@ formatlog() {
     }' "\$LOG_FILE" > "\$LOG_FILE.format.log"
 }
 
-if [[ "\$#" -eq 0 ]]; then
-    set -- start
+ACTION=\${1:-start}
+if [[ "\$#" -gt 0 ]]; then shift; fi
+while [[ "\$#" -gt 0 ]]; do
+    case "\$1" in
+        --target|--directory) PROJECT_DIR=\${2:?--target 需要路径}; shift 2 ;;
+        --venv) VENV_DIR=\${2:?--venv 需要路径}; shift 2 ;;
+        --source-mode) SOURCE_MODE=\${2:?--source-mode 需要值}; shift 2 ;;
+        --source) SOURCE_DIR=\${2:?--source 需要路径}; shift 2 ;;
+        --mirror) MIRROR_MODE=\${2:?--mirror 需要值}; shift 2 ;;
+        --mirror-url) MIRROR_URL=\${2:?--mirror-url 需要 URL}; shift 2 ;;
+        --yes) YES=1; shift ;;
+        --lines)
+            LOG_LINES=\${2:?--lines 需要正整数}
+            [[ "\$LOG_LINES" =~ ^[1-9][0-9]*\$ ]] || { echo "--lines 需要正整数" >&2; exit 2; }
+            shift 2
+            ;;
+        *) FORMAT_LOG=\$1; shift ;;
+    esac
+done
+LOG_FILE="\$PROJECT_DIR/\${PROJECT_NAME}.log"
+case "\$SOURCE_MODE" in release|source) ;; *) echo "invalid --source-mode: \$SOURCE_MODE" >&2; exit 2 ;; esac
+case "\$MIRROR_MODE" in auto|direct|accelerated|custom) ;; *) echo "invalid --mirror: \$MIRROR_MODE" >&2; exit 2 ;; esac
+if [ "\$MIRROR_MODE" = custom ] && [ -z "\$MIRROR_URL" ]; then
+    echo "--mirror custom requires --mirror-url" >&2
+    exit 2
 fi
+[ "\$MIRROR_MODE" != custom ] || MIRROR_ARGS+=(--mirror-url "\$MIRROR_URL")
 
-case "\$1" in
+run_installer() {
+    local action="\$1" installer temporary result
+    shift
+    if [ "\$SOURCE_MODE" = source ]; then
+        [ -n "\$SOURCE_DIR" ] || { echo "--source-mode source requires --source PATH" >&2; return 2; }
+        installer="\$SOURCE_DIR/scripts/install_termux.sh"
+        [ -f "\$installer" ] || { echo "installer not found: \$installer" >&2; return 2; }
+        bash "\$installer" "\$action" --target "\$PROJECT_DIR" --venv "\$VENV_DIR" \\
+            --source-mode source --source "\$SOURCE_DIR" --mirror "\$MIRROR_MODE" "\${MIRROR_ARGS[@]}" "\$@"
+    else
+        temporary=\$(mktemp)
+        if ! curl -fsSL "https://raw.githubusercontent.com/$REPO_OWNER/$REPO_NAME/main/scripts/install_termux.sh" -o "\$temporary"; then
+            rm -f "\$temporary"
+            echo "无法获取官方 Termux 安装器" >&2
+            return 1
+        fi
+        bash "\$temporary" "\$action" --target "\$PROJECT_DIR" --venv "\$VENV_DIR" \\
+            --source-mode release --mirror "\$MIRROR_MODE" "\${MIRROR_ARGS[@]}" "\$@"
+        result=\$?
+        rm -f "\$temporary"
+        return "\$result"
+    fi
+}
+
+case "\$ACTION" in
     start)
         mkdir -p "\$DIR/logs"
         if screen -list | grep -q "\\b\${PROJECT_NAME}\\b"; then
@@ -710,27 +845,39 @@ case "\$1" in
         ;;
     status)
         if screen -list | grep -q "\\b\${PROJECT_NAME}\\b"; then
-            screen -U -r "\$PROJECT_NAME"
+            echo "\$PROJECT_NAME 正在运行"
+            echo "日志: \$LOG_FILE"
         else
             echo "\$PROJECT_NAME 未在运行"
         fi
         ;;
-    update)
-        curl -fsSL https://raw.githubusercontent.com/$REPO_OWNER/$REPO_NAME/main/scripts/install_termux.sh | bash -s -- update "\$DIR"
+    logs)
+        [[ "\$LOG_LINES" =~ ^[1-9][0-9]*\$ ]] || { echo "--lines 必须是正整数" >&2; exit 2; }
+        if [[ -f "\$LOG_FILE" ]]; then tail -n "\$LOG_LINES" "\$LOG_FILE"; else echo "日志尚不存在: \$LOG_FILE"; fi
+        ;;
+    login)
+        echo "QQ 官方机器人配置入口: http://127.0.0.1:5888/config"
+        echo "请在登录后的 Web 管理面板完成扫码绑定；OneBot 登录仍由 NapCat 客户端处理。"
+        ;;
+    install|update|uninstall)
+        if [[ "\$ACTION" == uninstall && "\$YES" != 1 ]]; then
+            echo "uninstall 会删除安装目录和其中的数据；请确认备份后添加 --yes。" >&2
+            exit 2
+        fi
+        if [[ "\$YES" == 1 ]]; then run_installer "\$ACTION" --yes; else run_installer "\$ACTION"; fi
         ;;
     update-deps|deps|upgrade-deps)
-        curl -fsSL https://raw.githubusercontent.com/$REPO_OWNER/$REPO_NAME/main/scripts/install_termux.sh | bash -s -- update-deps "\$DIR"
+        curl -fsSL https://raw.githubusercontent.com/$REPO_OWNER/$REPO_NAME/main/scripts/install_termux.sh | bash -s -- update-deps --target "\$PROJECT_DIR" --venv "\$VENV_DIR"
         ;;
     format)
-        if [[ -n "\${2:-}" ]]; then
-            if [[ -f "\$2" ]]; then
-                formatlog "\$2"
-                echo "已输出格式化日志到: \$2.format.log"
+        if [[ -n "\$FORMAT_LOG" ]]; then
+            if [[ -f "\$FORMAT_LOG" ]]; then
+                formatlog "\$FORMAT_LOG"
+                echo "已输出格式化日志到: \$FORMAT_LOG.format.log"
             else
-                echo "错误：日志文件不存在: \$2"
+                echo "错误：日志文件不存在: \$FORMAT_LOG"
             fi
         else
-            LOG_FILE="\$DIR/\${PROJECT_NAME}.log"
             if [[ -f "\$LOG_FILE" ]]; then
                 formatlog "\$LOG_FILE"
                 echo "已输出格式化日志到: \$LOG_FILE.format.log"
@@ -740,7 +887,7 @@ case "\$1" in
         fi
         ;;
     *)
-        echo "用法: \$PROJECT_NAME [start|stop|restart|status|update|update-deps|format [log_file]]"
+        echo "用法: \$PROJECT_NAME [install|update|uninstall|start|stop|restart|status|logs|login|update-deps|format [log_file]] [--source-mode release|source] [--source PATH] [--mirror MODE] [--target PATH] [--venv PATH]"
         ;;
 esac
 EOF
@@ -778,6 +925,31 @@ main() {
     detect_termux
     parse_args "$@"
     resolve_paths
+
+    case "$ACTION" in
+        start|stop|restart|status|logs|login)
+            [[ -x "$COMMAND_PATH" ]] || { ui_print red "未找到管理命令: $COMMAND_PATH"; exit 1; }
+            manager_args=(--target "$DIR" --venv "$VENV_PATH" --source-mode "$SOURCE_MODE" --mirror "$MIRROR_MODE" --lines "$LOG_LINES")
+            [[ -z "$SOURCE_DIR" ]] || manager_args+=(--source "$SOURCE_DIR")
+            [[ "$MIRROR_MODE" != custom ]] || manager_args+=(--mirror-url "$MIRROR_URL")
+            ((INSTALL_YES == 0)) || manager_args+=(--yes)
+            exec "$COMMAND_PATH" "$ACTION" "${manager_args[@]}"
+            ;;
+        uninstall)
+            [[ "$DIR" != / && "$DIR" != "$TERMUX_HOME" ]] || { ui_print red "拒绝卸载危险目录: $DIR"; exit 2; }
+            [[ -d "$DIR/src/plugins/nonebot_plugin_xiuxian_2" ]] || { ui_print red "未找到修仙2安装: $DIR"; exit 1; }
+            if ((INSTALL_YES == 0)); then
+                [[ -t 0 ]] || { ui_print red "非交互卸载必须指定 --yes"; exit 2; }
+                read_or uninstall_confirm "卸载将删除安装目录及其中的数据；输入 YES 确认" "NO"
+                [[ "$uninstall_confirm" == YES ]] || { ui_print yellow "已取消卸载"; exit 0; }
+            fi
+            "$COMMAND_PATH" stop >/dev/null 2>&1 || true
+            rm -f "$COMMAND_PATH" "$START_PATH"
+            rm -rf -- "$DIR"
+            ui_print green "已卸载: $DIR"
+            exit 0
+            ;;
+    esac
 
     ui_print green "执行模式: $ACTION"
     ui_print green "项目名称: $PROJECT_NAME"

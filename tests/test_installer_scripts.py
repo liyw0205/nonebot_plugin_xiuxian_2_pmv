@@ -56,6 +56,69 @@ class InstallerScriptTests(unittest.TestCase):
         self.assertNotIn("nonebot_plugin_xiuxian_2_pmv_file", termux)
         self.assertIn("DEFAULT_PROJECT_NAME=\"xiu2\"", (SCRIPTS / "install.sh").read_text(encoding="utf-8"))
 
+    def test_linux_and_termux_installers_share_lifecycle_and_option_contract(self) -> None:
+        actions = ("install", "update", "uninstall", "start", "stop", "restart", "status", "logs", "login")
+        options = ("--source-mode", "--source", "--mirror", "--target", "--venv")
+        for name in ("install.sh", "install_termux.sh"):
+            source = (SCRIPTS / name).read_text(encoding="utf-8")
+            with self.subTest(installer=name):
+                for token in (*actions, *options):
+                    self.assertIn(token, source)
+
+    def test_login_routes_to_qq_bind_panel_and_onebot_auth_is_optional(self) -> None:
+        for name in ("install.sh", "install_termux.sh"):
+            source = (SCRIPTS / name).read_text(encoding="utf-8")
+            with self.subTest(installer=name):
+                self.assertIn('"QQ 官方机器人配置入口: http://127.0.0.1:5888/config"', source)
+                self.assertIn("OneBot 登录仍由 NapCat 客户端处理", source)
+
+        readme = (ROOT / "README.md").read_text(encoding="utf-8")
+        configuration = (ROOT / "docs" / "configuration.md").read_text(encoding="utf-8")
+        installation = (ROOT / "docs" / "installation.md").read_text(encoding="utf-8")
+        for document in (readme, configuration, installation):
+            self.assertIn("可选鉴权", document)
+            self.assertIn("ONEBOT_V11_ACCESS_TOKEN", document)
+        self.assertIn("默认无需生成或填写", readme)
+        self.assertIn("默认不启用，无需预先生成随机 token", configuration)
+
+    def test_linux_installer_help_and_invalid_source_mode_exit_before_install(self) -> None:
+        help_result = subprocess.run(
+            ["bash", str(SCRIPTS / "install.sh"), "--help"],
+            check=True,
+            capture_output=True,
+            text=True,
+            cwd=ROOT,
+        )
+        self.assertIn("--source-mode release|source", help_result.stdout)
+        self.assertIn("--target PATH", help_result.stdout)
+
+        invalid = subprocess.run(
+            ["bash", str(SCRIPTS / "install.sh"), "install", "--source-mode", "source"],
+            capture_output=True,
+            text=True,
+            cwd=ROOT,
+        )
+        self.assertEqual(invalid.returncode, 2)
+        self.assertIn("必须同时指定 --source PATH", invalid.stdout + invalid.stderr)
+
+    def test_termux_installer_help_is_safe_outside_termux(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            prefix = Path(temp) / "prefix"
+            home = Path(temp) / "home"
+            (prefix / "bin").mkdir(parents=True)
+            (prefix / "bin" / "pkg").write_text("#!/bin/sh\nexit 0\n", encoding="ascii")
+            (prefix / "bin" / "pkg").chmod(0o755)
+            result = subprocess.run(
+                ["bash", str(SCRIPTS / "install_termux.sh"), "--help"],
+                check=True,
+                capture_output=True,
+                text=True,
+                cwd=ROOT,
+                env=os.environ | {"PREFIX": str(prefix), "HOME": str(home)},
+            )
+        self.assertIn("--source-mode release|source", result.stdout)
+        self.assertIn("--venv PATH", result.stdout)
+
     def test_transient_databases_are_excluded_from_script_backups(self) -> None:
         for name in ("install.sh", "install_termux.sh"):
             source = (SCRIPTS / name).read_text(encoding="utf-8")
