@@ -20,15 +20,7 @@ from nonebot.log import logger
 from PIL import Image, ImageDraw, ImageFont
 
 from ...xiuxian_utils.http_proxy import http_client
-
-_FONT_CANDIDATES = [
-    Path("/root/xiu2/data/xiuxian/font/SarasaMonoSC-Bold.ttf"),
-    Path("/root/xiu2/data/xiuxian/font/SourceHanSerifCN-Heavy.otf"),
-    Path("/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc"),
-    Path("/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc"),
-    Path("/usr/share/fonts/truetype/wqy/wqy-microhei.ttc"),
-    Path("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"),
-]
+from ....paths import get_paths
 
 _ASSETS = Path(__file__).resolve().parent / "assets"
 _LOGO_DIR = _ASSETS / "logos"
@@ -68,8 +60,21 @@ MAX_COVER_H = 720
 MIN_COVER_H = 240
 
 
+def _font_candidates() -> list[Path]:
+    """Build font candidates at selection time so configured data roots apply."""
+    data_font_dir = get_paths().data / "font"
+    return [
+        data_font_dir / "SarasaMonoSC-Bold.ttf",
+        data_font_dir / "SourceHanSerifCN-Heavy.otf",
+        Path("/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc"),
+        Path("/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc"),
+        Path("/usr/share/fonts/truetype/wqy/wqy-microhei.ttc"),
+        Path("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"),
+    ]
+
+
 def _pick_font(size: int) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
-    for p in _FONT_CANDIDATES:
+    for p in _font_candidates():
         if p.is_file():
             try:
                 return ImageFont.truetype(str(p), size=size)
@@ -377,8 +382,6 @@ def render_media_card(
         cur += FOOT_SIZE + 6
 
     if out_path is None:
-        from ....paths import get_paths
-
         try:
             from .config import media_parser_cache_dir
             out_dir = media_parser_cache_dir() / "cards"
