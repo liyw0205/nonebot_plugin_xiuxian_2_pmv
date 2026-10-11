@@ -1,26 +1,26 @@
 # 项目执行入口
 
-用简体中文沟通。当前重构任务唯一入口为
-[`docs/refactor_slice_execution_protocol.md`](docs/refactor_slice_execution_protocol.md)，
-执行范围为 [`refactor-closeout-v1`](docs/refactor_closeout_scope_v1.md)，
-结果更新 [`docs/full_refactor_progress.md`](docs/full_refactor_progress.md)。
+用简体中文沟通。当前唯一进度入口是
+[`docs/current_project_status.md`](docs/current_project_status.md)；每次任务先读该文件。
 
-`refactor-closeout-v1` 的 C1-C4 与本地交付已完成并推送，当前分支与 origin 对齐；
-P7 仍受外部发布证据阻塞。不得自动开启下一重构切片；新开发需先明确范围和验收。
+## 分支与发布
 
-仅处理固定 C1-C5；历史账本和旧“下一片”不是当前指令，不从任意 false 字段、
-旧 helper、目录缺件或清单外发现自动开启新玩法。Phase 2、技术验收和当前发布 P7 分开判断。
-固定清单内库存 freshness 与普通闭关拒绝重放已按当前证据验收，结果见当前进度。
+- `main` 是安装器、README/安装教程和正式 Release 分支。
+- `develop` 是唯一活动开发分支。新切片先在 `develop` 实施、定向验证并普通推送，审查后普通合入 `main`。
+- 旧 `work`、`refactor/*`、文档分支和 worktree 是历史证据；不删除、不重置、不盲目合入。
+- 不移动旧 tag，不强推。README 和安装教程只指向 `main` 与真实存在的正式 Release。
 
-2026-10-10 收口已修复 C3 必需的测试包初始化、夹具、旧源码契约证据和已证实回归；
-根目录全量与 unittest 验收通过，结果见当前进度。文档单独变化不重跑门禁；
-用户 `boss_info.json` 不暂存，P7 仍独立受阻，不强推、不合 main、不发版。
+## 部署与数据
 
-保留现有用户改动，手工编辑用 apply_patch。子代理须有明确委派和互不重叠的边界，
-主线程统一整合；共享夹具测试与恢复串行。未运行的验收写明受阻，不弱化门禁。
-OneBot WebSocket 对共同 application/repository 的代表性业务长链只验一次；QQ 只保留
-消息格式、Markdown、蓝字、按钮、回调 ACK 和降级短合同，不重复业务长链。官方呈现与
-权限未实测时不得宣称通过。具体边界见唯一执行入口的适配器验证规则。
-仅清理本任务创建且进程已退出的临时产物；禁止删除 `/tmp/codex-daemon-*`、
-Codex IPC/socket/lock、其它活跃代理目录、运行数据/WAL/SHM、备份和用户 `boss_info.json`，
-禁止清空系统缓存或杀 daemon 来解决执行循环。
+- 安装、重启和测试共用 `flock -w 600 /tmp/nonebot-project-validation.lock`，串行执行并限制持锁时间。
+- 修改部署前先停机；把 `.env`、凭据、配置和全部数据冷备份到权限受限目录，校验源与副本；不覆盖或清理旧备份。
+- 不改共享 Python 环境，不输出密钥或个人数据，不对真实数据库做游戏写入测试。
+- 兼容性迁移只在隔离数据副本上验证；连接状态和 QQ 官方消息/界面呈现分别记录，未实测不宣称通过。
+- 保留 `boss_info.json`、运行缓存和其他用户改动；只暂存当前任务白名单。
+
+## 开发与验证
+
+- 只按 `docs/current_project_status.md` 中冻结的切片范围实施；不扩成重构、奖励系统或全量翻新。
+- 聚焦测试执行一次并复用未变化基线；不做全量测试、仿真、压测或真实 QQ 消息。
+- 完成即停止：develop 提交/推送、审查、普通合入 main 并推送；Release 只在确有需要且质量门通过时创建。
+- 手工编辑使用 `apply_patch`。遇到冲突或备份校验不一致时停止，不强推、不回滚用户状态。

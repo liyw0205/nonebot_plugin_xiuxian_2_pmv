@@ -1,6 +1,9 @@
-# 重构有限收口执行入口
+# 重构有限收口执行入口（历史）
 
-状态：2026-10-10 C1-C4 技术收口完成，本地交付已普通推送并核验分支与 origin 对齐；
+> 本文是已完成重构范围的历史边界记录。当前分支、部署、Release 和新开发规则以
+> [`docs/current_project_status.md`](current_project_status.md) 与 `AGENTS.md` 为准。
+
+状态（历史）：2026-10-10 C1-C4 技术收口完成，本地交付已普通推送并核验分支与 origin 对齐；
 当前发布 P7 仍受外部证据阻塞。本固定范围已关闭，不自动开启下一切片；新开发需明确范围和验收。
 本文件作为已交付范围的边界记录，不代表正在执行旧 goal。唯一执行入口。
 执行范围：[refactor-closeout-v1 固定清单](refactor_closeout_scope_v1.md)。

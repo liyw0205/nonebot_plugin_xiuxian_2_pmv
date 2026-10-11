@@ -1,4 +1,7 @@
-# 重构当前进度
+# 重构当前进度（历史）
+
+> 本文记录已完成的重构收口，不是当前执行入口。当前状态、分支、部署和 Release 以
+> [`docs/current_project_status.md`](current_project_status.md) 为准。
 
 状态：2026-10-10 C1-C4 技术收口完成、待发布；当前发布 P7 独立受阻。
 唯一执行入口：[重构有限收口协议](refactor_slice_execution_protocol.md)。
