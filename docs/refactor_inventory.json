@@ -1471,6 +1471,14 @@
     },
     {
       "aliases": [
+        "活动大厅"
+      ],
+      "feature": "activity",
+      "name": "活动中心",
+      "permission": "user"
+    },
+    {
+      "aliases": [
         "活动日常",
         "活动目标"
       ],
