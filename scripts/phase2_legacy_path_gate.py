@@ -443,6 +443,37 @@ def _refreshed_command_graph(
     return list(dict.fromkeys([*call_graph, *preserved_edges])), evidence
 
 
+def _refresh_frozen_command_bindings(
+    item: dict[str, Any], records: tuple[dict[str, Any], ...]
+) -> None:
+    call_graph, evidence = _refreshed_command_graph(
+        [str(edge) for edge in item.get("call_graph", [])], records
+    )
+    record_evidence = evidence[3:]
+    stale_binding_locations: set[str] = set()
+    for edge in item.get("call_graph", []):
+        edge = str(edge)
+        is_declaration = "= on_command(" in edge
+        is_handler = any(
+            str(edge).partition(" ")[2].startswith(f"{handler['name']} ")
+            and "->" in str(edge)
+            for record in records
+            for handler in record.get("handlers", [])
+        )
+        if not (is_declaration or is_handler):
+            continue
+        location = edge.split(" ", 1)[0]
+        if ":" in location and location.rsplit(":", 1)[-1].isdigit():
+            stale_binding_locations.add(location)
+    item["call_graph"] = call_graph
+    retained_evidence = [
+        value
+        for value in item.get("evidence", [])
+        if str(value) not in stale_binding_locations
+    ]
+    item["evidence"] = list(dict.fromkeys([*retained_evidence, *record_evidence]))
+
+
 @lru_cache(maxsize=1)
 def _suppressed_legacy_command_keys() -> frozenset[str]:
     path = PACKAGE / "xiuxian" / "on_compat.py"
@@ -794,13 +825,22 @@ def load_phase2_scope_report(*, include_items: bool = False) -> dict[str, Any]:
     if not items_path.is_file():
         return evaluate_phase2_scope(scope, inventory, include_items=include_items)
     frozen = json.loads(items_path.read_text(encoding="utf-8"))
+    command_index = _default_legacy_command_inventory()
+    for item in frozen.get("items", []):
+        if item.get("kind") != "commands":
+            continue
+        source = item.get("source") or {}
+        key = (str(source.get("feature", "")), str(source.get("name", "")))
+        records = command_index.get(key, ())
+        if records:
+            _refresh_frozen_command_bindings(item, records)
     return evaluate_phase2_scope(
         scope,
         inventory,
         frozen_items=frozen.get("items"),
         frozen_scope_id=frozen.get("scope_id"),
         frozen_source_projection=frozen.get("source_projection"),
-        default_legacy_commands=_default_legacy_command_inventory(),
+        default_legacy_commands=command_index,
         include_items=include_items,
     )
 

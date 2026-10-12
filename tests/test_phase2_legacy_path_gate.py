@@ -376,6 +376,24 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
         self.assertFalse(any("legacy downstream effect not closed" in edge for edge in graph))
         self.assertIn("legacy/admin.py:25", evidence)
 
+    def test_loaded_report_rebinds_stale_command_lines_without_writing_frozen_items(self):
+        root = Path(__file__).resolve().parents[1]
+        items_path = root / "docs/refactor_phase2_legacy_path_items.json"
+        original_items = items_path.read_bytes()
+        report = load_phase2_scope_report(include_items=True)
+        item = next(item for item in report["items"] if item["id"] == "command:title:称号帮助")
+        source = "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_title/__init__.py"
+        handler_line = _handler_line(source, "title_help_")
+        graph = " ".join(item["call_graph"])
+
+        self.assertIn(
+            f"{source}:{handler_line} title_help_ -> static __title_help__ text/buttons -> send_help_message -> handle_send",
+            graph,
+        )
+        self.assertIn(f"{source}:{handler_line}", item["evidence"])
+        self.assertEqual(report["integrity_errors"], [])
+        self.assertEqual(items_path.read_bytes(), original_items)
+
     def test_status_help_compatibility_and_system_info_application_owner(self):
         report = load_phase2_scope_report(include_items=True)
         items = {item["id"]: item for item in report["items"]}
@@ -746,9 +764,15 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
         )
         self.assertEqual(report["blocked_count"], 0)
         self.assertTrue(all(item["call_graph"] and item["evidence"] for item in report["items"]))
-        self.assertEqual(report["default_legacy_command_count"], 637)
-        self.assertEqual(report["default_legacy_command_backlog_count"], 323)
-        self.assertEqual(len(report["backlog"]), 327)
+        self.assertEqual(report["default_legacy_command_count"], 638)
+        self.assertEqual(report["default_legacy_command_backlog_count"], 324)
+        scope_path = Path(__file__).resolve().parents[1] / "docs/refactor_phase2_legacy_paths.json"
+        scope = json.loads(scope_path.read_text(encoding="utf-8"))
+        inventory_drift_count = sum(len(entries) for entries in report["source_inventory_added"].values())
+        self.assertEqual(
+            len(report["backlog"]),
+            len(scope["backlog"]) + report["default_legacy_command_backlog_count"] + inventory_drift_count,
+        )
         self.assertEqual(
             report["default_legacy_command_discovery"],
             "static_ast_startup_import_closure_not_live_runtime_observation",
