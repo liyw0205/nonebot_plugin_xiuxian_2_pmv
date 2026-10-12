@@ -48,6 +48,9 @@ class InstallerScriptTests(unittest.TestCase):
         self.assertIn("^v[0-9]+\\.[0-9]+\\.[0-9]+$", workflow)
         self.assertIn("workflow_dispatch 必须提供 tag_name", workflow)
         self.assertIn("project.tar.gz", workflow)
+        # The quality job audits real tags via released_tags(); without
+        # fetch-tags the CI checkout has zero tags and the gate audit dies.
+        self.assertIn("fetch-tags: true", workflow)
 
     def test_installers_are_maintained_in_this_repository(self) -> None:
         readme = (ROOT / "README.md").read_text(encoding="utf-8")

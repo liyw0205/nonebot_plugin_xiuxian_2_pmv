@@ -25,6 +25,10 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          # The release gate audits real repository tags; a depth-1 checkout
+          # without tags would make released_tags() see an empty set.
+          fetch-tags: true
 
       - name: Set up Python
         uses: actions/setup-python@v5
