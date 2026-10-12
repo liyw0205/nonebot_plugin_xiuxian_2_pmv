@@ -12,6 +12,7 @@ import ast
 from contextlib import redirect_stdout
 import json
 import re
+import subprocess
 import sys
 from pathlib import Path
 from typing import Any, Iterable
@@ -135,22 +136,19 @@ def _database_tables() -> list[str]:
 
 
 def _json_files() -> list[str]:
-    roots = (PACKAGE, ROOT / "data")
-    files: set[str] = set()
-    for root in roots:
-        if not root.is_dir():
-            continue
-        for path in root.rglob("*.json"):
-            if not path.is_file():
-                continue
-            # Compatibility hit counters and similar runtime state are
-            # derived artifacts, not deployable JSON assets.  Including them
-            # would make the checked-in inventory change after every test or
-            # process start.
-            if path.name in {"compatibility_hits.json"}:
-                continue
-            files.add(str(path.relative_to(ROOT)))
-    return sorted(files)
+    # Runtime and ignored test data vary between checkouts; inventory only
+    # source assets tracked by Git.
+    result = subprocess.run(
+        ["git", "ls-files", "-z", "--", "data", "nonebot_plugin_xiuxian_2"],
+        cwd=ROOT,
+        check=True,
+        capture_output=True,
+    )
+    return sorted(
+        path
+        for path in result.stdout.decode("utf-8").split("\0")
+        if path.endswith(".json") and Path(path).name != "compatibility_hits.json"
+    )
 
 
 def _registry_export() -> dict[str, Any]:
