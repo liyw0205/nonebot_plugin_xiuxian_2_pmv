@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sqlite3
+import time
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
@@ -53,9 +54,11 @@ class DatabaseUnitOfWork:
             self.connection = sqlite3.connect(self.database, timeout=self.timeout)
         try:
             self.connection.row_factory = sqlite3.Row
-            if not self.read_only:
-                self.connection.execute("PRAGMA journal_mode=WAL")
+            # busy_timeout must be in effect before any statement that could
+            # block on another connection's lock.
             self.connection.execute(f"PRAGMA busy_timeout={max(int(self.timeout * 1000), 0)}")
+            if not self.read_only:
+                self._ensure_wal()
             self.connection.execute(f"PRAGMA foreign_keys={'ON' if self.foreign_keys else 'OFF'}")
             if self.query_only:
                 self.connection.execute("PRAGMA query_only=ON")
@@ -69,6 +72,30 @@ class DatabaseUnitOfWork:
             self.connection = None
             raise
         return self
+
+    def _ensure_wal(self) -> None:
+        """Put the database in WAL mode once; the mode is persistent.
+
+        The mode is stored in the database header, so only the initializing
+        connection needs to convert it; every later open just reads "wal" and
+        skips the write-lock-taking conversion.  The conversion itself does
+        not honor busy_timeout — it returns SQLITE_BUSY immediately when
+        another connection is mid-transaction — so retry it within the same
+        overall timeout budget the connection was opened with.
+        """
+        connection = self._conn()
+        deadline = time.monotonic() + max(self.timeout, 0.0)
+        while True:
+            row = connection.execute("PRAGMA journal_mode").fetchone()
+            if row is not None and str(row[0]).lower() == "wal":
+                return
+            try:
+                connection.execute("PRAGMA journal_mode=WAL")
+                return
+            except sqlite3.OperationalError as exc:
+                if not is_database_busy(exc) or time.monotonic() >= deadline:
+                    raise
+                time.sleep(0.01)
 
     def __exit__(self, exc_type: Any, exc: Any, traceback: Any) -> bool | None:
         if self.connection is None:

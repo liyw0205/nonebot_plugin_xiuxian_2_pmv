@@ -1,6 +1,7 @@
 import sqlite3
 import tempfile
 import unittest
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from nonebot_plugin_xiuxian_2.infrastructure.database.uow import DatabaseUnitOfWork
@@ -83,6 +84,37 @@ class UnitOfWorkAttachTests(unittest.TestCase):
                     raise RuntimeError("boom")
             with sqlite3.connect(database) as conn:
                 self.assertEqual(conn.execute("SELECT content FROM messages").fetchone()[0], "original")
+
+    def test_concurrent_first_opens_converge_on_wal_without_busy_error(self):
+        """Regression for the CI race: every opener used to run
+        PRAGMA journal_mode=WAL with busy_timeout still unset, and the mode
+        conversion ignores busy_timeout entirely, so two simultaneous first
+        opens could die with 'database is locked' during __enter__."""
+        with tempfile.TemporaryDirectory() as directory:
+            database = Path(directory) / "sect.db"
+            with sqlite3.connect(database) as conn:
+                conn.execute("CREATE TABLE markers (who TEXT PRIMARY KEY)")
+                # Keep rollback journal mode so both threads truly race on the
+                # WAL conversion instead of inheriting a pre-set header.
+                conn.execute("PRAGMA journal_mode=DELETE")
+            errors: list[BaseException] = []
+
+            def open_immediate(worker: str) -> None:
+                try:
+                    with DatabaseUnitOfWork(database, immediate=True) as uow:
+                        uow.execute("INSERT INTO markers VALUES (?)", (worker,))
+                except BaseException as exc:  # noqa: BLE001 - reported below
+                    errors.append(exc)
+
+            with ThreadPoolExecutor(max_workers=4) as pool:
+                for future in [pool.submit(open_immediate, f"w{i}") for i in range(4)]:
+                    future.result()
+            self.assertEqual(errors, [])
+            with sqlite3.connect(database) as conn:
+                self.assertEqual(
+                    "wal", conn.execute("PRAGMA journal_mode").fetchone()[0].lower()
+                )
+                self.assertEqual(4, conn.execute("SELECT COUNT(*) FROM markers").fetchone()[0])
 
 
 if __name__ == "__main__":
