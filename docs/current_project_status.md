@@ -1,6 +1,6 @@
 # 当前项目状态
 
-最后核验：2026-10-12。本文是唯一活跃进度入口；旧重构文档仅作为历史记录，不再定义当前分支或禁止事项。
+最后核验：2026-10-13。本文是唯一活跃进度入口；旧重构文档仅作为历史记录，不再定义当前分支或禁止事项。
 
 ## CI 稳定化（2026-10-12）
 
@@ -10,8 +10,8 @@
 
 ## 主线与已交付
 
-- `main` 是安装/正式 Release 分支，核验 HEAD 为 `4344796b0510d98a468e72ec4c4a2ee1abbea9df`。
-- `develop` 是唯一活动开发分支；核验时尚不存在，需从同步后的 main 创建并推送。
+- `main` 是安装/正式 Release 分支；2026-10-13 核验 main 与 `develop` 均指向 `a21649b384aed48cdaf707b2a93ac672e4bd13f0`，develop/main CI（run 1501/1502）均为 success。后续合并策略：先在 develop HEAD 完成功能、CI 全绿并通过审查后才普通快进合入 main，小切片不单独触发。
+- `develop` 是唯一活动开发分支（`efcad54f` 起自 main 创建并推送）。合并历史：`0c55b1fa`（CI tag 抓取）、`3d7fcb84`（UOW WAL 锁）、`a21649b3`（installer tests 误报修复）已按 CI 门逐段快进。
 - C1-C4 与既定重构收口已经合入 main，不重开约 2,000 个旧提交的重构盘点。
 - 活动中心第一切片 `910aefbb` 及适配器降级修正 `592fdf7a` 都是 main 的祖先；字体修复 `4344796b` 已在 main。
 - 旧 `refactor/full-bottom-layer` 和其他历史分支/worktree 保留，不删除或盲目合并。
@@ -19,7 +19,7 @@
 ## Release 与部署实况
 
 - GitHub 当前真实 latest Release 为 `v1.0.0`，资产 `project.tar.gz`，目标 `97f43acba8dd185111d998c48d4e1cf5a069b117`。
-- `v1.1.0` tag 指向 `4083da45ce865ad2e3deb8bad965668fa72d3fba`，但 GitHub Release API 返回 404。两个旧 tag 均不可移动；包含当前修复的新 Release 尚未发布。
+- `v1.1.0` tag 指向 `4083da45ce865ad2e3deb8bad965668fa72d3fba`，`v1.2.0` tag 指向 `efcad54f444a593aab364ce0a0472496a99dc1d3`，两者 Release API 均返回 404（tag 存在但无对应 Release）。全部旧 tag 均不可移动；包含当前修复的新 Release 尚未发布。
 - `/root/xiu2` 是目标实例。`/bin/xiu2_start` 使用 `/root/myenv` 并在 `/root/xiu2` 执行 `nb run --reload`；当前控制器是旧脚本，不具备新版安装器的 Release 参数。
 - 已安装插件无 `.git` 元数据，不能证明精确 commit/tag。`card.py` 文件时间为 2026-08-20，SHA256 为 `140700ca2fbf67fbd23c7ccc9082d55bd10194d27af391c07cee3b5587fe9a8e`，与 main 字体修复不同。运行中的 screen 会话曾被观察到；部署更新/重启及当前加载版本待验。
 - 数据目录 `/root/xiu2/data/xiuxian` 有五个根目录库：`message.db`、`player.db`、`trade.db`、`xiuxian.db`、`xiuxian_impart.db`，另有活动中心的独立 `activity/activity.db`。配置文件为 `.env`、`.env.dev` 和 `data/xiuxian/config.json`；`.env.dev` 含 `QQ_BOTS` 与 PostgreSQL DSN 键。值不读取、不输出。尚未做停机一致备份，因此禁止覆盖部署。
