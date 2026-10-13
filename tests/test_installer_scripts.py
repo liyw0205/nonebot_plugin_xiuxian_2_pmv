@@ -191,6 +191,46 @@ class InstallerScriptTests(unittest.TestCase):
                 result = subprocess.run(["bash", "-c", command], cwd=ROOT, env=env)
                 self.assertNotEqual(result.returncode, 0)
 
+    def _run_validate_deployment(self, plugin_dir: Path, extra_files: dict[str, str]) -> int:
+        with tempfile.TemporaryDirectory() as temp:
+            directory = Path(temp)
+            staged = directory / "src" / "plugins" / "nonebot_plugin_xiuxian_2"
+            for name, content in {"__init__.py": "", **extra_files}.items():
+                target = staged / name
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_text(content, encoding="utf-8")
+            command = (
+                "set -u; DIR=" + self._quote(directory) + "; "
+                "export XIUXIAN_INSTALLER_LIBRARY_ONLY=1; "
+                f"source {self._quote(SCRIPTS / 'install.sh')}; "
+                "if validate_deployment; then exit 0; else exit 1; fi"
+            )
+            result = subprocess.run(["bash", "-c", command], cwd=ROOT, capture_output=True, text=True)
+            return result.returncode
+
+    def test_validate_deployment_allows_tests_fixtures_and_flags_runtime_imports(self) -> None:
+        fixture = (
+            "SCRIPT = '''\n"
+            "from nonebot_plugin_xiuxian_2.plugin import build_migrations\n"
+            "'''\n"
+        )
+        self.assertEqual(
+            0,
+            self._run_validate_deployment(
+                Path("."),
+                {"features/buff/tests/test_closing_repository.py": fixture},
+            ),
+            "tests/ fixtures importing the package absolutely must not block deploy",
+        )
+        self.assertEqual(
+            1,
+            self._run_validate_deployment(
+                Path("."),
+                {"features/buff/repository.py": "from nonebot_plugin_xiuxian_2.plugin import x\n"},
+            ),
+            "runtime absolute imports must still fail validate_deployment",
+        )
+
     @staticmethod
     def _quote(path: Path) -> str:
         return shlex.quote(str(path))

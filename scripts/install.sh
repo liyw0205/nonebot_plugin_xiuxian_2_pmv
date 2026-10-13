@@ -544,8 +544,11 @@ validate_deployment() {
         ui_print "red" "错误: 部署后缺少插件入口文件。"
         return 1
     }
+    # Shipped tests/ fixtures legitimately import the package by its absolute
+    # name (they run from the repository root, never under src/plugins), so
+    # only runtime modules are scanned here.
     if grep -R -n -E "(^|[[:space:]])(from|import)[[:space:]]+nonebot_plugin_xiuxian_2([[:space:].]|$)" \
-        --include="*.py" "$plugin_dir" > /dev/null; then
+        --include="*.py" --exclude-dir=tests "$plugin_dir" > /dev/null; then
         ui_print "red" "错误: 部署代码仍包含不兼容 src.plugins 命名空间的绝对导入。"
         return 1
     fi
