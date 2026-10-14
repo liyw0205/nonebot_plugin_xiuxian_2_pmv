@@ -143,3 +143,40 @@ def test_activity_center_message_has_qq_links_and_plain_fallback() -> None:
     assert "mqqapi://aio/inlinecmd" in markdown
     assert "活动签到" in strip_md_command_links(markdown)
     assert "mqqapi://aio/inlinecmd" not in strip_md_command_links(markdown)
+    # 无限/无时限配置不显示倒计时提示。
+    assert "剩余" not in markdown
+    assert "后开启" not in markdown
+
+
+def test_activity_center_time_hint_is_config_driven() -> None:
+    from nonebot_plugin_xiuxian_2.features.activity.center import time_hint
+
+    now = datetime(2026, 10, 15, 12)
+    # 日期型 end_time 解析为当日 23:59:59，因此剩余按向下取整天/小时显示。
+    assert time_hint(IN_PROGRESS, "2026-10-01", "2026-10-20", now) == "剩余 5 天"
+    assert time_hint(IN_PROGRESS, "2026-10-01", "2026-10-15", now) == "剩余 11 小时"
+    assert time_hint(NOT_STARTED, "2026-10-18", "2026-10-31", now) == "2 天后开启"
+    # 无截止时间（"无限"）与已结束/可领奖状态不显示提示。
+    assert time_hint(IN_PROGRESS, "0", "无限", now) == ""
+    assert time_hint(ENDED, "2026-10-01", "2026-10-10", now) == ""
+    assert time_hint(REWARD_CLAIM, "2026-10-01", "2026-10-10", now) == ""
+
+    config = {
+        "template_key": "spring",
+        "enabled": True,
+        "name": "春日庆典",
+        "start_time": "2026-10-01",
+        "end_time": "2026-10-20",
+        "daily_tasks": [],
+        "weekly_tasks": [],
+        "gameplay_activities": [],
+        "extensions": {"activity_pass": {"enabled": False}},
+    }
+    item = build_activity_center_items(config, now)[0]
+    assert item.time_hint == "剩余 5 天"
+    app = ActivityReadModelApplication(
+        "/tmp/activity-center-missing.db",
+        config_loader=lambda: config,
+        clock=SimpleNamespace(now=lambda: now),
+    )
+    assert "剩余 5 天" in app.activity_center_text()

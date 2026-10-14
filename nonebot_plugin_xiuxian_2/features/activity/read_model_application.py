@@ -184,6 +184,8 @@ class ActivityReadModelApplication:
                 lines.append(item.description)
             if item.gameplay_summary:
                 lines.append(f"玩法：{item.gameplay_summary}")
+            if item.time_hint:
+                lines.append(item.time_hint)
             lines.append(f"奖励：{item.reward_hint}")
             if user_id:
                 lines.append(personal_progress_summary(config, snapshot, now))

@@ -24,6 +24,7 @@ class ActivityCenterItem:
     reward_hint: str
     commands: tuple[tuple[str, str], ...]
     gameplay_summary: str = ""
+    time_hint: str = ""
 
 
 def resolve_status(
@@ -122,6 +123,36 @@ def commands_for_status(
     return _commands_for_activity(activity)
 
 
+def _format_countdown(delta_seconds: float) -> str:
+    total_hours = int(delta_seconds // 3600)
+    if total_hours < 24:
+        return f"{max(1, total_hours)} 小时"
+    return f"{total_hours // 24} 天"
+
+
+def time_hint(
+    status: str,
+    start_time: Any,
+    end_time: Any,
+    now: datetime,
+) -> str:
+    """Config-driven countdown text; empty for unlimited/ended states."""
+    if status == NOT_STARTED:
+        start = parse_time(start_time, is_start=True)
+        if start is None:
+            return ""
+        return _format_countdown((start - now).total_seconds()) + "后开启"
+    if status == IN_PROGRESS:
+        end = parse_time(end_time, is_start=False)
+        if end is None:
+            return ""
+        remaining = (end - now).total_seconds()
+        if remaining <= 0:
+            return ""
+        return "剩余 " + _format_countdown(remaining)
+    return ""
+
+
 def personal_progress_summary(
     config: Mapping[str, Any],
     snapshot: Mapping[str, Any],
@@ -198,6 +229,9 @@ def build_activity_center_items(
         reward_hint=_reward_hint(config, activities),
         commands=commands_for_status(main_status),
         gameplay_summary="；".join(gameplay_lines[:4]),
+        time_hint=time_hint(
+            main_status, config.get("start_time"), config.get("end_time"), now
+        ),
     )
     return (main,)
 
@@ -257,4 +291,5 @@ __all__ = [
     "commands_for_status",
     "personal_progress_summary",
     "resolve_status",
+    "time_hint",
 ]
