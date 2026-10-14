@@ -372,6 +372,7 @@ class ActivityReadModelSqlRepository:
         include_tasks: bool,
         include_pass: bool,
         collect_activity_keys: list[str],
+        point_activity_keys: list[str] | tuple[str, ...] = (),
     ) -> dict[str, Any]:
         """Read all personal overview state within a single game_db snapshot."""
         empty: dict[str, Any] = {
@@ -381,6 +382,7 @@ class ActivityReadModelSqlRepository:
             "pass_claimed_levels": set(),
             "pass_highest_level": 0,
             "collect_pity": {},
+            "point_balances": {},
         }
         if not self.database.is_file():
             return empty
@@ -393,6 +395,11 @@ class ActivityReadModelSqlRepository:
         collect_keys = tuple(dict.fromkeys(str(key) for key in collect_activity_keys if str(key)))
         if collect_keys:
             required.add("activity_collect_pity_state")
+        point_keys = tuple(
+            dict.fromkeys(str(key) for key in point_activity_keys if str(key))
+        )
+        if point_keys:
+            required.add("activity_point_balance")
 
         with DatabaseUnitOfWork(self.database, read_only=True) as uow:
             self._assert_tables(uow, required)
@@ -440,6 +447,14 @@ class ActivityReadModelSqlRepository:
                     f"WHERE activity_key IN ({placeholders}) AND user_id=?",
                     (*collect_keys, str(user_id)),
                 )
+            point_rows = []
+            if point_keys:
+                placeholders = ", ".join("?" for _ in point_keys)
+                point_rows = uow.query_all(
+                    "SELECT activity_key,points FROM activity_point_balance "
+                    f"WHERE activity_key IN ({placeholders}) AND user_id=?",
+                    (*point_keys, str(user_id)),
+                )
 
         tasks = {
             (str(row["scope_type"]), str(row["scope_key"]), str(row["task_key"])): {
@@ -465,6 +480,10 @@ class ActivityReadModelSqlRepository:
                     0, int(row["miss_count"] or 0)
                 )
                 for row in pity_rows
+            },
+            "point_balances": {
+                str(row["activity_key"]): max(0, int(row["points"] or 0))
+                for row in point_rows
             },
         }
 

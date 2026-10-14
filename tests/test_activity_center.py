@@ -239,3 +239,172 @@ def test_personal_progress_line_carries_today_sign_state() -> None:
     # 无用户不渲染进度行；有用户且今日已签时进度行带签到段。
     assert "进度：" not in render(None)
     assert "进度：签到 已签" in render("u-1")
+
+
+def test_progress_line_carries_collect_pity_and_points() -> None:
+    from nonebot_plugin_xiuxian_2.features.activity.center import (
+        personal_progress_summary,
+    )
+
+    now = datetime(2026, 10, 15, 12)
+    config = {
+        "daily_tasks": [],
+        "weekly_tasks": [],
+        "extensions": {"activity_pass": {"enabled": False}},
+        "gameplay_activities": [
+            {
+                "key": "spring_collect",
+                "type": "collect_words",
+                "enabled": True,
+                "name": "春日集字",
+                "pity_threshold": 10,
+                "drop_events": ["boss", "work"],
+            },
+            {
+                "key": "spring_points",
+                "type": "event_points",
+                "enabled": True,
+                "name": "春日积分",
+                "point_name": "春分",
+            },
+        ],
+    }
+    snapshot = {
+        "tasks": {},
+        "pass_total_exp": 0,
+        "pass_claimed_levels": set(),
+        "sign": {"last_sign_date": "2026-10-15"},
+        "collect_pity": {("spring_collect", "boss"): 3, ("spring_collect", "work"): 7},
+        "point_balances": {"spring_points": 120},
+    }
+    line = personal_progress_summary(config, snapshot, now)
+    assert "春日集字 保底 3/10" in line
+    assert "春分 120" in line
+    # 保底按配置的首个掉落事件，且不超过阈值。
+    capped = dict(snapshot, collect_pity={("spring_collect", "boss"): 99})
+    assert "春日集字 保底 10/10" in personal_progress_summary(config, capped, now)
+    # 快照未携带对应键时不产生段落（历史调用方不受影响）。
+    bare = {"tasks": {}, "pass_total_exp": 0, "pass_claimed_levels": set()}
+    assert "保底" not in personal_progress_summary(config, bare, now)
+    assert "春分" not in personal_progress_summary(config, bare, now)
+
+
+def test_center_text_renders_gameplay_progress_from_snapshot() -> None:
+    now = datetime(2026, 10, 15, 12)
+    config = {
+        "template_key": "spring",
+        "enabled": True,
+        "name": "春日庆典",
+        "start_time": "0",
+        "end_time": "无限",
+        "daily_tasks": [],
+        "weekly_tasks": [],
+        "extensions": {"activity_pass": {"enabled": False}},
+        "gameplay_activities": [
+            {
+                "key": "spring_collect",
+                "type": "collect_words",
+                "enabled": True,
+                "name": "春日集字",
+                "pity_threshold": 10,
+                "drop_events": ["boss"],
+            },
+            {
+                "key": "spring_points",
+                "type": "event_points",
+                "enabled": True,
+                "name": "春日积分",
+                "point_name": "春分",
+            },
+        ],
+    }
+    app = ActivityReadModelApplication(
+        "/tmp/activity-center-missing.db",
+        config_loader=lambda: config,
+        clock=SimpleNamespace(now=lambda: now),
+    )
+    captured: dict = {}
+
+    def fake_snapshot(user_id, activity_key, **kwargs):
+        captured.update(kwargs)
+        return {
+            "sign": {"last_sign_date": "2026-10-15"},
+            "tasks": {},
+            "pass_total_exp": 0,
+            "pass_claimed_levels": set(),
+            "pass_highest_level": 0,
+            "collect_pity": {("spring_collect", "boss"): 4},
+            "point_balances": {"spring_points": 88},
+        }
+
+    app.repository.overview_snapshot = fake_snapshot
+    text = app.activity_center_text("u-1")
+    # 只读快照按玩法类型请求集字与积分键，且渲染在进度行内。
+    assert captured["collect_activity_keys"] == ["spring_collect"]
+    assert captured["point_activity_keys"] == ["spring_points"]
+    assert "春日集字 保底 4/10" in text
+    assert "春分 88" in text
+
+
+def test_center_card_offers_entries_for_advertised_gameplay() -> None:
+    now = datetime(2026, 10, 15, 12)
+    config = {
+        "template_key": "spring",
+        "enabled": True,
+        "name": "春日庆典",
+        "start_time": "0",
+        "end_time": "无限",
+        "daily_tasks": [],
+        "weekly_tasks": [],
+        "extensions": {"activity_pass": {"enabled": False}},
+        "gameplay_activities": [
+            {
+                "key": "spring_collect",
+                "type": "collect_words",
+                "enabled": True,
+                "name": "春日集字",
+                "start_time": "0",
+                "end_time": "无限",
+            },
+            {
+                "key": "spring_points",
+                "type": "event_points",
+                "enabled": True,
+                "name": "春日积分",
+                "start_time": "0",
+                "end_time": "无限",
+            },
+            {
+                # 与主入口同命令：不得重复出现在链接行。
+                "key": "spring_extra",
+                "type": "collect_words",
+                "enabled": True,
+                "name": "重复玩法",
+                "start_time": "0",
+                "end_time": "无限",
+                "commands": [{"label": "活动任务", "command": "活动任务"}],
+            },
+        ],
+    }
+    item = build_activity_center_items(config, now)[0]
+    assert item.status == IN_PROGRESS
+    labels = [label for label, _ in item.gameplay_commands]
+    assert labels == ["集字背包", "集字兑换", "活动积分", "活动商店"]
+    assert "活动任务" not in [command for _, command in item.gameplay_commands]
+
+    # 卡片把它自己广告的玩法接到既有入口：链接行含玩法入口。
+    app = ActivityReadModelApplication(
+        "/tmp/activity-center-missing.db",
+        config_loader=lambda: config,
+        clock=SimpleNamespace(now=lambda: now),
+    )
+    text = app.activity_center_text()
+    plain = strip_md_command_links(text)
+    # 纯文本降级保留的是入口标签（命令目标只在蓝字链接里）。
+    for label in ("集字背包", "集字兑换", "活动积分", "活动商店"):
+        assert label in plain
+    assert "mqqapi" not in plain
+
+    # 未开始 / 已结束不给玩法入口（只给状态允许的入口）。
+    assert build_activity_center_items(dict(config, start_time="2099-01-01"), now)[0].gameplay_commands == ()
+    assert build_activity_center_items(dict(config, end_time="2000-01-01"), now)[0].gameplay_commands == ()

@@ -143,6 +143,40 @@ def test_plain_degradation_is_idempotent() -> None:
     assert strip_md_command_links(once) == once
 
 
+def test_enriched_card_still_degrades_cleanly_on_onebot() -> None:
+    """玩法入口加入链接行后，纯文本降级仍不得泄漏 markdown 或蓝字 URL。"""
+    config = dict(
+        CONFIG,
+        gameplay_activities=[
+            {
+                "key": "spring_collect",
+                "type": "collect_words",
+                "enabled": True,
+                "name": "春日集字",
+                "start_time": "0",
+                "end_time": "无限",
+            },
+        ],
+    )
+    app = ActivityReadModelApplication(
+        "/tmp/activity-center-delivery-missing.db",
+        config_loader=lambda: config,
+        clock=SimpleNamespace(now=lambda: datetime(2026, 10, 15, 12)),
+    )
+    text = app.activity_center_text()
+    assert "mqqapi://aio/inlinecmd" in text and "集字背包" in text
+
+    plain_sent, md_sent = _send_through_entry(_bot(onebot=True), text, markdown=True)
+    assert md_sent == []
+    plain = plain_sent[0]
+    assert "**" not in plain and "mqqapi" not in plain
+    assert "集字背包" in plain and "活动签到" in plain
+
+    plain_sent, md_sent = _send_through_entry(_bot(onebot=False), text, markdown=True)
+    assert plain_sent == []
+    assert "](mqqapi" in md_sent[0] and "\n" not in md_sent[0]
+
+
 def test_center_handler_wires_shared_entry_with_fallback() -> None:
     source = (
         ROOT

@@ -169,12 +169,18 @@ class ActivityReadModelApplication:
                 if activity.get("type") == "collect_words"
                 and _as_int(activity.get("pity_threshold"), 0) > 0
             ]
+            point_keys = [
+                str(activity.get("key") or "")
+                for activity in get_gameplay_activities(config)
+                if activity.get("type") == "event_points"
+            ]
             snapshot = self.repository.overview_snapshot(
                 str(user_id),
                 activity_key,
                 include_tasks=bool(tasks),
                 include_pass=bool(pass_config.get("enabled")),
                 collect_activity_keys=collect_keys,
+                point_activity_keys=point_keys,
             )
         claimable = bool(user_id and claimable_reward_count(config, snapshot, now))
         lines = ["**活动中心**"]
@@ -191,7 +197,7 @@ class ActivityReadModelApplication:
                 lines.append(personal_progress_summary(config, snapshot, now))
             links = " | ".join(
                 build_md_command_link(label, command)
-                for label, command in item.commands
+                for label, command in item.commands + item.gameplay_commands
             )
             if links:
                 lines.append(links)

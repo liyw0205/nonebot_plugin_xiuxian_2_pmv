@@ -25,6 +25,7 @@ class ActivityCenterItem:
     commands: tuple[tuple[str, str], ...]
     gameplay_summary: str = ""
     time_hint: str = ""
+    gameplay_commands: tuple[tuple[str, str], ...] = ()
 
 
 def resolve_status(
@@ -153,6 +154,48 @@ def time_hint(
     return ""
 
 
+def _gameplay_progress_parts(
+    config: Mapping[str, Any], snapshot: Mapping[str, Any]
+) -> list[str]:
+    """Read-only collect/points progress segments from one overview snapshot.
+
+    Only keys the snapshot actually carries are used, so callers that do not
+    request collect/point state simply get no extra segment.
+    """
+    pity_state = snapshot.get("collect_pity")
+    balances = snapshot.get("point_balances")
+    parts: list[str] = []
+    for activity in get_gameplay_activities(dict(config)):
+        activity_key = str(activity.get("key") or "")
+        if not activity_key:
+            continue
+        if activity.get("type") == "collect_words":
+            if pity_state is None:
+                continue
+            threshold = max(0, _as_int(activity.get("pity_threshold"), 0))
+            events = [
+                str(event) for event in (activity.get("drop_events") or []) if str(event)
+            ]
+            if threshold <= 0 or not events:
+                continue
+            # 与活动背包一致：按配置的首个掉落事件展示保底进度。
+            miss = min(
+                threshold,
+                max(0, _as_int(pity_state.get((activity_key, events[0]), 0), 0)),
+            )
+            parts.append(
+                f"{_clean_text(activity.get('name'), '集字')} 保底 {miss}/{threshold}"
+            )
+        elif activity.get("type") == "event_points":
+            if balances is None or activity_key not in balances:
+                continue
+            point_name = _clean_text(activity.get("point_name"), "活动积分")
+            parts.append(
+                f"{point_name} {max(0, _as_int(balances.get(activity_key), 0))}"
+            )
+    return parts
+
+
 def personal_progress_summary(
     config: Mapping[str, Any],
     snapshot: Mapping[str, Any],
@@ -199,9 +242,44 @@ def personal_progress_summary(
         max_level = max(1, _as_int(pass_config.get("max_level"), 12))
         level = min(max(0, _as_int(snapshot.get("pass_total_exp"), 0)) // level_exp, max_level)
         line += f"、战令 Lv{level}"
+    gameplay_parts = _gameplay_progress_parts(config, snapshot)
+    if gameplay_parts:
+        line += "、" + "、".join(gameplay_parts)
     if claimable:
         line += f"、可领 {claimable} 项"
     return line
+
+
+def gameplay_entry_commands(
+    config: Mapping[str, Any],
+    status: str,
+    now: datetime,
+) -> tuple[tuple[str, str], ...]:
+    """Entries for the gameplay activities the card advertises.
+
+    Only offered while the activity window is open (IN_PROGRESS) and only for
+    gameplay activities that are themselves in progress; every target is an
+    existing command, deduped in configuration order.
+    """
+    if status != IN_PROGRESS:
+        return ()
+    entries: list[tuple[str, str]] = []
+    seen: set[str] = set()
+    for activity in get_gameplay_activities(dict(config)):
+        activity_status = resolve_status(
+            activity.get("start_time"),
+            activity.get("end_time"),
+            now,
+            enabled=bool(activity.get("enabled", False)),
+        )
+        if activity_status != IN_PROGRESS:
+            continue
+        for label, command in _commands_for_activity(activity):
+            if command in seen:
+                continue
+            seen.add(command)
+            entries.append((label, command))
+    return tuple(entries[:4])
 
 
 def build_activity_center_items(
@@ -229,17 +307,25 @@ def build_activity_center_items(
         f"{_clean_text(activity.get('name'), '活动玩法')}·{resolve_status(activity.get('start_time'), activity.get('end_time'), now, enabled=bool(activity.get('enabled', False)))}"
         for activity in activities
     ]
+    main_commands = commands_for_status(main_status)
+    main_targets = {command for _, command in main_commands}
+    gameplay_commands = tuple(
+        (label, command)
+        for label, command in gameplay_entry_commands(config, main_status, now)
+        if command not in main_targets
+    )
     main = ActivityCenterItem(
         key=_activity_config_key(dict(config)),
         name=_clean_text(config.get("name"), "节日活动"),
         status=main_status,
         description=_clean_text(config.get("description"), ""),
         reward_hint=_reward_hint(config, activities),
-        commands=commands_for_status(main_status),
+        commands=main_commands,
         gameplay_summary="；".join(gameplay_lines[:4]),
         time_hint=time_hint(
             main_status, config.get("start_time"), config.get("end_time"), now
         ),
+        gameplay_commands=gameplay_commands,
     )
     return (main,)
 
@@ -297,6 +383,7 @@ __all__ = [
     "build_activity_center_items",
     "claimable_reward_count",
     "commands_for_status",
+    "gameplay_entry_commands",
     "personal_progress_summary",
     "resolve_status",
     "time_hint",
