@@ -180,3 +180,62 @@ def test_activity_center_time_hint_is_config_driven() -> None:
         clock=SimpleNamespace(now=lambda: now),
     )
     assert "剩余 5 天" in app.activity_center_text()
+
+
+def test_personal_progress_line_carries_today_sign_state() -> None:
+    from nonebot_plugin_xiuxian_2.features.activity.center import (
+        personal_progress_summary,
+    )
+
+    now = datetime(2026, 10, 15, 12)
+    config = {
+        "daily_tasks": [],
+        "weekly_tasks": [],
+        "extensions": {"activity_pass": {"enabled": False}},
+    }
+
+    def summary(sign: dict | None) -> str:
+        snapshot: dict = {"tasks": {}, "pass_total_exp": 0,
+                          "pass_claimed_levels": set()}
+        if sign is not None:
+            snapshot["sign"] = sign
+        return personal_progress_summary(config, snapshot, now)
+
+    # 今日已签 / 昨日签 / 快照缺 sign 三种情形（只读，复用 overview 快照字段）。
+    assert summary({"last_sign_date": "2026-10-15"}) == "进度：签到 已签、暂无任务"
+    assert summary({"last_sign_date": "2026-10-14"}) == "进度：签到 未签、暂无任务"
+    assert summary(None) == "进度：签到 未签、暂无任务"
+
+    app_config = {
+        "template_key": "spring",
+        "enabled": True,
+        "name": "春日庆典",
+        "start_time": "0",
+        "end_time": "无限",
+        "daily_tasks": [],
+        "weekly_tasks": [],
+        "gameplay_activities": [],
+        "extensions": {"activity_pass": {"enabled": False}},
+    }
+
+    def render(user_id: str | None) -> str:
+        app = ActivityReadModelApplication(
+            "/tmp/activity-center-missing.db",
+            config_loader=lambda: app_config,
+            clock=SimpleNamespace(now=lambda: now),
+        )
+        if user_id is None:
+            return app.activity_center_text()
+        app.repository.overview_snapshot = lambda *a, **k: {
+            "sign": {"last_sign_date": "2026-10-15", "sign_days": 3},
+            "tasks": {},
+            "pass_total_exp": 0,
+            "pass_claimed_levels": set(),
+            "pass_highest_level": 0,
+            "collect_pity": {},
+        }
+        return app.activity_center_text(user_id)
+
+    # 无用户不渲染进度行；有用户且今日已签时进度行带签到段。
+    assert "进度：" not in render(None)
+    assert "进度：签到 已签" in render("u-1")

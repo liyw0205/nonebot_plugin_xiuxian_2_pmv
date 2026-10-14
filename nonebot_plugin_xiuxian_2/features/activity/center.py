@@ -165,6 +165,12 @@ def personal_progress_summary(
     )
 
     parts: list[str] = []
+    # 今日签到状态与结算侧同一语义：last_sign_date 等于当天日期即已签。
+    sign_state = snapshot.get("sign") or {}
+    signed_today = (
+        _clean_text(sign_state.get("last_sign_date")) == now.strftime("%Y-%m-%d")
+    )
+    sign_part = "签到 已签" if signed_today else "签到 未签"
     rows: list[tuple[str, list[Any]]] = [
         ("日常", list(config.get("daily_tasks") or [])),
         ("周常", list(config.get("weekly_tasks") or [])),
@@ -185,7 +191,9 @@ def personal_progress_summary(
         parts.append(f"{scope_label}任务 {done}/{len(scope_rows)}")
     pass_config = _activity_pass_config(dict(config))
     claimable = claimable_reward_count(config, snapshot, now)
-    line = "进度：" + ("、".join(parts) if parts else "暂无任务")
+    line = "进度：" + sign_part + (
+        "、" + "、".join(parts) if parts else "、暂无任务"
+    )
     if pass_config.get("enabled", True):
         level_exp = max(1, _as_int(pass_config.get("level_exp"), 100))
         max_level = max(1, _as_int(pass_config.get("max_level"), 12))
