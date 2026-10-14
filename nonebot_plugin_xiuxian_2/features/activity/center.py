@@ -23,6 +23,7 @@ class ActivityCenterItem:
     description: str
     reward_hint: str
     commands: tuple[tuple[str, str], ...]
+    gameplay_summary: str = ""
 
 
 def resolve_status(
@@ -95,46 +96,110 @@ def _commands_for_activity(activity: Mapping[str, Any]) -> tuple[tuple[str, str]
     return defaults.get(activity_type, (("活动玩法", "活动玩法"),))
 
 
+# 状态入口映射：只映射既有命令，不新增能力。未开始的玩法没有可参与的入口；
+# 已结束只保留结算类入口（可领奖时由 REWARD_CLAIM 状态给出）。
+MAIN_STATUS_COMMANDS: Mapping[str, tuple[tuple[str, str], ...]] = {
+    NOT_STARTED: (("查看详情", "活动信息"),),
+    IN_PROGRESS: (
+        ("活动签到", "活动签到"),
+        ("活动任务", "活动任务"),
+        ("活动战令", "活动战令"),
+    ),
+    REWARD_CLAIM: (("领取奖励", "活动领取"), ("活动任务", "活动任务")),
+    ENDED: (),
+}
+
+
+def commands_for_status(
+    status: str,
+    activity: Mapping[str, Any] | None = None,
+) -> tuple[tuple[str, str], ...]:
+    """Map one lifecycle state onto the existing entry commands it allows."""
+    if activity is None:
+        return MAIN_STATUS_COMMANDS.get(status, ())
+    if status != IN_PROGRESS:
+        return ()
+    return _commands_for_activity(activity)
+
+
+def personal_progress_summary(
+    config: Mapping[str, Any],
+    snapshot: Mapping[str, Any],
+    now: datetime,
+) -> str:
+    """Read-only personal progress line built from one read-model snapshot."""
+    from ...xiuxian.xiuxian_activity.activity_rules import (
+        _activity_pass_config,
+        _task_scope_key,
+    )
+
+    parts: list[str] = []
+    rows: list[tuple[str, list[Any]]] = [
+        ("日常", list(config.get("daily_tasks") or [])),
+        ("周常", list(config.get("weekly_tasks") or [])),
+    ]
+    tasks = snapshot.get("tasks") or {}
+    for scope_label, scope_rows in rows:
+        if not scope_rows:
+            continue
+        scope_key = _task_scope_key("daily" if scope_label == "日常" else "weekly", now)
+        done = 0
+        for task in scope_rows:
+            if not isinstance(task, Mapping):
+                continue
+            state = tasks.get(("daily" if scope_label == "日常" else "weekly", scope_key, _clean_text(task.get("key"))), {})
+            target = max(1, _as_int(task.get("target"), 1))
+            if _as_int(state.get("progress"), 0) >= target:
+                done += 1
+        parts.append(f"{scope_label}任务 {done}/{len(scope_rows)}")
+    pass_config = _activity_pass_config(dict(config))
+    claimable = claimable_reward_count(config, snapshot, now)
+    line = "进度：" + ("、".join(parts) if parts else "暂无任务")
+    if pass_config.get("enabled", True):
+        level_exp = max(1, _as_int(pass_config.get("level_exp"), 100))
+        max_level = max(1, _as_int(pass_config.get("max_level"), 12))
+        level = min(max(0, _as_int(snapshot.get("pass_total_exp"), 0)) // level_exp, max_level)
+        line += f"、战令 Lv{level}"
+    if claimable:
+        line += f"、可领 {claimable} 项"
+    return line
+
+
 def build_activity_center_items(
     config: Mapping[str, Any],
     now: datetime,
     *,
     claimable: bool = False,
 ) -> tuple[ActivityCenterItem, ...]:
-    """Build center cards from the versioned config and normalized activities."""
+    """Build center cards from the versioned config and normalized activities.
+
+    One card only: the main activity aggregates description, rewards and the
+    entry commands its lifecycle state allows; gameplay states are listed as
+    a short line instead of repeating identical cards/links (QQ short-message
+    contract: no duplicated primary-level blocks).
+    """
     activities = get_gameplay_activities(dict(config))
+    main_status = resolve_status(
+        config.get("start_time"),
+        config.get("end_time"),
+        now,
+        enabled=bool(config.get("enabled", False)),
+        claimable=claimable,
+    )
+    gameplay_lines = [
+        f"{_clean_text(activity.get('name'), '活动玩法')}·{resolve_status(activity.get('start_time'), activity.get('end_time'), now, enabled=bool(activity.get('enabled', False)))}"
+        for activity in activities
+    ]
     main = ActivityCenterItem(
         key=_activity_config_key(dict(config)),
         name=_clean_text(config.get("name"), "节日活动"),
-        status=resolve_status(
-            config.get("start_time"),
-            config.get("end_time"),
-            now,
-            enabled=bool(config.get("enabled", False)),
-            claimable=claimable,
-        ),
+        status=main_status,
         description=_clean_text(config.get("description"), ""),
         reward_hint=_reward_hint(config, activities),
-        commands=(("活动签到", "活动签到"), ("活动任务", "活动任务"), ("活动领取", "活动领取")),
+        commands=commands_for_status(main_status),
+        gameplay_summary="；".join(gameplay_lines[:4]),
     )
-    items = [main]
-    for activity in activities:
-        items.append(
-            ActivityCenterItem(
-                key=_clean_text(activity.get("key"), "activity"),
-                name=_clean_text(activity.get("name"), "活动玩法"),
-                status=resolve_status(
-                    activity.get("start_time"),
-                    activity.get("end_time"),
-                    now,
-                    enabled=bool(activity.get("enabled", False)),
-                ),
-                description=_clean_text(activity.get("description"), ""),
-                reward_hint=_reward_hint({}, [activity]),
-                commands=_commands_for_activity(activity),
-            )
-        )
-    return tuple(items)
+    return (main,)
 
 
 def claimable_reward_count(
@@ -184,9 +249,12 @@ __all__ = [
     "ActivityCenterItem",
     "ENDED",
     "IN_PROGRESS",
+    "MAIN_STATUS_COMMANDS",
     "NOT_STARTED",
     "REWARD_CLAIM",
     "build_activity_center_items",
     "claimable_reward_count",
+    "commands_for_status",
+    "personal_progress_summary",
     "resolve_status",
 ]

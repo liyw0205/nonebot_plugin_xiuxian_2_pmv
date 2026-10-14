@@ -146,7 +146,11 @@ class ActivityReadModelApplication:
         )
         from ...xiuxian.xiuxian_activity.activity_utils import _as_int
         from ...xiuxian.xiuxian_utils.message_markdown import build_md_command_link
-        from .center import build_activity_center_items, claimable_reward_count
+        from .center import (
+            build_activity_center_items,
+            claimable_reward_count,
+            personal_progress_summary,
+        )
 
         config = self._config()
         tasks = get_activity_tasks(config)
@@ -178,7 +182,11 @@ class ActivityReadModelApplication:
             lines.extend(("", f"**{item.name}** · {item.status}"))
             if item.description:
                 lines.append(item.description)
+            if item.gameplay_summary:
+                lines.append(f"玩法：{item.gameplay_summary}")
             lines.append(f"奖励：{item.reward_hint}")
+            if user_id:
+                lines.append(personal_progress_summary(config, snapshot, now))
             links = " | ".join(
                 build_md_command_link(label, command)
                 for label, command in item.commands

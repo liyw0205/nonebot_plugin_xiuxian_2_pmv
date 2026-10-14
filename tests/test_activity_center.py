@@ -39,7 +39,7 @@ def test_activity_center_is_config_driven_and_counts_claimable_rewards() -> None
         "template_key": "spring",
         "enabled": True,
         "name": "春日庆典",
-        "start_time": "2026-10-01",
+        "start_time": "2026-10-10",
         "end_time": "2026-10-31",
         "daily_tasks": [{"key": "daily", "target": 1}],
         "weekly_tasks": [],
@@ -63,10 +63,61 @@ def test_activity_center_is_config_driven_and_counts_claimable_rewards() -> None
     now = datetime(2026, 10, 15, 12)
     assert claimable_reward_count(config, snapshot, now) == 1
     items = build_activity_center_items(config, now, claimable=True)
-    assert [item.name for item in items] == ["春日庆典", "春日集字"]
+    # QQ short-message contract: one aggregated card, gameplay folded into
+    # a single status line instead of duplicated cards and links.
+    assert [item.name for item in items] == ["春日庆典"]
     assert items[0].status == REWARD_CLAIM
-    assert items[1].status == IN_PROGRESS
-    assert "灵石x1" in items[1].reward_hint
+    assert "春日集字·进行中" in items[0].gameplay_summary
+    assert "灵石x1" in items[0].reward_hint
+
+
+def test_center_entry_commands_follow_lifecycle_state() -> None:
+    from nonebot_plugin_xiuxian_2.features.activity.center import commands_for_status
+
+    # 未开始只能看详情；进行中给出参与/任务/战令；可领奖给领取；已结束无入口。
+    assert commands_for_status(NOT_STARTED) == (("查看详情", "活动信息"),)
+    assert [label for label, _ in commands_for_status(IN_PROGRESS)] == [
+        "活动签到", "活动任务", "活动战令",
+    ]
+    assert ("领取奖励", "活动领取") in commands_for_status(REWARD_CLAIM)
+    assert commands_for_status(ENDED) == ()
+    gameplay = {"type": "collect_words", "enabled": True}
+    assert commands_for_status(IN_PROGRESS, gameplay) == (("集字背包", "活动背包"), ("集字兑换", "活动兑换"))
+    assert commands_for_status(ENDED, gameplay) == ()
+    # Every mapped command must be an existing activity command entry.
+    all_targets = {
+        command
+        for state in (NOT_STARTED, IN_PROGRESS, REWARD_CLAIM, ENDED)
+        for _, command in commands_for_status(state)
+    }
+    assert all_targets <= {
+        "活动信息", "活动签到", "活动任务", "活动战令", "活动领取",
+    }
+
+
+def test_personal_progress_summary_is_read_only_line() -> None:
+    from nonebot_plugin_xiuxian_2.features.activity.center import (
+        personal_progress_summary,
+    )
+
+    config = {
+        "daily_tasks": [{"key": "d1", "target": 2}],
+        "weekly_tasks": [{"key": "w1", "target": 5}],
+        "extensions": {"activity_pass": {"enabled": True, "level_exp": 100}},
+    }
+    snapshot = {
+        "tasks": {
+            ("daily", "2026-10-15", "d1"): {"progress": 2, "claimed": True},
+            ("weekly", "2026-41", "w1"): {"progress": 1, "claimed": False},
+        },
+        "pass_total_exp": 250,
+        "pass_claimed_levels": set(),
+    }
+    line = personal_progress_summary(config, snapshot, datetime(2026, 10, 15, 12))
+    assert line.startswith("进度：")
+    assert "日常任务 1/1" in line
+    assert "周常任务 0/1" in line
+    assert "战令 Lv2" in line
 
 
 def test_activity_center_message_has_qq_links_and_plain_fallback() -> None:
