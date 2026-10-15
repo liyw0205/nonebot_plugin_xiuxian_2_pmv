@@ -7,6 +7,14 @@ from typing import Any, Mapping
 from ...xiuxian.xiuxian_activity.activity_config import _activity_config_key, parse_time
 from ...xiuxian.xiuxian_activity.activity_rules import get_gameplay_activities
 from ...xiuxian.xiuxian_activity.activity_utils import _as_int, _clean_text
+from .gameplay_progress import (
+    claimable_pass_rewards,
+    closest_pity_entry,
+    collect_pity_entries,
+    gameplay_status_text,
+    pass_level,
+    task_claimable,
+)
 
 
 NOT_STARTED = "未开始"
@@ -172,17 +180,12 @@ def _gameplay_progress_parts(
         if activity.get("type") == "collect_words":
             if pity_state is None:
                 continue
-            threshold = max(0, _as_int(activity.get("pity_threshold"), 0))
-            events = [
-                str(event) for event in (activity.get("drop_events") or []) if str(event)
-            ]
-            if threshold <= 0 or not events:
+            entries = collect_pity_entries(activity, pity_state)
+            closest = closest_pity_entry(entries)
+            if closest is None:
                 continue
-            # 与活动背包一致：按配置的首个掉落事件展示保底进度。
-            miss = min(
-                threshold,
-                max(0, _as_int(pity_state.get((activity_key, events[0]), 0), 0)),
-            )
+            # 与活动背包同源：取最接近保底的事件，数字必须与背包一致。
+            _, miss, threshold = closest
             parts.append(
                 f"{_clean_text(activity.get('name'), '集字')} 保底 {miss}/{threshold}"
             )
@@ -238,9 +241,7 @@ def personal_progress_summary(
         "、" + "、".join(parts) if parts else "、暂无任务"
     )
     if pass_config.get("enabled", True):
-        level_exp = max(1, _as_int(pass_config.get("level_exp"), 100))
-        max_level = max(1, _as_int(pass_config.get("max_level"), 12))
-        level = min(max(0, _as_int(snapshot.get("pass_total_exp"), 0)) // level_exp, max_level)
+        level = pass_level(pass_config, snapshot.get("pass_total_exp"))
         line += f"、战令 Lv{level}"
     gameplay_parts = _gameplay_progress_parts(config, snapshot)
     if gameplay_parts:
@@ -304,7 +305,7 @@ def build_activity_center_items(
         claimable=claimable,
     )
     gameplay_lines = [
-        f"{_clean_text(activity.get('name'), '活动玩法')}·{resolve_status(activity.get('start_time'), activity.get('end_time'), now, enabled=bool(activity.get('enabled', False)))}"
+        f"{_clean_text(activity.get('name'), '活动玩法')}·{gameplay_status_text(activity)}"
         for activity in activities
     ]
     main_commands = commands_for_status(main_status)
@@ -353,23 +354,17 @@ def claimable_reward_count(
                 continue
             task_key = _clean_text(task.get("key"))
             state = tasks.get((scope_type, scope_key, task_key), {})
-            target = max(1, _as_int(task.get("target"), 1))
-            if not state.get("claimed") and _as_int(state.get("progress"), 0) >= target:
+            if task_claimable(state, task.get("target")):
                 count += 1
 
     pass_config = _activity_pass_config(dict(config))
-    if pass_config.get("enabled", True):
-        level_exp = max(1, _as_int(pass_config.get("level_exp"), 100))
-        max_level = max(1, _as_int(pass_config.get("max_level"), 12))
-        level = min(max(0, _as_int(snapshot.get("pass_total_exp"), 0)) // level_exp, max_level)
-        claimed = snapshot.get("pass_claimed_levels") or set()
-        count += sum(
-            1
-            for reward in pass_config.get("level_rewards") or []
-            if isinstance(reward, Mapping)
-            and 0 < _as_int(reward.get("level"), 0) <= level
-            and _as_int(reward.get("level"), 0) not in claimed
+    count += len(
+        claimable_pass_rewards(
+            pass_config,
+            snapshot.get("pass_total_exp"),
+            snapshot.get("pass_claimed_levels") or set(),
         )
+    )
     return count
 
 

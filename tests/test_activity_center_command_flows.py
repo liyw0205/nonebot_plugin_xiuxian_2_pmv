@@ -8,9 +8,12 @@ once here; adapter-specific formatting lives in the delivery contract test.
 
 from __future__ import annotations
 
+import unittest
+
 import re
 from datetime import datetime
 from pathlib import Path
+from unittest.mock import patch
 
 import nonebot
 
@@ -64,89 +67,97 @@ def _card_targets() -> set[str]:
     return targets
 
 
-def test_every_card_entry_is_a_registered_activity_command() -> None:
-    registered = _registered_commands()
-    # 解析必须真的取到注册表，否则空集会让本测试假绿。
-    assert len(registered) > 30
-    assert {"活动中心", "活动大厅"} <= registered
-    assert _card_targets() <= registered
+class ActivityCenterCommandFlowsTests(unittest.TestCase):
+    def test_every_card_entry_is_a_registered_activity_command(self) -> None:
+        registered = _registered_commands()
+        # 解析必须真的取到注册表，否则空集会让本测试假绿。
+        assert len(registered) > 30
+        assert {"活动中心", "活动大厅"} <= registered
+        assert _card_targets() <= registered
 
 
-def test_card_lifecycle_agrees_with_the_entry_flow_gate() -> None:
-    now = datetime.now()
-    cases = [
-        # (config, 卡片状态, 流程闸门是否放行)
-        ({"enabled": False, "start_time": "0", "end_time": "无限"}, ENDED, False),
-        (
-            {"enabled": True, "start_time": "2099-01-01", "end_time": "2099-12-31"},
-            NOT_STARTED,
-            False,
-        ),
-        (
-            {"enabled": True, "start_time": "2000-01-01", "end_time": "2000-12-31"},
-            ENDED,
-            False,
-        ),
-        ({"enabled": True, "start_time": "0", "end_time": "无限"}, IN_PROGRESS, True),
-    ]
-    for config, expected_status, expected_ok in cases:
-        status = resolve_status(
-            config["start_time"],
-            config["end_time"],
-            now,
-            enabled=bool(config["enabled"]),
+    def test_card_lifecycle_agrees_with_the_entry_flow_gate(self) -> None:
+        now = datetime.now()
+        cases = [
+            # (config, 卡片状态, 流程闸门是否放行)
+            ({"enabled": False, "start_time": "0", "end_time": "无限"}, ENDED, False),
+            (
+                {"enabled": True, "start_time": "2099-01-01", "end_time": "2099-12-31"},
+                NOT_STARTED,
+                False,
+            ),
+            (
+                {"enabled": True, "start_time": "2000-01-01", "end_time": "2000-12-31"},
+                ENDED,
+                False,
+            ),
+            ({"enabled": True, "start_time": "0", "end_time": "无限"}, IN_PROGRESS, True),
+        ]
+        for config, expected_status, expected_ok in cases:
+            status = resolve_status(
+                config["start_time"],
+                config["end_time"],
+                now,
+                enabled=bool(config["enabled"]),
+            )
+            assert status == expected_status, config
+            ok, reason = activity_state(config)
+            assert ok is expected_ok, (config, reason)
+            if not ok:
+                # 拒绝必须给出原因，卡片状态才有对应说法。
+                assert reason.strip()
+
+
+    def test_entry_flows_refuse_out_of_window_without_touching_the_database(self) -> None:
+        def _no_db(*args, **kwargs):
+            raise AssertionError("入口流程在活动窗口外不应访问数据库")
+
+        base = {
+            "enabled": True,
+            "start_time": "2099-01-01",
+            "end_time": "2099-12-31",
+            "daily_rewards": [],
+            "milestone_rewards": [],
+            "daily_tasks": [],
+            "weekly_tasks": [],
+            "extensions": {"activity_pass": {"enabled": True}},
+        }
+        flows = (
+            service.claim_sign,
+            service.claim_activity_tasks,
+            service.claim_activity_pass_rewards,
         )
-        assert status == expected_status, config
-        ok, reason = activity_state(config)
-        assert ok is expected_ok, (config, reason)
-        if not ok:
-            # 拒绝必须给出原因，卡片状态才有对应说法。
-            assert reason.strip()
+
+        with patch.object(service.db_backend, "connect_readonly", _no_db), patch.object(
+            service.db_backend, "connect", _no_db
+        ), patch.object(
+            service, "_activity_pass_claim_application_instance", None
+        ), patch.object(
+            service, "_activity_task_claim_application_instance", None
+        ), patch.object(
+            service, "_activity_sign_settlement_service_instance", None
+        ):
+            with patch.object(service, "load_config", lambda: base):
+                for flow in flows:
+                    ok, reason = flow("u-1")
+                    assert ok is False, flow.__name__
+                    assert "尚未开始" in reason, (flow.__name__, reason)
+
+            ended = dict(base, start_time="2000-01-01", end_time="2000-12-31")
+            with patch.object(service, "load_config", lambda: ended):
+                for flow in flows:
+                    ok, reason = flow("u-1")
+                    assert ok is False, flow.__name__
+                    assert "已结束" in reason, (flow.__name__, reason)
 
 
-def test_entry_flows_refuse_out_of_window_without_touching_the_database(
-    monkeypatch,
-) -> None:
-    def _no_db(*args, **kwargs):
-        raise AssertionError("入口流程在活动窗口外不应访问数据库")
+    def test_help_text_documents_every_card_entry(self) -> None:
+        source = ACTIVITY_MODULE.read_text(encoding="utf-8")
+        start = source.index('ACTIVITY_HELP = """') + len('ACTIVITY_HELP = """')
+        help_text = source[start : source.index('"""', start)]
+        assert "活动中心" in help_text and "活动大厅" in help_text
+        missing = sorted(target for target in _card_targets() if target not in help_text)
+        assert missing == []
 
-    monkeypatch.setattr(service.db_backend, "connect_readonly", _no_db)
-    monkeypatch.setattr(service.db_backend, "connect", _no_db)
-
-    base = {
-        "enabled": True,
-        "start_time": "2099-01-01",
-        "end_time": "2099-12-31",
-        "daily_rewards": [],
-        "milestone_rewards": [],
-        "daily_tasks": [],
-        "weekly_tasks": [],
-        "extensions": {"activity_pass": {"enabled": True}},
-    }
-    flows = (
-        service.claim_sign,
-        service.claim_activity_tasks,
-        service.claim_activity_pass_rewards,
-    )
-
-    monkeypatch.setattr(service, "load_config", lambda: base)
-    for flow in flows:
-        ok, reason = flow("u-1")
-        assert ok is False, flow.__name__
-        assert "尚未开始" in reason, (flow.__name__, reason)
-
-    ended = dict(base, start_time="2000-01-01", end_time="2000-12-31")
-    monkeypatch.setattr(service, "load_config", lambda: ended)
-    for flow in flows:
-        ok, reason = flow("u-1")
-        assert ok is False, flow.__name__
-        assert "已结束" in reason, (flow.__name__, reason)
-
-
-def test_help_text_documents_every_card_entry() -> None:
-    source = ACTIVITY_MODULE.read_text(encoding="utf-8")
-    start = source.index('ACTIVITY_HELP = """') + len('ACTIVITY_HELP = """')
-    help_text = source[start : source.index('"""', start)]
-    assert "活动中心" in help_text and "活动大厅" in help_text
-    missing = sorted(target for target in _card_targets() if target not in help_text)
-    assert missing == []
+if __name__ == "__main__":
+    unittest.main()

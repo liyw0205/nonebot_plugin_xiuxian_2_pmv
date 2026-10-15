@@ -736,6 +736,7 @@ class ActivityReadModelApplication:
         )
         from ...xiuxian.xiuxian_activity.activity_utils import _as_int
         from ...xiuxian.xiuxian_activity.activity_views import ACTIVITY_EVENT_LABELS
+        from .gameplay_progress import collect_pity_entries
 
         uid = str(user_id)
         activities = [
@@ -775,17 +776,15 @@ class ActivityReadModelApplication:
                     "字牌：" + (letter_text or "暂无"),
                 ]
             )
-            pity_threshold = max(0, _as_int(activity.get("pity_threshold"), 0))
-            if pity_threshold > 0:
-                pity_parts = []
-                for event_key in activity.get("drop_events") or []:
-                    label = ACTIVITY_EVENT_LABELS.get(event_key, event_key)
-                    miss_count = pity_state.get((activity_key, str(event_key)), 0)
-                    pity_parts.append(
-                        f"{label} {min(pity_threshold, miss_count)}/{pity_threshold}"
+            pity_entries = collect_pity_entries(activity, pity_state)
+            if pity_entries:
+                lines.append(
+                    "保底进度："
+                    + "、".join(
+                        f"{label} {miss}/{threshold}"
+                        for label, miss, threshold in pity_entries
                     )
-                if pity_parts:
-                    lines.append("保底进度：" + "、".join(pity_parts))
+                )
             if not phrases:
                 lines.append("暂无兑换词组")
                 continue
