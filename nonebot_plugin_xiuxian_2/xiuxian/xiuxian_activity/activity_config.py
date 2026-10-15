@@ -85,6 +85,17 @@ DEFAULT_ACTIVITY_STAGES = [
         "multiplier": 1.0,
     },
 ]
+RANK_BOARD_SOURCES = ("sign", "points", "collect", "pass", "boss")
+RANK_BOARD_LABELS = {
+    "sign": "签到榜",
+    "points": "积分榜",
+    "collect": "集字榜",
+    "pass": "战令榜",
+    "boss": "首领榜",
+}
+DEFAULT_RANK_BOARDS = [
+    {"key": "sign", "label": "签到榜", "source": "sign", "limit": 10},
+]
 
 
 def _ensure_activity_files():
@@ -363,6 +374,77 @@ def _activity_stages_config(config: dict | None = None) -> list[dict]:
             "rewards": _normalize_stage_rewards(row.get("rewards")),
         })
     return stages
+
+
+def _normalize_rank_boards(value) -> list[dict]:
+    """Normalize the optional rank board list; absent config keeps the sign board."""
+    if not isinstance(value, list):
+        return [dict(row) for row in DEFAULT_RANK_BOARDS]
+    boards: list[dict] = []
+    seen_sources: set[str] = set()
+    seen_keys: set[str] = set()
+    for index, row in enumerate(value, 1):
+        if not isinstance(row, dict):
+            continue
+        source = _clean_text(row.get("source") or row.get("key"))
+        if source not in RANK_BOARD_SOURCES or source in seen_sources:
+            continue
+        seen_sources.add(source)
+        key = _normalize_activity_key(row.get("key") or source, source)
+        if key in seen_keys:
+            key = f"{key}_{index}"
+        seen_keys.add(key)
+        boards.append({
+            "key": key,
+            "label": _clean_text(row.get("label"), RANK_BOARD_LABELS.get(source, source)),
+            "source": source,
+            "limit": max(1, min(_as_int(row.get("limit"), 10), 100)),
+        })
+    return boards or [dict(row) for row in DEFAULT_RANK_BOARDS]
+
+
+def _normalize_rank_rewards(value) -> list[dict]:
+    """Normalize optional rank reward tiers; empty or invalid rows are dropped."""
+    if not isinstance(value, list):
+        return []
+    rewards: list[dict] = []
+    seen: set[tuple[str, int, int]] = set()
+    for row in value:
+        if not isinstance(row, dict):
+            continue
+        board = _clean_text(row.get("board") or row.get("source"))
+        if board not in RANK_BOARD_SOURCES:
+            continue
+        rank_min = max(1, _as_int(row.get("rank_min"), 1))
+        rank_max = max(rank_min, _as_int(row.get("rank_max"), rank_min))
+        reward_text = _clean_text(row.get("reward"))
+        if not reward_text:
+            continue
+        marker = (board, rank_min, rank_max)
+        if marker in seen:
+            continue
+        seen.add(marker)
+        rewards.append({
+            "board": board,
+            "rank_min": rank_min,
+            "rank_max": rank_max,
+            "key": _clean_text(row.get("key")) or f"{board}_{rank_min}_{rank_max}",
+            "name": _clean_text(row.get("name"), f"第{rank_min}-{rank_max}名"),
+            "reward": reward_text,
+        })
+    return rewards
+
+
+def activity_rank_config(config: dict | None = None) -> dict:
+    """Return the normalized optional rank section (boards + reward tiers)."""
+    cfg = config if config is not None else load_config()
+    raw = _get_extensions(cfg).get("rank")
+    if not isinstance(raw, dict):
+        raw = {}
+    return {
+        "boards": _normalize_rank_boards(raw.get("boards")),
+        "rewards": _normalize_rank_rewards(raw.get("rewards")),
+    }
 
 
 def activity_runtime_state(config: dict | None = None, at_time: datetime | None = None) -> dict:

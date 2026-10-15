@@ -786,6 +786,109 @@ class ActivityReadModelApplication:
             )
         return "\n".join(lines)
 
+    def rank_overview_text(self, user_id: str = "") -> str:
+        from ...xiuxian.xiuxian_activity.activity_config import (
+            _activity_config_key,
+            activity_rank_config,
+            activity_state,
+        )
+        from .rank import position_text, value_text
+
+        config = self._config()
+        rank_config = activity_rank_config(config)
+        boards = rank_config["boards"]
+        lines = [f"【{config.get('name', '节日签到活动')} · 排行榜】"]
+        if not boards:
+            lines.append("暂无排行榜配置")
+            return "\n".join(lines).strip()
+        ok, reason = activity_state(config)
+        if not ok:
+            lines.append(reason)
+        activity_key = _activity_config_key(config)
+        uid = str(user_id or "")
+        for board in boards:
+            source = str(board.get("source") or "")
+            label = str(board.get("label") or board.get("key") or source)
+            total = self.repository.board_total(source, activity_key)
+            position, value = (
+                (0, 0)
+                if not uid
+                else self.repository.board_position(source, activity_key, uid)
+            )
+            lines.append(
+                f"{label}：{position_text(position, total)}（{value_text(source, value)}）"
+            )
+        if rank_config["rewards"]:
+            lines.append("发送 活动排行 <榜单> 查看榜单，活动排行领取 领取排行奖励")
+        else:
+            lines.append("发送 活动排行 <榜单> 查看榜单")
+        return "\n".join(lines).strip()
+
+    def rank_board_text(self, user_id: str = "", query: str = "") -> str:
+        from ...xiuxian.xiuxian_activity.activity_config import (
+            _activity_config_key,
+            activity_rank_config,
+            activity_state,
+        )
+        from .rank import (
+            board_by_query,
+            board_labels,
+            display_name,
+            position_text,
+            rewards_for_board,
+            tier_for_position,
+            value_text,
+        )
+
+        config = self._config()
+        rank_config = activity_rank_config(config)
+        boards = rank_config["boards"]
+        if not boards:
+            return f"【{config.get('name', '节日签到活动')} · 排行榜】\n暂无排行榜配置"
+        target = str(query or "").strip()
+        board = board_by_query(boards, target) if target else dict(boards[0])
+        if board is None:
+            return f"未找到榜单【{target}】\n可用榜单：{board_labels(boards)}"
+        source = str(board.get("source") or "")
+        label = str(board.get("label") or board.get("key") or source)
+        limit = max(1, min(int(board.get("limit") or 10), 100))
+        activity_key = _activity_config_key(config)
+        rows = self.repository.board_rank(source, activity_key, limit)
+        lines = [f"【{config.get('name', '节日签到活动')} · {label}】"]
+        ok, reason = activity_state(config)
+        if not ok:
+            lines.append(reason)
+        if not rows:
+            lines.append("暂无排行数据")
+        else:
+            for index, row in enumerate(rows, 1):
+                lines.append(
+                    f"{index}. "
+                    f"{display_name(str(row.get('user_id') or ''), str(row.get('user_name') or ''))} "
+                    f"{value_text(source, int(row.get('value') or 0))}"
+                )
+        uid = str(user_id or "")
+        total = self.repository.board_total(source, activity_key)
+        position, value = (
+            (0, 0)
+            if not uid
+            else self.repository.board_position(source, activity_key, uid)
+        )
+        lines.append(
+            f"我的名次：{position_text(position, total)}（{value_text(source, value)}）"
+        )
+        tiers = rewards_for_board(rank_config["rewards"], board)
+        if tiers:
+            tier = tier_for_position(tiers, position)
+            if tier is not None:
+                lines.append(f"可领取：{tier.get('name')}（{tier.get('reward')}）")
+                lines.append("发送 活动排行领取 领取排行奖励")
+            else:
+                lines.append("当前名次没有可领取的排行奖励")
+        elif rank_config["rewards"]:
+            lines.append("该榜单未配置排行奖励")
+        return "\n".join(lines).strip()
+
     def collect_bag_text(self, user_id: str) -> str:
         from ...xiuxian.xiuxian_activity.activity_config import activity_state
         from ...xiuxian.xiuxian_activity.activity_progress import _phrase_need_counter

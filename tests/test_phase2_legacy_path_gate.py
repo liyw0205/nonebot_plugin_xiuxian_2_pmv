@@ -764,15 +764,17 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
         )
         self.assertEqual(report["blocked_count"], 0)
         self.assertTrue(all(item["call_graph"] and item["evidence"] for item in report["items"]))
-        # The activity stage slice registers two new player commands (活动阶段 /
-        # 活动阶段领取) in the legacy package, which still owns matcher
-        # registration during the compatibility release.  The gate records them
-        # in the default-command backlog ("keep it in backlog; do not add it to
-        # Phase 2 completion until an explicitly reviewed scope version adopts
-        # it"), so the derived counts move 638->640 and 324->326 while the frozen
-        # membership file and its hash stay untouched.
-        self.assertEqual(report["default_legacy_command_count"], 640)
-        self.assertEqual(report["default_legacy_command_backlog_count"], 326)
+        # The activity stage slice registered two new player commands (活动阶段 /
+        # 活动阶段领取) and the activity rank slice one more (活动排行领取) in
+        # the legacy package, which still owns matcher registration during the
+        # compatibility release.  The gate records them in the default-command
+        # backlog ("keep it in backlog; do not add it to Phase 2 completion
+        # until an explicitly reviewed scope version adopts it"), so the derived
+        # counts move 638->641 and 324->327 while the frozen membership file and
+        # its hash stay untouched.  (活动排行 itself is a pre-existing frozen
+        # command and is not counted again.)
+        self.assertEqual(report["default_legacy_command_count"], 641)
+        self.assertEqual(report["default_legacy_command_backlog_count"], 327)
         scope_path = Path(__file__).resolve().parents[1] / "docs/refactor_phase2_legacy_paths.json"
         scope = json.loads(scope_path.read_text(encoding="utf-8"))
         inventory_drift_count = sum(len(entries) for entries in report["source_inventory_added"].values())

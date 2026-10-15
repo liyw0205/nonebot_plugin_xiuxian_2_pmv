@@ -1547,6 +1547,14 @@
       "permission": "user"
     },
     {
+      "aliases": [
+        "领取排行奖励"
+      ],
+      "feature": "activity",
+      "name": "活动排行领取",
+      "permission": "user"
+    },
+    {
       "aliases": [],
       "feature": "activity",
       "name": "活动玩法",
@@ -2638,6 +2646,7 @@
     "activity_point_event_log",
     "activity_point_purchase",
     "activity_point_purchase_operations",
+    "activity_rank_claim",
     "activity_reward_feature_migrations",
     "activity_sign_log",
     "activity_sign_settlement_operations",

@@ -31,6 +31,7 @@ activity_pass_claim_cmd = on_command("活动战令领取", aliases={"领取活�
 activity_gameplay_cmd = on_command("活动玩法", priority=10, block=True)
 activity_sign_cmd = on_command("活动签到", aliases={"节日签到"}, priority=10, block=True)
 activity_rank_cmd = on_command("活动排行", priority=10, block=True)
+activity_rank_claim_cmd = on_command("活动排行领取", aliases={"领取排行奖励"}, priority=10, block=True)
 activity_bag_cmd = on_command("活动背包", aliases={"活动字牌", "集字背包"}, priority=10, block=True)
 activity_exchange_cmd = on_command("活动兑换", aliases={"集字兑换"}, priority=10, block=True)
 activity_points_cmd = on_command("活动积分", aliases={"积分活动"}, priority=10, block=True)
@@ -298,9 +299,40 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 
 
 @activity_rank_cmd.handle(parameterless=[Cooldown(cd_time=0)])
-async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     await assign_bot(bot=bot, event=event)
-    await handle_send(bot, event, activity_application.read_model.sign_rank_text(10))
+    is_user, user_info, msg = await _ensure_user(event)
+    user_id = str(user_info["user_id"]) if is_user else ""
+    query = args.extract_plain_text().strip()
+    text = (
+        activity_application.read_model.rank_board_text(user_id, query)
+        if query
+        else activity_application.read_model.rank_overview_text(user_id)
+    )
+    await handle_send(
+        bot,
+        event,
+        text,
+        native_markdown=True,
+        fallback_msg=strip_md_command_links(text),
+    )
+
+
+@activity_rank_claim_cmd.handle(parameterless=[Cooldown(cd_time=0)])
+async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
+    await assign_bot(bot=bot, event=event)
+    is_user, user_info, msg = await _ensure_user(event)
+    if not is_user:
+        await handle_send(bot, event, msg, md_type="我要修仙")
+        return
+    uid = str(user_info["user_id"])
+    ok, text, _ = _run_activity_action(
+        "claim_rank_rewards",
+        _activity_operation_id(event, "rank-claim", uid),
+        uid,
+        query=args.extract_plain_text(),
+    )
+    await handle_send(bot, event, text if ok else text)
 
 
 @activity_bag_cmd.handle(parameterless=[Cooldown(cd_time=0)])
@@ -506,8 +538,10 @@ ACTIVITY_HELP = """
 > 直接挑战，或 活动讨伐 爆竹/烟花
 - 活动首领领奖 排行 / 进度
 > 按排行或进度领奖
-- 活动排行
-> 查看活动排行
+- 活动排行 / 活动排行 积分榜
+> 查看榜单与我的名次
+- 活动排行领取
+> 领取排行奖励
 """.strip()
 
 

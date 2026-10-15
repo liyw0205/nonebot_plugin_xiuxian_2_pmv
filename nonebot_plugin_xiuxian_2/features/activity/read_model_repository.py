@@ -378,6 +378,218 @@ class ActivityReadModelSqlRepository:
             )
         return {str(row["stage_key"]) for row in rows}
 
+    _BOARD_RANK_SQL = {
+        "points": (
+            "activity_point_balance",
+            "SELECT {name}b.user_id,b.total_points AS value FROM activity_point_balance b {join}"
+            "WHERE b.activity_key=? AND b.total_points>0 "
+            "ORDER BY b.total_points DESC,b.points DESC,b.user_id ASC LIMIT ?",
+        ),
+        "collect": (
+            "activity_collect_inventory",
+            "SELECT {name}b.user_id,SUM(b.count) AS value FROM activity_collect_inventory b {join}"
+            "WHERE b.activity_key=? GROUP BY b.user_id HAVING SUM(b.count)>0 "
+            "ORDER BY value DESC,b.user_id ASC LIMIT ?",
+        ),
+        "pass": (
+            "activity_pass_balance",
+            "SELECT {name}b.user_id,b.level AS value FROM activity_pass_balance b {join}"
+            "WHERE b.activity_key=? AND b.level>0 "
+            "ORDER BY b.level DESC,b.total_exp DESC,b.user_id ASC LIMIT ?",
+        ),
+    }
+    _BOARD_POSITION_SQL = {
+        "points": (
+            "activity_point_balance",
+            "SELECT b.total_points AS value,b.points AS tie FROM activity_point_balance b "
+            "WHERE b.activity_key=? AND b.user_id=?",
+            "SELECT COUNT(*) AS better FROM activity_point_balance b WHERE b.activity_key=? AND b.total_points>0 "
+            "AND (b.total_points>? OR (b.total_points=? AND b.points>?) "
+            "OR (b.total_points=? AND b.points=? AND b.user_id<?))",
+            "SELECT COUNT(*) AS total FROM activity_point_balance b WHERE b.activity_key=? AND b.total_points>0",
+        ),
+        "pass": (
+            "activity_pass_balance",
+            "SELECT b.level AS value,b.total_exp AS tie FROM activity_pass_balance b "
+            "WHERE b.activity_key=? AND b.user_id=?",
+            "SELECT COUNT(*) AS better FROM activity_pass_balance b WHERE b.activity_key=? AND b.level>0 "
+            "AND (b.level>? OR (b.level=? AND b.total_exp>?) "
+            "OR (b.level=? AND b.total_exp=? AND b.user_id<?))",
+            "SELECT COUNT(*) AS total FROM activity_pass_balance b WHERE b.activity_key=? AND b.level>0",
+        ),
+        "collect": (
+            "activity_collect_inventory",
+            "SELECT COALESCE(SUM(b.count),0) AS value,0 AS tie FROM activity_collect_inventory b "
+            "WHERE b.activity_key=? AND b.user_id=?",
+            "SELECT COUNT(*) AS better FROM (SELECT b.user_id AS user_id,SUM(b.count) AS value "
+            "FROM activity_collect_inventory b WHERE b.activity_key=? GROUP BY b.user_id "
+            "HAVING SUM(b.count)>0) t WHERE t.value>? OR (t.value=? AND t.user_id<?)",
+            "SELECT COUNT(*) AS total FROM (SELECT b.user_id FROM activity_collect_inventory b "
+            "WHERE b.activity_key=? GROUP BY b.user_id HAVING SUM(b.count)>0) t",
+        ),
+    }
+
+    def board_rank(
+        self, source: str, activity_key: str, limit: int = 10
+    ) -> list[dict[str, Any]]:
+        """Top-N rows for one configured rank board (empty when unavailable)."""
+        source = str(source or "").strip()
+        limit = max(0, min(int(limit), 100))
+        if limit == 0:
+            return []
+        if source == "sign":
+            return [
+                {
+                    "user_id": str(row.get("user_id") or ""),
+                    "value": max(0, int(row.get("sign_days") or 0)),
+                    "user_name": str(row.get("user_name") or ""),
+                }
+                for row in self.sign_rank(limit)
+            ]
+        if source == "boss":
+            return [
+                {
+                    "user_id": str(row.get("user_id") or ""),
+                    "value": max(0, int(row.get("total_damage") or 0)),
+                    "user_name": str(row.get("user_name") or ""),
+                }
+                for row in self.boss_rank(str(activity_key), limit)
+            ]
+        spec = self._BOARD_RANK_SQL.get(source)
+        key = str(activity_key).strip()
+        if spec is None or not key or not self.database.is_file():
+            return []
+        table, sql = spec
+        with DatabaseUnitOfWork(self.database, read_only=True) as uow:
+            tables = self._table_names(uow)
+            if table not in tables:
+                return []
+            use_names = "user_xiuxian" in tables
+            rows = uow.query_all(
+                sql.format(
+                    name="u.user_name," if use_names else "",
+                    join="LEFT JOIN user_xiuxian u ON u.user_id=b.user_id " if use_names else "",
+                ),
+                (key, limit),
+            )
+        return [
+            {
+                "user_id": str(row["user_id"] or ""),
+                "value": max(0, int(row["value"] or 0)),
+                "user_name": str(row.get("user_name") or "").strip(),
+            }
+            for row in rows
+        ]
+
+    def board_position(
+        self, source: str, activity_key: str, user_id: str
+    ) -> tuple[int, int]:
+        """Return the player's (1-based rank, value); (0, 0) when unranked."""
+        source = str(source or "").strip()
+        uid = str(user_id or "").strip()
+        key = str(activity_key).strip()
+        if not uid or not self.database.is_file():
+            return 0, 0
+        if source == "sign":
+            with DatabaseUnitOfWork(self.database, read_only=True) as uow:
+                if "activity_user" not in self._table_names(uow):
+                    return 0, 0
+                mine = uow.query_one(
+                    "SELECT sign_days,total_sign_days,last_sign_date FROM activity_user "
+                    "WHERE user_id=?",
+                    (uid,),
+                )
+                if not mine:
+                    return 0, 0
+                value = max(0, int(mine["sign_days"] or 0))
+                tie = max(0, int(mine["total_sign_days"] or 0))
+                if value <= 0:
+                    return 0, 0
+                last = str(mine["last_sign_date"] or "")
+                better = uow.query_one(
+                    "SELECT COUNT(*) AS better FROM activity_user WHERE sign_days>? "
+                    "OR (sign_days=? AND total_sign_days>?) "
+                    "OR (sign_days=? AND total_sign_days=? AND last_sign_date<?) "
+                    "OR (sign_days=? AND total_sign_days=? AND last_sign_date=? AND user_id<?)",
+                    (value, value, tie, value, tie, last, value, tie, last, uid),
+                )
+            return int((better or {}).get("better") or 0) + 1, value
+        if source == "boss":
+            if not key:
+                return 0, 0
+            with DatabaseUnitOfWork(self.database, read_only=True) as uow:
+                if "activity_boss_damage" not in self._table_names(uow):
+                    return 0, 0
+                mine = uow.query_one(
+                    "SELECT total_damage FROM activity_boss_damage "
+                    "WHERE activity_key=? AND user_id=?",
+                    (key, uid),
+                )
+                value = max(0, int((mine or {}).get("total_damage") or 0))
+                if value <= 0:
+                    return 0, 0
+                better = uow.query_one(
+                    "SELECT COUNT(*) AS better FROM activity_boss_damage "
+                    "WHERE activity_key=? AND (total_damage>? OR (total_damage=? AND user_id<?))",
+                    (key, value, value, uid),
+                )
+            return int((better or {}).get("better") or 0) + 1, value
+        spec = self._BOARD_POSITION_SQL.get(source)
+        if spec is None or not key:
+            return 0, 0
+        table, self_sql, better_sql, _total_sql = spec
+        with DatabaseUnitOfWork(self.database, read_only=True) as uow:
+            if table not in self._table_names(uow):
+                return 0, 0
+            mine = uow.query_one(self_sql, (key, uid))
+            value = max(0, int((mine or {}).get("value") or 0))
+            if value <= 0:
+                return 0, 0
+            tie = max(0, int((mine or {}).get("tie") or 0))
+            if source == "collect":
+                better = uow.query_one(better_sql, (key, value, value, uid))
+            else:
+                better = uow.query_one(
+                    better_sql, (key, value, value, tie, value, tie, uid)
+                )
+        return int((better or {}).get("better") or 0) + 1, value
+
+    def board_total(self, source: str, activity_key: str) -> int:
+        """Number of ranked participants on one board (0 when unavailable)."""
+        source = str(source or "").strip()
+        key = str(activity_key).strip()
+        if not self.database.is_file():
+            return 0
+        if source == "sign":
+            with DatabaseUnitOfWork(self.database, read_only=True) as uow:
+                if "activity_user" not in self._table_names(uow):
+                    return 0
+                row = uow.query_one(
+                    "SELECT COUNT(*) AS total FROM activity_user WHERE sign_days>0"
+                )
+            return max(0, int((row or {}).get("total") or 0))
+        if source == "boss":
+            if not key:
+                return 0
+            with DatabaseUnitOfWork(self.database, read_only=True) as uow:
+                if "activity_boss_damage" not in self._table_names(uow):
+                    return 0
+                row = uow.query_one(
+                    "SELECT COUNT(*) AS total FROM activity_boss_damage "
+                    "WHERE activity_key=? AND total_damage>0",
+                    (key,),
+                )
+            return max(0, int((row or {}).get("total") or 0))
+        spec = self._BOARD_POSITION_SQL.get(source)
+        if spec is None or not key:
+            return 0
+        table, _self_sql, _better_sql, total_sql = spec
+        with DatabaseUnitOfWork(self.database, read_only=True) as uow:
+            if table not in self._table_names(uow):
+                return 0
+            row = uow.query_one(total_sql, (key,))
+        return max(0, int((row or {}).get("total") or 0))
+
     def overview_snapshot(
         self,
         user_id: str,

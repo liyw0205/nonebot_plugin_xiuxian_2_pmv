@@ -31,6 +31,25 @@ The historical package owns command names during the compatibility release. New 
 （`activity_sign_log`、`activity_point_event_log`、`activity_pass_event_log`、
 `activity_collect_drop_log`、`activity_boss_fight_log`），不新增日志、不改既有表结构。
 
+活动排行榜玩法把 `活动排行` 从单一签到榜扩展为配置驱动的多榜只读视图，并新增
+`活动排行领取`（别名 `领取排行奖励`）结算名次奖励：
+
+- `活动排行`：无参数时列出每个已配置榜单的本人名次与参与人数；带榜单名（如
+  `活动排行 积分榜`）时展示该榜 top-N、本人名次与达标档位。榜单名支持 `key`、
+  `label` 或 `source` 匹配，未知榜单返回可用榜单列表。
+- `活动排行领取`：按配置档位匹配本人名次发放奖励；可加榜单名限定。重复领取不重复
+  发放，活动未开放、未配置排行奖励、未知榜单、未上榜、未达到名次、已领取各自给出
+  明确拒绝文案。
+
+榜单配置位于 `extensions.rank`（可选）：`boards` 为 `[{key,label,source,limit}]`，
+`source` 取 `sign`/`points`/`collect`/`pass`/`boss`，`limit` 归一为 1..100；`rewards`
+为 `[{board,rank_min,rank_max,key?,name,reward}]`，名次为闭区间，`reward` 复用既有
+`parse_reward` 词汇。缺省（无 `rank` 键）时仅保留签到榜且无奖励，旧行为不变。榜单
+数据只读复用既有表（`activity_user`、`activity_point_balance`、
+`activity_collect_inventory`、`activity_pass_balance`、`activity_boss_damage`），
+不新增日志表；领取记录写入增量表 `activity_rank_claim`
+（`activity_key,user_id,board_key,tier_key,reward,create_time`），不改既有表结构。
+
 ## Web API
 No new HTTP route is exposed in this migration slice. Existing URLs remain served by the legacy web adapter.
 
@@ -89,6 +108,8 @@ Legacy algorithms and schemas remain behind the repository adapter for one compl
 - `alias: 领取活动战令`
 - `alias: 领取活动通行证`
 - `command: 活动排行`
+- `command: 活动排行领取`
+- `alias: 领取排行奖励`
 - `command: 活动玩法`
 - `command: 活动积分`
 - `alias: 积分活动`
