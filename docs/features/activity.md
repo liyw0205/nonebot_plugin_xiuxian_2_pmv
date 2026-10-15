@@ -7,8 +7,15 @@ The compatibility command remains available while the new application boundary i
 
 `活动中心`（别名 `活动大厅`）是本阶段的最小只读入口。它从版本化活动配置和一次
 玩家活动快照生成活动卡片，显示 `未开始`、`进行中`、`已结束` 或当前玩家存在可领取
-任务/战令奖励时的 `奖励领取`。活动名称、时间、描述和奖励摘要均来自配置数据，handler
+奖励时的 `奖励领取`。活动名称、时间、描述和奖励摘要均来自配置数据，handler
 不内嵌具体活动内容；奖励领取仍交给既有任务、战令和统一活动领取入口。
+
+`奖励领取` 的判定与一键 `活动领取` 覆盖的来源一致：任务、战令、阶段、排行、
+首领进度和首领排行任一来源可领取即置位，因此只差阶段或排行奖励的玩家同样能看到
+领取入口。判定只读复用既有表（`activity_stage_claim`、`activity_rank_claim`、
+`activity_boss_milestone`、`activity_boss_milestone_claim`、`activity_boss_rank_claim`、
+`activity_boss_damage` 及既有日志表），不新增表、不写库；快照未携带某来源状态时该
+来源计 0，旧调用方行为不变。
 
 QQ 使用现有原生 Markdown、蓝字命令链接和可选键盘提取；OneBot 或 Markdown 不可用时，
 同一文案经公共发送入口降级为纯文本。此切片只读，不新增表、不执行奖励发放、不引入
@@ -95,6 +102,13 @@ Legacy algorithms and schemas remain behind the repository adapter for one compl
 - `alias: 活动目标`
 - `command: 活动任务领取`
 - `alias: 领取活动任务`
+- `command: 活动领取`
+- `alias: 活动一键领取`
+- `alias: 领取活动奖励`
+- `alias: 活动领奖`
+- `command: 活动阶段`
+- `command: 活动阶段领取`
+- `alias: 领取阶段奖励`
 - `command: 活动兑换`
 - `alias: 集字兑换`
 - `command: 活动商店`
@@ -128,6 +142,7 @@ Legacy algorithms and schemas remain behind the repository adapter for one compl
 - `alias: 活动商城兑换`
 - `command: 活动首领`
 - `alias: 活动BOSS`
+- `alias: 活动Boss`
 - `command: 活动首领排行`
 - `alias: 活动BOSS排行`
 - `alias: 首领伤害榜`

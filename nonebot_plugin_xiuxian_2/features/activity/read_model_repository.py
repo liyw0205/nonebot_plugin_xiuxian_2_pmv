@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
@@ -599,8 +600,15 @@ class ActivityReadModelSqlRepository:
         include_pass: bool,
         collect_activity_keys: list[str],
         point_activity_keys: list[str] | tuple[str, ...] = (),
+        stage_windows: Sequence[tuple[str, str | None, str | None]] = (),
+        board_sources: Sequence[str] = (),
     ) -> dict[str, Any]:
-        """Read all personal overview state within a single game_db snapshot."""
+        """Read all personal overview state within a single game_db snapshot.
+
+        ``stage_windows``/``board_sources`` opt into the claim state the activity
+        center needs to decide whether anything is claimable; both default to
+        empty so existing callers keep their current snapshot shape.
+        """
         empty: dict[str, Any] = {
             "sign": {},
             "tasks": {},
@@ -609,6 +617,13 @@ class ActivityReadModelSqlRepository:
             "pass_highest_level": 0,
             "collect_pity": {},
             "point_balances": {},
+            "stage_participated": set(),
+            "stage_claimed": set(),
+            "rank_claimed": set(),
+            "boss_milestone_unlocked": set(),
+            "boss_milestone_claimed": set(),
+            "boss_rank_claimed": set(),
+            "board_positions": {},
         }
         if not self.database.is_file():
             return empty
@@ -681,6 +696,57 @@ class ActivityReadModelSqlRepository:
                     f"WHERE activity_key IN ({placeholders}) AND user_id=?",
                     (*point_keys, str(user_id)),
                 )
+            tables = self._table_names(uow)
+            stage_claimed: set[str] = set()
+            if "activity_stage_claim" in tables:
+                stage_claimed = {
+                    str(row["stage_key"])
+                    for row in uow.query_all(
+                        "SELECT stage_key FROM activity_stage_claim "
+                        "WHERE activity_key=? AND user_id=?",
+                        (str(activity_key), str(user_id)),
+                    )
+                }
+            rank_claimed: set[tuple[str, str]] = set()
+            if "activity_rank_claim" in tables:
+                rank_claimed = {
+                    (str(row["board_key"]), str(row["tier_key"]))
+                    for row in uow.query_all(
+                        "SELECT board_key,tier_key FROM activity_rank_claim "
+                        "WHERE activity_key=? AND user_id=?",
+                        (str(activity_key), str(user_id)),
+                    )
+                }
+            boss_milestone_unlocked: set[str] = set()
+            if "activity_boss_milestone" in tables:
+                boss_milestone_unlocked = {
+                    str(row["milestone_key"])
+                    for row in uow.query_all(
+                        "SELECT milestone_key FROM activity_boss_milestone "
+                        "WHERE activity_key=?",
+                        (str(activity_key),),
+                    )
+                }
+            boss_milestone_claimed: set[str] = set()
+            if "activity_boss_milestone_claim" in tables:
+                boss_milestone_claimed = {
+                    str(row["milestone_key"])
+                    for row in uow.query_all(
+                        "SELECT milestone_key FROM activity_boss_milestone_claim "
+                        "WHERE activity_key=? AND user_id=?",
+                        (str(activity_key), str(user_id)),
+                    )
+                }
+            boss_rank_claimed: set[str] = set()
+            if "activity_boss_rank_claim" in tables:
+                boss_rank_claimed = {
+                    str(row["tier_key"])
+                    for row in uow.query_all(
+                        "SELECT tier_key FROM activity_boss_rank_claim "
+                        "WHERE activity_key=? AND user_id=?",
+                        (str(activity_key), str(user_id)),
+                    )
+                }
 
         tasks = {
             (str(row["scope_type"]), str(row["scope_key"]), str(row["task_key"])): {
@@ -691,6 +757,21 @@ class ActivityReadModelSqlRepository:
             }
             for row in task_rows
         }
+        stage_participated: set[str] = set()
+        if stage_windows:
+            from .stage_participation import ActivityStageParticipationRepository
+
+            stage_participated = ActivityStageParticipationRepository(
+                self.database
+            ).participated_stages(
+                str(user_id), str(activity_key), list(stage_windows)
+            )
+        board_positions: dict[str, int] = {}
+        for source in board_sources:
+            position, _ = self.board_position(
+                str(source), str(activity_key), str(user_id)
+            )
+            board_positions[str(source)] = max(0, int(position))
         return {
             "sign": {
                 "sign_days": max(0, int(sign.get("sign_days") or 0)),
@@ -711,6 +792,13 @@ class ActivityReadModelSqlRepository:
                 str(row["activity_key"]): max(0, int(row["points"] or 0))
                 for row in point_rows
             },
+            "stage_participated": stage_participated,
+            "stage_claimed": stage_claimed,
+            "rank_claimed": rank_claimed,
+            "boss_milestone_unlocked": boss_milestone_unlocked,
+            "boss_milestone_claimed": boss_milestone_claimed,
+            "boss_rank_claimed": boss_rank_claimed,
+            "board_positions": board_positions,
         }
 
 

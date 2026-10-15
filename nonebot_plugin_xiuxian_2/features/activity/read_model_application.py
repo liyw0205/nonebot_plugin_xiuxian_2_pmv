@@ -174,6 +174,25 @@ class ActivityReadModelApplication:
                 for activity in get_gameplay_activities(config)
                 if activity.get("type") == "event_points"
             ]
+            # Claim state the center needs so 奖励领取 tracks every source the
+            # one-click claim covers, not just tasks and the battle pass.
+            from ...xiuxian.xiuxian_activity.activity_config import activity_rank_config
+            from .stage import stage_timeline, stage_window_bounds
+
+            stage_windows = [
+                (stage["key"], *stage_window_bounds(stage))
+                for stage in stage_timeline(config, now)["ended"]
+            ]
+            board_sources = [
+                str(board.get("source") or "")
+                for board in activity_rank_config(config)["boards"]
+                if str(board.get("source") or "")
+            ]
+            if any(
+                activity.get("type") == "activity_boss"
+                for activity in get_gameplay_activities(config)
+            ):
+                board_sources.append("boss")
             snapshot = self.repository.overview_snapshot(
                 str(user_id),
                 activity_key,
@@ -181,6 +200,8 @@ class ActivityReadModelApplication:
                 include_pass=bool(pass_config.get("enabled")),
                 collect_activity_keys=collect_keys,
                 point_activity_keys=point_keys,
+                stage_windows=stage_windows,
+                board_sources=board_sources,
             )
         claimable = bool(user_id and claimable_reward_count(config, snapshot, now))
         lines = ["**活动中心**"]

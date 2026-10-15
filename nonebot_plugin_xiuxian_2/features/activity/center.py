@@ -331,12 +331,107 @@ def build_activity_center_items(
     return (main,)
 
 
+def _claimable_stage_count(config: Mapping[str, Any], snapshot: Mapping[str, Any], now: datetime) -> int:
+    """Ended stages the player took part in, has rewards for and not claimed."""
+    from .stage import claimable_stage_rows
+
+    participated = set(snapshot.get("stage_participated") or ())
+    claimed = set(snapshot.get("stage_claimed") or ())
+    if not participated:
+        return 0
+    return len(claimable_stage_rows(dict(config), now, participated, claimed))
+
+
+def _claimable_rank_count(config: Mapping[str, Any], snapshot: Mapping[str, Any]) -> int:
+    """Configured rank tiers the player's own position reaches and has not claimed."""
+    from ...xiuxian.xiuxian_activity.activity_config import activity_rank_config
+    from .rank import rewards_for_board, tier_for_position
+
+    rank_config = activity_rank_config(dict(config))
+    rewards = rank_config.get("rewards") or []
+    if not rewards:
+        return 0
+    positions = snapshot.get("board_positions") or {}
+    claimed = set(snapshot.get("rank_claimed") or ())
+    count = 0
+    for board in rank_config.get("boards") or []:
+        tiers = rewards_for_board(rewards, board)
+        if not tiers:
+            continue
+        position = _as_int(positions.get(str(board.get("source") or "")), 0)
+        tier = tier_for_position(tiers, position)
+        if tier is None:
+            continue
+        board_key = str(board.get("key") or board.get("source") or "")
+        tier_key = str(tier.get("key") or "")
+        if (board_key, tier_key) in claimed:
+            continue
+        count += 1
+    return count
+
+
+def _boss_milestone_keys(config: Mapping[str, Any]) -> set[str]:
+    """Configured server-progress milestone keys, matching the unlock writer."""
+    keys: set[str] = set()
+    for activity in get_gameplay_activities(dict(config)):
+        if activity.get("type") != "activity_boss":
+            continue
+        for milestone in activity.get("server_milestones") or []:
+            if not isinstance(milestone, Mapping):
+                continue
+            key = milestone.get("key") or f"p{int(float(milestone.get('hp_percent', 0)))}"
+            if str(key):
+                keys.add(str(key))
+    return keys
+
+
+def _claimable_boss_milestone_count(config: Mapping[str, Any], snapshot: Mapping[str, Any]) -> int:
+    """Unlocked server-progress milestones the player has not claimed yet."""
+    unlocked = set(snapshot.get("boss_milestone_unlocked") or ())
+    if not unlocked:
+        return 0
+    claimed = set(snapshot.get("boss_milestone_claimed") or ())
+    return len((unlocked & _boss_milestone_keys(config)) - claimed)
+
+
+def _claimable_boss_rank_count(config: Mapping[str, Any], snapshot: Mapping[str, Any]) -> int:
+    """Boss rank tiers the player's own damage rank reaches and has not claimed."""
+    from .rank import tier_for_position
+
+    position = _as_int((snapshot.get("board_positions") or {}).get("boss"), 0)
+    if position <= 0:
+        return 0
+    claimed = set(snapshot.get("boss_rank_claimed") or ())
+    count = 0
+    for activity in get_gameplay_activities(dict(config)):
+        if activity.get("type") != "activity_boss":
+            continue
+        tiers = [
+            {"rank_min": tier.get("rank_min"), "rank_max": tier.get("rank_max")}
+            for tier in activity.get("rank_rewards") or []
+            if isinstance(tier, Mapping)
+        ]
+        matched = tier_for_position(tiers, position)
+        if matched is None:
+            continue
+        tier_key = f"{_as_int(matched.get('rank_min'), 0)}-{_as_int(matched.get('rank_max'), 0)}"
+        if tier_key in claimed:
+            continue
+        count += 1
+    return count
+
+
 def claimable_reward_count(
     config: Mapping[str, Any],
     snapshot: Mapping[str, Any],
     now: datetime,
 ) -> int:
-    """Count claimable task/pass rewards from one read-model snapshot."""
+    """Count claimable rewards across every source the one-click claim covers.
+
+    Task and pass rewards come straight from the snapshot; stage, rank and boss
+    sources read the claim state the snapshot carries and contribute nothing when
+    that state is absent, so older callers keep their previous count.
+    """
     from ...xiuxian.xiuxian_activity.activity_rules import (
         _activity_pass_config,
         _task_scope_key,
@@ -365,6 +460,10 @@ def claimable_reward_count(
             snapshot.get("pass_claimed_levels") or set(),
         )
     )
+    count += _claimable_stage_count(config, snapshot, now)
+    count += _claimable_rank_count(config, snapshot)
+    count += _claimable_boss_milestone_count(config, snapshot)
+    count += _claimable_boss_rank_count(config, snapshot)
     return count
 
 
