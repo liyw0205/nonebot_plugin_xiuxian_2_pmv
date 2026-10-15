@@ -307,6 +307,20 @@ class ActivityReadModelSqlRepository:
                     f"WHERE activity_key IN ({placeholders}) AND user_id=?",
                     (*keys, str(user_id)),
                 )
+            milestone_rows = []
+            if "activity_boss_milestone" in tables:
+                milestone_rows = uow.query_all(
+                    "SELECT activity_key,milestone_key FROM activity_boss_milestone "
+                    f"WHERE activity_key IN ({placeholders})",
+                    keys,
+                )
+            milestone_claim_rows = []
+            if "activity_boss_milestone_claim" in tables:
+                milestone_claim_rows = uow.query_all(
+                    "SELECT activity_key,milestone_key FROM activity_boss_milestone_claim "
+                    f"WHERE activity_key IN ({placeholders}) AND user_id=?",
+                    (*keys, str(user_id)),
+                )
         result = {
             key: {
                 "hp_left": max(0, int(row["hp_left"] or 0)),
@@ -330,6 +344,14 @@ class ActivityReadModelSqlRepository:
             result.setdefault(str(row["activity_key"]), {}).setdefault("inventory", {})[
                 str(row["item_id"])
             ] = max(0, int(row["count"] or 0))
+        for row in milestone_rows:
+            result.setdefault(str(row["activity_key"]), {}).setdefault(
+                "milestones_unlocked", set()
+            ).add(str(row["milestone_key"]))
+        for row in milestone_claim_rows:
+            result.setdefault(str(row["activity_key"]), {}).setdefault(
+                "milestones_claimed", set()
+            ).add(str(row["milestone_key"]))
         return result
 
     def boss_rank(self, activity_key: str, limit: int = 10) -> list[dict[str, Any]]:
@@ -602,6 +624,7 @@ class ActivityReadModelSqlRepository:
         point_activity_keys: list[str] | tuple[str, ...] = (),
         stage_windows: Sequence[tuple[str, str | None, str | None]] = (),
         board_sources: Sequence[str] = (),
+        boss_activity_keys: Sequence[str] = (),
     ) -> dict[str, Any]:
         """Read all personal overview state within a single game_db snapshot.
 
@@ -624,6 +647,7 @@ class ActivityReadModelSqlRepository:
             "boss_milestone_claimed": set(),
             "boss_rank_claimed": set(),
             "board_positions": {},
+            "boss_progress": {},
         }
         if not self.database.is_file():
             return empty
@@ -747,6 +771,69 @@ class ActivityReadModelSqlRepository:
                         (str(activity_key), str(user_id)),
                     )
                 }
+            boss_progress: dict[str, dict[str, Any]] = {}
+            boss_keys = tuple(
+                dict.fromkeys(str(key) for key in boss_activity_keys if str(key))
+            )
+            if boss_keys:
+                boss_placeholders = ",".join("?" for _ in boss_keys)
+                boss_progress = {
+                    key: {
+                        "hp_left": 0,
+                        "max_hp": 0,
+                        "damage": 0,
+                        "milestones_unlocked": set(),
+                        "milestones_claimed": set(),
+                        "rank_claimed": set(),
+                    }
+                    for key in boss_keys
+                }
+                if "activity_boss_state" in tables:
+                    for row in uow.query_all(
+                        "SELECT activity_key,hp_left,max_hp FROM activity_boss_state "
+                        f"WHERE activity_key IN ({boss_placeholders})",
+                        boss_keys,
+                    ):
+                        boss_progress[str(row["activity_key"])].update(
+                            hp_left=max(0, int(row["hp_left"] or 0)),
+                            max_hp=max(1, int(row["max_hp"] or 1)),
+                        )
+                if "activity_boss_damage" in tables:
+                    for row in uow.query_all(
+                        "SELECT activity_key,total_damage FROM activity_boss_damage "
+                        f"WHERE activity_key IN ({boss_placeholders}) AND user_id=?",
+                        (*boss_keys, str(user_id)),
+                    ):
+                        boss_progress[str(row["activity_key"])]["damage"] = max(
+                            0, int(row["total_damage"] or 0)
+                        )
+                if "activity_boss_milestone" in tables:
+                    for row in uow.query_all(
+                        "SELECT activity_key,milestone_key FROM activity_boss_milestone "
+                        f"WHERE activity_key IN ({boss_placeholders})",
+                        boss_keys,
+                    ):
+                        boss_progress[str(row["activity_key"])][
+                            "milestones_unlocked"
+                        ].add(str(row["milestone_key"]))
+                if "activity_boss_milestone_claim" in tables:
+                    for row in uow.query_all(
+                        "SELECT activity_key,milestone_key FROM activity_boss_milestone_claim "
+                        f"WHERE activity_key IN ({boss_placeholders}) AND user_id=?",
+                        (*boss_keys, str(user_id)),
+                    ):
+                        boss_progress[str(row["activity_key"])][
+                            "milestones_claimed"
+                        ].add(str(row["milestone_key"]))
+                if "activity_boss_rank_claim" in tables:
+                    for row in uow.query_all(
+                        "SELECT activity_key,tier_key FROM activity_boss_rank_claim "
+                        f"WHERE activity_key IN ({boss_placeholders}) AND user_id=?",
+                        (*boss_keys, str(user_id)),
+                    ):
+                        boss_progress[str(row["activity_key"])]["rank_claimed"].add(
+                            str(row["tier_key"])
+                        )
 
         tasks = {
             (str(row["scope_type"]), str(row["scope_key"]), str(row["task_key"])): {
@@ -799,6 +886,7 @@ class ActivityReadModelSqlRepository:
             "boss_milestone_claimed": boss_milestone_claimed,
             "boss_rank_claimed": boss_rank_claimed,
             "board_positions": board_positions,
+            "boss_progress": boss_progress,
         }
 
 

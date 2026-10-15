@@ -17,6 +17,9 @@ The compatibility command remains available while the new application boundary i
 `activity_boss_damage` 及既有日志表），不新增表、不写库；快照未携带某来源状态时该
 来源计 0，旧调用方行为不变。
 
+进度行同时展示首领进度：`{首领名} 血量 {pct}%、我的伤害 {damage}`，存在可领取的
+进度奖励时追加 `进度奖励 N 项可领`，与一键领取的首领进度计数同源。
+
 QQ 使用现有原生 Markdown、蓝字命令链接和可选键盘提取；OneBot 或 Markdown 不可用时，
 同一文案经公共发送入口降级为纯文本。此切片只读，不新增表、不执行奖励发放、不引入
 后台任务，也不覆盖集字、积分商店或活动首领的既有结算逻辑。
@@ -56,6 +59,12 @@ The historical package owns command names during the compatibility release. New 
 `activity_collect_inventory`、`activity_pass_balance`、`activity_boss_damage`），
 不新增日志表；领取记录写入增量表 `activity_rank_claim`
 （`activity_key,user_id,board_key,tier_key,reward,create_time`），不改既有表结构。
+
+`活动首领` 的状态块除首领名、全服血量、我的累计伤害、今日挑战与活动道具外，还列出
+全服进度奖励档位：按 `hp_percent` 降序显示名称、`血量≤X%`、奖励与本人状态
+（`已领取` / `可领取` / `未解锁`）；存在可领取档位时给出 `活动首领领奖 进度` 提示。
+未配置 `server_milestones` 时不渲染该段。状态只读复用 `activity_boss_milestone`
+（已解锁）与 `activity_boss_milestone_claim`（本人已领），不新增表、不写库。
 
 ## Web API
 No new HTTP route is exposed in this migration slice. Existing URLs remain served by the legacy web adapter.

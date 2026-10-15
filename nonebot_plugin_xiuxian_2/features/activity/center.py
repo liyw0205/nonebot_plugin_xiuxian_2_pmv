@@ -196,6 +196,23 @@ def _gameplay_progress_parts(
             parts.append(
                 f"{point_name} {max(0, _as_int(balances.get(activity_key), 0))}"
             )
+        elif activity.get("type") == "activity_boss":
+            progress = (snapshot.get("boss_progress") or {}).get(activity_key)
+            if not progress:
+                continue
+            configured_max = max(1, _as_int(activity.get("max_hp"), 1))
+            hp_left = max(0, _as_int(progress.get("hp_left"), configured_max))
+            pct = 100.0 * hp_left / configured_max if configured_max else 0.0
+            segment = (
+                f"{_clean_text(activity.get('boss_name'), '活动首领')} 血量 {pct:.0f}%"
+                f"、我的伤害 {max(0, _as_int(progress.get('damage'), 0))}"
+            )
+            unlocked = set(progress.get("milestones_unlocked") or ())
+            claimed = set(progress.get("milestones_claimed") or ())
+            claimable = len((unlocked & _boss_milestone_keys(config)) - claimed)
+            if claimable:
+                segment += f"、进度奖励 {claimable} 项可领"
+            parts.append(segment)
     return parts
 
 
@@ -385,12 +402,31 @@ def _boss_milestone_keys(config: Mapping[str, Any]) -> set[str]:
     return keys
 
 
+def _boss_claim_state(snapshot: Mapping[str, Any]) -> tuple[set[str], set[str], set[str]]:
+    """Boss claim state from whichever representation the snapshot carries.
+
+    ``boss_progress`` is keyed by the boss gameplay activity's own key, which is
+    the key the boss tables actually use; the flat keys are the older
+    single-activity projection. Both are unioned so the count never depends on
+    which one the caller populated.
+    """
+    unlocked = set(snapshot.get("boss_milestone_unlocked") or ())
+    claimed = set(snapshot.get("boss_milestone_claimed") or ())
+    rank_claimed = set(snapshot.get("boss_rank_claimed") or ())
+    for progress in (snapshot.get("boss_progress") or {}).values():
+        if not isinstance(progress, Mapping):
+            continue
+        unlocked |= set(progress.get("milestones_unlocked") or ())
+        claimed |= set(progress.get("milestones_claimed") or ())
+        rank_claimed |= set(progress.get("rank_claimed") or ())
+    return unlocked, claimed, rank_claimed
+
+
 def _claimable_boss_milestone_count(config: Mapping[str, Any], snapshot: Mapping[str, Any]) -> int:
     """Unlocked server-progress milestones the player has not claimed yet."""
-    unlocked = set(snapshot.get("boss_milestone_unlocked") or ())
+    unlocked, claimed, _ = _boss_claim_state(snapshot)
     if not unlocked:
         return 0
-    claimed = set(snapshot.get("boss_milestone_claimed") or ())
     return len((unlocked & _boss_milestone_keys(config)) - claimed)
 
 
@@ -401,7 +437,7 @@ def _claimable_boss_rank_count(config: Mapping[str, Any], snapshot: Mapping[str,
     position = _as_int((snapshot.get("board_positions") or {}).get("boss"), 0)
     if position <= 0:
         return 0
-    claimed = set(snapshot.get("boss_rank_claimed") or ())
+    _, _, claimed = _boss_claim_state(snapshot)
     count = 0
     for activity in get_gameplay_activities(dict(config)):
         if activity.get("type") != "activity_boss":

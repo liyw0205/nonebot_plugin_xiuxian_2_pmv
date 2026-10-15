@@ -188,10 +188,13 @@ class ActivityReadModelApplication:
                 for board in activity_rank_config(config)["boards"]
                 if str(board.get("source") or "")
             ]
-            if any(
-                activity.get("type") == "activity_boss"
+            boss_keys = [
+                str(activity.get("key") or "")
                 for activity in get_gameplay_activities(config)
-            ):
+                if activity.get("type") == "activity_boss"
+                and str(activity.get("key") or "")
+            ]
+            if boss_keys:
                 board_sources.append("boss")
             snapshot = self.repository.overview_snapshot(
                 str(user_id),
@@ -202,6 +205,7 @@ class ActivityReadModelApplication:
                 point_activity_keys=point_keys,
                 stage_windows=stage_windows,
                 board_sources=board_sources,
+                boss_activity_keys=boss_keys,
             )
         claimable = bool(user_id and claimable_reward_count(config, snapshot, now))
         lines = ["**活动中心**"]
@@ -651,6 +655,27 @@ class ActivityReadModelApplication:
         ]
         if items:
             lines.append("活动道具：" + "、".join(items))
+        milestones = activity.get("server_milestones") or []
+        if milestones:
+            unlocked = set(row.get("milestones_unlocked") or ())
+            claimed = set(row.get("milestones_claimed") or ())
+            lines.append("全服进度奖励：")
+            pending = False
+            for milestone in milestones:
+                key = str(milestone.get("key") or "")
+                name = str(milestone.get("name") or "全服进度奖励")
+                percent = float(milestone.get("hp_percent") or 0)
+                reward = str(milestone.get("reward") or "")
+                if key and key in claimed:
+                    state = "已领取"
+                elif key and key in unlocked:
+                    state = "可领取"
+                    pending = True
+                else:
+                    state = "未解锁"
+                lines.append(f"- {name}（血量≤{percent:g}%）{reward}｜{state}")
+            if pending:
+                lines.append("可用 活动首领领奖 进度 领取已解锁的进度奖励")
         return "\n".join(lines)
 
     def boss_status_text(self, user_id: str, query: str = "") -> str:
