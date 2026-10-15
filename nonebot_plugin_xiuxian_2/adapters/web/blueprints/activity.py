@@ -23,9 +23,9 @@ def create_blueprint(*, context=None, application=None, permission=None) -> Blue
         """Read-only activity state; claiming keeps its own write route."""
         if application is None:
             return api_success({"items": [], "source": "compatibility"})
+        # The panel fetches this endpoint without parameters, so an absent
+        # user_id renders the activity card without a personal progress line.
         user_id = str(request.args.get("user_id") or "").strip()
-        if not user_id:
-            return api_error("validation_error", "user_id is required", status=400)
         view = str(request.args.get("view") or "center").strip() or "center"
         read_model = application.read_model
         views = {

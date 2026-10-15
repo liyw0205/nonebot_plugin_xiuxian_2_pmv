@@ -216,6 +216,39 @@ def _gameplay_progress_parts(
     return parts
 
 
+def _stage_progress_part(config: Mapping[str, Any], now: datetime) -> str:
+    """Current stage name and countdown; empty when no stage is running."""
+    from .stage import stage_timeline
+
+    active = stage_timeline(dict(config), now).get("active")
+    if not active:
+        return ""
+    name = _clean_text(active.get("name") or active.get("key"), "阶段")
+    remaining = _clean_text(active.get("remaining_text"))
+    return f"阶段 {name} 剩余 {remaining}" if remaining else f"阶段 {name}"
+
+
+def _rank_progress_parts(
+    config: Mapping[str, Any], snapshot: Mapping[str, Any]
+) -> list[str]:
+    """Own position per configured rank board; empty when unranked."""
+    from ...xiuxian.xiuxian_activity.activity_config import activity_rank_config
+    from .rank import position_text
+
+    positions = snapshot.get("board_positions") or {}
+    if not positions:
+        return []
+    parts: list[str] = []
+    for board in activity_rank_config(dict(config)).get("boards") or []:
+        source = str(board.get("source") or "")
+        position = _as_int(positions.get(source), 0)
+        if position <= 0:
+            continue
+        label = _clean_text(board.get("label") or board.get("key") or source, source)
+        parts.append(f"{label} {position_text(position, 0)}")
+    return parts
+
+
 def personal_progress_summary(
     config: Mapping[str, Any],
     snapshot: Mapping[str, Any],
@@ -260,6 +293,12 @@ def personal_progress_summary(
     if pass_config.get("enabled", True):
         level = pass_level(pass_config, snapshot.get("pass_total_exp"))
         line += f"、战令 Lv{level}"
+    stage_part = _stage_progress_part(config, now)
+    if stage_part:
+        line += "、" + stage_part
+    rank_parts = _rank_progress_parts(config, snapshot)
+    if rank_parts:
+        line += "、" + "、".join(rank_parts)
     gameplay_parts = _gameplay_progress_parts(config, snapshot)
     if gameplay_parts:
         line += "、" + "、".join(gameplay_parts)

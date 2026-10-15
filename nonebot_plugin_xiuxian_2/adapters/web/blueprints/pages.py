@@ -15,11 +15,11 @@ PAGE_ENDPOINTS = {
     "database": "/api/v1/database",
     "scheduler": "/api/v1/scheduler",
     "backups": "/api/v1/backups",
-    "activity": "/api/v1/activity",
+    "activity": "/api/v1/activity/state",
     "logs": "/api/v1/logs",
     "commands": "/api/v1/registry",
     "command_registry": "/api/v1/registry",
-    "reward_center": "/api/v1/activity",
+    "reward_center": "/api/v1/activity/state",
     "update": "/api/v1/dashboard",
 }
 

@@ -205,9 +205,10 @@ class ActivityCenterTests(unittest.TestCase):
             return personal_progress_summary(config, snapshot, now)
 
         # 今日已签 / 昨日签 / 快照缺 sign 三种情形（只读，复用 overview 快照字段）。
-        assert summary({"last_sign_date": "2026-10-15"}) == "进度：签到 已签、暂无任务"
-        assert summary({"last_sign_date": "2026-10-14"}) == "进度：签到 未签、暂无任务"
-        assert summary(None) == "进度：签到 未签、暂无任务"
+        # 默认阶段集含进行中的「正式期」，进度行在签到状态后追加阶段段。
+        assert summary({"last_sign_date": "2026-10-15"}) == "进度：签到 已签、暂无任务、阶段 正式期"
+        assert summary({"last_sign_date": "2026-10-14"}) == "进度：签到 未签、暂无任务、阶段 正式期"
+        assert summary(None) == "进度：签到 未签、暂无任务、阶段 正式期"
 
         app_config = {
             "template_key": "spring",

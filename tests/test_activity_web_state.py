@@ -89,11 +89,24 @@ class ActivityWebStateTests(unittest.TestCase):
             self.assertEqual(data["view"], view)
             self.assertTrue(data["text"].strip())
 
-    def test_missing_user_id_is_rejected(self) -> None:
+    def test_missing_user_id_returns_the_card_without_personal_progress(self) -> None:
+        """The panel fetches this endpoint without parameters."""
         client = self._client(self._database())
         response = client.get("/api/v1/activity/state")
-        self.assertEqual(response.status_code, 400)
-        self.assertEqual(response.get_json()["error"]["code"], "validation_error")
+        self.assertEqual(response.status_code, 200)
+        data = response.get_json()["data"]
+        self.assertEqual(data["view"], "center")
+        self.assertEqual(data["user_id"], "")
+        self.assertIn("活动中心", data["text"])
+        self.assertNotIn("进度：", data["text"])
+
+    def test_panel_page_endpoints_point_at_the_state_route(self) -> None:
+        from nonebot_plugin_xiuxian_2.adapters.web.blueprints.pages import (
+            PAGE_ENDPOINTS,
+        )
+
+        self.assertEqual(PAGE_ENDPOINTS["activity"], "/api/v1/activity/state")
+        self.assertEqual(PAGE_ENDPOINTS["reward_center"], "/api/v1/activity/state")
 
     def test_unknown_view_is_rejected(self) -> None:
         client = self._client(self._database())
