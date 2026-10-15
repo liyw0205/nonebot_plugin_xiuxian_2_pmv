@@ -203,6 +203,66 @@ class ActivityReadModelApplication:
                 lines.append(links)
         return "\n".join(lines).strip()
 
+    def activity_stage_text(self, user_id: str | None = None) -> str:
+        """Read-only stage view: current stage, next stage, claimable rewards.
+
+        The stage window is the activity's own time progression; the player
+        only ever sees stages the config declares, and claim eligibility comes
+        from their own participation evidence.
+        """
+        from ...xiuxian.xiuxian_activity.activity_config import (
+            STAGE_TYPE_LABELS,
+            _activity_config_key,
+            activity_state,
+        )
+        from ...xiuxian.xiuxian_activity.activity_views import _stage_feature_text
+        from .stage import claimable_stage_rows, stage_timeline, stage_window_bounds
+        from .stage_participation import ActivityStageParticipationRepository
+
+        config = self._config()
+        now = self.clock.now().astimezone().replace(tzinfo=None)
+        lines = ["**活动阶段**"]
+        ok, reason = activity_state(config)
+        if not ok:
+            lines.append(reason)
+            return "\n".join(lines).strip()
+
+        timeline = stage_timeline(config, now)
+        active = timeline["active"]
+        if active is None:
+            lines.append("当前没有进行中的活动阶段")
+        else:
+            stage_type = STAGE_TYPE_LABELS.get(
+                active["stage_type"], active["stage_type"]
+            )
+            lines.append(f"{active['name']}（{stage_type}）")
+            lines.append(f"阶段时间：{active['start_time']} 至 {active['end_time']}")
+            if active["remaining_text"]:
+                lines.append(active["remaining_text"])
+            lines.append("开放内容：" + _stage_feature_text(list(active["features"])))
+            lines.append(f"阶段倍率：{float(active['multiplier']):.2f}x")
+        next_stage = timeline["next"]
+        if next_stage is not None:
+            lines.append(f"下一阶段：{next_stage['name']}（{next_stage['start_time']} 后开启）")
+
+        if user_id:
+            activity_key = _activity_config_key(config)
+            windows = [
+                (stage["key"], *stage_window_bounds(stage))
+                for stage in timeline["ended"]
+            ]
+            participated = ActivityStageParticipationRepository(
+                getattr(self.repository, "database", "")
+            ).participated_stages(str(user_id), activity_key, windows)
+            claimed = self.repository.stage_claims(str(user_id), activity_key)
+            rows = claimable_stage_rows(config, now, participated, claimed)
+            if rows:
+                names = "、".join(row["name"] for row in rows)
+                lines.append(f"可领阶段奖励：{names}｜活动阶段领取")
+            else:
+                lines.append("可领阶段奖励：暂无")
+        return "\n".join(lines).strip()
+
     @staticmethod
     def _append_stage_summary(
         lines, config, runtime_fn, as_float, helpers, *, detail=False

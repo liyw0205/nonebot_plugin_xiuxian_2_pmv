@@ -1603,6 +1603,20 @@
       "permission": "user"
     },
     {
+      "aliases": [],
+      "feature": "activity",
+      "name": "活动阶段",
+      "permission": "user"
+    },
+    {
+      "aliases": [
+        "领取阶段奖励"
+      ],
+      "feature": "activity",
+      "name": "活动阶段领取",
+      "permission": "user"
+    },
+    {
       "aliases": [
         "活动一键领取",
         "活动领奖",
@@ -2627,6 +2641,7 @@
     "activity_reward_feature_migrations",
     "activity_sign_log",
     "activity_sign_settlement_operations",
+    "activity_stage_claim",
     "activity_state_migration_audit",
     "activity_task_claim_log",
     "activity_task_claim_operations",

@@ -308,6 +308,28 @@ def _normalize_stage_features(value, default: list[str] | None = None) -> list[s
     return features
 
 
+def _normalize_stage_rewards(value) -> list[dict]:
+    """Normalize a stage's optional reward rows; empty rows are dropped."""
+    if not isinstance(value, list):
+        return []
+    rewards: list[dict] = []
+    seen: set[str] = set()
+    for index, row in enumerate(value, 1):
+        if isinstance(row, dict):
+            reward_text = _clean_text(row.get("reward"))
+            name = _clean_text(row.get("name"))
+            key = _clean_text(row.get("key")) or f"reward_{index}"
+        else:
+            reward_text = _clean_text(row)
+            name = ""
+            key = f"reward_{index}"
+        if not reward_text or key in seen:
+            continue
+        seen.add(key)
+        rewards.append({"key": key, "name": name, "reward": reward_text})
+    return rewards
+
+
 def _activity_stages_config(config: dict | None = None) -> list[dict]:
     cfg = config if config is not None else load_config()
     raw = _get_extensions(cfg).get("stages")
@@ -338,6 +360,7 @@ def _activity_stages_config(config: dict | None = None) -> list[dict]:
             "features": features,
             "multiplier": max(0.0, _as_float(row.get("multiplier"), 1.0)),
             "description": _clean_text(row.get("description")),
+            "rewards": _normalize_stage_rewards(row.get("rewards")),
         })
     return stages
 

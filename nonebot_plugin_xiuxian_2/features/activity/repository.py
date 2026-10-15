@@ -22,6 +22,7 @@ class ActivityRepository(ServicePort):
             "activity_boss.claim_boss_rewards": self._claim_boss,
             "activity_boss.fight_cooperative_boss": self._fight_boss,
             "activity_boss.use_item_on_boss": self._use_boss_item,
+            "claim_stage_rewards": self._claim_stage,
             "set_enabled": self._set_enabled,
         })
         self.database = str(database)
@@ -47,6 +48,13 @@ class ActivityRepository(ServicePort):
     def _claim_tasks(self, **kwargs: Any):
         from ...xiuxian.xiuxian_activity.service import claim_activity_tasks
         return claim_activity_tasks(str(kwargs.get("user_id", "")), str(kwargs.get("query", "")), str(kwargs.get("operation_id", "")))
+
+    def _claim_stage(self, **kwargs: Any):
+        from .stage_claim_application import ActivityStageClaimApplication
+        return ActivityStageClaimApplication(self.database).claim(
+            str(kwargs.get("user_id", "")),
+            query=str(kwargs.get("query", "")),
+        )
 
     def _claim_pass(self, **kwargs: Any):
         from ...xiuxian.xiuxian_activity.service import claim_activity_pass_rewards

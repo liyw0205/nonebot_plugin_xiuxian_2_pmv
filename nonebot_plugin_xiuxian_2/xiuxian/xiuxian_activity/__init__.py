@@ -40,6 +40,8 @@ activity_boss_cmd = on_command("活动首领", aliases={"活动BOSS", "活动Bos
 activity_boss_rank_cmd = on_command("活动首领排行", aliases={"活动BOSS排行", "首领伤害榜"}, priority=10, block=True)
 activity_boss_atk_cmd = on_command("活动讨伐", aliases={"活动首领攻击", "使用爆竹", "使用烟花"}, priority=10, block=True)
 activity_boss_claim_cmd = on_command("活动首领领奖", aliases={"领取首领奖励", "首领领奖"}, priority=10, block=True)
+activity_stage_cmd = on_command("活动阶段", priority=10, block=True)
+activity_stage_claim_cmd = on_command("活动阶段领取", aliases={"领取阶段奖励"}, priority=10, block=True)
 
 activity_open_cmd = on_command("开启活动", permission=SUPERUSER, priority=5, block=True)
 activity_close_cmd = on_command("关闭活动", permission=SUPERUSER, priority=5, block=True)
@@ -134,6 +136,38 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         native_markdown=True,
         fallback_msg=strip_md_command_links(text),
     )
+
+
+@activity_stage_cmd.handle(parameterless=[Cooldown(cd_time=0)])
+async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    await assign_bot(bot=bot, event=event)
+    is_user, user_info, msg = await _ensure_user(event)
+    user_id = str(user_info["user_id"]) if is_user else None
+    text = activity_application.read_model.activity_stage_text(user_id)
+    await handle_send(
+        bot,
+        event,
+        text,
+        native_markdown=True,
+        fallback_msg=strip_md_command_links(text),
+    )
+
+
+@activity_stage_claim_cmd.handle(parameterless=[Cooldown(cd_time=0)])
+async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
+    await assign_bot(bot=bot, event=event)
+    is_user, user_info, msg = await _ensure_user(event)
+    if not is_user:
+        await handle_send(bot, event, msg, md_type="我要修仙")
+        return
+    uid = str(user_info["user_id"])
+    ok, text, _ = _run_activity_action(
+        "claim_stage_rewards",
+        _activity_operation_id(event, "stage-claim", uid),
+        uid,
+        query=args.extract_plain_text(),
+    )
+    await handle_send(bot, event, text if ok else text)
 
 
 @activity_rewards_cmd.handle(parameterless=[Cooldown(cd_time=0)])
@@ -434,6 +468,8 @@ ACTIVITY_HELP = """
 **查看**
 - 活动中心 / 活动大厅
 > 查看活动状态、奖励和快捷入口
+- 活动阶段
+> 查看当前阶段、剩余时间和开放内容
 - 活动 / 活动信息
 > 查看活动概览
 - 活动奖励
@@ -450,6 +486,8 @@ ACTIVITY_HELP = """
 **领取与兑换**
 - 活动领取
 > 任务、战令、首领奖励一键领取
+- 活动阶段领取
+> 领取已结束阶段的奖励
 - 活动签到
 > 每日活动签到
 - 活动战令 / 活动战令领取

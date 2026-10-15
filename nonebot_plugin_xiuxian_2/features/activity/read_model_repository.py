@@ -364,6 +364,20 @@ class ActivityReadModelSqlRepository:
             for row in rows
         ]
 
+    def stage_claims(self, user_id: str, activity_key: str) -> set[str]:
+        """Stage keys the player already claimed (empty when the table is absent)."""
+        if not self.database.is_file():
+            return set()
+        with DatabaseUnitOfWork(self.database, read_only=True) as uow:
+            if "activity_stage_claim" not in self._table_names(uow):
+                return set()
+            rows = uow.query_all(
+                "SELECT stage_key FROM activity_stage_claim "
+                "WHERE activity_key=? AND user_id=?",
+                (str(activity_key), str(user_id)),
+            )
+        return {str(row["stage_key"]) for row in rows}
+
     def overview_snapshot(
         self,
         user_id: str,

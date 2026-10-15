@@ -17,6 +17,20 @@ QQ 使用现有原生 Markdown、蓝字命令链接和可选键盘提取；OneBo
 ## 命令与别名
 The historical package owns command names during the compatibility release. New names are added only through this feature manifest.
 
+活动阶段玩法新增两条玩家命令，均只映射既有能力：
+
+- `活动阶段`：只读查看当前阶段（名称、类型、时间、剩余、开放内容、倍率）、下一阶段，
+  以及本人可领取的阶段奖励摘要；活动未开启或没有进行中的阶段时给出确定文案。
+- `活动阶段领取`（别名 `领取阶段奖励`）：领取**已结束**且本人在该阶段内有参与记录、
+  配置了奖励、尚未领取的阶段奖励；可加阶段名过滤。重复领取不重复发放，活动未开启、
+  没有已结束阶段、未配置奖励、无参与记录各自给出明确拒绝文案。
+
+阶段配置位于 `extensions.stages[]`，可选 `rewards` 行（`{key?, name, reward}`）；缺省
+表示该阶段无奖励，旧配置语义不变。领取记录写入增量表 `activity_stage_claim`
+（`activity_key,user_id,stage_key,reward,create_time`），参与证据复用既有日志表
+（`activity_sign_log`、`activity_point_event_log`、`activity_pass_event_log`、
+`activity_collect_drop_log`、`activity_boss_fight_log`），不新增日志、不改既有表结构。
+
 ## Web API
 No new HTTP route is exposed in this migration slice. Existing URLs remain served by the legacy web adapter.
 
