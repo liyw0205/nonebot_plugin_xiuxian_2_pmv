@@ -67,7 +67,12 @@ The historical package owns command names during the compatibility release. New 
 （已解锁）与 `activity_boss_milestone_claim`（本人已领），不新增表、不写库。
 
 ## Web API
-No new HTTP route is exposed in this migration slice. Existing URLs remain served by the legacy web adapter.
+`GET /api/v1/activity/state?user_id=<id>[&view=center|stage|rank|boss]` 返回只读活动状态文本：
+默认 `view=center` 为活动中心卡片与本人进度行，`stage`/`rank`/`boss` 分别复用
+`活动阶段`/`活动排行`/`活动首领` 的读模型；缺少 `user_id` 或未知 `view` 返回
+`validation_error`（400），权限不足返回 `forbidden`（403）。写入口仍是既有
+`POST /api/v1/activity/rewards/claim`（一键领取，带 `Idempotency-Key`，覆盖六来源）；
+既有 `GET /api/v1/activity` 审计路由与其响应不变。
 
 ## 数据模型与迁移
 Manifest 保留历史 migration 标记 `legacy.activity.001`；当前启动 migration `activity_state.001/.002` 在 `game_db` 预建活动玩法表，并从 `data/activity/activity.db` 以只读、每批最多 200 行的方式回填。目标身份冲突、旧 schema 不完整或磁盘空间预检不通过时拒绝继续；迁移不会删除旧文件，也不在请求路径建表。活动模块导入不再抢先校验目标表，避免 startup migration 尚未运行时阻断新库/旧库升级。默认签到、集字、积分、道具、任务、战令和活动首领状态读写统一使用 `game_db`。

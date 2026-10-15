@@ -481,7 +481,18 @@ def create_app(
     app.register_blueprint(database_blueprint(context=context, permission=has_permission))
     app.register_blueprint(scheduler_blueprint(context=context, permission=has_permission))
     app.register_blueprint(backups_blueprint(context=context, permission=has_permission))
-    app.register_blueprint(activity_blueprint(context=context, permission=has_permission))
+    activity_application = (context.services or {}).get("activity")
+    if activity_application is None:
+        from ...features.activity.application import ActivityApplication
+
+        activity_application = ActivityApplication(
+            str(context.database.path("game_db"))
+        )
+    app.register_blueprint(
+        activity_blueprint(
+            context=context, application=activity_application, permission=has_permission
+        )
+    )
     app.register_blueprint(messages_blueprint(context=context, permission=has_permission))
     app.register_blueprint(logs_blueprint(context=context, permission=has_permission))
     economy_ledger = (context.services or {}).get("economy_ledger") or EconomyLedgerApplication(

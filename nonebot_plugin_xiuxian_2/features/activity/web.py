@@ -4,8 +4,10 @@ from typing import Any
 
 
 def blueprint(application: Any, *, permission: Any):
-    """This legacy slice has no new HTTP routes yet."""
-    return None
+    """Read-only activity state route for the web panel."""
+    from ...adapters.web.blueprints.activity import create_blueprint
+
+    return create_blueprint(application=application, permission=permission)
 
 
 __all__ = ["blueprint"]
