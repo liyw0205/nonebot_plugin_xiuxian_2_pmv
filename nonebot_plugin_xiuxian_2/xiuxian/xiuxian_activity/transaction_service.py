@@ -983,6 +983,8 @@ class ActivityClaimAllService:
         "pass": "战令",
         "boss_milestone": "首领进度",
         "boss_rank": "首领排行",
+        "stage": "阶段",
+        "rank": "排行",
     }
 
     def __init__(self, activity_database: str | Path, lock: RLock | None = None) -> None:
@@ -1071,8 +1073,20 @@ class ActivityClaimAllService:
                     ).fetchall()
                 )
                 if names != self.step_names():
-                    conn.rollback()
-                    return ActivityClaimAllResult("operation_conflict", text="领取计划冲突，请重新发送")
+                    if not names or names != self.step_names()[: len(names)]:
+                        conn.rollback()
+                        return ActivityClaimAllResult("operation_conflict", text="领取计划冲突，请重新发送")
+                    # The plan only ever grows by appending steps, so a stored operation from an
+                    # earlier plan is upgraded in place instead of losing its unfinished progress.
+                    conn.executemany(
+                        "INSERT INTO activity_claim_all_steps(operation_id,step_name,ordinal) "
+                        "VALUES(%s,%s,%s)",
+                        [
+                            (operation_id, step_name, ordinal)
+                            for ordinal, step_name in enumerate(self.step_names())
+                            if ordinal >= len(names)
+                        ],
+                    )
                 if str(row[1]) == "completed" and str(row[2]):
                     conn.rollback()
                     return self._decode_result("duplicate", str(row[2]))

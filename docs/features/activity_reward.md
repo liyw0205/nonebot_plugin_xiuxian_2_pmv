@@ -2,7 +2,9 @@
 
 ## 用户流程
 
-用户通过 `活动领取` 一次性领取当前可领取的任务、战令和首领奖励。旧活动服务继续负责具体奖励规则，新 application 负责统一 operation ledger、审计和 Web 合约。
+用户通过 `活动领取` 一次性领取当前可领取的任务、战令、首领进度、首领排行、阶段和排行奖励。旧活动服务继续负责具体奖励规则，新 application 负责统一 operation ledger、审计和 Web 合约。
+
+固定计划由 `features/activity_reward/claim_all_repository.py` 的 `STEP_LABELS` 声明，共六步：任务、战令、首领进度、首领排行、阶段、排行；旧兼容侧 `xiuxian/xiuxian_activity/transaction_service.py` 的 `ActivityClaimAllService.STEP_LABELS` 必须与该顺序完全一致，否则 `run()` 直接拒绝执行。阶段与排行奖励由活动 feature 的领取应用结算（`ActivityStageClaimApplication` / `ActivityRankClaimApplication`，同一 `game_db`），兼容层只做运行器接线。计划变更会让在飞行中的旧计划得到 `operation_conflict`（领取计划冲突，请重新发送），不自动补偿。
 
 ## 命令与别名
 
@@ -18,7 +20,7 @@
 
 ## 事务与失败回滚
 
-application 对外操作号幂等；旧活动协调器对每个子奖励步骤持久化进度，失败返回可重试状态，不重复已完成步骤。
+application 对外操作号幂等；旧活动协调器对每个子奖励步骤持久化进度，失败返回可重试状态，不重复已完成步骤。六个步骤逐步隔离：任一步抛异常即返回 `retryable_failure` 并保留已完成步骤，重试只补跑未完成步骤；全部步骤落空时聚合为暂无可领取奖励并逐项列出原因。阶段/排行步骤在无可领时返回 `(False, 原因)`（如阶段奖励已领取、没有可领取的排行奖励），重复发放由 `activity_stage_claim` / `activity_rank_claim` 主键兜底。
 
 ## 定时任务
 

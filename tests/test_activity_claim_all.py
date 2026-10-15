@@ -58,6 +58,8 @@ class ActivityClaimAllTests(unittest.TestCase):
                 "pass": (False, "战令暂无奖励"),
                 "boss_milestone": (False, "进度暂无奖励"),
                 "boss_rank": (True, "排行奖励"),
+                "stage": (True, "阶段奖励"),
+                "rank": (True, "排行榜奖励"),
             },
         )
 
@@ -66,16 +68,20 @@ class ActivityClaimAllTests(unittest.TestCase):
 
         self.assertEqual("applied", result.status)
         self.assertTrue(result.ok)
-        self.assertEqual("任务奖励\n\n排行奖励", result.text)
+        self.assertEqual(
+            "任务奖励\n\n排行奖励\n\n阶段奖励\n\n排行榜奖励", result.text
+        )
         self.assertEqual("duplicate", replay.status)
         self.assertEqual(result.text, replay.text)
-        self.assertEqual(4, len(calls))
+        self.assertEqual(6, len(calls))
         self.assertEqual(
             [
                 "claim-op:tasks",
                 "claim-op:pass",
                 "claim-op:boss-milestone",
                 "claim-op:boss-rank",
+                "claim-op:stage",
+                "claim-op:rank",
             ],
             [operation_id for _, operation_id in calls],
         )
@@ -95,7 +101,7 @@ class ActivityClaimAllTests(unittest.TestCase):
         self.assertIn("暂无可领取奖励", result.text)
         with db_backend.connection(self.database) as conn:
             self.assertEqual(
-                4,
+                6,
                 conn.execute(
                     "SELECT COUNT(*) FROM activity_claim_all_steps WHERE status='completed'"
                 ).fetchone()[0],
@@ -109,6 +115,8 @@ class ActivityClaimAllTests(unittest.TestCase):
             "pass": RuntimeError("temporary failure"),
             "boss_milestone": (False, "milestone miss"),
             "boss_rank": (False, "rank miss"),
+            "stage": (False, "stage miss"),
+            "rank": (False, "rank miss"),
         }
         runners = self._runners(calls, outcomes)
 
@@ -119,7 +127,7 @@ class ActivityClaimAllTests(unittest.TestCase):
         self.assertEqual("retryable_failure", first.status)
         self.assertEqual("applied", second.status)
         self.assertEqual(
-            ["tasks", "pass", "pass", "boss_milestone", "boss_rank"],
+            ["tasks", "pass", "pass", "boss_milestone", "boss_rank", "stage", "rank"],
             [step for step, _ in calls],
         )
         with db_backend.connection(self.database) as conn:
@@ -154,7 +162,7 @@ class ActivityClaimAllTests(unittest.TestCase):
         self.assertEqual("applied", second.status)
         self.assertEqual(2, calls.count("pass"))
         self.assertEqual(1, grants.count("pass"))
-        self.assertEqual(4, len(grants))
+        self.assertEqual(6, len(grants))
 
     def test_rejects_operation_reuse_for_another_user(self):
         service = ActivityClaimAllService(self.database)

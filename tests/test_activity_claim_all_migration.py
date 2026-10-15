@@ -15,6 +15,11 @@ from nonebot_plugin_xiuxian_2.features.activity_reward.migrations import (
 )
 from nonebot_plugin_xiuxian_2.infrastructure.database import DatabaseUnitOfWork
 
+# The plan the pre-refactor plugin wrote into the legacy activity database. The
+# migration validates this exact historical plan, so it must not track the
+# current, larger claim-all plan.
+LEGACY_STEP_NAMES = ("tasks", "pass", "boss_milestone", "boss_rank")
+
 
 class ActivityClaimAllMigrationTests(unittest.TestCase):
     @staticmethod
@@ -25,14 +30,14 @@ class ActivityClaimAllMigrationTests(unittest.TestCase):
                 result = json.dumps({
                     "ok": True, "text": "task reward",
                     "steps": [{"name": name, "ok": name == "tasks", "text": "task reward" if name == "tasks" else "no reward"}
-                              for name in ActivityClaimAllApplication.step_names()],
+                              for name in LEGACY_STEP_NAMES],
                 }) if complete else ""
                 uow.execute(
                     "INSERT INTO activity_claim_all_operations(operation_id,user_id,status,result_json,created_at,updated_at) "
                     "VALUES(?,?,?,?,?,?)",
                     (operation_id, "u1", "completed" if complete else "pending", result, "t0", "t1"),
                 )
-                for ordinal, name in enumerate(ActivityClaimAllApplication.step_names()):
+                for ordinal, name in enumerate(LEGACY_STEP_NAMES):
                     done = complete or ordinal == 0
                     uow.execute(
                         "INSERT INTO activity_claim_all_steps(operation_id,step_name,ordinal,status,attempts,ok,result_text,error_text,updated_at) "
@@ -63,9 +68,13 @@ class ActivityClaimAllMigrationTests(unittest.TestCase):
             resumed = application.run("legacy-pending", "u1", runners)
             self.assertEqual((replay.status, replay.text), ("duplicate", "task reward"))
             self.assertEqual((resumed.status, resumed.text), ("applied", "task reward"))
-            self.assertEqual([name for name, _ in calls], ["pass", "boss_milestone", "boss_rank"])
+            self.assertEqual(
+                [name for name, _ in calls],
+                ["pass", "boss_milestone", "boss_rank", "stage", "rank"],
+            )
             self.assertEqual([child for _, child in calls], [
                 "legacy-pending:pass", "legacy-pending:boss-milestone", "legacy-pending:boss-rank",
+                "legacy-pending:stage", "legacy-pending:rank",
             ])
             with DatabaseUnitOfWork(legacy, read_only=True) as uow:
                 self.assertEqual(uow.query_one(

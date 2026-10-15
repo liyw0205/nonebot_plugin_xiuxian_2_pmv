@@ -28,7 +28,7 @@ class ActivityClaimAllResult:
 
 
 class ActivityClaimAllRepository:
-    STEP_LABELS = {"tasks": "任务", "pass": "战令", "boss_milestone": "首领进度", "boss_rank": "首领排行"}
+    STEP_LABELS = {"tasks": "任务", "pass": "战令", "boss_milestone": "首领进度", "boss_rank": "首领排行", "stage": "阶段", "rank": "排行"}
 
     def __init__(self, database: str | Path) -> None:
         self.database = str(database)
@@ -72,7 +72,14 @@ class ActivityClaimAllRepository:
                 return ActivityClaimAllResult("operation_conflict", text="领取请求冲突，请重新发送")
             names = tuple(str(x["step_name"]) for x in uow.query_all("SELECT step_name FROM activity_claim_all_steps WHERE operation_id=? ORDER BY ordinal", (operation_id,)))
             if names != self.step_names():
-                return ActivityClaimAllResult("operation_conflict", text="领取计划冲突，请重新发送")
+                if not names or names != self.step_names()[: len(names)]:
+                    return ActivityClaimAllResult("operation_conflict", text="领取计划冲突，请重新发送")
+                # The plan only ever grows by appending steps, so a stored operation from an
+                # earlier plan is upgraded in place instead of losing its unfinished progress.
+                uow.executemany(
+                    "INSERT INTO activity_claim_all_steps(operation_id,step_name,ordinal) VALUES(?,?,?)",
+                    ((operation_id, name, ordinal) for ordinal, name in enumerate(self.step_names()) if ordinal >= len(names)),
+                )
             if str(row["status"]) == "completed" and str(row["result_json"]):
                 return self._decode("duplicate", str(row["result_json"]))
             return None

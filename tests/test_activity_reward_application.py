@@ -85,7 +85,9 @@ class ActivityRewardApplicationTests(unittest.TestCase):
 
                 return {"tasks": task, "pass": battle_pass,
                         "boss_milestone": lambda child_id: (False, "no reward"),
-                        "boss_rank": lambda child_id: (False, "no reward")}
+                        "boss_rank": lambda child_id: (False, "no reward"),
+                        "stage": lambda child_id: (False, "no reward"),
+                        "rank": lambda child_id: (False, "no reward")}
 
             web = Flask(__name__)
             web.secret_key = "test"
@@ -149,7 +151,7 @@ class ActivityRewardApplicationTests(unittest.TestCase):
                 replay = application.execute(operation_id="cmd-claim", user_id="u1", payload={"action": "claim_activity_rewards"})
             self.assertTrue(first.ok)
             self.assertTrue(replay.replayed)
-            self.assertEqual(len(calls), 4)
+            self.assertEqual(len(calls), 6)
 
     def test_web_then_command_reuses_the_same_feature_receipt(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -171,7 +173,7 @@ class ActivityRewardApplicationTests(unittest.TestCase):
                 )
             self.assertTrue(web_result.ok)
             self.assertTrue(command_result.ok)
-            self.assertEqual(len(calls), 4)
+            self.assertEqual(len(calls), 6)
             with DatabaseUnitOfWork(database, read_only=True) as uow:
                 self.assertEqual(uow.query_one(
                     "SELECT count(*) AS n FROM activity_claim_all_operations WHERE operation_id='shared'"
