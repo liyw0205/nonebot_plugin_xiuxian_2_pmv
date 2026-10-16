@@ -1,6 +1,6 @@
 # 当前项目状态
 
-最后核验：2026-10-13。本文是唯一活跃进度入口；旧重构文档仅作为历史记录，不再定义当前分支或禁止事项。
+最后核验：2026-10-16。本文是唯一活跃进度入口；旧重构文档仅作为历史记录，不再定义当前分支或禁止事项。
 
 ## CI 稳定化（2026-10-12）
 
@@ -14,6 +14,7 @@
 - 时间提示切片：目标文档 `docs/goals/activity-time-hints.md`；`center.time_hint` 配置驱动倒计时（进行中"剩余 N 天/小时"、未开始"N 天后开启"、无限/已结束不显示），渲染在玩法行后、奖励行前；聚焦测试 `tests/test_activity_center.py` 6/6。非目标（阶段倒计时/提醒推送/新配置键）见目标文档。
 - 签到状态行切片：目标文档 `docs/goals/activity-center-sign-line.md`；`personal_progress_summary` 复用 `overview_snapshot` 的 `sign.last_sign_date` 与结算侧同一"今日已签"语义，在进度行行首追加"签到 已签/未签"，只读、无新查询/配置键；聚焦测试 `tests/test_activity_center.py` 7/7（历史 6 项断言未改）。
 - 投递合同切片：目标文档 `docs/goals/activity-center-delivery-contract.md`；`tests/test_activity_center_delivery_contract.py` 5/5 覆盖 OneBot V11 纯文本降级、QQ markdown 关闭同合同、QQ markdown 开启保留 `mqqapi://aio/inlinecmd` 原生蓝字（换行按既有约定归一为 `\r`）与降级幂等，另含 handler 接线源合同；生产代码零改动，仅修正一处测试期望；受影响 `tests/test_activity_center.py` 7/7。
+- 来源级领奖入口完整目标（本轮）：活动中心在同一只读 overview snapshot 上按真实资格追加战令、首领进度、首领排行快捷入口，并把阶段/排行入口收紧为实际可领；五类来源保持一键领取首项、稳定顺序和跨适配器降级合同。无新表/迁移/配置键，缺少可选状态表时保持旧库兼容；`tests/test_activity_center_claim_sources.py` 覆盖单来源、组合去重、缺少状态、旧库兼容和参数化蓝字。正式说明已写入 `docs/features/activity.md`，develop CI 与 main 合入门禁待本轮提交后核验。
 
 ## 主线与已交付
 
@@ -35,12 +36,13 @@
 
 ## 当前有限目标
 
-同步/部署阶段完成前不开始功能开发。之后只在 develop 实施活动中心第二切片：
+同步/部署阶段完成前不开始功能开发。之后只在 develop 实施活动中心来源级领奖入口完整目标：
 
 - 配置驱动的活动详情；活动配置仍是内容与状态的唯一来源。
 - 按活动状态展示既有参与、任务、战令和领奖入口；未开始/进行中/已结束/领奖状态仅映射现有能力，不新增奖励系统。
 - 当前玩家个人进度只读展示，复用现有查询/任务/战令能力。
 - 修正不适用的入口；文案少量、去重地使用按钮/辅助蓝字；不滥用一级标题或引用。
+- 奖励状态明确时提供来源级领奖入口；状态缺失、已领取或未达成时不猜测、不展示专项入口。
 - QQ/OneBot 使用既有消息能力与降级；OneBot 共享业务链只验证一次，QQ 仅验证格式、按钮、蓝字、回调 ACK 与降级合同，不发送真实消息。
 
 ## 冻结清单与停止条件

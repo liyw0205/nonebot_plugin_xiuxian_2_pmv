@@ -442,7 +442,9 @@ class ActivityReadModelApplication:
             )
         claimable = bool(user_id and claimable_reward_count(config, snapshot, now))
         lines = ["**活动中心**"]
-        for item in build_activity_center_items(config, now, claimable=claimable):
+        for item in build_activity_center_items(
+            config, now, claimable=claimable, snapshot=snapshot if user_id else None
+        ):
             lines.extend(("", f"**{item.name}** · {item.status}"))
             if item.description:
                 lines.append(item.description)

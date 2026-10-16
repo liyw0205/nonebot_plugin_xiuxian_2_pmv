@@ -152,6 +152,36 @@ def _source_entry_commands(
     return tuple(entries)
 
 
+def _claim_source_entry_commands(
+    config: Mapping[str, Any], snapshot: Mapping[str, Any], now: datetime
+) -> tuple[tuple[str, str], ...]:
+    """Map actually claimable sources to their existing focused commands.
+
+    The one-click claim and this card both consume the same read-only snapshot.
+    An absent source state therefore produces no focused link instead of
+    guessing from configuration alone.
+    """
+    from ...xiuxian.xiuxian_activity.activity_rules import _activity_pass_config
+
+    entries: list[tuple[str, str]] = []
+    if _claimable_stage_count(config, snapshot, now):
+        entries.append(("活动阶段领取", "活动阶段领取"))
+    if _claimable_rank_count(config, snapshot):
+        entries.append(("活动排行领取", "活动排行领取"))
+    pass_config = _activity_pass_config(dict(config))
+    if claimable_pass_rewards(
+        pass_config,
+        snapshot.get("pass_total_exp"),
+        snapshot.get("pass_claimed_levels") or set(),
+    ):
+        entries.append(("活动战令领取", "活动战令领取"))
+    if _claimable_boss_milestone_count(config, snapshot):
+        entries.append(("活动首领领奖 进度", "活动首领领奖 进度"))
+    if _claimable_boss_rank_count(config, snapshot):
+        entries.append(("活动首领领奖 排行", "活动首领领奖 排行"))
+    return tuple(entries)
+
+
 def _format_countdown(delta_seconds: float) -> str:
     total_hours = int(delta_seconds // 3600)
     if total_hours < 24:
@@ -364,6 +394,7 @@ def build_activity_center_items(
     now: datetime,
     *,
     claimable: bool = False,
+    snapshot: Mapping[str, Any] | None = None,
 ) -> tuple[ActivityCenterItem, ...]:
     """Build center cards from the versioned config and normalized activities.
 
@@ -387,17 +418,8 @@ def build_activity_center_items(
     main_commands = commands_for_status(main_status)
     if main_status == IN_PROGRESS:
         main_commands += _source_entry_commands(config, now)
-    elif main_status == REWARD_CLAIM:
-        source_commands = _source_entry_commands(config, now)
-        claim_commands = {
-            "活动阶段": ("活动阶段领取", "活动阶段领取"),
-            "活动排行": ("活动排行领取", "活动排行领取"),
-        }
-        main_commands += tuple(
-            claim_commands[command]
-            for _, command in source_commands
-            if command in claim_commands
-        )
+    elif main_status == REWARD_CLAIM and snapshot is not None:
+        main_commands += _claim_source_entry_commands(config, snapshot, now)
     main_targets = {command for _, command in main_commands}
     gameplay_commands = tuple(
         (label, command)

@@ -23,6 +23,14 @@ The compatibility command remains available while the new application boundary i
 `activity_boss_damage` 及既有日志表），不新增表、不写库；快照未携带某来源状态时该
 来源计 0，旧调用方行为不变。
 
+当卡片状态为 `奖励领取` 且玩家快照明确携带某来源的可领取状态时，入口区在一键
+`活动领取` 和任务入口之后，按既有顺序追加来源级快捷入口：阶段、排行、战令、首领
+进度、首领排行分别映射 `活动阶段领取`、`活动排行领取`、`活动战令领取`、
+`活动首领领奖 进度`、`活动首领领奖 排行`。每个目标最多出现一次；配置存在但没有
+资格、已领取、未上榜，或旧库缺少可选状态表时均不展示对应入口。快捷入口只调用既有
+领奖命令，交易、幂等和拒绝语义不变，不新增配置键、路由、表或迁移。QQ 蓝字链接携带
+完整命令参数，OneBot/无 Markdown 路径仍只显示可读入口名称。
+
 进度行同时展示首领进度：`{首领名} 血量 {pct}%、我的伤害 {damage}`，存在可领取的
 进度奖励时追加 `进度奖励 N 项可领`，与一键领取的首领进度计数同源。进度行还包含当前阶段
 （`阶段 {名称} 剩余 {倒计时}`，无限或已结束不显示倒计时）与本人榜单名次
@@ -117,7 +125,9 @@ Command and web adapters translate transport input into the application DTO; bus
 Run the feature application test and the full architecture gate. Repeat the same operation ID to verify replay.
 
 本阶段轻量回归：`tests/test_activity_center.py` 覆盖四种生命周期状态、配置驱动活动卡片、
-奖励可领取状态和 Markdown 链接的纯文本降级；未运行全量长测或真实 QQ 消息发送。
+奖励可领取状态和 Markdown 链接的纯文本降级；`tests/test_activity_center_claim_sources.py`
+覆盖五类来源的单独/组合入口、稳定顺序与去重、缺少资格状态、旧库可选表兼容，以及带参数
+蓝字的纯文本降级；未运行全量长测或真实 QQ 消息发送。
 
 ## 灰度开关、回滚和已知限制
 Legacy algorithms and schemas remain behind the repository adapter for one complete release cycle; the compatibility hit counter determines when removal is safe.
