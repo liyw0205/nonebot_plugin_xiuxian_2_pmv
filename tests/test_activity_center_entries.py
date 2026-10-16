@@ -73,7 +73,32 @@ class ActivityCenterEntryTests(unittest.TestCase):
         self.assertEqual(ended.commands, ())
 
     def test_reward_claim_keeps_one_click_claim_first_and_adds_source_claims(self) -> None:
-        item = build_activity_center_items(_config(), NOW, claimable=True)[0]
+        config = _config()
+        config["extensions"]["stages"][0]["end_time"] = "2026-10-10"
+        config["extensions"]["stages"][0]["rewards"] = [
+            {"key": "stage", "name": "阶段礼", "reward": "灵石x10"}
+        ]
+        config["extensions"]["rank"]["rewards"] = [
+            {
+                "board": "points",
+                "rank_min": 1,
+                "rank_max": 1,
+                "key": "champion",
+                "name": "榜首",
+                "reward": "灵石x20",
+            }
+        ]
+        item = build_activity_center_items(
+            config,
+            NOW,
+            claimable=True,
+            snapshot={
+                "stage_participated": {"opening"},
+                "stage_claimed": set(),
+                "board_positions": {"points": 1},
+                "rank_claimed": set(),
+            },
+        )[0]
 
         self.assertEqual(item.status, REWARD_CLAIM)
         self.assertEqual(item.commands[0], ("领取奖励", "活动领取"))
