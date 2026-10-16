@@ -14,11 +14,11 @@
 - 时间提示切片：目标文档 `docs/goals/activity-time-hints.md`；`center.time_hint` 配置驱动倒计时（进行中"剩余 N 天/小时"、未开始"N 天后开启"、无限/已结束不显示），渲染在玩法行后、奖励行前；聚焦测试 `tests/test_activity_center.py` 6/6。非目标（阶段倒计时/提醒推送/新配置键）见目标文档。
 - 签到状态行切片：目标文档 `docs/goals/activity-center-sign-line.md`；`personal_progress_summary` 复用 `overview_snapshot` 的 `sign.last_sign_date` 与结算侧同一"今日已签"语义，在进度行行首追加"签到 已签/未签"，只读、无新查询/配置键；聚焦测试 `tests/test_activity_center.py` 7/7（历史 6 项断言未改）。
 - 投递合同切片：目标文档 `docs/goals/activity-center-delivery-contract.md`；`tests/test_activity_center_delivery_contract.py` 5/5 覆盖 OneBot V11 纯文本降级、QQ markdown 关闭同合同、QQ markdown 开启保留 `mqqapi://aio/inlinecmd` 原生蓝字（换行按既有约定归一为 `\r`）与降级幂等，另含 handler 接线源合同；生产代码零改动，仅修正一处测试期望；受影响 `tests/test_activity_center.py` 7/7。
-- 来源级领奖入口完整目标（本轮）：活动中心在同一只读 overview snapshot 上按真实资格追加战令、首领进度、首领排行快捷入口，并把阶段/排行入口收紧为实际可领；五类来源保持一键领取首项、稳定顺序和跨适配器降级合同。无新表/迁移/配置键，缺少可选状态表时保持旧库兼容；`tests/test_activity_center_claim_sources.py` 覆盖单来源、组合去重、缺少状态、旧库兼容和参数化蓝字。正式说明已写入 `docs/features/activity.md`，develop CI 与 main 合入门禁待本轮提交后核验。
+- 来源级领奖入口完整目标（本轮已完成）：活动中心在同一只读 overview snapshot 上按真实资格追加战令、首领进度、首领排行快捷入口，并把阶段/排行入口收紧为实际可领；五类来源保持一键领取首项、稳定顺序和跨适配器降级合同。无新表/迁移/配置键，缺少可选状态表时保持旧库兼容；`tests/test_activity_center_claim_sources.py` 覆盖单来源、组合去重、缺少状态、旧库兼容和参数化蓝字。正式说明已写入 `docs/features/activity.md`；develop CI run `38883608353`、main CI run `38884198589` 均成功。
 
 ## 主线与已交付
 
-- `main` 是安装/正式 Release 分支；2026-10-13 核验 main 与 `develop` 均指向 `a21649b384aed48cdaf707b2a93ac672e4bd13f0`，develop/main CI（run 1501/1502）均为 success。后续合并策略：先在 develop HEAD 完成功能、CI 全绿并通过审查后才普通快进合入 main，小切片不单独触发。
+- `main` 是安装/正式 Release 分支；2026-10-16 核验 main 与 `develop` 均指向 `da81188352766ad9835a466c4bdb48fbd64a8a0d`，本轮 develop/main CI（run `38883608353`/`38884198589`）均为 success。后续合并策略：先在 develop HEAD 完成功能、CI 全绿并通过审查后才普通快进合入 main，小切片不单独触发。
 - `develop` 是唯一活动开发分支（`efcad54f` 起自 main 创建并推送）。合并历史：`0c55b1fa`（CI tag 抓取）、`3d7fcb84`（UOW WAL 锁）、`a21649b3`（installer tests 误报修复）已按 CI 门逐段快进。
 - C1-C4 与既定重构收口已经合入 main，不重开约 2,000 个旧提交的重构盘点。
 - 活动中心第一切片 `910aefbb` 及适配器降级修正 `592fdf7a` 都是 main 的祖先；字体修复 `4344796b` 已在 main。
@@ -36,7 +36,7 @@
 
 ## 当前有限目标
 
-同步/部署阶段完成前不开始功能开发。之后只在 develop 实施活动中心来源级领奖入口完整目标：
+同步/部署阶段完成前不开始功能开发。本轮 develop 已完成活动中心来源级领奖入口完整目标；后续活动切片仍须重新定义范围并走同一门禁：
 
 - 配置驱动的活动详情；活动配置仍是内容与状态的唯一来源。
 - 按活动状态展示既有参与、任务、战令和领奖入口；未开始/进行中/已结束/领奖状态仅映射现有能力，不新增奖励系统。
