@@ -176,7 +176,12 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     await assign_bot(bot=bot, event=event)
     is_user, user_info, msg = await _ensure_user(event)
     user_id = str(user_info["user_id"]) if is_user else ""
-    text = activity_application.read_model.reward_catalog_text(user_id)
+    # 解析到用户时给出六来源档位与本人状态；否则回退配置口径的奖励文案。
+    text = (
+        activity_application.read_model.reward_catalog_text(user_id)
+        if user_id
+        else activity_application.read_model.rewards_text()
+    )
     await handle_send(
         bot,
         event,
