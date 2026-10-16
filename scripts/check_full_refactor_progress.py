@@ -3493,7 +3493,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
                 and "test_receipt_failure_rolls_back_tokens_and_assets" in activity_collect_tests
             ),
             "started_exchange_retries_only_with_business_receipt_boundary": (
-                "retry_started_actions = frozenset({\"claim_collect_phrase\"})" in activity_command_repository
+                "retry_started_actions = frozenset({\"claim_collect_phrase\", \"claim_sign\"})" in activity_command_repository
                 and "retry_started_actions" in migrated_application
                 and "def lookup_receipt(" in activity_collect_repository
                 and "lookup_receipt(operation_id, uid)" in activity_service
@@ -3539,7 +3539,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
                 and "test_receipt_write_failure_rolls_back_points_and_rewards" in activity_purchase_tests
             ),
             "historical_receipts_replay_without_started_retry": (
-                "retry_started_actions = frozenset({\"claim_collect_phrase\"})" in activity_command_repository
+                "retry_started_actions = frozenset({\"claim_collect_phrase\", \"claim_sign\"})" in activity_command_repository
                 and "test_point_shop_started_operation_is_not_blindly_retried" in activity_application_tests
                 and "test_backfilled_purchase_receipt_replays_without_granting_assets_twice" in activity_state_migration_tests
                 and "apply_activity_state_legacy" in activity_state_migrations

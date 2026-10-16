@@ -4612,6 +4612,14 @@
     {
       "feature": "activity",
       "methods": [
+        "POST"
+      ],
+      "path": "/api/v1/activity/sign-in",
+      "permission": "admin"
+    },
+    {
+      "feature": "activity",
+      "methods": [
         "GET"
       ],
       "path": "/api/v1/activity/state",
