@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, Mapping
 
 from ...infrastructure.clock import SystemClock
 from .read_model_repository import ActivityReadModelSqlRepository
@@ -57,11 +57,11 @@ class ActivityReadModelApplication:
 
         return locals()
 
-    def rewards_text(self) -> str:
+    def _sign_reward_lines(self, config: Mapping[str, Any]) -> list[str]:
+        """Configured sign reward ladders, shared by the catalog and 奖励 view."""
         from ...xiuxian.xiuxian_activity.activity_utils import _as_int
 
-        config = self._config()
-        lines = [f"【{config.get('name', '节日签到活动')} · 奖励】", "", "【每日签到奖励】"]
+        lines = ["", "【每日签到奖励】"]
         rewards = config.get("daily_rewards") or []
         if rewards:
             for reward in sorted(rewards, key=lambda item: _as_int(item.get("day"))):
@@ -77,6 +77,239 @@ class ActivityReadModelApplication:
                 days = _as_int(reward.get("days"))
                 name = str(reward.get("name") or f"累计{days}天")
                 lines.append(f"- {name}：{reward.get('reward') or '暂无奖励'}")
+        return lines
+
+    def rewards_text(self) -> str:
+        config = self._config()
+        lines = [f"【{config.get('name', '节日签到活动')} · 奖励】"]
+        lines.extend(self._sign_reward_lines(config))
+        return "\n".join(lines).strip()
+
+    def reward_catalog_text(self, user_id: str = "") -> str:
+        """Every configured reward source plus the player's own claim state.
+
+        ``rewards_text`` stays byte-identical with the legacy config-only
+        ``build_activity_rewards_text`` (parity-tested), so the personal catalog
+        lives here: one read-only snapshot, then each configured ladder is
+        annotated with 已领取 / 可领取 / 未达成.
+        """
+        from ...xiuxian.xiuxian_activity.activity_config import activity_rank_config
+        from ...xiuxian.xiuxian_activity.activity_rules import (
+            _activity_pass_config,
+            _task_scope_key,
+            get_activity_tasks,
+            get_gameplay_activities,
+        )
+        from ...xiuxian.xiuxian_activity.activity_utils import _as_int, _clean_text
+        from ...xiuxian.xiuxian_activity.activity_views import _format_activity_task
+        from .center import ENDED, _boss_claim_state, _boss_milestone_keys
+        from .gameplay_progress import claimable_pass_rewards, task_claimable
+        from .rank import position_text, rewards_for_board, tier_for_position
+        from .stage import stage_timeline, stage_window_bounds
+
+        config = self._config()
+        uid = str(user_id or "")
+        now = self.clock.now().astimezone().replace(tzinfo=None)
+        lines = [f"【{config.get('name', '节日签到活动')} · 奖励】"]
+        lines.extend(self._sign_reward_lines(config))
+
+        snapshot: dict[str, Any] = {}
+        if uid:
+            activity_key = self._overview_helpers()["_activity_config_key"](config)
+            activities = get_gameplay_activities(config)
+            collect_keys = [
+                str(activity.get("key") or "")
+                for activity in activities
+                if activity.get("type") == "collect_words"
+                and _as_int(activity.get("pity_threshold"), 0) > 0
+            ]
+            point_keys = [
+                str(activity.get("key") or "")
+                for activity in activities
+                if activity.get("type") == "event_points"
+            ]
+            stage_windows = [
+                (stage["key"], *stage_window_bounds(stage))
+                for stage in stage_timeline(config, now)["ended"]
+            ]
+            board_sources = [
+                str(board.get("source") or "")
+                for board in activity_rank_config(config)["boards"]
+                if str(board.get("source") or "")
+            ]
+            boss_keys = [
+                str(activity.get("key") or "")
+                for activity in activities
+                if activity.get("type") == "activity_boss" and str(activity.get("key") or "")
+            ]
+            if boss_keys:
+                board_sources.append("boss")
+            snapshot = self.repository.overview_snapshot(
+                uid,
+                activity_key,
+                include_tasks=bool(get_activity_tasks(config)),
+                include_pass=bool(_activity_pass_config(config).get("enabled")),
+                collect_activity_keys=collect_keys,
+                point_activity_keys=point_keys,
+                stage_windows=stage_windows,
+                board_sources=board_sources,
+                boss_activity_keys=boss_keys,
+            )
+
+        def mark(claimed: bool, claimable: bool) -> str:
+            if not uid:
+                return ""
+            if claimed:
+                return "（已领取）"
+            return "（可领取）" if claimable else "（未达成）"
+
+        # 签到：本人累计天数与已达成档位。
+        if uid:
+            sign = snapshot.get("sign") or {}
+            days = _as_int(sign.get("total_sign_days"), 0)
+            milestones = [
+                row for row in config.get("milestone_rewards") or [] if isinstance(row, Mapping)
+            ]
+            achieved = sum(1 for row in milestones if _as_int(row.get("days"), 0) <= days)
+            lines.append(f"我的累计签到 {days} 天，已达成 {achieved}/{len(milestones)} 档")
+
+        # 任务奖励。
+        tasks = snapshot.get("tasks") or {}
+        for scope_type, rows in (
+            ("daily", config.get("daily_tasks") or []),
+            ("weekly", config.get("weekly_tasks") or []),
+        ):
+            tasks_rows = [row for row in rows if isinstance(row, Mapping)]
+            if not tasks_rows:
+                continue
+            scope_key = _task_scope_key(scope_type, now)
+            lines.extend(("", f"【{'每日' if scope_type == 'daily' else '周常'}任务奖励】"))
+            for task in tasks_rows:
+                state = tasks.get((scope_type, scope_key, _clean_text(task.get("key"))), {})
+                status = mark(
+                    bool(state.get("claimed")), task_claimable(state, task.get("target"))
+                )
+                lines.append(f"{_format_activity_task(dict(task))}{status}")
+
+        # 战令奖励。
+        pass_config = _activity_pass_config(config)
+        levels = [row for row in pass_config.get("level_rewards") or [] if isinstance(row, Mapping)]
+        if levels:
+            claimed_levels = set(snapshot.get("pass_claimed_levels") or ())
+            claimable_levels = {
+                _as_int(level, 0)
+                for level in claimable_pass_rewards(
+                    pass_config,
+                    snapshot.get("pass_total_exp"),
+                    claimed_levels,
+                )
+            }
+            lines.extend(("", "【战令奖励】"))
+            for row in sorted(levels, key=lambda item: _as_int(item.get("level"), 0)):
+                level = _as_int(row.get("level"), 0)
+                name = str(row.get("name") or f"Lv{level}")
+                status = mark(
+                    level in claimed_levels, level in claimable_levels
+                )
+                lines.append(f"- Lv{level} {name}：{row.get('reward') or '暂无奖励'}{status}")
+
+        # 阶段奖励。
+        stages = [
+            stage for stage in stage_timeline(config, now)["stages"] if stage["reward_rows"]
+        ]
+        if stages:
+            participated = set(snapshot.get("stage_participated") or ())
+            claimed_stages = set(snapshot.get("stage_claimed") or ())
+            lines.extend(("", "【阶段奖励】"))
+            for stage in stages:
+                status = mark(
+                    stage["key"] in claimed_stages,
+                    stage["status"] == ENDED
+                    and stage["key"] in participated
+                    and stage["key"] not in claimed_stages,
+                )
+                for row in stage["reward_rows"]:
+                    lines.append(f"- {stage['name']} {row['name']}：{row['reward']}{status}")
+
+        # 排行奖励。
+        rank_config = activity_rank_config(config)
+        rank_rewards = rank_config.get("rewards") or []
+        positions = snapshot.get("board_positions") or {}
+        claimed_ranks = set(snapshot.get("rank_claimed") or ())
+        if rank_rewards:
+            lines.extend(("", "【排行奖励】"))
+            for board in rank_config.get("boards") or []:
+                tiers = rewards_for_board(rank_rewards, board)
+                if not tiers:
+                    continue
+                source = str(board.get("source") or "")
+                board_key = str(board.get("key") or source)
+                board_label = str(board.get("label") or board.get("name") or board_key)
+                position = _as_int(positions.get(source), 0)
+                matched = tier_for_position(tiers, position)
+                for tier in tiers:
+                    tier_key = str(tier.get("key") or "")
+                    low = _as_int(tier.get("rank_min"), 0)
+                    high = _as_int(tier.get("rank_max"), 0)
+                    status = mark(
+                        (board_key, tier_key) in claimed_ranks,
+                        matched is not None
+                        and str(matched.get("key") or "") == tier_key,
+                    )
+                    lines.append(
+                        f"- {board_label} 第{low}-{high}名：{tier.get('reward') or '暂无奖励'}{status}"
+                    )
+                if uid:
+                    lines.append(f"  我的名次：{position_text(position, 0)}")
+
+        # 首领进度（全服）与首领排行奖励。
+        unlocked, claimed_milestones, claimed_boss_ranks = _boss_claim_state(snapshot)
+        milestone_keys = _boss_milestone_keys(config)
+        for activity in get_gameplay_activities(config):
+            if activity.get("type") != "activity_boss":
+                continue
+            label = str(activity.get("name") or activity.get("key") or "活动首领")
+            milestones = [
+                row for row in activity.get("server_milestones") or [] if isinstance(row, Mapping)
+            ]
+            if milestones:
+                lines.extend(("", f"【{label} · 进度奖励】"))
+                for row in milestones:
+                    key = str(
+                        row.get("key") or f"p{int(float(row.get('hp_percent') or 0))}"
+                    )
+                    if key not in milestone_keys:
+                        continue
+                    name = str(row.get("name") or key)
+                    hp = row.get("hp_percent")
+                    status = mark(
+                        key in claimed_milestones,
+                        key in unlocked and key not in claimed_milestones,
+                    )
+                    lines.append(f"- {name}（血量≤{hp}%）：{row.get('reward') or '暂无奖励'}{status}")
+            tiers = [
+                row for row in activity.get("rank_rewards") or [] if isinstance(row, Mapping)
+            ]
+            if tiers:
+                lines.extend(("", f"【{label} · 排行奖励】"))
+                position = _as_int(positions.get("boss"), 0)
+                matched = tier_for_position(tiers, position)
+                for row in tiers:
+                    low = _as_int(row.get("rank_min"), 0)
+                    high = _as_int(row.get("rank_max"), 0)
+                    tier_key = f"{low}-{high}"
+                    status = mark(
+                        tier_key in claimed_boss_ranks,
+                        matched is not None
+                        and _as_int(matched.get("rank_min"), 0) == low
+                        and _as_int(matched.get("rank_max"), 0) == high,
+                    )
+                    lines.append(
+                        f"- 第{low}-{high}名：{row.get('reward') or '暂无奖励'}{status}"
+                    )
+                if uid:
+                    lines.append(f"  我的名次：{position_text(position, 0)}")
+
         return "\n".join(lines).strip()
 
     def gameplay_text(self) -> str:

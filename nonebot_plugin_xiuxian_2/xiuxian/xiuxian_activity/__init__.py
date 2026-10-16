@@ -174,7 +174,9 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
 @activity_rewards_cmd.handle(parameterless=[Cooldown(cd_time=0)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     await assign_bot(bot=bot, event=event)
-    text = activity_application.read_model.rewards_text()
+    is_user, user_info, msg = await _ensure_user(event)
+    user_id = str(user_info["user_id"]) if is_user else ""
+    text = activity_application.read_model.reward_catalog_text(user_id)
     await handle_send(
         bot,
         event,
