@@ -536,6 +536,20 @@ def _runtime_allows(config: dict, feature: str) -> bool:
     return runtime.get("ok", False) and feature in set(runtime.get("features") or [])
 
 
+def _runtime_feature_refusal(config: dict, feature: str, label: str) -> str:
+    """Refusal text when the running stage does not open ``feature``.
+
+    Mirrors the wording the legacy claim paths already return so that every
+    claim path refuses identically inside the same stage.
+    """
+    runtime = activity_runtime_state(config)
+    if not runtime.get("ok"):
+        return str(runtime.get("reason") or "活动未开放")
+    if feature not in set(runtime.get("features") or []):
+        return f"当前阶段【{runtime.get('stage_name', '活动阶段')}】不开放{label}"
+    return ""
+
+
 def _get_extensions(config: dict) -> dict:
     extensions = config.get("extensions")
     return extensions if isinstance(extensions, dict) else {}

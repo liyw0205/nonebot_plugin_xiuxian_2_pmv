@@ -75,6 +75,17 @@ ACTIVE_STAGE = {
     "features": ["sign", "task"],
     "multiplier": 1.0,
 }
+# 开放「领奖」的阶段：领取类用例必须让当前阶段开放 claim，
+# 否则阶段门禁会先于业务校验拒绝（与旧路径同一语义）。
+CLAIM_STAGE = {
+    "key": "claim_live",
+    "name": "领奖期",
+    "stage_type": "settlement",
+    "start_time": "0",
+    "end_time": "无限",
+    "features": ["claim"],
+    "multiplier": 1.0,
+}
 NEXT_STAGE = {
     "key": "settle",
     "name": "结算期",
@@ -223,7 +234,7 @@ class ActivityStageTests(unittest.TestCase):
                 "INSERT INTO activity_sign_log(user_id,sign_date,create_time) "
                 "VALUES('u1','2026-09-15','2026-09-15 10:00:00')"
             )
-        config = _config([ENDED_STAGE, ACTIVE_STAGE])
+        config = _config([ENDED_STAGE, CLAIM_STAGE])
         sent: list[tuple[str, str]] = []
         app = ActivityStageClaimApplication(
             database,
@@ -248,7 +259,7 @@ class ActivityStageTests(unittest.TestCase):
 
     def test_claim_failure_boundaries(self) -> None:
         database = self._database()
-        config = _config([ENDED_STAGE, ACTIVE_STAGE])
+        config = _config([ENDED_STAGE, CLAIM_STAGE])
 
         def app_for(cfg, *, sender=None):
             return ActivityStageClaimApplication(
@@ -263,11 +274,11 @@ class ActivityStageTests(unittest.TestCase):
         self.assertFalse(ok)
         self.assertIn("活动未开启", text)
         # 没有已结束阶段。
-        ok, text = app_for(_config([ACTIVE_STAGE])).claim("u1")
+        ok, text = app_for(_config([CLAIM_STAGE])).claim("u1")
         self.assertFalse(ok)
         self.assertEqual(text, "当前没有已结束的活动阶段")
         # 已结束阶段没有配置奖励。
-        ok, text = app_for(_config([dict(ENDED_STAGE, rewards=[]), ACTIVE_STAGE])).claim("u1")
+        ok, text = app_for(_config([dict(ENDED_STAGE, rewards=[]), CLAIM_STAGE])).claim("u1")
         self.assertFalse(ok)
         self.assertEqual(text, "已结束阶段没有配置奖励")
         # 有奖励但本人没有参与记录。

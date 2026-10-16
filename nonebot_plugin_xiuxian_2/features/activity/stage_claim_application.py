@@ -63,6 +63,7 @@ class ActivityStageClaimApplication:
     def claim(self, user_id: str, *, query: str = "") -> tuple[bool, str]:
         from ...xiuxian.xiuxian_activity.activity_config import (
             _activity_config_key,
+            _runtime_feature_refusal,
             activity_state,
         )
         from ...xiuxian.xiuxian_activity.activity_utils import _clean_text
@@ -72,6 +73,9 @@ class ActivityStageClaimApplication:
         ok, reason = activity_state(config)
         if not ok:
             return False, reason or "活动未开放"
+        refusal = _runtime_feature_refusal(config, "claim", "活动领奖")
+        if refusal:
+            return False, refusal
 
         now = self.clock.now().astimezone().replace(tzinfo=None)
         timeline = stage_timeline(config, now)

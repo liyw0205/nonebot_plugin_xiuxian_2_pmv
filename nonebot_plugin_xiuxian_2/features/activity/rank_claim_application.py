@@ -62,6 +62,7 @@ class ActivityRankClaimApplication:
     def claim(self, user_id: str, *, query: str = "") -> tuple[bool, str]:
         from ...xiuxian.xiuxian_activity.activity_config import (
             _activity_config_key,
+            _runtime_feature_refusal,
             activity_rank_config,
             activity_state,
         )
@@ -72,6 +73,9 @@ class ActivityRankClaimApplication:
         ok, reason = activity_state(config)
         if not ok:
             return False, reason or "活动未开放"
+        refusal = _runtime_feature_refusal(config, "claim", "活动领奖")
+        if refusal:
+            return False, refusal
 
         rank_config = activity_rank_config(config)
         boards = rank_config["boards"]

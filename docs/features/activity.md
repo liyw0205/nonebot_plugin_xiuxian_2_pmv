@@ -37,6 +37,11 @@ The historical package owns command names during the compatibility release. New 
   配置了奖励、尚未领取的阶段奖励；可加阶段名过滤。重复领取不重复发放，活动未开启、
   没有已结束阶段、未配置奖励、无参与记录各自给出明确拒绝文案。
 
+阶段 `features` 声明「开放内容」，对领奖路径一致生效：当前阶段不含 `claim` 时，
+`活动阶段领取`、`活动排行领取` 与一键 `活动领取` 的对应步骤同样拒绝，文案为
+`当前阶段【{阶段名}】不开放活动领奖`，与旧路径（任务/战令/积分/首领/集字/兑换/商店/签到）
+的拒绝文案一致。
+
 阶段配置位于 `extensions.stages[]`，可选 `rewards` 行（`{key?, name, reward}`）；缺省
 表示该阶段无奖励，旧配置语义不变。领取记录写入增量表 `activity_stage_claim`
 （`activity_key,user_id,stage_key,reward,create_time`），参与证据复用既有日志表
