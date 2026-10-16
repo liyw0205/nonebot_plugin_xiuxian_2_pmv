@@ -94,13 +94,16 @@ The historical package owns command names during the compatibility release. New 
 （已解锁）与 `activity_boss_milestone_claim`（本人已领），不新增表、不写库。
 
 ## Web API
-`GET /api/v1/activity/state?user_id=<id>[&view=center|stage|rank|boss]` 返回只读活动状态文本：
-默认 `view=center` 为活动中心卡片与本人进度行，`stage`/`rank`/`boss` 分别复用
-`活动阶段`/`活动排行`/`活动首领` 的读模型；`user_id` 可省略（Web 面板不带参数请求），
-省略时只返回活动卡片、不含个人进度行；未知 `view` 返回 `validation_error`（400），
-权限不足返回 `forbidden`（403）。面板「活动」页（`PAGE_ENDPOINTS["activity"]`/
-`["reward_center"]`）即指向该路由，审计日志仍由 `GET /api/v1/activity` 提供。写入口仍是
-既有 `POST /api/v1/activity/rewards/claim`（一键领取，带 `Idempotency-Key`，覆盖六来源）。
+`GET /api/v1/activity/state?user_id=<id>[&view=center|detail|stage|rank|boss]` 返回只读活动状态文本：
+默认 `view=center` 为活动中心卡片与本人进度行，`detail` 复用配置驱动的 `活动` 详情读模型，
+`stage`/`rank`/`boss` 分别复用 `活动阶段`/`活动排行`/`活动首领` 的读模型。未传 `user_id`
+时各视图只返回公共活动信息；带 `user_id` 的个人进度查询要求管理权限，避免把未绑定 Web
+身份的任意玩家状态公开给匿名请求。未知 `view` 返回 `validation_error`（400），权限不足返回
+`forbidden`（403）。面板「活动」页提供上述视图选择、可选玩家 ID 与查询操作，读模型文本通过
+纯文本节点呈现；`PAGE_ENDPOINTS["activity"]`/`["reward_center"]` 仍指向该路由。详情与状态
+读取只使用活动配置及既有只读快照，不建表、不补写迁移、不创建缺失数据库文件；空库无个人
+数据时仍可读取公共详情。审计日志仍由 `GET /api/v1/activity` 提供。写入口仍是既有
+`POST /api/v1/activity/rewards/claim`（一键领取，带 `Idempotency-Key`，覆盖六来源）。
 
 ## 数据模型与迁移
 Manifest 保留历史 migration 标记 `legacy.activity.001`；当前启动 migration `activity_state.001/.002` 在 `game_db` 预建活动玩法表，并从 `data/activity/activity.db` 以只读、每批最多 200 行的方式回填。目标身份冲突、旧 schema 不完整或磁盘空间预检不通过时拒绝继续；迁移不会删除旧文件，也不在请求路径建表。活动模块导入不再抢先校验目标表，避免 startup migration 尚未运行时阻断新库/旧库升级。默认签到、集字、积分、道具、任务、战令和活动首领状态读写统一使用 `game_db`。
@@ -124,6 +127,8 @@ Command and web adapters translate transport input into the application DTO; bus
 ## 测试与手工验收
 Run the feature application test and the full architecture gate. Repeat the same operation ID to verify replay.
 
+活动详情 Web 交互闭环的聚焦回归：`tests/test_activity_web_state.py` 覆盖 `detail` 与既有
+视图、匿名公共状态/管理员个人查询边界、精简旧状态库只读兼容、空库不建文件和面板控件。
 本阶段轻量回归：`tests/test_activity_center.py` 覆盖四种生命周期状态、配置驱动活动卡片、
 奖励可领取状态和 Markdown 链接的纯文本降级；`tests/test_activity_center_claim_sources.py`
 覆盖五类来源的单独/组合入口、稳定顺序与去重、缺少资格状态、旧库可选表兼容，以及带参数

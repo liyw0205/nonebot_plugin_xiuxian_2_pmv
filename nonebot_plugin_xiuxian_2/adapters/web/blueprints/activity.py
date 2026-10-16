@@ -26,10 +26,15 @@ def create_blueprint(*, context=None, application=None, permission=None) -> Blue
         # The panel fetches this endpoint without parameters, so an absent
         # user_id renders the activity card without a personal progress line.
         user_id = str(request.args.get("user_id") or "").strip()
+        if user_id and not resolver("admin"):
+            return api_error(
+                "forbidden", "查看个人活动进度需要管理权限", status=403
+            )
         view = str(request.args.get("view") or "center").strip() or "center"
         read_model = application.read_model
         views = {
             "center": read_model.activity_center_text,
+            "detail": read_model.activity_info_text,
             "stage": read_model.activity_stage_text,
             "rank": read_model.rank_overview_text,
             "boss": read_model.boss_status_text,

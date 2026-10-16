@@ -23,6 +23,49 @@ main {
   padding: 1rem;
 }
 
+.activity-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 0.75rem;
+  margin: 1rem 0;
+}
+
+.activity-controls label {
+  display: grid;
+  gap: 0.35rem;
+  min-width: min(220px, 100%);
+  color: CanvasText;
+  font-size: 0.9rem;
+}
+
+.activity-controls input,
+.activity-controls select,
+.activity-controls button {
+  box-sizing: border-box;
+  min-height: 2.5rem;
+  padding: 0.45rem 0.65rem;
+  border: 1px solid color-mix(in srgb, CanvasText 25%, Canvas);
+  border-radius: 4px;
+  font: inherit;
+}
+
+.activity-controls button {
+  cursor: pointer;
+}
+
+@media (max-width: 520px) {
+  .activity-controls {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .activity-controls label,
+  .activity-controls button {
+    width: 100%;
+  }
+}
+
 /* Keep long JSON/tokens inside the viewport instead of stretching the page. */
 pre,
 code,

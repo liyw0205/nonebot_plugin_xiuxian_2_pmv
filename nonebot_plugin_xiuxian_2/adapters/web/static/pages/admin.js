@@ -8,14 +8,30 @@ export function initAdminPage(root = document) {
   if (!panel) return state;
   const refresh = one('[data-action="refresh"]', panel);
   const output = one('[data-state-output]', panel);
+  const activityForm = one('[data-activity-controls]', panel);
+  const activityView = one('[data-activity-view]', panel);
+  const activityUserId = one('[data-activity-user-id]', panel);
   const load = async () => {
     state.update({ status: 'loading', error: '' });
+    if (activityForm && output) output.textContent = '';
     renderState(panel, state.get());
     setBusy(refresh, true);
     try {
-      const data = await requestJson(panel.dataset.endpoint);
+      let endpoint = panel.dataset.endpoint;
+      if (activityForm) {
+        const url = new URL(endpoint, window.location.origin);
+        url.searchParams.set('view', activityView?.value || 'center');
+        const userId = activityUserId?.value.trim();
+        if (userId) url.searchParams.set('user_id', userId);
+        endpoint = url.toString();
+      }
+      const data = await requestJson(endpoint);
       state.update({ status: data && ((Array.isArray(data) && data.length) || Object.keys(data || {}).length) ? 'ready' : 'empty', data });
-      if (output) output.textContent = JSON.stringify(data ?? null, null, 2);
+      if (output) {
+        output.textContent = activityForm
+          ? String(data?.text || '')
+          : JSON.stringify(data ?? null, null, 2);
+      }
     } catch (error) {
       state.update({ status: 'error', error: error.message || '请求失败' });
     } finally {
@@ -23,7 +39,15 @@ export function initAdminPage(root = document) {
       renderState(panel, state.get());
     }
   };
-  refresh?.addEventListener('click', load);
+  if (activityForm) {
+    activityForm.addEventListener('submit', (event) => {
+      event.preventDefault();
+      load();
+    });
+  } else {
+    refresh?.addEventListener('click', load);
+  }
+  activityView?.addEventListener('change', load);
   load();
   return state;
 }
