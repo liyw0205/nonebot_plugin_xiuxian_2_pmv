@@ -132,6 +132,26 @@ def commands_for_status(
     return _commands_for_activity(activity)
 
 
+def _source_entry_commands(
+    config: Mapping[str, Any], now: datetime
+) -> tuple[tuple[str, str], ...]:
+    """Entries for the configured non-gameplay sources (stages, rank boards).
+
+    Stages and rank boards are not gameplay activities, so they never reach
+    ``gameplay_entry_commands``. They contribute an entry only when the config
+    actually defines them, and only existing commands are mapped.
+    """
+    from ...xiuxian.xiuxian_activity.activity_config import activity_rank_config
+    from .stage import stage_timeline
+
+    entries: list[tuple[str, str]] = []
+    if stage_timeline(dict(config), now)["stages"]:
+        entries.append(("活动阶段", "活动阶段"))
+    if activity_rank_config(dict(config))["boards"]:
+        entries.append(("活动排行", "活动排行"))
+    return tuple(entries)
+
+
 def _format_countdown(delta_seconds: float) -> str:
     total_hours = int(delta_seconds // 3600)
     if total_hours < 24:
@@ -365,6 +385,19 @@ def build_activity_center_items(
         for activity in activities
     ]
     main_commands = commands_for_status(main_status)
+    if main_status == IN_PROGRESS:
+        main_commands += _source_entry_commands(config, now)
+    elif main_status == REWARD_CLAIM:
+        source_commands = _source_entry_commands(config, now)
+        claim_commands = {
+            "活动阶段": ("活动阶段领取", "活动阶段领取"),
+            "活动排行": ("活动排行领取", "活动排行领取"),
+        }
+        main_commands += tuple(
+            claim_commands[command]
+            for _, command in source_commands
+            if command in claim_commands
+        )
     main_targets = {command for _, command in main_commands}
     gameplay_commands = tuple(
         (label, command)

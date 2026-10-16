@@ -380,6 +380,8 @@ def _normalize_rank_boards(value) -> list[dict]:
     """Normalize the optional rank board list; absent config keeps the sign board."""
     if not isinstance(value, list):
         return [dict(row) for row in DEFAULT_RANK_BOARDS]
+    if not value:
+        return []
     boards: list[dict] = []
     seen_sources: set[str] = set()
     seen_keys: set[str] = set()
