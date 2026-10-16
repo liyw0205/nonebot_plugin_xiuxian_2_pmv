@@ -7,7 +7,10 @@ FEATURE = FeatureManifest(
     title="Activity lifecycle",
     owner="gameplay",
     commands=commands_for("activity"),
-    routes=(RouteSpec("/api/v1/activity/state", methods=("GET",), permission="user"),),
+    routes=(
+        RouteSpec("/api/v1/activity/state", methods=("GET",), permission="user"),
+        RouteSpec("/api/v1/activity/sign-in", methods=("POST",), permission="admin"),
+    ),
     config=(ConfigSpec("activity_enabled", "bool", default=True, reloadable=True, description="Enable Activity lifecycle"),),
     migration_version="legacy.activity.001",
     test_tag="activity",

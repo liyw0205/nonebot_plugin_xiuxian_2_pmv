@@ -1,4 +1,4 @@
-import { requestJson } from '../core/api.js';
+import { idempotencyKey, requestJson } from '../core/api.js';
 import { createState } from '../core/state.js';
 import { one, renderState, setBusy } from '../core/dom.js';
 
@@ -11,6 +11,8 @@ export function initAdminPage(root = document) {
   const activityForm = one('[data-activity-controls]', panel);
   const activityView = one('[data-activity-view]', panel);
   const activityUserId = one('[data-activity-user-id]', panel);
+  const activitySign = one('[data-action="activity-sign"]', panel);
+  let pendingActivitySign = null;
   const load = async () => {
     state.update({ status: 'loading', error: '' });
     if (activityForm && output) output.textContent = '';
@@ -48,6 +50,47 @@ export function initAdminPage(root = document) {
     refresh?.addEventListener('click', load);
   }
   activityView?.addEventListener('change', load);
+  const updateSignAvailability = () => {
+    if (!activitySign) return;
+    activitySign.disabled = !activityUserId?.value.trim();
+  };
+  activityUserId?.addEventListener('input', () => {
+    if (pendingActivitySign && pendingActivitySign.userId !== activityUserId.value.trim()) {
+      pendingActivitySign = null;
+    }
+    updateSignAvailability();
+  });
+  activitySign?.addEventListener('click', async () => {
+    const userId = activityUserId?.value.trim() || '';
+    if (!userId) return;
+    if (!pendingActivitySign || pendingActivitySign.userId !== userId) {
+      pendingActivitySign = { userId, operationId: idempotencyKey() };
+    }
+    setBusy(activitySign, true);
+    state.update({ status: 'submitting', error: '' });
+    renderState(panel, state.get());
+    try {
+      const result = await requestJson('/api/v1/activity/sign-in', {
+        method: 'POST',
+        headers: { 'Idempotency-Key': pendingActivitySign.operationId },
+        body: JSON.stringify({ user_id: userId }),
+      });
+      pendingActivitySign = null;
+      if (output) output.textContent = String(result?.data?.message || result?.message || '签到操作已完成');
+      await load();
+    } catch (error) {
+      const retryable = !error.status || error.status >= 500 || error.status === 403 ||
+        ['conflict', 'operation_conflict'].includes(error.code);
+      if (!retryable) pendingActivitySign = null;
+      state.update({ status: 'error', error: error.message || '请求失败' });
+      if (output) output.textContent = error.message || '请求失败';
+      renderState(panel, state.get());
+    } finally {
+      setBusy(activitySign, false);
+      updateSignAvailability();
+    }
+  });
+  updateSignAvailability();
   load();
   return state;
 }

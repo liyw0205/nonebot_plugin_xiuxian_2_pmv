@@ -31,7 +31,7 @@ class ActivityRepository(ServicePort):
         self.collect_exchange = ActivityCollectExchangeSqlRepository(database)
         self.point_shop_purchase = ActivityPointShopPurchaseSqlRepository(database)
         self.boss_settlement = ActivityBossSettlementSqlRepository(database)
-        self.retry_started_actions = frozenset({"claim_collect_phrase"})
+        self.retry_started_actions = frozenset({"claim_collect_phrase", "claim_sign"})
 
     def _claim_all(self, **kwargs: Any):
         from ...compatibility.legacy_activity_claim_steps import build_legacy_activity_claim_runners

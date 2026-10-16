@@ -105,6 +105,21 @@ The historical package owns command names during the compatibility release. New 
 数据时仍可读取公共详情。审计日志仍由 `GET /api/v1/activity` 提供。写入口仍是既有
 `POST /api/v1/activity/rewards/claim`（一键领取，带 `Idempotency-Key`，覆盖六来源）。
 
+管理员活动页可对当前填写的玩家 ID 发起代签到：`POST /api/v1/activity/sign-in`，权限为
+`admin`，要求 CSRF 与 `Idempotency-Key`，请求字段为 `user_id`。它调用既有
+`ActivityApplication` 的 `claim_sign`，签到开关/阶段、每日唯一、配置奖励、玩家存在与背包
+上限全部沿用命令规则；成功返回 `200`，确定的业务拒绝返回 `409`。面板在空玩家 ID 时禁用
+操作，收到完成结果后刷新相同玩家的活动视图。当前 Web 没有可验证的玩家主体绑定，因此
+不提供由匿名/普通 Web 身份任意指定 `user_id` 的玩家自助写入口；管理员个人查询与代办均受
+管理员权限保护。
+
+代签到只使用既有 `game_db` 迁移表。请求前只读检查 `operation_ledger`、签到及玩法事件回执、完整
+活动状态/进度表、签到日志与角色资产表；数据库不存在或 schema 未就绪返回 `503 migrations_required`，不在
+请求路径创建文件、表或迁移，也不回写独立旧 `activity/activity.db`。同 operation ID 重放由外层
+ledger 回放；若进程在签到事务提交后、外层 ledger 完成前中断，`claim_sign` 可依据同事务提交的
+`activity_sign_settlement_operations` 业务回执续跑并返回 duplicate，不重复发奖。其他活动动作的
+started 状态恢复白名单不变。
+
 ## 数据模型与迁移
 Manifest 保留历史 migration 标记 `legacy.activity.001`；当前启动 migration `activity_state.001/.002` 在 `game_db` 预建活动玩法表，并从 `data/activity/activity.db` 以只读、每批最多 200 行的方式回填。目标身份冲突、旧 schema 不完整或磁盘空间预检不通过时拒绝继续；迁移不会删除旧文件，也不在请求路径建表。活动模块导入不再抢先校验目标表，避免 startup migration 尚未运行时阻断新库/旧库升级。默认签到、集字、积分、道具、任务、战令和活动首领状态读写统一使用 `game_db`。
 
@@ -129,6 +144,8 @@ Run the feature application test and the full architecture gate. Repeat the same
 
 活动详情 Web 交互闭环的聚焦回归：`tests/test_activity_web_state.py` 覆盖 `detail` 与既有
 视图、匿名公共状态/管理员个人查询边界、精简旧状态库只读兼容、空库不建文件和面板控件。
+签到 Web 代办闭环的聚焦回归：`tests/test_activity_sign_web.py` 覆盖管理员/CSRF/参数合同、真实
+签到结算与发放一次、外层操作恢复、旧/缺失 schema 失败关闭、manifest 权限与面板幂等交互。
 本阶段轻量回归：`tests/test_activity_center.py` 覆盖四种生命周期状态、配置驱动活动卡片、
 奖励可领取状态和 Markdown 链接的纯文本降级；`tests/test_activity_center_claim_sources.py`
 覆盖五类来源的单独/组合入口、稳定顺序与去重、缺少资格状态、旧库可选表兼容，以及带参数
