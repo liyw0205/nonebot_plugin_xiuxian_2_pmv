@@ -113,6 +113,16 @@ The historical package owns command names during the compatibility release. New 
 不提供由匿名/普通 Web 身份任意指定 `user_id` 的玩家自助写入口；管理员个人查询与代办均受
 管理员权限保护。
 
+活动页也可为当前玩家 ID 执行六来源一键代领：`POST /api/v1/activity/rewards/claim`，权限为
+`admin`，要求 CSRF、非空 `user_id` 与稳定操作 ID（新面板通过 `Idempotency-Key` 传递；旧
+body `operation_id` 仍兼容）。它复用既有 `ActivityRewardApplication` 与六步领取协调器，覆盖
+任务、战令、首领进度、首领排行、阶段和排行；重复键重放原结果，遇到可恢复的部分失败时保留
+同一键续跑，已完成子操作不重复发奖。成功返回 `200`，确定拒绝和可恢复子步骤失败返回结构化
+`409`，数据库/schema 不可用返回 `503`。管理员面板完成或收到业务结果后刷新同一玩家的活动视图。
+`user` 目前不是可验证的玩家身份，故该 Web 写路由不可由匿名/普通请求代玩家提交；玩家本人继续
+通过 bot `活动领取` 命令使用同一业务协调器。请求前只读检查 game DB、外层 ledger/audit 与六步
+协调器 schema；缺失或旧 schema 不会触发请求期建库、建表或迁移。
+
 代签到只使用既有 `game_db` 迁移表。请求前只读检查 `operation_ledger`、签到及玩法事件回执、完整
 活动状态/进度表、签到日志与角色资产表；数据库不存在或 schema 未就绪返回 `503 migrations_required`，不在
 请求路径创建文件、表或迁移，也不回写独立旧 `activity/activity.db`。同 operation ID 重放由外层

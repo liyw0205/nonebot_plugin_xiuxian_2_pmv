@@ -12,7 +12,9 @@ export function initAdminPage(root = document) {
   const activityView = one('[data-activity-view]', panel);
   const activityUserId = one('[data-activity-user-id]', panel);
   const activitySign = one('[data-action="activity-sign"]', panel);
+  const activityClaim = one('[data-action="activity-claim"]', panel);
   let pendingActivitySign = null;
+  let pendingActivityClaim = null;
   const load = async () => {
     state.update({ status: 'loading', error: '' });
     if (activityForm && output) output.textContent = '';
@@ -41,6 +43,16 @@ export function initAdminPage(root = document) {
       renderState(panel, state.get());
     }
   };
+  const refreshActivityState = async (feedback) => {
+    await load();
+    if (!output || !feedback) return;
+    const refreshed = output.textContent;
+    output.textContent = refreshed ? `${feedback}\n\n${refreshed}` : feedback;
+  };
+  const setActivityControlsBusy = (busy) => {
+    if (activityUserId) activityUserId.disabled = busy;
+    if (activityView) activityView.disabled = busy;
+  };
   if (activityForm) {
     activityForm.addEventListener('submit', (event) => {
       event.preventDefault();
@@ -50,15 +62,25 @@ export function initAdminPage(root = document) {
     refresh?.addEventListener('click', load);
   }
   activityView?.addEventListener('change', load);
-  const updateSignAvailability = () => {
-    if (!activitySign) return;
-    activitySign.disabled = !activityUserId?.value.trim();
+  const updateActionAvailability = () => {
+    const userSelected = Boolean(activityUserId?.value.trim());
+    const mutationBusy = activitySign?.getAttribute('aria-busy') === 'true' ||
+      activityClaim?.getAttribute('aria-busy') === 'true';
+    if (activitySign) {
+      activitySign.disabled = !userSelected || mutationBusy;
+    }
+    if (activityClaim) {
+      activityClaim.disabled = !userSelected || mutationBusy;
+    }
   };
   activityUserId?.addEventListener('input', () => {
     if (pendingActivitySign && pendingActivitySign.userId !== activityUserId.value.trim()) {
       pendingActivitySign = null;
     }
-    updateSignAvailability();
+    if (pendingActivityClaim && pendingActivityClaim.userId !== activityUserId.value.trim()) {
+      pendingActivityClaim = null;
+    }
+    updateActionAvailability();
   });
   activitySign?.addEventListener('click', async () => {
     const userId = activityUserId?.value.trim() || '';
@@ -67,6 +89,8 @@ export function initAdminPage(root = document) {
       pendingActivitySign = { userId, operationId: idempotencyKey() };
     }
     setBusy(activitySign, true);
+    setActivityControlsBusy(true);
+    updateActionAvailability();
     state.update({ status: 'submitting', error: '' });
     renderState(panel, state.get());
     try {
@@ -87,10 +111,48 @@ export function initAdminPage(root = document) {
       renderState(panel, state.get());
     } finally {
       setBusy(activitySign, false);
-      updateSignAvailability();
+      setActivityControlsBusy(false);
+      updateActionAvailability();
     }
   });
-  updateSignAvailability();
+  activityClaim?.addEventListener('click', async () => {
+    const userId = activityUserId?.value.trim() || '';
+    if (!userId) return;
+    if (!pendingActivityClaim || pendingActivityClaim.userId !== userId) {
+      pendingActivityClaim = { userId, operationId: idempotencyKey() };
+    }
+    setBusy(activityClaim, true);
+    setActivityControlsBusy(true);
+    updateActionAvailability();
+    state.update({ status: 'submitting', error: '' });
+    renderState(panel, state.get());
+    try {
+      const result = await requestJson('/api/v1/activity/rewards/claim', {
+        method: 'POST',
+        headers: { 'Idempotency-Key': pendingActivityClaim.operationId },
+        body: JSON.stringify({ user_id: userId }),
+      });
+      pendingActivityClaim = null;
+      await refreshActivityState(result?.data?.text || result?.message || '活动奖励领取已完成');
+    } catch (error) {
+      const retryable = !error.status || error.status >= 500 || error.status === 403 ||
+        error.code === 'retryable_failure' || error.code === 'conflict';
+      if (!retryable) pendingActivityClaim = null;
+      const message = error.message || '活动奖励领取未完成';
+      if (error.status === 409) {
+        await refreshActivityState(message);
+      } else {
+        state.update({ status: 'error', error: message });
+        if (output) output.textContent = message;
+        renderState(panel, state.get());
+      }
+    } finally {
+      setBusy(activityClaim, false);
+      setActivityControlsBusy(false);
+      updateActionAvailability();
+    }
+  });
+  updateActionAvailability();
   load();
   return state;
 }

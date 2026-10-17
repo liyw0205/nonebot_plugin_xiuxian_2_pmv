@@ -4607,7 +4607,7 @@
         "POST"
       ],
       "path": "/api/v1/activity/rewards/claim",
-      "permission": "user"
+      "permission": "admin"
     },
     {
       "feature": "activity",
