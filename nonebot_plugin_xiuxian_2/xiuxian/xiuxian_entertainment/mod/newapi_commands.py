@@ -192,6 +192,47 @@ def _format_list_message(qq_id: str) -> str:
     return message
 
 
+def _record_checkin_history_with_recovery(
+    qq_id: str,
+    target: NewApiCheckinTarget,
+    data: dict[str, Any],
+    *,
+    source: Literal["manual", "auto"],
+) -> None:
+    """Record one checkin row, retrying the LOCAL history write once.
+
+    The remote POST is never replayed here: the remote service answers a
+    duplicate same-day check-in with an explicit already-signed message, but
+    compensating a lost history row only needs the local write, so the retry
+    stays free of remote side effects.
+    """
+    try:
+        append_checkin_history(
+            qq_id,
+            account_index=target.index,
+            api_user_id=target.api_user_id,
+            base_url=target.base_url,
+            summary=summarize_checkin_for_history(data),
+            source=source,
+        )
+        return
+    except (OSError, RuntimeError, sqlite3.Error):
+        pass
+    try:
+        append_checkin_history(
+            qq_id,
+            account_index=target.index,
+            api_user_id=target.api_user_id,
+            base_url=target.base_url,
+            summary=summarize_checkin_for_history(data),
+            source=source,
+        )
+        return
+    except (OSError, RuntimeError, sqlite3.Error) as exc:
+        category = "数据库不可用" if isinstance(exc, sqlite3.Error) else "历史不可写"
+        data["_history_warning"] = f"历史记录未更新（{category}），签到结果不受影响"
+
+
 def _run_checkin_for_target(
     qq_id: str,
     target: NewApiCheckinTarget,
@@ -209,17 +250,7 @@ def _run_checkin_for_target(
             target.secret,
             base,
         )
-    try:
-        append_checkin_history(
-            qq_id,
-            account_index=target.index,
-            api_user_id=target.api_user_id,
-            base_url=target.base_url,
-            summary=summarize_checkin_for_history(data),
-            source=source,
-        )
-    except (OSError, RuntimeError, sqlite3.Error):
-        data["_history_warning"] = "历史记录未更新，签到结果不受影响"
+    _record_checkin_history_with_recovery(qq_id, target, data, source=source)
     return target.index, data
 
 

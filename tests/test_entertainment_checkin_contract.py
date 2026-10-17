@@ -47,8 +47,14 @@ def test_manual_checkin_worker_records_history_through_feature_application():
     worker = _function(source, "_run_checkin_for_target")
 
     called = _called_names(worker)
-    assert "append_checkin_history" in called
+    # History recording is delegated to the recovery helper, which retries the
+    # LOCAL history write once and never replays the remote POST.
+    assert "_record_checkin_history_with_recovery" in called
     assert "do_checkin" in called
+    recovery = _function(source, "_record_checkin_history_with_recovery")
+    recovery_called = _called_names(recovery)
+    assert "append_checkin_history" in recovery_called
+    assert "do_checkin" not in recovery_called
 
 
 def test_scheduled_checkin_reads_bounded_feature_owned_pages_without_reloading_accounts():
@@ -57,7 +63,7 @@ def test_scheduled_checkin_reads_bounded_feature_owned_pages_without_reloading_a
 
     called = _called_names(worker)
     assert "load_accounts" not in called
-    assert "append_checkin_history" in called
+    assert "_record_checkin_history_with_recovery" in called
     scheduler = _function(source, "run_scheduled_auto_checkins")
     scheduler_calls = _referenced_names(scheduler)
     assert "list_auto_checkin_bindings" in scheduler_calls

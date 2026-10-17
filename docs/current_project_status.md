@@ -80,6 +80,26 @@
   `39042548289` 因快照多单元失败，已修正）、main CI run `39054522726` 均成功。
   未部署，未读取或写入真实游戏库。
 
+## 当前完整目标：NewAPI 签到历史写入收口
+
+沿 Phase 2 backlog 项 `newapi-checkin-remote-history-window` 收口真实风险：远端签到
+POST 与本地三条历史写入无法原子提交，进程在远端接受后、历史写入前崩溃会留下
+"远端已签、本地无记录"的永久不一致；原实现历史写入失败只降级为无类别提示。
+
+- `_run_checkin_for_target` 的历史写入抽为 `_record_checkin_history_with_recovery`：
+  首次失败后同进程补偿重试一次（仅本地历史写入，不重放远端 POST——远端同日重复
+  签到返回明确"已签"消息，但补偿丢失历史行只需本地写入）；重试仍失败才降级为带
+  原因类别（数据库不可用/历史不可写）的 `_history_warning`，签到结果本身不变。
+- 自动签到调度逐账号异常隔离行为不变；不改远端调用次数、历史表结构、3 条上限、
+  展示格式或命令合同；不新增配置键或后台任务。
+- `tests/test_entertainment_newapi_history_recovery.py` 聚焦套件 `6/6` 通过，覆盖
+  重试成功、双失败分类警告、非数据库失败类别、成功不重试、远端错误仍记失败摘要、
+  补偿不重放远端；受影响合同套件（checkin/auto/client/owner）合计 `20/20` 通过。
+  architecture/inventory/progress 门禁真实 exit 0；`git diff --check` 干净。
+- 本轮只改 `newapi_commands.py`、新聚焦测试、`tests/test_entertainment_checkin_contract.py`
+  （AST 合同随委托更新）与正式文档；develop 推送/CI、审查与 main 快进/CI 按发布门
+  继续完成。未部署，未读取或写入真实游戏库，不发送真实消息。
+
 ## 冻结清单与停止条件
 
 冻结范围仅包括活动 Web 六来源一键代领 API、权限/错误合同、管理员面板、兼容性保护、聚焦测试、路由清单和正式文档。不得新增奖励经济、schema/数据迁移、玩家身份模型、后台活动编辑器、通用 UI 框架或 unrelated refactor。
