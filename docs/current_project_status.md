@@ -57,6 +57,27 @@
 - `tests/test_activity_reward_web.py` 与 `tests/test_activity_reward_application.py` 聚焦套件 `15/15` 通过，覆盖权限/CSRF、参数、缺库旧 schema 无 DDL、六步顺序、成功/replay、异玩家 operation 冲突、部分失败续跑、旧 body operation ID、manifest 与面板合同。JS/Python 语法检查、inventory 与 architecture 门禁通过；diff check 在提交前复核。
 - 本轮只改本目标白名单中的 API、管理员面板、manifest、测试与正式文档。目标提交 `a2214a29` 已推送 develop 并快进合入 main；develop CI run `39018775656`、main CI run `39019137012` 均成功（quality job 通过，build-and-release 按无 Release 跳过）。未部署，未读取或写入真实游戏库。
 
+## 当前完整目标：活动详情视图行动建议对齐一键领取来源
+
+沿活动中心路线图推进到活动详情 Web 视图（`view=detail`）的行动建议段；中心卡片、
+一键代领、签到代办、详情视图与投递合同均是已完成基线，不重做。
+
+- 详情视图带 `user_id` 时按配置请求完整领取状态快照（结束阶段窗口、排行来源含 boss 板、
+  首领活动 key），行动建议段复用中心 `detail_action_tips` 判定，覆盖任务、战令与追赶、
+  集字保底、阶段、排行、首领进度、首领排行，与活动中心一键领取来源集合一致。
+- 修复既有首领排行名次读取缺陷：boss 板位此前用主活动 key 查 `activity_boss_damage`，
+  生产配置中首领活动 key 不同（如 `festival_world_boss`），名次恒为 0，中心与详情均无法
+  提示首领排行可领；现按首领玩法活动自身 key 读取。
+- 只读复用既有 `overview_snapshot`，同一单次快照，不新增表、迁移、配置键、查询次数或
+  写路径；无 `user_id` 或快照缺来源键时详情输出不变。
+- `tests/test_activity_detail_actions.py` 聚焦套件 `4/4` 通过，覆盖四来源单独可领、
+  中心/详情一致性、无资格不误报、首领 key 修复；受影响活动套件（web_state、center、
+  claim_sources、claimable、reward_web、sign_web）合计 `58/58` 通过。architecture、
+  inventory 与 progress 门禁真实 exit 0；`git diff --check` 干净。
+- 本轮只改 `center.py`、`read_model_application.py`、`read_model_repository.py`、
+  新聚焦测试与正式文档；develop 推送/CI、审查与 main 快进/CI 按发布门继续完成。
+  未部署，未读取或写入真实游戏库。
+
 ## 冻结清单与停止条件
 
 冻结范围仅包括活动 Web 六来源一键代领 API、权限/错误合同、管理员面板、兼容性保护、聚焦测试、路由清单和正式文档。不得新增奖励经济、schema/数据迁移、玩家身份模型、后台活动编辑器、通用 UI 框架或 unrelated refactor。

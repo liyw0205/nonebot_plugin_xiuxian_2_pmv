@@ -100,7 +100,10 @@ The historical package owns command names during the compatibility release. New 
 时各视图只返回公共活动信息；带 `user_id` 的个人进度查询要求管理权限，避免把未绑定 Web
 身份的任意玩家状态公开给匿名请求。未知 `view` 返回 `validation_error`（400），权限不足返回
 `forbidden`（403）。面板「活动」页提供上述视图选择、可选玩家 ID 与查询操作，读模型文本通过
-纯文本节点呈现；`PAGE_ENDPOINTS["activity"]`/`["reward_center"]` 仍指向该路由。详情与状态
+纯文本节点呈现；`PAGE_ENDPOINTS["activity"]`/`["reward_center"]` 仍指向该路由。详情视图的
+行动建议段与活动中心卡片覆盖完全相同的可领取来源（任务、战令与追赶、集字保底、阶段、排行、
+首领进度、首领排行），两者复用同一 `detail_action_tips` 判定，提示与一键领取入口一致；
+首领排行名次按首领玩法活动自身的 key 读取，不使用主活动 key。详情与状态
 读取只使用活动配置及既有只读快照，不建表、不补写迁移、不创建缺失数据库文件；空库无个人
 数据时仍可读取公共详情。审计日志仍由 `GET /api/v1/activity` 提供。写入口仍是既有
 `POST /api/v1/activity/rewards/claim`（一键领取，带 `Idempotency-Key`，覆盖六来源）。
@@ -154,6 +157,9 @@ Run the feature application test and the full architecture gate. Repeat the same
 
 活动详情 Web 交互闭环的聚焦回归：`tests/test_activity_web_state.py` 覆盖 `detail` 与既有
 视图、匿名公共状态/管理员个人查询边界、精简旧状态库只读兼容、空库不建文件和面板控件。
+详情行动建议聚焦回归：`tests/test_activity_detail_actions.py` 覆盖详情视图行动建议覆盖
+与一键领取相同的六来源、中心卡片与详情同一快照的一致性、无 `user_id`/无资格状态不出现
+新提示，以及首领排行名次按首领活动 key 读取。
 签到 Web 代办闭环的聚焦回归：`tests/test_activity_sign_web.py` 覆盖管理员/CSRF/参数合同、真实
 签到结算与发放一次、外层操作恢复、旧/缺失 schema 失败关闭、manifest 权限与面板幂等交互。
 本阶段轻量回归：`tests/test_activity_center.py` 覆盖四种生命周期状态、配置驱动活动卡片、

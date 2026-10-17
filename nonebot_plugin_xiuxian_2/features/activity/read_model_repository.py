@@ -854,9 +854,21 @@ class ActivityReadModelSqlRepository:
                 str(user_id), str(activity_key), list(stage_windows)
             )
         board_positions: dict[str, int] = {}
+        boss_board_keys = tuple(
+            dict.fromkeys(str(key) for key in boss_activity_keys if str(key))
+        )
         for source in board_sources:
+            # The boss damage tables are keyed by the boss gameplay activity's
+            # own key, not the main activity key; without this the boss board
+            # position would always read 0 for players of a differently-keyed
+            # boss activity.
+            source_key = (
+                boss_board_keys[0]
+                if str(source) == "boss" and boss_board_keys
+                else str(activity_key)
+            )
             position, _ = self.board_position(
-                str(source), str(activity_key), str(user_id)
+                str(source), source_key, str(user_id)
             )
             board_positions[str(source)] = max(0, int(position))
         return {

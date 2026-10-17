@@ -551,6 +551,99 @@ def _claimable_boss_rank_count(config: Mapping[str, Any], snapshot: Mapping[str,
     return count
 
 
+def detail_action_tips(
+    config: Mapping[str, Any],
+    snapshot: Mapping[str, Any],
+    now: datetime,
+    helpers: Mapping[str, Any],
+) -> list[str]:
+    """Action-summary tips shared by the center card and the detail view.
+
+    Covers exactly the sources the one-click claim covers: tasks, the battle
+    pass (including catch-up), collect pity, stage, rank and both boss claim
+    sources. Every rule delegates to the same helpers the center card uses, so
+    the two surfaces cannot drift; a snapshot without a source's claim state
+    simply contributes no tip.
+    """
+    from ...xiuxian.xiuxian_activity.activity_rules import (
+        _activity_pass_config,
+        _task_scope_key,
+    )
+
+    as_int = helpers["_as_int"]
+    as_float = helpers["_as_float"]
+    tips: list[str] = []
+
+    tasks_state = snapshot.get("tasks") or {}
+    claimable_tasks = 0
+    for scope_type, rows in (
+        ("daily", config.get("daily_tasks") or []),
+        ("weekly", config.get("weekly_tasks") or []),
+    ):
+        scope_key = _task_scope_key(scope_type, now)
+        for task in rows:
+            if not isinstance(task, Mapping):
+                continue
+            task_key = _clean_text(task.get("key"))
+            state = tasks_state.get((scope_type, scope_key, task_key), {})
+            if task_claimable(state, task.get("target")):
+                claimable_tasks += 1
+    if claimable_tasks:
+        tips.append(f"{claimable_tasks}个任务奖励可领")
+
+    pass_config = _activity_pass_config(dict(config))
+    if pass_config.get("enabled"):
+        claimable = claimable_pass_rewards(
+            pass_config,
+            snapshot.get("pass_total_exp"),
+            snapshot.get("pass_claimed_levels") or set(),
+        )
+        if claimable:
+            tips.append(f"{len(claimable)}档战令奖励可领")
+        elapsed = helpers["_activity_elapsed_days"](config, now)
+        highest_level = as_int(snapshot.get("pass_highest_level"), 0)
+        level = pass_level(pass_config, snapshot.get("pass_total_exp"))
+        gap = max(0, highest_level - level)
+        multiplier = max(1.0, as_float(pass_config.get("catchup_multiplier"), 1.5))
+        if (
+            pass_config.get("catchup_enabled")
+            and elapsed >= max(1, as_int(pass_config.get("catchup_start_day"), 5))
+            and gap >= max(1, as_int(pass_config.get("catchup_level_gap"), 3))
+            and multiplier > 1.0
+        ):
+            tips.append(f"战令追赶{multiplier:.2f}x生效")
+
+    pity_state = snapshot.get("collect_pity")
+    if pity_state:
+        for activity in get_gameplay_activities(dict(config)):
+            if activity.get("type") != "collect_words":
+                continue
+            threshold = max(0, as_int(activity.get("pity_threshold"), 0))
+            if threshold <= 0:
+                continue
+            for event_key in activity.get("drop_events") or []:
+                if (
+                    pity_state.get((str(activity.get("key") or ""), str(event_key)), 0)
+                    >= max(1, threshold - 1)
+                ):
+                    label = helpers["ACTIVITY_EVENT_LABELS"].get(event_key, event_key)
+                    tips.append(f"{activity['name']}接近保底：{label}")
+                    break
+            else:
+                continue
+            break
+
+    if _claimable_stage_count(config, snapshot, now):
+        tips.append("阶段奖励可领：活动阶段领取")
+    if _claimable_rank_count(config, snapshot):
+        tips.append("排行奖励可领：活动排行领取")
+    if _claimable_boss_milestone_count(config, snapshot):
+        tips.append("首领进度奖励可领：活动首领领奖 进度")
+    if _claimable_boss_rank_count(config, snapshot):
+        tips.append("首领排行奖励可领：活动首领领奖 排行")
+    return tips
+
+
 def claimable_reward_count(
     config: Mapping[str, Any],
     snapshot: Mapping[str, Any],

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable, Mapping
 
@@ -351,13 +352,7 @@ class ActivityReadModelApplication:
         ]
         now = self.clock.now().astimezone().replace(tzinfo=None)
         state = (
-            self.repository.overview_snapshot(
-                str(user_id),
-                activity_key,
-                include_tasks=bool(user_id and tasks),
-                include_pass=bool(user_id and pass_config.get("enabled")),
-                collect_activity_keys=collect_keys if user_id else [],
-            )
+            self._overview_snapshot_for_detail(str(user_id), config, helpers, now)
             if user_id
             else {
                 "sign": {}, "tasks": {}, "pass_total_exp": 0,
@@ -368,6 +363,53 @@ class ActivityReadModelApplication:
         return self._render_activity_info(
             config, str(user_id) if user_id else None, state, now, helpers,
             tasks, pass_config, gameplay,
+        )
+
+    def _overview_snapshot_for_detail(
+        self, user_id: str, config: dict[str, Any], helpers: Mapping[str, Any], now: datetime
+    ) -> dict[str, Any]:
+        """Detail-view snapshot: overview state plus every claim source the
+        one-click claim covers, so the action summary matches the center card."""
+        from ...xiuxian.xiuxian_activity.activity_config import activity_rank_config
+        from ...xiuxian.xiuxian_activity.activity_utils import _as_int
+        from .stage import stage_timeline, stage_window_bounds
+
+        activity_key = helpers["_activity_config_key"](config)
+        tasks = helpers["get_activity_tasks"](config)
+        pass_config = helpers["_activity_pass_config"](config)
+        gameplay = helpers["get_gameplay_activities"](config)
+        collect_keys = [
+            str(activity.get("key") or "")
+            for activity in gameplay
+            if activity.get("type") == "collect_words"
+            and _as_int(activity.get("pity_threshold"), 0) > 0
+        ]
+        stage_windows = [
+            (stage["key"], *stage_window_bounds(stage))
+            for stage in stage_timeline(config, now)["ended"]
+        ]
+        board_sources = [
+            str(board.get("source") or "")
+            for board in activity_rank_config(config)["boards"]
+            if str(board.get("source") or "")
+        ]
+        boss_keys = [
+            str(activity.get("key") or "")
+            for activity in gameplay
+            if activity.get("type") == "activity_boss"
+            and str(activity.get("key") or "")
+        ]
+        if boss_keys:
+            board_sources.append("boss")
+        return self.repository.overview_snapshot(
+            user_id,
+            activity_key,
+            include_tasks=bool(tasks),
+            include_pass=bool(pass_config.get("enabled")),
+            collect_activity_keys=collect_keys,
+            stage_windows=stage_windows,
+            board_sources=board_sources,
+            boss_activity_keys=boss_keys,
         )
 
     def activity_center_text(self, user_id: str | None = None) -> str:
@@ -679,7 +721,7 @@ class ActivityReadModelApplication:
             if user_id:
                 self._append_action_summary(
                     lines, config, tasks, task_map, pass_config, pass_balance,
-                    snapshot["collect_pity"], now, helpers,
+                    snapshot["collect_pity"], now, helpers, snapshot=snapshot,
                 )
         else:
             lines.extend((
@@ -690,7 +732,7 @@ class ActivityReadModelApplication:
             if user_id:
                 self._append_action_summary(
                     lines, config, tasks, task_map, pass_config, pass_balance,
-                    snapshot["collect_pity"], now, helpers,
+                    snapshot["collect_pity"], now, helpers, snapshot=snapshot,
                 )
             self._append_stage_summary(
                 lines, config, helpers["activity_runtime_state"], as_float,
@@ -774,52 +816,20 @@ class ActivityReadModelApplication:
 
     @staticmethod
     def _append_action_summary(
-        lines, config, tasks, task_map, pass_config, pass_balance, pity_map, now, helpers
+        lines, config, tasks, task_map, pass_config, pass_balance, pity_map, now, helpers,
+        snapshot=None,
     ):
-        tips = []
-        claimable_tasks = 0
-        for task in tasks:
-            scope_type = task["scope_type"]
-            scope_key = now.strftime("%Y-%m-%d") if scope_type == "daily" else f"{now.isocalendar().year}-W{now.isocalendar().week:02d}"
-            state = task_map.get((scope_type, scope_key, task["key"]), {})
-            target = max(1, helpers["_as_int"](state.get("target"), task.get("target", 1)))
-            if not state.get("claimed") and helpers["_as_int"](state.get("progress"), 0) >= target:
-                claimable_tasks += 1
-        if claimable_tasks:
-            tips.append(f"{claimable_tasks}个任务奖励可领")
-        if pass_config.get("enabled"):
-            claimable = [
-                reward for reward in pass_config.get("level_rewards") or []
-                if helpers["_as_int"](reward.get("level"), 0) > 0
-                and helpers["_as_int"](reward.get("level"), 0) <= pass_balance["level"]
-                and helpers["_as_int"](reward.get("level"), 0) not in pass_balance["claimed_levels"]
-            ]
-            if claimable:
-                tips.append(f"{len(claimable)}档战令奖励可领")
-            elapsed = helpers["_activity_elapsed_days"](config, now)
-            gap = max(0, pass_balance["highest_level"] - pass_balance["level"])
-            multiplier = max(1.0, helpers["_as_float"](pass_config.get("catchup_multiplier"), 1.5))
-            if (
-                pass_config.get("catchup_enabled")
-                and elapsed >= max(1, helpers["_as_int"](pass_config.get("catchup_start_day"), 5))
-                and gap >= max(1, helpers["_as_int"](pass_config.get("catchup_level_gap"), 3))
-                and multiplier > 1.0
-            ):
-                tips.append(f"战令追赶{multiplier:.2f}x生效")
-        for activity in helpers["get_gameplay_activities"](config):
-            if activity.get("type") != "collect_words":
-                continue
-            threshold = max(0, helpers["_as_int"](activity.get("pity_threshold"), 0))
-            if threshold <= 0:
-                continue
-            for event_key in activity.get("drop_events") or []:
-                if pity_map.get((str(activity.get("key") or ""), str(event_key)), 0) >= max(1, threshold - 1):
-                    label = helpers["ACTIVITY_EVENT_LABELS"].get(event_key, event_key)
-                    tips.append(f"{activity['name']}接近保底：{label}")
-                    break
-            else:
-                continue
-            break
+        from .center import detail_action_tips
+
+        if snapshot is None:
+            snapshot = {
+                "tasks": task_map,
+                "pass_total_exp": pass_balance["total_exp"],
+                "pass_claimed_levels": pass_balance["claimed_levels"],
+                "pass_highest_level": pass_balance["highest_level"],
+                "collect_pity": pity_map,
+            }
+        tips = detail_action_tips(config, snapshot, now, helpers)
         if tips:
             lines.extend(("", "【行动建议】", "；".join(tips[:4]), "一键领取：活动领取"))
 
