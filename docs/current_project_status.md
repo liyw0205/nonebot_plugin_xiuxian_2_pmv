@@ -57,7 +57,7 @@
 - `tests/test_activity_reward_web.py` 与 `tests/test_activity_reward_application.py` 聚焦套件 `15/15` 通过，覆盖权限/CSRF、参数、缺库旧 schema 无 DDL、六步顺序、成功/replay、异玩家 operation 冲突、部分失败续跑、旧 body operation ID、manifest 与面板合同。JS/Python 语法检查、inventory 与 architecture 门禁通过；diff check 在提交前复核。
 - 本轮只改本目标白名单中的 API、管理员面板、manifest、测试与正式文档。目标提交 `a2214a29` 已推送 develop 并快进合入 main；develop CI run `39018775656`、main CI run `39019137012` 均成功（quality job 通过，build-and-release 按无 Release 跳过）。未部署，未读取或写入真实游戏库。
 
-## 当前完整目标：活动详情视图行动建议对齐一键领取来源
+## 已完成目标：活动详情视图行动建议对齐一键领取来源
 
 沿活动中心路线图推进到活动详情 Web 视图（`view=detail`）的行动建议段；中心卡片、
 一键代领、签到代办、详情视图与投递合同均是已完成基线，不重做。
@@ -75,7 +75,9 @@
   claim_sources、claimable、reward_web、sign_web）合计 `58/58` 通过。architecture、
   inventory 与 progress 门禁真实 exit 0；`git diff --check` 干净。
 - 本轮只改 `center.py`、`read_model_application.py`、`read_model_repository.py`、
-  新聚焦测试与正式文档；develop 推送/CI、审查与 main 快进/CI 按发布门继续完成。
+  `stage_participation.py`、新聚焦测试与正式文档。目标提交 `d5a25d32` 与快照单单元修正
+  `e64ee107` 已推送 develop 并快进合入 main；develop CI run `39054068758`（首推
+  `39042548289` 因快照多单元失败，已修正）、main CI run `39054522726` 均成功。
   未部署，未读取或写入真实游戏库。
 
 ## 冻结清单与停止条件
