@@ -508,73 +508,85 @@ class ActivityReadModelSqlRepository:
         self, source: str, activity_key: str, user_id: str
     ) -> tuple[int, int]:
         """Return the player's (1-based rank, value); (0, 0) when unranked."""
+        with DatabaseUnitOfWork(self.database, read_only=True) as uow:
+            return self.board_position_in_uow(uow, source, activity_key, user_id)
+
+    def board_position_in_uow(
+        self,
+        uow: DatabaseUnitOfWork,
+        source: str,
+        activity_key: str,
+        user_id: str,
+    ) -> tuple[int, int]:
+        """``board_position`` inside the caller's already-open read-only unit.
+
+        ``overview_snapshot`` uses this so the whole personal overview stays
+        ONE read-only unit of work instead of one per board.
+        """
         source = str(source or "").strip()
         uid = str(user_id or "").strip()
         key = str(activity_key).strip()
         if not uid or not self.database.is_file():
             return 0, 0
         if source == "sign":
-            with DatabaseUnitOfWork(self.database, read_only=True) as uow:
-                if "activity_user" not in self._table_names(uow):
-                    return 0, 0
-                mine = uow.query_one(
-                    "SELECT sign_days,total_sign_days,last_sign_date FROM activity_user "
-                    "WHERE user_id=?",
-                    (uid,),
-                )
-                if not mine:
-                    return 0, 0
-                value = max(0, int(mine["sign_days"] or 0))
-                tie = max(0, int(mine["total_sign_days"] or 0))
-                if value <= 0:
-                    return 0, 0
-                last = str(mine["last_sign_date"] or "")
-                better = uow.query_one(
-                    "SELECT COUNT(*) AS better FROM activity_user WHERE sign_days>? "
-                    "OR (sign_days=? AND total_sign_days>?) "
-                    "OR (sign_days=? AND total_sign_days=? AND last_sign_date<?) "
-                    "OR (sign_days=? AND total_sign_days=? AND last_sign_date=? AND user_id<?)",
-                    (value, value, tie, value, tie, last, value, tie, last, uid),
-                )
+            if "activity_user" not in self._table_names(uow):
+                return 0, 0
+            mine = uow.query_one(
+                "SELECT sign_days,total_sign_days,last_sign_date FROM activity_user "
+                "WHERE user_id=?",
+                (uid,),
+            )
+            if not mine:
+                return 0, 0
+            value = max(0, int(mine["sign_days"] or 0))
+            tie = max(0, int(mine["total_sign_days"] or 0))
+            if value <= 0:
+                return 0, 0
+            last = str(mine["last_sign_date"] or "")
+            better = uow.query_one(
+                "SELECT COUNT(*) AS better FROM activity_user WHERE sign_days>? "
+                "OR (sign_days=? AND total_sign_days>?) "
+                "OR (sign_days=? AND total_sign_days=? AND last_sign_date<?) "
+                "OR (sign_days=? AND total_sign_days=? AND last_sign_date=? AND user_id<?)",
+                (value, value, tie, value, tie, last, value, tie, last, uid),
+            )
             return int((better or {}).get("better") or 0) + 1, value
         if source == "boss":
             if not key:
                 return 0, 0
-            with DatabaseUnitOfWork(self.database, read_only=True) as uow:
-                if "activity_boss_damage" not in self._table_names(uow):
-                    return 0, 0
-                mine = uow.query_one(
-                    "SELECT total_damage FROM activity_boss_damage "
-                    "WHERE activity_key=? AND user_id=?",
-                    (key, uid),
-                )
-                value = max(0, int((mine or {}).get("total_damage") or 0))
-                if value <= 0:
-                    return 0, 0
-                better = uow.query_one(
-                    "SELECT COUNT(*) AS better FROM activity_boss_damage "
-                    "WHERE activity_key=? AND (total_damage>? OR (total_damage=? AND user_id<?))",
-                    (key, value, value, uid),
-                )
+            if "activity_boss_damage" not in self._table_names(uow):
+                return 0, 0
+            mine = uow.query_one(
+                "SELECT total_damage FROM activity_boss_damage "
+                "WHERE activity_key=? AND user_id=?",
+                (key, uid),
+            )
+            value = max(0, int((mine or {}).get("total_damage") or 0))
+            if value <= 0:
+                return 0, 0
+            better = uow.query_one(
+                "SELECT COUNT(*) AS better FROM activity_boss_damage "
+                "WHERE activity_key=? AND (total_damage>? OR (total_damage=? AND user_id<?))",
+                (key, value, value, uid),
+            )
             return int((better or {}).get("better") or 0) + 1, value
         spec = self._BOARD_POSITION_SQL.get(source)
         if spec is None or not key:
             return 0, 0
         table, self_sql, better_sql, _total_sql = spec
-        with DatabaseUnitOfWork(self.database, read_only=True) as uow:
-            if table not in self._table_names(uow):
-                return 0, 0
-            mine = uow.query_one(self_sql, (key, uid))
-            value = max(0, int((mine or {}).get("value") or 0))
-            if value <= 0:
-                return 0, 0
-            tie = max(0, int((mine or {}).get("tie") or 0))
-            if source == "collect":
-                better = uow.query_one(better_sql, (key, value, value, uid))
-            else:
-                better = uow.query_one(
-                    better_sql, (key, value, value, tie, value, tie, uid)
-                )
+        if table not in self._table_names(uow):
+            return 0, 0
+        mine = uow.query_one(self_sql, (key, uid))
+        value = max(0, int((mine or {}).get("value") or 0))
+        if value <= 0:
+            return 0, 0
+        tie = max(0, int((mine or {}).get("tie") or 0))
+        if source == "collect":
+            better = uow.query_one(better_sql, (key, value, value, uid))
+        else:
+            better = uow.query_one(
+                better_sql, (key, value, value, tie, value, tie, uid)
+            )
         return int((better or {}).get("better") or 0) + 1, value
 
     def board_total(self, source: str, activity_key: str) -> int:
@@ -835,6 +847,35 @@ class ActivityReadModelSqlRepository:
                             str(row["tier_key"])
                         )
 
+            stage_participated: set[str] = set()
+            if stage_windows:
+                from .stage_participation import ActivityStageParticipationRepository
+
+                stage_participated = (
+                    ActivityStageParticipationRepository(self.database)
+                    .participated_stages_in_uow(
+                        uow, str(user_id), str(activity_key), list(stage_windows)
+                    )
+                )
+            board_positions: dict[str, int] = {}
+            boss_board_keys = tuple(
+                dict.fromkeys(str(key) for key in boss_activity_keys if str(key))
+            )
+            for source in board_sources:
+                # The boss damage tables are keyed by the boss gameplay
+                # activity's own key, not the main activity key; without this
+                # the boss board position would always read 0 for players of a
+                # differently-keyed boss activity.
+                source_key = (
+                    boss_board_keys[0]
+                    if str(source) == "boss" and boss_board_keys
+                    else str(activity_key)
+                )
+                position, _ = self.board_position_in_uow(
+                    uow, str(source), source_key, str(user_id)
+                )
+                board_positions[str(source)] = max(0, int(position))
+
         tasks = {
             (str(row["scope_type"]), str(row["scope_key"]), str(row["task_key"])): {
                 "progress": max(0, int(row["progress"] or 0)),
@@ -844,33 +885,6 @@ class ActivityReadModelSqlRepository:
             }
             for row in task_rows
         }
-        stage_participated: set[str] = set()
-        if stage_windows:
-            from .stage_participation import ActivityStageParticipationRepository
-
-            stage_participated = ActivityStageParticipationRepository(
-                self.database
-            ).participated_stages(
-                str(user_id), str(activity_key), list(stage_windows)
-            )
-        board_positions: dict[str, int] = {}
-        boss_board_keys = tuple(
-            dict.fromkeys(str(key) for key in boss_activity_keys if str(key))
-        )
-        for source in board_sources:
-            # The boss damage tables are keyed by the boss gameplay activity's
-            # own key, not the main activity key; without this the boss board
-            # position would always read 0 for players of a differently-keyed
-            # boss activity.
-            source_key = (
-                boss_board_keys[0]
-                if str(source) == "boss" and boss_board_keys
-                else str(activity_key)
-            )
-            position, _ = self.board_position(
-                str(source), source_key, str(user_id)
-            )
-            board_positions[str(source)] = max(0, int(position))
         return {
             "sign": {
                 "sign_days": max(0, int(sign.get("sign_days") or 0)),

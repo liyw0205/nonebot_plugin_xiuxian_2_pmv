@@ -80,14 +80,32 @@ class ActivityStageParticipationRepository:
         """
         if not self.database.is_file() or not windows:
             return set()
-        found: set[str] = set()
         with DatabaseUnitOfWork(self.database, read_only=True) as uow:
-            existing = self._table_names(uow)
-            for stage_key, start, end in windows:
-                if self._has_evidence(
-                    uow, existing, str(user_id), str(activity_key), start, end
-                ):
-                    found.add(str(stage_key))
+            return self.participated_stages_in_uow(
+                uow, user_id, activity_key, windows
+            )
+
+    def participated_stages_in_uow(
+        self,
+        uow: DatabaseUnitOfWork,
+        user_id: str,
+        activity_key: str,
+        windows: list[tuple[str, str | None, str | None]],
+    ) -> set[str]:
+        """``participated_stages`` inside the caller's open read-only unit.
+
+        ``overview_snapshot`` uses this so the whole personal overview stays
+        ONE read-only unit of work.
+        """
+        if not self.database.is_file() or not windows:
+            return set()
+        found: set[str] = set()
+        existing = self._table_names(uow)
+        for stage_key, start, end in windows:
+            if self._has_evidence(
+                uow, existing, str(user_id), str(activity_key), start, end
+            ):
+                found.add(str(stage_key))
         return found
 
 
