@@ -659,6 +659,7 @@ class ActivityReadModelSqlRepository:
             "boss_milestone_claimed": set(),
             "boss_rank_claimed": set(),
             "board_positions": {},
+            "boss_board_positions": {},
             "boss_progress": {},
         }
         if not self.database.is_file():
@@ -875,6 +876,15 @@ class ActivityReadModelSqlRepository:
                     uow, str(source), source_key, str(user_id)
                 )
                 board_positions[str(source)] = max(0, int(position))
+            # Per-boss-activity rank positions: with multiple boss activities
+            # one shared "boss" position would match one boss's rank against
+            # another boss's reward tiers.
+            boss_board_positions: dict[str, int] = {}
+            for boss_key in boss_board_keys:
+                position, _ = self.board_position_in_uow(
+                    uow, "boss", boss_key, str(user_id)
+                )
+                boss_board_positions[boss_key] = max(0, int(position))
 
         tasks = {
             (str(row["scope_type"]), str(row["scope_key"]), str(row["task_key"])): {
@@ -912,6 +922,7 @@ class ActivityReadModelSqlRepository:
             "boss_milestone_claimed": boss_milestone_claimed,
             "boss_rank_claimed": boss_rank_claimed,
             "board_positions": board_positions,
+            "boss_board_positions": boss_board_positions,
             "boss_progress": boss_progress,
         }
 

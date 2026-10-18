@@ -525,16 +525,28 @@ def _claimable_boss_milestone_count(config: Mapping[str, Any], snapshot: Mapping
 
 
 def _claimable_boss_rank_count(config: Mapping[str, Any], snapshot: Mapping[str, Any]) -> int:
-    """Boss rank tiers the player's own damage rank reaches and has not claimed."""
+    """Boss rank tiers the player's own damage rank reaches and has not claimed.
+
+    Each boss activity is judged by its own rank position; a single shared
+    position would let one boss's rank match another boss's reward tiers.
+    """
     from .rank import tier_for_position
 
-    position = _as_int((snapshot.get("board_positions") or {}).get("boss"), 0)
-    if position <= 0:
-        return 0
+    per_activity = snapshot.get("boss_board_positions") or {}
+    legacy_position = _as_int((snapshot.get("board_positions") or {}).get("boss"), 0)
     _, _, claimed = _boss_claim_state(snapshot)
     count = 0
     for activity in get_gameplay_activities(dict(config)):
         if activity.get("type") != "activity_boss":
+            continue
+        activity_key = str(activity.get("key") or "")
+        if activity_key and activity_key in per_activity:
+            position = _as_int(per_activity.get(activity_key), 0)
+        else:
+            # Older snapshots carry only the shared position; with a single
+            # boss activity that is this activity's own rank.
+            position = legacy_position
+        if position <= 0:
             continue
         tiers = [
             {"rank_min": tier.get("rank_min"), "rank_max": tier.get("rank_max")}

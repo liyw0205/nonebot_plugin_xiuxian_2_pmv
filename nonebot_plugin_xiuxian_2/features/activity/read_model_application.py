@@ -293,7 +293,14 @@ class ActivityReadModelApplication:
             ]
             if tiers:
                 lines.extend(("", f"【{label} · 排行奖励】"))
-                position = _as_int(positions.get("boss"), 0)
+                # Each boss activity is judged by its own rank position; the
+                # shared "boss" position is only the single-boss fallback.
+                activity_key = str(activity.get("key") or "")
+                boss_positions = snapshot.get("boss_board_positions") or {}
+                if activity_key and activity_key in boss_positions:
+                    position = _as_int(boss_positions.get(activity_key), 0)
+                else:
+                    position = _as_int(positions.get("boss"), 0)
                 matched = tier_for_position(tiers, position)
                 for row in tiers:
                     low = _as_int(row.get("rank_min"), 0)

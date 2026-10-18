@@ -101,6 +101,26 @@ POST 与本地三条历史写入无法原子提交，进程在远端接受后、
   develop CI run `39080592491`、main CI run `39080959210` 均成功。未部署，未读取或写入
   真实游戏库，不发送真实消息。
 
+## 当前完整目标：多首领排行名次按首领活动区分
+
+沿活动中心路线图收口多首领配置下的排行名次缺陷：快照 `board_positions["boss"]`
+只用第一个首领活动的 key 计算，而 `_claimable_boss_rank_count` 用这一个共享名次
+匹配所有首领的档位——玩家在首领 A 上榜、首领 B 未上榜时，B 仍可能被误报"排行可领"。
+
+- `overview_snapshot` 为每个首领活动 key 计算名次，新增可选快照键
+  `boss_board_positions`（同一只读快照单元，无第二次往返）；旧
+  `board_positions["boss"]` 保留为单首领/旧快照回退语义。
+- `_claimable_boss_rank_count` 与奖励目录 `reward_catalog_text` 的首领排行段改为
+  按各首领活动自己的名次匹配自己的档位；缺键时回退共享名次，现有断言不变。
+- 不改领取写路径、`claim_boss_rank_reward` 的 query 语义、表结构或配置键。
+- `tests/test_activity_boss_rank_positions.py` 聚焦套件 `6/6` 通过，覆盖 per-activity
+  名次快照、A 上榜 B 不误报、双首领独立名次、旧快照回退、已领档不重复计数与单首领
+  中心渲染；受影响活动套件合计 `98 passed + 4 subtests`。architecture/inventory/progress
+  门禁真实 exit 0；`git diff --check` 干净。
+- 本轮只改 `read_model_repository.py`、`center.py`、`read_model_application.py`、
+  新聚焦测试与正式文档；develop 推送/CI、审查与 main 快进/CI 按发布门继续完成。
+  未部署，未读取或写入真实游戏库，不发送真实消息。
+
 ## 冻结清单与停止条件
 
 冻结范围仅包括活动 Web 六来源一键代领 API、权限/错误合同、管理员面板、兼容性保护、聚焦测试、路由清单和正式文档。不得新增奖励经济、schema/数据迁移、玩家身份模型、后台活动编辑器、通用 UI 框架或 unrelated refactor。

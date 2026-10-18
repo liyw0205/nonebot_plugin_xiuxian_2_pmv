@@ -103,7 +103,9 @@ The historical package owns command names during the compatibility release. New 
 纯文本节点呈现；`PAGE_ENDPOINTS["activity"]`/`["reward_center"]` 仍指向该路由。详情视图的
 行动建议段与活动中心卡片覆盖完全相同的可领取来源（任务、战令与追赶、集字保底、阶段、排行、
 首领进度、首领排行），两者复用同一 `detail_action_tips` 判定，提示与一键领取入口一致；
-首领排行名次按首领玩法活动自身的 key 读取，不使用主活动 key。详情与状态
+首领排行名次按首领玩法活动自身的 key 读取（快照 `boss_board_positions` 按首领活动逐个
+计算名次，多首领配置下各首领按自己的名次匹配自己的档位；单首领与旧快照回退到共享
+`board_positions["boss"]`）。详情与状态
 读取只使用活动配置及既有只读快照，不建表、不补写迁移、不创建缺失数据库文件；空库无个人
 数据时仍可读取公共详情。审计日志仍由 `GET /api/v1/activity` 提供。写入口仍是既有
 `POST /api/v1/activity/rewards/claim`（一键领取，带 `Idempotency-Key`，覆盖六来源）。
