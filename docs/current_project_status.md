@@ -122,7 +122,7 @@ POST 与本地三条历史写入无法原子提交，进程在远端接受后、
   develop CI run `39093663915`、main CI run `39094053406` 均成功。未部署，未读取或
   写入真实游戏库，不发送真实消息。
 
-## 当前完整目标：多首领领取状态按首领活动区分
+## 已完成目标：多首领领取状态按首领活动区分
 
 沿活动中心路线图继续收口多首领配置缺陷：`_boss_claim_state` 把所有首领的
 `milestones_unlocked/claimed` 与 `rank_claimed` 并成无命名空间集合，而领取回执按
@@ -143,8 +143,9 @@ A 已解锁会冒充 B 未达标的进度，A 已领 `1-3` 排行档会漏报 B 
   per-activity 表示更新。受影响活动套件合计 `104 passed + 4 subtests`。
   architecture/inventory/progress 门禁真实 exit 0；`git diff --check` 干净。
 - 本轮只改 `center.py`、`read_model_application.py`、新聚焦测试、既有聚焦断言与
-  正式文档；develop 推送/CI、审查与 main 快进/CI 按发布门继续完成。未部署，未
-  读取或写入真实游戏库，不发送真实消息。
+  正式文档。目标提交 `56391d37` 已推送 develop 并快进合入 main；develop CI run
+  `39141994905`、main CI run `39142399243` 均成功。未部署，未读取或写入真实游戏库，
+  不发送真实消息。
 
 ## 冻结清单与停止条件
 
