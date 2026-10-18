@@ -80,7 +80,7 @@
   `39042548289` 因快照多单元失败，已修正）、main CI run `39054522726` 均成功。
   未部署，未读取或写入真实游戏库。
 
-## 当前完整目标：NewAPI 签到历史写入收口
+## 已完成目标：NewAPI 签到历史写入收口
 
 沿 Phase 2 backlog 项 `newapi-checkin-remote-history-window` 收口真实风险：远端签到
 POST 与本地三条历史写入无法原子提交，进程在远端接受后、历史写入前崩溃会留下
@@ -97,8 +97,9 @@ POST 与本地三条历史写入无法原子提交，进程在远端接受后、
   补偿不重放远端；受影响合同套件（checkin/auto/client/owner）合计 `20/20` 通过。
   architecture/inventory/progress 门禁真实 exit 0；`git diff --check` 干净。
 - 本轮只改 `newapi_commands.py`、新聚焦测试、`tests/test_entertainment_checkin_contract.py`
-  （AST 合同随委托更新）与正式文档；develop 推送/CI、审查与 main 快进/CI 按发布门
-  继续完成。未部署，未读取或写入真实游戏库，不发送真实消息。
+  （AST 合同随委托更新）与正式文档。目标提交 `ed7413ed` 已推送 develop 并快进合入 main；
+  develop CI run `39080592491`、main CI run `39080959210` 均成功。未部署，未读取或写入
+  真实游戏库，不发送真实消息。
 
 ## 冻结清单与停止条件
 
