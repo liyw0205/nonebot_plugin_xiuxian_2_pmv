@@ -122,6 +122,30 @@ POST 与本地三条历史写入无法原子提交，进程在远端接受后、
   develop CI run `39093663915`、main CI run `39094053406` 均成功。未部署，未读取或
   写入真实游戏库，不发送真实消息。
 
+## 当前完整目标：多首领领取状态按首领活动区分
+
+沿活动中心路线图继续收口多首领配置缺陷：`_boss_claim_state` 把所有首领的
+`milestones_unlocked/claimed` 与 `rank_claimed` 并成无命名空间集合，而领取回执按
+`(activity_key, user, key)` 独立——首领 A 已领同名 `m1` 会漏报首领 B 的可领进度，
+A 已解锁会冒充 B 未达标的进度，A 已领 `1-3` 排行档会漏报 B 的同档。
+
+- 新增 `_boss_claim_state_by_activity`：按 `boss_progress` 的 activity key 归位
+  各首领的 unlocked/claimed/rank_claimed；无 `boss_progress` 的旧 flat 快照回退
+  共享投影（单首领语义不变）。
+- `_claimable_boss_milestone_count` 逐首领用自己的 unlocked/claimed与自己配置的
+  `server_milestones` 求交；`_claimable_boss_rank_count` 逐首领用自己的
+  `rank_claimed` 判档（名次沿用 `boss_board_positions`）；奖励目录
+  `reward_catalog_text` 的首领进度/排行段已领标记按当前首领自己的状态判定。
+- 不改领取写路径、回执结构、表结构或配置键；只读复用同一快照。
+- `tests/test_activity_boss_claim_scoping.py` 聚焦套件 `6/6` 通过，覆盖 A 已领不
+  抑制 B、A 已解锁不冒充 B、排行档独立、flat 回退、helper 归位与奖励目录分段
+  标记；上一切片 `tests/test_activity_boss_rank_positions.py` 的已领档断言随
+  per-activity 表示更新。受影响活动套件合计 `104 passed + 4 subtests`。
+  architecture/inventory/progress 门禁真实 exit 0；`git diff --check` 干净。
+- 本轮只改 `center.py`、`read_model_application.py`、新聚焦测试、既有聚焦断言与
+  正式文档；develop 推送/CI、审查与 main 快进/CI 按发布门继续完成。未部署，未
+  读取或写入真实游戏库，不发送真实消息。
+
 ## 冻结清单与停止条件
 
 冻结范围仅包括活动 Web 六来源一键代领 API、权限/错误合同、管理员面板、兼容性保护、聚焦测试、路由清单和正式文档。不得新增奖励经济、schema/数据迁移、玩家身份模型、后台活动编辑器、通用 UI 框架或 unrelated refactor。

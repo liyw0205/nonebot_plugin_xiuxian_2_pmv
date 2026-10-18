@@ -105,7 +105,10 @@ The historical package owns command names during the compatibility release. New 
 首领进度、首领排行），两者复用同一 `detail_action_tips` 判定，提示与一键领取入口一致；
 首领排行名次按首领玩法活动自身的 key 读取（快照 `boss_board_positions` 按首领活动逐个
 计算名次，多首领配置下各首领按自己的名次匹配自己的档位；单首领与旧快照回退到共享
-`board_positions["boss"]`）。详情与状态
+`board_positions["boss"]`）。首领进度与排行领取状态同样按首领活动各自归并
+（`_boss_claim_state_by_activity`，回执按 `(activity_key, user, key)` 独立），多首领
+配置下一个首领的已领/已解锁不再抑制或冒充另一首领的同名档位；单首领与旧 flat 快照
+回退到共享投影。详情与状态
 读取只使用活动配置及既有只读快照，不建表、不补写迁移、不创建缺失数据库文件；空库无个人
 数据时仍可读取公共详情。审计日志仍由 `GET /api/v1/activity` 提供。写入口仍是既有
 `POST /api/v1/activity/rewards/claim`（一键领取，带 `Idempotency-Key`，覆盖六来源）。

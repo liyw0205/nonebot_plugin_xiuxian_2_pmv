@@ -151,10 +151,9 @@ class BossRankPerActivityTests(unittest.TestCase):
         self._seed_damage([("boss_a", "u1", 500)])
         bosses = [_boss("boss_a")]
         snapshot = self._snapshot(bosses)
-        snapshot = {
-            **snapshot,
-            "boss_rank_claimed": {"1-3"},
-        }
+        # The claim lives in the per-activity boss_progress entry — the same
+        # representation the repository writes.
+        snapshot["boss_progress"]["boss_a"]["rank_claimed"] = {"1-3"}
         config = _config(bosses)
         self.assertEqual(_claimable_boss_rank_count(config, snapshot), 0)
 

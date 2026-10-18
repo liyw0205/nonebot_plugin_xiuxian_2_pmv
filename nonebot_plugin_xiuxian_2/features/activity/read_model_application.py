@@ -103,7 +103,7 @@ class ActivityReadModelApplication:
         )
         from ...xiuxian.xiuxian_activity.activity_utils import _as_int, _clean_text
         from ...xiuxian.xiuxian_activity.activity_views import _format_activity_task
-        from .center import ENDED, _boss_claim_state, _boss_milestone_keys
+        from .center import ENDED, _boss_milestone_keys
         from .gameplay_progress import claimable_pass_rewards, task_claimable
         from .rank import position_text, rewards_for_board, tier_for_position
         from .stage import stage_timeline, stage_window_bounds
@@ -264,12 +264,22 @@ class ActivityReadModelApplication:
                     lines.append(f"  我的名次：{position_text(position, 0)}")
 
         # 首领进度（全服）与首领排行奖励。
-        unlocked, claimed_milestones, claimed_boss_ranks = _boss_claim_state(snapshot)
+        from .center import _boss_claim_state_by_activity
+
+        boss_claim_states = _boss_claim_state_by_activity(snapshot)
         milestone_keys = _boss_milestone_keys(config)
         for activity in get_gameplay_activities(config):
             if activity.get("type") != "activity_boss":
                 continue
             label = str(activity.get("name") or activity.get("key") or "活动首领")
+            activity_key = str(activity.get("key") or "")
+            claim_state = boss_claim_states.get(activity_key)
+            if claim_state is None and "" in boss_claim_states:
+                # Flat single-activity snapshot: fall back to the shared state.
+                claim_state = boss_claim_states[""]
+            unlocked, claimed_milestones, claimed_boss_ranks = (
+                claim_state if claim_state is not None else (set(), set(), set())
+            )
             milestones = [
                 row for row in activity.get("server_milestones") or [] if isinstance(row, Mapping)
             ]
@@ -295,7 +305,6 @@ class ActivityReadModelApplication:
                 lines.extend(("", f"【{label} · 排行奖励】"))
                 # Each boss activity is judged by its own rank position; the
                 # shared "boss" position is only the single-boss fallback.
-                activity_key = str(activity.get("key") or "")
                 boss_positions = snapshot.get("boss_board_positions") or {}
                 if activity_key and activity_key in boss_positions:
                     position = _as_int(boss_positions.get(activity_key), 0)

@@ -516,12 +516,65 @@ def _boss_claim_state(snapshot: Mapping[str, Any]) -> tuple[set[str], set[str], 
     return unlocked, claimed, rank_claimed
 
 
+def _boss_claim_state_by_activity(
+    snapshot: Mapping[str, Any],
+) -> dict[str, tuple[set[str], set[str], set[str]]]:
+    """Per-boss-activity claim state.
+
+    The claim receipts are keyed by ``(activity_key, user_id, key)``, so each
+    boss's unlocked/claimed sets are independent; a flat single-activity
+    snapshot falls back to the shared projection for every boss that has no
+    ``boss_progress`` entry.
+    """
+    flat: tuple[set[str], set[str], set[str]] = (
+        set(snapshot.get("boss_milestone_unlocked") or ()),
+        set(snapshot.get("boss_milestone_claimed") or ()),
+        set(snapshot.get("boss_rank_claimed") or ()),
+    )
+    states: dict[str, tuple[set[str], set[str], set[str]]] = {}
+    has_progress = False
+    for activity_key, progress in (snapshot.get("boss_progress") or {}).items():
+        if not isinstance(progress, Mapping):
+            continue
+        has_progress = True
+        states[str(activity_key)] = (
+            set(progress.get("milestones_unlocked") or ()),
+            set(progress.get("milestones_claimed") or ()),
+            set(progress.get("rank_claimed") or ()),
+        )
+    if not has_progress:
+        return {"": flat}
+    return states
+
+
 def _claimable_boss_milestone_count(config: Mapping[str, Any], snapshot: Mapping[str, Any]) -> int:
-    """Unlocked server-progress milestones the player has not claimed yet."""
-    unlocked, claimed, _ = _boss_claim_state(snapshot)
-    if not unlocked:
-        return 0
-    return len((unlocked & _boss_milestone_keys(config)) - claimed)
+    """Unlocked server-progress milestones the player has not claimed yet.
+
+    Each boss activity is judged by its own unlocked/claimed sets; a shared
+    union would let one boss's claim suppress another boss's milestone.
+    """
+    from ...xiuxian.xiuxian_activity.activity_rules import get_gameplay_activities as _all_activities
+
+    states = _boss_claim_state_by_activity(snapshot)
+    count = 0
+    for activity in get_gameplay_activities(dict(config)):
+        if activity.get("type") != "activity_boss":
+            continue
+        activity_key = str(activity.get("key") or "")
+        state = states.get(activity_key)
+        if state is None and "" in states:
+            # Flat single-activity snapshot: every boss falls back to it.
+            state = states[""]
+        if state is None:
+            continue
+        unlocked, claimed, _ = state
+        configured = {
+            str(milestone.get("key") or f"p{int(float(milestone.get('hp_percent', 0)))}")
+            for milestone in activity.get("server_milestones") or []
+            if isinstance(milestone, Mapping)
+        }
+        count += len((unlocked & configured) - claimed)
+    return count
 
 
 def _claimable_boss_rank_count(config: Mapping[str, Any], snapshot: Mapping[str, Any]) -> int:
@@ -534,7 +587,7 @@ def _claimable_boss_rank_count(config: Mapping[str, Any], snapshot: Mapping[str,
 
     per_activity = snapshot.get("boss_board_positions") or {}
     legacy_position = _as_int((snapshot.get("board_positions") or {}).get("boss"), 0)
-    _, _, claimed = _boss_claim_state(snapshot)
+    states = _boss_claim_state_by_activity(snapshot)
     count = 0
     for activity in get_gameplay_activities(dict(config)):
         if activity.get("type") != "activity_boss":
@@ -548,6 +601,10 @@ def _claimable_boss_rank_count(config: Mapping[str, Any], snapshot: Mapping[str,
             position = legacy_position
         if position <= 0:
             continue
+        state = states.get(activity_key)
+        if state is None and "" in states:
+            state = states[""]
+        claimed = state[2] if state is not None else set()
         tiers = [
             {"rank_min": tier.get("rank_min"), "rank_max": tier.get("rank_max")}
             for tier in activity.get("rank_rewards") or []
