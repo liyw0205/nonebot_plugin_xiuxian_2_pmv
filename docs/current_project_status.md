@@ -101,7 +101,7 @@ POST 与本地三条历史写入无法原子提交，进程在远端接受后、
   develop CI run `39080592491`、main CI run `39080959210` 均成功。未部署，未读取或写入
   真实游戏库，不发送真实消息。
 
-## 当前完整目标：多首领排行名次按首领活动区分
+## 已完成目标：多首领排行名次按首领活动区分
 
 沿活动中心路线图收口多首领配置下的排行名次缺陷：快照 `board_positions["boss"]`
 只用第一个首领活动的 key 计算，而 `_claimable_boss_rank_count` 用这一个共享名次
@@ -118,8 +118,9 @@ POST 与本地三条历史写入无法原子提交，进程在远端接受后、
   中心渲染；受影响活动套件合计 `98 passed + 4 subtests`。architecture/inventory/progress
   门禁真实 exit 0；`git diff --check` 干净。
 - 本轮只改 `read_model_repository.py`、`center.py`、`read_model_application.py`、
-  新聚焦测试与正式文档；develop 推送/CI、审查与 main 快进/CI 按发布门继续完成。
-  未部署，未读取或写入真实游戏库，不发送真实消息。
+  新聚焦测试与正式文档。目标提交 `44eecf85` 已推送 develop 并快进合入 main；
+  develop CI run `39093663915`、main CI run `39094053406` 均成功。未部署，未读取或
+  写入真实游戏库，不发送真实消息。
 
 ## 冻结清单与停止条件
 
