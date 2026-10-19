@@ -579,7 +579,50 @@ class ActivityReadModelApplication:
                 lines.append(f"可领阶段奖励：{names}｜活动阶段领取")
             else:
                 lines.append("可领阶段奖励：暂无")
+            self._append_stage_timeline(
+                lines, timeline, participated=participated, claimed=claimed,
+            )
+        else:
+            self._append_stage_timeline(lines, timeline)
         return "\n".join(lines).strip()
+
+    @staticmethod
+    def _append_stage_timeline(
+        lines,
+        timeline: dict,
+        *,
+        participated: set[str] | None = None,
+        claimed: set[str] | None = None,
+    ) -> None:
+        """Full stage schedule: every configured stage with its own state.
+
+        Personal claim marks render only for a resolved player; ended stages
+        without configured rewards carry no claim marker.
+        """
+        stages = timeline.get("stages") or []
+        if not stages:
+            return
+        lines.extend(("", "【阶段日程】"))
+        for stage in stages:
+            status = str(stage.get("status") or "")
+            marker = {"进行中": "▶", "已结束": "✓", "未开始": "…"}.get(status, "·")
+            row = f"- {marker} {stage['name']}（{status}）"
+            window = f"{stage.get('start_time', '')} 至 {stage.get('end_time', '')}"
+            row += f" {window}"
+            remaining = str(stage.get("remaining_text") or "")
+            if remaining:
+                row += f" {remaining}"
+            if stage.get("reward_rows"):
+                key = str(stage.get("key") or "")
+                if participated is None or claimed is None:
+                    row += " 奖励：已配置"
+                elif key in claimed:
+                    row += " 奖励：已领取"
+                elif key in (participated or set()):
+                    row += " 奖励：可领取｜活动阶段领取"
+                else:
+                    row += " 奖励：未领取"
+            lines.append(row)
 
     @staticmethod
     def _append_stage_summary(
