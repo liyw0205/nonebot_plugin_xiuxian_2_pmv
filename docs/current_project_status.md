@@ -169,7 +169,7 @@ A 已解锁会冒充 B 未达标的进度，A 已领 `1-3` 排行档会漏报 B 
   已推送 develop 并快进合入 main；develop CI run `39244610916`、main CI run
   `39245281531` 均成功。未部署，未读取或写入真实游戏库，不发送真实消息。
 
-## 当前完整目标：积分事件每日上限进度闭环
+## 已完成目标：积分事件每日上限进度闭环
 
 活动中心积分玩法的事件结算带每规则 `daily_limit`（结算按
 `activity_point_event_log` 当日累计截断），但玩家侧完全不可见——每日上限是黑盒。
@@ -191,8 +191,9 @@ A 已解锁会冒充 B 未达标的进度，A 已领 `1-3` 排行档会漏报 B 
   architecture/inventory/progress 门禁真实 exit 0；`git diff --check` 干净。
 - 本轮只改 `gameplay_progress.py`、`read_model_repository.py`、
   `read_model_application.py`（仅 snapshot 传参）、`center.py`、新聚焦测试与正式
-  文档；develop 推送/CI、审查与 main 快进/CI 按发布门继续完成。未部署，未读取
-  或写入真实游戏库，不发送真实消息。
+  文档。目标提交 `dc1d842c` 已推送 develop 并快进合入 main；develop CI run
+  `39266368432`、main CI run `39267090259` 均成功。未部署，未读取或写入真实游戏库，
+  不发送真实消息。
 
 ## 冻结清单与停止条件
 
