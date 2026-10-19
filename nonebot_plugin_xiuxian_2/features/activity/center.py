@@ -222,6 +222,7 @@ def _gameplay_progress_parts(
     """
     pity_state = snapshot.get("collect_pity")
     balances = snapshot.get("point_balances")
+    daily_totals = snapshot.get("point_event_daily_totals")
     parts: list[str] = []
     for activity in get_gameplay_activities(dict(config)):
         activity_key = str(activity.get("key") or "")
@@ -246,6 +247,15 @@ def _gameplay_progress_parts(
             parts.append(
                 f"{point_name} {max(0, _as_int(balances.get(activity_key), 0))}"
             )
+            from .gameplay_progress import point_event_daily_parts
+
+            daily_parts = (
+                point_event_daily_parts(activity, daily_totals)
+                if daily_totals is not None
+                else []
+            )
+            if daily_parts:
+                parts[-1] += f"（今日 {'、'.join(daily_parts)}）"
         elif activity.get("type") == "activity_boss":
             progress = (snapshot.get("boss_progress") or {}).get(activity_key)
             if not progress:

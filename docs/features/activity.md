@@ -34,7 +34,12 @@ The compatibility command remains available while the new application boundary i
 进度行同时展示首领进度：`{首领名} 血量 {pct}%、我的伤害 {damage}`，存在可领取的
 进度奖励时追加 `进度奖励 N 项可领`，与一键领取的首领进度计数同源。进度行还包含当前阶段
 （`阶段 {名称} 剩余 {倒计时}`，无限或已结束不显示倒计时）与本人榜单名次
-（`{榜单名} 第 N 名`），数据来自同一只读快照与活动配置。
+（`{榜单名} 第 N 名`），数据来自同一只读快照与活动配置。积分玩法的进度段在余额后
+追加当日进度：每个配置 `daily_limit` 的事件规则渲染 `（今日 {label} 今日
+{earned}/{limit}）`（达上限追加 `已达上限`），数据与结算侧每日上限同源
+（`activity_point_event_log` 当日累计，按 activity+user+date 有界查询）；事件日志表
+缺失（旧库）或未配置 `daily_limit` 时不渲染该进度；`活动积分` 视图保持与旧
+`build_activity_points_text` 逐字相等，不携带个人进度。
 
 QQ 使用现有原生 Markdown、蓝字命令链接和可选键盘提取；OneBot 或 Markdown 不可用时，
 同一文案经公共发送入口降级为纯文本。此切片只读，不新增表、不执行奖励发放、不引入

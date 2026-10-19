@@ -155,6 +155,7 @@ class ActivityReadModelApplication:
                 stage_windows=stage_windows,
                 board_sources=board_sources,
                 boss_activity_keys=boss_keys,
+                now=now,
             )
 
         def mark(claimed: bool, claimable: bool) -> str:
@@ -426,6 +427,7 @@ class ActivityReadModelApplication:
             stage_windows=stage_windows,
             board_sources=board_sources,
             boss_activity_keys=boss_keys,
+            now=now,
         )
 
     def activity_center_text(self, user_id: str | None = None) -> str:
@@ -497,6 +499,7 @@ class ActivityReadModelApplication:
                 stage_windows=stage_windows,
                 board_sources=board_sources,
                 boss_activity_keys=boss_keys,
+                now=now,
             )
         claimable = bool(user_id and claimable_reward_count(config, snapshot, now))
         lines = ["**活动中心**"]
@@ -1352,9 +1355,10 @@ class ActivityReadModelApplication:
             rules = activity.get("event_rules") or []
             if rules:
                 rule_text = "、".join(
-                    f"{ACTIVITY_EVENT_LABELS.get(rule.get('event'), rule.get('event'))}+"
+                    f"{ACTIVITY_EVENT_LABELS.get(str(rule.get('event')), str(rule.get('event')))}+"
                     f"{_as_int(rule.get('points'))}"
                     for rule in rules
+                    if isinstance(rule, dict)
                 )
                 lines.append(f"积分来源：{rule_text}")
         return "\n".join(lines).strip()

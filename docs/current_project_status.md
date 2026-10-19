@@ -169,6 +169,31 @@ A 已解锁会冒充 B 未达标的进度，A 已领 `1-3` 排行档会漏报 B 
   已推送 develop 并快进合入 main；develop CI run `39244610916`、main CI run
   `39245281531` 均成功。未部署，未读取或写入真实游戏库，不发送真实消息。
 
+## 当前完整目标：积分事件每日上限进度闭环
+
+活动中心积分玩法的事件结算带每规则 `daily_limit`（结算按
+`activity_point_event_log` 当日累计截断），但玩家侧完全不可见——每日上限是黑盒。
+本切片把同一累计渲染为进度。
+
+- `overview_snapshot` 在同一只读单元内按 activity+user+date 有界聚合当日事件积分，
+  新增可选快照键 `point_event_daily_totals`（事件日志表缺失时为 `None`，旧库兼容）。
+- 共享纯 helper `point_event_daily_parts`（`gameplay_progress.py`）：每个配置
+  `daily_limit` 的事件规则产出 `{label} 今日 {earned}/{limit}`（达上限追加
+  `已达上限`）；中心进度行积分段在余额后追加 `（今日 …）`。
+- `活动积分` 视图（`points_text`）与旧 `build_activity_points_text` 逐字 parity
+  锁定，不携带个人进度——进度只在中心卡片渲染（skill 规则：parity-pinned 方法
+  不能长数据，用新位置承载）。
+- 不改积分结算、每日上限截断、商店购买或任何写路径；不新增命令、表、迁移或
+  配置键。
+- `tests/test_activity_point_daily_progress.py` 新聚焦套件 `7/7` 通过（进度渲染、
+  达上限、跨日/跨用户不计、匿名无进度、旧库缺表、无限制规则、helper 单测）；
+  受影响活动套件合计 `121 passed + 4 subtests`（含 read_model parity）。
+  architecture/inventory/progress 门禁真实 exit 0；`git diff --check` 干净。
+- 本轮只改 `gameplay_progress.py`、`read_model_repository.py`、
+  `read_model_application.py`（仅 snapshot 传参）、`center.py`、新聚焦测试与正式
+  文档；develop 推送/CI、审查与 main 快进/CI 按发布门继续完成。未部署，未读取
+  或写入真实游戏库，不发送真实消息。
+
 ## 冻结清单与停止条件
 
 冻结范围仅包括活动 Web 六来源一键代领 API、权限/错误合同、管理员面板、兼容性保护、聚焦测试、路由清单和正式文档。不得新增奖励经济、schema/数据迁移、玩家身份模型、后台活动编辑器、通用 UI 框架或 unrelated refactor。

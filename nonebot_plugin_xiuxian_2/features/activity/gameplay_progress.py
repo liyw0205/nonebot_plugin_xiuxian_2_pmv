@@ -62,6 +62,39 @@ def gameplay_status_text(activity: Mapping[str, Any]) -> str:
     return "进行中" if ok else (_clean_text(reason) or "未开放")
 
 
+def point_event_daily_parts(
+    activity: Mapping[str, Any],
+    daily_totals: Mapping[tuple[str, str], int],
+) -> list[str]:
+    """Per-rule daily progress parts for one points activity, in config order.
+
+    ``daily_totals`` maps ``(activity_key, event_key)`` to the points earned
+    today (the same accumulation the settlement-side daily limit reads). Only
+    rules with ``daily_limit > 0`` render progress; the part reads
+    ``{label} 今日 {earned}/{limit}`` and appends ``已达上限`` when the cap is
+    reached.
+    """
+    activity_key = str(activity.get("key") or "")
+    parts: list[str] = []
+    for rule in activity.get("event_rules") or []:
+        if not isinstance(rule, Mapping):
+            continue
+        limit = max(0, _as_int(rule.get("daily_limit"), 0))
+        if limit <= 0:
+            continue
+        event = str(rule.get("event") or "")
+        label = ACTIVITY_EVENT_LABELS.get(event, event)
+        earned = min(
+            limit,
+            max(0, _as_int(daily_totals.get((activity_key, event), 0), 0)),
+        )
+        part = f"{label} 今日 {earned}/{limit}"
+        if earned >= limit:
+            part += "（已达上限）"
+        parts.append(part)
+    return parts
+
+
 def task_claimable(state: Mapping[str, Any], target: Any) -> bool:
     """A task reward is claimable when it is unclaimed and progress is met."""
     if bool(_as_int(state.get("claimed"), 0)):

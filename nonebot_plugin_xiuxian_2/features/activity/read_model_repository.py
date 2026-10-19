@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import sqlite3
 from collections.abc import Sequence
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -213,6 +215,40 @@ class ActivityReadModelSqlRepository:
                 "points": max(0, int(row["points"] or 0)),
                 "total_points": max(0, int(row["total_points"] or 0)),
             }
+            for row in rows
+        }
+
+    def point_event_daily_totals(
+        self, user_id: str, activity_keys: list[str], date: str
+    ) -> dict[tuple[str, str], int] | None:
+        """Today's earned points per ``(activity_key, event_key)``.
+
+        Read-only and bounded (activity keys + user + date); returns ``None``
+        when the optional event-log table is missing so the view skips the
+        progress segment instead of advertising zeros. Mirrors the
+        settlement-side daily-limit accumulation exactly.
+        """
+        keys = tuple(dict.fromkeys(str(key) for key in activity_keys if str(key)))
+        if not self.database.is_file() or not keys:
+            return {}
+        placeholders = ",".join("?" for _ in keys)
+        try:
+            with DatabaseUnitOfWork(self.database, read_only=True) as uow:
+                if "activity_point_event_log" not in self._table_names(uow):
+                    return None
+                rows = uow.query_all(
+                    "SELECT activity_key,event_key,COALESCE(SUM(points),0) AS earned "
+                    "FROM activity_point_event_log "
+                    f"WHERE activity_key IN ({placeholders}) AND user_id=? AND record_date=? "
+                    "GROUP BY activity_key,event_key",
+                    (*keys, str(user_id), str(date)),
+                )
+        except sqlite3.Error:
+            return None
+        return {
+            (str(row["activity_key"]), str(row["event_key"])): max(
+                0, int(row["earned"] or 0)
+            )
             for row in rows
         }
 
@@ -637,12 +673,15 @@ class ActivityReadModelSqlRepository:
         stage_windows: Sequence[tuple[str, str | None, str | None]] = (),
         board_sources: Sequence[str] = (),
         boss_activity_keys: Sequence[str] = (),
+        now: Any = None,
     ) -> dict[str, Any]:
         """Read all personal overview state within a single game_db snapshot.
 
         ``stage_windows``/``board_sources`` opt into the claim state the activity
         center needs to decide whether anything is claimable; both default to
-        empty so existing callers keep their current snapshot shape.
+        empty so existing callers keep their current snapshot shape. ``now``
+        (datetime) selects the day for the optional point-event daily totals;
+        it defaults to the current time.
         """
         empty: dict[str, Any] = {
             "sign": {},
@@ -661,6 +700,7 @@ class ActivityReadModelSqlRepository:
             "board_positions": {},
             "boss_board_positions": {},
             "boss_progress": {},
+            "point_event_daily_totals": None,
         }
         if not self.database.is_file():
             return empty
@@ -885,6 +925,28 @@ class ActivityReadModelSqlRepository:
                     uow, "boss", boss_key, str(user_id)
                 )
                 boss_board_positions[boss_key] = max(0, int(position))
+            # Optional per-event daily totals for the points progress line;
+            # the event log is optional so older databases get None (the
+            # progress segment then renders without the 今日 part).
+            point_event_daily_totals: dict[tuple[str, str], int] | None = None
+            if point_keys and "activity_point_event_log" in tables:
+                point_placeholders = ",".join("?" for _ in point_keys)
+                day = (
+                    now.strftime("%Y-%m-%d")
+                    if now is not None
+                    else datetime.now().strftime("%Y-%m-%d")
+                )
+                point_event_daily_totals = {}
+                for row in uow.query_all(
+                    "SELECT activity_key,event_key,COALESCE(SUM(points),0) AS earned "
+                    "FROM activity_point_event_log "
+                    f"WHERE activity_key IN ({point_placeholders}) AND user_id=? AND record_date=? "
+                    "GROUP BY activity_key,event_key",
+                    (*point_keys, str(user_id), day),
+                ):
+                    point_event_daily_totals[
+                        (str(row["activity_key"]), str(row["event_key"]))
+                    ] = max(0, int(row["earned"] or 0))
 
         tasks = {
             (str(row["scope_type"]), str(row["scope_key"]), str(row["task_key"])): {
@@ -924,6 +986,7 @@ class ActivityReadModelSqlRepository:
             "board_positions": board_positions,
             "boss_board_positions": boss_board_positions,
             "boss_progress": boss_progress,
+            "point_event_daily_totals": point_event_daily_totals,
         }
 
 
