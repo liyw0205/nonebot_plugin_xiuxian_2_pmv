@@ -147,7 +147,7 @@ A 已解锁会冒充 B 未达标的进度，A 已领 `1-3` 排行档会漏报 B 
   `39141994905`、main CI run `39142399243` 均成功。未部署，未读取或写入真实游戏库，
   不发送真实消息。
 
-## 当前完整目标：活动中心完整玩家流程——阶段时间线视图
+## 已完成目标：活动中心完整玩家流程——阶段时间线视图
 
 活动中心各玩家流程（发现/详情/签到/任务/战令/阶段/排行/首领/集字/积分/奖励
 目录/一键领取/Web 管理面）均已交付并有聚焦测试；本切片补全 `活动阶段` 视图
@@ -165,9 +165,9 @@ A 已解锁会冒充 B 未达标的进度，A 已领 `1-3` 排行档会漏报 B 
   受影响套件（web_state/stage/center/read_model/detail_actions/claim_sources/
   claimable）合计 `71 passed`。architecture/inventory/progress 门禁真实 exit 0；
   `git diff --check` 干净。
-- 本轮只改 `read_model_application.py`、新聚焦测试与正式文档；develop 推送/CI、
-  审查与 main 快进/CI 按发布门继续完成。未部署，未读取或写入真实游戏库，不发送
-  真实消息。
+- 本轮只改 `read_model_application.py`、新聚焦测试与正式文档。目标提交 `70465227`
+  已推送 develop 并快进合入 main；develop CI run `39244610916`、main CI run
+  `39245281531` 均成功。未部署，未读取或写入真实游戏库，不发送真实消息。
 
 ## 冻结清单与停止条件
 
