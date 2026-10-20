@@ -221,7 +221,7 @@ A 已解锁会冒充 B 未达标的进度，A 已领 `1-3` 排行档会漏报 B 
   `39345702933`、main CI run `39346383377` 均成功。未部署，未读取或写入真实
   游戏库，不发送真实消息。
 
-## 当前完整目标：G1 积分商店购买引导闭环（roadmap-index G1）
+## 已完成目标：G1 积分商店购买引导闭环（roadmap-index G1）
 
 `point_shop_text` 被 parity 锁定（与旧 `build_activity_shop_text` 逐字相等），
 商店视图没有购买命令引导，玩家看到商品不知道发送 `活动购买 <商品名>`；达
@@ -239,8 +239,10 @@ A 已解锁会冒充 B 未达标的进度，A 已领 `1-3` 排行档会漏报 B 
   （point_shop_purchase/read_model/center/point_daily_progress/gameplay_consistency）
   合计 `51 passed + 4 subtests`。三门禁真实 exit 0；`git diff --check` 干净。
 - 本轮只改 `read_model_application.py`（新增 sibling）、`__init__.py`（handler
-  改调）、新聚焦测试与正式文档；develop 推送/CI、审查与 main 快进/CI 按发布
-  门继续完成。未部署，未读取或写入真实游戏库，不发送真实消息。
+  改调）、新聚焦测试与正式文档。目标提交 `7c68ffce` 与门禁字面量修正
+  `5f8bc2f1` 已推送 develop；develop CI run `39393218002`（首推因
+  activity_points_shop matcher 字面量翻转失败）、`39394735034` 均已核验，
+  后者 success。
 
 ## 冻结清单与停止条件
 
