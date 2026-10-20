@@ -633,7 +633,7 @@ class ActivityReadModelApplication:
                 elif key in (participated or set()):
                     row += " 奖励：可领取｜活动阶段领取"
                 else:
-                    row += " 奖励：未领取"
+                    row += " 奖励：未领取（参与记录来自活动期间的签到/任务/玩法记录）"
             lines.append(row)
 
     @staticmethod
