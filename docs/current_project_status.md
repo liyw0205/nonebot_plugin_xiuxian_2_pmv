@@ -221,6 +221,27 @@ A 已解锁会冒充 B 未达标的进度，A 已领 `1-3` 排行档会漏报 B 
   `39345702933`、main CI run `39346383377` 均成功。未部署，未读取或写入真实
   游戏库，不发送真实消息。
 
+## 当前完整目标：G1 积分商店购买引导闭环（roadmap-index G1）
+
+`point_shop_text` 被 parity 锁定（与旧 `build_activity_shop_text` 逐字相等），
+商店视图没有购买命令引导，玩家看到商品不知道发送 `活动购买 <商品名>`；达
+个人上限/售罄也无终态标注。
+
+- 新增 sibling `point_shop_guidance_text`：每商品行追加
+  `购买：活动购买 {商品名}`；`bought>=limit>0` 标 `已兑换完（x/y）`、
+  `stock_limit>0 且 sold>=stock_limit` 标 `已售罄`，两者不再引导；
+  `limit<=0` 不限商品始终可购；尾部显示 `可购商品 N 件` 汇总。
+- `活动商店` handler（`__init__.py:395`）改调 sibling；`point_shop_text`
+  字节不变（parity 回归锁定）。
+- 不改购买结算、上限/库存校验、拒绝语义；不新增命令/表/迁移/配置键。
+- `tests/test_activity_shop_guidance.py` 新聚焦套件 `6/6` 通过（可购引导、
+  个人上限终态、售罄终态、不限商品、parity 不变、汇总行）；受影响套件
+  （point_shop_purchase/read_model/center/point_daily_progress/gameplay_consistency）
+  合计 `51 passed + 4 subtests`。三门禁真实 exit 0；`git diff --check` 干净。
+- 本轮只改 `read_model_application.py`（新增 sibling）、`__init__.py`（handler
+  改调）、新聚焦测试与正式文档；develop 推送/CI、审查与 main 快进/CI 按发布
+  门继续完成。未部署，未读取或写入真实游戏库，不发送真实消息。
+
 ## 冻结清单与停止条件
 
 冻结范围仅包括活动 Web 六来源一键代领 API、权限/错误合同、管理员面板、兼容性保护、聚焦测试、路由清单和正式文档。不得新增奖励经济、schema/数据迁移、玩家身份模型、后台活动编辑器、通用 UI 框架或 unrelated refactor。

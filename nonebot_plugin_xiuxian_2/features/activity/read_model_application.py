@@ -1423,6 +1423,85 @@ class ActivityReadModelApplication:
                 )
         return "\n".join(lines).strip()
 
+    def point_shop_guidance_text(self, user_id: str) -> str:
+        """Shop view with per-item purchase guidance and terminal states.
+
+        Sibling of the parity-pinned ``point_shop_text``: same data path, plus
+        per-item `购买：活动购买 {商品名}` guidance, `已兑换完`/`已售罄`
+        terminal states, and a purchasable-count summary line.
+        """
+        from ...xiuxian.xiuxian_activity.activity_config import activity_state
+        from ...xiuxian.xiuxian_activity.activity_rules import get_gameplay_activities
+        from ...xiuxian.xiuxian_activity.activity_utils import _as_int
+
+        activities = [
+            activity
+            for activity in get_gameplay_activities(self._config())
+            if activity.get("type") == "event_points"
+        ]
+        lines = ["【活动商店】"]
+        if not activities:
+            lines.append("暂无积分商店")
+            return "\n".join(lines)
+
+        state = self.repository.point_shop_state(
+            str(user_id), [str(activity["key"]) for activity in activities]
+        )
+        purchasable = 0
+        example_name = ""
+        for activity in activities:
+            activity_key = str(activity["key"])
+            ok, reason = activity_state(activity)
+            point_name = activity.get("point_name") or "活动积分"
+            balance = state["balances"].get(activity_key, 0)
+            shop = activity.get("shop") or []
+            lines.extend(
+                [
+                    "",
+                    f"【{activity['name']}】{'进行中' if ok else reason}",
+                    f"当前{point_name}：{balance}",
+                ]
+            )
+            if not shop:
+                lines.append("暂无商店商品")
+                continue
+            for item in shop:
+                item_key = str(item.get("item_key") or "")
+                item_name = str(item.get("name") or item_key)
+                purchase_key = (activity_key, item_key)
+                bought = state["purchases"].get(purchase_key, 0)
+                limit = _as_int(item.get("limit"), 1)
+                stock_limit = _as_int(item.get("stock_limit"), 0)
+                sold = (
+                    state["stock"].get(purchase_key, 0) if stock_limit > 0 else 0
+                )
+                status_text = ""
+                guidance = f"，购买：活动购买 {item_name}"
+                if limit > 0 and bought >= limit:
+                    status_text = f"，已兑换完（{bought}/{limit}）"
+                    guidance = ""
+                elif stock_limit > 0 and sold >= stock_limit:
+                    status_text = "，已售罄"
+                    guidance = ""
+                else:
+                    purchasable += 1
+                    if not example_name:
+                        example_name = item_name
+                limit_text = "不限" if limit <= 0 else f"{bought}/{limit}"
+                stock_text = (
+                    f"，全服库存 {sold}/{stock_limit}" if stock_limit > 0 else ""
+                )
+                lines.append(
+                    f"- {item_name}：{_as_int(item.get('cost'))}{point_name}，"
+                    f"已兑换 {limit_text}{stock_text}{status_text}，"
+                    f"奖励：{item.get('reward') or '暂无奖励'}{guidance}"
+                )
+        if purchasable:
+            lines.append(
+                f"可购商品 {purchasable} 件，购买：活动购买 {example_name}"
+            )
+        return "\n".join(lines).strip()
+
     def pass_text(self, user_id: str) -> str:
         from ...xiuxian.xiuxian_activity.activity_config import (
             _activity_config_key,

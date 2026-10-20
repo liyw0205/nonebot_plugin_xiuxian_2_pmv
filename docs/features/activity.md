@@ -66,7 +66,13 @@ The historical package owns command names during the compatibility release. New 
 每日/周常任务、战令、阶段、排行、首领进度与首领排行，每档标注 `已领取`/`可领取`/`未达成`，
 排行段另附 `我的名次`；未配置的来源不渲染该段，未解析到用户时只渲染配置档位。
 `rewards_text()`（配置口径，与旧 `build_activity_rewards_text()` 逐字相等）保持不变，
-个人状态由新增只读方法 `reward_catalog_text(user_id)` 提供。
+个人状态由新增只读方法 `reward_catalog_text(user_id)` 提供。`活动商店` 查看视图
+由 `point_shop_guidance_text` 提供（sibling；`point_shop_text` 保持与旧
+`build_activity_shop_text` 逐字相等）：每个商品行追加 `购买：活动购买 {商品名}`
+引导；已达个人上限标注 `已兑换完（x/y）`、全服库存售罄标注 `已售罄`，两者不再
+显示购买引导；`limit<=0` 不限商品始终可购；视图尾部有可购商品时显示
+`可购商品 N 件，购买：活动购买 {商品名}` 汇总。购买结算、
+`personal_limit/stock_limit` 校验与拒绝语义不变。
 
 阶段 `features` 声明「开放内容」，对领奖路径一致生效：当前阶段不含 `claim` 时，
 `活动阶段领取`、`活动排行领取` 与一键 `活动领取` 的对应步骤同样拒绝，文案为
