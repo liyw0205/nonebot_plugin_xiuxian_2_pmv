@@ -392,7 +392,14 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await handle_send(bot, event, msg, md_type="我要修仙")
         return
 
-    text = activity_application.read_model.point_shop_guidance_text(str(user_info["user_id"]))
+    uid = str(user_info["user_id"])
+    read_model = activity_application.read_model
+    # The guidance sibling keeps per-item purchase commands; the base
+    # point_shop_text( remains the parity-pinned fallback builder.
+    text = (
+        read_model.point_shop_guidance_text(uid)
+        or activity_application.read_model.point_shop_text(uid)
+    )
     await handle_send(bot, event, text)
 
 
