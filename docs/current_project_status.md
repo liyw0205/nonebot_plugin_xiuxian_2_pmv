@@ -244,7 +244,7 @@ A 已解锁会冒充 B 未达标的进度，A 已领 `1-3` 排行档会漏报 B 
   activity_points_shop matcher 字面量翻转失败）、`39394735034` 均已核验，
   后者 success。
 
-## 当前完整目标：G2 集字兑换就绪状态与缺口明细闭环（roadmap-index G2）
+## 已完成目标：G2 集字兑换就绪状态与缺口明细闭环（roadmap-index G2）
 
 `collect_bag_text` 被 parity 锁定（与旧 `build_collect_bag_text` 逐字相等），
 背包视图无就绪标记、无缺字明细，达上限仍引导兑换。
@@ -261,8 +261,9 @@ A 已解锁会冒充 B 未达标的进度，A 已领 `1-3` 排行档会漏报 B 
   （collect_exchange/read_model/gameplay_consistency/center）合计
   `47 passed + 4 subtests`。三门禁真实 exit 0；`git diff --check` 干净。
 - 本轮只改 `read_model_application.py`（新增 sibling）、`__init__.py`（handler
-  改调）、新聚焦测试与正式文档；develop 推送/CI、审查与 main 快进/CI 按发布
-  门继续完成。未部署，未读取或写入真实游戏库，不发送真实消息。
+  改调）、新聚焦测试与正式文档。目标提交 `42b4a1e4` 已推送 develop 并快进合入
+  main；develop CI run `39421168893`、main CI run `39423466337` 均成功。未部署，
+  未读取或写入真实游戏库，不发送真实消息。
 
 ## 冻结清单与停止条件
 
