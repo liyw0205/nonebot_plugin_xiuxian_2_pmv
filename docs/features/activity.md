@@ -158,7 +158,7 @@ started 状态恢复白名单不变。
 ## 数据模型与迁移
 Manifest 保留历史 migration 标记 `legacy.activity.001`；当前启动 migration `activity_state.001/.002` 在 `game_db` 预建活动玩法表，并从 `data/activity/activity.db` 以只读、每批最多 200 行的方式回填。目标身份冲突、旧 schema 不完整或磁盘空间预检不通过时拒绝继续；迁移不会删除旧文件，也不在请求路径建表。活动模块导入不再抢先校验目标表，避免 startup migration 尚未运行时阻断新库/旧库升级。默认签到、集字、积分、道具、任务、战令和活动首领状态读写统一使用 `game_db`。
 
-`活动背包` 通过 `ActivityApplication.read_model` 使用 feature-owned 只读查询，一次 game_db 快照批量读取当前集字活动的库存、兑换次数和保底进度；旧服务 builder 保留为兼容路径。`活动兑换` 的默认 matcher 经 `ActivityApplication -> ActivityRepository -> ActivityCollectExchangeSqlRepository` 结算，复用 `activity_collect_exchange_operations`，在同一 game_db `BEGIN IMMEDIATE` 中原子更新字牌、领取次数和玩家资产。默认请求不再调用 `ensure_activity_files()`，也不创建新 schema；旧 `ActivityCollectExchangeService` 仅保留显式兼容调用。
+`活动背包` 通过 `ActivityApplication.read_model` 使用 feature-owned 只读查询，一次 game_db 快照批量读取当前集字活动的库存、兑换次数和保底进度；旧服务 builder 保留为兼容路径。`活动背包` 查看视图由 `collect_bag_guidance_text` 提供（sibling；`collect_bag_text` 保持与旧 `build_collect_bag_text` 逐字相等）：字牌齐且未达上限的词组标注 `可兑换｜活动兑换 {词组}`；缺字词组列出 `还缺 {char}x{count}`（最多 4 项，其余 `等 N 项`），与结算侧 `tokens_insufficient` 计算同源；已达兑换上限的词组标注 `已兑换完` 且不再显示兑换命令；`limit<=0` 不限词组永不显示已兑换完。兑换结算、幂等回执与拒绝语义不变。`活动兑换` 的默认 matcher 经 `ActivityApplication -> ActivityRepository -> ActivityCollectExchangeSqlRepository` 结算，复用 `activity_collect_exchange_operations`，在同一 game_db `BEGIN IMMEDIATE` 中原子更新字牌、领取次数和玩家资产。默认请求不再调用 `ensure_activity_files()`，也不创建新 schema；旧 `ActivityCollectExchangeService` 仅保留显式兼容调用。
 
 旧 `activity.db` 仍承载 `activity_config_*` 配置/事件数据及对应管理路径，并保留作备份与迁移核验来源；不能将整个文件描述为只读或缓存。活动积分、战令、集字掉落和首领战斗日志均参与每日上限、资格判断或审计，不得按缓存清理。
 

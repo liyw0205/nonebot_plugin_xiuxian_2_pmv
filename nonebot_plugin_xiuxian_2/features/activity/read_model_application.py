@@ -1330,6 +1330,117 @@ class ActivityReadModelApplication:
                 )
         return "\n".join(lines).strip()
 
+    def collect_bag_guidance_text(self, user_id: str) -> str:
+        """Bag view with per-phrase readiness and shortfall details.
+
+        Sibling of the parity-pinned ``collect_bag_text``: same data path,
+        plus `可兑换｜` readiness marks, `还缺 {char}x{count}` shortfalls
+        (capped at 4 entries) and `已兑换完` terminal states that drop the
+        exchange command.
+        """
+        from ...xiuxian.xiuxian_activity.activity_config import activity_state
+        from ...xiuxian.xiuxian_activity.activity_progress import (
+            _phrase_need_counter,
+        )
+        from ...xiuxian.xiuxian_activity.activity_rules import (
+            _collect_letters,
+            _collect_phrases,
+            get_gameplay_activities,
+        )
+        from ...xiuxian.xiuxian_activity.activity_utils import _as_int
+        from .gameplay_progress import collect_pity_entries
+
+        uid = str(user_id)
+        activities = [
+            activity
+            for activity in get_gameplay_activities(self._config())
+            if activity.get("type") == "collect_words"
+        ]
+        lines = ["【活动背包】"]
+        if not activities:
+            lines.append("暂无集字活动")
+            return "\n".join(lines)
+
+        state = self.repository.collect_state(
+            uid, [str(activity["key"]) for activity in activities]
+        )
+        inventory_state = state["inventory"]
+        claim_state = state["claims"]
+        pity_state = state["pity"]
+        for activity in activities:
+            activity_key = str(activity["key"])
+            ok, reason = activity_state(activity)
+            phrases = _collect_phrases(activity)
+            letters = _collect_letters(activity, phrases)
+            inventory = {
+                str(item.get("char") or ""): inventory_state.get(
+                    (activity_key, str(item.get("char") or "")), 0
+                )
+                for item in letters
+            }
+            letter_text = "、".join(
+                f"{item['char']}x{inventory.get(item['char'], 0)}" for item in letters
+            )
+            lines.extend(
+                [
+                    "",
+                    f"【{activity['name']}】{'进行中' if ok else reason}",
+                    "字牌：" + (letter_text or "暂无"),
+                ]
+            )
+            pity_entries = collect_pity_entries(activity, pity_state)
+            if pity_entries:
+                lines.append(
+                    "保底进度："
+                    + "、".join(
+                        f"{label} {miss}/{threshold}"
+                        for label, miss, threshold in pity_entries
+                    )
+                )
+            if not phrases:
+                lines.append("暂无兑换词组")
+                continue
+            lines.append("可兑换词组：")
+            for phrase in phrases:
+                need = _phrase_need_counter(phrase["phrase"])
+                owned = sum(
+                    min(inventory.get(word_char, 0), count)
+                    for word_char, count in need.items()
+                )
+                total_need = sum(need.values())
+                claimed = claim_state.get((activity_key, phrase["phrase"]), 0)
+                limit = _as_int(phrase.get("limit"), 1)
+                limit_text = "不限" if limit <= 0 else f"{claimed}/{limit}"
+                missing = [
+                    (word_char, count - inventory.get(word_char, 0))
+                    for word_char, count in need.items()
+                    if inventory.get(word_char, 0) < count
+                ]
+                ready = owned >= total_need
+                if limit > 0 and claimed >= limit:
+                    status = "，已兑换完"
+                    command = ""
+                elif ready:
+                    status = "，可兑换"
+                    command = f"｜活动兑换 {phrase['name']}"
+                elif missing:
+                    shown = "、".join(
+                        f"{word_char}x{count}" for word_char, count in missing[:4]
+                    )
+                    extra = (
+                        f" 等 {len(missing)} 项" if len(missing) > 4 else ""
+                    )
+                    status = f"，还缺 {shown}{extra}"
+                    command = f"，兑换：活动兑换 {phrase['name']}"
+                else:
+                    status = ""
+                    command = f"，兑换：活动兑换 {phrase['name']}"
+                lines.append(
+                    f"- {phrase['name']}：{owned}/{total_need}，已兑换 {limit_text}"
+                    f"{status}{command}"
+                )
+        return "\n".join(lines).strip()
+
     def points_text(self, user_id: str) -> str:
         from ...xiuxian.xiuxian_activity.activity_config import activity_state
         from ...xiuxian.xiuxian_activity.activity_rules import get_gameplay_activities

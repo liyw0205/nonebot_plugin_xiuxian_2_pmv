@@ -244,6 +244,26 @@ A 已解锁会冒充 B 未达标的进度，A 已领 `1-3` 排行档会漏报 B 
   activity_points_shop matcher 字面量翻转失败）、`39394735034` 均已核验，
   后者 success。
 
+## 当前完整目标：G2 集字兑换就绪状态与缺口明细闭环（roadmap-index G2）
+
+`collect_bag_text` 被 parity 锁定（与旧 `build_collect_bag_text` 逐字相等），
+背包视图无就绪标记、无缺字明细，达上限仍引导兑换。
+
+- 新增 sibling `collect_bag_guidance_text`：字牌齐+未达上限标注
+  `可兑换｜活动兑换 {词组}`；缺字列出 `还缺 {char}x{count}`（≤4 项，其余
+  `等 N 项`），与结算侧 `tokens_insufficient` 计算同源；达上限标注
+  `已兑换完` 且不再显示兑换命令；`limit<=0` 不限词组永不显示已兑换完。
+- `活动背包` handler（`__init__.py:353`）改调 sibling（主视图 + parity 回退
+  表达式保留 gate 字面量）；`collect_bag_text` 字节不变（parity 回归锁定）。
+- 不改兑换结算事务、幂等回执、拒绝语义；不新增命令/表/迁移/配置键。
+- `tests/test_activity_exchange_readiness.py` 新聚焦套件 `6/6` 通过（就绪
+  标注、缺字明细、达上限终态、不限词组、parity 不变）；受影响套件
+  （collect_exchange/read_model/gameplay_consistency/center）合计
+  `47 passed + 4 subtests`。三门禁真实 exit 0；`git diff --check` 干净。
+- 本轮只改 `read_model_application.py`（新增 sibling）、`__init__.py`（handler
+  改调）、新聚焦测试与正式文档；develop 推送/CI、审查与 main 快进/CI 按发布
+  门继续完成。未部署，未读取或写入真实游戏库，不发送真实消息。
+
 ## 冻结清单与停止条件
 
 冻结范围仅包括活动 Web 六来源一键代领 API、权限/错误合同、管理员面板、兼容性保护、聚焦测试、路由清单和正式文档。不得新增奖励经济、schema/数据迁移、玩家身份模型、后台活动编辑器、通用 UI 框架或 unrelated refactor。
