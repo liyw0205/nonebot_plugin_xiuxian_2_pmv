@@ -518,10 +518,19 @@ class ActivityReadModelApplication:
                 lines.append(personal_progress_summary(config, snapshot, now))
             links = " | ".join(
                 build_md_command_link(label, command)
-                for label, command in item.commands + item.gameplay_commands
+                for label, command in item.commands
             )
             if links:
                 lines.append(links)
+            # One compact link row per gameplay activity: every configured
+            # entry stays reachable without building a single unbounded row.
+            for group_name, group_entries in item.gameplay_entry_groups:
+                group_links = " | ".join(
+                    build_md_command_link(label, command)
+                    for label, command in group_entries
+                )
+                if group_links:
+                    lines.append(f"{group_name}：{group_links}")
         return "\n".join(lines).strip()
 
     def activity_stage_text(self, user_id: str | None = None) -> str:

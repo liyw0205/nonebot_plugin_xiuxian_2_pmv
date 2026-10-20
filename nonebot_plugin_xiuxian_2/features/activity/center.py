@@ -34,6 +34,10 @@ class ActivityCenterItem:
     gameplay_summary: str = ""
     time_hint: str = ""
     gameplay_commands: tuple[tuple[str, str], ...] = ()
+    # Per-activity entry groups: (activity name, its entries). The renderer
+    # emits one compact link row per group so every entry stays reachable
+    # without building one unbounded row.
+    gameplay_entry_groups: tuple[tuple[str, tuple[tuple[str, str], ...]], ...] = ()
 
 
 def resolve_status(
@@ -96,7 +100,9 @@ def _commands_for_activity(activity: Mapping[str, Any]) -> tuple[tuple[str, str]
                 if label and command:
                     commands.append((label, command))
         if commands:
-            return tuple(commands[:4])
+            # Configured overrides render in full; entry-count caps belong to
+            # the delivery layer, not to entry mapping.
+            return tuple(commands)
     activity_type = _clean_text(activity.get("type"))
     defaults = {
         "collect_words": (("集字背包", "活动背包"), ("集字兑换", "活动兑换")),
@@ -396,7 +402,48 @@ def gameplay_entry_commands(
                 continue
             seen.add(command)
             entries.append((label, command))
-    return tuple(entries[:4])
+    # No cap here: every in-progress gameplay keeps its entries on the card.
+    # Message-length constraints belong to the delivery layer, not to entry
+    # mapping — a cap here silently dropped boss entries once a third gameplay
+    # type was configured.
+    return tuple(entries)
+
+
+def gameplay_entry_groups(
+    config: Mapping[str, Any],
+    status: str,
+    now: datetime,
+) -> tuple[tuple[str, tuple[tuple[str, str], ...]], ...]:
+    """Per-activity entry groups for the card's link rows.
+
+    Same selection rules as :func:`gameplay_entry_commands` (in-progress
+    activities only, existing commands, deduped against earlier groups), but
+    grouped per activity so the renderer can emit one compact row per gameplay
+    instead of a single unbounded row.
+    """
+    if status != IN_PROGRESS:
+        return ()
+    groups: list[tuple[str, tuple[tuple[str, str], ...]]] = []
+    seen: set[str] = set()
+    for activity in get_gameplay_activities(dict(config)):
+        activity_status = resolve_status(
+            activity.get("start_time"),
+            activity.get("end_time"),
+            now,
+            enabled=bool(activity.get("enabled", False)),
+        )
+        if activity_status != IN_PROGRESS:
+            continue
+        name = _clean_text(activity.get("name"), "活动玩法")
+        entries: list[tuple[str, str]] = []
+        for label, command in _commands_for_activity(activity):
+            if command in seen:
+                continue
+            seen.add(command)
+            entries.append((label, command))
+        if entries:
+            groups.append((name, tuple(entries)))
+    return tuple(groups)
 
 
 def build_activity_center_items(
@@ -436,6 +483,11 @@ def build_activity_center_items(
         for label, command in gameplay_entry_commands(config, main_status, now)
         if command not in main_targets
     )
+    gameplay_entry_groups_value = tuple(
+        (name, tuple((label, command) for label, command in entries if command not in main_targets))
+        for name, entries in gameplay_entry_groups(config, main_status, now)
+        if any(command not in main_targets for _, command in entries)
+    )
     main = ActivityCenterItem(
         key=_activity_config_key(dict(config)),
         name=_clean_text(config.get("name"), "节日活动"),
@@ -448,6 +500,7 @@ def build_activity_center_items(
             main_status, config.get("start_time"), config.get("end_time"), now
         ),
         gameplay_commands=gameplay_commands,
+        gameplay_entry_groups=gameplay_entry_groups_value,
     )
     return (main,)
 
