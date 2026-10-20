@@ -195,7 +195,7 @@ A 已解锁会冒充 B 未达标的进度，A 已领 `1-3` 排行档会漏报 B 
   `39266368432`、main CI run `39267090259` 均成功。未部署，未读取或写入真实游戏库，
   不发送真实消息。
 
-## 当前完整目标：活动中心玩法入口完整覆盖
+## 已完成目标：活动中心玩法入口完整覆盖
 
 配置三类玩法（集字+积分+首领）时，`gameplay_entry_commands` 与配置覆盖路径在
 映射层硬截断 `[:4]`——首领入口（活动首领/活动首领排行）整体从卡片消失，玩家
@@ -216,9 +216,10 @@ A 已解锁会冒充 B 未达标的进度，A 已领 `1-3` 排行档会漏报 B 
   分组行、载荷上限、纯文本降级）；受影响活动套件合计 `89 passed + 4 subtests`
   （含 delivery contract）。architecture/inventory/progress 门禁真实 exit 0；
   `git diff --check` 干净。
-- 本轮只改 `center.py`、`read_model_application.py`、新聚焦测试与正式文档；
-  develop 推送/CI、审查与 main 快进/CI 按发布门继续完成。未部署，未读取或
-  写入真实游戏库，不发送真实消息。
+- 本轮只改 `center.py`、`read_model_application.py`、新聚焦测试与正式文档。
+  目标提交 `edfeb9bf` 已推送 develop 并快进合入 main；develop CI run
+  `39345702933`、main CI run `39346383377` 均成功。未部署，未读取或写入真实
+  游戏库，不发送真实消息。
 
 ## 冻结清单与停止条件
 
