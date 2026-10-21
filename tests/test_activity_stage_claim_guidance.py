@@ -39,11 +39,13 @@ ENDED = {
     "features": ["sign"],
     "rewards": [{"key": "stage", "name": "阶段礼", "reward": "灵石x100"}],
 }
+# 活动阶段领取的 runtime gate 使用真实时钟（_now_dt），进行期阶段窗口必须
+# 永续，否则 CI 在固定窗口外运行时整个 gate 拒绝。
 RUNNING = {
     "key": "running",
     "name": "进行期",
-    "start_time": "2026-10-10",
-    "end_time": "2026-10-20",
+    "start_time": "0",
+    "end_time": "无限",
     "features": ["sign", "claim"],
 }
 
