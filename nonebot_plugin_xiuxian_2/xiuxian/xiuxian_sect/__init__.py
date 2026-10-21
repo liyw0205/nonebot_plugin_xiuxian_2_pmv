@@ -2019,7 +2019,7 @@ async def sect_task_complete_(bot: Bot, event: GroupMessageEvent | PrivateMessag
                 user_info['exp'],
                 active_task['任务内容']['give'],
                 user_info['level'],
-                apply_rank_suppress=False,
+                divide_by_three=True,
                 anchor='gap',
             )
             msg = ""
@@ -2102,7 +2102,7 @@ async def sect_task_complete_(bot: Bot, event: GroupMessageEvent | PrivateMessag
                 user_info['exp'],
                 active_task['任务内容']['give'],
                 user_info['level'],
-                apply_rank_suppress=False,
+                divide_by_three=True,
                 anchor='gap',
             )
             exp_cap_note = ""
