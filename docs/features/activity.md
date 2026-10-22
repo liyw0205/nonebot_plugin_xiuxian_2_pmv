@@ -112,6 +112,14 @@ The historical package owns command names during the compatibility release. New 
 未配置 `server_milestones` 时不渲染该段。状态只读复用 `activity_boss_milestone`
 （已解锁）与 `activity_boss_milestone_claim`（本人已领），不新增表、不写库。
 
+状态块还按配置模式给出行动提示：`item_raid`/`both` 追加
+`讨伐：活动讨伐 {首领名} {首个道具名}`，`cooperative`/`both` 追加
+`讨伐：活动讨伐`。本人名次达到某排行档且该档未领时追加
+`可用 活动首领领奖 排行 领取`；存在多个活跃首领时，排行/进度提示都会带上
+首领名（`活动首领领奖 排行 {首领名}` / `活动首领领奖 进度 {首领名} …`），
+因为无名称的领奖命令在多首领下会被拒绝。排行档位读取 `activity_boss_rank_claim`
+（可选表，缺表时视为全部未领）；名次来自既有 `board_position` 查询。
+
 ## Web API
 `GET /api/v1/activity/state?user_id=<id>[&view=center|detail|stage|rank|boss]` 返回只读活动状态文本：
 默认 `view=center` 为活动中心卡片与本人进度行，`detail` 复用配置驱动的 `活动` 详情读模型，

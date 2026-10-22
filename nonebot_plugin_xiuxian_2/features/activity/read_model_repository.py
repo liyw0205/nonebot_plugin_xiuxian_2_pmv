@@ -357,6 +357,13 @@ class ActivityReadModelSqlRepository:
                     f"WHERE activity_key IN ({placeholders}) AND user_id=?",
                     (*keys, str(user_id)),
                 )
+            rank_claim_rows = []
+            if "activity_boss_rank_claim" in tables:
+                rank_claim_rows = uow.query_all(
+                    "SELECT activity_key,tier_key FROM activity_boss_rank_claim "
+                    f"WHERE activity_key IN ({placeholders}) AND user_id=?",
+                    (*keys, str(user_id)),
+                )
         result = {
             key: {
                 "hp_left": max(0, int(row["hp_left"] or 0)),
@@ -388,6 +395,10 @@ class ActivityReadModelSqlRepository:
             result.setdefault(str(row["activity_key"]), {}).setdefault(
                 "milestones_claimed", set()
             ).add(str(row["milestone_key"]))
+        for row in rank_claim_rows:
+            result.setdefault(str(row["activity_key"]), {}).setdefault(
+                "rank_claimed", set()
+            ).add(str(row["tier_key"]))
         return result
 
     def boss_rank(self, activity_key: str, limit: int = 10) -> list[dict[str, Any]]:

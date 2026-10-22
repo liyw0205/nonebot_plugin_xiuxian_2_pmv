@@ -944,7 +944,15 @@ class ActivityReadModelApplication:
         return [activity for activity in activities if activity_state(activity)[0]]
 
     @staticmethod
-    def _status_block(activity: dict[str, Any], row: dict[str, Any]) -> str:
+    def _status_block(
+        activity: dict[str, Any],
+        row: dict[str, Any],
+        rank_position: int = 0,
+        multiple_active: bool = False,
+    ) -> str:
+        from collections.abc import Mapping
+
+        from ...xiuxian.xiuxian_activity.activity_utils import _as_int
         from ...xiuxian.xiuxian_utils.utils import number_to
 
         configured_max = max(1, int(activity.get("max_hp") or 1))
@@ -963,6 +971,19 @@ class ActivityReadModelApplication:
         ]
         if activity.get("mode") in {"cooperative", "both"}:
             lines.append(f"今日挑战 {used}/{max(1, int(activity.get('daily_fight_limit') or 1))}")
+        # Action hints (G4): the boss status block carries the exact commands
+        # the configured mode supports, so players do not have to leave the
+        # view they are already looking at.
+        boss_name = str(activity.get("boss_name") or "活动首领")
+        mode = activity.get("mode")
+        if mode in {"item_raid", "both"}:
+            configured_items = activity.get("items") or []
+            if configured_items:
+                item = configured_items[0]
+                item_name = str(item.get("name") or item.get("id") or "道具")
+                lines.append(f"讨伐：活动讨伐 {boss_name} {item_name}")
+        if mode in {"cooperative", "both"}:
+            lines.append("讨伐：活动讨伐")
         inventory = row.get("inventory") or {}
         items = [
             f"{item.get('name', item.get('id', '道具'))}x{inventory.get(str(item.get('id')), 0)}"
@@ -991,31 +1012,64 @@ class ActivityReadModelApplication:
                     state = "未解锁"
                 lines.append(f"- {name}（血量≤{percent:g}%）{reward}｜{state}")
             if pending:
-                lines.append("可用 活动首领领奖 进度 领取已解锁的进度奖励")
+                if multiple_active:
+                    lines.append(f"可用 活动首领领奖 进度 {boss_name} 领取已解锁的进度奖励")
+                else:
+                    lines.append("可用 活动首领领奖 进度 领取已解锁的进度奖励")
+        # Rank-tier hint (G4): only when the player's own position reaches a
+        # configured tier and that tier is unclaimed for this boss activity.
+        if rank_position > 0:
+            from .rank import tier_for_position
+
+            tiers = [
+                {"rank_min": tier.get("rank_min"), "rank_max": tier.get("rank_max")}
+                for tier in activity.get("rank_rewards") or []
+                if isinstance(tier, Mapping)
+            ]
+            matched = tier_for_position(tiers, rank_position)
+            if matched is not None:
+                tier_key = (
+                    f"{_as_int(matched.get('rank_min'), 0)}-"
+                    f"{_as_int(matched.get('rank_max'), 0)}"
+                )
+                if tier_key not in set(row.get("rank_claimed") or ()):
+                    if multiple_active:
+                        lines.append(f"可用 活动首领领奖 排行 {boss_name} 领取")
+                    else:
+                        lines.append("可用 活动首领领奖 排行 领取")
         return "\n".join(lines)
 
     def boss_status_text(self, user_id: str, query: str = "") -> str:
         activities = self._boss_activities(self._config())
         selected = self._find_boss(activities, query)
+        today = self.clock.now().strftime("%Y-%m-%d")
         if selected is not None:
-            rows = self.repository.boss_snapshot(
-                str(user_id), [str(selected["key"])], self.clock.now().strftime("%Y-%m-%d")
+            key = str(selected["key"])
+            rows = self.repository.boss_snapshot(str(user_id), [key], today)
+            position, _ = self.repository.board_position("boss", key, str(user_id))
+            return self._status_block(
+                selected, rows.get(key, {}), rank_position=max(0, int(position))
             )
-            return self._status_block(selected, rows.get(str(selected["key"]), {}))
         active = self._active_bosses(activities)
         if not active:
             return "当前没有进行中的活动首领玩法"
         rows = self.repository.boss_snapshot(
-            str(user_id), [str(activity["key"]) for activity in active],
-            self.clock.now().strftime("%Y-%m-%d"),
+            str(user_id), [str(activity["key"]) for activity in active], today
         )
-        return "\n\n".join(
-            ["【活动首领】"]
-            + [
-                self._status_block(activity, rows.get(str(activity["key"]), {}))
-                for activity in active
-            ]
-        )
+        multiple = len(active) > 1
+        blocks = []
+        for activity in active:
+            key = str(activity["key"])
+            position, _ = self.repository.board_position("boss", key, str(user_id))
+            blocks.append(
+                self._status_block(
+                    activity,
+                    rows.get(key, {}),
+                    rank_position=max(0, int(position)),
+                    multiple_active=multiple,
+                )
+            )
+        return "\n\n".join(["【活动首领】"] + blocks)
 
     def boss_rank_text(self, query: str = "", limit: int = 10) -> str:
         activities = self._boss_activities(self._config())
