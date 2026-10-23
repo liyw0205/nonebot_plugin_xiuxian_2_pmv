@@ -354,6 +354,97 @@ class ActivityReadModelApplication:
             lines.extend(("", "暂无玩法活动"))
         return "\n".join(lines).strip()
 
+    def gameplay_personal_text(self, user_id: str) -> str:
+        helpers = self._overview_helpers()
+        config = self._config()
+        now = self.clock.now().astimezone().replace(tzinfo=None)
+        snapshot = self._overview_snapshot_for_detail(
+            str(user_id), config, helpers, now, include_point_progress=True,
+            include_collect_inventory=True,
+        )
+        from ...xiuxian.xiuxian_activity.activity_utils import _as_int
+        from .gameplay_progress import (
+            closest_pity_entry,
+            collect_pity_entries,
+            point_event_daily_parts,
+        )
+
+        lines = [self.gameplay_text(), "", "【我的玩法进度】"]
+        sections = 0
+        daily_totals = snapshot.get("point_event_daily_totals")
+        for activity in helpers["get_gameplay_activities"](config):
+            activity_key = str(activity.get("key") or "")
+            if not activity_key:
+                continue
+            activity_type = activity.get("type")
+            if activity_type == "collect_words":
+                inventory = snapshot.get("collect_inventory") or {}
+                items = sorted(
+                    (char, count)
+                    for (key, char), count in inventory.items()
+                    if key == activity_key and count > 0
+                )
+                total = sum(count for _char, count in items)
+                inventory_text = "、".join(
+                    f"{char}×{count}" for char, count in items
+                ) or "未收集"
+                lines.append(
+                    f"- {activity.get('name') or '集字'} 字牌 {inventory_text}（共{total}张）"
+                )
+                sections += 1
+                entries = collect_pity_entries(
+                    activity, snapshot.get("collect_pity") or {}
+                )
+                closest = closest_pity_entry(entries)
+                if closest is None:
+                    continue
+                _, miss, threshold = closest
+                lines.append(
+                    f"- {activity.get('name') or '集字'} 保底 {miss}/{threshold}"
+                )
+                sections += 1
+            elif activity_type == "event_points":
+                point_name = str(activity.get("point_name") or "活动积分")
+                balances = snapshot.get("point_balances") or {}
+                points = max(0, _as_int(balances.get(activity_key), 0))
+                lines.append(
+                    f"- {activity.get('name') or '积分活动'} {point_name} {points}"
+                )
+                if daily_totals is not None:
+                    daily = point_event_daily_parts(activity, daily_totals)
+                    if daily:
+                        lines.append("  今日进度：" + "、".join(daily))
+                sections += 1
+            elif activity_type == "activity_boss":
+                progress = (snapshot.get("boss_progress") or {}).get(activity_key)
+                if not progress or not _as_int(progress.get("max_hp"), 0):
+                    continue
+                configured_max = max(1, _as_int(activity.get("max_hp"), 1))
+                stored_max = max(
+                    1, _as_int(progress.get("max_hp"), configured_max)
+                )
+                hp_left = max(
+                    0, _as_int(progress.get("hp_left"), configured_max)
+                )
+                if stored_max != configured_max:
+                    hp_left = int(configured_max * hp_left / stored_max)
+                hp_percent = 100.0 * hp_left / configured_max
+                boss_name = str(activity.get("boss_name") or "活动首领")
+                detail = (
+                    f"- {boss_name} 血量 {hp_percent:.0f}%、我的伤害 "
+                    f"{max(0, _as_int(progress.get('damage'), 0))}"
+                )
+                if activity.get("mode") in {"cooperative", "both"}:
+                    used = max(0, _as_int(progress.get("fight_count"), 0))
+                    limit = max(1, _as_int(activity.get("daily_fight_limit"), 1))
+                    detail += f"、今日挑战 {used}/{limit}"
+                lines.append(detail)
+                sections += 1
+        if not sections:
+            lines.extend(("", "暂无个人玩法进度"))
+        return "\n".join(lines).strip()
+
+
     def activity_info_text(self, user_id: str | None = None) -> str:
         helpers = self._overview_helpers()
         config = self._config()
@@ -383,7 +474,10 @@ class ActivityReadModelApplication:
         )
 
     def _overview_snapshot_for_detail(
-        self, user_id: str, config: dict[str, Any], helpers: Mapping[str, Any], now: datetime
+        self, user_id: str, config: dict[str, Any], helpers: Mapping[str, Any], now: datetime,
+        *,
+        include_point_progress: bool = False,
+        include_collect_inventory: bool = False,
     ) -> dict[str, Any]:
         """Detail-view snapshot: overview state plus every claim source the
         one-click claim covers, so the action summary matches the center card."""
@@ -401,6 +495,13 @@ class ActivityReadModelApplication:
             if activity.get("type") == "collect_words"
             and _as_int(activity.get("pity_threshold"), 0) > 0
         ]
+        collect_inventory_keys = [
+            str(activity.get("key") or "")
+            for activity in gameplay
+            if include_collect_inventory
+            and activity.get("type") == "collect_words"
+            and str(activity.get("key") or "")
+        ]
         stage_windows = [
             (stage["key"], *stage_window_bounds(stage))
             for stage in stage_timeline(config, now)["ended"]
@@ -416,6 +517,12 @@ class ActivityReadModelApplication:
             if activity.get("type") == "activity_boss"
             and str(activity.get("key") or "")
         ]
+        point_keys = [
+            str(activity.get("key") or "")
+            for activity in gameplay
+            if include_point_progress and activity.get("type") == "event_points"
+            and str(activity.get("key") or "")
+        ]
         if boss_keys:
             board_sources.append("boss")
         return self.repository.overview_snapshot(
@@ -424,6 +531,8 @@ class ActivityReadModelApplication:
             include_tasks=bool(tasks),
             include_pass=bool(pass_config.get("enabled")),
             collect_activity_keys=collect_keys,
+            collect_inventory_activity_keys=collect_inventory_keys,
+            point_activity_keys=point_keys,
             stage_windows=stage_windows,
             board_sources=board_sources,
             boss_activity_keys=boss_keys,

@@ -278,7 +278,12 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
 @activity_gameplay_cmd.handle(parameterless=[Cooldown(cd_time=0)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     await assign_bot(bot=bot, event=event)
-    text = activity_application.read_model.gameplay_text()
+    is_user, user_info, _ = await _ensure_user(event)
+    text = (
+        activity_application.read_model.gameplay_personal_text(str(user_info["user_id"]))
+        if is_user
+        else activity_application.read_model.gameplay_text()
+    )
     await handle_send(
         bot,
         event,

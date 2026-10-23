@@ -601,5 +601,61 @@ class ActivityReadModelTests(unittest.TestCase):
         self.assertEqual(len(store.calls), 1)
 
 
+    def test_personal_gameplay_uses_one_snapshot_for_all_progress(self) -> None:
+        from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_activity.activity_rules import (
+            get_gameplay_activities,
+        )
+
+        application = ActivityReadModelApplication(self.database, config_loader=lambda: self.config)
+        activities = {a["type"]: a for a in get_gameplay_activities(self.config)}
+        collect = activities["collect_words"]
+        points = activities["event_points"]
+        boss = activities["activity_boss"]
+        point_rule = next(r for r in points["event_rules"] if r.get("daily_limit") and r.get("event") == "work")
+        now = application.clock.now().astimezone().replace(tzinfo=None)
+        today = now.strftime("%Y-%m-%d")
+        with DatabaseUnitOfWork(self.database) as uow:
+            uow.execute("INSERT INTO activity_collect_pity_state(activity_key,user_id,event_key,miss_count) VALUES(?,?,?,?)", (collect["key"], "user-1", collect["drop_events"][0], 5))
+            uow.execute(
+                "INSERT INTO activity_collect_inventory(activity_key,user_id,word_char,count) VALUES(?,?,?,?)",
+                (collect["key"], "user-1", "福", 2),
+            )
+            uow.execute("INSERT INTO activity_point_balance(activity_key,user_id,points,total_points) VALUES(?,?,?,?)", (points["key"], "user-1", 35, 50))
+            uow.execute("INSERT INTO activity_point_event_log(activity_key,user_id,event_key,points,record_date) VALUES(?,?,?,?,?)", (points["key"], "user-1", point_rule["event"], 30, today))
+            uow.execute("INSERT INTO activity_boss_state(activity_key,hp_left,max_hp) VALUES(?,?,?)", (boss["key"], 750, 1000))
+            uow.execute("INSERT INTO activity_boss_damage(activity_key,user_id,total_damage) VALUES(?,?,?)", (boss["key"], "user-1", 1234))
+            uow.execute("INSERT INTO activity_boss_fight_log(activity_key,user_id,damage,fight_date,source) VALUES(?,?,?,?,?)", (boss["key"], "user-1", 100, today, "coop"))
+        with patch.object(application.repository, "overview_snapshot", wraps=application.repository.overview_snapshot) as snapshot:
+            text = application.gameplay_personal_text("user-1")
+        self.assertEqual(snapshot.call_count, 1)
+        self.assertIn("福×2（共2张）", text)
+        self.assertIn(f"保底 5/{collect['pity_threshold']}", text)
+        self.assertIn(f"{points['point_name']} 35", text)
+        self.assertIn(f"今日 30/{point_rule['daily_limit']}", text)
+        self.assertIn("我的伤害 1234", text)
+        self.assertIn("今日挑战 1/3", text)
+
+    def test_personal_gameplay_ignores_missing_legacy_inventory_table(self) -> None:
+        from nonebot_plugin_xiuxian_2.features.activity.read_model_repository import (
+            ActivityReadModelSqlRepository,
+        )
+
+        database = Path(self.temp.name) / "legacy.db"
+        with DatabaseUnitOfWork(database) as uow:
+            uow.execute(
+                "CREATE TABLE activity_user(user_id TEXT PRIMARY KEY,sign_days INTEGER,"
+                "last_sign_date TEXT,total_sign_days INTEGER)"
+            )
+        repository = ActivityReadModelSqlRepository(database)
+        snapshot = repository.overview_snapshot(
+            "user-1",
+            "activity-1",
+            include_tasks=False,
+            include_pass=False,
+            collect_activity_keys=[],
+            collect_inventory_activity_keys=["collect-1"],
+        )
+        self.assertEqual(snapshot["collect_inventory"], {})
+
 if __name__ == "__main__":
     unittest.main()

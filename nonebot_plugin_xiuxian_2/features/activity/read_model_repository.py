@@ -680,6 +680,7 @@ class ActivityReadModelSqlRepository:
         include_tasks: bool,
         include_pass: bool,
         collect_activity_keys: list[str],
+        collect_inventory_activity_keys: Sequence[str] = (),
         point_activity_keys: list[str] | tuple[str, ...] = (),
         stage_windows: Sequence[tuple[str, str | None, str | None]] = (),
         board_sources: Sequence[str] = (),
@@ -701,6 +702,7 @@ class ActivityReadModelSqlRepository:
             "pass_claimed_levels": set(),
             "pass_highest_level": 0,
             "collect_pity": {},
+            "collect_inventory": {},
             "point_balances": {},
             "stage_participated": set(),
             "stage_claimed": set(),
@@ -724,6 +726,11 @@ class ActivityReadModelSqlRepository:
         collect_keys = tuple(dict.fromkeys(str(key) for key in collect_activity_keys if str(key)))
         if collect_keys:
             required.add("activity_collect_pity_state")
+        collect_inventory_keys = tuple(
+            dict.fromkeys(
+                str(key) for key in collect_inventory_activity_keys if str(key)
+            )
+        )
         point_keys = tuple(
             dict.fromkeys(str(key) for key in point_activity_keys if str(key))
         )
@@ -732,6 +739,7 @@ class ActivityReadModelSqlRepository:
 
         with DatabaseUnitOfWork(self.database, read_only=True) as uow:
             self._assert_tables(uow, required)
+            tables = self._table_names(uow)
             sign = uow.query_one(
                 "SELECT sign_days,last_sign_date,total_sign_days FROM activity_user "
                 "WHERE user_id=?",
@@ -776,6 +784,14 @@ class ActivityReadModelSqlRepository:
                     f"WHERE activity_key IN ({placeholders}) AND user_id=?",
                     (*collect_keys, str(user_id)),
                 )
+            inventory_rows = []
+            if collect_inventory_keys and "activity_collect_inventory" in tables:
+                placeholders = ",".join("?" for _ in collect_inventory_keys)
+                inventory_rows = uow.query_all(
+                    "SELECT activity_key,word_char,count FROM activity_collect_inventory "
+                    f"WHERE activity_key IN ({placeholders}) AND user_id=?",
+                    (*collect_inventory_keys, str(user_id)),
+                )
             point_rows = []
             if point_keys:
                 placeholders = ", ".join("?" for _ in point_keys)
@@ -784,7 +800,6 @@ class ActivityReadModelSqlRepository:
                     f"WHERE activity_key IN ({placeholders}) AND user_id=?",
                     (*point_keys, str(user_id)),
                 )
-            tables = self._table_names(uow)
             stage_claimed: set[str] = set()
             if "activity_stage_claim" in tables:
                 stage_claimed = {
@@ -846,6 +861,7 @@ class ActivityReadModelSqlRepository:
                         "hp_left": 0,
                         "max_hp": 0,
                         "damage": 0,
+                        "fight_count": 0,
                         "milestones_unlocked": set(),
                         "milestones_claimed": set(),
                         "rank_claimed": set(),
@@ -870,6 +886,23 @@ class ActivityReadModelSqlRepository:
                     ):
                         boss_progress[str(row["activity_key"])]["damage"] = max(
                             0, int(row["total_damage"] or 0)
+                        )
+                if "activity_boss_fight_log" in tables:
+                    fight_date = (
+                        now.strftime("%Y-%m-%d")
+                        if now is not None
+                        else datetime.now().strftime("%Y-%m-%d")
+                    )
+                    for row in uow.query_all(
+                        "SELECT activity_key,COUNT(*) AS fight_count "
+                        "FROM activity_boss_fight_log "
+                        f"WHERE activity_key IN ({boss_placeholders}) AND user_id=? "
+                        "AND fight_date=? AND source IN ('coop','world_boss','item') "
+                        "GROUP BY activity_key",
+                        (*boss_keys, str(user_id), fight_date),
+                    ):
+                        boss_progress[str(row["activity_key"])]["fight_count"] = max(
+                            0, int(row["fight_count"] or 0)
                         )
                 if "activity_boss_milestone" in tables:
                     for row in uow.query_all(
@@ -983,6 +1016,12 @@ class ActivityReadModelSqlRepository:
                     0, int(row["miss_count"] or 0)
                 )
                 for row in pity_rows
+            },
+            "collect_inventory": {
+                (str(row["activity_key"]), str(row["word_char"])): max(
+                    0, int(row["count"] or 0)
+                )
+                for row in inventory_rows
             },
             "point_balances": {
                 str(row["activity_key"]): max(0, int(row["points"] or 0))
