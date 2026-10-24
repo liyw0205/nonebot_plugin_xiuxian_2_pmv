@@ -286,6 +286,35 @@ A 已解锁会冒充 B 未达标的进度，A 已领 `1-3` 排行档会漏报 B 
   develop 推送/CI、审查与 main 快进/CI 按发布门继续完成。未部署，未读取或
   写入真实游戏库，不发送真实消息。
 
+## 已完成目标：G5 活动玩法个人进度视图（roadmap-index G5）
+
+`gameplay_text` 被 parity 锁定、无 `user_id` 参数，玩家看不到本人集字保底、
+积分当日进度与首领伤害；目标文档 `docs/goals/goal-gameplay-personal-state.md`。
+
+- 新增 sibling `gameplay_personal_text(user_id)`：复用 `gameplay_text` 的
+  配置/阶段/玩法摘要，按玩法追加本人状态段（集字复用
+  `collect_pity_entries`/`closest_pity_entry`；积分余额+今日进度复用
+  `point_event_daily_parts` 与快照键 `point_event_daily_totals`；首领复用
+  `boss_snapshot`）；数据来自一次 `overview_snapshot`（传 `now`），无
+  `user_id` 时输出等价 `gameplay_text()`。
+- `活动玩法` handler 改调新方法并传入登录用户 id；`gameplay_text` 字节不变
+  （parity 回归锁定）；旧库缺可选表时对应段省略；只读，无新命令/路由/表/
+  迁移/配置键，不改写路径。
+- `tests/test_activity_gameplay_personal.py` 新聚焦套件 `4/4` 通过（三玩法
+  本人状态段、单快照、parity、handler 源合同；时钟经
+  `patch.object(application.clock, "now", …)` 固定为与插入记录同日的 aware
+  时间戳，测试与服务器日期无关）；受影响套件 `test_activity_read_model.py`
+  `17/17`（含两个 G5 测试 `test_personal_gameplay_uses_one_snapshot_for_all_progress`
+  与 `test_personal_gameplay_ignores_missing_legacy_inventory_table`）、
+  `test_activity_gameplay_consistency.py` `9/9`、
+  `test_activity_point_daily_progress.py` `7/7` 全绿。三门禁真实 exit 0；
+  `git diff --check` 干净。
+- 本轮只改 `read_model_application.py`、`read_model_repository.py`、
+  `__init__.py`（handler 改调）、新聚焦测试与 `test_activity_read_model.py`
+  两个 G5 测试。目标提交 `bf85e010` 已推送 develop 并快进合入 main；
+  develop CI run `39998595819`、main CI run `40001772187` 均成功（headSha
+  均为 `bf85e010`）。未部署，未读取或写入真实游戏库，不发送真实消息。
+
 ## 冻结清单与停止条件
 
 冻结范围仅包括活动 Web 六来源一键代领 API、权限/错误合同、管理员面板、兼容性保护、聚焦测试、路由清单和正式文档。不得新增奖励经济、schema/数据迁移、玩家身份模型、后台活动编辑器、通用 UI 框架或 unrelated refactor。
