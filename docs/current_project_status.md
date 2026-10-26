@@ -386,6 +386,31 @@ A 已解锁会冒充 B 未达标的进度，A 已领 `1-3` 排行档会漏报 B 
 - 三门禁真实 exit 0；`git diff --check` 干净；`compileall` 通过。未部署、未读写真实游戏库、
   不发送真实消息。
 
+## 已完成目标：活动 Web 玩家视图与 bot 六视图对齐
+
+bot 侧六个玩家视图（`活动阶段`/`活动首领`/`活动商店`/`活动背包`/`活动奖励`/`活动玩法`）
+在 G6 已有统一投递合同，但 Web 的 `GET /api/v1/activity/state` 与管理员面板下拉都只有
+`center|detail|stage|rank|boss`；实测 `?view=shop|bag|reward|gameplay` 一律
+`400 unknown view`，运营无法在面板查看商店购买引导、背包就绪标注、奖励目录与玩法个人状态。
+四个读模型本身可直接渲染，能力已存在、Web 未暴露。
+
+- `adapters/web/blueprints/activity.py` 视图映射补 4 项：`shop`/`bag`/`reward`/`gameplay`
+  分别指向 `point_shop_guidance_text`/`collect_bag_guidance_text`/`reward_catalog_text`/
+  `gameplay_personal_text`；路由直接返回读模型文本，不重渲染。
+- `adapters/web/templates/pages/admin.html` 的 `data-activity-view` 补齐同名四个选项。
+  权限语义（无 `user_id` 公共、带 `user_id` 要求 `admin` 否则 403）、未知视图 400、缺
+  `application` 的兼容响应、缺可选表的 `schema_missing`（503）失败关闭合同全部沿用既有视图；
+  `center`/`detail` 在缺可选表时本就返回 503，新视图行为与其一致。
+- 只读对齐：不新增路由、命令、表、迁移或配置键；不改写路径；未部署、未读写真实游戏库、
+  不发送真实消息。
+- 新聚焦套件 `tests/test_activity_web_views.py` `12/12`（四视图公共/个人两态、逐字等于读模型
+  文本、九视图枚举、面板选项与路由映射一致、旧库只读不建文件、缺表失败关闭）；受影响
+  `test_activity_web_state`/`test_activity_center_delivery_contract`/
+  `test_activity_view_delivery_contracts`/`test_activity_center`/`test_activity_read_model`
+  合计 `53 passed`。三门禁真实 exit 0；`git diff --check` 干净；`compileall` 通过。目标提交
+  `52f62c09` 已推送 develop 并快进合入 main；develop CI run `40371340167`、main CI run
+  `40372486961` 均成功（headSha 均为 `52f62c09`）。未部署、未读写真实游戏库、不发送真实消息。
+
 ## 冻结清单与停止条件
 
 冻结范围仅包括活动 Web 六来源一键代领 API、权限/错误合同、管理员面板、兼容性保护、聚焦测试、路由清单和正式文档。不得新增奖励经济、schema/数据迁移、玩家身份模型、后台活动编辑器、通用 UI 框架或 unrelated refactor。
