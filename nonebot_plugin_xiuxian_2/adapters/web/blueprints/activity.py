@@ -110,6 +110,10 @@ def create_blueprint(*, context=None, application=None, permission=None) -> Blue
             "stage": read_model.activity_stage_text,
             "rank": read_model.rank_overview_text,
             "boss": read_model.boss_status_text,
+            "shop": read_model.point_shop_guidance_text,
+            "bag": read_model.collect_bag_guidance_text,
+            "reward": read_model.reward_catalog_text,
+            "gameplay": read_model.gameplay_personal_text,
         }
         render = views.get(view)
         if render is None:

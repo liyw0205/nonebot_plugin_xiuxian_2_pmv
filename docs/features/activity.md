@@ -121,11 +121,15 @@ The historical package owns command names during the compatibility release. New 
 （可选表，缺表时视为全部未领）；名次来自既有 `board_position` 查询。
 
 ## Web API
-`GET /api/v1/activity/state?user_id=<id>[&view=center|detail|stage|rank|boss]` 返回只读活动状态文本：
+`GET /api/v1/activity/state?user_id=<id>[&view=center|detail|stage|rank|boss|shop|bag|reward|gameplay]` 返回只读活动状态文本：
 默认 `view=center` 为活动中心卡片与本人进度行，`detail` 复用配置驱动的 `活动` 详情读模型，
-`stage`/`rank`/`boss` 分别复用 `活动阶段`/`活动排行`/`活动首领` 的读模型。未传 `user_id`
+`stage`/`rank`/`boss` 分别复用 `活动阶段`/`活动排行`/`活动首领` 的读模型，`shop`/`bag`/
+`reward`/`gameplay` 分别复用 `活动商店`（购买引导）/`活动背包`（就绪标注）/`活动奖励`
+（奖励目录）/`活动玩法`（个人状态段）的读模型，与 bot 侧六个玩家视图同源同文（路由不重渲染，
+直接返回读模型文本）。未传 `user_id`
 时各视图只返回公共活动信息；带 `user_id` 的个人进度查询要求管理权限，避免把未绑定 Web
-身份的任意玩家状态公开给匿名请求。未知 `view` 返回 `validation_error`（400），权限不足返回
+身份的任意玩家状态公开给匿名请求。视图依赖可选活动表时，缺表按既有失败关闭合同返回
+`schema_missing`（503），不臆造数据。未知 `view` 返回 `validation_error`（400），权限不足返回
 `forbidden`（403）。面板「活动」页提供上述视图选择、可选玩家 ID 与查询操作，读模型文本通过
 纯文本节点呈现；`PAGE_ENDPOINTS["activity"]`/`["reward_center"]` 仍指向该路由。详情视图的
 行动建议段与活动中心卡片覆盖完全相同的可领取来源（任务、战令与追赶、集字保底、阶段、排行、
@@ -222,6 +226,18 @@ handler 走同一缝隙。
 - `活动玩法` 的玩法段与「今日进度」行之后缺少空行，QQ 原生 markdown 下下一段会被
   粘到上一行；`活动背包` 多集字活动时相邻段之间出现过两个空行。新增
   `_tighten_blank_lines` 统一「段后恰一空行、段间不连空行」的折叠规则。
+
+活动 Web 玩家视图对齐（G6 后续）：bot 侧的六个玩家视图（阶段/首领/商店/背包/奖励/玩法）
+在 Web 只有前三个视图有对应入口 —— `GET /api/v1/activity/state` 的视图映射与管理员面板
+下拉都只有 `center|detail|stage|rank|boss`，`?view=shop|bag|reward|gameplay` 一律返回
+`400 validation_error`，运营无法在面板查看商店购买引导、背包就绪标注、奖励目录与玩法个人
+状态。现在把这四个只读读模型（`point_shop_guidance_text`/`collect_bag_guidance_text`/
+`reward_catalog_text`/`gameplay_personal_text`）接入既有视图映射并在面板补齐同名选项，
+路由直接返回读模型文本、不重渲染；权限语义（无 `user_id` 公共、带 `user_id` 要求
+`admin` 否则 403）、未知视图 400、缺 `application` 兼容响应、缺可选表时的 `schema_missing`
+（503）失败关闭合同全部沿用既有视图。只读；不新增路由、命令、表、迁移或配置键。
+聚焦测试 `tests/test_activity_web_views.py` 钉住四视图的两态渲染、逐字等于读模型文本、
+九视图枚举、面板选项与路由映射一致、旧库只读不建文件与缺表失败关闭。
 
 ## 灰度开关、回滚和已知限制
 Legacy algorithms and schemas remain behind the repository adapter for one complete release cycle; the compatibility hit counter determines when removal is safe.
