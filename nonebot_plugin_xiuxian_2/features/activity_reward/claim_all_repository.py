@@ -114,6 +114,23 @@ class ActivityClaimAllRepository:
             uow.execute("UPDATE activity_claim_all_operations SET status='completed',result_json=?,updated_at=CURRENT_TIMESTAMP WHERE operation_id=?", (self._encode(ok,text,steps),operation_id))
         return result
 
+    def retryable_failure_text(self, step_name: str, error: object, steps: tuple[ActivityClaimAllStepResult, ...]) -> str:
+        """Player-facing retry text that also reports what already landed.
+
+        The persisted plan already keeps completed steps, so a retry only runs the
+        rest. Without this line the player cannot tell whether the earlier
+        rewards were granted, which is exactly what the feature documentation
+        promises (保留已完成步骤).
+        """
+        lines = [f"活动奖励领取未完成，请重试\n{self.STEP_LABELS[step_name]}：{error}"]
+        settled = [step for step in steps if step.ok]
+        if settled:
+            lines.append(
+                "已发放：" + "、".join(self.STEP_LABELS[step.name] for step in settled)
+                + "（重试不会重复发放）"
+            )
+        return "\n".join(lines)
+
     def run(self, operation_id: str, user_id: str, runners: Mapping[str, Callable[[str], tuple[bool, str]]]) -> ActivityClaimAllResult:
         if not operation_id or not user_id or tuple(runners) != self.step_names():
             raise ValueError("fixed activity claim-all operation is required")
@@ -130,7 +147,8 @@ class ActivityClaimAllRepository:
                 self.complete_step(operation_id, name, ok, text)
             except Exception as exc:
                 self.fail_step(operation_id, name, str(exc))
-                return ActivityClaimAllResult("retryable_failure", text=f"活动奖励领取未完成，请重试\n{self.STEP_LABELS[name]}：{exc}", steps=self.completed_steps(operation_id))
+                steps = self.completed_steps(operation_id)
+                return ActivityClaimAllResult("retryable_failure", text=self.retryable_failure_text(name, exc, steps), steps=steps)
         return self.finish(operation_id)
 
 

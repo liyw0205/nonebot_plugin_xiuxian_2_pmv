@@ -1163,6 +1163,31 @@ class ActivityClaimAllService:
                 raise
 
     @classmethod
+    def _format_retryable(
+        cls,
+        step_name: str,
+        error: object,
+        steps: tuple[ActivityClaimAllStepResult, ...],
+    ) -> str:
+        """Retry message that also lists which steps were already granted.
+
+        A mid-plan failure keeps the completed steps (and the retry resumes
+        from them), but the old text only named the failing step, so players
+        could not tell what had already been awarded. The reward text is not
+        echoed: it is re-read from the settled records on the retry.
+        """
+
+        lines = [f"活动奖励领取未完成，请重试", f"{cls.STEP_LABELS[step_name]}：{error}"]
+        granted = "".join(
+            f"、{cls.STEP_LABELS[step.name]}" for step in steps
+        )
+        if granted:
+            lines.append(f"已发放：{granted.lstrip('、')}（重试不会重复发放）")
+        else:
+            lines.append("暂无已发放步骤，重试从第一步开始")
+        return "\n".join(lines)
+
+    @classmethod
     def _format_completed(cls, steps: tuple[ActivityClaimAllStepResult, ...]) -> tuple[bool, str]:
         successes = [step.text for step in steps if step.ok]
         if successes:
@@ -1217,12 +1242,12 @@ class ActivityClaimAllService:
                 self._complete_step(operation_id, step_name, ok, result_text)
             except Exception as exc:
                 self._fail_step(operation_id, step_name, str(exc))
-                label = self.STEP_LABELS[step_name]
+                rows = self._step_rows(operation_id)
                 return ActivityClaimAllResult(
                     "retryable_failure",
                     False,
-                    f"活动奖励领取未完成，请重试\n{label}：{exc}",
-                    self._step_rows(operation_id),
+                    self._format_retryable(step_name, exc, rows),
+                    rows,
                 )
         return self._finish(operation_id)
 
