@@ -366,6 +366,26 @@ A 已解锁会冒充 B 未达标的进度，A 已领 `1-3` 排行档会漏报 B 
   未执行步骤、文案变更不影响重试只补跑未完成步骤）；受影响 claim-all/reward 套件 `24 passed`。
   三门禁真实 exit 0，`git diff --check` 干净。未跑全量测试、未部署、未读写真实游戏库。
 
+## 已完成目标：文档权限与 manifest 一致性门禁（架构门禁补强）
+
+`check_manifest_documentation()` 只要求文档**提到**路由/命令，从不校验文档写下的权限等级。
+`activity_reward` 因而长期把 `POST /api/v1/activity/rewards/claim` 写成 `权限 user`，而 manifest 与
+蓝图实际都按 `admin` 执行（`adapters/web/static/pages/admin.js` 是唯一调用方），运维按文档
+配置权限会直接踩空。
+
+- `scripts/check_architecture.py` 新增 `_documented_permission_drift()` 与
+  `check_documented_permission_levels()`：逐行读取功能文档里 `权限 \`<level>\`` 的声明，
+  与 manifest 的 `RouteSpec`/`CommandSpec.permission` 比对，不一致即报错；不写权限的
+  文档行不受影响（存在性仍由原检查负责）。
+- 修正唯一一处真实偏差：`docs/features/activity_reward.md` 的 Web API 段改为 `admin`，
+  并写明该端点只供管理员面板代玩家领取、玩家本人走 bot 命令。
+- 不改任何执行层权限、路由、命令、表或迁移；只加门禁与文档更正。
+- `tests/architecture/test_architecture_gate_checks.py` 新增 `ManifestPermissionDriftTests`
+  `5/5`（路由漂移上报、命令漂移上报、一致的声明不报、未写权限的行不报、真实仓库保持零错误）；
+  反射对照确认把文档改回 `user` 时门禁确实报错。
+- 三门禁真实 exit 0；`git diff --check` 干净；`compileall` 通过。未部署、未读写真实游戏库、
+  不发送真实消息。
+
 ## 冻结清单与停止条件
 
 冻结范围仅包括活动 Web 六来源一键代领 API、权限/错误合同、管理员面板、兼容性保护、聚焦测试、路由清单和正式文档。不得新增奖励经济、schema/数据迁移、玩家身份模型、后台活动编辑器、通用 UI 框架或 unrelated refactor。

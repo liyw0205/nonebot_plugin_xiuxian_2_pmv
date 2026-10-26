@@ -501,6 +501,12 @@ def check_manifest_documentation() -> list[str]:
     only migration/config names lets command aliases, routes, and jobs silently
     drift from the registry, so all transport and scheduling identifiers are
     required here as well.
+
+    Naming the route is not enough on its own: the operator also reads the
+    documented permission level to decide who may call it, so any route or
+    command whose doc states a different level than the manifest is an error.
+    ``activity_reward`` shipped with ``权限 user`` documented against an
+    ``admin`` manifest route because only presence was checked.
     """
     try:
         _ensure_nonebot_initialized()
@@ -528,6 +534,73 @@ def check_manifest_documentation() -> list[str]:
         for identifier in identifiers:
             if identifier not in source:
                 errors.append(f"{documentation.relative_to(ROOT)} does not name {identifier}")
+        errors.extend(_documented_permission_drift(documentation, feature))
+    return errors
+
+
+_PERMISSION_TOKEN = re.compile(r"(`?)/api/v1/[^\s`]*`?[^\n]{0,120}?权限(?:为)?\s*`?([a-z]+)`?")
+_PERMISSION_ONLY = re.compile(r"权限(?:为)?\s*`?([a-z]+)`?")
+
+
+def _documented_permission_drift(documentation: Path, feature) -> list[str]:
+    """Compare documented route/command permission levels against the manifest.
+
+    Both transports are documented the same way in the feature cards: the
+    command or route name, then ``权限 `level```. A documented level that
+    contradicts the manifest is reported, because the operator reads the doc to
+    decide who may call the entry point.
+    """
+
+    source = documentation.read_text(encoding="utf-8")
+    expected: dict[str, tuple[str, str]] = {}
+    for route in feature.routes:
+        expected[route.path] = ("route", route.permission or "")
+    for command in feature.commands:
+        expected[command.name] = ("command", command.permission or "")
+    label = (
+        documentation.relative_to(ROOT)
+        if documentation.is_relative_to(ROOT)
+        else documentation
+    )
+    errors: list[str] = []
+    for line in source.splitlines():
+        match = _PERMISSION_TOKEN.search(line)
+        documented = match.group(2) if match else ""
+        if not documented:
+            only = _PERMISSION_ONLY.search(line)
+            documented = only.group(1) if only else ""
+        if not documented:
+            continue
+        named = next(
+            (name for name in expected if name and name in line),
+            "",
+        )
+        if not named:
+            continue
+        kind, actual = expected[named]
+        if not actual or documented == actual:
+            continue
+        errors.append(
+            f"{label} documents {kind} {named} permission "
+            f"{documented!r} but the manifest declares {actual!r}"
+        )
+    return errors
+
+
+def check_documented_permission_levels() -> list[str]:
+    """Every documented route permission must match the manifest declaration."""
+
+    try:
+        _ensure_nonebot_initialized()
+        from nonebot_plugin_xiuxian_2.plugin import build_registry
+    except Exception as exc:
+        return [f"documented permission check failed: {type(exc).__name__}: {exc}"]
+    errors: list[str] = []
+    for feature in build_registry().features:
+        documentation = ROOT / "docs" / "features" / f"{feature.key}.md"
+        if not documentation.is_file() or not feature.routes:
+            continue
+        errors.extend(_documented_permission_drift(documentation, feature))
     return errors
 
 

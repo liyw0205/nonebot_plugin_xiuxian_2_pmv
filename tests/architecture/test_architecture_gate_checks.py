@@ -162,5 +162,76 @@ class ActivityImportCycleTests(unittest.TestCase):
         self.assertIn("ok True", completed.stdout)
 
 
+class _FakeRoute:
+    def __init__(self, path, methods, permission):
+        self.path = path
+        self.methods = tuple(methods)
+        self.permission = permission
+
+
+class _FakeCommand:
+    def __init__(self, name, permission, aliases=()):
+        self.name = name
+        self.aliases = tuple(aliases)
+        self.permission = permission
+
+
+class _FakeFeature:
+    def __init__(self, routes=(), commands=()):
+        self.key = "fake_feature"
+        self.routes = tuple(routes)
+        self.commands = tuple(commands)
+        self.jobs = ()
+        self.config = ()
+        self.migration_version = ""
+
+
+class ManifestPermissionDriftTests(unittest.TestCase):
+    """The gate must catch a documented permission that differs from the manifest.
+
+    `check_manifest_documentation` used to only require that the document *names*
+    the route, so `activity_reward` shipped documenting `权限 user` for a route
+    the manifest and the blueprint both enforce as `admin`.
+    """
+
+    def _drift(self, body: str, feature: _FakeFeature) -> list[str]:
+        with tempfile.TemporaryDirectory() as directory:
+            documentation = Path(directory) / "fake_feature.md"
+            documentation.write_text(body, encoding="utf-8")
+            return gates._documented_permission_drift(documentation, feature)
+
+    def test_matching_documented_permission_is_accepted(self) -> None:
+        feature = _FakeFeature(routes=[_FakeRoute("/api/v1/fake/claim", ("POST",), "admin")])
+        self.assertEqual(
+            [],
+            self._drift("`POST /api/v1/fake/claim`，权限 `admin`，需要 CSRF。", feature),
+        )
+
+    def test_documented_permission_that_contradicts_the_manifest_is_reported(self) -> None:
+        feature = _FakeFeature(routes=[_FakeRoute("/api/v1/fake/claim", ("POST",), "admin")])
+        errors = self._drift("`POST /api/v1/fake/claim`，权限 `user`，需要 CSRF。", feature)
+        self.assertEqual(1, len(errors))
+        self.assertIn("/api/v1/fake/claim", errors[0])
+        self.assertIn("'user'", errors[0])
+        self.assertIn("'admin'", errors[0])
+
+    def test_route_without_a_documented_permission_is_not_a_drift(self) -> None:
+        """Presence is still `check_manifest_documentation`'s job, not this one."""
+        feature = _FakeFeature(routes=[_FakeRoute("/api/v1/fake/state", ("GET",), "user")])
+        self.assertEqual([], self._drift("`GET /api/v1/fake/state` 返回只读状态。", feature))
+
+    def test_command_permission_drift_is_reported(self) -> None:
+        feature = _FakeFeature(commands=[_FakeCommand("神秘命令", "admin")])
+        self.assertEqual([], self._drift("`神秘命令`，权限 `admin`。", feature))
+        errors = self._drift("`神秘命令`，权限 `user`。", feature)
+        self.assertEqual(1, len(errors))
+        self.assertIn("神秘命令", errors[0])
+
+    def test_every_shipped_feature_document_agrees_with_its_manifest(self) -> None:
+        """The real tree must stay clean: this is the gate's own live assertion."""
+
+        self.assertEqual([], gates.check_manifest_documentation())
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -12,7 +12,7 @@
 
 ## Web API
 
-`POST /api/v1/activity/rewards/claim`，权限 `user`，需要 CSRF 和 `Idempotency-Key`；请求字段为 `user_id`。
+`POST /api/v1/activity/rewards/claim`，权限 `admin`，需要 CSRF 和 `Idempotency-Key`；请求字段为 `user_id`。该端点只供管理员面板代玩家领取（`adapters/web/static/pages/admin.js` 是唯一调用方）；玩家本人通过 bot 命令 `活动领取` 走同一业务协调器。
 
 ## 数据模型与迁移
 
