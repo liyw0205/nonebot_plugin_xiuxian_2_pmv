@@ -199,6 +199,30 @@ Run the feature application test and the full architecture gate. Repeat the same
 覆盖五类来源的单独/组合入口、稳定顺序与去重、缺少资格状态、旧库可选表兼容，以及带参数
 蓝字的纯文本降级；未运行全量长测或真实 QQ 消息发送。
 
+活动视图投递合同（G6）：`tests/test_activity_view_delivery_contracts.py` 用默认配置
+（集字+积分+首领三类玩法、阶段日程、首领行动提示、购买引导、就绪标注）把
+`活动阶段`/`活动首领`/`活动商店`/`活动背包`/`活动奖励`/`活动玩法` 六个玩家视图
+逐个走一遍 `handle_send(native_markdown=True, fallback_msg=strip_md_command_links(text))`
+缝隙，断言 OneBot V11 与关闭 markdown 的 QQ 都只收到一次纯文本（无 `**`、无
+`mqqapi`、入口与关键行完整），QQ 原生 markdown 收到 `\n`→`\r` 归一后的消息且保留
+`](mqqapi` 蓝字；多行布局（玩法段之间、多集字段之间）在两条路径上都保留空行，
+否则 QQ 原生 markdown 的单换行会吞行。handler 源合同与运行期接线合同钉住六个
+handler 走同一缝隙。
+
+本轮据此修复的合同缺口（均只读渲染/接线，不改写路径、命令语义、表结构、迁移或
+配置键）：
+
+- `活动首领` 旧实现先 `_ensure_user` 再渲染：未注册用户收到「请先修仙」提示而不是
+  首领状态块，且从未走原生 markdown 缝隙。现在直接按事件用户 id 渲染状态块并走
+  共享缝隙（读模型本身对任意 id 只读）。
+- `活动商店`、`活动背包` 只发纯文本，QQ 原生 markdown 下购买/兑换引导没有蓝字命令；
+  现改走同一缝隙。
+- `活动玩法` 的 `fallback_msg` 曾是 `text` 本身（未剥链），`活动奖励` 同样；现统一为
+  `strip_md_command_links(text)`。
+- `活动玩法` 的玩法段与「今日进度」行之后缺少空行，QQ 原生 markdown 下下一段会被
+  粘到上一行；`活动背包` 多集字活动时相邻段之间出现过两个空行。新增
+  `_tighten_blank_lines` 统一「段后恰一空行、段间不连空行」的折叠规则。
+
 ## 灰度开关、回滚和已知限制
 Legacy algorithms and schemas remain behind the repository adapter for one complete release cycle; the compatibility hit counter determines when removal is safe.
 

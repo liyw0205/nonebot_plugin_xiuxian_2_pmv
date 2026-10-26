@@ -187,7 +187,8 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         event,
         text,
         native_markdown=True,
-        fallback_msg=text,
+        # 奖励目录只有文字，没有蓝字命令链接；纯文本降级仍走后端同一约定。
+        fallback_msg=strip_md_command_links(text),
     )
 
 
@@ -289,7 +290,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         event,
         text,
         native_markdown=True,
-        fallback_msg=text,
+        fallback_msg=strip_md_command_links(text),
     )
 
 
@@ -363,7 +364,13 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
             str(user_info["user_id"])
         )
     )
-    await handle_send(bot, event, text)
+    await handle_send(
+        bot,
+        event,
+        text,
+        native_markdown=True,
+        fallback_msg=strip_md_command_links(text),
+    )
 
 
 @activity_exchange_cmd.handle(parameterless=[Cooldown(cd_time=0)])
@@ -405,14 +412,20 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         return
 
     uid = str(user_info["user_id"])
-    read_model = activity_application.read_model
-    # The guidance sibling keeps per-item purchase commands; the base
-    # point_shop_text( remains the parity-pinned fallback builder.
+    # 商店视图与「活动中心/活动阶段/活动玩法」同一投递合同：原生 markdown 保留
+    # 命令链接，降级走剥链接纯文本。此前这里只发纯文本，QQ 原生 markdown 下
+    # 购买引导没有蓝字命令。
     text = (
-        read_model.point_shop_guidance_text(uid)
+        activity_application.read_model.point_shop_guidance_text(uid)
         or activity_application.read_model.point_shop_text(uid)
     )
-    await handle_send(bot, event, text)
+    await handle_send(
+        bot,
+        event,
+        text,
+        native_markdown=True,
+        fallback_msg=strip_md_command_links(text),
+    )
 
 
 @activity_buy_cmd.handle(parameterless=[Cooldown(cd_time=0)])
@@ -436,21 +449,28 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
 @activity_boss_cmd.handle(parameterless=[Cooldown(cd_time=0)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     await assign_bot(bot=bot, event=event)
-    is_user, user_info, msg = await _ensure_user(event)
-    if not is_user:
-        await handle_send(bot, event, msg, md_type="我要修仙")
-        return
+    user_id = event.get_user_id()
+    text = activity_application.read_model.boss_status_text(str(user_id))
     await handle_send(
         bot,
         event,
-        activity_application.read_model.boss_status_text(str(user_info["user_id"])),
+        text,
+        native_markdown=True,
+        fallback_msg=strip_md_command_links(text),
     )
 
 
 @activity_boss_rank_cmd.handle(parameterless=[Cooldown(cd_time=0)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     await assign_bot(bot=bot, event=event)
-    await handle_send(bot, event, activity_application.read_model.boss_rank_text("", 15))
+    text = activity_application.read_model.boss_rank_text("", 15)
+    await handle_send(
+        bot,
+        event,
+        text,
+        native_markdown=True,
+        fallback_msg=strip_md_command_links(text),
+    )
 
 
 @activity_boss_atk_cmd.handle(parameterless=[Cooldown(cd_time=0)])

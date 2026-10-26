@@ -414,6 +414,9 @@ class ActivityReadModelApplication:
                     daily = point_event_daily_parts(activity, daily_totals)
                     if daily:
                         lines.append("  今日进度：" + "、".join(daily))
+                # 玩法段与视图段之间留空行：QQ 原生 markdown 把 `\n` 归一为
+                # `\r` 后单换行会吞行，「今日进度」会被粘到下一个玩法上。
+                lines.append("")
                 sections += 1
             elif activity_type == "activity_boss":
                 progress = (snapshot.get("boss_progress") or {}).get(activity_key)
@@ -439,11 +442,13 @@ class ActivityReadModelApplication:
                     limit = max(1, _as_int(activity.get("daily_fight_limit"), 1))
                     detail += f"、今日挑战 {used}/{limit}"
                 lines.append(detail)
+                # 首领段是最后一段也照常留空行，末尾统一 strip，保持相邻玩法
+                # 段之间恰有一个空行（QQ 原生 markdown 单换行会被吞行）。
+                lines.append("")
                 sections += 1
         if not sections:
             lines.extend(("", "暂无个人玩法进度"))
-        return "\n".join(lines).strip()
-
+        return self._tighten_blank_lines(lines)
 
     def activity_info_text(self, user_id: str | None = None) -> str:
         helpers = self._overview_helpers()
@@ -1602,7 +1607,35 @@ class ActivityReadModelApplication:
                     f"- {phrase['name']}：{owned}/{total_need}，已兑换 {limit_text}"
                     f"{status}{command}"
                 )
-        return "\n".join(lines).strip()
+            # 玩法段与下一段之间留空行。收尾的 strip 会去掉末段多余空行，
+            # 既保持原有「段间恰一空行」的纯文本形态，也避免 QQ 原生
+            # markdown（`\n`→`\r`）把下一段标题吞进上一行。
+            lines.append("")
+        return self._tighten_blank_lines(lines)
+
+    @staticmethod
+    def _tighten_blank_lines(lines: list[str]) -> str:
+        """Collapse blank-line runs so each gameplay section keeps one blank line.
+
+        Each gameplay section ends with a blank line so QQ native markdown
+        (``\\n`` → ``\\r``) cannot swallow the next section's first line. Runs of
+        blank lines collapse to exactly one, leading blanks are dropped, and
+        only the very last blank line (the one a section contributed) is kept.
+        """
+
+        rendered: list[str] = []
+        for line in lines:
+            if line == "" and (not rendered or rendered[-1] == ""):
+                continue
+            rendered.append(line)
+        while rendered and rendered[0] == "":
+            rendered.pop(0)
+        while len(rendered) > 1 and rendered[-1] == "" and rendered[-2] == "":
+            rendered.pop()
+        text = "\n".join(rendered)
+        if not text.strip():
+            return ""
+        return text.lstrip("\n")
 
     def points_text(self, user_id: str) -> str:
         from ...xiuxian.xiuxian_activity.activity_config import activity_state
@@ -1765,6 +1798,12 @@ class ActivityReadModelApplication:
                 stock_text = (
                     f"，全服库存 {sold}/{stock_limit}" if stock_limit > 0 else ""
                 )
+                # 原有可购引导以 `，` 接在奖励段之后；终态标注（已兑换完/
+                # 已售罄）以 `；` 收尾，再挂购买引导必须另起分隔，否则会渲染成
+                # “已兑换完（3/3），购买：…”，读起来像仍可购买。终态与不引导
+                # 时逐字保持旧文案（parity）。
+                if guidance and status_text:
+                    guidance = "；" + guidance.lstrip("，")
                 lines.append(
                     f"- {item_name}：{_as_int(item.get('cost'))}{point_name}，"
                     f"已兑换 {limit_text}{stock_text}{status_text}，"

@@ -315,6 +315,36 @@ A 已解锁会冒充 B 未达标的进度，A 已领 `1-3` 排行档会漏报 B 
   develop CI run `39998595819`、main CI run `40001772187` 均成功（headSha
   均为 `bf85e010`）。未部署，未读取或写入真实游戏库，不发送真实消息。
 
+## 已完成目标：G6 活动视图投递合同全覆盖（roadmap-index G6）
+
+`test_activity_center_delivery_contract.py` 只通过共享 `handle_send` 缝隙证明过中心
+卡片；其余玩家视图没有投递层测试，实测确实存在合同缺口。目标文档
+`docs/goals/goal-view-delivery-contracts.md`。
+
+- 新增 `tests/test_activity_view_delivery_contracts.py`（`7/7`）：以随包默认配置
+  （集字+积分+首领三玩法、阶段日程、首领行动提示、购买引导、就绪标注）渲染
+  stage/boss/shop/bag/reward/gameplay 六视图，逐个走
+  `handle_send(native_markdown=True, fallback_msg=strip_md_command_links(text))`：
+  OneBot 与关闭 markdown 的 QQ 只收到一次纯文本（无 `**`、无 `mqqapi`、入口 label
+  与关键行完整、降级幂等）；QQ 原生 markdown 收到 `\n`→`\r` 归一后消息、保留
+  `](mqqapi`；多行布局（玩法段之间、多集字段之间）两条路径都保留空行。handler 源
+  合同逐个钉住该视图自己的 handler，另有商店/背包运行期接线合同。
+- 合同暴露并修复的缺口（只读渲染/接线）：`活动首领` 曾先 `_ensure_user`，未注册
+  用户拿到「请先修仙」而不是状态块，且从未走原生缝隙 → 改为按事件用户 id 渲染并
+  走共享缝隙；`活动商店`/`活动背包` 只发纯文本（QQ 原生下购买/兑换引导无蓝字）→
+  改走共享缝隙；`活动玩法`/`活动奖励` 的 `fallback_msg` 曾是未剥链接的 `text` →
+  统一 `strip_md_command_links(text)`；`活动玩法` 玩法段与「今日进度」后缺空行、
+  `活动背包` 多集字时相邻段出现两个空行 → 新增 `_tighten_blank_lines` 折叠为
+  「段后恰一空行、段间不连空行」。
+- 不改投递层 `handle_send` 的换行归一行为、不改领取/购买/兑换/讨伐写路径与
+  `claim_*` query 语义；不新增命令/路由/表/迁移/配置键。
+- 受影响 `tests/test_activity_*` 合计 `352 passed`，加上 `test_refactor_progress`
+  `23/23` 共 `375` 通过；architecture/inventory/progress 三门禁真实 exit 0；
+  `git diff --check` 干净；`compileall` 通过。按用户指示未跑全量测试、未部署、
+  未读写真实游戏库、未发真实消息。
+- 本轮只改 `read_model_application.py`、`xiuxian_activity/__init__.py`、新聚焦测试与
+  正式文档；提交与 CI 状态见本条末尾。
+
 ## 冻结清单与停止条件
 
 冻结范围仅包括活动 Web 六来源一键代领 API、权限/错误合同、管理员面板、兼容性保护、聚焦测试、路由清单和正式文档。不得新增奖励经济、schema/数据迁移、玩家身份模型、后台活动编辑器、通用 UI 框架或 unrelated refactor。
