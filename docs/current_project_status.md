@@ -343,7 +343,10 @@ A 已解锁会冒充 B 未达标的进度，A 已领 `1-3` 排行档会漏报 B 
   `git diff --check` 干净；`compileall` 通过。按用户指示未跑全量测试、未部署、
   未读写真实游戏库、未发真实消息。
 - 本轮只改 `read_model_application.py`、`xiuxian_activity/__init__.py`、新聚焦测试与
-  正式文档；提交与 CI 状态见本条末尾。
+  正式文档。目标提交 `5c88cd3a` 已推送 develop 并快进合入 main；develop CI run
+  `40260273593`、main CI run `40261122013` 均成功（headSha 均为 `5c88cd3a`，
+  build-and-release 按分支规则 skipped）。未部署，未读取或写入真实游戏库，不发送
+  真实消息。
 
 ## 冻结清单与停止条件
 
