@@ -506,7 +506,11 @@ bot 侧六个玩家视图（`活动阶段`/`活动首领`/`活动商店`/`活动
   → 买家 920、卖家 80，重复清理不再退款。
 - 交付提交：`f020f62d`（N1，develop CI run `40517570714` success）、
   `5319b209`（N2，run `40519162723` success）、`235d9912`（N3，run
-  `40520461812` success）。未部署、未读写真实游戏库、不发送真实消息。
+  `40520461812` success）、`66e4710b`（状态记录，develop CI run `40521587683`
+  success）。三阶段与记录提交齐备后一次性快进合入 main（`main` 与 `develop`
+  均为 `66e4710b`），main CI run `40522703643` success（headSha `66e4710b`，
+  `build-and-release` 按分支规则 skipped）。未部署、未读写真实游戏库、
+  不发送真实消息。
 
 ## 冻结清单与停止条件
 
