@@ -512,6 +512,59 @@ bot 侧六个玩家视图（`活动阶段`/`活动首领`/`活动商店`/`活动
   `build-and-release` 按分支规则 skipped）。未部署、未读写真实游戏库、
   不发送真实消息。
 
+## 已完成目标：拍卖结算物品投递闭环（A1→A2→A3）
+
+拍卖的竞价、上架、下架、场次开始与结算早已由 feature application 承担，但结算的容量
+口径在生产接线里恒为 `1`：`AuctionSettlementApplication` 只传 database，
+`AuctionSettlementSqlRepository(database)` 的 `max(int(max_goods_num or 1), 1)`
+把「未传参」当成单件上限。真实仓储探针（生产接线，非配置默认）实测
+`repo.max_goods_num = 1`，因此卖家流拍时只要背包里还有同名物品就判「背包满」：
+`auction_current` 行被删、物品不退回、`auction_history` 记 `卖家背包满流拍`，
+而玩家日志写的是「已退回背包」；中标者已持有该物品 1 件则 `inventory_full`
+拒绝整场结算，所有人的拍品与卖家收入一起卡住，管理员重试也必然失败。目标文档
+`docs/goals/next-full-feature.md`（local-only，未提交）。
+
+- A1 结算容量口径修正（`bc404a9d`）：新增 `DEFAULT_MAX_GOODS_NUM = 1000` 与
+  `configured_max_goods_num()`（惰性读 `XiuConfig().max_goods_num`，配置不可读才
+  回落默认值），`AuctionSettlementSqlRepository` 在未显式注入时走该解析；
+  `AuctionSettlementApplication` 可透传 `max_goods_num`。实测修复后
+  `max_goods_num = 1000`：卖家持有 2 件时流拍物品退回成 3 件、中标者已持有 1 件
+  时正常入包。不改结算价、手续费、卖家收入与败者退款口径。
+- A2 未送达入库（`621e558e`）：新迁移 `auction.009`（game DB）创建
+  `auction_pending_items`/`auction_pending_claim_operations`。结算在同一事务内
+  按 `backpack`/`pending` 投递：卖家流拍且背包满、中标者背包满都写入待领取行
+  （`role`+`reason`），历史状态 `待领取`，**不再丢物品、也不再阻塞整场**；
+  其余拍品、卖家入账、败者退款照常完成。`item_missing`/`participant_missing`
+  仍整事务拒绝；旧库缺表时插入抛错→整个结算回滚、场次保持 active，绝不静默降级
+  为销毁。中标/流拍日志改为按 `delivery` 分支，不再谎称「已退回背包」。
+- A3 领取闭环（`0d9d378b`）：新增 `AuctionPendingApplication`——`list_for` 只读
+  列本人未领取物品，`claim` 在单个 immediate UoW 内逐行做容量校验、原子入包
+  （`goods_num/bind_num +1`）、标记 `claimed_at/claim_operation_id`，背包满的
+  跳过并保持待领取，同 operation_id 重放不重复发放，缺表 `schema_missing` 失败关闭。
+  命令面复用既有 `我的拍卖`（不新增命令名/路由/配置键）：无参数同时列出等待区与
+  待领取并给出指令提示，`我的拍卖 领取 [拍卖ID]` 领取全部可领取项或指定一件；
+  `trade_help.py` 拍卖帮助补该指令与待领取说明。
+- 测试：`tests/test_auction_settlement_delivery.py`（A1 容量 4 项 + A2 入库 5 项 +
+  迁移路由）`10/10`、`tests/test_auction_pending_claim.py`（领取/重放/跨用户/
+  容量/缺表 + handler 源合同）`15/15`；既有断言按新语义**原地更新**：
+  `test_auction_settlement_repository.py` 由「inventory_full 保持 pending」改为
+  「settled + 待领取 + 待领取行」，`test_auction_session_finish.py` 同，
+  `test_source_quality.py` 的结算默认路径合同改钉
+  `self.repository = repository or self._build_repository()` +
+  `max_goods_num=self.max_goods_num`。受影响拍卖/交易/源码质量套件 `335 passed`，
+  unittest 收集 `271 tests OK`；三门禁真实 exit 0；`compileall` 与
+  `git diff --check` 干净；`docs/refactor_inventory.json` 已重新导出（仅新增两张表）。
+- 端到端探针（真实 application + 真实仓储，cap=1 复现满包）：结算 `待领取`、
+  场次 `settled`、卖家 +630、败者退 500、中标者待领取 1 件；满包时领取 `blocked`
+  且仍待领取，腾出空间后领取成功入包（`goods_num=1,bind_num=1`），同 operation_id
+  重放返回 `duplicate`、不重复发放。
+- 交付与 CI：A1 `bc404a9d` 的 develop run `40529415381` **failure**——唯一失败项是
+  `test_source_quality` 仍钉旧字面量 `self.repository = repository or
+  AuctionSettlementSqlRepository`，该合同在 A2 提交就地更新（功能代码本身由 A2 的
+  绿色 run 覆盖），这里如实记录而不宣称通过；A2 `621e558e` run `40531739039`
+  success；A3 `0d9d378b` run `40534016731` success。未部署、未读写真实游戏库、
+  不发送真实消息。
+
 ## 冻结清单与停止条件
 
 冻结范围仅包括活动 Web 六来源一键代领 API、权限/错误合同、管理员面板、兼容性保护、聚焦测试、路由清单和正式文档。不得新增奖励经济、schema/数据迁移、玩家身份模型、后台活动编辑器、通用 UI 框架或 unrelated refactor。
