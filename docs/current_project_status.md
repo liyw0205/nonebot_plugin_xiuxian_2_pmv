@@ -433,28 +433,35 @@ bot 侧六个玩家视图（`活动阶段`/`活动首领`/`活动商店`/`活动
   只跑一次（三个启动钩子中的第一个真正执行，其余为空操作），供测试重置的
   `reset_restore_state()`。
 - 三个 `restore_*_rooms()` 改为 async 并委派给该协调器；`load_rooms(states=None)`
-  增加可选入参（不传时仍按原路径逐类型读取，既有调用语义不变）。过期房间静默
-  释放（启动期无 bot/event 上下文），其余房间按**剩余时间**重建计时器；重复
-  重建先取消旧任务，不叠加。
+  增加可选入参（不传时仍按原路径逐类型读取，既有调用语义不变）。过期房间走**与
+  运行期相同的清理分支**（仅抑制通知）：五子棋 `_close_waiting_room`/
+  `_finish_stale_move`、十点半 `_close_waiting_room`（人数不足关闭 vs 自动结算）、
+  扫雷 `_expire_game`（`status="closed"` + 落盘），其余房间按**剩余时间**重建
+  计时器；重复重建先取消旧任务，不叠加。`_finish_stale_move` 接受可选 `moment`，
+  使恢复用与过期判定同一时刻比较而非墙钟。
 - `start_*_timeout` 增加关键字参数 `delay`（默认 None = 原完整时长，在线行为
   不变）并允许 `bot/event` 为 None（仅清理与落盘，不投递）。运行期超时文案与
   触发条件未改。
 - 不改写路径、表结构、迁移或配置键；未新增命令/路由。
 - 新聚焦套件 `nonebot_plugin_xiuxian_2/features/entertainment/tests/test_room_lifecycle.py`
   `20/20`（锚点选择、非候选状态、缺/坏时间戳、到期边界、余量、按类型分组）、
-  `tests/test_entertainment_room_restore_timeout.py` `14/14`（过期释放并可
-  重新开局、存活房间保留且重建计时器、无投递上下文不发送消息、重复重建不叠加、
-  启动钩子可 await）与 `tests/test_entertainment_room_batch_restore.py` `9/9`
-  （批量读只开一个只读 UoW、覆盖三类且空类型仍在、保留预算与 fail-closed、
+  `tests/test_entertainment_room_restore_timeout.py` `15/15`（过期释放并可
+  重新开局、走真实关闭分支、存活房间保留且重建计时器、无投递上下文不发送消息、
+  重复重建不叠加、启动钩子可 await）与 `tests/test_entertainment_room_batch_restore.py`
+  `9/9`（批量读只开一个只读 UoW、覆盖三类且空类型仍在、保留预算与 fail-closed、
   恢复只跑一次且不逐类型读、无 bot 不发消息）；`test_room_repository.py` 新增
   3 项批量读断言（`9 passed`）。受影响套件 `test_entertainment_room_managers`/
   `test_half_ten_providers`/`test_minesweeper_providers`/`test_source_quality`
-  与全部 entertainment feature 测试（126 项）合计 `269 passed`。三门禁真实
-  exit 0；`git diff --check` 干净；`compileall` 通过。代码提交 `d814465d`
-  （develop CI run `40447332383` success）、文档提交 `5ab2db4e`（develop CI run
-  `40448212171` success）、CI run 回填提交 `060ca806`（develop CI run
-  `40449259010` success）；`060ca806` 已快进合入 main，main CI run `40450117536`
-  success（headSha 均为 `060ca806`）。未部署、未读写真实游戏库、不发送真实消息。
+  与全部 entertainment feature 测试（129 项）合计 `270 passed`。三门禁真实
+  exit 0；`git diff --check` 干净；`compileall` 通过。
+- 交付提交：`d814465d`（纯规则模块 + 首次接入，develop CI run `40447332383`
+  success，已快进 main，main CI run `40450117536` success）、`5ab2db4e`（文档，
+  run `40448212171` success）、`060ca806`（回到 develop/CI 记录，run
+  `40449259010` success）、`fdb8ae8f`（单快照批量读 + 协调器，run `40461069946`
+  success）、`bcaf80a5`（文档，run `40461855992` success）、`80ba1cb9`（过期房间
+  走真实关闭分支，run `40468586654` success）；三个 develop run 的 `quality` job
+  均 success、`build-and-release` skipped。整卡验收通过前未把 fdb8ae8f 之后的
+  提交合入 main。未部署、未读写真实游戏库、不发送真实消息。
 
 ## 冻结清单与停止条件
 
