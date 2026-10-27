@@ -392,20 +392,64 @@ def ai_best_move(game: GomokuGame):
 # =========================
 # 超时任务
 # =========================
+async def _close_waiting_room(room_id: str, bot, event) -> None:
+    """The waiting-room timeout body: release the room, notify only with a context."""
+    g = room_manager.get_room(room_id)
+    if not g or g.status != "waiting":
+        return
+    room_manager.delete_room(room_id)
+    if bot is None or event is None:
+        # Startup restore has no delivery context: release the room silently.
+        return
+    await handle_send(bot, event, f"【五子棋房间关闭】\n房间：{room_id}\n原因：超时无人加入")
+
+
+async def _finish_stale_move(room_id: str, bot, event, *, moment=None) -> None:
+    """The move-timeout body: judge the loss, notify only with a context.
+
+    ``moment`` lets the startup restore compare against the same instant it used
+    to decide the room had expired; the live timer leaves it None so the real
+    clock is used (the task can fire slightly late).
+    """
+    g = room_manager.get_room(room_id)
+    if not g or g.status != "playing" or not g.last_move_time:
+        return
+
+    reference = moment if moment is not None else runtime_clock.now().replace(tzinfo=None)
+    last = datetime.strptime(g.last_move_time, "%Y-%m-%d %H:%M:%S")
+    if (reference - last).total_seconds() < MOVE_TIMEOUT:
+        return
+
+    if bot is None or event is None:
+        # Startup restore has no delivery context: release the room silently.
+        room_manager.delete_room(room_id)
+        return
+
+    loser = g.current_player
+    winner = g.player_white if loser == g.player_black else g.player_black
+    loser_name = g.player_names.get(loser, loser)
+    winner_name = g.player_names.get(winner, winner)
+
+    img = create_board_image(g)
+    await handle_pic_msg_send(
+        bot,
+        event,
+        img,
+        f"【五子棋结束】\n"
+        f"负方：{loser_name}\n"
+        f"原因：超时未落子\n"
+        f"胜者：{winner_name}",
+    )
+    room_manager.delete_room(room_id)
+
+
 async def start_room_timeout(bot, event, room_id: str, *, delay: float | None = None):
     if room_id in room_timeout_tasks:
         room_timeout_tasks[room_id].cancel()
 
     async def _task():
         await asyncio.sleep(ROOM_TIMEOUT if delay is None else delay)
-        g = room_manager.get_room(room_id)
-        if not g or g.status != "waiting":
-            return
-        room_manager.delete_room(room_id)
-        if bot is None or event is None:
-            # Startup restore has no delivery context: release the room silently.
-            return
-        await handle_send(bot, event, f"【五子棋房间关闭】\n房间：{room_id}\n原因：超时无人加入")
+        await _close_waiting_room(room_id, bot, event)
 
     room_timeout_tasks[room_id] = asyncio.create_task(_task())
 
@@ -416,35 +460,7 @@ async def start_move_timeout(bot, event, room_id: str, *, delay: float | None = 
 
     async def _task():
         await asyncio.sleep(MOVE_TIMEOUT if delay is None else delay)
-        g = room_manager.get_room(room_id)
-        if not g or g.status != "playing" or not g.last_move_time:
-            return
-
-        last = datetime.strptime(g.last_move_time, "%Y-%m-%d %H:%M:%S")
-        if (runtime_clock.now().replace(tzinfo=None) - last).total_seconds() < MOVE_TIMEOUT:
-            return
-
-        if bot is None or event is None:
-            # Startup restore has no delivery context: release the room silently.
-            room_manager.delete_room(room_id)
-            return
-
-        loser = g.current_player
-        winner = g.player_white if loser == g.player_black else g.player_black
-        loser_name = g.player_names.get(loser, loser)
-        winner_name = g.player_names.get(winner, winner)
-
-        img = create_board_image(g)
-        await handle_pic_msg_send(
-            bot,
-            event,
-            img,
-            f"【五子棋结束】\n"
-            f"负方：{loser_name}\n"
-            f"原因：超时未落子\n"
-            f"胜者：{winner_name}",
-        )
-        room_manager.delete_room(room_id)
+        await _finish_stale_move(room_id, bot, event)
 
     move_timeout_tasks[room_id] = asyncio.create_task(_task())
 
@@ -454,15 +470,22 @@ async def rearm_room_timeouts(now=None) -> dict[str, list[str]]:
 
     Room snapshots outlive the process but their asyncio timers do not, so without
     this step a restored room keeps binding its players indefinitely. Expired
-    rooms are cleaned up silently (startup has no bot/event to notify), and live
-    rooms get a timer for their REMAINING time, never a fresh full timeout.
+    rooms are released through the SAME cleanup the live timer would have run
+    (minus the notification, since startup has no bot/event), and live rooms get a
+    timer for their REMAINING time, never a fresh full timeout.
     """
     moment = now if now is not None else runtime_clock.now().replace(tzinfo=None)
     expired = room_lifecycle.expired_rooms(
         {"gomoku": [g.to_dict() for g in room_manager.rooms.values()]}, moment
     )["gomoku"]
     for room_id in expired:
-        room_manager.delete_room(room_id)
+        g = room_manager.get_room(room_id)
+        if g is None:
+            continue
+        if g.status == "waiting":
+            await _close_waiting_room(room_id, None, None)
+        elif g.status == "playing":
+            await _finish_stale_move(room_id, None, None, moment=moment)
     for room_id in list(room_manager.rooms):
         g = room_manager.get_room(room_id)
         if g is None:

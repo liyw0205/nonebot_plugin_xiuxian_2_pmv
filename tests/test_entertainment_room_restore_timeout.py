@@ -242,6 +242,19 @@ class HalfTenRearmTests(RoomRearmTestCase):
             asyncio.run(half_ten.rearm_half_ten_timeouts(now=NOW))
             self.assertIn("live", half_ten.half_timeout_tasks)
 
+    def test_expired_room_goes_through_the_real_close_branch(self) -> None:
+        """The expired room must persist the same closed status the live timer writes."""
+        app = MemoryRoomApplication(
+            {"half_ten": [_half_state("old", "waiting", create_ago=3 * 3600)]}
+        )
+        patcher, manager = self._install(half_ten, "half_manager", app)
+        with patcher:
+            manager.load_rooms()
+            asyncio.run(half_ten.rearm_half_ten_timeouts(now=NOW))
+            # one player < MIN_PLAYERS: the timeout closes the room and saves it
+            self.assertEqual([(gt, rid) for gt, rid, _ in app.writes], [("half_ten", "old")])
+            self.assertIsNone(manager.get_user_room("u1"))
+
     def test_settled_room_is_left_alone(self) -> None:
         app = MemoryRoomApplication(
             {"half_ten": [_half_state("done", "finished", create_ago=3 * 3600)]}

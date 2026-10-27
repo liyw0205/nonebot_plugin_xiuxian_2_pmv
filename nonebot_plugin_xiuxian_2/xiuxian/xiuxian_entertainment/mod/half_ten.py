@@ -339,45 +339,50 @@ def build_result_text(g: HalfTenGame):
 # =========================
 # 超时任务
 # =========================
+async def _close_waiting_room(room_id: str, bot, event) -> None:
+    """The waiting-room timeout body; notifies only when a context exists."""
+    g = half_manager.get_room(room_id)
+    if not g or g.status != "waiting":
+        return
+
+    if len(g.players) < MIN_PLAYERS:
+        g.close(f"超时且人数不足{MIN_PLAYERS}人")
+        half_manager.save_room(room_id)
+        half_manager.delete_room(room_id)
+        if bot is None or event is None:
+            # Startup restore has no delivery context: release silently.
+            return
+        await handle_send(
+            bot,
+            event,
+            f"【十点半房间关闭】\n"
+            f"房间：{room_id}\n"
+            f"原因：超时且人数不足 {MIN_PLAYERS} 人",
+        )
+        return
+
+    g.start_and_settle()
+    half_manager.save_room(room_id)
+
+    if bot is None or event is None:
+        # Startup restore has no delivery context: settle silently.
+        half_manager.delete_room(room_id)
+        return
+
+    winner = g.player_names.get(g.winner, g.winner) if g.winner else "未知"
+    result = build_result_text(g)
+    await handle_send(bot, event, f"【十点半自动结算】\n冠军：{winner}\n\n{result}")
+
+    half_manager.delete_room(room_id)
+
+
 async def start_half_timeout(bot, event, room_id: str, *, delay: float | None = None):
     if room_id in half_timeout_tasks:
         half_timeout_tasks[room_id].cancel()
 
     async def _task():
         await asyncio.sleep(ROOM_TIMEOUT if delay is None else delay)
-        g = half_manager.get_room(room_id)
-        if not g or g.status != "waiting":
-            return
-
-        if len(g.players) < MIN_PLAYERS:
-            g.close(f"超时且人数不足{MIN_PLAYERS}人")
-            half_manager.save_room(room_id)
-            half_manager.delete_room(room_id)
-            if bot is None or event is None:
-                # Startup restore has no delivery context: release silently.
-                return
-            await handle_send(
-                bot,
-                event,
-                f"【十点半房间关闭】\n"
-                f"房间：{room_id}\n"
-                f"原因：超时且人数不足 {MIN_PLAYERS} 人",
-            )
-            return
-
-        g.start_and_settle()
-        half_manager.save_room(room_id)
-
-        if bot is None or event is None:
-            # Startup restore has no delivery context: settle silently.
-            half_manager.delete_room(room_id)
-            return
-
-        winner = g.player_names.get(g.winner, g.winner) if g.winner else "未知"
-        result = build_result_text(g)
-        await handle_send(bot, event, f"【十点半自动结算】\n冠军：{winner}\n\n{result}")
-
-        half_manager.delete_room(room_id)
+        await _close_waiting_room(room_id, bot, event)
 
     half_timeout_tasks[room_id] = asyncio.create_task(_task())
 
@@ -387,13 +392,15 @@ async def rearm_half_ten_timeouts(now=None) -> dict[str, list[str]]:
 
     Rooms persist but their timers do not; without this a restored waiting room
     never closes and ``开始十点半`` keeps answering ``你已在其它十点半房间中``.
+    Expired rooms go through the SAME close/settle branches the live timer uses,
+    minus the notification (startup has no bot/event).
     """
     moment = now if now is not None else runtime_clock.now().replace(tzinfo=None)
     expired = room_lifecycle.expired_rooms(
         {"half_ten": [g.to_dict() for g in half_manager.rooms.values()]}, moment
     )["half_ten"]
     for room_id in expired:
-        half_manager.delete_room(room_id)
+        await _close_waiting_room(room_id, None, None)
     for room_id in list(half_manager.rooms):
         g = half_manager.get_room(room_id)
         if g is None:
