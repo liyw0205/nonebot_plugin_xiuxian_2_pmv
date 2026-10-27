@@ -562,7 +562,10 @@ bot 侧六个玩家视图（`活动阶段`/`活动首领`/`活动商店`/`活动
   `test_source_quality` 仍钉旧字面量 `self.repository = repository or
   AuctionSettlementSqlRepository`，该合同在 A2 提交就地更新（功能代码本身由 A2 的
   绿色 run 覆盖），这里如实记录而不宣称通过；A2 `621e558e` run `40531739039`
-  success；A3 `0d9d378b` run `40534016731` success。未部署、未读写真实游戏库、
+  success；A3 `0d9d378b` run `40534016731` success；状态记录 `9993f451` 的
+  develop run `40535126193` success，随后一次性快进合入 main（`main` 与 `develop`
+  均为 `9993f451`），main CI run `40536296188` success（headSha `9993f451`，
+  `build-and-release` 按分支规则 skipped）。未部署、未读写真实游戏库、
   不发送真实消息。
 
 ## 冻结清单与停止条件
