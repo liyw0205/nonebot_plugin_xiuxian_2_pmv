@@ -4,6 +4,7 @@ from ....infrastructure.clock import SystemClock
 from ....infrastructure.random_source import SystemRandom
 from ....infrastructure.ids import UUIDGenerator
 from ....bootstrap.legacy import register_legacy_startup
+from ....features.entertainment import room_lifecycle
 
 from ...on_compat import on_command
 from nonebot.params import CommandArg
@@ -294,8 +295,10 @@ half_manager = HalfTenRoomManager()
 
 
 @register_legacy_startup
-def restore_half_ten_rooms() -> None:
+async def restore_half_ten_rooms() -> None:
     half_manager.load_rooms()
+    # See gomoku.restore_gomoku_rooms: rooms persist, their timers do not.
+    await rearm_half_ten_timeouts()
 
 
 # =========================
@@ -335,12 +338,12 @@ def build_result_text(g: HalfTenGame):
 # =========================
 # 超时任务
 # =========================
-async def start_half_timeout(bot, event, room_id: str):
+async def start_half_timeout(bot, event, room_id: str, *, delay: float | None = None):
     if room_id in half_timeout_tasks:
         half_timeout_tasks[room_id].cancel()
 
     async def _task():
-        await asyncio.sleep(ROOM_TIMEOUT)
+        await asyncio.sleep(ROOM_TIMEOUT if delay is None else delay)
         g = half_manager.get_room(room_id)
         if not g or g.status != "waiting":
             return
@@ -349,6 +352,9 @@ async def start_half_timeout(bot, event, room_id: str):
             g.close(f"超时且人数不足{MIN_PLAYERS}人")
             half_manager.save_room(room_id)
             half_manager.delete_room(room_id)
+            if bot is None or event is None:
+                # Startup restore has no delivery context: release silently.
+                return
             await handle_send(
                 bot,
                 event,
@@ -361,6 +367,11 @@ async def start_half_timeout(bot, event, room_id: str):
         g.start_and_settle()
         half_manager.save_room(room_id)
 
+        if bot is None or event is None:
+            # Startup restore has no delivery context: settle silently.
+            half_manager.delete_room(room_id)
+            return
+
         winner = g.player_names.get(g.winner, g.winner) if g.winner else "未知"
         result = build_result_text(g)
         await handle_send(bot, event, f"【十点半自动结算】\n冠军：{winner}\n\n{result}")
@@ -368,6 +379,29 @@ async def start_half_timeout(bot, event, room_id: str):
         half_manager.delete_room(room_id)
 
     half_timeout_tasks[room_id] = asyncio.create_task(_task())
+
+
+async def rearm_half_ten_timeouts(now=None) -> dict[str, list[str]]:
+    """Release expired rooms and rebuild the waiting-room timers after a restart.
+
+    Rooms persist but their timers do not; without this a restored waiting room
+    never closes and ``开始十点半`` keeps answering ``你已在其它十点半房间中``.
+    """
+    moment = now if now is not None else runtime_clock.now().replace(tzinfo=None)
+    expired = room_lifecycle.expired_rooms(
+        {"half_ten": [g.to_dict() for g in half_manager.rooms.values()]}, moment
+    )["half_ten"]
+    for room_id in expired:
+        half_manager.delete_room(room_id)
+    for room_id in list(half_manager.rooms):
+        g = half_manager.get_room(room_id)
+        if g is None:
+            continue
+        remaining = room_lifecycle.remaining_seconds("half_ten", g.to_dict(), moment)
+        if remaining is None:
+            continue
+        await start_half_timeout(None, None, room_id, delay=remaining)
+    return {"half_ten": expired}
 
 
 # =========================

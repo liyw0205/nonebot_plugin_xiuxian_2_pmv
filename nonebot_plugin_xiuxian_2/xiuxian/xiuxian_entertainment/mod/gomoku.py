@@ -6,6 +6,7 @@ from PIL import Image, ImageDraw, ImageFont
 from ....infrastructure.clock import SystemClock
 from ....infrastructure.ids import UUIDGenerator
 from ....bootstrap.legacy import register_legacy_startup
+from ....features.entertainment import room_lifecycle
 
 from ...on_compat import on_command
 from nonebot.params import CommandArg
@@ -190,8 +191,11 @@ room_manager = GomokuRoomManager()
 
 
 @register_legacy_startup
-def restore_gomoku_rooms() -> None:
+async def restore_gomoku_rooms() -> None:
     room_manager.load_rooms()
+    # Snapshots outlive the process but their timers do not: release the rooms
+    # that already expired while we were down and re-arm the rest.
+    await rearm_room_timeouts()
 
 
 # =========================
@@ -387,33 +391,41 @@ def ai_best_move(game: GomokuGame):
 # =========================
 # 超时任务
 # =========================
-async def start_room_timeout(bot, event, room_id: str):
+async def start_room_timeout(bot, event, room_id: str, *, delay: float | None = None):
     if room_id in room_timeout_tasks:
         room_timeout_tasks[room_id].cancel()
 
     async def _task():
-        await asyncio.sleep(ROOM_TIMEOUT)
+        await asyncio.sleep(ROOM_TIMEOUT if delay is None else delay)
         g = room_manager.get_room(room_id)
         if not g or g.status != "waiting":
             return
         room_manager.delete_room(room_id)
+        if bot is None or event is None:
+            # Startup restore has no delivery context: release the room silently.
+            return
         await handle_send(bot, event, f"【五子棋房间关闭】\n房间：{room_id}\n原因：超时无人加入")
 
     room_timeout_tasks[room_id] = asyncio.create_task(_task())
 
 
-async def start_move_timeout(bot, event, room_id: str):
+async def start_move_timeout(bot, event, room_id: str, *, delay: float | None = None):
     if room_id in move_timeout_tasks:
         move_timeout_tasks[room_id].cancel()
 
     async def _task():
-        await asyncio.sleep(MOVE_TIMEOUT)
+        await asyncio.sleep(MOVE_TIMEOUT if delay is None else delay)
         g = room_manager.get_room(room_id)
         if not g or g.status != "playing" or not g.last_move_time:
             return
 
         last = datetime.strptime(g.last_move_time, "%Y-%m-%d %H:%M:%S")
         if (runtime_clock.now().replace(tzinfo=None) - last).total_seconds() < MOVE_TIMEOUT:
+            return
+
+        if bot is None or event is None:
+            # Startup restore has no delivery context: release the room silently.
+            room_manager.delete_room(room_id)
             return
 
         loser = g.current_player
@@ -434,6 +446,34 @@ async def start_move_timeout(bot, event, room_id: str):
         room_manager.delete_room(room_id)
 
     move_timeout_tasks[room_id] = asyncio.create_task(_task())
+
+
+async def rearm_room_timeouts(now=None) -> dict[str, list[str]]:
+    """Release expired rooms and rebuild timers for the survivors after a restart.
+
+    Room snapshots outlive the process but their asyncio timers do not, so without
+    this step a restored room keeps binding its players indefinitely. Expired
+    rooms are cleaned up silently (startup has no bot/event to notify), and live
+    rooms get a timer for their REMAINING time, never a fresh full timeout.
+    """
+    moment = now if now is not None else runtime_clock.now().replace(tzinfo=None)
+    expired = room_lifecycle.expired_rooms(
+        {"gomoku": [g.to_dict() for g in room_manager.rooms.values()]}, moment
+    )["gomoku"]
+    for room_id in expired:
+        room_manager.delete_room(room_id)
+    for room_id in list(room_manager.rooms):
+        g = room_manager.get_room(room_id)
+        if g is None:
+            continue
+        remaining = room_lifecycle.remaining_seconds("gomoku", g.to_dict(), moment)
+        if remaining is None:
+            continue
+        if g.status == "waiting":
+            await start_room_timeout(None, None, room_id, delay=remaining)
+        elif g.status == "playing":
+            await start_move_timeout(None, None, room_id, delay=remaining)
+    return {"gomoku": expired}
 
 
 # =========================

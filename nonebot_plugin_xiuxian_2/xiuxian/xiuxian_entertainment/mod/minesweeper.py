@@ -6,6 +6,7 @@ from ....infrastructure.clock import SystemClock
 from ....infrastructure.random_source import SystemRandom
 from ....infrastructure.ids import UUIDGenerator
 from ....bootstrap.legacy import register_legacy_startup
+from ....features.entertainment import room_lifecycle
 
 from ...on_compat import on_command
 from nonebot.params import CommandArg
@@ -303,8 +304,10 @@ ms_manager = MinesweeperManager()
 
 
 @register_legacy_startup
-def restore_minesweeper_rooms() -> None:
+async def restore_minesweeper_rooms() -> None:
     ms_manager.load_rooms()
+    # See gomoku.restore_gomoku_rooms: games persist, their timers do not.
+    await rearm_game_timeouts()
 
 
 def parse_coord(s: str):
@@ -431,19 +434,47 @@ def render_game(g: MinesweeperGame, reveal_all=False) -> BytesIO:
     return out
 
 
-async def start_ms_timeout(bot, event, game_id: str, handle_send):
+async def start_ms_timeout(bot, event, game_id: str, handle_send, *, delay: float | None = None):
     if game_id in minesweeper_timeout_tasks:
         minesweeper_timeout_tasks[game_id].cancel()
 
     async def _timeout():
-        await asyncio.sleep(GAME_TIMEOUT)
+        await asyncio.sleep(GAME_TIMEOUT if delay is None else delay)
         g = ms_manager.games.get(game_id)
         if not g or g.status != "playing":
             return
         g.status = "closed"
         ms_manager.save(game_id)
+        if bot is None or event is None:
+            # Startup restore has no delivery context: release the game silently.
+            ms_manager.delete(game_id)
+            return
         await handle_send(bot, event, f"【扫雷超时】\n{GAME_TIMEOUT} 秒无操作，本局已关闭。")
         ms_manager.delete(game_id)
 
     t = asyncio.create_task(_timeout())
     minesweeper_timeout_tasks[game_id] = t
+
+
+async def rearm_game_timeouts(now=None) -> dict[str, list[str]]:
+    """Release expired minesweeper games and rebuild timers for the survivors.
+
+    Mirrors ``gomoku.rearm_room_timeouts``: snapshots survive a restart but their
+    timers do not, so without this a restored game stays ``playing`` forever and
+    ``开始扫雷`` keeps answering ``你已有进行中的扫雷局``.
+    """
+    moment = now if now is not None else runtime_clock.now().replace(tzinfo=None)
+    expired = room_lifecycle.expired_rooms(
+        {"minesweeper": [g.to_dict() for g in ms_manager.games.values()]}, moment
+    )["minesweeper"]
+    for game_id in expired:
+        ms_manager.delete(game_id)
+    for game_id in list(ms_manager.games):
+        g = ms_manager.games.get(game_id)
+        if g is None:
+            continue
+        remaining = room_lifecycle.remaining_seconds("minesweeper", g.to_dict(), moment)
+        if remaining is None:
+            continue
+        await start_ms_timeout(None, None, game_id, handle_send, delay=remaining)
+    return {"minesweeper": expired}
