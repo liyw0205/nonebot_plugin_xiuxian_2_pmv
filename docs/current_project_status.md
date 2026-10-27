@@ -411,6 +411,35 @@ bot 侧六个玩家视图（`活动阶段`/`活动首领`/`活动商店`/`活动
   `52f62c09` 已推送 develop 并快进合入 main；develop CI run `40371340167`、main CI run
   `40372486961` 均成功（headSha 均为 `52f62c09`）。未部署、未读写真实游戏库、不发送真实消息。
 
+## 已完成目标：娱乐房间重启后超时恢复
+
+三个娱乐房间在重启后仍然存在（快照持久化于 `entertainment_game_rooms`，
+启动时 `load_rooms()` 恢复），但**超时任务不随进程保留**：一个等待对手的
+五子棋房间（`ROOM_TIMEOUT=180s`）重启后不再自动关闭，创建者永远
+「你已在其它棋局中」，无法开新局；进行中的五子棋/扫雷/十点半同样不再超时收敛。
+
+- 新增只读纯规则模块 `features/entertainment/room_lifecycle.py`：
+  `timeout_seconds`/`room_deadline`/`is_expired`/`remaining_seconds`/
+  `expired_rooms`。按类型取时间锚点（五子棋 `playing` 用落子时钟、否则用加入
+  时钟；十点半用创建时钟；扫雷用操作时钟），`waiting`/`playing` 之外的状态一律
+  不参与，缺字段或坏时间戳按「不清理」处理。到期时刻本身不算过期（运行期任务
+  睡满整段才动作），剩余时间返回余量，过期返回 0。
+- 三个 `restore_*_rooms()` 改为 async，在 `load_rooms()` 后调用对应的
+  `rearm_*_timeouts()`：过期房间静默释放（启动期无 bot/event 上下文），其余
+  房间按**剩余时间**重建计时器；重复调用会先取消旧任务，不叠加。
+- `start_*_timeout` 增加关键字参数 `delay`（默认 None = 原完整时长，在线行为
+  不变）并允许 `bot/event` 为 None（仅清理与落盘，不投递）。运行期超时文案与
+  触发条件未改。
+- 不改写路径、表结构、迁移或配置键；未新增命令/路由。
+- 新聚焦套件 `nonebot_plugin_xiuxian_2/features/entertainment/tests/test_room_lifecycle.py`
+  `20/20`（锚点选择、非候选状态、缺/坏时间戳、到期边界、余量、按类型分组）
+  与 `tests/test_entertainment_room_restore_timeout.py` `14/14`（过期释放并可
+  重新开局、存活房间保留且重建计时器、无投递上下文不发送消息、重复重建不叠加、
+  启动钩子可 await）；受影响套件 `test_entertainment_room_managers`/
+  `test_half_ten_providers`/`test_minesweeper_providers`/`test_source_quality`
+  与全部 entertainment feature 测试（126 项）合计 `260 passed`。三门禁真实
+  exit 0；`git diff --check` 干净；`compileall` 通过。
+
 ## 冻结清单与停止条件
 
 冻结范围仅包括活动 Web 六来源一键代领 API、权限/错误合同、管理员面板、兼容性保护、聚焦测试、路由清单和正式文档。不得新增奖励经济、schema/数据迁移、玩家身份模型、后台活动编辑器、通用 UI 框架或 unrelated refactor。
