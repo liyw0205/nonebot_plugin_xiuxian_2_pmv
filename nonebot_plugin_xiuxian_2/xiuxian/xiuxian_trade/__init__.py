@@ -525,6 +525,22 @@ def _guishi_expired_operation_id(order_id):
     return f"guishi-expire:baitan:{str(order_id).strip()}"
 
 
+def _record_guishi_match_event(result, buyer_name, seller_name):
+    """Record the shared Guishi trade statistics for one matched buy/sell pair."""
+    record_trade_event(
+        result.buyer_id,
+        "鬼市成交",
+        f"购得{result.item_name}x{result.quantity}，花费{number_to(result.amount)}灵石，卖家:{seller_name}",
+        {"鬼市购买次数": 1, "鬼市购买数量": result.quantity, "鬼市消费灵石": result.amount}
+    )
+    record_trade_event(
+        result.seller_id,
+        "鬼市成交",
+        f"售出{result.item_name}x{result.quantity}，收入{number_to(result.amount)}灵石，买家:{buyer_name}",
+        {"鬼市售出次数": 1, "鬼市售出数量": result.quantity, "鬼市收入灵石": result.amount}
+    )
+
+
 def _auction_queue_operation_id(event, action, user_id, item_id):
     event_id = str(
         getattr(event, "message_id", "") or getattr(event, "id", "") or ""
@@ -2083,6 +2099,25 @@ async def guishi_baitan_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     msg += f"价格：{number_to(price)} 灵石\n"
     msg += f"数量：{quantity}\n"
     msg += f"摊位ID：{order_id}\n"
+
+    # 摆摊即撮合：立刻匹配能接受该价格的求购订单，成交结果当场回到卖家手里。
+    fill_results = trade_application.guishi_fill_standing_qiugou(
+        baitan_order_id=order_id
+    )
+    if fill_results:
+        msg += "\n☆------求购成交------☆\n"
+        seller_name = (user_info or {}).get('user_name') or user_id
+        for fill in fill_results:
+            buyer_info = _sql_message().get_user_info_with_id(fill.buyer_id)
+            buyer_name = buyer_info['user_name'] if buyer_info else fill.buyer_id
+            execution_price = fill.amount // fill.quantity if fill.quantity else 0
+            msg += (
+                f"{buyer_name} 购得 {fill.item_name} x{fill.quantity}，"
+                f"单价 {number_to(execution_price)} 灵石，共 {number_to(fill.amount)} 灵石\n"
+            )
+            _record_guishi_match_event(fill, buyer_name, seller_name)
+        msg += "成交灵石已进入鬼市账户，可用 鬼市取灵石 取出。\n"
+
     msg += f"⚠️ 请在次日{GUISHI_BAITAN_END_HOUR}点前收摊，超时未收摊将自动清空摊位，物品不退还！"
     record_trade_event(
         user_id,
@@ -2415,18 +2450,7 @@ async def process_guishi_transactions(user_id: str = None) -> str:
             baitan_user_name = (
                 baitan_user_info['user_name'] if baitan_user_info else result.seller_id
             )
-            record_trade_event(
-                result.buyer_id,
-                "鬼市成交",
-                f"购得{result.item_name}x{result.quantity}，花费{number_to(result.amount)}灵石，卖家:{baitan_user_name}",
-                {"鬼市购买次数": 1, "鬼市购买数量": result.quantity, "鬼市消费灵石": result.amount}
-            )
-            record_trade_event(
-                result.seller_id,
-                "鬼市成交",
-                f"售出{result.item_name}x{result.quantity}，收入{number_to(result.amount)}灵石，买家:{qiugou_user_name}",
-                {"鬼市售出次数": 1, "鬼市售出数量": result.quantity, "鬼市收入灵石": result.amount}
-            )
+            _record_guishi_match_event(result, qiugou_user_name, baitan_user_name)
             transaction_log += (f"{qiugou_user_name} 从 {baitan_user_name} 处\n"
                                 f"购买了 {result.quantity} 个 【{result.item_name}】，花费 {number_to(result.amount)} 灵石。\n")
             if result.baitan_completed and user_id:

@@ -20,6 +20,7 @@ class GuishiMatchResult:
     amount: int = 0
     qiugou_completed: bool = False
     baitan_completed: bool = False
+    price_refund: int = 0
 
     @property
     def matched(self) -> bool:
@@ -166,12 +167,18 @@ class GuishiOrderMatchSqlRepository:
                 return GuishiMatchResult("not_matchable", qiugou_order_id, baitan_order_id)
 
             quantity = min(qiugou_remaining, baitan_remaining)
-            amount = quantity * int(baitan["price"] or 0)
+            execution_price = int(baitan["price"] or 0)
+            amount = quantity * execution_price
+            # The buyer froze ``quantity * bid`` when creating the order but the pair
+            # settles at the stall price, so the difference belongs back to the buyer.
+            price_refund = quantity * max(
+                int(qiugou["price"] or 0) - execution_price, 0
+            )
             buyer_stone, buyer_items = self._info(uow, buyer_id)
             seller_stone, seller_items = self._info(uow, seller_id)
             item_key = str(item_id)
             buyer_items[item_key] = int(buyer_items.get(item_key, 0)) + quantity
-            self._save_info(uow, buyer_id, buyer_stone, buyer_items)
+            self._save_info(uow, buyer_id, buyer_stone + price_refund, buyer_items)
             self._save_info(uow, seller_id, seller_stone + amount, seller_items)
 
             qiugou_completed = quantity == qiugou_remaining
@@ -205,6 +212,7 @@ class GuishiOrderMatchSqlRepository:
                 amount,
                 qiugou_completed,
                 baitan_completed,
+                price_refund,
             )
             if operation_id:
                 uow.execute(

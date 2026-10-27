@@ -60,9 +60,13 @@ class GuishiMatchRepositoryTests(unittest.TestCase):
             operation_id="match-1", qiugou_order_id="other", baitan_order_id="sell"
         )
         self.assertEqual((first.status, first.quantity, first.amount), ("matched", 6, 120))
+        self.assertEqual(first.price_refund, 60)
         self.assertEqual((duplicate.status, duplicate.quantity), ("duplicate", 6))
+        self.assertEqual(duplicate.price_refund, 60)
         self.assertEqual(conflict.status, "operation_conflict")
-        self.assertEqual(self._info("buyer"), (99, {"1001": 6}))
+        # The buyer bid 30 but the pair settled at the stall price 20: the 6*10
+        # difference returns to the buyer instead of disappearing.
+        self.assertEqual(self._info("buyer"), (159, {"1001": 6}))
         self.assertEqual(self._info("seller"), (137, {}))
 
     def test_partial_match_and_rollback(self) -> None:
@@ -89,6 +93,9 @@ class GuishiMatchRepositoryTests(unittest.TestCase):
             self.repository.match(
                 operation_id="rollback", qiugou_order_id="want", baitan_order_id="sell2"
             )
+        # The buyer credit happens before the seller write, so a rejected match must
+        # roll the refund back with the rest of the settlement.
+        self.assertEqual(self._info("buyer"), (159, {"1001": 6}))
 
     def test_legacy_match_operation_replays_without_settling_twice(self) -> None:
         legacy_result = {
@@ -119,6 +126,8 @@ class GuishiMatchRepositoryTests(unittest.TestCase):
             baitan_order_id="sell",
         )
         self.assertEqual((result.status, result.quantity, result.amount), ("duplicate", 4, 80))
+        # A stored pre-refund operation replays through the defaulted field.
+        self.assertEqual(result.price_refund, 0)
         self.assertEqual(self._info("buyer"), (99, {}))
         self.assertEqual(self._info("seller"), (17, {}))
 
