@@ -459,9 +459,11 @@ bot 侧六个玩家视图（`活动阶段`/`活动首领`/`活动商店`/`活动
   run `40448212171` success）、`060ca806`（回到 develop/CI 记录，run
   `40449259010` success）、`fdb8ae8f`（单快照批量读 + 协调器，run `40461069946`
   success）、`bcaf80a5`（文档，run `40461855992` success）、`80ba1cb9`（过期房间
-  走真实关闭分支，run `40468586654` success）；三个 develop run 的 `quality` job
-  均 success、`build-and-release` skipped。整卡验收通过前未把 fdb8ae8f 之后的
-  提交合入 main。未部署、未读写真实游戏库、不发送真实消息。
+  走真实关闭分支，run `40468586654` success）、`42401305`（最终记录，develop CI
+  run `40472172908` success，已快进 main，main CI run `40473193062` success）；
+  全部 develop run 的 `quality` job 均 success、`build-and-release` skipped。
+  整卡验收通过前未把 `fdb8ae8f` 之后的提交合入 main。未部署、未读写真实游戏库、
+  不发送真实消息。
 
 ## 冻结清单与停止条件
 
