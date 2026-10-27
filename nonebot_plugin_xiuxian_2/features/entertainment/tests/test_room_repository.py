@@ -143,6 +143,75 @@ class EntertainmentRoomRepositoryTests(unittest.TestCase):
             self.assertEqual([], repository.list_states("gomoku"))
             self.assertEqual([snapshots["half_ten"]], repository.list_states("half_ten"))
 
+    def test_batch_read_takes_every_type_in_one_read_only_unit_of_work(self) -> None:
+        """The startup restore needs all three types from ONE snapshot."""
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            database = root / "game.db"
+            with DatabaseUnitOfWork(database) as uow:
+                apply_entertainment(uow)
+                apply_entertainment_rooms(uow, root / "missing-rooms")
+            repository = EntertainmentRoomSqlRepository(database)
+            snapshots = _room_snapshots()
+            for game_type, state in snapshots.items():
+                repository.save_state(game_type, "shared-id", state)
+
+            states = repository.list_all_states()
+
+            self.assertEqual(sorted(states), ["gomoku", "half_ten", "minesweeper"])
+            self.assertEqual(states["gomoku"], [snapshots["gomoku"]])
+            self.assertEqual(states["half_ten"], [snapshots["half_ten"]])
+            self.assertEqual(states["minesweeper"], [snapshots["minesweeper"]])
+
+    def test_batch_read_opens_one_read_only_unit_of_work(self) -> None:
+        from .. import room_repository as module
+
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            database = root / "game.db"
+            with DatabaseUnitOfWork(database) as uow:
+                apply_entertainment(uow)
+                apply_entertainment_rooms(uow, root / "missing-rooms")
+            repository = module.EntertainmentRoomSqlRepository(database)
+            for game_type, state in _room_snapshots().items():
+                repository.save_state(game_type, "shared-id", state)
+
+            opened: list = []
+            real = module.DatabaseUnitOfWork
+
+            class Counting(real):
+                def __init__(self, *args, **kwargs):
+                    opened.append(
+                        kwargs.get("read_only", args[1] if len(args) > 1 else False)
+                    )
+                    super().__init__(*args, **kwargs)
+
+            with patch.object(module, "DatabaseUnitOfWork", Counting):
+                module.EntertainmentRoomSqlRepository(database).list_all_states()
+
+            self.assertEqual(opened, [True], "exactly one read-only unit of work")
+
+    def test_batch_read_keeps_the_shared_bounds_and_fails_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            database = root / "game.db"
+            with DatabaseUnitOfWork(database) as uow:
+                apply_entertainment(uow)
+                apply_entertainment_rooms(uow, root / "missing-rooms")
+            repository = EntertainmentRoomSqlRepository(database)
+            repository.save_state("gomoku", "shared-id", _room_snapshots()["gomoku"])
+
+            with patch(
+                "nonebot_plugin_xiuxian_2.features.entertainment.room_repository.MAX_ROOM_RESTORE_BYTES",
+                1,
+            ):
+                with self.assertRaisesRegex(RuntimeError, "byte limit"):
+                    repository.list_all_states()
+
+        missing = Path(tempfile.mkdtemp()) / "missing.db"
+        with self.assertRaisesRegex(RuntimeError, "schema_missing"):
+            EntertainmentRoomSqlRepository(missing).list_all_states()
+
     def test_missing_schema_fails_closed_without_creating_database(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             database = Path(temp) / "missing.db"

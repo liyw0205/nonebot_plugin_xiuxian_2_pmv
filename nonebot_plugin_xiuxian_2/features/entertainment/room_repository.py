@@ -94,22 +94,45 @@ class EntertainmentRoomSqlRepository:
             raise RuntimeError("legacy.entertainment.002 schema_missing: game database")
         with DatabaseUnitOfWork(self.database, read_only=True, timeout=0) as uow:
             self._require_schema(uow)
-            bounds = uow.query_one(
-                f"SELECT COUNT(*) AS row_count,"
-                "COALESCE(SUM(length(CAST(state_json AS BLOB))),0) AS total_bytes "
-                f"FROM {ROOM_TABLE} WHERE game_type=?",
-                (game_type,),
-            )
-            if int(bounds["row_count"]) > MAX_ROOM_ROWS_PER_TYPE:
-                raise RuntimeError("entertainment room restore exceeds row limit")
-            if int(bounds["total_bytes"]) > MAX_ROOM_RESTORE_BYTES:
-                raise RuntimeError("entertainment room restore exceeds byte limit")
-            rows = uow.query_all(
-                f"SELECT game_type,room_id,state_json FROM {ROOM_TABLE} "
-                "WHERE game_type=? ORDER BY room_id",
-                (game_type,),
-            )
+            rows = self._select_rows(uow, game_type)
         return [self._decode(row) for row in rows]
+
+    @staticmethod
+    def _select_rows(uow: DatabaseUnitOfWork, game_type: str) -> list:
+        """Read one type's rows, enforcing the shared restore bounds first."""
+        bounds = uow.query_one(
+            f"SELECT COUNT(*) AS row_count,"
+            "COALESCE(SUM(length(CAST(state_json AS BLOB))),0) AS total_bytes "
+            f"FROM {ROOM_TABLE} WHERE game_type=?",
+            (game_type,),
+        )
+        if int(bounds["row_count"]) > MAX_ROOM_ROWS_PER_TYPE:
+            raise RuntimeError("entertainment room restore exceeds row limit")
+        if int(bounds["total_bytes"]) > MAX_ROOM_RESTORE_BYTES:
+            raise RuntimeError("entertainment room restore exceeds byte limit")
+        return uow.query_all(
+            f"SELECT game_type,room_id,state_json FROM {ROOM_TABLE} "
+            "WHERE game_type=? ORDER BY room_id",
+            (game_type,),
+        )
+
+    def list_all_states(self) -> dict[str, list[dict[str, Any]]]:
+        """Read every room type in ONE read-only unit of work.
+
+        The startup restore needs all three types at once; calling
+        ``list_states`` per type would open three connections for the same
+        snapshot. Schema and bounds checks match the single-type read, and the
+        returned mapping always carries every known type.
+        """
+        if not self.database.is_file():
+            raise RuntimeError("legacy.entertainment.002 schema_missing: game database")
+        result: dict[str, list[dict[str, Any]]] = {}
+        with DatabaseUnitOfWork(self.database, read_only=True, timeout=0) as uow:
+            self._require_schema(uow)
+            for game_type in sorted(GAME_TYPES):
+                rows = self._select_rows(uow, game_type)
+                result[game_type] = [self._decode(row) for row in rows]
+        return result
 
     def save_state(self, game_type: str, room_id: str, state: dict[str, Any]) -> None:
         game_type = self._game_type(game_type)

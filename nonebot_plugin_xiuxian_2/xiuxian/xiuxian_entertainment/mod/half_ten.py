@@ -173,10 +173,10 @@ class HalfTenRoomManager:
         self.rooms: dict[str, HalfTenGame] = {}
         self.application = application
 
-    def load_rooms(self):
+    def load_rooms(self, states=None):
         self.rooms.clear()
         user_half_status.clear()
-        for data in self.application.room_states("half_ten"):
+        for data in (self.application.room_states("half_ten") if states is None else states):
             game = HalfTenGame.from_dict(data)
             self.rooms[game.room_id] = game
             if game.status == "waiting":
@@ -296,9 +296,10 @@ half_manager = HalfTenRoomManager()
 
 @register_legacy_startup
 async def restore_half_ten_rooms() -> None:
-    half_manager.load_rooms()
-    # See gomoku.restore_gomoku_rooms: rooms persist, their timers do not.
-    await rearm_half_ten_timeouts()
+    # Delegates to the shared restore: one batch read covers all three types.
+    from .room_restore import restore_entertainment_rooms
+
+    await restore_entertainment_rooms()
 
 
 # =========================

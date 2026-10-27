@@ -254,17 +254,17 @@ class MinesweeperManager:
         self.games = {}
         self.application = application
 
-    def _load(self):
+    def _load(self, states=None):
         self.games.clear()
         user_minesweeper_status.clear()
-        for data in self.application.room_states("minesweeper"):
+        for data in (self.application.room_states("minesweeper") if states is None else states):
             game = MinesweeperGame.from_dict(data)
             self.games[game.game_id] = game
             if game.status == "playing":
                 user_minesweeper_status[game.user_id] = game.game_id
 
-    def load_rooms(self):
-        self._load()
+    def load_rooms(self, states=None):
+        self._load(states)
 
     def save(self, game_id: str):
         game = self.games.get(game_id)
@@ -305,9 +305,10 @@ ms_manager = MinesweeperManager()
 
 @register_legacy_startup
 async def restore_minesweeper_rooms() -> None:
-    ms_manager.load_rooms()
-    # See gomoku.restore_gomoku_rooms: games persist, their timers do not.
-    await rearm_game_timeouts()
+    # Delegates to the shared restore: one batch read covers all three types.
+    from .room_restore import restore_entertainment_rooms
+
+    await restore_entertainment_rooms()
 
 
 def parse_coord(s: str):

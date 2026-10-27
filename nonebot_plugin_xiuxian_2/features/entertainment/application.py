@@ -89,6 +89,9 @@ class EntertainmentApplication(MigratedFeatureApplication):
     def room_states(self, game_type: str):
         return self.room_repository.list_states(game_type)
 
+    def room_states_all(self):
+        return self.room_repository.list_all_states()
+
     def save_room_state(self, game_type: str, room_id: str, state: dict):
         self.room_repository.save_state(game_type, room_id, state)
 

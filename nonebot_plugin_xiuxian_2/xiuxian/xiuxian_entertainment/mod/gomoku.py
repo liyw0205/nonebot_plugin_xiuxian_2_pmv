@@ -101,10 +101,10 @@ class GomokuRoomManager:
         self.rooms: dict[str, GomokuGame] = {}
         self.application = application
 
-    def load_rooms(self):
+    def load_rooms(self, states=None):
         self.rooms.clear()
         user_room_status.clear()
-        for data in self.application.room_states("gomoku"):
+        for data in (self.application.room_states("gomoku") if states is None else states):
             game = GomokuGame.from_dict(data)
             self.rooms[game.room_id] = game
             for uid in [game.player_black, game.player_white]:
@@ -192,10 +192,11 @@ room_manager = GomokuRoomManager()
 
 @register_legacy_startup
 async def restore_gomoku_rooms() -> None:
-    room_manager.load_rooms()
-    # Snapshots outlive the process but their timers do not: release the rooms
-    # that already expired while we were down and re-arm the rest.
-    await rearm_room_timeouts()
+    # One batch snapshot covers all three room types; the coordinator is
+    # idempotent, so the other two hooks become no-ops after this one runs.
+    from .room_restore import restore_entertainment_rooms
+
+    await restore_entertainment_rooms()
 
 
 # =========================
