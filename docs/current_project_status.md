@@ -438,7 +438,9 @@ bot 侧六个玩家视图（`活动阶段`/`活动首领`/`活动商店`/`活动
   启动钩子可 await）；受影响套件 `test_entertainment_room_managers`/
   `test_half_ten_providers`/`test_minesweeper_providers`/`test_source_quality`
   与全部 entertainment feature 测试（126 项）合计 `260 passed`。三门禁真实
-  exit 0；`git diff --check` 干净；`compileall` 通过。
+  exit 0；`git diff --check` 干净；`compileall` 通过。代码提交 `d814465d`
+  （develop CI run `40447332383` success）、文档提交 `5ab2db4e`（develop CI run
+  `40448212171` success）；未部署、未读写真实游戏库、不发送真实消息。
 
 ## 冻结清单与停止条件
 
