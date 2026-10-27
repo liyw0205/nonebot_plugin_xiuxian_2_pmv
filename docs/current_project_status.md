@@ -424,20 +424,32 @@ bot 侧六个玩家视图（`活动阶段`/`活动首领`/`活动商店`/`活动
   时钟；十点半用创建时钟；扫雷用操作时钟），`waiting`/`playing` 之外的状态一律
   不参与，缺字段或坏时间戳按「不清理」处理。到期时刻本身不算过期（运行期任务
   睡满整段才动作），剩余时间返回余量，过期返回 0。
-- 三个 `restore_*_rooms()` 改为 async，在 `load_rooms()` 后调用对应的
-  `rearm_*_timeouts()`：过期房间静默释放（启动期无 bot/event 上下文），其余
-  房间按**剩余时间**重建计时器；重复调用会先取消旧任务，不叠加。
+- `room_repository.py` 增加只读批量能力：`list_all_states()` 在**单个只读 UoW**
+  内取回三类快照（`list_states` 语义、行/字节预算与 fail-closed 检查不变，抽出的
+  `_select_rows` 两者共用）；`EntertainmentApplication.room_states_all()` 暴露该
+  能力。
+- 新增 `mod/room_restore.py`：`restore_entertainment_rooms()` 用一次批量快照依次
+  调用三个 manager 的 `load_rooms(states)`，再执行过期清理与剩余时间重建；进程内
+  只跑一次（三个启动钩子中的第一个真正执行，其余为空操作），供测试重置的
+  `reset_restore_state()`。
+- 三个 `restore_*_rooms()` 改为 async 并委派给该协调器；`load_rooms(states=None)`
+  增加可选入参（不传时仍按原路径逐类型读取，既有调用语义不变）。过期房间静默
+  释放（启动期无 bot/event 上下文），其余房间按**剩余时间**重建计时器；重复
+  重建先取消旧任务，不叠加。
 - `start_*_timeout` 增加关键字参数 `delay`（默认 None = 原完整时长，在线行为
   不变）并允许 `bot/event` 为 None（仅清理与落盘，不投递）。运行期超时文案与
   触发条件未改。
 - 不改写路径、表结构、迁移或配置键；未新增命令/路由。
 - 新聚焦套件 `nonebot_plugin_xiuxian_2/features/entertainment/tests/test_room_lifecycle.py`
-  `20/20`（锚点选择、非候选状态、缺/坏时间戳、到期边界、余量、按类型分组）
-  与 `tests/test_entertainment_room_restore_timeout.py` `14/14`（过期释放并可
+  `20/20`（锚点选择、非候选状态、缺/坏时间戳、到期边界、余量、按类型分组）、
+  `tests/test_entertainment_room_restore_timeout.py` `14/14`（过期释放并可
   重新开局、存活房间保留且重建计时器、无投递上下文不发送消息、重复重建不叠加、
-  启动钩子可 await）；受影响套件 `test_entertainment_room_managers`/
+  启动钩子可 await）与 `tests/test_entertainment_room_batch_restore.py` `9/9`
+  （批量读只开一个只读 UoW、覆盖三类且空类型仍在、保留预算与 fail-closed、
+  恢复只跑一次且不逐类型读、无 bot 不发消息）；`test_room_repository.py` 新增
+  3 项批量读断言（`9 passed`）。受影响套件 `test_entertainment_room_managers`/
   `test_half_ten_providers`/`test_minesweeper_providers`/`test_source_quality`
-  与全部 entertainment feature 测试（126 项）合计 `260 passed`。三门禁真实
+  与全部 entertainment feature 测试（126 项）合计 `269 passed`。三门禁真实
   exit 0；`git diff --check` 干净；`compileall` 通过。代码提交 `d814465d`
   （develop CI run `40447332383` success）、文档提交 `5ab2db4e`（develop CI run
   `40448212171` success）、CI run 回填提交 `060ca806`（develop CI run
