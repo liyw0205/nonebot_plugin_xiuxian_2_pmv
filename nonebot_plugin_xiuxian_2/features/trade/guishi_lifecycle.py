@@ -71,10 +71,10 @@ def _compare_frames(
     return deadline, now
 
 
-def qiugou_deadline(
+def order_deadline(
     created_at: datetime | None, *, end_hour: int = DEFAULT_GUISHI_END_HOUR
 ) -> datetime | None:
-    """Deadline of a buy order: ``end_hour`` on the day AFTER it was created."""
+    """Deadline of any Guishi order: ``end_hour`` on the day AFTER it was created."""
 
     if not isinstance(created_at, datetime):
         return None
@@ -82,6 +82,30 @@ def qiugou_deadline(
     return datetime(
         day.year, day.month, day.day, int(end_hour), 0, 0, tzinfo=created_at.tzinfo
     )
+
+
+def order_remaining_seconds(
+    created_at: datetime | None,
+    now: datetime,
+    *,
+    end_hour: int = DEFAULT_GUISHI_END_HOUR,
+) -> int:
+    """Seconds left before the order deadline; 0 when reached or unknown."""
+
+    deadline = order_deadline(created_at, end_hour=end_hour)
+    if deadline is None or not isinstance(now, datetime):
+        return 0
+    deadline, now = _compare_frames(deadline, now)
+    remaining = (deadline - now).total_seconds()
+    return max(int(remaining), 0)
+
+
+def qiugou_deadline(
+    created_at: datetime | None, *, end_hour: int = DEFAULT_GUISHI_END_HOUR
+) -> datetime | None:
+    """Deadline of a buy order; the player text quotes the same next-day hour."""
+
+    return order_deadline(created_at, end_hour=end_hour)
 
 
 def qiugou_is_expired(
@@ -107,16 +131,13 @@ def qiugou_remaining_seconds(
 ) -> int:
     """Seconds left before the buy order expires; 0 when expired or unknown."""
 
-    deadline = qiugou_deadline(created_at, end_hour=end_hour)
-    if deadline is None or not isinstance(now, datetime):
-        return 0
-    deadline, now = _compare_frames(deadline, now)
-    remaining = (deadline - now).total_seconds()
-    return max(int(remaining), 0)
+    return order_remaining_seconds(created_at, now, end_hour=end_hour)
 
 
 __all__ = [
     "DEFAULT_GUISHI_END_HOUR",
+    "order_deadline",
+    "order_remaining_seconds",
     "parse_created_at",
     "qiugou_deadline",
     "qiugou_is_expired",

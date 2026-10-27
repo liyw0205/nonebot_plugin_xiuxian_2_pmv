@@ -22,6 +22,29 @@ feature-owned use case 结算。存取操作记录在 game DB 的
 在 `xianshi_listing_operations`；`quantity=-1` 无限量和指定数量均保持原样，且不扣玩家资产。
 ## 用户流程
 鬼市存取、求购/摆摊创建与撤销、上架/撤回、场次开始/收尾和现世购买统一提交操作号。
+
+鬼市订单生命周期（求购与摆摊）由 feature 层闭环：
+
+- 求购创建按 `单价 × 数量` 冻结鬼市余额；到期时刻取创建操作行的 `created_at`
+  （`guishi_order_create_operations`，与订单同事务写入），规则是**创建日次日
+  `GUISHI_BAITAN_END_HOUR`（默认 8）点**，由纯规则模块
+  `features/trade/guishi_lifecycle.py` 计算。到期由
+  `GuishiQiugouExpiryService` 逐条调用既有 `cancel_qiugou` 取消并按
+  `(数量 - 已成交) × 求购价` 退款，操作号 `guishi-expire-qiugou:{order_id}`
+  稳定可重放。清理触发点有两处：`clear_expired_baitan_orders_job`（同一 8 点
+  任务，先做全服求购到期，再做摆摊清理）与 `鬼市信息` 的本人访问期收敛。
+- 摆摊创建后立即调用 `GuishiListingFillService`，按同物品、求购价不低于摆摊价、
+  非本人、`(数量 - 已成交) > 0` 选候选，按创建时刻升序（无锚点排最后）逐条走
+  既有 `guishi_match`，操作号 `guishi-fill:{摆摊ID}:{求购ID}`。摆摊售罄或没有
+  候选即停止；成交摘要与 `鬼市成交` 统计同时回到卖家回执。
+- 成交按摆摊价结算（`amount = 成交数量 × 摆摊价`），求购冻结价高于成交价的
+  差价 `price_refund` 在同事务退回买家鬼市余额，买家最终支出恒等于
+  `成交数量 × 成交价`。`GuishiMatchResult.price_refund` 带默认值，历史
+  operation 行重放按 0 处理。
+- `鬼市信息` 用 `GuishiOrderStatusService` 一次只读快照取本人订单与锚点，再由
+  纯渲染 `guishi_order_view.py` 输出到期时刻与剩余时长；无锚点历史订单显示
+  `到期：未知（历史订单）`。
+
 ## 命令与别名
 `交易`、`寄售`、`鬼市`。
 ## Web API
@@ -56,6 +79,12 @@ trade DB，按背包上限原子退回未售库存、删除订单并记录 opera
 feature-owned session/settlement repositories。
 ## 定时任务
 场次调度继续由兼容 scheduler 管理。
+
+`clear_expired_baitan_orders_job`（每日 `GUISHI_BAITAN_END_HOUR` 点，job id 未改）
+现在按同一顺序做两件事：先全服求购到期取消退款，再清理超时摆摊并退还未售出
+物品。两段都是静默的（任务没有 bot/event 上下文，不发群消息），退款与清理结果
+只写日志。求购到期同时在 `鬼市信息` 的本人访问期收敛，因此玩家不必等下一次
+任务就能看到冻结灵石回到余额。
 ## 配置项
 `trade_enabled`。
 ## 适配器差异
@@ -68,6 +97,20 @@ Web/命令不直接连接 trade_db。
 迁移的交易兼容路径。仙肆普通、自动、快速和系统上架已切换。拍卖竞价、等待区、场次开始/交接与
 结算已由 feature application 处理；场次自动调度仍由兼容 scheduler 触发，其余未覆盖拍卖策略与
 命令路径仍待迁移。
+
+鬼市生命周期已知限制：
+
+- 到期锚点只来自 `guishi_order_create_operations`。早于本功能创建的历史订单
+  没有该行，因此**不会自动到期**，只能手动 `鬼市取消求购` 或管理员 `清空鬼市`；
+  渲染显示 `到期：未知（历史订单）`。这是有意的 fail-safe：宁可不清理，也不猜
+  时间误删玩家订单。
+- 到期小时沿用既有 `GUISHI_BAITAN_END_HOUR` 与模块内 UTC `runtime_clock` 口径
+  （与既有摆摊窗口/任务一致），本次不改摆摊窗口的时区语义。
+- `price_refund` 只补「买家按求购价冻结、按摆摊价成交」的差价，不改变价格闸门
+  （摆摊价高于求购价仍然不成交）、部分成交语义或手续费。
+- legacy `TradeRepository.match_guishi_orders` 保留原语义供兼容测试使用，默认
+  路径已停用（进度门禁 `legacy_guishi_matching_disabled`），新语义只由 feature
+  路径承担。
 
 ## Manifest 清单
 - `route: POST /api/v1/trade/deposit`

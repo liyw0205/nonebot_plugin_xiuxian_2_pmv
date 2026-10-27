@@ -2118,7 +2118,7 @@ async def guishi_baitan_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
             _record_guishi_match_event(fill, buyer_name, seller_name)
         msg += "成交灵石已进入鬼市账户，可用 鬼市取灵石 取出。\n"
 
-    msg += f"⚠️ 请在次日{GUISHI_BAITAN_END_HOUR}点前收摊，超时未收摊将自动清空摊位，物品不退还！"
+    msg += f"⚠️ 请在次日{GUISHI_BAITAN_END_HOUR}点前收摊；未售出的物品会退回背包，背包已满时保留摊位。"
     record_trade_event(
         user_id,
         "鬼市摆摊",
@@ -2284,20 +2284,21 @@ async def guishi_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
                 msg_parts.append(f"  {item_info['name']} x{quantity}\n")
 
     # 获取用户的求购订单
-    qiugou_orders = trade_application.guishi_get_orders(user_id=user_id, order_type="qiugou")
-    if qiugou_orders:
+    status_lines = trade_application.guishi_order_status_lines(user_id)
+    qiugou_lines = status_lines.get("qiugou") or []
+    if qiugou_lines:
         msg_parts.append(f"\n☆------求购列表------☆\n")
-        for order in qiugou_orders:
-            unfilled_quantity = order['quantity'] - order['filled_quantity']
-            msg_parts.append(f"ID:{order['id']} {order['item_name']} {number_to(order['price'])}灵石 x{order['quantity']} (待购:{unfilled_quantity})\n")
+        for line in qiugou_lines:
+            msg_parts.append(f"{line}\n")
+        msg_parts.append("取消求购：鬼市取消求购 <ID>\n")
 
     # 获取用户的摆摊订单
-    baitan_orders = trade_application.guishi_get_orders(user_id=user_id, order_type="baitan")
-    if baitan_orders:
+    baitan_lines = status_lines.get("baitan") or []
+    if baitan_lines:
         msg_parts.append(f"\n☆------摆摊列表------☆\n")
-        for order in baitan_orders:
-            unsold_quantity = order['quantity'] - order['filled_quantity']
-            msg_parts.append(f"ID:{order['id']} {order['item_name']} {number_to(order['price'])}灵石 x{order['quantity']} (待售:{unsold_quantity})\n")
+        for line in baitan_lines:
+            msg_parts.append(f"{line}\n")
+        msg_parts.append("提前收摊：鬼市收摊\n")
     
     await handle_send(bot, event, "\n".join(msg_parts), md_type="交易", k1="取物品", v1="鬼市取物品", k2="求购", v2="鬼市求购", k3="摆摊", v3="鬼市摆摊")
     await guishi_info.finish()

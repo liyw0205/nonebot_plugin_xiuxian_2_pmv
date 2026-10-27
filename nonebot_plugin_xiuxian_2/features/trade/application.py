@@ -21,6 +21,7 @@ from .guishi_match_repository import GuishiOrderMatchSqlRepository
 from .guishi_expired_repository import GuishiExpiredOrderSqlRepository
 from .guishi_qiugou_expiry import GuishiQiugouExpiryService
 from .guishi_listing_fill import GuishiListingFillService
+from .guishi_order_status import GuishiOrderStatusService
 from .guishi_take_repository import GuishiStoredItemTakeSqlRepository
 from .guishi_query_repository import GuishiQueryRepository, GuishiQuerySqlRepository
 from .xianshi_listing_repository import XianshiListingSqlRepository
@@ -97,6 +98,9 @@ class TradeApplication(LegacyApplication):
             self.trade_database,
             match=self.guishi_order_match_repository.match,
             clock=self.clock,
+        )
+        self.guishi_order_status_service = GuishiOrderStatusService(
+            self.trade_database, clock=self.clock
         )
         self.guishi_stored_item_take_repository = GuishiStoredItemTakeSqlRepository(
             self.game_database, self.trade_database, clock=self.clock
@@ -456,6 +460,11 @@ class TradeApplication(LegacyApplication):
             qiugou_order_id=qiugou_order_id,
             baitan_order_id=baitan_order_id,
         )
+
+    def guishi_order_status_lines(self, user_id: str, *, now: Any | None = None):
+        """Render one player's buy orders and stalls with deadline information."""
+
+        return self.guishi_order_status_service.lines_for(str(user_id), now=now)
 
     def guishi_fill_standing_qiugou(self, *, baitan_order_id: str):
         """Match a freshly listed stall against the buy orders it can satisfy."""
