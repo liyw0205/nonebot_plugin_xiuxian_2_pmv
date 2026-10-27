@@ -19,6 +19,7 @@ from .guishi_withdraw_repository import GuishiWithdrawSqlRepository
 from .guishi_qiugou_repository import GuishiQiugouSqlRepository
 from .guishi_match_repository import GuishiOrderMatchSqlRepository
 from .guishi_expired_repository import GuishiExpiredOrderSqlRepository
+from .guishi_qiugou_expiry import GuishiQiugouExpiryService
 from .guishi_take_repository import GuishiStoredItemTakeSqlRepository
 from .guishi_query_repository import GuishiQueryRepository, GuishiQuerySqlRepository
 from .xianshi_listing_repository import XianshiListingSqlRepository
@@ -85,6 +86,11 @@ class TradeApplication(LegacyApplication):
         self.guishi_order_match_repository = GuishiOrderMatchSqlRepository(self.trade_database)
         self.guishi_expired_order_repository = GuishiExpiredOrderSqlRepository(
             self.game_database, self.trade_database, clock=self.clock
+        )
+        self.guishi_qiugou_expiry_service = GuishiQiugouExpiryService(
+            self.trade_database,
+            cancel=self.guishi_order_cancel_repository.cancel_qiugou,
+            clock=self.clock,
         )
         self.guishi_stored_item_take_repository = GuishiStoredItemTakeSqlRepository(
             self.game_database, self.trade_database, clock=self.clock
@@ -444,6 +450,11 @@ class TradeApplication(LegacyApplication):
             qiugou_order_id=qiugou_order_id,
             baitan_order_id=baitan_order_id,
         )
+
+    def guishi_expire_qiugou(self, *, user_id: str | None = None, now: Any | None = None):
+        """Cancel buy orders whose deadline passed and refund their frozen stones."""
+
+        return self.guishi_qiugou_expiry_service.expire(user_id=user_id, now=now)
 
     def guishi_clear_expired_baitan(
         self,

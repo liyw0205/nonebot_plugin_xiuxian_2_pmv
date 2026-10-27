@@ -2231,7 +2231,10 @@ async def guishi_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
         await guishi_info.finish()
     
     user_id = user_info['user_id']
-    
+
+    # 访问期收敛：先让本人到期的求购自动取消并退还灵石，再展示余额与订单。
+    trade_application.guishi_expire_qiugou(user_id=user_id)
+
     # 获取用户的鬼市账户信息
     stored_stone, stored_items = trade_application.guishi_get_account(user_id)
     
@@ -2463,7 +2466,27 @@ async def auto_guishi_transactions_job():
     misfire_grace_time=300,
 )
 async def clear_expired_baitan_orders_job():
-    """每天摆摊时间结束后，自动清空所有未售罄的摆摊订单，并退还未售出的物品。"""
+    """每天摆摊时间结束后，自动清空所有未售罄的摆摊订单，并退还未售出的物品；
+    同时让到期的求购订单自动取消并把未成交灵石退回鬼市账户。"""
+    expired_qiugou = trade_application.guishi_expire_qiugou()
+    if expired_qiugou:
+        refunded_by_user = {}
+        for result in expired_qiugou:
+            if result.applied and result.refunded_stone > 0:
+                refunded_by_user[result.user_id] = (
+                    refunded_by_user.get(result.user_id, 0) + result.refunded_stone
+                )
+        logger.info(
+            f"共取消 {sum(1 for r in expired_qiugou if r.applied)} 条到期求购订单。"
+        )
+        if refunded_by_user:
+            logger.info(
+                "以下求购到期已自动取消并退还灵石：\n"
+                + "\n".join(
+                    f"{user_id}: {amount}" for user_id, amount in refunded_by_user.items()
+                )
+            )
+
     logger.info("开始检查并清理超时鬼市摆摊订单...")
     
     all_baitan_orders = trade_application.guishi_get_orders(order_type="baitan")
