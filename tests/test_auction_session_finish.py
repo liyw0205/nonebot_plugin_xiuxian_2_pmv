@@ -13,6 +13,7 @@ from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_trade.transaction_service import (
     AuctionSessionService,
 )
 from nonebot_plugin_xiuxian_2.features.auction.migrations import (
+    apply_auction_pending_delivery,
     apply_auction_player_queue,
     apply_auction_queue_operations,
     apply_auction_settlement,
@@ -41,6 +42,7 @@ class AuctionSessionFinishTests(unittest.TestCase):
             pass
         with DatabaseUnitOfWork(self.game) as uow:
             apply_auction_settlement(uow)
+            apply_auction_pending_delivery(uow)
             apply_auction_queue_operations(uow)
         with DatabaseUnitOfWork(self.trade) as uow:
             apply_auction_player_queue(uow)
@@ -111,17 +113,30 @@ class AuctionSessionFinishTests(unittest.TestCase):
             self.assertEqual(conn.execute("SELECT status FROM auction_sessions").fetchone()[0], "active")
             self.assertEqual(conn.execute("SELECT COUNT(*) FROM auction_history").fetchone()[0], 0)
 
-    def test_inventory_full_blocks_without_partial_settlement(self) -> None:
+    def test_inventory_full_parks_the_item_instead_of_blocking_the_session(self) -> None:
         with db_backend.transaction(self.game) as conn:
             conn.execute(
                 "INSERT INTO back VALUES (%s,%s,%s,%s,%s,NULL,NULL,%s)",
                 ("winner", 1001, "玩家法器", "装备", 99, 99),
             )
         result = self.finish()
-        self.assertEqual(result.status, "inventory_full")
+        # The winner paid at bid time; a full stack parks the item for pickup
+        # instead of failing the whole session.
+        self.assertEqual(result.status, "settled")
+        self.assertEqual("待领取", result.results[0]["status"])
+        with DatabaseUnitOfWork(self.game) as uow:
+            pending = uow.query_one(
+                "SELECT auction_id,item_id,role FROM auction_pending_items"
+            )
+        self.assertEqual((self.auction_id, 1001, "winner"),
+                         (pending["auction_id"], pending["item_id"], pending["role"]))
         with db_backend.connection(self.game) as conn:
-            self.assertEqual(conn.execute("SELECT COUNT(*) FROM auction_current").fetchone()[0], 1)
-            self.assertEqual(conn.execute("SELECT status FROM auction_sessions").fetchone()[0], "active")
+            self.assertEqual(conn.execute("SELECT COUNT(*) FROM auction_current").fetchone()[0], 0)
+            self.assertEqual(conn.execute("SELECT status FROM auction_sessions").fetchone()[0], "settled")
+            self.assertEqual(
+                conn.execute("SELECT stone FROM user_xiuxian WHERE user_id=%s", ("seller",)).fetchone()[0],
+                810,
+            )
 
 
 if __name__ == "__main__":

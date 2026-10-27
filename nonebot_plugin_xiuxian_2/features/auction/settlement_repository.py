@@ -165,6 +165,7 @@ class AuctionSettlementSqlRepository:
                 winner_id = final_price = winner_name = None
                 fee = earnings = 0
                 status = "流拍"
+                delivery = "none"
                 item_type = self._item_type(item_id, normalized_types)
                 if (bids or not is_system) and not item_type:
                     raise _SettlementRejected(
@@ -183,11 +184,24 @@ class AuctionSettlementSqlRepository:
                             AuctionSettlementResult("participant_missing", operation_id, session_id)
                         )
                     winner_name = str(winner["user_name"] or winner_id)
+                    # A winner who already holds a full stack still owns the item they
+                    # paid for: park it instead of blocking the whole session.
                     if self._inventory_full(uow, winner_id, item_id):
-                        raise _SettlementRejected(
-                            AuctionSettlementResult("inventory_full", operation_id, session_id)
+                        self._park_pending(
+                            uow,
+                            auction_id=auction_id,
+                            item_id=item_id,
+                            item_name=name,
+                            item_type=item_type,
+                            owner_id=winner_id,
+                            owner_name=winner_name,
+                            role="winner",
+                            reason="inventory_full",
                         )
-                    self._grant_item(uow, winner_id, item_id, name, item_type)
+                        delivery = "pending"
+                    else:
+                        self._grant_item(uow, winner_id, item_id, name, item_type)
+                        delivery = "backpack"
                     fee = 0 if is_system else int(final_price * float(fee_rate))
                     earnings = 0 if is_system else final_price - fee
                     if not is_system:
@@ -203,7 +217,7 @@ class AuctionSettlementSqlRepository:
                             raise _SettlementRejected(
                                 AuctionSettlementResult("participant_missing", operation_id, session_id)
                             )
-                    status = "成交"
+                    status = "待领取" if delivery == "pending" else "成交"
                 elif not is_system:
                     if uow.query_one(
                         "SELECT 1 AS present FROM user_xiuxian WHERE user_id=?", (seller_id,)
@@ -212,9 +226,22 @@ class AuctionSettlementSqlRepository:
                             AuctionSettlementResult("participant_missing", operation_id, session_id)
                         )
                     if self._inventory_full(uow, seller_id, item_id):
-                        status = "卖家背包满流拍"
+                        self._park_pending(
+                            uow,
+                            auction_id=auction_id,
+                            item_id=item_id,
+                            item_name=name,
+                            item_type=item_type,
+                            owner_id=seller_id,
+                            owner_name=seller_name,
+                            role="seller",
+                            reason="inventory_full",
+                        )
+                        status = "待领取"
+                        delivery = "pending"
                     else:
                         self._grant_item(uow, seller_id, item_id, name, item_type)
+                        delivery = "backpack"
 
                 record = {
                     "auction_id": auction_id,
@@ -229,6 +256,8 @@ class AuctionSettlementSqlRepository:
                     "status": status,
                     "fee": fee,
                     "seller_earnings": earnings,
+                    "delivery": delivery,
+                    "pending_reason": "inventory_full" if delivery == "pending" else "",
                     "start_time": float(row["last_bid_time"] or session["start_time"]),
                     "end_time": float(end_time),
                 }
@@ -262,6 +291,41 @@ class AuctionSettlementSqlRepository:
             "SELECT goods_num FROM back WHERE user_id=? AND goods_id=?", (user_id, item_id)
         )
         return bool(row and int(row["goods_num"] or 0) >= self.max_goods_num)
+
+    @staticmethod
+    def _park_pending(
+        uow: DatabaseUnitOfWork,
+        *,
+        auction_id: str,
+        item_id: int,
+        item_name: str,
+        item_type: str | None,
+        owner_id: str,
+        owner_name: str,
+        role: str,
+        reason: str,
+    ) -> None:
+        """Store an item that could not enter a backpack so it is never destroyed.
+
+        The write shares the settlement transaction: if this table is missing (an
+        unmigrated database) the insert fails and the whole settlement rolls back,
+        leaving the session pending instead of silently dropping the item.
+        """
+
+        uow.execute(
+            "INSERT INTO auction_pending_items(auction_id,item_id,item_name,item_type,"
+            "owner_id,owner_name,role,reason) VALUES(?,?,?,?,?,?,?,?)",
+            (
+                auction_id,
+                int(item_id),
+                item_name,
+                str(item_type or ""),
+                owner_id,
+                owner_name,
+                role,
+                reason,
+            ),
+        )
 
     @staticmethod
     def _grant_item(uow: DatabaseUnitOfWork, user_id: str, item_id: int, name: str, item_type: str) -> None:

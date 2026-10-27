@@ -5,7 +5,10 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from nonebot_plugin_xiuxian_2.features.auction.migrations import apply_auction_settlement
+from nonebot_plugin_xiuxian_2.features.auction.migrations import (
+    apply_auction_pending_delivery,
+    apply_auction_settlement,
+)
 from nonebot_plugin_xiuxian_2.features.auction.settlement import AuctionSettlementApplication
 from nonebot_plugin_xiuxian_2.features.auction.settlement_repository import AuctionSettlementSqlRepository
 from nonebot_plugin_xiuxian_2.infrastructure.database import DatabaseUnitOfWork
@@ -28,6 +31,7 @@ class AuctionSettlementSqlRepositoryTests(unittest.TestCase):
                 (("seller", "卖家", 0), ("winner", "买家", 1000), ("loser", "落败者", 500)),
             )
             apply_auction_settlement(uow)
+            apply_auction_pending_delivery(uow)
             uow.execute(
                 "INSERT INTO auction_sessions(session_id,status,start_time,end_time,items_count,start_operation_id) "
                 "VALUES(?,?,?,?,?,?)",
@@ -69,18 +73,29 @@ class AuctionSettlementSqlRepositoryTests(unittest.TestCase):
             self.assertEqual(uow.query_one("SELECT stone FROM user_xiuxian WHERE user_id=?", ("seller",))["stone"], 810)
             self.assertEqual(uow.query_one("SELECT COUNT(*) AS n FROM auction_history")["n"], 1)
 
-    def test_inventory_full_keeps_everything_pending(self) -> None:
+    def test_inventory_full_parks_the_item_and_still_settles(self) -> None:
         with DatabaseUnitOfWork(self.database) as uow:
             uow.execute(
                 "INSERT INTO back(user_id,goods_id,goods_name,goods_type,goods_num,bind_num) VALUES(?,?,?,?,?,?)",
                 ("winner", 1001, "玩家法器", "装备", 99, 99),
             )
         result = self.settle()
-        self.assertEqual(result.status, "inventory_full")
+        # A winner at the cap still bought the item: it is parked for later pickup
+        # instead of blocking the whole session or vanishing.
+        self.assertEqual(result.status, "settled")
+        self.assertEqual("待领取", result.results[0]["status"])
+        self.assertEqual("pending", result.results[0]["delivery"])
         with DatabaseUnitOfWork(self.database) as uow:
-            self.assertEqual(uow.query_one("SELECT stone FROM user_xiuxian WHERE user_id=?", ("seller",))["stone"], 0)
-            self.assertEqual(uow.query_one("SELECT status FROM auction_sessions")["status"], "active")
-            self.assertEqual(uow.query_one("SELECT COUNT(*) AS n FROM auction_current")["n"], 1)
+            self.assertEqual(uow.query_one("SELECT stone FROM user_xiuxian WHERE user_id=?", ("seller",))["stone"], 810)
+            self.assertEqual(uow.query_one("SELECT status FROM auction_sessions")["status"], "settled")
+            self.assertEqual(uow.query_one("SELECT COUNT(*) AS n FROM auction_current")["n"], 0)
+            pending = uow.query_one(
+                "SELECT auction_id,item_id,role,claimed_at FROM auction_pending_items"
+            )
+            self.assertEqual(
+                ("auction-1", 1001, "winner"), (pending["auction_id"], pending["item_id"], pending["role"])
+            )
+            self.assertIsNone(pending["claimed_at"])
 
     def test_later_business_rejection_rolls_back_earlier_item_settlement(self) -> None:
         with DatabaseUnitOfWork(self.database) as uow:

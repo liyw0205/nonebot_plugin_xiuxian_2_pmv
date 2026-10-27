@@ -207,6 +207,7 @@ from .features.auction.migrations import (
     apply_auction_bid_statistics,
     apply_auction_settlement_game_effects,
     apply_auction_settlement_statistics,
+    apply_auction_pending_delivery,
 )
 # Operational slices without SQLite schemas still declare their surface here so
 # the registry stays the complete inventory of feature boundaries.
@@ -306,6 +307,7 @@ def build_migrations() -> tuple[Migration, ...]:
         Migration("auction.006", "auction_bid_statistics_projection", apply_auction_bid_statistics),
         Migration("auction.007", "auction_settlement_game_effect_receipts", apply_auction_settlement_game_effects),
         Migration("auction.008", "auction_settlement_statistics_projection", apply_auction_settlement_statistics),
+        Migration("auction.009", "auction_pending_delivery", apply_auction_pending_delivery),
         Migration("back.001", "back_feature_migrations", apply_back),
         Migration("back.002", "alchemy_operations", apply_alchemy),
         Migration("back.003", "unbind_item_operations", apply_unbind),

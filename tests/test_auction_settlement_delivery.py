@@ -5,7 +5,10 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from nonebot_plugin_xiuxian_2.features.auction.migrations import apply_auction_settlement
+from nonebot_plugin_xiuxian_2.features.auction.migrations import (
+    apply_auction_pending_delivery,
+    apply_auction_settlement,
+)
 from nonebot_plugin_xiuxian_2.features.auction.settlement_repository import (
     DEFAULT_MAX_GOODS_NUM,
     AuctionSettlementSqlRepository,
@@ -34,12 +37,22 @@ class AuctionDeliveryFixture:
                 (("seller", "卖家", 0), ("winner", "买家", 1000), ("loser", "落败者", 500)),
             )
             apply_auction_settlement(uow)
+            apply_auction_pending_delivery(uow)
             uow.execute(
                 "INSERT INTO auction_sessions(session_id,status,start_time,end_time,items_count,"
                 "start_operation_id) VALUES('session','active',100.0,200.0,1,'start')"
             )
 
-    def add_auction(self, *, auction_id: str = "auction-1", bids: dict | None = None) -> None:
+    def add_auction(
+        self,
+        *,
+        auction_id: str = "auction-1",
+        bids: dict | None = None,
+        item_id: int = 1001,
+        item_name: str = "玩家法器",
+        start_price: int = 600,
+        current_price: int = 900,
+    ) -> None:
         with DatabaseUnitOfWork(self.database) as uow:
             uow.execute(
                 "INSERT INTO auction_current(id,item_id,name,start_price,current_price,"
@@ -47,10 +60,10 @@ class AuctionDeliveryFixture:
                 "VALUES(?,?,?,?,?,?,?,?,?,?)",
                 (
                     auction_id,
-                    1001,
-                    "玩家法器",
-                    600,
-                    900,
+                    item_id,
+                    item_name,
+                    start_price,
+                    current_price,
                     "seller",
                     "卖家",
                     json.dumps(bids or {}),
@@ -58,6 +71,15 @@ class AuctionDeliveryFixture:
                     100.0,
                 ),
             )
+
+    def pending(self) -> list[dict]:
+        with DatabaseUnitOfWork(self.database) as uow:
+            return [
+                dict(row)
+                for row in uow.query_all(
+                    "SELECT * FROM auction_pending_items ORDER BY id"
+                )
+            ]
 
     def give(self, user_id: str, item_id: int, quantity: int) -> None:
         with DatabaseUnitOfWork(self.database) as uow:
@@ -151,6 +173,139 @@ class AuctionSettlementCapacityTests(unittest.TestCase):
         self.assertEqual(810, self.fixture.stone("seller"))
         self.assertEqual(1000, self.fixture.stone("winner"))
         self.assertEqual(1200, self.fixture.stone("loser"))
+
+
+class AuctionSettlementParkingTests(unittest.TestCase):
+    """A2: an item that cannot enter a backpack is parked, never destroyed."""
+
+    def setUp(self) -> None:
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.fixture = AuctionDeliveryFixture(Path(self.temp_dir.name))
+
+    def tearDown(self) -> None:
+        self.temp_dir.cleanup()
+
+    def _repository(self, cap: int = 1) -> AuctionSettlementSqlRepository:
+        return AuctionSettlementSqlRepository(self.fixture.database, max_goods_num=cap)
+
+    def test_unsold_item_for_a_full_seller_is_parked_not_destroyed(self) -> None:
+        self.fixture.add_auction(bids={})
+        self.fixture.give("seller", 1001, 1)
+
+        result = self._repository().settle_active(
+            "settle-park-seller", end_time=300.0, fee_rate=0.1, item_types={1001: "装备"}
+        )
+
+        self.assertEqual("settled", result.status)
+        self.assertEqual("待领取", result.results[0]["status"])
+        self.assertEqual("pending", result.results[0]["delivery"])
+        self.assertEqual(1, self.fixture.copies("seller", 1001))
+        rows = self.fixture.pending()
+        self.assertEqual(1, len(rows))
+        self.assertEqual(("seller", "inventory_full", 1001), (
+            rows[0]["role"], rows[0]["reason"], rows[0]["item_id"]
+        ))
+        self.assertEqual("卖家", rows[0]["owner_name"])
+        self.assertIsNone(rows[0]["claimed_at"])
+        self.assertEqual(0, self.fixture.auction_rows())
+        self.assertEqual("settled", self.fixture.status())
+
+    def test_full_winner_parks_the_item_instead_of_blocking_the_session(self) -> None:
+        self.fixture.add_auction(bids={"winner": 900, "loser": 700})
+        self.fixture.give("winner", 1001, 1)
+
+        result = self._repository().settle_active(
+            "settle-park-winner", end_time=300.0, fee_rate=0.1, item_types={1001: "装备"}
+        )
+
+        self.assertEqual("settled", result.status)
+        self.assertEqual("待领取", result.results[0]["status"])
+        self.assertEqual("pending", result.results[0]["delivery"])
+        self.assertEqual(1, self.fixture.copies("winner", 1001))
+        self.assertEqual(810, self.fixture.stone("seller"))
+        self.assertEqual(1000, self.fixture.stone("winner"))
+        self.assertEqual(1200, self.fixture.stone("loser"))
+        rows = self.fixture.pending()
+        self.assertEqual(1, len(rows))
+        self.assertEqual(("winner", "买家"), (rows[0]["role"], rows[0]["owner_name"]))
+        self.assertEqual(0, self.fixture.auction_rows())
+        self.assertEqual("settled", self.fixture.status())
+
+    def test_one_full_winner_does_not_block_the_other_item(self) -> None:
+        self.fixture.add_auction(
+            auction_id="full-winner", bids={"winner": 900}, item_id=1001, item_name="玩家法器"
+        )
+        self.fixture.add_auction(
+            auction_id="room", bids={"loser": 300}, item_id=2002, item_name="灵草"
+        )
+        self.fixture.give("winner", 1001, 1)
+
+        result = self._repository().settle_active(
+            "settle-mixed",
+            end_time=300.0,
+            fee_rate=0.1,
+            item_types={1001: "装备", 2002: "药材"},
+        )
+
+        self.assertEqual("settled", result.status)
+        by_auction = {record["auction_id"]: record for record in result.results}
+        self.assertEqual("待领取", by_auction["full-winner"]["status"])
+        self.assertEqual("成交", by_auction["room"]["status"])
+        self.assertEqual(1, self.fixture.copies("loser", 2002))
+        self.assertEqual(["winner"], [row["role"] for row in self.fixture.pending()])
+        self.assertEqual("settled", self.fixture.status())
+
+    def test_missing_pending_table_rolls_the_settlement_back(self) -> None:
+        self.fixture.add_auction(bids={"winner": 900})
+        self.fixture.give("winner", 1001, 1)
+        with DatabaseUnitOfWork(self.fixture.database) as uow:
+            uow.execute("DROP TABLE auction_pending_items")
+
+        with self.assertRaises(Exception):
+            self._repository().settle_active(
+                "settle-unmigrated", end_time=300.0, fee_rate=0.1, item_types={1001: "装备"}
+            )
+
+        self.assertEqual(1, self.fixture.copies("winner", 1001))
+        self.assertEqual(1000, self.fixture.stone("winner"))
+        self.assertEqual(0, self.fixture.stone("seller"))
+        self.assertEqual(1, self.fixture.auction_rows())
+        self.assertEqual("active", self.fixture.status())
+        self.assertEqual([], self.fixture.history())
+
+    def test_replay_keeps_a_single_pending_row(self) -> None:
+        self.fixture.add_auction(bids={})
+        self.fixture.give("seller", 1001, 1)
+        repository = self._repository()
+
+        first = repository.settle_active(
+            "settle-replay", end_time=300.0, fee_rate=0.1, item_types={1001: "装备"}
+        )
+        replay = repository.settle_active(
+            "settle-replay", end_time=300.0, fee_rate=0.1, item_types={1001: "装备"}
+        )
+
+        self.assertEqual("settled", first.status)
+        self.assertEqual("duplicate", replay.status)
+        self.assertEqual(1, len(self.fixture.pending()))
+        self.assertEqual(1, self.fixture.copies("seller", 1001))
+
+
+    def test_pending_tables_are_created_by_the_game_database_migration(self) -> None:
+        from nonebot_plugin_xiuxian_2.plugin import build_migrations, migrations_for_database
+
+        migrations = build_migrations()
+        game = {item.version for item in migrations_for_database(migrations, "game_db")}
+        self.assertIn("auction.009", game)
+        with DatabaseUnitOfWork(self.fixture.database) as uow:
+            tables = {
+                str(row[0])
+                for row in uow.execute(
+                    "SELECT name FROM sqlite_master WHERE type='table'"
+                ).fetchall()
+            }
+        self.assertIn("auction_pending_items", tables)
+        self.assertIn("auction_pending_claim_operations", tables)
 
 
 if __name__ == "__main__":

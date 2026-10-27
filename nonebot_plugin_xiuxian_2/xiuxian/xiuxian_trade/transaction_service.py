@@ -226,9 +226,18 @@ async def end_auction_process(
                     },
                 )
         elif settlement["seller_id"] != "0":
+            if str(settlement.get("delivery", "")) == "pending":
+                flow_message = (
+                    f"{settlement['item_name']}流拍，背包已满，物品已放入拍卖待领取，"
+                    f"使用 我的拍卖 领取，拍卖ID:{settlement['auction_id']}"
+                )
+            else:
+                flow_message = (
+                    f"{settlement['item_name']}流拍，已退回背包，拍卖ID:{settlement['auction_id']}"
+                )
             record_trade_event(
                 settlement["seller_id"], "拍卖流拍",
-                f"{settlement['item_name']}流拍，已退回背包，拍卖ID:{settlement['auction_id']}",
+                flow_message,
                 {"拍卖流拍次数": 1},
             )
     logger.info("拍卖已结束，结算完成！")

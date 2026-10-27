@@ -132,6 +132,31 @@ def apply_auction_settlement_statistics(uow: DatabaseUnitOfWork) -> None:
     )
 
 
+def apply_auction_pending_delivery(uow: DatabaseUnitOfWork) -> None:
+    """Own the mailbox for auction items that could not enter a backpack."""
+
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS auction_pending_items ("
+        "id INTEGER PRIMARY KEY AUTOINCREMENT,auction_id TEXT NOT NULL,"
+        "item_id INTEGER NOT NULL,item_name TEXT NOT NULL,item_type TEXT NOT NULL,"
+        "owner_id TEXT NOT NULL,owner_name TEXT NOT NULL,role TEXT NOT NULL,"
+        "reason TEXT NOT NULL,created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,"
+        "claimed_at TEXT,claim_operation_id TEXT,UNIQUE(auction_id,role))"
+    )
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS auction_pending_claim_operations ("
+        "operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,user_id TEXT NOT NULL,"
+        "claimed_count INTEGER NOT NULL DEFAULT 0,blocked_count INTEGER NOT NULL DEFAULT 0,"
+        "result TEXT NOT NULL,created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)"
+    )
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS auction_feature_migrations (version TEXT PRIMARY KEY)"
+    )
+    uow.execute(
+        "INSERT OR IGNORE INTO auction_feature_migrations(version) VALUES ('auction.009')"
+    )
+
+
 __all__ = [
     "apply_auction",
     "apply_auction_settlement",
@@ -141,4 +166,5 @@ __all__ = [
     "apply_auction_bid_statistics",
     "apply_auction_settlement_game_effects",
     "apply_auction_settlement_statistics",
+    "apply_auction_pending_delivery",
 ]

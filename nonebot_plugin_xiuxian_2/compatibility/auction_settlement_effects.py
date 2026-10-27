@@ -52,6 +52,8 @@ class LegacyAuctionSettlementEffects:
             message = (
                 f"[拍卖成交] 拍得{item_name}，成交价{number_to(price)}灵石，拍卖ID:{auction_id}"
             )
+            if str(settlement.get("delivery", "")) == "pending":
+                message += "。背包已满，物品已放入拍卖待领取，使用 我的拍卖 领取"
             game_event_key = "trade_buy"
             stone_delta = -price
             item_delta = [{"id": item_id, "name": item_name, "amount": 1}]
@@ -88,7 +90,13 @@ class LegacyAuctionSettlementEffects:
         elif event_key == "seller_miss":
             user_id = seller_id
             increments = {"拍卖流拍次数": 1}
-            message = f"[拍卖流拍] {item_name}流拍，已退回背包，拍卖ID:{auction_id}"
+            if str(settlement.get("delivery", "")) == "pending":
+                message = (
+                    f"[拍卖流拍] {item_name}流拍，背包已满，物品已放入拍卖待领取，"
+                    f"使用 我的拍卖 领取，拍卖ID:{auction_id}"
+                )
+            else:
+                message = f"[拍卖流拍] {item_name}流拍，已退回背包，拍卖ID:{auction_id}"
             game_event_key = ""
             stone_delta = 0
             item_delta = []
