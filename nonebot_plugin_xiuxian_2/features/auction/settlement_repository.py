@@ -20,6 +20,22 @@ class AuctionSettlementResult:
         return self.status in {"settled", "duplicate"}
 
 
+# ``XiuConfig.max_goods_num`` defaults to 1000; mirror it so a repository that is
+# built without an explicit cap never falls back to "one copy is a full backpack".
+DEFAULT_MAX_GOODS_NUM = 1000
+
+
+def _configured_max_goods_num() -> int:
+    """Read the configured per-item backpack cap without importing config eagerly."""
+
+    try:
+        from ...xiuxian.xiuxian_config import XiuConfig
+
+        return max(int(XiuConfig().max_goods_num), 1)
+    except Exception:  # pragma: no cover - isolated maintenance contexts
+        return DEFAULT_MAX_GOODS_NUM
+
+
 class _SettlementRejected(Exception):
     def __init__(self, result: AuctionSettlementResult) -> None:
         self.result = result
@@ -36,7 +52,10 @@ class AuctionSettlementSqlRepository:
         item_type_resolver: Callable[[int], Mapping[str, Any] | None] | None = None,
     ) -> None:
         self.database = str(database)
-        self.max_goods_num = max(int(max_goods_num or 1), 1)
+        self.max_goods_num = max(
+            int(max_goods_num) if max_goods_num is not None else _configured_max_goods_num(),
+            1,
+        )
         self.item_type_resolver = item_type_resolver
 
     @staticmethod

@@ -82,12 +82,21 @@ class AuctionSettlementApplication:
         ledger: OperationLedger | None = None,
         outbox: OutboxStore | None = None,
         effects: AuctionSettlementEffects | None = None,
+        max_goods_num: int | None = None,
     ) -> None:
         self.database = str(database)
-        self.repository = repository or AuctionSettlementSqlRepository(self.database)
+        self.max_goods_num = max_goods_num
+        self.repository = repository or self._build_repository()
         self.ledger = ledger or OperationLedger()
         self.outbox = outbox or OutboxStore()
         self.effects = effects or NullAuctionSettlementEffects()
+
+    def _build_repository(self) -> Any:
+        from .settlement_repository import AuctionSettlementSqlRepository
+
+        return AuctionSettlementSqlRepository(
+            self.database, max_goods_num=self.max_goods_num
+        )
 
     @staticmethod
     def _event_id(operation_id: str, settlement: Mapping[str, Any], event_key: str) -> str:
