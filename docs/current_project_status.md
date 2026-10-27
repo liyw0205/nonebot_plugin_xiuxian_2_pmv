@@ -465,6 +465,49 @@ bot 侧六个玩家视图（`活动阶段`/`活动首领`/`活动商店`/`活动
   整卡验收通过前未把 `fdb8ae8f` 之后的提交合入 main。未部署、未读写真实游戏库、
   不发送真实消息。
 
+## 已完成目标：鬼市订单生命周期闭环（N1→N2→N3）
+
+鬼市三个入口（存/取灵石、求购、摆摊）此前已迁到 feature application，但订单从创建
+到成交、到期、退款从未闭环：`鬼市求购` 的回执明写「次日 8 点自动取消订单，并退还
+未购得物品的灵石」，而仓库里没有任何求购到期路径（guishi 仓储零 `created_at`/
+`expire` 读取），冻结灵石只在手动取消或管理员 `清空鬼市` 时才回来；`鬼市摆摊`
+创建后不触发撮合（对照求购创建后立即调用 `process_guishi_transactions`）；
+撮合按摆摊价结算而买家按求购价冻结，差价既不入卖家也不退买家。目标文档
+`docs/goals/next-full-feature.md`（local-only，未提交）。
+
+- N1 求购到期自动取消退款：新增纯规则 `features/trade/guishi_lifecycle.py`
+  （创建日次日 `GUISHI_BAITAN_END_HOUR` 点到期、`None` 锚点永不过期、混合时区
+  不抛错）与 `GuishiQiugouExpiryService`（单次只读 UoW 取候选 + 既有
+  `cancel_qiugou` 退款，操作号 `guishi-expire-qiugou:{order_id}` 稳定可重放；
+  缺锚点表/缺库返回空且不建表）。锚点复用既有
+  `guishi_order_create_operations.created_at`，**未新增表/列/迁移**。接线：
+  `clear_expired_baitan_orders_job` 先做全服到期再做摆摊清理（job id 与 cron 不变），
+  `鬼市信息` 做本人访问期收敛。
+- N2 摆摊即时撮合与差价退还：新增 `GuishiListingFillService`（同物品、求购价不
+  低于摆摊价、非本人、按创建时刻 FIFO，操作号 `guishi-fill:{摆摊}:{求购}`），
+  `鬼市摆摊` 创建后立即撮合并把成交摘要与 `鬼市成交` 统计写回卖家回执
+  （抽 `_record_guishi_match_event` 与既有定时撮合共用）。`guishi_match` 新增
+  `price_refund`（`数量 × (求购价 - 摆摊价)`）在同事务退回买家，`GuishiMatchResult`
+  默认值保证旧 operation 行重放兼容；价格闸门与部分成交语义不变。
+- N3 玩家可见状态与文案：新增纯渲染 `guishi_order_view.py` 与只读
+  `GuishiOrderStatusService`，`鬼市信息` 每笔订单显示到期时刻与剩余时长，
+  无锚点历史订单显示 `到期：未知（历史订单）`，段尾给出可执行提示；摆摊回执
+  「物品不退还」改为与代码一致的「未售出物品退回背包」；`trade_help.py` 补齐
+  `鬼市取消求购`/`鬼市取物品` 与到期规则。正式文档 `docs/features/trade.md`、
+  `docs/gameplay_notes.md` 已更新。
+- 测试：`tests/test_trade_guishi_qiugou_expiry.py` `21/21`、
+  `tests/test_trade_guishi_listing_fill.py` `13/13`、
+  `tests/test_trade_guishi_order_status.py` `13/13`；
+  `tests/test_trade_guishi_match_repository.py` 按新语义原地更新（买家余额
+  99→159、回滚不留退款、旧行 `price_refund=0`）；三阶段受影响套件
+  `362 passed`、unittest 收集 `293 tests OK`。三门禁真实 exit 0；
+  `compileall` 与 `git diff --check` 干净。另用一次性探针跑真实 application
+  路径验证价值守恒：1000 → 冻结 120 → 成交净付 80 并退差价 40 → 到期退回 100
+  → 买家 920、卖家 80，重复清理不再退款。
+- 交付提交：`f020f62d`（N1，develop CI run `40517570714` success）、
+  `5319b209`（N2，run `40519162723` success）、`235d9912`（N3，run
+  `40520461812` success）。未部署、未读写真实游戏库、不发送真实消息。
+
 ## 冻结清单与停止条件
 
 冻结范围仅包括活动 Web 六来源一键代领 API、权限/错误合同、管理员面板、兼容性保护、聚焦测试、路由清单和正式文档。不得新增奖励经济、schema/数据迁移、玩家身份模型、后台活动编辑器、通用 UI 框架或 unrelated refactor。
