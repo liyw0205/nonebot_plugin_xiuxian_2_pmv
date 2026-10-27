@@ -12,7 +12,7 @@ from nonebot_plugin_xiuxian_2.features.auction.migrations import (
 from nonebot_plugin_xiuxian_2.features.auction.settlement_repository import (
     DEFAULT_MAX_GOODS_NUM,
     AuctionSettlementSqlRepository,
-    _configured_max_goods_num,
+    configured_max_goods_num,
 )
 from nonebot_plugin_xiuxian_2.infrastructure.database import DatabaseUnitOfWork
 
@@ -132,7 +132,7 @@ class AuctionSettlementCapacityTests(unittest.TestCase):
         self.temp_dir.cleanup()
 
     def test_default_capacity_follows_the_configured_backpack_limit(self) -> None:
-        configured = _configured_max_goods_num()
+        configured = configured_max_goods_num()
         self.assertGreater(configured, 1)
         self.assertEqual(
             configured, AuctionSettlementSqlRepository(self.fixture.database).max_goods_num

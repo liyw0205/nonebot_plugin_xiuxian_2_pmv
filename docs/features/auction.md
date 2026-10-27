@@ -34,6 +34,37 @@
 
 `AuctionBidSqlRepository` 在 game DB 的 immediate UoW 中校验预期价格/竞价快照，锁定出价者灵石、退还上一位领先者并写入竞价 operation；application replay 不重复写交易统计。
 
+## 结算投递合同（不丢物品 / 不阻塞整场）
+
+结算的容量口径取 `XiuConfig().max_goods_num`（默认 1000）：`AuctionSettlementSqlRepository`
+未显式注入 `max_goods_num` 时惰性读取该配置，只有配置不可读时才回落到同名默认值
+`DEFAULT_MAX_GOODS_NUM`——**不得**再把「未传参」当作 1 件上限。`AuctionSettlementApplication`
+可透传 `max_goods_num`，既有构造点不传即走配置解析。
+
+投递只有三种结果，全部在同一结算事务内决定：
+
+- `backpack`：背包有位置，物品直接入包（`back.goods_num/bind_num + 1`）。
+- `pending`：背包该物品已达上限，写入 `auction_pending_items`（`owner_id`/`role`/
+  `reason`），历史状态记为 `待领取`；**物品永不丢失**。中标者背包满不再
+  `inventory_full` 拒绝整场，其余拍品、卖家收入与败者退款照常完成。
+- `none`：无物品需要投递（系统拍品或异常路径）。
+
+`item_missing`（物品类型无法解析）与 `participant_missing`（买卖方账号缺失）仍按原样
+拒绝并整事务回滚，保持 fail-closed。`auction_pending_items` 缺失（未迁移旧库）时插入
+抛错 → 整个结算回滚、场次保持 active、`auction_current` 与背包不变，绝不静默降级为
+「已销毁」。
+
+玩家侧读取与领取由 `AuctionPendingApplication` 承担：
+
+- `list_for(user_id)` 只读返回本人未领取行（`auction_id`、物品、`role`（中标/流拍）、时间），
+  缺库/缺表返回空且不建表。
+- `claim(operation_id, user_id, auction_id=None)` 在单个 immediate UoW 内逐行校验
+  `goods_num + 1 <= max_goods_num`，可领的原子入包并标记 `claimed_at/claim_operation_id`，
+  背包满的跳过并保持待领取；结果写 `auction_pending_claim_operations`，同 operation_id
+  重放返回首次结果、不重复发放；无待领取项返回 `empty`，无 schema 返回 `schema_missing`。
+- 命令面：`我的拍卖` 同时列出等待区与待领取；`我的拍卖 领取 [拍卖ID]` 领取全部可领取项
+  或指定物品，不新增命令名、路由或配置键。
+
 ## 定时任务
 
 `auction.settle` 是稳定的按需任务 ID，可由调度器或管理 API 执行。任务通过同一 `auction.settle` operation ledger 幂等；旧调度器在兼容周期内仍保留，但不再是新 application 的唯一入口。

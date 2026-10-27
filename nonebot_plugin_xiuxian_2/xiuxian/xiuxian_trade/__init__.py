@@ -65,6 +65,7 @@ from ...compatibility.auction_settlement_effects import LegacyAuctionSettlementE
 from ...compatibility.legacy_xianshi_schema import LegacyXianshiSchemaAdapter
 from ...features.auction.session_start_application import AuctionSessionStartApplication
 from ...features.auction.settlement import AuctionSettlementApplication
+from ...features.auction.pending import AuctionPendingApplication
 from ...features.auction.query_application import AuctionQueryApplication
 from ...features.trade.guishi_deposit_repository import GuishiDepositSqlRepository
 from ...features.trade.guishi_withdraw_repository import GuishiWithdrawSqlRepository
@@ -93,6 +94,7 @@ _auction_bid_application_instance = None
 _auction_bid_repository_instance = None
 _auction_session_start_application_instance = None
 _auction_settlement_application_instance = None
+_auction_pending_application_instance = None
 _auction_query_application_instance = None
 scheduler = require("nonebot_plugin_apscheduler").scheduler # 全局调度器，用于鬼市
 auction_scheduler = require("nonebot_plugin_apscheduler").scheduler # 独立的拍卖调度器，避免冲突
@@ -157,6 +159,16 @@ def _auction_bid_repository():
             str(get_paths().game_db)
         )
     return _auction_bid_repository_instance
+
+
+def _auction_pending_application():
+    global _auction_pending_application_instance
+    if _auction_pending_application_instance is None:
+        _auction_pending_application_instance = AuctionPendingApplication(
+            get_paths().game_db,
+            max_goods_num=XiuConfig().max_goods_num,
+        )
+    return _auction_pending_application_instance
 
 
 def _auction_settlement_application():
@@ -549,6 +561,16 @@ def _auction_queue_operation_id(event, action, user_id, item_id):
         return f"auction-queue:{action}:{event_id}:{user_id}:{item_id}"
     timestamp = runtime_clock.now().strftime("%Y%m%d%H%M%S%f")
     return f"auction-queue:{action}:{user_id}:{item_id}:{timestamp}"
+
+
+def _auction_pending_claim_operation_id(event, user_id, auction_id):
+    event_id = str(
+        getattr(event, "message_id", "") or getattr(event, "id", "") or ""
+    ).strip()
+    scope = str(auction_id or "all")
+    if event_id:
+        return f"auction-claim:{event_id}:{user_id}:{scope}"
+    return f"auction-claim:{user_id}:{scope}:{runtime_ids.new_id()}"
 
 
 def _auction_session_operation_id(event, action):
@@ -2983,29 +3005,78 @@ async def auction_remove_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
     await auction_remove.finish()
 
 @my_auction.handle(parameterless=[Cooldown(cd_time=0)])
-async def my_auction_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
-    """查看我上架的拍卖物品（在等待区）"""
+async def my_auction_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
+    """查看我上架的拍卖物品（等待区 + 待领取），并可用 `我的拍卖 领取 [拍卖ID]` 领取"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
         await handle_send(bot, event, msg, md_type="我要修仙")
         await my_auction.finish()
-    
+
     user_id = user_info['user_id']
+    command_text = args.extract_plain_text().strip()
+
+    if command_text.startswith("领取"):
+        scope = command_text[len("领取"):].strip()
+        result = _auction_pending_application().claim(
+            operation_id=_auction_pending_claim_operation_id(event, user_id, scope or None),
+            user_id=user_id,
+            auction_id=scope or None,
+        )
+        if result.status == "schema_missing":
+            reply = "拍卖待领取暂不可用（数据库尚未就绪），请联系管理员。"
+        elif result.status == "operation_conflict":
+            reply = "该领取请求与之前的记录冲突，请重新发送指令。"
+        elif result.status == "empty":
+            reply = (
+                f"未找到拍卖ID {scope} 的待领取物品。" if scope else "您没有待领取的拍卖物品。"
+            )
+        elif result.status == "blocked":
+            names = "、".join(f"{row['item_name']}(ID:{row['auction_id']})" for row in result.blocked)
+            reply = f"背包已满，暂时无法领取：{names}\n请整理背包后再次使用 我的拍卖 领取。"
+        else:
+            claimed = "\n".join(
+                f"{row['role_label']}：{row['item_name']} x1（拍卖ID:{row['auction_id']}）"
+                for row in result.claimed
+            )
+            reply = f"已领取 {len(result.claimed)} 件拍卖物品：\n{claimed}"
+            if result.blocked:
+                names = "、".join(f"{row['item_name']}(ID:{row['auction_id']})" for row in result.blocked)
+                reply += f"\n背包已满未领取：{names}"
+            if result.remaining:
+                reply += f"\n仍有 {result.remaining} 件待领取。"
+        await handle_send(
+            bot, event, reply,
+            md_type="拍卖", k1="我的拍卖", v1="我的拍卖", k2="查看", v2="拍卖查看", k3="帮助", v3="拍卖帮助",
+        )
+        await my_auction.finish()
+
     player_auction_items = _auction_queue_application().get_player_items(user_id)
-    
-    if not player_auction_items:
-        msg = "您当前没有上架任何拍卖物品在等待区！"
+    pending_items = _auction_pending_application().list_for(user_id)
+
+    if not player_auction_items and not pending_items:
+        msg = "您当前没有上架任何拍卖物品在等待区，也没有待领取的拍卖物品！"
         await handle_send(bot, event, msg, md_type="拍卖", k1="查看", v1="拍卖查看", k2="下架", v2="拍卖下架", k3="帮助", v3="拍卖帮助")
         await my_auction.finish()
-    
-    msg_list = [f"【我的拍卖等待区物品】"]
-    for item in player_auction_items:
-        msg_list.append(f"\n物品: {item['item_name']}") # item_name是玩家上架时的名称
-        msg_list.append(f"起拍价: {number_to(item['start_price'])}灵石")
-    
-    msg_list.append("\n使用【拍卖下架 物品名】可以从等待区下架物品")
-    
+
+    msg_list = []
+    if player_auction_items:
+        msg_list.append("【我的拍卖等待区物品】")
+        for item in player_auction_items:
+            msg_list.append(f"\n物品: {item['item_name']}") # item_name是玩家上架时的名称
+            msg_list.append(f"起拍价: {number_to(item['start_price'])}灵石")
+        msg_list.append("\n使用【拍卖下架 物品名】可以从等待区下架物品")
+
+    if pending_items:
+        if msg_list:
+            msg_list.append("")
+        msg_list.append("【拍卖待领取】")
+        for item in pending_items:
+            msg_list.append(
+                f"拍卖ID:{item['auction_id']} {item['item_name']} x1（{item['role_label']}）"
+            )
+        msg_list.append("使用【我的拍卖 领取】领取全部，或【我的拍卖 领取 拍卖ID】领取单件")
+
     await handle_send(bot, event, "\n".join(msg_list), md_type="拍卖", k1="查看", v1="拍卖查看", k2="下架", v2="拍卖下架", k3="帮助", v3="拍卖帮助")
     await my_auction.finish()
 

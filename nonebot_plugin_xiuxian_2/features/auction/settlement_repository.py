@@ -25,7 +25,7 @@ class AuctionSettlementResult:
 DEFAULT_MAX_GOODS_NUM = 1000
 
 
-def _configured_max_goods_num() -> int:
+def configured_max_goods_num() -> int:
     """Read the configured per-item backpack cap without importing config eagerly."""
 
     try:
@@ -53,7 +53,7 @@ class AuctionSettlementSqlRepository:
     ) -> None:
         self.database = str(database)
         self.max_goods_num = max(
-            int(max_goods_num) if max_goods_num is not None else _configured_max_goods_num(),
+            int(max_goods_num) if max_goods_num is not None else configured_max_goods_num(),
             1,
         )
         self.item_type_resolver = item_type_resolver
@@ -339,4 +339,9 @@ class AuctionSettlementSqlRepository:
         )
 
 
-__all__ = ["AuctionSettlementResult", "AuctionSettlementSqlRepository"]
+__all__ = [
+    "AuctionSettlementResult",
+    "AuctionSettlementSqlRepository",
+    "DEFAULT_MAX_GOODS_NUM",
+    "configured_max_goods_num",
+]

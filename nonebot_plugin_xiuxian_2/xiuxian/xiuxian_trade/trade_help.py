@@ -65,7 +65,9 @@ async def trade_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 - 拍卖上架 物品名 底价：提交拍卖品（最低底价 {number_to(auction_config.get_auction_rules()['min_price'])} 灵石）
   每人最多上架 {auction_config.get_auction_rules()['max_user_items']} 件（仅限非拍卖期间）
 - 拍卖下架 物品名：撤回拍卖品（仅非拍卖期间）
-- 我的拍卖：查看已上架、等待拍卖的物品
+- 我的拍卖：查看已上架、等待拍卖的物品，以及待领取的拍卖物品
+- 我的拍卖 领取 [拍卖ID]：领取待领取的拍卖物品（不带 ID 领取全部可领取项）
+  结算时背包已满的物品不会丢失，会留在待领取，腾出空间后再领取
 
 **状态**
 - 拍卖活动：查看当前拍卖规则和限时交易状态
