@@ -568,6 +568,42 @@ bot 侧六个玩家视图（`活动阶段`/`活动首领`/`活动商店`/`活动
   `build-and-release` 按分支规则 skipped）。未部署、未读写真实游戏库、
   不发送真实消息。
 
+## 已完成目标：拍卖竞价可见性与被超价通知（B1→B2）
+
+竞价资产一直是对的：`AuctionBidSqlRepository` 在同一事务锁定新出价并退回上一位领先者，
+`refunded_bidder`/`refunded_amount` 落进 `auction_bid_operations`。但玩家侧完全看不到这条链：
+`on_bid` 效果签名里没有被超价者与退款额，被超越的人只会发现灵石悄悄回到余额；
+`我的拍卖` 只列等待区与待领取，看不到自己参与的竞价。目标文档
+`docs/goals/next-full-feature.md`（local-only，未提交）。
+
+- B1 我的竞价视图：`AuctionQuerySqlRepository.my_bids(user_id)` 只读解析
+  `auction_current` 与 `auction_bid_operations`——竞价仓储在玩家被超越时会把它从
+  `auction_current.bids` 移除，因此**出价只能从操作账本恢复**；返回
+  `auction_id/item_name/my_price/current_price/leading/bid_count`，缺库缺表返回空且不建表。
+  `AuctionQueryApplication.my_bids` 直接委派。`我的拍卖` 在等待区与待领取之后追加
+  `【我的竞价】` 段（领先/已被超价 + `拍卖竞拍 <ID> <价格>` 加价提示），
+  竞价投影读取异常时该段按空处理，不影响整条指令。
+- B2 被超价通知：`AuctionBidEffects.on_bid`/`NullAuctionBidEffects` 增加带默认值的
+  `refunded_bidder`/`refunded_amount`；`_append_effect_event` 把两者写进 outbox payload，
+  `reconcile_outbox_event` 读出并透传；`LegacyAuctionBidEffects.on_bid` 在出价行之后，
+  若被超价者非空且退款额大于 0，写
+  `[拍卖被超价] {物品} 已被超越，原出价 {N} 灵石已退回，拍卖ID:{id}`，
+  `event_id=f"auction.outbid:{operation_id}"`（与出价行 `auction.bid:{operation_id}` 分开，
+  outbox 重放各自去重）。`reconcile_event` 同步透传两字段。
+- 不改扣款/退款金额、竞价校验、operation 与 outbox 结构；不新增表、迁移、命令、路由或配置键。
+- 测试：新增 `tests/test_auction_bid_visibility.py` `13/13`（领先/被超价、账本恢复出价、
+  只返回本人拍品、`current_price` 不低于最高出价、空玩家、缺库缺表不建表、超价通知两行/
+  无超价一行/退款额为 0 不写、事件号稳定可去重、application payload 源合同、
+  handler 渲染源合同）；受影响拍卖/交易/源码质量套件 `333 passed`，unittest 收集
+  `274 tests OK`；三门禁真实 exit 0；`compileall` 与 `git diff --check` 干净。
+- 端到端探针（真实 `AuctionBidSqlRepository` + `AuctionQueryApplication` +
+  `LegacyAuctionBidEffects` + 真实日志写入到临时 players 目录）：先由 me 出价 500、
+  再由 rival 出价 800 → 回执 `refunded_bidder=me/500`；`my_bids("me")` 返回
+  `my_price=500,current_price=800,leading=False`；me 的日志恰好一条
+  `[拍卖被超价] 灵剑 已被超越，原出价 500 灵石已退回，拍卖ID:a1`，rival 只有出价行。
+- 交付与 CI：`b05c665e` 已推送 develop，develop CI run `40620682579`；main run 号在
+  快进后回填。未部署、未读写真实游戏库、不发送真实消息。
+
 ## 冻结清单与停止条件
 
 冻结范围仅包括活动 Web 六来源一键代领 API、权限/错误合同、管理员面板、兼容性保护、聚焦测试、路由清单和正式文档。不得新增奖励经济、schema/数据迁移、玩家身份模型、后台活动编辑器、通用 UI 框架或 unrelated refactor。
