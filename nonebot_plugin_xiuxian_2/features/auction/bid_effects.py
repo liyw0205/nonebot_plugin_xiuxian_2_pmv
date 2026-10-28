@@ -16,6 +16,8 @@ class AuctionBidEffects(Protocol):
         bid_price: int,
         replayed: bool,
         occurred_at: str,
+        refunded_bidder: str = "",
+        refunded_amount: int = 0,
     ) -> str | None: ...
 
 
@@ -32,6 +34,8 @@ class NullAuctionBidEffects:
         bid_price: int,
         replayed: bool,
         occurred_at: str,
+        refunded_bidder: str = "",
+        refunded_amount: int = 0,
     ) -> str | None:
         return None
 

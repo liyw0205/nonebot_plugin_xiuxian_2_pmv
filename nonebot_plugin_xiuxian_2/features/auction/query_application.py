@@ -30,5 +30,10 @@ class AuctionQueryApplication:
     def count_auction_history(self) -> int:
         return self.repository.count_auction_history()
 
+    def my_bids(self, user_id: str) -> list[dict[str, Any]]:
+        """Return the player's standing bids on the current auctions."""
+
+        return self.repository.my_bids(user_id)
+
 
 __all__ = ["AuctionQueryApplication"]

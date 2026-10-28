@@ -69,6 +69,8 @@ class AuctionBidApplication:
             bid_price=int(payload["bid_price"]),
             replayed=bool(record.get("replayed", True)),
             occurred_at=str(payload["occurred_at"]),
+            refunded_bidder=str(payload.get("refunded_bidder", "") or ""),
+            refunded_amount=int(payload.get("refunded_amount", 0) or 0),
         )
 
     def _append_effect_event(self, uow: DatabaseUnitOfWork, outcome: OperationOutcome[Any], request: AuctionBidRequest, item_name: str) -> None:
@@ -93,6 +95,8 @@ class AuctionBidApplication:
                 "bidder_id": request.bidder_id,
                 "item_name": event_name,
                 "bid_price": int((outcome.data or {}).get("bid_price", request.bid_price)),
+                "refunded_bidder": str((outcome.data or {}).get("refunded_bidder", "") or ""),
+                "refunded_amount": int((outcome.data or {}).get("refunded_amount", 0) or 0),
                 "occurred_at": outcome.occurred_at or self.ledger.clock.now().isoformat(),
             },
         )

@@ -18,6 +18,8 @@ class AuctionQueryRepository(Protocol):
 
     def count_auction_history(self) -> int: ...
 
+    def my_bids(self, user_id: str) -> list[dict[str, Any]]: ...
+
 
 class AuctionQuerySqlRepository:
     """Read the legacy auction projection without creating its schema."""
@@ -108,6 +110,55 @@ class AuctionQuerySqlRepository:
                 return 0
             row = uow.query_one("SELECT COUNT(*) AS total FROM auction_history")
             return int(row["total"]) if row else 0
+
+    def my_bids(self, user_id: str) -> list[dict[str, Any]]:
+        """Return the player's bids on still-active auctions (read-only).
+
+        The bid repository drops a player from ``auction_current.bids`` as soon as
+        somebody outbids them, so the standing bid is only recoverable from the
+        bid operation ledger; ``bids`` supplies the current top for the leader flag.
+        """
+
+        if not self.database.is_file():
+            return []
+        user_id = str(user_id or "").strip()
+        if not user_id:
+            return []
+        with DatabaseUnitOfWork(self.database, read_only=True) as uow:
+            if not self._table_exists(uow, "auction_current"):
+                return []
+            auctions = {
+                str(row["id"]): self._auction_row(row)
+                for row in uow.query_all("SELECT * FROM auction_current ORDER BY id")
+            }
+            latest_bid: dict[str, int] = {}
+            if self._table_exists(uow, "auction_bid_operations"):
+                for row in uow.query_all(
+                    "SELECT auction_id,bid_price FROM auction_bid_operations "
+                    "WHERE bidder_id=? ORDER BY rowid",
+                    (user_id,),
+                ):
+                    latest_bid[str(row["auction_id"])] = int(row["bid_price"] or 0)
+        bids: list[dict[str, Any]] = []
+        for auction_id, record in auctions.items():
+            prices = record.get("bids") or {}
+            leading_price = int(prices.get(user_id) or 0)
+            my_price = leading_price or latest_bid.get(auction_id, 0)
+            if my_price <= 0:
+                continue
+            top = max((int(value) for value in prices.values()), default=0)
+            bids.append(
+                {
+                    "auction_id": auction_id,
+                    "item_id": int(record.get("item_id") or 0),
+                    "item_name": str(record.get("name") or ""),
+                    "my_price": my_price,
+                    "current_price": max(int(record.get("current_price") or 0), top),
+                    "leading": leading_price > 0 and leading_price >= top,
+                    "bid_count": len(prices),
+                }
+            )
+        return bids
 
 
 __all__ = ["AuctionQueryRepository", "AuctionQuerySqlRepository"]

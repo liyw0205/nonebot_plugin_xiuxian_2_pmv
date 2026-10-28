@@ -84,6 +84,8 @@ class LegacyAuctionBidEffects:
         bid_price: int,
         replayed: bool,
         occurred_at: str,
+        refunded_bidder: str = "",
+        refunded_amount: int = 0,
     ) -> str | None:
         if str(bidder_id) == "0":
             return None
@@ -103,6 +105,20 @@ class LegacyAuctionBidEffects:
             event_id=f"auction.bid:{operation_id}",
             occurred_at=occurred_at,
         )
+        outbid_target = str(refunded_bidder or "").strip()
+        outbid_amount = int(refunded_amount or 0)
+        if outbid_target and outbid_target != "0" and outbid_amount > 0:
+            # The previous leader paid this amount for a bid that is no longer the
+            # top one; the ledger already refunded it, so tell them why.
+            self.log_writer(
+                user_id=outbid_target,
+                message=(
+                    f"[拍卖被超价] {item_name} 已被超越，原出价 "
+                    f"{outbid_amount} 灵石已退回，拍卖ID:{auction_id}"
+                ),
+                event_id=f"auction.outbid:{operation_id}",
+                occurred_at=occurred_at,
+            )
         return None
 
     def reconcile_event(self, record: Mapping[str, Any]) -> None:
@@ -115,6 +131,8 @@ class LegacyAuctionBidEffects:
             bid_price=int(payload["bid_price"]),
             replayed=True,
             occurred_at=str(payload["occurred_at"]),
+            refunded_bidder=str(payload.get("refunded_bidder", "") or ""),
+            refunded_amount=int(payload.get("refunded_amount", 0) or 0),
         )
 
 

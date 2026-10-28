@@ -65,6 +65,26 @@
 - 命令面：`我的拍卖` 同时列出等待区与待领取；`我的拍卖 领取 [拍卖ID]` 领取全部可领取项
   或指定物品，不新增命令名、路由或配置键。
 
+## 竞价可见性与被超价通知
+
+竞价资产写入时，`AuctionBidSqlRepository` 已在同一事务中锁定新出价并退回上一位领先者
+（`refunded_bidder`/`refunded_amount` 随 `auction_bid_operations` 持久化）。
+应用层把这两个字段放进 outbox payload，效果层据此补齐玩家可见面：
+
+- `AuctionQuerySqlRepository.my_bids(user_id)` 只读解析 `auction_current.bids`，返回本人
+  参与的拍品：`auction_id`、`item_name`、`my_price`、`current_price`（取
+  `max(current_price, 最高出价)`）、`leading`（`my_price >= 最高出价`）、`bid_count`；
+  缺库/缺表返回空且不建表，`AuctionQueryApplication` 同名方法直接委派。
+- `我的拍卖` 在等待区与待领取之后追加 `【我的竞价】` 段，逐条给出
+  `拍卖ID/物品/我的出价/当前价（领先|已被超价）` 与 `拍卖竞拍 <ID> <价格>` 加价提示；
+  竞价投影读取异常时该段按空处理，不影响整条指令的其余内容。
+- `LegacyAuctionBidEffects.on_bid` 在出价行之后，若确有被超价者且退款额大于 0，为其写
+  `[拍卖被超价] {物品} 已被超越，原出价 {N} 灵石已退回，拍卖ID:{id}`，
+  `event_id=f"auction.outbid:{operation_id}"`（与出价行 `auction.bid:{operation_id}`
+  分开），因此 outbox 重放时两行各自按事件号去重，不会重复通知。
+
+不改变扣款/退款金额、竞价校验、operation 结构或 outbox 语义；不新增表、迁移或配置键。
+
 ## 定时任务
 
 `auction.settle` 是稳定的按需任务 ID，可由调度器或管理 API 执行。任务通过同一 `auction.settle` operation ledger 幂等；旧调度器在兼容周期内仍保留，但不再是新 application 的唯一入口。
