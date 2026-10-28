@@ -741,6 +741,31 @@ bot 侧六个玩家视图（`活动阶段`/`活动首领`/`活动商店`/`活动
   main run `40756949336` success（headSha 均为 `695f1243`，`build-and-release` 按分支规则
   skipped）。未部署、未读写真实游戏库、不发送真实消息；用户删除的四个文件保持未暂存。
 
+## 已完成目标：组队邀请待处理面板
+
+组队邀请已持久化到 `dungeon_team_invites` 并有到期清理，但 `查看队伍` 在玩家不在队伍时
+直接回复“你不在任何队伍中”，错过的私聊邀请没有主动查询入口。目标文档
+`.codex-next-goal.md`（local-only，未提交）。
+
+- `features/dungeon/team_presentation.py` 新增 `TeamPendingInviteView` 与
+  `render_pending_invite`：展示队伍名、邀请人道号、发起群、剩余分钟和同意/拒绝指引；
+  空名称回退 `未知队伍`/`未知用户`，`remaining_seconds <= 0` 输出过期文案。
+- `xiuxian_dungeon/__init__.py::view_team_handler` 的无队伍分支先调用
+  `DungeonTeamApplication.pending_invite(user_id, now)`；命中未过期邀请时读取
+  `team_info` 与邀请人道号并渲染，按钮为同意/拒绝/队伍帮助；未命中保持原创建队伍提示。
+  新 helper 定义在文件末尾，既有 Phase2 证据锚点 `343/346/1126/1223` 未漂移。
+- 只读；复用既有 `dungeon_team_invites` 与 `pending_invite`，不新增表、列、迁移、索引、
+  配置键、命令、别名或路由；不改邀请 TTL、私聊通知、同意/拒绝或到期清理。
+- 测试：`tests/test_dungeon_pending_invite_view.py` `7/7`，覆盖真实 pending/过期/已消费/
+  他人邀请、缺表/缺库不建表、应用委托、纯渲染降级与 handler 源合同；受影响组队/源码
+  质量套件 `275 passed`。`test_dungeon_frozen_command_owner` 在本地因用户删除
+  `docs/refactor_phase2_legacy_path_items.json` 报 KeyError，在 HEAD 快照中单测 `OK`。
+  architecture、inventory `--check`、progress `--json`（`failures: []`）真实 exit 0；
+  `compileall` 与 `git diff --check` 干净。
+- 交付与 CI：功能提交 `6c14cb7e` 的 develop run `40787111157` success；快进合入 main 后
+  main run `40788335192` success（headSha 均为 `6c14cb7e`，`build-and-release` 按分支规则
+  skipped）。未部署、未读写真实游戏库、不发送真实消息；用户删除的四个文件保持未暂存。
+
 ## 冻结清单与停止条件
 
 冻结范围仅包括活动 Web 六来源一键代领 API、权限/错误合同、管理员面板、兼容性保护、聚焦测试、路由清单和正式文档。不得新增奖励经济、schema/数据迁移、玩家身份模型、后台活动编辑器、通用 UI 框架或 unrelated refactor。
