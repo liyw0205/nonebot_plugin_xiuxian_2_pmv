@@ -2,7 +2,7 @@
 
 ## 用户流程
 
-用户通过 `修仙签到` 或 `签到` 领取当日灵石。角色必须存在且当天尚未签到；成功后 `user_xiuxian.is_sign` 置为 `1` 并增加灵石。
+用户通过 `修仙签到` 或 `签到` 领取当日灵石。角色必须存在且当天尚未签到；成功后 `user_xiuxian.is_sign` 置为 `1` 并增加灵石，同时在 `sign_in_daily` 写入当天回执。回复会追加本月签到日历与连续天数；同日已有回执时即使 `is_sign` 被重置清掉也不能再次领取。
 
 ## 命令与别名
 
@@ -18,17 +18,22 @@
 ## 数据模型与迁移
 
 - `user_xiuxian.is_sign`、`user_xiuxian.stone`：既有玩家资产表。
+- `sign_in_daily`：业务日签到回执（`user_id`、`business_date`、`stone`、`operation_id`），
+  主键 `(user_id, business_date)`；按 `business_date` 建索引，供日历与重置保护读取。
 - `sign_in_operations`：操作号、用户和发放灵石的兼容投影。
 - `operation_ledger`、`operation_audit`：统一操作幂等、审计和重放记录。
-- 迁移版本：`sign_in.001`。
+- 迁移版本：`sign_in.001`、`sign_in.002`、`sign_in.003`、`sign_in.004`（每日回执）。
 
 ## 事务与失败回滚
 
-同一 `DatabaseUnitOfWork` 中完成操作登记、签到状态更新、灵石增加和操作投影写入。相同操作号重试只返回首次结果；角色不存在或已经签到不会改变资产；写入异常回滚整笔事务并记录失败状态。
+同一 `DatabaseUnitOfWork` 中完成操作登记、签到状态更新、灵石增加、操作投影和
+`sign_in_daily` 回执写入。相同操作号重试只返回首次结果；角色不存在、已经签到或当天已有
+回执不会改变资产；写入异常回滚整笔事务并记录失败状态。`sign_in_daily` 缺失的旧库跳过日回执，
+保持原有领取语义。
 
 ## 定时任务
 
-每日 `is_sign` 重置由现有 scheduler job 委托给 `SignInApplication`，按 scheduler 业务日写入共享 ledger/audit；相同业务日重放不重复清零，缺 schema 时拒绝写入，不在请求期建表。
+每日 `is_sign` 重置由现有 scheduler job 委托给 `SignInApplication`，按 scheduler 业务日写入共享 ledger/audit；相同业务日重放不重复清零，缺 schema 时拒绝写入，不在请求期建表。`sign_in_daily` 存在时，重置只清没有当天回执的 `is_sign`，并在审计中记录保护行数；表缺失时保持旧的全表清零。
 
 ## 配置项
 
@@ -46,7 +51,11 @@
 
 ## 灰度、回滚和已知限制
 
-关闭 `XIUXIAN_SIGN_IN_ENABLED` 后 registry 不注册新命令/路由，但旧命令仍由兼容包提供。首次重置任务若延迟到用户已签到之后，仍按历史语义清零；迁移前的 `is_sign=1` 没有业务日期回执，不能可靠区分新旧签到。当前 scheduler timezone 由部署配置决定，代码没有固定业务时区。严格保护这些情况需要每日状态模型与历史迁移/对账，当前不在本切片范围内。
+关闭 `XIUXIAN_SIGN_IN_ENABLED` 后 registry 不注册新命令/路由，但旧命令仍由兼容包提供。
+`sign_in_daily` 从 `sign_in.004` 上线起记录，不回填历史日期：旧 `is_sign=1` 没有日期回执，
+仍会被下一次重置按旧语义清零，日历也不会显示功能上线前的签到。日历与连续天数只展示，
+不发放额外奖励；没有补签入口。当前 scheduler timezone 由部署配置决定，业务日与
+`sign_in_clock` 同源，代码没有新增固定时区。
 
 ## 灰度开关、回滚和已知限制
 

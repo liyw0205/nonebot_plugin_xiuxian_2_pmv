@@ -39,7 +39,7 @@ from .features.title.manifest import FEATURE as TITLE_FEATURE
 from .features.title.migrations import apply_title, apply_title_schema
 from .features.title.application import TitleApplication
 from .features.sign_in.manifest import FEATURE as SIGN_IN_FEATURE
-from .features.sign_in.migrations import apply_lottery, apply_lottery_audit, apply_sign_in, apply_sign_in_statistics, apply_sign_in_tasks
+from .features.sign_in.migrations import apply_lottery, apply_lottery_audit, apply_sign_in, apply_sign_in_daily, apply_sign_in_statistics, apply_sign_in_tasks
 from .features.tasks.application import TaskClaimApplication
 from .features.tasks.migrations import (
     apply_task_claim,
@@ -458,6 +458,7 @@ def build_migrations() -> tuple[Migration, ...]:
         Migration("sign_in.001", "sign_in_operations", apply_sign_in),
         Migration("sign_in.002", "sign_in_statistics_events", apply_sign_in_statistics),
         Migration("sign_in.003", "sign_in_task_events", apply_sign_in_tasks),
+        Migration("sign_in.004", "sign_in_daily_receipts", apply_sign_in_daily),
         Migration("stone_gift.001", "stone_gift_operations", apply_stone_gift),
         Migration("stone_gift.002", "stone_gift_limits", apply_stone_gift_limits),
         Migration("tasks.001", "task_progress_schema", apply_task_progress),

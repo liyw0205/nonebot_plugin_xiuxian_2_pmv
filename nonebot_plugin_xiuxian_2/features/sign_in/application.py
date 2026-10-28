@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import date, datetime
 from dataclasses import replace
+from calendar import monthrange
 from pathlib import Path
 from typing import Any
 
@@ -12,6 +13,7 @@ from ...infrastructure.observability import trace_context
 from ...infrastructure.clock import SystemClock
 from ...infrastructure.random_source import SystemRandom
 from .daily_reset_repository import SignInDailyResetSqlRepository
+from .calendar import render_sign_in_calendar
 from .domain import SignInRecord, validate_limits
 from .effects import NullSignInEffects, SignInEffects
 from .repository import SignInRepository
@@ -136,6 +138,8 @@ class SignInApplication:
         upper_limit: int | None = None,
     ) -> OperationOutcome[dict[str, Any]]:
         with trace_context(operation_id=operation_id, user_scope=user_id):
+            moment = self._now()
+            business_date = moment.date().isoformat()
             request = SignInRequest(
                 str(user_id),
                 str(operation_id),
@@ -200,6 +204,20 @@ class SignInApplication:
                         )
                         self.ledger.finish(uow, outcome)
                         return outcome
+                    if self.repository.daily_signed(
+                        uow, request.user_id, business_date
+                    ):
+                        outcome = OperationOutcome.rejected(
+                            request.operation_id,
+                            self.action,
+                            "今日已经签到",
+                            code="already_signed",
+                            before=before,
+                            after=before,
+                            audit_category="sign_in",
+                        )
+                        self.ledger.finish(uow, outcome)
+                        return outcome
                     stone = int(self.random.randint(lower, upper))
                     changed = self.repository.apply(uow, request.user_id, stone)
                     if changed < 1:
@@ -216,8 +234,15 @@ class SignInApplication:
                         return outcome
                     record = SignInRecord(request.user_id, request.operation_id, stone)
                     self.repository.insert_operation(uow, record)
+                    self.repository.record_daily(
+                        uow,
+                        request.user_id,
+                        business_date,
+                        stone,
+                        request.operation_id,
+                    )
                     after = self.repository.user_snapshot(uow, request.user_id)
-                    now = self._now().isoformat()
+                    now = moment.isoformat()
                     outcome = OperationOutcome.applied(
                         request.operation_id,
                         self.action,
@@ -241,6 +266,23 @@ class SignInApplication:
                     pass
                 raise
 
+    def calendar_text(self, user_id: str) -> str:
+        """Render the current-month calendar, or an empty string when unavailable."""
+
+        try:
+            today = self._now().date()
+            start = today.replace(day=1)
+            end = today.replace(day=monthrange(today.year, today.month)[1])
+            with DatabaseUnitOfWork(self.database, read_only=True) as uow:
+                dates = self.repository.daily_dates(
+                    uow, str(user_id), start.isoformat(), end.isoformat()
+                )
+        except Exception:
+            return ""
+        if dates is None:
+            return ""
+        return "\n".join(render_sign_in_calendar(today, dates))
+
     def reply(self, **kwargs: Any) -> ReplyPlan:
         result = self.claim(**kwargs)
         if result.message:
@@ -249,6 +291,11 @@ class SignInApplication:
             sign_in = (result.data or {}).get("sign_in", {}) if isinstance(result.data, dict) else {}
             stone = sign_in.get("stone", result.granted.get("stone", 0))
             content = f"**修仙签到**\n---\n✅ 签到成功，获取{stone}块灵石!"
+        user_id = str(kwargs.get("user_id", ""))
+        if user_id and (result.ok or result.code == "already_signed"):
+            calendar_text = self.calendar_text(user_id)
+            if calendar_text:
+                content = f"{content}\n{calendar_text}"
         return ReplyPlan(content, reference=True)
 
 

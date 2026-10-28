@@ -15,6 +15,7 @@ class SignInDailyResetResult:
     operation_id: str
     business_date: str
     reset_count: int = 0
+    protected_count: int = 0
 
     @property
     def succeeded(self) -> bool:
@@ -53,6 +54,13 @@ class SignInDailyResetSqlRepository:
         )
 
     @staticmethod
+    def _table_exists(uow: DatabaseUnitOfWork, name: str) -> bool:
+        return uow.query_one(
+            "SELECT 1 AS present FROM sqlite_master WHERE type='table' AND name=?",
+            (name,),
+        ) is not None
+
+    @staticmethod
     def _result(
         outcome: OperationOutcome[dict] | None,
         operation_id: str,
@@ -65,6 +73,7 @@ class SignInDailyResetSqlRepository:
             operation_id=operation_id,
             business_date=business_date,
             reset_count=int(data.get("reset_count", 0) or 0),
+            protected_count=int(data.get("protected_count", 0) or 0),
         )
 
     def reset(self, operation_id: str, business_date: str) -> SignInDailyResetResult:
@@ -92,18 +101,49 @@ class SignInDailyResetSqlRepository:
             before = uow.query_one(
                 "SELECT COUNT(*) AS reset_count FROM user_xiuxian WHERE is_sign IS NOT 0"
             )
-            reset_count = int(before["reset_count"] or 0)
-            updated = uow.execute(
-                "UPDATE user_xiuxian SET is_sign=0 WHERE is_sign IS NOT 0"
-            )
+            if before is None:
+                raise RuntimeError("daily sign flag reset source missing")
+            total_nonzero = int(before["reset_count"] or 0)
+            protected_count = 0
+            if self._table_exists(uow, "sign_in_daily"):
+                protected = uow.query_one(
+                    "SELECT COUNT(*) AS protected_count FROM user_xiuxian AS u "
+                    "WHERE u.is_sign IS NOT 0 AND EXISTS ("
+                    "SELECT 1 FROM sign_in_daily AS d "
+                    "WHERE d.user_id=u.user_id AND d.business_date=?)",
+                    (business_date,),
+                )
+                if protected is None:
+                    raise RuntimeError("daily sign flag protection source missing")
+                protected_count = int(protected["protected_count"] or 0)
+                reset_count = total_nonzero - protected_count
+                updated = uow.execute(
+                    "UPDATE user_xiuxian SET is_sign=0 WHERE is_sign IS NOT 0 AND NOT EXISTS ("
+                    "SELECT 1 FROM sign_in_daily AS d "
+                    "WHERE d.user_id=user_xiuxian.user_id AND d.business_date=?)",
+                    (business_date,),
+                )
+            else:
+                reset_count = total_nonzero
+                updated = uow.execute(
+                    "UPDATE user_xiuxian SET is_sign=0 WHERE is_sign IS NOT 0"
+                )
             if updated.rowcount != reset_count:
                 raise RuntimeError("daily sign flag reset target changed")
 
             outcome = OperationOutcome.applied(
                 operation_id,
                 self.ACTION,
-                data={"status": "applied", "business_date": business_date, "reset_count": reset_count},
-                before={"nonzero_or_null_rows": reset_count},
+                data={
+                    "status": "applied",
+                    "business_date": business_date,
+                    "reset_count": reset_count,
+                    "protected_count": protected_count,
+                },
+                before={
+                    "nonzero_or_null_rows": total_nonzero,
+                    "protected_rows": protected_count,
+                },
                 after={"is_sign": 0},
                 audit_category="sign_in_maintenance",
             )
