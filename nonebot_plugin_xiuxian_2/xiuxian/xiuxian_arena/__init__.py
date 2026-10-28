@@ -624,6 +624,8 @@ async def arena_honor_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
         await arena_honor.finish()
     
     user_id = user_info['user_id']
+    from ...features.arena.honor_settlement_view import render_honor_settlements
+    settlements = arena_season_reward_application.recent_settlements(user_id)
     arena_data = arena_limit.get_user_arena_info(user_id)
     
     # 计算明日预计奖励
@@ -651,6 +653,7 @@ async def arena_honor_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
 > {ranking_bonus}点（第{user_ranking}名）
 总计
 > {tomorrow_honor}点
+{render_honor_settlements(settlements)}
 """
     await handle_send(bot, event, msg)
     await arena_honor.finish()

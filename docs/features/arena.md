@@ -72,6 +72,25 @@ Web API 保留 `/api/v1/arena/purchase`、`/challenge-purchase`、`/settle`，�
 
 兑换与结算在 game DB immediate UoW 内完成 ledger 登记、资产写入、业务回执与审计，异常整体回滚。`started` 维持处理中、`needs_reconcile` 维持待核查；只有同 payload 的 `arena.purchase`、`arena.settle` 才允许沿业务回执继续，已拒绝回执不会被重放成成功。
 
+## 荣誉结算回执与个人历史
+
+每日 `reset_daily` 在 `arena_season_reward_operations` 保存 `season_key`、本次荣誉、
+结算后荣誉/累计荣誉和完整 `payload`（基础荣誉、排名奖励、结算时段位与名次）。玩家侧只读
+展示复用该表，不改变自动结算：
+
+- `ArenaSeasonRewardRepository.recent_settlements(user_id, limit=5)` 在
+  `read_only=True` 的 `DatabaseUnitOfWork` 中按 `season_key DESC, rowid DESC` 返回本人
+  最近 N 条；缺数据库文件、缺表或读失败返回空元组，不建库、不建表、不补列。
+- 正常 `payload` 解析基础/排名/总计、结算时段位与名次；旧行缺 `payload`、坏 JSON 或
+  `base + bonus != honor` 时只显示总计，`details_available=False`，不猜测拆分。
+- 纯模块 `features/arena/honor_settlement_view.py` 渲染【最近荣誉结算】：正常行显示
+  `日期：基础 N + 排名 N = 本次 N（结算后荣誉 N）`，旧行显示
+  `日期：本次 +N 荣誉（结算后 N；明细不可用）`；无记录显示“暂无荣誉结算记录”。
+- `我的荣誉` 保留原有当前段位/排名/荣誉与“明日预计奖励”，在其后追加该段；最多展示
+  最近 5 次。只读；不新增命令、别名、路由、配置键、表、列、迁移或索引。
+- 结算时区沿用 `SystemClock` 的 UTC 业务日，展示 `season_key` 原值；不改变每日重置
+  时刻、段位/排名/荣誉公式或任何奖励写入。
+
 ## 定时任务
 
 本 feature 无自有任务，`features/arena/jobs.py` 不导出 job；排行榜与赛季任务仍由兼容调度器执行。

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping, Sequence
@@ -20,6 +21,19 @@ class ArenaSeasonRewardResult:
         return self.status in {"applied", "duplicate"}
 
 
+@dataclass(frozen=True)
+class ArenaHonorSettlement:
+    season_key: str
+    total_honor: int
+    honor_after: int
+    total_honor_earned_after: int
+    base_honor: int = 0
+    ranking_bonus: int = 0
+    rank: str = ""
+    position: int = 0
+    details_available: bool = False
+
+
 class ArenaSeasonRewardRepository:
     """Apply one daily arena reward and counter reset across game/player DBs."""
 
@@ -30,6 +44,58 @@ class ArenaSeasonRewardRepository:
     @staticmethod
     def _result(status: str, honor: int, honor_points: int, earned: int) -> ArenaSeasonRewardResult:
         return ArenaSeasonRewardResult(status, int(honor), int(honor_points), int(earned))
+
+    @staticmethod
+    def _settlement(row: Mapping[str, Any]) -> ArenaHonorSettlement:
+        total = max(int(row["honor"] or 0), 0)
+        honor_after = max(int(row["honor_points"] or 0), 0)
+        earned_after = max(int(row["total_honor_earned"] or 0), 0)
+        base = bonus = position = 0
+        rank = ""
+        details = False
+        try:
+            payload = json.loads(row["payload"]) if isinstance(row["payload"], str) else row["payload"]
+            if isinstance(payload, (list, tuple)) and len(payload) >= 9:
+                base = max(int(payload[7]), 0)
+                bonus = max(int(payload[8]), 0)
+                rank = str(payload[3] or "")
+                position = max(int(payload[4]), 0)
+                details = base + bonus == total
+        except (TypeError, ValueError, IndexError):
+            details = False
+        return ArenaHonorSettlement(
+            str(row["season_key"] or ""),
+            total,
+            honor_after,
+            earned_after,
+            base if details else 0,
+            bonus if details else 0,
+            rank if details else "",
+            position if details else 0,
+            details,
+        )
+
+    def recent_settlements(self, user_id: str, limit: int = 5) -> tuple[ArenaHonorSettlement, ...]:
+        user_id = str(user_id).strip()
+        limit = max(int(limit), 0)
+        if not user_id or limit == 0:
+            return ()
+        try:
+            with DatabaseUnitOfWork(self.game_database, read_only=True) as uow:
+                if uow.query_one(
+                    "SELECT 1 FROM sqlite_master "
+                    "WHERE type='table' AND name='arena_season_reward_operations'"
+                ) is None:
+                    return ()
+                rows = uow.query_all(
+                    "SELECT season_key,honor,honor_points,total_honor_earned,payload "
+                    "FROM arena_season_reward_operations WHERE user_id=? "
+                    "ORDER BY season_key DESC,rowid DESC LIMIT ?",
+                    (user_id, limit),
+                )
+        except (OSError, sqlite3.Error):
+            return ()
+        return tuple(self._settlement(row) for row in rows)
 
     def daily_candidates(self) -> tuple[dict[str, Any], ...]:
         with DatabaseUnitOfWork(self.player_database) as uow:
@@ -190,4 +256,4 @@ class ArenaSeasonRewardRepository:
             return self._result("applied", total_reward, honor_points, total_honor)
 
 
-__all__ = ["ArenaSeasonRewardRepository", "ArenaSeasonRewardResult"]
+__all__ = ["ArenaHonorSettlement", "ArenaSeasonRewardRepository", "ArenaSeasonRewardResult"]

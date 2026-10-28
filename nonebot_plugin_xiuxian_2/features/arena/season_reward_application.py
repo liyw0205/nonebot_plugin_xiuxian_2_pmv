@@ -80,6 +80,9 @@ class ArenaSeasonRewardApplication:
             expected_reset=expected_reset,
         )
 
+    def recent_settlements(self, user_id: str, limit: int = 5):
+        return self.repository.recent_settlements(user_id, limit=limit)
+
     def reset_daily(self) -> tuple[dict[str, Any], ...]:
         now = self.clock.now()
         season_key = now.date().isoformat()
