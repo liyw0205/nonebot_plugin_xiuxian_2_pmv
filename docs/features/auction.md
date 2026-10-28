@@ -85,6 +85,25 @@
 
 不改变扣款/退款金额、竞价校验、operation 结构或 outbox 语义；不新增表、迁移或配置键。
 
+## 我的拍卖个人视图
+
+`我的拍卖` 在等待区、待领取与竞价段之外，读取
+`AuctionQuerySqlRepository.my_auction_snapshot(user_id)`；该方法在**同一个只读 UoW** 内返回
+`lots` 与 `records`，缺库/缺表返回空且不建库、不建表：
+
+- `lots`：`auction_current` 中 `seller_id` 为本人且 `is_system=0` 的拍品。`current_price`
+  取列值与 `bids` 最高出价的较大者（与 `my_bids` 同口径）；`bid_count`/`bidder_count`
+  来自 `auction_bid_operations`（表缺失时回退 `bids` 长度）；`remaining_seconds` 取
+  `auction_sessions` 中 active 场次的 `end_time` 差额，缺表或非 active 为 `None`。
+- `records`：`auction_history` 中本人为卖家或中标者的最近 5 条，按 `end_time DESC`
+  由 SQL `LIMIT` 截断；字段含 `role`（seller/winner）、`status`（成交/流拍/待领取）、
+  `final_price`、`fee`、`seller_earnings`、`counterparty`、`end_time`。
+- 渲染由纯模块 `features/auction/my_auction_view.py` 承担；段序固定为
+  等待区 →【本场拍品】→【拍卖待领取】→【我的竞价】→【最近拍卖记录】，
+  五类来源全空才进入空态。开场把等待区搬进 `auction_current` 后，卖家仍能在
+  【本场拍品】看到自己的拍品，不会误报「没有上架任何拍卖物品」。
+- 只读；不改上架/下架/竞价/结算/投递/领取写路径，不新增表、迁移、命令、路由或配置键。
+
 ## 定时任务
 
 `auction.settle` 是稳定的按需任务 ID，可由调度器或管理 API 执行。任务通过同一 `auction.settle` operation ledger 幂等；旧调度器在兼容周期内仍保留，但不再是新 application 的唯一入口。

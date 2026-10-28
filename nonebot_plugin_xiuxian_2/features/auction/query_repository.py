@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 from typing import Any, Mapping, Protocol
 
+from ...infrastructure.clock import SystemClock
 from ...infrastructure.database import DatabaseUnitOfWork
 
 
@@ -20,12 +21,17 @@ class AuctionQueryRepository(Protocol):
 
     def my_bids(self, user_id: str) -> list[dict[str, Any]]: ...
 
+    def my_auction_snapshot(
+        self, user_id: str, *, limit: int = 5, now_epoch: float | None = None
+    ) -> dict[str, Any]: ...
+
 
 class AuctionQuerySqlRepository:
     """Read the legacy auction projection without creating its schema."""
 
-    def __init__(self, database: str | Path) -> None:
+    def __init__(self, database: str | Path, *, clock: Any | None = None) -> None:
         self.database = Path(database)
+        self.clock = clock or SystemClock()
 
     @staticmethod
     def _table_exists(uow: DatabaseUnitOfWork, name: str) -> bool:
@@ -159,6 +165,119 @@ class AuctionQuerySqlRepository:
                 }
             )
         return bids
+
+    def my_auction_snapshot(
+        self, user_id: str, *, limit: int = 5, now_epoch: float | None = None
+    ) -> dict[str, Any]:
+        """Read the player's live lots and settled records in one snapshot.
+
+        ``auction_current`` only holds the running session, so ``lots`` is
+        naturally scoped to "this auction".  Settlement deletes those rows and
+        writes ``auction_history``, which is why the durable outcome has to be
+        read from history instead of the live table.
+        """
+
+        empty: dict[str, Any] = {"lots": [], "records": []}
+        if not self.database.is_file():
+            return empty
+        user_id = str(user_id or "").strip()
+        if not user_id:
+            return empty
+        limit = max(int(limit), 0)
+        moment = float(now_epoch) if now_epoch is not None else float(
+            self.clock.now().timestamp()
+        )
+
+        with DatabaseUnitOfWork(self.database, read_only=True) as uow:
+            if not self._table_exists(uow, "auction_current"):
+                return empty
+            end_time = None
+            if self._table_exists(uow, "auction_sessions"):
+                row = uow.query_one(
+                    "SELECT end_time FROM auction_sessions WHERE status='active'"
+                )
+                if row is not None:
+                    end_time = float(row["end_time"])
+            lot_rows = uow.query_all(
+                "SELECT id,item_id,name,start_price,current_price,seller_id,bids "
+                "FROM auction_current WHERE seller_id=? AND is_system=0 ORDER BY id",
+                (user_id,),
+            )
+            lot_ids = [str(row["id"]) for row in lot_rows]
+            bid_stats: dict[str, tuple[int, int]] = {}
+            if lot_ids and self._table_exists(uow, "auction_bid_operations"):
+                placeholders = ",".join("?" for _ in lot_ids)
+                for row in uow.query_all(
+                    "SELECT auction_id,COUNT(*) AS total,"
+                    "COUNT(DISTINCT bidder_id) AS bidders "
+                    f"FROM auction_bid_operations WHERE auction_id IN ({placeholders}) "
+                    "GROUP BY auction_id",
+                    tuple(lot_ids),
+                ):
+                    bid_stats[str(row["auction_id"])] = (
+                        int(row["total"] or 0),
+                        int(row["bidders"] or 0),
+                    )
+            records: list[dict[str, Any]] = []
+            if self._table_exists(uow, "auction_history"):
+                for row in uow.query_all(
+                    "SELECT auction_id,item_id,item_name,final_price,seller_id,seller_name,"
+                    "winner_id,winner_name,status,fee,seller_earnings,end_time "
+                    "FROM auction_history WHERE seller_id=? OR winner_id=? "
+                    "ORDER BY end_time DESC LIMIT ?",
+                    (user_id, user_id, limit),
+                ):
+                    seller = str(row["seller_id"]) == user_id
+                    counterparty = (
+                        str(row["winner_name"] or row["winner_id"] or "未知")
+                        if seller
+                        else str(row["seller_name"] or row["seller_id"] or "未知")
+                    )
+                    records.append(
+                        {
+                            "auction_id": str(row["auction_id"]),
+                            "item_id": int(row["item_id"] or 0),
+                            "item_name": str(row["item_name"] or ""),
+                            "role": "seller" if seller else "winner",
+                            "status": str(row["status"] or ""),
+                            "final_price": (
+                                None
+                                if row["final_price"] is None
+                                else int(row["final_price"])
+                            ),
+                            "fee": int(row["fee"] or 0),
+                            "seller_earnings": int(row["seller_earnings"] or 0),
+                            "counterparty": counterparty,
+                            "end_time": float(row["end_time"] or 0.0),
+                        }
+                    )
+
+        lots: list[dict[str, Any]] = []
+        for row in lot_rows:
+            auction_id = str(row["id"])
+            try:
+                prices = json.loads(str(row["bids"] or "{}"))
+            except (TypeError, ValueError):
+                prices = {}
+            if not isinstance(prices, dict):
+                prices = {}
+            top = max((int(value) for value in prices.values()), default=0)
+            total, bidders = bid_stats.get(auction_id, (len(prices), len(prices)))
+            lots.append(
+                {
+                    "auction_id": auction_id,
+                    "item_id": int(row["item_id"] or 0),
+                    "item_name": str(row["name"] or ""),
+                    "start_price": int(row["start_price"] or 0),
+                    "current_price": max(int(row["current_price"] or 0), top),
+                    "bid_count": total,
+                    "bidder_count": bidders,
+                    "remaining_seconds": (
+                        None if end_time is None else max(int(end_time - moment), 0)
+                    ),
+                }
+            )
+        return {"lots": lots, "records": records}
 
 
 __all__ = ["AuctionQueryRepository", "AuctionQuerySqlRepository"]

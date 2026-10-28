@@ -66,6 +66,7 @@ from ...compatibility.legacy_xianshi_schema import LegacyXianshiSchemaAdapter
 from ...features.auction.session_start_application import AuctionSessionStartApplication
 from ...features.auction.settlement import AuctionSettlementApplication
 from ...features.auction.pending import AuctionPendingApplication
+from ...features.auction.my_auction_view import render_live_lots, render_settlements
 from ...features.auction.query_application import AuctionQueryApplication
 from ...features.trade.guishi_deposit_repository import GuishiDepositSqlRepository
 from ...features.trade.guishi_withdraw_repository import GuishiWithdrawSqlRepository
@@ -3058,9 +3059,18 @@ async def my_auction_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
     except Exception:
         # 竞价投影读取失败不应让整条指令不可用
         my_bids = []
+    try:
+        auction_snapshot = _auction_query_application().my_auction_snapshot(user_id)
+    except Exception:
+        auction_snapshot = {"lots": [], "records": []}
+    my_lots = auction_snapshot.get("lots") or []
+    my_records = auction_snapshot.get("records") or []
 
-    if not player_auction_items and not pending_items and not my_bids:
-        msg = "您当前没有上架任何拍卖物品在等待区，也没有待领取的拍卖物品，也没有正在参与的竞价！"
+    if not player_auction_items and not pending_items and not my_bids and not my_lots and not my_records:
+        msg = (
+            "您当前没有等待区拍品、本场在拍的拍品、待领取物品、"
+            "正在参与的竞价或拍卖成交记录！"
+        )
         await handle_send(bot, event, msg, md_type="拍卖", k1="查看", v1="拍卖查看", k2="下架", v2="拍卖下架", k3="帮助", v3="拍卖帮助")
         await my_auction.finish()
 
@@ -3071,6 +3081,12 @@ async def my_auction_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
             msg_list.append(f"\n物品: {item['item_name']}") # item_name是玩家上架时的名称
             msg_list.append(f"起拍价: {number_to(item['start_price'])}灵石")
         msg_list.append("\n使用【拍卖下架 物品名】可以从等待区下架物品")
+
+    if my_lots:
+        if msg_list:
+            msg_list.append("")
+        msg_list.append("【本场拍品】")
+        msg_list.extend(render_live_lots(my_lots, number=number_to))
 
     if pending_items:
         if msg_list:
@@ -3093,6 +3109,12 @@ async def my_auction_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
                 f"我的出价:{number_to(bid['my_price'])} 当前价:{number_to(bid['current_price'])}（{state}）"
             )
         msg_list.append("使用【拍卖竞拍 拍卖ID 价格】可以加价")
+
+    if my_records:
+        if msg_list:
+            msg_list.append("")
+        msg_list.append("【最近拍卖记录】")
+        msg_list.extend(render_settlements(my_records, number=number_to))
 
     await handle_send(bot, event, "\n".join(msg_list), md_type="拍卖", k1="查看", v1="拍卖查看", k2="下架", v2="拍卖下架", k3="帮助", v3="拍卖帮助")
     await my_auction.finish()

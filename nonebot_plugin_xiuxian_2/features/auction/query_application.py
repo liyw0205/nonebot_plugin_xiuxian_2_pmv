@@ -35,5 +35,14 @@ class AuctionQueryApplication:
 
         return self.repository.my_bids(user_id)
 
+    def my_auction_snapshot(
+        self, user_id: str, *, limit: int = 5, now_epoch: float | None = None
+    ) -> dict[str, Any]:
+        """Return the player's live lots and recent settlement records."""
+
+        return self.repository.my_auction_snapshot(
+            user_id, limit=limit, now_epoch=now_epoch
+        )
+
 
 __all__ = ["AuctionQueryApplication"]
