@@ -174,11 +174,14 @@ class PersonalContributionWiringTests(unittest.TestCase):
     def test_status_message_appends_the_personal_panel(self) -> None:
         start = self.source.index("def _build_state_message(")
         block = self.source[start : self.source.index("def _extract_total_damage", start)]
+        helper_start = self.source.index("def _personal_panel_lines(")
+        helper = self.source[helper_start:]
 
-        self.assertIn("render_personal_contribution(", block)
-        self.assertIn("state.get(\"participants\", {})", block)
-        self.assertIn("state.get(\"claimed\", {})", block)
+        self.assertIn("_personal_panel_lines(state, user_info, status)", block)
         self.assertIn("本境界本波贡献排行", block)
+        self.assertIn("render_personal_contribution(", helper)
+        self.assertIn("state.get(\"participants\", {})", helper)
+        self.assertIn("state.get(\"claimed\", {})", helper)
 
 
 if __name__ == "__main__":

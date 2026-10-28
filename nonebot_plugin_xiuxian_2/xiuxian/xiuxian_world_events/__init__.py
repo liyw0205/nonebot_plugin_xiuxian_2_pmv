@@ -771,7 +771,6 @@ def _build_state_message(state: dict, user_info: dict | None = None) -> str:
             battle_hp = max(_to_int(boss_info.get("battle_hp", boss_info.get("气血")), 0), 0)
             battle_max_hp = max(_to_int(boss_info.get("battle_max_hp", boss_info.get("总血量")), 0), 1)
             boss_title = "魔修首领" if _to_int(boss_info.get("is_chief"), 0) == 1 else "魔修"
-            wave = max(_to_int(boss_info.get("wave"), 1), 1)
             reward_multiplier = _boss_reward_multiplier(boss_info)
             reward_text = "奖励：按贡献结算，可能获得珍稀奖励"
             if reward_multiplier > 1:
@@ -779,7 +778,7 @@ def _build_state_message(state: dict, user_info: dict | None = None) -> str:
             lines.extend(
                 [
                     "",
-                    f"你的境界{boss_title}：{boss_info.get('name', realm)}（第{wave}波）",
+                    f"你的境界{boss_title}：{boss_info.get('name', realm)}（第{max(_to_int(boss_info.get('wave'), 1), 1)}波）",
                     f"真实血条：{number_to(boss_hp)} / {number_to(boss_max_hp)}",
                     f"对战血条：{number_to(battle_hp)} / {number_to(battle_max_hp)}",
                     reward_text,
@@ -788,47 +787,18 @@ def _build_state_message(state: dict, user_info: dict | None = None) -> str:
                     _format_participant_rank(
                         state.get("participants", {}),
                         realm,
-                        wave,
-                    ),
-                    "",
-                    *render_personal_contribution(
-                        state.get("participants", {}),
-                        state.get("claimed", {}),
-                        str(user_info.get("user_id", "")),
-                        realm,
-                        wave,
-                        active=status == "active",
-                        number=number_to,
+                        max(_to_int(boss_info.get("wave"), 1), 1),
                     ),
                 ]
             )
-        else:
-            wave = latest_wave(
-                state.get("participants", {}),
-                str(user_info.get("user_id", "")),
-                realm,
-            )
-            lines.extend(
-                [
-                    "",
-                    *render_personal_contribution(
-                        state.get("participants", {}),
-                        state.get("claimed", {}),
-                        str(user_info.get("user_id", "")),
-                        realm,
-                        wave,
-                        active=status == "active",
-                        number=number_to,
-                    ),
-                ]
-            )
+
     if status == "active":
         lines.append("")
         lines.append("发送【讨伐魔修】参与战斗。")
     else:
         lines.append("")
         lines.append("发送【领取魔修奖励】领取本期贡献奖励。")
-    return "\n".join(lines)
+    return "\n".join(lines + list(_personal_panel_lines(state, user_info, status)))
 
 
 def _extract_total_damage(status_list: list, user_id: str) -> int:
@@ -1682,3 +1652,28 @@ async def claim_demon_reward_(bot: Bot, event: GroupMessageEvent | PrivateMessag
         v3="我的成就",
     )
     await claim_demon_reward.finish()
+
+
+def _personal_panel_lines(
+    state: dict, user_info: dict | None, status: str | None
+) -> tuple[str, ...]:
+    if not user_info:
+        return ()
+    realm = _normalize_realm(user_info.get("level", ""))
+    user_id = str(user_info.get("user_id", ""))
+    boss_info = (state.get("bosses") or {}).get(realm) or {}
+    wave = max(_to_int(boss_info.get("wave"), 1), 1)
+    if not boss_info:
+        wave = latest_wave(state.get("participants", {}), user_id, realm)
+    return (
+        "",
+        *render_personal_contribution(
+            state.get("participants", {}),
+            state.get("claimed", {}),
+            user_id,
+            realm,
+            wave,
+            active=status == "active",
+            number=number_to,
+        ),
+    )
