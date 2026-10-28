@@ -606,6 +606,31 @@ bot 侧六个玩家视图（`活动阶段`/`活动首领`/`活动商店`/`活动
   `develop` 均为 `a2fba70e`），main CI run `40621911086` success（headSha `a2fba70e`，
   `build-and-release` 按分支规则 skipped）。未部署、未读写真实游戏库、不发送真实消息。
 
+## 已完成目标：我的拍卖——本场拍品与个人成交记录闭环
+
+`我的拍卖` 只读等待区/待领取/我的竞价；开场把等待区整体搬进 `auction_current` 并清空
+`auction_player_upload` 后，卖家拍品从该命令消失，三源全空时还会误报「没有上架任何
+拍卖物品」。结算结果只写一次性私聊日志，玩家错过 `[拍卖成交]`/`[拍卖流拍]` 后无法回查。
+目标文档 `.codex-next-goal.md`（local-only，未提交）。
+
+- 新增只读 `AuctionQuerySqlRepository.my_auction_snapshot(user_id)`（单个只读 UoW）：
+  `lots` 返回本人非系统在拍品——当前价取列值与最高出价的较大者，出价次数/人数来自
+  `auction_bid_operations`（缺表回退 `bids` 长度），剩余时间取 active `auction_sessions`
+  的 `end_time` 差额（缺表为 `None`）；`records` 按 `seller_id OR winner_id` 取最近 5 条
+  `auction_history`，由 SQL `ORDER BY end_time DESC LIMIT` 截断。缺库/缺表返回空且不建表。
+- 新增纯渲染 `features/auction/my_auction_view.py`；`我的拍卖` 段序固定为
+  等待区 →【本场拍品】→【拍卖待领取】→【我的竞价】→【最近拍卖记录】，五源全空才进空态。
+  卖出行显示成交价/手续费/实收/买家，拍得行显示成交价/卖家；流拍写「未售出，物品已退回
+  背包」，待领取写「物品在拍卖待领取」，不谎称已售出。
+- 只读；不改上架/下架/竞价/结算/投递/领取写路径；不新增表、迁移、命令、路由或配置键。
+- 测试：`tests/test_auction_my_lots.py` `24/24`（仓储投影、开拍交接回归、双角色记录、
+  limit/排序、缺库缺表不建文件、纯渲染、handler/帮助源合同）；受影响拍卖与源码质量套件
+  `324 passed`；unittest 收集 `162 tests OK`。architecture/inventory/progress 门禁真实
+  exit 0；`compileall` 与 `git diff --check` 干净。
+- 目标提交 `ac8cfdc3` 已推送 develop，develop CI run `40680683571` success；快进合入
+  main，main CI run `40681683532` success（headSha 均为 `ac8cfdc3`，`build-and-release`
+  按分支规则 skipped）。未部署、未读写真实游戏库、不发送真实消息。
+
 ## 冻结清单与停止条件
 
 冻结范围仅包括活动 Web 六来源一键代领 API、权限/错误合同、管理员面板、兼容性保护、聚焦测试、路由清单和正式文档。不得新增奖励经济、schema/数据迁移、玩家身份模型、后台活动编辑器、通用 UI 框架或 unrelated refactor。
