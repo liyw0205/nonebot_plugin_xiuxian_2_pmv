@@ -660,6 +660,33 @@ bot 侧六个玩家视图（`活动阶段`/`活动首领`/`活动商店`/`活动
   main，main run `40712724666` success（headSha `be0e82b7`，`build-and-release` 按分支规则
   skipped）。未部署、未读写真实游戏库、不发送真实消息。
 
+## 已完成目标：我的仙肆成交记录与收支汇总
+
+仙肆成交事实早已写入 `xianshi_operations`（买家、卖家、物品、数量、成交总额、时间），但
+`我的仙肆` 只读取 `xianshi_item` 当前挂单；物品售罄后命令直接回“没有上架任何物品”，玩家
+只能从一次性 `仙肆售出`/`仙肆购买` 日志回忆成交。目标文档 `.codex-next-goal.md`
+（local-only，未提交）。
+
+- `XianshiQuerySqlRepository.my_trades(user_id, limit=5)` 在单个只读 UoW 内按
+  `buyer_id OR seller_id` 取最近 5 笔，`rowid DESC` 排序；字段含 `operation_id、
+  listing_id、name、goods_type、quantity、total_cost、role、counterparty、created_at`。
+  对手方优先取 `user_xiuxian.user_name`（同名多行取最小 rowid）；缺表时为空，系统卖家
+  显示“系统”。缺 `xianshi_operations`/数据库返回空且不建表。
+- `TradeApplication.xianshi_my_trades` 直接委托；新增纯渲染
+  `features/trade/xianshi_history_view.py`，逐行输出卖出/买入、数量、成交总额、对手方与
+  时间，末尾给出最近 N 笔的卖出收入/买入支出汇总。
+- `我的仙肆 记录`（也接受 `成交`/`历史`）展示记录；无记录时明确提示。原上架列表、20 条
+  分页和 `send_msg_handler` 行为不变，尾部追加记录入口；空上架提示同样带入口。
+- 只读；不改购买扣款、卖家到账、上架手续费、挂单数量、系统商品或 operation 回执；不新增
+  表、列、迁移、索引、配置键、命令名或路由。
+- 测试：`tests/test_trade_xianshi_history.py` `14/14`（角色/对手方、系统卖家、排序/limit、
+  缺表缺库不建文件、纯渲染、handler/帮助源合同）；受影响交易与源码质量套件 `263 passed`；
+  unittest 交易组 `121 tests OK`。architecture/inventory/progress 门禁真实 exit 0；
+  `compileall` 与 `git diff --check` 干净。
+- 目标提交 `6ef35416` 已推送 develop，develop CI run `40731686802` success；快进合入 main，
+  main CI run `40732798556` success（headSha 均为 `6ef35416`，`build-and-release` 按分支规则
+  skipped）。未部署、未读写真实游戏库、不发送真实消息。
+
 ## 冻结清单与停止条件
 
 冻结范围仅包括活动 Web 六来源一键代领 API、权限/错误合同、管理员面板、兼容性保护、聚焦测试、路由清单和正式文档。不得新增奖励经济、schema/数据迁移、玩家身份模型、后台活动编辑器、通用 UI 框架或 unrelated refactor。
