@@ -716,6 +716,31 @@ bot 侧六个玩家视图（`活动阶段`/`活动首领`/`活动商店`/`活动
   `40743346266` success（headSha 均为 `fc7f3d9f`，`build-and-release` 按分支规则 skipped）。
   未部署、未读写真实游戏库、不发送真实消息；用户删除的四个文件保持未暂存。
 
+## 已完成目标：竞技场荣誉结算回执与个人历史
+
+竞技场每日荣誉由 `ArenaSeasonRewardApplication.reset_daily` 自动发放，结算快照已写入
+`arena_season_reward_operations`，但 `我的荣誉` 只显示当前荣誉与“明日预计奖励”，玩家
+看不到今天实际结算了多少、最近几次是否到账。目标文档 `.codex-next-goal.md`
+（local-only，未提交）。
+
+- `ArenaSeasonRewardRepository.recent_settlements(user_id, limit=5)` 在只读 UoW 中按
+  `season_key DESC, rowid DESC` 取本人最近 N 条；缺 game DB 文件、缺表或读失败返回空，
+  不建库、不建表、不补列。新增冻结 `ArenaHonorSettlement`，解析 `payload` 中的基础/
+  排名/段位/名次；坏 JSON、缺字段或 `base + bonus != honor` 时只保留总计，不猜测拆分。
+- `ArenaSeasonRewardApplication.recent_settlements` 只读委托；纯渲染
+  `features/arena/honor_settlement_view.py` 输出【最近荣誉结算】，空记录给出每日 0 点
+  结算提示，旧记录标注“明细不可用”。
+- `我的荣誉` 保留既有段位/排名/荣誉与“明日预计奖励”，在其后追加最近最多 5 次结算；
+  不新增命令、别名、路由、配置键、表、列、迁移或索引，不改自动结算、荣誉公式或资产。
+- 测试：`tests/test_arena_honor_settlement_history.py` `10/10`，覆盖真实 claim 写入后
+  读回、倒序/limit、用户隔离、缺表/缺文件不建库、坏 payload 降级、应用委托、纯渲染与
+  handler 源合同；受影响竞技场/源码质量套件 `283 passed + 10 subtests`。architecture、
+  inventory `--check`、progress `--json`（`failures: []`）真实 exit 0；`compileall` 与
+  `git diff --check` 干净。
+- 交付与 CI：功能提交 `695f1243` 的 develop run `40755596698` success；快进合入 main 后
+  main run `40756949336` success（headSha 均为 `695f1243`，`build-and-release` 按分支规则
+  skipped）。未部署、未读写真实游戏库、不发送真实消息；用户删除的四个文件保持未暂存。
+
 ## 冻结清单与停止条件
 
 冻结范围仅包括活动 Web 六来源一键代领 API、权限/错误合同、管理员面板、兼容性保护、聚焦测试、路由清单和正式文档。不得新增奖励经济、schema/数据迁移、玩家身份模型、后台活动编辑器、通用 UI 框架或 unrelated refactor。
