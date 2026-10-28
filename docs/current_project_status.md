@@ -631,6 +631,35 @@ bot 侧六个玩家视图（`活动阶段`/`活动首领`/`活动商店`/`活动
   main，main CI run `40681683532` success（headSha 均为 `ac8cfdc3`，`build-and-release`
   按分支规则 skipped）。未部署、未读写真实游戏库、不发送真实消息。
 
+## 已完成目标：签到业务日回执与签到日历
+
+`修仙签到` 只依赖可被每日重置清掉的 `user_xiuxian.is_sign`：重置任务若延迟到玩家当天签到
+之后执行，会把当天标记清零，玩家可再次签到并重复领灵石；迁移前的 `is_sign=1` 也没有业务
+日期回执，无法区分新旧签到，玩家侧也没有签到历史可查。目标文档 `.codex-next-goal.md`
+（local-only，未提交）。
+
+- 新增 `sign_in.004`（game DB）创建 `sign_in_daily`（`user_id`、`business_date`、`stone`、
+  `operation_id`，主键 `(user_id,business_date)`）与 `business_date` 索引；请求路径不建表。
+- `SignInApplication.claim` 在事务内用注入时钟固定业务日：当天已有回执时返回既有
+  `already_signed` 拒绝（即使 `is_sign` 被清成 0），成功路径在同一 UoW 写入日回执；
+  `sign_in_daily` 缺失的旧库跳过回执、保持原领取语义。
+- `SignInDailyResetSqlRepository` 在表存在时只清没有当天回执的 `is_sign`，审计记录
+  `protected_rows`/`protected_count`；表缺失时保持旧全表清零。同日 operation 重放不重复清零。
+- 新增纯渲染 `features/sign_in/calendar.py`：`signed_streak` 与
+  `render_sign_in_calendar`（本月网格、已签 `✓`、今天 `·`、`本月已签 N 天｜连续 M 天`）；
+  `修仙签到` 成功与已签到回复都追加日历，表缺失或读取异常时静默省略。
+- 只读展示，不发额外奖励；不改灵石区间、随机源、ledger/effects/outbox、任务/统计投影或
+  Web 响应；不新增命令、别名、路由或配置键。无历史回填（旧 `is_sign` 无法推断日期）。
+- 测试：`tests/test_sign_in_daily_calendar.py` `18/18`（日回执、同日重复拒绝、延迟重置保护、
+  旧标记清零、重放、缺表兼容、日历/连签、迁移与接线合同）；受影响签到与源码质量套件
+  `277 passed`；unittest 签到组 `20 + 19 tests OK`。architecture/inventory/progress 门禁
+  真实 exit 0；`compileall` 与 `git diff --check` 干净。
+- 交付与 CI：功能提交 `03c5a1b6` 的 develop run `40710128801` **failure**——唯一失败项是
+  `test_refactor_progress` 仍要求已知限制保留“迁移前/首次重置延迟”原文，文档改写时移除了
+  该表述；修正文档 `be0e82b7` 的 develop run `40711177457` success，随后一次性快进合入
+  main，main run `40712724666` success（headSha `be0e82b7`，`build-and-release` 按分支规则
+  skipped）。未部署、未读写真实游戏库、不发送真实消息。
+
 ## 冻结清单与停止条件
 
 冻结范围仅包括活动 Web 六来源一键代领 API、权限/错误合同、管理员面板、兼容性保护、聚焦测试、路由清单和正式文档。不得新增奖励经济、schema/数据迁移、玩家身份模型、后台活动编辑器、通用 UI 框架或 unrelated refactor。
