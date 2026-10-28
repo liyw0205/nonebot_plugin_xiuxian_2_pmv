@@ -36,6 +36,18 @@
 
 `dungeon_enabled`（`XIUXIAN_DUNGEON_ENABLED`）控制新边界，默认启用。
 
+## 待处理组队邀请面板
+
+`查看队伍` 在玩家不在任何队伍时先读取 `DungeonTeamApplication.pending_invite(user_id, now)`：
+
+- 命中未过期 `dungeon_team_invites` 行时，显示队伍名、邀请人道号、发起群与剩余分钟，
+  并提示回复 `同意组队` 或 `拒绝组队`；快捷按钮为同意/拒绝/队伍帮助。
+- 未命中、已过期、已消费或 schema 缺失时保持原“你不在任何队伍中”与创建队伍提示。
+- 纯展示 `render_pending_invite` 只接收队伍名、邀请人、群和剩余秒数；空名称回退为
+  `未知队伍`/`未知用户`，`remaining_seconds <= 0` 输出过期文案。
+- 只读；复用既有 `dungeon_team_invites` 与 `pending_invite` 查询，不新增表、列、迁移、
+  索引、配置键、命令、别名或路由；不改邀请 TTL、私聊通知、同意/拒绝或到期清理。
+
 ## 灰度开关、回滚和已知限制
 
 关闭开关后保留旧命令和数据格式。探索的战斗规则、队伍管理和奖励计算尚未移入新 domain，待后续发布周期完成迁移。

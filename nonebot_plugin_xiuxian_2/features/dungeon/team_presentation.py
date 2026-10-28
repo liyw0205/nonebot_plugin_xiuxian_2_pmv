@@ -62,6 +62,34 @@ class TeamInviteResponseResult:
     invite_group_id: str = ""
 
 
+@dataclass(frozen=True)
+class TeamPendingInviteView:
+    message: str
+
+
+def render_pending_invite(
+    *,
+    team_name: str,
+    inviter_name: str,
+    group_id: str,
+    remaining_seconds: float,
+) -> TeamPendingInviteView:
+    if float(remaining_seconds) <= 0:
+        return TeamPendingInviteView("该组队邀请已过期，请让队长重新邀请。")
+    minutes = max(1, int((float(remaining_seconds) + 59) // 60))
+    team = str(team_name or "").strip() or "未知队伍"
+    inviter = str(inviter_name or "").strip() or "未知用户"
+    group = str(group_id or "").strip() or "未知群"
+    return TeamPendingInviteView(
+        "【待处理组队邀请】\n"
+        f"队伍：{team}\n"
+        f"邀请人：{inviter}\n"
+        f"发起群：{group}\n"
+        f"剩余：{minutes}分钟\n"
+        "回复【同意组队】加入，或【拒绝组队】拒绝。"
+    )
+
+
 def build_team_view(team_info: dict[str, Any], lookup_user_name: Callable[[str], str]) -> TeamViewResult:
     members = []
     leader_id = str(team_info.get("leader", ""))
@@ -367,6 +395,7 @@ __all__ = [
     "TeamKickResult",
     "TeamLeaveResult",
     "TeamMemberView",
+    "TeamPendingInviteView",
     "TeamTransferResult",
     "TeamViewResult",
     "build_invite_response_message",
@@ -381,6 +410,7 @@ __all__ = [
     "build_transfer_team_not_member_message",
     "build_transfer_team_self_message",
     "build_transfer_team_success_message",
+    "render_pending_invite",
     "resolve_invite_response",
     "resolve_kick_target",
     "resolve_team_invite",

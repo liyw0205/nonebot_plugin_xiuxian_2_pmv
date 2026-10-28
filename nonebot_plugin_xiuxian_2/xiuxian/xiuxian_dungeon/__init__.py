@@ -681,8 +681,8 @@ async def view_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateMes
 
     team_id = dungeon_team_application.team_id_for_user(user_id)
     if not team_id:
-        msg = "你不在任何队伍中！\n📢 使用【创建队伍 队伍名】来创建队伍！"
-        await handle_send(bot, event, msg, md_type="team", k1="创建队伍", v1="创建队伍", k2="队伍帮助", v2="队伍帮助")
+        msg, k1, v1, k2, v2 = _team_invite_or_no_team_view(user_id)
+        await handle_send(bot, event, msg, md_type="team", k1=k1, v1=v1, k2=k2, v2=v2)
         await view_team_cmd.finish()
 
     team_info = dungeon_team_application.team_info(team_id)
@@ -1839,3 +1839,29 @@ async def handle_dungeon_status(bot: Bot, event: GroupMessageEvent | PrivateMess
 
     await handle_send(bot, event, msg, md_type="副本", k1="探索副本", v1="探索副本", k2="副本信息", v2="副本信息", k3="副本帮助", v3="副本帮助")
     await dungeon_status.finish()
+
+
+def _team_invite_or_no_team_view(user_id: str) -> tuple[str, str, str, str, str]:
+    from ...features.dungeon.team_presentation import render_pending_invite
+
+    now = time.time()
+    invite = dungeon_team_application.pending_invite(user_id, now)
+    if invite is None:
+        return (
+            "你不在任何队伍中！\n📢 使用【创建队伍 队伍名】来创建队伍！",
+            "创建队伍",
+            "创建队伍",
+            "队伍帮助",
+            "队伍帮助",
+        )
+    team = dungeon_team_application.team_info(invite.team_id) or {}
+    inviter = (_sql_message().get_user_info_with_id(invite.inviter_id) or {}).get(
+        "user_name", f"未知用户({invite.inviter_id})"
+    )
+    view = render_pending_invite(
+        team_name=str(team.get("team_name") or invite.team_id),
+        inviter_name=inviter,
+        group_id=invite.group_id,
+        remaining_seconds=invite.expires_at - now,
+    )
+    return (view.message, "同意组队", "同意组队", "拒绝组队", "拒绝组队")
