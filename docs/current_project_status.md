@@ -601,8 +601,10 @@ bot 侧六个玩家视图（`活动阶段`/`活动首领`/`活动商店`/`活动
   再由 rival 出价 800 → 回执 `refunded_bidder=me/500`；`my_bids("me")` 返回
   `my_price=500,current_price=800,leading=False`；me 的日志恰好一条
   `[拍卖被超价] 灵剑 已被超越，原出价 500 灵石已退回，拍卖ID:a1`，rival 只有出价行。
-- 交付与 CI：`b05c665e` 已推送 develop，develop CI run `40620682579`；main run 号在
-  快进后回填。未部署、未读写真实游戏库、不发送真实消息。
+- 交付与 CI：`b05c665e` 已推送 develop，develop CI run `40620682579` success；状态记录
+  `a2fba70e` 的 develop run `40621226265` success，随后一次性快进合入 main（`main` 与
+  `develop` 均为 `a2fba70e`），main CI run `40621911086` success（headSha `a2fba70e`，
+  `build-and-release` 按分支规则 skipped）。未部署、未读写真实游戏库、不发送真实消息。
 
 ## 冻结清单与停止条件
 
