@@ -20,6 +20,22 @@
 
 应用层先记录 `operation_ledger`，feature-owned SQL repository 随后使用 `ATTACH DATABASE` 与 `BEGIN IMMEDIATE` 在 `game_db`、`player_db` 中原子更新领奖标记、灵石、修为、物品、魔修领奖统计和领奖 operation。统计仅随首次成功 claim 递增，duplicate/replay 不重复计数；统计写入失败会回滚本次领奖。业务拒绝不改变资产，异常由 repository 事务回滚并由应用层记录 failed ledger。超出 SQLite 64 位整数范围的修为/灵石以安全文本参数绑定，并在 SQL 中按历史规则进行数值累加。
 
+## 个人战功面板
+
+`魔修入侵` 状态页在“本境界本波贡献排行”之后追加【你的战功】段，复用同一
+`world_event_state.participants/claimed` 快照，不新增查询、表或缓存：
+
+- 汇总本人全部波次的 `attacks` 与 `damage`，显示“本期出手/真实伤害”。
+- 当前境界与波次内按 `damage` 倒序计算本人名次 `R/T` 与本波伤害占比；即使不在前五名
+  榜单中也会显示自己的名次。
+- 奖励状态按 `claimed` 与记录 `reward_ready` 显示：`本期已领取`、`可领取（发送
+  【领取魔修奖励】）`、进行中`本期结束后按贡献结算`、已结束未领取`本期未领取`、
+  无记录`本期尚未参与讨伐`。
+- 兼容 `realm:wave:user`、`realm:user` 记录 key 与按字段匹配的旧结构；`claimed` 兼容
+  用户 key、记录 key 与 `:*user` 后缀；缺/坏字段按 0 处理，不抛错。
+- 只读；不改 `讨伐魔修`、`领取魔修奖励`、Boss/波次刷新、奖励计算或 claimed 写入，
+  不新增命令、路由、表、迁移或配置键。
+
 ## 定时任务
 
 本切片不新增任务；魔修生命周期与波次刷新仍由现有 scheduler 触发，状态事务由 feature application/repository 管理；灵脉调度仍走兼容路径。
