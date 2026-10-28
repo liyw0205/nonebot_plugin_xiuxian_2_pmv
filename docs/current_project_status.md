@@ -687,6 +687,35 @@ bot 侧六个玩家视图（`活动阶段`/`活动首领`/`活动商店`/`活动
   main CI run `40732798556` success（headSha 均为 `6ef35416`，`build-and-release` 按分支规则
   skipped）。未部署、未读写真实游戏库、不发送真实消息。
 
+## 已完成目标：魔修入侵个人战功与领奖状态
+
+魔修入侵的个人战功已持久化在 `world_event_state.participants/claimed`，但状态页此前只显示
+本境界本波前五名，榜外玩家看不到自己的出手、伤害、名次与领奖状态。目标文档
+`.codex-next-goal.md`（local-only，未提交）。
+
+- 新增纯渲染 `features/world_events/contribution_view.py`：`find_current_record` 兼容
+  `realm:wave:user`、`realm:user` 与仅字段匹配的旧记录；`latest_wave` 取本人该境界最新
+  波次；`render_personal_contribution` 汇总本期出手/真实伤害、当前波次名次与伤害占比，
+  并按 `claimed`（用户 key、记录 key、`:*user` 后缀）和 `reward_ready` 输出已领取/
+  可领取/进行中/已结束未领取/未参与。
+- `xiuxian_world_events/__init__.py::_build_state_message` 在原有排行后追加【你的战功】段；
+  `_personal_panel_lines` 仅在有 `user_info` 时渲染，无当前境界 Boss 时按本人最新波次降级。
+  不改 `讨伐魔修`、`领取魔修奖励`、Boss/波次刷新、奖励计算或 claimed 写入；不新增命令、
+  别名、路由、表、列、迁移、索引、配置键或查询次数。
+- 测试：`tests/test_world_events_personal_contribution.py` `13/13`（含 3 subtests），覆盖
+  榜外名次、波次汇总、三种 claimed 旧格式、四种奖励文案、坏字段降级与状态接线源合同。
+  Phase2 门禁 `test_world_events_demon_claim_command_owns_atomic_claim_statistic` 改为校验
+  证据路径与 `claim_demon_reward_` 调用图，不再硬编码源代码行号；该单测在 HEAD 快照中
+  `OK`。`docs/refactor_phase2_legacy_path_items.json` 保持用户删除、未暂存。
+- 门禁：architecture、inventory `--check`、progress `--json`（`failures: []`）真实 exit 0；
+  `compileall` 与 `git diff --check` 干净。正式说明写入 `docs/features/world_events.md`
+  与 `docs/gameplay_notes.md`。
+- 交付与 CI：功能提交 `1b96bc04` 的 develop run `40738987652` failure——唯一失败项是
+  Phase2 门禁仍断言旧行号 `__init__.py:191`；修正提交 `fc7f3d9f`（自然 import 布局 +
+  路径级证据断言）的 develop run `40742318934` success，快进合入 main 后 main run
+  `40743346266` success（headSha 均为 `fc7f3d9f`，`build-and-release` 按分支规则 skipped）。
+  未部署、未读写真实游戏库、不发送真实消息；用户删除的四个文件保持未暂存。
+
 ## 冻结清单与停止条件
 
 冻结范围仅包括活动 Web 六来源一键代领 API、权限/错误合同、管理员面板、兼容性保护、聚焦测试、路由清单和正式文档。不得新增奖励经济、schema/数据迁移、玩家身份模型、后台活动编辑器、通用 UI 框架或 unrelated refactor。
