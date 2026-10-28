@@ -45,6 +45,23 @@ feature-owned use case 结算。存取操作记录在 game DB 的
   纯渲染 `guishi_order_view.py` 输出到期时刻与剩余时长；无锚点历史订单显示
   `到期：未知（历史订单）`。
 
+## 我的仙肆成交记录
+
+`我的仙肆 记录`（也接受 `成交`/`历史`）读取 `XianshiQuerySqlRepository.my_trades(user_id,
+limit=5)`；该查询在单个只读 UoW 内从既有 `xianshi_operations` 取本人为买家或卖家的最近
+5 笔成交，按 `rowid DESC` 排序，不建表、不建库：
+
+- 字段：`operation_id/listing_id/name/goods_type/quantity/total_cost/role(seller|buyer)/
+  counterparty/created_at`。对手方名称优先取 `user_xiuxian.user_name`（同名多行取最小 rowid），
+  `user_xiuxian` 缺失时为空；系统卖家（`seller_id='0'`）显示“系统”。
+- 渲染由纯模块 `features/trade/xianshi_history_view.py` 承担：逐行
+  `{卖出|买入}｜{物品} x{数量}｜{总额}灵石｜{买家|卖家}:{对手方}｜{MM-DD HH:MM}`，末尾给出
+  `最近 N 笔：卖出 X 笔/收入 A｜买入 Y 笔/支出 B`。
+- `我的仙肆` 上架列表保留原分页与排序，尾部追加 `使用【我的仙肆 记录】查看最近成交`；
+  无上架时提示同样带记录入口。无记录时明确返回“最近没有仙肆成交记录”。
+- 只读；不改购买扣款、卖家到账、上架手续费、挂单数量、系统商品或 operation 回执；
+  不新增表、列、迁移、索引、配置键、命令名或路由。
+
 ## 命令与别名
 `交易`、`寄售`、`鬼市`。
 ## Web API

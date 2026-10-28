@@ -57,6 +57,7 @@ from .transaction_service import (
 from .auction_jobs import run_auction_job
 from ...paths import get_paths
 from ...features.trade.application import TradeApplication
+from ...features.trade.xianshi_history_view import render_xianshi_trades
 from ...features.auction.queue_application import AuctionQueueApplication
 from ...features.auction.application import AuctionBidApplication
 from ...features.auction.repository import LegacyTradeRepository
@@ -1245,18 +1246,35 @@ async def my_xian_shop_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         await handle_send(bot, event, msg, md_type="我要修仙")
         await my_xian_shop.finish()
     
-    # 获取页码
+    # 获取页码或成交记录视图
+    user_id = user_info['user_id']
+    command_text = args.extract_plain_text().strip()
+    if command_text in {"记录", "成交", "历史"}:
+        try:
+            trades = trade_application.xianshi_my_trades(user_id=user_id, limit=5)
+        except Exception:
+            trades = []
+        if trades:
+            msg = "**我的仙肆成交记录**\n---\n" + "\n".join(
+                render_xianshi_trades(trades, number=number_to)
+            )
+        else:
+            msg = "您最近没有仙肆成交记录。"
+        await handle_send(
+            bot, event, msg,
+            md_type="交易", k1="我的", v1="我的仙肆", k2="查看", v2="仙肆查看", k3="帮助", v3="交易帮助",
+        )
+        await my_xian_shop.finish()
+
     try:
-        current_page = int(args.extract_plain_text().strip())
+        current_page = int(command_text)
     except ValueError:
         current_page = 1
-    
-    user_id = user_info['user_id']
-    
+
     user_items = trade_application.xianshi_get_items(user_id=user_id)
 
     if not user_items:
-        msg = "您在仙肆中没有上架任何物品！"
+        msg = "您在仙肆中没有上架任何物品！使用【我的仙肆 记录】查看最近成交。"
         await handle_send(bot, event, msg, md_type="交易", k1="查看", v1="仙肆查看", k2="我的", v2="我的仙肆", k3="购买", v3="仙肆购买")
         await my_xian_shop.finish()
     
@@ -1283,6 +1301,7 @@ async def my_xian_shop_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         msg_list.append(msg_line)
     
     msg_list.append(f"\n第 {current_page}/{total_pages} 页")
+    msg_list.append("使用【我的仙肆 记录】查看最近成交")
     page = ["翻页", f"我的仙肆 {current_page + 1}", "下架", "仙肆下架", "查看", "仙肆查看", f"{current_page}/{total_pages}"]
     await send_msg_handler(bot, event, '我的仙肆', bot.self_id, msg_list, title=title, page=page)
     await my_xian_shop.finish()
