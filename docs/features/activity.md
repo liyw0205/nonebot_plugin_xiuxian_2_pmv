@@ -179,6 +179,23 @@ Manifest 保留历史 migration 标记 `legacy.activity.001`；当前启动 migr
 ## 事务与失败回滚
 Mutating calls carry an `operation_id` and are recorded in the operation ledger. Collect exchange also commits its existing business receipt in the same transaction as inventory and asset changes. Only this receipt-backed action opts into retrying a matching interrupted `started` operation; recovery checks the business receipt before revalidating current activity configuration, while a missing receipt proceeds through the current request once. Historical two-field receipts remain replayable after backfill. Disable the feature flag or restore the pre-migration backup to roll back.
 
+## 最近一键领取回执
+
+`活动中心` 在本人存在一键领取记录时追加【最近一键领取】，只读复用既有
+`activity_claim_all_operations` / `activity_claim_all_steps`，不新增表、迁移或命令：
+
+- `ActivityReadModelSqlRepository.recent_claim_receipts(user_id, limit=5)` 在只读 UoW 中按
+  `COALESCE(updated_at,created_at) DESC,rowid DESC` 取最近 N 条；缺数据库、缺表或读失败
+  返回空，不建库、不建表、不补列。
+- 解析 `result_json` 的 `ok/text/steps`：`completed` 且 `ok=true` 显示“已领取”，
+  `ok=false` 显示“未领取”，`pending` 显示“处理中（可重试）”；步骤名固定映射
+  `tasks→任务`、`pass→战令`、`boss_milestone→首领进度`、`boss_rank→首领排行`、
+  `stage→阶段`、`rank→排行`。
+- 纯模块 `features/activity/claim_receipt_view.py` 渲染【最近一键领取】：已发放来源、
+  未完成步骤与最近 5 次提示；空/坏 `result_json` 只保留状态和时间，不猜测奖励明细。
+- 仅 `user_id` 且回执非空时追加；匿名或无回执时 `活动中心` 输出与当前一致。只读；
+  不改六步领取计划、`retryable_failure` 文案、回执写入、ledger/审计或资产。
+
 ## 定时任务
 No new scheduled jobs. Legacy jobs stay registered through the compatibility scheduler.
 

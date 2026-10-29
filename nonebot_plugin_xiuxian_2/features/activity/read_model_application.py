@@ -558,6 +558,7 @@ class ActivityReadModelApplication:
             claimable_reward_count,
             personal_progress_summary,
         )
+        from .claim_receipt_view import render_claim_receipts
 
         config = self._config()
         tasks = get_activity_tasks(config)
@@ -645,6 +646,11 @@ class ActivityReadModelApplication:
                 )
                 if group_links:
                     lines.append(f"{group_name}：{group_links}")
+        if user_id:
+            receipts = self.repository.recent_claim_receipts(str(user_id))
+            receipt_text = render_claim_receipts(receipts)
+            if receipt_text:
+                lines.append(receipt_text)
         return "\n".join(lines).strip()
 
     def activity_stage_text(self, user_id: str | None = None) -> str:

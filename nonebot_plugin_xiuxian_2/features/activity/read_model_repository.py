@@ -1,12 +1,14 @@
 from __future__ import annotations
 
+import json
 import sqlite3
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 from ...infrastructure.database import DatabaseUnitOfWork
+from .claim_receipt_view import ActivityClaimReceiptView
 
 
 class ActivityReadModelSqlRepository:
@@ -33,6 +35,75 @@ class ActivityReadModelSqlRepository:
                 f"activity_state.001 schema_missing: {', '.join(missing)}"
             )
         return existing
+
+    @staticmethod
+    def _claim_receipt(row: dict[str, Any]) -> ActivityClaimReceiptView:
+        labels = {
+            "tasks": "任务",
+            "pass": "战令",
+            "boss_milestone": "首领进度",
+            "boss_rank": "首领排行",
+            "stage": "阶段",
+            "rank": "排行",
+        }
+        raw_status = str(row["status"] or "")
+        raw = row["result_json"] if "result_json" in row else ""
+        data: dict[str, Any] = {}
+        try:
+            decoded = json.loads(raw) if isinstance(raw, str) and raw else {}
+            if isinstance(decoded, Mapping):
+                data = dict(decoded)
+        except (TypeError, ValueError):
+            data = {}
+        settled: list[str] = []
+        failed: list[str] = []
+        steps = data.get("steps")
+        if isinstance(steps, list):
+            for step in steps:
+                if not isinstance(step, Mapping):
+                    continue
+                name = str(step.get("name") or "")
+                label = labels.get(name, name or "其他")
+                if bool(step.get("ok")):
+                    settled.append(label)
+                else:
+                    failed.append(label)
+        ok = bool(data.get("ok"))
+        if raw_status == "pending":
+            status = "处理中"
+        elif raw_status == "completed":
+            status = "已领取" if ok else "未领取"
+        else:
+            status = raw_status or "未知"
+        return ActivityClaimReceiptView(
+            created_at=str(row["updated_at"] or row["created_at"] or ""),
+            status=status,
+            ok=ok,
+            settled_labels=tuple(settled),
+            failed_labels=tuple(failed),
+            text=str(data.get("text") or ""),
+        )
+
+    def recent_claim_receipts(
+        self, user_id: str, limit: int = 5
+    ) -> tuple[ActivityClaimReceiptView, ...]:
+        user_id = str(user_id).strip()
+        limit = max(int(limit), 0)
+        if not user_id or limit == 0 or not self.database.is_file():
+            return ()
+        try:
+            with DatabaseUnitOfWork(self.database, read_only=True) as uow:
+                if "activity_claim_all_operations" not in self._table_names(uow):
+                    return ()
+                rows = uow.query_all(
+                    "SELECT status,result_json,created_at,updated_at "
+                    "FROM activity_claim_all_operations WHERE user_id=? "
+                    "ORDER BY COALESCE(updated_at,created_at) DESC,rowid DESC LIMIT ?",
+                    (user_id, limit),
+                )
+        except (OSError, sqlite3.Error):
+            return ()
+        return tuple(self._claim_receipt(dict(row)) for row in rows)
 
     def task_progress(
         self, activity_key: str, user_id: str
