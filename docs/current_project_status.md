@@ -832,6 +832,27 @@ bot 侧六个玩家视图（`活动阶段`/`活动首领`/`活动商店`/`活动
   main run `40843463241`（headSha 均为 `3db163c0`；`build-and-release` 按分支规则
   skipped）。未部署、未读写真实游戏库、不发送真实消息；用户删除的四个文件保持未暂存。
 
+## 已完成目标：活动中心最近活动签到
+
+`活动签到` 的逐日记录已写入 `activity_sign_log`，但 `活动` 只显示累计/上次日期，
+`活动中心` 没有逐日回看。目标文档 `.codex-next-goal.md`（local-only，未提交）。
+
+- 新增纯展示 `features/activity/sign_history_view.py`：`ActivitySignDayView` 与
+  `render_sign_calendar` 以今天为终点输出最近 7 天 `MM-DD 已签/未签`；空记录或全部
+  坏日期不输出段，坏日期跳过。
+- `ActivityReadModelSqlRepository.recent_signs(user_id, limit=7)` 在只读 UoW 中按
+  `sign_date DESC` 取本人最近 N 条；缺库/缺表/读失败返回空，不请求期 DDL。
+- `activity_center_text(user_id)` 仅在本人存在有效签到记录时追加【最近活动签到】；
+  匿名或无记录输出与当前一致。未改 `活动签到` 的写入、奖励、去重、累计天数或事务；
+  无新表、列、迁移、索引、配置键、命令、别名或路由。
+- 测试：`tests/test_activity_sign_history_view.py` `5/5`，覆盖排序/limit/用户隔离、
+  缺表/缺库不建表、7 天窗口补缺/坏日期、中心接线与源合同；受影响活动/源码质量套件
+  `289 passed`。architecture、inventory `--check`、progress `--json`（`failures: []`）
+  真实 exit 0；`compileall` 与 `git diff --check` 干净。
+- 交付与 CI：功能提交 `c65c20a2` 的 develop run `40848021717` success；快进合入 main 后
+  main run `40849339731`（headSha 均为 `c65c20a2`；`build-and-release` 按分支规则
+  skipped）。未部署、未读写真实游戏库、不发送真实消息；用户删除的四个文件保持未暂存。
+
 ## 冻结清单与停止条件
 
 冻结范围仅包括活动 Web 六来源一键代领 API、权限/错误合同、管理员面板、兼容性保护、聚焦测试、路由清单和正式文档。不得新增奖励经济、schema/数据迁移、玩家身份模型、后台活动编辑器、通用 UI 框架或 unrelated refactor。
