@@ -301,12 +301,22 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     
     user_id = user_info["user_id"]
     tower_info_data = tower_limit.get_user_tower_info(user_id)
+    from ...features.tower.progress_view import render_tower_progress
+    progress = render_tower_progress(
+        current_floor=tower_info_data.get("current_floor"),
+        max_floor=tower_info_data.get("max_floor"),
+        score=tower_info_data.get("score"),
+        weekly_purchases=tower_info_data.get("weekly_purchases"),
+        shop_items=tower_data.config.get("商店商品", {}),
+        config=tower_data.config,
+    )
     
     msg = (
         f"【通天塔信息】\n"
         f"当前层数：{tower_info_data['current_floor']}\n"
         f"历史最高：{tower_info_data['max_floor']}\n"
         f"累计积分：{tower_info_data['score']}\n"
+        f"{progress}\n"
         f"输入【挑战通天塔】挑战下一层\n"
         f"输入【速通通天塔】连续挑战10层"
     )
