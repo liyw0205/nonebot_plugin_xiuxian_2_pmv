@@ -64,7 +64,11 @@ class BankCommandApplication:
         if account["status"] not in {"ok", "account_missing"}:
             return {"action": action, **account}
         if action == "info":
-            return {"action": action, **account}
+            return {
+                "action": action,
+                **account,
+                "operations": self.info.recent_operations(user_id=user_id),
+            }
 
         now = (self.clock or bank_clock()).now()
         settled_at = now.isoformat()

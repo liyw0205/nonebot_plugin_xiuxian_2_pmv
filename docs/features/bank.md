@@ -65,6 +65,21 @@
 
 `tests/test_bank_progress_contract.py` 绑定实际正则 handler、command owner、回执 reader 与既有账户 application 的源码调用边，并通过内存源码变异防止旧 writer 回流或回执优先级退化。新增实现仍须串行运行对应行为测试和门禁，本文不作为本轮验证通过的记录。
 
+## 灵庄流水与最近操作
+
+`灵庄信息` 在既有存款/会员/上限后追加【最近灵庄记录】：
+
+- `BankAccountInfoApplication.recent_operations(user_id, limit=5)` 在只读 UoW 中按
+  `created_at DESC,rowid DESC` 返回本人最近 N 条 `bank_account_operations`；缺数据库、
+  缺表或 schema 不完整返回空，不建库、不建表、不补列。
+- `BankOperationView` 归一为存入/取出/结息/会员升级/账户操作；优先使用 `payload` 的
+  `withdraw`/`interest`/`upgrade` 前缀，缺失或损坏时按 `deposited` 正负与 `interest`
+  降级，非数字按 0；金额取绝对值，利息/余额负数按 0。
+- `BankCommandApplication.execute` 的 `info` 结果增加 `operations`；`render_bank_reply`
+  仅在该键存在时追加流水，旧调用方/其它 action 的输出保持不变。
+- 只读；不改存取、结息、会员升级、回执优先级、余额或资产写路径；不新增表、列、迁移、
+  索引、配置键、命令、别名或路由。
+
 ## 灰度开关、回滚和已知限制
 
 关闭新功能开关后兼容 Web 与命令入口仍保留；显式 `savef` 仅供兼容写入。v1 Web 默认执行切换和历史账户启动回填仍需正式发布迁移、恢复/对账与灰度回滚证据；这些证据完成前不能宣称 bank 全面重构。

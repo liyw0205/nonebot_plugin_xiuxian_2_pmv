@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import Any, Mapping
 
+from .history_view import render_bank_history
+
 
 def render_bank_reply(result: Mapping[str, Any], bank_levels: Mapping[str, Any]) -> str:
     action = str(result.get("action", ""))
@@ -9,7 +11,7 @@ def render_bank_reply(result: Mapping[str, Any], bank_levels: Mapping[str, Any])
     if action == "info" and status in {"ok", "account_missing"}:
         level = str(result.get("bank_level", "1"))
         config = bank_levels.get(level, {})
-        return (
+        message = (
             "**灵庄信息**\n---\n"
             f"已存\n> {int(result.get('saved_stone', 0))}灵石\n"
             f"存入时间\n> {result.get('updated_at') or '尚未存入'}\n"
@@ -17,6 +19,9 @@ def render_bank_reply(result: Mapping[str, Any], bank_levels: Mapping[str, Any])
             f"当前灵石\n> {int(result.get('wallet_stone', 0))}\n"
             f"存储上限\n> {config.get('savemax', '暂不可用')}枚"
         )
+        if "operations" in result:
+            message += render_bank_history(result.get("operations") or ())
+        return message
     if status not in {"applied", "duplicate"}:
         return {
             "invalid_argument": "请输入正确的金额或指令！本次未结算。",
