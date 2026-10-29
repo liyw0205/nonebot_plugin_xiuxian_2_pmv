@@ -766,6 +766,26 @@ bot 侧六个玩家视图（`活动阶段`/`活动首领`/`活动商店`/`活动
   main run `40788335192` success（headSha 均为 `6c14cb7e`，`build-and-release` 按分支规则
   skipped）。未部署、未读写真实游戏库、不发送真实消息；用户删除的四个文件保持未暂存。
 
+## 已完成目标：通天塔个人进度与里程碑总览
+
+`通天塔信息` 此前只显示当前层数、历史最高、累计积分和挑战提示；玩家需要记住帮助里的
+每 10 层奖励，也看不到本周兑换总进度。目标文档 `.codex-next-goal.md`（local-only，未提交）。
+
+- 新增纯展示 `features/tower/progress_view.py`：`next_milestone` 返回严格大于历史最高的
+  下一个 10 的倍数；`weekly_purchase_summary` 汇总有效商品的已兑/上限/已兑完项数，
+  忽略 `_last_reset`、非法数量、缺失/非正上限；`render_tower_progress` 输出下一里程碑、
+  剩余层数、首通积分/灵石/修为预览、本周兑换与重置提示，空配置仍保留里程碑段。
+- `通天塔信息` 使用同一 `tower_limit.get_user_tower_info` 快照与 `tower_data.config`
+  追加【进度与里程碑】；保留原有当前层数/历史最高/累计积分/挑战提示。零新增查询、
+  表、列、迁移、索引、配置键、命令、别名或路由，不写回 `weekly_purchases`。
+- 测试：`tests/test_tower_progress_view.py` `9/9`，覆盖里程碑边界、正常/坏/整数键
+  `weekly_purchases`、空商品配置、可重复渲染与输入不变、handler 源合同；受影响
+  通天塔/源码质量套件 `266 passed`。architecture、inventory `--check`、progress
+  `--json`（`failures: []`）真实 exit 0；`compileall` 与 `git diff --check` 干净。
+- 交付与 CI：功能提交 `fb40e07f` 的 develop run `40801441031` success；快进合入 main 后
+  main run `40802372687` success（headSha 均为 `fb40e07f`，`build-and-release` 按分支规则
+  skipped）。未部署、未读写真实游戏库、不发送真实消息；用户删除的四个文件保持未暂存。
+
 ## 冻结清单与停止条件
 
 冻结范围仅包括活动 Web 六来源一键代领 API、权限/错误合同、管理员面板、兼容性保护、聚焦测试、路由清单和正式文档。不得新增奖励经济、schema/数据迁移、玩家身份模型、后台活动编辑器、通用 UI 框架或 unrelated refactor。
