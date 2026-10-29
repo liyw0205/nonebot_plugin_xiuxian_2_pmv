@@ -786,6 +786,29 @@ bot 侧六个玩家视图（`活动阶段`/`活动首领`/`活动商店`/`活动
   main run `40802372687` success（headSha 均为 `fb40e07f`，`build-and-release` 按分支规则
   skipped）。未部署、未读写真实游戏库、不发送真实消息；用户删除的四个文件保持未暂存。
 
+## 已完成目标：灵庄流水与最近操作
+
+`灵庄信息` 此前只显示当前存款、会员等级和上限；`bank_account_operations` 已保存每次
+存入/取出/结息/升级，但玩家没有读取面。目标文档 `.codex-next-goal.md`（local-only，未提交）。
+
+- 新增纯展示 `features/bank/history_view.py`：`BankOperationView` 与
+  `render_bank_history` 输出【最近灵庄记录】，含存入/取出/结息/会员升级的时间、金额或
+  利息、操作后存款；空记录显示“暂无记录”，不导入 NoneBot/Flask。
+- `BankAccountInfoApplication.recent_operations(user_id, limit=5)` 在只读 UoW 中按
+  `created_at DESC,rowid DESC` 取本人最近 N 条；从 payload 的 `withdraw`/`interest`/
+  `upgrade` 前缀识别类型，缺失/损坏时按金额符号与利息降级；缺库/缺表/schema 不完整
+  返回空，不请求期 DDL。`get_info` 既有字段不变。
+- `BankCommandApplication.execute` 的 `info` 结果增加 `operations`；`render_bank_reply`
+  仅在该键存在时追加流水，旧调用方与其它 action 输出不变。未改存取、结息、升级、回执、
+  余额或资产写路径；无新表、列、迁移、索引、配置键、命令、别名或路由。
+- 测试：`tests/test_bank_history_view.py` `8/8`，覆盖真实流水排序/limit/用户隔离、
+  四类操作识别、坏 payload、缺表/缺库不建表、info 结果接线、纯渲染与命令源合同；
+  受影响 bank/源码质量套件 `340 passed`。architecture、inventory `--check`、progress
+  `--json`（`failures: []`）真实 exit 0；`compileall` 与 `git diff --check` 干净。
+- 交付与 CI：功能提交 `ddfec137` 的 develop run `40828075324` success；快进合入 main 后
+  main run `40829025235` success（headSha 均为 `ddfec137`，`build-and-release` 按分支规则
+  skipped）。未部署、未读写真实游戏库、不发送真实消息；用户删除的四个文件保持未暂存。
+
 ## 冻结清单与停止条件
 
 冻结范围仅包括活动 Web 六来源一键代领 API、权限/错误合同、管理员面板、兼容性保护、聚焦测试、路由清单和正式文档。不得新增奖励经济、schema/数据迁移、玩家身份模型、后台活动编辑器、通用 UI 框架或 unrelated refactor。
