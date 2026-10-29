@@ -179,6 +179,20 @@ Manifest 保留历史 migration 标记 `legacy.activity.001`；当前启动 migr
 ## 事务与失败回滚
 Mutating calls carry an `operation_id` and are recorded in the operation ledger. Collect exchange also commits its existing business receipt in the same transaction as inventory and asset changes. Only this receipt-backed action opts into retrying a matching interrupted `started` operation; recovery checks the business receipt before revalidating current activity configuration, while a missing receipt proceeds through the current request once. Historical two-field receipts remain replayable after backfill. Disable the feature flag or restore the pre-migration backup to roll back.
 
+## 最近活动签到
+
+`活动中心` 在本人有 `activity_sign_log` 记录时追加【最近活动签到】，以今天为终点展示
+最近 7 天的“已签/未签”，只读复用签到日志，不新增表、迁移或命令：
+
+- `ActivityReadModelSqlRepository.recent_signs(user_id, limit=7)` 在只读 UoW 中按
+  `sign_date DESC` 取本人最近 N 条，只读 `sign_date/day_index/reward_status`；缺库、缺表
+  或读失败返回空，不建库、不建表、不补列。
+- 纯模块 `features/activity/sign_history_view.py` 的 `render_sign_calendar` 以传入的
+  `today` 倒推 7 天，逐日输出 `MM-DD 已签/未签`；空记录或全部坏日期不输出段，坏日期
+  跳过，不回显奖励。
+- 仅 `user_id` 且存在有效签到记录时追加；匿名或没有记录时 `活动中心` 输出与当前一致。
+  只读；不改 `活动签到` 的写入、奖励、去重、累计天数或事务语义。
+
 ## 最近一键领取回执
 
 `活动中心` 在本人存在一键领取记录时追加【最近一键领取】，只读复用既有

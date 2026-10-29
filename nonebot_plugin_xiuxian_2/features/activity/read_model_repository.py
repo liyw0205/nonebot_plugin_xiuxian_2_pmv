@@ -9,6 +9,7 @@ from typing import Any
 
 from ...infrastructure.database import DatabaseUnitOfWork
 from .claim_receipt_view import ActivityClaimReceiptView
+from .sign_history_view import ActivitySignDayView
 
 
 class ActivityReadModelSqlRepository:
@@ -104,6 +105,33 @@ class ActivityReadModelSqlRepository:
         except (OSError, sqlite3.Error):
             return ()
         return tuple(self._claim_receipt(dict(row)) for row in rows)
+
+    def recent_signs(
+        self, user_id: str, limit: int = 7
+    ) -> tuple[ActivitySignDayView, ...]:
+        user_id = str(user_id).strip()
+        limit = max(int(limit), 0)
+        if not user_id or limit == 0 or not self.database.is_file():
+            return ()
+        try:
+            with DatabaseUnitOfWork(self.database, read_only=True) as uow:
+                if "activity_sign_log" not in self._table_names(uow):
+                    return ()
+                rows = uow.query_all(
+                    "SELECT sign_date,day_index,reward_status FROM activity_sign_log "
+                    "WHERE user_id=? ORDER BY sign_date DESC LIMIT ?",
+                    (user_id, limit),
+                )
+        except (OSError, sqlite3.Error):
+            return ()
+        return tuple(
+            ActivitySignDayView(
+                sign_date=str(row["sign_date"] or ""),
+                day_index=int(row["day_index"] or 0),
+                reward_status=str(row["reward_status"] or ""),
+            )
+            for row in rows
+        )
 
     def task_progress(
         self, activity_key: str, user_id: str

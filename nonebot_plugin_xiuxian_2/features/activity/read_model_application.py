@@ -559,6 +559,7 @@ class ActivityReadModelApplication:
             personal_progress_summary,
         )
         from .claim_receipt_view import render_claim_receipts
+        from .sign_history_view import render_sign_calendar
 
         config = self._config()
         tasks = get_activity_tasks(config)
@@ -651,6 +652,10 @@ class ActivityReadModelApplication:
             receipt_text = render_claim_receipts(receipts)
             if receipt_text:
                 lines.append(receipt_text)
+            signs = self.repository.recent_signs(str(user_id))
+            sign_text = render_sign_calendar(signs, today=self.clock.now().date())
+            if sign_text:
+                lines.append(sign_text)
         return "\n".join(lines).strip()
 
     def activity_stage_text(self, user_id: str | None = None) -> str:
