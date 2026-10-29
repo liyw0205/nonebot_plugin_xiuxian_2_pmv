@@ -809,6 +809,29 @@ bot 侧六个玩家视图（`活动阶段`/`活动首领`/`活动商店`/`活动
   main run `40829025235` success（headSha 均为 `ddfec137`，`build-and-release` 按分支规则
   skipped）。未部署、未读写真实游戏库、不发送真实消息；用户删除的四个文件保持未暂存。
 
+## 已完成目标：活动中心最近一键领取回执
+
+`活动领取` 的六步回执已写入 `activity_claim_all_operations` / `activity_claim_all_steps`，
+但 `活动中心` 只渲染当前卡片，玩家错过后无法回看哪些来源已发放、哪些步骤失败。目标文档
+`.codex-next-goal.md`（local-only，未提交）。
+
+- 新增纯展示 `features/activity/claim_receipt_view.py`：`ActivityClaimReceiptView` 与
+  `render_claim_receipts` 输出【最近一键领取】，按状态显示已领取来源、未完成步骤或
+  “处理中（可重试）”；空输入不输出段。
+- `ActivityReadModelSqlRepository.recent_claim_receipts(user_id, limit=5)` 在只读 UoW 中按
+  `COALESCE(updated_at,created_at) DESC,rowid DESC` 取本人最近 N 条；解析 `result_json`
+  的 `ok/text/steps`，坏 JSON 只保留状态/时间；缺库/缺表返回空，不请求期 DDL。
+- `activity_center_text(user_id)` 仅在本人回执非空时追加该段；匿名或没有回执时输出与
+  当前一致。未改六步领取计划、`retryable_failure` 文案、回执写入、ledger/审计或资产；
+  无新表、列、迁移、索引、配置键、命令、别名或路由。
+- 测试：`tests/test_activity_claim_receipt_view.py` `6/6`，覆盖真实回执排序/limit/用户
+  隔离、成功/部分失败/未领取/处理中/坏 JSON、缺表/缺库不建表、纯渲染和中心源合同；
+  受影响活动/源码质量套件 `292 passed`。architecture、inventory `--check`、progress
+  `--json`（`failures: []`）真实 exit 0；`compileall` 与 `git diff --check` 干净。
+- 交付与 CI：功能提交 `3db163c0` 的 develop run `40842248247` success；快进合入 main 后
+  main run `40843463241`（headSha 均为 `3db163c0`；`build-and-release` 按分支规则
+  skipped）。未部署、未读写真实游戏库、不发送真实消息；用户删除的四个文件保持未暂存。
+
 ## 冻结清单与停止条件
 
 冻结范围仅包括活动 Web 六来源一键代领 API、权限/错误合同、管理员面板、兼容性保护、聚焦测试、路由清单和正式文档。不得新增奖励经济、schema/数据迁移、玩家身份模型、后台活动编辑器、通用 UI 框架或 unrelated refactor。
