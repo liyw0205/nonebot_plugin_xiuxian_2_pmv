@@ -229,10 +229,14 @@ async def check_and_harvest(user_id):
             f"道友成功收获药材：{reward.goods_name} {reward.quantity} 个！\n"
             for reward in result.rewards
         )
+        if result.status == "duplicate":
+            msg += "该收取请求已经处理，无需重复提交。\n"
         log_message(user_id, msg)
         return msg
     if result.status == "blessed_spot_missing":
         return "道友还没有洞天福地呢，请发送洞天福地购买吧~"
+    if result.status == "puppet_disabled":
+        return None
     if result.status == "stone_insufficient":
         msg = "道友灵石数量不足，无法驱动傀儡，灵田傀儡已关闭"
         log_message(user_id, msg)
@@ -243,7 +247,12 @@ async def check_and_harvest(user_id):
         return f"道友的灵田还不能收取，下次收取时间为：{hours}小时{minutes}分钟之后"
     if result.status == "inventory_full":
         return "道友背包中对应药材已达上限，傀儡暂未收取"
-    return None
+    msg = (
+        "傀儡收取未完成"
+        f"（{result.status}），本次未发放药材也未扣除灵石，请稍后重试。"
+    )
+    log_message(user_id, msg)
+    return msg
 
 
 @buy_puppet.handle()
