@@ -53,6 +53,10 @@ from .stone_limit import stone_limit
 
 from ...features.sign_in.application import SignInApplication
 from ...features.economy_ledger.application import EconomyLedgerApplication, format_stone_flow
+from ...features.base.assets_overview import (
+    PlayerAssetsOverviewApplication,
+    format_assets_overview,
+)
 from ...features.sign_in.lottery_application import LotteryApplication
 from ...features.sign_in.effects import NullSignInEffects
 from ...features.player_state.application import PlayerStateApplication
@@ -63,6 +67,9 @@ from .xiangyuan import clear_all_xiangyuan, reset_xiangyuan_daily  # noqa: F401
 _sql_message_instance = None
 sign_in_application = SignInApplication(get_paths().game_db)
 stone_flow_application = EconomyLedgerApplication(get_paths().game_db)
+assets_overview_application = PlayerAssetsOverviewApplication(
+    get_paths().game_db, get_paths().player_db
+)
 lottery_application: Any | None = None
 
 
@@ -171,6 +178,7 @@ rank = on_command("排行榜", aliases={"修仙排行榜", "灵石排行榜", "�
 season_rank = on_command("赛季榜", aliases={"赛季排行榜", "赛季排行", "赛季信息"}, priority=7, block=True)
 my_season_rank = on_command("我的赛季", aliases={"我的赛季榜", "个人赛季"}, priority=7, block=True)
 stone_flow = on_command("我的灵石流水", aliases={"灵石流水", "灵石收支"}, priority=7, block=True)
+assets_overview = on_command("我的资产总览", aliases={"资产总览", "我的资产"}, priority=7, block=True)
 remaname = on_command("修仙改名", priority=5, block=True)
 root_rename = on_command("灵根改名", priority=5, block=True)
 _legacy_stone_gift_enabled = os.environ.get("XIUXIAN_STONE_GIFT_LEGACY_HANDLER", "false").strip().lower() in {
@@ -1324,6 +1332,33 @@ async def stone_flow_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         v3="修仙帮助",
     )
     await stone_flow.finish()
+
+
+@assets_overview.handle(parameterless=[Cooldown(cd_time=0)])
+async def assets_overview_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    """我的资产总览：一次展示本人灵石、灵庄、宗门、背包与竞技场规模（只读）。"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    isUser, user_info, msg = check_user(event)
+    if not isUser:
+        await handle_send(bot, event, msg, md_type="我要修仙")
+        await assets_overview.finish()
+
+    # 只使用登录会话里的 user_id；不接受任何参数指定他人资产。
+    payload = assets_overview_application.overview(str(user_info["user_id"]))
+    text = format_assets_overview(payload, format_number=number_to)
+    await handle_send(
+        bot,
+        event,
+        text,
+        md_type="修仙",
+        k1="灵庄",
+        v1="灵庄",
+        k2="背包",
+        v2="我的背包",
+        k3="帮助",
+        v3="修仙帮助",
+    )
+    await assets_overview.finish()
 
 
 @user_stamina.handle(parameterless=[Cooldown(cd_time=0)])

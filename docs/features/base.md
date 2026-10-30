@@ -4,6 +4,7 @@
 ## 命令与别名
 `修炼`、`突破`、`修仙签到`。
 `我的灵石流水`（别名 `灵石流水`、`灵石收支`）：玩家本人近 7 天灵石收支总览、主要来源/去向与最近 5 笔明细，只读。
+`我的资产总览`（别名 `资产总览`、`我的资产`）：玩家本人灵石、灵庄存款、宗门归属与贡献、背包规模、竞技场段位/积分/荣誉的一览，只读，缺失段自动省略。
 ## Web API
 `POST /api/v1/base/{breakthrough,tribulation,rename,stone_contest,stone_robbery,sign}`，权限 `user`，要求幂等键。
 `POST /api/v1/base/xiangyuan/{create,claim}` 与 `GET /api/v1/base/xiangyuan/group`，权限 `user`；写入请求要求幂等键和 CSRF。
@@ -37,6 +38,7 @@ NoneBot 和 Web 只负责输入输出转换。
 - `command: 修炼`
 - `alias: 突破`
 - `command: 我的灵石流水`
+- `command: 我的资产总览`
 - `alias: 灵石流水`
 - `alias: 灵石收支`
 - `route: POST /api/v1/base/breakthrough`

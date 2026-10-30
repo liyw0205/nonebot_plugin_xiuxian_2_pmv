@@ -1133,6 +1133,15 @@
       "permission": "user"
     },
     {
+      "aliases": [
+        "我的资产",
+        "资产总览"
+      ],
+      "feature": "base",
+      "name": "我的资产总览",
+      "permission": "user"
+    },
+    {
       "aliases": [],
       "feature": "compensation",
       "name": "我的邀请",
