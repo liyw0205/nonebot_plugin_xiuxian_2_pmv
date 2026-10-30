@@ -952,6 +952,69 @@ bot 侧六个玩家视图（`活动阶段`/`活动首领`/`活动商店`/`活动
   main run `41008883828` success（headSha 均为 `37e87326`；`build-and-release` 按分支规则
   skipped）。未部署、未读写真实游戏库、不发送真实消息；用户删除的四个文件保持未暂存。
 
+## 已完成目标：宗门命令契约闭环修复（搜寻/创建/加入/传位/任务结算）
+
+宗门有 8 条玩家命令在生产数据上不可用或把成功渲染成失败。全部源自同一重构接线漂移，
+且都被自建 schema / 自建 stub 的旧测试掩盖。目标文档 `.codex-next-goal.md`（local-only，未提交）。
+证据方法：用插件自身的迁移目录把 `game_db`/`player_db` 迁到临时库得到真实 schema，
+再按 `xiuxian2_handle` 的基础 DDL + `xiuxian_config.py` 的 `sql_sects`/`sql_user_xiuxian`
+ALTER 列表得到真实旧表列集，最后调用真实 `SectApplication` 与真实 feature 仓储逐条实测。
+
+- **宗门功法搜寻 / 宗门神通搜寻 必然抛错（三重缺陷）**：
+  1. `xiuxian_sect/__init__.py` 以 `owner_position=owner_position` 调用
+     `apply_buff_search`，而该方法签名无此关键字 → 实测
+     `TypeError: got an unexpected keyword argument 'owner_position'`；
+     同文件兄弟方法（`close_mountain`/`inherit_owner`/`open_join`/`disband`/`upgrade_*`）
+     都接受 `*, owner_position: int = 0`，唯它漏了。handler 无 try/except，玩家收不到回复。
+  2. `buff_search_repository.py` 读写**不存在的列** `sect_mainbuff` / `sect_secbuff`；
+     真实 `sects` 列是 `mainbuff` / `secbuff`（权威来源 `xiuxian_config.py` 的 `sql_sects`）。
+     实测 `UPDATE sects SET sect_mainbuff=...` 抛
+     `OperationalError: no such column: sect_mainbuff`，而
+     `SELECT "sect_mainbuff"` 返回字符串字面量 `'sect_mainbuff'`
+     （与已修 `控火等级`、`傀儡等级` 同一 SQLite 语义陷阱）。修好 (1) 后命令依然必炸。
+     对照：兼容实现 `legacy_sect_membership.py` 的 `{"main": "mainbuff", "secondary": "secbuff"}`
+     与 `features/sect/repository.py` 都正确。
+  3. 仓储把宗主校验写成 `int(user['sect_position'] or 0) != 0`，硬编码 0；
+     兼容实现比较调用方传入的 `owner_position`，故非 0 宗主位的宗门配置永远拒绝。
+- **`SectMutationResult.applied` 漏掉真实成功状态**：只认
+  `claimed/closed/disbanded/duplicate/granted/inherited/upgraded`，漏掉
+  `applied`/`charged`/`created`/`opened`/`transferred`/`settled`。实测
+  `创建宗门`(`created`)、`宗门改名`计费(`charged`)、`开放宗门加入`(`opened`)、
+  `宗主传位`(`transferred`)、`宗门任务完成`(`settled`)、功法/神通搜寻(`applied`)
+  全部 `applied=False`，成功被渲染成失败并要求玩家重试。
+- **`宗主传位` 读取不存在的属性**：handler 读 `result.succeeded`，而 `transfer_owner`
+  返回 `SectMutationResult`（dict 子类，只有 `.applied`），
+  `.succeeded` 走 `__getattr__` 抛 `AttributeError`（实测确认）。
+
+修复内容：
+
+- `features/sect/buff_search_repository.py`：列名收进
+  `_BUFF_COLUMNS = {"main": "mainbuff", "secondary": "secbuff"}`，SELECT/UPDATE 共用；
+  `apply(...)` 增加 `*, owner_position: int = 0` 并用于宗主校验，去掉硬编码 0。
+- `features/sect/application.py`：`apply_buff_search` 增加 `*, owner_position: int = 0`
+  并原样透传；`SectMutationResult.applied` 补齐六个真实成功状态。
+- `xiuxian/xiuxian_sect/__init__.py`：`宗主传位` 成功判定由 `result.succeeded` 改为
+  `result.applied`。
+- 零 schema 变更：复用 `sects`、`user_xiuxian`、`sect_buff_search_operations` 及既有
+  operation 表；未改已应用迁移函数；无新表、列、迁移、索引、配置键、命令名、别名或路由。
+- 测试：新 `tests/test_sect_command_contract_production_path.py` `25/25`（含 35 subtests），
+  用**真实旧表列集**（含 `mainbuff`/`secbuff`、**无** `sect_mainbuff`/`sect_secbuff`）
+  + 真实 `SectApplication` + 真实 feature 仓储 + 真实任务迁移表，复现并钉住上述缺陷，
+  覆盖成功/失败状态词表、搜寻 main/secondary 扣减与幂等重放不二次扣减、非宗主与资材不足
+  零变化、`owner_position` 生效与不匹配被拒、创建/改名/开放/关闭/传位/任务结算各状态、
+  传位结果无 `succeeded` 属性、handler 源合同。feature 侧
+  `test_buff_search_repository.py` 表结构改为真实列并新增 `owner_position` 用例。
+  聚焦套件合计 `386 passed + 37 subtests`；`unittest discover -s tests -p 'test_sect*'`
+  `222 OK`、`-p 'test_source_quality*'` `246 OK`。
+  architecture、inventory `--check`、progress `--json`（`failures: []`）真实 exit 0；
+  `compileall` 与 `git diff --check` 干净。全量 `unittest discover -s tests` 在改动前后
+  的失败集合逐名比对**完全一致**（37 个 distinct，全部源于用户有意删除的
+  `docs/refactor_phase2_legacy_path_items.json`），确认零回归。
+- 交付与 CI：功能提交 `72229709` 的 develop run `41027959408` success（全部步骤 success）；
+  快进合入 main 后 main run `41029044007` success（headSha 均 `72229709`；
+  `build-and-release` 按分支规则 skipped）。未部署、未读写真实游戏库、不发送真实消息；
+  用户删除的四个文件保持未暂存。
+
 ## 冻结清单与停止条件
 
 冻结范围仅包括活动 Web 六来源一键代领 API、权限/错误合同、管理员面板、兼容性保护、聚焦测试、路由清单和正式文档。不得新增奖励经济、schema/数据迁移、玩家身份模型、后台活动编辑器、通用 UI 框架或 unrelated refactor。
