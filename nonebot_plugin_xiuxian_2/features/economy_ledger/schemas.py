@@ -32,6 +32,10 @@ QUICK_PRESETS = {"today": ("今天", 0), "7d": ("近7天", 6), "30d": ("近30天
 DEFAULT_PAGE_SIZE = 100
 MAX_PAGE_SIZE = 500
 DEFAULT_ANOMALY_STONE_DELTA = 100000000
+# 玩家个人灵石流水视图（只读）：近 7 天窗口、来源/去向各前 3、最近 5 笔。
+STONE_FLOW_DAYS = 7
+STONE_FLOW_TOP_N = 3
+STONE_FLOW_RECENT = 5
 
 __all__ = [
     "DEFAULT_ANOMALY_STONE_DELTA",
@@ -41,5 +45,8 @@ __all__ = [
     "FILTER_FIELDS",
     "MAX_PAGE_SIZE",
     "QUICK_PRESETS",
+    "STONE_FLOW_DAYS",
+    "STONE_FLOW_RECENT",
+    "STONE_FLOW_TOP_N",
     "TIME_FILTER_FIELDS",
 ]

@@ -3,7 +3,10 @@ from ...bootstrap.registry import CommandSpec, ConfigSpec, FeatureManifest, Rout
 _ACTIONS = ("breakthrough", "tribulation", "rename", "stone_contest", "stone_robbery", "sign")
 FEATURE = FeatureManifest(
     key="base", title="修炼与基础资产", owner="gameplay",
-    commands=(CommandSpec("修炼", aliases=("突破",), permission="user"),),
+    commands=(
+        CommandSpec("修炼", aliases=("突破",), permission="user"),
+        CommandSpec("我的灵石流水", aliases=("灵石流水", "灵石收支"), permission="user"),
+    ),
     routes=tuple(RouteSpec(f"/api/v1/base/{action}", methods=("POST",), permission="user") for action in _ACTIONS)
     + (
         RouteSpec("/api/v1/base/xiangyuan/create", methods=("POST",), permission="user"),

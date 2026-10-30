@@ -1108,6 +1108,15 @@
     },
     {
       "aliases": [
+        "灵石收支",
+        "灵石流水"
+      ],
+      "feature": "base",
+      "name": "我的灵石流水",
+      "permission": "user"
+    },
+    {
+      "aliases": [
         "炼体状态"
       ],
       "feature": "tianti",

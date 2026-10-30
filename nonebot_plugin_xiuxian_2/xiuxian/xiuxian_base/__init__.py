@@ -52,6 +52,7 @@ from .stone_limit import stone_limit
 
 
 from ...features.sign_in.application import SignInApplication
+from ...features.economy_ledger.application import EconomyLedgerApplication, format_stone_flow
 from ...features.sign_in.lottery_application import LotteryApplication
 from ...features.sign_in.effects import NullSignInEffects
 from ...features.player_state.application import PlayerStateApplication
@@ -61,6 +62,7 @@ from .xiangyuan import clear_all_xiangyuan, reset_xiangyuan_daily  # noqa: F401
 
 _sql_message_instance = None
 sign_in_application = SignInApplication(get_paths().game_db)
+stone_flow_application = EconomyLedgerApplication(get_paths().game_db)
 lottery_application: Any | None = None
 
 
@@ -168,6 +170,7 @@ rank = on_command("排行榜", aliases={"修仙排行榜", "灵石排行榜", "�
                   priority=7, block=True)
 season_rank = on_command("赛季榜", aliases={"赛季排行榜", "赛季排行", "赛季信息"}, priority=7, block=True)
 my_season_rank = on_command("我的赛季", aliases={"我的赛季榜", "个人赛季"}, priority=7, block=True)
+stone_flow = on_command("我的灵石流水", aliases={"灵石流水", "灵石收支"}, priority=7, block=True)
 remaname = on_command("修仙改名", priority=5, block=True)
 root_rename = on_command("灵根改名", priority=5, block=True)
 _legacy_stone_gift_enabled = os.environ.get("XIUXIAN_STONE_GIFT_LEGACY_HANDLER", "false").strip().lower() in {
@@ -1294,6 +1297,33 @@ async def my_season_rank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
         v3="赛季榜",
     )
     await my_season_rank.finish()
+
+
+@stone_flow.handle(parameterless=[Cooldown(cd_time=0)])
+async def stone_flow_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    """我的灵石流水：展示本人近 7 天灵石收支总览、来源去向与最近明细（只读）。"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    isUser, user_info, msg = check_user(event)
+    if not isUser:
+        await handle_send(bot, event, msg, md_type="我要修仙")
+        await stone_flow.finish()
+
+    # 只使用登录会话里的 user_id；不接受任何参数指定他人流水。
+    payload = stone_flow_application.stone_flow_summary(str(user_info["user_id"]))
+    text = format_stone_flow(payload, format_number=number_to)
+    await handle_send(
+        bot,
+        event,
+        text,
+        md_type="修仙",
+        k1="修仙信息",
+        v1="我的修仙信息",
+        k2="签到",
+        v2="修仙签到",
+        k3="帮助",
+        v3="修仙帮助",
+    )
+    await stone_flow.finish()
 
 
 @user_stamina.handle(parameterless=[Cooldown(cd_time=0)])

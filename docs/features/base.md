@@ -3,6 +3,7 @@
 突破、渡劫、改名、重入仙途、灵石争夺、抢夺和签到统一进入应用服务。
 ## 命令与别名
 `修炼`、`突破`、`修仙签到`。
+`我的灵石流水`（别名 `灵石流水`、`灵石收支`）：玩家本人近 7 天灵石收支总览、主要来源/去向与最近 5 笔明细，只读。
 ## Web API
 `POST /api/v1/base/{breakthrough,tribulation,rename,stone_contest,stone_robbery,sign}`，权限 `user`，要求幂等键。
 `POST /api/v1/base/xiangyuan/{create,claim}` 与 `GET /api/v1/base/xiangyuan/group`，权限 `user`；写入请求要求幂等键和 CSRF。
@@ -33,6 +34,11 @@ NoneBot 和 Web 只负责输入输出转换。
 关闭开关可回退旧基础玩法；旧数值算法暂不复制。
 
 ## Manifest 清单
+- `command: 修炼`
+- `alias: 突破`
+- `command: 我的灵石流水`
+- `alias: 灵石流水`
+- `alias: 灵石收支`
 - `route: POST /api/v1/base/breakthrough`
 - `route: POST /api/v1/base/tribulation`
 - `route: POST /api/v1/base/rename`
