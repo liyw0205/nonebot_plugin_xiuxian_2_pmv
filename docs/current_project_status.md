@@ -1255,6 +1255,71 @@ sect_scale_delta,sect_materials_delta,item_delta,detail,trace_id,created_at,even
   `build-and-release` 按分支规则 skipped）。未部署、未读写真实游戏库、不发送真实消息；
   用户删除的四个文件保持未暂存，`.codex-next-goal.md` 与 `docs/goals/**` 未提交。
 
+## 已完成目标：新增玩家「我的宗门贡献流水」个人贡献收支视图
+
+新功能（非修复）。目标文档 `.codex-next-goal.md`（local-only，未提交）。
+
+**缺口证据**：宗门贡献是玩家用灵石换来的个人额度，`economy_log.sect_contribution_delta`
+由真实写路径持续记录——`宗门捐献`（`action="donate"`，贡献 +）、`宗门商店兑换`
+（`action="shop_exchange"`，贡献 −）、宗门洞天/炼丹房升级、以及宗门任务结算
+（`action="task_complete"`，贡献 +），均位于 `xiuxian/xiuxian_sect/__init__.py`。
+但玩家只能看到 `user_xiuxian.sect_contribution` 这一个当前余额，
+`grep -rn "贡献流水" --include=*.py` **零匹配**，没有任何命令说明贡献"最近怎么变的"。
+数据在、写入点齐全、只有玩家视角缺失，属纯可见性缺口，无需任何新数据。
+
+真实 schema（插件自身迁移实测）：`economy_log` 15 列，含
+`sect_contribution_delta`、`source`、`action`、`created_at`；
+`user_xiuxian` 33 列含 `sect_contribution`、`sect_id`；`sects` 含 `sect_name`。
+
+交付内容：
+
+- 新玩家命令 `我的宗门贡献流水`（别名 `宗门贡献流水`、`贡献流水`，priority 7，`block=True`），
+  注册在 `xiuxian/xiuxian_sect/__init__.py`；一次展示近 7 天获得/消耗/净变化/笔数、
+  主要来源与主要去向各前 3、最近 5 笔明细，以及当前贡献余额与所属宗门。
+- 新模块 `features/economy_ledger/contribution_flow.py`：
+  `ContributionFlowApplication(game_db, clock=...)` 以只读 UoW 聚合
+  `sect_contribution_delta`；`format_contribution_flow()` 为纯函数（无 I/O、无 NoneBot），
+  把已知宗门动作映射为中文（捐献/宗门任务/商店兑换/洞天升级/炼丹房升级），
+  未知动作回退 `source·action`。
+- 口径细节：`COALESCE(sect_contribution_delta,0)<>0` 过滤零变化行，使"笔数"反映真实变动；
+  前 3 各按金额降序、笔数次之；最近 5 笔按 `created_at DESC, id DESC`。
+- **时间窗只用下界**：`economy_log.created_at` 由各写入方提供、UTC 与本地时区混用，
+  加上界会把「刚刚发生」的本地时间行误判为未来而丢弃（灵石流水切片已实测该陷阱）。
+  常量与灵石流水同形，集中在 `features/economy_ledger/schemas.py`
+  （`CONTRIBUTION_FLOW_DAYS=7`、`CONTRIBUTION_FLOW_TOP_N=3`、`CONTRIBUTION_FLOW_RECENT=5`）。
+- **玩家隔离**：`user_id` 只取 `check_user` 会话，handler 不解析 `args`/
+  `extract_plain_text`，无法查询他人贡献流水。
+- **错误/降级响应**：`economy_log` 缺失、缺 `sect_contribution_delta` 列、
+  `user_xiuxian` 缺 `sect_contribution` 列、`sects` 表缺失、库不可读——各自只丢失
+  它覆盖的部分，均不抛异常；空 `user_id` 返回「缺少玩家身份，无法查询宗门贡献流水。」
+  只读路径**不建任何表**（测试断言 `sqlite_master` 前后一致）。
+- 零 schema 变更：不新增表、列、索引、迁移版本、配置键或 Web 路由；
+  不改任何写路径与经济数值；不新增或修改既有玩家文案。
+- `features/sect/manifest.py` 追加该命令的 `CommandSpec`；`docs/features/sect.md`
+  的「命令与 Web API」与「命令与别名」两段登记；`scripts/export_refactor_inventory.py`
+  使 `docs/refactor_inventory.json` 新增 1 条 command 记录（+9 行）。
+- 新增命令使 Phase-2 派生计数 643→644、backlog 329→330；
+  `tests/test_phase2_legacy_path_gate.py` 按既有先例同步期望值，
+  **冻结成员文件与其哈希保持不变**（临时还原 `git show HEAD:` 版本实测，
+  随后再次删除）。
+- 测试：新 `tests/test_sect_contribution_flow.py` `16/16`（`unittest.TestCase`），
+  用**真实 15 列 `economy_log`** 与真实 `ContributionFlowApplication`（注入固定时钟）钉住：
+  汇总口径（获得 1,620 / 消耗 500 / 净 1,120 / 5 笔）、前 3 排序与金额、
+  最近 5 笔倒序与上限、零变化行不计笔数、7 天窗外行排除、
+  **玩家隔离**（第二名玩家 9,999 零泄漏且各自独立）、中文动作标签与未知动作回退、
+  无记录/无角色文案、空 `user_id`、四条降级路径（缺表/缺列/缺宗门表/极旧库）、
+  只读不建表，以及 handler 源合同（命令名/别名、`summary(str(user_info["user_id"]))`、
+  无 `args`）。聚焦套件 `test_sect_contribution_flow.py` + `test_phase2_legacy_path_gate.py`
+  + `test_source_quality.py` + `test_economy_stone_flow_view.py` + `features/sect/tests/`
+  合计 `404 passed`（冻结文件在位时）；
+  `unittest discover -s tests -p 'test_sect_contribution*'` `16 OK`。
+  architecture、inventory `--check`、progress `--json`（`failures: None`）真实 exit 0；
+  `compileall` 与 `git diff --check` 干净。
+- 交付与 CI：功能提交 `ccd2f6f3` 的 develop run `41077385695` success；
+  快进合入 main 后 main run `41078349901` success（headSha 均 `ccd2f6f3`；
+  `build-and-release` 按分支规则 skipped）。未部署、未读写真实游戏库、不发送真实消息；
+  用户删除的四个文件保持未暂存，`.codex-next-goal.md` 与 `docs/goals/**` 未提交。
+
 ## 冻结清单与停止条件
 
 冻结范围仅包括活动 Web 六来源一键代领 API、权限/错误合同、管理员面板、兼容性保护、聚焦测试、路由清单和正式文档。不得新增奖励经济、schema/数据迁移、玩家身份模型、后台活动编辑器、通用 UI 框架或 unrelated refactor。
