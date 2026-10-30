@@ -853,6 +853,57 @@ bot 侧六个玩家视图（`活动阶段`/`活动首领`/`活动商店`/`活动
   main run `40849339731`（headSha 均为 `c65c20a2`；`build-and-release` 按分支规则
   skipped）。未部署、未读写真实游戏库、不发送真实消息；用户删除的四个文件保持未暂存。
 
+## 已完成目标：灵田傀儡自动收取生产路径修复
+
+`灵田傀儡自动收取`（每小时 `auto_harvest` job → `check_and_harvest` →
+`PuppetApplication.harvest` → `PuppetHarvestSqlRepository`）在生产形态下**必然失败**，
+且失败被命令层 `return None` 静默吞掉，玩家与日志都收不到任何结果。目标文档
+`.codex-next-goal.md`（local-only，未提交）。
+
+- 读取不存在的列：`harvest_repository.py` 的 SELECT 引用 `mix_elixir_info."傀儡等级"`，
+  而真实列是 `灵田傀儡`（= 等级，0 表示未拥有）；SQLite 把未解析标识符当**字符串
+  字面量**，`int('傀儡等级')` 抛 `ValueError`。生产探针实测 row 为
+  `('2026-01-01 00:00:00','1','傀儡等级')`。既有测试自建了带 `傀儡等级` 的表，
+  所以本地绿、生产必炸。
+- 奖励工厂类型不匹配：仓库按 4 元组解包，生产 `create_rewards` 返回
+  `PuppetHarvestReward` 数据类 → `TypeError: cannot unpack non-iterable ...`。
+- 时间基准不一致：`收取时间` 是无偏移文本，`SystemClock.now()` 是 aware UTC，
+  裸减抛 `TypeError: can't subtract offset-naive and offset-aware datetimes`。
+- 口径漂移：成熟窗口应为 `max(时间成本 × (1 - 加速基数 × 药材速度), 0)`、产出数量为
+  `灵田数量 + 收取等级 + 收获加成`、驱动灵石按 `灵田傀儡` 自身等级取配置；旧实现用
+  `elapsed × (1 + speed_base)`、`remaining // time_cost_hours` 且把不存在的列当等级，
+  等级 2/3 的玩家被误判为未拥有。
+- 状态码不可用：仓库产出 `not_mature`/`puppet_missing`，facade 只识别兼容实现的
+  `not_ready`/`blessed_spot_missing`/`inventory_full`/`stone_insufficient`，未知状态
+  直接 `return None`；灵石不足也不回写关闭。
+
+修复内容：
+
+- `PuppetHarvestSqlRepository` 重写：读真实列；`normalize_now` 把 aware 实例归一为
+  naive UTC、`parse_harvest_time` 解析锚点；成熟窗口/产出数量/驱动灵石与
+  `我的灵田` 展示及兼容实现同源；等级无配置时拒绝收取而不是免费发放；灵石不足把
+  `puppet_status` 置 0 并提交；返回冻结数据类 `PuppetHarvestResult` 与 `HarvestReward`
+  （替代 `type(...)` 动态类）；奖励工厂同时接受 4 元组与数据类；`_coerce_reward`/
+  `as_int` 容错坏字段。保留 `puppet_harvest_operations` 幂等语义。
+- facade `check_and_harvest` 补齐状态分支，未完成状态写出可读文案并记日志
+  （`puppet_disabled` 是每小时遍历常态，保持静默）；`duplicate` 附"已经处理"提示。
+- 零 schema 变更：复用 `mix_elixir_info`/`back`/`puppet_status`/
+  `puppet_harvest_operations`；未改已应用的 `puppet.001`/`puppet.002` 函数；无新表、列、
+  迁移、索引、配置键、命令名、别名或路由；job 注册与摘要不变。
+- 测试：新 `tests/test_puppet_harvest_production_path.py` `20/20`，用**真实 player
+  schema + 生产奖励工厂 + aware UTC 时钟**复现并钉住上述缺陷，覆盖收取成功、数量口径、
+  `药材速度` 缩短窗口、未成熟剩余时间、naive 时钟兼容、未开启、灵石不足关闭傀儡、
+  等级 3 计价、背包满 fail-closed、重复 operation 不重发、缺行、缺洞天福地、
+  helper 单测、handler 源合同（不再静默 `return None`）。feature 侧
+  `test_harvest_repository.py` 的表结构随真实列原地更新。聚焦套件合计 `330 passed`。
+  architecture、inventory `--check`、progress `--json`（`failures: []`）真实 exit 0；
+  `compileall` 与 `git diff --check` 干净；Phase-2 冻结门禁在 `git archive HEAD`
+  快照中 `47 OK`。
+- 交付与 CI：功能提交 `fd795c82` 的 develop run `40979221766` success；快进合入 main 后
+  main run `40979718077` success（headSha 均为 `fd795c82`；`build-and-release` 按分支
+  规则 skipped）。未部署、未读写真实游戏库、不发送真实消息；用户删除的四个文件保持
+  未暂存。
+
 ## 冻结清单与停止条件
 
 冻结范围仅包括活动 Web 六来源一键代领 API、权限/错误合同、管理员面板、兼容性保护、聚焦测试、路由清单和正式文档。不得新增奖励经济、schema/数据迁移、玩家身份模型、后台活动编辑器、通用 UI 框架或 unrelated refactor。
