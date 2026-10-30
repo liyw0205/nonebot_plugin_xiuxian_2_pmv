@@ -41,6 +41,7 @@ from ..xiuxian_arena import use_arena_challenge_ticket
 
 from ..xiuxian_config import XiuConfig, convert_rank, added_ranks
 from ...features.back.application import BackApplication
+from ...features.economy_ledger.item_flow import ItemFlowApplication, format_item_flow
 from ...features.back.skill_confirmation_cache import SkillConfirmationCache
 from ...compatibility.legacy_back_lottery_talisman import LotteryReward, LotteryTalismanService
 from ...paths import get_paths
@@ -101,6 +102,7 @@ _skill_learning_service_instance = None
 _batch_item_use_service_instance = None
 _backpack_repair_service_instance = None
 back_application = BackApplication(get_paths().game_db, get_paths().player_db)
+item_flow_application = ItemFlowApplication(get_paths().game_db)
 package_reward_application: PackageRewardApplication | None = None
 runtime_ids = UUIDGenerator()
 
@@ -479,6 +481,7 @@ check_item_effect = on_command("查看效果", aliases={"查", "效果"}, priori
 goods_re_root = on_command("炼金", priority=6, block=True)
 fast_alchemy = on_command("快速炼金", aliases={"一键炼金"}, priority=6, block=True)
 main_back = on_command('我的背包', aliases={'我的物品'}, priority=10, block=True)
+item_flow = on_command('我的物品流水', aliases={'物品流水', '道具流水'}, priority=7, block=True)
 yaocai_back = on_command('药材背包', priority=10, block=True)
 yaocai_detail_back = on_command('药材背包详细', aliases={'药材背包详情'}, priority=10, block=True)
 danyao_back = on_command('丹药背包', priority=10, block=True)
@@ -2203,6 +2206,33 @@ def _build_yaocai_sections_for_md(user_id: str):
         if rows:
             sections.append((lv, rows))
     return sections
+
+@item_flow.handle(parameterless=[Cooldown(cd_time=0)])
+async def item_flow_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    """我的物品流水：本人近 7 天物品获得/消耗概览（只读）。"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    isUser, user_info, msg = check_user(event)
+    if not isUser:
+        await handle_send(bot, event, msg, md_type="我要修仙")
+        await item_flow.finish()
+
+    # 只使用登录会话里的 user_id；不接受任何参数指定他人物品流水。
+    payload = item_flow_application.summary(str(user_info["user_id"]))
+    text = format_item_flow(payload, format_number=number_to)
+    await handle_send(
+        bot,
+        event,
+        text,
+        md_type="修仙",
+        k1="背包",
+        v1="我的背包",
+        k2="宗门",
+        v2="我的宗门",
+        k3="帮助",
+        v3="修仙帮助",
+    )
+    await item_flow.finish()
+
 
 @main_back.handle(parameterless=[Cooldown(cd_time=5)])
 async def main_back_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):

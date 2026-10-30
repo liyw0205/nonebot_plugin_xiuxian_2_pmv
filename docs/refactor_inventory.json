@@ -1134,6 +1134,15 @@
     },
     {
       "aliases": [
+        "物品流水",
+        "道具流水"
+      ],
+      "feature": "back",
+      "name": "我的物品流水",
+      "permission": "user"
+    },
+    {
+      "aliases": [
         "查看称号",
         "称号列表"
       ],

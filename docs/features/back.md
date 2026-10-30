@@ -3,6 +3,13 @@
 礼包、物品、装备、技能、修复和炼丹动作通过一个操作号协调。
 ## 命令与别名
 `背包`、`使用物品`、`装备`。
+`我的物品流水`（别名 `物品流水`、`道具流水`，priority 7）：玩家本人近 7 天物品收支概览——
+获得/消耗件数与种类数、变动笔数、主要获得与主要消耗各前 3、最近 5 笔明细。
+数据来自共享 `economy_log.item_delta`（JSON 元素 `{"id","name","type","amount",...}`，
+加物品为正、扣物品为负），由背包加减（`item_add`/`item_cost`）、奖励统一发放、
+宗门商店兑换与仙肆购买持续写入。时间窗只用下界以避免 UTC/本地时间混用误删「刚刚发生」的行；
+`user_id` 只取登录会话，不接受参数指定他人；只读、无新表/迁移/配置键，
+缺表、缺列或单行脏 JSON 均降级跳过而不报错。
 ## Web API
 `POST /api/v1/back/{open_package,use_item,change_equipment,learn_skill,repair,use_pet_eggs,alchemy,unbind}`，权限 `user`。
 ## 数据模型与迁移
