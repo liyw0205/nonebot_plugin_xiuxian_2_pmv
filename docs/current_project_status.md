@@ -1015,6 +1015,49 @@ ALTER 列表得到真实旧表列集，最后调用真实 `SectApplication` 与�
   `build-and-release` 按分支规则 skipped）。未部署、未读写真实游戏库、不发送真实消息；
   用户删除的四个文件保持未暂存。
 
+## 已完成目标：砸蛋命令闭环修复（hatch_result keyword-only 调用）
+
+`砸蛋` / `砸宠物蛋` 在生产形态下 100% 不可用。目标文档 `.codex-next-goal.md`
+（local-only，未提交）。
+
+- **位置参数调用 keyword-only 方法**：`xiuxian/xiuxian_pet/__init__.py:1064` 的前置回放
+  检查以 `pet_application.hatch_result(operation_id)` 传位置参数，而
+  `features/pet/application.py:152` 定义为 `def hatch_result(self, *, operation_id: str)`
+  （keyword-only）。实测 `TypeError: hatch_result() takes 1 positional argument but
+  2 were given`。
+- **致命位置**：该调用位于 `pet_egg` handler 的灵石判断、容量判断、孵蛋与落库**之前**，
+  且 handler 无 try/except，因此**任何**玩家每次发送 `砸蛋` 都在任何业务逻辑执行前抛错、
+  收不到任何回复，孵化功能整体失效。
+- **对照**：同文件 1185 行（同一次孵化的后置回放）与兼容门面
+  `compatibility/pet.py:69` 都用正确的 `hatch_result(operation_id=operation_id)`；
+  唯一破损点就是这一处位置参数调用。
+- **测试为何未捕获**：既有 `features/pet/tests/test_pet_application.py:34` 的 stub
+  写作 `def hatch_result(self, *args, **kwargs)`，接受任意位置参数，故本地绿、生产必炸。
+  属已修的签名/语义漂移家族（`控火等级`、`傀儡等级`、`owner_position`、
+  `sect_mainbuff`）的**位置参数 vs keyword-only** 变体。
+
+修复内容：
+
+- `xiuxian/xiuxian_pet/__init__.py`：第 1064 行改为
+  `pet_application.hatch_result(operation_id=operation_id)`，与同文件后置回放及兼容门面一致。
+- `features/pet/tests/test_pet_application.py`：stub 的 `hatch_result` 收紧为与生产一致的
+  keyword-only 形态（`def hatch_result(self, *, operation_id)`），使同类漂移可被捕获。
+- 零 schema 变更：复用 `pet_hatch_operations` 与既有宠物表；未改已应用迁移函数；
+  无新表、列、迁移、索引、配置键、命令名、别名或路由；未改命令名/别名/priority/冷却/文案。
+- 测试：新 `tests/test_pet_hatch_production_path.py` `5/5`，用**真实 `PetApplication`**
+  （非 stub）+ 真实 `pet_hatch_operations` 表钉住缺陷：位置调用抛 `TypeError`、
+  关键字调用返回 `None`、真实落库后经前置回放读出 `duplicate` 且
+  `pets`/`updated_meta`/`bag_limit` 与写入一致（`pets` 为冻结元组）、
+  缺表时抛错且**不建表**（不写请求期 DDL）、handler 源合同（所有 `hatch_result(` 调用
+  均带 `operation_id=` 且无位置参数）。聚焦套件合计 `292 passed`；
+  `unittest discover -s tests -p 'test_pet*'` `50 OK`。
+  architecture、inventory `--check`、progress `--json`（`failures: []`）真实 exit 0；
+  `compileall` 与 `git diff --check` 干净。
+- 交付与 CI：功能提交 `40fbbc74` 的 develop run `41033528555` success；
+  快进合入 main 后 main run `41034346130` success（headSha 均 `40fbbc74`；
+  `build-and-release` 按分支规则 skipped）。未部署、未读写真实游戏库、不发送真实消息；
+  用户删除的四个文件保持未暂存。
+
 ## 冻结清单与停止条件
 
 冻结范围仅包括活动 Web 六来源一键代领 API、权限/错误合同、管理员面板、兼容性保护、聚焦测试、路由清单和正式文档。不得新增奖励经济、schema/数据迁移、玩家身份模型、后台活动编辑器、通用 UI 框架或 unrelated refactor。
