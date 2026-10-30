@@ -1093,6 +1093,15 @@
     },
     {
       "aliases": [
+        "宗门贡献流水",
+        "贡献流水"
+      ],
+      "feature": "sect",
+      "name": "我的宗门贡献流水",
+      "permission": "user"
+    },
+    {
+      "aliases": [
         "成就列表",
         "查看成就"
       ],

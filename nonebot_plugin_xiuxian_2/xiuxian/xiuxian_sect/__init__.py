@@ -25,6 +25,10 @@ from ..xiuxian_utils.data_source import jsondata
 from datetime import datetime, timedelta
 from ..xiuxian_config import XiuConfig, convert_rank, JsonConfig, added_ranks
 from ..xiuxian_utils.economy_log import safe_log_economy_change
+from ...features.economy_ledger.contribution_flow import (
+    ContributionFlowApplication,
+    format_contribution_flow,
+)
 from ..xiuxian_utils.game_events import safe_record_game_event
 from .sectconfig import get_config, get_sect_weekly_purchases
 from .sect_tasks import sect_task_state_manager
@@ -89,6 +93,9 @@ sect_application = SectApplication(
     random_source=runtime_random,
 )
 sect_task_state_manager.bind_application(sect_application)
+contribution_flow_application = ContributionFlowApplication(
+    get_paths().game_db, clock=runtime_clock
+)
 
 
 def _spirit_vein_tianti_multiplier() -> float:
@@ -157,6 +164,7 @@ sect_position_update = on_command("宗门职位变更", priority=5, block=True)
 sect_position_help = on_command("宗门职位帮助", priority=5, block=True)
 sect_manage = on_command("宗门管理", aliases={"宗门管理帮助"}, priority=5, block=True)
 sect_donate = on_command("宗门捐献", aliases={"宗门贡献"}, priority=5, block=True)
+sect_contribution_flow = on_command("我的宗门贡献流水", aliases={"宗门贡献流水", "贡献流水"}, priority=7, block=True)
 sect_out = on_command("退出宗门", priority=5, block=True)
 sect_kick_out = on_command("踢出宗门", priority=5, block=True)
 sect_owner_change = on_command("宗主传位", priority=5, block=True)
@@ -2596,6 +2604,33 @@ async def sect_out_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, ar
     msg = f"道友已退出{sect_name}，今后就是自由散修，是福是祸，犹未可知。"
     await handle_send(bot, event, msg, md_type="宗门", k1="加入", v1="宗门加入", k2="列表", v2="宗门列表", k3="帮助", v3="宗门帮助")
     await sect_out.finish()
+
+
+@sect_contribution_flow.handle(parameterless=[Cooldown(cd_time=0)])
+async def sect_contribution_flow_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    """我的宗门贡献流水：本人近 7 天宗门贡献收支（只读）。"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    isUser, user_info, msg = check_user(event)
+    if not isUser:
+        await handle_send(bot, event, msg, md_type="我要修仙")
+        await sect_contribution_flow.finish()
+
+    # 只使用登录会话里的 user_id；不接受任何参数指定他人贡献流水。
+    payload = contribution_flow_application.summary(str(user_info["user_id"]))
+    text = format_contribution_flow(payload, format_number=number_to)
+    await handle_send(
+        bot,
+        event,
+        text,
+        md_type="宗门",
+        k1="捐献",
+        v1="宗门捐献",
+        k2="商店",
+        v2="宗门商店",
+        k3="宗门",
+        v3="我的宗门",
+    )
+    await sect_contribution_flow.finish()
 
 
 @sect_donate.handle(parameterless=[Cooldown(cd_time=0)])
