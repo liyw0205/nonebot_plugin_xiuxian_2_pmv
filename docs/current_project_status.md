@@ -1320,6 +1320,76 @@ sect_scale_delta,sect_materials_delta,item_delta,detail,trace_id,created_at,even
   `build-and-release` 按分支规则 skipped）。未部署、未读写真实游戏库、不发送真实消息；
   用户删除的四个文件保持未暂存，`.codex-next-goal.md` 与 `docs/goals/**` 未提交。
 
+## 已完成目标：新增玩家「我的物品流水」个人物品收支视图
+
+新功能（非修复）。目标文档 `.codex-next-goal.md`（local-only，未提交；本目标由人工命名，
+自动命名辅助 HTTP 400 属辅助能力故障，未构成阻塞）。
+
+**缺口证据**：物品增减已全量记进共享 `economy_log.item_delta`，写入点齐备且语义统一——
+背包加减（`xiuxian2_handle.py:2485` 的 `item_add` 与 `:2570` 的 `item_cost`）、
+奖励统一发放（`reward_service.py:248`）、宗门商店兑换（`xiuxian_sect/__init__.py:3531`）、
+仙肆购买（`xiuxian_trade/__init__.py:642`），元素形状均为
+`{"id","name","type","amount",...}`，加物品 `amount` 为正、扣物品为负。
+但 `grep -rn "物品流水|道具流水" --include=*.py` **零匹配**，`docs/refactor_inventory.json`
+无对应命令；玩家只能翻 `我的背包` 看当前持有，无法回答"今天的丹药/材料怎么来的、花到哪去了"。
+属纯可见性缺口，不需要任何新数据。
+
+真实 schema（插件自身迁移实测）：`economy_log` 15 列，`item_delta` 为 **NOT NULL TEXT**，
+另有 `source`、`action`、`created_at`、`id`、`user_id`。
+
+交付内容：
+
+- 新玩家命令 `我的物品流水`（别名 `物品流水`、`道具流水`，priority 7，`block=True`），
+  注册在 `xiuxian/xiuxian_back/__init__.py`；一次展示近 7 天获得/消耗件数与种类数、
+  变动笔数、主要获得与主要消耗各前 3、最近 5 笔明细。
+- 新模块 `features/economy_ledger/item_flow.py`：
+  `ItemFlowApplication(game_db, clock=...)` 以只读 UoW 取该玩家近 7 天
+  `item_delta` 非空的行，按物品名聚合；`format_item_flow()` 为纯函数
+  （无 I/O、无 NoneBot），已知动作映射中文（宗门商店兑换/仙肆购买/物品获得/物品消耗/
+  宗门捐献/宗门任务），未知动作回退 `source·action`，最近明细按元素正负标注「获得/失去」。
+- 口径细节：`''`/`'[]'`/`'{}'`/`'null'`/`None` 视为无变动、不计笔数，与
+  `features/economy_ledger/repository.py` 既有 `item_change` 判定一致；两个方向各按
+  累计件数降序、笔数次之取前 3；最近 5 笔按 `created_at DESC, id DESC`。
+- **时间窗只用下界**：`economy_log.created_at` 由各写入方提供、UTC 与本地时区混用，
+  加上界会把「刚刚发生」的本地时间行误判为未来而丢弃（灵石流水切片已实测该陷阱）。
+  常量与灵石/贡献流水同形，集中在 `features/economy_ledger/schemas.py`
+  （`ITEM_FLOW_DAYS=7`、`ITEM_FLOW_TOP_N=3`、`ITEM_FLOW_RECENT=5`）。
+- **脏数据容错**：非法 JSON、非 list、元素非 dict、`amount` 非数字——逐行/逐元素跳过，
+  其余照常展示；缺 `name` 回退 `物品#<id>`，缺 `type` 记「其他」；早期把单个物品
+  直接写成对象的行也兼容。任何异常都在应用层捕获并降级为提示文案，绝不冒泡到 handler。
+- **玩家隔离**：`user_id` 只取 `check_user` 会话，handler 不解析 `args`/
+  `extract_plain_text`，无法查询他人物品流水。
+- **降级响应**：空 `user_id` → 「缺少玩家身份，无法查询物品流水。」；
+  缺 `economy_log` 表或缺 `item_delta` 列 → 「暂无物品流水记录。」；无记录 →
+  「近7天没有物品收支记录。」；只读路径**不建表、不补列**（测试断言 `sqlite_master`
+  与 `PRAGMA table_info` 前后一致）。
+- 零 schema 变更：不新增表、列、索引、迁移版本、配置键或 Web 路由；
+  不改任何物品增减逻辑、经济数值与既有玩家文案。
+- `features/back/manifest.py` 追加该命令 `CommandSpec`；`docs/features/back.md`
+  的「命令与别名」段登记；`scripts/export_refactor_inventory.py` 使
+  `docs/refactor_inventory.json` 新增 1 条 command 记录（+9 行）。
+- 新增命令使 Phase-2 派生计数 644→645、backlog 330→331；
+  `tests/test_phase2_legacy_path_gate.py` 按既有先例同步期望值，
+  **冻结成员文件与其哈希保持不变**（临时还原 `git show HEAD:` 版本实测后再次删除）。
+- 测试：新 `tests/test_item_flow_view.py` `19/19`（`unittest.TestCase`），
+  用**真实 15 列 `economy_log`**（`item_delta` NOT NULL）与真实 `ItemFlowApplication`
+  （注入固定时钟）钉住：汇总口径（获得 112 件/2 种、消耗 20 件/1 种、5 笔）、
+  四种空形状不计笔数、前 3 排序与笔数、最近 5 笔倒序与上限、7 天窗外排除、
+  **玩家隔离**（他人 999 零泄漏且各自独立）、完整渲染、混合方向行双标注、
+  未知动作回退、四种脏数据形状、dict 包装遗留行、缺 type 默认「其他」，
+  以及无记录/空 `user_id`/缺表/缺列（不补列）/只读不建表五条降级路径，
+  外加 handler 源合同（命令名/别名、`summary(str(user_info["user_id"]))`、无 `args`）。
+  聚焦套件 `test_item_flow_view.py` + `test_phase2_legacy_path_gate.py` +
+  `test_source_quality.py` + `test_sect_contribution_flow.py` + `features/back/tests/`
+  合计 `332 passed`（冻结文件在位时）；
+  `unittest discover -s tests -p 'test_item_flow*'` `19 OK`。
+  architecture、inventory `--check`、progress `--json`（`failures: None`）真实 exit 0；
+  `compileall` 与 `git diff --check` 干净。
+- 交付与 CI：功能提交 `6485cbfb` 的 develop run `41095115054` success；
+  快进合入 main 后 main run `41095961222` success（headSha 均 `6485cbfb`；
+  `build-and-release` 按分支规则 skipped）。未部署、未读写真实游戏库、不发送真实消息；
+  用户删除的四个文件保持未暂存，`.codex-next-goal.md` 与 `docs/goals/**` 未提交。
+
 ## 冻结清单与停止条件
 
 冻结范围仅包括活动 Web 六来源一键代领 API、权限/错误合同、管理员面板、兼容性保护、聚焦测试、路由清单和正式文档。不得新增奖励经济、schema/数据迁移、玩家身份模型、后台活动编辑器、通用 UI 框架或 unrelated refactor。
