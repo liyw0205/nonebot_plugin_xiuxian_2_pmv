@@ -51,7 +51,12 @@ class SectMutationResult(dict):
 
     @property
     def applied(self) -> bool:
-        return self.status in {"claimed", "closed", "inherited", "disbanded", "duplicate", "upgraded", "granted"}
+        # 真实成功状态由各 feature 仓储产出；`applied` 必须覆盖全部成功词表，
+        # 否则玩家在成功后会被渲染成失败并被要求重试。
+        return self.status in {
+            "claimed", "closed", "disbanded", "duplicate", "granted", "inherited", "upgraded",
+            "applied", "charged", "created", "opened", "transferred", "settled",
+        }
 
     def __getattr__(self, name: str) -> Any:
         try:
@@ -345,8 +350,8 @@ class SectApplication:
     def upgrade_elixir_room(self, operation_id: str, actor_id: str, sect_id: int, expected_level: int, next_level: int, stone_cost: int, scale_cost: int, *, owner_position: int = 0):
         return SectMutationResult(SectElixirRoomSqlRepository(self.database).upgrade(operation_id, actor_id, sect_id, expected_level, next_level, stone_cost, scale_cost, owner_position=owner_position))
 
-    def apply_buff_search(self, operation_id: str, actor_id: str, sect_id: int, buff_type: str, previous_value: str, new_value: str, stone_cost: int, materials_cost: int):
-        return SectMutationResult(SectBuffSearchSqlRepository(self.database).apply(operation_id, actor_id, sect_id, buff_type, previous_value, new_value, stone_cost, materials_cost))
+    def apply_buff_search(self, operation_id: str, actor_id: str, sect_id: int, buff_type: str, previous_value: str, new_value: str, stone_cost: int, materials_cost: int, *, owner_position: int = 0):
+        return SectMutationResult(SectBuffSearchSqlRepository(self.database).apply(operation_id, actor_id, sect_id, buff_type, previous_value, new_value, stone_cost, materials_cost, owner_position=owner_position))
 
     def upgrade_practice(self, operation_id: str, user_id: str, sect_id: int, practice_type: str, expected_level: int, next_level: int, stone_cost: int, materials_cost: int):
         return SectMutationResult(SectPracticeSqlRepository(self.database).upgrade(operation_id, user_id, sect_id, practice_type, expected_level, next_level, stone_cost, materials_cost))

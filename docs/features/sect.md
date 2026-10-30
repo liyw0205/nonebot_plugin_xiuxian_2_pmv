@@ -36,6 +36,34 @@
 
 周常领取以 `sect_weekly_reward_operations` 作为唯一幂等回执，并与奖励状态在同一 attached transaction 提交；不额外写入会跨事务留下 started 状态的通用 ledger。重复领取可重放奖励摘要，operation 冲突、进度变化、库存不足和晚期 SQL 异常不发放部分奖励。
 
+## 宗门命令合同
+
+主/副功法搜寻（`宗门功法搜寻`、`宗门神通搜寻`）经
+`SectApplication.apply_buff_search(..., owner_position=...)` 进入
+`SectBuffSearchSqlRepository`，在 `sects` 上写**真实列** `mainbuff` / `secbuff`
+（映射常量 `_BUFF_COLUMNS = {"main": "mainbuff", "secondary": "secbuff"}`）。
+历史上这里写成了两个并不存在的 `sect_` 前缀列名：SQLite 把未解析标识符在 SELECT
+里当字符串字面量、在 UPDATE 里抛 `OperationalError`，因此命令在生产数据上必炸。
+宗主校验比较调用方传入的 `owner_position`（不再硬编码 0），以便非 0 宗主位的宗门配置生效；
+同一 `operation_id` 重放返回 `duplicate` 且不二次扣减宗门灵石与资材。
+
+`sects` / `user_xiuxian` 的列集以 `xiuxian_config.py` 的 `sql_sects`、
+`sql_user_xiuxian` 为权威：`sects` 为
+`sect_id,sect_name,sect_owner,sect_scale,sect_used_stone,join_open,closed,combat_power,
+sect_fairyland,sect_materials,mainbuff,secbuff,elixir_room_level`。
+
+`SectMutationResult`（`dict` 子类）的成功谓词 `applied` 覆盖全部真实成功状态：
+`applied`、`charged`、`created`、`opened`、`transferred`、`settled`，以及既有的
+`claimed`、`closed`、`disbanded`、`duplicate`、`granted`、`inherited`、`upgraded`。
+谓词遗漏真实成功状态会把成功渲染成失败并要求玩家重试（`创建宗门` 的 `created`、
+`宗门改名` 计费的 `charged`、`开放宗门加入` 的 `opened`、`宗主传位` 的 `transferred`、
+`宗门任务完成` 的 `settled` 都曾受影响）。命令层统一读 `.applied`；`宗主传位`
+曾误读不存在的 `.succeeded`，会抛 `AttributeError`。
+
+失败状态（`not_owner`、`stone_insufficient`、`materials_insufficient`、
+`scale_insufficient`、`state_changed`、`name_exists`、`already_member`、
+`task_missing`、`membership_changed`、`schema_missing` 等）一律不算成功，且不产生副作用。
+
 ## 定时任务
 
 宗门日常重置和任务刷新由兼容生命周期统一调度，使用稳定 job ID。

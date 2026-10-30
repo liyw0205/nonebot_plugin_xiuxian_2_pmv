@@ -2208,7 +2208,7 @@ async def sect_owner_change_(bot: Bot, event: GroupMessageEvent | PrivateMessage
                 give_qq,
                 owner_position=owner_position,
             )
-            if result.succeeded:
+            if result.applied:
                 msg = f"传老宗主{result.actor_name or user_info['user_name']}法旨，即日起由{result.target_name}继任{result.sect_name}宗主"
                 await handle_send(bot, event, msg, md_type="宗门", k1="宗门", v1="我的宗门", k2="成员", v2="查看宗门成员", k3="帮助", v3="宗门帮助")
                 await sect_owner_change.finish()
