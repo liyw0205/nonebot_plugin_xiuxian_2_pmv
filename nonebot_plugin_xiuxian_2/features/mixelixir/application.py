@@ -95,14 +95,33 @@ class MixelixirApplication:
             normalize=lambda data: {"status": data.get("status", "failed"), "reward_quantity": int(data.get("reward_quantity", 0) or 0), "granted": {"elixir": int(data.get("reward_quantity", 0) or 0)}},
         )
 
-    def harvest_level_upgrade(self, *, operation_id: str, user_id: str, current_level: int, experience: int, next_level: int, cost: int):
-        from ...xiuxian.xiuxian_mixelixir.transaction_service import MixelixirHarvestLevelUpgradeService
+    def harvest_level_upgrade(self, *, operation_id: str, user_id: str, current_level: int, experience: int, expected_stone: int | None, next_level: int, cost: int):
+        """Spend alchemy experience to raise the herb harvest level.
+
+        ``expected_stone`` is the wallet snapshot the caller observed; the
+        repository treats it as a concurrency guard and never charges it.  It
+        used to be hard-coded to ``0`` here, so every player whose wallet was
+        not exactly zero got ``state_changed`` and could never upgrade.  Pass
+        the caller's snapshot through, and keep ``None`` meaning "skip the
+        wallet check" for explicit callers.
+        """
+        if self._explicit_repository is None:
+            call = lambda: MixelixirHarvestLevelUpgradeSqlRepository(self.game_database, self.player_database).upgrade(
+                operation_id, user_id, current_level, experience, expected_stone, next_level, cost
+            )
+        else:
+            from ...xiuxian.xiuxian_mixelixir.transaction_service import MixelixirHarvestLevelUpgradeService
+
+            service = MixelixirHarvestLevelUpgradeService(self.game_database, self.player_database)
+            call = lambda: service.upgrade(
+                operation_id, user_id, current_level, experience, expected_stone or 0, next_level, cost
+            )
         return self._execute(
             operation_id=operation_id,
             user_id=user_id,
             action="mixelixir.harvest_level_upgrade",
             payload={"current_level": current_level, "experience": experience, "next_level": next_level, "cost": cost},
-            call=lambda: (MixelixirHarvestLevelUpgradeSqlRepository(self.game_database, self.player_database) if self._explicit_repository is None else MixelixirHarvestLevelUpgradeService(self.game_database, self.player_database)).upgrade(operation_id, user_id, current_level, experience, expected_stone=0, next_level=next_level, cost=cost) if self._explicit_repository is None else MixelixirHarvestLevelUpgradeService(self.game_database, self.player_database).upgrade(operation_id, user_id, current_level, experience, 0, next_level, cost),
+            call=call,
             success_statuses={"applied", "duplicate"},
             messages={"experience_insufficient": "炼丹经验不足。", "state_changed": "炼丹数据已更新，请重新查看。"},
             normalize=lambda data: data,

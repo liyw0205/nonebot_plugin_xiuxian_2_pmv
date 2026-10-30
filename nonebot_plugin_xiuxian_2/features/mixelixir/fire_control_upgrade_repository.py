@@ -16,6 +16,12 @@ class MixelixirFireControlUpgradeResult:
 
 
 class MixelixirFireControlUpgradeSqlRepository:
+    # Authoritative column names for player_db.mix_elixir_info: the fire-control
+    # level lives in 丹药控火 (there is no 控火等级 column), and the spent currency
+    # is 炼丹经验. Keep both in one place so the read and the write cannot drift.
+    _LEVEL_FIELD = "丹药控火"
+    _EXPERIENCE_FIELD = "炼丹经验"
+
     def __init__(self, game_database: str | Path, player_database: str | Path) -> None:
         self.game_database = str(game_database)
         self.player_database = str(player_database)
@@ -28,6 +34,8 @@ class MixelixirFireControlUpgradeSqlRepository:
         if not operation_id or min(expected_level, expected_experience) < 0 or (expected_stone is not None and expected_stone < 0) or next_level != expected_level + 1 or cost <= 0:
             raise ValueError("valid operation, state snapshot, next level and cost are required")
         payload = json.dumps([user_id, next_level, cost], separators=(",", ":"))
+        level_field = f'"{self._LEVEL_FIELD}"'
+        experience_field = f'"{self._EXPERIENCE_FIELD}"'
         with DatabaseUnitOfWork(self.game_database, immediate=True) as uow:
             uow.execute("ATTACH DATABASE ? AS player_data", (self.player_database,))
             try:
@@ -38,7 +46,12 @@ class MixelixirFireControlUpgradeSqlRepository:
                         return MixelixirFireControlUpgradeResult("state_changed")
                     return MixelixirFireControlUpgradeResult("duplicate", int(previous["cost"]), int(previous["wallet_stone"]), int(previous["level"]), int(previous["experience"]))
                 row = uow.query_one("SELECT COALESCE(stone,0) AS stone FROM user_xiuxian WHERE user_id=?", (user_id,))
-                state = uow.query_one("SELECT CAST(COALESCE(\"控火等级\",'0') AS INTEGER) AS level,CAST(COALESCE(\"炼丹经验\",'0') AS INTEGER) AS experience FROM player_data.mix_elixir_info WHERE user_id=?", (user_id,))
+                state = uow.query_one(
+                    f"SELECT CAST(COALESCE({level_field},'0') AS INTEGER) AS level,"
+                    f"CAST(COALESCE({experience_field},'0') AS INTEGER) AS experience "
+                    "FROM player_data.mix_elixir_info WHERE user_id=?",
+                    (user_id,),
+                )
                 if row is None or state is None:
                     return MixelixirFireControlUpgradeResult("state_changed")
                 current_level, current_exp, current_stone = int(state["level"]), int(state["experience"]), int(row["stone"])
@@ -47,7 +60,11 @@ class MixelixirFireControlUpgradeSqlRepository:
                 if current_exp < cost:
                     return MixelixirFireControlUpgradeResult("experience_insufficient", wallet_stone=current_stone, level=current_level, experience=current_exp)
                 remaining = current_exp - cost
-                changed = uow.execute("UPDATE player_data.mix_elixir_info SET \"控火等级\"=?,\"炼丹经验\"=? WHERE user_id=? AND CAST(\"控火等级\" AS INTEGER)=? AND CAST(\"炼丹经验\" AS INTEGER)=?", (str(next_level), str(remaining), user_id, expected_level, expected_experience))
+                changed = uow.execute(
+                    f"UPDATE player_data.mix_elixir_info SET {level_field}=?,{experience_field}=? "
+                    f"WHERE user_id=? AND CAST({level_field} AS INTEGER)=? AND CAST({experience_field} AS INTEGER)=?",
+                    (str(next_level), str(remaining), user_id, expected_level, expected_experience),
+                )
                 if changed.rowcount != 1:
                     return MixelixirFireControlUpgradeResult("state_changed")
                 uow.execute("INSERT INTO mixelixir_fire_control_upgrade_operations(operation_id,payload,cost,wallet_stone,level,experience) VALUES(?,?,?,?,?,?)", (operation_id, payload, cost, current_stone, next_level, remaining))

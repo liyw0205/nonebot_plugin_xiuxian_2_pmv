@@ -181,6 +181,7 @@ async def mix_elixir_sqdj_up_(bot: Bot, event: GroupMessageEvent | PrivateMessag
         user_id=str(user_id),
         current_level=now_level,
         experience=now_exp,
+        expected_stone=user_info['stone'],
         next_level=now_level + 1,
         cost=next_level_cost,
     )
