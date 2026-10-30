@@ -1189,6 +1189,72 @@ sect_scale_delta,sect_materials_delta,item_delta,detail,trace_id,created_at,even
   不发送真实消息；用户删除的四个文件保持未暂存，`.codex-next-goal.md` 与
   `docs/goals/**` 未提交。
 
+## 已完成目标：虚神界统计列契约修复（虚神界闭关 / 投影虚神界）
+
+修复（非新功能）。目标文档 `.codex-next-goal.md`（local-only，未提交；本目标由人工命名，
+自动命名辅助能力遇 HTTP 400 不参与，未构成阻塞）。
+
+**缺口证据（真实 schema 实测）**：用插件自身迁移 + `xiuxian2_handle` DDL +
+`XiuConfig` ALTER 物化真实库（`game_db` 337 表 / `player_db` 82 表），
+`player_data.statistics` 实有 59 列，含 `闭关次数`/`闭关时长`/`闭关修为`/
+`闭关灵石消耗`/`虚神界时间获取` 等，但**不含** `虚神界闭关次数`、`虚神界投影次数`。
+对真实 schema 直接调用生产仓储，两条玩家命令必然抛错：
+
+- `ImpartClosingEnterSqlRepository.enter()` →
+  `OperationalError: no such column: 虚神界闭关次数`
+- `ImpartProjectJoinSqlRepository.join()` →
+  `OperationalError: table statistics has no column named 虚神界投影次数`
+
+**根因（同一缺陷类）**：两处都用
+`CREATE TABLE IF NOT EXISTS statistics(user_id TEXT PRIMARY KEY, "<列>" INTEGER DEFAULT 0)`
+把业务列内联进建表语句；而 `statistics` 已被 `features/base`、`training`、`auction`、
+`boss` 等迁移以 `CREATE TABLE IF NOT EXISTS statistics(user_id TEXT PRIMARY KEY)` 先建好，
+`IF NOT EXISTS` 分支是 **no-op**，内联列永远不会被创建。两个 handler 在调用处
+（`xiuxian_impart_pk/__init__.py:984`、`:236`）都没有 `try/except`，异常直接冒泡，
+**玩家收不到任何回复**。既有测试自建带目标列的表，绕开了真实 schema，故本地一直绿。
+
+对照先例（同子系统与其他切片都已做对）：`closing_settlement_repository`（虚神界出关）
+先 `PRAGMA` 取列、缺列才 `ALTER`、`UPDATE rowcount==0` 时 `INSERT`；
+`past_life/start_repository`（前尘往事次数）同样先 `ALTER`；
+旧路径 `_increment_entry_stat` 亦为 `PRAGMA` + `ALTER` + 补行。
+
+交付内容：
+
+- 新模块 `features/impart_pk/statistics_columns.py`：
+  `ensure_statistics_column()` 用 `PRAGMA table_info(statistics)` 取真实列，
+  缺列才 `ALTER TABLE ... ADD COLUMN "<列>" INTEGER DEFAULT 0`（不 `DROP`、不改已有列类型）；
+  `increment_statistics()` 先 `UPDATE ... COALESCE("<列>",0)+? WHERE user_id=?`，
+  `rowcount==0` 时 `INSERT` 补行，返回累加后的真实值。两者支持 `schema=""`
+  （UoW 主库即 player_db、未 attach 的仓储）。
+- `closing_enter_repository.py` 与 `project_join_repository.py` 的统计写入改走该辅助，
+  都在既有写事务内执行，事务边界与回滚语义不变。
+- 零迁移：不新增迁移版本、不改已应用迁移函数（checksum 不变）、不新增表/索引/配置键/
+  命令/路由；不新增或修改任何玩家文案。
+- 兼容性：旧库已有该列 → `PRAGMA` 判定存在，跳过 `ALTER` 直接读写；
+  干净库首次写入自动补列补行（计数从 1 开始，不再像旧实现那样在无统计行时静默丢失）；
+  `statistics` 表完全不存在时兜底建最小表再补列。
+- 文档：`docs/features/impart_pk.md` 新增「`player_data.statistics` 统计列契约」一节。
+- 测试：新 `tests/test_impart_statistics_column_contract.py` `19/19`（`unittest.TestCase`），
+  刻意用**生产形态** `statistics`（只有 `user_id`，绝不内联目标列）钉住：
+  两命令 `applied` 且计数 1；闭关两次累加到 2、删除统计行后仍从 1 正确补行；
+  重复 `operation_id` 返回 `duplicate` 且计数不增；`busy`/`ineligible`/
+  `already_joined`/`pk_exhausted`/`capacity_full` 分支计数不变；投影按玩家隔离；
+  旧库预置列（值 5）累加到 6；`statistics` 表缺失时自动创建；
+  以及回归防线——断言两个仓储**不得**再把业务列内联进 `CREATE TABLE ... statistics`。
+  聚焦套件 `test_impart_statistics_column_contract.py` + `test_impart_closing_enter.py` +
+  `features/impart_pk/tests/` + `test_source_quality.py` 合计 `261 passed`；
+  `test_phase2_legacy_path_gate.py` `47 passed`（冻结文件在位时）；
+  `unittest discover -s tests -p 'test_impart_statistics*'` `19 OK`。
+  architecture、inventory `--check`、progress `--json`（`failures: None`）真实 exit 0；
+  `compileall` 与 `git diff --check` 干净。
+- 门禁计数：本切片不新增命令，派生计数按预期**保持** `643 / 329` 不变；
+  临时还原冻结文件实测 `exit_ready: True`、`exit_blockers` 0 条、无 `integrity_errors`，
+  随后再次删除。
+- 交付与 CI：功能提交 `c0753bd0` 的 develop run `41071870790` success；
+  快进合入 main 后 main run `41072988353` success（headSha 均 `c0753bd0`；
+  `build-and-release` 按分支规则 skipped）。未部署、未读写真实游戏库、不发送真实消息；
+  用户删除的四个文件保持未暂存，`.codex-next-goal.md` 与 `docs/goals/**` 未提交。
+
 ## 冻结清单与停止条件
 
 冻结范围仅包括活动 Web 六来源一键代领 API、权限/错误合同、管理员面板、兼容性保护、聚焦测试、路由清单和正式文档。不得新增奖励经济、schema/数据迁移、玩家身份模型、后台活动编辑器、通用 UI 框架或 unrelated refactor。
