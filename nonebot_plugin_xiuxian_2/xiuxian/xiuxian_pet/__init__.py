@@ -1061,7 +1061,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
     operation_id = f"pet-hatch:{event_id or user_id}:{user_id}"
     # 先回放：成功后灵石/容量变化，且随机宠物不可重掷。
-    prior = pet_application.hatch_result(operation_id)
+    prior = pet_application.hatch_result(operation_id=operation_id)
     if prior is not None and prior.succeeded:
         hatched_pets = list(prior.pets or ())
         success_cost = int(prior.cost or total_cost)

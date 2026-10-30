@@ -30,6 +30,15 @@
 
 application 先调用带 operation replay/CAS 的 feature-owned repository；重复请求只重放首次结果，宠物快照、背包和灵石不匹配时返回拒绝且不修改资产。缺少 `pet.002` 或 `pet.003` 时请求失败并保持 schema 不变。
 
+### 砸蛋回放契约
+
+`PetApplication.hatch_result(*, operation_id)` 是 **keyword-only**：操作 ID 只能以
+关键字传递。`砸蛋` handler 在扣灵石/查容量之前先做前置回放（`operation_id=` 取得
+`pet_hatch_operations` 回执），命中已成功回执时直接重放同一批宠物、不重掷随机、不重复扣灵石；
+孵蛋落库后同一次请求还会用同一 operation ID 做后置回放。历史上前置回放曾以**位置参数**
+调用该 keyword-only 方法，导致 `砸蛋` 在真正执行前就抛 `TypeError`、玩家收不到任何回复。
+缺少 `pet_hatch_operations` 表时读取直接失败且**不建表**、不写请求期 DDL。
+
 ## 配置项与回滚
 
 `pet_enabled`（`XIUXIAN_PET_ENABLED`）控制灰度。关闭后可以继续使用旧入口，待融合、放生和技能动作迁移完成、兼容命中归零后再删除门面。

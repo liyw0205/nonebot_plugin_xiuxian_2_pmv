@@ -31,7 +31,9 @@ class _Repository:
         self.calls.append("hatch")
         return {"status": "applied", "cost": 10, "pets": [], "updated_meta": [], "bag_limit": 99}
 
-    def hatch_result(self, *args, **kwargs):
+    def hatch_result(self, *, operation_id):
+        # Mirror the production keyword-only signature so a handler passing
+        # operation_id positionally fails here too.
         return None
 
 
