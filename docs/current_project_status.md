@@ -904,6 +904,54 @@ bot 侧六个玩家视图（`活动阶段`/`活动首领`/`活动商店`/`活动
   规则 skipped）。未部署、未读写真实游戏库、不发送真实消息；用户删除的四个文件保持
   未暂存。
 
+## 已完成目标：炼丹升级闭环修复（升级收取等级 / 升级丹药控火）
+
+`炼丹升级` 两条玩家命令在生产形态下都不可用，且都被自建 schema 的旧测试掩盖。
+两条缺陷都源自同一重构提交 `00768565`。目标文档 `.codex-next-goal.md`（local-only，未提交）。
+
+- **`升级丹药控火` 必然抛错**：`features/mixelixir/fire_control_upgrade_repository.py`
+  读写 `mix_elixir_info."控火等级"`，而真实列是 `丹药控火`（权威来源
+  `xiuxian2_handle.mix_elixir_infoconfigkey`，**没有 `控火等级`**）。SELECT 里 SQLite
+  把未解析标识符当**字符串字面量**（探针 row 为 `'控火等级'`，`CAST` 后 0），UPDATE
+  直接抛 `OperationalError: no such column: 控火等级`。探针在 `丹药控火=0/1/2` 三种
+  等级下全部复现，等级与经验零变化；handler 无 try/except，玩家收不到任何回复。
+  既有测试 `features/mixelixir/tests/test_fire_control_upgrade_repository.py` 自建了
+  带 `控火等级` 的表，所以本地绿、生产必炸。
+- **`升级收取等级` 对钱包非 0 的玩家恒失败**：`features/mixelixir/application.py` 的
+  `harvest_level_upgrade` 默认分支把 `expected_stone=0` 硬编码传给仓储，而仓储把它当
+  钱包并发快照，`current_stone != expected_stone` 即返回 `state_changed`。探针（真实
+  application）实测 `stone=0` → applied、`stone=1`/`stone=5000` → state_changed；
+  即只有钱包恰好为 0 的玩家能升级。handler 也从未透传钱包快照（兄弟
+  `升级丹药控火` 传了）。旧测试的钱包值恰好等于硬编码快照，才得以通过。
+
+修复内容：
+
+- 两个升级仓储把列名收在类常量（`_LEVEL_FIELD = "丹药控火"` /
+  `"收取等级"`，`_EXPERIENCE_FIELD = "炼丹经验"`），SELECT 与 UPDATE 共用，读写不再
+  可能漂移；删除全部 `控火等级` 引用。
+- `harvest_level_upgrade` 新增 `expected_stone` 参数并原样透传仓储；删除写死
+  `expected_stone=0` 与「显式 repository」分支三重复的嵌套三元表达式，改为与
+  `fire_control_upgrade` 同形的单一 `call`。`expected_stone=None` 语义保留
+  （显式跳过钱包校验）。
+- `升级收取等级` handler 传 `expected_stone=user_info['stone']`，与 `升级丹药控火`
+  一致。两条命令都只消耗 `炼丹经验`，都不扣灵石。
+- 零 schema 变更：复用 `mix_elixir_info`、`user_xiuxian.stone` 与两张既有
+  operation 表；未改已应用迁移函数；无新表、列、迁移、索引、配置键、命令名、别名或
+  路由；兼容 service 保留为显式回滚路径且列名常量与 feature 仓储一致。
+- 测试：新 `tests/test_mixelixir_upgrade_production_path.py` `16/16`（含 7 subtests），
+  用**真实 `mix_elixir_info` 列集 + 真实 `MixelixirApplication` + `OperationLedger`**
+  复现并钉住两条缺陷，覆盖 `丹药控火=0/1/2`、duplicate 重放不重扣、operation_conflict、
+  经验不足、钱包快照过期、钱包 `0/1/5000/极大值` 全通过、`None` 跳过快照、缺表/缺行
+  fail-closed、操作行写入失败整体回滚、列名常量与 handler 源合同。feature 侧
+  `test_fire_control_upgrade_repository.py` / `test_harvest_level_upgrade_repository.py`
+  的表结构与断言同步改为真实列。聚焦套件合计 `334 passed + 9 subtests`。
+  architecture、inventory `--check`、progress `--json`（`failures: []`）真实 exit 0；
+  `compileall` 与 `git diff --check` 干净；`unittest discover -s tests -p 'test_mixelixir*'`
+  `46 OK`。
+- 交付与 CI：功能提交 `37e87326` 的 develop run `41008196196` success；快进合入 main 后
+  main run `41008883828` success（headSha 均为 `37e87326`；`build-and-release` 按分支规则
+  skipped）。未部署、未读写真实游戏库、不发送真实消息；用户删除的四个文件保持未暂存。
+
 ## 冻结清单与停止条件
 
 冻结范围仅包括活动 Web 六来源一键代领 API、权限/错误合同、管理员面板、兼容性保护、聚焦测试、路由清单和正式文档。不得新增奖励经济、schema/数据迁移、玩家身份模型、后台活动编辑器、通用 UI 框架或 unrelated refactor。
