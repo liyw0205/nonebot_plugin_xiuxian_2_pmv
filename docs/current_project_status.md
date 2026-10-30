@@ -1120,6 +1120,75 @@ sect_scale_delta,sect_materials_delta,item_delta,detail,trace_id,created_at,even
   `build-and-release` 按分支规则 skipped）。未部署、未读写真实游戏库、不发送真实消息；
   用户删除的四个文件保持未暂存。
 
+## 已完成目标：新增玩家「我的资产总览」跨库资产一览视图
+
+新功能（非修复）。目标文档 `.codex-next-goal.md`（local-only，未提交）。
+
+**缺口证据**：玩家「身家」分散在 **两个库、五张表**——灵石（`game_db.user_xiuxian.stone`）、
+灵庄存款（`game_db.bank_accounts.saved_stone`）、宗门归属与贡献（`game_db.sects.sect_name` +
+`user_xiuxian.sect_contribution`）、背包规模（`game_db.back`）、竞技场段位/积分/荣誉
+（`player_db.arena.rank/score/honor_points`）。此前只能靠 `灵石`/`灵庄`/`我的宗门`/
+`我的背包`/`我的竞技场` 五条命令各自拼，没有任何合计视图：
+`grep -rn "资产|总览|一览" --include=*.py nonebot_plugin_xiuxian_2/xiuxian/ | grep on_command|on_regex`
+**零匹配**，`docs/refactor_inventory.json` 的 command 清单也无对应条目。数据齐全、
+每条命令都在、只有合计视角缺失，属纯可见性缺口，无需任何新数据。
+
+真实 schema（插件自身迁移 + `xiuxian2_handle` 基础 DDL + `XiuConfig` ALTER 实测）：
+`user_xiuxian` 33 列含 `stone/sect_id/sect_contribution`；`sects` 13 列含 `sect_name`；
+`back` 13 列含 `goods_id/goods_num/bind_num`；`bank_accounts` 4 列
+`user_id,saved_stone,bank_level,updated_at`；`arena` 含 `score/rank/honor_points`。
+
+交付内容：
+
+- 新玩家命令 `我的资产总览`（别名 `资产总览`、`我的资产`，priority 7，`block=True`），
+  注册在 `xiuxian/xiuxian_base/__init__.py`；一次展示灵石、灵庄存款（含等级）、
+  宗门（含贡献）、背包（种类/总数）、竞技场（段位·积分·荣誉）。
+- 新模块 `features/base/assets_overview.py`：
+  `PlayerAssetsOverviewApplication(game_db, player_db).overview(user_id)` 以**只读**
+  `DatabaseUnitOfWork(..., read_only=True)` 打开主库并 `attach_database(player_db,
+  "player_data")`，每段查询前用 `sqlite_master` + `PRAGMA table_info` 探测表/列，
+  旧库缺表缺列自动降级；纯函数 `format_assets_overview(payload, *, format_number=None)`
+  （无 I/O、无 NoneBot）承载文案与省略规则。
+- **分段省略**：无灵庄开户行、无宗门、背包为空、无竞技场记录时各自独立消失，
+  任一段缺失不会让整条回复失败；全部可选段缺失时仍输出标题与「灵石」行。
+- **错误响应**：主库不可读或角色不存在 → `未找到角色数据，请先发送【我要修仙】。`；
+  `player_db` 文件缺失/无 `arena` 表 → 只省略竞技场段、不抛错；
+  `bank_accounts`/`sects`/`back` 缺表 → 只省略对应段，且**只读路径不建任何表**
+  （实测 `sqlite_master` 仍无该表）。
+- **玩家隔离**：`user_id` 只取 `check_user` 的会话信息，handler 不解析 `args`/
+  `extract_plain_text`，无法查询他人资产；测试写入第二名玩家的巨额资产（灵石
+  999,999、存款 888,888、贡献 777,777、段位王者）验证零泄漏。
+- 零 schema 变更：只读复用上述五张既有表与索引；不新增表、列、索引、迁移版本、
+  配置键或 Web 路由；不改任何写路径与经济数值。
+- `features/base/manifest.py` 追加该命令的 `CommandSpec`；`docs/features/base.md`
+  的「命令与别名」与「Manifest 清单」两段登记（`check_architecture.py` 要求
+  feature 文档点名每条命令）；`scripts/export_refactor_inventory.py` 使
+  `docs/refactor_inventory.json` 新增 1 条 command 记录（+9 行）。
+- 新增命令使 Phase-2 派生计数 642→643、backlog 328→329；
+  `tests/test_phase2_legacy_path_gate.py` 按既有先例同步期望值，
+  **冻结成员文件与其哈希保持不变**（临时还原 `git show HEAD:` 版本实测
+  `exit_ready: True`、`integrity_errors` 无、`exit_blockers` 0 条，随后再次删除）。
+- 测试：新 `tests/test_assets_overview_view.py` `17/17`（`unittest.TestCase`），
+  用**真实列集**（`user_xiuxian`/`sects`/`back`/`bank_accounts`/`arena`）与真实
+  `PlayerAssetsOverviewApplication` 钉住：五段取数（灵石 123,456、存款 500,000 黄金、
+  青云宗贡献 8,800、背包 2 种/17 个且 `goods_num=0` 不计、白银 1,520 分/荣誉 3,300）、
+  完整渲染五行、**玩家隔离**、四种分段省略、全段缺失仅剩灵石、
+  未知/空 `user_id` 引导文案、缺 `bank_accounts`/`arena`/`sects`+`back` 表与
+  整个 `player_db` 缺失均降级且不建表、纯函数边界（空等级、无贡献）、
+  handler 源合同（命令名/别名/`overview(str(user_info["user_id"]))`、无 `args`）。
+  聚焦套件 `tests/test_assets_overview_view.py` + `test_source_quality.py` +
+  `test_phase2_legacy_path_gate.py` + `features/base/tests/` 合计 `401 passed`
+  （冻结文件在位时）；`unittest discover -s tests -p 'test_assets*'` `17 OK`、
+  `-p 'test_source_quality*'` `246 OK`。architecture、inventory `--check`、
+  progress `--json`（`failures: None`）真实 exit 0；`compileall` 与
+  `git diff --check` 干净。改动前 stash 比对：`test_phase2_legacy_path_gate.py`
+  在干净 HEAD 上同样 `86 failed`（全部源于用户有意删除的冻结文件），确认零回归。
+- 交付与 CI：功能提交 `7ac9ea89` 的 develop run `41057871515` success；
+  快进合入 main 后 main run `41058553519` success（headSha 均 `7ac9ea89`；
+  `build-and-release` 按分支规则 skipped）。未部署、未读写真实游戏库、
+  不发送真实消息；用户删除的四个文件保持未暂存，`.codex-next-goal.md` 与
+  `docs/goals/**` 未提交。
+
 ## 冻结清单与停止条件
 
 冻结范围仅包括活动 Web 六来源一键代领 API、权限/错误合同、管理员面板、兼容性保护、聚焦测试、路由清单和正式文档。不得新增奖励经济、schema/数据迁移、玩家身份模型、后台活动编辑器、通用 UI 框架或 unrelated refactor。
