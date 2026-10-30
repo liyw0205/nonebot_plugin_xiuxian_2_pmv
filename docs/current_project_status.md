@@ -1058,6 +1058,68 @@ ALTER 列表得到真实旧表列集，最后调用真实 `SectApplication` 与�
   `build-and-release` 按分支规则 skipped）。未部署、未读写真实游戏库、不发送真实消息；
   用户删除的四个文件保持未暂存。
 
+## 已完成目标：新增玩家「我的灵石流水」个人经济流水视图
+
+新功能（非修复）。目标文档 `.codex-next-goal.md`（local-only，未提交）。
+
+**缺口证据**：`economy_log` 是全服唯一经济流水账，由真实玩法持续写入
+（`features/tasks/claim_repository.py`、`features/dufang/share_repository.py`、
+`features/past_life/final_repository.py`、`features/admin_asset/*`，以及
+`xiuxian/xiuxian_utils/economy_log.py` 的 `safe_log_economy_change` 7 处调用点），
+但玩家完全看不到自己的流水：`features/economy_ledger/manifest.py` 的 `FEATURE`
+没有 `commands`；`features/economy_ledger/commands.py` 明确声明只暴露管理员 Web
+读取（`COMMANDS = ()`）；唯一入口是需管理员会话与 CSRF 守卫的 Web 蓝图。
+数据在、聚合已实现、只有管理员能看，属纯可见性缺口。
+
+真实 schema（用插件自身迁移目录实测，`game_db` 225 条迁移）：`economy_log` 15 列
+`id,user_id,sect_id,source,action,stone_delta,exp_delta,sect_contribution_delta,
+sect_scale_delta,sect_materials_delta,item_delta,detail,trace_id,created_at,event_id`，
+已有 `idx_economy_log_user_source_time(user_id,source,created_at)` 支撑按玩家查询。
+
+交付内容：
+
+- 新玩家命令 `我的灵石流水`（别名 `灵石流水`、`灵石收支`，priority 7，`block=True`），
+  注册在 `xiuxian/xiuxian_base/__init__.py`；展示本人近 7 天灵石收支总览
+  （收入/支出/净额/笔数）、主要收入来源前 3、主要支出方向前 3、最近 5 笔明细。
+- `EconomyLedgerApplication.stone_flow_summary(user_id)` 复用既有 `query_page`
+  （同一仓储、同一 SQL），玩家视图与管理员台账不可能出现口径分歧；
+  `user_id` 只由调用方注入，handler 不解析命令参数，**不能查询他人流水**。
+- 新纯函数 `format_stone_flow(payload, *, format_number=None)`（无 I/O、无 NoneBot）
+  承载文案与省略规则：无收入省略收入段、无支出省略支出段、无记录输出
+  `近7天没有灵石收支记录。`、表缺失透传仓储 notice。
+- 时间窗**只用下界**：`economy_log.created_at` 由各写入方提供（UTC 与本地时区混用），
+  加上界会把「刚刚发生」的本地时间行误判为未来而丢弃；实测该陷阱会把 6 笔近 7 天
+  流水错算成 4 笔、收入 9200 错算成 1200。
+- 常量集中于 `features/economy_ledger/schemas.py`：
+  `STONE_FLOW_DAYS=7`、`STONE_FLOW_TOP_N=3`、`STONE_FLOW_RECENT=5`，无配置键。
+- `features/base/manifest.py` 的 `FEATURE.commands` 追加该命令的 `CommandSpec`；
+  `docs/features/base.md` 的「命令与别名」与「Manifest 清单」两段登记
+  （`check_architecture.py` 要求 feature 文档点名每条命令）。
+- 零 schema 变更：只读复用 `economy_log` 与既有索引；不改任何写路径、经济数值、
+  Web 路由或已应用迁移函数。
+- 清单再生成：`scripts/export_refactor_inventory.py` 使
+  `docs/refactor_inventory.json` 新增 1 条 command 记录（+9 行）。
+- 新增命令使 Phase-2 派生计数 641→642、backlog 327→328；
+  `tests/test_phase2_legacy_path_gate.py` 按既有活动切片先例同步该期望值
+  （活动切片曾 638→641、324→327），**冻结成员文件与其哈希保持不变**
+  （实测 `frozen_membership_valid: True`、`integrity_errors: []`、`failures: None`）。
+- 测试：新 `tests/test_economy_stone_flow_view.py` `13/13`（`unittest.TestCase`），
+  用**真实 `economy_log` 列集** + 真实 `EconomyLedgerApplication` 钉住：汇总口径
+  （收入 6200/支出 10000/净额 -3800/4 笔）、**玩家隔离**（他人流水不进任何字段）、
+  7 天窗口（窗外行排除）、收入/支出各前 3 排序、最近 5 笔上限、缺表返回 notice 且
+  **不建表**、空 `user_id` 拒绝、四种渲染形态（完整/仅收入/仅支出/空）、
+  handler 源合同（会话 `user_id` + 不出现 `args`/`extract_plain_text`）。
+  聚焦套件合计 `270 passed`；`unittest discover -s tests -p 'test_economy*'` `17 OK`、
+  `-p 'test_source_quality*'` `246 OK`、`-p 'test_phase2*'` `47 OK`（冻结文件在位时）。
+  architecture、inventory `--check`、progress `--json`（`failures: None`）真实 exit 0；
+  `compileall` 与 `git diff --check` 干净。全量 `unittest discover -s tests` 在改动前后
+  的失败集合逐名比对**完全一致**（37 个 distinct，全部源于用户有意删除的
+  `docs/refactor_phase2_legacy_path_items.json`），确认零回归；测试数 3482→3500。
+- 交付与 CI：功能提交 `b0b5f3f4` 的 develop run `41043300120` success（全部步骤 success）；
+  快进合入 main 后 main run `41044079519` success（headSha 均 `b0b5f3f4`；
+  `build-and-release` 按分支规则 skipped）。未部署、未读写真实游戏库、不发送真实消息；
+  用户删除的四个文件保持未暂存。
+
 ## 冻结清单与停止条件
 
 冻结范围仅包括活动 Web 六来源一键代领 API、权限/错误合同、管理员面板、兼容性保护、聚焦测试、路由清单和正式文档。不得新增奖励经济、schema/数据迁移、玩家身份模型、后台活动编辑器、通用 UI 框架或 unrelated refactor。
