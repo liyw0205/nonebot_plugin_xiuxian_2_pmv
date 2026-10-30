@@ -3,6 +3,7 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 from ...infrastructure.database import DatabaseUnitOfWork
+from .statistics_columns import ensure_statistics_column
 
 @dataclass(frozen=True)
 class ImpartProjectJoinResult:
@@ -27,4 +28,4 @@ class ImpartProjectJoinSqlRepository:
             if member is not None: return ImpartProjectJoinResult('already_joined',pk_num,count)
             if pk_num<=0: return ImpartProjectJoinResult('pk_exhausted',pk_num,count)
             if count>=self.capacity: return ImpartProjectJoinResult('capacity_full',pk_num,count)
-            uow.execute('CREATE TABLE IF NOT EXISTS statistics(user_id TEXT PRIMARY KEY,"虚神界投影次数" INTEGER DEFAULT 0)'); uow.execute('INSERT INTO impart_project_members(user_id) VALUES(?)',(user_id,)); uow.execute('INSERT INTO statistics(user_id,"虚神界投影次数") VALUES(?,1) ON CONFLICT(user_id) DO UPDATE SET "虚神界投影次数"=COALESCE(statistics."虚神界投影次数",0)+1',(user_id,)); count+=1; saved=[pk_num,count]; uow.execute('INSERT INTO impart_project_join_operations(operation_id,payload,result_json) VALUES(?,?,?)',(operation_id,payload,json.dumps(saved,separators=(',',':')))); return ImpartProjectJoinResult('applied',*saved)
+            uow.execute('CREATE TABLE IF NOT EXISTS statistics(user_id TEXT PRIMARY KEY)'); ensure_statistics_column(uow,'虚神界投影次数',schema=''); uow.execute('INSERT INTO impart_project_members(user_id) VALUES(?)',(user_id,)); uow.execute('INSERT INTO statistics(user_id,"虚神界投影次数") VALUES(?,1) ON CONFLICT(user_id) DO UPDATE SET "虚神界投影次数"=COALESCE(statistics."虚神界投影次数",0)+1',(user_id,)); count+=1; saved=[pk_num,count]; uow.execute('INSERT INTO impart_project_join_operations(operation_id,payload,result_json) VALUES(?,?,?)',(operation_id,payload,json.dumps(saved,separators=(',',':')))); return ImpartProjectJoinResult('applied',*saved)
