@@ -587,6 +587,8 @@ async def back_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 > 查看物品详情
 - 灵石
 > 查看当前灵石数量
+- 我的物品流水
+> 查看本人近7天物品获得与消耗
 
 **使用与整理**
 - 使用+物品名 [数量]
