@@ -1048,6 +1048,8 @@ async def help_in_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
 > 灵石、灵庄、宗门、背包与竞技场一览
 - 我的签到统计
 > 累计签到次数与本月签到天数
+- 我的突破统计
+> 突破次数、成功率与累计损失修为
 
 **功能入口**
 - 背包帮助 / 饰品帮助 / 称号帮助

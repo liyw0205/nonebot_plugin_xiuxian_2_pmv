@@ -7,6 +7,7 @@ FEATURE = FeatureManifest(
         CommandSpec("修炼", aliases=("突破",), permission="user"),
         CommandSpec("我的灵石流水", aliases=("灵石流水", "灵石收支"), permission="user"),
         CommandSpec("我的资产总览", aliases=("资产总览", "我的资产"), permission="user"),
+        CommandSpec("我的突破统计", aliases=("突破统计", "突破记录"), permission="user"),
     ),
     routes=tuple(RouteSpec(f"/api/v1/base/{action}", methods=("POST",), permission="user") for action in _ACTIONS)
     + (

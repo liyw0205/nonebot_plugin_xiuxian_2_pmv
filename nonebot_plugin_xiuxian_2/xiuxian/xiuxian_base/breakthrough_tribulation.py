@@ -10,6 +10,10 @@ from ...paths import get_paths
 from ...infrastructure.ids import UUIDGenerator
 from ...features.player_state.application import PlayerStateApplication
 from ...features.base.application import BaseApplication
+from ...features.base.breakthrough_stats import (
+    BreakthroughStatsApplication,
+    format_breakthrough_stats,
+)
 from ...compatibility.base_breakthrough_effects import LegacyDirectBreakthroughEffects, direct_breakthrough_root_rate
 from ..on_compat import on_command
 from nonebot.params import CommandArg
@@ -139,6 +143,8 @@ level_up_lx = on_command("连续突破", aliases={"快速突破"}, priority=7, b
 level_up_dr_lx = on_command("连续渡厄突破", aliases={"连续渡厄", "快速渡厄突破"}, priority=7, block=True)
 level_up_drjd_lx = on_command("连续渡厄金丹突破", aliases={"连续金丹突破", "快速金丹突破"}, priority=7, block=True)
 user_leveluprate = on_command('我的突破概率', aliases={"突破概率", "概率"}, priority=5, block=True)
+breakthrough_stats = on_command('我的突破统计', aliases={"突破统计", "突破记录"}, priority=7, block=True)
+breakthrough_stats_application = BreakthroughStatsApplication(get_paths().player_db)
 tribulation_info = on_command("渡劫", priority=5, block=True)
 start_tribulation = on_command("开始渡劫", priority=6, block=True)
 destiny_tribulation = on_command("天命渡劫", priority=6, block=True)
@@ -1865,6 +1871,33 @@ async def level_up_drjd_lx_continuous(bot: Bot, event: GroupMessageEvent | Priva
     
     await handle_send(bot, event, result_msg)
     await level_up_drjd_lx.finish()
+
+@breakthrough_stats.handle(parameterless=[Cooldown(cd_time=0)])
+async def breakthrough_stats_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    """我的突破统计：突破次数、成功、失败、成功率与累计损失修为（只读）。"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    isUser, user_info, msg = check_user(event)
+    if not isUser:
+        await handle_send(bot, event, msg, md_type="我要修仙")
+        await breakthrough_stats.finish()
+
+    # 只使用登录会话里的 user_id；不接受任何参数指定他人突破统计。
+    payload = breakthrough_stats_application.summary(str(user_info["user_id"]))
+    text = format_breakthrough_stats(payload, format_number=number_to)
+    await handle_send(
+        bot,
+        event,
+        text,
+        md_type="修仙",
+        k1="突破",
+        v1="突破",
+        k2="数据",
+        v2="修仙数据",
+        k3="帮助",
+        v3="修仙帮助",
+    )
+    await breakthrough_stats.finish()
+
 
 @user_leveluprate.handle(parameterless=[Cooldown(cd_time=0)])
 async def user_leveluprate_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):

@@ -1152,6 +1152,15 @@
     },
     {
       "aliases": [
+        "突破统计",
+        "突破记录"
+      ],
+      "feature": "base",
+      "name": "我的突破统计",
+      "permission": "user"
+    },
+    {
+      "aliases": [
         "签到统计",
         "签到记录"
       ],
