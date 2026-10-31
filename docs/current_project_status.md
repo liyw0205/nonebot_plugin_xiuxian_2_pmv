@@ -1451,6 +1451,73 @@ sect_scale_delta,sect_materials_delta,item_delta,detail,trace_id,created_at,even
   `build-and-release` 按分支规则 skipped）。未部署、未读写真实游戏库、不发送真实消息；
   用户删除的四个文件保持未暂存，`.codex-next-goal.md` 与 `docs/goals/**` 未提交。
 
+## 已完成目标：新增玩家「我的签到统计」签到累计视图
+
+新功能（非修复）。目标文档 `.codex-next-goal.md`（local-only，未提交；本目标由人工命名，
+自动命名辅助 HTTP 400 属辅助能力故障，未构成阻塞）。
+
+**缺口证据**：每次成功签到都会把统计写进投影，写入点在真实生产路径上——
+`features/sign_in/application_effects.py:54` 的
+`self.statistics.record(user_id=..., operation_id=f"statistics:{operation_id}",
+event_key="修仙签到", occurred_at=now)`，其 effects 由 `plugin.py:1009` 以
+`SignInApplicationEffects(..., statistics=SignInStatisticsRepository(str(game_db)))` 装配。
+但 `grep -rn "签到统计\|签到记录"` 只命中 newapi 的无关命令，**没有任何玩家命令读它**；
+`SignInStatisticsRepository.value(user_id, event_key)`（`features/sign_in/statistics.py:44`）
+本就是为这个视图准备的读接口，长期只被测试与写入侧使用。数据在、读接口在、玩家入口完全没有。
+
+真实 schema（插件自身迁移实测，两表都在 **game_db**）：
+`sign_in_statistics_events(operation_id,user_id,event_key,created_at)`、
+`sign_in_statistics_projection(user_id,event_key,value)`。
+
+交付内容：
+
+- 新玩家命令 `我的签到统计`（别名 `签到统计`、`签到记录`，priority 7，`block=True`，
+  注册在 `xiuxian/xiuxian_base/__init__.py` 与 `修仙签到` 同文件）；展示累计签到次数、
+  本月签到天数、最近一次签到时间。
+- 新模块 `features/sign_in/statistics_view.py`：
+  `SignInStatisticsViewApplication(game_db, clock=...)` 以只读 UoW 读投影表取累计次数、
+  聚合事件表取本月天数与最近时间；`format_sign_in_statistics()` 为纯函数
+  （无 I/O、无 NoneBot）。
+- **口径合同**：累计次数与 `SignInStatisticsRepository.value(user_id, "修仙签到")`
+  使用同一 SQL、同一 `event_key`；测试在同一夹具上断言两者相等，玩家视图与写入侧
+  不可能分歧。
+- **本月口径**：按 `created_at` 的 `YYYY-MM` 前缀匹配（不用 `strftime`，避免毫秒/时区
+  后缀解析失败），天数用 `substr(created_at,1,10)` 去重——同一天两条签到只算一天。
+- **分段降级**：两表都缺 → `暂无签到统计数据。`；只有投影表 → 显示累计、省略本月与最近；
+  只有事件表 → 累计按事件行数兜底；`created_at` 为空的行不计天数、不污染最近时间；
+  任何异常在应用层捕获并降级为提示文案。只读路径**不建表、不补列**。
+- **玩家隔离**：`user_id` 只取 `check_user` 会话，handler 不解析 `args`/
+  `extract_plain_text`，无法查询他人签到统计。
+- 零 schema 变更：不新增表、列、索引、迁移版本、配置键或 Web 路由；不改签到写路径、
+  奖励、连签规则或 `is_sign` 标记。
+- 帮助与文档：`修仙帮助` 的「流水与总览」段追加 `我的签到统计`；
+  `docs/features/sign_in.md` 登记命令与口径；既有
+  `tests/test_help_discoverability.py` 的 `EXPECTED` 扩到第五条，反向防漂移合同
+  继续生效。
+- `features/sign_in/manifest.py` 追加该命令 `CommandSpec`；
+  `scripts/export_refactor_inventory.py` 使 `docs/refactor_inventory.json` 新增 1 条
+  command 记录（+9 行）。
+- 新增命令使 Phase-2 派生计数 645→646、backlog 331→332；
+  `tests/test_phase2_legacy_path_gate.py` 按既有先例同步期望值，
+  **冻结成员文件与其哈希保持不变**（临时还原后再次删除）。
+- 测试：新 `tests/test_sign_in_statistics_view.py` `14/14`（`unittest.TestCase`），
+  用**真实两表列集**与真实应用（固定时钟）钉住：汇总口径（累计 5 次、本月 3 天、
+  最近 10-30 09:12）、同日去重、跨月排除、其他 `event_key` 忽略、
+  **与 `SignInStatisticsRepository.value()` 取值一致**、玩家隔离、
+  三种降级形态（双表缺/只有投影/只有事件兜底）、空 `user_id`、脏 `created_at`、
+  从未签到引导文案、只读不建表，以及 handler 源合同（命令名/别名、
+  `summary(str(user_info["user_id"]))`、无 `args`）。
+  聚焦套件 `test_sign_in_statistics_view.py` + `test_help_discoverability.py` +
+  `test_phase2_legacy_path_gate.py` + `test_source_quality.py` +
+  `features/sign_in/tests/` 合计 `326 passed`（冻结文件在位时）；
+  `unittest discover -s tests -p 'test_sign_in_statistics*'` `16 OK`。
+  architecture、inventory `--check`、progress `--json`（`failures: None`）真实 exit 0；
+  `compileall` 与 `git diff --check` 干净。
+- 交付与 CI：功能提交 `14f9e346` 的 develop run `41180959755` success；
+  快进合入 main 后 main run `41181330664` success（headSha 均 `14f9e346`；
+  `build-and-release` 按分支规则 skipped）。未部署、未读写真实游戏库、不发送真实消息；
+  用户删除的四个文件保持未暂存，`.codex-next-goal.md` 与 `docs/goals/**` 未提交。
+
 ## 冻结清单与停止条件
 
 冻结范围仅包括活动 Web 六来源一键代领 API、权限/错误合同、管理员面板、兼容性保护、聚焦测试、路由清单和正式文档。不得新增奖励经济、schema/数据迁移、玩家身份模型、后台活动编辑器、通用 UI 框架或 unrelated refactor。
