@@ -1390,6 +1390,67 @@ sect_scale_delta,sect_materials_delta,item_delta,detail,trace_id,created_at,even
   `build-and-release` 按分支规则 skipped）。未部署、未读写真实游戏库、不发送真实消息；
   用户删除的四个文件保持未暂存，`.codex-next-goal.md` 与 `docs/goals/**` 未提交。
 
+## 已完成目标：帮助文本补齐已上线玩家命令（发现性修复）
+
+修复（非新功能）。目标文档 `.codex-next-goal.md`（local-only，未提交；本目标由人工命名，
+自动命名辅助 HTTP 400 属辅助能力故障，未构成阻塞）。
+
+**缺口证据**：近四个切片新增的四条玩家命令**上线即隐身**——`grep` 三个帮助文本块零命中，
+只存在于 matcher 定义与 handler docstring：
+
+| 命令 | 应有帮助入口 | 修复前 |
+| --- | --- | --- |
+| `我的灵石流水` | 修仙帮助 | 未列出 |
+| `我的资产总览` | 修仙帮助 | 未列出 |
+| `我的宗门贡献流水` | 宗门帮助 | 未列出 |
+| `我的物品流水` | 背包帮助 | 未列出 |
+
+复核命令：
+`grep -rn "我的物品流水\|我的灵石流水\|我的资产总览\|我的宗门贡献流水" --include=*.py nonebot_plugin_xiuxian_2/xiuxian/ | grep -v on_command`
+仅命中四条 handler docstring。即功能做了但玩家没有任何途径发现，属半个功能缺失；
+既有测试只覆盖命令行为，**没有一条**断言"已上线命令必须出现在对应帮助文本里"。
+
+交付内容：
+
+- `修仙帮助`（`help_in_`）新增 `**流水与总览**` 分组（置于 `**功能入口**` 之前），
+  列出 `我的灵石流水`（近7天灵石收支与主要来源去向）与
+  `我的资产总览`（灵石、灵庄、宗门、背包与竞技场一览）。
+- `宗门帮助`（`__sect_help__`）在 `**任务与商店**` 段 `宗门兑换` 之后追加
+  `我的宗门贡献流水`（查看本人近7天贡献收支）。
+- `背包帮助`（`back_help_`）在 `**查看**` 段 `灵石` 之后追加
+  `我的物品流水`（查看本人近7天物品获得与消耗）。
+- 统一沿用既有「`- 命令名` + `> 一行说明`」格式；**纯追加**，不改任何既有条目、
+  分组名、快捷按钮（`k1..k4` / `button_id`）或 handler 行为；`宗门帮助` 仍走
+  `paginate_text_blocks(..., per_page=3)`，不写死页数。
+- 零 schema/命令变更：不新增表、列、索引、迁移版本、配置键、命令或 Web 路由；
+  派生计数按预期**保持** `645 / 331`（临时还原冻结文件实测 `exit_ready: True`、
+  `exit_blockers` 0 条，随后再次删除）。
+- 文档：`docs/features/base.md`、`docs/features/sect.md`、`docs/features/back.md`
+  各补一句"已登记在对应帮助入口"，保持文档与玩家入口一致。
+- 测试：新 `tests/test_help_discoverability.py` `10/10`（`unittest.TestCase`），
+  把这件事变成合同：
+  - **正向**：四条命令既已注册，又逐字出现在所属帮助块中，且每条带 `>` 一行说明
+    （不接受只甩命令名）。
+  - **不倒退**：三个帮助块的原有分组名（`**基础指令**`/`**任务与商店**`/
+    `**使用与整理**` 等）与抽样既有条目仍在；帮助快捷按钮未改。
+  - **反向防漂移**：帮助块里每个 `- ` 条目都必须能落到真实命令上
+    （等于主名/别名，或是某个主名/别名的口语简称），因此帮助**不可能**再宣传
+    一条不存在的命令。
+  - **分页**：`宗门帮助` 首页仍非空，且新条目可经翻页到达。
+  - 收集器覆盖整个包（命令也注册在 `adapters/nonebot/commands.py`），并能从
+    `"修仙签到" if _legacy_sign_in_enabled else "__legacy_sign_in_disabled__"`
+    这类条件首参里取出真实命令名字面量、过滤 `__` 占位符。
+  聚焦套件 `test_help_discoverability.py` + `test_source_quality.py` +
+  `test_phase2_legacy_path_gate.py` + `features/back/tests/` + `features/sect/tests/`
+  合计 `389 passed`（冻结文件在位时）；
+  `unittest discover -s tests -p 'test_help_discoverability*'` `10 OK`。
+  architecture、inventory `--check`、progress `--json`（`failures: None`）真实 exit 0；
+  `compileall` 与 `git diff --check` 干净。
+- 交付与 CI：功能提交 `6f461149` 的 develop run `41172607668` success；
+  快进合入 main 后 main run `41172947130` success（headSha 均 `6f461149`；
+  `build-and-release` 按分支规则 skipped）。未部署、未读写真实游戏库、不发送真实消息；
+  用户删除的四个文件保持未暂存，`.codex-next-goal.md` 与 `docs/goals/**` 未提交。
+
 ## 冻结清单与停止条件
 
 冻结范围仅包括活动 Web 六来源一键代领 API、权限/错误合同、管理员面板、兼容性保护、聚焦测试、路由清单和正式文档。不得新增奖励经济、schema/数据迁移、玩家身份模型、后台活动编辑器、通用 UI 框架或 unrelated refactor。
