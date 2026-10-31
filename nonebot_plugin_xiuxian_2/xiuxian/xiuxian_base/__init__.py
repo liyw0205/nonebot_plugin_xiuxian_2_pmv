@@ -57,6 +57,10 @@ from ...features.base.assets_overview import (
     PlayerAssetsOverviewApplication,
     format_assets_overview,
 )
+from ...features.sign_in.statistics_view import (
+    SignInStatisticsViewApplication,
+    format_sign_in_statistics,
+)
 from ...features.sign_in.lottery_application import LotteryApplication
 from ...features.sign_in.effects import NullSignInEffects
 from ...features.player_state.application import PlayerStateApplication
@@ -69,6 +73,9 @@ sign_in_application = SignInApplication(get_paths().game_db)
 stone_flow_application = EconomyLedgerApplication(get_paths().game_db)
 assets_overview_application = PlayerAssetsOverviewApplication(
     get_paths().game_db, get_paths().player_db
+)
+sign_in_statistics_application = SignInStatisticsViewApplication(
+    get_paths().game_db, clock=SystemClock()
 )
 lottery_application: Any | None = None
 
@@ -172,6 +179,7 @@ sign_in = on_command(
     block=True,
 )
 hongyun = on_command("鸿运", aliases={"查看中奖", "奖池查询"}, priority=5, block=True)
+sign_in_statistics = on_command("我的签到统计", aliases={"签到统计", "签到记录"}, priority=7, block=True)
 help_in = on_command("修仙帮助", aliases={"修仙菜单"}, priority=12, block=True)
 rank = on_command("排行榜", aliases={"修仙排行榜", "灵石排行榜", "战力排行榜", "境界排行榜", "宗门排行榜", "轮回排行榜"},
                   priority=7, block=True)
@@ -890,6 +898,33 @@ async def run_xiuxian_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
     )
     await run_xiuxian.finish()
 
+@sign_in_statistics.handle(parameterless=[Cooldown(cd_time=0)])
+async def sign_in_statistics_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    """我的签到统计：累计签到次数、本月签到天数与最近签到时间（只读）。"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    isUser, user_info, msg = check_user(event)
+    if not isUser:
+        await handle_send(bot, event, msg, md_type="我要修仙")
+        await sign_in_statistics.finish()
+
+    # 只使用登录会话里的 user_id；不接受任何参数指定他人签到统计。
+    payload = sign_in_statistics_application.summary(str(user_info["user_id"]))
+    text = format_sign_in_statistics(payload, format_number=number_to)
+    await handle_send(
+        bot,
+        event,
+        text,
+        md_type="修仙",
+        k1="签到",
+        v1="修仙签到",
+        k2="资产",
+        v2="我的资产总览",
+        k3="帮助",
+        v3="修仙帮助",
+    )
+    await sign_in_statistics.finish()
+
+
 @sign_in.handle(parameterless=[Cooldown(cd_time=0)])
 async def sign_in_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """修仙签到"""
@@ -1011,6 +1046,8 @@ async def help_in_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
 > 近7天灵石收支与主要来源去向
 - 我的资产总览
 > 灵石、灵庄、宗门、背包与竞技场一览
+- 我的签到统计
+> 累计签到次数与本月签到天数
 
 **功能入口**
 - 背包帮助 / 饰品帮助 / 称号帮助

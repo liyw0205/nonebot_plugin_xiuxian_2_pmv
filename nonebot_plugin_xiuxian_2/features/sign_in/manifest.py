@@ -5,7 +5,7 @@ FEATURE = FeatureManifest(
     key="sign_in",
     title="修仙签到",
     owner="gameplay",
-    commands=(CommandSpec("修仙签到", aliases=("签到",), permission="user"),),
+    commands=(CommandSpec("修仙签到", aliases=("签到",), permission="user"), CommandSpec("我的签到统计", aliases=("签到统计", "签到记录"), permission="user")),
     routes=(RouteSpec("/api/v1/sign-in", methods=("POST",), permission="user"),),
     config=(
         ConfigSpec("sign_in_lower_limit", "int", default=100000, reloadable=True, description="签到灵石下限"),

@@ -1152,6 +1152,15 @@
     },
     {
       "aliases": [
+        "签到统计",
+        "签到记录"
+      ],
+      "feature": "sign_in",
+      "name": "我的签到统计",
+      "permission": "user"
+    },
+    {
+      "aliases": [
         "我的资产",
         "资产总览"
       ],

@@ -8,6 +8,17 @@
 
 - `修仙签到`
 - `签到`
+- `我的签到统计`（别名 `签到统计`、`签到记录`）
+
+`我的签到统计` 是玩家只读视图：展示本人累计签到次数、本月签到天数与最近一次签到时间。
+数据来自签到写路径本身维护的投影——`SignInApplicationEffects` 每次成功签到时
+`statistics.record(..., event_key="修仙签到")` 写入 `sign_in_statistics_events`
+并递增 `sign_in_statistics_projection.value`（两表均在 game_db）。
+累计次数与 `SignInStatisticsRepository.value(user_id, "修仙签到")` 使用同一 SQL 与
+同一 event_key，玩家视图与写入侧口径不可能分歧；本月天数按自然日去重，
+`created_at` 用日期前缀匹配而非 `strftime`，避免毫秒/时区后缀解析失败。
+`user_id` 只取登录会话，不接受参数查询他人；只读、不建表、不补列；
+缺表或脏数据只降级不抛错。该命令同时登记在 `修仙帮助` 的「流水与总览」段。
 
 旧 NoneBot handler 仅保留兼容消息适配；资产变更转发到 `SignInApplication`，签到后的鸿运、统计和任务投影由 feature-owned effects/application 处理。
 
