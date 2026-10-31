@@ -1518,6 +1518,67 @@ event_key="修仙签到", occurred_at=now)`，其 effects 由 `plugin.py:1009` �
   `build-and-release` 按分支规则 skipped）。未部署、未读写真实游戏库、不发送真实消息；
   用户删除的四个文件保持未暂存，`.codex-next-goal.md` 与 `docs/goals/**` 未提交。
 
+## 已完成目标：新增玩家「我的突破统计」派生统计视图
+
+新功能（非修复）。目标文档 `.codex-next-goal.md`（local-only，未提交；本目标由人工命名，
+自动命名辅助 HTTP 400 属辅助能力故障，未构成阻塞）。
+
+**缺口证据**：突破的四个原始计数一直在累积（`player_data.statistics` 实有 59 列，实测含
+`突破次数`/`突破成功`/`突破失败`/`突破损失修为`/`师父突破返修`/`徒弟突破回馈`），
+但玩家侧**没有任何派生视图**——唯一入口 `修仙数据`（`view_data_`，
+`xiuxian_base/__init__.py:1807`）只是把 55 个字段原样裸罗列
+（`:1824` `stats_message += f"- {key}：{number_to(formatted_value)}\n"`），
+没有成功率、没有累计损失修为的汇总，玩家要自己在 55 行里挑 4 个数字做除法。
+`grep -rn "突破统计\|突破记录\|成功率"` 在玩家侧零匹配（竞技场胜率是竞技场自己的字段）。
+
+交付内容：
+
+- 新玩家命令 `我的突破统计`（别名 `突破统计`、`突破记录`，priority 7，`block=True`，
+  注册在 `xiuxian/xiuxian_base/breakthrough_tribulation.py`，与 `突破` 同文件）；
+  展示突破次数、成功、失败、成功率、累计损失修为。
+- 新模块 `features/base/breakthrough_stats.py`：
+  `BreakthroughStatsApplication(player_db)` 以只读 UoW 读 `statistics` 单行并派生；
+  `format_breakthrough_stats()` 为纯函数（无 I/O、无 NoneBot）。
+- **口径不臆造**：成功率分母恒为 `突破次数`（`成功/次数`，保留 1 位小数）。
+  当 `成功+失败 != 次数`（历史脏数据/旧版本只记部分计数）时置 `inconsistent`
+  并在输出追加「（成功+失败 与 突破次数 不一致，成功率按突破次数计）」，
+  **不静默改数、不用"成功+失败"顶替次数**。
+- `突破次数 == 0` → 不计算、不显示成功率（避免除零与"0%"误导）；任一计数为负或非数字
+  一律按 0 展示，不出现负成功率。
+- **分段降级**：缺 `statistics` 表 / 四列全缺 / 库不可读 → `暂无突破统计数据。`；
+  缺单列（如旧库无 `突破损失修为`）→ 该行按 0 展示、其余照常；无该玩家行 →
+  `还没有突破记录，发送【突破】试试。`；空 `user_id` → `缺少玩家身份，无法查询突破统计。`。
+  只读路径**不建表、不补列**。
+- **玩家隔离**：`user_id` 只取 `check_user` 会话，handler 不解析 `args`/
+  `extract_plain_text`，无法查询他人突破统计。
+- 零 schema 变更：不新增表、列、索引、迁移版本、配置键或 Web 路由；不改突破写路径、
+  成功率规则、境界数据或奖励；**不替换 `修仙数据` 的裸罗列视图**（既有合同）。
+- 帮助与文档：`修仙帮助` 的「流水与总览」段追加该命令；`docs/features/base.md` 登记口径；
+  既有 `tests/test_help_discoverability.py` 的 `EXPECTED` 扩到第六条。
+- `features/base/manifest.py` 追加该命令 `CommandSpec`；
+  `scripts/export_refactor_inventory.py` 使 `docs/refactor_inventory.json` 新增 1 条
+  command 记录（+9 行）。
+- 新增命令使 Phase-2 派生计数 646→647、backlog 332→333；
+  `tests/test_phase2_legacy_path_gate.py` 按既有先例同步期望值，
+  **冻结成员文件与其哈希保持不变**（临时还原后再次删除）。
+- 测试：新 `tests/test_breakthrough_stats_view.py` `16/16`（`unittest.TestCase`），
+  用**真实 `statistics` 形状**（player_db）与真实应用钉住：汇总取值与成功率
+  （12/5/7 → 41.7%）、全成功 100.0%、零次数不显示成功率、
+  **不一致行分母仍取次数（10/3/3 → 30.0%）且渲染含说明**、一致时不出现说明、
+  玩家隔离、缺表/四列全缺/缺单列/无行/空 `user_id` 五条降级、
+  负数钳制、千分位渲染、只读不建表，以及 handler 源合同
+  （命令名/别名、`summary(str(user_info["user_id"]))`、无 `args`）。
+  聚焦套件 `test_breakthrough_stats_view.py` + `test_help_discoverability.py` +
+  `test_phase2_legacy_path_gate.py` + `test_source_quality.py` +
+  `features/base/tests/` 合计 `410 passed`（冻结文件在位时）；
+  `unittest discover -s tests -p 'test_breakthrough_stats*'` `16 OK`。
+  architecture、inventory `--check`、progress `--json`（`failures: None`）真实 exit 0；
+  `compileall` 与 `git diff --check` 干净。
+- 交付与 CI：功能提交 `b7292a94` 的 develop run `41195694321` success；
+  快进合入 main 后 main run `41196290315` success（headSha 均 `b7292a94`；
+  `build-and-release` 按分支规则 skipped）。未部署、未读写真实游戏库、不发送真实消息；
+  用户删除的四个文件保持未暂存，`.codex-next-goal.md` 与 `docs/goals/**` 未提交。
+
 ## 冻结清单与停止条件
 
 冻结范围仅包括活动 Web 六来源一键代领 API、权限/错误合同、管理员面板、兼容性保护、聚焦测试、路由清单和正式文档。不得新增奖励经济、schema/数据迁移、玩家身份模型、后台活动编辑器、通用 UI 框架或 unrelated refactor。
