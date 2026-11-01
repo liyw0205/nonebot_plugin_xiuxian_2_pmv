@@ -35,6 +35,18 @@
 - QQ 官方机器人配置键存在不等于平台连接通过；QQ 连接状态需从本轮启动证据单独核验。官方 QQ 消息呈现/权限未做真机验收，不发送真机消息，也不将其宣称通过。
 - 本轮先核实 Release 质量门和实例的真实加载/数据路径；停机冷备份并验证复制一致后，才可下载 Release 覆盖插件代码。不得运行会改写共享 `/root/myenv` 的依赖升级。
 
+## 已完成目标：战力拆解（三因子与升境预估）
+
+战力是闭式三因子乘积（`xiuxian2_handle.py::update_power2`：`round(exp × root_rate × level_spend, 0)`），但玩家侧只有一个数字，无从判断提升优先级。本目标新增只读的 `战力拆解`，不改公式、灵根/境界数据与任何写路径。
+
+- 新增 `features/base/power_breakdown.py::PowerBreakdownApplication`：只读 `user_xiuxian` 单行，输出修为、灵根倍率、境界系数、计算战力、账面战力与差异、距下一境所需修为、同修为突破后的战力预估，以及三项提升手段中相对增幅最大的一项。
+- 舍入与 SQLite `round(x,0)` 对齐（.5 远离零），避免与账面值出现 +1 的假差异；账面与计算不一致时如实标注（提示下次刷新会校正），不改数、不写库。
+- `root_rate`/`level_data` 可注入（`命运道果` 阶梯倍率走 `compute_fate_root_rate`）；`PRAGMA table_info` 探测真实列，缺 `power` 列仍可计算；未知境界、倍率不可用、缺表一律 fail-closed，不伪造战力、不建表。
+- 命令 `战力拆解`（别名 `我的战力`、`战力明细`，priority 7）注册于 `xiuxian_base`，只取登录会话 `user_id`；`修仙帮助`「常用入口」与 `features/base/manifest.py` 同步登记。
+- `tests/test_power_breakdown_view.py` 11 项通过：公式一致与 .5 舍入、灵根倍率线性、命运道果阶梯注入、未知境界 fail-closed、缺 power 列、缺表不建表、账面差异、升境预估与末境无预估、主导项、命令/帮助/manifest 合同。受影响套件：help 10 通过；三门禁 exit 0 / `failures: None`；compile 与 diff check 干净。
+- 派生计数 648/334 → 649/335；`test_phase2_legacy_path_gate.py` 期望同步更新，并在**含冻结文件的隔离 worktree** 中实跑 58/58 通过（本仓因用户删除该文件无法本地评估，未恢复）。
+- 提交 `45a2deb5` 推送 develop，CI run `41288611849` success；`--ff-only` 合入 main 后 main CI run `41289386745` success。未部署、未读写真实游戏库、未打 tag。
+
 ## 已完成目标：修行周报（跨玩法 7 天核算）
 
 玩家此前只能单口径查看：灵石流水、物品流水、宗门贡献流水、资产总览与累计统计，缺少跨来源的周期汇总。本目标新增只读的 `修行周报`，不改 schema、写入路径与既有命令输出。
