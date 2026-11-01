@@ -35,6 +35,18 @@
 - QQ 官方机器人配置键存在不等于平台连接通过；QQ 连接状态需从本轮启动证据单独核验。官方 QQ 消息呈现/权限未做真机验收，不发送真机消息，也不将其宣称通过。
 - 本轮先核实 Release 质量门和实例的真实加载/数据路径；停机冷备份并验证复制一致后，才可下载 Release 覆盖插件代码。不得运行会改写共享 `/root/myenv` 的依赖升级。
 
+## 已完成目标：背包容量体检（单件口径）
+
+背包上限 `max_goods_num` 在写入前按**单件物品件数**判定（`当前件数 + 本次发放 > 上限` 即 `inventory_full`），但 `我的背包` 只列物品，玩家往往在领奖被拒后才知道装不下。本目标新增只读的 `背包容量`，不改上限、判定与写路径。
+
+- 新增 `features/back/capacity_view.py::BackpackCapacityApplication`：只读 `back` 表按 `user_id` 聚合，输出上限、条目数、总件数、最接近上限的前 3 件（当前件数/剩余可容纳件数/占用百分比）与达到 80% 的警示条目；剩余只与该件当前件数相关，不被其他物品影响。
+- 口径与 `inventory_full` 同源：任务领奖（`features/tasks/claim_repository.py`）、洞府收获/巡逻/潜入（`features/dongfu/`）、战斗结算（`features/combat_settlement/repository.py`）、宠物出行（`features/pet/repository.py`）。
+- 上限由调用方注入 `XiuConfig().max_goods_num`；`PRAGMA` 探测 `back` 表与 `goods_num` 列，缺表/缺列明确降级，不建表、不补列、不写库，也不改任何 `inventory_full` 判定。
+- 命令 `背包容量`（别名 `我的背包容量`、`背包空间`，priority 7）注册于 `xiuxian_back`，只取登录会话 `user_id`；`背包帮助`「查看」段与 `features/back/manifest.py` 同步登记。
+- `tests/test_backpack_capacity_view.py` 10 项通过：单件口径、与 `inventory_full` 判定同值、排序与并列、80% 边界（79%/80%）、空背包、零/负行忽略、他人隔离、缺表不建表、缺列降级、命令/帮助/manifest 合同。受影响套件：help 10、back 47 通过；三门禁 exit 0 / `failures: None`；compile 与 diff check 干净。
+- 派生计数 649/335 → 650/336；`test_phase2_legacy_path_gate.py` 期望同步更新，并在**含冻结文件的隔离 worktree** 中实跑 57/57 通过（本仓因用户删除该文件无法本地评估，未恢复）。
+- 提交 `a5e59663` 推送 develop，CI run `41293640452` success；随后 `--ff-only` 合入 main 并核验 main CI。未部署、未读写真实游戏库、未打 tag。
+
 ## 已完成目标：战力拆解（三因子与升境预估）
 
 战力是闭式三因子乘积（`xiuxian2_handle.py::update_power2`：`round(exp × root_rate × level_spend, 0)`），但玩家侧只有一个数字，无从判断提升优先级。本目标新增只读的 `战力拆解`，不改公式、灵根/境界数据与任何写路径。
