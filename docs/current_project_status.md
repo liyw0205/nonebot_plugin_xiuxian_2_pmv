@@ -35,6 +35,26 @@
 - QQ 官方机器人配置键存在不等于平台连接通过；QQ 连接状态需从本轮启动证据单独核验。官方 QQ 消息呈现/权限未做真机验收，不发送真机消息，也不将其宣称通过。
 - 本轮先核实 Release 质量门和实例的真实加载/数据路径；停机冷备份并验证复制一致后，才可下载 Release 覆盖插件代码。不得运行会改写共享 `/root/myenv` 的依赖升级。
 
+## 已完成目标：修为奖励口径校准（gap 锚定 + 境界压制）
+
+核对 `docs/features/xiuxian_progression.md` 声称的 2026-10 全项目盘点是否在代码落地，按实测偏差分批修复；不改任何百分比数值、境界数据或奖励文案。
+
+- 定位唯一真实偏差：世界BOSS 讨伐（`xiuxian_boss/__init__.py`）手写 `自身累计修为 × exp_buff/10000 × min(0.1×rank//3,1)`，属 `current` 锚定，单次奖励会随累计修为膨胀。改为 `features/boss/exp_reward.py::boss_exp_reward` 纯函数，复用 `percent_exp_reward(anchor="gap", divide_by_three=True)`，百分比与压制口径不变；新增 fail-closed 守卫，境界名未知时返回 0 而非回退 `current`。三个零奖励分支（`exp_buff<=0`、`root=="凡人"`、未获胜）保持不变。
+- 历练惩罚侧（`features/training/event_resolver.py:542`）补齐 `divide_by_three=True`，与该文件奖励侧、规划侧一致。
+- 按当前代码重新核验全部 16 个 `percent_exp_reward` 调用点（爬塔 4 处、宗门任务 2 处、历练 3 处、幻境、前尘轮回、魔修入侵、双修、传功、突破成功、世界BOSS），逐项记录 anchor/÷3/压制开关；另登记固定值与间接来源：闭关与灵石/修为修炼（乘法增益 + cap）、悬赏令（任务固定数值）、秘境扣减（`apply_rank_suppress=False`，扣减语义）与结算（gap + `max_exp` 上限）、签到（仅灵石）。
+- 重写 `docs/features/xiuxian_progression.md` 总表并同步 `docs/gameplay_notes.md`；纠正文档事实错误：境界为「初期/中期/圆满」三段共 77 境，77 境 `stage_power_gap` 全部 > 0。
+- 新增 `tests/test_boss_exp_reward_anchor.py` 9 项（gap 成正比、改变累计 exp 不影响奖励、÷3 压制、未知境界 fail-closed、三个零分支、历练两处源合同）与 `tests/test_progression_source_table.py` 8 项（未登记调用点、登记位置缺失、anchor/÷3/压制不符、`current` 锚定发放点、高频玩法缺 ÷3、文档同步），共 17/17 通过。受影响套件：boss 31、training 17、source_quality 246 全通过。
+- 目标提交 `b4421bb3`、`6f4e1105` 已推送 develop，develop CI run `41275688373`、`41276510275` 均成功，随后快进合入 main 并验证 main CI。未部署、未读写真实游戏库、未打 tag。
+
+## 已完成目标：灵庄空格容错与活动中心注入时钟
+
+修复玩家反馈的灵庄误报与 develop CI 的时间驱动红灯，两段均先取证再改。
+
+- 灵庄：正则 `^灵庄(存灵石|取灵石|升级会员|信息|结算)?(.*)?` 要求子指令紧跟 `灵庄`，中间有空格/全角空格时 `mode` 为 None → 走 help 分支 → 余文非「帮助」→ `invalid_argument`。收敛为 `BANK_COMMAND_PATTERN` + `parse_bank_command()`（`灵庄\s*`），matcher 引用同一常量，帮助文本补充空格与正整数金额规则；金额校验未放宽（小数点、千分位、单位、全角数字仍拒绝）。
+- 活动中心：`gameplay_status_text(activity)` 丢弃传入的 `now`，内部 `activity_state` 用 `datetime.now()`，导致固定时钟测试随真实日期翻转，且同一张卡片可能出现主活动「进行中」而玩法「已结束」。新增 `at_time` 参数贯通 `activity_state`/`gameplay_status_text`/`build_activity_center_items`/阶段视图与两处玩法摘要。失败先于本次改动存在（未修改的 `b1679cf4` 上同节点同失败、实际值逐字相同）。
+- 新增 `tests/test_bank_command_whitespace.py`（12 tests + 24 subtests）与两项不依赖真实日期的活动时钟合同测试；受影响套件 295 与 99 全通过。
+- 提交 `4763733d`、`690e1c91`；develop CI run `41272314565`、main CI run `41272887413` 成功。未部署、未打 tag。
+
 ## 已完成目标：活动签到 Web 代办
 
 本轮沿活动中心路线图推进到受保护的签到写交互，不重做来源级领奖入口、阶段/排行快捷入口、详情视图或已通过的 QQ/OneBot 投递合同。只允许管理员对已选玩家 ID 发起代签到；不引入未绑定 Web 身份的玩家自助写入口。
