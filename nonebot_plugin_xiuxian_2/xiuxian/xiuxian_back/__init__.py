@@ -46,6 +46,12 @@ from ...features.back.capacity_view import (
     BackpackCapacityApplication,
     format_backpack_capacity,
 )
+from ...features.back.backpack_search import (
+    empty_notice,
+    filter_lines,
+    filter_sections,
+    parse_backpack_arg,
+)
 from ...features.back.skill_confirmation_cache import SkillConfirmationCache
 from ...compatibility.legacy_back_lottery_talisman import LotteryReward, LotteryTalismanService
 from ...paths import get_paths
@@ -583,6 +589,8 @@ async def back_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 **查看**
 - 我的背包 [页码]
 > 查看背包物品
+- 我的背包 关键词 [页码]
+> 按名称或类型筛选背包，例如 我的背包 破境丹
 - 药材背包 [页码]
 > 查看药材类物品
 - 丹药背包 [页码]
@@ -2282,17 +2290,19 @@ async def main_back_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, a
         await handle_send(bot, event, msg, md_type="我要修仙")
         await main_back.finish()
 
-    try:
-        current_page = int(args.extract_plain_text().strip())
-    except ValueError:
-        current_page = 1
+    # 参数可以是页码，也可以是关键词（可带页码）：原先 int() 失败就静默当第 1 页，
+    # 让 `我的背包 破境丹` 显示首页而不是破境丹。
+    parsed = parse_backpack_arg(args.extract_plain_text() if args else "")
+    current_page = parsed["page"]
+    keyword = parsed["keyword"]
 
     user_id = user_info['user_id']
 
     if XiuConfig().markdown_status:
         sections = _build_main_backpack_sections_for_md(user_id)
+        sections = filter_sections(sections, keyword)
         if not sections:
-            await handle_send(bot, event, "道友的背包空空如也！")
+            await handle_send(bot, event, empty_notice(keyword))
             await main_back.finish()
 
         page_sections, current_page, total_pages = _paginate_sections(
@@ -2320,10 +2330,11 @@ async def main_back_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, a
 
     # 非 markdown 逻辑保持原有
     msg_list = get_user_main_back_msg(user_id)
+    msg_list = filter_lines(msg_list, keyword)
     title = f"{user_info['user_name']}的背包"
 
     if not msg_list:
-        await handle_send(bot, event, "道友的背包空空如也！")
+        await handle_send(bot, event, empty_notice(keyword))
         await main_back.finish()
 
     per_page = 15
