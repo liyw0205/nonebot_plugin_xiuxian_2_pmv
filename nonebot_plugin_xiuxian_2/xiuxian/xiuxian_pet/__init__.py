@@ -370,8 +370,30 @@ def _format_my_pet(data: dict):
     return "\n".join(lines)
 
 
-def _format_pet_bag(data: dict, page: int = 1, per_page: int = 15):
-    rows = get_pet_bag_rows(data)
+def _filter_pet_rows(rows, keyword):
+    """按宠物名/品种/稀有度/类型/UID 过滤；空关键词原样返回。"""
+    from ...features.base.keyword_page import matches_keyword
+
+    query = str(keyword or "").strip()
+    if not query:
+        return list(rows)
+    return [
+        row
+        for row in rows
+        if matches_keyword(
+            [
+                row.get("form_name"),
+                row.get("name"),
+                row.get("rarity"),
+                row.get("type"),
+                row.get("uid"),
+            ],
+            query,
+        )
+    ]
+
+def _format_pet_bag(data: dict, page: int = 1, per_page: int = 15, keyword: str = ""):
+    rows = _filter_pet_rows(get_pet_bag_rows(data), keyword)
     if not rows:
         return "宠物背包为空。"
 
@@ -404,8 +426,9 @@ def _build_pet_bag_md_text(
     data: dict,
     current_page: int,
     per_page: int = 15,
+    keyword: str = "",
 ) -> tuple[str, int, int]:
-    rows = get_pet_bag_rows(data)
+    rows = _filter_pet_rows(get_pet_bag_rows(data), keyword)
     total_pages = max(1, (len(rows) + per_page - 1) // per_page)
     current_page = max(1, min(int(current_page), total_pages))
     start = (current_page - 1) * per_page
@@ -447,8 +470,9 @@ def _build_pet_bag_plain_text(
     data: dict,
     current_page: int,
     per_page: int = 15,
+    keyword: str = "",
 ) -> str:
-    rows = get_pet_bag_rows(data)
+    rows = _filter_pet_rows(get_pet_bag_rows(data), keyword)
     total_pages = max(1, (len(rows) + per_page - 1) // per_page)
     current_page = max(1, min(int(current_page), total_pages))
     start = (current_page - 1) * per_page
@@ -506,6 +530,9 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 
 **查看信息**
 > 我的宠物 / 宠物背包
+
+**背包筛选**
+> 宠物背包 [页码|关键词]，按宠物名/品种/稀有度/类型/UID 筛选，例如 `宠物背包 龙`
 
 """.strip()
 
@@ -973,14 +1000,16 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         await handle_send(bot, event, msg, md_type="我要修仙")
         return
 
-    try:
-        current_page = int(args.extract_plain_text().strip())
-    except ValueError:
-        current_page = 1
+    from ...features.base.keyword_page import empty_notice, parse_page_arg
+
+    # 参数可以是页码，也可以是宠物名/品种/稀有度/类型/UID 关键词
+    parsed = parse_page_arg(args.extract_plain_text() if args else "")
+    current_page = parsed["page"]
+    keyword = parsed["keyword"]
 
     data = get_pet_doc(str(user_info["user_id"]))
-    if not get_pet_bag_rows(data):
-        await handle_send(bot, event, "宠物背包为空。")
+    if not _filter_pet_rows(get_pet_bag_rows(data), keyword):
+        await handle_send(bot, event, empty_notice(keyword, "宠物背包"))
         return
 
     if XiuConfig().markdown_status:
@@ -988,11 +1017,13 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
             title=f"{user_info.get('user_name', '道友')}的宠物背包",
             data=data,
             current_page=current_page,
+            keyword=keyword,
         )
         fallback_text = _build_pet_bag_plain_text(
             title=f"{user_info.get('user_name', '道友')}的宠物背包",
             data=data,
             current_page=current_page,
+            keyword=keyword,
         )
         try:
             await delivery_service.reply(bot, event, MessageSegment.markdown(bot, md_text))
@@ -1003,7 +1034,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     await handle_send(
         bot,
         event,
-        _format_pet_bag(data, current_page),
+        _format_pet_bag(data, current_page, keyword=keyword),
         md_type="背包",
         k1="我的宠物",
         v1="我的宠物",

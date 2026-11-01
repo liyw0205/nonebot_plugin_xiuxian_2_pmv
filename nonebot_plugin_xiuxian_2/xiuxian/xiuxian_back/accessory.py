@@ -275,9 +275,9 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 
 **查看饰品背包**
    发送
-   > 饰品背包 [页码]
+   > 饰品背包 [页码|关键词]
    例如
-   > 饰品背包 2
+   > 饰品背包 2 / 饰品背包 烈阳
 
 **查看单件饰品详情**
    发送
@@ -526,16 +526,19 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
 
     user_id = str(user_info["user_id"])
 
-    try:
-        current_page = int(args.extract_plain_text().strip() or "1")
-    except ValueError:
-        current_page = 1
+    # 参数可以是页码，也可以是饰品名/部位关键词
+    from ...features.base.keyword_page import empty_notice, parse_page_arg
+    from ...features.back.backpack_search import filter_sections
+
+    parsed = parse_page_arg(args.extract_plain_text() if args else "")
+    current_page = parsed["page"]
+    keyword = parsed["keyword"]
 
     data = _get_data(user_id)
-    sections = _build_accessory_sections_for_md(user_id)
+    sections = filter_sections(_build_accessory_sections_for_md(user_id), keyword)
     # 背包展示含已装备；仅 bag 为空但身上有饰品时仍应展示
     if not sections:
-        await handle_send(bot, event, "饰品背包为空")
+        await handle_send(bot, event, empty_notice(keyword, "饰品背包"))
         return
     capacity_text = f"容量：{get_accessory_total_count(data)}/{ACCESSORY_BAG_LIMIT}"
     title_name = f"{user_info.get('user_name', '道友')}的饰品背包"
