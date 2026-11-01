@@ -18,6 +18,13 @@
 （差异如实标注，不改数）、距下一境所需修为、同修为突破后的战力预估，以及三项提升手段中
 相对增幅最大的一项。舍入与 SQLite `round(x,0)` 一致（.5 远离零）。未知境界、灵根倍率不可用、
 缺表时明确降级，不伪造战力、不建表、不写库。该命令登记在 `修仙帮助` 的「常用入口」段。
+`修仙帮助 关键词`（例如 `修仙帮助 签到`）：对已登记命令做关键词检索，只读、纯内存。
+索引由 `features/base/help_search.py` 扫描 `bootstrap/platform_manifest.py` 与
+`features/*/manifest.py` 的 `FEATURE.commands` 构建，并在首次检索时缓存；
+匹配强度为「完全相等 → 前缀 → 包含」，命令名与别名都参与匹配，大小写与首尾空白归一化。
+返回最多 10 条（超出时提示收窄关键词），无命中时提示换用更短关键词或发送 `修仙帮助` 看完整菜单。
+`tests/test_help_search.py` 会把它与 `plugin.build_registry()` 的登记结果逐条比对，
+manifest 新增命令而索引漏扫时直接失败。不带参数的 `修仙帮助` 行为不变。
 ## Web API
 `POST /api/v1/base/{breakthrough,tribulation,rename,stone_contest,stone_robbery,sign}`，权限 `user`，要求幂等键。
 `POST /api/v1/base/xiangyuan/{create,claim}` 与 `GET /api/v1/base/xiangyuan/group`，权限 `user`；写入请求要求幂等键和 CSRF。

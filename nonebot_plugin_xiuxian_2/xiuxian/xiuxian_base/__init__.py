@@ -65,6 +65,13 @@ from ...features.base.power_breakdown import (
     PowerBreakdownApplication,
     format_power_breakdown,
 )
+from ...features.base.help_search import (
+    build_entries,
+    format_help_search,
+    iter_feature_manifests,
+    search as search_help_entries,
+)
+import sys as _sys
 from ...features.sign_in.statistics_view import (
     SignInStatisticsViewApplication,
     format_sign_in_statistics,
@@ -77,6 +84,24 @@ from .breakthrough_tribulation import *  # noqa: F401,F403
 from .xiangyuan import clear_all_xiangyuan, reset_xiangyuan_daily  # noqa: F401
 
 _sql_message_instance = None
+_HELP_SEARCH_ENTRIES: list[dict] | None = None
+
+
+def _help_search_entries() -> list[dict]:
+    """惰性构建一次帮助索引（650+ 命令，避免每次检索都重新扫 manifest）。"""
+    global _HELP_SEARCH_ENTRIES
+    if _HELP_SEARCH_ENTRIES is None:
+        # `__package__` 是 ...xiuxian_base，manifest 位于根包的 features/ 下。
+        root_package = _sys.modules[__package__.split(".")[0]]
+        _HELP_SEARCH_ENTRIES = build_entries(iter_feature_manifests(root_package))
+    return _HELP_SEARCH_ENTRIES
+
+
+def search_help_commands(keyword: str) -> dict:
+    """按命令名/别名检索已登记命令。"""
+    return search_help_entries(_help_search_entries(), keyword)
+
+
 sign_in_application = SignInApplication(get_paths().game_db)
 stone_flow_application = EconomyLedgerApplication(get_paths().game_db)
 weekly_report_application = WeeklyReportApplication(get_paths().game_db)
@@ -1016,8 +1041,25 @@ async def help_in_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
     """修仙帮助"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
 
+    keyword = args.extract_plain_text().strip() if args else ""
+    if keyword:
+        # 有参数时走关键词检索，不返回整页菜单。
+        payload = search_help_commands(keyword)
+        await handle_send(
+            bot,
+            event,
+            format_help_search(payload),
+            md_type="修仙",
+            k1="帮助",
+            v1="修仙帮助",
+            k2="存档",
+            v2="我的修仙信息",
+        )
+        await help_in.finish()
+
     msg = """**修仙帮助**
 ---
+> 发送 `修仙帮助 关键词` 可直接检索命令，例如 `修仙帮助 签到`
 **基础指令**
 - 我要修仙
 > 创建角色
