@@ -1193,6 +1193,15 @@
       "permission": "user"
     },
     {
+      "aliases": [
+        "我的战力",
+        "战力明细"
+      ],
+      "feature": "base",
+      "name": "战力拆解",
+      "permission": "user"
+    },
+    {
       "aliases": [],
       "feature": "entertainment",
       "name": "扫雷信息",

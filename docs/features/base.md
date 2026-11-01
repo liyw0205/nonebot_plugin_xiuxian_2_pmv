@@ -11,6 +11,13 @@
 数据来自 `player_data.statistics` 的 `突破次数`/`突破成功`/`突破失败`/`突破损失修为`；
 成功率分母恒为 `突破次数`，若 `成功+失败 != 次数` 会如实标注不一致而不改数。
 该命令同样登记在 `修仙帮助` 的「流水与总览」段。
+`战力拆解`（别名 `我的战力`、`战力明细`）：把战力拆成三因子并给出升境预估，只读。
+公式来自 `xiuxian2_handle.py::update_power2` 的 `power = round(exp × root_rate × level_spend, 0)`：
+`exp` 为当前修为，`root_rate` 为灵根倍率（`命运道果` 走 `compute_fate_root_rate` 阶梯），
+`level_spend` 为境界系数 `jsondata.level_data()[level]["spend"]`。视图输出计算战力、账面战力
+（差异如实标注，不改数）、距下一境所需修为、同修为突破后的战力预估，以及三项提升手段中
+相对增幅最大的一项。舍入与 SQLite `round(x,0)` 一致（.5 远离零）。未知境界、灵根倍率不可用、
+缺表时明确降级，不伪造战力、不建表、不写库。该命令登记在 `修仙帮助` 的「常用入口」段。
 ## Web API
 `POST /api/v1/base/{breakthrough,tribulation,rename,stone_contest,stone_robbery,sign}`，权限 `user`，要求幂等键。
 `POST /api/v1/base/xiangyuan/{create,claim}` 与 `GET /api/v1/base/xiangyuan/group`，权限 `user`；写入请求要求幂等键和 CSRF。
@@ -47,6 +54,9 @@ NoneBot 和 Web 只负责输入输出转换。
 - `command: 修行周报`
 - `alias: 我的周报`
 - `alias: 本周修行`
+- `command: 战力拆解`
+- `alias: 我的战力`
+- `alias: 战力明细`
 - `command: 我的资产总览`
 - `alias: 灵石流水`
 - `alias: 灵石收支`

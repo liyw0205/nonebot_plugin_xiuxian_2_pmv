@@ -61,6 +61,10 @@ from ...features.base.assets_overview import (
     PlayerAssetsOverviewApplication,
     format_assets_overview,
 )
+from ...features.base.power_breakdown import (
+    PowerBreakdownApplication,
+    format_power_breakdown,
+)
 from ...features.sign_in.statistics_view import (
     SignInStatisticsViewApplication,
     format_sign_in_statistics,
@@ -79,6 +83,7 @@ weekly_report_application = WeeklyReportApplication(get_paths().game_db)
 assets_overview_application = PlayerAssetsOverviewApplication(
     get_paths().game_db, get_paths().player_db
 )
+power_breakdown_application = PowerBreakdownApplication(get_paths().player_db)
 sign_in_statistics_application = SignInStatisticsViewApplication(
     get_paths().game_db, clock=SystemClock()
 )
@@ -192,6 +197,7 @@ season_rank = on_command("赛季榜", aliases={"赛季排行榜", "赛季排行"
 my_season_rank = on_command("我的赛季", aliases={"我的赛季榜", "个人赛季"}, priority=7, block=True)
 stone_flow = on_command("我的灵石流水", aliases={"灵石流水", "灵石收支"}, priority=7, block=True)
 weekly_report = on_command("修行周报", aliases={"我的周报", "本周修行"}, priority=7, block=True)
+power_breakdown = on_command("战力拆解", aliases={"我的战力", "战力明细"}, priority=7, block=True)
 assets_overview = on_command("我的资产总览", aliases={"资产总览", "我的资产"}, priority=7, block=True)
 remaname = on_command("修仙改名", priority=5, block=True)
 root_rename = on_command("灵根改名", priority=5, block=True)
@@ -1044,6 +1050,8 @@ async def help_in_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
 
 **常用入口**
 - 修仙数据 / 修仙日志 / 修仙界信息
+- 战力拆解
+> 修为、灵根、境界三因子如何合成战力，以及突破预估
 - 修仙排行榜 / 赛季榜 / 我的赛季
 - 境界帮助 / 品阶帮助 / 灵根帮助
 
@@ -1412,6 +1420,33 @@ async def weekly_report_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         v3="修仙帮助",
     )
     await weekly_report.finish()
+
+
+@power_breakdown.handle(parameterless=[Cooldown(cd_time=0)])
+async def power_breakdown_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    """战力拆解：展示本人战力三因子与同修为升境预估（只读）。"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    isUser, user_info, msg = check_user(event)
+    if not isUser:
+        await handle_send(bot, event, msg, md_type="我要修仙")
+        await power_breakdown.finish()
+
+    # 只使用登录会话里的 user_id；不接受参数指定他人。
+    payload = power_breakdown_application.breakdown(str(user_info["user_id"]))
+    text = format_power_breakdown(payload, format_number=number_to)
+    await handle_send(
+        bot,
+        event,
+        text,
+        md_type="修仙",
+        k1="修仙信息",
+        v1="我的修仙信息",
+        k2="境界帮助",
+        v2="境界帮助",
+        k3="帮助",
+        v3="修仙帮助",
+    )
+    await power_breakdown.finish()
 
 
 @assets_overview.handle(parameterless=[Cooldown(cd_time=0)])
