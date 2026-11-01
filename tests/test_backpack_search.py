@@ -98,6 +98,11 @@ class NoticeTests(unittest.TestCase):
         self.assertIn("破境丹", text)
         self.assertNotIn("空空如也", text, "筛选无结果不能误报为背包为空")
 
+    def test_named_bags_keep_their_own_wording(self) -> None:
+        self.assertEqual(empty_notice("", "丹药背包"), "道友的丹药背包空空如也！")
+        self.assertIn("药材背包里没有", empty_notice("灵芝", "药材背包"))
+        self.assertEqual(empty_notice("", "装备"), "道友的装备空空如也！")
+
     def test_handler_wires_both_paths(self) -> None:
         src = (
             Path(__file__).resolve().parents[1]
@@ -111,6 +116,33 @@ class NoticeTests(unittest.TestCase):
         self.assertIn("filter_lines(msg_list, keyword)", src)
         self.assertIn("empty_notice(keyword)", src)
         self.assertIn("我的背包 关键词 [页码]", src)
+
+    def test_every_bag_view_uses_the_shared_parser(self) -> None:
+        """同类缺陷的兄弟路径必须一起修：五处背包视图都走 parse_backpack_arg。"""
+        src = (
+            Path(__file__).resolve().parents[1]
+            / "nonebot_plugin_xiuxian_2"
+            / "xiuxian"
+            / "xiuxian_back"
+            / "__init__.py"
+        ).read_text(encoding="utf-8")
+        self.assertEqual(
+            src.count("parse_backpack_arg(args.extract_plain_text()"),
+            5,
+            "我的背包/丹药背包/药材背包/我的装备/药材背包详细 都应用同一解析器",
+        )
+
+    def test_no_silent_int_page_fallback_remains(self) -> None:
+        """防回归：不得再出现 `int(args...)` 失败后静默当第 1 页的写法。"""
+        src = (
+            Path(__file__).resolve().parents[1]
+            / "nonebot_plugin_xiuxian_2"
+            / "xiuxian"
+            / "xiuxian_back"
+            / "__init__.py"
+        ).read_text(encoding="utf-8")
+        self.assertNotIn("current_page = int(args.extract_plain_text()", src)
+        self.assertNotIn("except ValueError:\n        current_page = 1", src)
 
 
 if __name__ == "__main__":

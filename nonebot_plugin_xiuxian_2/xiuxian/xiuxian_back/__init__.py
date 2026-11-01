@@ -591,12 +591,14 @@ async def back_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 > 查看背包物品
 - 我的背包 关键词 [页码]
 > 按名称或类型筛选背包，例如 我的背包 破境丹
-- 药材背包 [页码]
+- 药材背包 [页码|关键词]
 > 查看药材类物品
-- 丹药背包 [页码]
+- 丹药背包 [页码|关键词]
 > 查看丹药类物品
-- 我的装备 [页码]
+- 我的装备 [页码|关键词]
 > 查看背包装备
+- 药材背包详细 [页码|关键词]
+> 查看药材详细信息（含效果）
 - 查看修仙界物品+类型 [页码]
 > 查看物品图鉴
 - 查看效果+物品名
@@ -2367,17 +2369,17 @@ async def danyao_back_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
         await handle_send(bot, event, msg, md_type="我要修仙")
         await danyao_back.finish()
 
-    try:
-        current_page = int(args.extract_plain_text().strip())
-    except ValueError:
-        current_page = 1
+    parsed = parse_backpack_arg(args.extract_plain_text() if args else "")
+    current_page = parsed["page"]
+    keyword = parsed["keyword"]
 
     user_id = user_info['user_id']
 
     if XiuConfig().markdown_status:
         sections = _build_danyao_sections_for_md(user_id)
+        sections = filter_sections(sections, keyword)
         if not sections:
-            await handle_send(bot, event, "道友的丹药背包空空如也！")
+            await handle_send(bot, event, empty_notice(keyword, "丹药背包"))
             await danyao_back.finish()
 
         page_sections, current_page, total_pages = _paginate_sections(
@@ -2405,10 +2407,11 @@ async def danyao_back_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
 
     # 非 markdown 逻辑保持原有
     msg_list = get_user_danyao_back_msg(user_id)
+    msg_list = filter_lines(msg_list, keyword)
     title = f"{user_info['user_name']}的丹药背包"
 
     if not msg_list:
-        await handle_send(bot, event, "道友的丹药背包空空如也！")
+        await handle_send(bot, event, empty_notice(keyword, "丹药背包"))
         await danyao_back.finish()
 
     per_page = 15
@@ -2441,17 +2444,17 @@ async def yaocai_back_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
         await handle_send(bot, event, msg, md_type="我要修仙")
         await yaocai_back.finish()
 
-    try:
-        current_page = int(args.extract_plain_text().strip())
-    except ValueError:
-        current_page = 1
+    parsed = parse_backpack_arg(args.extract_plain_text() if args else "")
+    current_page = parsed["page"]
+    keyword = parsed["keyword"]
 
     user_id = user_info['user_id']
 
     if XiuConfig().markdown_status:
         sections = _build_yaocai_sections_for_md(user_id)
+        sections = filter_sections(sections, keyword)
         if not sections:
-            await handle_send(bot, event, "道友的药材背包空空如也！")
+            await handle_send(bot, event, empty_notice(keyword, "药材背包"))
             await yaocai_back.finish()
 
         page_sections, current_page, total_pages = _paginate_sections(
@@ -2479,10 +2482,11 @@ async def yaocai_back_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
 
     # 非 markdown 逻辑保持原有
     msg_list = get_user_yaocai_back_msg(user_id)
+    msg_list = filter_lines(msg_list, keyword)
     title = f"{user_info['user_name']}的药材背包"
 
     if not msg_list:
-        await handle_send(bot, event, "道友的药材背包空空如也！")
+        await handle_send(bot, event, empty_notice(keyword, "药材背包"))
         await yaocai_back.finish()
 
     per_page = 15
@@ -2514,18 +2518,18 @@ async def my_equipment_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         await handle_send(bot, event, msg, md_type="我要修仙")
         await my_equipment.finish()
     
-    # 获取页码
-    try:
-        current_page = int(args.extract_plain_text().strip())
-    except ValueError:
-        current_page = 1
+    # 参数可以是页码，也可以是关键词
+    parsed = parse_backpack_arg(args.extract_plain_text() if args else "")
+    current_page = parsed["page"]
+    keyword = parsed["keyword"]
     
     user_id = user_info['user_id']
     msg_list = get_user_equipment_msg(user_id)
+    msg_list = filter_lines(msg_list, keyword)
     title = f"{user_info['user_name']}的装备"
     
     if not msg_list:
-        await handle_send(bot, event, "道友的背包中没有装备！")
+        await handle_send(bot, event, empty_notice(keyword, "装备"))
         await my_equipment.finish()
     
     # 分页处理
@@ -2559,18 +2563,18 @@ async def yaocai_detail_back_(bot: Bot, event: GroupMessageEvent | PrivateMessag
         await handle_send(bot, event, msg, md_type="我要修仙")
         await yaocai_detail_back.finish()
     
-    # 获取页码
-    try:
-        current_page = int(args.extract_plain_text().strip())
-    except ValueError:
-        current_page = 1
+    # 参数可以是页码，也可以是关键词
+    parsed = parse_backpack_arg(args.extract_plain_text() if args else "")
+    current_page = parsed["page"]
+    keyword = parsed["keyword"]
     
     user_id = user_info['user_id']
     msg_list = get_user_yaocai_detail_back_msg(user_id)
+    msg_list = filter_lines(msg_list, keyword)
     title = f"{user_info['user_name']}的药材背包详情"
     
     if not msg_list:
-        await handle_send(bot, event, "道友的药材背包空空如也！")
+        await handle_send(bot, event, empty_notice(keyword, "药材背包详情"))
         await yaocai_detail_back.finish()
     
     # 分页处理

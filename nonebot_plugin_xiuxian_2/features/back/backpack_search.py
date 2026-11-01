@@ -76,12 +76,13 @@ def filter_lines(lines: Iterable[str], keyword: str) -> list[str]:
     return [line for line in lines if query in _normalize(line)]
 
 
-def empty_notice(keyword: str) -> str:
+def empty_notice(keyword: str, bag_name: str = "背包") -> str:
     """没有命中时的提示：明确说明是筛选无结果，而不是背包为空。"""
     query = str(keyword or "").strip()
+    name = str(bag_name or "背包").strip() or "背包"
     if not query:
-        return "道友的背包空空如也！"
-    return f"背包里没有名称或类型包含「{query}」的物品，换个关键词试试。"
+        return f"道友的{name}空空如也！"
+    return f"{name}里没有名称或类型包含「{query}」的物品，换个关键词试试。"
 
 
 __all__ = [
