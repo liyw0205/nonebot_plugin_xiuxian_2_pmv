@@ -35,6 +35,15 @@
 
 旧正则命令入口及其操作语法保留；账户编排已集中到 feature command owner，不再由 matcher 直接调用四个 writer 或旧存储。manifest 中的 `灵庄` 及别名仍是声明，不能据此声称存在同名 `on_command` matcher。
 
+解析入口收敛为 `features/bank/command_application.py` 的单一常量
+`BANK_COMMAND_PATTERN`（matcher 与测试共用，避免两份正则漂移）。该正则允许
+`灵庄` 与子指令之间有空白：`\s*` 覆盖半角与全角空格（U+3000），因此
+`灵庄 信息`、`灵庄　存灵石　1000` 与 `灵庄信息`、`灵庄存灵石 1000` 等价。
+早期写法要求子指令紧跟 `灵庄`，中间一旦有空格就整体退化为 help 分支，
+余下文本又不等于 `帮助`，合法操作被判为 `invalid_argument`
+（"请输入正确的金额或指令"）；该回归由 `tests/test_bank_command_whitespace.py` 钉住。
+金额仍须为正整数：小数点、千分位逗号、单位与全角数字依旧按 `invalid_argument` 拒绝。
+
 ## Web API
 
 四个接口均为 `POST /api/v1/bank/{deposit,withdraw,upgrade,interest}`，权限为 `user`，支持 CSRF 与 `Idempotency-Key`。生产默认路径由 `BankApplication` 编排 feature-owned game DB account application。

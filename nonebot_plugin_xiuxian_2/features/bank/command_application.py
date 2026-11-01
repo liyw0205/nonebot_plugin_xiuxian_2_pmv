@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 from .account_application import BankDepositApplication
@@ -10,6 +11,31 @@ from .account_withdrawal_application import BankWithdrawalApplication
 from .command_receipt_repository import BankCommandReceiptRepository
 from .clock import bank_clock
 from .interest_rules import calculate_interest
+
+# 灵庄子指令。顺序即正则交替顺序，`信息`/`结算` 必须与 `存灵石`/`取灵石` 同级。
+BANK_MODES = ("存灵石", "取灵石", "升级会员", "信息", "结算")
+
+# 玩家实际输入的解析入口。
+#
+# `\s*` 是必需的：玩家常写成 `灵庄 存灵石 1000` 或使用全角空格（U+3000），
+# 早期写法 `^灵庄(存灵石|...)?` 要求子指令紧跟 `灵庄`，一旦中间有空格
+# 就整体退化成 help 分支，余下文本又不等于 `帮助`，于是合法操作被判为
+# `invalid_argument`（"请输入正确的金额或指令"）。Python 的 `\s` 覆盖
+# Unicode 空白，因此半角与全角空格都能吸收。
+BANK_COMMAND_PATTERN = r'^灵庄\s*(存灵石|取灵石|升级会员|信息|结算)?(.*)?'
+_BANK_COMMAND_RE = re.compile(BANK_COMMAND_PATTERN)
+
+
+def parse_bank_command(text: str) -> tuple[str | None, str]:
+    """把一条灵庄消息解析成 ``(mode, argument)``。
+
+    ``mode`` 为 None 表示玩家只发了 `灵庄` 或 `灵庄 帮助`；``argument`` 原样返回，
+    由 :class:`BankCommandApplication` 负责金额校验（它自己会 strip）。
+    """
+    match = _BANK_COMMAND_RE.match(str(text or ""))
+    if match is None:
+        return None, ""
+    return match.group(1), match.group(2) or ""
 
 
 class BankCommandApplication:

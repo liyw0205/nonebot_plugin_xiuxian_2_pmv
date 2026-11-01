@@ -2,7 +2,7 @@ from typing import Any, Tuple
 
 from ...paths import get_paths
 from ...core.errors import ConflictError
-from ...features.bank.command_application import BankCommandApplication
+from ...features.bank.command_application import BankCommandApplication, BANK_COMMAND_PATTERN
 from ...features.bank.command_replies import render_bank_reply
 from ...infrastructure.ids import UUIDGenerator
 from ..on_compat import on_regex
@@ -25,7 +25,7 @@ runtime_ids = UUIDGenerator()
 
 
 bank = on_regex(
-    r'^灵庄(存灵石|取灵石|升级会员|信息|结算)?(.*)?',
+    BANK_COMMAND_PATTERN,
     priority=9,    
     block=True
 )
@@ -50,6 +50,7 @@ __bank_help__ = """
 > 手动结算当前利息
 
 > 利息按小时计算；会员等级越高收益越高；存取时会自动结算利息。
+> 金额为正整数（不要写小数点、千分位逗号或单位）；灵庄与指令之间可加空格，如 `灵庄 存灵石 1000`。
 """.strip()
 
 
