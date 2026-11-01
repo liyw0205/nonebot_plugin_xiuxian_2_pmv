@@ -51,6 +51,7 @@ from ..xiuxian_title.title_data import check_and_unlock_titles
 from .boss_limit import DAILY_BATTLE_COUNT
 from ...compatibility.boss import WorldBossBattleSettlementService
 from ...features.boss.application import BossApplication
+from ...features.boss.exp_reward import boss_exp_reward
 from ...features.boss.purchase_command_application import BossPurchaseCommandApplication
 from ...features.boss.purchase_command_replies import render_boss_purchase_reply
 from ...features.boss.integral_application import BossIntegralApplication
@@ -812,16 +813,15 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
     # 修为奖励
     # =========================
     exp_msg = ""
-    now_exp = 0
-    if exp_buff > 0 and user_info['root'] != "凡人" and victor == "群友赢了":
-        now_exp = int(
-            user_info['exp']
-            * exp_buff
-            / 10000
-            * min(0.1 * max(user_rank // 3, 1), 1)
-        )
-        if now_exp > 0:
-            exp_msg = f"，获得修为{number_to(now_exp)}点！"
+    now_exp = boss_exp_reward(
+        user_exp=user_info['exp'],
+        exp_buff=exp_buff,
+        level=user_info['level'],
+        root=user_info['root'],
+        victor=victor,
+    )
+    if now_exp > 0:
+        exp_msg = f"，获得修为{number_to(now_exp)}点！"
 
     # =========================
     # 掉落

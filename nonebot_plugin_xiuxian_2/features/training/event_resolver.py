@@ -541,7 +541,7 @@ class TrainingEvents:
                 percent = eval(calc_rule, {}, locals_dict)
                 exp = percent_exp_reward(
                     user_info["exp"], percent, user_info["level"],
-                    anchor="gap",
+                    divide_by_three=True, anchor="gap",
                 )
                 level = user_info['level'][:3] + '初期'
                 max_exp = int(jsondata.level_data()[level]["power"] * XiuConfig().closing_exp_upper_limit)
