@@ -76,6 +76,11 @@ from ..xiuxian_utils.numeric_bind import percent_exp_reward
 from ...features.sect_fairyland.application import SectFairylandApplication
 
 from ...features.sect.application import SectApplication
+from ...features.base.keyword_page import (
+    empty_notice,
+    matches_keyword,
+    parse_page_arg,
+)
 from ...features.sect.repository import SectRenameSqlRepository
 from ...infrastructure.ids import UUIDGenerator
 from ...infrastructure.clock import SystemClock
@@ -265,8 +270,8 @@ __sect_help__ = f"""
 > 领取已完成的周常奖励
 - 宗门周常排行
 > 查看本周周常进度排行
-- 宗门商店
-> 查看可兑换物品
+- 宗门商店 [页码|关键词]
+> 查看可兑换物品，可按名称/描述筛选，例如 宗门商店 灵芝
 - 宗门兑换 [物品] [数量]
 > 消耗贡献兑换
 - 我的宗门贡献流水
@@ -3389,14 +3394,25 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         await handle_send(bot, event, msg)
         await sect_shop.finish()
     
-    # 获取页码参数
-    page_input = args.extract_plain_text().strip()
-    try:
-        page = int(page_input) if page_input else 1
-    except ValueError:
-        page = 1
-    
-    # 分页设置
+    # 参数可以是页码，也可以是商品名/描述关键词
+    parsed = parse_page_arg(args.extract_plain_text() if args else "")
+    page = parsed["page"]
+    keyword = parsed["keyword"]
+
+    shop_items = dict(shop_items)
+    if keyword:
+        filtered = {}
+        for item_id, item_data in shop_items.items():
+            info = items.get_data_by_item_id(item_id) or {}
+            if matches_keyword(
+                [info.get("name"), info.get("desc"), item_id], keyword
+            ):
+                filtered[item_id] = item_data
+        shop_items = filtered
+        if not shop_items:
+            await handle_send(bot, event, empty_notice(keyword, "宗门商店"))
+            await sect_shop.finish()
+
     items_per_page = 5
     total_pages = (len(shop_items) + items_per_page - 1) // items_per_page
     page = max(1, min(page, total_pages))
