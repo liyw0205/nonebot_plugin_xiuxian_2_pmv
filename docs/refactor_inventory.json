@@ -414,6 +414,15 @@
       "permission": "user"
     },
     {
+      "aliases": [
+        "我的周报",
+        "本周修行"
+      ],
+      "feature": "base",
+      "name": "修行周报",
+      "permission": "user"
+    },
+    {
       "aliases": [],
       "feature": "compensation",
       "name": "兑换",

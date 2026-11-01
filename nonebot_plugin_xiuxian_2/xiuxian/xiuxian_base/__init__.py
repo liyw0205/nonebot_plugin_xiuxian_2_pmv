@@ -53,6 +53,10 @@ from .stone_limit import stone_limit
 
 from ...features.sign_in.application import SignInApplication
 from ...features.economy_ledger.application import EconomyLedgerApplication, format_stone_flow
+from ...features.economy_ledger.weekly_report import (
+    WeeklyReportApplication,
+    format_weekly_report,
+)
 from ...features.base.assets_overview import (
     PlayerAssetsOverviewApplication,
     format_assets_overview,
@@ -71,6 +75,7 @@ from .xiangyuan import clear_all_xiangyuan, reset_xiangyuan_daily  # noqa: F401
 _sql_message_instance = None
 sign_in_application = SignInApplication(get_paths().game_db)
 stone_flow_application = EconomyLedgerApplication(get_paths().game_db)
+weekly_report_application = WeeklyReportApplication(get_paths().game_db)
 assets_overview_application = PlayerAssetsOverviewApplication(
     get_paths().game_db, get_paths().player_db
 )
@@ -186,6 +191,7 @@ rank = on_command("排行榜", aliases={"修仙排行榜", "灵石排行榜", "�
 season_rank = on_command("赛季榜", aliases={"赛季排行榜", "赛季排行", "赛季信息"}, priority=7, block=True)
 my_season_rank = on_command("我的赛季", aliases={"我的赛季榜", "个人赛季"}, priority=7, block=True)
 stone_flow = on_command("我的灵石流水", aliases={"灵石流水", "灵石收支"}, priority=7, block=True)
+weekly_report = on_command("修行周报", aliases={"我的周报", "本周修行"}, priority=7, block=True)
 assets_overview = on_command("我的资产总览", aliases={"资产总览", "我的资产"}, priority=7, block=True)
 remaname = on_command("修仙改名", priority=5, block=True)
 root_rename = on_command("灵根改名", priority=5, block=True)
@@ -1044,6 +1050,8 @@ async def help_in_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
 **流水与总览**
 - 我的灵石流水
 > 近7天灵石收支与主要来源去向
+- 修行周报
+> 近7天修为、灵石、贡献、物品收支与活跃天数
 - 我的资产总览
 > 灵石、灵庄、宗门、背包与竞技场一览
 - 我的签到统计
@@ -1377,6 +1385,33 @@ async def stone_flow_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         v3="修仙帮助",
     )
     await stone_flow.finish()
+
+
+@weekly_report.handle(parameterless=[Cooldown(cd_time=0)])
+async def weekly_report_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    """修行周报：展示本人近 7 天修为/灵石/贡献/物品收支与活跃度（只读）。"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    isUser, user_info, msg = check_user(event)
+    if not isUser:
+        await handle_send(bot, event, msg, md_type="我要修仙")
+        await weekly_report.finish()
+
+    # 只使用登录会话里的 user_id；不接受任何参数指定他人周报。
+    payload = weekly_report_application.weekly_report(str(user_info["user_id"]))
+    text = format_weekly_report(payload, format_number=number_to)
+    await handle_send(
+        bot,
+        event,
+        text,
+        md_type="修仙",
+        k1="我的灵石流水",
+        v1="我的灵石流水",
+        k2="我的物品流水",
+        v2="我的物品流水",
+        k3="帮助",
+        v3="修仙帮助",
+    )
+    await weekly_report.finish()
 
 
 @assets_overview.handle(parameterless=[Cooldown(cd_time=0)])
