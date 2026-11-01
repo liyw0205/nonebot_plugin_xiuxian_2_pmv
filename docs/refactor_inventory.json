@@ -2171,6 +2171,15 @@
       "permission": "user"
     },
     {
+      "aliases": [
+        "我的背包容量",
+        "背包空间"
+      ],
+      "feature": "back",
+      "name": "背包容量",
+      "permission": "user"
+    },
+    {
       "aliases": [],
       "feature": "entertainment",
       "name": "脑筋急转弯",
