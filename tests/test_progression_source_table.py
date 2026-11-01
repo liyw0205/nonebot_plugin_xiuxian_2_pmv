@@ -22,32 +22,26 @@ DOC = Path(__file__).resolve().parents[1] / "docs" / "features" / "xiuxian_progr
 ANCHOR_RE = re.compile(r"""anchor\s*=\s*["']([a-z_]+)["']""")
 SUPPRESS_RE = re.compile(r"apply_rank_suppress\s*=\s*(\w+)")
 
-# (相对包路径) -> 按源码出现顺序的 (anchor, divide_by_three, apply_rank_suppress)
+# (相对包路径, 行号) -> (anchor, divide_by_three, apply_rank_suppress)
+# 行号是契约的一部分：任何改动调用点的编辑都必须同步这里与
+# docs/features/xiuxian_progression.md 的总表（宗门任务两处随 import 增至 2033/2116）。
 EXPECTED = {
-    "compatibility/base_breakthrough_effects.py": [("gap", False, "False")],
-    "features/boss/exp_reward.py": [("gap", True, "default")],
-    "features/training/event_planner.py": [("gap", True, "default")],
-    "features/training/event_resolver.py": [
-        ("gap", True, "default"),
-        ("gap", True, "default"),
-    ],
-    "xiuxian/xiuxian_Illusion/__init__.py": [("gap", True, "default")],
-    "xiuxian/xiuxian_buff/partner.py": [
-        ("gap", False, "default"),
-        ("gap", False, "False"),
-    ],
-    "xiuxian/xiuxian_past_life/past_life_events.py": [("gap", True, "default")],
-    "xiuxian/xiuxian_sect/__init__.py": [
-        ("gap", True, "default"),
-        ("gap", True, "default"),
-    ],
-    "xiuxian/xiuxian_tower/tower_battle.py": [
-        ("gap", True, "default"),
-        ("gap", True, "default"),
-        ("gap", True, "default"),
-        ("gap", True, "default"),
-    ],
-    "xiuxian/xiuxian_world_events/__init__.py": [("gap", False, "default")],
+    ("compatibility/base_breakthrough_effects.py", 193): ("gap", False, "False"),
+    ("features/boss/exp_reward.py", 61): ("gap", True, "default"),
+    ("features/training/event_planner.py", 83): ("gap", True, "default"),
+    ("features/training/event_resolver.py", 398): ("gap", True, "default"),
+    ("features/training/event_resolver.py", 542): ("gap", True, "default"),
+    ("xiuxian/xiuxian_Illusion/__init__.py", 244): ("gap", True, "default"),
+    ("xiuxian/xiuxian_buff/partner.py", 2537): ("gap", False, "default"),
+    ("xiuxian/xiuxian_buff/partner.py", 2630): ("gap", False, "False"),
+    ("xiuxian/xiuxian_past_life/past_life_events.py", 713): ("gap", True, "default"),
+    ("xiuxian/xiuxian_sect/__init__.py", 2033): ("gap", True, "default"),
+    ("xiuxian/xiuxian_sect/__init__.py", 2116): ("gap", True, "default"),
+    ("xiuxian/xiuxian_tower/tower_battle.py", 203): ("gap", True, "default"),
+    ("xiuxian/xiuxian_tower/tower_battle.py", 224): ("gap", True, "default"),
+    ("xiuxian/xiuxian_tower/tower_battle.py", 370): ("gap", True, "default"),
+    ("xiuxian/xiuxian_tower/tower_battle.py", 390): ("gap", True, "default"),
+    ("xiuxian/xiuxian_world_events/__init__.py", 1518): ("gap", False, "default"),
 }
 
 
@@ -91,19 +85,13 @@ def _code_only(src: str) -> str:
     return "".join(out)
 
 
-def scan_calls() -> dict[str, list[tuple[str, bool, str]]]:
-    """解析包内所有真实 percent_exp_reward 调用，按文件聚合成「出现顺序」列表。
-
-    刻意不按绝对行号定位：任何在其上方的无关编辑都会让行号漂移，使防漂移测试
-    变成噪声源（本仓库已因此误报过一次 CI 红灯）。契约由「文件 + 出现顺序」确定，
-    行号只留在文档里供人查阅。
-    """
-    found: dict[str, list[tuple[str, bool, str]]] = {}
+def scan_calls() -> dict[tuple[str, int], tuple[str, bool, str]]:
+    """解析包内所有真实 percent_exp_reward 调用（跳过定义、注释与文档字符串）。"""
+    found: dict[tuple[str, int], tuple[str, bool, str]] = {}
     for path in sorted(PACKAGE.rglob("*.py")):
         if "tests" in path.parts:
             continue
         src = _code_only(path.read_text(encoding="utf-8", errors="ignore"))
-        entries: list[tuple[str, bool, str]] = []
         for match in re.finditer(r"percent_exp_reward\s*\(", src):
             head = src[max(0, match.start() - 16):match.start()]
             if head.rstrip().endswith("def"):
@@ -123,15 +111,12 @@ def scan_calls() -> dict[str, list[tuple[str, bool, str]]]:
                 continue
             anchor = ANCHOR_RE.search(body)
             suppress = SUPPRESS_RE.search(body)
-            entries.append(
-                (
-                    anchor.group(1) if anchor else "current",
-                    "divide_by_three=True" in body.replace(" ", ""),
-                    suppress.group(1) if suppress else "default",
-                )
+            key = (str(path.relative_to(PACKAGE)), src[:match.start()].count("\n") + 1)
+            found[key] = (
+                anchor.group(1) if anchor else "current",
+                "divide_by_three=True" in body.replace(" ", ""),
+                suppress.group(1) if suppress else "default",
             )
-        if entries:
-            found[str(path.relative_to(PACKAGE))] = entries
     return found
 
 
@@ -141,7 +126,7 @@ class ProgressionSourceTableTests(unittest.TestCase):
         self.assertEqual(
             sorted(set(found) - set(EXPECTED)),
             [],
-            "代码里出现了总表未登记 percent_exp_reward 调用的文件",
+            "代码里出现了总表未登记的 percent_exp_reward 调用点（新增或行号漂移）",
         )
 
     def test_no_table_entry_missing_from_code(self) -> None:
@@ -149,67 +134,66 @@ class ProgressionSourceTableTests(unittest.TestCase):
         self.assertEqual(
             sorted(set(EXPECTED) - set(found)),
             [],
-            "总表登记的文件已不存在该调用点（被删除或改走别的助手）",
+            "总表登记的调用点在代码中不存在（行号漂移或已删除）",
         )
 
     def test_call_counts_match_table(self) -> None:
         found = scan_calls()
-        for path, contracts in EXPECTED.items():
-            with self.subTest(file=path):
-                self.assertEqual(
-                    len(found.get(path, ())), len(contracts),
-                    f"{path} 的调用点数量与总表声明不一致",
-                )
+        by_file: dict[str, int] = {}
+        for path, _line in found:
+            by_file[path] = by_file.get(path, 0) + 1
+        expected_by_file: dict[str, int] = {}
+        for path, _line in EXPECTED:
+            expected_by_file[path] = expected_by_file.get(path, 0) + 1
+        self.assertEqual(by_file, expected_by_file, "各文件调用点数量与总表声明不一致")
 
     def test_every_call_matches_documented_contract(self) -> None:
         found = scan_calls()
-        for path, contracts in EXPECTED.items():
-            for index, (anchor, div3, suppress) in enumerate(contracts, start=1):
-                with self.subTest(site=f"{path} 第{index}处"):
-                    actual = found.get(path, [])
-                    self.assertGreaterEqual(len(actual), index)
-                    self.assertEqual(
-                        actual[index - 1], (anchor, div3, suppress),
-                        f"{path} 第{index}处的 anchor/÷3/压制与总表声明不一致",
-                    )
+        for key, (anchor, div3, suppress) in EXPECTED.items():
+            with self.subTest(site="%s:%d" % key):
+                self.assertIn(key, found)
+                self.assertEqual(
+                    found[key], (anchor, div3, suppress),
+                    f"{key[0]}:{key[1]} 的 anchor/÷3/压制与总表声明不一致",
+                )
 
     def test_no_reward_site_uses_current_anchor(self) -> None:
         """修为**发放**绝不使用 current 锚定（会随累计修为膨胀）。"""
         offenders = [
-            f"{path} 第{index}处"
-            for path, entries in scan_calls().items()
-            for index, (anchor, _div3, _supp) in enumerate(entries, start=1)
+            f"{path}:{line}"
+            for (path, line), (anchor, _div3, _supp) in scan_calls().items()
             if anchor == "current"
         ]
         self.assertEqual(offenders, [], "存在 current 锚定的修为发放点")
 
     def test_high_frequency_repeatables_divide_by_three(self) -> None:
         require_div3 = {
-            ("features/boss/exp_reward.py", 1),               # 世界BOSS
-            ("features/training/event_planner.py", 1),        # 历练规划
-            ("features/training/event_resolver.py", 1),       # 历练奖励
-            ("features/training/event_resolver.py", 2),       # 历练惩罚
-            ("xiuxian/xiuxian_Illusion/__init__.py", 1),      # 幻境
-            ("xiuxian/xiuxian_past_life/past_life_events.py", 1),
-            ("xiuxian/xiuxian_sect/__init__.py", 1),
-            ("xiuxian/xiuxian_sect/__init__.py", 2),
-            ("xiuxian/xiuxian_tower/tower_battle.py", 1),
-            ("xiuxian/xiuxian_tower/tower_battle.py", 2),
-            ("xiuxian/xiuxian_tower/tower_battle.py", 3),
-            ("xiuxian/xiuxian_tower/tower_battle.py", 4),
+            ("features/boss/exp_reward.py", 61),              # 世界BOSS
+            ("features/training/event_planner.py", 83),       # 历练规划
+            ("features/training/event_resolver.py", 398),     # 历练奖励
+            ("features/training/event_resolver.py", 542),     # 历练惩罚
+            ("xiuxian/xiuxian_Illusion/__init__.py", 244),    # 幻境
+            ("xiuxian/xiuxian_past_life/past_life_events.py", 713),
+            ("xiuxian/xiuxian_sect/__init__.py", 2033),
+            ("xiuxian/xiuxian_sect/__init__.py", 2116),
+            ("xiuxian/xiuxian_tower/tower_battle.py", 203),
+            ("xiuxian/xiuxian_tower/tower_battle.py", 224),
+            ("xiuxian/xiuxian_tower/tower_battle.py", 370),
+            ("xiuxian/xiuxian_tower/tower_battle.py", 390),
         }
         found = scan_calls()
-        for path, index in sorted(require_div3):
-            with self.subTest(site=f"{path} 第{index}处"):
-                self.assertTrue(
-                    found[path][index - 1][1], f"{path} 第{index}处缺少 ÷3 压制"
-                )
+        for key in sorted(require_div3):
+            with self.subTest(site="%s:%d" % key):
+                self.assertTrue(found[key][1], f"{key[0]}:{key[1]} 缺少 ÷3 压制")
 
-    def test_document_lists_every_registered_file(self) -> None:
+    def test_document_lists_every_registered_site(self) -> None:
         text = DOC.read_text(encoding="utf-8")
-        for path in EXPECTED:
-            with self.subTest(file=path):
-                self.assertIn(path, text, "总表未写出该调用点所在文件")
+        for path, line in EXPECTED:
+            with self.subTest(site=f"{path}:{line}"):
+                self.assertIn(
+                    f"{path}:{line}", text,
+                    "总表未写出该调用点的位置",
+                )
 
     def test_document_states_no_current_anchor_rule(self) -> None:
         text = DOC.read_text(encoding="utf-8")
