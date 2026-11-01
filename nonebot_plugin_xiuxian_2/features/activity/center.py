@@ -469,7 +469,7 @@ def build_activity_center_items(
         claimable=claimable,
     )
     gameplay_lines = [
-        f"{_clean_text(activity.get('name'), '活动玩法')}·{gameplay_status_text(activity)}"
+        f"{_clean_text(activity.get('name'), '活动玩法')}·{gameplay_status_text(activity, at_time=now)}"
         for activity in activities
     ]
     main_commands = commands_for_status(main_status)

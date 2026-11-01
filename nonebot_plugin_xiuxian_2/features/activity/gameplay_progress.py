@@ -7,6 +7,7 @@ one place is what makes that consistency enforceable and testable.
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any, Mapping
 
 from ...xiuxian.xiuxian_activity.activity_utils import _as_int, _clean_text
@@ -50,15 +51,20 @@ def closest_pity_entry(
     return max(entries, key=lambda item: item[1])
 
 
-def gameplay_status_text(activity: Mapping[str, Any]) -> str:
+def gameplay_status_text(activity: Mapping[str, Any], *, at_time: datetime | None = None) -> str:
     """Status text for one gameplay activity, shared by card and detail views.
 
     Uses ``activity_state`` so the card cannot claim a different lifecycle than
     the detail commands (e.g. 已结束 vs 活动未开启).
+
+    ``at_time`` is forwarded so the caller's clock decides the lifecycle: the
+    activity center passes the same ``now`` it used for the main activity,
+    otherwise a card could show 主活动进行中 while its gameplay line says
+    已结束 (and a fixed-clock test would flip once real time passed end_time).
     """
     from ...xiuxian.xiuxian_activity.activity_config import activity_state
 
-    ok, reason = activity_state(dict(activity))
+    ok, reason = activity_state(dict(activity), at_time=at_time)
     return "进行中" if ok else (_clean_text(reason) or "未开放")
 
 

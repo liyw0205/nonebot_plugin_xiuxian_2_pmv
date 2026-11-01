@@ -261,12 +261,15 @@ def parse_time(value, *, is_start: bool):
     return None
 
 
-def activity_state(config: dict | None = None) -> tuple[bool, str]:
+def activity_state(config: dict | None = None, *, at_time: datetime | None = None) -> tuple[bool, str]:
     cfg = config or load_config()
     if not cfg.get("enabled", False):
         return False, "活动未开启"
 
-    now = _now_dt()
+    # `at_time` 让调用方注入时钟：同一张活动卡片里的主活动与各玩法必须用同一个
+    # 时刻判定生命周期，否则会出现"主活动进行中、玩法已结束"这种自相矛盾的展示，
+    # 也会让固定时钟的测试在真实日期跨过 end_time 后失效。
+    now = at_time or _now_dt()
     start_time = parse_time(cfg.get("start_time"), is_start=True)
     end_time = parse_time(cfg.get("end_time"), is_start=False)
     if start_time and now < start_time:

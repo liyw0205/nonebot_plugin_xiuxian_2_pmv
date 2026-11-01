@@ -787,13 +787,13 @@ class ActivityReadModelApplication:
     @staticmethod
     def _append_gameplay_summary(
         lines, activities, activity_state_fn, as_int, as_float,
-        event_text, event_labels, drop_rate, *, detail,
+        event_text, event_labels, drop_rate, *, detail, at_time=None,
     ):
         if not activities:
             return
         lines.extend(("", "【玩法活动】"))
         for activity in activities:
-            ok, reason = activity_state_fn(activity)
+            ok, reason = activity_state_fn(activity, at_time=at_time)
             lines.append(f"- {activity.get('name', '集字活动')}：{'进行中' if ok else reason}")
             if not detail:
                 continue
@@ -908,6 +908,7 @@ class ActivityReadModelApplication:
             self._append_gameplay_summary(
                 lines, gameplay, helpers["activity_state"], as_int, as_float,
                 event_text, event_labels, helpers["_drop_rate"], detail=True,
+                at_time=now,
             )
             self._append_task_summary(
                 lines, tasks, task_map, now, helpers,
@@ -942,6 +943,7 @@ class ActivityReadModelApplication:
             self._append_gameplay_summary(
                 lines, gameplay, helpers["activity_state"], as_int, as_float,
                 event_text, event_labels, helpers["_drop_rate"], detail=False,
+                at_time=now,
             )
         return "\n".join(lines).strip()
 

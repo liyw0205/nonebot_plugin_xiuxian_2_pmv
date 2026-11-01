@@ -414,5 +414,57 @@ class ActivityCenterTests(unittest.TestCase):
         assert build_activity_center_items(dict(config, start_time="2099-01-01"), now)[0].gameplay_commands == ()
         assert build_activity_center_items(dict(config, end_time="2000-01-01"), now)[0].gameplay_commands == ()
 
+    def test_gameplay_status_follows_injected_clock_not_wall_clock(self) -> None:
+        """玩法行必须用调用方注入的 now 判定生命周期，而不是真实时钟。
+
+        回归背景：`gameplay_status_text` 曾经丢掉 `now`，直接调用
+        `activity_state(activity)`（内部用 `datetime.now()`）。于是
+        1) 卡片可能出现"主活动进行中、玩法已结束"的自相矛盾；
+        2) 固定时钟的测试在真实日期跨过玩法 end_time 后必然失败
+           （2026-10-31 之后 `春日集字·进行中` 变成 `活动已结束`）。
+        本测试把窗口固定在 now 之前/之后，不依赖运行时的真实日期。
+        """
+        gameplay = {
+            "key": "spring_collect",
+            "type": "collect_words",
+            "enabled": True,
+            "name": "春日集字",
+            "start_time": "2026-10-01",
+            "end_time": "2026-10-31",
+        }
+        config = {
+            "template_key": "spring",
+            "enabled": True,
+            "name": "春日庆典",
+            "start_time": "2026-10-01",
+            "end_time": "2026-12-31",
+            "gameplay_activities": [gameplay],
+        }
+        inside = datetime(2026, 10, 15, 12)
+        after = datetime(2027, 3, 1, 12)
+
+        inside_item = build_activity_center_items(config, inside)[0]
+        assert "春日集字·进行中" in inside_item.gameplay_summary
+
+        after_item = build_activity_center_items(config, after)[0]
+        assert "春日集字·进行中" not in after_item.gameplay_summary
+        assert "活动已结束" in after_item.gameplay_summary
+
+    def test_gameplay_status_agrees_with_main_activity_clock(self) -> None:
+        """同一张卡片里主活动与玩法必须来自同一个时刻。"""
+        gameplay = {
+            "key": "spring_collect", "type": "collect_words", "enabled": True,
+            "name": "春日集字", "start_time": "2026-10-01", "end_time": "2026-10-31",
+        }
+        config = {
+            "template_key": "spring", "enabled": True, "name": "春日庆典",
+            "start_time": "2026-10-01", "end_time": "2026-10-31",
+            "gameplay_activities": [gameplay],
+        }
+        inside = datetime(2026, 10, 15, 12)
+        item = build_activity_center_items(config, inside)[0]
+        assert item.status == IN_PROGRESS
+        assert "进行中" in item.gameplay_summary
+
 if __name__ == "__main__":
     unittest.main()
