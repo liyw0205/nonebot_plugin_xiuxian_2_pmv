@@ -18,8 +18,8 @@
 | 7 | 双修 | `xiuxian/xiuxian_buff/partner.py:2537` | gap | 否 | 默认 | 另受「对方修为 10%」上限 |
 | 8 | 传功 | `xiuxian/xiuxian_buff/partner.py:2630` | gap | 否 | `False` | 由「对方修为 10%」上限承担压制 |
 | 9 | 前尘轮回 | `xiuxian/xiuxian_past_life/past_life_events.py:713` | gap | **是** | 默认 | `gap×exp_rate` |
-| 10 | 宗门任务（接取） | `xiuxian/xiuxian_sect/__init__.py:2028` | gap | **是** | 默认 | `gap×give`（配置 give） |
-| 11 | 宗门任务（完成） | `xiuxian/xiuxian_sect/__init__.py:2111` | gap | **是** | 默认 | 同上 |
+| 10 | 宗门任务（接取） | `xiuxian/xiuxian_sect/__init__.py:2033` | gap | **是** | 默认 | `gap×give`（配置 give） |
+| 11 | 宗门任务（完成） | `xiuxian/xiuxian_sect/__init__.py:2116` | gap | **是** | 默认 | 同上 |
 | 12 | 爬塔每 10 层 | `xiuxian/xiuxian_tower/tower_battle.py:203` | gap | **是** | 默认 | `gap×0.001` |
 | 13 | 爬塔里程碑 ×2 | `xiuxian/xiuxian_tower/tower_battle.py:224` | gap | **是** | 默认 | 同一路径的里程碑加成 |
 | 14 | 爬塔每 10 层（另一路径） | `xiuxian/xiuxian_tower/tower_battle.py:370` | gap | **是** | 默认 | 与 12 同口径 |
