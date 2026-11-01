@@ -35,6 +35,18 @@
 - QQ 官方机器人配置键存在不等于平台连接通过；QQ 连接状态需从本轮启动证据单独核验。官方 QQ 消息呈现/权限未做真机验收，不发送真机消息，也不将其宣称通过。
 - 本轮先核实 Release 质量门和实例的真实加载/数据路径；停机冷备份并验证复制一致后，才可下载 Release 覆盖插件代码。不得运行会改写共享 `/root/myenv` 的依赖升级。
 
+## 已完成目标：修行周报（跨玩法 7 天核算）
+
+玩家此前只能单口径查看：灵石流水、物品流水、宗门贡献流水、资产总览与累计统计，缺少跨来源的周期汇总。本目标新增只读的 `修行周报`，不改 schema、写入路径与既有命令输出。
+
+- 新增 `features/economy_ledger/weekly_report.py::WeeklyReportApplication`：单次只读 `economy_log`，汇总近 7 天修为/灵石/宗门贡献的获得、消耗、净额与笔数，物品获得/消耗件数与前 3 名（同名合并、按件数降序），活跃天数、最活跃一天与主要玩法前 3；已知动作映射中文，未知动作回退 `source·action`。
+- 时间窗只用下界：`created_at` 由各写入方提供、UTC 与本地混用，加上界会误删「刚刚发生」的行（灵石流水切片已实测该陷阱）；`PRAGMA table_info` 探测真实列，旧库缺列该段为 0、缺表直接降级，不建表、不补列、不写库；`item_delta` 脏数据逐行跳过。
+- 命令 `修行周报`（别名 `我的周报`、`本周修行`，priority 7）注册于 `xiuxian_base`，只取登录会话 `user_id`；`修仙帮助`「流水与总览」分组与 `features/base/manifest.py` 同步登记。
+- `tests/test_weekly_report_view.py` 10 项通过：收支拆分与净额、本人隔离、未来时间行不被上界误删、窗外行排除、脏 JSON 逐行降级、缺表不建表、缺列逐段降级、零记录文案、活跃天数去重与最活跃一天、玩法分布排序、命令与帮助合同。受影响套件：help 10、economy 17、flow 52、source_quality 246 全通过。
+- 派生计数 647/333 → 648/334；`test_phase2_legacy_path_gate.py` 期望同步更新，并在**含冻结文件的隔离 worktree** 中实跑 47/47 通过（本仓因用户删除该文件无法本地评估，未恢复）。
+- 三门禁：architecture exit 0、inventory `--check` exit 0（已重生成 9 行）、progress `failures: None`；`compileall` 与 `git diff --check` 干净。
+- 提交 `0034ecb2` 推送 develop，CI run `41284807435` success；随后 `--ff-only` 合入 main 并核验 main CI。未部署、未读写真实游戏库、未打 tag。
+
 ## 已完成目标：修为奖励口径校准（gap 锚定 + 境界压制）
 
 核对 `docs/features/xiuxian_progression.md` 声称的 2026-10 全项目盘点是否在代码落地，按实测偏差分批修复；不改任何百分比数值、境界数据或奖励文案。
