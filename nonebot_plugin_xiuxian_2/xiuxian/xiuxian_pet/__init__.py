@@ -8,6 +8,7 @@ from nonebot.params import CommandArg
 from ..adapter_compat import Bot, GroupMessageEvent, Message, MessageSegment, PrivateMessageEvent
 from ..on_compat import on_command
 from ..messaging.delivery import delivery_service
+from ...features.base.keyword_page import page_command
 from ..xiuxian_config import XiuConfig
 from ..xiuxian_utils.item_json import Items
 from ..xiuxian_utils.lay_out import Cooldown
@@ -415,7 +416,7 @@ def _format_pet_bag(data: dict, page: int = 1, per_page: int = 15, keyword: str 
 
     lines.append(f"\n第 {page}/{total_pages} 页")
     if page < total_pages:
-        lines.append(f"输入 宠物背包 {page + 1} 查看下一页")
+        lines.append(f"输入 {page_command('宠物背包', keyword, page + 1)} 查看下一页")
     lines.append("可用命令：查看宠物 UID / 出战宠物 UID / 放生宠物 UID / 一键放生 稀有度或宠物名称")
 
     return "\n".join(lines)
@@ -459,7 +460,7 @@ def _build_pet_bag_md_text(
     lines.append("")
     lines.append(f"第 {current_page}/{total_pages} 页")
     if current_page < total_pages:
-        next_cmd = quote(f"宠物背包 {current_page + 1}", safe="")
+        next_cmd = quote(page_command("宠物背包", keyword, current_page + 1), safe="")
         lines.append(f"[下一页](mqqapi://aio/inlinecmd?command={next_cmd}&enter=false&reply=false)")
 
     return "\r".join(lines), current_page, total_pages
@@ -499,7 +500,7 @@ def _build_pet_bag_plain_text(
         f"第 {current_page}/{total_pages} 页",
     ])
     if current_page < total_pages:
-        lines.append(f"输入 宠物背包 {current_page + 1} 查看下一页")
+        lines.append(f"输入 {page_command('宠物背包', keyword, current_page + 1)} 查看下一页")
     lines.append("可用命令：查看宠物 UID / 出战宠物 UID / 放生宠物 UID / 一键放生 稀有度或宠物名称")
 
     return "\n".join(lines)

@@ -18,6 +18,7 @@ from ..xiuxian_utils.item_json import Items
 from ..xiuxian_utils.utils import check_user, handle_send, send_msg_handler, send_help_message
 from ..xiuxian_utils.xiuxian2_handle import PlayerDataManager, XiuxianDateManage, calc_accessory_effects
 from ..xiuxian_utils.lay_out import Cooldown
+from ...features.base.keyword_page import page_command
 from .accessory_helpers import *  # noqa: F403
 # 显式导入公开 API，避免 helpers.__all__ 漏导出导致 NameError
 from .accessory_helpers import (  # noqa: F401
@@ -552,7 +553,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
             sections=page_sections,
             current_page=current_page,
             total_pages=total_pages,
-            next_cmd=f"饰品背包 {current_page + 1}",
+            next_cmd=page_command("饰品背包", keyword, current_page + 1),
             capacity_text=capacity_text,
         )
         fallback_text = _build_accessory_plain_text(
@@ -560,7 +561,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
             sections=page_sections,
             current_page=current_page,
             total_pages=total_pages,
-            next_cmd=f"饰品背包 {current_page + 1}",
+            next_cmd=page_command("饰品背包", keyword, current_page + 1),
             capacity_text=capacity_text,
         )
         # 与「我的背包」一致：走 handle_send 原生 MD + 回落，避免裸 MessageSegment.markdown 异常吞没
@@ -598,9 +599,9 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
 
     lines.append(f"\n第 {current_page}/{total_pages} 页")
     if current_page < total_pages:
-        lines.append(f"输入 饰品背包 {current_page + 1} 查看下一页")
+        lines.append(f"输入 {page_command('饰品背包', keyword, current_page + 1)} 查看下一页")
     lines.append("可用命令：装备饰品 UID / 饰品洗练 UID / 饰品分解 UID")
-    page = ["翻页", f"饰品背包 {current_page + 1}", "装备", "装备饰品", "洗练", "饰品洗练", f"{current_page}/{total_pages}"]
+    page = ["翻页", page_command("饰品背包", keyword, current_page + 1), "装备", "装备饰品", "洗练", "饰品洗练", f"{current_page}/{total_pages}"]
     await send_msg_handler(bot, event, '饰品背包', bot.self_id, lines, title=title, page=page)
 
 

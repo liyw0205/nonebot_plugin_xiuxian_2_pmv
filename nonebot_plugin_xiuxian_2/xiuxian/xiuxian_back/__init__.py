@@ -52,6 +52,7 @@ from ...features.back.backpack_search import (
     filter_sections,
     parse_backpack_arg,
 )
+from ...features.base.keyword_page import page_command
 from ...features.back.skill_confirmation_cache import SkillConfirmationCache
 from ...compatibility.legacy_back_lottery_talisman import LotteryReward, LotteryTalismanService
 from ...paths import get_paths
@@ -2317,7 +2318,7 @@ async def main_back_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, a
             current_page=current_page,
             total_pages=total_pages,
             show_use_btn=True,
-            next_cmd=f"我的背包 {current_page + 1}"
+            next_cmd=page_command("我的背包", keyword, current_page + 1)
         )
         fallback_text = _build_backpack_fallback_with_sections(
             title=f"{user_info['user_name']}的背包",
@@ -2325,7 +2326,7 @@ async def main_back_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, a
             current_page=current_page,
             total_pages=total_pages,
             show_use_btn=True,
-            next_cmd=f"我的背包 {current_page + 1}"
+            next_cmd=page_command("我的背包", keyword, current_page + 1)
         )
         await handle_send(bot, event, md_text, native_markdown=True, fallback_msg=fallback_text)
         await main_back.finish()
@@ -2353,9 +2354,9 @@ async def main_back_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, a
     final_msg.append(f"\n第 {current_page}/{total_pages} 页")
 
     if total_pages > 1:
-        next_page_cmd = f"我的背包 {current_page + 1}"
+        next_page_cmd = page_command("我的背包", keyword, current_page + 1)
         final_msg.append(f"输入 {next_page_cmd} 查看下一页")
-    page = ["翻页", f"我的背包 {current_page + 1}", "使用", "使用", "查看", "查看效果", f"{current_page}/{total_pages}"]
+    page = ["翻页", page_command("我的背包", keyword, current_page + 1), "使用", "使用", "查看", "查看效果", f"{current_page}/{total_pages}"]
     await send_msg_handler(bot, event, '背包', bot.self_id, final_msg, title=title_display, page=page)
     await main_back.finish()
 
@@ -2392,7 +2393,7 @@ async def danyao_back_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
             current_page=current_page,
             total_pages=total_pages,
             show_use_btn=True,
-            next_cmd=f"丹药背包 {current_page + 1}"
+            next_cmd=page_command("丹药背包", keyword, current_page + 1)
         )
         fallback_text = _build_backpack_fallback_with_sections(
             title=f"{user_info['user_name']}的丹药背包",
@@ -2400,7 +2401,7 @@ async def danyao_back_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
             current_page=current_page,
             total_pages=total_pages,
             show_use_btn=True,
-            next_cmd=f"丹药背包 {current_page + 1}"
+            next_cmd=page_command("丹药背包", keyword, current_page + 1)
         )
         await handle_send(bot, event, md_text, native_markdown=True, fallback_msg=fallback_text)
         await danyao_back.finish()
@@ -2428,9 +2429,9 @@ async def danyao_back_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
     final_msg.append(f"\n第 {current_page}/{total_pages} 页")
 
     if total_pages > 1:
-        next_page_cmd = f"丹药背包 {current_page + 1}"
+        next_page_cmd = page_command("丹药背包", keyword, current_page + 1)
         final_msg.append(f"输入 {next_page_cmd} 查看下一页")
-    page = ["翻页", f"丹药背包 {current_page + 1}", "使用", "使用", "查看", "查看效果", f"{current_page}/{total_pages}"]
+    page = ["翻页", page_command("丹药背包", keyword, current_page + 1), "使用", "使用", "查看", "查看效果", f"{current_page}/{total_pages}"]
     await send_msg_handler(bot, event, '丹药背包', bot.self_id, final_msg, title=title_display, page=page)
     await danyao_back.finish()
 
@@ -2467,7 +2468,7 @@ async def yaocai_back_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
             current_page=current_page,
             total_pages=total_pages,
             show_use_btn=False,  # 药材不显示“使用”
-            next_cmd=f"药材背包 {current_page + 1}"
+            next_cmd=page_command("药材背包", keyword, current_page + 1)
         )
         fallback_text = _build_backpack_fallback_with_sections(
             title=f"{user_info['user_name']}的药材背包",
@@ -2475,7 +2476,7 @@ async def yaocai_back_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
             current_page=current_page,
             total_pages=total_pages,
             show_use_btn=False,
-            next_cmd=f"药材背包 {current_page + 1}"
+            next_cmd=page_command("药材背包", keyword, current_page + 1)
         )
         await handle_send(bot, event, md_text, native_markdown=True, fallback_msg=fallback_text)
         await yaocai_back.finish()
@@ -2503,9 +2504,9 @@ async def yaocai_back_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
     final_msg.append(f"\n第 {current_page}/{total_pages} 页")
 
     if total_pages > 1:
-        next_page_cmd = f"药材背包 {current_page + 1}"
+        next_page_cmd = page_command("药材背包", keyword, current_page + 1)
         final_msg.append(f"输入 {next_page_cmd} 查看下一页")
-    page = ["翻页", f"药材背包 {current_page + 1}", "使用", "使用", "查看", "查看效果", f"{current_page}/{total_pages}"]
+    page = ["翻页", page_command("药材背包", keyword, current_page + 1), "使用", "使用", "查看", "查看效果", f"{current_page}/{total_pages}"]
     await send_msg_handler(bot, event, '药材背包', bot.self_id, final_msg, title=title_display, page=page)
     await yaocai_back.finish()
 
@@ -2548,9 +2549,9 @@ async def my_equipment_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     final_msg.append(f"\n第 {current_page}/{total_pages} 页")
     
     if total_pages > 1:
-        next_page_cmd = f"我的装备 {current_page + 1}"
+        next_page_cmd = page_command("我的装备", keyword, current_page + 1)
         final_msg.append(f"输入 {next_page_cmd} 查看下一页")
-    page = ["翻页", f"我的装备 {current_page + 1}", "使用", "使用", "查看", "查看效果", f"{current_page}/{total_pages}"]
+    page = ["翻页", page_command("我的装备", keyword, current_page + 1), "使用", "使用", "查看", "查看效果", f"{current_page}/{total_pages}"]
     await send_msg_handler(bot, event, '我的装备', bot.self_id, final_msg, title=title_display, page=page)
     await my_equipment.finish()
 
@@ -2593,9 +2594,9 @@ async def yaocai_detail_back_(bot: Bot, event: GroupMessageEvent | PrivateMessag
     final_msg.append(f"\n第 {current_page}/{total_pages} 页")
     
     if total_pages > 1:
-        next_page_cmd = f"药材背包详情 {current_page + 1}"
+        next_page_cmd = page_command("药材背包详情", keyword, current_page + 1)
         final_msg.append(f"输入 {next_page_cmd} 查看下一页")
-    page = ["翻页", f"药材背包详情 {current_page + 1}", "使用", "使用", "查看", "查看效果", f"{current_page}/{total_pages}"]
+    page = ["翻页", page_command("药材背包详情", keyword, current_page + 1), "使用", "使用", "查看", "查看效果", f"{current_page}/{total_pages}"]
     await send_msg_handler(bot, event, '药材背包详情', bot.self_id, final_msg, title=title_display, page=page)
     await yaocai_detail_back.finish()
 

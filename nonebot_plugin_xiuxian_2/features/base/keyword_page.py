@@ -18,6 +18,7 @@ __all__ = [
     "filter_lines",
     "filter_rows",
     "matches_keyword",
+    "page_command",
     "parse_page_arg",
 ]
 
@@ -43,6 +44,24 @@ def parse_page_arg(raw: Any) -> dict[str, Any]:
 
 def _normalize(value: Any) -> str:
     return str(value or "").strip().casefold()
+
+
+def page_command(command: str, keyword: str = "", page: int | str = 1) -> str:
+    """构造翻页命令，保留筛选关键词。
+
+    筛选只作用于当次请求时，玩家一翻页就会看到未筛选的结果：下一页命令里必须
+    带上同一个关键词（`命令 关键词 页码`，与 :func:`parse_page_arg` 往返一致）。
+    """
+    base = str(command or "").strip()
+    query = str(keyword or "").strip()
+    try:
+        number = int(page)
+    except (TypeError, ValueError):
+        number = 1
+    number = max(1, number)
+    if query:
+        return f"{base} {query} {number}"
+    return f"{base} {number}"
 
 
 def matches_keyword(fields: Iterable[Any], keyword: str) -> bool:

@@ -24,6 +24,10 @@
 参数被无声吞掉。现在由 `features/back/backpack_search.py` 明确区分两种意图：纯数字才是页码，
 其余按名称或类型做大小写不敏感的包含匹配；筛选后保持原有排序与分页，空段整段丢弃。
 筛选无结果时提示「没有名称或类型包含该关键词的物品」，与真正的空背包提示分开，不误报。
+筛选后的翻页（MD `next_cmd`、纯文本「下一页」提示与底部按钮）统一由
+`features/base/keyword_page.py::page_command` 生成 `我的背包 关键词 页码`，所以第 2 页仍是
+筛选结果，不会退回未筛选列表；`丹药背包`、`药材背包`、`药材背包详情`、`我的装备` 四条同类视图
+使用同一规则。
 `背包帮助`「查看」段已补该用法。
 ## Web API
 `POST /api/v1/back/{open_package,use_item,change_equipment,learn_skill,repair,use_pet_eggs,alchemy,unbind}`，权限 `user`。

@@ -109,12 +109,11 @@ class SourceContractTests(unittest.TestCase):
         self.assertIn('empty_notice(keyword, "饰品背包")', ACC_SRC)
         self.assertNotIn('current_page = int(args.extract_plain_text().strip() or "1")', ACC_SRC)
 
-    # 唯一已知未迁移项：宗门成员列表（首页含职位人数统计与 MD/纯文本双路径），
-    # 单独作为下一目标处理；其余文件一律不得再有静默回退。
-    KNOWN_PENDING = {"nonebot_plugin_xiuxian_2/xiuxian/xiuxian_sect/__init__.py"}
+    # 宗门成员查看已纳入同一检索契约（关键词 + 翻页续查），全包不得再有静默回退。
+    KNOWN_PENDING: set[str] = set()
 
     def test_no_silent_int_page_fallback_in_package(self) -> None:
-        """全包防回归：除已知待迁移项外，不得再有 int(args.extract_plain_text()) 静默回退。"""
+        """全包防回归：不得再有 int(args.extract_plain_text()) 静默回退。"""
         offenders = []
         for path in (ROOT / "nonebot_plugin_xiuxian_2").rglob("*.py"):
             if "tests" in path.parts:

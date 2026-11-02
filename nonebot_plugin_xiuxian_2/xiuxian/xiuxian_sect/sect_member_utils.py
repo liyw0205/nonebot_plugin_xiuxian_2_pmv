@@ -4,6 +4,7 @@ from urllib.parse import quote
 
 from ..xiuxian_utils.item_json import Items
 from .sectconfig import get_config
+from ...features.base.keyword_page import matches_keyword
 
 items = Items()
 sect_application = None
@@ -29,6 +30,37 @@ def bind_sect_member_dependencies(
 def _md_cmd_link(text: str, cmd: str) -> str:
     """生成 QQ 原生 Markdown 快捷指令链接"""
     return f"[{text}](mqqapi://aio/inlinecmd?command={quote(cmd)}&enter=false&reply=false)"
+
+
+def filter_sect_member_rows(rows, keyword, position_titles=None):
+    """按道号/职位名/境界/UID 过滤宗门成员行；空关键词保持原顺序。"""
+    query = str(keyword or "").strip()
+    if not query:
+        return list(rows)
+    titles = position_titles or {}
+    kept = []
+    for row in rows:
+        position = row.get("sect_position")
+        if matches_keyword(
+            [
+                row.get("user_name"),
+                titles.get(str(position), ""),
+                row.get("level"),
+                row.get("user_id"),
+            ],
+            query,
+        ):
+            kept.append(row)
+    return kept
+
+
+def count_sect_positions(rows):
+    """首页职位人数统计：{职位编号: 人数}。"""
+    counts = {}
+    for row in rows:
+        position = row.get("sect_position")
+        counts[position] = counts.get(position, 0) + 1
+    return counts
 
 
 def create_user_sect_task(user_id, sect_id=None, operation_id=None, replace_existing=False):
