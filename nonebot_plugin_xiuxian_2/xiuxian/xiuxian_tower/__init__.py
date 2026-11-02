@@ -28,6 +28,12 @@ from .transaction_service import normalize_weekly_purchases
 from .transaction_service import TowerSettlementResult
 from ...features.tower.application import TowerApplication
 from ...features.tower.repository import TowerPurchaseSqlRepository
+from ...features.base.keyword_page import (
+    empty_notice,
+    matches_keyword,
+    page_command,
+    parse_page_arg,
+)
 from ...features.player_state.application import PlayerStateApplication
 from ...infrastructure.ids import UUIDGenerator
 from ...paths import get_paths
@@ -158,8 +164,8 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         "> 查看通天塔排行\n"
         "- 通天塔积分排行榜\n"
         "> 查看积分排行\n"
-        "- 通天塔商店\n"
-        "> 查看商店商品\n"
+        "- 通天塔商店 [关键词|页码]\n"
+        "> 查看商店商品，可按物品名筛选\n"
         "- 通天塔兑换+编号\n"
         "> 兑换商店商品\n"
         "\n"
@@ -344,20 +350,29 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     
     # 获取页码参数
     page_input = args.extract_plain_text().strip()
-    try:
-        page = int(page_input) if page_input else 1
-    except ValueError:
-        page = 1
+    parsed = parse_page_arg(page_input)
+    keyword = parsed["keyword"]
+    page = parsed["page"]
+    shop_rows = []
+    for item_id, item_data in shop_items.items():
+        item_info = _items().get_data_by_item_id(item_id) or {}
+        if matches_keyword(
+            [item_id, item_info.get("name"), item_info.get("desc")], keyword
+        ):
+            shop_rows.append((item_id, item_data))
+    if keyword and not shop_rows:
+        await handle_send(bot, event, empty_notice(keyword, "通天塔商店"))
+        await tower_shop.finish()
     
     # 分页设置
     items_per_page = 10
-    total_pages = (len(shop_items) + items_per_page - 1) // items_per_page
+    total_pages = (len(shop_rows) + items_per_page - 1) // items_per_page
     page = max(1, min(page, total_pages))
     
     # 获取当前页的商品
     start_idx = (page - 1) * items_per_page
     end_idx = start_idx + items_per_page
-    current_page_items = list(shop_items.items())[start_idx:end_idx]
+    current_page_items = shop_rows[start_idx:end_idx]
     title = f"道友目前拥有的通天塔积分：{tower_info['score']}点"
     msg_list = []
     msg_list.append(f"════════════\n【通天塔商店】第{page}/{total_pages}页")
@@ -374,8 +389,10 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
                 f"每周限购：{item_data['weekly_limit'] - already_purchased}/{item_data['weekly_limit']}个"
             )
     
-    msg_list.append(f"提示：发送 通天塔商店+页码 查看其他页（共{total_pages}页）")
-    page = ["翻页", f"通天塔商店 {page + 1}", "信息", "通天塔信息", "兑换", "通天塔兑换", f"{page}/{total_pages}"]
+    next_cmd = page_command("通天塔商店", keyword, min(page + 1, total_pages))
+    page_label = f"{page}/{total_pages}"
+    msg_list.append(f"提示：发送 {next_cmd} 查看其他页（共{total_pages}页）")
+    page = ["翻页", next_cmd, "信息", "通天塔信息", "兑换", "通天塔兑换", page_label]
     await send_msg_handler(bot, event, "通天塔商店", bot.self_id, msg_list, title=title, page=page)
     await tower_shop.finish()
 

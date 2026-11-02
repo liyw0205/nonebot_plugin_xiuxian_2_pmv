@@ -16,6 +16,12 @@ from .training_data import training_data
 from .training_limit import training_limit
 from ...paths import get_paths
 from ...features.training.application import TrainingApplication
+from ...features.base.keyword_page import (
+    empty_notice,
+    matches_keyword,
+    page_command,
+    parse_page_arg,
+)
 from ...features.player_state.application import PlayerStateApplication
 from ...infrastructure.clock import SystemClock
 from ...infrastructure.ids import UUIDGenerator
@@ -99,8 +105,8 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         "> 开始新的历练\n"
         "- 历练状态\n"
         "> 查看当前历练进度\n"
-        "- 历练商店\n"
-        "> 查看历练商店\n"
+        "- 历练商店 [关键词|页码]\n"
+        "> 查看历练商店，可按物品名筛选\n"
         "- 历练兑换+编号\n"
         "> 兑换商店商品\n"
         "- 历练排行榜\n"
@@ -254,18 +260,27 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     
     # 获取页码参数
     page_input = args.extract_plain_text().strip()
-    try:
-        page = int(page_input) if page_input else 1
-    except ValueError:
-        page = 1
+    parsed = parse_page_arg(page_input)
+    keyword = parsed["keyword"]
+    page = parsed["page"]
+    shop_rows = []
+    for item_id, item_data in shop_items.items():
+        item_info = _items().get_data_by_item_id(item_id) or {}
+        if matches_keyword(
+            [item_id, item_info.get("name"), item_info.get("desc")], keyword
+        ):
+            shop_rows.append((item_id, item_data))
+    if keyword and not shop_rows:
+        await handle_send(bot, event, empty_notice(keyword, "历练商店"))
+        await training_shop.finish()
     
     # 分页设置
     items_per_page = 10
-    total_pages = (len(shop_items) + items_per_page - 1) // items_per_page
+    total_pages = (len(shop_rows) + items_per_page - 1) // items_per_page
     page = max(1, min(page, total_pages))
     
     # 获取当前页的商品
-    sorted_items = sorted(shop_items.items(), key=lambda x: int(x[0]))
+    sorted_items = sorted(shop_rows, key=lambda x: int(x[0]))
     start_idx = (page - 1) * items_per_page
     end_idx = start_idx + items_per_page
     current_page_items = sorted_items[start_idx:end_idx]
@@ -289,8 +304,10 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
             f"每周限购：{item_data['weekly_limit'] - already_purchased}/{item_data['weekly_limit']}个"
         )
     
-    msg_list.append(f"提示：发送 历练商店+页码 查看其他页（共{total_pages}页）")
-    page = ["翻页", f"历练商店 {page + 1}", "状态", "历练状态", "兑换", "历练兑换", f"{page}/{total_pages}"]
+    next_cmd = page_command("历练商店", keyword, min(page + 1, total_pages))
+    page_label = f"{page}/{total_pages}"
+    msg_list.append(f"提示：发送 {next_cmd} 查看其他页（共{total_pages}页）")
+    page = ["翻页", next_cmd, "状态", "历练状态", "兑换", "历练兑换", page_label]
     await send_msg_handler(bot, event, "历练商店", bot.self_id, msg_list, title=title, page=page)
     await training_shop.finish()
 

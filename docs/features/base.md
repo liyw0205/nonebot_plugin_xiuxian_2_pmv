@@ -25,6 +25,25 @@
 返回最多 10 条（超出时提示收窄关键词），无命中时提示换用更短关键词或发送 `修仙帮助` 看完整菜单。
 `tests/test_help_search.py` 会把它与 `plugin.build_registry()` 的登记结果逐条比对，
 manifest 新增命令而索引漏扫时直接失败。不带参数的 `修仙帮助` 行为不变。
+## 列表检索与翻页续查（共享合同）
+`features/base/keyword_page.py` 是列表类视图唯一的参数解析与翻页命令构造入口：
+
+- `parse_page_arg(raw)` → `{keyword, page}`：用于 `命令 [关键词] [页码]`。纯数字（且 >0）才是页码，
+  其余整体按关键词；关键词可带尾随页码（`灵芝 2`），也允许多词关键词（`A B 3` → 关键词 `A B`）。
+- `parse_typed_page_arg(raw, types)` → `{type, keyword, page}`：用于 `命令 类型 [关键词] [页码]`。
+  类型按最长优先匹配（`辅修功法`/`合成丹药` 不会被 `功法`/`丹药` 抢先），并兼容旧的
+  「类型紧贴页码」写法（`神通2`、`药材2`）；类型不在列表中时返回空串，由各 handler 给既有错误文案。
+- `matches_keyword(fields, keyword)`：大小写与首尾空白归一的包含匹配，空关键词恒为真；
+  参与匹配的字段由各视图决定（物品名/ID/描述/卡名等）。
+- `page_command(命令, keyword, page)`：构造翻页命令。无关键词时输出与改动前逐字相同
+  （`命令 2`）；有关键词时输出 `命令 关键词 2`，与解析器往返一致。
+
+约定：筛选只改变当次集合——总页数、MD `next_cmd`、纯文本翻页提示与底部按钮全部基于筛选结果，
+所以第 2 页仍是筛选结果而不是退回全量列表；筛选无命中用 `empty_notice(keyword, 视图名)`
+与「本来为空」分开提示；排序沿用各视图原有规则。当前接入六个入口：`仙肆查看`、
+`查看修仙界物品`、`世界BOSS商店`、`通天塔商店`、`历练商店`、`传承背包`，
+由 `tests/test_list_search_remaining_views.py` 钉住真实渲染、翻页续查与帮助文本。
+本切片零 schema/命令变更：不新增表、列、迁移、配置键、命令或别名。
 ## Web API
 `POST /api/v1/base/{breakthrough,tribulation,rename,stone_contest,stone_robbery,sign}`，权限 `user`，要求幂等键。
 `POST /api/v1/base/xiangyuan/{create,claim}` 与 `GET /api/v1/base/xiangyuan/group`，权限 `user`；写入请求要求幂等键和 CSRF。

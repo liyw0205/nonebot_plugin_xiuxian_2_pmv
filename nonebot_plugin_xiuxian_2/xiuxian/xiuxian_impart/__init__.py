@@ -38,6 +38,12 @@ from .impart_uitls import (
     img_path,
 )
 from ...paths import get_paths
+from ...features.base.keyword_page import (
+    empty_notice,
+    matches_keyword,
+    page_command,
+    parse_page_arg,
+)
 impart_application = ImpartApplication(
     get_paths().game_db,
     impart_database=get_paths().impart_db,
@@ -106,8 +112,8 @@ __impart_help__ = """
 **管理**
 - 传承信息
 > 查看传承说明
-- 传承背包
-> 查看已获得的传承卡片
+- 传承背包 [关键词|页码]
+> 查看已获得的传承卡片，可按卡名筛选
 - 加载传承数据
 > 重新加载传承属性（显示异常时用）
 - 传承卡图+名字
@@ -613,15 +619,23 @@ async def impart_back_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
         await handle_send(bot, event, "暂无传承卡片")
         return
     
-    # 解析页码参数
-    msg_text = args.extract_plain_text().strip()
-    try:
-        page = int(msg_text) if msg_text else 1
-    except ValueError:
-        page = 1
+    # 解析页码/关键词参数
+    parsed = parse_page_arg(args.extract_plain_text().strip())
+    keyword = parsed["keyword"]
+    page = parsed["page"]
     
-    # 按数量从多到少排序，数量相同的按卡名排序
-    sorted_cards = sorted(card_dict.items(), key=lambda x: (-x[1], x[0]))
+    # 按数量从多到少排序，数量相同的按卡名排序（先按关键词筛选）
+    sorted_cards = sorted(
+        (
+            (card_name, count)
+            for card_name, count in card_dict.items()
+            if matches_keyword([card_name], keyword)
+        ),
+        key=lambda x: (-x[1], x[0]),
+    )
+    if keyword and not sorted_cards:
+        await handle_send(bot, event, empty_notice(keyword, "传承背包"))
+        return
     
     # 分页设置
     cards_per_page = 30
@@ -646,16 +660,20 @@ async def impart_back_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
     
     # 只在第一页显示总数和种类
     if page == 1:
-        unique_cards = len(card_dict)
-        total_cards = sum(card_dict.values())
+        unique_cards = len(sorted_cards)
+        total_cards = sum(count for _card, count in sorted_cards)
         msg += f"\n\n卡片种类：{unique_cards}/106"
         msg += f"\n总卡片数：{total_cards}"
+        if keyword:
+            msg += f"\n筛选：「{keyword}」"
     
     # 添加分页信息
+    next_cmd = page_command("传承背包", keyword, min(page + 1, total_pages))
+    page_label = f"{page}/{total_pages}"
     msg += f"\n\n第{page}/{total_pages}页"
-    msg += f"\n输入【传承背包+页码】查看其他页"
+    msg += f"\n输入【{next_cmd}】查看其他页"
     l_msg.append(msg)
-    page = ["翻页", f"传承背包 {page + 1}", "信息", "传承信息", "卡图", "传承卡图", f"{page}/{total_pages}"]    
+    page = ["翻页", next_cmd, "信息", "传承信息", "卡图", "传承卡图", page_label]
     await send_msg_handler(bot, event, '传承背包', bot.self_id, l_msg, title=title, page=page)
 
 @re_impart_load.handle(parameterless=[Cooldown(cd_time=0)])

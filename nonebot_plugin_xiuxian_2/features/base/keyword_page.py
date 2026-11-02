@@ -20,6 +20,7 @@ __all__ = [
     "matches_keyword",
     "page_command",
     "parse_page_arg",
+    "parse_typed_page_arg",
 ]
 
 
@@ -44,6 +45,26 @@ def parse_page_arg(raw: Any) -> dict[str, Any]:
 
 def _normalize(value: Any) -> str:
     return str(value or "").strip().casefold()
+
+
+def parse_typed_page_arg(raw: Any, types: Iterable[str]) -> dict[str, Any]:
+    """解析「类型 [关键词] [页码]」参数，兼容旧的类型紧贴页码写法。
+
+    返回 `{"type": str, "keyword": str, "page": int}`。类型按最长优先匹配，避免
+    `辅修功法` 被 `功法`、`合成丹药` 被 `丹药` 抢先；类型后可直接跟页码
+    （`药材2`），也可用空格分隔关键词与页码（`药材 灵芝 2`）。类型不在列表内时
+    `type` 为空串，由调用方给出既有错误文案。
+    """
+    text = str(raw or "").strip()
+    if not text:
+        return {"type": "", "keyword": "", "page": 1}
+    for name in sorted({str(t) for t in types if str(t)}, key=len, reverse=True):
+        if not text.startswith(name):
+            continue
+        rest = text[len(name) :].strip()
+        parsed = parse_page_arg(rest)
+        return {"type": name, "keyword": parsed["keyword"], "page": parsed["page"]}
+    return {"type": "", "keyword": "", "page": 1}
 
 
 def page_command(command: str, keyword: str = "", page: int | str = 1) -> str:

@@ -52,7 +52,12 @@ from ...features.back.backpack_search import (
     filter_sections,
     parse_backpack_arg,
 )
-from ...features.base.keyword_page import page_command
+from ...features.base.keyword_page import (
+    empty_notice,
+    matches_keyword,
+    page_command,
+    parse_typed_page_arg,
+)
 from ...features.back.skill_confirmation_cache import SkillConfirmationCache
 from ...compatibility.legacy_back_lottery_talisman import LotteryReward, LotteryTalismanService
 from ...paths import get_paths
@@ -600,8 +605,8 @@ async def back_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 > 查看背包装备
 - 药材背包详细 [页码|关键词]
 > 查看药材详细信息（含效果）
-- 查看修仙界物品+类型 [页码]
-> 查看物品图鉴
+- 查看修仙界物品+类型 [关键词] [页码]
+> 查看物品图鉴，可按物品名筛选
 - 查看效果+物品名
 > 查看物品详情
 - 灵石
@@ -1946,29 +1951,16 @@ async def chakan_wupin_(
     # 支持的类型列表
     valid_types = ["功法", "辅修功法", "神通", "身法", "瞳术", "丹药", "合成丹药", "法器", "防具", "饰品", "特殊物品", "神物"]
     
-    # 解析类型和页码
-    item_type = None
-    current_page = 1  # 默认第一页
+    # 解析类型、关键词和页码（类型可紧贴页码：神通2）
+    parsed = parse_typed_page_arg(args_str, valid_types)
+    item_type = parsed["type"] or None
+    keyword = parsed["keyword"]
+    current_page = parsed["page"]
     
-    # 情况1：用户输入类似 "神通2"（无空格）
-    for t in valid_types:
-        if args_str.startswith(t) and len(args_str) > len(t):
-            remaining = args_str[len(t):].strip()
-            if remaining.isdigit():  # 检查剩余部分是否是数字
-                item_type = t
-                current_page = int(remaining)
-                break
-    
-    if item_type is None: # 如果没有匹配到无空格的情况，尝试匹配带空格的或只有类型的情况
-        parts = args_str.split(maxsplit=1)  # 只分割第一个空格
-        if len(parts) > 0 and parts[0] in valid_types:
-            item_type = parts[0]
-            if len(parts) > 1 and parts[1].isdigit():
-                current_page = int(parts[1])
-        else:
-            msg = "请输入正确类型【功法|辅修功法|神通|身法|瞳术|丹药|合成丹药|法器|防具|饰品|特殊物品|神物】！！！"
-            await handle_send(bot, event, msg, md_type="背包", k1="物品", v1="查看修仙界物品", k2="效果", v2="查看效果", k3="帮助", v3="修仙帮助")
-            await chakan_wupin.finish()
+    if item_type is None:
+        msg = "请输入正确类型【功法|辅修功法|神通|身法|瞳术|丹药|合成丹药|法器|防具|饰品|特殊物品|神物】！！！"
+        await handle_send(bot, event, msg, md_type="背包", k1="物品", v1="查看修仙界物品", k2="效果", v2="查看效果", k3="帮助", v3="修仙帮助")
+        await chakan_wupin.finish()
     
     # 获取物品数据
     if item_type == "特殊物品":
@@ -1979,6 +1971,15 @@ async def chakan_wupin_(
         item_data = {**jlq_data, **ldl_data, **special_data}
     else:
         item_data = items.get_data_by_item_type([item_type])
+    if keyword:
+        item_data = {
+            item_id: item_info
+            for item_id, item_info in item_data.items()
+            if matches_keyword([item_id, item_info.get("name")], keyword)
+        }
+        if not item_data:
+            await handle_send(bot, event, empty_notice(keyword, item_type))
+            await chakan_wupin.finish()
     
     msg_list = []
     
@@ -2033,10 +2034,10 @@ async def chakan_wupin_(
     final_msg.extend(paged_items)
     final_msg.append(f"\n第 {current_page}/{total_pages} 页")
     
+    next_cmd = page_command(f"查看修仙界物品{item_type}", keyword, min(current_page + 1, total_pages))
     if total_pages > 1:
-        next_page_cmd = f"查看{item_type}{current_page + 1}"
-        final_msg.append(f"输入 {next_page_cmd} 查看下一页")
-    page = ["翻页", f"查看修仙界物品{item_type} {current_page + 1}", "查看", "查看效果", "背包", "我的背包", f"{current_page}/{total_pages}"]
+        final_msg.append(f"输入 {next_cmd} 查看下一页")
+    page = ["翻页", next_cmd, "查看", "查看效果", "背包", "我的背包", f"{current_page}/{total_pages}"]
     await send_msg_handler(bot, event, '修仙界物品', bot.self_id, final_msg, title=title, page=page) # 传入final_msg而非paged_items
     await chakan_wupin.finish()
 

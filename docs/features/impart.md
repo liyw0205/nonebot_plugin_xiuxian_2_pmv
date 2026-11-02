@@ -30,6 +30,12 @@ Run the feature application test and the full architecture gate. Repeat the same
 ## 灰度开关、回滚和已知限制
 Legacy algorithms and schemas remain behind the repository adapter for one complete release cycle; the compatibility hit counter determines when removal is safe.
 
+## 列表检索
+`传承背包 [关键词|页码]`：卡片列表按卡名筛选（如 `传承背包 画屏春`），第 1 页的种类/总数
+与「筛选：「关键词」」行按命中集合统计，翻页提示与按钮携带关键词（`传承背包 画屏春 2`）。
+解析与续查走 `docs/features/base.md` 的「列表检索与翻页续查（共享合同）」；卡名排序沿用
+既有 `(-数量, 卡名)` 规则，不改抽卡、合成、分解或思恋结晶数值。
+
 ## Manifest 清单
 - `command: 传承信息`
 - `command: 传承分解`

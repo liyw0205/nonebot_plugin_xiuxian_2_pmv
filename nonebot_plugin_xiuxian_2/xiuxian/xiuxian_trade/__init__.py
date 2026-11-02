@@ -30,6 +30,12 @@ from ..xiuxian_utils.xiuxian2_handle import (
 from ..xiuxian_back import type_mapping, rank_map, get_recover # 引用 xiuxian_back 中的类型和炼金函数
 from ..xiuxian_back.back_util import check_equipment_use_msg, get_item_msg_rank # 引用 xiuxian_back.back_util
 from ..xiuxian_config import XiuConfig, convert_rank
+from ...features.base.keyword_page import (
+    empty_notice,
+    matches_keyword,
+    page_command,
+    parse_typed_page_arg,
+)
 from . import auction_config
 from .auction_config import * # 显式导入模块，避免冲突和混乱
 from .trade_help import trade_help
@@ -1134,26 +1140,11 @@ async def xiuxian_shop_view_(bot: Bot, event: GroupMessageEvent | PrivateMessage
         await handle_send(bot, event, msg, md_type="交易", k1="技能", v1="仙肆查看 技能", k2="装备", v2="仙肆查看 装备", k3="药材", v3="仙肆查看 药材", k4="丹药", v4="仙肆查看 丹药")
         await xiuxian_shop_view.finish()
     
-    # 解析类型和页码
-    item_type = None
-    current_page = 1
-    
-    # 检查是否直接拼接类型和页码（无空格）
-    for t in ITEM_TYPES:
-        if args_str.startswith(t):
-            item_type = t
-            remaining = args_str[len(t):].strip()
-            if remaining.isdigit():
-                current_page = int(remaining)
-            break
-    
-    # 情况2：有空格分隔
-    if item_type is None:
-        parts = args_str.split(maxsplit=1)
-        if len(parts) > 0 and parts[0] in ITEM_TYPES:
-            item_type = parts[0]
-            if len(parts) > 1 and parts[1].isdigit():
-                current_page = int(parts[1])
+    # 解析类型、关键词和页码（类型可紧贴页码：药材2）
+    parsed = parse_typed_page_arg(args_str, ITEM_TYPES)
+    item_type = parsed["type"] or None
+    keyword = parsed["keyword"]
+    current_page = parsed["page"]
     
     # 检查类型有效性
     if item_type not in ITEM_TYPES:
@@ -1183,6 +1174,15 @@ async def xiuxian_shop_view_(bot: Bot, event: GroupMessageEvent | PrivateMessage
     
     # 合并系统物品和用户物品，并按名称排序
     items_list = sorted(system_items + list(user_items.values()), key=lambda x: x['name'])
+    if keyword:
+        items_list = [
+            item
+            for item in items_list
+            if matches_keyword([item.get("name"), item.get("id")], keyword)
+        ]
+        if not items_list:
+            await handle_send(bot, event, empty_notice(keyword, f"仙肆{item_type}"))
+            await xiuxian_shop_view.finish()
     
     # 分页处理
     per_page = 10
@@ -1198,6 +1198,7 @@ async def xiuxian_shop_view_(bot: Bot, event: GroupMessageEvent | PrivateMessage
     start_idx = (current_page - 1) * per_page
     end_idx = start_idx + per_page
     paged_items = items_list[start_idx:end_idx]
+    next_cmd = page_command(f"仙肆查看{item_type}", keyword, min(current_page + 1, total_pages))
 
     # 构建消息内容
     if XiuConfig().markdown_status:
@@ -1224,7 +1225,7 @@ async def xiuxian_shop_view_(bot: Bot, event: GroupMessageEvent | PrivateMessage
         lines.append("")
         lines.append(f"第 {current_page}/{total_pages} 页")
         lines.append(
-            f"[下一页](mqqapi://aio/inlinecmd?command={quote(f'仙肆查看{item_type} {current_page + 1}')}&enter=false&reply=false)"
+            f"[下一页](mqqapi://aio/inlinecmd?command={quote(next_cmd)}&enter=false&reply=false)"
         )
 
         md_text = "\r".join(lines)  # QQ md更建议 \r
@@ -1240,7 +1241,7 @@ async def xiuxian_shop_view_(bot: Bot, event: GroupMessageEvent | PrivateMessage
         fallback_lines.append("")
         fallback_lines.append(f"第 {current_page}/{total_pages} 页")
         if current_page < total_pages:
-            fallback_lines.append(f"下一页：仙肆查看{item_type} {current_page + 1}")
+            fallback_lines.append(f"下一页：{next_cmd}")
         fallback_text = "\n".join(fallback_lines)
         await handle_send(bot, event, md_text, native_markdown=True, fallback_msg=fallback_text)
         await xiuxian_shop_view.finish()
@@ -1262,7 +1263,7 @@ async def xiuxian_shop_view_(bot: Bot, event: GroupMessageEvent | PrivateMessage
     pages_info = f"\n第 {current_page}/{total_pages} 页"
     msg_list.append(pages_info)
 
-    page = ["翻页", f"仙肆查看{item_type} {current_page + 1}", "我的", "我的仙肆", "购买", "仙肆购买", f"{current_page}/{total_pages}"]
+    page = ["翻页", next_cmd, "我的", "我的仙肆", "购买", "仙肆购买", f"{current_page}/{total_pages}"]
     await send_msg_handler(bot, event, '仙肆查看', bot.self_id, msg_list, title=title, page=page)
     await xiuxian_shop_view.finish()
 

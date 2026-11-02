@@ -65,6 +65,12 @@ from ...features.boss.world_boss_repository import (
     WorldBossDailyLimitResetSqlRepository,
     WorldBossManualSpawnSqlRepository,
 )
+from ...features.base.keyword_page import (
+    empty_notice,
+    matches_keyword,
+    page_command,
+    parse_page_arg,
+)
 from .. import DRIVER
 from ...bootstrap.legacy import register_legacy_shutdown, register_legacy_startup
 # boss定时任务
@@ -223,8 +229,8 @@ __boss_help__ = """
 > 查看个人战绩
 - 世界BOSS积分排行榜
 > 查看积分排行
-- 世界BOSS商店
-> 查看可兑换物品
+- 世界BOSS商店 [关键词|页码]
+> 查看可兑换物品，可按物品名筛选
 
 **战斗**
 - 讨伐世界BOSS [编号]
@@ -1372,13 +1378,23 @@ async def boss_integral_store_(bot: Bot, event: GroupMessageEvent | PrivateMessa
     
     # 获取页码参数
     arg = args.extract_plain_text().strip()
-    page = 1
-    if arg.isdigit():
-        page = int(arg)
+    parsed = parse_page_arg(arg)
+    keyword = parsed["keyword"]
+    page = parsed["page"]
     
     # 分页设置
     per_page = 10  # 每页显示10个商品
-    total_items = len(boss_integral_shop)
+    shop_rows = []
+    for item_id, item_info in boss_integral_shop.items():
+        item_data = _items().get_data_by_item_id(item_id) or {}
+        if matches_keyword(
+            [item_id, item_data.get("name"), item_data.get("desc")], keyword
+        ):
+            shop_rows.append((item_id, item_info))
+    if keyword and not shop_rows:
+        await handle_send(bot, event, empty_notice(keyword, "世界积分商店"))
+        await boss_integral_store.finish()
+    total_items = len(shop_rows)
     total_pages = (total_items + per_page - 1) // per_page
     
     # 检查页码是否有效
@@ -1402,7 +1418,7 @@ async def boss_integral_store_(bot: Bot, event: GroupMessageEvent | PrivateMessa
         end_index = min(start_index + per_page, total_items)
         
         # 获取当前页的商品
-        shop_items = list(boss_integral_shop.items())[start_index:end_index]
+        shop_items = shop_rows[start_index:end_index]
         
         for item_id, item_info in shop_items:
             item_data = _items().get_data_by_item_id(item_id)
@@ -1417,8 +1433,10 @@ async def boss_integral_store_(bot: Bot, event: GroupMessageEvent | PrivateMessa
     else:
         l_msg.append(f"世界积分商店内空空如也！")
 
-    l_msg.append(f"提示：发送 世界BOSS商店+页码 查看其他页（共{total_pages}页）")
-    page = ["翻页", f"世界BOSS商店 {page + 1}", "信息", "世界BOSS信息", "兑换", "世界BOSS兑换", f"{page}/{total_pages}"]
+    next_cmd = page_command("世界BOSS商店", keyword, min(page + 1, total_pages))
+    page_label = f"{page}/{total_pages}"
+    l_msg.append(f"提示：发送 {next_cmd} 查看其他页（共{total_pages}页）")
+    page = ["翻页", next_cmd, "信息", "世界BOSS信息", "兑换", "世界BOSS兑换", page_label]
     await send_msg_handler(bot, event, '世界积分商店', bot.self_id, l_msg, title=title, page=page)
     await boss_integral_store.finish()
 
