@@ -35,6 +35,40 @@
 - QQ 官方机器人配置键存在不等于平台连接通过；QQ 连接状态需从本轮启动证据单独核验。官方 QQ 消息呈现/权限未做真机验收，不发送真机消息，也不将其宣称通过。
 - 本轮先核实 Release 质量门和实例的真实加载/数据路径；停机冷备份并验证复制一致后，才可下载 Release 覆盖插件代码。不得运行会改写共享 `/root/myenv` 的依赖升级。
 
+## 已完成目标：列表检索翻页续查（含宗门成员查看收口）
+
+已交付的关键词筛选只作用于当次请求：翻页提示、MD 下一页链接与底部按钮仍只拼页码，总页数却按
+筛选结果计算，于是第 2 页渲染的是**未筛选**集合的第 2 页；`宗门成员查看` 还是全包最后一处
+`int(args)` 静默回退，且完全不支持关键词。
+
+- 新增 `features/base/keyword_page.py::page_command`：有关键词时生成 `命令 关键词 页码`，
+  与 `parse_page_arg` 往返一致；无关键词时输出与改动前逐字相同。
+- 接入九个视图的全部翻页出口：宠物背包（`_format_pet_bag` 与 MD/纯文本构建器共 3 处）、
+  饰品背包（MD/回落/文本/按钮 4 处）、我的背包、丹药背包、药材背包（各 MD 两处 `next_cmd`
+  + 文本提示 + 按钮）、我的装备与药材背包详情（文本提示 + 按钮）、宗门商店（提示 + 按钮）。
+- 宗门成员查看：改用 `parse_page_arg`，新增 `sect_member_utils.filter_sect_member_rows`
+  按道号/职位名/境界/UID 过滤；首页职位统计只统计命中成员并标注「筛选「kw」命中 N 人」；
+  MD/纯文本/footer/按钮都保留关键词；`empty_notice(keyword, "宗门成员")` 与
+  「宗门目前没有成员！」分开；职位权限判定、踢人/变更快捷操作语义未改。
+  `宗门管理`「成员」段改为 `宗门成员查看 [页码|关键词]`。
+- 零 schema/命令变更：不新增表、列、迁移、配置键、命令或别名；派生计数保持 650/336，
+  `test_phase2_legacy_path_gate` 期望不变。
+- 文档：`docs/features/pet.md`、`back.md`、`accessory_package.md`、`sect.md` 记录翻页续查口径。
+- 测试：新增 `tests/test_list_search_pagination.py` 25 项（解析往返、宠物/饰品真实渲染的第 1/2 页、
+  九个视图源合同、成员筛选与统计、全包零静默回退）；`test_pet_accessory_search.py` 的
+  `KNOWN_PENDING` 收紧为空集。受影响套件 `74 passed`（`test_list_search_pagination` 25、
+  `test_pet_accessory_search` 12、`test_backpack_search` 17、`test_sect_shop_search` 10、
+  `test_help_discoverability` 10）；`test_progression_source_table` 9/9。
+  三门禁 exit 0（progress `failures: None`；本地 `exit_ready: False` 仍因用户删除的冻结文件）；
+  `compileall` 与 `git diff --check` 干净。
+- CI：功能提交 `f7974fcd` 的 develop run `41394825763` **failure** —— 宗门切片使
+  `percent_exp_reward` 两个调用点从 2033/2116 漂到 2048/2131，而
+  `test_progression_source_table` 仍按 (文件, 绝对行号) 作契约键（4 failures / 2 errors）。
+  修复提交 `61a27e76` 把该表改为「文件 → 按源码出现顺序的契约列表」，契约（anchor/÷3/
+  压制/调用点数量）未放宽，行号只留在文档（已同步 2048/2131）；develop run `41395742298`
+  success，`--ff-only` 合入 main 后 main run `41396549661` success（headSha 均 `61a27e76`；
+  `build-and-release` 按分支规则 skipped）。未部署、未读写真实游戏库、未发真实 QQ 消息、未打 tag。
+
 ## 已完成目标：宠物背包与饰品背包关键词筛选
 
 `宠物背包`、`饰品背包` 是包内最后两处 `int(args)` 失败即静默回退第 1 页的分页入口（输入宠物名或饰品名只看到首页）。本目标补齐这两处，并加了全包防回归断言。
