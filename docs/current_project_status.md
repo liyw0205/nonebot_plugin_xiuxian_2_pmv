@@ -1891,6 +1891,56 @@ event_key="修仙签到", occurred_at=now)`，其 effects 由 `plugin.py:1009` �
   `build-and-release` 按分支规则 skipped）。未部署、未读写真实游戏库、未发真实 QQ 消息、
   未打 tag、未新建 Release；用户删除的四个文件保持未暂存，`.codex-next-goal.md` 未提交。
 
+## 已完成目标：灵田读模型迁移与傀儡回执启动迁移
+
+重构收敛（非新玩法）。目标文档 `docs/goals/goal-puppet-field-read-model.md`（local-only，未提交）。
+承接 `docs/features/puppet.md` 的既有遗留项「灵田读模型仍待后续迁移」。
+
+**缺口证据**：`我的灵田`（`puppet_info_handler`）仍走 `get_player_info(user_id, "mix_elixir_info")`，
+在 `if not mix_elixir_info` 之前直接读 `['收取时间']` / `['灵田傀儡']`——缺行玩家抛 `KeyError`、
+脏时间抛 `ValueError`；成熟窗口在 handler 内硬编码 `23 / 0.05`，与 `PuppetHarvestSqlRepository`
+的注入参数各写一份。购买/收取仓储还在请求事务内 `CREATE TABLE IF NOT EXISTS`
+`puppet_operations` / `puppet_harvest_operations`，与「请求路径不执行 DDL」的既有合同冲突；
+`migrations.py` 只有 `puppet.001/.002`。
+
+交付内容：
+
+- 新启动迁移 `puppet.003`（game DB）：`CREATE TABLE IF NOT EXISTS` 预建两张回执表并登记版本；
+  旧库已有表/回执原样保留。`plugin.py` 迁移目录注册，manifest 版本同步 `puppet.003`。
+- `PuppetPurchaseSqlRepository` 与 `PuppetHarvestSqlRepository` 改为 schema 检查：
+  缺表/缺列返回 `schema_missing`，零写入、不建表；正常路径的回执、CAS、幂等重放不变。
+- 新 `features/puppet/field_rules.py`：`maturity_interval_hours` / `maturity_state` /
+  `normalize_now` / `parse_harvest_time`；收获仓储与读模型共用同一成熟规则与时间归一。
+- 新 `features/puppet/field_view.py`：`PuppetFieldApplication` 一次只读快照读
+  `user_xiuxian`（level/stone/blessed_spot_flag/puppet_status）与 `mix_elixir_info` 真实列集；
+  可选列缺失按 0，缺表/缺行/脏时间/库不可读分别降级；`puppet_status` 经注入的
+  `puppet_application.get_status` 读取，保留 enable 开关的 feature owner。
+  有 `puppet_harvest_operations` 时追加「最近7天收取」（笔数、灵石消耗、最近一次、上次收获），
+  时间窗只用下界，脏 JSON 逐行跳过；`format_puppet_field` 为纯函数，保留既有五行文案。
+- `我的灵田` handler 改调新读应用，不再 `get_player_info`、不再裸 `strptime`；
+  `schema_missing` 在购买/升级与自动收取命令层都有明确文案。
+- 兼容：`puppet.003` 幂等；旧库已有表不被重建；缺新迁移时写路径 fail closed、读路径省略
+  最近收取但仍给基础信息；只读路径不建表、不补列。
+- 文档：`docs/features/puppet.md` 新增「灵田读模型（我的灵田）」与 `puppet.003`/`schema_missing`
+  说明，`docs/gameplay_notes.md` 补玩家口径；无新命令/路由/配置键，派生计数保持 `652 / 338`。
+
+**测试**：新 `tests/test_puppet_field_view.py` 12/12（迁移幂等与回执保留、购买/收取缺表
+`schema_missing` 且不建表、真实列集、成熟边界、7 天窗口下界与玩家隔离、五条降级、
+status_reader 归属、渲染与 handler 源合同）。受影响套件：
+`test_puppet_harvest_production_path` + `test_puppet_application_purchase` +
+`test_puppet_operation_service` + `test_source_quality` 274 passed；
+`features/puppet/tests` 6 passed；`test_puppet_field_view` + `test_puppet_harvest_service` +
+`test_refactor_progress` 42 passed；`test_phase2_legacy_path_gate` 47/47（临时还原冻结文件后再次删除）。
+三门禁 exit 0（progress `failures: None`，`exit_ready: False` 仍由用户删除的冻结文件导致）；
+`compileall` 与 `git diff --check` 干净。
+- 交付与 CI：功能提交 `bce21448` 的 develop run `41520619713` **failure**——两处既有源码/进度
+  合同仍要求 `puppet_application.get_status(` 出现在 facade（`test_puppet_harvest_service`、
+  `test_refactor_progress`）。修复提交 `f2fd56e1` 把 enable 开关读取经注入 `status_reader` 交回
+  application，develop run `41521920609` success、`--ff-only` 合入 main 后 main run
+  `41523252106` success（headSha 均 `f2fd56e1`；`quality` success、`build-and-release`
+  skipped）。未部署、未读写真实游戏库、未发真实 QQ 消息、未打 tag；用户删除的四个文件保持
+  未暂存，`docs/goals/**` 与 `.codex-next-goal.md` 未提交。
+
 ## 冻结清单与停止条件
 
 冻结范围仅包括活动 Web 六来源一键代领 API、权限/错误合同、管理员面板、兼容性保护、聚焦测试、路由清单和正式文档。不得新增奖励经济、schema/数据迁移、玩家身份模型、后台活动编辑器、通用 UI 框架或 unrelated refactor。
