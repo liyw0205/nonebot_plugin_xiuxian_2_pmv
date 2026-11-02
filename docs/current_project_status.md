@@ -586,6 +586,38 @@ A 已解锁会冒充 B 未达标的进度，A 已领 `1-3` 排行档会漏报 B 
   build-and-release 按分支规则 skipped）。未部署，未读取或写入真实游戏库，不发送
   真实消息。
 
+## 已完成目标：活动中心收口大目标（G4→G5→G6，roadmap-index）
+
+目标文档 `docs/goals/goal-activity-completion.md`（local-only，未提交）。审计确认三个阶段
+均已有实现提交；本轮补齐 G4 多首领边界缺口，并把三阶段的空态/多首领/parity/投递合同
+补成可回归断言。G4 此前没有独立完成记录，本段一并收口。
+
+- 阶段提交：G4 首领行动引导 `8682acec`（develop CI run `39781507524` success）。该提交
+  当时未单独快进 main，随后随 G5 一起进入 main，其 main 门禁由包含该代码的
+  `bf85e010` main run `40001772187` 覆盖（历史 sha 不补跑）。G5 玩法个人状态 `bf85e010`
+  （develop `39998595819`、main `40001772187` success）；G6 六视图投递合同 `5c88cd3a`
+  （develop `40260273593`、main `40261122013` success）。
+- 本轮 G4 修正：`boss_status_text` 在“按名查看单个首领”分支未传 `multiple_active`，
+  多活跃首领下仍输出不带首领名的 `可用 活动首领领奖 排行 领取` /
+  `活动首领领奖 进度 领取已解锁的进度奖励`，而 `活动首领领奖` 在多首领下会拒绝无名称
+  query——该提示不可执行。现按活跃首领数在聚合与单首领两条渲染路径统一带名；新增
+  真实视图边界测试（双首领聚合、双首领按名、单首领、无首领空态）。`docs/features/activity.md`
+  同步该口径。
+- 测试补强：G4 `test_activity_boss_action_hints.py` 17 项；G5
+  `test_activity_gameplay_personal.py` 5 项（新增无记录玩家：集字零保底、积分零余额与
+  零当日进度、首领无状态行省略段）；G6 `test_activity_view_delivery_contracts.py` 9 项
+  （新增多阶段日程逐行在 OneBot 纯文本与 QQ 原生 `\r` 两条路径完整，以及命令链接抽取
+  为键盘按钮后不得同时留在正文的非重复断言）。受影响 `test_activity*.py` 合计 `393`
+  通过；三门禁真实 exit 0（progress `failures: None`；`exit_ready: False` 仍由用户删除的
+  冻结文件导致，11 条 blocker 属既有）；`compileall` 与 `git diff --check` 干净。
+- 边界：只读渲染与测试改动；不改讨伐结算、领奖写路径与 `claim_boss_*_reward` 的 query
+  语义；不新增命令/路由/表/迁移/配置键。未部署、未读写真实游戏库、未发真实 QQ 消息、
+  未创建 Release。
+- 交付与 CI：修复提交 `3a15815e` 的 develop run `41457736488` success；`--ff-only` 合入
+  main 后 main run `41459087854` success（headSha 均为 `3a15815e`；`build-and-release`
+  按分支规则 skipped）。用户删除的四个文件保持未暂存；`docs/goals/**` 与
+  `.codex-next-goal.md` 未提交。
+
 ## 已完成目标：活动一键领取中断重试回执可见性
 
 活动中心 roadmap（G1-G6）已全部交付，本轮改从仓库证据另选切片：`docs/features/activity_reward.md`
