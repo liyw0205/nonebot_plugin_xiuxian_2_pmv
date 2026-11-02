@@ -35,6 +35,64 @@
 - QQ 官方机器人配置键存在不等于平台连接通过；QQ 连接状态需从本轮启动证据单独核验。官方 QQ 消息呈现/权限未做真机验收，不发送真机消息，也不将其宣称通过。
 - 本轮先核实 Release 质量门和实例的真实加载/数据路径；停机冷备份并验证复制一致后，才可下载 Release 覆盖插件代码。不得运行会改写共享 `/root/myenv` 的依赖升级。
 
+## 已完成目标：仙肆行情与关注（仙肆行情 / 仙肆关注）
+
+新功能（非修复）。目标卡 `.codex-next-goal.md`（local-only，未提交）。
+
+**缺口证据**：仙肆是全服唯一玩家交易市场，成交账本 `xianshi_operations` 与在售投影
+`xianshi_item` 一直在真实写路径上产生数据（`xianshi_purchase_repository.py:125-138` 以
+`price * quantity` 结算），但玩家侧只有逐条翻页的 `仙肆查看` 与只看自己的 `我的仙肆`；
+`grep -rn "行情\|均价\|价格参考"` 在玩家模块零命中——没有按物品聚合的成交价，
+也没有「等某件物品」的持久入口。
+
+交付内容：
+
+- 迁移 `trade.014`（game DB，启动期）：`xianshi_watchlist(user_id,goods_name COLLATE NOCASE,
+  created_at, PRIMARY KEY(user_id,goods_name))` 与 `xianshi_watch_operations(operation_id
+  PRIMARY KEY, user_id, action, goods_name, result, created_at)`；请求期不建表、不补列。
+- 新模块 `features/trade/`：`xianshi_market_schemas.py`（窗口/上限常量、名称归一化）、
+  `xianshi_watch_repository.py`（关注写路径与回执）、`xianshi_market_repository.py`
+  （只读行情聚合）、`xianshi_market_application.py`（用例编排）、
+  `xianshi_market_view.py`（纯渲染）。
+- 命令 `仙肆关注`（别名 `关注仙肆物品`）与 `仙肆行情`（别名 `仙肆价格`），priority 5，
+  `block=True`，注册在 `xiuxian/xiuxian_trade/__init__.py`；`仙肆关注` 无参数看关注列表、
+  `<物品名>` 添加、`取消/取关 <物品名>` 取消；`仙肆行情 <物品名>` 查单件行情。
+- 成交口径：按物品名大小写不敏感匹配；时间窗**只用下界** `created_at >= now-7d`
+  （UTC/本地混用，上界会丢弃「刚刚发生」的行）；行内单价 `total_cost/quantity` 四舍五入，
+  加权均价 `Σtotal_cost/Σquantity`；跳过 `quantity<=0`、`total_cost<0`、空名、空时间。
+- 在售口径：`xianshi_item.price` 是单价；统计摊位行数、卖家去重（`user_id='0'` 为系统）、
+  件数与最低单价；跳过 `price<=0`、`quantity<=0`。
+- 失败与幂等：`added`/`removed` 写关注行与回执；`duplicate` 为同操作号重放或重复关注
+  （仅写回执）；`absent` 为取消不存在或同一取消操作重放（不写回执）；`limit_reached`
+  在 10 个上限时不写回执、腾出名额后同一操作号可重试；`invalid_name`/`invalid_user`/
+  `operation_conflict`/`schema_missing` 均零写入。上限判定与插入是同一条
+  `INSERT ... SELECT ... WHERE COUNT(*) < 10`，并发不超限；拒绝分支全部在写入前返回
+  （正常返回即 commit），晚期异常整体回滚。
+- 降级：缺库/缺表/读异常时按来源提示「成交数据暂不可用」/「在售数据暂不可用」，
+  两者都不可用显示「行情数据暂不可用」，不建库、不建表。
+- 帮助与文档：`交易帮助` 仙肆段登记两条命令（沿用该文件的 `- 命令 …：说明` 单行格式）；
+  `docs/features/trade.md` 新增「仙肆行情与关注」；`docs/gameplay_notes.md` 补玩家口径。
+- `features/trade/manifest.py` 追加两条 `CommandSpec`；`scripts/export_refactor_inventory.py`
+  使 `docs/refactor_inventory.json` 新增 2 条 command 与 2 张表（+18 行）。
+- 派生计数 650→652、336→338；`tests/test_phase2_legacy_path_gate.py` 同步期望值并记录
+  delta 注释，**冻结成员文件与哈希保持不变**（隔离 worktree 实测 47/47 通过）。
+- `tests/test_help_discoverability.py` 新增 `仙肆帮助` 块与两条 `EXPECTED`；
+  一行说明断言放宽为「`>` 下一行或 `：` 后文本」，命令名仍要求逐字命中。
+- 测试：新 `tests/test_xianshi_market_watch.py` `39 passed, 13 subtests passed`
+  （`unittest discover -s tests -p 'test_xianshi_market*.py'` 39 OK）：迁移与重复迁移、
+  添加/重放/重复关注/上限与解除后重试/非法名称/取消命中与未命中/取消重放/操作号冲突/
+  名称归一化与大小写/玩家隔离/缺 schema 不建表；行情加权均价与最低最高、7 天窗外排除、
+  只有下界（未来时间行计入）、脏行跳过、在售多卖家与系统卖家、大小写匹配、未知物品、
+  缺表与缺库降级、关注列表编排与仓储异常降级；渲染全文/空态/分页外状态/九种回执文案；
+  handler 源合同与 manifest 合同。受影响套件：help 10、source quality 246、
+  trade 121、隔离 worktree 内 phase2 gate 47 均通过。
+- 三门禁真实 exit 0（progress `failures: None`；本地 `exit_ready: False` 仍由用户删除的
+  冻结文件导致，11 条 blocker 属既有），`compileall` 与 `git diff --check` 干净。
+- 交付与 CI：功能提交 `a1846b66` 的 develop run `41434310002` success；`--ff-only` 合入 main
+  后 main run `41435476640` success（headSha 均 `a1846b66`；`build-and-release` 按分支规则
+  skipped）。未部署、未读写真实游戏库、未发真实 QQ 消息、未打 tag。
+  用户删除的四个文件保持未暂存，`.codex-next-goal.md` 未提交。
+
 ## 已完成目标：签到补签闭环（修仙补签）
 
 签到日历与连续天数早已由 `sign_in_daily` 持久化，但漏签一天只能永久断签，文档也明确写
