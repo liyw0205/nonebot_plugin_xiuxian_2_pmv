@@ -56,4 +56,25 @@
 
 ## 灰度开关、回滚和已知限制
 
-关闭 `world_events_enabled` 可切回旧入口。旧 `DemonClaimService`、`DemonAttackSettlementService`、`DemonEventLifecycleService`、`DemonWaveRefreshService` 和 `SpiritVeinLifecycleService` 分别保留在 compatibility 模块，并由原 transaction module 身份一致地 re-export；奖励随机池和贡献计算暂未迁移到新 domain，仍由兼容命令提供。spirit vein 仍有兼容事务路径。live migration/recovery 与完整发布周期证据仍未完成，不能据此关闭整个 world-events 切片。
+关闭 `world_events_enabled` 可切回旧入口。旧 `DemonClaimService`、`DemonAttackSettlementService`、`DemonEventLifecycleService`、`DemonWaveRefreshService` 和 `SpiritVeinLifecycleService` 分别保留在 compatibility 模块，并由原 transaction module 身份一致地 re-export；奖励随机池和贡献计算已迁到 `features/world_events/reward_rules.py`（纯规则）与 `features/world_events/reward_settlement.py`（明细组装），命令适配器只提供状态快照、物品目录与随机源，不再内联计算。spirit vein 仍有兼容事务路径。live migration/recovery 与完整发布周期证据仍未完成，不能据此关闭整个 world-events 切片。
+
+## 奖励结算归属（feature 域）
+
+`领取魔修奖励` 的奖励计算不再留在命令模块：
+
+- `features/world_events/reward_rules.py`（纯函数、无 I/O）持有贡献口径
+  （`reward_contribution` 压入 `[0.01, 1.0]`）、灵石上限（贡献 × 50,000,000，封顶）、修为比例
+  （`0.05 × 贡献`，仍由调用方用 `percent_exp_reward(anchor="gap")` 结算）、灵签宝箓档位
+  （每 0.10 贡献 1 个，上限 3）、随机池筛选（特殊物品恒可抽；功法/辅修功法/神通需 rank>0；
+  身法/瞳术与法器/防具需贡献 ≥ 0.50 或 rank>0；带 `fusion` 的装备排除）与
+  「无上仅 1% 保留」的 `pick_random_reward`。
+- `features/world_events/reward_settlement.py` 的 `build_demon_reward_plan(...)` 产出
+  `DemonRewardPlan`（贡献、灵石、修为比例、灵签数量、随机奖励 id/物品/文案、奖励物品列表），
+  随机奖励只在 `rng.random() <= 贡献` 时抽取，与历史行为一致。
+- 命令侧的 `_reward_contribution` / `_format_contribution_percent` / `_demon_talisman_reward_count` /
+  `_is_wushang_reward_item` / `_is_demon_random_reward_item` / `_get_demon_random_reward_pool` /
+  `_pick_demon_random_reward` / `_record_reward_base_hp` / `_record_reward_contribution` /
+  `_record_wave` / `_sum_reward_contribution` 现在都是委派 shim，保留历史名称与调用点，
+  逻辑只有一份。
+- 旧 `world_event_state` 是历史 JSON 投影（字段可能缺失或为文本），全部读取按缺/坏回退默认值；
+  已冻结的 `reward_contribution` 优先于按伤害重算，避免历史记录被重新解释。

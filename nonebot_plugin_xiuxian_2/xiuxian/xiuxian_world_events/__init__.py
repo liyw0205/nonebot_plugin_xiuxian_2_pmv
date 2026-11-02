@@ -44,6 +44,25 @@ from ...features.world_events.contribution_view import (
 )
 from ...features.world_events.application import DemonEventLifecycleApplication
 from ...features.world_events.repository import WorldEventClaimSqlRepository
+from ...features.world_events.reward_rules import (
+    DEMON_EXP_REWARD_CAP_RATE,
+    DEMON_STONE_REWARD_CAP,
+    DEMON_TALISMAN_ITEM_ID,
+    boss_reward_multiplier as _boss_reward_multiplier_rule,
+    format_contribution_percent as _format_contribution_percent_rule,
+    is_random_reward_item as _is_random_reward_item_rule,
+    is_wushang_reward_item as _is_wushang_reward_item_rule,
+    pick_random_reward as _pick_random_reward_rule,
+    random_reward_pool as _random_reward_pool_rule,
+    record_reward_base_hp as _record_reward_base_hp_rule,
+    record_reward_contribution as _record_reward_contribution_rule,
+    record_reward_multiplier as _record_reward_multiplier_rule,
+    record_wave as _record_wave_rule,
+    reward_contribution as _reward_contribution_rule,
+    sum_reward_contribution as _sum_reward_contribution_rule,
+    talisman_reward_count as _demon_talisman_reward_count_rule,
+)
+from ...features.world_events.reward_settlement import build_demon_reward_plan
 from ...features.player_state.application import PlayerStateApplication
 
 
@@ -126,13 +145,6 @@ DEMON_CHIEF_WAVE = EVENT_END_HOUR - EVENT_START_HOUR + 1
 DEMON_CHIEF_HP_MULTIPLIER = 100
 DEMON_CHIEF_ATK_MULTIPLIER = 10
 DEMON_CHIEF_REWARD_MULTIPLIER = 1.5
-DEMON_STONE_REWARD_CAP = 50000000
-DEMON_EXP_REWARD_CAP_RATE = 0.05
-DEMON_MIN_REWARD_CONTRIBUTION = 0.01
-DEMON_TALISMAN_ITEM_ID = 20010
-DEMON_TALISMAN_CONTRIBUTION_STEP = 0.10
-DEMON_TALISMAN_REWARD_CAP = 3
-DEMON_FULL_RANDOM_POOL_CONTRIBUTION = 0.50
 SPIRIT_VEIN_TRIGGER_CHANCE = 0.10
 SPIRIT_VEIN_MIN_DURATION = 30
 SPIRIT_VEIN_MAX_DURATION = 180
@@ -267,94 +279,42 @@ def _to_float(value, default: float = 0.0) -> float:
 
 
 def _reward_contribution(contribution: float) -> float:
-    value = _to_float(contribution)
-    return min(max(value, DEMON_MIN_REWARD_CONTRIBUTION), 1.0)
+    """Compat shim: the rule lives in ``features.world_events.reward_rules``."""
+    return _reward_contribution_rule(contribution)
 
 
 def _is_demon_chief_wave(wave: int) -> bool:
     return max(_to_int(wave, 1), 1) >= DEMON_CHIEF_WAVE
 
 
-def _boss_reward_multiplier(boss_info: dict | None) -> float:
-    return max(_to_float((boss_info or {}).get("reward_multiplier"), 1.0), 1.0)
-
-
-def _record_reward_multiplier(record: dict | None) -> float:
-    return max(_to_float((record or {}).get("reward_multiplier"), 1.0), 1.0)
-
-
 def _format_contribution_percent(contribution: float, reward_multiplier: float = 1.0) -> str:
-    contribution = min(max(_to_float(contribution), 0.0), 1.0)
-    settlement_contribution = min(max(contribution * max(_to_float(reward_multiplier, 1.0), 1.0), 0.0), 1.0)
-    if abs(settlement_contribution - contribution) > 1e-12:
-        return f"{contribution * 100:.2f}%，结算{settlement_contribution * 100:.2f}%"
-    return f"{contribution * 100:.2f}%"
+    """Compat shim: the formatter lives in ``features.world_events.reward_rules``."""
+    return _format_contribution_percent_rule(contribution, reward_multiplier)
 
 
 def _demon_talisman_reward_count(contribution: float) -> int:
-    count = int((contribution + 1e-12) / DEMON_TALISMAN_CONTRIBUTION_STEP)
-    return min(max(count, 0), DEMON_TALISMAN_REWARD_CAP)
+    """Compat shim: the tier rule lives in ``features.world_events.reward_rules``."""
+    return _demon_talisman_reward_count_rule(contribution)
 
 
 def _is_wushang_reward_item(item: dict) -> bool:
-    """无上品技能/装备（技能加载后 level 常为「无上」）。"""
-    if not isinstance(item, dict):
-        return False
-    if str(item.get("level") or "") == "无上":
-        return True
-    if str(item.get("rank") or "") == "无上":
-        return True
-    # 装备数值 rank 5：顶级档
-    if item.get("item_type") in ("法器", "防具") and _to_int(item.get("rank"), -1) == 5:
-        return True
-    return False
+    """Compat shim: the 无上 rule lives in ``features.world_events.reward_rules``."""
+    return _is_wushang_reward_item_rule(item)
 
 
 def _is_demon_random_reward_item(item: dict, contribution: float) -> bool:
-    item_type = item.get("item_type")
-    if item_type == "特殊物品":
-        return True
-    if item_type in ("功法", "辅修功法", "神通"):
-        return _to_int(item.get("rank"), -1) > 0
-    if item_type in ("身法", "瞳术"):
-        return contribution >= DEMON_FULL_RANDOM_POOL_CONTRIBUTION or _to_int(item.get("rank"), -1) > 0
-    if item_type in ("法器", "防具"):
-        if "fusion" in item:
-            return False
-        return contribution >= DEMON_FULL_RANDOM_POOL_CONTRIBUTION or _to_int(item.get("rank"), -1) > 0
-    return False
+    """Compat shim: pool filtering lives in ``features.world_events.reward_rules``."""
+    return _is_random_reward_item_rule(item, contribution)
 
 
-def _get_demon_random_reward_pool(contribution: float) -> list[tuple[int, dict]]:
-    pool = []
-    for item_id, item in _items().items.items():
-        if not _is_demon_random_reward_item(item, contribution):
-            continue
-        try:
-            pool.append((int(item_id), item))
-        except (TypeError, ValueError):
-            continue
-    return pool
+def _get_demon_random_reward_pool(contribution: float) -> list:
+    """Compat shim: the pool is built by ``features.world_events.reward_rules``."""
+    return list(_random_reward_pool_rule(_items().items, contribution))
 
 
 def _pick_demon_random_reward(contribution: float):
-    """从魔修随机池抽一件。
-
-    抽中无上技能/装备时仅 1% 保留，否则改抽非无上。
-    """
-    reward_pool = _get_demon_random_reward_pool(contribution)
-    if not reward_pool:
-        return None
-    pick = runtime_random.choice(reward_pool)
-    item = pick[1] if isinstance(pick, tuple) and len(pick) > 1 else None
-    if item is not None and _is_wushang_reward_item(item):
-        # 1% 保留无上，否则降为非无上
-        if runtime_random.randint(1, 100) != 100:
-            normal_pool = [row for row in reward_pool if not _is_wushang_reward_item(row[1])]
-            if normal_pool:
-                return runtime_random.choice(normal_pool)
-            return None
-    return pick
+    """Compat shim: the 无上 1% re-roll lives in ``features.world_events.reward_rules``."""
+    return _pick_random_reward_rule(_get_demon_random_reward_pool(contribution), runtime_random)
 
 
 def _load_state(event_key: str = EVENT_KEY) -> dict:
@@ -731,7 +691,7 @@ def _format_participant_rank(
         attacks = _to_int(item.get("attacks"), 0)
         contribution = _to_float(item.get("reward_contribution"), 0.0)
         base_contribution = _to_float(item.get("base_contribution"), contribution)
-        contribution_text = f"，贡献{_format_contribution_percent(base_contribution, _record_reward_multiplier(item))}" if contribution > 0 else ""
+        contribution_text = f"，贡献{_format_contribution_percent(base_contribution, _record_reward_multiplier_rule(item))}" if contribution > 0 else ""
         lines.append(f"{index}. {name}：{number_to(damage)}真实伤害{contribution_text}，出手{attacks}次")
     return "\n".join(lines)
 
@@ -771,7 +731,7 @@ def _build_state_message(state: dict, user_info: dict | None = None) -> str:
             battle_hp = max(_to_int(boss_info.get("battle_hp", boss_info.get("气血")), 0), 0)
             battle_max_hp = max(_to_int(boss_info.get("battle_max_hp", boss_info.get("总血量")), 0), 1)
             boss_title = "魔修首领" if _to_int(boss_info.get("is_chief"), 0) == 1 else "魔修"
-            reward_multiplier = _boss_reward_multiplier(boss_info)
+            reward_multiplier = _boss_reward_multiplier_rule(boss_info)
             reward_text = "奖励：按贡献结算，可能获得珍稀奖励"
             if reward_multiplier > 1:
                 reward_text = f"奖励：首领贡献结算x{reward_multiplier:g}，可能获得珍稀奖励"
@@ -817,7 +777,8 @@ def _participant_key(user_id: str, realm: str, wave: int | None = None) -> str:
 
 
 def _record_wave(record: dict | None) -> int:
-    return max(_to_int((record or {}).get("wave"), 1), 1)
+    """Compat shim: the wave default lives in the feature domain."""
+    return _record_wave_rule(record)
 
 
 def _find_participant_record(
@@ -911,7 +872,7 @@ def _record_participant(
     record["reward_total_damage"] = record["reward_base_hp"]
     reward_multiplier = max(_to_float(reward_multiplier, 1.0), 1.0)
     settlement_contribution = max(0.0, float(contribution)) * reward_multiplier
-    record["reward_multiplier"] = max(_record_reward_multiplier(record), reward_multiplier)
+    record["reward_multiplier"] = max(_record_reward_multiplier_rule(record), reward_multiplier)
     record["base_contribution"] = min(
         _to_float(record.get("base_contribution"), 0.0) + max(0.0, float(contribution)),
         1.0,
@@ -952,35 +913,18 @@ def _mark_wave_reward_ready(state: dict, realm: str, wave: int) -> int:
         if "reward_contribution" not in item:
             base_contribution = min(max(_to_int(item.get("damage"), 0) / max(_to_int(item.get("reward_base_hp"), 0), 1), 0.0), 1.0)
             item["base_contribution"] = base_contribution
-            item["reward_contribution"] = min(base_contribution * _record_reward_multiplier(item), 1.0)
+            item["reward_contribution"] = min(base_contribution * _record_reward_multiplier_rule(item), 1.0)
     return reward_base_hp
 
 
 def _record_reward_base_hp(state: dict, record: dict | None, realm: str, wave: int) -> int:
-    if not record:
-        return 1
-
-    boss_info = state.get("bosses", {}).get(realm, {})
-    current_boss_base = 0
-    if boss_info and max(_to_int(boss_info.get("wave"), 1), 1) == wave:
-        current_boss_base = _to_int(boss_info.get("boss_max_hp"), 0)
-
-    return max(
-        _to_int(record.get("reward_base_hp"), 0),
-        current_boss_base,
-        _to_int(record.get("damage"), 0),
-        1,
-    )
+    """Compat shim: the contribution denominator lives in the feature domain."""
+    return _record_reward_base_hp_rule(state, record, realm, wave)
 
 
 def _record_reward_contribution(state: dict, record: dict | None, realm: str, wave: int) -> float:
-    if not record:
-        return 0.0
-    if "reward_contribution" in record:
-        return min(max(_to_float(record.get("reward_contribution"), 0.0), 0.0), 1.0)
-    reward_base_hp = _record_reward_base_hp(state, record, realm, wave)
-    base_contribution = min(max(_to_int(record.get("damage"), 0) / reward_base_hp, 0.0), 1.0)
-    return min(base_contribution * _record_reward_multiplier(record), 1.0)
+    """Compat shim: per-record contribution lives in the feature domain."""
+    return _record_reward_contribution_rule(state, record, realm, wave)
 
 
 def _find_user_records(state: dict, user_id: str, preferred_realm: str | None = None) -> list[tuple[str, dict]]:
@@ -1012,20 +956,8 @@ def _count_user_attacks(state: dict, user_id: str) -> int:
 
 
 def _sum_reward_contribution(state: dict, records: list[tuple[str, dict]]) -> tuple[int, float, int, int]:
-    total_damage = 0
-    total_contribution = 0.0
-    first_wave = 0
-    last_wave = 0
-    for _, record in records:
-        wave = _record_wave(record)
-        if first_wave <= 0 or wave < first_wave:
-            first_wave = wave
-        if wave > last_wave:
-            last_wave = wave
-        realm = record.get("realm") or ""
-        total_damage += _to_int(record.get("damage"), 0)
-        total_contribution += _record_reward_contribution(state, record, realm, wave)
-    return total_damage, min(max(total_contribution, 0.0), 1.0), first_wave, last_wave
+    """Compat shim: the aggregate lives in the feature domain."""
+    return _sum_reward_contribution_rule(state, records)
 
 
 def _start_auto_demon_invasion() -> dict:
@@ -1510,21 +1442,27 @@ async def claim_demon_reward_(bot: Bot, event: GroupMessageEvent | PrivateMessag
         )
         prior_claim = demon_claim_application.get_result(claim_op_preview) if claim_op_preview else None
         already_claimed = _has_user_claimed(claimed, user_id, claim_key) if not no_reward_event else False
+        plan = None
+        random_reward_text = "未获得"
 
         if prior_claim is None and not (reward_pending or no_reward_event or no_contribution or already_claimed):
-            contribution = _reward_contribution(raw_contribution)
-            stone_reward = min(int(DEMON_STONE_REWARD_CAP * contribution), DEMON_STONE_REWARD_CAP)
+            plan = build_demon_reward_plan(
+                raw_contribution=raw_contribution,
+                talisman_item=_items().get_data_by_item_id(DEMON_TALISMAN_ITEM_ID),
+                item_catalog=_items().items,
+                rng=runtime_random,
+            )
+            contribution = plan.contribution
+            stone_reward = plan.stone
             # 最高约 5%×贡献，再按境界 rank 压制（与双修/塔一致）
             exp_reward = percent_exp_reward(
                 max(_to_int(user_info.get("exp"), 0), 1),
-                DEMON_EXP_REWARD_CAP_RATE * contribution,
+                plan.exp_rate,
                 user_info.get("level"),
                 anchor="gap",
             )
-            talisman_reward = _demon_talisman_reward_count(contribution)
-            random_reward = None
-            if runtime_random.random() <= contribution:
-                random_reward = _pick_demon_random_reward(contribution)
+            talisman_reward = plan.talisman_count
+            random_reward_text = plan.random_reward_text
 
             expected_claimed = dict(claimed)
             claim_event_id = str(state.get("event_id", ""))
@@ -1562,19 +1500,7 @@ async def claim_demon_reward_(bot: Bot, event: GroupMessageEvent | PrivateMessag
         await handle_send(bot, event, msg, md_type="世界事件", k1="状态", v1="魔修入侵状态")
         await claim_demon_reward.finish()
 
-    reward_items = []
-    if talisman_reward > 0:
-        talisman_info = _items().get_data_by_item_id(DEMON_TALISMAN_ITEM_ID)
-        if talisman_info:
-            reward_items.append({"id": DEMON_TALISMAN_ITEM_ID, "name": talisman_info["name"], "type": talisman_info["type"], "amount": talisman_reward})
-
-    random_reward_text = "未获得"
-    if random_reward:
-        random_item_id, random_item_info = random_reward
-        reward_items.append({"id": random_item_id, "name": random_item_info["name"], "type": random_item_info["type"], "amount": 1})
-        random_reward_level = random_item_info.get("level")
-        random_reward_name = random_item_info.get("name", f"未知物品{random_item_id}")
-        random_reward_text = f"{random_reward_level}:{random_reward_name}" if random_reward_level else random_reward_name
+    reward_items = [dict(item) for item in (plan.items if plan is not None else ())]
 
     operation_id = (
         f"demon-claim:{claim_event_id}:{user_id}:{event_message_id}"
