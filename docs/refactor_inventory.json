@@ -400,6 +400,15 @@
       "permission": "user"
     },
     {
+      "aliases": [
+        "签到补签",
+        "补签"
+      ],
+      "feature": "sign_in",
+      "name": "修仙补签",
+      "permission": "user"
+    },
+    {
       "aliases": [],
       "feature": "admin",
       "name": "修仙适配",

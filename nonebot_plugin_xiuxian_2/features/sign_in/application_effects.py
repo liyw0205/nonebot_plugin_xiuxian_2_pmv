@@ -55,5 +55,24 @@ class SignInApplicationEffects(SignInEffects):
         self.tasks.record(user_id=str(user_id), operation_id=operation_id)
         return message + ("\n该签到请求已经处理，无需重复提交。" if replayed else "")
 
+    def on_makeup(
+        self,
+        *,
+        user_id: str,
+        operation_id: str,
+        business_date: str,
+        occurred_at: Any,
+        replayed: bool,
+    ) -> str | None:
+        # A makeup day must appear in 我的签到统计 exactly like a real claim day,
+        # but it is not a new sign-in for lottery or task purposes.
+        self.statistics.record(
+            user_id=str(user_id),
+            operation_id=f"statistics:{operation_id}",
+            event_key="修仙签到",
+            occurred_at=occurred_at,
+        )
+        return None
+
 
 __all__ = ["SignInApplicationEffects"]

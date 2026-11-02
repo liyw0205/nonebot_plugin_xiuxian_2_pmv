@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date, datetime, time
 from dataclasses import replace
 from calendar import monthrange
 from pathlib import Path
@@ -17,7 +17,7 @@ from .calendar import render_sign_in_calendar
 from .domain import SignInRecord, validate_limits
 from .effects import NullSignInEffects, SignInEffects
 from .repository import SignInRepository
-from .schemas import SignInRequest
+from .schemas import SignInMakeupRequest, SignInRequest
 
 
 class SignInApplication:
@@ -34,6 +34,7 @@ class SignInApplication:
         clock: Any | None = None,
         lower_limit: int = 100000,
         upper_limit: int = 500000,
+        makeup_cost: int = 100000,
         effects: SignInEffects | None = None,
         outbox: OutboxStore | None = None,
     ) -> None:
@@ -43,6 +44,7 @@ class SignInApplication:
         self.random = random_source or SystemRandom()
         self.clock = clock or SystemClock()
         self.lower_limit, self.upper_limit = validate_limits(lower_limit, upper_limit)
+        self.makeup_cost = max(0, int(makeup_cost))
         self.effects = effects or NullSignInEffects()
         self.outbox = outbox or OutboxStore(clock=self.clock)
 
@@ -265,6 +267,206 @@ class SignInApplication:
                 except Exception:
                     pass
                 raise
+
+    def makeup(
+        self,
+        *,
+        user_id: str,
+        operation_id: str,
+        business_date: str,
+        cost: int | None = None,
+    ) -> OperationOutcome[dict[str, Any]]:
+        """补签本月内、早于今天且没有回执的一天；只扣成本，不发放签到灵石。"""
+
+        price = self.makeup_cost if cost is None else int(cost)
+        action = "sign_in.makeup"
+        request = SignInMakeupRequest(
+            str(user_id), str(operation_id), str(business_date).strip(), price
+        )
+        try:
+            request.validate()
+        except ValueError as exc:
+            raise ValidationError(str(exc)) from exc
+        payload = {
+            "user_id": request.user_id,
+            "business_date": request.business_date,
+            "cost": request.cost,
+        }
+        with trace_context(operation_id=request.operation_id, user_scope=request.user_id):
+            moment = self._now()
+            today = moment.date()
+            try:
+                with DatabaseUnitOfWork(self.database) as uow:
+                    existing = self.ledger.begin(
+                        uow, request.operation_id, action, payload
+                    )
+                    if existing is not None:
+                        previous = existing.outcome()
+                        if previous is not None:
+                            replayed = previous.replay()
+                            uow.commit()
+                            return self._apply_makeup_effects(
+                                replayed, request=request, target=None, replayed=True
+                            )
+                        raise ConflictError("操作正在处理中")
+
+                    before = self.repository.user_snapshot(uow, request.user_id)
+
+                    def reject(
+                        message: str, code: str
+                    ) -> OperationOutcome[dict[str, Any]]:
+                        outcome = OperationOutcome.rejected(
+                            request.operation_id,
+                            action,
+                            message,
+                            code=code,
+                            before=before,
+                            after=before,
+                            audit_category="sign_in",
+                        )
+                        self.ledger.finish(uow, outcome)
+                        return outcome
+
+                    try:
+                        target = date.fromisoformat(request.business_date)
+                    except (TypeError, ValueError):
+                        return reject(
+                            "日期格式不正确，请发送【修仙补签 2026-11-01】或【修仙补签 1】。",
+                            "invalid_date",
+                        )
+                    if target == today:
+                        return reject(
+                            "今天请直接发送【修仙签到】，补签只用于已过去的日子。",
+                            "today_not_allowed",
+                        )
+                    if target > today:
+                        return reject("不能补签未来的日期。", "future_date")
+                    if (target.year, target.month) != (today.year, today.month):
+                        return reject("只能补签本月内的日期。", "out_of_month")
+                    if not self.repository.makeup_schema_ready(uow):
+                        return reject(
+                            "补签需要完成数据库迁移后才能使用。", "schema_missing"
+                        )
+                    if self.repository.daily_signed(
+                        uow, request.user_id, target.isoformat()
+                    ):
+                        return reject(
+                            f"{target.isoformat()} 已经签到，无需补签。",
+                            "already_signed",
+                        )
+                    balance = self.repository.stone_balance(uow, request.user_id)
+                    if balance is None:
+                        return reject("角色不存在", "user_missing")
+                    if balance < request.cost:
+                        return reject(
+                            f"补签需要{request.cost}灵石，当前灵石不足。",
+                            "stone_insufficient",
+                        )
+                    if not self.repository.record_makeup_daily(
+                        uow, request.user_id, target.isoformat(), request.operation_id
+                    ):
+                        raise ConflictError("该日期已有签到回执，请刷新后重试")
+                    if (
+                        self.repository.charge_stone(
+                            uow, request.user_id, request.cost
+                        )
+                        != 1
+                    ):
+                        raise ConflictError("灵石余额已变化，请重试")
+
+                    after = self.repository.user_snapshot(uow, request.user_id)
+                    month_start = today.replace(day=1)
+                    month_end = today.replace(
+                        day=monthrange(today.year, today.month)[1]
+                    )
+                    dates = self.repository.daily_dates(
+                        uow,
+                        request.user_id,
+                        month_start.isoformat(),
+                        month_end.isoformat(),
+                    ) or []
+                    outcome = OperationOutcome.applied(
+                        request.operation_id,
+                        action,
+                        data={
+                            "makeup": {
+                                "business_date": target.isoformat(),
+                                "cost": request.cost,
+                                "stone_before": int(before.get("stone", 0)),
+                                "stone_after": int(after.get("stone", 0)),
+                            },
+                            "calendar": list(render_sign_in_calendar(today, dates)),
+                        },
+                        before=before,
+                        after=after,
+                        consumed={"stone": request.cost},
+                        audit_category="sign_in",
+                        occurred_at=moment.isoformat(),
+                    )
+                    self.ledger.finish(uow, outcome)
+                    uow.commit()
+                    return self._apply_makeup_effects(
+                        outcome, request=request, target=target, replayed=False
+                    )
+            except DomainError:
+                raise
+            except Exception as exc:
+                try:
+                    self.ledger.record_failure(
+                        self.database,
+                        request.operation_id,
+                        action,
+                        payload,
+                        str(exc),
+                    )
+                except Exception:
+                    pass
+                raise
+
+    def _apply_makeup_effects(
+        self,
+        outcome: OperationOutcome[dict[str, Any]],
+        *,
+        request: SignInMakeupRequest,
+        target: date | None,
+        replayed: bool,
+    ) -> OperationOutcome[dict[str, Any]]:
+        if isinstance(self.effects, NullSignInEffects) or not outcome.ok:
+            return outcome
+        try:
+            day = target or date.fromisoformat(request.business_date)
+            message = self.effects.on_makeup(
+                user_id=request.user_id,
+                operation_id=request.operation_id,
+                business_date=request.business_date,
+                occurred_at=datetime.combine(day, time(12, 0)),
+                replayed=replayed,
+            )
+        except Exception:
+            return replace(outcome, message="补签已记账，但签到统计稍后补偿。")
+        return replace(outcome, message=message or outcome.message)
+
+    def reply_makeup(self, **kwargs: Any) -> ReplyPlan:
+        result = self.makeup(**kwargs)
+        data = result.data if isinstance(result.data, dict) else {}
+        makeup = data.get("makeup", {}) if isinstance(data, dict) else {}
+        if not result.ok:
+            return ReplyPlan(result.message or "补签未完成，请稍后重试。", reference=True)
+        lines = [
+            "**修仙补签**",
+            "---",
+            f"✅ 补签成功：{makeup.get('business_date', '')}",
+            f"消耗：{int(makeup.get('cost', 0) or 0)} 灵石"
+            f"｜余额：{int(makeup.get('stone_after', 0) or 0)} 灵石",
+        ]
+        calendar_lines = data.get("calendar") or []
+        if calendar_lines:
+            lines.append("")
+            lines.extend(str(line) for line in calendar_lines)
+        if result.replayed:
+            lines.append("")
+            lines.append("该补签请求已经处理，无需重复提交。")
+        return ReplyPlan("\n".join(lines), reference=True)
 
     def calendar_text(self, user_id: str) -> str:
         """Render the current-month calendar, or an empty string when unavailable."""

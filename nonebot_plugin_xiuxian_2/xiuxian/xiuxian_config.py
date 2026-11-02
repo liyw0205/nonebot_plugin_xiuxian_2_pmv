@@ -241,6 +241,8 @@ class XiuConfig:
         # 每日签到灵石下限
         self.sign_in_lingshi_upper_limit = 500000
         # 每日签到灵石上限
+        self.sign_in_makeup_cost = 100000
+        # 补签一天消耗灵石
         self.beg_max_level = "结丹境圆满"
         # 仙途奇缘能领灵石最高境界
         self.beg_max_days = 7

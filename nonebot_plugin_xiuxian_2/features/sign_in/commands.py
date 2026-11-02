@@ -20,6 +20,24 @@ def handle_sign_in(application: SignInApplication, *, user_id: str, operation_id
     )
 
 
+def handle_sign_in_makeup(
+    application: SignInApplication,
+    *,
+    user_id: str,
+    operation_id: str,
+    business_date: str,
+    cost: int | None = None,
+) -> ReplyPlan:
+    """补签一个本月内已过去、且没有回执的业务日。"""
+
+    return application.reply_makeup(
+        user_id=user_id,
+        operation_id=operation_id,
+        business_date=business_date,
+        cost=cost,
+    )
+
+
 def format_lottery_snapshot(snapshot: LotterySnapshot, number_to: Any) -> str:
     message = "**鸿运当头**\n---\n"
     message += f"当前奖池累计\n> {number_to(snapshot.pool)}灵石\n"
@@ -98,4 +116,4 @@ def settle_lottery(
     )
 
 
-__all__ = ["format_lottery_result", "format_lottery_snapshot", "handle_sign_in", "settle_lottery"]
+__all__ = ["format_lottery_result", "format_lottery_snapshot", "handle_sign_in", "handle_sign_in_makeup", "settle_lottery"]

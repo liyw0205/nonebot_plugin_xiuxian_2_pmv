@@ -1067,6 +1067,8 @@ async def help_in_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
 > 查看存档
 - 修仙签到
 > 每日签到
+- 修仙补签 [日期]
+> 补签本月内漏签的一天（消耗灵石）
 - 鸿运
 > 查看签到奖池
 - 修仙改名 新道号

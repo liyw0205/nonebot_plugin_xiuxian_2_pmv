@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Callable
+from datetime import date, timedelta
 from typing import Any
 
 from nonebot.adapters import Bot, Event, Message
@@ -116,6 +117,36 @@ def _build_sign(context: CommandContext, application: Any) -> ReplyPlan:
         operation_id=_message_id(context.raw_event, context.user_id, "sign"),
         lower_limit=int(getattr(application, "lower_limit", 100000)),
         upper_limit=int(getattr(application, "upper_limit", 500000)),
+    )
+
+
+def _makeup_business_date(args: Any, today: date) -> str:
+    """空参数→昨天；`D`→本月第 D 天；其余原样交给应用层校验。"""
+
+    text = _plain_text(args)
+    if not text or text in {"昨天", "昨日"}:
+        return (today - timedelta(days=1)).isoformat()
+    if re.fullmatch(r"\d{1,2}", text):
+        try:
+            return date(today.year, today.month, int(text)).isoformat()
+        except ValueError:
+            return text
+    return text
+
+
+def _build_sign_makeup(
+    context: CommandContext, application: Any, args: Any
+) -> ReplyPlan:
+    from ...features.sign_in.clock import sign_in_clock
+    from ...features.sign_in.commands import handle_sign_in_makeup
+
+    today = sign_in_clock().now().date()
+    return handle_sign_in_makeup(
+        application,
+        user_id=context.user_id,
+        operation_id=_message_id(context.raw_event, context.user_id, "sign-makeup"),
+        business_date=_makeup_business_date(args, today),
+        cost=int(getattr(application, "makeup_cost", 100000)),
     )
 
 
@@ -305,6 +336,9 @@ def register_migrated_matchers(driver: Any, holder: dict[str, Any]) -> tuple[typ
         block=True,
     )
     sign = on_command("修仙签到", aliases={"签到"}, priority=1, block=True)
+    sign_makeup = on_command(
+        "修仙补签", aliases={"补签", "签到补签"}, priority=1, block=True
+    )
     stone = on_command("送灵石", priority=1, block=True)
 
     @daily.handle()
@@ -314,6 +348,24 @@ def register_migrated_matchers(driver: Any, holder: dict[str, Any]) -> tuple[typ
     @sign.handle()
     async def _sign_handler(bot: Bot, event: Event):
         return await _dispatch(holder, event, bot, "sign_in", _build_sign)
+
+    @sign_makeup.handle()
+    async def _sign_makeup_handler(
+        bot: Bot, event: Event, args: Message = CommandArg()
+    ):
+        context = context_from_event(event, bot=bot)
+        try:
+            runtime = _runtime(holder)
+            plan = _build_sign_makeup(
+                context, runtime.services["sign_in"], args
+            )
+        except DomainError as exc:
+            plan = ReplyPlan(exc.message, reference=True)
+        except (KeyError, RuntimeError) as exc:
+            plan = ReplyPlan(str(exc), reference=True)
+        except Exception:
+            plan = ReplyPlan("当前服务暂不可用，请稍后重试。", reference=True)
+        return await _send(holder, event, bot, plan)
 
     @stone.handle()
     async def _stone_handler(bot: Bot, event: Event, args: Message = CommandArg()):

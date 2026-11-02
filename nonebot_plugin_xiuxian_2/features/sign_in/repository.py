@@ -68,6 +68,69 @@ class SignInRepository:
             "SELECT 1 AS present FROM sqlite_master WHERE type='table' AND name='sign_in_daily'"
         ) is not None
 
+    @staticmethod
+    def makeup_schema_ready(uow: DatabaseUnitOfWork) -> bool:
+        """Makeup needs both the receipt table and its ``source`` tag column."""
+
+        if not SignInRepository.daily_schema_exists(uow):
+            return False
+        columns = {
+            str(row["name"])
+            for row in uow.query_all("PRAGMA table_info(sign_in_daily)")
+        }
+        return "source" in columns
+
+    def stone_balance(self, uow: DatabaseUnitOfWork, user_id: str) -> int | None:
+        """Read-only balance probe; ``None`` when the player row does not exist."""
+
+        row = uow.query_one(
+            "SELECT CAST(COALESCE(stone, 0) AS REAL) AS stone FROM user_xiuxian "
+            "WHERE user_id = ? LIMIT 1",
+            (str(user_id),),
+        )
+        return int(float(row["stone"] or 0)) if row else None
+
+    def charge_stone(self, uow: DatabaseUnitOfWork, user_id: str, cost: int) -> int:
+        """Deduct ``cost`` from one player row; never allows a negative balance."""
+
+        cursor = uow.execute(
+            "UPDATE user_xiuxian SET stone = CAST(COALESCE(stone, 0) AS REAL) - ? "
+            "WHERE user_id = ? AND CAST(COALESCE(stone, 0) AS REAL) >= ?",
+            (int(cost), str(user_id), int(cost)),
+        )
+        return int(cursor.rowcount)
+
+    def record_makeup_daily(
+        self,
+        uow: DatabaseUnitOfWork,
+        user_id: str,
+        business_date: str,
+        operation_id: str,
+    ) -> bool:
+        """Insert a makeup receipt (zero stone) for one business date.
+
+        Returns ``False`` when the date already has a receipt; the caller must
+        treat that as "already signed" rather than retrying the charge.
+        """
+
+        cursor = uow.execute(
+            "INSERT OR IGNORE INTO sign_in_daily"
+            "(user_id,business_date,stone,operation_id,source) VALUES(?,?,?,?,?)",
+            (str(user_id), str(business_date), 0, str(operation_id), "makeup"),
+        )
+        return int(cursor.rowcount) == 1
+
+    def daily_source(
+        self, uow: DatabaseUnitOfWork, user_id: str, business_date: str
+    ) -> str | None:
+        if not self.makeup_schema_ready(uow):
+            return None
+        row = uow.query_one(
+            "SELECT source FROM sign_in_daily WHERE user_id=? AND business_date=?",
+            (str(user_id), str(business_date)),
+        )
+        return str(row["source"]) if row else None
+
     def daily_signed(
         self, uow: DatabaseUnitOfWork, user_id: str, business_date: str
     ) -> bool | None:

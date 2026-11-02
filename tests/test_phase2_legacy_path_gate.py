@@ -808,6 +808,10 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
         # (背包容量, registered in the legacy xiuxian_back package),
         # moving the derived counts 649->650 and 335->336 while the frozen
         # membership file and its hash remain untouched.
+        # The sign-in makeup slice adds 修仙补签 through the migrated adapter
+        # matcher group (like 修仙签到), not as a legacy declaration under
+        # xiuxian/, so the derived legacy counts stay at 650/336 while the
+        # frozen membership file and its hash remain untouched.
         self.assertEqual(report["default_legacy_command_count"], 650)
         self.assertEqual(report["default_legacy_command_backlog_count"], 336)
         scope_path = Path(__file__).resolve().parents[1] / "docs/refactor_phase2_legacy_paths.json"

@@ -65,6 +65,7 @@ def build_runtime_context(
                 SettingDefinition("sign_in_enabled", bool, default=True, reloadable=True, env_name="XIUXIAN_SIGN_IN_ENABLED", description="修仙签到新实现灰度开关"),
                 SettingDefinition("sign_in_lower_limit", int, default=100000, reloadable=True, env_name="XIUXIAN_SIGN_IN_LOWER_LIMIT", description="签到灵石下限"),
                 SettingDefinition("sign_in_upper_limit", int, default=500000, reloadable=True, env_name="XIUXIAN_SIGN_IN_UPPER_LIMIT", description="签到灵石上限"),
+                SettingDefinition("sign_in_makeup_cost", int, default=100000, reloadable=True, env_name="XIUXIAN_SIGN_IN_MAKEUP_COST", description="签到补签消耗灵石"),
                 SettingDefinition("stone_gift_enabled", bool, default=True, reloadable=True, env_name="XIUXIAN_STONE_GIFT_ENABLED", description="灵石赠送新实现灰度开关"),
                 SettingDefinition("stone_gift_fee_rate", float, default=0.1, reloadable=True, env_name="XIUXIAN_STONE_GIFT_FEE_RATE", description="灵石赠送手续费率"),
                 SettingDefinition("accessory_package_enabled", bool, default=True, reloadable=True, env_name="XIUXIAN_ACCESSORY_PACKAGE_ENABLED", description="饰品礼包新实现灰度开关"),

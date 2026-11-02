@@ -437,6 +437,12 @@ CONFIG_EDITABLE_FIELDS = {
         "type": "int",
         "category": "资源设置"
     },
+    "sign_in_makeup_cost": {
+        "name": "补签消耗",
+        "description": "补签一天消耗的灵石",
+        "type": "int",
+        "category": "资源设置"
+    },
     "beg_max_level": {
         "name": "奇缘最高境界",
         "description": "仙途奇缘能领灵石最高境界",

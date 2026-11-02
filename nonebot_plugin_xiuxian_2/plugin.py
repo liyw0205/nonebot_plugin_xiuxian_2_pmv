@@ -39,7 +39,7 @@ from .features.title.manifest import FEATURE as TITLE_FEATURE
 from .features.title.migrations import apply_title, apply_title_schema
 from .features.title.application import TitleApplication
 from .features.sign_in.manifest import FEATURE as SIGN_IN_FEATURE
-from .features.sign_in.migrations import apply_lottery, apply_lottery_audit, apply_sign_in, apply_sign_in_daily, apply_sign_in_statistics, apply_sign_in_tasks
+from .features.sign_in.migrations import apply_lottery, apply_lottery_audit, apply_sign_in, apply_sign_in_daily, apply_sign_in_makeup_source, apply_sign_in_statistics, apply_sign_in_tasks
 from .features.tasks.application import TaskClaimApplication
 from .features.tasks.migrations import (
     apply_task_claim,
@@ -459,6 +459,7 @@ def build_migrations() -> tuple[Migration, ...]:
         Migration("sign_in.002", "sign_in_statistics_events", apply_sign_in_statistics),
         Migration("sign_in.003", "sign_in_task_events", apply_sign_in_tasks),
         Migration("sign_in.004", "sign_in_daily_receipts", apply_sign_in_daily),
+        Migration("sign_in.005", "sign_in_daily_makeup_source", apply_sign_in_makeup_source),
         Migration("stone_gift.001", "stone_gift_operations", apply_stone_gift),
         Migration("stone_gift.002", "stone_gift_limits", apply_stone_gift_limits),
         Migration("tasks.001", "task_progress_schema", apply_task_progress),
@@ -973,6 +974,7 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
         from .features.bank.feature_flag import bank_first_use_enabled
         lower = int(settings.get("sign_in_lower_limit", 100000)) if settings is not None else 100000
         upper = int(settings.get("sign_in_upper_limit", 500000)) if settings is not None else 500000
+        makeup_cost = int(settings.get("sign_in_makeup_cost", 100000)) if settings is not None else 100000
         fee_rate = float(settings.get("stone_gift_fee_rate", 0.1)) if settings is not None else 0.1
         sign_in_effects = None
         game_event_effects = LegacyGameEventEffects(
@@ -1057,6 +1059,7 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
                 clock=context.clock,
                 lower_limit=lower,
                 upper_limit=upper,
+                makeup_cost=makeup_cost,
                 effects=sign_in_effects,
             ),
             "stone_gift": StoneGiftApplication(

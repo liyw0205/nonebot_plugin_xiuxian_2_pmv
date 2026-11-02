@@ -36,6 +36,34 @@ def apply_sign_in_daily(uow: DatabaseUnitOfWork) -> None:
     )
 
 
+def apply_sign_in_makeup_source(uow: DatabaseUnitOfWork) -> None:
+    """Tag daily receipts with their origin so makeup days stay distinguishable.
+
+    The column is added in place: the receipt table is the business-date
+    uniqueness boundary for both claim and makeup, so rebuilding it would risk
+    the player's existing calendar.  Old rows default to ``claim``.
+    """
+
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS sign_in_daily ("
+        "user_id TEXT NOT NULL,"
+        "business_date TEXT NOT NULL,"
+        "stone INTEGER NOT NULL,"
+        "operation_id TEXT NOT NULL,"
+        "created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,"
+        "source TEXT NOT NULL DEFAULT 'claim',"
+        "PRIMARY KEY(user_id,business_date))"
+    )
+    columns = {
+        str(row["name"])
+        for row in uow.query_all("PRAGMA table_info(sign_in_daily)")
+    }
+    if "source" not in columns:
+        uow.execute(
+            "ALTER TABLE sign_in_daily ADD COLUMN source TEXT NOT NULL DEFAULT 'claim'"
+        )
+
+
 def apply_lottery(uow: DatabaseUnitOfWork) -> None:
     from .lottery_repository import LotteryRepository
 
@@ -46,4 +74,12 @@ def apply_lottery_audit(uow: DatabaseUnitOfWork) -> None:
     uow.execute("CREATE TABLE IF NOT EXISTS economy_log(id INTEGER PRIMARY KEY AUTOINCREMENT,user_id TEXT,source TEXT NOT NULL,action TEXT NOT NULL,stone_delta INTEGER NOT NULL DEFAULT 0,item_delta TEXT NOT NULL DEFAULT '[]',detail TEXT NOT NULL DEFAULT '{}',trace_id TEXT,created_at TEXT NOT NULL)")
 
 
-__all__ = ["apply_lottery", "apply_lottery_audit", "apply_sign_in", "apply_sign_in_daily", "apply_sign_in_statistics", "apply_sign_in_tasks"]
+__all__ = [
+    "apply_lottery",
+    "apply_lottery_audit",
+    "apply_sign_in",
+    "apply_sign_in_daily",
+    "apply_sign_in_makeup_source",
+    "apply_sign_in_statistics",
+    "apply_sign_in_tasks",
+]
