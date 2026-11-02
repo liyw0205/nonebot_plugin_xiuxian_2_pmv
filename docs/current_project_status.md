@@ -1849,6 +1849,48 @@ event_key="修仙签到", occurred_at=now)`，其 effects 由 `plugin.py:1009` �
   `build-and-release` 按分支规则 skipped）。未部署、未读写真实游戏库、不发送真实消息；
   用户删除的四个文件保持未暂存，`.codex-next-goal.md` 与 `docs/goals/**` 未提交。
 
+## 已完成目标：剩余六处列表检索与翻页续查
+
+新功能（非修复，承接「列表检索翻页续查」与背包/宠物/宗门检索切片）。目标文档
+`.codex-next-goal.md`（local-only，未提交）。
+
+**缺口证据**：`世界BOSS商店`、`通天塔商店`、`历练商店`、`传承背包`、`仙肆查看`、
+`查看修仙界物品` 是包内最后六处只认页码的列表——前四处写 `int(args)` 失败即静默回退第 1 页，
+后两处用前缀循环只识别「类型紧贴页码」，玩家输入物品名/卡名时参数被无声吞掉；即便命中筛选，
+翻页提示与按钮也只拼页码，第 2 页会退回未筛选集合。
+
+- `features/base/keyword_page.py` 新增 `parse_typed_page_arg(raw, types)`：
+  `命令 类型 [关键词] [页码]`，类型按最长优先（`辅修功法`/`合成丹药` 不被 `功法`/`丹药`
+  抢先），兼容旧紧贴写法（`神通2`、`药材2`）；未知类型返回空串，沿用各 handler 原错误文案，
+  因此不带关键词的旧输入逐字保持原行为。
+- 六个 handler 接入共享 `matches_keyword` / `page_command`：商店按物品名/ID/描述筛选，
+  `传承背包` 按卡名，`仙肆查看` 与 `查看修仙界物品` 按物品名/ID；MD `next_cmd`、
+  纯文本提示、底部按钮全部携带关键词（`仙肆查看药材 灵芝 2`、`传承背包 画屏春 2`）。
+- 总页数按命中集合计算；`empty_notice` 区分「没有包含该关键词的内容」与「本来就空」；
+  `传承背包` 第 1 页的种类/总数与「筛选：「关键词」」行按命中集合统计，排序仍是
+  `(-数量, 卡名)`。
+- 零 schema/命令变更：不新增表、列、索引、迁移版本、配置键、命令或别名；派生计数
+  `652 / 338` 与冻结清单不变（`test_phase2_legacy_path_gate` 临时还原冻结文件后 47/47）。
+- 帮助与文档：`交易帮助` 改 `仙肆查看 类型 [关键词] [页码]`，`背包帮助` 改
+  `查看修仙界物品+类型 [关键词] [页码]`，`世界BOSS帮助`/`通天塔帮助`/`历练帮助`/
+  `传承帮助` 的商店与背包条目加 `[关键词|页码]` 与一行说明；`docs/features/base.md`
+  新增「列表检索与翻页续查（共享合同）」，trade/back/boss/tower/training/impart
+  各补一段，`docs/gameplay_notes.md` 新增玩家口径「列表筛选与翻页」。
+- 测试：新 `tests/test_list_search_remaining_views.py` `27/27`（`unittest.TestCase`），
+  驱动六个真实注册 handler（patch 数据源与发送缝隙）：筛选命中、第 2 页仍是筛选结果、
+  翻页命令携带关键词、无关键词保持旧页码形式、旧紧贴写法兼容、无命中与空集合分开提示、
+  MD 下一页链接编码、`parse_typed_page_arg` 与 `page_command` 往返、帮助文本与源合同
+  （六视图必须共用 `keyword_page`，不得再拼字面量页码命令）。
+  定向套件：`test_list_search_remaining_views` 27、`test_list_search_pagination`、
+  `test_source_quality`、`test_boss_purchase_command_ingress`、
+  `test_help_discoverability`、`test_impart_command_owner_contract` 与
+  `features/{trade,boss,tower,training,back}/tests` 全绿；
+  architecture、inventory `--check` 真实 exit 0；`compileall` 与 `git diff --check` 干净。
+- 交付与 CI：功能提交 `bcc0745c` 的 develop run `41493961692` success；
+  `--ff-only` 合入 main 后 main run `41494905967` success（headSha 均 `bcc0745c`；
+  `build-and-release` 按分支规则 skipped）。未部署、未读写真实游戏库、未发真实 QQ 消息、
+  未打 tag、未新建 Release；用户删除的四个文件保持未暂存，`.codex-next-goal.md` 未提交。
+
 ## 冻结清单与停止条件
 
 冻结范围仅包括活动 Web 六来源一键代领 API、权限/错误合同、管理员面板、兼容性保护、聚焦测试、路由清单和正式文档。不得新增奖励经济、schema/数据迁移、玩家身份模型、后台活动编辑器、通用 UI 框架或 unrelated refactor。
