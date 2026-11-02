@@ -338,6 +338,20 @@ class PuppetFieldViewTests(unittest.TestCase):
                 PuppetFieldApplication(game, player).snapshot("").notice or "",
             )
 
+    def test_status_reader_keeps_enable_switch_behind_application(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            game = Path(temp) / "game.db"
+            player = Path(temp) / "player.db"
+            create_game(game, puppet_status=1)
+            create_player(player)
+            snapshot = PuppetFieldApplication(
+                game, player, status_reader=lambda user_id: 0
+            ).snapshot("u1")
+
+            self.assertTrue(snapshot.ok)
+            self.assertEqual(snapshot.puppet_enabled, 0)
+            self.assertIn("傀儡状态：关闭", format_puppet_field(snapshot))
+
     def test_handler_uses_feature_read_model(self) -> None:
         source = (
             Path(__file__).resolve().parents[1]

@@ -92,6 +92,7 @@ class PuppetFieldApplication:
         time_cost_hours: float = DEFAULT_TIME_COST_HOURS,
         speed_base: float = DEFAULT_SPEED_BASE,
         recent_days: int = RECENT_DAYS,
+        status_reader: Any | None = None,
     ) -> None:
         self.game_database = str(game_database)
         self.player_database = str(player_database)
@@ -99,6 +100,7 @@ class PuppetFieldApplication:
         self.time_cost_hours = float(time_cost_hours)
         self.speed_base = float(speed_base)
         self.recent_days = max(int(recent_days), 1)
+        self.status_reader = status_reader
 
     @staticmethod
     def _table_exists(uow: DatabaseUnitOfWork, table: str, schema: str = "main") -> bool:
@@ -220,6 +222,11 @@ class PuppetFieldApplication:
                     herb_speed=herb_speed,
                 )
                 puppet_level = as_int(elixir["puppet_level"])
+                puppet_enabled = as_int(user["puppet_status"])
+                if self.status_reader is not None:
+                    # The enable switch is owned by PuppetStatusSqlRepository; ask the
+                    # application instead of duplicating its read semantics here.
+                    puppet_enabled = as_int(self.status_reader(user_id))
                 recent = self._recent(uow, user_id, now)
                 return PuppetFieldSnapshot(
                     True,
@@ -227,7 +234,7 @@ class PuppetFieldApplication:
                     herb_speed=herb_speed,
                     harvest_level=max(as_int(elixir["harvest_level"]), 0),
                     puppet_level=max(puppet_level, 0),
-                    puppet_enabled=as_int(user["puppet_status"]),
+                    puppet_enabled=puppet_enabled,
                     stone=as_int(user["stone"]),
                     maturity=maturity,
                     remaining_hours=remaining,

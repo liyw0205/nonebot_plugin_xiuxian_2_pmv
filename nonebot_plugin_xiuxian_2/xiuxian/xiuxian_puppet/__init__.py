@@ -35,6 +35,7 @@ field_application = PuppetFieldApplication(
     get_paths().game_db,
     get_paths().player_db,
     clock=SystemClock(),
+    status_reader=lambda user_id: puppet_application.get_status(user_id),
 )
 runtime_ids = UUIDGenerator()
 runtime_clock = SystemClock()
