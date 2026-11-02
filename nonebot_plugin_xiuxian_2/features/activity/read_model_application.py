@@ -1169,13 +1169,20 @@ class ActivityReadModelApplication:
     def boss_status_text(self, user_id: str, query: str = "") -> str:
         activities = self._boss_activities(self._config())
         selected = self._find_boss(activities, query)
+        # With several active bosses the claim commands refuse a nameless
+        # query, so a single-boss block must name its boss too — not just the
+        # aggregated view (G4). Compute it before the selected-view branch.
+        multiple = len(self._active_bosses(activities)) > 1
         today = self.clock.now().strftime("%Y-%m-%d")
         if selected is not None:
             key = str(selected["key"])
             rows = self.repository.boss_snapshot(str(user_id), [key], today)
             position, _ = self.repository.board_position("boss", key, str(user_id))
             return self._status_block(
-                selected, rows.get(key, {}), rank_position=max(0, int(position))
+                selected,
+                rows.get(key, {}),
+                rank_position=max(0, int(position)),
+                multiple_active=multiple,
             )
         active = self._active_bosses(activities)
         if not active:
@@ -1183,7 +1190,6 @@ class ActivityReadModelApplication:
         rows = self.repository.boss_snapshot(
             str(user_id), [str(activity["key"]) for activity in active], today
         )
-        multiple = len(active) > 1
         blocks = []
         for activity in active:
             key = str(activity["key"])

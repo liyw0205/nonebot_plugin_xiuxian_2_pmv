@@ -117,7 +117,9 @@ The historical package owns command names during the compatibility release. New 
 `讨伐：活动讨伐`。本人名次达到某排行档且该档未领时追加
 `可用 活动首领领奖 排行 领取`；存在多个活跃首领时，排行/进度提示都会带上
 首领名（`活动首领领奖 排行 {首领名}` / `活动首领领奖 进度 {首领名} …`），
-因为无名称的领奖命令在多首领下会被拒绝。排行档位读取 `activity_boss_rank_claim`
+因为无名称的领奖命令在多首领下会被拒绝。`活动首领 {首领名}` 按名查看单个首领时
+同样带名：聚合视图与单首领块共用同一“活跃首领数”判定，不因只渲染一个块而省略。
+排行档位读取 `activity_boss_rank_claim`
 （可选表，缺表时视为全部未领）；名次来自既有 `board_position` 查询。
 
 ## Web API

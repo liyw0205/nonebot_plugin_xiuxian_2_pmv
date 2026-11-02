@@ -86,6 +86,39 @@ class TestActivityGameplayPersonal(unittest.TestCase):
         text = application.gameplay_personal_text("user-1")
         self.assertTrue(text.startswith(application.gameplay_text()))
 
+    def test_missing_personal_records_show_zero_or_omit_the_segment(self) -> None:
+        """A player with no records still gets a defined, non-crashing view."""
+
+        collect = self.activities["collect_words"]
+        threshold = collect["pity_threshold"]
+        cases = {
+            "collect_words": ("未收集（共0张）", f"保底 0/{threshold}"),
+            "event_points": ("庆典积分 0", "今日进度："),
+        }
+        for kind, expected in cases.items():
+            with self.subTest(activity=kind):
+                config = dict(self.config, gameplay_activities=[self.activities[kind]])
+                application = ActivityReadModelApplication(
+                    self.database, config_loader=lambda c=config: c
+                )
+                personal = application.gameplay_personal_text("nobody").split(
+                    "【我的玩法进度】", 1
+                )[1]
+                for fragment in expected:
+                    self.assertIn(fragment, personal)
+
+        with self.subTest(activity="activity_boss"):
+            config = dict(
+                self.config, gameplay_activities=[self.activities["activity_boss"]]
+            )
+            application = ActivityReadModelApplication(
+                self.database, config_loader=lambda c=config: c
+            )
+            personal = application.gameplay_personal_text("nobody").split(
+                "【我的玩法进度】", 1
+            )[1]
+            self.assertIn("暂无个人玩法进度", personal)
+
     def test_real_handler_wiring(self) -> None:
         source = (
             Path(__file__).resolve().parents[1]

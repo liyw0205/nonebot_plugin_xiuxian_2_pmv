@@ -21,11 +21,14 @@ with ``python -m unittest discover``.
 from __future__ import annotations
 
 import asyncio
+import re
 import tempfile
 import unittest
+from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
+from urllib.parse import unquote
 
 import nonebot
 
@@ -125,6 +128,56 @@ def _send_through_entry(bot, text: str, *, markdown: bool):
             )
         )
     return plain_sent, md_sent
+
+
+LINK_COMMAND_RE = re.compile(r"\]\(mqqapi://aio/inlinecmd\?command=([^)&]+)")
+
+
+def _link_commands(text: str) -> list[str]:
+    return [unquote(match) for match in LINK_COMMAND_RE.findall(text)]
+
+
+def _send_with_keyboard(bot, text: str):
+    """Run the native-markdown seam with markdown buttons enabled.
+
+    Returns the markdown body that stayed in the message and the keyboard
+    rows extracted out of it, so the test can prove each command is delivered
+    exactly once — as a link or as a button, never both.
+    """
+
+    md_sent: list[str] = []
+    rows_sent: list[list[tuple[str, str]]] = []
+
+    async def capture(*args, **kwargs):
+        md_sent.append(str(kwargs.get("md_text") or (args[2] if len(args) > 2 else "")))
+        rows_sent.append(kwargs.get("rows") or [])
+
+    class _XiuConfig:
+        def __init__(self, *args, **kwargs) -> None:
+            self.markdown_status = True
+            self.img = False
+            self.at_sender = False
+            self.message_optimization = False
+            self.markdown_button_status = True
+            self.markdown_id2 = False
+
+    with (
+        patch.object(utils, "XiuConfig", _XiuConfig),
+        patch.object(utils, "get_chat_scene", lambda event: "group"),
+        patch.object(utils, "is_group_event", lambda event: True),
+        patch.object(utils, "get_real_id_async", AsyncMock(return_value="")),
+        patch.object(utils, "_send_markdown_or_keyboard", capture),
+    ):
+        asyncio.run(
+            utils.handle_send(
+                bot,
+                _event(),
+                text,
+                native_markdown=True,
+                fallback_msg=strip_md_command_links(text),
+            )
+        )
+    return md_sent, rows_sent
 
 
 VIEWS = {
@@ -292,6 +345,88 @@ class ActivityViewDeliveryContractTests(unittest.TestCase):
         )
         self.assertEqual([], no_md)
         self.assertEqual(strip_md_command_links(text).rstrip(), plain_sent[0].rstrip())
+
+    def test_stage_timeline_lines_survive_both_paths(self) -> None:
+        """多阶段日程：每一行在纯文本完整、在 QQ 原生按 `\\r` 归一。"""
+
+        config = _config()
+        config["extensions"] = {
+            **config.get("extensions", {}),
+            "stages": [
+                {
+                    "key": "warmup",
+                    "name": "预热期",
+                    "stage_type": "open",
+                    "start_time": "2026-10-01",
+                    "end_time": "2026-10-10",
+                    "features": ["sign"],
+                },
+                {
+                    "key": "formal",
+                    "name": "正式期",
+                    "stage_type": "open",
+                    "start_time": "2026-10-12",
+                    "end_time": "2026-10-20",
+                    "features": ["sign", "task"],
+                },
+                {
+                    "key": "tail",
+                    "name": "尾声期",
+                    "stage_type": "open",
+                    "start_time": "2026-11-01",
+                    "end_time": "2026-11-10",
+                    "features": ["claim"],
+                },
+            ],
+        }
+        read_model = ActivityReadModelApplication(
+            self.database,
+            config_loader=lambda: config,
+            clock=SimpleNamespace(now=lambda: datetime(2026, 10, 15, 12)),
+        )
+        text = read_model.activity_stage_text("u1")
+        schedule = text.split("【阶段日程】", 1)[1]
+        for fragment in ("- ✓ 预热期（已结束）", "- ▶ 正式期（进行中）", "- … 尾声期（未开始）"):
+            self.assertIn(fragment, schedule)
+
+        plain_sent, md_sent = _send_through_entry(
+            _bot(onebot=True), text, markdown=True
+        )
+        self.assertEqual([], md_sent)
+        plain = plain_sent[0]
+        self.assertNotIn("**", plain)
+        for fragment in ("- ✓ 预热期（已结束）", "- ▶ 正式期（进行中）", "- … 尾声期（未开始）"):
+            self.assertIn(fragment, plain)
+
+        plain_sent, md_sent = _send_through_entry(
+            _bot(onebot=False), text, markdown=True
+        )
+        self.assertEqual([], plain_sent)
+        native = md_sent[0]
+        self.assertNotIn("\n", native)
+        for fragment in ("- ✓ 预热期", "- ▶ 正式期", "- … 尾声期"):
+            self.assertIn("\r" + fragment, native)
+
+    def test_center_command_links_are_never_duplicated_as_buttons(self) -> None:
+        """QQ 原生按钮：整行命令链接移入键盘后不得同时留在正文。"""
+
+        text = self._read_model().activity_center_text()
+        links = _link_commands(text)
+        self.assertGreaterEqual(len(links), 2, "中心卡片应含命令蓝字")
+
+        md_sent, rows_sent = _send_with_keyboard(_bot(onebot=False), text)
+        self.assertEqual(1, len(md_sent))
+        buttons = [command for row in rows_sent[0] for _label, command in row]
+        self.assertTrue(buttons, "整行命令链接应被抽取为键盘按钮")
+
+        delivered = _link_commands(md_sent[0]) + buttons
+        self.assertEqual(
+            len(delivered), len(set(delivered)), "同一命令不得同时以链接和按钮投递"
+        )
+        self.assertEqual(
+            set(links), set(delivered), "抽取按钮不得丢失或改写命令"
+        )
+        self.assertNotIn("\n", md_sent[0])
 
     # --- handler wiring -------------------------------------------------
 

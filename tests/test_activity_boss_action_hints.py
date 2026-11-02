@@ -13,17 +13,23 @@ with ``python -m unittest discover``.
 
 from __future__ import annotations
 
+import tempfile
 import unittest
 from datetime import datetime
 from pathlib import Path
+from types import SimpleNamespace
 
 import nonebot
 
 nonebot.init()
 
+from nonebot_plugin_xiuxian_2.features.activity.migrations import (
+    apply_activity_state_schema,
+)
 from nonebot_plugin_xiuxian_2.features.activity.read_model_application import (
     ActivityReadModelApplication,
 )
+from nonebot_plugin_xiuxian_2.infrastructure.database import DatabaseUnitOfWork
 
 NOW = datetime(2026, 10, 15, 12)
 
@@ -138,6 +144,78 @@ class BossActionHintTests(unittest.TestCase):
     def test_no_claim_hints_without_pending_milestones_or_rank(self) -> None:
         text = ActivityReadModelApplication._status_block(BOSS, _row())
         self.assertNotIn("活动首领领奖", text)
+
+
+class BossStatusViewBoundaryTests(unittest.TestCase):
+    """The real `活动首领` view, not just `_status_block`, on both boundaries.
+
+    A nameless hint is only actionable while exactly one boss is active: with
+    two active bosses the claim commands refuse an empty query, so every hint
+    the view prints must carry the boss name — including the single-boss block
+    produced by `活动首领 <首领名>`.
+    """
+
+    def setUp(self) -> None:
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.database = Path(tmp.name) / "game.db"
+        with DatabaseUnitOfWork(self.database) as uow:
+            apply_activity_state_schema(uow)
+            for key in ("boss1", "boss2"):
+                uow.execute(
+                    "INSERT INTO activity_boss_milestone(activity_key,milestone_key) "
+                    "VALUES(?,?)",
+                    (key, "m1"),
+                )
+                for uid, damage in (("u1", 500), ("u2", 900)):
+                    uow.execute(
+                        "INSERT INTO activity_boss_damage"
+                        "(activity_key,user_id,total_damage) VALUES(?,?,?)",
+                        (key, uid, damage),
+                    )
+
+    def _app(self, *activities: dict) -> ActivityReadModelApplication:
+        config = {
+            "enabled": True,
+            "name": "测试活动",
+            "start_time": "0",
+            "end_time": "无限",
+            "gameplay_activities": list(activities),
+        }
+        return ActivityReadModelApplication(
+            self.database,
+            config_loader=lambda: config,
+            clock=SimpleNamespace(now=lambda: NOW),
+        )
+
+    def test_aggregate_view_names_every_hint_with_several_active_bosses(self) -> None:
+        text = self._app(BOSS, COOP).boss_status_text("u1")
+        self.assertIn("活动首领领奖 进度 年兽 领取已解锁的进度奖励", text)
+        self.assertIn("活动首领领奖 排行 年兽 领取", text)
+        self.assertIn("活动首领领奖 进度 巨龟 领取已解锁的进度奖励", text)
+        self.assertIn("活动首领领奖 排行 巨龟 领取", text)
+
+    def test_named_boss_view_also_names_the_hints(self) -> None:
+        text = self._app(BOSS, COOP).boss_status_text("u1", "年兽")
+        self.assertIn("活动首领领奖 进度 年兽 领取已解锁的进度奖励", text)
+        self.assertIn("活动首领领奖 排行 年兽 领取", text)
+        self.assertNotIn("巨龟", text)
+
+    def test_single_boss_view_stays_nameless(self) -> None:
+        text = self._app(BOSS).boss_status_text("u1")
+        self.assertIn("活动首领领奖 进度 领取已解锁的进度奖励", text)
+        self.assertIn("活动首领领奖 排行 领取", text)
+        self.assertNotIn("活动首领领奖 进度 年兽", text)
+
+    def test_single_boss_named_query_stays_nameless(self) -> None:
+        text = self._app(BOSS).boss_status_text("u1", "年兽")
+        self.assertIn("活动首领领奖 排行 领取", text)
+        self.assertNotIn("活动首领领奖 排行 年兽", text)
+
+    def test_no_boss_activity_renders_the_empty_notice(self) -> None:
+        self.assertEqual(
+            "当前没有进行中的活动首领玩法", self._app().boss_status_text("u1")
+        )
 
 
 if __name__ == "__main__":
