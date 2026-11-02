@@ -187,7 +187,7 @@ from .features.mixelixir.migrations import (
     apply_mixelixir_refine_claim_player,
 )
 from .features.puppet.manifest import FEATURE as PUPPET_FEATURE
-from .features.puppet.migrations import apply_puppet, apply_puppet_status
+from .features.puppet.migrations import apply_puppet, apply_puppet_operations, apply_puppet_status
 from .features.boss.manifest import FEATURE as BOSS_FEATURE
 from .features.boss.migrations import apply_boss, apply_boss_battle_player_schema, apply_boss_full_refresh_player_schema, apply_boss_player_schema, apply_boss_purchase, apply_boss_settlement
 from .features.dungeon.manifest import FEATURE as DUNGEON_FEATURE
@@ -427,6 +427,7 @@ def build_migrations() -> tuple[Migration, ...]:
         Migration("platform.001", "operation_ledger_outbox", apply_platform_schema),
         Migration("puppet.001", "puppet_feature_migrations", apply_puppet),
         Migration("puppet.002", "puppet_status_column", apply_puppet_status),
+        Migration("puppet.003", "puppet_operations", apply_puppet_operations),
         Migration("rift.001", "rift_feature_migrations", apply_rift),
         Migration("rift.002", "rift_demon_token_battle_operations", apply_rift_demon_token_operations),
         Migration("rift.003", "rift_demon_token_player_schema", apply_rift_demon_token_player_schema),

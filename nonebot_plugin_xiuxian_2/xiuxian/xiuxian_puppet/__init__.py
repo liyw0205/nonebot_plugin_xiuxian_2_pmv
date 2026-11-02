@@ -1,6 +1,5 @@
 import random
 import time
-from datetime import datetime
 from nonebot import require
 from nonebot.log import logger
 from ..on_compat import on_command
@@ -21,6 +20,7 @@ from .transaction_service import (
     PuppetOperation,
 )
 from ...features.puppet.application import PuppetApplication
+from ...features.puppet.field_view import PuppetFieldApplication, format_puppet_field
 
 from ...infrastructure.ids import UUIDGenerator
 from ...infrastructure.clock import SystemClock
@@ -30,6 +30,11 @@ items = Items()
 puppet_application = PuppetApplication(
     get_paths().game_db,
     get_paths().player_db,
+)
+field_application = PuppetFieldApplication(
+    get_paths().game_db,
+    get_paths().player_db,
+    clock=SystemClock(),
 )
 runtime_ids = UUIDGenerator()
 runtime_clock = SystemClock()
@@ -116,6 +121,8 @@ def _puppet_operation_message(result: PuppetOperation) -> str:
         return "未找到道友信息，请重新开始修仙后再试！"
     if result.status == "invalid_puppet_level":
         return "灵田傀儡等级异常，请联系管理员处理！"
+    if result.status == "schema_missing":
+        return "傀儡回执表尚未迁移，请重启机器人完成启动迁移后再试。"
     if result.action == "purchase":
         return (
             "恭喜道友成功购买灵田傀儡！"
@@ -247,6 +254,13 @@ async def check_and_harvest(user_id):
         return f"道友的灵田还不能收取，下次收取时间为：{hours}小时{minutes}分钟之后"
     if result.status == "inventory_full":
         return "道友背包中对应药材已达上限，傀儡暂未收取"
+    if result.status == "schema_missing":
+        msg = (
+            "傀儡收取回执表尚未迁移，本次未发放药材也未扣除灵石；"
+            "请重启机器人完成启动迁移后再试。"
+        )
+        log_message(user_id, msg)
+        return msg
     msg = (
         "傀儡收取未完成"
         f"（{result.status}），本次未发放药材也未扣除灵石，请稍后重试。"
@@ -400,46 +414,8 @@ async def puppet_info_handler(bot: Bot, event: GroupMessageEvent | PrivateMessag
         await handle_send(bot, event, msg)
         await puppet_info.finish()
 
-    user_id = user_info['user_id']
-    mix_elixir_info = get_player_info(user_id, "mix_elixir_info")
-    last_time = mix_elixir_info['收取时间']
-    puppet_level = mix_elixir_info['灵田傀儡']
-
-    if not mix_elixir_info:
-        msg = "获取灵田信息失败！"
-        await handle_send(bot, event, msg)
-        await puppet_info.finish()
-
-    # 计算下次收取时间
-    GETCONFIG = {
-        "time_cost": 23,
-        "加速基数": 0.05
-    }
-
-    nowtime = runtime_clock.now().strftime('%Y-%m-%d %H:%M:%S')  # str
-    timedeff = round((datetime.strptime(nowtime, '%Y-%m-%d %H:%M:%S') -
-                      datetime.strptime(last_time,'%Y-%m-%d %H:%M:%S')).total_seconds() / 3600,2)
-
-    if timedeff >= round(GETCONFIG['time_cost'] * (1 - (GETCONFIG['加速基数'] * mix_elixir_info['药材速度'])), 2):
-        elixir_time = "灵药已成熟，可以收取"
-    else:
-        remaining_time = round(GETCONFIG['time_cost'] * (1 - (GETCONFIG['加速基数'] * mix_elixir_info['药材速度'])), 2) - timedeff
-        hours = int(remaining_time)
-        minutes = int((remaining_time - hours) * 60)
-        elixir_time = f"灵药成熟还需{hours}小时{minutes}分钟"
-
-    msg = "道友的灵田信息：\n"
-    msg += f"灵田数量：{mix_elixir_info['灵田数量']}\n"
-    msg += f"药材速度：增加{mix_elixir_info['药材速度'] * 100}%\n"
-    msg += f"灵药状态：{elixir_time}\n"
-    if puppet_level > 0:
-        status = "关闭"
-        puppet_status = puppet_application.get_status(user_id)
-        if puppet_status == 1:
-            status = "开启"
-
-        msg += f"傀儡等级：{puppet_level}级\n"
-        msg += f"傀儡状态：{status}\n"
+    snapshot = field_application.snapshot(str(user_info['user_id']))
+    msg = format_puppet_field(snapshot, format_number=lambda value: f"{int(value):,}")
 
     await handle_send(bot, event, msg)
     await puppet_info.finish()

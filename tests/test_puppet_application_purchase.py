@@ -3,6 +3,7 @@ import unittest
 from pathlib import Path
 
 from nonebot_plugin_xiuxian_2.features.puppet.application import PuppetApplication
+from nonebot_plugin_xiuxian_2.features.puppet.migrations import apply_puppet_operations
 from nonebot_plugin_xiuxian_2.features.puppet.purchase_repository import PuppetPurchaseSqlRepository
 from nonebot_plugin_xiuxian_2.infrastructure.database import DatabaseUnitOfWork
 from nonebot_plugin_xiuxian_2.plugin import apply_platform_schema
@@ -17,6 +18,7 @@ def make_databases(root: Path):
         conn.execute("INSERT INTO user_xiuxian VALUES('u',100,1)")
     with DatabaseUnitOfWork(game) as uow:
         apply_platform_schema(uow)
+        apply_puppet_operations(uow)
     with db_backend.transaction(player) as conn:
         conn.execute('CREATE TABLE mix_elixir_info(user_id TEXT PRIMARY KEY, "灵田傀儡" TEXT)')
         conn.execute("INSERT INTO mix_elixir_info VALUES('u','0')")

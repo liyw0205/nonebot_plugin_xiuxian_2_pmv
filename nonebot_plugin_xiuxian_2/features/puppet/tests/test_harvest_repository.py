@@ -3,7 +3,9 @@ import unittest
 from datetime import datetime
 from pathlib import Path
 
+from ....infrastructure.database import DatabaseUnitOfWork
 from ..harvest_repository import HarvestReward, PuppetHarvestSqlRepository
+from ..migrations import apply_puppet_operations
 from tests.test_db_backend import db_backend
 
 
@@ -23,6 +25,8 @@ class PuppetHarvestRepositoryTests(unittest.TestCase):
                 "CREATE TABLE back(user_id TEXT,goods_id INTEGER,goods_name TEXT,goods_type TEXT,"
                 "goods_num INTEGER,bind_num INTEGER,PRIMARY KEY(user_id,goods_id))"
             )
+        with DatabaseUnitOfWork(game, immediate=True) as uow:
+            apply_puppet_operations(uow)
         with db_backend.transaction(player) as conn:
             conn.execute(
                 'CREATE TABLE mix_elixir_info(user_id TEXT PRIMARY KEY,"收取时间" TEXT,'

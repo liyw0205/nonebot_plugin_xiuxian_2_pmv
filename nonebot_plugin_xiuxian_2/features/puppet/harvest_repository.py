@@ -2,11 +2,17 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable, Iterable, Mapping
 
 from ...infrastructure.database import DatabaseUnitOfWork
+from .field_rules import (
+    as_int,
+    maturity_interval_hours,
+    normalize_now,
+    parse_harvest_time,
+)
 
 
 @dataclass(frozen=True)
@@ -33,42 +39,6 @@ class PuppetHarvestResult:
 
 
 RewardFactory = Callable[[str, int], Iterable[Any]]
-
-
-def normalize_now(value: datetime) -> datetime:
-    """Normalize a harvest instant into the naive frame the stamps are stored in.
-
-    ``mix_elixir_info."收取时间"`` is written as ``%Y-%m-%d %H:%M:%S`` with no
-    offset, while the runtime clock (``SystemClock``) returns an AWARE UTC
-    instant.  Subtracting one from the other raises ``TypeError``; an aware
-    instant is therefore converted to UTC and stripped of its tzinfo here, and
-    a naive instant is passed through unchanged so existing naive callers keep
-    working.
-    """
-    if value.tzinfo is None:
-        return value
-    return value.astimezone(timezone.utc).replace(tzinfo=None)
-
-
-def parse_harvest_time(value: Any) -> datetime | None:
-    """Parse a stored ``收取时间``; ``None`` means the value cannot be trusted."""
-    if isinstance(value, datetime):
-        return normalize_now(value)
-    if value in (None, "", 0, "0"):
-        return None
-    for fmt in ("%Y-%m-%d %H:%M:%S.%f", "%Y-%m-%d %H:%M:%S"):
-        try:
-            return datetime.strptime(str(value), fmt)
-        except ValueError:
-            continue
-    return None
-
-
-def as_int(value: Any, default: int = 0) -> int:
-    try:
-        return int(value)
-    except (TypeError, ValueError):
-        return default
 
 
 def _coerce_reward(raw: Any) -> HarvestReward:
@@ -109,6 +79,26 @@ class PuppetHarvestSqlRepository:
         self.player_database = str(player_database)
         self.max_goods_num = int(max_goods_num)
 
+    OPERATION_TABLE = "puppet_harvest_operations"
+    OPERATION_COLUMNS = frozenset(
+        {"operation_id", "user_id", "payload", "rewards_json", "stone_cost"}
+    )
+
+    @classmethod
+    def _operations_ready(cls, uow: DatabaseUnitOfWork) -> bool:
+        """The receipt table is created by startup migration ``puppet.003``."""
+        present = uow.query_one(
+            "SELECT 1 AS present FROM sqlite_master WHERE type='table' AND name=?",
+            (cls.OPERATION_TABLE,),
+        )
+        if present is None:
+            return False
+        columns = {
+            str(row["name"]).casefold()
+            for row in uow.query_all(f'PRAGMA table_info("{cls.OPERATION_TABLE}")')
+        }
+        return cls.OPERATION_COLUMNS.issubset(columns)
+
     def _duplicate(self, previous: Mapping[str, Any]) -> PuppetHarvestResult:
         stored = json.loads(str(previous["rewards_json"]))
         rewards = tuple(
@@ -147,12 +137,8 @@ class PuppetHarvestSqlRepository:
 
         with DatabaseUnitOfWork(self.game_database, immediate=True) as uow:
             uow.execute("ATTACH DATABASE ? AS player_data", (self.player_database,))
-            uow.execute(
-                "CREATE TABLE IF NOT EXISTS puppet_harvest_operations("
-                "operation_id TEXT PRIMARY KEY,user_id TEXT NOT NULL,payload TEXT NOT NULL,"
-                "rewards_json TEXT NOT NULL,stone_cost INTEGER NOT NULL,"
-                "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
-            )
+            if not self._operations_ready(uow):
+                return PuppetHarvestResult("schema_missing", user_id)
             if operation_id:
                 previous = uow.query_one(
                     "SELECT user_id,rewards_json,stone_cost FROM puppet_harvest_operations "
@@ -186,9 +172,10 @@ class PuppetHarvestSqlRepository:
             if last_time is None:
                 return PuppetHarvestResult("invalid_harvest_time", user_id)
 
-            interval = max(
-                float(time_cost_hours) * (1 - float(speed_base) * as_int(elixir["herb_speed"])),
-                0.0,
+            interval = maturity_interval_hours(
+                time_cost_hours,
+                speed_base,
+                as_int(elixir["herb_speed"]),
             )
             elapsed = (moment - last_time).total_seconds() / 3600
             if elapsed < interval:

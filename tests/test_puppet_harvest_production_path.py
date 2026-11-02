@@ -26,6 +26,8 @@ from nonebot_plugin_xiuxian_2.features.puppet.harvest_repository import (
     normalize_now,
     parse_harvest_time,
 )
+from nonebot_plugin_xiuxian_2.features.puppet.migrations import apply_puppet_operations
+from nonebot_plugin_xiuxian_2.infrastructure.database import DatabaseUnitOfWork
 from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_puppet.transaction_service import (
     PuppetHarvestReward,
 )
@@ -98,6 +100,8 @@ class ProductionSchemaHarvestTests(unittest.TestCase):
                 "CREATE TABLE back(user_id TEXT,goods_id INTEGER,goods_name TEXT,goods_type TEXT,"
                 "goods_num INTEGER,bind_num INTEGER,PRIMARY KEY(user_id,goods_id))"
             )
+        with DatabaseUnitOfWork(game, immediate=True) as uow:
+            apply_puppet_operations(uow)
         real_player_schema(player)
         seed_player_row(
             player,
@@ -324,6 +328,8 @@ class HarvestHelperTests(unittest.TestCase):
                     "CREATE TABLE back(user_id TEXT,goods_id INTEGER,goods_name TEXT,goods_type TEXT,"
                     "goods_num INTEGER,bind_num INTEGER,PRIMARY KEY(user_id,goods_id))"
                 )
+            with DatabaseUnitOfWork(game, immediate=True) as uow:
+                apply_puppet_operations(uow)
             real_player_schema(player)
             seed_player_row(player, puppet_level="9", last="2026-10-28 00:00:00")
             repo = PuppetHarvestSqlRepository(game, player, max_goods_num=1000)

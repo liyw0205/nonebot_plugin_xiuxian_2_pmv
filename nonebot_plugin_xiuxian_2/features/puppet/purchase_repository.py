@@ -22,18 +22,40 @@ class PuppetPurchaseResult:
 
 
 class PuppetPurchaseSqlRepository:
+    OPERATION_TABLE = "puppet_operations"
+    OPERATION_COLUMNS = frozenset(
+        {
+            "operation_id",
+            "user_id",
+            "action",
+            "previous_level",
+            "current_level",
+            "stone_cost",
+        }
+    )
+
     def __init__(self, game_database: str | Path, player_database: str | Path, lock: RLock | None = None) -> None:
         self.game_database = str(game_database)
         self.player_database = str(player_database)
         self.lock = lock or RLock()
 
-    def _ensure_operations(self, uow: DatabaseUnitOfWork) -> None:
-        uow.execute(
-            "CREATE TABLE IF NOT EXISTS puppet_operations("
-            "operation_id TEXT PRIMARY KEY,user_id TEXT NOT NULL,action TEXT NOT NULL,"
-            "previous_level INTEGER NOT NULL,current_level INTEGER NOT NULL,"
-            "stone_cost INTEGER NOT NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+    @classmethod
+    def _operations_ready(cls, uow: DatabaseUnitOfWork) -> bool:
+        """The ledger is created by startup migration ``puppet.003``; requests never DDL."""
+        present = uow.query_one(
+            "SELECT 1 AS present FROM sqlite_master WHERE type='table' AND name=?",
+            (cls.OPERATION_TABLE,),
         )
+        if present is None:
+            return False
+        columns = {
+            str(row["name"]).casefold()
+            for row in uow.query_all(f'PRAGMA table_info("{cls.OPERATION_TABLE}")')
+        }
+        return cls.OPERATION_COLUMNS.issubset(columns)
+
+    def _schema_missing(self, user_id: str, action: str) -> PuppetPurchaseResult:
+        return PuppetPurchaseResult("schema_missing", user_id, action=action)
 
     def _duplicate(self, previous, user_id: str) -> PuppetPurchaseResult:
         return PuppetPurchaseResult(
@@ -48,7 +70,8 @@ class PuppetPurchaseSqlRepository:
             raise ValueError("operation_id must not be empty")
         with self.lock, DatabaseUnitOfWork(self.game_database, immediate=True) as uow:
             uow.execute("ATTACH DATABASE ? AS player_data", (self.player_database,))
-            self._ensure_operations(uow)
+            if not self._operations_ready(uow):
+                return self._schema_missing(user_id, "purchase")
             previous = uow.query_one("SELECT action,previous_level,current_level,stone_cost FROM puppet_operations WHERE operation_id=?", (operation_id,))
             if previous is not None:
                 return self._duplicate(previous, user_id)
@@ -76,7 +99,8 @@ class PuppetPurchaseSqlRepository:
         operation_id, user_id = str(operation_id).strip(), str(user_id)
         with self.lock, DatabaseUnitOfWork(self.game_database, immediate=True) as uow:
             uow.execute("ATTACH DATABASE ? AS player_data", (self.player_database,))
-            self._ensure_operations(uow)
+            if not self._operations_ready(uow):
+                return self._schema_missing(user_id, "upgrade")
             previous = uow.query_one("SELECT action,previous_level,current_level,stone_cost FROM puppet_operations WHERE operation_id=?", (operation_id,))
             if previous is not None:
                 return self._duplicate(previous, user_id)

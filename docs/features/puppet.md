@@ -27,7 +27,21 @@
 - `灵田傀儡`：**傀儡等级**（1/2/3；0 表示未拥有）。它不是开关——开关在 `user_xiuxian.puppet_status`。仓库曾误读一个不存在的 `傀儡等级` 列，SQLite 把该标识符解析成字符串字面量并导致收取抛错；`tests/test_puppet_harvest_production_path.py` 用真实 schema 钉住这一点。
 - `灵田数量`、`收取等级`、`药材速度`：分别参与产出数量与成熟窗口（见下）。
 
-历史傀儡等级/收取时间仍由 player DB `mix_elixir_info` 承载；`puppet_harvest_operations` 保存 operation ID、玩家、奖励 JSON 与灵石消耗，作为幂等回执。
+历史傀儡等级/收取时间仍由 player DB `mix_elixir_info` 承载；`puppet_harvest_operations` 保存 operation ID、玩家、奖励 JSON 与灵石消耗，作为幂等回执。`puppet.003` 在启动迁移中预建 `puppet_operations` 与 `puppet_harvest_operations`；请求路径只检查 schema，缺表返回 `schema_missing`，不再建表。
+
+## 灵田读模型（我的灵田）
+
+`我的灵田` 由 `features/puppet/field_view.py` 的 `PuppetFieldApplication` 读取，不再走旧 `get_player_info`：
+
+- 一次只读 UoW 读取 `user_xiuxian`（`level/stone/blessed_spot_flag/puppet_status`）与
+  `player_data.mix_elixir_info` 的真实列集（`收取时间/收取等级/灵田数量/药材速度/灵田傀儡`）；
+  可选列缺失时按 0 展示，缺表/缺行/缺列/脏时间/库不可读均返回明确提示，不抛异常。
+- 成熟判定与自动收取共用 `features/puppet/field_rules.py` 的
+  `maturity_interval_hours` / `maturity_state`，展示的「还需多久」与能否收取不会各自漂移。
+- 有 `puppet_harvest_operations` 时追加「最近7天收取」：笔数、灵石消耗、最近一次时间与
+  上次收获摘要；时间窗**只用下界**（UTC/本地混用，避免丢弃刚刚写入的行），解析失败的
+  奖励行逐条跳过。缺回执表时只省略该段，基础信息照常显示。
+- 只读路径不建表、不补列、不写库；`user_id` 只取登录会话，不接受参数查询他人灵田。
 
 ## 事务与失败回滚
 
@@ -40,7 +54,7 @@
 - 驱动灵石：按 `灵田傀儡` **自己的等级**取 `PUPPET_CONFIG[level]["harvest_cost"]`；等级无配置时拒绝收取而不是免费发放。
 - 时间基准：`收取时间` 是无偏移文本而运行时钟是 aware UTC，仓储在比较前把 aware 实例归一为 naive UTC；naive 调用方的语义不变。
 
-时间基准与状态码：未完成状态（`not_ready`、`puppet_disabled`、`blessed_spot_missing`、`inventory_full`、`player_info_missing`、`invalid_harvest_time`、`invalid_puppet_level`、`harvest_time_changed`、`reward_missing`、`stone_insufficient`、`user_missing`）都会在命令层渲染成明确结果；除 `puppet_disabled`（每小时遍历的常态，不打扰玩家）外，其余都会写入玩家日志。`duplicate` 回执附带"已经处理"提示，且不重复发放。
+时间基准与状态码：未完成状态（`not_ready`、`puppet_disabled`、`blessed_spot_missing`、`inventory_full`、`player_info_missing`、`invalid_harvest_time`、`invalid_puppet_level`、`harvest_time_changed`、`reward_missing`、`stone_insufficient`、`user_missing`、`schema_missing`）都会在命令层渲染成明确结果；除 `puppet_disabled`（每小时遍历的常态，不打扰玩家）外，其余都会写入玩家日志。`duplicate` 回执附带"已经处理"提示，且不重复发放。
 
 若玩家库在最终提交后才发生故障，operation 行与资产同事务，不会出现"扣了灵石没给药材"或反之。
 
@@ -73,7 +87,7 @@
 
 ## 灰度开关、回滚和已知限制
 
-关闭开关后旧命令兼容入口继续工作；灵田读模型仍待后续迁移。自动收取的旧实现（`PuppetHarvestService`）保留在 compatibility 模块作为显式回滚路径，其入包语句带 `create_time/update_time` 而 feature 仓储只维护数量与名称——两实现在玩家可见结果上一致，列级差异记录在此而不是当作缺陷。收取不做跨库 WAL 崩溃原子性承诺（与既有 attached SQLite 事务边界相同）。
+关闭开关后旧命令兼容入口继续工作；灵田读模型已由 `PuppetFieldApplication` 承接，旧 `get_player_info` 不再参与 `我的灵田`。`puppet.003` 只新增回执表，旧库已有表时原样保留。自动收取的旧实现（`PuppetHarvestService`）保留在 compatibility 模块作为显式回滚路径，其入包语句带 `create_time/update_time` 而 feature 仓储只维护数量与名称——两实现在玩家可见结果上一致，列级差异记录在此而不是当作缺陷。收取不做跨库 WAL 崩溃原子性承诺（与既有 attached SQLite 事务边界相同）。
 
 ## Manifest 清单
 
@@ -82,4 +96,4 @@
 - `route: POST /api/v1/puppet/purchase`
 - `route: POST /api/v1/puppet/upgrade`
 - `config: puppet_enabled`
-- `migration: puppet.002`
+- `migration: puppet.003`
