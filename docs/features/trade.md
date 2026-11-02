@@ -62,6 +62,69 @@ limit=5)`；该查询在单个只读 UoW 内从既有 `xianshi_operations` 取�
 - 只读；不改购买扣款、卖家到账、上架手续费、挂单数量、系统商品或 operation 回执；
   不新增表、列、迁移、索引、配置键、命令名或路由。
 
+## 仙肆行情与关注
+
+`仙肆行情 <物品名>`（别名 `仙肆价格`）与 `仙肆关注`（别名 `关注仙肆物品`）只读既有成交账本
+`xianshi_operations` 与在售投影 `xianshi_item`，并为玩家新增一张个人关注表。
+不新增奖励、不改买入/卖出扣款、手续费、上架数量或系统商品语义。
+
+数据模型（game DB，启动期迁移 `trade.014`）：
+
+- `xianshi_watchlist(user_id, goods_name COLLATE NOCASE, created_at,
+  PRIMARY KEY(user_id, goods_name))`。
+- `xianshi_watch_operations(operation_id PRIMARY KEY, user_id, action, goods_name,
+  result, created_at DEFAULT CURRENT_TIMESTAMP)`。
+- 请求期不建表、不补列；缺 `trade.014` 时关注写入返回 `schema_missing`。
+
+成交口径：
+
+- 仅按物品名大小写不敏感匹配；时间窗**只用下界** `created_at >= now - 7 天`。
+  `created_at` 由各写入方提供、UTC 与本地时间混用，加上界会把「刚刚发生」的本地时间行
+  误判为未来而丢弃。
+- 行内单价 = `total_cost / quantity`（四舍五入）；加权均价 = `Σtotal_cost / Σquantity`。
+- 跳过脏行：`quantity <= 0`、`total_cost < 0`、空物品名、空 `created_at`。
+- 统计笔数、件数、最低/最高单价、最近成交时间与单价（按 `created_at` 取最大）。
+
+在售口径：
+
+- `xianshi_item.price` 是**单价**（购买总额为 `price * quantity`）。
+- 统计摊位行数、卖家去重数（`user_id='0'` 视为系统卖家）、件数合计与最低单价。
+- 跳过 `price <= 0`、`quantity <= 0` 的行。
+
+命令语义：
+
+- `仙肆关注`：无参数查看关注列表（最多 10 个）与每项行情摘要；
+  `仙肆关注 <物品名>` 添加；`仙肆关注 取消 <物品名>`（或 `取关`）取消。
+- 名称归一化：去首尾空白、内部连续空白折叠为一个空格；大小写不敏感去重；
+  长度 1–24，非空白控制字符拒绝。
+
+状态与幂等（操作号取会话消息 ID + 动作 + 用户 + 物品名，无消息 ID 时用 UUID）：
+
+| 状态 | 含义 | 写入 |
+| --- | --- | --- |
+| `added` | 新增关注并写回执 | 是 |
+| `duplicate` | 同操作号重放，或该物品已关注 | 仅回执 |
+| `removed` | 删除关注并写回执 | 是 |
+| `absent` | 取消不存在的关注，或同一取消操作重放；不写回执、不消耗操作号 | 否 |
+| `limit_reached` | 已达 10 个上限，腾出名额后同一操作号可重试 | 否 |
+| `invalid_name` / `invalid_user` | 名称或身份非法 | 否 |
+| `operation_conflict` | 同一操作号用于不同用户/动作/物品 | 否 |
+| `schema_missing` | 缺 `trade.014` | 否，且不建表 |
+
+事务与降级：
+
+- 每次写入在 game DB 单个 `BEGIN IMMEDIATE` UoW 内完成；上限判定与插入是同一条
+  `INSERT ... SELECT ... WHERE COUNT(*) < 10`，并发下不会超限。
+- 拒绝分支全部在写入之前返回（`DatabaseUnitOfWork` 正常返回即 commit），
+  晚期异常整体回滚，不留半笔状态。
+- 行情读取缺库/缺表/读异常时按来源降级：成交显示「成交数据暂不可用」，
+  在售显示「在售数据暂不可用」；两者都不可用时显示「行情数据暂不可用」，
+  不建库、不建表。
+- 关注只影响本人查看列表，不推送提醒，不参与交易撮合。
+
+玩家入口：`交易帮助` 仙肆段登记两条命令；`tests/test_xianshi_market_watch.py` 覆盖写路径、
+行情聚合、降级与渲染。
+
 ## 命令与别名
 `交易`、`寄售`、`鬼市`。
 ## Web API

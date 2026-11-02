@@ -3,7 +3,11 @@ from ...bootstrap.registry import CommandSpec, ConfigSpec, FeatureManifest, Rout
 _ACTIONS = ("deposit", "withdraw", "enqueue", "dequeue", "session_start", "session_finish", "purchase")
 FEATURE = FeatureManifest(
     key="trade", title="交易与拍卖", owner="economy",
-    commands=(CommandSpec("交易", aliases=("寄售", "鬼市"), permission="user"),),
+    commands=(
+        CommandSpec("交易", aliases=("寄售", "鬼市"), permission="user"),
+        CommandSpec("仙肆关注", aliases=("关注仙肆物品",), permission="user"),
+        CommandSpec("仙肆行情", aliases=("仙肆价格",), permission="user"),
+    ),
     routes=tuple(
         RouteSpec(
             f"/api/v1/trade/{action}",

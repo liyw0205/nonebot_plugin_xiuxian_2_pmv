@@ -257,6 +257,22 @@
       "permission": "user"
     },
     {
+      "aliases": [
+        "关注仙肆物品"
+      ],
+      "feature": "trade",
+      "name": "仙肆关注",
+      "permission": "user"
+    },
+    {
+      "aliases": [
+        "仙肆价格"
+      ],
+      "feature": "trade",
+      "name": "仙肆行情",
+      "permission": "user"
+    },
+    {
       "aliases": [],
       "feature": "beg",
       "name": "仙途奇缘",
@@ -3270,6 +3286,8 @@
     "xianshi_plan_listing_operations",
     "xianshi_removal_operations",
     "xianshi_stamina_operations",
+    "xianshi_watch_operations",
+    "xianshi_watchlist",
     "xiuxian_impart",
     "xiuxian_tasks"
   ],

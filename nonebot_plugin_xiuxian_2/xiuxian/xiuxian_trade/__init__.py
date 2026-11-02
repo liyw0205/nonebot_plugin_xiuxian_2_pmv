@@ -58,6 +58,19 @@ from .auction_jobs import run_auction_job
 from ...paths import get_paths
 from ...features.trade.application import TradeApplication
 from ...features.trade.xianshi_history_view import render_xianshi_trades
+from ...features.trade.xianshi_market_application import XianshiMarketApplication
+from ...features.trade.xianshi_market_schemas import (
+    WATCH_LIMIT,
+    WATCH_NAME_MAX,
+    is_valid_goods_name,
+    name_key,
+    normalize_goods_name,
+)
+from ...features.trade.xianshi_market_view import (
+    render_market_quote,
+    render_watch_result,
+    render_watchlist,
+)
 from ...features.auction.queue_application import AuctionQueueApplication
 from ...features.auction.application import AuctionBidApplication
 from ...features.auction.repository import LegacyTradeRepository
@@ -89,6 +102,10 @@ trade_application = TradeApplication(
     get_paths().trade_db,
     clock=runtime_clock,
     ids=runtime_ids,
+)
+xianshi_market_application = XianshiMarketApplication(
+    get_paths().game_db,
+    clock=runtime_clock,
 )
 _auction_queue_application_instance = None
 _auction_session_service_instance = None
@@ -394,6 +411,16 @@ def _xianshi_name_removal_operation_id(event, user_id, item_name, quantity):
     return f"xianshi-remove-name:{user_id}:{item_name}:{quantity}:{runtime_ids.new_id()}"
 
 
+def _xianshi_watch_operation_id(event, action, user_id, goods_name):
+    event_id = str(
+        getattr(event, "message_id", "") or getattr(event, "id", "") or ""
+    ).strip()
+    name = normalize_goods_name(goods_name)
+    if event_id:
+        return f"xianshi-watch:{action}:{event_id}:{user_id}:{name}"
+    return f"xianshi-watch:{action}:{user_id}:{name}:{runtime_ids.new_id()}"
+
+
 # === 仙肆命令 ===
 xian_shop_add = on_command("仙肆上架", priority=5, block=True)
 xianshi_auto_add = on_command("仙肆自动上架", priority=5, block=True)
@@ -404,6 +431,8 @@ xian_shop_off_all = on_command("清空仙肆", permission=SUPERUSER, priority=6,
 xianshi_fast_buy = on_command("仙肆快速购买", priority=5, block=True)
 xian_shop_remove = on_command("仙肆下架", priority=5, block=True)
 xian_buy = on_command("仙肆购买", priority=5, block=True)
+xianshi_watch = on_command("仙肆关注", aliases={"关注仙肆物品"}, priority=5, block=True)
+xianshi_market = on_command("仙肆行情", aliases={"仙肆价格"}, priority=5, block=True)
 xian_shop_added_by_admin = on_command("系统仙肆上架", permission=SUPERUSER, priority=6, block=True)
 xian_shop_remove_by_admin = on_command("系统仙肆下架", permission=SUPERUSER, priority=6, block=True)
 
@@ -1305,6 +1334,118 @@ async def my_xian_shop_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     page = ["翻页", f"我的仙肆 {current_page + 1}", "下架", "仙肆下架", "查看", "仙肆查看", f"{current_page}/{total_pages}"]
     await send_msg_handler(bot, event, '我的仙肆', bot.self_id, msg_list, title=title, page=page)
     await my_xian_shop.finish()
+
+@xianshi_watch.handle(parameterless=[Cooldown(cd_time=0)])
+async def xianshi_watch_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
+    """仙肆关注 - 关注/取消关注仙肆物品，或不带参数查看关注列表"""
+    bot, _ = await assign_bot(bot=bot, event=event)
+    isUser, user_info, msg = check_user(event)
+    if not isUser:
+        await handle_send(bot, event, msg, md_type="我要修仙")
+        await xianshi_watch.finish()
+
+    user_id = str(user_info['user_id'])
+    command_text = args.extract_plain_text().strip()
+
+    if not command_text:
+        try:
+            reply = render_watchlist(
+                xianshi_market_application.overview(user_id), number=number_to
+            )
+        except Exception:
+            reply = "关注列表暂不可用，请稍后重试。"
+        await handle_send(
+            bot, event, reply,
+            md_type="交易", k1="行情", v1="仙肆行情", k2="我的", v2="我的仙肆",
+            k3="帮助", v3="交易帮助",
+        )
+        await xianshi_watch.finish()
+
+    action = "add"
+    goods_name = command_text
+    for prefix in ("取消", "取关"):
+        if command_text.startswith(prefix):
+            action = "remove"
+            goods_name = command_text[len(prefix):].strip()
+            break
+    goods_name = normalize_goods_name(goods_name)
+    if not goods_name:
+        await handle_send(
+            bot, event,
+            "请给出要操作的物品名，例如【仙肆关注 破境丹】或【仙肆关注 取消 破境丹】。",
+            md_type="交易", k1="关注", v1="仙肆关注", k2="帮助", v2="交易帮助",
+        )
+        await xianshi_watch.finish()
+    if not is_valid_goods_name(goods_name):
+        await handle_send(
+            bot, event,
+            f"物品名无效：请使用 1-{WATCH_NAME_MAX} 个可见字符，且不要包含换行。",
+            md_type="交易", k1="关注", v1="仙肆关注", k2="帮助", v2="交易帮助",
+        )
+        await xianshi_watch.finish()
+
+    operation_id = _xianshi_watch_operation_id(event, action, user_id, goods_name)
+    try:
+        if action == "remove":
+            result = xianshi_market_application.unwatch(
+                operation_id=operation_id, user_id=user_id, goods_name=goods_name
+            )
+        else:
+            result = xianshi_market_application.watch(
+                operation_id=operation_id, user_id=user_id, goods_name=goods_name
+            )
+        reply = render_watch_result(result, limit=WATCH_LIMIT)
+    except Exception:
+        reply = "关注操作暂不可用，请稍后重试。"
+    await handle_send(
+        bot, event, reply,
+        md_type="交易", k1="关注", v1="仙肆关注", k2="行情",
+        v2=f"仙肆行情 {goods_name}", k3="帮助", v3="交易帮助",
+    )
+    await xianshi_watch.finish()
+
+
+@xianshi_market.handle(parameterless=[Cooldown(cd_time=0)])
+async def xianshi_market_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
+    """仙肆行情 - 查看单件物品近 7 天成交与当前在售"""
+    bot, _ = await assign_bot(bot=bot, event=event)
+    isUser, user_info, msg = check_user(event)
+    if not isUser:
+        await handle_send(bot, event, msg, md_type="我要修仙")
+        await xianshi_market.finish()
+
+    user_id = str(user_info['user_id'])
+    goods_name = normalize_goods_name(args.extract_plain_text().strip())
+    if not goods_name:
+        await handle_send(
+            bot, event, "请输入要查询的物品名，例如【仙肆行情 破境丹】。",
+            md_type="交易", k1="关注", v1="仙肆关注", k2="帮助", v2="交易帮助",
+        )
+        await xianshi_market.finish()
+    if not is_valid_goods_name(goods_name):
+        await handle_send(
+            bot, event,
+            f"物品名无效：请使用 1-{WATCH_NAME_MAX} 个可见字符，且不要包含换行。",
+            md_type="交易", k1="行情", v1="仙肆行情", k2="帮助", v2="交易帮助",
+        )
+        await xianshi_market.finish()
+
+    try:
+        quote = xianshi_market_application.quote(goods_name)
+        watched = any(
+            name_key(name) == name_key(goods_name)
+            for name in xianshi_market_application.names(user_id)
+        )
+        reply = render_market_quote(goods_name, quote, watched=watched, number=number_to)
+    except Exception:
+        reply = "行情查询暂不可用，请稍后重试。"
+    await handle_send(
+        bot, event, reply,
+        md_type="交易", k1="关注", v1=f"仙肆关注 {goods_name}", k2="我的",
+        v2="我的仙肆", k3="帮助", v3="交易帮助",
+    )
+    await xianshi_market.finish()
+
 
 @xian_shop_remove.handle(parameterless=[Cooldown(cd_time=0)])
 async def xian_shop_remove_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):

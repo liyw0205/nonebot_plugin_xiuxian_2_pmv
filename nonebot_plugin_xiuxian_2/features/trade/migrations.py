@@ -180,6 +180,24 @@ def apply_trade_xianshi_purchase(uow: DatabaseUnitOfWork) -> None:
     uow.execute("INSERT OR IGNORE INTO trade_feature_migrations(version) VALUES ('trade.013')")
 
 
+def apply_trade_xianshi_watch(uow: DatabaseUnitOfWork) -> None:
+    """Prepare the player-facing Xianshi watch list and its receipts."""
+
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS xianshi_watchlist ("
+        "user_id TEXT NOT NULL,goods_name TEXT NOT NULL COLLATE NOCASE,"
+        "created_at TEXT NOT NULL,PRIMARY KEY(user_id,goods_name))"
+    )
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS xianshi_watch_operations ("
+        "operation_id TEXT PRIMARY KEY,user_id TEXT NOT NULL,action TEXT NOT NULL,"
+        "goods_name TEXT NOT NULL,result TEXT NOT NULL,"
+        "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+    )
+    uow.execute("CREATE TABLE IF NOT EXISTS trade_feature_migrations(version TEXT PRIMARY KEY)")
+    uow.execute("INSERT OR IGNORE INTO trade_feature_migrations(version) VALUES ('trade.014')")
+
+
 __all__ = [
     "apply_trade",
     "apply_trade_guishi_deposit",
@@ -194,4 +212,5 @@ __all__ = [
     "apply_trade_xianshi_plan_listing",
     "apply_trade_xianshi_removal",
     "apply_trade_xianshi_purchase",
+    "apply_trade_xianshi_watch",
 ]

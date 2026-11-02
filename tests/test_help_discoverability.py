@@ -32,6 +32,7 @@ XIUXIAN = PKG / "xiuxian"
 BASE_SRC = (XIUXIAN / "xiuxian_base" / "__init__.py").read_text(encoding="utf-8")
 SECT_SRC = (XIUXIAN / "xiuxian_sect" / "__init__.py").read_text(encoding="utf-8")
 BACK_SRC = (XIUXIAN / "xiuxian_back" / "__init__.py").read_text(encoding="utf-8")
+TRADE_HELP_SRC = (XIUXIAN / "xiuxian_trade" / "trade_help.py").read_text(encoding="utf-8")
 
 
 def slice_between(source: str, start: str, end: str = '""".strip()') -> str:
@@ -95,6 +96,7 @@ HELP_BLOCKS = {
     "修仙帮助": slice_between(BASE_SRC, "**修仙帮助**"),
     "宗门帮助": slice_between(SECT_SRC, '__sect_help__ = f"""'),
     "背包帮助": slice_between(BACK_SRC, "**背包帮助**"),
+    "仙肆帮助": slice_between(TRADE_HELP_SRC, "**仙肆帮助（全服交易）**"),
 }
 
 EXPECTED = {
@@ -104,6 +106,8 @@ EXPECTED = {
     "我的突破统计": "修仙帮助",
     "我的宗门贡献流水": "宗门帮助",
     "我的物品流水": "背包帮助",
+    "仙肆关注": "仙肆帮助",
+    "仙肆行情": "仙肆帮助",
 }
 
 
@@ -124,16 +128,28 @@ class HelpDiscoverabilityTests(unittest.TestCase):
             )
 
     def test_help_lists_command_with_a_one_line_hint(self) -> None:
-        """每条新增条目都应带一行 `>` 说明，而不是只甩一个命令名。"""
+        """每条新增条目都应带一行说明，而不是只甩一个命令名。
+
+        `修仙帮助` / `宗门帮助` / `背包帮助` 用下一行的 `>` 写说明；
+        `交易帮助` 沿用文件自身的 `- 命令 …：说明` 单行格式。两种都必须有说明。
+        """
         for command, block_name in EXPECTED.items():
             block = HELP_BLOCKS[block_name]
-            match = re.search(
-                rf"^- {re.escape(command)}\n> (?P<hint>\S[^\n]*)$", block, re.MULTILINE
+            lines = block.splitlines()
+            hint = ""
+            for index, line in enumerate(lines):
+                if line != f"- {command}" and not line.startswith(f"- {command} "):
+                    continue
+                entry = line[len(f"- {command}"):].strip()
+                following = lines[index + 1].strip() if index + 1 < len(lines) else ""
+                if following.startswith("> "):
+                    hint = following[2:].strip()
+                elif "：" in entry:
+                    hint = entry.split("：", 1)[1].strip()
+                break
+            self.assertTrue(
+                hint, f"{block_name} 里 {command} 缺少一行说明"
             )
-            self.assertIsNotNone(
-                match, f"{block_name} 里 {command} 缺少 `>` 一行说明"
-            )
-            self.assertTrue(match.group("hint").strip())
 
     # ------------------------------------------------------------ 不倒退
     def test_original_sections_survive(self) -> None:
@@ -190,10 +206,17 @@ class HelpDiscoverabilityTests(unittest.TestCase):
                 )
 
     def test_new_entries_are_exact_command_names(self) -> None:
-        """本切片新增的四条必须逐字等于真实命令名，不允许用简称蒙混。"""
+        """本切片新增条目必须逐字等于真实命令名，不允许用简称蒙混。"""
         for command, block_name in EXPECTED.items():
             self.assertIn(command, self.registered, f"{command} 不是真实命令名")
-            self.assertIn(f"- {command}\n", HELP_BLOCKS[block_name])
+            self.assertIsNotNone(
+                re.search(
+                    rf"^- {re.escape(command)}(?: |$)",
+                    HELP_BLOCKS[block_name],
+                    re.MULTILINE,
+                ),
+                f"{block_name} 未以完整命令名登记 {command}",
+            )
 
     # ------------------------------------------------------------ 分页
     def test_sect_help_still_paginates(self) -> None:

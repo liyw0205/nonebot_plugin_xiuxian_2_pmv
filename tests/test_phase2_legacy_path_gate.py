@@ -812,8 +812,12 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
         # matcher group (like 修仙签到), not as a legacy declaration under
         # xiuxian/, so the derived legacy counts stay at 650/336 while the
         # frozen membership file and its hash remain untouched.
-        self.assertEqual(report["default_legacy_command_count"], 650)
-        self.assertEqual(report["default_legacy_command_backlog_count"], 336)
+        # The Xianshi market-watch slice adds two player commands
+        # (仙肆关注 / 仙肆行情, both registered in the legacy xiuxian_trade
+        # package), moving the derived counts 650->652 and 336->338 while the
+        # frozen membership file and its hash remain untouched.
+        self.assertEqual(report["default_legacy_command_count"], 652)
+        self.assertEqual(report["default_legacy_command_backlog_count"], 338)
         scope_path = Path(__file__).resolve().parents[1] / "docs/refactor_phase2_legacy_paths.json"
         scope = json.loads(scope_path.read_text(encoding="utf-8"))
         inventory_drift_count = sum(len(entries) for entries in report["source_inventory_added"].values())
