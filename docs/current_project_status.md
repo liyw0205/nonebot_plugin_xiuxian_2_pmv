@@ -35,6 +35,43 @@
 - QQ 官方机器人配置键存在不等于平台连接通过；QQ 连接状态需从本轮启动证据单独核验。官方 QQ 消息呈现/权限未做真机验收，不发送真机消息，也不将其宣称通过。
 - 本轮先核实 Release 质量门和实例的真实加载/数据路径；停机冷备份并验证复制一致后，才可下载 Release 覆盖插件代码。不得运行会改写共享 `/root/myenv` 的依赖升级。
 
+## 已完成目标：签到补签闭环（修仙补签）
+
+签到日历与连续天数早已由 `sign_in_daily` 持久化，但漏签一天只能永久断签，文档也明确写
+「没有补签入口」。本目标补上完整业务动作，不改签到奖励、鸿运与签到任务。
+
+- 新增迁移 `sign_in.005`（game DB）：`sign_in_daily` 增加 `source TEXT NOT NULL DEFAULT 'claim'`，
+  `PRAGMA table_info` 探测缺列才 `ALTER TABLE`，旧行默认 claim，不重建表、不回填历史日期。
+- 仓储新增 `makeup_schema_ready` / `stone_balance` / `charge_stone` / `record_makeup_daily`：
+  补签回执 `stone=0`、`source='makeup'`，唯一键 `(user_id,business_date)` 兜底同日重复；
+  扣款用 `stone >= cost` 守卫，不会出现负余额。
+- `SignInApplication.makeup`（action `sign_in.makeup`）：只允许本月内、早于今天的日期；
+  今日/未来/跨月/非法日期、已有回执、余额不足、角色缺失、缺迁移分别返回
+  `today_not_allowed` / `future_date` / `out_of_month` / `invalid_date` / `already_signed` /
+  `stone_insufficient` / `user_missing` / `schema_missing`，失败均不改资产；扣款与回执同事务，
+  异常回滚并 `record_failure`。同一操作号重放返回首次结果、不重复扣款。
+- `SignInEffects.on_makeup` 只写签到统计投影，`occurred_at` 取补签日 12:00，
+  不触发鸿运与签到任务，`我的签到统计` 与日历口径一致；补签不改 `is_sign`，当天仍可正常签到。
+- 命令 `修仙补签`（别名 `补签`、`签到补签`，priority 1）注册在迁移后 matcher 组：
+  空参数补昨天，支持 `YYYY-MM-DD` 与本月第 `D` 天；成功回复含日期、成本、余额与本月日历。
+- 配置 `sign_in_makeup_cost`（`XIUXIAN_SIGN_IN_MAKEUP_COST`，默认 `100000`）：XiuConfig、
+  SettingDefinition、插件配置 schema、manifest ConfigSpec 与组合根注入同步；
+  `修仙帮助` 基础段、`docs/features/sign_in.md`、`docs/gameplay_notes.md` 已更新；
+  `docs/refactor_inventory.json` 增加 1 条 command 记录（+9 行）。
+- 派生计数保持 650/336：新命令与 `修仙签到` 一样由迁移后 matcher 注册，不计入
+  `xiuxian/` 下的 legacy 声明；`test_phase2_legacy_path_gate` 只在注释记录该原因、期望值未改。
+  为实测该套件，临时从 HEAD 还原被用户删除的冻结文件后 47/47 通过，随后再次删除（保持未暂存）。
+- 测试：`tests/test_sign_in_makeup.py` 17 项（成功扣款与回执 source、日历/连续天数、统计目标日、
+  同操作重放、不同操作同日拒绝、今日/未来/跨月/非法日期、余额不足、无角色、缺表/缺列
+  fail-closed 且不建表、`is_sign` 不被改写、同日仍可签到）。受影响套件：help 10、
+  签到统计 14、legacy switch 1、source quality 246 均通过；三门禁 exit 0
+  （progress `failures: None`；`exit_ready: False` 仍由用户删除的冻结文件导致）。
+  本地单独 discover `features/sign_in/tests` 时 `test_sign_in_adapter` 因未初始化 NoneBot
+  报 1 error，属既有隔离行为（该文件未改动，CI 全量发现通过），不计为本目标回归。
+- CI：功能提交 `4ae67919` 的 develop run `41405172148` success；`--ff-only` 合入 main 后
+  main run `41406084291` success（headSha 均 `4ae67919`；`build-and-release` 按分支规则 skipped）。
+  未部署、未读写真实游戏库、未发真实 QQ 消息、未打 tag。
+
 ## 已完成目标：列表检索翻页续查（含宗门成员查看收口）
 
 已交付的关键词筛选只作用于当次请求：翻页提示、MD 下一页链接与底部按钮仍只拼页码，总页数却按
