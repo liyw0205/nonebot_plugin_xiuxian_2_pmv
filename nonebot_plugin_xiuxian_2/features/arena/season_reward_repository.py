@@ -7,6 +7,20 @@ from pathlib import Path
 from typing import Any, Mapping, Sequence
 
 from ...infrastructure.database import DatabaseUnitOfWork
+from .schema import SCHEMA_MISSING, table_ready
+
+
+DAILY_CANDIDATE_COLUMNS = frozenset(
+    {
+        "user_id", "score", "rank", "honor_points", "total_honor_earned",
+        "daily_challenges_used", "daily_extra_challenges", "daily_challenge_buys",
+        "last_reset_date", "last_buy_date",
+    }
+)
+CLAIM_COLUMNS = frozenset({"score", "rank", "honor_points", "total_honor_earned"})
+CLAIM_RECEIPT_COLUMNS = frozenset(
+    {"operation_id", "payload", "season_key", "user_id", "honor", "honor_points", "total_honor_earned"}
+)
 
 
 @dataclass(frozen=True)
@@ -97,8 +111,15 @@ class ArenaSeasonRewardRepository:
             return ()
         return tuple(self._settlement(row) for row in rows)
 
+    def schema_ready(self) -> bool:
+        """True once the startup migrations built the arena tables the reset needs."""
+        with DatabaseUnitOfWork(self.player_database, read_only=True) as uow:
+            return table_ready(uow, "arena", DAILY_CANDIDATE_COLUMNS)
+
     def daily_candidates(self) -> tuple[dict[str, Any], ...]:
         with DatabaseUnitOfWork(self.player_database) as uow:
+            if not table_ready(uow, "arena", DAILY_CANDIDATE_COLUMNS):
+                return ()
             rows = uow.query_all(
                 "SELECT a.user_id,COALESCE(a.score,0) AS score,COALESCE(a.rank,'') AS rank,"
                 "COALESCE(a.honor_points,0) AS honor_points,"
@@ -161,6 +182,10 @@ class ArenaSeasonRewardRepository:
 
         with DatabaseUnitOfWork(self.game_database, immediate=True) as uow:
             uow.attach_database(self.player_database, "player_data")
+            if not table_ready(uow, "arena_season_reward_operations", CLAIM_RECEIPT_COLUMNS) or not table_ready(
+                uow, "arena", CLAIM_COLUMNS | frozenset(reset or {}), prefix="player_data."
+            ):
+                return self._result(SCHEMA_MISSING, 0, expected_honor, expected_total_honor)
             previous = uow.query_one(
                 "SELECT payload,honor,honor_points,total_honor_earned "
                 "FROM arena_season_reward_operations WHERE operation_id=?",
@@ -181,12 +206,6 @@ class ArenaSeasonRewardRepository:
                 return self._result("already_claimed", claimed["honor"], claimed["honor_points"], claimed["total_honor_earned"])
             if uow.query_one("SELECT 1 FROM user_xiuxian WHERE user_id=?", (user_id,)) is None:
                 return self._result("user_missing", 0, expected_honor, expected_total_honor)
-            columns = {str(row[1]) for row in uow.execute("PRAGMA player_data.table_info(arena)").fetchall()}
-            required = {"score", "rank", "honor_points", "total_honor_earned"}
-            if reset is not None:
-                required.update(reset)
-            if not required.issubset(columns):
-                return self._result("state_changed", 0, expected_honor, expected_total_honor)
             arena = uow.query_one(
                 "SELECT COALESCE(score,0) AS score,COALESCE(rank,'') AS rank,"
                 "COALESCE(honor_points,0) AS honor_points,"

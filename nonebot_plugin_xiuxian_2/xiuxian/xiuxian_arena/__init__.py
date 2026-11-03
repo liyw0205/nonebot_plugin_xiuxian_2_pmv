@@ -33,7 +33,7 @@ from ...features.arena.opponent_application import ArenaOpponentApplication
 from ...features.arena.opponent_repository import ArenaOpponentRepository
 from ...features.arena.state_application import ArenaStateApplication
 from ...features.info.profile_application import PlayerProfileApplication
-from ...core.errors import ConflictError
+from ...core.errors import ConflictError, DomainError
 from ...features.arena.repository import ArenaChallengePurchaseSqlRepository
 from ...features.arena.season_reward_application import ArenaSeasonRewardApplication
 from ...features.arena.weekly_rank_application import ArenaWeeklyRankApplication
@@ -353,6 +353,9 @@ async def arena_challenge_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
     except ConflictError:
         await handle_send(bot, event, "竞技场挑战请求冲突，本次未结算。")
         return
+    except DomainError as exc:
+        await handle_send(bot, event, exc.message)
+        return
     except Exception as exc:
         logger.warning("arena challenge failed: {}", type(exc).__name__)
         await handle_send(bot, event, "竞技场数据或存储异常，挑战结果未确认，请稍后重试。")
@@ -362,6 +365,8 @@ async def arena_challenge_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
             message = "今日挑战次数已用完，请明日再来！"
         elif settlement.status == "stamina_insufficient":
             message = "体力不足，无法发起竞技场挑战。"
+        elif settlement.status == "schema_missing":
+            message = "竞技场数据尚未就绪，请检查启动迁移。"
         else:
             message = "挑战未结算：战斗当前状态已更新。"
         await handle_send(bot, event, message)
@@ -385,6 +390,9 @@ async def arena_view_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
             await handle_send(bot, event, msg, md_type="我要修仙")
             return
         view = arena_opponent_application.view(str(user_info["user_id"]))
+    except DomainError as exc:
+        await handle_send(bot, event, exc.message)
+        return
     except Exception as exc:
         logger.warning("arena opponent view failed: {}", type(exc).__name__)
         await handle_send(bot, event, "竞技场对手数据暂不可用，请稍后重试。")
@@ -607,6 +615,9 @@ async def arena_buy_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, a
     except ConflictError:
         await handle_send(bot, event, "竞技场兑换请求冲突，本次未兑换。")
         return
+    except DomainError as exc:
+        await handle_send(bot, event, exc.message)
+        return
     except Exception as exc:
         logger.warning("arena purchase failed: {}", type(exc).__name__)
         await handle_send(bot, event, "竞技场数据或存储异常，兑换结果未确认，请稍后重试。")
@@ -729,6 +740,9 @@ async def arena_buy_challenge_(bot: Bot, event: GroupMessageEvent | PrivateMessa
             f"今日竞技场购买次数已用完（{arena_limit.daily_buy_limit}/{arena_limit.daily_buy_limit}）。",
         )
         await arena_buy_challenge.finish()
+    if result.status == "schema_missing":
+        await handle_send(bot, event, "竞技场数据尚未就绪，请检查启动迁移。")
+        await arena_buy_challenge.finish()
     if result.status == "stone_insufficient":
         total_cost = ARENA_CHALLENGE_BUY_COST * buy_amount
         await handle_send(
@@ -768,6 +782,11 @@ def clear_arena_opponent_cache(user_id: str):
 
 async def reset_arena_daily_challenges():
     """每日重置竞技场挑战次数并发放荣誉值奖励"""
+    if not arena_season_reward_application.schema_ready():
+        logger.opt(colors=True).warning(
+            "<yellow>竞技场每日重置未执行：竞技场数据尚未就绪，请检查启动迁移。</yellow>"
+        )
+        return
     settled = arena_season_reward_application.reset_daily()
     honor_distribution = {
         record["user_id"]: {
@@ -850,6 +869,8 @@ async def use_arena_challenge_ticket(bot: Bot, event: GroupMessageEvent | Privat
         message = "今日竞技场挑战次数未消耗，无需使用挑战券。"
     elif result.status == "item_missing":
         message = "背包中没有可用的竞技场挑战券。"
+    elif result.status == "schema_missing":
+        message = "竞技场数据尚未就绪，请检查启动迁移。"
     else:
         message = "挑战券使用未结算：次数当前状态已更新，请重新操作。"
     await handle_send(bot, event, message, md_type="竞技场")

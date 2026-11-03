@@ -8,7 +8,28 @@ import json
 
 from ...infrastructure.database import DatabaseUnitOfWork
 from ...infrastructure.clock import SystemClock
+from .schema import SCHEMA_MISSING, table_ready
 from .state_repository import ArenaStateRepository
+
+
+# Columns each request actually reads; startup migrations own the tables.
+_SETTLEMENT_COLUMNS = frozenset(
+    {
+        "score", "total_wins", "total_losses", "win_streak", "max_win_streak", "rank",
+        "daily_challenges_used", "daily_extra_challenges", "last_challenge_time",
+    }
+)
+_TICKET_ARENA_COLUMNS = frozenset({"daily_challenges_used", "daily_extra_challenges"})
+_PURCHASE_ARENA_COLUMNS = frozenset({"honor_points", "weekly_purchases"})
+_CHALLENGE_PURCHASE_ARENA_COLUMNS = frozenset(
+    {"daily_challenge_buys", "daily_extra_challenges", "last_buy_date"}
+)
+_SETTLEMENT_RECEIPT_COLUMNS = frozenset({"challenger_id", "payload", "result_json"})
+_TICKET_RECEIPT_COLUMNS = frozenset(
+    {"payload", "used_tickets", "item_remaining", "challenges_used", "challenges_remaining", "challenge_cap"}
+)
+_PURCHASE_RECEIPT_COLUMNS = frozenset({"payload", "status", "result_json"})
+_CHALLENGE_PURCHASE_RECEIPT_COLUMNS = frozenset({"payload", "amount", "cost", "stone", "bought", "extra"})
 
 
 class ArenaRepository(Protocol):
@@ -71,6 +92,8 @@ class ArenaChallengePurchaseSqlRepository(LegacyArenaRepository):
 
     def settlement_result(self, operation_id: str, challenger_id: str) -> dict[str, Any] | None:
         with DatabaseUnitOfWork(self.game_database, read_only=True) as uow:
+            if not table_ready(uow, "arena_challenge_settlement_operations", _SETTLEMENT_RECEIPT_COLUMNS):
+                return None
             row = uow.query_one("SELECT challenger_id,payload,result_json FROM arena_challenge_settlement_operations WHERE operation_id=?", (str(operation_id),))
         if row is None:
             return None
@@ -101,6 +124,10 @@ class ArenaChallengePurchaseSqlRepository(LegacyArenaRepository):
             return {"status": status, "outcome": outcome, "challenger_score": int(challenger["score"] if score is None else score), "challenger_rank": str(challenger["rank"] if rank is None else rank), "opponent_score": None if opponent_score is None else int(opponent_score), "score_delta": win_points if outcome == "win" else no_match_points if outcome == "no_match" else 0, "used": int(challenger["daily_challenges_used"] if used is None else used), "remaining": max(0, challenge_cap - int(challenger["daily_challenges_used"] if used is None else used)), "stamina": int(challenger_player["user_stamina"] if stamina is None else stamina), "challenged_at": challenged_at}
         with DatabaseUnitOfWork(self.game_database, immediate=True) as uow:
             uow.attach_database(self.player_database, "player_data")
+            if not table_ready(uow, "arena_challenge_settlement_operations", _SETTLEMENT_RECEIPT_COLUMNS) or not table_ready(
+                uow, "arena", _SETTLEMENT_COLUMNS, prefix="player_data."
+            ):
+                return result(SCHEMA_MISSING)
             old = uow.query_one("SELECT challenger_id,payload,result_json FROM arena_challenge_settlement_operations WHERE operation_id=?", (operation_id,))
             if old:
                 if str(old["challenger_id"]) != challenger_id or str(old["payload"]) != payload:
@@ -150,6 +177,10 @@ class ArenaChallengePurchaseSqlRepository(LegacyArenaRepository):
         if not operation_id or requested_count<=0 or min(expected_item_count,expected_challenges_used,expected_extra_challenges,challenge_cap)<0: raise ValueError("valid arena ticket operation is required")
         with DatabaseUnitOfWork(self.game_database,immediate=True) as uow:
             uow.attach_database(self.player_database,"player_data")
+            if not table_ready(uow,"arena_challenge_ticket_operations",_TICKET_RECEIPT_COLUMNS) or not table_ready(
+                uow,"arena",_TICKET_ARENA_COLUMNS,prefix="player_data."
+            ):
+                return self._ticket_result(SCHEMA_MISSING,expected_item_count,expected_challenges_used,challenge_cap)
             old=uow.query_one("SELECT payload,used_tickets,item_remaining,challenges_used,challenges_remaining,challenge_cap FROM arena_challenge_ticket_operations WHERE operation_id=?",(operation_id,))
             if old:
                 if str(old["payload"])!=payload:return self._ticket_result("operation_conflict",expected_item_count,expected_challenges_used,challenge_cap)
@@ -169,6 +200,8 @@ class ArenaChallengePurchaseSqlRepository(LegacyArenaRepository):
         uow.execute("INSERT INTO arena_challenge_ticket_operations(operation_id,payload,used_tickets,item_remaining,challenges_used,challenges_remaining,challenge_cap) VALUES(?,?,?,?,?,?,?)",(operation_id,payload,result["used_tickets"],result["item_remaining"],result["challenges_used"],result["challenges_remaining"],result["challenge_cap"]));return result
     def purchase_result(self, operation_id, user_id, item_id, quantity) -> dict[str, Any] | None:
         with DatabaseUnitOfWork(self.game_database, read_only=True) as uow:
+            if not table_ready(uow, "arena_purchase_operations", _PURCHASE_RECEIPT_COLUMNS):
+                return None
             row = uow.query_one(
                 "SELECT payload,status,result_json FROM arena_purchase_operations WHERE operation_id=?",
                 (str(operation_id),),
@@ -219,6 +252,10 @@ class ArenaChallengePurchaseSqlRepository(LegacyArenaRepository):
 
         with DatabaseUnitOfWork(self.game_database, immediate=True) as uow:
             uow.attach_database(self.player_database, "player_data")
+            if not table_ready(uow, "arena_purchase_operations", _PURCHASE_RECEIPT_COLUMNS) or not table_ready(
+                uow, "arena", _PURCHASE_ARENA_COLUMNS, prefix="player_data."
+            ):
+                return self._purchase_result(SCHEMA_MISSING, quantity, 0, expected_honor, 0, 0)
             old = uow.query_one("SELECT payload,status,result_json FROM arena_purchase_operations WHERE operation_id=?", (operation_id,))
             if old:
                 if str(old["payload"]) != payload:
@@ -280,6 +317,10 @@ class ArenaChallengePurchaseSqlRepository(LegacyArenaRepository):
         payload = json.dumps([user_id, amount, unit_cost, daily_limit], ensure_ascii=True, separators=(",", ":"))
         with DatabaseUnitOfWork(self.game_database, immediate=True) as uow:
             uow.attach_database(self.player_database, "player_data")
+            if not table_ready(uow, "arena_challenge_purchase_operations", _CHALLENGE_PURCHASE_RECEIPT_COLUMNS) or not table_ready(
+                uow, "arena", _CHALLENGE_PURCHASE_ARENA_COLUMNS, prefix="player_data."
+            ):
+                return self._result(SCHEMA_MISSING, 0, 0, expected_stone, expected_bought, expected_extra)
             old = uow.query_one("SELECT payload,amount,cost,stone,bought,extra FROM arena_challenge_purchase_operations WHERE operation_id=?", (operation_id,))
             if old:
                 if str(old["payload"]) != payload:

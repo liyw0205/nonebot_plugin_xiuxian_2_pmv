@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from ...infrastructure.database import DatabaseUnitOfWork
+from .schema import ArenaSchemaMissing, table_ready
 
 
 ARENA_FIELDS = (
@@ -13,6 +14,10 @@ ARENA_FIELDS = (
     "daily_extra_challenges", "daily_challenge_buys", "last_reset_date",
     "last_buy_date", "last_challenge_time", "win_streak", "max_win_streak",
     "rank", "honor_points", "total_honor_earned", "weekly_purchases",
+)
+
+STATE_OPERATION_COLUMNS = frozenset(
+    {"operation_id", "user_id", "kind", "period_key", "snapshot", "created_at"}
 )
 
 
@@ -110,6 +115,10 @@ class ArenaStateRepository:
         if not user_id:
             raise ValueError("user_id is required")
         with DatabaseUnitOfWork(self.player_database, immediate=True) as uow:
+            if not table_ready(uow, "arena", frozenset(ARENA_FIELDS)) or not table_ready(
+                uow, "arena_state_operations", STATE_OPERATION_COLUMNS
+            ):
+                raise ArenaSchemaMissing()
             row = uow.query_one(
                 f"SELECT {','.join(ARENA_FIELDS)} FROM arena WHERE user_id=?", (user_id,)
             )
@@ -192,6 +201,8 @@ class ArenaStateRepository:
 
     def ranking(self, limit: int) -> tuple[tuple[str, int], ...]:
         with DatabaseUnitOfWork(self.player_database) as uow:
+            if not table_ready(uow, "arena", frozenset({"user_id", "score"})):
+                return ()
             rows = uow.query_all(
                 "SELECT user_id,CAST(COALESCE(score,0) AS INTEGER) AS score "
                 "FROM arena ORDER BY CAST(COALESCE(score,0) AS INTEGER) DESC LIMIT ?",

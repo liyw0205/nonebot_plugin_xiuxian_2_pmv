@@ -83,6 +83,10 @@ class ArenaSeasonRewardApplication:
     def recent_settlements(self, user_id: str, limit: int = 5):
         return self.repository.recent_settlements(user_id, limit=limit)
 
+    def schema_ready(self) -> bool:
+        """True once the startup migrations built the arena tables this feature needs."""
+        return self.repository.schema_ready()
+
     def reset_daily(self) -> tuple[dict[str, Any], ...]:
         now = self.clock.now()
         season_key = now.date().isoformat()

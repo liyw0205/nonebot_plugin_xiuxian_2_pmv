@@ -95,6 +95,34 @@ Web API 保留 `/api/v1/arena/purchase`、`/challenge-purchase`、`/settle`，�
 
 本 feature 无自有任务，`features/arena/jobs.py` 不导出 job；排行榜与赛季任务仍由兼容调度器执行。
 
+### schema 归属（全域）
+
+竞技场的持久化全部由启动迁移建立，请求路径（命令、调度、Web、回执读取）只做校验。
+`features/arena/schema.py` 是唯一契约来源：
+
+| 库 | 表 | 迁移 |
+| --- | --- | --- |
+| game | `arena_challenge_purchase_operations` | `arena.002` |
+| game | `arena_purchase_operations`（含 `status`/`result_json`） | `arena.003` + `arena.010` |
+| game | `arena_challenge_ticket_operations` | `arena.004` |
+| game | `arena_challenge_settlement_operations` | `arena.005` |
+| game | `arena_season_reward_operations` | `arena.007` |
+| player | `arena_weekly_rank_reduction_operations` / `..._targets` | `arena.006` |
+| player | `arena`、`arena_state_operations` | `arena.008` / `arena.009` |
+
+`features/arena/` 与 legacy `xiuxian/xiuxian_arena/` 中除 `migrations.py` 外的任何文件都不得出现
+`CREATE TABLE`/`ALTER TABLE`（由定向测试钉住）。校验口径是「表存在 + 本次要读的列齐全」，
+缺表或缺任一列即 fail-closed，不建表、不补列、不写资产：
+
+- 写路径 `purchase` / `purchase_challenges` / `use_challenge_ticket` / `settle` /
+  赛季 `claim` / 周降段 `reduce` 返回 `schema_missing`，不写回执、不动 `arena`、`back`、`user_xiuxian`。
+- 读路径 `purchase_result` / `settlement_result` 返回 `None`，`ranking` 与 `candidates` 返回空，
+  `recent_settlements` 返回空。
+- 状态初始化 `ArenaStateRepository.initialize` 抛 `ArenaSchemaMissing`（`DomainError`，
+  `code="schema_missing"`），命令层用 `except DomainError` 直接展示 `exc.message`。
+- 调度侧：`reduce_arena_rank` 在续跑循环前短路，`reset_arena_daily_challenges` 在
+  `schema_ready()` 为假时记 warning 并跳过，不再打印「发放 0 名玩家」的误导日志。
+
 ### 每周降段的 schema 归属
 
 `竞技场每周降段` 的持久化由 `ArenaWeeklyRankApplication -> ArenaWeeklyRankRepository` 承担，
@@ -129,3 +157,9 @@ Web API 保留 `/api/v1/arena/purchase`、`/challenge-purchase`、`/settle`，�
 —— 覆盖三张表的启动建表形状与列集、未迁移库与半成品 `arena` 上 `reduce()` 返回 `schema_missing`
 且零写入（含「不得 `ALTER` 补列」）、缺一张回执表即整体拒绝、历史回执行保留、
 迁移后分块续跑至 `completed` 并重放、以及段位/初始分数常量未被改动。
+
+schema 归属切片：`python -m unittest tests.test_arena_schema_ownership -q`
+—— 覆盖 `arena.002`~`arena.010` 建出 `GAME_TABLES`/`PLAYER_TABLES` 的全部表列且可重跑、
+请求路径无 DDL（源码合同）、四个写路径与赛季 `claim`/周降段在未迁移库上 `schema_missing`
+并保持 `arena`/`back`/`user_xiuxian`/回执零变化、半成品 `arena` 不被补列、
+状态初始化抛 `ArenaSchemaMissing`、读路径降级为空/`None`、应用层映射为 rejected 结果。

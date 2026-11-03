@@ -212,7 +212,8 @@ class FacadeContractTests(unittest.TestCase):
         self.assertNotIn("CREATE TABLE", source)
         self.assertNotIn("ALTER TABLE", source)
         self.assertIn("_schema_ready", source)
-        self.assertIn("schema_missing", source)
+        self.assertIn("table_ready", source, "the gate must come from the shared arena schema contract")
+        self.assertIn("SCHEMA_MISSING", source)
 
     def test_scheduler_entry_surfaces_schema_missing_before_looping(self) -> None:
         source = FACADE.read_text(encoding="utf-8")

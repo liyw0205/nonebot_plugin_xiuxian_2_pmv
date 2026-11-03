@@ -8,6 +8,7 @@ from typing import Any
 
 from ...infrastructure.database import DatabaseUnitOfWork
 from ...infrastructure.clock import SystemClock
+from .schema import SCHEMA_MISSING, table_ready
 
 
 @dataclass(frozen=True)
@@ -102,19 +103,9 @@ class ArenaWeeklyRankRepository:
     @classmethod
     def _schema_ready(cls, uow: DatabaseUnitOfWork) -> bool:
         """Verify the startup-owned schema; never create or patch it here."""
-        tables = {
-            str(row["name"]).casefold()
-            for row in uow.query_all(
-                "SELECT name FROM sqlite_master WHERE type='table'"
-            )
-        }
-        if any(table not in tables for table in ("arena", *cls.OPERATION_TABLES)):
-            return False
-        columns = {
-            str(row["name"]).casefold()
-            for row in uow.query_all('PRAGMA table_info("arena")')
-        }
-        return cls.ARENA_COLUMNS.issubset(columns)
+        return table_ready(uow, "arena", cls.ARENA_COLUMNS) and all(
+            table_ready(uow, table) for table in cls.OPERATION_TABLES
+        )
 
     @staticmethod
     def _result(uow: DatabaseUnitOfWork, week: str, status: str) -> ArenaWeeklyRankReductionResult:
@@ -139,7 +130,7 @@ class ArenaWeeklyRankRepository:
         try:
             with self.lock, DatabaseUnitOfWork(self.database, immediate=True) as uow:
                 if not self._schema_ready(uow):
-                    return ArenaWeeklyRankReductionResult("schema_missing", week)
+                    return ArenaWeeklyRankReductionResult(SCHEMA_MISSING, week)
                 operation = uow.query_one(
                     "SELECT reduce_steps,status FROM arena_weekly_rank_reduction_operations "
                     "WHERE business_week=?",

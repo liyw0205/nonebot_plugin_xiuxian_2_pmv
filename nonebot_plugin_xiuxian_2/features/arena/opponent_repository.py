@@ -8,6 +8,11 @@ from threading import RLock
 
 from ...infrastructure.clock import SystemClock
 from ...infrastructure.database import DatabaseUnitOfWork
+from .schema import table_ready
+
+
+CANDIDATE_COLUMNS = frozenset({"user_id", "score"})
+PROFILE_COLUMNS = frozenset({"user_id", "user_name"})
 
 
 class ArenaOpponentRepository:
@@ -43,6 +48,12 @@ class ArenaOpponentRepository:
             predicate += " AND a.user_id IN (" + ",".join("?" for _ in target_ids) + ")"
             parameters.extend(target_ids)
         with self._connection() as connection:
+            # Startup migrations own `arena`; a missing table yields no candidates
+            # instead of raising inside the view/challenge path.
+            if not table_ready(connection, "arena", CANDIDATE_COLUMNS) or not table_ready(
+                connection, "user_xiuxian", PROFILE_COLUMNS, prefix="profiles."
+            ):
+                return []
             rows = connection.execute(
                 "SELECT CAST(a.user_id AS TEXT) AS user_id,a.score,p.user_name "
                 "FROM arena AS a JOIN profiles.user_xiuxian AS p "
