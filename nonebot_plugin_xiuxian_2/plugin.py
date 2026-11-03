@@ -56,6 +56,7 @@ from .features.stone_gift.manifest import FEATURE as STONE_GIFT_FEATURE
 from .features.stone_gift.migrations import apply_stone_gift, apply_stone_gift_limits
 from .features.package_reward.manifest import FEATURE as PACKAGE_REWARD_FEATURE
 from .features.package_reward.migrations import apply_package_reward
+from .features.past_life.migrations import apply_past_life_game, apply_past_life_player
 from .features.pet.manifest import FEATURE as PET_FEATURE
 from .features.pet.migrations import apply_pet, apply_pet_hatch, apply_pet_skill_replace, apply_pet_travel_claim
 from .features.game_events.migrations import apply_game_event_statistics_player
@@ -436,6 +437,8 @@ def build_migrations() -> tuple[Migration, ...]:
         Migration("natal_treasure.002", "natal_treasure_operations", apply_natal_treasure_operations),
         Migration("natal_treasure.003", "natal_treasure_player_operations", apply_natal_treasure_player_operations),
         Migration("package_reward.001", "package_reward_operations", apply_package_reward),
+        Migration("past_life.002", "past_life_player_operations", apply_past_life_player),
+        Migration("past_life.003", "past_life_game_receipts", apply_past_life_game),
         Migration("pet.001", "pet_feature_migrations", apply_pet),
         Migration("pet.002", "pet_hatch_operations", apply_pet_hatch),
         Migration("pet.003", "pet_skill_replace_operations", apply_pet_skill_replace),
@@ -543,6 +546,7 @@ _GAME_DATABASE_EXCLUDED_MIGRATION_VERSIONS = frozenset(
         "arena.006",
         "arena.008",
         "arena.009",
+        "past_life.002",
         "tower.004",
         "title.002",
         "combat_settlement.003",
@@ -630,6 +634,7 @@ _PLAYER_DATABASE_MIGRATION_VERSIONS = frozenset(
         "buff.013",
         "game_events.001",
         "platform.001",
+        "past_life.002",
         "title.001",
         "title.002",
         "combat_settlement.003",

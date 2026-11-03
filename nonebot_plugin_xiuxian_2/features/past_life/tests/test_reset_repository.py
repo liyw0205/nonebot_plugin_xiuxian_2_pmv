@@ -2,25 +2,23 @@ import tempfile
 import unittest
 from pathlib import Path
 from ..reset_repository import PastLifeResetSqlRepository
+from .fixtures import migrate_pair
 from tests.test_db_backend import db_backend
 
 class PastLifeResetRepositoryTests(unittest.TestCase):
     def test_reset_one_replay_and_clear_history(self):
         with tempfile.TemporaryDirectory() as temp:
             game,player=Path(temp)/'game.db',Path(temp)/'player.db'
+            migrate_pair(game, player)
             with db_backend.transaction(game) as c: c.execute('CREATE TABLE user_xiuxian(user_id TEXT PRIMARY KEY)'); c.execute("INSERT INTO user_xiuxian VALUES('u')")
-            with db_backend.transaction(player) as c: c.execute('CREATE TABLE past_life(user_id TEXT PRIMARY KEY,state INTEGER,stage INTEGER,revision INTEGER,total_runs INTEGER,best_ending TEXT,best_score INTEGER,endings_log TEXT,achievement_points INTEGER)'); c.execute("INSERT INTO past_life VALUES('u',2,3,5,2,'end',88,'[]',9)")
+            with db_backend.transaction(player) as c: c.execute("INSERT INTO past_life(user_id,state,stage,revision,total_runs,best_ending,best_score,endings_log,achievement_points) VALUES('u',2,3,5,2,'end',88,'[]',9)")
             repo=PastLifeResetSqlRepository(game,player); first=repo.reset_one('r','u',False); dup=repo.reset_one('r','u',False); self.assertEqual((first.status,dup.status),('applied','duplicate'))
 
     def test_reset_all_freezes_targets_and_replays_after_chunked_completion(self):
         with tempfile.TemporaryDirectory() as temp:
             game, player = Path(temp) / "game.db", Path(temp) / "player.db"
+            migrate_pair(game, player)
             with db_backend.transaction(player) as conn:
-                conn.execute(
-                    "CREATE TABLE past_life(user_id TEXT PRIMARY KEY,state INTEGER,"
-                    "revision INTEGER,total_runs INTEGER,best_ending TEXT,best_score INTEGER,"
-                    "endings_log TEXT,achievement_points INTEGER)"
-                )
                 conn.executemany(
                     "INSERT INTO past_life(user_id,state,revision,total_runs,best_ending,best_score,endings_log,achievement_points) VALUES(?,?,?,?,?,?,?,?)",
                     [("u", 2, 1, 2, "end", 80, "[]", 4), ("v", 2, 3, 5, "best", 90, "[]", 8)],
@@ -45,8 +43,8 @@ class PastLifeResetRepositoryTests(unittest.TestCase):
     def test_reset_all_batch_records_error_and_can_resume_after_rollback(self):
         with tempfile.TemporaryDirectory() as temp:
             game, player = Path(temp) / "game.db", Path(temp) / "player.db"
+            migrate_pair(game, player)
             with db_backend.transaction(player) as conn:
-                conn.execute("CREATE TABLE past_life(user_id TEXT PRIMARY KEY,state INTEGER,revision INTEGER)")
                 conn.executemany("INSERT INTO past_life(user_id,state,revision) VALUES(?,?,?)", [("u", 2, 1), ("v", 2, 2)])
             repo = PastLifeResetSqlRepository(game, player)
             repo.reset_all_create("all-error")

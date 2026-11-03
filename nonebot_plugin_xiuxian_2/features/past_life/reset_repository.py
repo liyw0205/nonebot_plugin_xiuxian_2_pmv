@@ -5,6 +5,13 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from ...infrastructure.database import DatabaseUnitOfWork
+from .schema import (
+    PAST_LIFE_COLUMNS,
+    RESET_OPERATIONS_COLUMNS,
+    RESET_TARGETS_COLUMNS,
+    SCHEMA_MISSING,
+    table_ready,
+)
 
 
 FIELDS = (
@@ -126,51 +133,18 @@ class PastLifeResetSqlRepository:
         return cls._canonical({"mode": mode, "clear_history": bool(clear_history), "user_id": user_id})
 
     @classmethod
-    def _ensure_schema(cls, uow: DatabaseUnitOfWork) -> set[str]:
-        uow.execute("CREATE TABLE IF NOT EXISTS player_data.past_life(user_id TEXT PRIMARY KEY)")
-        columns = {str(row["name"]) for row in uow.query_all("PRAGMA player_data.table_info(past_life)")}
-        for field in FIELDS:
-            if field not in columns:
-                kind = "INTEGER" if field in INTEGER_FIELDS else "TEXT"
-                uow.execute(f'ALTER TABLE player_data.past_life ADD COLUMN "{field}" {kind} DEFAULT NULL')
-        uow.execute(
-            "CREATE TABLE IF NOT EXISTS past_life_reset_operations("
-            "operation_id TEXT PRIMARY KEY,mode TEXT NOT NULL DEFAULT 'single',"
-            "user_id TEXT NOT NULL DEFAULT '',clear_history INTEGER NOT NULL DEFAULT 0,"
-            "payload TEXT NOT NULL DEFAULT '',status TEXT NOT NULL DEFAULT 'completed',"
-            "total INTEGER NOT NULL DEFAULT 0,processed INTEGER NOT NULL DEFAULT 0,"
-            "applied INTEGER NOT NULL DEFAULT 0,conflicted INTEGER NOT NULL DEFAULT 0,"
-            "missing INTEGER NOT NULL DEFAULT 0,last_error TEXT NOT NULL DEFAULT '',"
-            "created_at TEXT NOT NULL DEFAULT '',updated_at TEXT NOT NULL DEFAULT '')"
+    def _schema_ready(cls, uow: DatabaseUnitOfWork) -> set[str] | None:
+        """Startup migration `past_life.002` owns these tables; verify, never create.
+
+        Returns the live reset-receipt column set, or ``None`` when the schema the
+        reset path needs is not there yet.
+        """
+        ready = (
+            table_ready(uow, "past_life", PAST_LIFE_COLUMNS)
+            and table_ready(uow, "past_life_reset_operations", RESET_OPERATIONS_COLUMNS, schema="")
+            and table_ready(uow, "past_life_reset_targets", RESET_TARGETS_COLUMNS, schema="")
         )
-        operation_columns = {
-            str(row["name"]) for row in uow.query_all("PRAGMA table_info(past_life_reset_operations)")
-        }
-        additions = {
-            "mode": "TEXT NOT NULL DEFAULT 'single'",
-            "user_id": "TEXT NOT NULL DEFAULT ''",
-            "clear_history": "INTEGER NOT NULL DEFAULT 0",
-            "payload": "TEXT NOT NULL DEFAULT ''",
-            "status": "TEXT NOT NULL DEFAULT 'completed'",
-            "total": "INTEGER NOT NULL DEFAULT 0",
-            "processed": "INTEGER NOT NULL DEFAULT 0",
-            "applied": "INTEGER NOT NULL DEFAULT 0",
-            "conflicted": "INTEGER NOT NULL DEFAULT 0",
-            "missing": "INTEGER NOT NULL DEFAULT 0",
-            "last_error": "TEXT NOT NULL DEFAULT ''",
-            "updated_at": "TEXT NOT NULL DEFAULT ''",
-        }
-        for field, definition in additions.items():
-            if field not in operation_columns:
-                uow.execute(f'ALTER TABLE past_life_reset_operations ADD COLUMN "{field}" {definition}')
-        uow.execute(
-            "CREATE TABLE IF NOT EXISTS past_life_reset_targets("
-            "operation_id TEXT NOT NULL,ordinal INTEGER NOT NULL,user_id TEXT NOT NULL,"
-            "expected_json TEXT NOT NULL,final_json TEXT NOT NULL,"
-            "status TEXT NOT NULL DEFAULT 'pending',error_text TEXT NOT NULL DEFAULT '',"
-            "updated_at TEXT NOT NULL,PRIMARY KEY(operation_id,user_id))"
-        )
-        return operation_columns | set(additions)
+        return set(RESET_OPERATIONS_COLUMNS) if ready else None
 
     @classmethod
     def _read_state(cls, uow: DatabaseUnitOfWork, user_id: str) -> tuple[dict, bool]:
@@ -249,7 +223,9 @@ class PastLifeResetSqlRepository:
         payload = self._payload("single", clear_history, user_id)
         with DatabaseUnitOfWork(self.game_database, immediate=True) as uow:
             uow.attach_database(self.player_database, "player_data")
-            columns = self._ensure_schema(uow)
+            columns = self._schema_ready(uow)
+            if columns is None:
+                return PastLifeResetResult(SCHEMA_MISSING, {})
             previous = uow.query_one(
                 "SELECT payload FROM past_life_reset_operations WHERE operation_id=?", (operation_id,)
             )
@@ -283,7 +259,9 @@ class PastLifeResetSqlRepository:
         payload = self._payload("all", clear_history)
         with DatabaseUnitOfWork(self.game_database, immediate=True) as uow:
             uow.attach_database(self.player_database, "player_data")
-            columns = self._ensure_schema(uow)
+            columns = self._schema_ready(uow)
+            if columns is None:
+                return PastLifeResetResult(SCHEMA_MISSING, {})
             previous = uow.query_one(
                 "SELECT payload,status FROM past_life_reset_operations WHERE operation_id=?", (operation_id,)
             )
@@ -333,7 +311,8 @@ class PastLifeResetSqlRepository:
             raise ValueError("operation_id is required")
         with DatabaseUnitOfWork(self.game_database, immediate=True) as uow:
             uow.attach_database(self.player_database, "player_data")
-            self._ensure_schema(uow)
+            if self._schema_ready(uow) is None:
+                return PastLifeResetResult(SCHEMA_MISSING, {}, operation_id=operation_id)
             operation = uow.query_one(
                 "SELECT mode,status FROM past_life_reset_operations WHERE operation_id=?", (operation_id,)
             )

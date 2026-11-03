@@ -336,11 +336,12 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
             clear_history=clear_history,
         )
         if not result.succeeded:
-            await handle_send(
-                bot,
-                event,
-                "已有不同模式的全服前尘重置任务正在执行，本次未创建新任务。",
+            message = (
+                "前尘数据尚未就绪，请检查启动迁移。"
+                if result.status == "schema_missing"
+                else "已有不同模式的全服前尘重置任务正在执行，本次未创建新任务。"
             )
+            await handle_send(bot, event, message)
             return
         operation_id = result.operation_id
         try:
@@ -396,7 +397,12 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     result_data["succeeded"] = outcome.ok
     result = _LegacyResult(result_data)
     if not result.succeeded:
-        await handle_send(bot, event, "前尘重置 operation 冲突，本次未修改状态。")
+        message = (
+            "前尘数据尚未就绪，请检查启动迁移。"
+            if result.status == "schema_missing"
+            else "前尘重置 operation 冲突，本次未修改状态。"
+        )
+        await handle_send(bot, event, message)
         return
     mode = "（已清空历史）" if clear_history else "（保留历史）"
     msg = f"已重置 {target_user['user_name']} 的前尘状态 {mode}"

@@ -4,6 +4,7 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 from ...infrastructure.database import DatabaseUnitOfWork
+from .schema import CHOICE_OPERATIONS_COLUMNS, PAST_LIFE_COLUMNS, SCHEMA_MISSING, table_ready
 
 FIELDS=("state","stage","revision","alloc","accumulated","talent","birth_scenario","total_score","score_breakdown","event_indices","event_snapshots","early_death_rolls","history","last_run_time","total_runs","best_ending","best_score","endings_log","achievement_points")
 JSON_FIELDS={"alloc","accumulated","score_breakdown","event_indices","event_snapshots","early_death_rolls","history","endings_log"}
@@ -31,11 +32,10 @@ class PastLifeChoiceSqlRepository:
         return out
     def _canon(self,x): return json.dumps(x,ensure_ascii=False,sort_keys=True,separators=(',',':'))
     def _enc(self,f,x): return self._canon(x) if f in JSON_FIELDS else x
-    def _schema(self,uow):
-        uow.execute('CREATE TABLE IF NOT EXISTS player_data.past_life(user_id TEXT PRIMARY KEY)'); cols={str(r['name']) for r in uow.query_all('PRAGMA player_data.table_info(past_life)')}
-        for f in FIELDS:
-            if f not in cols:uow.execute(f'ALTER TABLE player_data.past_life ADD COLUMN "{f}" {"INTEGER" if f in INT_FIELDS else "TEXT"} DEFAULT NULL')
-        uow.execute('CREATE TABLE IF NOT EXISTS past_life_choice_operations(operation_id TEXT PRIMARY KEY,user_id TEXT NOT NULL,kind TEXT NOT NULL,payload TEXT NOT NULL,response_json TEXT NOT NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)')
+    def _schema_ready(self,uow):
+        return table_ready(uow, "past_life", PAST_LIFE_COLUMNS) and table_ready(
+            uow, "past_life_choice_operations", CHOICE_OPERATIONS_COLUMNS, schema="",
+        )
     def _read(self,uow,user_id):
         r=uow.query_one('SELECT * FROM player_data.past_life WHERE user_id=?',(user_id,)); return None if r is None else self._norm(dict(r))
     def _write(self,uow,user_id,state):
@@ -79,7 +79,9 @@ class PastLifeChoiceSqlRepository:
             if self._canon(final[f])!=self._canon(exp[f]): raise ValueError(f'past life choice changed immutable field: {f}')
         payload=self._canon({'user_id':user_id,'choice_idx':choice_idx,'expected':exp,'final':final})
         with DatabaseUnitOfWork(self.game_database,immediate=True) as uow:
-            uow.attach_database(self.player_database,'player_data'); self._schema(uow); old=uow.query_one('SELECT user_id,response_json FROM past_life_choice_operations WHERE operation_id=?',(operation_id,))
+            uow.attach_database(self.player_database,'player_data')
+            if not self._schema_ready(uow):return PastLifeChoiceResult(SCHEMA_MISSING)
+            old=uow.query_one('SELECT user_id,response_json FROM past_life_choice_operations WHERE operation_id=?',(operation_id,))
             if old is not None:return PastLifeChoiceResult('duplicate',json.loads(old['response_json'])) if str(old['user_id'])==user_id else PastLifeChoiceResult('operation_conflict')
             if uow.query_one('SELECT 1 FROM user_xiuxian WHERE user_id=?',(user_id,)) is None:return PastLifeChoiceResult('user_missing')
             current=self._read(uow,user_id)

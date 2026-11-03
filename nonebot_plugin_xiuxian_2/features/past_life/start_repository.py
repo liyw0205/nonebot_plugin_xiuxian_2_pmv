@@ -6,6 +6,12 @@ from datetime import datetime
 from pathlib import Path
 
 from ...infrastructure.database import DatabaseUnitOfWork
+from .schema import (
+    PAST_LIFE_COLUMNS,
+    SCHEMA_MISSING,
+    START_OPERATIONS_COLUMNS,
+    table_ready,
+)
 
 PAST_LIFE_FIELDS = (
     "state", "stage", "revision", "alloc", "accumulated", "talent", "birth_scenario",
@@ -82,18 +88,11 @@ class PastLifeStartSqlRepository:
         except ValueError:
             return None
 
-    def _ensure_schema(self, uow):
-        uow.execute("CREATE TABLE IF NOT EXISTS player_data.past_life(user_id TEXT PRIMARY KEY)")
-        columns = {str(row["name"]) for row in uow.query_all("PRAGMA player_data.table_info(past_life)")}
-        for field in PAST_LIFE_FIELDS:
-            if field not in columns:
-                data_type = "INTEGER" if field in INTEGER_FIELDS else "TEXT"
-                uow.execute(f'ALTER TABLE player_data.past_life ADD COLUMN "{field}" {data_type} DEFAULT NULL')
-        uow.execute("CREATE TABLE IF NOT EXISTS player_data.statistics(user_id TEXT PRIMARY KEY)")
-        columns = {str(row["name"]) for row in uow.query_all("PRAGMA player_data.table_info(statistics)")}
-        if "前尘往事次数" not in columns:
-            uow.execute('ALTER TABLE player_data.statistics ADD COLUMN "前尘往事次数" INTEGER DEFAULT 0')
-        uow.execute("CREATE TABLE IF NOT EXISTS past_life_start_operations(operation_id TEXT PRIMARY KEY,user_id TEXT NOT NULL,payload TEXT NOT NULL,result_json TEXT NOT NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
+    def _schema_ready(self, uow) -> bool:
+        """Startup migration `past_life.002` owns these tables; verify, never create."""
+        return table_ready(uow, "past_life", PAST_LIFE_COLUMNS) and table_ready(
+            uow, "past_life_start_operations", START_OPERATIONS_COLUMNS, schema="",
+        )
 
     def _read_state(self, uow, user_id):
         row = uow.query_one("SELECT * FROM player_data.past_life WHERE user_id=?", (user_id,))
@@ -122,7 +121,8 @@ class PastLifeStartSqlRepository:
         payload = self._canonical({"user_id": user_id, "plan": plan, "message": str(first_stage_message), "choices_count": int(choices_count), "refresh_slot_start": str(refresh_slot_start)})
         with DatabaseUnitOfWork(self.game_database, immediate=True) as uow:
             uow.attach_database(self.player_database, "player_data")
-            self._ensure_schema(uow)
+            if not self._schema_ready(uow):
+                return PastLifeStartResult(SCHEMA_MISSING)
             old = uow.query_one("SELECT user_id,result_json FROM past_life_start_operations WHERE operation_id=?", (operation_id,))
             if old is not None:
                 if str(old["user_id"]) != user_id:

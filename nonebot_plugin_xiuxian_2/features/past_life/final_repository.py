@@ -4,6 +4,13 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from ...infrastructure.database import DatabaseUnitOfWork
+from .schema import (
+    ECONOMY_LOG_COLUMNS,
+    FINAL_OPERATIONS_COLUMNS,
+    PAST_LIFE_COLUMNS,
+    SCHEMA_MISSING,
+    table_ready,
+)
 
 FIELDS=("state","stage","revision","alloc","accumulated","talent","birth_scenario","total_score","score_breakdown","event_indices","event_snapshots","early_death_rolls","history","last_run_time","total_runs","best_ending","best_score","endings_log","achievement_points")
 JSON_FIELDS={"alloc","accumulated","score_breakdown","event_indices","event_snapshots","early_death_rolls","history","endings_log"}
@@ -15,15 +22,13 @@ class PastLifeFinalResult:
 class PastLifeFinalSettlementSqlRepository:
     def __init__(self,game_database:str|Path,player_database:str|Path|None=None,max_goods_num:int=1000): self.game_database,self.player_database,self.max_goods_num=str(game_database),str(player_database or game_database),max(1,int(max_goods_num))
     def _canon(self,x): return json.dumps(x,ensure_ascii=False,sort_keys=True,separators=(',',':'))
-    def _schema(self,uow):
-        uow.execute('CREATE TABLE IF NOT EXISTS player_data.past_life(user_id TEXT PRIMARY KEY)'); cols={str(r['name']) for r in uow.query_all('PRAGMA player_data.table_info(past_life)')}
-        for f in FIELDS:
-            if f not in cols:uow.execute(f'ALTER TABLE player_data.past_life ADD COLUMN "{f}" {"INTEGER" if f in {"state","stage","revision","total_score","total_runs","best_score","achievement_points"} else "TEXT"} DEFAULT NULL')
-        uow.execute('CREATE TABLE IF NOT EXISTS past_life_final_operations(operation_id TEXT PRIMARY KEY,user_id TEXT NOT NULL,payload TEXT NOT NULL,result_json TEXT NOT NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)')
-        operation_columns={str(r['name']) for r in uow.query_all('PRAGMA table_info(past_life_final_operations)')}
-        if 'user_id' not in operation_columns:
-            uow.execute('ALTER TABLE past_life_final_operations ADD COLUMN user_id TEXT')
-        uow.execute('CREATE TABLE IF NOT EXISTS economy_log(id INTEGER PRIMARY KEY AUTOINCREMENT,user_id TEXT,source TEXT NOT NULL,action TEXT NOT NULL,stone_delta INTEGER NOT NULL DEFAULT 0,exp_delta INTEGER NOT NULL DEFAULT 0,item_delta TEXT NOT NULL DEFAULT "[]",detail TEXT NOT NULL DEFAULT "{}",trace_id TEXT,created_at TEXT NOT NULL)')
+    def _schema_ready(self,uow):
+        """Past-life tables come from `past_life.002`; `economy_log` from platform migrations."""
+        return (
+            table_ready(uow, "past_life", PAST_LIFE_COLUMNS)
+            and table_ready(uow, "past_life_final_operations", FINAL_OPERATIONS_COLUMNS, schema="")
+            and table_ready(uow, "economy_log", ECONOMY_LOG_COLUMNS, schema="")
+        )
     def _encode(self, field, value):
         return self._canon(value) if field in JSON_FIELDS else value
 
@@ -49,7 +54,9 @@ class PastLifeFinalSettlementSqlRepository:
         item=None if not item_reward else {'id':int(item_reward['id']),'name':str(item_reward['name']),'type':str(item_reward['type']),'num':max(0,int(item_reward.get('num',1)))}
         payload=self._canon({'user_id':user_id,'expected':expected_state,'ending':str(ending_name),'score':score,'exp':exp_reward,'stone':stone_reward,'points':achievement_points,'item':item,'completed_at':completed_at,'choice_response':choice_response})
         with DatabaseUnitOfWork(self.game_database,immediate=True) as uow:
-            uow.attach_database(self.player_database,'player_data'); self._schema(uow); old=uow.query_one('SELECT user_id,payload,result_json FROM past_life_final_operations WHERE operation_id=?',(operation_id,))
+            uow.attach_database(self.player_database,'player_data')
+            if not self._schema_ready(uow):return PastLifeFinalResult(SCHEMA_MISSING,{})
+            old=uow.query_one('SELECT user_id,payload,result_json FROM past_life_final_operations WHERE operation_id=?',(operation_id,))
             if old is not None:
                 old_user_id=old['user_id']
                 if old_user_id is None:

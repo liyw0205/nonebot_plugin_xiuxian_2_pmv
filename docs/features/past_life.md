@@ -12,6 +12,36 @@ No new HTTP route is exposed in this migration slice. Existing URLs remain serve
 ## 数据模型与迁移
 Migration `legacy.past_life.001` records the slice in `game_db`; the feature-owned repository and explicit service port now own the operation boundary while legacy tables remain the compatibility data source.
 
+### schema 归属（`past_life.002` / `past_life.003`）
+
+前世的状态表与回执表原先由四份仓储在请求事务内 `CREATE TABLE` / `ALTER TABLE` 惰性创建。
+现在启动迁移是唯一写入者，`features/past_life/schema.py` 是唯一契约来源：
+
+| 库 | 表 | 迁移 |
+| --- | --- | --- |
+| player | `past_life`（`user_id` + 19 个业务字段） | `past_life.002` |
+| player | `statistics."前尘往事次数"`（共享表，只补列） | `past_life.002` |
+| game | `past_life_start_operations` | `past_life.003` |
+| game | `past_life_choice_operations` | `past_life.003` |
+| game | `past_life_final_operations` | `past_life.003` |
+| game | `past_life_reset_operations` | `past_life.003` |
+| game | `past_life_reset_targets` | `past_life.003` |
+
+回执表位于 game 库，因为仓储的写事务主库是 game，只把 player 作为 `player_data` 附库读取状态；
+`past_life` 与 `statistics` 在 player 库。`economy_log` 是共享账本，由 `tasks`/`dufang`/`auction`/
+`admin_asset`/`sign_in` 的启动迁移各自 `IF NOT EXISTS` 建立，前世只校验、不重复声明所有权。
+
+请求路径只校验「表存在 + 本次要读的列齐全」，缺表或缺任一列即返回 `schema_missing`
+且零写入（不动 `past_life`、`statistics`、任何回执表与 `economy_log`）：
+
+- `PastLifeStartSqlRepository.start`、`PastLifeChoiceSqlRepository.advance`、
+  `PastLifeFinalSettlementSqlRepository.settle`、`PastLifeResetSqlRepository.reset_one` /
+  `reset_all_create` / `reset_all_batch` 全部 fail-closed。
+- 命令层对 `schema_missing` 给出「前尘数据尚未就绪，请检查启动迁移。」，不再误报
+  「已有不同模式的任务」或「operation 冲突」。
+- 兼容 `xiuxian/xiuxian_past_life/transaction_service.py` 保留为**显式回滚入口**，仍在自身事务内建表；
+  定向测试钉住 legacy 包内只有它允许出现 DDL。
+
 ## 事务与失败回滚
 Mutating calls carry an `operation_id` and are recorded in the operation ledger. Disable the feature flag or restore the pre-migration backup to roll back.
 
