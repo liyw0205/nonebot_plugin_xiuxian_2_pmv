@@ -1992,6 +1992,56 @@ status_reader 归属、渲染与 handler 源合同）。受影响套件：
   `build-and-release` skipped）。未部署、未读写真实游戏库、未发真实 QQ 消息、未打 tag；
   用户删除的四个文件保持未暂存，`docs/goals/**` 与 `.codex-next-goal.md` 未提交。
 
+## 已完成目标：灵田收取域收敛（成熟窗口/抽取规则 + 回执表启动迁移）
+
+重构收敛（非新玩法）。目标文档 `docs/goals/goal-mixelixir-harvest-domain.md`（local-only，未提交）。
+承接 `docs/features/mixelixir.md` 的两处遗留：命令侧内联成熟窗口/抽取，以及四张炼丹回执表
+在请求事务内 `CREATE TABLE IF NOT EXISTS`（与仓库级「请求路径不执行 DDL」合同冲突）。
+
+**缺口证据**：`xiuxian/xiuxian_mixelixir/__init__.py` 的 `yaocai_get_` 内联
+`{"time_cost": 23, "加速基数": 0.05}` 与裸 `strptime`；`last_time != 0` 对历史文本列上的 `'0'`
+成立，新号直接 `ValueError`，缺列/缺行则 `KeyError`，窗口常量还与收获仓储各写一份。数量合计
+（`灵田数量 + 收取等级 + 传承 + 功法`）、逐次 `choice` 去重与「恒心草」兜底也全部内联。
+四张回执表（harvest / settlement / harvest_level_upgrade / fire_control_upgrade）在四个 feature
+仓储与 legacy `transaction_service` 的请求事务里建表。
+
+交付内容：
+
+- 新 `features/mixelixir/harvest_rules.py`（纯函数、无 I/O）：`maturity_state()` 三态
+  （`ready`/`waiting` 含剩余小时/`invalid`），窗口 `round(23 × (1 − 0.05 × 药材速度), 2)`；
+  `is_never_harvested()` 把 `0`/`'0'`/空串/非法时间统一视作「从未收取」而不抛错；
+  `harvest_count()` 数量合计（下限 0）；`roll_rewards()` 逐次抽取按 id 去重保持首次顺序、
+  候选为空时兜底 `(3001, "恒心草", 数量)`；`remaining_text()` 保持 `X小时Y分钟` 文案；
+  `normalize_rewards()` 兼容 mapping/元组两种 payload 形状。
+- 新 `features/mixelixir/harvest_view.py`：`MixelixirHarvestFieldApplication.snapshot()` 单只读 UoW +
+  player 附库读真实列集，缺 `user_xiuxian`/缺 `mix_elixir_info`/缺可选列一律 fail-soft，
+  不建表不补列；无行时按「首次收取」返回 `invalid`。
+- `migrations.py` 新增 `apply_mixelixir_operations`（含 `OPERATIONS_TABLE_DDL`/`OPERATIONS_TABLE_COLUMNS`），
+  `plugin.py` 注册 `Migration("mixelixir.004", "mixelixir_operations", apply_mixelixir_operations)`。
+- 四个 feature 仓储改为 `_operations_ready` schema 检查，缺表/缺列返回 `schema_missing` 且零变化；
+  请求路径不再建表。迁移语句保持 `IF NOT EXISTS`，已按惰性路径建表的历史库保留全部回执行。
+- 命令入口改调 feature 规则与只读快照；消息状态分支保持历史形态并新增 `schema_missing` 提示。
+- 兼容：`收取时间` 历史文本列、`'0'`/空串/脏值等价于首次收取；重放语义不变；不改奖励数值、
+  抽取分布、写入语义与 operation 语义；不新增表/命令/路由/配置键。
+- 文档：`docs/features/mixelixir.md` 新增「灵田收取（成熟窗口 / 数量 / 抽取）」段，改写「数据模型与迁移」
+  与「灰度开关、回滚和已知限制」，补定向测试命令；`docs/refactor_inventory.json` 重新导出（新增 `migrated_command_aliases` 等为空，表清单无漂移）。
+- 测试：新 `tests/test_mixelixir_harvest_domain.py` `25/25`（窗口边界、脏时间/缺行/缺列容错、
+  数量合计、抽取去重与兜底、请求路径无 DDL 与 `schema_missing`、启动迁移建四表并复用历史表、
+  facade 委派与模块纯净性源合同）；4 个 feature 仓储夹具与 `tests/test_mixelixir_upgrade_production_path.py`
+  夹具补 `mixelixir.004`（后者移除了自建回执表改为用启动迁移）。定向套件
+  `test_mixelixir_harvest_domain` + `test_mixelixir_upgrade_production_path` + `test_source_quality` +
+  `test_mixelixir_harvest_service` + `test_mixelixir_settlement_service` + `test_mixelixir_refine_claim_boundary` +
+  `test_refactor_progress` + 4 个 feature 仓储测试合计 `329 passed`；扩大集（含
+  `test_mixelixir_refine_cost_service`/`_refine_reward_service`/`_fire_control_upgrade`/`_harvest_level_upgrade`/`_recipe_service`）
+  合计 `340 passed`；`features/mixelixir/tests` 隔离运行 `8 passed`。
+  三门禁真实 exit 0（progress `failures: None`；`exit_ready: False` 仍仅由用户删除的冻结文件造成，
+  11 条既有 blocker）；`test_phase2_legacy_path_gate` `47/47`（临时还原后删除，未暂存）；
+  `compileall` 与 `git diff --check` 干净。
+- 交付与 CI：功能提交 `d1920603` 的 develop run `41562018713` success；`--ff-only` 合入 main 后
+  main run `41562844978` success（headSha 均 `d1920603`；`quality` success、`build-and-release` skipped）。
+  未部署、未读写真实游戏库、未发真实 QQ 消息、未打 tag；用户删除的四个文件保持未暂存，
+  `docs/goals/**` 与 `.codex-next-goal.md` 未提交。
+
 ## 冻结清单与停止条件
 
 冻结范围仅包括活动 Web 六来源一键代领 API、权限/错误合同、管理员面板、兼容性保护、聚焦测试、路由清单和正式文档。不得新增奖励经济、schema/数据迁移、玩家身份模型、后台活动编辑器、通用 UI 框架或 unrelated refactor。
