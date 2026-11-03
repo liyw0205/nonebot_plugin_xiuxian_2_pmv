@@ -25,6 +25,18 @@
 
 `boss.001` 在 `game_db` 创建 `boss_feature_migrations`，`boss.004` 与 `boss.005` 在 `player_db` 启动时创建世界BOSS生命周期、限额和全量刷新回执表。积分、背包和战斗结算继续复用既有跨库表，但默认通过 `BossApplication` 的 feature-owned repository 执行；手动生成、全量刷新与每日限额重置运行期只读校验 schema，缺失时 fail closed，不执行 DDL。
 
+### 惩罚/状态表的 schema 归属（`boss.007`）
+
+`WorldBossPunishmentSqlRepository` 原先在 `snapshot`、`get_result`、`punish` 共四处请求期
+`CREATE TABLE IF NOT EXISTS` 建 `world_boss_state`（`state_key`/`bosses`/`updated_at`/`revision`）
+与 `world_boss_punishment_operations`（`operation_id`/`payload`/`result_json`/`created_at`）。
+现在 `boss.007` 在 game DB 统一建这两张表，`features/boss/schema.py` 是唯一契约来源；
+请求路径只校验「表存在 + 本次要读的列齐全」：
+
+- 写路径 `punish`：缺表或缺列返回 `schema_missing`，不改变首领状态、不写回执；
+- 读路径 `snapshot` 降级为 `([], 0)`，`get_result` 返回 `None`；
+- 半成品 `world_boss_state` 不会被补列。
+
 ## 事务与失败回滚
 
 资产 application 先写 `operation_ledger`，再执行结算；手动生成使用版本 CAS 与回执幂等，每日限额重置冻结目标并按 chunk 恢复。相同 operation/日期重试只返回首次结果；异常在当前事务回滚并保留可恢复进度。旧 transaction service 仅作为显式兼容/回滚路径。

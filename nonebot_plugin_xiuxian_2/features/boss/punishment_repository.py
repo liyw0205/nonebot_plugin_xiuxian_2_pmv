@@ -5,6 +5,12 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from ...infrastructure.database import DatabaseUnitOfWork
+from .schema import (
+    PUNISHMENT_OPERATION_COLUMNS,
+    SCHEMA_MISSING,
+    STATE_COLUMNS,
+    table_ready,
+)
 
 
 @dataclass(frozen=True)
@@ -38,13 +44,15 @@ class WorldBossPunishmentSqlRepository:
 
     def snapshot(self) -> tuple[list[dict], int]:
         with DatabaseUnitOfWork(self.database) as uow:
-            uow.execute("CREATE TABLE IF NOT EXISTS world_boss_state(state_key TEXT PRIMARY KEY,bosses TEXT NOT NULL,updated_at TEXT NOT NULL,revision INTEGER NOT NULL DEFAULT 0)")
+            if not table_ready(uow, "world_boss_state", STATE_COLUMNS):
+                return [], 0
             row = uow.query_one("SELECT bosses,revision FROM world_boss_state WHERE state_key='global'")
             return (self._decode(row["bosses"]), int(row["revision"] or 0)) if row else ([], 0)
 
     def get_result(self, operation_id: str) -> WorldBossPunishmentResult | None:
         with DatabaseUnitOfWork(self.database) as uow:
-            uow.execute("CREATE TABLE IF NOT EXISTS world_boss_punishment_operations(operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,result_json TEXT NOT NULL,created_at TEXT NOT NULL)")
+            if not table_ready(uow, "world_boss_punishment_operations", PUNISHMENT_OPERATION_COLUMNS):
+                return None
             row = uow.query_one("SELECT result_json FROM world_boss_punishment_operations WHERE operation_id=?", (str(operation_id).strip(),))
             if row is None:
                 return None
@@ -62,8 +70,10 @@ class WorldBossPunishmentSqlRepository:
         expected = [dict(boss) for boss in expected_bosses]
         payload = self._json({"action": action, "expected_revision": int(expected_revision), "expected_bosses": expected, "boss_number": int(boss_number) if boss_number is not None else None})
         with DatabaseUnitOfWork(self.database, immediate=True) as uow:
-            uow.execute("CREATE TABLE IF NOT EXISTS world_boss_state(state_key TEXT PRIMARY KEY,bosses TEXT NOT NULL,updated_at TEXT NOT NULL,revision INTEGER NOT NULL DEFAULT 0)")
-            uow.execute("CREATE TABLE IF NOT EXISTS world_boss_punishment_operations(operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,result_json TEXT NOT NULL,created_at TEXT NOT NULL)")
+            if not table_ready(uow, "world_boss_state", STATE_COLUMNS) or not table_ready(
+                uow, "world_boss_punishment_operations", PUNISHMENT_OPERATION_COLUMNS
+            ):
+                return WorldBossPunishmentResult(SCHEMA_MISSING)
             previous = uow.query_one("SELECT payload,result_json FROM world_boss_punishment_operations WHERE operation_id=?", (operation_id,))
             if previous is not None:
                 if str(previous["payload"]) != payload:

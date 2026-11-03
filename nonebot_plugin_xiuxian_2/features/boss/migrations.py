@@ -87,11 +87,26 @@ def apply_boss_battle_player_schema(uow: DatabaseUnitOfWork) -> None:
     apply_boss_player_schema(uow)
 
 
+def apply_boss_punishment_operations(uow: DatabaseUnitOfWork) -> None:
+    """Create the world-boss punishment state and receipt tables (game DB)."""
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS world_boss_state("
+        "state_key TEXT PRIMARY KEY,bosses TEXT NOT NULL,updated_at TEXT NOT NULL,"
+        "revision INTEGER NOT NULL DEFAULT 0)"
+    )
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS world_boss_punishment_operations("
+        "operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,result_json TEXT NOT NULL,"
+        "created_at TEXT NOT NULL)"
+    )
+
+
 __all__ = [
     "apply_boss",
+    "apply_boss_battle_player_schema",
+    "apply_boss_full_refresh_player_schema",
+    "apply_boss_player_schema",
+    "apply_boss_punishment_operations",
     "apply_boss_purchase",
     "apply_boss_settlement",
-    "apply_boss_player_schema",
-    "apply_boss_full_refresh_player_schema",
-    "apply_boss_battle_player_schema",
 ]
