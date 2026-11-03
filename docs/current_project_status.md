@@ -2083,6 +2083,47 @@ status_reader 归属、渲染与 handler 源合同）。受影响套件：
   `build-and-release` skipped）。未部署、未读写真实游戏库、未发真实 QQ 消息、未打 tag；
   用户删除的四个文件保持未暂存，`docs/goals/**` 与 `.codex-next-goal.md` 未提交。
 
+## 已完成目标：竞技场每周降段的启动迁移收口
+
+重构收敛（非新玩法），承接 `docs/features/arena.md` 与仓库级「请求路径不执行 DDL」合同。
+
+**缺口证据**：`features/arena/weekly_rank_repository.py` 的 `_ensure_schema()` 在 `reduce()`
+的降段/调度事务内执行 `CREATE TABLE IF NOT EXISTS arena(...)`、`ALTER TABLE arena ADD COLUMN`
+补 `score/rank/win_streak`，以及 `CREATE TABLE IF NOT EXISTS arena_weekly_rank_reduction_operations`
+与 `..._targets`。三张表其实已由启动迁移 `arena.006`（两张降段回执表）与
+`arena.008`/`arena.009`（`arena` 及列）持有，请求路径重复一次启动迁移已拥有的 DDL。
+
+交付内容：
+
+- `weekly_rank_repository.py`：`_ensure_schema` 换成 `_schema_ready`（只查 `sqlite_master` 与
+  `PRAGMA table_info("arena")`），`reduce()` 首步校验 `arena` + 两张回执表存在且
+  `arena` 具备 `user_id/score/rank/win_streak`，缺表或缺列返回 `schema_missing` 且零写入；
+  请求期 `CREATE TABLE`/`ALTER TABLE` 全部删除。新增 `OPERATION_TABLES`/`ARENA_COLUMNS` 常量。
+- `xiuxian/xiuxian_arena/__init__.py`：调度入口 `reduce_arena_rank` 在进入 `while` 续跑循环
+  **之前**短路 `schema_missing` 并记一条 warning，避免把它当 `applied` 反复空转。
+- `tests/test_arena_weekly_rank_schema.py`（新，242 行，13 测试）：三条迁移的建表形状与列集、
+  未迁移库 `schema_missing` 且零建表、半成品 `arena` 被拒且**不被 `ALTER` 补列**、
+  缺一张回执表即整体拒绝且段位零变化、历史回执行在重跑迁移后保留、迁移后分块续跑至
+  `completed` 与重放 `duplicate`、空榜 `completed`、冻结目标行、仓储源无 DDL、
+  调度入口在 `await asyncio.sleep(0)` 之前短路、段位表与初始分数常量冻结。
+- `tests/test_arena_weekly_rank_reduction.py`：夹具改为先跑 `apply_arena_state` +
+  `apply_arena_weekly_rank_reduction` 再插 `arena` 行（此前靠请求期惰性建表），
+  插入语句改为显式列名。
+- `docs/features/arena.md`：新增「每周降段的 schema 归属」段与定向测试命令。
+- 兼容：迁移语句保持 `IF NOT EXISTS`，已按旧惰性路径建表的历史库保留全部回执行；
+  不改段位表、初始分数、`_target()` 下标、`chunk_size`、CAS 三元组与回执语义；
+  不新增表/命令/路由/配置键；`arena_enabled` 灰度与 Web 路由行为不变。
+- 定向测试：新套件 `13/13`；`tests.test_arena_weekly_rank_reduction` `11/11`；
+  arena 相关 12 个套件 `45/45`；`features/arena/tests` 隔离 `21/21`；
+  合并集（含 `test_platform_ledger_migration`/`test_source_quality`/`test_refactor_progress`/
+  `test_refactor_architecture`，临时还原冻结清单后即删）`321/321`。
+  三门禁 exit 0（progress `failures: None`、11 条既有 blocker 仍只由用户删除的冻结文件造成）；
+  `compileall` 与 `git diff --check` 干净。
+- 交付与 CI：功能提交 `37e2c706` 的 develop run `41621695411` success、
+  main run `41623005648` success（headSha 均 `37e2c706`；`quality` success、
+  `build-and-release` skipped）。未部署、未读写真实游戏库、未发真实 QQ 消息、未打 tag；
+  用户删除的四个文件保持未暂存，`docs/goals/**` 与 `.codex-next-goal.md` 未提交。
+
 ## 已完成目标：虚神界回执/投影表启动迁移
 
 重构收敛（非新玩法）。目标文档 `.codex-next-goal.md`（local-only，未提交）。
