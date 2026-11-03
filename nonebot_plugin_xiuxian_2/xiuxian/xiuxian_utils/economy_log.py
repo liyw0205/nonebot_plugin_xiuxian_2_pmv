@@ -8,6 +8,11 @@ try:
 except Exception:  # pragma: no cover
     logger = None
 
+from ...infrastructure.database.economy import (
+    ECONOMY_LOG_COLUMNS,
+    ECONOMY_LOG_DDL,
+    ECONOMY_LOG_INDEXES,
+)
 from .json_store import safe_json_dumps as _json_dumps
 from .xiuxian2_handle import XiuxianDateManage
 
@@ -27,56 +32,33 @@ def _normalize_time(value: datetime | str | None = None) -> str:
     return str(value)
 
 
-def ensure_economy_log_table() -> None:
+def ensure_economy_log_table() -> bool:
+    """Verify the startup-owned canonical ledger; only bootstrap if it is absent.
+
+    `economy_ledger.002` is the owner of the canonical `economy_log` shape and its
+    indexes.  The write path therefore performs no DDL once migrations have run;
+    the creation branch below remains only as a compatibility fallback for
+    databases that never ran the startup migrations.
+    """
     sql_message = XiuxianDateManage()
     with sql_message.lock:
         cur = sql_message.conn.cursor()
-        cur.execute(
-            """
-            CREATE TABLE IF NOT EXISTS economy_log (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id TEXT,
-                sect_id INTEGER,
-                source TEXT NOT NULL,
-                action TEXT NOT NULL,
-                stone_delta INTEGER NOT NULL DEFAULT 0,
-                exp_delta INTEGER NOT NULL DEFAULT 0,
-                sect_contribution_delta INTEGER NOT NULL DEFAULT 0,
-                sect_scale_delta INTEGER NOT NULL DEFAULT 0,
-                sect_materials_delta INTEGER NOT NULL DEFAULT 0,
-                item_delta TEXT NOT NULL DEFAULT '[]',
-                detail TEXT NOT NULL DEFAULT '{}',
-                trace_id TEXT,
-                event_id TEXT,
-                created_at TEXT NOT NULL
-            )
-            """
-        )
-        if not sql_message.conn.column_exists("economy_log", "trace_id"):
-            cur.execute("ALTER TABLE economy_log ADD COLUMN trace_id TEXT")
-        if not sql_message.conn.column_exists("economy_log", "event_id"):
-            cur.execute("ALTER TABLE economy_log ADD COLUMN event_id TEXT")
-        cur.execute(
-            "CREATE INDEX IF NOT EXISTS idx_economy_log_user_time "
-            "ON economy_log(user_id, created_at)"
-        )
-        cur.execute(
-            "CREATE INDEX IF NOT EXISTS idx_economy_log_sect_time "
-            "ON economy_log(sect_id, created_at)"
-        )
-        cur.execute(
-            "CREATE INDEX IF NOT EXISTS idx_economy_log_source_action "
-            "ON economy_log(source, action)"
-        )
-        cur.execute(
-            "CREATE INDEX IF NOT EXISTS idx_economy_log_trace_id "
-            "ON economy_log(trace_id)"
-        )
-        cur.execute(
-            "CREATE UNIQUE INDEX IF NOT EXISTS idx_economy_log_event_id "
-            "ON economy_log(event_id) WHERE event_id IS NOT NULL"
-        )
+        cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='economy_log'")
+        present = cur.fetchone() is not None
+        if present:
+            columns = {str(row[1]).casefold() for row in cur.execute('PRAGMA table_info("economy_log")')}
+            indexes = {
+                str(row[0])
+                for row in cur.execute(
+                    "SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='economy_log'"
+                )
+            }
+            if ECONOMY_LOG_COLUMNS.issubset(columns) and set(ECONOMY_LOG_INDEXES).issubset(indexes):
+                return True
+        for statement in ECONOMY_LOG_DDL:
+            cur.execute(statement)
         sql_message._commit_write()
+        return True
 
 
 def log_economy_change(

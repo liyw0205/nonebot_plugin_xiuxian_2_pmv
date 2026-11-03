@@ -35,7 +35,10 @@ from .features.impart_pk.migrations import (
 )
 from .features.interactive.manifest import FEATURE as INTERACTIVE_FEATURE
 from .features.interactive.migrations import apply_interactive
-from .features.economy_ledger.migrations import apply_economy_ledger_read_indexes
+from .features.economy_ledger.migrations import (
+    apply_economy_ledger_read_indexes,
+    apply_economy_log_schema,
+)
 from .features.info.migrations import apply_avatar_identity_player, apply_avatar_initialization_player
 from .features.beg.manifest import FEATURE as BEG_FEATURE
 from .features.beg.migrations import apply_beg
@@ -399,6 +402,7 @@ def build_migrations() -> tuple[Migration, ...]:
         Migration("dungeon.009", "dungeon_team_members_index", apply_dungeon_team_members_index),
         Migration("dungeon.010", "dungeon_team_invite_expiry", apply_dungeon_team_invite_expiry),
         Migration("economy_ledger.001", "economy_ledger_read_indexes", apply_economy_ledger_read_indexes),
+        Migration("economy_ledger.002", "economy_log_canonical_schema", apply_economy_log_schema),
         Migration("fusion.002", "fusion_operation_tables", apply_fusion_operations),
         Migration("game_events.001", "game_event_statistics_projection", apply_game_event_statistics_player),
         Migration("illusion.001", "illusion_feature_migrations", apply_illusion),

@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 from ...infrastructure.database import DatabaseUnitOfWork
+from ...infrastructure.database.economy import ECONOMY_LOG_DDL
 
 
 # The composition root owns execution; this tuple records the feature's
 # startup migration without creating a second migration runner.
-MIGRATIONS = ("economy_ledger.001",)
+MIGRATIONS = ("economy_ledger.001", "economy_ledger.002")
 
 
 def apply_economy_ledger_read_indexes(uow: DatabaseUnitOfWork) -> None:
@@ -51,4 +52,18 @@ def apply_economy_ledger_read_indexes(uow: DatabaseUnitOfWork) -> None:
             uow.execute(statement)
 
 
-__all__ = ["MIGRATIONS", "apply_economy_ledger_read_indexes"]
+def apply_economy_log_schema(uow: DatabaseUnitOfWork) -> None:
+    """Create the canonical shared `economy_log` shape and its indexes.
+
+    `log_economy_change()` used to create and repeatedly patch this table on the
+    write path.  The startup migration owns it now; request paths only verify.
+    """
+    for statement in ECONOMY_LOG_DDL:
+        uow.execute(statement)
+
+
+__all__ = [
+    "MIGRATIONS",
+    "apply_economy_ledger_read_indexes",
+    "apply_economy_log_schema",
+]
