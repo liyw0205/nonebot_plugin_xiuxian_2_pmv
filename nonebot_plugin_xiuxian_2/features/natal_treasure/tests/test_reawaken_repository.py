@@ -4,6 +4,7 @@ from pathlib import Path
 
 from ..reawaken_repository import NatalReawakenSqlRepository
 from ....infrastructure.database import DatabaseUnitOfWork
+from ..migrations import apply_natal_treasure_operations
 
 
 class NatalReawakenSqlRepositoryTests(unittest.TestCase):
@@ -20,6 +21,9 @@ class NatalReawakenSqlRepositoryTests(unittest.TestCase):
             uow.execute("INSERT INTO natal_treasure VALUES('u',1,'旧法宝',5,50,600,1,0.1,1,2,0.2,3,3,0.3,2,1,2,3,4,5,1,'{}','{}')")
         self.configs = {1: (0.1, 0.2), 2: (0.3, 0.4)}
         self.names = {1: ('一号',), 2: ('二号',)}
+
+        with DatabaseUnitOfWork(self.game, immediate=True) as uow:
+            apply_natal_treasure_operations(uow)
 
     def tearDown(self):
         self.temp.cleanup()

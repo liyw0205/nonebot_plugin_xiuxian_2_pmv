@@ -64,7 +64,11 @@ from .features.sect.migrations import (
     apply_sect_task_state,
 )
 from .features.natal_treasure.manifest import FEATURE as NATAL_TREASURE_FEATURE
-from .features.natal_treasure.migrations import apply_natal_treasure
+from .features.natal_treasure.migrations import (
+    apply_natal_treasure,
+    apply_natal_treasure_operations,
+    apply_natal_treasure_player_operations,
+)
 from .features.buff.manifest import FEATURE as BUFF_FEATURE
 from .features.buff.migrations import (
     apply_buff,
@@ -421,6 +425,8 @@ def build_migrations() -> tuple[Migration, ...]:
         Migration("mixelixir.003", "mixelixir_refine_claim_player", apply_mixelixir_refine_claim_player),
         Migration("mixelixir.004", "mixelixir_operations", apply_mixelixir_operations),
         Migration("natal_treasure.001", "natal_treasure_feature_migrations", apply_natal_treasure),
+        Migration("natal_treasure.002", "natal_treasure_operations", apply_natal_treasure_operations),
+        Migration("natal_treasure.003", "natal_treasure_player_operations", apply_natal_treasure_player_operations),
         Migration("package_reward.001", "package_reward_operations", apply_package_reward),
         Migration("pet.001", "pet_feature_migrations", apply_pet),
         Migration("pet.002", "pet_hatch_operations", apply_pet_hatch),
@@ -566,6 +572,7 @@ _GAME_DATABASE_EXCLUDED_MIGRATION_VERSIONS = frozenset(
         "buff.005",
         "buff.007",
         "mixelixir.003",
+        "natal_treasure.003",
         "impart.003",
         "impart.005",
         "impart.007",
@@ -640,6 +647,7 @@ _PLAYER_DATABASE_MIGRATION_VERSIONS = frozenset(
         "buff.005",
         "buff.007",
         "mixelixir.003",
+        "natal_treasure.003",
         "impart.003",
         "impart.005",
         "impart.008",

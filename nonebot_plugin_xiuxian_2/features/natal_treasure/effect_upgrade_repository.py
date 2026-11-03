@@ -8,9 +8,29 @@ from ...infrastructure.database import DatabaseUnitOfWork
 
 
 class NatalEffectUpgradeSqlRepository:
+    OPERATION_TABLE = "natal_effect_upgrade_operations"
+    OPERATION_COLUMNS = frozenset(
+        {"operation_id", "user_id", "scripture_id", "scripture_cost", "max_slots",
+            "max_effect_level", "choice_seed", "slot", "effect_type", "level"}
+    )
+
     def __init__(self, game_database: str | Path, player_database: str | Path) -> None:
         self.game_database = str(game_database)
         self.player_database = str(player_database)
+
+    @classmethod
+    def _operations_ready(cls, uow: DatabaseUnitOfWork) -> bool:
+        """The ledger is created by startup migration ``natal_treasure.002``; requests never DDL."""
+        if uow.query_one(
+            "SELECT 1 AS present FROM sqlite_master WHERE type='table' AND name=?",
+            (cls.OPERATION_TABLE,),
+        ) is None:
+            return False
+        columns = {
+            str(row["name"]).casefold()
+            for row in uow.query_all(f'PRAGMA main.table_info("{cls.OPERATION_TABLE}")')
+        }
+        return cls.OPERATION_COLUMNS.issubset(columns)
 
     @staticmethod
     def _result(status: str, slot: int = 0, effect_type: int = 0, level: int = 0) -> dict[str, Any]:
@@ -23,7 +43,8 @@ class NatalEffectUpgradeSqlRepository:
             raise ValueError("valid effect upgrade parameters are required")
         with DatabaseUnitOfWork(self.game_database, immediate=True) as uow:
             uow.attach_database(self.player_database, "player_data")
-            uow.execute("CREATE TABLE IF NOT EXISTS natal_effect_upgrade_operations(operation_id TEXT PRIMARY KEY,user_id TEXT,scripture_id INTEGER,scripture_cost INTEGER,max_slots INTEGER,max_effect_level INTEGER,choice_seed INTEGER,slot INTEGER,effect_type INTEGER,level INTEGER)")
+            if not self._operations_ready(uow):
+                return self._result("schema_missing")
             old = uow.query_one("SELECT user_id,scripture_id,scripture_cost,slot,effect_type,level FROM natal_effect_upgrade_operations WHERE operation_id=?", (operation_id,))
             if old is not None:
                 return self._result("duplicate", old["slot"], old["effect_type"], old["level"]) if str(old["user_id"]) == user_id and int(old["scripture_id"]) == scripture_id and int(old["scripture_cost"]) == scripture_cost else self._result("state_changed")

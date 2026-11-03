@@ -9,8 +9,27 @@ from ...infrastructure.database import DatabaseUnitOfWork
 
 
 class NatalAwakenSqlRepository:
+    OPERATION_TABLE = "natal_awaken_operations"
+    OPERATION_COLUMNS = frozenset(
+        {"operation_id", "user_id", "max_slots", "choice_seed", "form", "name", "effect_type", "base_value"}
+    )
+
     def __init__(self, player_database: str | Path) -> None:
         self.player_database = str(player_database)
+
+    @classmethod
+    def _operations_ready(cls, uow: DatabaseUnitOfWork) -> bool:
+        """The ledger is created by startup migration ``natal_treasure.003``; requests never DDL."""
+        if uow.query_one(
+            "SELECT 1 AS present FROM sqlite_master WHERE type='table' AND name=?",
+            (cls.OPERATION_TABLE,),
+        ) is None:
+            return False
+        columns = {
+            str(row["name"]).casefold()
+            for row in uow.query_all(f'PRAGMA table_info("{cls.OPERATION_TABLE}")')
+        }
+        return cls.OPERATION_COLUMNS.issubset(columns)
 
     @staticmethod
     def _result(status: str, form: int = 0, name: str = "", effect_type: int = 0, base_value: float = 0.0) -> dict[str, Any]:
@@ -31,7 +50,8 @@ class NatalAwakenSqlRepository:
         if not operation_id or max_slots <= 0 or not configs or any(not names.get(key) for key in configs):
             raise ValueError("valid operation and awaken parameters are required")
         with DatabaseUnitOfWork(self.player_database, immediate=True) as uow:
-            uow.execute("CREATE TABLE IF NOT EXISTS natal_awaken_operations (operation_id TEXT PRIMARY KEY,user_id TEXT NOT NULL,max_slots INTEGER NOT NULL,choice_seed INTEGER NOT NULL,form INTEGER NOT NULL,name TEXT NOT NULL,effect_type INTEGER NOT NULL,base_value REAL NOT NULL)")
+            if not self._operations_ready(uow):
+                return self._result("schema_missing")
             previous = uow.query_one("SELECT user_id,max_slots,choice_seed,form,name,effect_type,base_value FROM natal_awaken_operations WHERE operation_id=?", (operation_id,))
             if previous is not None:
                 if str(previous["user_id"]) != user_id:

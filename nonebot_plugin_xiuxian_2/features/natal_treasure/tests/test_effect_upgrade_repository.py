@@ -4,6 +4,7 @@ from pathlib import Path
 
 from ..effect_upgrade_repository import NatalEffectUpgradeSqlRepository
 from ....infrastructure.database import DatabaseUnitOfWork
+from ..migrations import apply_natal_treasure_operations
 
 
 class NatalEffectUpgradeSqlRepositoryTests(unittest.TestCase):
@@ -18,6 +19,9 @@ class NatalEffectUpgradeSqlRepositoryTests(unittest.TestCase):
         with DatabaseUnitOfWork(self.player) as uow:
             uow.execute("CREATE TABLE natal_treasure(user_id TEXT PRIMARY KEY,form INTEGER,effect1_type INTEGER,effect1_level INTEGER,effect2_type INTEGER,effect2_level INTEGER,effect3_type INTEGER,effect3_level INTEGER)")
             uow.execute("INSERT INTO natal_treasure VALUES('u',1,11,1,12,1,13,3)")
+
+        with DatabaseUnitOfWork(self.game, immediate=True) as uow:
+            apply_natal_treasure_operations(uow)
 
     def tearDown(self):
         self.temp.cleanup()

@@ -4,6 +4,7 @@ from pathlib import Path
 
 from ..engraving_repository import NatalEngravingSqlRepository
 from ....infrastructure.database import DatabaseUnitOfWork
+from ..migrations import apply_natal_treasure_operations
 
 
 class NatalEngravingSqlRepositoryTests(unittest.TestCase):
@@ -16,6 +17,9 @@ class NatalEngravingSqlRepositoryTests(unittest.TestCase):
         with DatabaseUnitOfWork(self.player) as uow:
             uow.execute("CREATE TABLE natal_treasure(user_id TEXT PRIMARY KEY,form INTEGER,effect1_type INTEGER,effect1_base_value REAL,effect1_level INTEGER,effect2_type INTEGER,effect2_base_value REAL,effect2_level INTEGER,effect3_type INTEGER,effect3_base_value REAL,effect3_level INTEGER)")
             uow.execute("INSERT INTO natal_treasure VALUES('u',1,1,0.1,1,0,0,0,0,0,0)")
+
+        with DatabaseUnitOfWork(self.game, immediate=True) as uow:
+            apply_natal_treasure_operations(uow)
 
     def tearDown(self): self.temp.cleanup()
 

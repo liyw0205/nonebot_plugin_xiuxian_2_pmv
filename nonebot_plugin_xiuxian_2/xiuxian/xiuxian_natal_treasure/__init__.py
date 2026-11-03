@@ -187,6 +187,7 @@ async def natal_awaken_handler(bot: Bot, event: GroupMessageEvent | PrivateMessa
         if awakened_status not in {"awakened", "applied"}:
             failure_reasons = {
                 "treasure_missing": "法宝数据结构尚未准备完成",
+                "schema_missing": "本命法宝数据尚未就绪，请稍后重试",
                 "already_awakened": "本命法宝已经觉醒",
                 "state_changed": "本命法宝操作未结算：法宝当前状态已更新",
             }
@@ -279,6 +280,7 @@ async def natal_reawaken_handler(bot: Bot, event: GroupMessageEvent | PrivateMes
             "item_insufficient": "神秘经书数量不足",
             "inventory_full": "神秘经书已达到背包上限",
             "state_changed": "强化/洗练未结算：法宝当前状态已更新",
+            "schema_missing": "本命法宝数据尚未就绪，请稍后重试",
         }
         reason = failure_reasons.get(reawakened.status, "重塑事务未能完成")
         await handle_send(
@@ -575,6 +577,7 @@ async def natal_engrave_handler(bot: Bot, event: GroupMessageEvent | PrivateMess
             "effect_exhausted": "没有可供铭刻的新道纹",
             "item_insufficient": "神秘经书数量不足",
             "state_changed": "强化/洗练未结算：法宝当前状态已更新",
+            "schema_missing": "本命法宝数据尚未就绪，请稍后重试",
         }
         reason = failure_reasons.get(engraving.status, "铭刻事务未能完成")
         await handle_send(bot, event, f"铭刻道纹失败：{reason}。",
@@ -652,6 +655,7 @@ async def natal_forget_handler(bot: Bot, event: GroupMessageEvent | PrivateMessa
             "item_insufficient": "神秘经书数量不足",
             "inventory_full": "神秘经书已达到背包上限",
             "state_changed": "强化/洗练未结算：法宝当前状态已更新",
+            "schema_missing": "本命法宝数据尚未就绪，请稍后重试",
         }
         reason = failure_reasons.get(forgotten.status, "遗忘事务未能完成")
         await handle_send(bot, event, f"遗忘道纹失败：{reason}。",

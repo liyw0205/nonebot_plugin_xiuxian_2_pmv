@@ -8,9 +8,29 @@ from ...infrastructure.database import DatabaseUnitOfWork
 
 
 class NatalReawakenSqlRepository:
+    OPERATION_TABLE = "natal_reawaken_operations"
+    OPERATION_COLUMNS = frozenset(
+        {"operation_id", "user_id", "scripture_id", "scripture_cost", "max_slots", "choice_seed",
+            "form", "name", "effect_type", "base_value", "scripture_change"}
+    )
+
     def __init__(self, game_database: str | Path, player_database: str | Path) -> None:
         self.game_database = str(game_database)
         self.player_database = str(player_database)
+
+    @classmethod
+    def _operations_ready(cls, uow: DatabaseUnitOfWork) -> bool:
+        """The ledger is created by startup migration ``natal_treasure.002``; requests never DDL."""
+        if uow.query_one(
+            "SELECT 1 AS present FROM sqlite_master WHERE type='table' AND name=?",
+            (cls.OPERATION_TABLE,),
+        ) is None:
+            return False
+        columns = {
+            str(row["name"]).casefold()
+            for row in uow.query_all(f'PRAGMA main.table_info("{cls.OPERATION_TABLE}")')
+        }
+        return cls.OPERATION_COLUMNS.issubset(columns)
 
     @staticmethod
     def _result(status: str, form: int = 0, name: str = "", effect_type: int = 0, base_value: float = 0.0, scripture_change: int = 0) -> dict[str, Any]:
@@ -26,7 +46,8 @@ class NatalReawakenSqlRepository:
             raise ValueError("valid operation and reawaken parameters are required")
         with DatabaseUnitOfWork(self.game_database, immediate=True) as uow:
             uow.attach_database(self.player_database, "player_data")
-            uow.execute("CREATE TABLE IF NOT EXISTS natal_reawaken_operations(operation_id TEXT PRIMARY KEY,user_id TEXT NOT NULL,scripture_id INTEGER NOT NULL,scripture_cost INTEGER NOT NULL,max_slots INTEGER NOT NULL,choice_seed INTEGER NOT NULL,form INTEGER NOT NULL,name TEXT NOT NULL,effect_type INTEGER NOT NULL,base_value REAL NOT NULL,scripture_change INTEGER NOT NULL)")
+            if not self._operations_ready(uow):
+                return self._result("schema_missing")
             old = uow.query_one("SELECT user_id,scripture_id,scripture_cost,form,name,effect_type,base_value,scripture_change FROM natal_reawaken_operations WHERE operation_id=?", (operation_id,))
             if old is not None:
                 if str(old["user_id"]) != user_id or int(old["scripture_id"]) != scripture_id or int(old["scripture_cost"]) != scripture_cost:

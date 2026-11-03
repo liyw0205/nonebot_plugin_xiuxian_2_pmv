@@ -4,6 +4,7 @@ from pathlib import Path
 
 from ..training_repository import NatalTrainingSqlRepository
 from ....infrastructure.database import DatabaseUnitOfWork
+from ..migrations import apply_natal_treasure_operations
 
 
 class NatalTrainingSqlRepositoryTests(unittest.TestCase):
@@ -18,6 +19,9 @@ class NatalTrainingSqlRepositoryTests(unittest.TestCase):
         with DatabaseUnitOfWork(self.player) as uow:
             uow.execute("CREATE TABLE natal_treasure(user_id TEXT PRIMARY KEY, form INTEGER, level INTEGER, exp INTEGER, max_exp INTEGER)")
             uow.execute("INSERT INTO natal_treasure VALUES('u',1,0,0,100)")
+
+        with DatabaseUnitOfWork(self.game, immediate=True) as uow:
+            apply_natal_treasure_operations(uow)
 
     def tearDown(self):
         self.temp.cleanup()

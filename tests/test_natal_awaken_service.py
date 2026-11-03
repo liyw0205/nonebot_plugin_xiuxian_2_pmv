@@ -10,6 +10,9 @@ nonebot.init()
 
 from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_natal_treasure.transaction_service import AwakenService
 from nonebot_plugin_xiuxian_2.features.natal_treasure.application import NatalTreasureApplication
+from nonebot_plugin_xiuxian_2.features.natal_treasure.migrations import (
+    apply_natal_treasure_player_operations,
+)
 from nonebot_plugin_xiuxian_2.infrastructure.database import DatabaseUnitOfWork, OperationLedger
 from tests.test_db_backend import db_backend
 
@@ -76,6 +79,7 @@ class AwakenServiceTests(unittest.TestCase):
     def test_feature_application_owns_awaken_replay_and_existing_state_guard(self) -> None:
         with DatabaseUnitOfWork(self.player) as uow:
             OperationLedger().ensure_schema(uow)
+            apply_natal_treasure_player_operations(uow)
         application = NatalTreasureApplication(self.player, self.player)
         kwargs = {
             "max_slots": 3,
