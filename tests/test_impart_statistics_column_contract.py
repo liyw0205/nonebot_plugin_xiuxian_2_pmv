@@ -32,6 +32,10 @@ nonebot.init()
 from nonebot_plugin_xiuxian_2.features.impart_pk.closing_enter_repository import (
     ImpartClosingEnterSqlRepository,
 )
+from nonebot_plugin_xiuxian_2.features.impart_pk.migrations import (
+    apply_impart_pk_operations,
+    apply_impart_pk_player_operations,
+)
 from nonebot_plugin_xiuxian_2.features.impart_pk.project_join_repository import (
     ImpartProjectJoinSqlRepository,
 )
@@ -68,6 +72,11 @@ class _Base(unittest.TestCase):
             uow.execute("INSERT INTO user_xiuxian(id,user_id,user_name,stone,root_type,level)"
                         " VALUES(3,'u3','丙',100,'天灵根',10)")
             uow.execute("INSERT INTO user_cd(user_id,type,create_time) VALUES('u3',0,'2026-10-30 00:00:00')")
+        # 回执/投影表由启动迁移创建；请求路径只校验 schema。
+        with DatabaseUnitOfWork(str(self.game), immediate=True) as uow:
+            apply_impart_pk_operations(uow)
+        with DatabaseUnitOfWork(str(self.player), immediate=True) as uow:
+            apply_impart_pk_player_operations(uow)
 
     def tearDown(self) -> None:
         self._temp.cleanup()

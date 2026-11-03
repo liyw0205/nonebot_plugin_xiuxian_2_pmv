@@ -3,6 +3,7 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 from ...infrastructure.database import DatabaseUnitOfWork
+from .migrations import operations_ready
 
 @dataclass(frozen=True)
 class ImpartTrainingResult:
@@ -16,7 +17,9 @@ class ImpartTrainingSqlRepository:
         operation_id,user_id=str(operation_id).strip(),str(user_id); expected_exp,expected_exp_day,exp_cost,exp_gain,exp_load_gain,power=map(int,(expected_exp,expected_exp_day,exp_cost,exp_gain,exp_load_gain,power)); expected_daily={k:int(expected_daily[k]) for k in ('exp_used','exp_count','exp_load','exp_gain')}; payload=json.dumps([user_id,exp_cost],separators=(',',':'))
         if not operation_id or exp_cost<=0 or exp_gain<=0 or exp_load_gain<0 or power<0: raise ValueError('invalid impart training settlement')
         with DatabaseUnitOfWork(self.game_database,immediate=True) as uow:
-            uow.attach_database(self.impart_database,'impart_data'); uow.attach_database(self.player_database,'player_data'); uow.execute('CREATE TABLE IF NOT EXISTS impart_training_operations(operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,result_json TEXT NOT NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)'); old=uow.query_one('SELECT payload,result_json FROM impart_training_operations WHERE operation_id=?',(operation_id,))
+            uow.attach_database(self.impart_database,'impart_data'); uow.attach_database(self.player_database,'player_data')
+            if not operations_ready(uow,'impart_training_operations'): return ImpartTrainingResult('schema_missing')
+            old=uow.query_one('SELECT payload,result_json FROM impart_training_operations WHERE operation_id=?',(operation_id,))
             if old is not None: return ImpartTrainingResult('duplicate',*json.loads(old['result_json'])) if str(old['payload'])==payload else ImpartTrainingResult('operation_conflict')
             user=uow.query_one('SELECT exp FROM user_xiuxian WHERE user_id=?',(user_id,)); impart=uow.query_one('SELECT exp_day FROM impart_data.xiuxian_impart WHERE user_id=?',(user_id,)); daily=uow.query_one('SELECT exp_used,exp_count,exp_load,exp_gain FROM player_data.impart_pk_daily WHERE user_id=?',(user_id,))
             if user is None or impart is None or daily is None or int(user['exp'] or 0)!=expected_exp or int(impart['exp_day'] or 0)!=expected_exp_day or any(int(daily[k] or 0)!=v for k,v in expected_daily.items()): return ImpartTrainingResult('state_changed')

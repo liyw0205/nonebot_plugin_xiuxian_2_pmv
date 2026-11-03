@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from ...infrastructure.database import DatabaseUnitOfWork
 from .statistics_columns import increment_statistics
+from .migrations import operations_ready
 
 @dataclass(frozen=True)
 class ImpartClosingEnterResult:
@@ -17,7 +18,9 @@ class ImpartClosingEnterSqlRepository:
         operation_id,user_id,started_at=str(operation_id).strip(),str(user_id),str(started_at).strip(); payload=json.dumps([user_id],separators=(',',':'))
         if not operation_id or not user_id or not started_at: raise ValueError('operation, user and start time are required')
         with DatabaseUnitOfWork(self.game_database,immediate=True) as uow:
-            uow.attach_database(self.player_database,'player_data'); uow.execute('CREATE TABLE IF NOT EXISTS impart_closing_enter_operations(operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,result_json TEXT NOT NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)'); old=uow.query_one('SELECT payload,result_json FROM impart_closing_enter_operations WHERE operation_id=?',(operation_id,))
+            uow.attach_database(self.player_database,'player_data')
+            if not operations_ready(uow,'impart_closing_enter_operations'): return ImpartClosingEnterResult('schema_missing')
+            old=uow.query_one('SELECT payload,result_json FROM impart_closing_enter_operations WHERE operation_id=?',(operation_id,))
             if old is not None: return ImpartClosingEnterResult('duplicate',*json.loads(old['result_json'])) if str(old['payload'])==payload else ImpartClosingEnterResult('operation_conflict')
             user=uow.query_one('SELECT root_type FROM user_xiuxian WHERE user_id=?',(user_id,)); cd=uow.query_one('SELECT COALESCE(type,0) AS type FROM user_cd WHERE user_id=?',(user_id,))
             if user is None or cd is None: return ImpartClosingEnterResult('user_missing')

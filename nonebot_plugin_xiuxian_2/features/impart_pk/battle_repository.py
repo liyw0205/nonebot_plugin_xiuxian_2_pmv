@@ -3,6 +3,7 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 from ...infrastructure.database import DatabaseUnitOfWork
+from .migrations import operations_ready
 
 @dataclass(frozen=True)
 class ImpartBattleResult:
@@ -16,7 +17,10 @@ class ImpartBattleBatchSqlRepository:
         operation_id,challenger_id=str(operation_id).strip(),str(challenger_id); opponent_id=None if opponent_id is None else str(opponent_id); vals=tuple(map(int,(expected_challenger_pk_num,challenger_wins,challenger_losses,challenger_stones,opponent_wins,opponent_losses,opponent_stones))); expected_challenger_pk_num,challenger_wins,challenger_losses,challenger_stones,opponent_wins,opponent_losses,opponent_stones=vals; expected_opponent_pk_num=None if expected_opponent_pk_num is None else int(expected_opponent_pk_num); payload=json.dumps([challenger_id,opponent_id],separators=(',',':'))
         if not operation_id or min(vals)<0 or challenger_losses>expected_challenger_pk_num or (opponent_id is None)!=(expected_opponent_pk_num is None) or (expected_opponent_pk_num is not None and opponent_losses>expected_opponent_pk_num): raise ValueError('invalid impart battle batch')
         with DatabaseUnitOfWork(self.impart_database,immediate=True) as uow:
-            uow.attach_database(self.player_database,'player_data'); uow.execute('CREATE TABLE IF NOT EXISTS impart_battle_batch_operations(operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,result_json TEXT NOT NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)'); uow.execute('CREATE TABLE IF NOT EXISTS player_data.impart_pk_state(user_id TEXT PRIMARY KEY,pk_num INTEGER NOT NULL DEFAULT 7,win_num INTEGER NOT NULL DEFAULT 0)'); old=uow.query_one('SELECT payload,result_json FROM impart_battle_batch_operations WHERE operation_id=?',(operation_id,))
+            uow.attach_database(self.player_database,'player_data')
+            if not operations_ready(uow,'impart_battle_batch_operations'): return ImpartBattleResult('schema_missing')
+            if not operations_ready(uow,'impart_pk_state','player_data'): return ImpartBattleResult('schema_missing')
+            old=uow.query_one('SELECT payload,result_json FROM impart_battle_batch_operations WHERE operation_id=?',(operation_id,))
             if old is not None: return ImpartBattleResult('duplicate',*json.loads(old['result_json'])) if str(old['payload'])==payload else ImpartBattleResult('operation_conflict')
             participants=[(challenger_id,expected_challenger_pk_num,challenger_wins,challenger_losses,challenger_stones)]
             if opponent_id is not None: participants.append((opponent_id,expected_opponent_pk_num,opponent_wins,opponent_losses,opponent_stones))

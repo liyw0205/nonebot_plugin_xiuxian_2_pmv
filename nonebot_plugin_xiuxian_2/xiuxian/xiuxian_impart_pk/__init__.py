@@ -251,6 +251,8 @@ async def impart_pk_project_(bot: Bot, event: GroupMessageEvent | PrivateMessage
         msg = "道友今日次数已用尽，无法再加入虚神界！"
     elif result.status == "capacity_full":
         msg = "虚神界人数已满，道友现在无法加入！"
+    elif result.status == "schema_missing":
+        msg = "投影未结算：虚神界数据尚未就绪，请稍后重试。"
     else:
         msg = "投影操作未结算：投影当前状态已更新。"
     await handle_send(bot, event, msg, md_type="虚神界", k1="投影", v1="投影虚神界", k2="信息", v2="虚神界信息", k3="帮助", v3="虚神界帮助")
@@ -441,6 +443,8 @@ async def impart_pk_now_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
                 msg = "对决失败：请求冲突。"
             elif settlement.status == "user_missing":
                 msg = "对决失败：未找到角色数据。"
+            elif settlement.status == "schema_missing":
+                msg = "对决未结算：虚神界数据尚未就绪，请稍后重试。"
             else:
                 msg = f"对决未结算（{settlement.status}）。"
             await handle_send(bot, event, msg, md_type="虚神界", k1="对决", v1="虚神界对决", k2="信息", v2="虚神界信息", k3="祈愿", v3="传承祈愿")
@@ -721,6 +725,8 @@ async def impart_pk_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
             msg = "修炼未结算：虚神界当前状态已更新。"
         elif result.status == "user_missing":
             msg = "修炼失败：未找到角色数据。"
+        elif result.status == "schema_missing":
+            msg = "修炼未结算：虚神界数据尚未就绪，请稍后重试。"
         else:
             msg = f"修炼未结算（{result.status}）。"
         await handle_send(bot, event, msg, md_type="虚神界", k1="修炼", v1="虚神界修炼", k2="信息", v2="虚神界信息", k3="帮助", v3="虚神界帮助")
@@ -952,6 +958,8 @@ async def impart_pk_go_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
             msg = "探索未结算：虚神界当前状态已更新。"
         elif result.status == "user_missing":
             msg = "探索失败：未找到角色数据。"
+        elif result.status == "schema_missing":
+            msg = "探索未结算：虚神界数据尚未就绪，请稍后重试。"
         else:
             msg = f"探索未结算（{result.status}）。"
         await handle_send(bot, event, msg, md_type="虚神界", k1="探索", v1="虚神界探索", k2="信息", v2="虚神界信息", k3="帮助", v3="虚神界帮助")
@@ -998,6 +1006,10 @@ async def impart_pk_in_closing_(bot: Bot, event: GroupMessageEvent | PrivateMess
         msg = f"进入虚神界闭关状态，如需出关，发送【虚神界出关】！"
         log_message(user_id, "[虚神界闭关] 进入虚神界闭关状态")
         await handle_send(bot, event, msg, md_type="虚神界", k1="出关", v1="虚神界出关", k2="信息", v2="虚神界信息", k3="帮助", v3="虚神界帮助")
+        await impart_pk_in_closing.finish()
+    if result.status == "schema_missing":
+        msg = "闭关未结算：虚神界数据尚未就绪，请稍后重试。"
+        await handle_send(bot, event, msg, md_type="虚神界", k1="闭关", v1="虚神界闭关", k2="信息", v2="虚神界信息", k3="帮助", v3="虚神界帮助")
         await impart_pk_in_closing.finish()
     msg = "当前状态无法进入虚神界闭关。"
     await handle_send(bot, event, msg, md_type="0", k2="修仙帮助", v2="修仙帮助", k3="虚神界帮助", v3="虚神界帮助")
@@ -1135,7 +1147,11 @@ async def impart_pk_out_closing_(bot: Bot, event: GroupMessageEvent | PrivateMes
         await handle_send(bot, event, msg, md_type="虚神界", k1="闭关", v1="虚神界闭关", k2="信息", v2="虚神界信息", k3="帮助", v3="虚神界帮助")
         await impart_pk_out_closing.finish()
     if not settlement.succeeded:
-        await handle_send(bot, event, "出关未结算：闭关当前状态已更新。")
+        if settlement.status == "schema_missing":
+            msg = "出关未结算：虚神界数据尚未就绪，请稍后重试。"
+        else:
+            msg = "出关未结算：闭关当前状态已更新。"
+        await handle_send(bot, event, msg)
         await impart_pk_out_closing.finish()
 
     # 构造返回消息

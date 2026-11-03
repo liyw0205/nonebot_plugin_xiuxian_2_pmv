@@ -573,6 +573,8 @@ _GAME_DATABASE_EXCLUDED_MIGRATION_VERSIONS = frozenset(
         "buff.007",
         "mixelixir.003",
         "natal_treasure.003",
+        "impart_pk.003",
+        "impart_pk.004",
         "impart.003",
         "impart.005",
         "impart.007",
@@ -648,6 +650,7 @@ _PLAYER_DATABASE_MIGRATION_VERSIONS = frozenset(
         "buff.007",
         "mixelixir.003",
         "natal_treasure.003",
+        "impart_pk.003",
         "impart.003",
         "impart.005",
         "impart.008",
@@ -674,7 +677,7 @@ _PLAYER_DATABASE_MIGRATION_VERSIONS = frozenset(
     }
 )
 _TRADE_DATABASE_MIGRATION_VERSIONS = frozenset({"legacy.admin.003", "legacy.admin.005", "platform.001", "trade.003", "trade.005", "trade.006", "trade.007", "trade.008", "auction.004"})
-_IMPART_DATABASE_MIGRATION_VERSIONS = frozenset({"legacy.admin.003", "legacy.admin.005", "platform.001", "impart.007"})
+_IMPART_DATABASE_MIGRATION_VERSIONS = frozenset({"legacy.admin.003", "legacy.admin.005", "platform.001", "impart.007", "impart_pk.004"})
 
 
 def migrations_for_database(
