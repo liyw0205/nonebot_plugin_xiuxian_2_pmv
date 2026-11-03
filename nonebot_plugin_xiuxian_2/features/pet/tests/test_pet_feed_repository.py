@@ -3,6 +3,7 @@ import unittest
 from pathlib import Path
 
 from ..repository import PetFeedSqlRepository
+from .fixtures import migrate_game
 from ....infrastructure.database import DatabaseUnitOfWork
 
 
@@ -12,6 +13,7 @@ class PetFeedSqlRepositoryTests(unittest.TestCase):
         root = Path(self.temp.name)
         self.game = root / "game.db"
         self.player = root / "player.db"
+        migrate_game(self.game)
         with DatabaseUnitOfWork(self.game) as uow:
             uow.execute("CREATE TABLE back(user_id TEXT, goods_id INTEGER, goods_num INTEGER, PRIMARY KEY(user_id,goods_id))")
             uow.execute("INSERT INTO back VALUES('u',1,3)")
@@ -40,7 +42,6 @@ class PetFeedSqlRepositoryTests(unittest.TestCase):
 
     def test_operation_trigger_rolls_back(self) -> None:
         with DatabaseUnitOfWork(self.game) as uow:
-            uow.execute("CREATE TABLE pet_feed_operations(operation_id TEXT PRIMARY KEY,payload TEXT,stars INTEGER,exp INTEGER,total_exp INTEGER)")
             uow.execute("CREATE TRIGGER fail_pet_feed BEFORE INSERT ON pet_feed_operations BEGIN SELECT RAISE(ABORT, 'operation failed'); END")
         with self.assertRaises(Exception):
             PetFeedSqlRepository(self.game, self.player).feed("rollback", "u", "p", 1, 1, (1, 2, 3), (2, 4, 6))

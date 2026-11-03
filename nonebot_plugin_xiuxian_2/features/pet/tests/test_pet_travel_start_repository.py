@@ -3,6 +3,7 @@ import unittest
 from pathlib import Path
 
 from ..repository import PetTravelStartSqlRepository
+from .fixtures import migrate_player
 from ....infrastructure.database import DatabaseUnitOfWork
 
 
@@ -10,6 +11,7 @@ class PetTravelStartSqlRepositoryTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temp = tempfile.TemporaryDirectory()
         self.database = Path(self.temp.name) / "player.db"
+        migrate_player(self.database)
         with DatabaseUnitOfWork(self.database) as uow:
             uow.execute("CREATE TABLE player_pet(user_id TEXT PRIMARY KEY, travel TEXT)")
             uow.execute("INSERT INTO player_pet VALUES('u',NULL)")
@@ -35,7 +37,6 @@ class PetTravelStartSqlRepositoryTests(unittest.TestCase):
 
     def test_trigger_rolls_back_travel(self) -> None:
         with DatabaseUnitOfWork(self.database) as uow:
-            uow.execute("CREATE TABLE pet_travel_start_operations(operation_id TEXT PRIMARY KEY,payload TEXT,created_at TEXT)")
             uow.execute("CREATE TRIGGER fail_travel BEFORE INSERT ON pet_travel_start_operations BEGIN SELECT RAISE(ABORT, 'operation failed'); END")
         with self.assertRaises(Exception):
             PetTravelStartSqlRepository(self.database).start("rollback", "u", "p", None, self.travel)

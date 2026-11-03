@@ -27,6 +27,29 @@
 
 `pet.001` 在 `game_db` 创建 `pet_feature_migrations`；`pet.002` 在 `game_db` 创建 `pet_hatch_operations`；`pet.003` 在 `player_db` 创建 `pet_skill_replace_operations`。孵化和技能替换 repository 只使用已迁移 schema，不在请求路径建表；宠物历史表仍由既有 player 数据边界管理。
 
+### 回执表的 schema 归属（`pet.005` / `pet.006`）
+
+出战切换、派遣出发、融合突破、喂养、放生、技能洗练六条默认命令路径原先在各自的写事务里
+`CREATE TABLE IF NOT EXISTS <回执行>` 惰性建表。现在启动迁移是唯一写入者，
+`features/pet/schema.py` 是唯一契约来源：
+
+| 库 | 表 | 迁移 |
+| --- | --- | --- |
+| player | `pet_active_switch_operations` | `pet.005` |
+| player | `pet_travel_start_operations` | `pet.005` |
+| player | `pet_fusion_breakthrough_operations` | `pet.005` |
+| game | `pet_feed_operations` | `pet.006` |
+| game | `pet_release_operations` | `pet.006` |
+| game | `pet_skill_reroll_operations` | `pet.006` |
+
+归属按仓储实际打开的主库划分：`active_switch`/`travel_start`/`fusion` 的仓储只接 player 库；
+`feed`/`release`/`skill_reroll` 的仓储以 game 为主库、只把 player 作为 `player_data` 附库。
+请求路径只校验「表存在 + 本次要读的列齐全」，缺表或缺任一列返回 `schema_missing`
+且零写入（不动宠物、背包与任何回执行）；半成品回执表不会被补列。
+
+兼容 `xiuxian/xiuxian_Interactive` 之外的 legacy 宠物服务仍按其既有方式工作；
+本切片的定向测试钉住 `features/pet/repository.py` 不含 `CREATE TABLE`/`ALTER TABLE`。
+
 ## 事务与失败回滚
 
 application 先调用带 operation replay/CAS 的 feature-owned repository；重复请求只重放首次结果，宠物快照、背包和灵石不匹配时返回拒绝且不修改资产。缺少 `pet.002` 或 `pet.003` 时请求失败并保持 schema 不变。

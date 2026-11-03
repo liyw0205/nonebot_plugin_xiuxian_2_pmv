@@ -8,6 +8,16 @@ from typing import Any, Protocol
 
 from ...infrastructure.clock import SystemClock
 from ...infrastructure.database import DatabaseUnitOfWork, OutboxStore
+from .schema import (
+    ACTIVE_SWITCH_COLUMNS,
+    FEED_COLUMNS,
+    FUSION_COLUMNS,
+    RELEASE_COLUMNS,
+    REROLL_COLUMNS,
+    SCHEMA_MISSING,
+    TRAVEL_START_COLUMNS,
+    operations_ready,
+)
 
 
 @dataclass(frozen=True)
@@ -34,11 +44,8 @@ class PetActiveSwitchSqlRepository:
             raise ValueError("operation, user and target pet are required")
         payload = json.dumps([user_id, target_uid], ensure_ascii=True, separators=(",", ":"))
         with DatabaseUnitOfWork(self.database, immediate=True) as uow:
-            uow.execute(
-                "CREATE TABLE IF NOT EXISTS pet_active_switch_operations("
-                "operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,active_uid TEXT NOT NULL,"
-                "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
-            )
+            if not operations_ready(uow, "pet_active_switch_operations", ACTIVE_SWITCH_COLUMNS):
+                return PetActiveSwitchResult(SCHEMA_MISSING)
             previous = uow.query_one(
                 "SELECT payload,active_uid FROM pet_active_switch_operations WHERE operation_id=?",
                 (operation_id,),
@@ -118,10 +125,8 @@ class PetFeedSqlRepository:
         payload = json.dumps([user_id, uid, item_id, count], ensure_ascii=True, separators=(",", ":"))
         with DatabaseUnitOfWork(self.game_database, immediate=True) as uow:
             uow.attach_database(self.player_database, "player_data")
-            uow.execute(
-                "CREATE TABLE IF NOT EXISTS pet_feed_operations("
-                "operation_id TEXT PRIMARY KEY,payload TEXT,stars INTEGER,exp INTEGER,total_exp INTEGER)"
-            )
+            if not operations_ready(uow, "pet_feed_operations", FEED_COLUMNS):
+                return PetFeedResult(SCHEMA_MISSING)
             old = uow.query_one(
                 "SELECT payload,stars,exp,total_exp FROM pet_feed_operations WHERE operation_id=?",
                 (operation_id,),
@@ -173,10 +178,8 @@ class PetTravelStartSqlRepository:
         travel_json = json.dumps(travel, ensure_ascii=False, sort_keys=True)
         payload = json.dumps([user_id, pet_uid, expected_json, travel_json], ensure_ascii=True)
         with DatabaseUnitOfWork(self.database, immediate=True) as uow:
-            uow.execute(
-                "CREATE TABLE IF NOT EXISTS pet_travel_start_operations("
-                "operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
-            )
+            if not operations_ready(uow, "pet_travel_start_operations", TRAVEL_START_COLUMNS):
+                return PetTravelStartResult(SCHEMA_MISSING)
             previous = uow.query_one("SELECT payload FROM pet_travel_start_operations WHERE operation_id=?", (operation_id,))
             if previous is not None:
                 return PetTravelStartResult("duplicate" if str(previous["payload"]) == payload else "state_changed")
@@ -438,7 +441,8 @@ class PetReleaseSqlRepository:
         payload = json.dumps([user_id, pets, refund_item, str(refund_name), str(refund_type), refund, max_goods, bool(allow_active)], ensure_ascii=True, separators=(",", ":"))
         with DatabaseUnitOfWork(self.game_database, immediate=True) as uow:
             uow.attach_database(self.player_database, "player_data")
-            uow.execute("CREATE TABLE IF NOT EXISTS pet_release_operations(operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,refund INTEGER NOT NULL,released_uids TEXT NOT NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
+            if not operations_ready(uow, "pet_release_operations", RELEASE_COLUMNS):
+                return PetReleaseResult(SCHEMA_MISSING)
             old = uow.query_one("SELECT payload,refund,released_uids FROM pet_release_operations WHERE operation_id=?", (operation_id,))
             if old is not None:
                 return PetReleaseResult("duplicate" if str(old["payload"]) == payload else "state_changed", int(old["refund"]) if str(old["payload"]) == payload else 0, tuple(json.loads(old["released_uids"])) if str(old["payload"]) == payload else ())
@@ -493,7 +497,8 @@ class PetFusionBreakthroughSqlRepository:
             raise ValueError("operation, main snapshot and materials are required")
         payload = json.dumps([user_id, main, materials, updated_stars, updated_exp, skill_offer], ensure_ascii=True, sort_keys=True, separators=(",", ":"))
         with DatabaseUnitOfWork(self.database, immediate=True) as uow:
-            uow.execute("CREATE TABLE IF NOT EXISTS pet_fusion_breakthrough_operations(operation_id TEXT PRIMARY KEY,payload TEXT,stars INTEGER,exp INTEGER,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
+            if not operations_ready(uow, "pet_fusion_breakthrough_operations", FUSION_COLUMNS):
+                return PetFusionBreakthroughResult(SCHEMA_MISSING)
             old = uow.query_one("SELECT payload,stars,exp FROM pet_fusion_breakthrough_operations WHERE operation_id=?", (operation_id,))
             if old is not None:
                 return PetFusionBreakthroughResult("duplicate" if str(old["payload"]) == payload else "state_changed", int(old["stars"]) if str(old["payload"]) == payload else 0, int(old["exp"]) if str(old["payload"]) == payload else 0)
@@ -536,7 +541,8 @@ class PetSkillRerollSqlRepository:
         payload = json.dumps([user_id, expected_pet, new_skill_id, item_id], ensure_ascii=True, separators=(",", ":"))
         with DatabaseUnitOfWork(self.game_database, immediate=True) as uow:
             uow.attach_database(self.player_database, "player_data")
-            uow.execute("CREATE TABLE IF NOT EXISTS pet_skill_reroll_operations(operation_id TEXT PRIMARY KEY,payload TEXT,skill_id TEXT,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
+            if not operations_ready(uow, "pet_skill_reroll_operations", REROLL_COLUMNS):
+                return PetSkillRerollResult(SCHEMA_MISSING)
             old = uow.query_one("SELECT payload,skill_id FROM pet_skill_reroll_operations WHERE operation_id=?", (operation_id,))
             if old is not None:
                 return PetSkillRerollResult("duplicate" if str(old["payload"]) == payload else "state_changed", str(old["skill_id"]) if str(old["payload"]) == payload else "")

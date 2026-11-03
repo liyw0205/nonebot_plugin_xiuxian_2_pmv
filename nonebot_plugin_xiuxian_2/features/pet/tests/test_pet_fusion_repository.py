@@ -3,6 +3,7 @@ import unittest
 from pathlib import Path
 
 from ..repository import PetFusionBreakthroughSqlRepository
+from .fixtures import migrate_player
 from ....infrastructure.database import DatabaseUnitOfWork
 
 
@@ -10,6 +11,7 @@ class PetFusionBreakthroughSqlRepositoryTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.database = Path(self.temp.name) / "player.db"
+        migrate_player(self.database)
         with DatabaseUnitOfWork(self.database) as uow:
             uow.execute("CREATE TABLE player_pet_item(user_id TEXT, uid TEXT PRIMARY KEY, pet_id TEXT, stars INTEGER, exp INTEGER, total_exp INTEGER, skill_id TEXT, is_active INTEGER)")
             uow.execute("INSERT INTO player_pet_item VALUES('u','main','fox',4,100,500,'old',1)")

@@ -3,6 +3,7 @@ import unittest
 from pathlib import Path
 
 from ..repository import PetReleaseSqlRepository
+from .fixtures import migrate_game
 from ....infrastructure.database import DatabaseUnitOfWork
 
 
@@ -12,6 +13,7 @@ class PetReleaseSqlRepositoryTests(unittest.TestCase):
         root = Path(self.temp.name)
         self.game = root / "game.db"
         self.player = root / "player.db"
+        migrate_game(self.game)
         with DatabaseUnitOfWork(self.game) as uow:
             uow.execute("CREATE TABLE back(user_id TEXT, goods_id INTEGER, goods_name TEXT, goods_type TEXT, goods_num INTEGER, bind_num INTEGER, PRIMARY KEY(user_id,goods_id))")
         with DatabaseUnitOfWork(self.player) as uow:
@@ -41,7 +43,6 @@ class PetReleaseSqlRepositoryTests(unittest.TestCase):
 
     def test_operation_trigger_rolls_back(self) -> None:
         with DatabaseUnitOfWork(self.game) as uow:
-            uow.execute("CREATE TABLE pet_release_operations(operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,refund INTEGER NOT NULL,released_uids TEXT NOT NULL,created_at TEXT)")
             uow.execute("CREATE TRIGGER fail_release BEFORE INSERT ON pet_release_operations BEGIN SELECT RAISE(ABORT, 'failed'); END")
         with self.assertRaises(Exception):
             PetReleaseSqlRepository(self.game, self.player).release("rollback", "u", "bag", 2000, 9, "灵髓", "特殊道具", 3, 99, expected_is_active=False)

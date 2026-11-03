@@ -1,4 +1,5 @@
 from ...infrastructure.database import DatabaseUnitOfWork
+from .schema import GAME_OPERATION_TABLES, PLAYER_OPERATION_TABLES
 
 
 def apply_pet(uow: DatabaseUnitOfWork) -> None:
@@ -33,4 +34,52 @@ def apply_pet_travel_claim(uow: DatabaseUnitOfWork) -> None:
     )
 
 
-__all__ = ["apply_pet", "apply_pet_hatch", "apply_pet_skill_replace", "apply_pet_travel_claim"]
+# The six receipt ledgers the default command paths write to.  They used to be
+# created lazily inside `features/pet/repository.py`; the startup migration owns
+# them now so request paths never execute DDL.
+_PLAYER_OPERATION_DDL = (
+    "CREATE TABLE IF NOT EXISTS pet_active_switch_operations("
+    "operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,active_uid TEXT NOT NULL,"
+    "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)",
+    "CREATE TABLE IF NOT EXISTS pet_travel_start_operations("
+    "operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,"
+    "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)",
+    "CREATE TABLE IF NOT EXISTS pet_fusion_breakthrough_operations("
+    "operation_id TEXT PRIMARY KEY,payload TEXT,stars INTEGER,exp INTEGER,"
+    "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)",
+)
+
+_GAME_OPERATION_DDL = (
+    "CREATE TABLE IF NOT EXISTS pet_feed_operations("
+    "operation_id TEXT PRIMARY KEY,payload TEXT,stars INTEGER,exp INTEGER,total_exp INTEGER)",
+    "CREATE TABLE IF NOT EXISTS pet_release_operations("
+    "operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,refund INTEGER NOT NULL,"
+    "released_uids TEXT NOT NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)",
+    "CREATE TABLE IF NOT EXISTS pet_skill_reroll_operations("
+    "operation_id TEXT PRIMARY KEY,payload TEXT,skill_id TEXT,"
+    "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)",
+)
+
+
+def apply_pet_player_operations(uow: DatabaseUnitOfWork) -> None:
+    """Build the receipt ledgers whose repository opens the player database."""
+    for statement in _PLAYER_OPERATION_DDL:
+        uow.execute(statement)
+
+
+def apply_pet_game_operations(uow: DatabaseUnitOfWork) -> None:
+    """Build the receipt ledgers whose repository opens the game database."""
+    for statement in _GAME_OPERATION_DDL:
+        uow.execute(statement)
+
+
+__all__ = [
+    "GAME_OPERATION_TABLES",
+    "PLAYER_OPERATION_TABLES",
+    "apply_pet",
+    "apply_pet_game_operations",
+    "apply_pet_hatch",
+    "apply_pet_player_operations",
+    "apply_pet_skill_replace",
+    "apply_pet_travel_claim",
+]

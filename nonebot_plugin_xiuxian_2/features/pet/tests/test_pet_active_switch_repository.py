@@ -3,6 +3,7 @@ import unittest
 from pathlib import Path
 
 from ..repository import PetActiveSwitchSqlRepository
+from .fixtures import migrate_player
 from ....infrastructure.database import DatabaseUnitOfWork
 
 
@@ -10,6 +11,7 @@ class PetActiveSwitchSqlRepositoryTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temp = tempfile.TemporaryDirectory()
         self.database = Path(self.temp.name) / "player.db"
+        migrate_player(self.database)
         with DatabaseUnitOfWork(self.database) as uow:
             uow.execute("CREATE TABLE player_pet(user_id TEXT PRIMARY KEY, active_uid TEXT, active TEXT)")
             uow.execute("INSERT INTO player_pet VALUES('u','old','old')")

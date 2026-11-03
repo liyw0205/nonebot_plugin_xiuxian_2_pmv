@@ -8,7 +8,11 @@ from pathlib import Path
 from ....infrastructure.database import DatabaseUnitOfWork
 from ....plugin import apply_platform_schema
 from ..application import PetApplication
-from ..migrations import apply_pet_travel_claim
+from ..migrations import (
+    apply_pet_game_operations,
+    apply_pet_player_operations,
+    apply_pet_travel_claim,
+)
 
 
 class _Repository:
@@ -51,6 +55,7 @@ class PetApplicationTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             with DatabaseUnitOfWork(Path(directory) / "game.db") as uow:
                 apply_platform_schema(uow)
+                apply_pet_game_operations(uow)
             repository = _Repository()
             app = PetApplication(Path(directory) / "game.db", Path(directory) / "player.db", repository=repository)
             claim = dict(operation_id="pet-claim-1", user_id="u", expected_travel={"pet_uid": "p"}, stone=10, exp=20, items=[], max_goods_num=99)
@@ -73,6 +78,7 @@ class PetApplicationTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             player = Path(directory) / "player.db"
             with DatabaseUnitOfWork(player) as uow:
+                apply_pet_player_operations(uow)
                 uow.execute("CREATE TABLE player_pet(user_id TEXT PRIMARY KEY, active_uid TEXT, active TEXT)")
                 uow.execute("INSERT INTO player_pet VALUES('u','old','old')")
                 uow.execute("CREATE TABLE player_pet_item(user_id TEXT, uid TEXT, is_active INTEGER, updated_at INTEGER)")
@@ -92,6 +98,7 @@ class PetApplicationTests(unittest.TestCase):
             player = Path(directory) / "player.db"
             with DatabaseUnitOfWork(game) as uow:
                 apply_platform_schema(uow)
+                apply_pet_game_operations(uow)
                 uow.execute("CREATE TABLE back(user_id TEXT, goods_id INTEGER, goods_num INTEGER, PRIMARY KEY(user_id,goods_id))")
                 uow.execute("INSERT INTO back VALUES('u',1,2)")
             with DatabaseUnitOfWork(player) as uow:
@@ -108,7 +115,9 @@ class PetApplicationTests(unittest.TestCase):
             player = Path(directory) / "player.db"
             with DatabaseUnitOfWork(game) as uow:
                 apply_platform_schema(uow)
+                apply_pet_game_operations(uow)
             with DatabaseUnitOfWork(player) as uow:
+                apply_pet_player_operations(uow)
                 uow.execute("CREATE TABLE player_pet(user_id TEXT PRIMARY KEY, travel TEXT)")
                 uow.execute("INSERT INTO player_pet VALUES('u',NULL)")
                 uow.execute("CREATE TABLE player_pet_item(user_id TEXT, uid TEXT, is_active INTEGER)")
@@ -126,6 +135,7 @@ class PetApplicationTests(unittest.TestCase):
             travel = {"pet_uid": "p", "start_at": 1, "end_at": 2}
             with DatabaseUnitOfWork(game) as uow:
                 apply_platform_schema(uow)
+                apply_pet_game_operations(uow)
                 apply_pet_travel_claim(uow)
                 uow.execute("CREATE TABLE user_xiuxian(user_id TEXT PRIMARY KEY, stone INTEGER, exp INTEGER)")
                 uow.execute("INSERT INTO user_xiuxian VALUES('u',100,200)")

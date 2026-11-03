@@ -58,7 +58,14 @@ from .features.package_reward.manifest import FEATURE as PACKAGE_REWARD_FEATURE
 from .features.package_reward.migrations import apply_package_reward
 from .features.past_life.migrations import apply_past_life_game, apply_past_life_player
 from .features.pet.manifest import FEATURE as PET_FEATURE
-from .features.pet.migrations import apply_pet, apply_pet_hatch, apply_pet_skill_replace, apply_pet_travel_claim
+from .features.pet.migrations import (
+    apply_pet,
+    apply_pet_game_operations,
+    apply_pet_hatch,
+    apply_pet_player_operations,
+    apply_pet_skill_replace,
+    apply_pet_travel_claim,
+)
 from .features.game_events.migrations import apply_game_event_statistics_player
 from .features.sect.manifest import FEATURE as SECT_FEATURE
 from .features.sect.migrations import apply_sect, apply_sect_rename, apply_sect_join, apply_sect_removal, apply_sect_position, apply_sect_donation, apply_sect_shop, apply_sect_mainbuff, apply_sect_secbuff, apply_sect_elixir, apply_sect_weekly, apply_sect_weekly_player, apply_sect_manual_disband
@@ -443,6 +450,8 @@ def build_migrations() -> tuple[Migration, ...]:
         Migration("pet.002", "pet_hatch_operations", apply_pet_hatch),
         Migration("pet.003", "pet_skill_replace_operations", apply_pet_skill_replace),
         Migration("pet.004", "pet_travel_claim_operations", apply_pet_travel_claim),
+        Migration("pet.005", "pet_player_operation_receipts", apply_pet_player_operations),
+        Migration("pet.006", "pet_game_operation_receipts", apply_pet_game_operations),
         Migration("platform.001", "operation_ledger_outbox", apply_platform_schema),
         Migration("puppet.001", "puppet_feature_migrations", apply_puppet),
         Migration("puppet.002", "puppet_status_column", apply_puppet_status),
@@ -547,6 +556,7 @@ _GAME_DATABASE_EXCLUDED_MIGRATION_VERSIONS = frozenset(
         "arena.008",
         "arena.009",
         "past_life.002",
+        "pet.005",
         "tower.004",
         "title.002",
         "combat_settlement.003",
@@ -635,6 +645,7 @@ _PLAYER_DATABASE_MIGRATION_VERSIONS = frozenset(
         "game_events.001",
         "platform.001",
         "past_life.002",
+        "pet.005",
         "title.001",
         "title.002",
         "combat_settlement.003",

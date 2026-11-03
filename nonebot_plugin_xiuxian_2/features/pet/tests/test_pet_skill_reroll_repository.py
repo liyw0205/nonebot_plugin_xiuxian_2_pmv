@@ -3,6 +3,7 @@ import unittest
 from pathlib import Path
 
 from ..repository import PetSkillRerollSqlRepository
+from .fixtures import migrate_game
 from ....infrastructure.database import DatabaseUnitOfWork
 
 
@@ -12,6 +13,7 @@ class PetSkillRerollSqlRepositoryTests(unittest.TestCase):
         root = Path(self.temp.name)
         self.game = root / "game.db"
         self.player = root / "player.db"
+        migrate_game(self.game)
         with DatabaseUnitOfWork(self.game) as uow:
             uow.execute("CREATE TABLE back(user_id TEXT, goods_id INTEGER, goods_num INTEGER, PRIMARY KEY(user_id,goods_id))")
             uow.execute("INSERT INTO back VALUES('u',9,2)")
