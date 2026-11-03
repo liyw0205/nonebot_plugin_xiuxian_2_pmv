@@ -2083,6 +2083,44 @@ status_reader 归属、渲染与 handler 源合同）。受影响套件：
   `build-and-release` skipped）。未部署、未读写真实游戏库、未发真实 QQ 消息、未打 tag；
   用户删除的四个文件保持未暂存，`docs/goals/**` 与 `.codex-next-goal.md` 未提交。
 
+## 已完成目标：宗门（sect）操作回执表的启动迁移收敛
+
+重构收敛（非新玩法），承接 `docs/features/sect.md` 与仓库级「请求路径不执行 DDL」合同。
+
+**缺口证据**：11 份仓储在**业务方法写事务内**各自 `CREATE TABLE IF NOT EXISTS` 建回执表，
+共 12 张（入宗开关是动态的 `sect_{open,close}_join_operations`）：`sect_creation_operations`、
+`sect_name_refresh_operations`、`sect_operations`、`sect_inactive_disband_operations`、
+`sect_buff_search_operations`、`sect_practice_operations`、`sect_elixir_room_operations`、
+`sect_open_join_operations`/`sect_close_join_operations`、`sect_owner_inherit_operations`、
+`sect_close_mountain_operations`、`sect_daily_reset_operations`。
+
+交付内容：
+
+- 新增 `features/sect/schema.py`：`SCHEMA_MISSING`、11 组列契约、`OPERATION_TABLES`（12 张表）、
+  `JOIN_STATE_TABLES`、`columns()`/`table_ready()`。
+- `features/sect/migrations.py` 新增 `_SECT_OPERATION_DDL`（12 条显式 DDL）与
+  `apply_sect_operations`；`plugin.py` 按版本序注册 `sect.019`（game 库；catalog 307→308 条且单调）。
+- 11 份仓储删除请求期 DDL，改为方法内布尔守卫 `_ready(uow)`；缺表或缺本次要读的列返回
+  `schema_missing`，不回写宗门资产、成员、贡献或任何回执行。三个原有 `-> None` 辅助方法
+  （`disband_repository._ensure`、`close_mountain_repository.ensure_schema`、
+  `owner_inherit_repository.ensure_schema`）改为布尔守卫，避免返回值被调用方丢弃。
+- 测试：新增 `tests/test_sect_schema_ownership.py`（197 行，6 项）：12 张表由启动迁移建出且幂等、
+  仓储源码无 DDL、五个仓储都引用共享契约、未迁移库上 11 条写路径全部 `schema_missing` 且零建表、
+  半成品回执表被拒且不被补列。
+  `features/sect/tests/fixtures.py` 新增 `migrate_sect`，11 个仓储测试夹具接入；
+  `tests/test_sect_command_contract_production_path.py` 的真实 schema 夹具补跑 `sect.019`。
+- 定向测试：新套件 6/6；`features/sect/tests` 隔离 82/82；生产路径契约套件 25/25；
+  两者合并 31/31；含冻结清单门禁 53/53（临时还原后立即删除）。
+- 门禁：`check_architecture.py`、`export_refactor_inventory.py --check`、
+  `check_full_refactor_progress.py --json` 均 exit 0（`failures: None`）；`compileall`、
+  `git diff --check` 干净。
+- 兼容：不新增表/命令/路由/配置键；宗门贡献、建设度、洗练成本等数值未改；迁移一律
+  `IF NOT EXISTS`，历史库回执行保留。
+- 交付与 CI：功能提交 `b21de1ba` 的 develop run `41730486737` success、
+  main run `41731333440` success（headSha 均 `b21de1ba`；`quality` success、
+  `build-and-release` skipped）。未部署、未读写真实游戏库、未发真实 QQ 消息、未打 tag；
+  用户删除的四个文件保持未暂存，`docs/goals/**` 与 `.codex-next-goal.md` 未提交。
+
 ## 已完成目标：共享经济账本 economy_log 的 schema 归属
 
 重构收敛（非新玩法），承接仓库级「请求路径不执行 DDL」合同与经济/奖励结算边界。
