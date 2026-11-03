@@ -2083,6 +2083,50 @@ status_reader 归属、渲染与 handler 源合同）。受影响套件：
   `build-and-release` skipped）。未部署、未读写真实游戏库、未发真实 QQ 消息、未打 tag；
   用户删除的四个文件保持未暂存，`docs/goals/**` 与 `.codex-next-goal.md` 未提交。
 
+## 已完成目标：前世（past_life）全域 schema 归属与 fail-closed
+
+重构收敛（非新玩法），承接 `docs/features/past_life.md` 与仓库级「请求路径不执行 DDL」合同。
+
+**缺口证据**：`features/past_life/migrations.py` 只有标记迁移 `legacy.past_life.001`（建
+`past_life_feature_migrations` 并写一行），**没有任何真实建表**；四份仓储在请求事务内惰性建表并补列：
+`start_repository`（`player_data.past_life` 全列、`player_data.statistics."前尘往事次数"`、
+`past_life_start_operations`）、`choice_repository`（同表 + `past_life_choice_operations`）、
+`final_repository`（同表 + `past_life_final_operations` 及补列 + 共享 `economy_log`）、
+`reset_repository`（同表 + `past_life_reset_operations` 及补列 + `past_life_reset_targets`）。
+文档也明写「legacy tables remain the compatibility data source」。
+
+交付内容：
+
+- 新增 `features/past_life/schema.py`：`SCHEMA_MISSING`、`PAST_LIFE_COLUMNS`（`user_id` + 19 字段）、
+  五张回执表列集、`PLAYER_TABLES`/`GAME_TABLES` 形状、`columns()`/`table_ready()`/`tables_ready()`、
+  `PastLifeSchemaMissing(DomainError)`。
+- `migrations.py` 拆成两条真实迁移：`past_life.002`（player 库：`past_life` 全列 +
+  通过共享 `ensure_statistics_column` 补 `statistics."前尘往事次数"`）、
+  `past_life.003`（game 库：五张回执表）。`plugin.py` 按版本序注册，`past_life.002` 进 player 白名单
+  与 game 排除集，`past_life.003` 留在 game 库。catalog 303→304 条且保持单调。
+- 四份仓储删除请求期 `CREATE TABLE`/`ALTER TABLE`，改 `table_ready` 门禁；回执表按主库（game）校验、
+  `past_life` 按附库（`player_data.`）校验。缺表或缺本次要读的列返回 `schema_missing`：
+  `start`/`advance`/`settle`/`reset_one`/`reset_all_create`/`reset_all_batch` 全部零写入。
+- `economy_log` 明确不由前世声明所有权（`tasks`/`dufang`/`auction`/`admin_asset`/`sign_in`
+  的迁移各自 `IF NOT EXISTS` 建），前世 `settle` 在它缺失时也 fail-closed。
+- 命令层：全服重置与单用户重置的失败分支区分 `schema_missing`，不再误报
+  「已有不同模式的任务」/「operation 冲突」。
+- 兼容：`xiuxian/xiuxian_past_life/transaction_service.py` 保留为显式回滚入口（仍在自身事务内建表），
+  定向测试钉住 legacy 包内只有它允许出现 DDL；数值/奖励/评分/抽取口径未改。
+- 测试：新增 `tests/test_past_life_schema_ownership.py`（283 行，14 项）：两条迁移的建表形状与幂等、
+  `economy_log` 不归前世、请求路径无 DDL（源码合同）、四个写路径未迁移时 `schema_missing` 且零建表、
+  半成品 `past_life` 被拒且不被补列、缺 `economy_log` 阻断终局结算、迁移后 reset/final/choice
+  正常 applied 并重放 `duplicate`。feature 测试夹具改为先跑 `past_life.002`+`past_life.003`。
+- 定向测试：新套件 14/14；past_life 9 个既有套件 41/41；`features/past_life/tests` 隔离 8/8；
+  合并集 329/329；含冻结清单门禁的合并集 87/87（临时还原后立即删除）。
+- 门禁：`check_architecture.py`、`export_refactor_inventory.py --check`、
+  `check_full_refactor_progress.py --json` 均 exit 0（`failures: None`）；`compileall`、
+  `git diff --check` 干净。
+- 交付与 CI：功能提交 `87b10a10` 的 develop run `41659267095` success、
+  main run `41660823344` success（headSha 均 `87b10a10`；`quality` success、
+  `build-and-release` skipped）。未部署、未读写真实游戏库、未发真实 QQ 消息、未打 tag；
+  用户删除的四个文件保持未暂存，`docs/goals/**` 与 `.codex-next-goal.md` 未提交。
+
 ## 已完成目标：竞技场全域 schema 归属与 fail-closed
 
 重构收敛（非新玩法），承接 `docs/features/arena.md` 与仓库级「请求路径不执行 DDL」合同。
