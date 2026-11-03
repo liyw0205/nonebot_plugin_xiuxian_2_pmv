@@ -1941,6 +1941,57 @@ status_reader 归属、渲染与 handler 源合同）。受影响套件：
   skipped）。未部署、未读写真实游戏库、未发真实 QQ 消息、未打 tag；用户删除的四个文件保持
   未暂存，`docs/goals/**` 与 `.codex-next-goal.md` 未提交。
 
+## 已完成目标：魔修领奖奖励结算域收敛
+
+重构收敛（非新玩法）。目标文档 `docs/goals/goal-world-events-reward-domain.md`（local-only，未提交）。
+承接 `docs/features/world_events.md` 既有遗留项「奖励随机池和贡献计算暂未迁移到新 domain，
+仍由兼容命令提供」。
+
+**缺口证据**：`xiuxian/xiuxian_world_events/__init__.py` 内联七个奖励常量
+（灵石上限 5000 万、修为比例 5%、贡献下限 1%、灵签 id 20010/档位 0.10/上限 3、
+随机池门槛 0.50）与九个奖励/贡献助手（贡献压档、BOSS/记录倍率、贡献文案、灵签档位、
+无上判定、池筛选、抽取、记录分母/贡献、汇总），并在 `claim_demon_reward_` 里逐行拼装
+贡献、灵石、修为比例、灵签与随机奖励；规则与领奖写入、消息文案混在同一文件，无法单独回归。
+
+交付内容：
+
+- 新 `features/world_events/reward_rules.py`（纯函数、无 I/O）：上述常量、
+  `reward_contribution`（压入 `[0.01, 1.0]`）、`stone_reward`（贡献 × 上限并封顶）、
+  `exp_reward_rate`（`0.05 × 贡献`，结算仍由 `percent_exp_reward(anchor="gap")` 承担）、
+  `talisman_reward_count`（每 0.10 贡献 1 个、上限 3）、`is_random_reward_item`
+  （特殊物品恒可抽；功法/辅修功法/神通需 rank>0；身法/瞳术与法器/防具需贡献 ≥ 0.50 或 rank>0；
+  带 `fusion` 的装备排除）、`pick_random_reward`（无上仅 1% 保留，否则改抽非无上）、
+  记录级 `record_wave`/`record_reward_base_hp`/`record_reward_contribution` 与
+  `sum_reward_contribution`。
+- 新 `features/world_events/reward_settlement.py`：`DemonRewardPlan` 与
+  `build_demon_reward_plan(...)` 一次产出贡献/灵石/修为比例/灵签数量/随机奖励 id、物品与文案/
+  奖励物品列表；随机奖励只在 `rng.random() <= 贡献` 时抽取（与历史一致）。
+- facade 改为委派：奖励常量从 feature 域导入；`_reward_contribution`、
+  `_format_contribution_percent`、`_demon_talisman_reward_count`、`_is_wushang_reward_item`、
+  `_is_demon_random_reward_item`、`_get_demon_random_reward_pool`、`_pick_demon_random_reward`、
+  `_record_reward_base_hp`、`_record_reward_contribution`、`_record_wave`、
+  `_sum_reward_contribution` 全部保留历史名称但只调用 feature 规则；
+  `claim_demon_reward_` 只做快照、调用组装、写回执与发送消息。
+- 兼容：`world_event_state` 是历史 JSON 投影，字段缺失/为文本按默认值回退；已冻结的
+  `reward_contribution` 优先于按伤害重算；本次不改奖励数值、领奖写入、operation/统计语义、
+  迁移版本与消息格式，不新增表/命令/路由/配置键。
+- 文档：`docs/features/world_events.md` 新增「奖励结算归属（feature 域）」段并改写已知限制。
+- 测试：新 `tests/test_world_events_reward_domain.py` `21/21`（贡献/灵石/修为比例/灵签边界、
+  池筛选含 `fusion` 排除与 rank 门、无上 1% 保留、结算组装与脏数据结构容错、
+  facade 委派与规则模块纯净性源合同）；`tests/test_demon_wushang_reward_gate.py` 合同改钉
+  feature 域所有权并新增真实规则用例；定向套件 `test_world_events_reward_domain` +
+  `test_demon_wushang_reward_gate` + `test_demon_claim_service` + `test_demon_claim_repository` +
+  `test_world_events_personal_contribution` + `test_world_events_claim_web` +
+  `test_demon_event_lifecycle_application` + `test_demon_wave_refresh_application` 合计
+  `45 passed`；`test_source_quality` + `test_progression_source_table` 等合计 `279 passed`；
+  `features/world_events/tests` 隔离运行 `2 passed`。
+  三门禁真实 exit 0（progress `failures: None`；`exit_ready: False` 仍由用户删除的冻结文件导致，
+  11 条既有 blocker）；`compileall` 与 `git diff --check` 干净。
+- 交付与 CI：功能提交 `7b4fe0b8` 的 develop run `41549499847` success；`--ff-only` 合入 main 后
+  main run `41550561041` success（headSha 均 `7b4fe0b8`；`quality` success、
+  `build-and-release` skipped）。未部署、未读写真实游戏库、未发真实 QQ 消息、未打 tag；
+  用户删除的四个文件保持未暂存，`docs/goals/**` 与 `.codex-next-goal.md` 未提交。
+
 ## 冻结清单与停止条件
 
 冻结范围仅包括活动 Web 六来源一键代领 API、权限/错误合同、管理员面板、兼容性保护、聚焦测试、路由清单和正式文档。不得新增奖励经济、schema/数据迁移、玩家身份模型、后台活动编辑器、通用 UI 框架或 unrelated refactor。
