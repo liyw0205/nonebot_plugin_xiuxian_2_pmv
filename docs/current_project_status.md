@@ -2083,6 +2083,52 @@ status_reader 归属、渲染与 handler 源合同）。受影响套件：
   `build-and-release` skipped）。未部署、未读写真实游戏库、未发真实 QQ 消息、未打 tag；
   用户删除的四个文件保持未暂存，`docs/goals/**` 与 `.codex-next-goal.md` 未提交。
 
+## 已完成目标：虚神界回执/投影表启动迁移
+
+重构收敛（非新玩法）。目标文档 `.codex-next-goal.md`（local-only，未提交）。
+承接 `docs/features/impart_pk.md` 与仓库级「请求路径不执行 DDL」合同。
+
+**缺口证据**：六条虚神界动作都在请求事务内 `CREATE TABLE IF NOT EXISTS` ——
+`impart_closing_enter_operations` / `impart_closing_operations` / `impart_explore_operations` /
+`impart_training_operations`（game 主库事务）、`impart_battle_batch_operations`（impart 主库事务）、
+`impart_pk_state` / `impart_project_members` / `impart_project_meta` /
+`impart_project_join_operations`（player 主库事务）。此前只有 `legacy.impart_pk.001` 一个版本标记，
+没有任何启动迁移承载这些表。
+
+交付内容：
+
+- `features/impart_pk/migrations.py` 新增 `operations_ready(uow, table, schema)` 与按库拆分的
+  三组 DDL/列集：`apply_impart_pk_operations`（game 四张回执表，`impart_pk.002`）、
+  `apply_impart_pk_player_operations`（player 四张投影表，`impart_pk.003`）、
+  `apply_impart_pk_impart_operations`（impart 战斗批回执，`impart_pk.004`）。
+- `plugin.py` 把三条 Migration 按版本序插入 `build_migrations()`（必须在
+  `LEGACY_MIGRATIONS` 展开之前，否则 catalog 不再单调、`MigrationRunner` 会拒绝构造），
+  并把 `impart_pk.003` 加入 player 白名单、`impart_pk.004` 加入 impart 白名单与 game 排除集。
+- 六个仓储改为 `operations_ready` 门禁：缺表**或缺任一读取列**返回 `schema_missing`
+  且零资产/零统计变化；移除请求期 `CREATE TABLE`，并删除 `project_join` 里对
+  `statistics` 的 no-op 建表（`ensure_statistics_column` 仍是唯一列写入者，契约不变）。
+- 命令入口五处补 `schema_missing` 提示（含闭关的通用兜底分支），成功路径与文案形态不变。
+- 兼容：迁移语句保持 `IF NOT EXISTS`，已按惰性路径建表的历史库保留全部回执行；不改数值口径、
+  日限/统计计数、随机派生与 operation 语义；不新增表/命令/路由/配置键。
+  旧 `transaction_service` 六个兼容 service 保留为显式回滚入口。
+- 文档：`docs/features/impart_pk.md` 新增「回执/投影表的启动迁移（请求路径不执行 DDL）」段，
+  补定向测试命令与回滚说明。
+- 测试：新 `tests/test_impart_pk_operations_schema.py` `19/19`（三条迁移各自的建表形状与列集、
+  六条动作在未迁移库上 `schema_missing` 且零资产/零统计变化、半成品旧表被拒、
+  投影需四表齐全、历史回执行保留、迁移后同一操作号成功并重放、facade 源合同）；
+  6 个 feature 仓储夹具与 `tests/test_impart_statistics_column_contract.py` 夹具补启动迁移。
+  定向套件 `352 passed`；含 `test_impart_*` 与残余面 `376 passed`；feature 目录隔离运行 `9 passed`。
+  三门禁真实 exit 0（progress `failures: None`；`exit_ready: False` 仍仅由用户删除的冻结文件造成，
+  11 条既有 blocker）；`test_phase2_legacy_path_gate`/`test_info_frozen_command_owner`/
+  `test_impart_pk_frozen_command_owner`（临时还原冻结文件后删除，未暂存）全绿；
+  `compileall` 与 `git diff --check` 干净。
+- 交付与 CI：功能提交 `394f36bd`（develop run `41584263513` **failure**：三条迁移原先注册在
+  `LEGACY_MIGRATIONS` 之后，导致 catalog 非单调、`MigrationRunner` 拒绝构造）→ 修复提交
+  `d02d4ff0`（改到 `impart.008` 之后、`LEGACY_MIGRATIONS` 之前）的 develop run `41586325225`
+  success；`--ff-only` 合入 main 后 main run `41587210983` success（headSha 均 `d02d4ff0`；
+  `quality` success、`build-and-release` skipped）。未部署、未读写真实游戏库、未发真实 QQ 消息、
+  未打 tag；用户删除的四个文件保持未暂存，`docs/goals/**` 与 `.codex-next-goal.md` 未提交。
+
 ## 冻结清单与停止条件
 
 冻结范围仅包括活动 Web 六来源一键代领 API、权限/错误合同、管理员面板、兼容性保护、聚焦测试、路由清单和正式文档。不得新增奖励经济、schema/数据迁移、玩家身份模型、后台活动编辑器、通用 UI 框架或 unrelated refactor。
