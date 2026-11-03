@@ -28,6 +28,11 @@ from .features.impart.migrations import (
     apply_impart_prayer_operations,
     apply_impart_prayer_player_statistics,
 )
+from .features.impart_pk.migrations import (
+    apply_impart_pk_impart_operations,
+    apply_impart_pk_operations,
+    apply_impart_pk_player_operations,
+)
 from .features.interactive.manifest import FEATURE as INTERACTIVE_FEATURE
 from .features.interactive.migrations import apply_interactive
 from .features.economy_ledger.migrations import apply_economy_ledger_read_indexes
@@ -397,6 +402,9 @@ def build_migrations() -> tuple[Migration, ...]:
         Migration("impart.006", "impart_draw_operations", apply_impart_draw_operations),
         Migration("impart.007", "impart_crystal_and_card_operations", apply_impart_crystal_and_card_operations),
         Migration("impart.008", "impart_draw_player_statistics", apply_impart_draw_player_statistics),
+        Migration("impart_pk.002", "impart_pk_operations", apply_impart_pk_operations),
+        Migration("impart_pk.003", "impart_pk_player_operations", apply_impart_pk_player_operations),
+        Migration("impart_pk.004", "impart_pk_impart_operations", apply_impart_pk_impart_operations),
         Migration("info.avatar.001", "avatar_player_identity_and_receipts", apply_avatar_identity_player),
         Migration("info.avatar.002", "avatar_initialization_plans", apply_avatar_initialization_player),
         Migration("interactive.001", "interactive_feature_migrations", apply_interactive),

@@ -92,12 +92,7 @@ from .entertainment.migrations import (
 )
 from .fusion.migrations import apply_fusion
 from .impart.migrations import apply_impart
-from .impart_pk.migrations import (
-    apply_impart_pk,
-    apply_impart_pk_impart_operations,
-    apply_impart_pk_operations,
-    apply_impart_pk_player_operations,
-)
+from .impart_pk.migrations import apply_impart_pk
 from .info.migrations import apply_info
 from .lunhui.migrations import apply_lunhui
 from .past_life.migrations import apply_past_life
@@ -158,10 +153,7 @@ MIGRATIONS = tuple(
          ("legacy.entertainment.002", apply_entertainment_rooms),
          ("legacy.entertainment.003", apply_entertainment_newapi),
          ("legacy.entertainment.004", apply_entertainment_guess_sessions),
-         ("legacy.illusion.001", apply_illusion),
-         ("impart_pk.002", apply_impart_pk_operations),
-         ("impart_pk.003", apply_impart_pk_player_operations),
-         ("impart_pk.004", apply_impart_pk_impart_operations)),
+         ("legacy.illusion.001", apply_illusion)),
         key=lambda item: item[0],
     )
 )
