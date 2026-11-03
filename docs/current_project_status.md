@@ -2042,6 +2042,47 @@ status_reader 归属、渲染与 handler 源合同）。受影响套件：
   未部署、未读写真实游戏库、未发真实 QQ 消息、未打 tag；用户删除的四个文件保持未暂存，
   `docs/goals/**` 与 `.codex-next-goal.md` 未提交。
 
+## 已完成目标：本命法宝回执表启动迁移
+
+重构收敛（非新玩法）。目标文档 `docs/goals/goal-natal-treasure-operations-schema.md`（local-only，未提交）。
+承接 `docs/features/natal_treasure.md` 的「历史表仍由旧服务维护」与仓库级「请求路径不执行 DDL」合同。
+
+**缺口证据**：六张回执表都在请求事务内 `CREATE TABLE IF NOT EXISTS` ——
+`natal_awaken_operations`（player DB immediate）、`natal_reawaken_operations` /
+`natal_training_operations` / `natal_effect_upgrade_operations` / `natal_engraving_operations` /
+`natal_forget_operations`（game DB + ATTACH player_data）。此前只有 `natal_treasure.001` 一个版本标记，
+没有任何启动迁移承载这些表，缺表时仓储顺手建表，把 DDL 混进资产事务。
+
+交付内容：
+
+- `features/natal_treasure/migrations.py` 新增 `GAME_OPERATIONS_TABLE_DDL/COLUMNS`（五表）、
+  `PLAYER_OPERATIONS_TABLE_DDL/COLUMNS`（觉醒表）与合并视图，以及
+  `apply_natal_treasure_operations`（game，`natal_treasure.002`）与
+  `apply_natal_treasure_player_operations`（player，`natal_treasure.003`）。
+- `plugin.py` 注册 `Migration("natal_treasure.002"/"natal_treasure.003", ...)`，并把
+  `natal_treasure.003` 加入 player 库迁移白名单与 game 库排除集（与既有 `mixelixir.003` 同处理）。
+- 六个 feature 仓储改为 `OPERATION_TABLE/OPERATION_COLUMNS` + `_operations_ready` schema 检查，
+  缺表**或缺任一读取列**都返回 `schema_missing`；移除请求期 `CREATE TABLE`。
+- 命令入口四个 handler 的 `failure_reasons` 补 `schema_missing` 提示，成功路径与文案形态不变。
+- 兼容：迁移语句保持 `IF NOT EXISTS`，已按惰性路径建表的历史库保留全部回执行；不改数值规则、
+  随机种子派生、返还/消耗口径与 operation 语义；不新增表/命令/路由/配置键；不动 `natal_treasure`
+  本表与旧 `transaction_service` 的六个兼容 service。
+- 文档：`docs/features/natal_treasure.md` 改写「数据模型与迁移」「事务与失败回滚」「测试与手工验收」
+  「灰度开关、回滚和已知限制」，补 Manifest 命令/别名/config/migration 清单；
+  `docs/refactor_inventory.json` 重新导出无漂移。
+- 测试：新 `tests/test_natal_operations_schema.py` `15/15`（迁移建表形状与列集、请求路径无 DDL 且
+  六条动作各自 `schema_missing` 零资产变化、半成品旧表被拒、历史回执行保留、迁移后同一调用
+  成功/重放可用）；5 个 feature 仓储夹具 + `tests/test_natal_awaken_service.py` 夹具补对应迁移。
+  定向套件（含 `test_source_quality`/`test_refactor_progress`/`test_rift_boss_battle_source_contract`/
+  全部 natal 服务与仓储测试）`343 passed`，唯一失败是 `test_info_frozen_command_owner` ——
+  临时还原用户删除的 `docs/refactor_phase2_legacy_path_items.json` 后 51 项全绿（该文件已立即删除、
+  未暂存），确认非本切片回归。三门禁真实 exit 0（progress `failures: None`；`exit_ready: False` 仍仅由
+  该冻结文件缺失造成，11 条既有 blocker）；`compileall` 与 `git diff --check` 干净。
+- 交付与 CI：功能提交 `49f3b7de` 的 develop run `41572948906` success；`--ff-only` 合入 main 后
+  main run `41573740823` success（headSha 均 `49f3b7de`；`quality` success、
+  `build-and-release` skipped）。未部署、未读写真实游戏库、未发真实 QQ 消息、未打 tag；
+  用户删除的四个文件保持未暂存，`docs/goals/**` 与 `.codex-next-goal.md` 未提交。
+
 ## 冻结清单与停止条件
 
 冻结范围仅包括活动 Web 六来源一键代领 API、权限/错误合同、管理员面板、兼容性保护、聚焦测试、路由清单和正式文档。不得新增奖励经济、schema/数据迁移、玩家身份模型、后台活动编辑器、通用 UI 框架或 unrelated refactor。
