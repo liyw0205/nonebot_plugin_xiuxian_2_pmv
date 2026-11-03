@@ -2,6 +2,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 from ...infrastructure.database import DatabaseUnitOfWork
+from .schema import OWNER_TRANSFER_COLUMNS, SCHEMA_MISSING, table_ready
 
 class SectOwnerTransferSqlRepository:
     def __init__(self, database: str | Path) -> None: self.database=str(database)
@@ -10,7 +11,8 @@ class SectOwnerTransferSqlRepository:
         if not operation_id: raise ValueError('operation_id must not be empty')
         if actor_id==target_id: return {'status':'self_transfer','actor_id':actor_id,'target_id':target_id}
         with DatabaseUnitOfWork(self.database, immediate=True) as uow:
-            uow.execute("CREATE TABLE IF NOT EXISTS sect_operations(operation_id TEXT PRIMARY KEY,operation_type TEXT NOT NULL,actor_id TEXT NOT NULL,target_id TEXT NOT NULL,sect_id INTEGER NOT NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
+            if not table_ready(uow, "sect_operations", OWNER_TRANSFER_COLUMNS):
+                return {"status": SCHEMA_MISSING}
             old=uow.query_one('SELECT sect_id FROM sect_operations WHERE operation_id=?',(operation_id,))
             if old: return {'status':'duplicate','actor_id':actor_id,'target_id':target_id,'sect_id':int(old['sect_id'])}
             actor=uow.query_one('SELECT sect_id,sect_position,user_name FROM user_xiuxian WHERE user_id=?',(actor_id,)); target=uow.query_one('SELECT sect_id,sect_position,user_name FROM user_xiuxian WHERE user_id=?',(target_id,))

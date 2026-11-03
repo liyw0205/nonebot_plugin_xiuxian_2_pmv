@@ -2,6 +2,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 from ...infrastructure.database import DatabaseUnitOfWork
+from .schema import CLOSE_MOUNTAIN_COLUMNS, SCHEMA_MISSING, table_ready
 
 
 class SectCloseMountainSqlRepository:
@@ -9,15 +10,17 @@ class SectCloseMountainSqlRepository:
         self.database = str(database)
 
     @staticmethod
-    def ensure_schema(uow: DatabaseUnitOfWork) -> None:
-        uow.execute("CREATE TABLE IF NOT EXISTS sect_close_mountain_operations(operation_id TEXT PRIMARY KEY,actor_id TEXT NOT NULL,sect_id INTEGER NOT NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
+    def _ready(uow: DatabaseUnitOfWork) -> bool:
+        """Startup migration `sect.019` owns the receipt ledger; verify, never create."""
+        return table_ready(uow, "sect_close_mountain_operations", CLOSE_MOUNTAIN_COLUMNS)
 
     def close(self, operation_id: str, actor_id: str, *, owner_position: int = 0, former_owner_position: int = 2, expected_sect_id: int | None = None) -> dict[str, Any]:
         operation_id, actor_id = str(operation_id).strip(), str(actor_id)
         if not operation_id:
             raise ValueError("operation_id must not be empty")
         with DatabaseUnitOfWork(self.database, immediate=True) as uow:
-            self.ensure_schema(uow)
+            if not self._ready(uow):
+                return {"status": SCHEMA_MISSING}
             previous = uow.query_one("SELECT o.sect_id,s.sect_name FROM sect_close_mountain_operations o LEFT JOIN sects s ON s.sect_id=o.sect_id WHERE o.operation_id=?", (operation_id,))
             if previous:
                 return {"status":"duplicate","actor_id":actor_id,"sect_id":int(previous["sect_id"]),"sect_name":str(previous["sect_name"] or "")}

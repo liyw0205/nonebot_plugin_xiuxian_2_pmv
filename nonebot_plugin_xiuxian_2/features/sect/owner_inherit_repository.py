@@ -2,14 +2,16 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 from ...infrastructure.database import DatabaseUnitOfWork
+from .schema import OWNER_INHERIT_COLUMNS, SCHEMA_MISSING, table_ready
 
 class SectOwnerInheritSqlRepository:
     def __init__(self, database: str | Path) -> None:
         self.database = str(database)
 
     @staticmethod
-    def ensure_schema(uow: DatabaseUnitOfWork) -> None:
-        uow.execute("CREATE TABLE IF NOT EXISTS sect_owner_inherit_operations(operation_id TEXT PRIMARY KEY,actor_id TEXT NOT NULL,sect_id INTEGER NOT NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
+    def _ready(uow: DatabaseUnitOfWork) -> bool:
+        """Startup migration `sect.019` owns the receipt ledger; verify, never create."""
+        return table_ready(uow, "sect_owner_inherit_operations", OWNER_INHERIT_COLUMNS)
 
     def inherit(self, operation_id: str, actor_id: str, *, expected_sect_id: int | None = None, eligible_positions=(1,2,6,7), eligible_user_ids=None, owner_position: int = 0) -> dict[str, Any]:
         operation_id, actor_id = str(operation_id).strip(), str(actor_id)
@@ -18,7 +20,8 @@ class SectOwnerInheritSqlRepository:
         if not operation_id or not positions:
             raise ValueError("valid operation and eligible positions are required")
         with DatabaseUnitOfWork(self.database, immediate=True) as uow:
-            self.ensure_schema(uow)
+            if not self._ready(uow):
+                return {"status": SCHEMA_MISSING}
             previous = uow.query_one("SELECT o.sect_id,u.user_name,s.sect_name FROM sect_owner_inherit_operations o LEFT JOIN user_xiuxian u ON u.user_id=o.actor_id LEFT JOIN sects s ON s.sect_id=o.sect_id WHERE o.operation_id=?", (operation_id,))
             if previous:
                 return {"status":"duplicate","actor_id":actor_id,"sect_id":int(previous["sect_id"]),"actor_name":str(previous["user_name"] or ""),"sect_name":str(previous["sect_name"] or "")}

@@ -4,13 +4,15 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Iterable
 from ...infrastructure.database import DatabaseUnitOfWork
+from .schema import INACTIVE_DISBAND_COLUMNS, SCHEMA_MISSING, table_ready
 
 class SectDisbandSqlRepository:
     def __init__(self, database: str | Path) -> None:
         self.database = str(database)
 
-    def _ensure(self, uow: DatabaseUnitOfWork) -> None:
-        uow.execute("CREATE TABLE IF NOT EXISTS sect_inactive_disband_operations(operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,sect_id INTEGER NOT NULL,sect_name TEXT NOT NULL,reason TEXT NOT NULL,member_count INTEGER NOT NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
+    def _ready(self, uow: DatabaseUnitOfWork) -> bool:
+        """Startup migration `sect.019` owns the receipt ledger; verify, never create."""
+        return table_ready(uow, "sect_inactive_disband_operations", INACTIVE_DISBAND_COLUMNS)
 
     @staticmethod
     def _time(value: Any) -> datetime | None:
@@ -36,7 +38,8 @@ class SectDisbandSqlRepository:
             raise ValueError('invalid inactive sect disband request')
         payload = json.dumps({'reason':reason,'sect':[sect_id,str(expected_sect_name),expected_owner_id,int(bool(expected_closed))],'member_ids':members,'active_candidate_ids':candidates,'checked_at':checked.isoformat(sep=' '),'inactivity_days':int(inactivity_days)}, ensure_ascii=True, sort_keys=True, separators=(',',':'))
         with DatabaseUnitOfWork(self.database, immediate=True) as uow:
-            self._ensure(uow)
+            if not self._ready(uow):
+                return {"status": SCHEMA_MISSING}
             old = uow.query_one('SELECT payload,sect_name,reason,member_count FROM sect_inactive_disband_operations WHERE operation_id=?',(operation_id,))
             if old:
                 return {'status':'duplicate' if str(old['payload']) == payload else 'operation_conflict','sect_id':sect_id,'sect_name':str(old['sect_name']),'reason':str(old['reason']),'member_count':int(old['member_count'])}

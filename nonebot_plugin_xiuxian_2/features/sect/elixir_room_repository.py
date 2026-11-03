@@ -2,6 +2,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 from ...infrastructure.database import DatabaseUnitOfWork
+from .schema import ELIXIR_ROOM_COLUMNS, SCHEMA_MISSING, table_ready
 
 class SectElixirRoomSqlRepository:
     def __init__(self, database: str | Path) -> None: self.database=str(database)
@@ -9,7 +10,8 @@ class SectElixirRoomSqlRepository:
         operation_id,actor_id=str(operation_id).strip(),str(actor_id); sect_id,expected_level,next_level,stone_cost,scale_cost=int(sect_id),int(expected_level),int(next_level),max(int(stone_cost),0),max(int(scale_cost),0)
         if not operation_id: raise ValueError('operation_id must not be empty')
         with DatabaseUnitOfWork(self.database, immediate=True) as uow:
-            uow.execute('CREATE TABLE IF NOT EXISTS sect_elixir_room_operations(operation_id TEXT PRIMARY KEY,actor_id TEXT NOT NULL,sect_id INTEGER NOT NULL,from_level INTEGER NOT NULL,to_level INTEGER NOT NULL,stone_cost INTEGER NOT NULL,scale_cost INTEGER NOT NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)')
+            if not table_ready(uow, "sect_elixir_room_operations", ELIXIR_ROOM_COLUMNS):
+                return {"status": SCHEMA_MISSING}
             old=uow.query_one('SELECT from_level,to_level,stone_cost,scale_cost FROM sect_elixir_room_operations WHERE operation_id=?',(operation_id,))
             if old:return {'status':'duplicate','actor_id':actor_id,'sect_id':sect_id,'from_level':int(old['from_level']),'to_level':int(old['to_level']),'stone_cost':int(old['stone_cost']),'scale_cost':int(old['scale_cost'])}
             user=uow.query_one('SELECT sect_id,sect_position FROM user_xiuxian WHERE user_id=?',(actor_id,)); sect=uow.query_one('SELECT sect_owner,COALESCE(elixir_room_level,0) AS level,COALESCE(sect_used_stone,0) AS stones,COALESCE(sect_scale,0) AS scale FROM sects WHERE sect_id=?',(sect_id,))

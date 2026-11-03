@@ -2,6 +2,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 from ...infrastructure.database import DatabaseUnitOfWork
+from .schema import PRACTICE_COLUMNS, SCHEMA_MISSING, table_ready
 
 class SectPracticeSqlRepository:
     def __init__(self, database: str | Path) -> None: self.database=str(database)
@@ -12,7 +13,8 @@ class SectPracticeSqlRepository:
         column=columns.get(practice_type)
         if column is None:return {'status':'invalid_practice_type','user_id':user_id,'sect_id':sect_id,'practice_type':practice_type}
         with DatabaseUnitOfWork(self.database, immediate=True) as uow:
-            uow.execute('CREATE TABLE IF NOT EXISTS sect_practice_operations(operation_id TEXT PRIMARY KEY,user_id TEXT NOT NULL,sect_id INTEGER NOT NULL,practice_type TEXT NOT NULL,from_level INTEGER NOT NULL,to_level INTEGER NOT NULL,stone_cost INTEGER NOT NULL,materials_cost INTEGER NOT NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)')
+            if not table_ready(uow, "sect_practice_operations", PRACTICE_COLUMNS):
+                return {"status": SCHEMA_MISSING}
             old=uow.query_one('SELECT practice_type,from_level,to_level,stone_cost,materials_cost FROM sect_practice_operations WHERE operation_id=?',(operation_id,))
             if old:return {'status':'duplicate','user_id':user_id,'sect_id':sect_id,'practice_type':str(old['practice_type']),'from_level':int(old['from_level']),'to_level':int(old['to_level']),'stone_cost':int(old['stone_cost']),'materials_cost':int(old['materials_cost'])}
             user=uow.query_one(f'SELECT sect_id,COALESCE({column},0) AS level FROM user_xiuxian WHERE user_id=?',(user_id,)); sect=uow.query_one('SELECT sect_owner,COALESCE(sect_materials,0) AS materials,COALESCE(sect_used_stone,0) AS stones FROM sects WHERE sect_id=?',(sect_id,))

@@ -3,11 +3,13 @@ import unittest
 from pathlib import Path
 from ..buff_search_repository import SectBuffSearchSqlRepository
 from tests.test_db_backend import db_backend
+from .fixtures import migrate_sect
 
 class SectBuffSearchRepositoryTests(unittest.TestCase):
     def test_search_is_idempotent_and_deducts_assets(self):
         with tempfile.TemporaryDirectory() as temp:
             db=Path(temp)/'sect.db'
+            migrate_sect(db)
             with db_backend.transaction(db) as c:
                 c.execute('CREATE TABLE user_xiuxian(user_id TEXT PRIMARY KEY,sect_id INTEGER,sect_position INTEGER)'); c.execute("INSERT INTO user_xiuxian VALUES('owner',1,0)")
                 # 真实 sects 列是 mainbuff/secbuff（无 sect_mainbuff/sect_secbuff）。
@@ -21,6 +23,7 @@ class SectBuffSearchRepositoryTests(unittest.TestCase):
     def test_owner_position_is_honoured_instead_of_a_hardcoded_zero(self):
         with tempfile.TemporaryDirectory() as temp:
             db=Path(temp)/'sect.db'
+            migrate_sect(db)
             with db_backend.transaction(db) as c:
                 c.execute('CREATE TABLE user_xiuxian(user_id TEXT PRIMARY KEY,sect_id INTEGER,sect_position INTEGER)'); c.execute("INSERT INTO user_xiuxian VALUES('owner',1,3)")
                 c.execute('CREATE TABLE sects(sect_id INTEGER PRIMARY KEY,sect_owner TEXT,mainbuff TEXT,secbuff TEXT,sect_used_stone INTEGER,sect_materials INTEGER)'); c.execute("INSERT INTO sects VALUES(1,'owner','[]','[]',1000,2000)")

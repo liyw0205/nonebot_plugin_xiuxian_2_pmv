@@ -78,6 +78,7 @@ from .features.sect.migrations import (
     apply_sect_task_claim_operations,
     apply_sect_task_settlement_operations,
     apply_sect_task_state,
+    apply_sect_operations,
 )
 from .features.natal_treasure.manifest import FEATURE as NATAL_TREASURE_FEATURE
 from .features.natal_treasure.migrations import (
@@ -487,6 +488,7 @@ def build_migrations() -> tuple[Migration, ...]:
         Migration("sect.016", "sect_task_state", apply_sect_task_state),
         Migration("sect.017", "sect_task_claim_operations", apply_sect_task_claim_operations),
         Migration("sect.018", "sect_task_settlement_operations", apply_sect_task_settlement_operations),
+        Migration("sect.019", "sect_operation_receipts", apply_sect_operations),
         Migration("sect_fairyland.001", "sect_fairyland_feature_migrations", apply_sect_fairyland),
         Migration("sect_fairyland.002", "sect_fairyland_claim_player_schema", apply_sect_fairyland_player),
         Migration("sign_in.001", "sign_in_operations", apply_sign_in),

@@ -55,6 +55,31 @@
 
 `sect.001` 写迁移标记和统一 ledger；`sect.011`、`sect.013`、`sect.016`、`sect.017`、`sect.018` 属于 game DB，`sect.012` 属于 player DB。历史周常进度、已有手动解散回执和任务操作回执由幂等迁移保留。`sect_fairyland.002` 在 player DB 预建炼体堂领取回执与每日状态表，并将旧按宗门展开的领取日期回填到 `sect_fairyland_claim_days`；信息查询和领奖均读取/更新该 feature-owned 状态，不在请求期建表。
 
+### 操作回执表的 schema 归属（`sect.019`）
+
+11 份仓储原先在**业务方法写事务内** `CREATE TABLE IF NOT EXISTS` 建 12 张回执表；现在
+`sect.019` 是唯一创建者，`features/sect/schema.py` 是唯一契约来源。12 张表全部在 **game DB**
+（这些仓储只持有一个 `database` 连接，不使用附库）：
+
+| 仓储 | 回执表 |
+| --- | --- |
+| `creation_repository` | `sect_creation_operations` |
+| `name_refresh_repository` | `sect_name_refresh_operations` |
+| `owner_transfer_repository` | `sect_operations` |
+| `disband_repository` | `sect_inactive_disband_operations` |
+| `buff_search_repository` | `sect_buff_search_operations` |
+| `practice_repository` | `sect_practice_operations` |
+| `elixir_room_repository` | `sect_elixir_room_operations` |
+| `join_state_repository` | `sect_open_join_operations`、`sect_close_join_operations` |
+| `owner_inherit_repository` | `sect_owner_inherit_operations` |
+| `close_mountain_repository` | `sect_close_mountain_operations` |
+| `daily_maintenance_repository` | `sect_daily_reset_operations` |
+
+请求路径只校验「表存在 + 本次要读的列齐全」，缺表或缺任一列返回 `schema_missing`
+且零写入（不动宗门资产、成员、贡献与任何回执行）；半成品回执表不会被补列。
+门禁是业务方法内的布尔守卫（`_ready(uow)`），不是 `-> None` 辅助方法的返回值，
+避免返回值被调用方丢弃。
+
 ## 事务与失败回滚
 
 周常领取以 `sect_weekly_reward_operations` 作为唯一幂等回执，并与奖励状态在同一 attached transaction 提交；不额外写入会跨事务留下 started 状态的通用 ledger。重复领取可重放奖励摘要，operation 冲突、进度变化、库存不足和晚期 SQL 异常不发放部分奖励。

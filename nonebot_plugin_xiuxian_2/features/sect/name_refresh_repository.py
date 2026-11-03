@@ -2,6 +2,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 from ...infrastructure.database import DatabaseUnitOfWork
+from .schema import NAME_REFRESH_COLUMNS, SCHEMA_MISSING, table_ready
 
 class SectNameRefreshSqlRepository:
     def __init__(self, database: str | Path) -> None: self.database=str(database)
@@ -11,7 +12,8 @@ class SectNameRefreshSqlRepository:
         base={'user_id':user_id,'stone_cost':stone_cost}
         if stone_cost<0:return {'status':'invalid_cost',**base}
         with DatabaseUnitOfWork(self.database, immediate=True) as uow:
-            uow.execute('CREATE TABLE IF NOT EXISTS sect_name_refresh_operations(operation_id TEXT PRIMARY KEY,user_id TEXT NOT NULL,stone_cost INTEGER NOT NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)')
+            if not table_ready(uow, "sect_name_refresh_operations", NAME_REFRESH_COLUMNS):
+                return {"status": SCHEMA_MISSING}
             old=uow.query_one('SELECT stone_cost FROM sect_name_refresh_operations WHERE operation_id=?',(operation_id,))
             if old:return {'status':'duplicate','user_id':user_id,'stone_cost':int(old['stone_cost'])}
             user=uow.query_one('SELECT sect_id,stone FROM user_xiuxian WHERE user_id=?',(user_id,))

@@ -2,6 +2,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 from ...infrastructure.database import DatabaseUnitOfWork
+from .schema import CREATION_COLUMNS, SCHEMA_MISSING, table_ready
 
 class SectCreationSqlRepository:
     def __init__(self, database: str | Path) -> None: self.database=str(database)
@@ -12,7 +13,8 @@ class SectCreationSqlRepository:
         if not sect_name:return {'status':'invalid_name',**base}
         if stone_cost<0:return {'status':'invalid_cost',**base}
         with DatabaseUnitOfWork(self.database, immediate=True) as uow:
-            uow.execute('CREATE TABLE IF NOT EXISTS sect_creation_operations(operation_id TEXT PRIMARY KEY,user_id TEXT NOT NULL,sect_id INTEGER NOT NULL,sect_name TEXT NOT NULL,stone_cost INTEGER NOT NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)')
+            if not table_ready(uow, "sect_creation_operations", CREATION_COLUMNS):
+                return {"status": SCHEMA_MISSING}
             old=uow.query_one('SELECT sect_id,sect_name,stone_cost FROM sect_creation_operations WHERE operation_id=?',(operation_id,))
             if old:return {'status':'duplicate','user_id':user_id,'sect_name':str(old['sect_name']),'stone_cost':int(old['stone_cost']),'sect_id':int(old['sect_id'])}
             user=uow.query_one('SELECT sect_id,stone FROM user_xiuxian WHERE user_id=?',(user_id,))

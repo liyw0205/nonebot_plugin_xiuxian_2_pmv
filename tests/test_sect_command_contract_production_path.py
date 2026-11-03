@@ -170,6 +170,7 @@ class SectCommandContractProductionPathTests(unittest.TestCase):
     @staticmethod
     def _apply_task_schema(database: Path) -> None:
         from nonebot_plugin_xiuxian_2.features.sect.migrations import (
+            apply_sect_operations,
             apply_sect_task_claim_operations,
             apply_sect_task_settlement_operations,
             apply_sect_task_state,
@@ -180,6 +181,8 @@ class SectCommandContractProductionPathTests(unittest.TestCase):
             apply_sect_task_state(uow)
             apply_sect_task_claim_operations(uow)
             apply_sect_task_settlement_operations(uow)
+            # `sect.019` owns the command receipt ledgers; the request path only verifies.
+            apply_sect_operations(uow)
 
     def value(self, database: Path, sql: str, params=()):
         with db_backend.connection(database) as conn:

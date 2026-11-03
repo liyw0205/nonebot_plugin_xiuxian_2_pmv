@@ -3,11 +3,13 @@ import unittest
 from pathlib import Path
 from ..owner_inherit_repository import SectOwnerInheritSqlRepository
 from tests.test_db_backend import db_backend
+from .fixtures import migrate_sect
 
 class SectOwnerInheritRepositoryTests(unittest.TestCase):
     def test_inherit_replays_and_reopens_closed_sect(self):
         with tempfile.TemporaryDirectory() as temp:
             db = Path(temp) / 'sect.db'
+            migrate_sect(db)
             with db_backend.transaction(db) as c:
                 c.execute('CREATE TABLE user_xiuxian(user_id TEXT PRIMARY KEY,sect_id INTEGER,sect_position INTEGER,user_name TEXT,sect_contribution INTEGER)')
                 c.execute("INSERT INTO user_xiuxian VALUES('candidate',1,2,'候选人',10)")

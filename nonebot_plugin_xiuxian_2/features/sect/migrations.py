@@ -139,6 +139,60 @@ def apply_sect_task_settlement_operations(uow: DatabaseUnitOfWork) -> None:
     )
 
 
+_SECT_OPERATION_DDL = (
+    "CREATE TABLE IF NOT EXISTS sect_buff_search_operations("
+    "operation_id TEXT PRIMARY KEY,actor_id TEXT NOT NULL,sect_id INTEGER NOT NULL,"
+    "buff_type TEXT NOT NULL,previous_value TEXT NOT NULL,new_value TEXT NOT NULL,"
+    "stone_cost INTEGER NOT NULL,materials_cost INTEGER NOT NULL,"
+    "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)",
+    "CREATE TABLE IF NOT EXISTS sect_close_mountain_operations("
+    "operation_id TEXT PRIMARY KEY,actor_id TEXT NOT NULL,sect_id INTEGER NOT NULL,"
+    "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)",
+    "CREATE TABLE IF NOT EXISTS sect_creation_operations("
+    "operation_id TEXT PRIMARY KEY,user_id TEXT NOT NULL,sect_id INTEGER NOT NULL,"
+    "sect_name TEXT NOT NULL,stone_cost INTEGER NOT NULL,"
+    "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)",
+    "CREATE TABLE IF NOT EXISTS sect_daily_reset_operations("
+    "business_date TEXT PRIMARY KEY,payload TEXT NOT NULL,user_count INTEGER NOT NULL,"
+    "outcomes TEXT NOT NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)",
+    "CREATE TABLE IF NOT EXISTS sect_inactive_disband_operations("
+    "operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,sect_id INTEGER NOT NULL,"
+    "sect_name TEXT NOT NULL,reason TEXT NOT NULL,member_count INTEGER NOT NULL,"
+    "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)",
+    "CREATE TABLE IF NOT EXISTS sect_elixir_room_operations("
+    "operation_id TEXT PRIMARY KEY,actor_id TEXT NOT NULL,sect_id INTEGER NOT NULL,"
+    "from_level INTEGER NOT NULL,to_level INTEGER NOT NULL,stone_cost INTEGER NOT NULL,"
+    "scale_cost INTEGER NOT NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)",
+    "CREATE TABLE IF NOT EXISTS sect_open_join_operations("
+    "operation_id TEXT PRIMARY KEY,actor_id TEXT NOT NULL,sect_id INTEGER NOT NULL,"
+    "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)",
+    "CREATE TABLE IF NOT EXISTS sect_close_join_operations("
+    "operation_id TEXT PRIMARY KEY,actor_id TEXT NOT NULL,sect_id INTEGER NOT NULL,"
+    "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)",
+    "CREATE TABLE IF NOT EXISTS sect_name_refresh_operations("
+    "operation_id TEXT PRIMARY KEY,user_id TEXT NOT NULL,stone_cost INTEGER NOT NULL,"
+    "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)",
+    "CREATE TABLE IF NOT EXISTS sect_owner_inherit_operations("
+    "operation_id TEXT PRIMARY KEY,actor_id TEXT NOT NULL,sect_id INTEGER NOT NULL,"
+    "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)",
+    "CREATE TABLE IF NOT EXISTS sect_operations("
+    "operation_id TEXT PRIMARY KEY,operation_type TEXT NOT NULL,actor_id TEXT NOT NULL,"
+    "target_id TEXT NOT NULL,sect_id INTEGER NOT NULL,"
+    "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)",
+    "CREATE TABLE IF NOT EXISTS sect_practice_operations("
+    "operation_id TEXT PRIMARY KEY,user_id TEXT NOT NULL,sect_id INTEGER NOT NULL,"
+    "practice_type TEXT NOT NULL,from_level INTEGER NOT NULL,to_level INTEGER NOT NULL,"
+    "stone_cost INTEGER NOT NULL,materials_cost INTEGER NOT NULL,"
+    "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)",
+)
+
+
+def apply_sect_operations(uow: DatabaseUnitOfWork) -> None:
+    """Create the sect receipt ledgers in the game database (idempotent)."""
+    for statement in _SECT_OPERATION_DDL:
+        uow.execute(statement)
+
+
 __all__ = [
     "apply_sect",
     "apply_sect_rename",
@@ -158,4 +212,5 @@ __all__ = [
     "apply_sect_task_state",
     "apply_sect_task_claim_operations",
     "apply_sect_task_settlement_operations",
+    "apply_sect_operations",
 ]

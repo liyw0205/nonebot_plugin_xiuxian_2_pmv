@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from ...infrastructure.database import DatabaseUnitOfWork
+from .schema import DAILY_RESET_COLUMNS, SCHEMA_MISSING, table_ready
 
 
 @dataclass(frozen=True)
@@ -36,7 +37,8 @@ class SectDailyMaintenanceSqlRepository:
             raise ValueError("business date and positive room levels are required")
         payload = json.dumps(costs, ensure_ascii=True, sort_keys=True, separators=(",", ":"))
         with DatabaseUnitOfWork(self.database, immediate=True) as uow:
-            uow.execute("CREATE TABLE IF NOT EXISTS sect_daily_reset_operations(business_date TEXT PRIMARY KEY,payload TEXT NOT NULL,user_count INTEGER NOT NULL,outcomes TEXT NOT NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
+            if not table_ready(uow, "sect_daily_reset_operations", DAILY_RESET_COLUMNS):
+                return {"status": SCHEMA_MISSING}
             previous = uow.query_one("SELECT payload,user_count,outcomes FROM sect_daily_reset_operations WHERE business_date=?", (day,))
             if previous is not None:
                 if str(previous["payload"]) != payload:

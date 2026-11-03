@@ -4,11 +4,13 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from ..disband_repository import SectDisbandSqlRepository
 from tests.test_db_backend import db_backend
+from .fixtures import migrate_sect
 
 class SectDisbandRepositoryTests(unittest.TestCase):
     def test_legacy_naive_activity_time_compares_with_aware_clock(self):
         with tempfile.TemporaryDirectory() as temp:
             db = Path(temp) / 'sect.db'
+            migrate_sect(db)
             checked = datetime(2026, 7, 14, 12, tzinfo=timezone.utc)
             last_active = checked.astimezone().replace(tzinfo=None).isoformat(sep=' ')
             with db_backend.transaction(db) as c:
@@ -28,7 +30,9 @@ class SectDisbandRepositoryTests(unittest.TestCase):
 
     def test_inactive_sole_owner_disbands_and_replays(self):
         with tempfile.TemporaryDirectory() as temp:
-            db=Path(temp)/'sect.db'; checked=datetime(2026,7,14)
+            db=Path(temp)/'sect.db'
+            checked=datetime(2026,7,14)
+            migrate_sect(db)
             with db_backend.transaction(db) as c:
                 c.execute('CREATE TABLE sects(sect_id INTEGER PRIMARY KEY,sect_name TEXT,sect_owner TEXT,closed INTEGER)')
                 c.execute("INSERT INTO sects VALUES(1,'青云','owner',0)")

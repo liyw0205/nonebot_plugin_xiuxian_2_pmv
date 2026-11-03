@@ -3,6 +3,7 @@ import json
 from pathlib import Path
 from typing import Any, Iterable
 from ...infrastructure.database import DatabaseUnitOfWork
+from .schema import BUFF_SEARCH_COLUMNS, SCHEMA_MISSING, table_ready
 
 # 真实 sects 列名（权威来源 xiuxian_config.py sql_sects）。历史上这里写成了两个
 # 并不存在的列名（`sect_` 前缀）：SELECT 会把未解析标识符当字符串字面量、
@@ -17,7 +18,8 @@ class SectBuffSearchSqlRepository:
         if not operation_id: raise ValueError('operation_id must not be empty')
         column=_BUFF_COLUMNS.get(buff_type)
         with DatabaseUnitOfWork(self.database, immediate=True) as uow:
-            uow.execute('CREATE TABLE IF NOT EXISTS sect_buff_search_operations(operation_id TEXT PRIMARY KEY,actor_id TEXT NOT NULL,sect_id INTEGER NOT NULL,buff_type TEXT NOT NULL,previous_value TEXT NOT NULL,new_value TEXT NOT NULL,stone_cost INTEGER NOT NULL,materials_cost INTEGER NOT NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)')
+            if not table_ready(uow, "sect_buff_search_operations", BUFF_SEARCH_COLUMNS):
+                return {"status": SCHEMA_MISSING}
             old=uow.query_one('SELECT buff_type,previous_value,new_value,stone_cost,materials_cost FROM sect_buff_search_operations WHERE operation_id=?',(operation_id,))
             if old:return {'status':'duplicate','actor_id':actor_id,'sect_id':sect_id,'buff_type':str(old['buff_type']),'previous_value':str(old['previous_value']),'new_value':str(old['new_value']),'stone_cost':int(old['stone_cost']),'materials_cost':int(old['materials_cost'])}
             user=uow.query_one('SELECT sect_id,sect_position FROM user_xiuxian WHERE user_id=?',(actor_id,)); sect=uow.query_one('SELECT sect_owner,COALESCE(sect_used_stone,0) AS stones,COALESCE(sect_materials,0) AS materials FROM sects WHERE sect_id=?',(sect_id,))

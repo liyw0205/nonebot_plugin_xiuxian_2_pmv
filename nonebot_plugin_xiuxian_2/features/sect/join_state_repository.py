@@ -2,19 +2,22 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 from ...infrastructure.database import DatabaseUnitOfWork
+from .schema import JOIN_STATE_COLUMNS, SCHEMA_MISSING, table_ready
 
 class SectJoinStateSqlRepository:
     def __init__(self, database: str | Path) -> None:
         self.database = str(database)
 
-    def _ensure(self, uow: DatabaseUnitOfWork, action: str) -> None:
-        uow.execute(f"CREATE TABLE IF NOT EXISTS sect_{action}_join_operations(operation_id TEXT PRIMARY KEY,actor_id TEXT NOT NULL,sect_id INTEGER NOT NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
+    def _ready(self, uow: DatabaseUnitOfWork, action: str) -> bool:
+        """Startup migration `sect.019` owns the join receipts; verify, never create."""
+        return table_ready(uow, f"sect_{action}_join_operations", JOIN_STATE_COLUMNS)
 
     def _change(self, action: str, operation_id: str, actor_id: str, *, owner_position: int = 0, expected_sect_id: int | None = None) -> dict[str, Any]:
         operation_id, actor_id = str(operation_id).strip(), str(actor_id)
         if not operation_id: raise ValueError("operation_id must not be empty")
         with DatabaseUnitOfWork(self.database, immediate=True) as uow:
-            self._ensure(uow, action)
+            if not self._ready(uow, action):
+                return {"status": SCHEMA_MISSING}
             previous = uow.query_one(f"SELECT o.sect_id,s.sect_name FROM sect_{action}_join_operations o LEFT JOIN sects s ON s.sect_id=o.sect_id WHERE o.operation_id=?", (operation_id,))
             if previous: return {"status":"duplicate","actor_id":actor_id,"sect_id":int(previous["sect_id"]),"sect_name":str(previous["sect_name"] or "")}
             actor = uow.query_one("SELECT sect_id,sect_position FROM user_xiuxian WHERE user_id=?", (actor_id,))

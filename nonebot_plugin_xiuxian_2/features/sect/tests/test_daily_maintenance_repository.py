@@ -4,12 +4,14 @@ from pathlib import Path
 
 from ..daily_maintenance_repository import SectDailyMaintenanceSqlRepository
 from tests.test_db_backend import db_backend
+from .fixtures import migrate_sect
 
 
 class SectDailyMaintenanceRepositoryTests(unittest.TestCase):
     def test_resets_and_replays(self):
         with tempfile.TemporaryDirectory() as temp:
             db = Path(temp) / "sect.db"
+            migrate_sect(db)
             with db_backend.transaction(db) as conn:
                 conn.execute("CREATE TABLE user_xiuxian(user_id TEXT PRIMARY KEY,sect_task INTEGER,sect_elixir_get INTEGER)")
                 conn.execute("INSERT INTO user_xiuxian VALUES('u',2,1)")

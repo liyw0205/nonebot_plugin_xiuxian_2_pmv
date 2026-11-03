@@ -3,11 +3,13 @@ import unittest
 from pathlib import Path
 from ..close_mountain_repository import SectCloseMountainSqlRepository
 from tests.test_db_backend import db_backend
+from .fixtures import migrate_sect
 
 class SectCloseMountainRepositoryTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.database = Path(self.temp.name) / 'sect.db'
+        migrate_sect(self.database)
         with db_backend.transaction(self.database) as conn:
             conn.execute('CREATE TABLE user_xiuxian(user_id TEXT PRIMARY KEY,sect_id INTEGER,sect_position INTEGER)')
             conn.execute("INSERT INTO user_xiuxian VALUES('owner',1,0)")

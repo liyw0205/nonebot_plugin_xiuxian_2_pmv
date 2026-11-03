@@ -3,11 +3,13 @@ import unittest
 from pathlib import Path
 from ..practice_repository import SectPracticeSqlRepository
 from tests.test_db_backend import db_backend
+from .fixtures import migrate_sect
 
 class SectPracticeRepositoryTests(unittest.TestCase):
     def test_all_practice_types_replay_and_deduct_assets(self):
         with tempfile.TemporaryDirectory() as temp:
             db=Path(temp)/'sect.db'
+            migrate_sect(db)
             with db_backend.transaction(db) as c:
                 c.execute('CREATE TABLE user_xiuxian(user_id TEXT PRIMARY KEY,sect_id INTEGER,sect_position INTEGER,attack_practice INTEGER,health_practice INTEGER,mana_practice INTEGER)'); c.execute("INSERT INTO user_xiuxian VALUES('user',1,3,2,3,4)")
                 c.execute('CREATE TABLE sects(sect_id INTEGER PRIMARY KEY,sect_owner TEXT,sect_materials INTEGER,sect_used_stone INTEGER)'); c.execute("INSERT INTO sects VALUES(1,'owner',5000,1000)")
