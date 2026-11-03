@@ -36,9 +36,15 @@ class EconomyLedgerSliceContractTests(unittest.TestCase):
         )
 
     def test_migration_declaration_matches_the_runner(self) -> None:
-        self.assertEqual(migrations.MIGRATIONS, (FEATURE.migration_version,))
+        # The manifest version stays the slice's declared baseline; later versions
+        # in this feature only add schema this slice already owns the boundary for.
+        self.assertEqual(migrations.MIGRATIONS[0], FEATURE.migration_version)
+        self.assertEqual(
+            migrations.MIGRATIONS, ("economy_ledger.001", "economy_ledger.002")
+        )
         self.assertEqual(FEATURE.migration_version, "economy_ledger.001")
         self.assertTrue(callable(migrations.apply_economy_ledger_read_indexes))
+        self.assertTrue(callable(migrations.apply_economy_log_schema))
 
     def test_surfaces_and_manifest_are_explicit(self) -> None:
         self.assertEqual(commands.COMMANDS, ())
