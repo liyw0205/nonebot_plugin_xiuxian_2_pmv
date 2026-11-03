@@ -787,6 +787,11 @@ async def reduce_arena_rank(reduce_steps=2, business_week=None, *, chunk_size=50
             reduce_steps,
             chunk_size=chunk_size,
         )
+        if result.status == "schema_missing":
+            logger.opt(colors=True).warning(
+                "<yellow>竞技场降段未执行：竞技场数据尚未就绪，请检查启动迁移。</yellow>"
+            )
+            return result
         if result.status != "applied" or result.task_status == "completed":
             break
         await asyncio.sleep(0)

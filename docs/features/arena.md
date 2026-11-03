@@ -95,6 +95,24 @@ Web API 保留 `/api/v1/arena/purchase`、`/challenge-purchase`、`/settle`，�
 
 本 feature 无自有任务，`features/arena/jobs.py` 不导出 job；排行榜与赛季任务仍由兼容调度器执行。
 
+### 每周降段的 schema 归属
+
+`竞技场每周降段` 的持久化由 `ArenaWeeklyRankApplication -> ArenaWeeklyRankRepository` 承担，
+但仓储**不再在降段事务内建表或补列**。三张表全部归启动迁移：
+
+- `arena.006` 建 `arena_weekly_rank_reduction_operations`（业务周主键的进度行）与
+  `arena_weekly_rank_reduction_targets`（冻结的逐用户目标）。
+- `arena.008` / `arena.009` 建 `arena` 并补齐 `score`、`rank`、`win_streak` 等列。
+
+`reduce()` 第一步只做 `_schema_ready` 校验：`arena` 与两张回执表必须存在，且 `arena` 具备
+`user_id/score/rank/win_streak`。缺表**或缺任一列**返回 `schema_missing` 且零写入，不建表、不补列。
+调度入口 `reduce_arena_rank` 在进入 `while` 续跑循环之前短路该状态并记录一条 warning，
+不会把 `schema_missing` 当成 `applied` 反复空转。
+
+降段数值不变：段位表 `青铜→王者`、初始分数 `1000/1500/1900/2300/2700/3200`、
+`_target()` 的下标回退、分块 `chunk_size`、CAS 条件（`score/rank/win_streak` 三元组）
+与回执字段语义都与迁移前逐字一致。
+
 ## 配置项
 
 `arena_enabled` 控制新 application 与 Web 路由是否注册，默认开启且可热重载；关闭开关不会撤销已提交的结算数据。
@@ -106,3 +124,8 @@ Web API 保留 `/api/v1/arena/purchase`、`/challenge-purchase`、`/settle`，�
 ## 测试与手工验收
 
 `python -m unittest nonebot_plugin_xiuxian_2.features.arena.tests.test_arena_application nonebot_plugin_xiuxian_2.features.arena.tests.test_opponent_application -q`；`python -m unittest tests.test_arena_command_ingress tests.test_arena_progress_contract -q`。手工验收覆盖兑换幂等重放、剩余额度裁剪、无有效候选拒绝与结算回执回放。
+
+每周降段切片：`python -m unittest tests.test_arena_weekly_rank_schema tests.test_arena_weekly_rank_reduction -q`
+—— 覆盖三张表的启动建表形状与列集、未迁移库与半成品 `arena` 上 `reduce()` 返回 `schema_missing`
+且零写入（含「不得 `ALTER` 补列」）、缺一张回执表即整体拒绝、历史回执行保留、
+迁移后分块续跑至 `completed` 并重放、以及段位/初始分数常量未被改动。

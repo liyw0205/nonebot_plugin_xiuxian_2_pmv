@@ -12,6 +12,11 @@ nonebot.init()
 from nonebot_plugin_xiuxian_2.features.arena.weekly_rank_application import (
     ArenaWeeklyRankApplication,
 )
+from nonebot_plugin_xiuxian_2.features.arena.migrations import (
+    apply_arena_state,
+    apply_arena_weekly_rank_reduction,
+)
+from nonebot_plugin_xiuxian_2.infrastructure.database import DatabaseUnitOfWork
 from tests.test_db_backend import db_backend
 
 
@@ -21,6 +26,8 @@ class ArenaWeeklyRankReductionTests(unittest.TestCase):
             def now(self):
                 return datetime(2026, 7, 17, 20, 0, 0, tzinfo=timezone.utc)
 
+        with DatabaseUnitOfWork(str(self.database), immediate=True) as uow:
+            self._migrate(uow)
         application = ArenaWeeklyRankApplication(self.database, clock=FixedClock())
         result = application.reduce(chunk_size=10)
 
@@ -73,13 +80,12 @@ class ArenaWeeklyRankReductionTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.database = Path(self.temp.name) / "player.db"
+        with DatabaseUnitOfWork(str(self.database), immediate=True) as uow:
+            apply_arena_state(uow)
+            apply_arena_weekly_rank_reduction(uow)
         with db_backend.transaction(self.database) as conn:
-            conn.execute(
-                "CREATE TABLE arena(user_id TEXT PRIMARY KEY,score INTEGER,rank TEXT,"
-                "win_streak INTEGER)"
-            )
             conn.executemany(
-                "INSERT INTO arena VALUES(%s,%s,%s,%s)",
+                "INSERT INTO arena(user_id,score,rank,win_streak) VALUES(%s,%s,%s,%s)",
                 (
                     ("u1", 1100, "青铜", 2),
                     ("u2", 2000, "黄金", 3),
@@ -92,6 +98,12 @@ class ArenaWeeklyRankReductionTests(unittest.TestCase):
 
     def tearDown(self):
         self.temp.cleanup()
+
+    @staticmethod
+    def _migrate(uow):
+        """The startup migrations own `arena` and the two reduction ledgers."""
+        apply_arena_state(uow)
+        apply_arena_weekly_rank_reduction(uow)
 
     def reduce(self, week=None, steps=2, chunk_size=500):
         return self.service.reduce(
@@ -152,7 +164,7 @@ class ArenaWeeklyRankReductionTests(unittest.TestCase):
 
         with db_backend.transaction(self.database) as conn:
             conn.execute("UPDATE arena SET score=3400 WHERE user_id='u3'")
-            conn.execute("INSERT INTO arena VALUES('u5',2800,'钻石',4)")
+            conn.execute("INSERT INTO arena(user_id,score,rank,win_streak) VALUES('u5',2800,'钻石',4)")
         completed = self.reduce(chunk_size=10)
         duplicate = self.reduce()
 

@@ -41,6 +41,17 @@ class ArenaWeeklyRankRepository:
         "王者": 3200,
     }
 
+    # The startup migrations own every table this repository touches:
+    # ``arena.006`` builds the two reduction ledgers, ``arena.008``/``arena.009``
+    # build ``arena`` and patch in the columns read below.  The request path only
+    # verifies them, so a missing table or a half-migrated ``arena`` fails closed
+    # instead of silently running DDL inside the settlement transaction.
+    OPERATION_TABLES = (
+        "arena_weekly_rank_reduction_operations",
+        "arena_weekly_rank_reduction_targets",
+    )
+    ARENA_COLUMNS = frozenset({"user_id", "score", "rank", "win_streak"})
+
     def __init__(
         self,
         player_database: str | Path,
@@ -89,35 +100,21 @@ class ArenaWeeklyRankRepository:
         return target_rank, cls.INITIAL_SCORES[target_rank]
 
     @classmethod
-    def _ensure_schema(cls, uow: DatabaseUnitOfWork) -> None:
-        uow.execute(
-            "CREATE TABLE IF NOT EXISTS arena(user_id TEXT PRIMARY KEY,score INTEGER DEFAULT 1000,"
-            "rank TEXT DEFAULT '青铜',win_streak INTEGER DEFAULT 0)"
-        )
-        columns = {str(row[1]) for row in uow.execute("PRAGMA table_info(arena)").fetchall()}
-        for name, definition in {
-            "score": "INTEGER DEFAULT 1000",
-            "rank": "TEXT DEFAULT '青铜'",
-            "win_streak": "INTEGER DEFAULT 0",
-        }.items():
-            if name not in columns:
-                uow.execute(f'ALTER TABLE arena ADD COLUMN "{name}" {definition}')
-        uow.execute(
-            "CREATE TABLE IF NOT EXISTS arena_weekly_rank_reduction_operations("
-            "business_week TEXT PRIMARY KEY,reduce_steps INTEGER NOT NULL,total INTEGER NOT NULL,"
-            "completed INTEGER NOT NULL DEFAULT 0,changed INTEGER NOT NULL DEFAULT 0,"
-            "skipped INTEGER NOT NULL DEFAULT 0,conflicted INTEGER NOT NULL DEFAULT 0,"
-            "status TEXT NOT NULL DEFAULT 'running',last_error TEXT NOT NULL DEFAULT '',"
-            "created_at TEXT NOT NULL,updated_at TEXT NOT NULL)"
-        )
-        uow.execute(
-            "CREATE TABLE IF NOT EXISTS arena_weekly_rank_reduction_targets("
-            "business_week TEXT NOT NULL,user_id TEXT NOT NULL,ordinal INTEGER NOT NULL,"
-            "previous_score INTEGER NOT NULL,previous_rank TEXT NOT NULL,previous_win_streak INTEGER NOT NULL,"
-            "target_score INTEGER NOT NULL,target_rank TEXT NOT NULL,status TEXT NOT NULL DEFAULT 'pending',"
-            "error_text TEXT NOT NULL DEFAULT '',updated_at TEXT NOT NULL,"
-            "PRIMARY KEY(business_week,user_id))"
-        )
+    def _schema_ready(cls, uow: DatabaseUnitOfWork) -> bool:
+        """Verify the startup-owned schema; never create or patch it here."""
+        tables = {
+            str(row["name"]).casefold()
+            for row in uow.query_all(
+                "SELECT name FROM sqlite_master WHERE type='table'"
+            )
+        }
+        if any(table not in tables for table in ("arena", *cls.OPERATION_TABLES)):
+            return False
+        columns = {
+            str(row["name"]).casefold()
+            for row in uow.query_all('PRAGMA table_info("arena")')
+        }
+        return cls.ARENA_COLUMNS.issubset(columns)
 
     @staticmethod
     def _result(uow: DatabaseUnitOfWork, week: str, status: str) -> ArenaWeeklyRankReductionResult:
@@ -141,7 +138,8 @@ class ArenaWeeklyRankRepository:
         stamp = str(updated_at or now.strftime("%Y-%m-%d %H:%M:%S"))
         try:
             with self.lock, DatabaseUnitOfWork(self.database, immediate=True) as uow:
-                self._ensure_schema(uow)
+                if not self._schema_ready(uow):
+                    return ArenaWeeklyRankReductionResult("schema_missing", week)
                 operation = uow.query_one(
                     "SELECT reduce_steps,status FROM arena_weekly_rank_reduction_operations "
                     "WHERE business_week=?",
