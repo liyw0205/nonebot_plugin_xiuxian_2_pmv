@@ -2083,6 +2083,43 @@ status_reader 归属、渲染与 handler 源合同）。受影响套件：
   `build-and-release` skipped）。未部署、未读写真实游戏库、未发真实 QQ 消息、未打 tag；
   用户删除的四个文件保持未暂存，`docs/goals/**` 与 `.codex-next-goal.md` 未提交。
 
+## 已完成目标：共享经济账本 economy_log 的 schema 归属
+
+重构收敛（非新玩法），承接仓库级「请求路径不执行 DDL」合同与经济/奖励结算边界。
+
+**缺口证据**：`xiuxian/xiuxian_utils/economy_log.py::ensure_economy_log_table()` 在**每次**
+`log_economy_change()` 写入时建表、逐列 `ALTER` 并建五个索引；而
+`tasks`/`dufang`/`auction`/`admin_asset`/`sign_in` 的迁移各自只建了精简表。真正被写入的
+权威列集（`sect_id`、`sect_contribution_delta`、`sect_scale_delta`、`sect_materials_delta`、
+`event_id`）只存在于这段请求期 DDL 里 —— 启动迁移建的是另一份形状，请求期再补齐。
+
+交付内容：
+
+- 新增 `infrastructure/database/economy.py`：`ECONOMY_LOG_COLUMNS`、`ECONOMY_LOG_INDEXES`、
+  `ECONOMY_LOG_DDL`、`apply_economy_log()`、`columns()`/`indexes()`/`schema_ready()`，
+  作为共享账本形状的唯一来源。
+- `features/economy_ledger/migrations.py` 新增 `apply_economy_log_schema` 并登记
+  `economy_ledger.002`；`plugin.py` 按版本序注册（`economy_ledger.001` 之后、`fusion.002` 之前），
+  catalog 306→307 条且保持单调。
+- `ensure_economy_log_table()` 改为「已就绪即返回，不执行任何 DDL」；仅在表整体缺失时
+  用同一份 `ECONOMY_LOG_DDL` 兼容兜底（供未跑启动迁移的库/测试夹具）。
+  奖励口径未变：`stone_delta`/`exp_delta`/道具增量与 `event_id` 幂等语义逐字保留。
+- 测试：新增 `tests/test_economy_log_schema_ownership.py`（112 行，6 项）：启动迁移建出
+  权威列集与全部索引、幂等、写入口列集与迁移一致、就绪分支不含 `ALTER TABLE`、
+  就绪探测零写入、奖励列与 `event_id` 唯一索引冻结。
+  `features/economy_ledger/tests/test_slice_contract.py` 的迁移声明契约同步为
+  「清单版本为首个声明 + 固定顺序声明」，并断言新迁移可调用。
+- 定向测试：新套件 6/6；economy 相关合并集 355/355；`features/economy_ledger/tests` 隔离 11/11；
+  含冻结清单门禁合并集 53/53（临时还原后立即删除）。
+- 门禁：`check_architecture.py`、`export_refactor_inventory.py --check`、
+  `check_full_refactor_progress.py --json` 均 exit 0（`failures: None`）；`compileall`、
+  `git diff --check` 干净。
+- 交付与 CI：功能提交 `426386e3` 的 develop run `41682316741` **failure**（`economy_ledger`
+  slice 契约钉住「迁移元组只有一版」）→ 契约同步提交 `c24c9c65` 的 develop run
+  `41683764690` success、main run `41685097231` success（headSha `c24c9c65`；`quality` success、
+  `build-and-release` skipped）。未部署、未读写真实游戏库、未发真实 QQ 消息、未打 tag；
+  用户删除的四个文件保持未暂存，`docs/goals/**` 与 `.codex-next-goal.md` 未提交。
+
 ## 已完成目标：宠物（pet）回执表启动迁移收敛
 
 重构收敛（非新玩法），承接 `docs/features/pet.md` 与仓库级「请求路径不执行 DDL」合同。
