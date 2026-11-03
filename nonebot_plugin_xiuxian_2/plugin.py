@@ -183,6 +183,7 @@ from .features.work.migrations import (
 from .features.mixelixir.manifest import FEATURE as MIXELIXIR_FEATURE
 from .features.mixelixir.migrations import (
     apply_mixelixir,
+    apply_mixelixir_operations,
     apply_mixelixir_refine_claim,
     apply_mixelixir_refine_claim_player,
 )
@@ -418,6 +419,7 @@ def build_migrations() -> tuple[Migration, ...]:
         Migration("mixelixir.001", "mixelixir_feature_migrations", apply_mixelixir),
         Migration("mixelixir.002", "mixelixir_refine_claim", apply_mixelixir_refine_claim),
         Migration("mixelixir.003", "mixelixir_refine_claim_player", apply_mixelixir_refine_claim_player),
+        Migration("mixelixir.004", "mixelixir_operations", apply_mixelixir_operations),
         Migration("natal_treasure.001", "natal_treasure_feature_migrations", apply_natal_treasure),
         Migration("package_reward.001", "package_reward_operations", apply_package_reward),
         Migration("pet.001", "pet_feature_migrations", apply_pet),

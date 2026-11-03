@@ -2,7 +2,9 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from ....infrastructure.database import DatabaseUnitOfWork
 from ..fire_control_upgrade_repository import MixelixirFireControlUpgradeSqlRepository
+from ..migrations import apply_mixelixir_operations
 from tests.test_db_backend import db_backend
 
 # The authoritative player column set, from xiuxian2_handle.mix_elixir_infoconfigkey:
@@ -37,6 +39,8 @@ class MixelixirFireControlUpgradeRepositoryTests(unittest.TestCase):
                     ("u", "1", "100"),
                 )
             repo = MixelixirFireControlUpgradeSqlRepository(game, player)
+            with DatabaseUnitOfWork(game, immediate=True) as uow:
+                apply_mixelixir_operations(uow)
             first = repo.upgrade("u1", "u", 1, 100, 100, 2, 50)
             duplicate = repo.upgrade("u1", "u", 1, 100, 100, 2, 50)
             stale = repo.upgrade("u2", "u", 1, 100, 100, 2, 50)
@@ -57,6 +61,8 @@ class MixelixirFireControlUpgradeRepositoryTests(unittest.TestCase):
                     'INSERT INTO mix_elixir_info(user_id,"丹药控火","炼丹经验") VALUES(?,?,?)',
                     ("u", "0", "900"),
                 )
+            with DatabaseUnitOfWork(game, immediate=True) as uow:
+                apply_mixelixir_operations(uow)
             result = MixelixirFireControlUpgradeSqlRepository(game, player).upgrade(
                 "u3", "u", 0, 900, 100, 1, 400
             )

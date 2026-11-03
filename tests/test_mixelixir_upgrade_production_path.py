@@ -32,6 +32,7 @@ nonebot.init()
 
 from nonebot_plugin_xiuxian_2.core.errors import OperationConflictError
 from nonebot_plugin_xiuxian_2.features.mixelixir.application import MixelixirApplication
+from nonebot_plugin_xiuxian_2.features.mixelixir.migrations import apply_mixelixir_operations
 from nonebot_plugin_xiuxian_2.infrastructure.database import (
     DatabaseUnitOfWork,
     OperationLedger,
@@ -80,6 +81,7 @@ class UpgradeProductionPathTests(unittest.TestCase):
                 "INSERT INTO user_xiuxian VALUES('u1','化神境初期',?)", (stone,)
             )
             OperationLedger().ensure_schema(uow)
+            apply_mixelixir_operations(uow)
         real_player_schema(player)
         with db_backend.transaction(player) as conn:
             conn.execute(
@@ -283,12 +285,6 @@ class UpgradeProductionPathTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             game, player = self.build(temp)
             with db_backend.transaction(game) as conn:
-                conn.execute(
-                    "CREATE TABLE mixelixir_fire_control_upgrade_operations ("
-                    "operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,cost INTEGER NOT NULL,"
-                    "wallet_stone INTEGER NOT NULL,level INTEGER NOT NULL,"
-                    "experience INTEGER NOT NULL,created_at TIMESTAMP)"
-                )
                 conn.execute(
                     "CREATE TRIGGER fail_fire_control BEFORE INSERT ON "
                     "mixelixir_fire_control_upgrade_operations "

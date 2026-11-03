@@ -15,9 +15,27 @@ class MixelixirHarvestResult:
 
 
 class MixelixirHarvestSqlRepository:
+    OPERATION_TABLE = "mixelixir_harvest_operations"
+    OPERATION_COLUMNS = frozenset({"operation_id", "payload", "harvested_at", "rewards_json"})
+
     def __init__(self, game_database: str | Path, player_database: str | Path) -> None:
         self.game_database = str(game_database)
         self.player_database = str(player_database)
+
+    @classmethod
+    def _operations_ready(cls, uow: DatabaseUnitOfWork) -> bool:
+        """The ledger is created by startup migration ``mixelixir.004``; requests never DDL."""
+        present = uow.query_one(
+            "SELECT 1 AS present FROM sqlite_master WHERE type='table' AND name=?",
+            (cls.OPERATION_TABLE,),
+        )
+        if present is None:
+            return False
+        columns = {
+            str(row["name"]).casefold()
+            for row in uow.query_all(f'PRAGMA table_info("{cls.OPERATION_TABLE}")')
+        }
+        return cls.OPERATION_COLUMNS.issubset(columns)
 
     def harvest(self, operation_id: str, user_id: str, expected_last_time: str, harvested_at: str, rewards: Sequence[Mapping[str, Any]], *, max_goods_num: int) -> MixelixirHarvestResult:
         operation_id, user_id = str(operation_id).strip(), str(user_id)
@@ -26,7 +44,8 @@ class MixelixirHarvestSqlRepository:
         with DatabaseUnitOfWork(self.game_database, immediate=True) as uow:
             uow.execute("ATTACH DATABASE ? AS player_data", (self.player_database,))
             try:
-                uow.execute("CREATE TABLE IF NOT EXISTS mixelixir_harvest_operations(operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,harvested_at TEXT NOT NULL,rewards_json TEXT NOT NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
+                if not self._operations_ready(uow):
+                    return MixelixirHarvestResult("schema_missing", harvested_at, ())
                 previous = uow.query_one("SELECT payload,harvested_at,rewards_json FROM mixelixir_harvest_operations WHERE operation_id=?", (operation_id,))
                 if previous is not None:
                     if str(previous["payload"]) != payload:

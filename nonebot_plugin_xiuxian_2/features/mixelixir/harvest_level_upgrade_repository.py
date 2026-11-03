@@ -16,9 +16,29 @@ class MixelixirHarvestLevelUpgradeResult:
 
 
 class MixelixirHarvestLevelUpgradeSqlRepository:
+    OPERATION_TABLE = "mixelixir_harvest_level_upgrade_operations"
+    OPERATION_COLUMNS = frozenset(
+        {"operation_id", "payload", "cost", "wallet_stone", "level", "experience"}
+    )
+
     def __init__(self, game_database: str | Path, player_database: str | Path) -> None:
         self.game_database = str(game_database)
         self.player_database = str(player_database)
+
+    @classmethod
+    def _operations_ready(cls, uow: DatabaseUnitOfWork) -> bool:
+        """The ledger is created by startup migration ``mixelixir.004``; requests never DDL."""
+        present = uow.query_one(
+            "SELECT 1 AS present FROM sqlite_master WHERE type='table' AND name=?",
+            (cls.OPERATION_TABLE,),
+        )
+        if present is None:
+            return False
+        columns = {
+            str(row["name"]).casefold()
+            for row in uow.query_all(f'PRAGMA main.table_info("{cls.OPERATION_TABLE}")')
+        }
+        return cls.OPERATION_COLUMNS.issubset(columns)
 
     def upgrade(self, operation_id: str, user_id: str, expected_level: int, expected_experience: int, expected_stone: int | None, next_level: int, cost: int) -> MixelixirHarvestLevelUpgradeResult:
         operation_id, user_id = str(operation_id).strip(), str(user_id)
@@ -31,7 +51,8 @@ class MixelixirHarvestLevelUpgradeSqlRepository:
         with DatabaseUnitOfWork(self.game_database, immediate=True) as uow:
             uow.execute("ATTACH DATABASE ? AS player_data", (self.player_database,))
             try:
-                uow.execute("CREATE TABLE IF NOT EXISTS mixelixir_harvest_level_upgrade_operations(operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,cost INTEGER NOT NULL,wallet_stone INTEGER NOT NULL,level INTEGER NOT NULL,experience INTEGER NOT NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
+                if not self._operations_ready(uow):
+                    return MixelixirHarvestLevelUpgradeResult("schema_missing")
                 previous = uow.query_one("SELECT payload,cost,wallet_stone,level,experience FROM mixelixir_harvest_level_upgrade_operations WHERE operation_id=?", (operation_id,))
                 if previous is not None:
                     if str(previous["payload"]) != payload:

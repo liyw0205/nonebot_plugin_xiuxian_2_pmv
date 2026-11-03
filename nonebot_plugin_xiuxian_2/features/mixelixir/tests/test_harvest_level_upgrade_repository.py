@@ -2,7 +2,9 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from ....infrastructure.database import DatabaseUnitOfWork
 from ..harvest_level_upgrade_repository import MixelixirHarvestLevelUpgradeSqlRepository
+from ..migrations import apply_mixelixir_operations
 from tests.test_db_backend import db_backend
 
 # The authoritative player column set, from xiuxian2_handle.mix_elixir_infoconfigkey.
@@ -33,6 +35,8 @@ class MixelixirHarvestLevelUpgradeRepositoryTests(unittest.TestCase):
                 'INSERT INTO mix_elixir_info(user_id,"收取等级","炼丹经验") VALUES(?,?,?)',
                 ("u", level, experience),
             )
+        with DatabaseUnitOfWork(game, immediate=True) as uow:
+            apply_mixelixir_operations(uow)
         return game, player
 
     def test_applied_duplicate_and_state_changed(self):

@@ -2,7 +2,9 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from ....infrastructure.database import DatabaseUnitOfWork
 from ..settlement_repository import MixelixirSettlementSqlRepository
+from ..migrations import apply_mixelixir_operations
 from tests.test_db_backend import db_backend
 
 
@@ -15,6 +17,8 @@ class MixelixirSettlementRepositoryTests(unittest.TestCase):
             conn.execute("INSERT INTO user_xiuxian VALUES('u',0)")
             conn.execute("CREATE TABLE back(user_id TEXT,goods_id INTEGER,goods_name TEXT,goods_type TEXT,goods_num INTEGER,bind_num INTEGER,PRIMARY KEY(user_id,goods_id))")
             conn.execute("INSERT INTO back VALUES('u',1,'主药','药材',5,0)")
+        with DatabaseUnitOfWork(self.db, immediate=True) as uow:
+            apply_mixelixir_operations(uow)
 
     def tearDown(self):
         self.temp.cleanup()

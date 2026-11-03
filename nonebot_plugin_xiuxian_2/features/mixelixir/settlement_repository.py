@@ -14,8 +14,26 @@ class MixelixirSettlementResult:
 
 
 class MixelixirSettlementSqlRepository:
+    OPERATION_TABLE = "mixelixir_settlement_operations"
+    OPERATION_COLUMNS = frozenset({"operation_id", "payload", "reward_quantity"})
+
     def __init__(self, database: str | Path) -> None:
         self.database = str(database)
+
+    @classmethod
+    def _operations_ready(cls, uow: DatabaseUnitOfWork) -> bool:
+        """The ledger is created by startup migration ``mixelixir.004``; requests never DDL."""
+        present = uow.query_one(
+            "SELECT 1 AS present FROM sqlite_master WHERE type='table' AND name=?",
+            (cls.OPERATION_TABLE,),
+        )
+        if present is None:
+            return False
+        columns = {
+            str(row["name"]).casefold()
+            for row in uow.query_all(f'PRAGMA table_info("{cls.OPERATION_TABLE}")')
+        }
+        return cls.OPERATION_COLUMNS.issubset(columns)
 
     def settle(self, operation_id: str, user_id: str, materials: Mapping[int, int], reward_id: int, reward_name: str, reward_quantity: int, *, max_goods_num: int) -> MixelixirSettlementResult:
         operation_id, user_id = str(operation_id).strip(), str(user_id)
@@ -25,7 +43,8 @@ class MixelixirSettlementSqlRepository:
             raise ValueError("operation, materials, reward quantity and capacity are required")
         payload = json.dumps([user_id, sorted(normalized.items()), reward_id, reward_quantity], separators=(",", ":"))
         with DatabaseUnitOfWork(self.database, immediate=True) as uow:
-            uow.execute("CREATE TABLE IF NOT EXISTS mixelixir_settlement_operations(operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,reward_quantity INTEGER NOT NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
+            if not self._operations_ready(uow):
+                return MixelixirSettlementResult("schema_missing")
             previous = uow.query_one("SELECT payload,reward_quantity FROM mixelixir_settlement_operations WHERE operation_id=?", (operation_id,))
             if previous is not None:
                 if str(previous["payload"]) != payload:

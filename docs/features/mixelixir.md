@@ -2,7 +2,7 @@
 
 ## 用户流程
 
-用户在洞天福地灵田成熟后执行灵田收取；自定义配方炼丹则先扣除药材并记录待领取任务，再领取丹药。随机奖励、配方解析和数值加成仍由旧命令适配器计算；灵田收取、扣材和跨库领奖励通过 `MixelixirApplication`。
+用户在洞天福地灵田成熟后执行灵田收取；自定义配方炼丹则先扣除药材并记录待领取任务，再领取丹药。灵田成熟窗口、可收取数量与药材抽取已由 `features/mixelixir/harvest_rules.py` 承担，只读状态由 `features/mixelixir/harvest_view.py` 提供；配方解析、随机奖励展示文案与冷却仍由旧命令适配器计算。灵田收取、扣材和跨库领奖励统一通过 `MixelixirApplication`。
 
 ## 命令与别名
 
@@ -41,9 +41,33 @@
 `operation_conflict`（同一操作号用于不同请求）；`duplicate` 重放返回首次结果且不重复扣经验。
 缺 `mix_elixir_info` 表或缺玩家行时返回 `state_changed`，不建表、不补列。
 
+## 灵田收取（成熟窗口 / 数量 / 抽取）
+
+`灵田收取` / `灵田结算` 原先在命令模块里硬编码成熟窗口 `{"time_cost": 23, "加速基数": 0.05}`、
+裸 `strptime` 解析 `mix_elixir_info."收取时间"`（缺行、`0`/`'0'` 或脏值直接抛异常），并逐次
+`choice` 抽取药材后去重合并。现在：
+
+- 成熟判定与时间解析由 `features/mixelixir/harvest_rules.py` 提供：
+  `maturity_state()` 返回 `ready` / `waiting`（含剩余小时）/ `invalid`，窗口为
+  `round(23 × (1 − 0.05 × 药材速度), 2)`；`invalid` 与「从未收取」等价（`0` 与文本 `'0'` 同义），
+  交给跨库仓储的快照校验决定是否真正发放，不再在命令里抛错。
+- 可收取数量 = `灵田数量 + 收取等级 + 传承 impart_reap_per + 功法 reap_buff`（`harvest_count()`，下限 0）。
+- `roll_rewards()` 逐次抽取并按 id 去重保持首次出现顺序；候选为空时返回兜底
+  `(3001, "恒心草", 数量)`。`剩余时间` 文案由 `remaining_text()` 生成，格式与历史一致（`X小时Y分钟`）。
+- 只读状态由 `features/mixelixir/harvest_view.py` 的 `MixelixirHarvestFieldApplication.snapshot()`
+  在单个只读 UoW 内读取真实列集；缺 `user_xiuxian`、缺 `mix_elixir_info` 或缺可选列时 fail-soft
+  （`ok=False` 或缺失列按默认值），不建表、不补列。
+- 兼容：`收取时间` 是历史文本列，`'0'`、空串、非法时间一律视作首次收取；已存在的
+  `mixelixir_harvest_operations` 行继续参与重放，重放语义不变。
+
 ## 数据模型与迁移
 
-`mixelixir.001` 写入 `mixelixir_feature_migrations`。`mixelixir.002` 在 game DB 创建/升级两阶段任务、扣材操作和领奖励操作表；`mixelixir.003` 在 player DB 准备炼丹次数统计列。领取请求不执行 DDL。
+`mixelixir.001` 写入 `mixelixir_feature_migrations`。`mixelixir.002` 在 game DB 创建/升级两阶段任务、扣材操作和领奖励操作表；`mixelixir.003` 在 player DB 准备炼丹次数统计列。`mixelixir.004` 在 game DB 预建四张炼丹回执表
+（`mixelixir_harvest_operations`、`mixelixir_settlement_operations`、
+`mixelixir_harvest_level_upgrade_operations`、`mixelixir_fire_control_upgrade_operations`）；
+四张表此前在请求事务内 `CREATE TABLE IF NOT EXISTS`，与「请求路径不执行 DDL」的仓库级合同冲突，
+迁移语句保持 `IF NOT EXISTS`，已按惰性路径建表的历史库保留全部既有回执行。四条请求路径现在只校验
+schema，缺表或缺列一律返回 `schema_missing` 且零变化，领取请求不执行 DDL。
 
 ## 事务与失败回滚
 
@@ -72,10 +96,13 @@ NoneBot 适配器继续负责随机奖励、配方文本和消息文案；Web �
 - `python -m unittest nonebot_plugin_xiuxian_2.features.mixelixir.tests.test_refine_cost_repository nonebot_plugin_xiuxian_2.features.mixelixir.tests.test_refine_reward_repository -q`
 - `python -m unittest tests.test_mixelixir_refine_claim_boundary -q`
 - `python -m unittest tests.test_mixelixir_harvest_service tests.test_mixelixir_settlement_service tests.test_source_quality -q`
+- `python -m unittest tests.test_mixelixir_harvest_domain tests.test_mixelixir_upgrade_production_path -q`
 
 ## 灰度开关、回滚和已知限制
 
-关闭 `mixelixir_enabled` 即回到旧命令写入。炼丹升级和配方保存仍由兼容服务维护；旧 `MixelixirRefineRewardService` 保留作兼容对照，不再由默认领取 handler 调用。`升级收取等级` / `升级丹药控火` 的兼容 service（`MixelixirHarvestLevelUpgradeService` / `MixelixirFireControlUpgradeService`）保留为显式回滚路径，其列名常量与 feature 仓储一致；两条默认路径都已由 feature 仓储承担。
+关闭 `mixelixir_enabled` 即回到旧命令写入。旧 `transaction_service` 的四条兼容路径（`harvest` /
+`settle` / 两个 `upgrade`）保留为显式回滚入口，它们仍在自身事务内 `CREATE TABLE IF NOT EXISTS`；
+默认命令路径与 feature 仓储都已改为只校验启动迁移建的 schema。炼丹升级和配方保存仍由兼容服务维护；旧 `MixelixirRefineRewardService` 保留作兼容对照，不再由默认领取 handler 调用。`升级收取等级` / `升级丹药控火` 的兼容 service（`MixelixirHarvestLevelUpgradeService` / `MixelixirFireControlUpgradeService`）保留为显式回滚路径，其列名常量与 feature 仓储一致；两条默认路径都已由 feature 仓储承担。配方解析（`mixelixirutil`）与炼丹随机奖励展示仍在命令适配器侧。
 
 ## Manifest 清单
 

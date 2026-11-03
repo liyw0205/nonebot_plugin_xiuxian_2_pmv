@@ -77,7 +77,7 @@ class MixelixirApplication:
             operation_id=request.operation_id, user_id=request.user_id, action="mixelixir.harvest", payload=request.payload(),
             call=lambda: (MixelixirHarvestSqlRepository(self.game_database, self.player_database) if self._explicit_repository is None else self._repository()).harvest(request.operation_id, request.user_id, request.expected_last_time, request.harvested_at, request.rewards, max_goods_num=request.max_goods_num),
             success_statuses={"applied", "duplicate"},
-            messages={"state_changed": "药材未发放：灵田状态已更新，请重新收取。", "user_missing": "未找到修仙数据。"},
+            messages={"schema_missing": "药材未发放：灵田数据尚未就绪，请稍后重新收取。", "state_changed": "药材未发放：灵田状态已更新，请重新收取。", "user_missing": "未找到修仙数据。"},
             normalize=lambda data: {"status": data.get("status", "failed"), "harvested_at": str(data.get("harvested_at", request.harvested_at)), "rewards": data.get("rewards", []), "granted": {"herbs": data.get("rewards", [])}},
         )
 

@@ -2,7 +2,9 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from ....infrastructure.database import DatabaseUnitOfWork
 from ..harvest_repository import MixelixirHarvestSqlRepository
+from ..migrations import apply_mixelixir_operations
 from tests.test_db_backend import db_backend
 
 
@@ -17,6 +19,8 @@ class MixelixirHarvestRepositoryTests(unittest.TestCase):
         with db_backend.transaction(self.player) as conn:
             conn.execute("CREATE TABLE mix_elixir_info(user_id TEXT PRIMARY KEY,收取时间 TEXT)")
             conn.execute("INSERT INTO mix_elixir_info VALUES('u','2026-01-01 00:00:00')")
+        with DatabaseUnitOfWork(self.game, immediate=True) as uow:
+            apply_mixelixir_operations(uow)
 
     def tearDown(self):
         self.temp.cleanup()

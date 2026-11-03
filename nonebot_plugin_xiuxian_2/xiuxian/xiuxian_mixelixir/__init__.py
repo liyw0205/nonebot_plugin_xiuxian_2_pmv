@@ -26,6 +26,8 @@ from ..xiuxian_utils.utils import (
 )
 from ..xiuxian_utils.item_json import Items
 from .mixelixirutil import get_mix_elixir_msg, tiaohe, check_mix, make_dict, get_elixir_recipe_msg
+from ...features.mixelixir import harvest_rules
+from ...features.mixelixir.harvest_view import MixelixirHarvestFieldApplication
 from ..xiuxian_config import convert_rank, XiuConfig, added_ranks
 from datetime import datetime
 from .mix_elixir_config import MIXELIXIRCONFIG
@@ -60,6 +62,10 @@ def _mixelixir_result(outcome):
 
 
 mixelixir_application = MixelixirApplication(
+    get_paths().game_db,
+    get_paths().player_db,
+)
+harvest_field_application = MixelixirHarvestFieldApplication(
     get_paths().game_db,
     get_paths().player_db,
 )
@@ -270,89 +276,77 @@ async def yaocai_get_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         msg = f"道友还没有洞天福地呢，请发送洞天福地购买吧~"
         await handle_send(bot, event, msg, md_type="炼丹", k1="购买", v1="洞天福地购买", k2="查看", v2="洞天福地查看", k3="帮助", v3="洞天福地帮助")
         await yaocai_get.finish()
-    mix_elixir_info = get_player_info(user_id, "mix_elixir_info")
-    GETCONFIG = {
-        "time_cost": 23,  # 单位小时
-        "加速基数": 0.05
-    }
+    # 成熟窗口与「收取时间」解析统一走 feature 域规则：缺行/坏时间按「首次收取」处理，
+    # 交给跨库仓储的快照校验决定是否真正发放，不再在命令里 strptime 崩掉。
+    field = harvest_field_application.snapshot(str(user_id))
+    if not field.ok:
+        msg = field.notice or "灵田状态读取失败，请稍后再试。"
+        await handle_send(bot, event, msg, md_type="炼丹", k1="收取", v1="灵田收取", k2="查看", v2="洞天福地查看", k3="帮助", v3="洞天福地帮助")
+        await yaocai_get.finish()
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
     operation_id = f"mixelixir-harvest:{event_id}:{user_id}" if event_id else f"mixelixir-harvest:{user_id}:{runtime_ids.new_id()}"
-    last_time = mix_elixir_info['收取时间']
-    if last_time != 0:
-        nowtime = runtime_clock.now().strftime('%Y-%m-%d %H:%M:%S')  # str
-        timedeff = round((datetime.strptime(nowtime, '%Y-%m-%d %H:%M:%S') - datetime.strptime(last_time,
-                                                                                              '%Y-%m-%d %H:%M:%S')).total_seconds() / 3600,
-                         2)
-        if timedeff >= round(GETCONFIG['time_cost'] * (1 - (GETCONFIG['加速基数'] * mix_elixir_info['药材速度'])), 2):
-            yaocai_id_list = items.get_random_id_list_by_rank_and_item_type(
-                max(convert_rank(user_info['level'])[0] - added_rank, 16), ['药材'])
-            # 加入传承
-            impart_data = xiuxian_impart.get_user_impart_info_with_id(user_id)
-            impart_reap_per = impart_data['impart_reap_per'] if impart_data is not None else 0
-            # 功法灵田收取加成
-            main_reap = UserBuffDate(user_id).get_user_main_buff_data()
+    last_time = field.last_time
+    if field.state == harvest_rules.WAITING:
+        msg = f"道友的灵田还不能收取，下次收取时间为：{harvest_rules.remaining_text(field.remaining_hours)}之后"
+        await handle_send(bot, event, msg, md_type="炼丹", k1="收取", v1="灵田收取", k2="查看", v2="洞天福地查看", k3="帮助", v3="洞天福地帮助")
+        await yaocai_get.finish()
+    nowtime = runtime_clock.now().strftime('%Y-%m-%d %H:%M:%S')  # str
+    yaocai_id_list = items.get_random_id_list_by_rank_and_item_type(
+        max(convert_rank(user_info['level'])[0] - added_rank, 16), ['药材'])
+    # 加入传承
+    impart_data = xiuxian_impart.get_user_impart_info_with_id(user_id)
+    impart_reap_per = impart_data['impart_reap_per'] if impart_data is not None else 0
+    # 功法灵田收取加成
+    main_reap = UserBuffDate(user_id).get_user_main_buff_data()
 
-            if main_reap != None:  # 功法灵田收取加成
-                reap_buff = main_reap['reap_buff']
-            else:
-                reap_buff = 0
-            num = mix_elixir_info['灵田数量'] + mix_elixir_info['收取等级'] + impart_reap_per + reap_buff
-            rewards = []
-            if not yaocai_id_list:
-                rewards.append((3001, "恒心草", num))
-            else:
-                i = 1
-                give_dict = {}
-                while i <= num:
-                    id = runtime_random.choice(yaocai_id_list)
-                    try:
-                        give_dict[id] += 1
-                        i += 1
-                    except LookupError:
-                        give_dict[id] = 1
-                        i += 1
-                for k, v in give_dict.items():
-                    goods_info = items.get_data_by_item_id(k)
-                    rewards.append((k, goods_info['name'], v))
-            # Legacy facade call: mixelixir_harvest_service.harvest(...)
-            harvest = mixelixir_application.harvest(
-                operation_id=operation_id,
-                user_id=user_id,
-                expected_last_time=last_time,
-                harvested_at=nowtime,
-                rewards=rewards,
-                max_goods_num=XiuConfig().max_goods_num,
-            )
-            harvest_data = harvest.data or {}
-            harvest_status = str(harvest_data.get("status", harvest.status))
-            harvest_rewards = harvest_data.get("rewards", [])
-            if harvest_status == "duplicate" or harvest.replayed:
-                msg = "".join(
-                    f"道友成功收获药材：{reward.get('name', '')} {reward.get('quantity', 0)} 个！\n"
-                    for reward in harvest_rewards
-                ) + "该收取请求已经处理，无需重复提交。"
-                l_msg = [msg]
-                await send_msg_handler(bot, event, '灵田收取', bot.self_id, l_msg)
-                await yaocai_get.finish()
-            if harvest_status in {"state_changed", "user_missing"}:
-                msg = "药材未发放：灵田状态已更新，请重新收取。"
-                await handle_send(bot, event, msg, md_type="炼丹", k1="收取", v1="灵田收取", k2="查看", v2="洞天福地查看", k3="帮助", v3="洞天福地帮助")
-                await yaocai_get.finish()
-            msg = "".join(
-                f"道友成功收获药材：{reward.get('name', '')} {reward.get('quantity', 0)} 个！\n"
-                for reward in harvest_rewards
-            )
-            l_msg = [msg]
-            await send_msg_handler(bot, event, '灵田收取', bot.self_id, l_msg)
-            await yaocai_get.finish()
-        else:
-            remaining_time = round(GETCONFIG['time_cost'] * (1 - (GETCONFIG['加速基数'] * mix_elixir_info['药材速度'])),
-                                   2) - timedeff
-            hours = int(remaining_time)
-            minutes = int((remaining_time - hours) * 60)
-            msg = f"道友的灵田还不能收取，下次收取时间为：{hours}小时{minutes}分钟之后"
-            await handle_send(bot, event, msg, md_type="炼丹", k1="收取", v1="灵田收取", k2="查看", v2="洞天福地查看", k3="帮助", v3="洞天福地帮助")
-            await yaocai_get.finish()
+    if main_reap != None:  # 功法灵田收取加成
+        reap_buff = main_reap['reap_buff']
+    else:
+        reap_buff = 0
+    num = harvest_rules.harvest_count(
+        field.field_count, field.harvest_level, impart_reap_per, reap_buff
+    )
+    rewards = harvest_rules.roll_rewards(
+        yaocai_id_list,
+        num,
+        name_of=lambda goods_id: items.get_data_by_item_id(goods_id)['name'],
+        rng=runtime_random,
+    )
+    # Legacy facade call: mixelixir_harvest_service.harvest(...)
+    harvest = mixelixir_application.harvest(
+        operation_id=operation_id,
+        user_id=user_id,
+        expected_last_time=last_time,
+        harvested_at=nowtime,
+        rewards=rewards,
+        max_goods_num=XiuConfig().max_goods_num,
+    )
+    harvest_data = harvest.data or {}
+    harvest_status = str(harvest_data.get("status", harvest.status))
+    harvest_rewards = harvest_data.get("rewards", [])
+    if harvest_status == "duplicate" or harvest.replayed:
+        msg = "".join(
+            f"道友成功收获药材：{reward.get('name', '')} {reward.get('quantity', 0)} 个！\n"
+            for reward in harvest_rewards
+        ) + "该收取请求已经处理，无需重复提交。"
+        l_msg = [msg]
+        await send_msg_handler(bot, event, '灵田收取', bot.self_id, l_msg)
+        await yaocai_get.finish()
+    if harvest_status in {"state_changed", "user_missing"}:
+        msg = "药材未发放：灵田状态已更新，请重新收取。"
+        await handle_send(bot, event, msg, md_type="炼丹", k1="收取", v1="灵田收取", k2="查看", v2="洞天福地查看", k3="帮助", v3="洞天福地帮助")
+        await yaocai_get.finish()
+    if harvest_status == "schema_missing":
+        msg = "药材未发放：灵田数据尚未就绪，请稍后重新收取。"
+        await handle_send(bot, event, msg, md_type="炼丹", k1="收取", v1="灵田收取", k2="查看", v2="洞天福地查看", k3="帮助", v3="洞天福地帮助")
+        await yaocai_get.finish()
+    msg = "".join(
+        f"道友成功收获药材：{reward.get('name', '')} {reward.get('quantity', 0)} 个！\n"
+        for reward in harvest_rewards
+    )
+    l_msg = [msg]
+    await send_msg_handler(bot, event, '灵田收取', bot.self_id, l_msg)
+    await yaocai_get.finish()
 
 
 @my_mix_elixir_info.handle(parameterless=[Cooldown(cd_time=0)])
