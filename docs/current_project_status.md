@@ -2083,6 +2083,44 @@ status_reader 归属、渲染与 handler 源合同）。受影响套件：
   `build-and-release` skipped）。未部署、未读写真实游戏库、未发真实 QQ 消息、未打 tag；
   用户删除的四个文件保持未暂存，`docs/goals/**` 与 `.codex-next-goal.md` 未提交。
 
+## 已完成目标：宠物（pet）回执表启动迁移收敛
+
+重构收敛（非新玩法），承接 `docs/features/pet.md` 与仓库级「请求路径不执行 DDL」合同。
+
+**缺口证据**：`features/pet/migrations.py` 只有 `apply_pet`/`apply_pet_hatch`/`apply_pet_skill_replace`/
+`apply_pet_travel_claim` 四条迁移；`features/pet/repository.py` 仍在六个写路径里各自
+`CREATE TABLE IF NOT EXISTS <回执行>` 惰性建表：`pet_active_switch_operations`（出战切换）、
+`pet_feed_operations`（喂养）、`pet_travel_start_operations`（派遣出发）、
+`pet_release_operations`（放生）、`pet_fusion_breakthrough_operations`（融合突破）、
+`pet_skill_reroll_operations`（技能洗练）。
+
+交付内容：
+
+- 新增 `features/pet/schema.py`：`SCHEMA_MISSING`、六张表的列契约、
+  `PLAYER_OPERATION_TABLES`/`GAME_OPERATION_TABLES`、`columns()`/`operations_ready()`、
+  `PetSchemaMissing(DomainError)`。
+- `migrations.py` 新增两条真实迁移，按仓储实际主库拆分：`pet.005`（player 库：
+  出战切换/派遣出发/融合突破）、`pet.006`（game 库：喂养/放生/技能洗练）。
+  `plugin.py` 按版本序注册（`pet.004` 之后、`platform.001` 之前），`pet.005` 加入
+  player 白名单与 game 排除集；catalog 304→306 条且保持单调。
+- `repository.py` 六处请求期 `CREATE TABLE` 全部删除，改为方法首步 `operations_ready` 校验；
+  缺表或缺本次要读的列返回 `schema_missing`，不改动宠物、背包与任何回执行。
+- 测试：新增 `tests/test_pet_schema_ownership.py`（198 行，9 项）：两条迁移的建表形状与幂等、
+  player/game 归属不串库、仓储源码无 DDL、六条写路径未迁移时 `schema_missing` 且零建表、
+  半成品回执表被拒且不被补列、迁移后出战切换与派遣出发正常 applied 并重放 `duplicate`。
+  feature 夹具新增 `migrate_player`/`migrate_game`，六个仓储测试与 `test_pet_application` 改用它。
+- 定向测试：新套件 9/9；`features/pet/tests` 隔离 30/30；pet 相关与门禁合并集 318/318；
+  含冻结清单门禁的合并集 96/96（临时还原后立即删除）。
+- 门禁：`check_architecture.py`、`export_refactor_inventory.py --check`、
+  `check_full_refactor_progress.py --json` 均 exit 0（`failures: None`）；`compileall`、
+  `git diff --check` 干净。
+- 兼容：不新增表/命令/路由/配置键；宠物数值、抽取概率与技能池未改；迁移一律
+  `IF NOT EXISTS`，历史库回执行保留。
+- 交付与 CI：功能提交 `c5559667` 的 develop run `41671742605` success、
+  main run `41672978406` success（headSha 均 `c5559667`；`quality` success、
+  `build-and-release` skipped）。未部署、未读写真实游戏库、未发真实 QQ 消息、未打 tag；
+  用户删除的四个文件保持未暂存，`docs/goals/**` 与 `.codex-next-goal.md` 未提交。
+
 ## 已完成目标：前世（past_life）全域 schema 归属与 fail-closed
 
 重构收敛（非新玩法），承接 `docs/features/past_life.md` 与仓库级「请求路径不执行 DDL」合同。
