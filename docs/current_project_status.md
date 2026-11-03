@@ -2083,6 +2083,50 @@ status_reader 归属、渲染与 handler 源合同）。受影响套件：
   `build-and-release` skipped）。未部署、未读写真实游戏库、未发真实 QQ 消息、未打 tag；
   用户删除的四个文件保持未暂存，`docs/goals/**` 与 `.codex-next-goal.md` 未提交。
 
+## 已完成目标：竞技场全域 schema 归属与 fail-closed
+
+重构收敛（非新玩法），承接 `docs/features/arena.md` 与仓库级「请求路径不执行 DDL」合同。
+
+**审计结论**：`features/arena/` 与 legacy `xiuxian/xiuxian_arena/` 的请求路径**已无任何 DDL**
+（`CREATE TABLE`/`ALTER TABLE` 只在 `features/arena/migrations.py`；上一轮已删掉
+`weekly_rank_repository._ensure_schema`）。剩余缺口是同一合同的其余部分未覆盖：
+`repository.py`（四个写路径 + 两个回执读）、`state_repository.py`、`season_reward_repository.py`、
+`opponent_repository.py` 均无 schema 校验，未迁移库上直接抛 `sqlite3.OperationalError`；
+`season_reward_repository.claim` 用 `PRAGMA` 查到缺列后返回 `state_changed`，把 schema 缺失误报成状态变更。
+
+交付内容：
+
+- 新增 `features/arena/schema.py`：`SCHEMA_MISSING`、`GAME_TABLES`/`PLAYER_TABLES` 的完整形状
+  （7 张表，对齐 `arena.002`~`arena.010`）、`columns()`/`table_ready()`/`tables_ready()`、
+  `ArenaSchemaMissing(DomainError)`。校验口径是「表存在 + 本次要读的列齐全」。
+- `repository.py`：`purchase` / `purchase_challenges` / `use_challenge_ticket` / `settle` 四个写路径
+  与 `purchase_result`/`settlement_result` 两个回执读路径接契约；缺表或缺列返回
+  `schema_missing`（读路径 `None`），不写回执、不动 `arena`/`back`/`user_xiuxian`。
+- `state_repository.py`：`initialize` 抛 `ArenaSchemaMissing`，`ranking` 返回空；
+  `season_reward_repository.py`：`claim` 返回 `schema_missing`（不再误报 `state_changed`），
+  新增 `schema_ready()`，`daily_candidates` 缺表返回空；
+  `opponent_repository.py`：`candidates` 缺表返回空；`weekly_rank_repository.py` 改用共享 `table_ready`。
+- facade：挑战、挑战次数购买、挑战券、兑换补 `schema_missing` 文案；三个 handler 增加
+  `except DomainError` 直接展示 `exc.message`；`reset_arena_daily_challenges` 在 `schema_ready()`
+  为假时记 warning 并跳过（不再打印「发放 0 名玩家」）。
+- 测试：新增 `tests/test_arena_schema_ownership.py`（383 行，21 项）：迁移建出全部表列且可重跑、
+  请求路径无 DDL（源码合同 + 五个仓储都引用共享契约）、四个写路径与赛季 `claim`/周降段在未迁移库上
+  `schema_missing` 且零写入、半成品 `arena` 不被补列、状态初始化抛 `ArenaSchemaMissing`、
+  读路径降级、应用层映射为 rejected（`code=schema_missing`）、迁移后降段仍正常。
+  `tests/test_arena_weekly_rank_schema.py` 的仓储源码合同改钉共享契约。
+- 定向测试：新套件 21/21；arena 15 个套件 90/90；`features/arena/tests` 隔离 21/21；
+  `test_source_quality` + `test_refactor_progress` 269/269；含冻结清单门禁的合并集 114/114
+  （临时还原 `docs/refactor_phase2_legacy_path_items.json` 后立即删除）。
+- 门禁：`check_architecture.py`、`export_refactor_inventory.py --check`、
+  `check_full_refactor_progress.py --json` 均 exit 0（`failures: None`，11 条既有 blocker 仍只由
+  用户删除的冻结清单造成）；`compileall` 与 `git diff --check` 干净。
+- 兼容：不新增表/命令/路由/配置键；段位表、初始分数、`_target()` 下标、`chunk_size`、CAS 三元组、
+  荣誉/降段数值与 `duplicate`/`completed` 语义均未改动；迁移保持 `IF NOT EXISTS`，历史库回执行保留。
+- 交付与 CI：功能提交 `39ad5f7f` 的 develop run `41650174237` success、
+  main run `41651473877` success（headSha 均 `39ad5f7f`；`quality` success、
+  `build-and-release` skipped）。未部署、未读写真实游戏库、未发真实 QQ 消息、未打 tag；
+  用户删除的四个文件保持未暂存，`docs/goals/**` 与 `.codex-next-goal.md` 未提交。
+
 ## 已完成目标：竞技场每周降段的启动迁移收口
 
 重构收敛（非新玩法），承接 `docs/features/arena.md` 与仓库级「请求路径不执行 DDL」合同。
