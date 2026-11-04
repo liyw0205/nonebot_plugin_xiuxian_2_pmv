@@ -10,6 +10,7 @@ from unittest.mock import patch
 
 from nonebot_plugin_xiuxian_2.features.auction.migrations import apply_auction_settlement_game_effects
 from nonebot_plugin_xiuxian_2.infrastructure.database import DatabaseUnitOfWork
+from nonebot_plugin_xiuxian_2.infrastructure.database.message_store import apply_season_rank_schema
 from nonebot_plugin_xiuxian_2.plugin import build_migrations, migrations_for_database
 from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_utils import db_backend, economy_log, season_rank_service
 
@@ -41,6 +42,7 @@ class AuctionSettlementProjectionIdTests(unittest.TestCase):
             game_db = Path(directory) / "game.db"
             with DatabaseUnitOfWork(game_db) as uow:
                 apply_auction_settlement_game_effects(uow)
+                apply_season_rank_schema(uow)
             manager = _SqlMessage(game_db)
             now = datetime(2026, 9, 24, 10, 0, tzinfo=timezone.utc)
             paths = SimpleNamespace(game_db=game_db)

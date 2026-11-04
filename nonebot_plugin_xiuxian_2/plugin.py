@@ -137,6 +137,10 @@ from .features.trade.migrations import (
     apply_trade_xianshi_watch,
 )
 from .features.map.manifest import FEATURE as MAP_FEATURE
+from .infrastructure.database.message_store import (
+    apply_message_store_schema,
+    apply_season_rank_schema,
+)
 from .features.map.migrations import (
     apply_map,
     apply_map_combat_plan,
@@ -470,6 +474,7 @@ def build_migrations() -> tuple[Migration, ...]:
         Migration("map.016", "map_combat_plan_operations", apply_map_combat_plan),
         Migration("map.017", "map_dongfu_status_schema", apply_map_dongfu_status_schema),
         Migration("map.018", "map_player_state_schema", apply_map_player_state_schema),
+        Migration("message.001", "message_store_schema", apply_message_store_schema),
         Migration("mixelixir.001", "mixelixir_feature_migrations", apply_mixelixir),
         Migration("mixelixir.002", "mixelixir_refine_claim", apply_mixelixir_refine_claim),
         Migration("mixelixir.003", "mixelixir_refine_claim_player", apply_mixelixir_refine_claim_player),
@@ -499,6 +504,7 @@ def build_migrations() -> tuple[Migration, ...]:
         Migration("rift.007", "rift_key_event_operations", apply_rift_key_event_operations),
         Migration("rift.008", "rift_settlement_operations", apply_rift_settlement_operations),
         Migration("rift.009", "rift_entry_schema", apply_rift_entry_schema),
+        Migration("season_rank.001", "season_rank_player_leaderboard", apply_season_rank_schema),
         Migration("sect.001", "sect_feature_migrations", apply_sect),
         Migration("sect.002", "sect_rename_operations", apply_sect_rename),
         Migration("sect.003", "sect_member_join_operations", apply_sect_join),
@@ -610,6 +616,7 @@ _GAME_DATABASE_EXCLUDED_MIGRATION_VERSIONS = frozenset(
         "map.016",
         "map.017",
         "map.018",
+        "message.001",
         "tianti_settlement.002",
         "tianti_training.003",
         "tianti_training.004",
@@ -739,6 +746,7 @@ _PLAYER_DATABASE_MIGRATION_VERSIONS = frozenset(
 )
 _TRADE_DATABASE_MIGRATION_VERSIONS = frozenset({"legacy.admin.003", "legacy.admin.005", "platform.001", "trade.003", "trade.005", "trade.006", "trade.007", "trade.008", "auction.004"})
 _IMPART_DATABASE_MIGRATION_VERSIONS = frozenset({"legacy.admin.003", "legacy.admin.005", "platform.001", "impart.007", "impart_pk.004"})
+_MESSAGE_DATABASE_MIGRATION_VERSIONS = frozenset({"platform.001", "message.001"})
 
 
 def migrations_for_database(
@@ -768,6 +776,12 @@ def migrations_for_database(
             migration
             for migration in migrations
             if migration.version in _IMPART_DATABASE_MIGRATION_VERSIONS
+        )
+    if database_key == "message_db":
+        return tuple(
+            migration
+            for migration in migrations
+            if migration.version in _MESSAGE_DATABASE_MIGRATION_VERSIONS
         )
     return tuple(migration for migration in migrations if migration.version == "platform.001")
 

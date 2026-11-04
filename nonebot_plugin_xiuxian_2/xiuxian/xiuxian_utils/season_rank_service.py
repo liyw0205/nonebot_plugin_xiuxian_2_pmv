@@ -15,7 +15,7 @@ from .json_store import safe_json_loads as _json_loads
 from .periods import get_season_key
 from .season_service import build_season_rank_key, normalize_season_mode
 from .xiuxian2_handle import XiuxianDateManage
-from ...infrastructure.database import DatabaseUnitOfWork
+from ...infrastructure.database import DatabaseUnitOfWork, message_store
 
 _sql_message_instance = None
 
@@ -97,32 +97,18 @@ def _normalize_subject(
     return user_id_text, sect_id_int
 
 
-def ensure_season_rank_table() -> None:
+def ensure_season_rank_table() -> bool:
+    """Verify the season-rank table; `message.001` owns the DDL.
+
+    Returns ``False`` when the message database has not been migrated, so the
+    callers degrade to "no rank data" instead of creating the table themselves.
+    """
     with _sql_message().lock:
-        cur = _sql_message().conn.cursor()
-        cur.execute(
-            """
-            CREATE TABLE IF NOT EXISTS season_rank (
-                rank_key TEXT NOT NULL,
-                mode TEXT NOT NULL,
-                period_key TEXT NOT NULL,
-                rank_type TEXT NOT NULL,
-                user_id TEXT NOT NULL DEFAULT '',
-                sect_id INTEGER NOT NULL DEFAULT 0,
-                score INTEGER NOT NULL DEFAULT 0,
-                extra TEXT NOT NULL DEFAULT '{}',
-                updated_at TEXT NOT NULL,
-                PRIMARY KEY (rank_key, user_id, sect_id)
-            )
-            """
+        return message_store.table_ready(
+            _sql_message().conn,
+            "season_rank",
+            message_store.SEASON_RANK_COLUMNS,
         )
-        cur.execute(
-            """
-            CREATE INDEX IF NOT EXISTS idx_season_rank_query
-            ON season_rank(mode, period_key, rank_type, score)
-            """
-        )
-        _sql_message()._commit_write()
 
 
 def _build_rank_identity(
@@ -159,7 +145,8 @@ def add_season_rank_score(
     if not user_id_text and not sect_id_int:
         return None
 
-    ensure_season_rank_table()
+    if not ensure_season_rank_table():
+        return None
     rank_key, normalized_mode, period_key = _build_rank_identity(rank_type_text, mode, now)
     extra_text = _json_dumps(extra, {})
     updated_at = _now_text()
@@ -290,7 +277,8 @@ def get_top_season_rank(
     limit: int = 10,
     now: SeasonNow = None,
 ) -> list[dict[str, Any]]:
-    ensure_season_rank_table()
+    if not ensure_season_rank_table():
+        return []
     rank_type_text = str(rank_type or "").strip()
     if not rank_type_text:
         return []
@@ -331,7 +319,8 @@ def get_user_season_rank(
     *,
     now: SeasonNow = None,
 ) -> dict[str, Any] | None:
-    ensure_season_rank_table()
+    if not ensure_season_rank_table():
+        return None
     rank_type_text = str(rank_type or "").strip()
     if not rank_type_text:
         return None

@@ -11,6 +11,8 @@ import nonebot
 nonebot.init()
 
 from nonebot_plugin_xiuxian_2.paths import configure_paths
+from nonebot_plugin_xiuxian_2.infrastructure.database import DatabaseUnitOfWork
+from nonebot_plugin_xiuxian_2.infrastructure.database.message_store import apply_message_store_schema
 from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_utils import message_db
 
 
@@ -108,7 +110,8 @@ class MessageDatabaseMigrationTests(unittest.TestCase):
             database = message_db.get_message_db_path()
             conn = message_db.db_backend.connect(database)
             try:
-                message_db._ensure_message_db_schema(conn)
+                with DatabaseUnitOfWork(str(database), immediate=True) as uow:
+                    apply_message_store_schema(uow)
                 payload = "x" * 32_000
                 conn.executemany(
                     """

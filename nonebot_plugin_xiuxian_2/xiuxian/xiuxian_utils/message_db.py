@@ -16,6 +16,7 @@ from uuid import uuid4
 from nonebot.log import logger
 from ...paths import get_paths
 
+from ...infrastructure.database import message_store
 from . import db_backend
 
 
@@ -317,79 +318,11 @@ def _now_str() -> str:
     return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
 
-def _messages_table_sql() -> str:
-    return """
-        CREATE TABLE IF NOT EXISTS messages (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-
-            adapter TEXT,
-            bot_id TEXT,
-
-            direction TEXT NOT NULL,
-            scene TEXT NOT NULL,
-
-            message_id TEXT,
-            reference_id TEXT,
-            source_message_id TEXT,
-
-            group_id TEXT,
-            group_name TEXT,
-
-            user_id TEXT,
-            username TEXT,
-            nickname TEXT,
-            avatar TEXT,
-
-            content TEXT,
-
-            reply_used_count NUMERIC DEFAULT 0,
-
-            created_at TEXT NOT NULL
-        )
-    """
-
-
-def _ensure_message_db_schema(conn):
-    cur = conn.cursor()
-
-    cur.execute(_messages_table_sql())
-
-    if hasattr(conn, "column_exists") and not conn.column_exists("messages", "reference_id"):
-        cur.execute("ALTER TABLE messages ADD COLUMN reference_id TEXT")
-
-    cur.execute(
-        """
-        CREATE TABLE IF NOT EXISTS user_nicknames (
-            user_id TEXT PRIMARY KEY,
-
-            username TEXT NOT NULL,
-
-            adapter TEXT,
-            bot_id TEXT,
-
-            source_scene TEXT,
-            source_group_id TEXT,
-
-            first_seen_at TEXT NOT NULL,
-            last_seen_at TEXT NOT NULL
-        )
-        """
-    )
-
-    cur.execute("CREATE INDEX IF NOT EXISTS idx_user_nicknames_username ON user_nicknames(username)")
-    cur.execute("CREATE INDEX IF NOT EXISTS idx_user_nicknames_source_group_id ON user_nicknames(source_group_id)")
-    cur.execute("CREATE INDEX IF NOT EXISTS idx_messages_direction ON messages(direction)")
-    cur.execute("CREATE INDEX IF NOT EXISTS idx_messages_scene ON messages(scene)")
-    cur.execute("CREATE INDEX IF NOT EXISTS idx_messages_message_id ON messages(message_id)")
-    cur.execute("CREATE INDEX IF NOT EXISTS idx_messages_reference_id ON messages(reference_id)")
-    cur.execute("CREATE INDEX IF NOT EXISTS idx_messages_source_message_id ON messages(source_message_id)")
-    cur.execute("CREATE INDEX IF NOT EXISTS idx_messages_group_id ON messages(group_id)")
-    cur.execute("CREATE INDEX IF NOT EXISTS idx_messages_user_id ON messages(user_id)")
-    cur.execute("CREATE INDEX IF NOT EXISTS idx_messages_created_at ON messages(created_at)")
-    cur.execute("CREATE INDEX IF NOT EXISTS idx_messages_group_latest ON messages(scene, adapter, group_id, id)")
-    cur.execute("CREATE INDEX IF NOT EXISTS idx_messages_private_latest ON messages(scene, adapter, user_id, id)")
-    cur.execute("CREATE INDEX IF NOT EXISTS idx_messages_group_time ON messages(scene, adapter, group_id, created_at, id)")
-    cur.execute("CREATE INDEX IF NOT EXISTS idx_messages_private_time ON messages(scene, adapter, user_id, created_at, id)")
+def _ensure_message_db_schema(conn) -> None:
+    """Verify the message-database schema; `message.001` owns every DDL here."""
+    if message_store.schema_ready(conn):
+        return
+    raise RuntimeError("消息库数据尚未就绪，请检查启动迁移。")
 
 
 def connect_message_db(row_factory: bool = False):
