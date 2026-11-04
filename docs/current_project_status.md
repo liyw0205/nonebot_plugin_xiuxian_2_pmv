@@ -2414,3 +2414,39 @@ status_reader 归属、渲染与 handler 源合同）。受影响套件：
 停止条件：Release 质量门不能在不违反“无全量测试”要求时完成、发现共享环境/数据冲突、冷备份 hash 不一致、迁移试验需要触碰真实库、活动能力缺少既有入口/查询、或验收需扩大到冻结范围之外。此时保留现场并报告具体阻塞，不绕过门禁或推测通过。
 
 安装/更新/重启/测试串行取得 `flock -w 600 /tmp/nonebot-project-validation.lock`；短工作持锁，结束后释放。运行数据、凭据和 `boss_info.json` 永不暂存。
+
+## 已完成目标：地图玩家状态表的启动迁移归属
+
+重构收敛（非新玩法）。目标文档 `.codex-next-goal.md`（local-only，未提交）。
+承接 `docs/features/map.md` 与仓库级「请求路径不执行 DDL」合同。
+
+**缺口证据**：AST 扫描 `features/map/repository.py` 得 5 处请求期
+`ALTER TABLE ... ADD COLUMN`，覆盖 `map_daily_limit` / `map_cooldown` / `map_status` /
+`map_explore_status` / `map_mission`。全仓搜索确认：`map_daily_limit`、`map_status`、
+`map_mission` **没有任何启动迁移创建过**（只有测试自建），`map_cooldown`、`map_explore_status`
+由 `map.003`/`map.005` 建出但列不全 —— 归属完全缺失而非重复。
+
+交付内容：
+
+- 新增 `features/map/schema.py`：`SCHEMA_MISSING`、五张表的列契约
+  （`DAILY_LIMIT_COLUMNS`/`COOLDOWN_COLUMNS`/`STATUS_COLUMNS`/`EXPLORE_STATUS_COLUMNS`/
+  `MISSION_COLUMNS`）、`PLAYER_TABLES`、`columns()` 与 `table_ready()`（只读 `PRAGMA table_info`）。
+- `features/map/migrations.py` 新增 `apply_map_player_state_schema`：`map.018`（player 库）建出
+  五张表的完整列集，并对历史库补列（`CREATE TABLE IF NOT EXISTS` + 受 `PRAGMA` 保护的
+  `ALTER`，保留既有行，重复执行幂等）。`plugin.py` 按版本序插入 `map.018`
+  （catalog 309 → 310 单调），并同时登记 player 白名单与 game 排除集。
+- `features/map/repository.py` 五处请求期 DDL 全部改门禁：`save_daily_limit`/`upsert`/
+  explore `save`/mission `save` 在缺表或缺本次回读列时返回 `{"status": "schema_missing"}`
+  且零写入；`set_cooldown` 返回 `None`；源码已无 `CREATE TABLE`/`ALTER TABLE`。保留
+  `map_explore_status.reward_plan` 兼容分支（仅在契约列齐全时读取该遗留列）。
+- 测试：四个 feature 写仓储夹具改用 `apply_map_player_state_schema` 建立受支持形状，并把
+  原先钉住「请求期自动补列」的 7 个用例改钉新契约（历史/缺失 schema 返回 `schema_missing`
+  且行数为 0、列未被添加）；新增 `tests/test_map_schema_ownership.py` `6/6`（迁移建表形状、
+  幂等、历史库补列保留数据、仓储无 DDL 源合同、缺表零写入、迁移后正常写入）。
+  定向 `features/map/tests` `115/115`；含架构与启动迁移契约的合并集 `34/34`。
+  三门禁真实 exit 0（progress `failures: None`；`exit_ready: False` 仍仅由用户删除的冻结文件
+  造成，11 条既有 blocker）；`test_phase2_legacy_path_gate`（临时还原冻结文件后删除，未暂存）
+  `47/47`；`compileall` 与 `git diff --check` 干净。
+- 兼容：迁移只搬 DDL，不改任何数值常量、算法或 operation 语义；不新增表、命令、路由或配置键。
+  回退时先恢复代码版本并保留 `map.018` 已建出的表，不删除迁移数据。
+- 文档：`docs/features/map.md` 新增五表归属表（归属迁移 + 契约列）与请求路径 fail-closed 说明。
