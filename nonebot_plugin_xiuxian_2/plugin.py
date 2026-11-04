@@ -29,6 +29,7 @@ from .features.impart.migrations import (
     apply_impart_prayer_player_statistics,
 )
 from .features.impart_pk.migrations import (
+    apply_impart_pk_closing_statistics,
     apply_impart_pk_impart_operations,
     apply_impart_pk_operations,
     apply_impart_pk_player_operations,
@@ -456,6 +457,7 @@ def build_migrations() -> tuple[Migration, ...]:
         Migration("impart_pk.002", "impart_pk_operations", apply_impart_pk_operations),
         Migration("impart_pk.003", "impart_pk_player_operations", apply_impart_pk_player_operations),
         Migration("impart_pk.004", "impart_pk_impart_operations", apply_impart_pk_impart_operations),
+        Migration("impart_pk.005", "impart_pk_closing_statistics", apply_impart_pk_closing_statistics),
         Migration("info.avatar.001", "avatar_player_identity_and_receipts", apply_avatar_identity_player),
         Migration("info.avatar.002", "avatar_initialization_plans", apply_avatar_initialization_player),
         Migration("interactive.001", "interactive_feature_migrations", apply_interactive),
@@ -646,6 +648,7 @@ _GAME_DATABASE_EXCLUDED_MIGRATION_VERSIONS = frozenset(
         "natal_treasure.003",
         "impart_pk.003",
         "impart_pk.004",
+        "impart_pk.005",
         "impart.003",
         "impart.005",
         "impart.007",
@@ -725,6 +728,7 @@ _PLAYER_DATABASE_MIGRATION_VERSIONS = frozenset(
         "mixelixir.003",
         "natal_treasure.003",
         "impart_pk.003",
+        "impart_pk.005",
         "impart.003",
         "impart.005",
         "impart.008",

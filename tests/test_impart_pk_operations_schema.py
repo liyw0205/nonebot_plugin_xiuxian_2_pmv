@@ -31,6 +31,7 @@ from nonebot_plugin_xiuxian_2.features.impart_pk.migrations import (
     IMPART_OPERATIONS_TABLE_COLUMNS,
     OPERATIONS_TABLE_COLUMNS,
     PLAYER_OPERATIONS_TABLE_COLUMNS,
+    apply_impart_pk_closing_statistics,
     apply_impart_pk_impart_operations,
     apply_impart_pk_operations,
     apply_impart_pk_player_operations,
@@ -80,6 +81,7 @@ class Fixture:
         if player:
             with DatabaseUnitOfWork(self.player, immediate=True) as uow:
                 apply_impart_pk_player_operations(uow)
+                apply_impart_pk_closing_statistics(uow)
         if impart:
             with DatabaseUnitOfWork(self.impart, immediate=True) as uow:
                 apply_impart_pk_impart_operations(uow)

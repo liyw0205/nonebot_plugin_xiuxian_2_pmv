@@ -18,6 +18,21 @@ from __future__ import annotations
 
 SCHEMA = "player_data"
 
+# 虚神界出关结算写入的统计列；迁移 `impart_pk.005` 与请求路径共用这份清单。
+CLOSING_SETTLEMENT_FIELDS = (
+    "虚神界闭关时长",
+    "虚神界闭关修为",
+    "虚神界闭关祝福时长",
+)
+
+
+def statistics_columns_ready(uow, fields, *, schema: str = SCHEMA) -> bool:
+    """只读校验 `statistics` 是否存在且包含 `fields`；空列集视为缺表。"""
+    prefix = f"{schema}." if schema else ""
+    rows = uow.query_all(f"PRAGMA {prefix}table_info(statistics)")
+    columns = {str(row["name"]) for row in rows}
+    return bool(columns) and set(fields).issubset(columns)
+
 
 def ensure_statistics_column(uow, field: str, *, schema: str = SCHEMA) -> None:
     """确保 `statistics` 表与其业务列存在（幂等，不 DROP、不改已有列类型）。
@@ -58,4 +73,9 @@ def increment_statistics(
     return int(row["value"]) if row is not None else amount
 
 
-__all__ = ["ensure_statistics_column", "increment_statistics"]
+__all__ = [
+    "CLOSING_SETTLEMENT_FIELDS",
+    "ensure_statistics_column",
+    "increment_statistics",
+    "statistics_columns_ready",
+]

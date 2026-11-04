@@ -1,4 +1,5 @@
 from ...infrastructure.database import DatabaseUnitOfWork
+from .statistics_columns import CLOSING_SETTLEMENT_FIELDS, ensure_statistics_column
 
 # 虚神界 receipt/projection ledgers.  Every one of them used to be created lazily
 # inside the request transaction (``battle_repository``, ``closing_enter_repository``,
@@ -129,6 +130,23 @@ def apply_impart_pk_impart_operations(uow: DatabaseUnitOfWork) -> None:
     _apply(uow, IMPART_OPERATIONS_TABLE_DDL, "impart_pk.004")
 
 
+def apply_impart_pk_closing_statistics(uow: DatabaseUnitOfWork) -> None:
+    """Startup migration for the player-owned 虚神界出关 statistics columns.
+
+    `closing_settlement_repository.settle` used to `ALTER TABLE ... ADD COLUMN`
+    on every request.  `impart_pk.005` owns the columns now; the request path
+    only verifies them and fails closed when they are absent.
+    """
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS impart_pk_feature_migrations (version TEXT PRIMARY KEY)"
+    )
+    for field in CLOSING_SETTLEMENT_FIELDS:
+        ensure_statistics_column(uow, field, schema="")
+    uow.execute(
+        "INSERT OR IGNORE INTO impart_pk_feature_migrations(version) VALUES ('impart_pk.005')"
+    )
+
+
 __all__ = [
     "GAME_OPERATIONS_TABLE_COLUMNS",
     "GAME_OPERATIONS_TABLE_DDL",
@@ -139,6 +157,7 @@ __all__ = [
     "PLAYER_OPERATIONS_TABLE_COLUMNS",
     "PLAYER_OPERATIONS_TABLE_DDL",
     "apply_impart_pk",
+    "apply_impart_pk_closing_statistics",
     "apply_impart_pk_impart_operations",
     "apply_impart_pk_operations",
     "apply_impart_pk_player_operations",

@@ -14,7 +14,7 @@ Migration `legacy.impart_pk.001` records the slice in `game_db`; the feature-own
 
 ### 回执/投影表的启动迁移（请求路径不执行 DDL）
 六条虚神界动作原先都在请求事务内 `CREATE TABLE IF NOT EXISTS`，与仓库级
-「请求路径不执行 DDL」合同冲突，且把 DDL 混进资产/统计写入。现在按写入者所在库拆成三条启动迁移：
+「请求路径不执行 DDL」合同冲突，且把 DDL 混进资产/统计写入。现在按写入者所在库拆成四条启动迁移：
 
 - `impart_pk.002`（game DB）：`impart_closing_enter_operations`、`impart_closing_operations`、
   `impart_explore_operations`、`impart_training_operations` 四张回执表。
@@ -22,13 +22,15 @@ Migration `legacy.impart_pk.001` records the slice in `game_db`; the feature-own
   `impart_project_meta`、`impart_project_join_operations` 四张投影表。
 - `impart_pk.004`（impart DB，`_IMPART_DATABASE_MIGRATION_VERSIONS` 白名单内）：
   `impart_battle_batch_operations` —— 战斗批回执的写事务以 impart 库为主连接，不能落到 game 库。
+- `impart_pk.005`（player DB，`_PLAYER_DATABASE_MIGRATION_VERSIONS` 白名单内）：
+  `statistics` 的 `虚神界闭关时长` / `虚神界闭关修为` / `虚神界闭关祝福时长` 三列。
 
 六条请求路径只校验 schema：`operations_ready(uow, table, schema)` 同时检查表存在与本次回读用到的列
 （`operation_id`/`payload`/`result_json`；投影表各自的主键列）。缺表**或缺任一读取列**都返回
 `schema_missing` 且零资产/零统计变化，不建表、不补列。迁移语句保持 `IF NOT EXISTS`，
 已按惰性路径建表的历史库保留全部既有回执行。
 
-`impart_pk.002`/`impart_pk.003`/`impart_pk.004` 都不在 feature manifest 的
+`impart_pk.002`/`impart_pk.003`/`impart_pk.004`/`impart_pk.005` 都不在 feature manifest 的
 `migration_version` 上（仍为 `legacy.impart_pk.001`），由 `features/_legacy_migrated.py` 的
 `MIGRATIONS` 与 `plugin.py` 的库路由共同登记。
 
@@ -53,9 +55,18 @@ Migration `legacy.impart_pk.001` records the slice in `game_db`; the feature-own
   `rowcount==0`（玩家还没有统计行）时 `INSERT` 补行，返回累加后的真实值。
 
 两列的类型与默认值、以及"缺列补列 + 缺行补行"的行为，与
-`closing_settlement_repository`（虚神界出关）、`past_life/start_repository`（前尘往事次数）
-及旧 `_increment_entry_stat` 完全一致。补齐在调用方已有的写事务内完成，不新增迁移版本、
-不改已应用迁移函数；旧库若已有该列则跳过 `ALTER` 直接读写，干净库首次写入时自动补列补行。
+`past_life/start_repository`（前尘往事次数）及旧 `_increment_entry_stat` 完全一致。
+补齐在调用方已有的写事务内完成，不新增迁移版本、不改已应用迁移函数；旧库若已有该列则跳过
+`ALTER` 直接读写，干净库首次写入时自动补列补行。
+
+`虚神界出关` 结算还会累加 `虚神界闭关时长` / `虚神界闭关修为` / `虚神界闭关祝福时长` 三列。
+这三列不再由请求路径补列：player DB 启动迁移 `impart_pk.005` 通过
+`ensure_statistics_column(schema="")` 建表并补列（字段清单
+`CLOSING_SETTLEMENT_FIELDS` 与仓储共用），`closing_settlement_repository.settle`
+只经 `statistics_columns_ready()` 校验；缺表或缺三列中任一列时，在任何资产写入之前返回
+`schema_missing`，不建表、不补列，`user_xiuxian` / `user_cd` / `impart_data.xiuxian_impart`
+与回执行均零变化。旧库已有三列与历史行保持不变；legacy
+`xiuxian_impart_pk/transaction_service.py::_increment_stat` 仍是显式回滚入口。
 
 
 ## 事务与失败回滚
