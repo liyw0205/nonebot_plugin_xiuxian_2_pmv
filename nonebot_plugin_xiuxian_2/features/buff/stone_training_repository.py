@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 
 from ...infrastructure.database import DatabaseUnitOfWork
+from .operation_schema import SCHEMA_MISSING, stone_training_ready
 
 
 class StoneTrainingResult:
@@ -24,7 +25,8 @@ class StoneTrainingSqlRepository:
         stone_cost = exp_gain * 10 if possible_exp >= max(0, exp_cap - expected_exp) else requested_stone
         payload = json.dumps([user_id, requested_stone, exp_cap, float(power_multiplier)], separators=(",", ":"))
         with DatabaseUnitOfWork(self.game_database, immediate=True) as uow:
-            uow.execute("CREATE TABLE IF NOT EXISTS stone_training_operations(operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,result_json TEXT NOT NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
+            if not stone_training_ready(uow):
+                return StoneTrainingResult(SCHEMA_MISSING)
             previous = uow.query_one("SELECT payload,result_json FROM stone_training_operations WHERE operation_id=?", (operation_id,))
             if previous is not None:
                 if str(previous["payload"]) != payload:

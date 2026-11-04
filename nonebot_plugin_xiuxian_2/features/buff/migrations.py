@@ -1,4 +1,8 @@
 from ...infrastructure.database import DatabaseUnitOfWork
+from .operation_schema import (
+    BLESSED_SPOT_OPERATION_DDL,
+    STONE_TRAINING_OPERATION_DDL,
+)
 
 
 def apply_buff(uow: DatabaseUnitOfWork) -> None:
@@ -172,8 +176,27 @@ def apply_closing_enter_player(uow: DatabaseUnitOfWork) -> None:
         uow.execute('ALTER TABLE statistics ADD COLUMN "闭关次数" INTEGER DEFAULT 0')
 
 
+def apply_blessed_spot_operations(uow: DatabaseUnitOfWork) -> None:
+    """Create the game-owned 洞天福地 operation receipt table.
+
+    The two feature repositories used to create it on every write.  `buff.014`
+    owns it now; pre-existing lazy-built tables keep their receipt rows because
+    the statement is `IF NOT EXISTS`.
+    """
+    for statement in BLESSED_SPOT_OPERATION_DDL:
+        uow.execute(statement)
+
+
+def apply_stone_training_operations(uow: DatabaseUnitOfWork) -> None:
+    """Create the game-owned 灵石修炼 operation receipt table."""
+    for statement in STONE_TRAINING_OPERATION_DDL:
+        uow.execute(statement)
+
+
 __all__ = [
     "apply_buff",
+    "apply_blessed_spot_operations",
+    "apply_stone_training_operations",
     "apply_partner_token_operations",
     "apply_partner_token_usage",
     "apply_partner_cultivation_operations",

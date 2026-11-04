@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 
 from ...infrastructure.database import DatabaseUnitOfWork
+from .operation_schema import SCHEMA_MISSING, operations_ready
 
 
 class BlessedSpotUpgradeResult:
@@ -29,7 +30,8 @@ class BlessedSpotUpgradeSqlRepository:
         with DatabaseUnitOfWork(self.game_database, immediate=True) as uow:
             uow.execute("ATTACH DATABASE ? AS player_data", (self.player_database,))
             try:
-                uow.execute("CREATE TABLE IF NOT EXISTS blessed_spot_operations(operation_id TEXT PRIMARY KEY,action TEXT NOT NULL,payload TEXT NOT NULL,result_json TEXT NOT NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
+                if not operations_ready(uow):
+                    return BlessedSpotUpgradeResult(SCHEMA_MISSING, user_id)
                 previous = uow.query_one("SELECT payload,result_json FROM blessed_spot_operations WHERE operation_id=? AND action=?", (operation_id, "upgrade"))
                 if previous is not None:
                     if str(previous["payload"]) != payload:

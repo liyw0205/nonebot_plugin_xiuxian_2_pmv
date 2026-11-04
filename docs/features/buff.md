@@ -6,7 +6,25 @@
 ## Web API
 `POST /api/v1/buff/{open,upgrade_field,rename,training_start,training_complete,stone_training,pvp_settle}`，权限 `user`，要求幂等键。
 ## 数据模型与迁移
-迁移 `buff.001` 至 `buff.013`；双修令牌 operation 在 game DB，次数 projection 在 player DB，分别由 `buff.002`/`buff.003` 创建。双修结算 operation 由 game DB `buff.004` 创建；`buff.005` 在 player DB 补齐关系、保护、邀请与统计 schema。普通切磋回执由 game DB `buff.006` 预建，切磋胜负统计列由 player DB `buff.007` 预建；闭关结算及 effects 使用 `buff.008`/`buff.009`，普通修炼 lifecycle 使用 `buff.010`/`buff.011`，普通闭关进入使用 game receipt `buff.012` 与 player statistics `buff.013`。
+迁移 `buff.001` 至 `buff.015`；双修令牌 operation 在 game DB，次数 projection 在 player DB，分别由 `buff.002`/`buff.003` 创建。双修结算 operation 由 game DB `buff.004` 创建；`buff.005` 在 player DB 补齐关系、保护、邀请与统计 schema。普通切磋回执由 game DB `buff.006` 预建，切磋胜负统计列由 player DB `buff.007` 预建；闭关结算及 effects 使用 `buff.008`/`buff.009`，普通修炼 lifecycle 使用 `buff.010`/`buff.011`，普通闭关进入使用 game receipt `buff.012` 与 player statistics `buff.013`。操作回执 `blessed_spot_operations` 由 game DB `buff.014` 创建，`stone_training_operations` 由 game DB `buff.015` 创建。
+
+### 操作回执的 schema 归属
+
+| 库 | 表 | 迁移 | 契约列 |
+| --- | --- | --- | --- |
+| game_db | `blessed_spot_operations` | `buff.014` | `operation_id`(PK)、`action`、`payload`、`result_json`、`created_at` |
+| game_db | `stone_training_operations` | `buff.015` | `operation_id`(PK)、`payload`、`result_json`、`created_at` |
+
+两条迁移均为 `IF NOT EXISTS`：旧库中由请求期惰性建出的回执行与历史记录原样保留，重复执行幂等。
+请求路径 `features/buff/rename_repository.py`、`upgrade_repository.py`、
+`stone_training_repository.py` 只经 `operation_schema.operations_ready()` /
+`stone_training_ready()` 校验表与列；缺表或缺列返回 `schema_missing`，不建表、不补列，
+也不改 `user_xiuxian`、`mix_elixir_info` 或回执行。`灵田开垦` handler 现在传
+`stone_cost`（与 `BuffApplication.upgrade_field` 签名一致），福地开垦/改名在
+`schema_missing` 时提示检查启动迁移。
+legacy `BlessedSpotService` 与 `StoneTrainingSettlementService` 保留自身事务内建表，
+仅作为显式兼容/回滚入口，不再是默认写路径。
+定向测试：`python -m pytest tests/test_blessed_spot_schema_ownership.py -q`。
 
 ### Phase 3 普通闭关 scope（已冻结，2026-10-09）
 `scope_id=phase3-player-lifecycle-v1` 只覆盖默认 `闭关` 命令，不覆盖 `出关`、

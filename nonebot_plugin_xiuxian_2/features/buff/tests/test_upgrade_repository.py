@@ -3,7 +3,9 @@ import unittest
 from pathlib import Path
 
 from ..upgrade_repository import BlessedSpotUpgradeSqlRepository
+from ..migrations import apply_blessed_spot_operations
 from tests.test_db_backend import db_backend
+from ....infrastructure.database import DatabaseUnitOfWork
 
 
 class BlessedSpotUpgradeRepositoryTests(unittest.TestCase):
@@ -14,6 +16,8 @@ class BlessedSpotUpgradeRepositoryTests(unittest.TestCase):
             with db_backend.transaction(game) as conn:
                 conn.execute("CREATE TABLE user_xiuxian(user_id TEXT PRIMARY KEY,stone INTEGER,blessed_spot_flag INTEGER)")
                 conn.execute("INSERT INTO user_xiuxian VALUES('u',500,1)")
+            with DatabaseUnitOfWork(str(game), immediate=True) as uow:
+                apply_blessed_spot_operations(uow)
             with db_backend.transaction(player) as conn:
                 conn.execute("CREATE TABLE mix_elixir_info(user_id TEXT PRIMARY KEY,灵田数量 TEXT)")
                 conn.execute("INSERT INTO mix_elixir_info VALUES('u','1')")

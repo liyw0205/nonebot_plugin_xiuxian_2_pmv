@@ -89,6 +89,8 @@ from .features.natal_treasure.migrations import (
 from .features.buff.manifest import FEATURE as BUFF_FEATURE
 from .features.buff.migrations import (
     apply_buff,
+    apply_blessed_spot_operations,
+    apply_stone_training_operations,
     apply_partner_cultivation_operations,
     apply_partner_cultivation_player_schema,
     apply_partner_token_operations,
@@ -415,6 +417,8 @@ def build_migrations() -> tuple[Migration, ...]:
         Migration("buff.011", "normal_training_player_statistics", apply_normal_training_player),
         Migration("buff.012", "closing_enter_operations", apply_closing_enter_game),
         Migration("buff.013", "closing_enter_player_statistics", apply_closing_enter_player),
+        Migration("buff.014", "blessed_spot_operations", apply_blessed_spot_operations),
+        Migration("buff.015", "stone_training_operations", apply_stone_training_operations),
         Migration("combat_settlement.001", "combat_settlement_feature_migrations", apply_combat_settlement),
         Migration("combat_settlement.002", "map_combat_settlement_operations", apply_combat_settlement_operations),
         Migration("combat_settlement.003", "map_dao_battle_operations", apply_dao_battle_operations),

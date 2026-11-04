@@ -436,12 +436,14 @@ async def ling_tian_up_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
                 operation_id=_blessed_spot_operation_id(event, "upgrade", user_id),
                 user_id=user_id,
                 expected_level=now_num,
-                cost=cost,
+                stone_cost=cost,
                 max_level=len(LINGTIANCONFIG) + 1,
             )
             result = SimpleNamespace(**dict(outcome.data or {})); result.succeeded = outcome.ok
 
-            if result.succeeded:
+            if outcome.code == "schema_missing":
+                msg = "洞天福地数据尚未就绪，请检查启动迁移。"
+            elif result.succeeded:
                 msg = f"道友成功消耗灵石：{result.stone_cost}，灵田数量+1,目前数量:{result.current_level}"
             else:
                 msg = "灵田操作未完成：灵田状态已更新，请重新查看灵田。"
@@ -479,7 +481,9 @@ async def blessed_spot_rename_(bot: Bot, event: GroupMessageEvent | PrivateMessa
         )
         result = SimpleNamespace(**dict(outcome.data or {})); result.status = outcome.status; result.succeeded = outcome.ok
 
-        if result.status == "duplicate":
+        if outcome.code == "schema_missing":
+            msg = "洞天福地数据尚未就绪，请检查启动迁移。"
+        elif result.status == "duplicate":
             msg = f"道友的洞天福地成功改名为：{result.name}\n该改名请求已经处理，无需重复提交。"
         elif result.succeeded:
             msg = f"道友的洞天福地成功改名为：{result.name}"

@@ -3,7 +3,9 @@ import unittest
 from pathlib import Path
 
 from ..stone_training_repository import StoneTrainingSqlRepository
+from ..migrations import apply_stone_training_operations
 from tests.test_db_backend import db_backend
+from ....infrastructure.database import DatabaseUnitOfWork
 
 
 class StoneTrainingRepositoryTests(unittest.TestCase):
@@ -14,5 +16,7 @@ class StoneTrainingRepositoryTests(unittest.TestCase):
             with db_backend.transaction(game) as conn:
                 conn.execute("CREATE TABLE user_xiuxian(user_id TEXT PRIMARY KEY,exp INTEGER,stone INTEGER,power INTEGER)")
                 conn.execute("INSERT INTO user_xiuxian VALUES('u',100,100,1)")
+            with DatabaseUnitOfWork(str(game), immediate=True) as uow:
+                apply_stone_training_operations(uow)
             result = StoneTrainingSqlRepository(game, player).settle("s1", "u", requested_stone=100, expected_exp=100, expected_stone=100, exp_cap=100, power_multiplier=1.0)
             self.assertEqual(result.status, "exp_capped")

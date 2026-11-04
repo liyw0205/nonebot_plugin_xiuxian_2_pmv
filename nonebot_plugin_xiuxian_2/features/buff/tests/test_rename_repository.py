@@ -3,7 +3,9 @@ import unittest
 from pathlib import Path
 
 from ..rename_repository import BlessedSpotRenameSqlRepository
+from ..migrations import apply_blessed_spot_operations
 from tests.test_db_backend import db_backend
+from ....infrastructure.database import DatabaseUnitOfWork
 
 
 class BlessedSpotRenameRepositoryTests(unittest.TestCase):
@@ -13,6 +15,8 @@ class BlessedSpotRenameRepositoryTests(unittest.TestCase):
             with db_backend.transaction(db) as conn:
                 conn.execute("CREATE TABLE user_xiuxian(user_id TEXT PRIMARY KEY,blessed_spot_flag INTEGER,blessed_spot_name TEXT)")
                 conn.execute("INSERT INTO user_xiuxian VALUES('u',1,'旧名')")
+            with DatabaseUnitOfWork(str(db), immediate=True) as uow:
+                apply_blessed_spot_operations(uow)
             repository = BlessedSpotRenameSqlRepository(db)
             first = repository.rename("r1", "u", "旧名", "新名")
             duplicate = repository.rename("r1", "u", "旧名", "新名")
@@ -24,6 +28,8 @@ class BlessedSpotRenameRepositoryTests(unittest.TestCase):
             with db_backend.transaction(db) as conn:
                 conn.execute("CREATE TABLE user_xiuxian(user_id TEXT PRIMARY KEY,blessed_spot_flag INTEGER,blessed_spot_name TEXT)")
                 conn.executemany("INSERT INTO user_xiuxian VALUES(?,?,?)", (("u",1,"旧名"),("missing",0,"")))
+            with DatabaseUnitOfWork(str(db), immediate=True) as uow:
+                apply_blessed_spot_operations(uow)
             repository = BlessedSpotRenameSqlRepository(db)
             self.assertEqual(repository.rename("r2", "u", "错误", "新名").status, "state_changed")
             self.assertEqual(repository.rename("r3", "missing", "", "新名").status, "blessed_spot_missing")
