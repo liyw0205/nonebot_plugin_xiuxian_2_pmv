@@ -2450,3 +2450,40 @@ status_reader 归属、渲染与 handler 源合同）。受影响套件：
 - 兼容：迁移只搬 DDL，不改任何数值常量、算法或 operation 语义；不新增表、命令、路由或配置键。
   回退时先恢复代码版本并保留 `map.018` 已建出的表，不删除迁移数据。
 - 文档：`docs/features/map.md` 新增五表归属表（归属迁移 + 契约列）与请求路径 fail-closed 说明。
+
+## 已完成目标：消息库与赛季榜 schema 的启动迁移归属
+
+重构收敛（非新玩法）。承接 `docs/adr/0003-multiple-databases.md` 与仓库级「请求路径不执行 DDL」合同。
+
+**缺口证据**：`messages`、`user_nicknames` 只由
+`xiuxian_utils/message_db.py::_ensure_message_db_schema` 在每次连接消息库时创建
+（含 14 个索引与历史库 `messages.reference_id` 补列）；`season_rank` 只由
+`xiuxian_utils/season_rank_service.py::ensure_season_rank_table` 在赛季榜每次读/写前创建。
+两者都没有启动迁移，而 `message_db` 虽在 `DatabaseCatalog.KEYS` 中注册，
+`migrations_for_database()` 却只给它 `platform.001` —— 归属完全缺失。
+
+交付内容：
+
+- 新增 `infrastructure/database/message_store.py`：三张表的权威 DDL/索引、列契约
+  （`MESSAGES_COLUMNS` 17 列、`USER_NICKNAMES_COLUMNS` 8 列、`SEASON_RANK_COLUMNS` 9 列）、
+  `apply_message_store_schema`（`message_db`）与 `apply_season_rank_schema`（`game_db`），
+  以及 `table_columns`/`table_ready`/`schema_ready` 只读校验。
+- `message.001` 只路由 `message_db`；`season_rank.001` 只路由 `game_db`
+  （赛季榜需 JOIN 主库 `user_xiuxian`/`sects`，因此不属于消息库）。catalog 311 → 312 单调，
+  `message.001` 列入 game 排除集、`season_rank.001` 列入 player/trade/impart/message 排除集。
+- `message_db._ensure_message_db_schema` 改为只校验：未就绪抛
+  `RuntimeError("消息库数据尚未就绪，请检查启动迁移。")` 且零建表。
+- `season_rank_service.ensure_season_rank_table()` 改为返回 `bool`：未就绪返回 `False`，
+  写路径返回 `None`、读路径返回 `[]`/`None`，均不建表。
+- `message.001` 先补 `messages.reference_id` 再建引用该列的索引，历史库保留全部既有消息行；
+  两条迁移均为 `IF NOT EXISTS`，可重复执行且不改变列类型/默认值/查询语义。
+- 测试：新增 `tests/test_message_store_schema_ownership.py` `12/12`（双库路由、建表与索引、
+  幂等、历史库补列保数据、无请求期 DDL 源合同、未迁移降级零建表、迁移后赛季榜与消息读写）；
+  `tests/test_message_db_migration.py` 与 `tests/test_auction_settlement_projection_ids.py`
+  夹具改为显式应用迁移。缺口相关合并集 `61/61`。
+- 文档：`docs/adr/0003-multiple-databases.md` 新增 schema 归属表与降级/回滚说明。
+- 明确排除：`economy_operations`（`repositories.py::transfer_stones` 在请求事务内创建）
+  属于主玩家库的转账幂等回执，不在本目标范围，留作下一个独立切片。
+- 三门禁真实 exit 0（progress `failures: None`；`exit_ready: False` 仍仅由用户删除的冻结文件
+  造成，11 条既有 blocker）；`test_phase2_legacy_path_gate`（临时还原冻结文件后删除，未暂存）
+  `47/47`；`compileall` 与 `git diff --check` 干净。
