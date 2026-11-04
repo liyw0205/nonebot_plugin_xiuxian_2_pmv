@@ -3,7 +3,11 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 from ...infrastructure.database import DatabaseUnitOfWork
-from .statistics_columns import increment_statistics
+from .statistics_columns import (
+    IMPART_STATISTICS_FIELDS,
+    increment_statistics_verified,
+    statistics_columns_ready,
+)
 from .migrations import operations_ready
 
 @dataclass(frozen=True)
@@ -22,9 +26,10 @@ class ImpartClosingEnterSqlRepository:
             if not operations_ready(uow,'impart_closing_enter_operations'): return ImpartClosingEnterResult('schema_missing')
             old=uow.query_one('SELECT payload,result_json FROM impart_closing_enter_operations WHERE operation_id=?',(operation_id,))
             if old is not None: return ImpartClosingEnterResult('duplicate',*json.loads(old['result_json'])) if str(old['payload'])==payload else ImpartClosingEnterResult('operation_conflict')
+            if not statistics_columns_ready(uow, IMPART_STATISTICS_FIELDS): return ImpartClosingEnterResult('schema_missing')
             user=uow.query_one('SELECT root_type FROM user_xiuxian WHERE user_id=?',(user_id,)); cd=uow.query_one('SELECT COALESCE(type,0) AS type FROM user_cd WHERE user_id=?',(user_id,))
             if user is None or cd is None: return ImpartClosingEnterResult('user_missing')
             if str(user['root_type'] or '')=='伪灵根': return ImpartClosingEnterResult('ineligible')
             if int(cd['type'] or 0)!=0: return ImpartClosingEnterResult('busy')
             if uow.execute('UPDATE user_cd SET type=4,create_time=?,scheduled_time=NULL WHERE user_id=? AND COALESCE(type,0)=0',(started_at,user_id)).rowcount!=1: return ImpartClosingEnterResult('state_changed')
-            entry_count=increment_statistics(uow,user_id,'虚神界闭关次数'); saved=[started_at,entry_count]; uow.execute('INSERT INTO impart_closing_enter_operations(operation_id,payload,result_json) VALUES(?,?,?)',(operation_id,payload,json.dumps(saved,separators=(',',':')))); return ImpartClosingEnterResult('applied',*saved)
+            entry_count=increment_statistics_verified(uow,user_id,'虚神界闭关次数'); saved=[started_at,entry_count]; uow.execute('INSERT INTO impart_closing_enter_operations(operation_id,payload,result_json) VALUES(?,?,?)',(operation_id,payload,json.dumps(saved,separators=(',',':')))); return ImpartClosingEnterResult('applied',*saved)

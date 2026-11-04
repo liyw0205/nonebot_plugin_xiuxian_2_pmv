@@ -14,7 +14,7 @@ Migration `legacy.impart_pk.001` records the slice in `game_db`; the feature-own
 
 ### 回执/投影表的启动迁移（请求路径不执行 DDL）
 六条虚神界动作原先都在请求事务内 `CREATE TABLE IF NOT EXISTS`，与仓库级
-「请求路径不执行 DDL」合同冲突，且把 DDL 混进资产/统计写入。现在按写入者所在库拆成四条启动迁移：
+「请求路径不执行 DDL」合同冲突，且把 DDL 混进资产/统计写入。现在按写入者所在库拆成五条启动迁移：
 
 - `impart_pk.002`（game DB）：`impart_closing_enter_operations`、`impart_closing_operations`、
   `impart_explore_operations`、`impart_training_operations` 四张回执表。
@@ -24,6 +24,8 @@ Migration `legacy.impart_pk.001` records the slice in `game_db`; the feature-own
   `impart_battle_batch_operations` —— 战斗批回执的写事务以 impart 库为主连接，不能落到 game 库。
 - `impart_pk.005`（player DB，`_PLAYER_DATABASE_MIGRATION_VERSIONS` 白名单内）：
   `statistics` 的 `虚神界闭关时长` / `虚神界闭关修为` / `虚神界闭关祝福时长` 三列。
+- `impart_pk.006`（player DB，白名单同上）：`statistics` 的 `虚神界闭关次数` /
+  `虚神界投影次数` 两列。
 
 六条请求路径只校验 schema：`operations_ready(uow, table, schema)` 同时检查表存在与本次回读用到的列
 （`operation_id`/`payload`/`result_json`；投影表各自的主键列）。缺表**或缺任一读取列**都返回
@@ -47,26 +49,24 @@ Migration `legacy.impart_pk.001` records the slice in `game_db`; the feature-own
 `no such column: 虚神界闭关次数` 与 `table statistics has no column named 虚神界投影次数`，
 而两个 handler 没有 try/except —— 玩家收不到任何回复。
 
-现在两处统一走 `features/impart_pk/statistics_columns.py`：
+现在五个统计列全部由 player DB 启动迁移持有，`features/impart_pk/statistics_columns.py`
+提供共享契约：
 
-- `ensure_statistics_column()`：`PRAGMA table_info(statistics)` 取真实列，缺列才
-  `ALTER TABLE ... ADD COLUMN "<列>" INTEGER DEFAULT 0`；不 `DROP`、不改已有列类型。
-- `increment_statistics()`：`UPDATE ... COALESCE("<列>",0)+? WHERE user_id=?`，
-  `rowcount==0`（玩家还没有统计行）时 `INSERT` 补行，返回累加后的真实值。
+- `CLOSING_SETTLEMENT_FIELDS`（`虚神界闭关时长` / `虚神界闭关修为` / `虚神界闭关祝福时长`）
+  → `impart_pk.005`。
+- `IMPART_STATISTICS_FIELDS`（`虚神界闭关次数` / `虚神界投影次数`）→ `impart_pk.006`。
+- `ensure_statistics_column()`：建 `statistics` 并补列（`INTEGER DEFAULT 0`），仅供启动迁移
+  与显式回滚入口使用，不 `DROP`、不改已有列类型。
+- `statistics_columns_ready()`：`PRAGMA` 只读校验表与列，空列集视为缺表。
+- `increment_statistics_verified()`：请求路径的无 DDL 累加；
+  `UPDATE ... COALESCE("<列>",0)+?`，`rowcount==0`（玩家还没有统计行）时 `INSERT` 补行。
 
-两列的类型与默认值、以及"缺列补列 + 缺行补行"的行为，与
-`past_life/start_repository`（前尘往事次数）及旧 `_increment_entry_stat` 完全一致。
-补齐在调用方已有的写事务内完成，不新增迁移版本、不改已应用迁移函数；旧库若已有该列则跳过
-`ALTER` 直接读写，干净库首次写入时自动补列补行。
-
-`虚神界出关` 结算还会累加 `虚神界闭关时长` / `虚神界闭关修为` / `虚神界闭关祝福时长` 三列。
-这三列不再由请求路径补列：player DB 启动迁移 `impart_pk.005` 通过
-`ensure_statistics_column(schema="")` 建表并补列（字段清单
-`CLOSING_SETTLEMENT_FIELDS` 与仓储共用），`closing_settlement_repository.settle`
-只经 `statistics_columns_ready()` 校验；缺表或缺三列中任一列时，在任何资产写入之前返回
-`schema_missing`，不建表、不补列，`user_xiuxian` / `user_cd` / `impart_data.xiuxian_impart`
-与回执行均零变化。旧库已有三列与历史行保持不变；legacy
-`xiuxian_impart_pk/transaction_service.py::_increment_stat` 仍是显式回滚入口。
+`closing_enter_repository.enter`、`project_join_repository.join` 与
+`closing_settlement_repository.settle` 都在写事务首步、任何资产/回执行写入之前调用
+`statistics_columns_ready`；缺表或缺列返回 `schema_missing`，不建表、不补列。
+旧库已有列与历史行保持不变；legacy
+`xiuxian_impart_pk/transaction_service.py::_increment_stat` / `_increment_entry_stat` /
+`_increment_projection_stat` 仍是显式回滚入口。
 
 
 ## 事务与失败回滚

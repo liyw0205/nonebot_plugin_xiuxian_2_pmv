@@ -33,6 +33,7 @@ from nonebot_plugin_xiuxian_2.features.impart_pk.closing_enter_repository import
     ImpartClosingEnterSqlRepository,
 )
 from nonebot_plugin_xiuxian_2.features.impart_pk.migrations import (
+    apply_impart_pk_impart_statistics,
     apply_impart_pk_operations,
     apply_impart_pk_player_operations,
 )
@@ -77,6 +78,7 @@ class _Base(unittest.TestCase):
             apply_impart_pk_operations(uow)
         with DatabaseUnitOfWork(str(self.player), immediate=True) as uow:
             apply_impart_pk_player_operations(uow)
+            apply_impart_pk_impart_statistics(uow)
 
     def tearDown(self) -> None:
         self._temp.cleanup()
@@ -126,13 +128,11 @@ class _Base(unittest.TestCase):
 class ClosingEnterStatisticsTests(_Base):
     """`虚神界闭关` —— 此前 100% 抛 OperationalError。"""
 
-    def test_enter_applies_on_production_statistics_shape(self) -> None:
-        self.assertNotIn(CLOSING_FIELD, self.columns())
+    def test_enter_applies_after_statistics_migration(self) -> None:
         result = self.closing().enter("op-1", "u1", "2026-10-30 10:00:00.000000")
         self.assertEqual(result.status, "applied")
         self.assertEqual(result.entry_count, 1)
         self.assertEqual(self.stat(), 1)
-        self.assertIn(CLOSING_FIELD, self.columns())
 
     def test_enter_accumulates_and_survives_missing_statistics_row(self) -> None:
         repo = self.closing()
@@ -168,34 +168,38 @@ class ClosingEnterStatisticsTests(_Base):
         self.assertIn(self.stat(), (None, 0, "__no_column__"))
 
     def test_old_database_with_existing_column_still_works(self) -> None:
-        # 模拟旧路径已 ALTER 出该列的库
+        # 模拟旧路径已 ALTER 出该列的库：迁移后列与历史值都应保留
         with DatabaseUnitOfWork(str(self.player), immediate=True) as uow:
-            uow.execute(f'ALTER TABLE statistics ADD COLUMN "{CLOSING_FIELD}" INTEGER DEFAULT 0')
-            uow.execute('INSERT INTO statistics(user_id,"%s") VALUES(?,5)' % CLOSING_FIELD, ("u1",))
+            uow.execute(
+                'INSERT INTO statistics(user_id,"%s") VALUES(?,5)' % CLOSING_FIELD,
+                ("u1",),
+            )
         self.assertEqual(self.stat(), 5)
         result = self.closing().enter("op-1", "u1", "t1")
         self.assertEqual(result.status, "applied")
         self.assertEqual(result.entry_count, 6)
         self.assertEqual(self.stat(), 6)
 
-    def test_statistics_table_absent_is_created(self) -> None:
+    def test_statistics_table_absent_fails_closed_without_creating_it(self) -> None:
         with DatabaseUnitOfWork(str(self.player), immediate=True) as uow:
             uow.execute("DROP TABLE statistics")
         result = self.closing().enter("op-1", "u1", "t1")
-        self.assertEqual(result.status, "applied")
-        self.assertEqual(result.entry_count, 1)
-        self.assertEqual(self.stat(), 1)
+        self.assertEqual(result.status, "schema_missing")
+        self.assertEqual(self.stat(), "__no_column__")
+        with sqlite3.connect(self.player) as conn:
+            present = conn.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='statistics'"
+            ).fetchone()
+        self.assertIsNone(present)
 
 
 class ProjectJoinStatisticsTests(_Base):
     """`投影虚神界` —— 此前 100% 抛 'no column named 虚神界投影次数'。"""
 
-    def test_join_applies_on_production_statistics_shape(self) -> None:
-        self.assertNotIn(PROJECT_FIELD, self.columns())
+    def test_join_applies_after_statistics_migration(self) -> None:
         result = self.project().join("op-1", "u1")
         self.assertEqual(result.status, "applied")
         self.assertEqual(self.stat(PROJECT_FIELD), 1)
-        self.assertIn(PROJECT_FIELD, self.columns())
 
     def test_players_are_isolated(self) -> None:
         repo = self.project()
@@ -239,11 +243,25 @@ class ProjectJoinStatisticsTests(_Base):
 
     def test_old_database_with_existing_column_still_works(self) -> None:
         with DatabaseUnitOfWork(str(self.player), immediate=True) as uow:
-            uow.execute(f'ALTER TABLE statistics ADD COLUMN "{PROJECT_FIELD}" INTEGER DEFAULT 0')
-            uow.execute('INSERT INTO statistics(user_id,"%s") VALUES(?,4)' % PROJECT_FIELD, ("u1",))
+            uow.execute(
+                'INSERT INTO statistics(user_id,"%s") VALUES(?,4)' % PROJECT_FIELD,
+                ("u1",),
+            )
         result = self.project().join("op-1", "u1")
         self.assertEqual(result.status, "applied")
         self.assertEqual(self.stat(PROJECT_FIELD, "u1"), 5)
+
+    def test_statistics_table_absent_fails_closed_without_creating_it(self) -> None:
+        with DatabaseUnitOfWork(str(self.player), immediate=True) as uow:
+            uow.execute("DROP TABLE statistics")
+        result = self.project().join("op-1", "u1")
+        self.assertEqual(result.status, "schema_missing")
+        self.assertEqual(self.stat(PROJECT_FIELD), "__no_column__")
+        with sqlite3.connect(self.player) as conn:
+            present = conn.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='statistics'"
+            ).fetchone()
+        self.assertIsNone(present)
 
 
 class StatisticsColumnHelperTests(_Base):
@@ -306,8 +324,10 @@ class HandlerSourceContractTests(unittest.TestCase):
                 r"CREATE TABLE IF NOT EXISTS (player_data\.)?statistics\([^)]*,",
                 f"{name} must not inline statistics columns",
             )
-        self.assertIn("increment_statistics", closing)
-        self.assertIn("ensure_statistics_column", project)
+        self.assertIn("increment_statistics_verified", closing)
+        self.assertNotIn("ensure_statistics_column", closing)
+        self.assertIn("statistics_columns_ready", project)
+        self.assertIn("increment_statistics_verified", project)
 
 
 if __name__ == "__main__":

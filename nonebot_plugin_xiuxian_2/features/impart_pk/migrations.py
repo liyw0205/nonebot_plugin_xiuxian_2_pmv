@@ -1,5 +1,9 @@
 from ...infrastructure.database import DatabaseUnitOfWork
-from .statistics_columns import CLOSING_SETTLEMENT_FIELDS, ensure_statistics_column
+from .statistics_columns import (
+    CLOSING_SETTLEMENT_FIELDS,
+    IMPART_STATISTICS_FIELDS,
+    ensure_statistics_column,
+)
 
 # 虚神界 receipt/projection ledgers.  Every one of them used to be created lazily
 # inside the request transaction (``battle_repository``, ``closing_enter_repository``,
@@ -147,6 +151,18 @@ def apply_impart_pk_closing_statistics(uow: DatabaseUnitOfWork) -> None:
     )
 
 
+def apply_impart_pk_impart_statistics(uow: DatabaseUnitOfWork) -> None:
+    """Startup migration for the remaining 虚神界 statistics columns."""
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS impart_pk_feature_migrations (version TEXT PRIMARY KEY)"
+    )
+    for field in IMPART_STATISTICS_FIELDS:
+        ensure_statistics_column(uow, field, schema="")
+    uow.execute(
+        "INSERT OR IGNORE INTO impart_pk_feature_migrations(version) VALUES ('impart_pk.006')"
+    )
+
+
 __all__ = [
     "GAME_OPERATIONS_TABLE_COLUMNS",
     "GAME_OPERATIONS_TABLE_DDL",
@@ -159,6 +175,7 @@ __all__ = [
     "apply_impart_pk",
     "apply_impart_pk_closing_statistics",
     "apply_impart_pk_impart_operations",
+    "apply_impart_pk_impart_statistics",
     "apply_impart_pk_operations",
     "apply_impart_pk_player_operations",
     "operations_ready",

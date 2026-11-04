@@ -25,6 +25,12 @@ CLOSING_SETTLEMENT_FIELDS = (
     "虚神界闭关祝福时长",
 )
 
+# 进入闭关 / 投影加入各自累加的统计列；迁移 `impart_pk.006` 与请求路径共用。
+IMPART_STATISTICS_FIELDS = (
+    "虚神界闭关次数",
+    "虚神界投影次数",
+)
+
 
 def statistics_columns_ready(uow, fields, *, schema: str = SCHEMA) -> bool:
     """只读校验 `statistics` 是否存在且包含 `fields`；空列集视为缺表。"""
@@ -56,6 +62,17 @@ def increment_statistics(
     """把 `field` 累加 `amount`，返回累加后的真实值。"""
     user_id, amount = str(user_id), int(amount)
     ensure_statistics_column(uow, field, schema=schema)
+    return _increment_verified(uow, user_id, field, amount, schema=schema)
+
+
+def increment_statistics_verified(
+    uow, user_id: str, field: str, amount: int = 1, *, schema: str = SCHEMA
+) -> int:
+    """累加统计列但**不执行 DDL**；调用方必须先经 `statistics_columns_ready` 校验。"""
+    return _increment_verified(uow, str(user_id), field, int(amount), schema=schema)
+
+
+def _increment_verified(uow, user_id: str, field: str, amount: int, *, schema: str) -> int:
     prefix = f"{schema}." if schema else ""
     updated = uow.execute(
         f'UPDATE {prefix}statistics SET "{field}"=COALESCE("{field}",0)+? WHERE user_id=?',
@@ -75,7 +92,9 @@ def increment_statistics(
 
 __all__ = [
     "CLOSING_SETTLEMENT_FIELDS",
+    "IMPART_STATISTICS_FIELDS",
     "ensure_statistics_column",
     "increment_statistics",
+    "increment_statistics_verified",
     "statistics_columns_ready",
 ]
