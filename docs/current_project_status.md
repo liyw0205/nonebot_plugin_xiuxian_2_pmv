@@ -2620,3 +2620,44 @@ status_reader 归属、渲染与 handler 源合同）。受影响套件：
   `--ff-only` 合入 main 后 main run `41922652223` success（headSha 均 `ed6c50b1`；
   `quality` success、`build-and-release` skipped）。未部署、未读写真实游戏库、未发真实 QQ 消息、
   未打 tag；用户删除的四个文件保持未暂存，`.codex-next-goal.md` 未提交。
+
+## 已完成目标：虚神界剩余统计列（`impart_pk.006`）的启动迁移归属
+
+重构收敛（非新玩法）。承接 `docs/features/impart_pk.md` 与仓库级「请求路径不执行 DDL」合同。
+
+**缺口证据**：`features/impart_pk/closing_enter_repository.py` 成功进入闭关时经
+`increment_statistics()` 补 `虚神界闭关次数`；`features/impart_pk/project_join_repository.py`
+成功投影加入时经 `ensure_statistics_column()` 补 `虚神界投影次数`。两者都在请求事务内
+`CREATE TABLE`/`ALTER TABLE`，而 `impart_pk.002~.005` 未创建这两列。
+
+交付内容：
+
+- `features/impart_pk/statistics_columns.py` 增加 `IMPART_STATISTICS_FIELDS`（两列）与
+  无 DDL 的 `increment_statistics_verified()`；`increment_statistics()` 保留给迁移与显式回滚入口。
+- `features/impart_pk/migrations.py` 新增 `apply_impart_pk_impart_statistics`（`impart_pk.006`，
+  player DB），经 `ensure_statistics_column(schema="")` 建表补列；`plugin.py` 按版本序注册，
+  catalog 316→317 单调；列入 player 白名单与 game 排除集，trade/impart/message 均不包含。
+- 两个仓储删除请求期建表/补列：`closing_enter` 在重放检查之后、`project_join` 在
+  legacy 成员导入之前调用 `statistics_columns_ready`（前者 `player_data`，后者主库无前缀）；
+  缺表或缺列返回 `schema_missing`，零资产/零成员/零回执写入。
+- 写口径不变：成功进入闭关 `虚神界闭关次数` +1、成功投影加入 `虚神界投影次数` +1；
+  无统计行时插入；operation 重放 `duplicate` 不重复累加；`busy`/`ineligible`/`already_joined`/
+  `pk_exhausted`/`capacity_full` 分支零累加。
+- 兼容：迁移 `IF NOT EXISTS`，旧库已有列与历史行保留；legacy
+  `xiuxian_impart_pk/transaction_service.py` 的 `_increment_stat`/`_increment_entry_stat`/
+  `_increment_projection_stat` 保留为显式回滚入口。
+- 文档：`docs/features/impart_pk.md` 迁移清单补 `impart_pk.006`，统计列契约改为五列全部归迁移、
+  请求路径无 DDL 累加。
+- 测试：新增 `tests/test_impart_statistics_migration_ownership.py` `7/7`（迁移补列幂等、
+  player-only 路由、既有行保留、两个仓储缺迁移 `schema_missing` 且零写入零建表、
+  迁移后 enter/join applied+duplicate、请求路径无 DDL 源合同）；
+  `tests/test_impart_statistics_column_contract.py` 的 superseded 断言改为迁移后契约，
+  夹具显式应用 `impart_pk.006`。定向合并集 `311 passed`；
+  `test_phase2_legacy_path_gate`（临时还原冻结文件后删除）`47 passed, 91 subtests passed`；
+  `test_refactor_progress`/`test_dependency_lock`/`test_refactor_architecture` `43 passed`。
+- 三门禁真实 exit 0（progress `failures: None`；`exit_ready: False` 仍仅由用户删除的冻结文件
+  造成，11 条既有 blocker）；`compileall` 与 `git diff --check` 干净。
+- 交付与 CI：功能提交 `8b88e76c` 的 develop run `41933024471` success；
+  `--ff-only` 合入 main 后 main run `41933829744` success（headSha 均 `8b88e76c`；
+  `quality` success、`build-and-release` skipped）。未部署、未读写真实游戏库、未发真实 QQ 消息、
+  未打 tag；用户删除的四个文件保持未暂存，`.codex-next-goal.md` 未提交。
