@@ -19,7 +19,16 @@
 
 ## 数据模型与迁移
 
-流水表及写入方属于既有经济 owner；本切片只添加一次启动迁移 `economy_ledger.001` 的只读索引。请求路径不建表、不建索引、不修改流水。
+流水表及写入方属于既有经济 owner。`economy_ledger.001` 只添加 `economy_log` 的只读索引；
+`economy_ledger.002` 建出 `economy_log` 的权威列集与索引；`economy_ledger.003`（game DB）
+建出转账幂等回执 `economy_operations(operation_id TEXT PRIMARY KEY, operation_type TEXT NOT NULL,
+created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)`。三条迁移均为 `IF NOT EXISTS`，可重复执行。
+
+`economy_operations` 此前只由 `xiuxian_utils/repositories.py::EconomyRepository.transfer_stones`
+在请求事务内创建。现在该路径只经
+`infrastructure/database/economy_operations.operations_ready()` 校验形状；缺表或缺列返回
+`False`，零扣款、零入账、零回执，也不建表或补列。旧库已惰性建出的回执行与历史记录保留。
+请求路径不建表、不建索引、不修改流水。
 
 ## 事务与失败回滚
 

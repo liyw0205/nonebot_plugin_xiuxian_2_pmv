@@ -7,6 +7,10 @@ from contextlib import contextmanager
 from pathlib import Path
 
 from tests.test_db_backend import db_backend
+from nonebot_plugin_xiuxian_2.features.economy_ledger.migrations import (
+    apply_economy_operations,
+)
+from nonebot_plugin_xiuxian_2.infrastructure.database import DatabaseUnitOfWork
 
 
 MODULE_PATH = (
@@ -46,6 +50,8 @@ class RepositoryTests(unittest.TestCase):
                 "INSERT INTO user_xiuxian VALUES (%s, %s, %s, %s)",
                 ("1002", "另一位道友", 20, 10),
             )
+        with DatabaseUnitOfWork(str(self.database), immediate=True) as uow:
+            apply_economy_operations(uow)
         self.logs: list[dict] = []
 
     def tearDown(self) -> None:

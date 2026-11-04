@@ -24,6 +24,32 @@ def _numeric_bind():
         return module
 
 
+def _economy_operations_bind():
+    """Load the transfer receipt schema both as a package and in source-file tests."""
+    try:
+        from ...infrastructure.database import economy_operations
+
+        return economy_operations
+    except ImportError:
+        import importlib.util
+        from pathlib import Path
+
+        path = (
+            Path(__file__).resolve().parents[2]
+            / "infrastructure"
+            / "database"
+            / "economy_operations.py"
+        )
+        spec = importlib.util.spec_from_file_location(
+            "_xiuxian_economy_operations", path
+        )
+        if spec is None or spec.loader is None:
+            raise ImportError(f"无法加载经济回执 schema 模块: {path}")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module
+
+
 class UserRepository:
     """Read access for the main user table."""
 
@@ -213,17 +239,11 @@ class EconomyRepository:
         if amount_int <= 0 or str(sender_id) == str(recipient_id):
             return False
 
+        schema = _economy_operations_bind()
         with self._connection() as conn:
+            if not schema.operations_ready(conn):
+                return False
             cur = conn.cursor()
-            cur.execute(
-                """
-                CREATE TABLE IF NOT EXISTS economy_operations (
-                    operation_id TEXT PRIMARY KEY,
-                    operation_type TEXT NOT NULL,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )
-                """
-            )
             cur.execute(
                 "SELECT operation_id FROM economy_operations WHERE operation_id=%s",
                 (operation_id,),

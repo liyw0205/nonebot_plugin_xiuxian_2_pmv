@@ -42,6 +42,7 @@
 | --- | --- | --- |
 | `message_db` | `message.001` | `messages`、`user_nicknames` 及其 14 个索引 |
 | `game_db` | `season_rank.001` | `season_rank` 及 `idx_season_rank_query` |
+| `game_db` | `economy_ledger.003` | `economy_operations` 及 `operation_id` 主键 |
 
 `messages` / `user_nicknames` 此前只由 `xiuxian_utils/message_db.py::_ensure_message_db_schema`
 在每次连接消息库时创建，并对历史库补 `messages.reference_id`；`season_rank` 此前只在
@@ -54,6 +55,8 @@
 `RuntimeError("消息库数据尚未就绪，请检查启动迁移。")` 且零建表；`ensure_season_rank_table()`
 返回 `False`，写路径返回 `None`、读路径返回 `[]`/`None`。
 
-明确不在本 ADR 覆盖范围：`economy_operations`（`xiuxian_utils/repositories.py::transfer_stones`
-在请求事务内创建）属于主玩家库的转账幂等回执，与本节的 `message_db`/`game_db` 赛季榜无关，
-留作下一个独立切片处理。
+`economy_operations`（`xiuxian_utils/repositories.py::transfer_stones` 的转账幂等回执）
+归 `game_db`：它和 `user_xiuxian` 在同一个 legacy 主库事务内写入，迁移 `economy_ledger.003`
+用 `CREATE TABLE IF NOT EXISTS` 建出 `operation_id` 主键、`operation_type` 与 `created_at`。
+请求路径只经 `infrastructure/database/economy_operations.operations_ready()` 校验；
+未迁移或缺列时 `transfer_stones` 返回 `False`，零扣款、零入账、零回执，也不建表。

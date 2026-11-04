@@ -2,11 +2,12 @@ from __future__ import annotations
 
 from ...infrastructure.database import DatabaseUnitOfWork
 from ...infrastructure.database.economy import ECONOMY_LOG_DDL
+from ...infrastructure.database.economy_operations import ECONOMY_OPERATIONS_DDL
 
 
 # The composition root owns execution; this tuple records the feature's
 # startup migration without creating a second migration runner.
-MIGRATIONS = ("economy_ledger.001", "economy_ledger.002")
+MIGRATIONS = ("economy_ledger.001", "economy_ledger.002", "economy_ledger.003")
 
 
 def apply_economy_ledger_read_indexes(uow: DatabaseUnitOfWork) -> None:
@@ -62,8 +63,20 @@ def apply_economy_log_schema(uow: DatabaseUnitOfWork) -> None:
         uow.execute(statement)
 
 
+def apply_economy_operations(uow: DatabaseUnitOfWork) -> None:
+    """Create the game-owned transfer idempotency receipt table.
+
+    `EconomyRepository.transfer_stones` used to create it on every call.  The
+    startup migration owns it now; historical lazy-built receipts survive
+    because the statement is `IF NOT EXISTS`.
+    """
+    for statement in ECONOMY_OPERATIONS_DDL:
+        uow.execute(statement)
+
+
 __all__ = [
     "MIGRATIONS",
     "apply_economy_ledger_read_indexes",
     "apply_economy_log_schema",
+    "apply_economy_operations",
 ]
