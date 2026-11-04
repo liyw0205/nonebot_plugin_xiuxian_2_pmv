@@ -20,7 +20,14 @@
 - `stone_gift_operations`：赠送操作投影，保存总额、净额和手续费。
 - `stone_gift_limits`：按 UTC 日期记录用户发送/接收额度，和资产变更在同一事务中更新；旧命令首次触发当天操作时会把 `player.db` 的旧计数作为一次性基线导入。
 - `operation_ledger`、`operation_audit`：统一幂等与审计流水。
-- 迁移版本：`stone_gift.001`、`stone_gift.002`。
+- 迁移版本：`stone_gift.001`、`stone_gift.002`。两张表只由启动迁移创建
+  （`features/stone_gift/schema.py` 持有 DDL 与列契约）；请求路径不执行 DDL：
+  - 读路径降级：`operation()` 缺表返回 `None`，`limits()` 缺表返回全零，`read_limits` 仍可展示 0；
+  - 写路径 fail-closed：`transfer()` 在 `stone_gift_limits` 或 `stone_gift_operations`
+    未就绪时返回 `schema_missing`，应用层映射为「赠送数据尚未就绪，请检查启动迁移。」，
+    零资产、零额度、零回执写入；
+  - 旧库已按惰性路径建出的两张表与历史行保留；`compatibility/legacy_stone_gift.py`
+    的建表仍是显式回滚入口。
 
 ## 事务与失败回滚
 

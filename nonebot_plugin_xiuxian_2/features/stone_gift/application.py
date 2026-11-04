@@ -172,6 +172,7 @@ class StoneGiftApplication:
                             "state_changed": ("转账未结算：双方灵石刚被其他操作改动，请稍后重试。", "state_changed"),
                             "send_limit_reached": ("今日赠送额度不足", "send_limit_reached"),
                             "receive_limit_reached": ("对方今日可接收额度不足", "receive_limit_reached"),
+                            "schema_missing": ("赠送数据尚未就绪，请检查启动迁移。", "schema_missing"),
                         }
                         message, code = messages.get(status, ("转账失败", "rejected"))
                         outcome = OperationOutcome.rejected(

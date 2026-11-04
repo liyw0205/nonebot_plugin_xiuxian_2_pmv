@@ -7,7 +7,7 @@ from pathlib import Path
 from ....infrastructure.database import DatabaseUnitOfWork
 from ....plugin import apply_platform_schema
 from ..application import StoneGiftApplication
-from ..migrations import apply_stone_gift
+from ..migrations import apply_stone_gift, apply_stone_gift_limits
 
 
 class StoneGiftApplicationTests(unittest.TestCase):
@@ -20,6 +20,7 @@ class StoneGiftApplicationTests(unittest.TestCase):
             uow.execute("INSERT INTO user_xiuxian VALUES (?, ?)", ("recipient", 100))
             apply_platform_schema(uow)
             apply_stone_gift(uow)
+            apply_stone_gift_limits(uow)
         self.application = StoneGiftApplication(self.database)
 
     def tearDown(self) -> None:

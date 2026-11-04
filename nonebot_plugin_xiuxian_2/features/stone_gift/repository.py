@@ -4,39 +4,16 @@ from typing import Any
 
 from ...infrastructure.database import DatabaseUnitOfWork
 from .domain import StoneGiftRecord
+from .schema import (
+    LIMITS_COLUMNS,
+    OPERATIONS_COLUMNS,
+    SCHEMA_MISSING,
+    table_ready,
+)
 
 
 class StoneGiftRepository:
     """Owns the game database projection for spirit-stone transfers."""
-
-    def ensure_schema(self, uow: DatabaseUnitOfWork) -> None:
-        uow.execute(
-            """
-            CREATE TABLE IF NOT EXISTS stone_gift_operations (
-                operation_id TEXT PRIMARY KEY,
-                sender_id TEXT NOT NULL,
-                recipient_id TEXT NOT NULL,
-                gross_amount INTEGER NOT NULL,
-                net_amount INTEGER NOT NULL,
-                fee_amount INTEGER NOT NULL,
-                created_at TEXT DEFAULT CURRENT_TIMESTAMP
-            )
-            """
-        )
-
-    def ensure_limit_schema(self, uow: DatabaseUnitOfWork) -> None:
-        uow.execute(
-            """
-            CREATE TABLE IF NOT EXISTS stone_gift_limits (
-                limit_date TEXT NOT NULL,
-                user_id TEXT NOT NULL,
-                sent_amount INTEGER NOT NULL DEFAULT 0,
-                received_amount INTEGER NOT NULL DEFAULT 0,
-                updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
-                PRIMARY KEY(limit_date, user_id)
-            )
-            """
-        )
 
     def find_user(self, uow: DatabaseUnitOfWork, identifier: str) -> dict[str, Any] | None:
         """Resolve a command target by stable ID first, then display name."""
@@ -51,9 +28,10 @@ class StoneGiftRepository:
         return dict(row) if row is not None else None
 
     def limits(self, uow: DatabaseUnitOfWork, transfer_date: str, user_ids: tuple[str, ...]) -> dict[str, dict[str, int]]:
-        self.ensure_limit_schema(uow)
         result = {str(user_id): {"sent": 0, "received": 0} for user_id in user_ids}
         if not result:
+            return result
+        if not table_ready(uow, "stone_gift_limits", LIMITS_COLUMNS):
             return result
         placeholders = ",".join("?" for _ in result)
         rows = uow.query_all(
@@ -78,6 +56,8 @@ class StoneGiftRepository:
         )
 
     def operation(self, uow: DatabaseUnitOfWork, operation_id: str) -> StoneGiftRecord | None:
+        if not table_ready(uow, "stone_gift_operations", OPERATIONS_COLUMNS):
+            return None
         row = uow.query_one(
             "SELECT operation_id, sender_id, recipient_id, gross_amount, net_amount, fee_amount "
             "FROM stone_gift_operations WHERE operation_id = ?",
@@ -116,8 +96,11 @@ class StoneGiftRepository:
         baseline_received = 0
         sender_limit_exists = False
         recipient_limit_exists = False
+        if not table_ready(uow, "stone_gift_operations", OPERATIONS_COLUMNS):
+            return SCHEMA_MISSING
         if transfer_date is not None:
-            self.ensure_limit_schema(uow)
+            if not table_ready(uow, "stone_gift_limits", LIMITS_COLUMNS):
+                return SCHEMA_MISSING
             rows = uow.query_all(
                 "SELECT user_id, sent_amount, received_amount FROM stone_gift_limits "
                 "WHERE limit_date = ? AND user_id IN (?, ?)",
