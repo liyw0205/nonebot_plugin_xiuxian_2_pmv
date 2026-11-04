@@ -2573,3 +2573,50 @@ status_reader 归属、渲染与 handler 源合同）。受影响套件：
   `--ff-only` 合入 main 后 main run `41915105030` success（headSha 均 `6392b589`；
   `quality` success、`build-and-release` skipped）。未部署、未读写真实游戏库、未发真实 QQ 消息、
   未打 tag；用户删除的四个文件保持未暂存，`.codex-next-goal.md` 未提交。
+
+## 已完成目标：虚神界出关统计列的启动迁移归属
+
+重构收敛（非新玩法）。目标文档 `.codex-next-goal.md`（local-only，未提交）。
+承接 `docs/features/impart_pk.md` 与仓库级「请求路径不执行 DDL」合同。
+
+**缺口证据**：`features/impart_pk/closing_settlement_repository.py::settle` 在真实写事务内
+`PRAGMA player_data.table_info(statistics)` 后，对 `虚神界闭关时长`/`虚神界闭关修为`/
+`虚神界闭关祝福时长` 逐列 `ALTER TABLE player_data.statistics ADD COLUMN ... INTEGER DEFAULT 0`；
+`impart_pk.002~.004` 均未创建这三列。上一轮 impart_pk 切片只处理回执/投影表，
+`statistics` 业务列仍留在请求路径。
+
+交付内容：
+
+- `features/impart_pk/statistics_columns.py` 增加 `CLOSING_SETTLEMENT_FIELDS` 与只读
+  `statistics_columns_ready(uow, fields, *, schema)`（`PRAGMA` 取列，空列集视为缺表）。
+- `features/impart_pk/migrations.py` 新增 `apply_impart_pk_closing_statistics`（`impart_pk.005`，
+  player DB）：经共享 `ensure_statistics_column(schema="")` 建表并补三列，幂等；
+  `plugin.py` 按版本序注册，catalog 315→316 单调；列入 player 白名单与 game 排除集，
+  trade/impart/message 均不包含。
+- `settle` 删除逐列 `ALTER TABLE`，在幂等重放检查之后、任何资产写入之前调用
+  `statistics_columns_ready`；缺表或缺任一列返回 `schema_missing`，`user_xiuxian`/`user_cd`/
+  `impart_data.xiuxian_impart` 与回执行零变化，不建表、不补列。
+- 兼容：迁移 `IF NOT EXISTS`，旧库已有三列与历史行不变；成功结算仍按
+  `closing_minutes/exp_gain/blessing_cost` 累加，重放 `duplicate` 不重复累加；
+  legacy `xiuxian_impart_pk/transaction_service.py::_increment_stat` 保留为显式回滚入口。
+- 文档：`docs/features/impart_pk.md` 的启动迁移清单补 `impart_pk.005`，统计列契约段说明
+  三列归迁移所有、请求路径 fail-closed 与回滚口径。
+- 测试：新增 `tests/test_impart_closing_statistics_ownership.py` `7/7`（迁移建表/补列幂等、
+  player-only 路由、既有行保留、缺表与半成品表 `schema_missing` 且零写入零补列、
+  迁移后 applied/duplicate/state_changed、请求路径无 DDL 与共享契约源合同）；
+  `features/impart_pk/tests/test_closing_settlement_repository.py` 与
+  `tests/test_impart_pk_operations_schema.py` 夹具改为显式应用迁移。
+  合并集（新套件 + `test_impart_pk_operations_schema` + `test_impart_statistics_column_contract`
+  + `test_impart_closing_enter` + `test_impart_closing_settlement` + `features/impart_pk/tests`
+  + `test_source_quality`）`310 passed`；`test_phase2_legacy_path_gate`（临时还原冻结文件后删除）
+  `47 passed, 91 subtests passed`。
+- 已知既有失败（非本目标回归）：`tests/test_refactor_closeout_recovery.py::
+  test_closeout_five_database_migration_backup_restore_and_reconcile` 在
+  `tests/test_dependency_lock.py` 之后运行时，临时 data 目录缺 `功法/功法概率设置.json`，
+  `state.phase` 为 `not_ready`；在 HEAD 隔离 worktree 同序复现，单独运行通过，属既有测试顺序问题。
+- 三门禁真实 exit 0（progress `failures: None`；`exit_ready: False` 仍仅由用户删除的冻结文件
+  造成，11 条既有 blocker）；`compileall` 与 `git diff --check` 干净。
+- 交付与 CI：功能提交 `ed6c50b1` 的 develop run `41921231649` success；
+  `--ff-only` 合入 main 后 main run `41922652223` success（headSha 均 `ed6c50b1`；
+  `quality` success、`build-and-release` skipped）。未部署、未读写真实游戏库、未发真实 QQ 消息、
+  未打 tag；用户删除的四个文件保持未暂存，`.codex-next-goal.md` 未提交。
