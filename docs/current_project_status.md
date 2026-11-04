@@ -2487,3 +2487,47 @@ status_reader 归属、渲染与 handler 源合同）。受影响套件：
 - 三门禁真实 exit 0（progress `failures: None`；`exit_ready: False` 仍仅由用户删除的冻结文件
   造成，11 条既有 blocker）；`test_phase2_legacy_path_gate`（临时还原冻结文件后删除，未暂存）
   `47/47`；`compileall` 与 `git diff --check` 干净。
+
+## 已完成目标：洞天福地与灵石修炼操作回执表的启动迁移归属
+
+重构收敛（非新玩法）。目标文档 `.codex-next-goal.md`（local-only，未提交）。
+承接 `docs/features/buff.md` 与仓库级「请求路径不执行 DDL」合同。
+
+**缺口证据**：`features/buff/rename_repository.py` 与 `upgrade_repository.py` 在请求事务内
+`CREATE TABLE IF NOT EXISTS blessed_spot_operations`，`stone_training_repository.py` 同样内联
+`stone_training_operations`；`buff.001`~`buff.013` 从未创建这两张表。福地开垦、福地改名与
+`灵石修炼` 都是真实玩家命令。实测 `BuffApplication.upgrade_field(..., cost=200, ...)` 抛
+`ValidationError: expected_level and stone_cost are required`——handler 自 `08eeef62` 起传
+`cost`，应用只接受 `stone_cost`，开垦命令在参数校验阶段必然失败。
+
+交付内容：
+
+- 新增 `features/buff/operation_schema.py`：`SCHEMA_MISSING`、两张表的列契约与 DDL、
+  `operations_ready`/`stone_training_ready`（表存在 + 全列 + `operation_id` 主键）。
+- `features/buff/migrations.py` 新增 `apply_blessed_spot_operations`（`buff.014`）与
+  `apply_stone_training_operations`（`buff.015`），均 game DB；`plugin.py` 按版本序注册，
+  catalog 312→314 单调；两版本只出现在 game 路由，player/trade/impart/message 均不包含。
+- 三个仓储删除请求期 `CREATE TABLE`，事务首步校验契约；缺表/缺列返回 `schema_missing`，
+  零资产与零回执写入，不建表、不补列。
+- `灵田开垦` handler 改传 `stone_cost=cost`；福地开垦/改名在 `outcome.code == "schema_missing"`
+  时提示「洞天福地数据尚未就绪，请检查启动迁移。」。
+- 兼容：两条迁移均为 `IF NOT EXISTS`，旧库惰性建出的回执行与历史记录保留；
+  `BlessedSpotService`/`StoneTrainingSettlementService` 仍是显式回滚入口（保留自身事务内建表）。
+- 文档：`docs/features/buff.md` 数据模型改为 `buff.001` 至 `buff.015`，新增操作回执归属表、
+  fail-closed 与回滚说明。
+- 测试：新增 `tests/test_blessed_spot_schema_ownership.py` 11 项（两迁移建表形状与幂等、
+  game-only 路由、旧回执行保留、未迁移/半成品表 `schema_missing` 且零写入零建表、
+  真实 `BuffApplication` 的开垦/改名 applied-duplicate-state_changed、灵石修炼 applied/duplicate、
+  请求路径无 DDL 与共享契约源合同、handler 参数与降级文案合同）。
+  定向 `test_blessed_spot_schema_ownership.py` + 三个仓储套件 + `test_blessed_spot_service.py`
+  `25 passed`；`test_source_quality.py` + `features/buff/tests` `261 passed`；
+  `test_phase2_legacy_path_gate.py` + `test_refactor_closeout_recovery.py`
+  `48 passed, 91 subtests passed`（临时还原冻结文件后删除，未暂存）。
+- 三门禁真实 exit 0（progress `failures: None`；`exit_ready: False` 仍仅由用户删除的冻结文件
+  造成，11 条既有 blocker）；`compileall` 与 `git diff --check` 干净。
+- 交付与 CI：功能提交 `3c464252` 的 develop run `41906862840` success；
+  `--ff-only` 合入 main 后 main run `41907846475` success（headSha 均 `3c464252`；
+  `quality` success、`build-and-release` skipped）。未部署、未读写真实游戏库、未发真实 QQ 消息、
+  未打 tag；用户删除的四个文件保持未暂存，`.codex-next-goal.md` 未提交。
+- 明确排除：`economy_operations`（`xiuxian_utils/repositories.py::transfer_stones` 请求期建表，
+  无 in-repo 生产调用方）留作下一独立切片。
