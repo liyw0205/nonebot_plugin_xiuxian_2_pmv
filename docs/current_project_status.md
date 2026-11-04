@@ -2531,3 +2531,45 @@ status_reader 归属、渲染与 handler 源合同）。受影响套件：
   未打 tag；用户删除的四个文件保持未暂存，`.codex-next-goal.md` 未提交。
 - 明确排除：`economy_operations`（`xiuxian_utils/repositories.py::transfer_stones` 请求期建表，
   无 in-repo 生产调用方）留作下一独立切片。
+
+## 已完成目标：`economy_operations` 转账幂等回执的启动迁移归属
+
+重构收敛（非新玩法）。目标文档 `.codex-next-goal.md`（local-only，未提交）。
+承接 `docs/adr/0003-multiple-databases.md` 与仓库级「请求路径不执行 DDL」合同。
+
+**缺口证据**：`xiuxian_utils/repositories.py::EconomyRepository.transfer_stones` 在请求事务内
+`CREATE TABLE IF NOT EXISTS economy_operations(operation_id, operation_type, created_at)`；
+`economy_ledger.001/.002` 从未创建该表，全仓仅该文件 3 处引用。调用链为
+`XiuxianDateManage.transfer_ls` 的 legacy 主库连接（`game_db`）；`repositories.py` 还会被
+`tests/test_repositories.py` 以文件路径独立加载，不能引入顶层包级相对导入。
+
+交付内容：
+
+- 新增纯标准库 `infrastructure/database/economy_operations.py`：
+  `ECONOMY_OPERATIONS_COLUMNS`、`ECONOMY_OPERATIONS_DDL`、`operations_ready(connection)`
+  （raw legacy connection，兼容 tuple/Row），迁移与仓储共用同一字面 DDL。
+- `features/economy_ledger/migrations.py` 新增 `apply_economy_operations`，
+  `MIGRATIONS` 追加 `economy_ledger.003`；`plugin.py` 按版本序注册，catalog 314→315 单调；
+  该版本只出现在 `game_db`，player/trade/impart/message 均不包含。
+- `transfer_stones` 删除请求期 `CREATE TABLE`，改由 `_economy_operations_bind()` 取契约：
+  包内相对导入失败时按文件路径加载 `economy_operations.py`（与 `_numeric_bind()` 同模式），
+  保持独立文件加载测试可用。未迁移或缺列返回 `False`，零扣款、零入账、零回执，不建表。
+- 兼容：迁移 `IF NOT EXISTS`，旧库惰性建出的回执行与历史记录保留；转账金额/事务语义、
+  `update_stones` 等方法与回执 `operation_type='stone_transfer'` 未改。
+- 文档：`docs/features/economy_ledger.md` 登记 `economy_ledger.002/.003` 与 fail-closed 口径；
+  `docs/adr/0003-multiple-databases.md` 的 schema 归属表补 `economy_operations` 一行，
+  并删除“留作下一独立切片”的过时说明。
+- 测试：新增 `tests/test_economy_operations_schema_ownership.py` `7/7`（迁移建表形状与幂等、
+  game-only 路由、旧回执行保留、未迁移 `False` 且零写入零建表、迁移后转账/重放/余额不足/
+  收款方缺失回滚、独立文件加载 fallback、仓储源无 DDL）；`tests/test_repositories.py` 夹具
+  改为显式应用迁移。定向 `test_economy_operations_schema_ownership.py` + `test_repositories.py`
+  + `test_slice_contract.py` `15 passed`；含 `test_source_quality.py`、
+  `test_refactor_architecture.py`、`test_dependency_lock.py` 的合并集 `281 passed`；
+  `test_phase2_legacy_path_gate.py` + `test_refactor_progress.py`
+  `70 passed, 91 subtests passed`（临时还原冻结文件后删除，未暂存）。
+- 三门禁真实 exit 0（progress `failures: None`；`exit_ready: False` 仍仅由用户删除的冻结文件
+  造成，11 条既有 blocker）；`compileall` 与 `git diff --check` 干净。
+- 交付与 CI：功能提交 `6392b589` 的 develop run `41913786901` success；
+  `--ff-only` 合入 main 后 main run `41915105030` success（headSha 均 `6392b589`；
+  `quality` success、`build-and-release` skipped）。未部署、未读写真实游戏库、未发真实 QQ 消息、
+  未打 tag；用户删除的四个文件保持未暂存，`.codex-next-goal.md` 未提交。
