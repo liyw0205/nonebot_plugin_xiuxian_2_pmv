@@ -5,6 +5,15 @@ from pathlib import Path
 from typing import Any, Protocol
 import json
 from ...infrastructure.database import DatabaseUnitOfWork, OutboxStore
+from .schema import (
+    COOLDOWN_COLUMNS,
+    DAILY_LIMIT_COLUMNS,
+    EXPLORE_STATUS_COLUMNS,
+    MISSION_COLUMNS,
+    SCHEMA_MISSING,
+    STATUS_COLUMNS,
+    table_ready,
+)
 from .schemas import MapNearbyTargetResult
 
 
@@ -225,12 +234,8 @@ class MapProjectionSqlWriteRepository:
         if not user_id or not values["date"] or min(numeric_values) < 0:
             raise ValueError("valid daily limit state is required")
         with DatabaseUnitOfWork(self.player_database, immediate=True) as uow:
-            columns = {str(row["name"]) for row in uow.query_all("PRAGMA table_info(map_daily_limit)")}
-            if not columns:
-                raise RuntimeError("map_daily_limit schema is missing")
-            for field in ("gather_count", "combat_count", "explore_count", "resource_total_count"):
-                if field not in columns:
-                    uow.execute(f'ALTER TABLE map_daily_limit ADD COLUMN "{field}" INTEGER DEFAULT 0')
+            if not table_ready(uow, "map_daily_limit", DAILY_LIMIT_COLUMNS):
+                return {"status": SCHEMA_MISSING}
             uow.execute(
                 "INSERT INTO map_daily_limit(user_id,date,gather_count,combat_count,explore_count,resource_total_count) "
                 "VALUES(?,?,?,?,?,?) ON CONFLICT(user_id) DO UPDATE SET date=excluded.date,"
@@ -245,11 +250,8 @@ class MapProjectionSqlWriteRepository:
         if not user_id or field not in self._COOLDOWN_FIELDS:
             raise ValueError("valid cooldown field and user are required")
         with DatabaseUnitOfWork(self.player_database, immediate=True) as uow:
-            columns = {str(row["name"]) for row in uow.query_all("PRAGMA table_info(map_cooldown)")}
-            if not columns:
-                raise RuntimeError("map_cooldown schema is missing")
-            if field not in columns:
-                uow.execute(f'ALTER TABLE map_cooldown ADD COLUMN "{field}" TEXT DEFAULT NULL')
+            if not table_ready(uow, "map_cooldown", COOLDOWN_COLUMNS):
+                return None
             uow.execute(
                 f'INSERT INTO map_cooldown(user_id,"{field}") VALUES(?,?) '
                 f'ON CONFLICT(user_id) DO UPDATE SET "{field}"=excluded."{field}"',
@@ -307,11 +309,8 @@ class MapStatusSqlWriteRepository:
         if not user_id or not all(str(value).strip() for value in (realm, heaven, node_id)):
             raise ValueError("valid map status is required")
         with DatabaseUnitOfWork(self.player_database, immediate=True) as uow:
-            columns = {str(row["name"]) for row in uow.query_all("PRAGMA table_info(map_status)")}
-            if not columns:
-                raise RuntimeError("map_status schema is missing")
-            if "visited_nodes" not in columns:
-                uow.execute("ALTER TABLE map_status ADD COLUMN visited_nodes TEXT DEFAULT '[]'")
+            if not table_ready(uow, "map_status", STATUS_COLUMNS):
+                return {"status": SCHEMA_MISSING}
             current = uow.query_one("SELECT visited_nodes FROM map_status WHERE user_id=?", (user_id,))
             merged = self._merge_visited(current["visited_nodes"] if current else [], visited_nodes)
             uow.execute(
@@ -406,17 +405,9 @@ class MapExploreStatusSqlWriteRepository:
         if not user_id or values["running"] not in (0, 1) or min(values[key] for key in ("duration_min", "max_duration_min", "interval_min")) < 0:
             raise ValueError("valid exploration status is required")
         with DatabaseUnitOfWork(self.player_database, immediate=True) as uow:
+            if not table_ready(uow, "map_explore_status", EXPLORE_STATUS_COLUMNS):
+                return {"status": SCHEMA_MISSING}
             columns = {str(row["name"]) for row in uow.query_all("PRAGMA table_info(map_explore_status)")}
-            if not columns:
-                raise RuntimeError("map_explore_status schema is missing")
-            definitions = {
-                "running": "INTEGER DEFAULT 0", "node_type": "TEXT DEFAULT ''", "node_name": "TEXT DEFAULT ''",
-                "start_time": "TEXT DEFAULT ''", "duration_min": "INTEGER DEFAULT 0", "settlement": "TEXT DEFAULT ''",
-                "max_duration_min": "INTEGER DEFAULT 0", "interval_min": "INTEGER DEFAULT 0",
-            }
-            for field, definition in definitions.items():
-                if field not in columns:
-                    uow.execute(f'ALTER TABLE map_explore_status ADD COLUMN "{field}" {definition}')
             if "reward_plan" in columns:
                 uow.execute(
                     "INSERT INTO map_explore_status(user_id,running,node_type,node_name,start_time,duration_min,settlement,max_duration_min,interval_min,reward_plan) "
@@ -478,12 +469,8 @@ class MapMissionSqlWriteRepository:
         if not user_id or not values["date"] or values["target"] < 0 or values["claimed"] not in (0, 1):
             raise ValueError("valid mission state is required")
         with DatabaseUnitOfWork(self.player_database, immediate=True) as uow:
-            columns = {str(row["name"]) for row in uow.query_all("PRAGMA table_info(map_mission)")}
-            if not columns:
-                raise RuntimeError("map_mission schema is missing")
-            for field, definition in (("mission_type", "TEXT"), ("target", "INTEGER DEFAULT 0"), ("claimed", "INTEGER DEFAULT 0"), ("settlement", "TEXT DEFAULT ''")):
-                if field not in columns:
-                    uow.execute(f'ALTER TABLE map_mission ADD COLUMN "{field}" {definition}')
+            if not table_ready(uow, "map_mission", MISSION_COLUMNS):
+                return {"status": SCHEMA_MISSING}
             uow.execute(
                 "INSERT INTO map_mission(user_id,date,mission_type,target,claimed,settlement) VALUES(?,?,?,?,?,?) "
                 "ON CONFLICT(user_id) DO UPDATE SET date=excluded.date,mission_type=excluded.mission_type,"

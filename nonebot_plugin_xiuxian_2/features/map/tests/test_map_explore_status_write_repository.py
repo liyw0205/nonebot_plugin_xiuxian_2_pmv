@@ -36,7 +36,8 @@ class MapExploreStatusWriteRepositoryTests(unittest.TestCase):
                 conn.execute(
                     "CREATE TABLE map_explore_status ("
                     "user_id TEXT PRIMARY KEY,running INTEGER,node_type TEXT,node_name TEXT,"
-                    "start_time TEXT,duration_min INTEGER,max_duration_min INTEGER,interval_min INTEGER,reward_plan TEXT)"
+                    "start_time TEXT,duration_min INTEGER,settlement TEXT,max_duration_min INTEGER,"
+                    "interval_min INTEGER,reward_plan TEXT)"
                 )
             repository = MapExploreStatusSqlWriteRepository(database)
             repository.save(
@@ -59,8 +60,8 @@ class MapExploreStatusWriteRepositoryTests(unittest.TestCase):
 
     def test_missing_schema_is_rejected(self):
         with tempfile.TemporaryDirectory() as directory:
-            with self.assertRaises(RuntimeError):
-                MapExploreStatusSqlWriteRepository(Path(directory) / "player.db").save("u", {"running": 0})
+            result = MapExploreStatusSqlWriteRepository(Path(directory) / "player.db").save("u", {"running": 0})
+            self.assertEqual(result["status"], "schema_missing")
 
 
 if __name__ == "__main__":

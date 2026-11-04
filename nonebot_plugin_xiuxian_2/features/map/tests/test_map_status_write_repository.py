@@ -27,7 +27,8 @@ class MapStatusWriteRepositoryTests(unittest.TestCase):
             self.assertEqual(tuple(row[:3]), ("凡界", "一重天", "n1"))
             self.assertEqual(json.loads(row[3]), ["n1"])
 
-    def test_upsert_adds_visited_nodes_to_legacy_status_schema(self):
+    def test_upsert_rejects_legacy_status_schema_without_visited_nodes(self):
+        """`map.018` owns `visited_nodes`; the request path must not add it."""
         with tempfile.TemporaryDirectory() as directory:
             database = Path(directory) / "player.db"
             with db_backend.transaction(database) as conn:
@@ -36,9 +37,12 @@ class MapStatusWriteRepositoryTests(unittest.TestCase):
                 )
             repository = MapStatusSqlWriteRepository(database)
             result = repository.upsert("u", "凡界", "一重天", "n2", ["n1", "n2"])
-            self.assertEqual(result["node_id"], "n2")
+            self.assertEqual(result["status"], "schema_missing")
             with db_backend.connection(database) as conn:
-                self.assertIn("visited_nodes", conn.column_names("map_status"))
+                self.assertNotIn("visited_nodes", conn.column_names("map_status"))
+                self.assertEqual(
+                    int(conn.execute("SELECT COUNT(*) FROM map_status").fetchone()[0]), 0
+                )
 
     def test_upsert_merges_existing_visited_nodes_without_duplicates(self):
         with tempfile.TemporaryDirectory() as directory:

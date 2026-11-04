@@ -128,4 +128,75 @@ def apply_map_combat_player(uow: DatabaseUnitOfWork) -> None:
 def apply_map_combat_plan(uow: DatabaseUnitOfWork) -> None:
     uow.execute("CREATE TABLE IF NOT EXISTS map_combat_plan_operations (operation_id TEXT PRIMARY KEY,user_id TEXT NOT NULL,task_id TEXT NOT NULL,payload TEXT NOT NULL,snapshot TEXT NOT NULL,created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)")
 
-__all__ = ["apply_map", "apply_map_combat_plan", "apply_map_combat_player", "apply_map_combat_start", "apply_map_dongfu_build", "apply_map_dongfu_player", "apply_map_dongfu_status_schema", "apply_map_explore_player", "apply_map_explore_settlement", "apply_map_explore_start", "apply_map_home_return", "apply_map_interactive_player", "apply_map_interactive_start", "apply_map_mission_claim", "apply_map_movement", "apply_map_resource_reward", "apply_map_seed_purchase"]
+def apply_map_player_state_schema(uow: DatabaseUnitOfWork) -> None:
+    """Create the five player map-state tables with their full column sets.
+
+    `map_daily_limit`, `map_status` and `map_mission` had no startup owner at all;
+    `map_cooldown` and `map_explore_status` were created with partial columns and
+    patched lazily from the request path.  This migration is the single owner.
+    """
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS map_daily_limit("
+        "user_id TEXT PRIMARY KEY,date TEXT NOT NULL DEFAULT '',"
+        "gather_count INTEGER DEFAULT 0,combat_count INTEGER DEFAULT 0,"
+        "explore_count INTEGER DEFAULT 0,resource_total_count INTEGER DEFAULT 0)"
+    )
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS map_cooldown("
+        "user_id TEXT PRIMARY KEY,gather_cd_until TEXT DEFAULT NULL,"
+        "explore_start_cd_until TEXT DEFAULT NULL,combat_cd_until TEXT DEFAULT NULL)"
+    )
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS map_status("
+        "user_id TEXT PRIMARY KEY,realm TEXT DEFAULT '',heaven TEXT DEFAULT '',"
+        "node_id TEXT DEFAULT '',visited_nodes TEXT DEFAULT '[]')"
+    )
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS map_explore_status("
+        "user_id TEXT PRIMARY KEY,running INTEGER NOT NULL DEFAULT 0,"
+        "node_type TEXT NOT NULL DEFAULT '',node_name TEXT NOT NULL DEFAULT '',"
+        "start_time TEXT NOT NULL DEFAULT '',duration_min INTEGER NOT NULL DEFAULT 0,"
+        "settlement TEXT NOT NULL DEFAULT '',max_duration_min INTEGER NOT NULL DEFAULT 0,"
+        "interval_min INTEGER NOT NULL DEFAULT 0)"
+    )
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS map_mission("
+        "user_id TEXT PRIMARY KEY,date TEXT NOT NULL DEFAULT '',"
+        "mission_type TEXT, target INTEGER DEFAULT 0,claimed INTEGER DEFAULT 0,"
+        "settlement TEXT DEFAULT '')"
+    )
+    for table, declarations in (
+        ("map_daily_limit", {"gather_count": "INTEGER DEFAULT 0", "combat_count": "INTEGER DEFAULT 0",
+                             "explore_count": "INTEGER DEFAULT 0", "resource_total_count": "INTEGER DEFAULT 0"}),
+        ("map_cooldown", {"explore_start_cd_until": "TEXT DEFAULT NULL", "combat_cd_until": "TEXT DEFAULT NULL"}),
+        ("map_status", {"visited_nodes": "TEXT DEFAULT '[]'"}),
+        ("map_explore_status", {"settlement": "TEXT NOT NULL DEFAULT ''"}),
+        ("map_mission", {"mission_type": "TEXT", "target": "INTEGER DEFAULT 0",
+                         "claimed": "INTEGER DEFAULT 0", "settlement": "TEXT DEFAULT ''"}),
+    ):
+        live = {str(row["name"]) for row in uow.query_all(f'PRAGMA table_info("{table}")')}
+        for field, declaration in declarations.items():
+            if field not in live:
+                uow.execute(f'ALTER TABLE "{table}" ADD COLUMN "{field}" {declaration}')
+
+
+__all__ = [
+    "apply_map",
+    "apply_map_combat_plan",
+    "apply_map_combat_player",
+    "apply_map_combat_start",
+    "apply_map_dongfu_build",
+    "apply_map_dongfu_player",
+    "apply_map_dongfu_status_schema",
+    "apply_map_explore_player",
+    "apply_map_explore_settlement",
+    "apply_map_explore_start",
+    "apply_map_home_return",
+    "apply_map_interactive_player",
+    "apply_map_interactive_start",
+    "apply_map_mission_claim",
+    "apply_map_movement",
+    "apply_map_player_state_schema",
+    "apply_map_resource_reward",
+    "apply_map_seed_purchase",
+]

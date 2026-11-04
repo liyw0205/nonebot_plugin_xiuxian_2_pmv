@@ -14,7 +14,20 @@
 ## Web API
 `POST /api/v1/map/{move,return_home,interactive_start,interactive_finish,combat_start,combat_settle,explore_start,explore_settle,resource_reward,mission_claim,purchase_seed,build_dongfu}`，权限 `user`。
 ## 数据模型与迁移
-地图平台 schema 与各 asset operation schema 由启动迁移 `map.001` 至 `map.016` 管理，按 game/player 数据库路由；请求路径不依赖旧 transaction service 创建回执表。
+地图平台 schema 与各 asset operation schema 由启动迁移 `map.001` 至 `map.018` 管理，按 game/player 数据库路由；请求路径不依赖旧 transaction service 创建回执表。
+玩家地图状态表由 `map.018`（player 库）统一拥有，请求路径只校验、不建表补列：
+
+| 表 | 归属迁移 | 契约列 |
+| --- | --- | --- |
+| `map_daily_limit` | `map.018` | `user_id, date, gather_count, combat_count, explore_count, resource_total_count` |
+| `map_cooldown` | `map.003` + `map.018` | `user_id, gather_cd_until, explore_start_cd_until, combat_cd_until` |
+| `map_status` | `map.018` | `user_id, realm, heaven, node_id, visited_nodes` |
+| `map_explore_status` | `map.005` + `map.018` | `user_id, running, node_type, node_name, start_time, duration_min, settlement, max_duration_min, interval_min` |
+| `map_mission` | `map.018` | `user_id, date, mission_type, target, claimed, settlement` |
+
+`map_daily_limit`、`map_status`、`map_mission` 此前没有任何启动迁移创建，运行期由仓储 `ALTER TABLE ... ADD COLUMN` 惰性补列；`map_cooldown`、`map_explore_status` 由 `map.003`/`map.005` 建出但列不全。`map.018` 建出完整列集并对历史库补齐缺失列（保留既有行），`CREATE TABLE IF NOT EXISTS` 使重复执行幂等。
+
+请求路径（`features/map/repository.py`）不再执行任何 `CREATE TABLE`/`ALTER TABLE`：`MapProjectionSqlWriteRepository.save_daily_limit`/`upsert`、`MapExploreStatusSqlWriteRepository.save`、`MapMissionSqlWriteRepository.save` 在缺表或缺本次回读列时返回 `{"status": "schema_missing"}` 且零写入；`set_cooldown` 返回 `None`。`map_explore_status` 的 `reward_plan` 兼容分支保留，仅在契约列齐全时读取该遗留列。
 ## 事务与失败回滚
 默认 repository 保留各动作的 operation replay、状态快照校验和失败回滚。旧事务实现集中在 `compatibility/legacy_map_transactions.py`；历史 `xiuxian/xiuxian_map/transaction_service.py` 只 re-export 旧名字。默认路径不调用这些实现；显式注入的 `LegacyMapRepository`、`LegacyCombatSettlementRepository` 或旧 `*_service` wrappers 仍可调用。此隔离未改变 ledger/schema，不需要数据库回滚。
 采集开始在同一 immediate UoW 比较 `map_cooldown.gather_cd_until` 快照并阻止仍有效的冷却；若发现到期的 active action，则先原子标记为 `expired` 并记录冷却，再返回冷却回执，不扣新行动体力。相同 operation ID 重放保留原结果与 `cooldown_until`。
@@ -27,7 +40,7 @@
 ## 测试与手工验收
 覆盖体力不足、状态变化、背包容量、采集冷却快照、过期 active action 恢复和幂等重放。
 ## 灰度开关、回滚和已知限制
-战斗引擎、Items/配置解析和静态地图 JSON 仍由显式旧 provider/transport adapter 提供；这不把事务 service 计入默认执行图。旧 service 仍可经 shim 导入，显式 rollback repositories 保持可用。此切片无 migration；既有 `map.001` 至 `map.016` 若需回退，应先恢复代码版本，不删除迁移数据。
+战斗引擎、Items/配置解析和静态地图 JSON 仍由显式旧 provider/transport adapter 提供；这不把事务 service 计入默认执行图。旧 service 仍可经 shim 导入，显式 rollback repositories 保持可用。`map.018` 只建表与补列，不改任何数值或算法；回退时应先恢复代码版本，再保留 `map.018` 已建出的表，不删除迁移数据。既有 `map.001` 至 `map.017` 同理。
 
 附近道友展示经 `await MapApplication.nearby_display -> select_nearby_display`，不再物化完整 `nearby_players` 列表或无界 `seen_ids`。展示查询按 BINARY 字符串 ID 单向 seek，每页只读取一个 ID 和首个 map/profile rowid pair，再以 expected ID 重查 public 字段；最多保留 10 个对象。稳定数据下唯一用户流保持旧语义：不足 10 人按 map rowid 顺序，超过 10 人 reservoir(k=10) 后随机排列。短只读 UoW、双高水位、连接关闭、错误丢弃和取消传播与随机论道一致；单 ID 仍可能很大，SQL 工作集/缺索引耗时/逐候选 I/O/全进程 RAM 不由页大小保证。
 

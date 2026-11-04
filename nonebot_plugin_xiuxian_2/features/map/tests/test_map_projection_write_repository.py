@@ -2,7 +2,9 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from ..migrations import apply_map_player_state_schema
 from ..repository import MapProjectionSqlWriteRepository
+from ....infrastructure.database import DatabaseUnitOfWork
 from tests.test_db_backend import db_backend
 
 
@@ -10,15 +12,8 @@ class MapProjectionWriteRepositoryTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.database = Path(self.tmp.name) / "player.db"
-        with db_backend.transaction(self.database) as conn:
-            conn.execute(
-                "CREATE TABLE map_daily_limit ("
-                "user_id TEXT PRIMARY KEY,date TEXT,gather_count INTEGER,combat_count INTEGER,"
-                "explore_count INTEGER,resource_total_count INTEGER)"
-            )
-            conn.execute(
-                "CREATE TABLE map_cooldown (user_id TEXT PRIMARY KEY,gather_cd_until TEXT)"
-            )
+        with DatabaseUnitOfWork(str(self.database), immediate=True) as uow:
+            apply_map_player_state_schema(uow)
         self.repository = MapProjectionSqlWriteRepository(self.database)
 
     def tearDown(self):
@@ -41,15 +36,14 @@ class MapProjectionWriteRepositoryTests(unittest.TestCase):
             ).fetchone()
         self.assertEqual(tuple(row), ("2026-09-22", 3, 1, 3, 6))
 
-    def test_set_cooldown_adds_missing_known_column_and_upserts_user(self):
+    def test_set_cooldown_upserts_with_the_migrated_columns(self):
         self.assertEqual(
-            self.repository.set_cooldown("u", "explore_start_cd_until", "2026-09-22 10:00:00"),
+            self.repository.set_cooldown("u", "combat_cd_until", "2026-09-22 10:00:00"),
             "2026-09-22 10:00:00",
         )
         with db_backend.connection(self.database) as conn:
-            self.assertIn("explore_start_cd_until", conn.column_names("map_cooldown"))
             row = conn.execute(
-                "SELECT explore_start_cd_until FROM map_cooldown WHERE user_id='u'"
+                "SELECT combat_cd_until FROM map_cooldown WHERE user_id='u'"
             ).fetchone()
         self.assertEqual(row[0], "2026-09-22 10:00:00")
 
@@ -57,7 +51,8 @@ class MapProjectionWriteRepositoryTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.repository.set_cooldown("u", "not_a_cooldown", "value")
 
-    def test_legacy_daily_schema_is_extended_before_upsert(self):
+    def test_legacy_daily_schema_without_columns_is_rejected(self):
+        """`map.018` owns the columns; the request path must not add them."""
         with tempfile.TemporaryDirectory() as directory:
             database = Path(directory) / "legacy-player.db"
             with db_backend.transaction(database) as conn:
@@ -70,10 +65,11 @@ class MapProjectionWriteRepositoryTests(unittest.TestCase):
                 "u",
                 {"date": "2026-09-22", "gather_count": 1, "combat_count": 2, "explore_count": 3, "resource_total_count": 6},
             )
-            self.assertEqual(result["explore_count"], 3)
+            self.assertEqual(result["status"], "schema_missing")
             with db_backend.connection(database) as conn:
-                self.assertIn("combat_count", conn.column_names("map_daily_limit"))
-                self.assertIn("explore_count", conn.column_names("map_daily_limit"))
+                columns = conn.column_names("map_daily_limit")
+            self.assertNotIn("combat_count", columns)
+            self.assertNotIn("explore_count", columns)
 
 
 if __name__ == "__main__":
