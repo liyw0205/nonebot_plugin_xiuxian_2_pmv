@@ -2661,3 +2661,35 @@ status_reader 归属、渲染与 handler 源合同）。受影响套件：
   `--ff-only` 合入 main 后 main run `41933829744` success（headSha 均 `8b88e76c`；
   `quality` success、`build-and-release` skipped）。未部署、未读写真实游戏库、未发真实 QQ 消息、
   未打 tag；用户删除的四个文件保持未暂存，`.codex-next-goal.md` 未提交。
+
+## 已完成目标：灵石赠送请求路径的 DDL 收口
+
+重构收敛（非新玩法）。承接 `docs/features/stone_gift.md` 与仓库级「请求路径不执行 DDL」合同。
+
+**缺口证据**：`features/stone_gift/repository.py::limits` 与 `::transfer` 在请求事务内调用
+`ensure_limit_schema(uow)`，执行 `CREATE TABLE IF NOT EXISTS stone_gift_limits`；而
+`stone_gift.001`/`stone_gift.002` 已经创建 `stone_gift_operations`/`stone_gift_limits`，
+`plugin.py` 也已注册，属重复 DDL。
+
+交付内容：
+
+- 新增 `features/stone_gift/schema.py`：两张表的 DDL、列契约、`SCHEMA_MISSING` 与只读
+  `table_ready(uow, table, required)`；`migrations.py` 改为从该模块取 DDL。
+- `repository.py` 删除 `ensure_schema`/`ensure_limit_schema`：`operation()` 缺表返回 `None`、
+  `limits()` 缺表返回全零（读路径降级）；`transfer()` 在 `stone_gift_operations` 或
+  `stone_gift_limits` 未就绪时返回 `schema_missing`，在任何资产/额度/回执写入之前短路。
+- `application.py` 把 `schema_missing` 映射为 code `schema_missing`、文案
+  「赠送数据尚未就绪，请检查启动迁移。」。
+- 兼容：迁移 `IF NOT EXISTS`；`compatibility/legacy_stone_gift.py` 的建表保留为显式回滚入口。
+- 文档：`docs/features/stone_gift.md` 记录 DDL 归属、读降级与写 fail-closed。
+- 测试：新增 `tests/test_stone_gift_schema_ownership.py` `6/6`（两表建表幂等、读降级不建表、
+  未迁移写 `schema_missing` 且零写入、应用层映射、迁移后转账/重放、仓储源无 DDL）；
+  `features/stone_gift/tests/test_stone_gift_service.py` 与 `test_stone_gift_adapter.py`
+  夹具显式应用 `.002`。定向合并集 `259 passed`；
+  `test_refactor_progress`/`test_dependency_lock`/`test_refactor_architecture` `43 passed`。
+- 三门禁真实 exit 0（progress `failures: None`；`exit_ready: False` 仍仅由用户删除的冻结文件
+  造成，11 条既有 blocker）；`compileall` 与 `git diff --check` 干净。
+- 交付与 CI：功能提交 `42256588` 的 develop run `41937991440` success；
+  `--ff-only` 合入 main 后 main run `41938949357` success（headSha 均 `42256588`；
+  `quality` success、`build-and-release` skipped）。未部署、未读写真实游戏库、未发真实 QQ 消息、
+  未打 tag；用户删除的四个文件保持未暂存，`.codex-next-goal.md` 未提交。
