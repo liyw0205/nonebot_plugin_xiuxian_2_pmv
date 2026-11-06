@@ -2815,3 +2815,30 @@ status_reader 归属、渲染与 handler 源合同）。受影响套件：
   `--ff-only` 合入 main 后 main run `42249077539` success。
   未部署、未读写真实游戏库、未发真实 QQ 消息、未打 tag；用户删除的四个文件保持未暂存，
   `.codex-next-goal.md` 未提交。
+
+## 已完成目标：副本个人探索记录
+
+**缺口证据**：`dungeon_explore_operations` 在探索成功结算时写入规范
+`request_identity`（`{"action":"explore","user_id":...}`）、`phase='completed'`、
+`result_status='applied'`、`result_json`（message/battle_messages）、`current_layer`、
+`dungeon_status` 与 `updated_at`；玩家只有 `我的副本状态` 的当前层数/进度，无法回看
+近几天探索过哪些层、结果与奖励摘要。
+
+交付内容：
+
+- 新增 `features/dungeon/explore_history.py`：`DungeonExploreHistoryApplication` 在
+  `read_only=True` UoW 中按精确 identity 查询近 7 天（只用下界）成功结算行，按
+  `updated_at DESC, rowid DESC` 排序；被拒绝/未完成行不计入。聚合探索次数、通关次数、
+  最高层、战斗场数，最近 10 次显示时间、层数、通关/探索中与折叠后的结果摘要（120 字）；
+  缺库/缺表/缺列/坏 JSON/读失败降级空态，不建表不补列。
+- 新命令 `我的副本记录`（别名 `副本记录`、`副本探索记录`，priority 5）注册在
+  `xiuxian_dungeon`；`副本帮助` 与 `修仙帮助`「流水与总览」登记；manifest 增
+  `CommandSpec`，inventory +9 行；`docs/features/dungeon.md` 增「个人副本探索记录」章节。
+- 测试：新增 `tests/test_dungeon_explore_history.py` `6 passed`（窗口/聚合/排序、玩家隔离、
+  缺表降级不建表、坏 JSON/错误 identity 跳过、渲染、命令/manifest/帮助合同）；
+  定向集 `309 passed, 91 subtests`；Phase-2 派生计数 655→656、341→342。
+- 三门禁 exit 0；compileall/diff-check 干净。
+- 交付与 CI：功能提交 `3fa0327f` 的 develop run `42253408907` success；
+  `--ff-only` 合入 main 后 main run `42254737327` success。
+  未部署、未读写真实游戏库、未发真实 QQ 消息、未打 tag；用户删除的四个文件保持未暂存，
+  `.codex-next-goal.md` 未提交。
