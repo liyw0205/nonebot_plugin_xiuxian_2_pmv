@@ -64,6 +64,7 @@ class DemonClaimApplication:
         exp: int,
         items: Any,
         max_goods_num: int,
+        max_exp: int | None = None,
     ) -> OperationOutcome[dict[str, Any]]:
         try:
             request = DemonClaimRequest(
@@ -78,6 +79,8 @@ class DemonClaimApplication:
                 int(max_goods_num),
             )
             request.validate()
+            if max_exp is not None and int(max_exp) < 0:
+                raise ValueError("max_exp must not be negative")
         except (TypeError, ValueError, KeyError) as exc:
             raise ValidationError(str(exc)) from exc
 
@@ -103,6 +106,7 @@ class DemonClaimApplication:
                     request.exp,
                     request.items,
                     request.max_goods_num,
+                    max_exp=None if max_exp is None else int(max_exp),
                 )
                 service_data = _data(raw)
                 status = str(service_data.get("status", "failed"))

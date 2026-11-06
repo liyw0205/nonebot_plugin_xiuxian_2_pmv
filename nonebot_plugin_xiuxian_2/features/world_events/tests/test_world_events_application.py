@@ -13,7 +13,7 @@ class _Repository:
         self.status = status
         self.calls = 0
 
-    def claim(self, operation_id, event_key, event_id, user_id, expected_claimed, stone, exp, items, max_goods_num):
+    def claim(self, operation_id, event_key, event_id, user_id, expected_claimed, stone, exp, items, max_goods_num, *, max_exp=None):
         self.calls += 1
         return {"status": self.status, "stone": stone, "exp": exp}
 

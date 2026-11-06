@@ -11,7 +11,7 @@ from .domain import WorldEventClaimResult
 class WorldEventClaimRepository(Protocol):
     def get_result(self, operation_id: str) -> WorldEventClaimResult | None: ...
 
-    def claim(self, operation_id: str, event_key: str, event_id: str, user_id: str, expected_claimed: Mapping[str, Any], stone: int, exp: int, items: Sequence[Mapping[str, Any]], max_goods_num: int) -> Any: ...
+    def claim(self, operation_id: str, event_key: str, event_id: str, user_id: str, expected_claimed: Mapping[str, Any], stone: int, exp: int, items: Sequence[Mapping[str, Any]], max_goods_num: int, *, max_exp: int | None = None) -> Any: ...
 
 
 class WorldEventClaimSqlRepository:
@@ -46,10 +46,10 @@ class WorldEventClaimSqlRepository:
             )
         return self._result("duplicate", self._integer(row["stone"]), self._integer(row["exp"])) if row else None
 
-    def claim(self, operation_id: str, event_key: str, event_id: str, user_id: str, expected_claimed: Mapping[str, Any], stone: int, exp: int, items: Sequence[Mapping[str, Any]], max_goods_num: int) -> WorldEventClaimResult:
+    def claim(self, operation_id: str, event_key: str, event_id: str, user_id: str, expected_claimed: Mapping[str, Any], stone: int, exp: int, items: Sequence[Mapping[str, Any]], max_goods_num: int, *, max_exp: int | None = None) -> WorldEventClaimResult:
         operation_id, event_key, event_id, user_id = map(str, (operation_id, event_key, event_id, user_id))
         stone, exp, max_goods_num = max(0, int(stone)), max(0, int(exp)), int(max_goods_num)
-        stone_param, exp_param = self._sqlite_integer(stone), self._sqlite_integer(exp)
+        stone_param = self._sqlite_integer(stone)
         rewards = tuple((int(item["id"]), str(item.get("name", "")), str(item.get("type", item.get("item_type", ""))), int(item["amount"])) for item in items if int(item.get("amount", 0)) > 0)
         payload = json.dumps([event_key, event_id, user_id], ensure_ascii=True, separators=(",", ":"))
         with DatabaseUnitOfWork(self.game_database, immediate=True) as uow:
@@ -59,9 +59,15 @@ class WorldEventClaimSqlRepository:
                 if str(previous["payload"]) != payload:
                     return self._result("state_changed")
                 return self._result("duplicate", self._integer(previous["stone"]), self._integer(previous["exp"]))
-            user = uow.query_one("SELECT 1 AS present FROM user_xiuxian WHERE user_id=?", (user_id,))
+            user = uow.query_one("SELECT COALESCE(exp,0) AS exp FROM user_xiuxian WHERE user_id=?", (user_id,))
             if user is None:
                 return self._result("user_missing")
+            applied_exp = exp
+            if max_exp is not None:
+                # 与悬赏令/宗门任务/历练同一规则：单次奖励不得把修为推过本境上限。
+                headroom = max(0, int(max_exp) - self._integer(user["exp"]))
+                applied_exp = max(0, min(exp, headroom))
+            exp_param = self._sqlite_integer(applied_exp)
             row = uow.query_one("SELECT event_id,claimed FROM player_data.world_event_state WHERE user_id=?", (event_key,))
             if row is None or str(row["event_id"]) != event_id:
                 return self._result("state_changed")
@@ -92,7 +98,7 @@ class WorldEventClaimSqlRepository:
             for item_id, name, item_type, amount in rewards:
                 uow.execute("INSERT INTO back(user_id,goods_id,goods_name,goods_type,goods_num,create_time,update_time,bind_num) VALUES(?,?,?,?,?,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP,?) ON CONFLICT(user_id,goods_id) DO UPDATE SET goods_num=back.goods_num+excluded.goods_num,bind_num=COALESCE(back.bind_num,0)+excluded.goods_num,update_time=excluded.update_time", (user_id, item_id, name, item_type, amount, amount))
             uow.execute("INSERT INTO demon_claim_operations(operation_id,payload,stone,exp) VALUES(?,?,?,?)", (operation_id, payload, stone_param, exp_param))
-            return self._result("applied", stone, exp)
+            return self._result("applied", stone, applied_exp)
 
 
 class LegacyWorldEventClaimRepository:
@@ -108,7 +114,7 @@ class LegacyWorldEventClaimRepository:
         result = DemonClaimService(self.game_database, self.player_database).get_result(operation_id)
         return WorldEventClaimResult(result.status, result.stone, result.exp) if result else None
 
-    def claim(self, operation_id: str, event_key: str, event_id: str, user_id: str, expected_claimed: Mapping[str, Any], stone: int, exp: int, items: Sequence[Mapping[str, Any]], max_goods_num: int) -> Any:
+    def claim(self, operation_id: str, event_key: str, event_id: str, user_id: str, expected_claimed: Mapping[str, Any], stone: int, exp: int, items: Sequence[Mapping[str, Any]], max_goods_num: int, *, max_exp: int | None = None) -> Any:
         from ...compatibility.legacy_demon_claim import DemonClaimService
         return DemonClaimService(self.game_database, self.player_database).claim(operation_id, event_key, event_id, user_id, expected_claimed, stone, exp, items, max_goods_num)
 

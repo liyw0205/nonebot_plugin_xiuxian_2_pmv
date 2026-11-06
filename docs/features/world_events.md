@@ -20,6 +20,19 @@
 
 应用层先记录 `operation_ledger`，feature-owned SQL repository 随后使用 `ATTACH DATABASE` 与 `BEGIN IMMEDIATE` 在 `game_db`、`player_db` 中原子更新领奖标记、灵石、修为、物品、魔修领奖统计和领奖 operation。统计仅随首次成功 claim 递增，duplicate/replay 不重复计数；统计写入失败会回滚本次领奖。业务拒绝不改变资产，异常由 repository 事务回滚并由应用层记录 failed ledger。超出 SQLite 64 位整数范围的修为/灵石以安全文本参数绑定，并在 SQL 中按历史规则进行数值累加。
 
+### 修为上限与回执口径
+
+与其他修为发放路径（悬赏令结算、宗门任务、历练、闭关）一致，领奖不会把修为推过
+当前境界上限：命令层按 `set_closing_type(level) × closing_exp_upper_limit` 计算
+`max_exp`，仓储在写事务内取玩家当前修为并只发放
+`min(奖励, max(0, max_exp - 当前修为))`。灵石、灵签宝箓与随机物品不受该上限影响。
+
+- `demon_claim_operations.exp` 与回执 `result_json` 存**实际入账**修为；同一
+  operation 回放返回实际值，不会因为重算而虚报。
+- 被截断时回复显示实际获得修为并追加「（已达本境修为上限，超出部分未发放）」；
+  未截断时不追加。
+- 未传 `max_exp`（兼容回滚/旧调用）时保持历史行为，不做截断。
+
 ## 个人战功面板
 
 `魔修入侵` 状态页在“本境界本波贡献排行”之后追加【你的战功】段，复用同一

@@ -33,6 +33,7 @@ from ...infrastructure.ids import UUIDGenerator
 from ...infrastructure.clock import SystemClock
 from ...infrastructure.random_source import SystemRandom
 from ..xiuxian_config import XiuConfig
+from ..xiuxian_utils.xiuxian_json_config import OtherSet
 from ..xiuxian_utils.numeric_bind import percent_exp_reward
 from ...features.world_events.application import DemonClaimApplication
 from ...features.world_events.application import DemonWaveRefreshApplication
@@ -1444,6 +1445,8 @@ async def claim_demon_reward_(bot: Bot, event: GroupMessageEvent | PrivateMessag
         already_claimed = _has_user_claimed(claimed, user_id, claim_key) if not no_reward_event else False
         plan = None
         random_reward_text = "未获得"
+        max_exp_reward: int | None = None
+        exp_reward = 0
 
         if prior_claim is None and not (reward_pending or no_reward_event or no_contribution or already_claimed):
             plan = build_demon_reward_plan(
@@ -1460,6 +1463,11 @@ async def claim_demon_reward_(bot: Bot, event: GroupMessageEvent | PrivateMessag
                 plan.exp_rate,
                 user_info.get("level"),
                 anchor="gap",
+            )
+            # 与其他修为发放路径一致：单次奖励不得越过本境修为上限。
+            max_exp_reward = int(
+                int(OtherSet().set_closing_type(user_info["level"]))
+                * XiuConfig().closing_exp_upper_limit
             )
             talisman_reward = plan.talisman_count
             random_reward_text = plan.random_reward_text
@@ -1517,6 +1525,7 @@ async def claim_demon_reward_(bot: Bot, event: GroupMessageEvent | PrivateMessag
         exp=exp_reward,
         items=reward_items,
         max_goods_num=XiuConfig().max_goods_num,
+        max_exp=max_exp_reward,
     )
     claim_data = claim_outcome.data or {}
     claim_result_status = str(claim_data.get("status", "failed"))
@@ -1561,7 +1570,9 @@ async def claim_demon_reward_(bot: Bot, event: GroupMessageEvent | PrivateMessag
         f"贡献伤害：{number_to(damage)}\n"
         f"贡献占比：{contribution_text}\n"
         f"获得灵石：{number_to(stone_reward)}\n"
-        f"获得修为：{number_to(exp_reward)}\n"
+        f"获得修为：{number_to(claim_result_exp)}"
+        + ("（已达本境修为上限，超出部分未发放）" if claim_result_exp < exp_reward else "")
+        + "\n"
         f"获得灵签宝箓：{talisman_reward}个\n"
         f"珍稀奖励：{random_reward_text}"
     )
