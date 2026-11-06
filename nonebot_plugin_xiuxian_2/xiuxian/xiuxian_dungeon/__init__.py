@@ -49,6 +49,10 @@ from ...features.dungeon.team_presentation import (
 )
 from ...paths import get_paths
 from ...features.dungeon.application import DungeonApplication
+from ...features.dungeon.explore_history import (
+    DungeonExploreHistoryApplication,
+    format_dungeon_explore_history,
+)
 from ...features.dungeon.explore_snapshot import (
     DungeonExploreSnapshotApplication,
     DungeonExploreSnapshotError,
@@ -65,6 +69,9 @@ runtime_clock = SystemClock()
 dungeon_application = DungeonApplication(get_paths().game_db, get_paths().player_db, clock=runtime_clock)
 dungeon_explore_snapshot_application = DungeonExploreSnapshotApplication(
     get_paths().game_db
+)
+dungeon_explore_history_application = DungeonExploreHistoryApplication(
+    get_paths().game_db, clock=runtime_clock
 )
 dungeon_team_application = DungeonTeamApplication(get_paths().player_db, game_database=get_paths().game_db)
 dungeon_ids = UUIDGenerator()
@@ -345,6 +352,9 @@ dungeon_exit = on_command("退出副本", aliases={"离开副本"}, priority=5, 
 dungeon_shop = on_command("副本商店", priority=5, block=True)
 dungeon_purchase = on_command("副本兑换", aliases={"副本购买"}, priority=5, block=True)
 dungeon_status = on_command("我的副本状态", aliases={"副本状态", "我的副本信息"}, priority=5, block=True)
+dungeon_explore_history = on_command(
+    "我的副本记录", aliases={"副本记录", "副本探索记录"}, priority=5, block=True
+)
 reset_command = on_command("重置副本", aliases={"手动重置"}, priority=5, block=True, permission=SUPERUSER)
 help_dungeon_cmd = on_command("副本帮助", aliases={"副本指令"}, priority=5, block=True)
 
@@ -363,6 +373,8 @@ __dungeon_help__ = """
 > 开始挑战副本
 - 我的副本状态
 > 查看个人副本进度
+- 我的副本记录
+> 查看近7天探索结果与奖励摘要
 - 副本帮助
 > 查看本帮助
 """.strip()
@@ -1839,6 +1851,20 @@ async def handle_dungeon_status(bot: Bot, event: GroupMessageEvent | PrivateMess
 
     await handle_send(bot, event, msg, md_type="副本", k1="探索副本", v1="探索副本", k2="副本信息", v2="副本信息", k3="副本帮助", v3="副本帮助")
     await dungeon_status.finish()
+
+
+@dungeon_explore_history.handle(parameterless=[Cooldown(cd_time=0)])
+async def dungeon_explore_history_(bot: Bot, event: Union[GroupMessageEvent, PrivateMessageEvent]):
+    """我的副本记录：近7天探索结果与奖励摘要（只读）"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    isUser, user_info, msg = check_user(event)
+    if not isUser:
+        await handle_send(bot, event, msg, md_type="我要修仙")
+        await dungeon_explore_history.finish()
+
+    summary = dungeon_explore_history_application.summary(str(user_info["user_id"]))
+    await handle_send(bot, event, format_dungeon_explore_history(summary), md_type="副本")
+    await dungeon_explore_history.finish()
 
 
 def _team_invite_or_no_team_view(user_id: str) -> tuple[str, str, str, str, str]:

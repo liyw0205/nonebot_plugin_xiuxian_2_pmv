@@ -5,7 +5,7 @@ FEATURE = FeatureManifest(
     key="dungeon",
     title="副本探索与兑换",
     owner="gameplay",
-    commands=(CommandSpec("副本兑换", permission="user"), CommandSpec("探索副本", permission="user")),
+    commands=(CommandSpec("副本兑换", permission="user"), CommandSpec("探索副本", permission="user"), CommandSpec("我的副本记录", aliases=("副本记录", "副本探索记录"), permission="user")),
     routes=(
         RouteSpec("/api/v1/dungeon/purchase", methods=("POST",), permission="user"),
         RouteSpec("/api/v1/dungeon/explore/replay", methods=("POST",), permission="user"),

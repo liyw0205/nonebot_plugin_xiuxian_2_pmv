@@ -48,6 +48,26 @@
 - 只读；复用既有 `dungeon_team_invites` 与 `pending_invite` 查询，不新增表、列、迁移、
   索引、配置键、命令、别名或路由；不改邀请 TTL、私聊通知、同意/拒绝或到期清理。
 
+## 个人副本探索记录
+
+`我的副本记录`（别名 `副本记录`、`副本探索记录`）补齐玩家侧逐次副本探索的可见性：
+`我的副本状态` 只有当前层数与进度，看不到近几天探索过哪些层、结果与奖励摘要。
+
+- 数据源是真实结算回执 `dungeon_explore_operations`：`request_identity` 为
+  `{"action":"explore","user_id":...}` 规范 JSON，成功结算写 `phase='completed'`、
+  `result_status='applied'`、`result_json`（`message` 与 `battle_messages`）、
+  `current_layer`、`dungeon_status`、`updated_at`；不新增表、列、迁移、索引或写入路径。
+- `DungeonExploreHistoryApplication` 在 `read_only=True` 的 `DatabaseUnitOfWork` 中按
+  当前会话的精确 identity 查询近 7 天（只用下界）成功结算行，按
+  `updated_at DESC, rowid DESC` 排序；被拒绝或未完成的探索不计入。
+- 缺库、缺表、缺列、坏 JSON 或读失败返回空态，不建表、不补列；消息折叠为单行并截断，
+  避免整段战斗日志刷屏。
+- 输出：探索次数、通关次数、最高层、战斗场数，以及最近 10 次明细（时间、层数、
+  通关/探索中、结果摘要）；空态显示“近7天没有副本探索记录。”。
+- 帮助与发现性：`副本帮助` 增补条目，`修仙帮助`「流水与总览」登记；
+  manifest 增加 `CommandSpec`（含别名），命令仍由 `xiuxian_dungeon` 注册。
+- 只读展示；不改探索战斗、体力、掉落、队伍、副本状态或任何资产写路径。
+
 ## 灰度开关、回滚和已知限制
 
 关闭开关后保留旧命令和数据格式。探索的战斗规则、队伍管理和奖励计算尚未移入新 domain，待后续发布周期完成迁移。
@@ -63,6 +83,9 @@
 覆盖准备、结算、重放、快照冲突和库存拒绝；`tests/test_dungeon_explore_web_boundary.py` 通过隔离 Flask client 验证五项路由声明、注入拒绝 resolver、缺失/错误/跨会话 CSRF、幂等键优先和真实仓储 identity 冲突不泄露。不以注入权限测试宣称默认认证策略已加强。
 
 ## Manifest 清单
+- `command: 我的副本记录`
+- `alias: 副本记录`
+- `alias: 副本探索记录`
 - `route: POST /api/v1/dungeon/purchase`
 - `route: POST /api/v1/dungeon/explore/replay`
 - `route: POST /api/v1/dungeon/explore/intent`

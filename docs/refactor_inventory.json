@@ -1127,6 +1127,15 @@
     },
     {
       "aliases": [
+        "副本探索记录",
+        "副本记录"
+      ],
+      "feature": "dungeon",
+      "name": "我的副本记录",
+      "permission": "user"
+    },
+    {
+      "aliases": [
         "宗门任务记录"
       ],
       "feature": "sect",
