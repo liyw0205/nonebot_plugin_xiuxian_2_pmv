@@ -155,6 +155,8 @@ class WorkSettlementSqlRepository:
                 "success_kind": success_kind,
                 "item_msg": item_msg,
                 "scheduled_time": str(expected.get("scheduled_time") or ""),
+                # 记录请求值，回执可解释「为何实际入账低于悬赏基础报酬」。
+                "exp_requested": int(exp_gain),
             }
             if reward is not None:
                 item_id, item_name, item_type, quantity = reward

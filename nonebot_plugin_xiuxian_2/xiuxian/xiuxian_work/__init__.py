@@ -3,6 +3,7 @@ from typing import Tuple, Any
 from ..on_compat import on_regex
 from nonebot.params import RegexGroup
 from ..xiuxian_utils.lay_out import assign_bot, Cooldown
+from ...features.work.presentation import refresh_count_line, settlement_exp_note
 from ..adapter_compat import (
     Bot,
     GroupMessageEvent,
@@ -229,9 +230,10 @@ async def get_work_status_message(user_id: str, work_data: dict) -> str:
         )
     elif status == 3:  # 未过期的悬赏令
         remaining_minutes, _, _ = calculate_remaining_time(work_data["refresh_time"])
-        
+        user_info = _sql_message().get_user_info_with_id(user_id) or {}
         work_list = []
         work_msg_f = f"【道友的悬赏令】\n剩余时间：{remaining_minutes}分钟\n"
+        work_msg_f += refresh_count_line(user_info.get("work_num"), count) + "\n"
         tasks = _ordered_work_tasks(work_data)
         for n, (task_name, task_data) in enumerate(tasks, 1):
             item_msg = format_reward_item(task_data["item_id"])
@@ -325,6 +327,9 @@ async def settle_work(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
             f"**悬赏结算**\n---\n{success_msg}\n"
             f"悬赏名称\n> {result_scheduled_time or work_data['scheduled_time']}\n"
             f"获得修为\n> {number_to(result_exp)}"
+            + settlement_exp_note(
+                result_exp, result_data.get("exp_requested", result_exp)
+            )
         )
         if result_item_awarded:
             msg += f"\n额外奖励\n> {result_item_msg or item_msg}！"
@@ -349,6 +354,7 @@ async def settle_work(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
         f"**悬赏结算**\n---\n{success_msg}\n"
         f"悬赏名称\n> {work_data['scheduled_time']}\n"
         f"获得修为\n> {number_to(result_exp)}"
+        + settlement_exp_note(result_exp, result_data.get("exp_requested", result_exp))
     )
     if result_item_awarded:
         msg += f"\n额外奖励\n> {item_msg}！"
