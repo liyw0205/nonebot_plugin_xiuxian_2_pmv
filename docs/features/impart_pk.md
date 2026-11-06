@@ -72,6 +72,23 @@ Migration `legacy.impart_pk.001` records the slice in `game_db`; the feature-own
 ## 事务与失败回滚
 Mutating calls carry an `operation_id` and are recorded in the operation ledger. Disable the feature flag or restore the pre-migration backup to roll back.
 
+### `虚神界信息` 的闭关状态行
+
+玩家进入 `虚神界闭关` 后 `user_cd.type=4`，但信息面板此前只显示修炼时间/效率/次数，
+无法确认是否在闭关、已入定多久、祝福余额与本境修为上限余量。现在信息面板追加只读状态行：
+
+- `虚神界闭关中（已入定 N 分钟）`：`N` 由 `elapsed_minutes_from_cd_time` 计算，
+  坏/空 `create_time` 记 0，不阻塞面板；
+- `今日祝福余额：X 分钟`：取 `xiuxian_impart.exp_day`，与 `虚神界出关` 的
+  `available_exp_day` 同源，负值按 0；
+- `本境修为上限余量：Y`：`set_closing_type(level) × closing_exp_upper_limit − 当前修为`，
+  下限 0；上限配置缺失（`max_exp<=0`）时省略该行，避免误导；
+- `发送【虚神界出关】结算本次闭关`：下一步行动提示。
+
+渲染集中在纯函数 `features/impart_pk/closing_status.py::closing_status_lines`（无 I/O、
+无 NoneBot），命令适配器只提供 `user_cd`/`exp_day`/当前修为/上限。非闭关状态返回空元组，
+因此未闭关玩家的面板逐字不变；不新增表、列、迁移、配置键或命令。
+
 ## 定时任务
 No new scheduled jobs. Legacy jobs stay registered through the compatibility scheduler.
 

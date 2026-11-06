@@ -16,6 +16,7 @@ SQLITE_MAX_INT = 2**63 - 1
 from typing import Dict, List
 from ...paths import get_paths
 from ...features.impart_pk.application import ImpartPkApplication
+from ...features.impart_pk.closing_status import closing_status_lines
 from ...infrastructure.ids import UUIDGenerator
 from ...infrastructure.random_source import SystemRandom
 from ...infrastructure.clock import SystemClock
@@ -799,6 +800,22 @@ async def impart_pk_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
     msg += f"\n今日可探索次数：{impart_num}"
     msg += f"\n今日可对决次数：{pk_num}"
     msg += f"\n思恋结晶：{stone_num}"
+    try:
+        max_exp_limit = int(
+            int(OtherSet().set_closing_type(user_info["level"]))
+            * XiuConfig().closing_exp_upper_limit
+        )
+    except (KeyError, TypeError, ValueError):
+        max_exp_limit = 0
+    closing_lines = closing_status_lines(
+        _sql_message().get_user_cd(user_id),
+        exp_day=impart_data_draw["exp_day"],
+        current_exp=user_info["exp"],
+        max_exp=max_exp_limit,
+        now=runtime_clock.now(),
+    )
+    if closing_lines:
+        msg += "\n" + "\n".join(closing_lines)
     await handle_send(bot, event, msg, md_type="虚神界", k1="对决", v1="虚神界对决", k2="探索", v2="虚神界探索", k3="修炼", v3="虚神界修炼")
     await impart_pk_info.finish()
 
