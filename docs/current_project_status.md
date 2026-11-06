@@ -2728,3 +2728,43 @@ status_reader 归属、渲染与 handler 源合同）。受影响套件：
   `--ff-only` 合入 main 后 main run `42224408701` success（headSha 均 `aa174fa2`；
   `quality` success、`build-and-release` skipped）。未部署、未读写真实游戏库、未发真实 QQ 消息、
   未打 tag；用户删除的四个文件保持未暂存，`.codex-next-goal.md` 未提交。
+
+## 已完成目标：活动中心复核 + 竞技场个人挑战战绩
+
+先审计被人为标记为“半成品”的活动中心，再按证据交付下一项真实缺口。
+
+**活动中心审计（完整，不重复实现）**：`docs/goals/goal-activity-completion.md` 的 G1–G6
+均已关闭；`xiuxian_activity` 实际注册 26 条玩家命令，覆盖中心/详情/阶段/排行/首领/商店/
+背包/奖励/玩法/签到/任务/战令/一键领取；Web 为 `/api/v1/activity`（审计）、
+`/api/v1/activity/state`（九视图）与 `POST /api/v1/activity/sign-in`，admin 面板九视图与路由
+一致；`activity_state.001/.002` 启动迁移与 `activity_claim_all_operations/steps` 分步回执
+承担持久化与幂等，请求路径无 DDL。本机实跑 `tests/test_activity_*.py`：
+`413 passed, 112 subtests passed`。未发现命令、路由、奖励或持久化缺口。
+
+**下一缺口（竞技场个人战绩）**：`arena_challenge_settlement_operations` 每次结算均由真实
+写路径落行（`challenger_id`、`payload` 对手/结果/时间、`result_json` 状态/积分变化/结算后
+积分段位），但 `我的竞技场` 只有累计场次与胜率、`我的荣誉` 只有荣誉结算，玩家无法查看
+逐场战绩。
+
+交付内容：
+
+- 新增 `features/arena/match_history.py`：`ArenaMatchHistoryApplication` 只读聚合近 7 天
+  本人回执（窗口只用下界）；只统计 `result_json.status == "applied"`，拒绝回执不计入；
+  outcome 限 `win/loss/draw/no_match`；输出总场次、胜/负/平/未匹配、积分净变化与最近 5 场
+  （时间、对手、结果、积分变化、结算后积分/段位）。缺库/缺表/缺列/坏 JSON 降级为空态，
+  不建表、不补列；对手名通过注入 resolver 解析，失败回退 user_id。
+- 新命令 `我的竞技场战绩`（别名 `竞技场战绩`、`竞技场记录`，priority 10）注册在
+  `xiuxian_arena`；`竞技场帮助` 增条目与按钮，`修仙帮助`「流水与总览」登记；
+  `features/arena/manifest.py` 增 `CommandSpec`，inventory 新增 1 条 command（+9 行）。
+- `docs/features/arena.md` 增「个人挑战战绩」章节与命令说明，明确只读边界与拒绝回执过滤。
+- 测试：新增 `tests/test_arena_match_history.py` `7 passed`（窗口/排序、拒绝回执过滤、
+  玩家隔离、缺表降级不建表、坏 JSON 跳过、resolver 失败回退、渲染与帮助/manifest 合同）；
+  定向集 `284 passed`；`test_phase2_legacy_path_gate` `47 passed, 91 subtests`，
+  派生计数按新增 legacy 命令更新为 653/339（冻结文件未动）。
+- 三门禁真实 exit 0（progress `failures: None`，11 条既有 blocker）；`compileall` 与
+  `git diff --check` 干净。既有 4 项 pytest-only arena 失败在 stash 本切片后同样复现
+  （CI 的 unittest discover 不收集），未修改。
+- 交付与 CI：功能提交 `56b3bd45` 的 develop run `42235432858` success；
+  `--ff-only` 合入 main 后 main run `42236407388` success（headSha 均 `56b3bd45`）。
+  未部署、未读写真实游戏库、未发真实 QQ 消息、未打 tag；用户删除的四个文件保持未暂存，
+  `.codex-next-goal.md` 未提交。
