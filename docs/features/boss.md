@@ -47,6 +47,20 @@
 
 世界BOSS积分排行榜通过 `BossIntegralApplication.top_integrals` 读取长期 `boss_limit.integral` 投影，只返回最多 50 项且不在 Python 中物化全量积分表。重复 user_id 保持与积分发放相同的首 rowid 语义；缺数据库/schema 返回空列表，不建库、不建表。旧积分榜曾读取错误的 `integral.boss_integral` 表，不能作为当前数据源。
 
+### 每日额度与剩余次数
+
+每日讨伐次数、积分上限、灵石上限原先在结算与 `世界BOSS信息` 各写死一遍
+（`12000` / `300000000` / `DAILY_BATTLE_COUNT`），视图与结算可能各自漂移。现在三者
+集中在 `xiuxian/xiuxian_boss/boss_limit.py`：
+
+- `DAILY_BATTLE_COUNT = 30`、`DAILY_INTEGRAL_LIMIT = 12000`、`DAILY_STONE_LIMIT = 300000000`；
+- `daily_quota_line(battle_count, limit=DAILY_BATTLE_COUNT)` 为纯函数，输出
+  `今日讨伐：X/30（剩余 N 次）`，最后一次显示 `已用尽`，超额/坏输入按上限截断；
+- 结算与 `世界BOSS信息` 都引用同一常量，战斗成功回执末尾追加该行，玩家不必再另发
+  `世界BOSS信息` 才能知道剩余次数。
+
+数值本身未调整，仍是既有上限；本条只消除重复字面量与信息缺口。
+
 ## 定时任务
 
 世界BOSS刷新和天罚仍由显式兼容生命周期注册，手动生成、全量刷新与每日重置的持久化由 feature-owned repository 承担；手动与定时全量刷新共享 operation receipt，未在 feature 导入时重复注册。

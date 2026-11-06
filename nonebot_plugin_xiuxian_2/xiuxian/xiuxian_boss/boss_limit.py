@@ -17,8 +17,21 @@ def _player_data_manager():
         player_data_manager = _player_data_manager_instance
     return _player_data_manager_instance
 
-# 世界 BOSS 每日讨伐上限（讨伐校验 / 积分信息 / 日常 共用）
+# 世界 BOSS 每日额度（讨伐校验 / 结算 / 积分信息共用，禁止在调用点写死）
 DAILY_BATTLE_COUNT = 30
+DAILY_INTEGRAL_LIMIT = 12_000
+DAILY_STONE_LIMIT = 300_000_000
+
+
+def daily_quota_line(battle_count, *, limit: int = DAILY_BATTLE_COUNT) -> str:
+    """讨伐回执的剩余次数行；纯函数，供战斗回执与测试共用。"""
+    try:
+        used = max(0, min(int(battle_count), int(limit)))
+    except (TypeError, ValueError):
+        used = 0
+    remaining = max(0, int(limit) - used)
+    tail = "已用尽" if remaining == 0 else f"剩余 {remaining} 次"
+    return f"今日讨伐：{used}/{int(limit)}（{tail}）"
 
 
 class BossLimit:

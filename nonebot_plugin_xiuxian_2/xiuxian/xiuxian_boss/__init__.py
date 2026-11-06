@@ -48,7 +48,12 @@ from ..xiuxian_utils.utils import (
     restore_player_stamina,
 )
 from ..xiuxian_title.title_data import check_and_unlock_titles
-from .boss_limit import DAILY_BATTLE_COUNT
+from .boss_limit import (
+    DAILY_BATTLE_COUNT,
+    DAILY_INTEGRAL_LIMIT,
+    DAILY_STONE_LIMIT,
+    daily_quota_line,
+)
 from ...compatibility.boss import WorldBossBattleSettlementService
 from ...features.boss.application import BossApplication
 from ...features.boss.exp_reward import boss_exp_reward
@@ -744,8 +749,8 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
     today_stone = daily_limits.stone
     total_integral = integral_snapshot.integral
 
-    integral_limit = 12000
-    stone_limit = 300000000
+    integral_limit = DAILY_INTEGRAL_LIMIT
+    stone_limit = DAILY_STONE_LIMIT
 
     boss_integral = 0
     get_stone = 0
@@ -988,6 +993,7 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
     if user_info['root'] == "凡人" and boss_integral < 0:
         msg += "\n如果出现负积分，说明你境界太高了，玩凡人就不要那么高境界了！！！"
 
+    msg += "\n" + daily_quota_line(settlement.battle_count)
     battle_flag[GLOBAL_BOSS_KEY] = False
     if settlement.activity_lines:
         msg += "\n" + "\n".join(settlement.activity_lines)
@@ -1458,9 +1464,9 @@ async def boss_integral_info_(bot: Bot, event: GroupMessageEvent | PrivateMessag
     today_stone = daily_limits.stone
     today_battle_count = daily_limits.battle_count
     
-    # 设置每日上限
-    integral_limit = 12000
-    stone_limit = 300000000
+    # 设置每日上限（与结算共用同一常量来源）
+    integral_limit = DAILY_INTEGRAL_LIMIT
+    stone_limit = DAILY_STONE_LIMIT
     battle_count = DAILY_BATTLE_COUNT
     
     # 构建消息
