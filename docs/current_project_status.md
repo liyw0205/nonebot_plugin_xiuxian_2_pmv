@@ -2768,3 +2768,50 @@ status_reader 归属、渲染与 handler 源合同）。受影响套件：
   `--ff-only` 合入 main 后 main run `42236407388` success（headSha 均 `56b3bd45`）。
   未部署、未读写真实游戏库、未发真实 QQ 消息、未打 tag；用户删除的四个文件保持未暂存，
   `.codex-next-goal.md` 未提交。
+
+## 已完成目标：通天塔个人爬塔记录
+
+**缺口证据**：`tower_settlement_operations` 每次结算落行（`payload` 为
+`[user_id, floor, stamina_cost]`，`result_json` 含积分/灵石/修为/胜负/体力/掉落，
+`created_at` 可排序），但玩家只有 `通天塔信息` 的当前层数/历史最高/累计积分，
+看不到最近爬塔结果。
+
+交付内容：
+
+- 新增 `features/tower/history.py`：`TowerHistoryApplication` 只读近 7 天本人回执；
+  用 `json_extract(payload,'$[0]')` 定位玩家并保留 `floor > 0` 的真实结算行（拒绝回执
+  写 floor 0），聚合次数/成功/失败/最高层/累计积分/灵石/修为，最近 10 次含掉落摘要；
+  缺库/缺表/缺列/坏 JSON 降级空态，不建表不补列；旧 SQLite 无 JSON1 时有界扫描回退。
+- 新命令 `我的通天塔记录`（别名 `通天塔记录`、`爬塔记录`，priority 5）注册在
+  `xiuxian_tower`；`通天塔帮助` 与 `修仙帮助`「流水与总览」登记；manifest 增
+  `CommandSpec`，inventory +9 行；`docs/features/tower.md` 增「个人爬塔记录」章节。
+- 测试：新增 `tests/test_tower_history.py` `6 passed`（窗口/排序、拒绝行过滤、玩家隔离、
+  缺表降级不建表、坏 JSON、渲染与帮助/manifest 合同）；定向集 `309 passed, 91 subtests`；
+  Phase-2 派生计数 653→654、339→340。
+- 三门禁 exit 0；compileall/diff-check 干净。
+- 交付与 CI：功能提交 `4eb421c2` 的 develop run `42244338818` success；
+  `--ff-only` 合入 main 后 main run `42245637720` success。
+
+## 已完成目标：宗门任务结算记录
+
+**缺口证据**：`sect_task_settlement_operations`（game DB）在任务成功提交时写入
+`user_id/period/cost_type/cost/exp_reward/sect_reward/materials_reward/created_at`，
+但玩家只能看到当前接取任务与一次完成提示，无法回看历史消耗与奖励。
+
+交付内容：
+
+- 新增 `features/sect/task_history.py`：`SectTaskHistoryApplication` 只读近 7 天本人
+  结算行（窗口只用下界，按 `created_at DESC, rowid DESC`），聚合完成次数与累计
+  修为/宗门贡献/宗门资材，最近 10 次显示时间、气血/灵石消耗与三项奖励；缺表/缺列/
+  读失败返回空态，不建表不补列。
+- 新命令 `我的宗门任务记录`（别名 `宗门任务记录`，priority 7）注册在 `xiuxian_sect`；
+  `宗门帮助`「任务与商店」与 `修仙帮助`「流水与总览」登记；manifest 增 `CommandSpec`，
+  inventory +8 行；`docs/features/sect.md` 增「个人宗门任务记录」章节。
+- 测试：新增 `tests/test_sect_task_history.py` `5 passed`（窗口/聚合/排序、玩家隔离、
+  缺表降级不建表、渲染、命令/manifest/帮助合同）；定向集 `308 passed, 91 subtests`；
+  Phase-2 派生计数 654→655、340→341。
+- 三门禁 exit 0；compileall/diff-check 干净。
+- 交付与 CI：功能提交 `89288d9d` 的 develop run `42247682771` success；
+  `--ff-only` 合入 main 后 main run `42249077539` success。
+  未部署、未读写真实游戏库、未发真实 QQ 消息、未打 tag；用户删除的四个文件保持未暂存，
+  `.codex-next-goal.md` 未提交。
