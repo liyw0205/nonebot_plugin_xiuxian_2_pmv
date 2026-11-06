@@ -27,6 +27,25 @@ Command and web adapters translate transport input into the application DTO; bus
 ## 测试与手工验收
 Run the feature application, event, purchase and reset repository tests plus the full architecture gate. Verify applied, duplicate, conflict, frozen-target chunk resume, skipped users, CAS rejection, inventory/resource rejection, late-failure rollback, legacy-row replay and game/player migration routing. Repeat the same operation ID to verify replay.
 
+## 个人历练记录
+
+`我的历练记录`（别名 `历练记录`）补齐玩家侧逐次历练事件的可见性：`历练状态` 只有
+当前进度与上一次事件，看不到近几天的资源变化与掉落。
+
+- 数据源是真实结算回执 `training_event_operations`：`payload` 为
+  `[user_id, expected_state, state, expected_user, stone_delta, exp_delta, hp_delta,
+  rewards, max_goods_num]`，`result_json` 保存 `status` 与事件文本 `message`；
+  不新增表、列、迁移、索引或写入路径。
+- `TrainingEventHistoryApplication` 在 `read_only=True` 的 `DatabaseUnitOfWork` 中按
+  `json_valid(payload)` + `json_extract(payload,'$[0]') = 当前 user_id` 查询近 7 天
+  （只用下界）`status='applied'` 的行，按 `created_at DESC, rowid DESC` 排序；
+  缺库、缺表、缺列、坏 JSON 或读失败返回空态，不建表、不补列。
+- 输出：事件次数、累计灵石/修为/气血变化、奖励总件数，以及最近 10 次明细
+  （时间、折叠后的事件文本、三项变化与奖励摘要）；空态显示“近7天没有历练记录。”。
+- 帮助与发现性：`历练帮助` 增补条目，`修仙帮助`「流水与总览」登记；manifest 通过
+  `commands_for("training")` 自动纳入新命令。
+- 只读展示；不改历练事件抽取、资源结算、背包、商店或任何资产写路径。
+
 ## 灰度开关、回滚和已知限制
 Legacy event settlement, shop exchange and administrator reset remain available only as explicit repository fallbacks when no player database is supplied. The normal composition root uses the feature repositories; the compatibility hit counter determines when the fallback can be removed.
 
@@ -38,6 +57,8 @@ The default event path now persists a resolved plan before settlement and uses a
 （共享合同）」；筛选沿用既有编号排序，不改成就点扣减、周限购或兑换回执。
 
 ## Manifest 清单
+- `command: 我的历练记录`
+- `alias: 历练记录`
 - `command: 历练兑换`
 - `command: 历练商店`
 - `command: 历练帮助`

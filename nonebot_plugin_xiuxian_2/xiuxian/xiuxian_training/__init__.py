@@ -16,6 +16,10 @@ from .training_data import training_data
 from .training_limit import training_limit
 from ...paths import get_paths
 from ...features.training.application import TrainingApplication
+from ...features.training.event_history import (
+    TrainingEventHistoryApplication,
+    format_training_event_history,
+)
 from ...features.base.keyword_page import (
     empty_notice,
     matches_keyword,
@@ -33,6 +37,9 @@ _player_data_manager_instance = None
 _sql_message_instance = None
 _items_instance = None
 training_application = TrainingApplication(get_paths().game_db, get_paths().player_db)
+training_event_history_application = TrainingEventHistoryApplication(
+    get_paths().game_db, clock=SystemClock()
+)
 player_state_application = PlayerStateApplication(get_paths().player_db)
 runtime_clock = SystemClock()
 runtime_ids = UUIDGenerator()
@@ -86,6 +93,9 @@ def _initialize_player_state(user_id: str, profile=None):
 # 定义命令
 training_start = on_command("开始历练", aliases={"历练开始"}, priority=5, block=True)
 training_status = on_command("历练状态", priority=5, block=True)
+training_event_history = on_command(
+    "我的历练记录", aliases={"历练记录"}, priority=5, block=True
+)
 training_shop = on_command("历练商店", priority=5, block=True)
 training_buy = on_command("历练兑换", priority=5, block=True)
 training_help = on_command("历练帮助", priority=5, block=True)
@@ -105,6 +115,8 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         "> 开始新的历练\n"
         "- 历练状态\n"
         "> 查看当前历练进度\n"
+        "- 我的历练记录\n"
+        "> 查看近7天事件、资源变化与奖励\n"
         "- 历练商店 [关键词|页码]\n"
         "> 查看历练商店，可按物品名筛选\n"
         "- 历练兑换+编号\n"
@@ -238,6 +250,19 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     
     await handle_send(bot, event, msg, md_type="历练", k1="开始历练", v1="开始历练", k2="排行榜", v2="历练排行榜", k3="商店", v3="历练商店")
     await training_status.finish()
+
+@training_event_history.handle(parameterless=[Cooldown(cd_time=0)])
+async def training_event_history_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    """我的历练记录：近7天事件、资源变化与奖励（只读）"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    isUser, user_info, msg = check_user(event)
+    if not isUser:
+        await handle_send(bot, event, msg, md_type="我要修仙")
+        await training_event_history.finish()
+
+    summary = training_event_history_application.summary(str(user_info["user_id"]))
+    await handle_send(bot, event, format_training_event_history(summary), md_type="历练")
+    await training_event_history.finish()
 
 @training_shop.handle(parameterless=[Cooldown(cd_time=0)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):

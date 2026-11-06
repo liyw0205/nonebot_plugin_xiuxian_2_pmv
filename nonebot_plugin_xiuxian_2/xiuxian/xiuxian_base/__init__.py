@@ -1118,6 +1118,8 @@ async def help_in_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
 > 近7天副本探索层数与结果摘要
 - 我的洞府收获记录
 > 近7天收获物品与数量
+- 我的历练记录
+> 近7天事件、资源变化与奖励
 - 我的签到统计
 > 累计签到次数与本月签到天数
 - 我的突破统计

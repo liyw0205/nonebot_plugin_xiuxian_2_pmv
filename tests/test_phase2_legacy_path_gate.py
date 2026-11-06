@@ -836,8 +836,12 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
         # (我的洞府收获记录, registered in the legacy xiuxian_dongfu package),
         # moving the derived counts 656->657 and 342->343 while the frozen
         # membership file and its hash remain untouched.
-        self.assertEqual(report["default_legacy_command_count"], 657)
-        self.assertEqual(report["default_legacy_command_backlog_count"], 343)
+        # The training event-history slice adds one more player command
+        # (我的历练记录, registered in the legacy xiuxian_training package),
+        # moving the derived counts 657->658 and 343->344 while the frozen
+        # membership file and its hash remain untouched.
+        self.assertEqual(report["default_legacy_command_count"], 658)
+        self.assertEqual(report["default_legacy_command_backlog_count"], 344)
         scope_path = Path(__file__).resolve().parents[1] / "docs/refactor_phase2_legacy_paths.json"
         scope = json.loads(scope_path.read_text(encoding="utf-8"))
         inventory_drift_count = sum(len(entries) for entries in report["source_inventory_added"].values())

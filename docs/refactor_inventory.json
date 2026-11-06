@@ -1136,6 +1136,14 @@
     },
     {
       "aliases": [
+        "历练记录"
+      ],
+      "feature": "training",
+      "name": "我的历练记录",
+      "permission": "user"
+    },
+    {
+      "aliases": [
         "宗门任务记录"
       ],
       "feature": "sect",
