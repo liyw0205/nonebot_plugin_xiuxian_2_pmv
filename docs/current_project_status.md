@@ -2870,3 +2870,29 @@ status_reader 归属、渲染与 handler 源合同）。受影响套件：
   develop 以 `--ff-only` 快进到同一提交后推送。
   未部署、未读写真实游戏库、未发真实 QQ 消息、未打 tag；用户删除的四个文件保持未暂存，
   `.codex-next-goal.md` 未提交。
+
+## 已完成目标：历练个人事件记录
+
+**缺口证据**：`training_event_operations` 在每次历练事件结算时写入规范 payload
+（user_id、前后状态、灵石/修为/气血变化、奖励列表）与 `result_json.message`，
+但玩家只有 `历练状态` 的当前进度与上一次事件，看不到近几天的事件、资源变化与掉落。
+
+交付内容：
+
+- 新增 `features/training/event_history.py`：`TrainingEventHistoryApplication` 在
+  `read_only=True` UoW 中按 `json_valid(payload)` + `json_extract(payload,'$[0]')`
+  查询近 7 天（只用下界）`status='applied'` 的事件，按 `created_at DESC, rowid DESC`
+  排序；聚合事件次数、累计灵石/修为/气血变化与奖励件数，最近 10 次展示时间、折叠后的
+  事件文本、三项变化与奖励摘要；缺库/缺表/缺列/坏 JSON/读失败降级空态，不建表不补列。
+- 新命令 `我的历练记录`（别名 `历练记录`，priority 5）注册在 `xiuxian_training`；
+  `历练帮助` 与 `修仙帮助`「流水与总览」登记；manifest 由
+  `commands_for("training")` 自动纳入，inventory +8 行；`docs/features/training.md`
+  增「个人历练记录」章节。
+- 测试：新增 `tests/test_training_event_history.py` `6 passed`（窗口/聚合/排序、玩家隔离、
+  缺表降级不建表、坏/非 applied 行跳过、渲染、命令/manifest/帮助合同）；
+  定向集 `309 passed, 91 subtests`；Phase-2 派生计数 657→658、343→344。
+- 三门禁 exit 0；compileall/diff-check 干净。
+- 交付与 CI：功能提交 `c895f764` 的 develop run `42265602854` success；
+  `--ff-only` 合入 main 后 main run `42266650937` success。
+  未部署、未读写真实游戏库、未发真实 QQ 消息、未打 tag；用户删除的四个文件保持未暂存，
+  `.codex-next-goal.md` 未提交。
