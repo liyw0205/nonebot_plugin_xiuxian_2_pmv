@@ -1,10 +1,10 @@
 import unittest
 from tests.test_db_backend import db_backend
-from tests.test_map_combat_lifecycle import MapCombatLifecycleTests
+from tests import test_map_combat_lifecycle as _base
 from ..repository import MapCombatLifecycleStartSqlRepository
 
 
-class CombatLifecycleStartRepositoryTests(MapCombatLifecycleTests):
+class CombatLifecycleStartRepositoryTests(_base.MapCombatLifecycleTests):
     def setUp(self):
         super().setUp()
         with db_backend.transaction(self.game) as conn:

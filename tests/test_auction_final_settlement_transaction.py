@@ -1,7 +1,7 @@
 """Independent final-settlement regression suite."""
 
-from tests.test_auction_settlement import AuctionSettlementTests
+from tests import test_auction_settlement as _base
 
 
-class AuctionFinalSettlementTransactionTests(AuctionSettlementTests):
+class AuctionFinalSettlementTransactionTests(_base.AuctionSettlementTests):
     __test__ = True

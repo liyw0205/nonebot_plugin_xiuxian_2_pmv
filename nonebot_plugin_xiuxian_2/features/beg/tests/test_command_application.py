@@ -6,12 +6,12 @@ import pytest
 
 from ....infrastructure.database import DatabaseUnitOfWork
 from ..command_application import BegCommandApplication
-from .test_beg_application import BegApplicationTest
+from . import test_beg_application as _beg_base
 
 
 @pytest.fixture
 def command(tmp_path):
-    database = BegApplicationTest._database(str(tmp_path))
+    database = _beg_base.BegApplicationTest._database(str(tmp_path))
     with DatabaseUnitOfWork(database) as uow:
         uow.execute("CREATE TABLE user_cd(user_id TEXT PRIMARY KEY,last_check_info_time TEXT)")
         uow.execute("INSERT INTO user_cd VALUES('u','old')")

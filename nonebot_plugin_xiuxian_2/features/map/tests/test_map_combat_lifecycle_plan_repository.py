@@ -1,11 +1,11 @@
 import json
 import unittest
-from tests.test_map_combat_lifecycle import MapCombatLifecycleTests
+from tests import test_map_combat_lifecycle as _base
 from tests.test_db_backend import db_backend
 from ..repository import MapCombatLifecyclePlanSqlRepository
 
 
-class CombatLifecyclePlanRepositoryTests(MapCombatLifecycleTests):
+class CombatLifecyclePlanRepositoryTests(_base.MapCombatLifecycleTests):
     def setUp(self):
         super().setUp()
         with db_backend.transaction(self.player) as conn:

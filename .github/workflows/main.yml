@@ -46,10 +46,7 @@ jobs:
       - name: Compile sources
         run: python -m compileall -q nonebot_plugin_xiuxian_2 tests scripts
 
-      - name: Run isolated test suite
-        run: python -m unittest discover -s tests -q
-
-      - name: Run repository test collection
+      - name: Run test suite
         run: python -m unittest discover -s . -p 'test_*.py' -q
 
       - name: Run architecture gates
