@@ -1212,6 +1212,15 @@
       "permission": "user"
     },
     {
+      "aliases": [
+        "灵石赠送流水",
+        "赠送流水"
+      ],
+      "feature": "stone_gift",
+      "name": "我的赠送流水",
+      "permission": "user"
+    },
+    {
       "aliases": [],
       "feature": "compensation",
       "name": "我的邀请",

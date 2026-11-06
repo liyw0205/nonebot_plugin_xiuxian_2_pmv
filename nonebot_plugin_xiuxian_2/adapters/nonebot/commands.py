@@ -187,6 +187,16 @@ def _build_stone(context: CommandContext, application: Any, args: Any) -> ReplyP
     return plan
 
 
+def _build_stone_history(context: CommandContext, application: Any) -> ReplyPlan:
+    from ...features.stone_gift.history import (
+        StoneGiftHistoryApplication,
+        format_stone_gift_history,
+    )
+
+    summary = StoneGiftHistoryApplication(application.database).summary(context.user_id)
+    return ReplyPlan(format_stone_gift_history(summary), reference=True)
+
+
 def _build_bank_first_use(context: CommandContext, application: Any, args: Any, *, clock: Any, limit: int) -> ReplyPlan:
     from ...features.bank.commands import parse_first_use_deposit
 
@@ -340,6 +350,12 @@ def register_migrated_matchers(driver: Any, holder: dict[str, Any]) -> tuple[typ
         "修仙补签", aliases={"补签", "签到补签"}, priority=1, block=True
     )
     stone = on_command("送灵石", priority=1, block=True)
+    stone_history = on_command(
+        "我的赠送流水",
+        aliases={"赠送流水", "灵石赠送流水"},
+        priority=7,
+        block=True,
+    )
 
     @daily.handle()
     async def _daily_handler(bot: Bot, event: Event):
@@ -381,7 +397,11 @@ def register_migrated_matchers(driver: Any, holder: dict[str, Any]) -> tuple[typ
             plan = ReplyPlan("当前服务暂不可用，请稍后重试。", reference=True)
         return await _send(holder, event, bot, plan)
 
-    result = (daily, sign, stone)
+    @stone_history.handle()
+    async def _stone_history_handler(bot: Bot, event: Event):
+        return await _dispatch(holder, event, bot, "stone_gift", _build_stone_history)
+
+    result = (daily, sign, stone, stone_history)
     setattr(driver, marker, result)
     return result
 

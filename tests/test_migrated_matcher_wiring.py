@@ -20,7 +20,7 @@ class MigratedMatcherWiringTests(unittest.TestCase):
         first = register_migrated_matchers(driver, {"context": None})
         second = register_migrated_matchers(driver, {"context": None})
         self.assertIs(first, second)
-        self.assertEqual([matcher.priority for matcher in first], [1, 1, 1])
+        self.assertEqual([matcher.priority for matcher in first], [1, 1, 1, 7])
         self.assertTrue(all(matcher.handlers for matcher in first))
 
 

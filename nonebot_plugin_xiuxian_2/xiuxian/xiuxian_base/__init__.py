@@ -1102,6 +1102,8 @@ async def help_in_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
 **流水与总览**
 - 我的灵石流水
 > 近7天灵石收支与主要来源去向
+- 我的赠送流水
+> 近7天送出与收到的灵石、主要对象与最近记录
 - 修行周报
 > 近7天修为、灵石、贡献、物品收支与活跃天数
 - 我的资产总览
