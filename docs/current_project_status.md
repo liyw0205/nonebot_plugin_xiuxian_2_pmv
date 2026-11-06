@@ -2693,3 +2693,38 @@ status_reader 归属、渲染与 handler 源合同）。受影响套件：
   `--ff-only` 合入 main 后 main run `41938949357` success（headSha 均 `42256588`；
   `quality` success、`build-and-release` skipped）。未部署、未读写真实游戏库、未发真实 QQ 消息、
   未打 tag；用户删除的四个文件保持未暂存，`.codex-next-goal.md` 未提交。
+
+## 已完成目标：玩家「我的赠送流水」个人赠送收支视图
+
+新功能（非修复）。目标文档 `.codex-next-goal.md`（local-only，未提交）。
+
+**缺口证据**：`stone_gift_operations` 在每次成功赠送时由真实写路径落行
+（`features/stone_gift/repository.py::transfer`，含发送方/接收方/总额/净额/手续费/时间），
+但玩家侧只有 `送灵石` 与 Web 写入，`grep -rn "赠送流水|赠送记录"` 在玩家模块零命中，
+无法查看自己送出/收到过哪些灵石。
+
+交付内容：
+
+- 新增 `features/stone_gift/history.py`：`StoneGiftHistoryApplication(database, clock=...)`
+  只读聚合近 7 天记录（窗口只用下界 `created_at >= start`，未来时间行计入）；
+  发送侧统计笔数/总额/手续费/净额，接收侧统计笔数/净额；主要对象按净额降序取前 3；
+  最近 5 笔按 `created_at DESC` 标注送出/收到；对方显示 `user_xiuxian.user_name`，缺失回退 user_id。
+  缺表/缺列/读异常返回空快照，不建表、不补列；`format_stone_gift_history` 为纯函数。
+- 新玩家命令 `我的赠送流水`（别名 `赠送流水`、`灵石赠送流水`，priority 7，`block=True`），
+  注册在 `adapters/nonebot/commands.py`；`user_id` 只取会话身份，handler 不解析 `args`。
+- 帮助：`修仙帮助` 的「流水与总览」分组登记命令与一行说明。
+- 清单：`features/stone_gift/manifest.py` 追加 `CommandSpec`（含别名）；
+  `docs/refactor_inventory.json` 新增 1 条 command（+9 行）；该命令由迁移后 matcher 注册，
+  Phase-2 legacy 派生计数不变。
+- 文档：`docs/features/stone_gift.md` 的命令与别名段登记命令、口径与只读边界。
+- 测试：新增 `tests/test_stone_gift_history.py` `5/5`（汇总口径与前 3、最近 5 笔排序、
+  7 天窗外排除与未来行计入、玩家隔离、缺表降级且零建表、全文/空态渲染、handler/manifest/帮助合同）；
+  `tests/test_migrated_matcher_wiring.py` 的 matcher priority 列表同步为 `[1,1,1,7]`。
+  定向合并集 `298 passed`；`test_phase2_legacy_path_gate` + `test_dependency_lock` +
+  `test_refactor_architecture` `67 passed, 91 subtests passed`（临时还原冻结文件后删除）。
+- 三门禁真实 exit 0（progress `failures: None`；`exit_ready: False` 仍仅由用户删除的冻结文件
+  造成，11 条既有 blocker）；`compileall` 与 `git diff --check` 干净。
+- 交付与 CI：功能提交 `aa174fa2` 的 develop run `42223184181` success；
+  `--ff-only` 合入 main 后 main run `42224408701` success（headSha 均 `aa174fa2`；
+  `quality` success、`build-and-release` skipped）。未部署、未读写真实游戏库、未发真实 QQ 消息、
+  未打 tag；用户删除的四个文件保持未暂存，`.codex-next-goal.md` 未提交。
