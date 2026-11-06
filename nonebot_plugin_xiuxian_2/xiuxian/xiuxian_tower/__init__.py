@@ -27,6 +27,7 @@ from .tower_limit import tower_limit
 from .transaction_service import normalize_weekly_purchases
 from .transaction_service import TowerSettlementResult
 from ...features.tower.application import TowerApplication
+from ...features.tower.history import TowerHistoryApplication, format_tower_history
 from ...features.tower.repository import TowerPurchaseSqlRepository
 from ...features.base.keyword_page import (
     empty_notice,
@@ -36,6 +37,7 @@ from ...features.base.keyword_page import (
 )
 from ...features.player_state.application import PlayerStateApplication
 from ...infrastructure.ids import UUIDGenerator
+from ...infrastructure.clock import SystemClock
 from ...paths import get_paths
 from ..xiuxian_config import XiuConfig
 from ..xiuxian_title.title_data import check_and_unlock_titles
@@ -47,6 +49,9 @@ tower_application = TowerApplication(
     repository=TowerPurchaseSqlRepository(get_paths().game_db, get_paths().player_db),
 )
 tower_ids = UUIDGenerator()
+tower_history_application = TowerHistoryApplication(
+    get_paths().game_db, clock=SystemClock()
+)
 player_state_application = PlayerStateApplication(get_paths().player_db)
 
 
@@ -80,6 +85,9 @@ def _initialize_player_state(user_id: str, profile=None):
 tower_challenge = on_command("爬塔", aliases={"挑战通天塔", "通天塔挑战"}, priority=5, block=True)
 tower_continuous = on_command("连续爬塔", aliases={"通天塔速通", "速通通天塔"}, priority=5, block=True)
 tower_info = on_command("通天塔信息", priority=5, block=True)
+tower_history = on_command(
+    "我的通天塔记录", aliases={"通天塔记录", "爬塔记录"}, priority=5, block=True
+)
 tower_rank = on_command("通天塔排行榜", priority=5, block=True)
 tower_integral_rank = on_command("通天塔积分排行榜", priority=5, block=True)
 tower_shop = on_command("通天塔商店", priority=5, block=True)
@@ -158,6 +166,8 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         "> 连续挑战10层，可指定层数\n"
         "- 通天塔信息\n"
         "> 查看当前进度\n"
+        "- 我的通天塔记录\n"
+        "> 查看近7天爬塔结果与奖励\n"
         "- 通天塔BOSS\n"
         "> 查看下层BOSS属性\n"
         "- 通天塔排行榜\n"
@@ -177,7 +187,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         "> 常用：挑战通天塔 / 通天塔信息 / 通天塔商店"
     )
     
-    await send_help_message(bot, event, msg, k1="挑战", v1="挑战通天塔", k2="信息", v2="通天塔信息", k3="商店", v3="通天塔商店")
+    await send_help_message(bot, event, msg, k1="挑战", v1="挑战通天塔", k2="信息", v2="通天塔信息", k3="商店", v3="通天塔商店", k4="记录", v4="我的通天塔记录")
     await tower_help.finish()
 
 @tower_challenge.handle(parameterless=[Cooldown()])
@@ -329,6 +339,19 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     
     await handle_send(bot, event, msg, md_type="通天塔", k1="挑战", v1="挑战通天塔", k2="状态", v2="我的状态", k3="商店", v3="通天塔商店")
     await tower_info.finish()
+
+@tower_history.handle(parameterless=[Cooldown(cd_time=0)])
+async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    """我的通天塔记录：近7天爬塔结果与奖励（只读）"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    isUser, user_info, msg = check_user(event)
+    if not isUser:
+        await handle_send(bot, event, msg, md_type="我要修仙")
+        await tower_history.finish()
+
+    summary = tower_history_application.summary(str(user_info["user_id"]))
+    await handle_send(bot, event, format_tower_history(summary))
+    await tower_history.finish()
 
 @tower_shop.handle(parameterless=[Cooldown(cd_time=0)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):

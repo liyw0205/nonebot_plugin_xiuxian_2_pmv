@@ -1230,6 +1230,15 @@
       "permission": "user"
     },
     {
+      "aliases": [
+        "爬塔记录",
+        "通天塔记录"
+      ],
+      "feature": "tower",
+      "name": "我的通天塔记录",
+      "permission": "user"
+    },
+    {
       "aliases": [],
       "feature": "compensation",
       "name": "我的邀请",

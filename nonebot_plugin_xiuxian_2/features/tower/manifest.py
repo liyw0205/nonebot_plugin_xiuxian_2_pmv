@@ -5,7 +5,12 @@ FEATURE = FeatureManifest(
     key="tower",
     title="通天塔资产结算",
     owner="gameplay",
-    commands=(CommandSpec("爬塔", aliases=("通天塔兑换", "挑战通天塔"), permission="user"),),
+    commands=(
+        CommandSpec("爬塔", aliases=("通天塔兑换", "挑战通天塔"), permission="user"),
+        CommandSpec(
+            "我的通天塔记录", aliases=("通天塔记录", "爬塔记录"), permission="user"
+        ),
+    ),
     routes=(
         RouteSpec("/api/v1/tower/purchase", methods=("POST",), permission="user"),
         RouteSpec("/api/v1/tower/settle", methods=("POST",), permission="user"),
