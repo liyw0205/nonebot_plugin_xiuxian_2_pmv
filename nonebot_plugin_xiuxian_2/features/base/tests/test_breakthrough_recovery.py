@@ -291,6 +291,7 @@ class DirectBreakthroughRecoveryTests(unittest.TestCase):
 
     def test_relation_planner_does_not_import_legacy_partner_manager(self):
         partner_module = "nonebot_plugin_xiuxian_2.xiuxian.xiuxian_buff.partner"
+        numeric_module = "nonebot_plugin_xiuxian_2.xiuxian.xiuxian_utils.numeric_bind"
         defaults = self.effects._relation_defaults
         defaults.update(
             runtime_random=SimpleNamespace(randint=lambda *_: 1),
@@ -298,7 +299,14 @@ class DirectBreakthroughRecoveryTests(unittest.TestCase):
         )
         self.effects._percent_exp_reward = lambda *args, **kwargs: 100
         self.effects._number_to = str
-        with patch.dict(sys.modules, {partner_module: None}), DatabaseUnitOfWork(self.game, immediate=True) as uow:
+        # 该用例只验证「不导入 legacy partner manager」。境界名是测试夹具的
+        # 合成值，不能依赖 gap 锚定的 current 回退（该回退已按合同移除），
+        # 因此显式注入奖励函数。
+        stubs = {
+            partner_module: None,
+            numeric_module: SimpleNamespace(percent_exp_reward=lambda *args, **kwargs: 100),
+        }
+        with patch.dict(sys.modules, stubs), DatabaseUnitOfWork(self.game, immediate=True) as uow:
             plans = self.effects.plan_relations(uow, self.expected, "after", "2026-10-02 12:00:00")
         self.assertEqual([plan["kind"] for plan in plans], ["partner", "mentor"])
 
