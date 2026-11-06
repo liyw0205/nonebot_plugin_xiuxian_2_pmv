@@ -1168,6 +1168,15 @@
     },
     {
       "aliases": [
+        "洞府收获记录",
+        "灵田收获记录"
+      ],
+      "feature": "dongfu",
+      "name": "我的洞府收获记录",
+      "permission": "user"
+    },
+    {
+      "aliases": [
         "灵石收支",
         "灵石流水"
       ],

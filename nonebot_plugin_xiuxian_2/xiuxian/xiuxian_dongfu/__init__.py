@@ -9,6 +9,10 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from ...paths import get_paths
 from ...features.dongfu.application import DongfuApplication
+from ...features.dongfu.harvest_history import (
+    DongfuHarvestHistoryApplication,
+    format_dongfu_harvest_history,
+)
 from ...features.dongfu.plant_slots import empty_plant_slot, legacy_plant_fields, normalize_plant_slots
 from ...features.info.profile_application import PlayerProfileApplication
 from ...features.map.static_data import MapStaticDataProvider
@@ -26,6 +30,9 @@ from ..xiuxian_utils.item_json import Items
 from ..xiuxian_config import XiuConfig
 items = Items()
 dongfu_application = DongfuApplication(get_paths().game_db, get_paths().player_db)
+dongfu_harvest_history_application = DongfuHarvestHistoryApplication(
+    get_paths().game_db, clock=SystemClock()
+)
 player_profile_application = PlayerProfileApplication(get_paths().game_db)
 runtime_ids = UUIDGenerator()
 runtime_random = SystemRandom()
@@ -116,6 +123,9 @@ DONGFU_GEOMANCY = {
 my_dongfu = on_command("我的洞府", priority=8, block=True)
 dongfu_plant = on_command("洞府种植", priority=8, block=True)
 dongfu_harvest = on_command("洞府收获", aliases={"收获洞府"}, priority=8, block=True)
+dongfu_harvest_history = on_command(
+    "我的洞府收获记录", aliases={"洞府收获记录", "灵田收获记录"}, priority=8, block=True
+)
 dongfu_accelerate = on_command("洞府催熟", priority=8, block=True)
 dongfu_fertilize = on_command("洞府施肥", priority=8, block=True)
 dongfu_expand = on_command("洞府扩建", priority=8, block=True)
@@ -471,6 +481,8 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         "> 在灵田种植\n"
         "- 洞府收获 / 洞府收获 [编号]\n"
         "> 收获成熟作物\n"
+        "- 我的洞府收获记录\n"
+        "> 查看近7天收获物品\n"
         "- 洞府施肥 [编号] / 洞府催熟 [编号]\n"
         "> 施肥或催熟\n"
         "- 洞府地脉 / 洞府巡山\n"
@@ -496,6 +508,19 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         k2="种植", v2="洞府种植",
         k3="收获", v3="洞府收获"
     )
+
+
+@dongfu_harvest_history.handle(parameterless=[Cooldown(cd_time=0)])
+async def dongfu_harvest_history_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    """我的洞府收获记录：近7天收获物品（只读）"""
+    bot, _ = await assign_bot(bot=bot, event=event)
+    ok, user_info, m = check_user(event)
+    if not ok:
+        await handle_send(bot, event, m, md_type="我要修仙")
+        return
+
+    summary = dongfu_harvest_history_application.summary(str(user_info["user_id"]))
+    await handle_send(bot, event, format_dongfu_harvest_history(summary), md_type="洞府")
 
 
 @my_dongfu.handle(parameterless=[Cooldown(cd_time=0)])

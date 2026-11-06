@@ -31,6 +31,25 @@ Command and web adapters translate transport input into the application DTO; bus
 ## 测试与手工验收
 Run the Dongfu repository/schema tests and the full architecture gate. Verify operation replay after startup migration and verify that requests without `dongfu.004` fail closed without creating tables.
 
+## 个人洞府收获记录
+
+`我的洞府收获记录`（别名 `洞府收获记录`、`灵田收获记录`）补齐玩家侧逐次收获的可见性：
+`我的洞府` 只展示当前灵田与作物，看不到最近收获了哪些物品。
+
+- 数据源是真实结算回执 `dongfu_harvest_operations`（game DB）：`payload` 为
+  `[user_id, expected_slots, slot_numbers, reward_rows, failed_slots]`，
+  `reward_rows` 保存 `[物品ID, 名称, 类型, 数量]`，`created_at` 可排序；
+  不新增表、列、迁移、索引或写入路径。
+- `DongfuHarvestHistoryApplication` 在 `read_only=True` 的 `DatabaseUnitOfWork` 中按
+  `json_extract(payload, '$[0]') = 当前 user_id` 查询近 7 天（只用下界）成功收获行，
+  按 `created_at DESC, rowid DESC` 排序；缺库、缺表、缺列、坏 JSON 或读失败返回空态，
+  不建表、不补列。
+- 输出：收获次数、总件数、物品种类数，以及最近 10 次明细（时间、最多 4 种物品及数量、
+  未成熟灵田数）；空态显示“近7天没有洞府收获记录。”。
+- 帮助与发现性：`洞府帮助` 增补条目，`修仙帮助`「流水与总览」登记；manifest 通过
+  `commands_for("dongfu")` 自动纳入新命令，不需要新增路由或配置。
+- 只读展示；不改种植、收获、施肥、催熟、扩建、巡山、潜入或任何资产写路径。
+
 ## 灰度开关、回滚和已知限制
 Status displays use the feature-owned player projection; named and random infiltration no longer materialize full candidate lists. Random scans use independent short read transactions, not a global snapshot: the initial rowid high-water mark excludes larger inserts, but gap inserts or reused rowids ahead of the cursor may enter; deletion and updates are observed on subsequent reads. Fairness applies to the observed eligible stream (duplicate legacy cave IDs retain their old weighting), and settlement still rechecks current state. Scanning all raw cave metadata bounds work between yields even for sparse eligibility. One transaction/attachment per built candidate is an explicit I/O tradeoff to avoid holding a page of large JSON; missing indexes, single large fields, map nearby full-list reads, and legacy player-data writes remain separate work. The legacy classes remain importable through the shim for external callers. No new migration is required for these reads. Removing `dongfu.002`, `.003`, or `.004`, if ever required, needs restoration from a pre-migration database backup.
 
@@ -52,3 +71,6 @@ Status displays use the feature-owned player projection; named and random infilt
 - `command: 潜入洞府`
 - `alias: 随机潜入`
 - `alias: 随机潜入洞府`
+- `command: 我的洞府收获记录`
+- `alias: 洞府收获记录`
+- `alias: 灵田收获记录`
