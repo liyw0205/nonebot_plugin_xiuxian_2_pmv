@@ -2896,3 +2896,79 @@ status_reader 归属、渲染与 handler 源合同）。受影响套件：
   `--ff-only` 合入 main 后 main run `42266650937` success。
   未部署、未读写真实游戏库、未发真实 QQ 消息、未打 tag；用户删除的四个文件保持未暂存，
   `.codex-next-goal.md` 未提交。
+
+## 已完成目标：修为奖励合同与三玩法反馈收口（2026-11-07）
+
+本轮收口「修为奖励合同 + 悬赏令 / 世界BOSS / 虚神界三个玩法的回执与状态可见性
++ CI 重复执行」五个包；不新增表、列、迁移、配置键或命令，不改奖励数值。
+
+### P0 CI 重复执行收口（用户插入的最高优先级）
+
+- 用真实 `unittest.TestLoader.discover`（不执行用例）测量：`discover -s tests`
+  4079 个叶子 ID；`discover -s nonebot_plugin_xiuxian_2` 1311；`discover -s . -p
+  'test_*.py'` 5383。三者满足 A∪C==B、0 缺失 / 0 多余、三个全量模式发现错误均为 0，
+  因此旧 CI 第一步是第二步的严格子集，整套 `tests/` 每次推送被执行两遍。
+- 另有 49 个 ID 被重复收集：六个测试模块 `from tests.test_x import BaseClass`，
+  `loadTestsFromModule` 会把导入的 TestCase 再收一遍；改为
+  `from tests import test_x as _base` 并以 `_base.BaseClass` 继承/调用。
+- 结果：根发现 5383 unique == 5383 leaves、0 duplicate、0 discovery error；CI 合并为
+  单步 `python -m unittest discover -s . -p 'test_*.py' -q`，每次推送少执行 4079 个
+  用例（约 43%）。旧「窄 pattern 从根发现会因缺少 NoneBot 初始化报 40 个
+  `_FailedTest`」的既有脆弱性未改变，CI 一直使用全量 pattern。
+- 诚实记录：`efecc122` 的 develop run `42277923101` **failure** —— 一个夹具用合成境界名
+  依赖被 P1 移除的 `current` 回退；`b6963441` 显式注入奖励函数修复，未放宽断言。
+
+### P1 gap 锚定未知境界 fail-closed（根因）
+
+`numeric_bind.percent_exp_reward` 在 `anchor='gap'/'next_power'` 且
+`stage_power_gap(level)<=0` 时曾回退 `current` 锚定；`docs/features/xiuxian_progression.md`
+明确禁止该回退，但当时只有世界BOSS 自行守卫。现在字符串境界名取不到 gap 时直接返回 0，
+int/float 境界序号与 `None` 保留旧语义；新增 `tests/test_percent_exp_fail_closed.py` 6 项
+（未知名 exp 1e5/1e20 均为 0、已知境界 gap 不变、int/None 仍 current、末境不变、源合同）。
+提交 `b2b9b2c1`。
+
+### P2 魔修入侵领奖：修为不越过本境上限
+
+`WorldEventClaimSqlRepository.claim` 原先 `exp = exp + 奖励`，与悬赏令/宗门任务/历练/
+闭关的 `set_closing_type(level) × closing_exp_upper_limit` 截断口径不一致，回执照报全额。
+现在命令层计算 `max_exp` 传入（协议新增 keyword-only 参数，ledger payload 不变），仓储在
+写事务内按余量截断，`demon_claim_operations.exp` 与回执存实际值，回放返回实际值；被截断时
+回复追加「（已达本境修为上限，超出部分未发放）」。旧调用不传 `max_exp` 时保持历史行为。
+新增 `tests/test_world_event_claim_exp_cap.py` 6 项（真实迁移建表、低于/接近/已满、
+回放、旧行为、超大整数）。提交 `a2e53d49`。
+
+### P3 虚神界信息：闭关状态可见
+
+`虚神界信息` 过去在 `user_cd.type=4` 时仍不显示闭关状态。新增纯函数
+`features/impart_pk/closing_status.py::closing_status_lines`（闭关中/已入定 N 分钟/
+今日祝福余额/本境修为上限余量/出关提示），坏时间记 0、负值夹 0、上限缺失省略该行；
+非闭关返回空元组，未闭关玩家面板逐字不变。命令层只提供 `user_cd`、`exp_day`、当前修为
+与上限。新增 `tests/test_impart_closing_status_view.py` 6 项。提交 `a4c815c1`。
+
+### P4 世界BOSS：每日额度单一来源 + 回执剩余次数
+
+`12000` / `300000000` / `30` 原在结算与 `世界BOSS信息` 各写一遍。现集中在
+`xiuxian_boss/boss_limit.py`（`DAILY_INTEGRAL_LIMIT` / `DAILY_STONE_LIMIT` /
+`DAILY_BATTLE_COUNT` / `daily_quota_line`），两处引用同一常量；战斗成功回执追加
+`今日讨伐：X/30（剩余 N 次）`，最后一次显示「已用尽」。数值未调整。
+新增 `tests/test_boss_daily_quota_view.py` 6 项。提交 `2127f110`。
+
+### P5 悬赏令：剩余刷新次数 + 截断说明
+
+`悬赏令查看`（状态 3）新增 `今日剩余刷新次数：N次`（取 `user_xiuxian.work_num`，
+缺失/坏值回退总数并夹在 `[0,总数]`）；结算回执 `result_json` 新增 `exp_requested`，
+实际值低于请求值时追加「（已达本境修为上限，超出部分未发放）」，旧回执无该键则不追加。
+文案集中在 `features/work/presentation.py`。新增 `tests/test_work_reward_feedback.py` 9 项
+（含真实仓储截断/回放）。提交 `f4789356`。
+
+### 验证与 CI
+
+- 定向：P0 八个受影响/新增模块 70 项 OK（4.9 s）；P1/P2 15 + 49 项；P3 6 项；
+  P4/P5 与受影响悬赏/世界BOSS 套件 41 项。均单次执行，未重复跑已绿套件。
+- 三门禁真实 exit 0（progress `failures: None`；`exit_ready: False` 仍由用户删除的冻结
+  文件造成，11 条既有 blocker）；`compileall` 与 `git diff --check` 干净。
+- develop：`a4c815c1` run `42279097569` success；`f4789356` run `42281656573` success
+  （`Ran 5404 tests in 207.508s`）。`--ff-only` 合入 main 后 main run `42282783410`
+  success（headSha 均 `f4789356`）。
+- 未部署、未读写真实游戏库、未发真实 QQ 消息、未打 tag；用户删除的四个文件保持未暂存，
+  `.codex-next-goal.md` 未提交。
