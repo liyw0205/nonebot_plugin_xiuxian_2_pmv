@@ -112,6 +112,23 @@ sect_fairyland,sect_materials,mainbuff,secbuff,elixir_room_level`。
 `scale_insufficient`、`state_changed`、`name_exists`、`already_member`、
 `task_missing`、`membership_changed`、`schema_missing` 等）一律不算成功，且不产生副作用。
 
+## 个人宗门任务记录
+
+`我的宗门任务记录`（别名 `宗门任务记录`）补齐玩家侧逐次宗门任务的可见性：玩家只能看到
+当前接取的任务与一次完成提示，无法回看最近做过哪些任务、付出了什么、拿到了什么。
+
+- 数据源是真实结算回执 `sect_task_settlement_operations`（game DB）：`user_id`、`period`、
+  `cost_type`/`cost`、`exp_reward`、`sect_reward`、`materials_reward` 与 `created_at`
+  在 `settle_task` 成功时写入；不新增表、列、迁移、索引或写入路径。
+- `SectTaskHistoryApplication` 在 `read_only=True` 的 `DatabaseUnitOfWork` 中按
+  `user_id = 当前会话` 查询近 7 天（只用下界）结算行，按 `created_at DESC, rowid DESC`
+  排序；缺库、缺表、缺列或读失败返回空态，不建表、不补列。
+- 输出：完成次数、累计修为/宗门贡献/宗门资材奖励，以及最近 10 次明细（时间、消耗气血或
+  灵石、三项奖励）；空态显示“近7天没有宗门任务完成记录。”。
+- 帮助与发现性：`宗门帮助`「任务与商店」增补条目，`修仙帮助`「流水与总览」登记；
+  manifest 增加 `CommandSpec`（含别名），命令仍由 `xiuxian_sect` 注册。
+- 只读展示；不改任务接取/刷新/完成、消耗、奖励、周常或任何资产写路径。
+
 ## 定时任务
 
 宗门日常重置和任务刷新由兼容生命周期统一调度，使用稳定 job ID。

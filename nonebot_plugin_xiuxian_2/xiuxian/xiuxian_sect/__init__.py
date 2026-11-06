@@ -85,6 +85,10 @@ from ...features.base.keyword_page import (
     parse_page_arg,
 )
 from ...features.sect.repository import SectRenameSqlRepository
+from ...features.sect.task_history import (
+    SectTaskHistoryApplication,
+    format_sect_task_history,
+)
 from ...infrastructure.ids import UUIDGenerator
 from ...infrastructure.clock import SystemClock
 from ...infrastructure.random_source import SystemRandom
@@ -102,6 +106,9 @@ sect_application = SectApplication(
 )
 sect_task_state_manager.bind_application(sect_application)
 contribution_flow_application = ContributionFlowApplication(
+    get_paths().game_db, clock=runtime_clock
+)
+sect_task_history_application = SectTaskHistoryApplication(
     get_paths().game_db, clock=runtime_clock
 )
 
@@ -182,6 +189,9 @@ sect_help = on_command("宗门帮助", priority=5, block=True)
 sect_task = on_command("宗门任务接取", aliases={"我的宗门任务", "宗门任务"}, priority=7, block=True)
 sect_task_complete = on_command("宗门任务完成", priority=7, block=True)
 sect_task_refresh = on_command("宗门任务刷新", priority=7, block=True)
+sect_task_history = on_command(
+    "我的宗门任务记录", aliases={"宗门任务记录"}, priority=7, block=True
+)
 sect_mainbuff_get = on_command("宗门功法搜寻", aliases={"搜寻宗门功法"}, priority=6, block=True)
 sect_mainbuff_learn = on_command("学习宗门功法", priority=5, block=True)
 sect_secbuff_get = on_command("宗门神通搜寻", aliases={"搜寻宗门神通"}, priority=6, block=True)
@@ -279,6 +289,8 @@ __sect_help__ = f"""
 > 消耗贡献兑换
 - 我的宗门贡献流水
 > 查看本人近7天贡献收支
+- 我的宗门任务记录
+> 查看近7天任务结算与奖励
 
 **福利**
 > 每日{config["发放宗门资材"]["时间"]}点发放{config["发放宗门资材"]["倍率"]}倍建设度资材。
@@ -1769,6 +1781,20 @@ async def sect_task_refresh_(bot: Bot, event: GroupMessageEvent | PrivateMessage
         msg = f"道友尚未加入宗门，请加入宗门后再发送该指令！"
         await handle_send(bot, event, msg, md_type="宗门", k1="加入", v1="宗门加入", k2="列表", v2="宗门列表", k3="帮助", v3="宗门帮助")
         await sect_task_refresh.finish()
+
+
+@sect_task_history.handle(parameterless=[Cooldown(cd_time=0)])
+async def sect_task_history_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    """我的宗门任务记录：近7天任务结算与奖励（只读）"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    isUser, user_info, msg = check_user(event)
+    if not isUser:
+        await handle_send(bot, event, msg, md_type="我要修仙")
+        await sect_task_history.finish()
+
+    summary = sect_task_history_application.summary(str(user_info["user_id"]))
+    await handle_send(bot, event, format_sect_task_history(summary), md_type="宗门")
+    await sect_task_history.finish()
 
 
 @sect_list.handle(parameterless=[Cooldown(cd_time=0)])

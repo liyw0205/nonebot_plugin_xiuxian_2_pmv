@@ -1127,6 +1127,14 @@
     },
     {
       "aliases": [
+        "宗门任务记录"
+      ],
+      "feature": "sect",
+      "name": "我的宗门任务记录",
+      "permission": "user"
+    },
+    {
+      "aliases": [
         "宗门贡献流水",
         "贡献流水"
       ],
