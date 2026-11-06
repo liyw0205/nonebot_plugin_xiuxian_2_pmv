@@ -1108,6 +1108,8 @@ async def help_in_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
 > 近7天修为、灵石、贡献、物品收支与活跃天数
 - 我的资产总览
 > 灵石、灵庄、宗门、背包与竞技场一览
+- 我的竞技场战绩
+> 近7天挑战胜负与积分变化
 - 我的签到统计
 > 累计签到次数与本月签到天数
 - 我的突破统计

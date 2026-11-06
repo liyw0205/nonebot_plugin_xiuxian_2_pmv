@@ -1195,6 +1195,15 @@
     },
     {
       "aliases": [
+        "竞技场战绩",
+        "竞技场记录"
+      ],
+      "feature": "arena",
+      "name": "我的竞技场战绩",
+      "permission": "user"
+    },
+    {
+      "aliases": [
         "签到统计",
         "签到记录"
       ],

@@ -54,7 +54,7 @@ Web API 保留 `/api/v1/arena/purchase`、`/challenge-purchase`、`/settle`，�
 
 ## 命令与别名
 
-`竞技场挑战`（别名 `竞技场购买次数`）与 `竞技场兑换`（别名 `竞技场商店`）保持历史触发词；matcher 仍由 `xiuxian_arena` 注册，资格、限购和结算规则由 `ArenaApplication` 承担。
+`竞技场挑战`（别名 `竞技场购买次数`）与 `竞技场兑换`（别名 `竞技场商店`）保持历史触发词；matcher 仍由 `xiuxian_arena` 注册，资格、限购和结算规则由 `ArenaApplication` 承担。`我的竞技场战绩`（别名 `竞技场战绩`、`竞技场记录`）是只读个人历史入口，不改挑战、兑换或结算规则。
 
 ## Web API
 
@@ -90,6 +90,28 @@ Web API 保留 `/api/v1/arena/purchase`、`/challenge-purchase`、`/settle`，�
   最近 5 次。只读；不新增命令、别名、路由、配置键、表、列、迁移或索引。
 - 结算时区沿用 `SystemClock` 的 UTC 业务日，展示 `season_key` 原值；不改变每日重置
   时刻、段位/排名/荣誉公式或任何奖励写入。
+
+## 个人挑战战绩
+
+`我的竞技场战绩`（别名 `竞技场战绩`、`竞技场记录`）补齐玩家侧每一场挑战的可见性：
+`我的竞技场` 只有累计场次/胜率，`我的荣誉` 只有每日荣誉结算，均无法回答“最近和谁打、
+输赢、积分怎么变”。
+
+- 数据源是真实结算回执 `arena_challenge_settlement_operations`：`payload` 提供
+  对手、结果与挑战时间，`result_json` 提供结算状态、积分变化与结算后积分/段位；
+  不新增表、列、迁移、索引或写入路径。
+- 只统计 `result_json.status == "applied"` 的记录；`limit_reached`、`stamina_insufficient`、
+  `state_changed` 等被拒绝回执不计入战绩。缺 `status` 的历史行按已结算处理，
+  但 outcome 不在 `win/loss/draw/no_match` 内的行跳过。
+- 时间窗为近 7 天且只用下界（`created_at >= start`），与其它个人流水一致；回执
+  由真实挑战写入，玩家隔离条件为 `challenger_id = 当前会话 user_id`，不接受参数查询他人。
+- `ArenaMatchHistoryApplication` 在 `read_only=True` 的 `DatabaseUnitOfWork` 中查询；
+  缺库、缺表、缺列或读失败返回空态，不建表、不补列。对手名通过注入的
+  `PlayerProfileApplication` 解析，解析失败回退 user_id，不影响聚合。
+- 渲染为“近7天竞技场战绩 / 挑战 N 场（胜/负/平/未匹配）/ 积分净变化 / 最近 5 场明细”；
+  空态显示“近7天没有竞技场挑战记录。”。纯渲染函数不做 I/O。
+- 帮助与发现性：`竞技场帮助` 增补条目与按钮，`修仙帮助`「流水与总览」登记命令；
+  manifest 增加 `CommandSpec`（含别名），命令仍由 `xiuxian_arena` 注册。
 
 ## 定时任务
 

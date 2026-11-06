@@ -35,6 +35,10 @@ from ...features.arena.state_application import ArenaStateApplication
 from ...features.info.profile_application import PlayerProfileApplication
 from ...core.errors import ConflictError, DomainError
 from ...features.arena.repository import ArenaChallengePurchaseSqlRepository
+from ...features.arena.match_history import (
+    ArenaMatchHistoryApplication,
+    format_arena_match_history,
+)
 from ...features.arena.season_reward_application import ArenaSeasonRewardApplication
 from ...features.arena.weekly_rank_application import ArenaWeeklyRankApplication
 from ...infrastructure.ids import UUIDGenerator
@@ -49,6 +53,13 @@ arena_ids = UUIDGenerator()
 runtime_clock = SystemClock()
 arena_state_application = ArenaStateApplication(get_paths().player_db, clock=runtime_clock)
 arena_profile_application = PlayerProfileApplication(get_paths().game_db)
+arena_match_history_application = ArenaMatchHistoryApplication(
+    get_paths().game_db,
+    clock=runtime_clock,
+    name_resolver=lambda user_id: (
+        (arena_profile_application.get_user_profile(user_id) or {}).get("user_name")
+    ),
+)
 arena_opponent_application = ArenaOpponentApplication(
     ArenaOpponentRepository(get_paths().game_db, get_paths().player_db, clock=runtime_clock),
     arena_state_application,
@@ -82,6 +93,9 @@ arena_challenge = on_command("竞技场挑战", priority=10, block=True)
 arena_view = on_command("竞技场查看", priority=10, block=True)
 arena_ranking = on_command("竞技场排行榜", priority=10, block=True)
 arena_myinfo = on_command("我的竞技场", priority=10, block=True)
+arena_record = on_command(
+    "我的竞技场战绩", aliases={"竞技场战绩", "竞技场记录"}, priority=10, block=True
+)
 arena_help = on_command("竞技场帮助", priority=10, block=True)
 arena_shop = on_command("竞技场商店", priority=10, block=True)
 arena_buy = on_command("竞技场兑换", priority=10, block=True)
@@ -213,6 +227,8 @@ __arena_help__ = """
 > 查看排行榜
 - 我的竞技场
 > 查看个人战绩
+- 我的竞技场战绩
+> 查看近7天挑战结果与积分变化
 - 竞技场查看
 > 查看与你积分相近的3位道友
 
@@ -263,7 +279,8 @@ async def arena_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         bot, event, __arena_help__,
         k1="挑战", v1="竞技场挑战",
         k2="商店", v2="竞技场商店",
-        k3="排行", v3="竞技场排行榜"
+        k3="排行", v3="竞技场排行榜",
+        k4="战绩", v4="我的竞技场战绩"
     )
     await arena_help.finish()
 
@@ -503,6 +520,19 @@ async def arena_myinfo_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
 """
     await handle_send(bot, event, msg)
     await arena_myinfo.finish()
+
+@arena_record.handle(parameterless=[Cooldown(cd_time=0)])
+async def arena_record_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    """我的竞技场战绩：近7天挑战结果与积分变化（只读）"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    isUser, user_info, msg = check_user(event)
+    if not isUser:
+        await handle_send(bot, event, msg, md_type="我要修仙")
+        await arena_record.finish()
+
+    summary = arena_match_history_application.summary(str(user_info["user_id"]))
+    await handle_send(bot, event, format_arena_match_history(summary))
+    await arena_record.finish()
 
 @arena_shop.handle(parameterless=[Cooldown(cd_time=0)])
 async def arena_shop_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):

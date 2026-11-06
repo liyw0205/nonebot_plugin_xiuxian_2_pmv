@@ -8,6 +8,9 @@ FEATURE = FeatureManifest(
     commands=(
         CommandSpec("竞技场挑战", aliases=("竞技场购买次数",), permission="user"),
         CommandSpec("竞技场兑换", aliases=("竞技场商店",), permission="user"),
+        CommandSpec(
+            "我的竞技场战绩", aliases=("竞技场战绩", "竞技场记录"), permission="user"
+        ),
     ),
     routes=(
         RouteSpec("/api/v1/arena/purchase", methods=("POST",), permission="user"),
