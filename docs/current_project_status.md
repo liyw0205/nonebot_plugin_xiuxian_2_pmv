@@ -2842,3 +2842,31 @@ status_reader 归属、渲染与 handler 源合同）。受影响套件：
   `--ff-only` 合入 main 后 main run `42254737327` success。
   未部署、未读写真实游戏库、未发真实 QQ 消息、未打 tag；用户删除的四个文件保持未暂存，
   `.codex-next-goal.md` 未提交。
+
+## 已完成目标：洞府个人收获记录
+
+**缺口证据**：`dongfu_harvest_operations`（game DB）在成功收获时写入
+`payload=[user_id, expected_slots, slot_numbers, reward_rows, failed_slots]`，
+`reward_rows` 含物品 ID/名称/类型/数量，`created_at` 可排序；玩家只有 `我的洞府`
+当前灵田与作物，无法回看最近收获。
+
+交付内容：
+
+- 新增 `features/dongfu/harvest_history.py`：`DongfuHarvestHistoryApplication` 在
+  `read_only=True` UoW 中按 `json_extract(payload,'$[0]')` 查询近 7 天（只用下界）成功
+  收获行，`json_valid` 过滤坏 payload，按 `created_at DESC, rowid DESC` 排序；聚合收获
+  次数、总件数、物品种类数，最近 10 次显示时间、最多 4 种物品与未成熟灵田数；缺库/缺表/
+  缺列/坏 JSON/读失败降级空态，不建表不补列。
+- 新命令 `我的洞府收获记录`（别名 `洞府收获记录`、`灵田收获记录`，priority 8）注册在
+  `xiuxian_dongfu`；`洞府帮助` 与 `修仙帮助`「流水与总览」登记；manifest 由
+  `commands_for("dongfu")` 自动纳入，inventory +9 行；`docs/features/dongfu.md` 增
+  「个人洞府收获记录」章节。
+- 测试：新增 `tests/test_dongfu_harvest_history.py` `6 passed`（窗口/聚合/排序、玩家隔离、
+  缺表降级不建表、坏/旧 payload 跳过、渲染、命令/manifest/帮助合同）；
+  定向集 `309 passed, 91 subtests`；Phase-2 派生计数 656→657、342→343。
+- 三门禁 exit 0；compileall/diff-check 干净。
+- 交付与 CI：功能提交 `5c1adc88` 的 develop run `42259621403` success；
+  main run `42260631315` success（两分支同 SHA）。提交最初落在 main，未重写历史，
+  develop 以 `--ff-only` 快进到同一提交后推送。
+  未部署、未读写真实游戏库、未发真实 QQ 消息、未打 tag；用户删除的四个文件保持未暂存，
+  `.codex-next-goal.md` 未提交。
