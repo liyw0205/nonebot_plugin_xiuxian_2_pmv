@@ -317,9 +317,11 @@ def percent_exp_reward(
             base = stage_power_gap(level_or_rank)
         else:
             base = stage_next_power(level_or_rank)
-        # gap 未知时回退 current，避免 0 奖静默
+        # 未知境界名 fail-closed：gap/next_power 取不到基准时**不得**回退到
+        # current 锚定，否则单次奖励会随累计修为一起膨胀（后期崩塌源）。
+        # 只有 int/float 境界序号与 None 保留 current 锚定的历史语义。
         if base <= 0:
-            base = max(0, as_int_like(current_exp, 0))
+            return 0
     else:
         base = max(0, as_int_like(current_exp, 0))
 

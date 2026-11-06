@@ -40,8 +40,9 @@
 
 **境界数据**：`data/xiuxian/境界.json`，77 境，命名为「初期/中期/圆满」三段
 （**没有**「后期」）。`power` = 该境升级所需修为基数。77 境 `stage_power_gap` 全部 > 0；
-境界名不在表内时返回 0——此时 `percent_exp_reward` 会静默回退到 `current` 锚定，
-发放方必须自行 fail-closed（世界BOSS 已按此实现）。
+境界名不在表内时 `stage_power_gap` 返回 0，`percent_exp_reward` 在 `anchor='gap'` /
+`'next_power'` 下**直接返回 0**（fail-closed，不回退 `current` 锚定）；只有 int/float
+境界序号与 `None` 保留 `current` 锚定的历史语义。世界BOSS 另有一层同义守卫。
 
 ## 三、压制公式与分类原则
 
