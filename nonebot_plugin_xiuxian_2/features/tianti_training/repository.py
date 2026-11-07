@@ -9,6 +9,7 @@ from typing import Any, Callable, Mapping, Protocol, Sequence
 from ...infrastructure.database import DatabaseUnitOfWork
 from .profile_persistence import upsert_tianti_profile
 from .presentation import get_sect_fairyland_bonus as _get_sect_fairyland_bonus
+from .presentation import medicine_bath_active
 from .presentation import parse_tianti_time as _parse_tianti_time
 from .domain import (
     decide_breakthrough,
@@ -390,8 +391,8 @@ class TiantiMedicineBathSqlRepository:
             if row is None:
                 return MedicineBathPersistenceResult("user_missing", user_id)
             data = self.profile.clean(row)
-            current_end = _parse_time(data.get("medicine_end_time"))
-            if current_end is not None and started_at <= current_end and float(data.get("medicine_effect", 0) or 0) > 1:
+            current_bath = medicine_bath_active(data, started_at)
+            if current_bath is not None:
                 return MedicineBathPersistenceResult("bath_active", user_id)
             insufficient = []
             for item in plan:

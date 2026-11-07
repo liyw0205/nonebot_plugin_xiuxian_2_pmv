@@ -1247,6 +1247,14 @@
     },
     {
       "aliases": [
+        "药浴记录"
+      ],
+      "feature": "tianti",
+      "name": "我的药浴记录",
+      "permission": "user"
+    },
+    {
+      "aliases": [
         "我的资产",
         "资产总览"
       ],

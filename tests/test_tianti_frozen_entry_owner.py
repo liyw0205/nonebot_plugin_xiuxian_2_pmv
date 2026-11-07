@@ -155,12 +155,15 @@ def test_dynamic_tianti_entries_read_profile_and_delegate_display_rules() -> Non
         assert not (called_methods & STATE_MUTATIONS)
 
     assert _has_call(status, "calculate_tianti_gain_rate")
-    assert _has_call(status, "_get_active_medicine_bath")
+    assert _has_call(status, "bath_status")
     assert _has_call(status, "get_sect_fairyland_bonus")
     assert _has_call(status, "_get_tianti_sect_fairyland_level")
     assert not _has_call(status, "_get_user_sect_fairyland_level")
     assert _has_call(status, "_get_tianti_cap")
     assert _has_call(qiaoxue, "calc_qiaoxue_bonus")
+
+    # 三态药浴状态的读取规则也必须由 feature 域拥有（`我的炼体` 不再自建分支）。
+    assert _has_call(_function(tree, "_get_active_medicine_bath"), "get_active_medicine_bath")
 
     bath_reader = _function(tree, "_get_active_medicine_bath")
     assert _has_call(bath_reader, "get_active_medicine_bath")

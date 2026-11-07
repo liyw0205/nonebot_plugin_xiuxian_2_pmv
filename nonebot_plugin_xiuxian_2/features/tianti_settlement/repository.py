@@ -10,8 +10,8 @@ from ...features.tianti_training.domain import decide_tianti_gain, decide_tianti
 from ...features.tianti_training.profile_persistence import upsert_tianti_profile
 from ...features.tianti_training.presentation import (
     calc_qiaoxue_bonus,
-    get_active_medicine_bath,
     get_sect_fairyland_bonus,
+    medicine_bath_active,
     parse_tianti_time,
 )
 from ...infrastructure.database import DatabaseUnitOfWork
@@ -96,7 +96,7 @@ class TiantiSettlementSqlRepository:
         if window.status == "settle":
             level = self.profile.levels()[str(data["tianti_level"])]
             base_ratio, gain_pct = calc_qiaoxue_bonus(data)
-            bath = get_active_medicine_bath(data, settled_at)
+            bath = medicine_bath_active(data, settled_at)
             bath_expired = False
             if bath is None and data.get("medicine_end_time"):
                 data.update({"medicine_last_time": None, "medicine_end_time": None, "medicine_effect": 0.0, "medicine_name": ""})

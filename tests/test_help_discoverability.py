@@ -33,6 +33,7 @@ BASE_SRC = (XIUXIAN / "xiuxian_base" / "__init__.py").read_text(encoding="utf-8"
 SECT_SRC = (XIUXIAN / "xiuxian_sect" / "__init__.py").read_text(encoding="utf-8")
 BACK_SRC = (XIUXIAN / "xiuxian_back" / "__init__.py").read_text(encoding="utf-8")
 TRADE_HELP_SRC = (XIUXIAN / "xiuxian_trade" / "trade_help.py").read_text(encoding="utf-8")
+TIANTI_SRC = (XIUXIAN / "xiuxian_tianti" / "__init__.py").read_text(encoding="utf-8")
 
 
 def slice_between(source: str, start: str, end: str = '""".strip()') -> str:
@@ -97,6 +98,7 @@ HELP_BLOCKS = {
     "宗门帮助": slice_between(SECT_SRC, '__sect_help__ = f"""'),
     "背包帮助": slice_between(BACK_SRC, "**背包帮助**"),
     "仙肆帮助": slice_between(TRADE_HELP_SRC, "**仙肆帮助（全服交易）**"),
+    "炼体帮助": slice_between(TIANTI_SRC, "**炼体帮助**"),
 }
 
 EXPECTED = {
@@ -108,6 +110,7 @@ EXPECTED = {
     "我的物品流水": "背包帮助",
     "仙肆关注": "仙肆帮助",
     "仙肆行情": "仙肆帮助",
+    "我的药浴记录": "炼体帮助",
 }
 
 
@@ -177,6 +180,11 @@ class HelpDiscoverabilityTests(unittest.TestCase):
         self.assertIn("button_id=XiuConfig().button_id2", SECT_SRC)
 
     # ------------------------------------------------------------ 反向防漂移
+    # 历史帮助块里 `- ` 条目并非都是命令，`炼体帮助` 的 `使用炼体神物` 是有说明的
+    # 描述行（该玩法没有独立 matcher），与 `背包`/`灵根名` 一类同属既有事实条目；
+    # 反向检查只钉命令名，故显式列出这一条，不"修正"帮助文案本身。
+    DESCRIPTIVE_ENTRIES = frozenset({"使用炼体神物"})
+
     def test_help_never_advertises_unknown_commands(self) -> None:
         """帮助块里的命令条目必须能落到某个真实命令上。
 
@@ -198,7 +206,7 @@ class HelpDiscoverabilityTests(unittest.TestCase):
                 if not entry or "/" in entry or "[" in entry or "+" in entry:
                     continue
                 token = entry.split(" ")[0].strip()
-                if not token:
+                if not token or token in self.DESCRIPTIVE_ENTRIES:
                     continue
                 self.assertTrue(
                     resolvable(token),

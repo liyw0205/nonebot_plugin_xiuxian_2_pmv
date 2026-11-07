@@ -10,6 +10,7 @@ from ...infrastructure.clock import SystemClock
 from ...infrastructure.database import DatabaseUnitOfWork
 from ...features.tianti_training.domain import decide_tianti_gain
 from ...features.tianti_training.profile_persistence import upsert_tianti_profile
+from ...features.tianti_training.presentation import medicine_bath_active
 from ...features.tianti_training.repository import TiantiProfileReader
 
 
@@ -172,9 +173,7 @@ class SectFairylandSqlRepository:
             now = self.clock.now()
             if now.tzinfo is not None:
                 now = now.astimezone().replace(tzinfo=None)
-            end_time = self._parse_time(data.get("medicine_end_time"))
-            effect = float(data.get("medicine_effect", 0) or 0)
-            bath = {"name": data.get("medicine_name") or "未知药材", "effect": effect, "end_time": end_time} if end_time and now <= end_time and effect > 1 else None
+            bath = medicine_bath_active(data, now)
             bath_expired = bath is None and bool(data.get("medicine_end_time"))
             if bath_expired:
                 data.update({"medicine_last_time": None, "medicine_end_time": None, "medicine_effect": 0.0, "medicine_name": ""})
@@ -201,7 +200,7 @@ class SectFairylandSqlRepository:
                 base_per_min=base_per_min,
                 base_ratio=base_ratio,
                 gain_pct=gain_pct,
-                bath_effect=effect if bath is not None else 1.0,
+                bath_effect=bath["effect"] if bath is not None else 1.0,
                 sect_bonus=sect_bonus,
                 spirit_vein_multiplier=spirit_vein_multiplier,
                 old_hp=int(data["tianti_hp"]),

@@ -21,11 +21,21 @@ from .tianti_data import (
 )
 from ...features.tianti_settlement.application import TiantiSettlementApplication
 from ...features.tianti_training.application import TiantiTrainingApplication
+from ...features.tianti_training.bath_history import (
+    TiantiBathHistoryApplication,
+    format_tianti_bath_history,
+)
 from ...features.tianti_training.presentation import (
+    bath_remaining_text,
+    bath_schedule,
+    bath_status,
     calc_qiaoxue_bonus,
     calculate_tianti_gain_rate,
     get_active_medicine_bath,
     get_sect_fairyland_bonus,
+    render_bath_remaining_suffix,
+    render_bath_schedule,
+    render_bath_status,
 )
 from ...paths import get_paths
 from ...infrastructure.ids import UUIDGenerator
@@ -38,6 +48,10 @@ tianti_settlement_application = TiantiSettlementApplication(
 tianti_training_application = TiantiTrainingApplication(
     get_paths().game_db,
     get_paths().player_db,
+)
+tianti_bath_history_application = TiantiBathHistoryApplication(
+    get_paths().game_db,
+    clock=SystemClock(),
 )
 runtime_ids = UUIDGenerator()
 runtime_clock = SystemClock()
@@ -56,6 +70,9 @@ tianti_chongqiao = on_command("冲窍", priority=10, block=True)
 tiqiao_info = on_command("我的体窍", priority=10, block=True)
 tianti_level_help = on_command("炼体境界", priority=10, block=True)
 tianti_medicine_bath = on_command("炼体药浴", aliases={"药浴"}, priority=10, block=True)
+tianti_bath_history = on_command(
+    "我的药浴记录", aliases={"药浴记录"}, priority=10, block=True
+)
 
 MEDICINE_BATH_DURATION_MINUTES = 360
 MEDICINE_BATH_UNIT_EFFECT = 1 / 30
@@ -206,7 +223,9 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 - 冲窍
 > 消耗当前10%炼体气血，随机冲击一个未开的窍穴
 - 炼体药浴 药材x数量 药材x数量
-> 按当前时段消耗药材，获得360分钟炼体结算加成
+> 按当前时段消耗药材，获得360分钟炼体结算加成（不带参数查看全部时段）
+- 我的药浴记录
+> 查看本人近7天药浴开启、消耗与效果
 - 使用炼体神物
 > 按神物提供的分钟数获得炼体结算气血
 - 我的体窍 [窍穴名/天罡/地煞]
@@ -370,18 +389,20 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     slot = _medicine_bath_slot(now_t.hour)
 
     if not raw_text:
-        herbs = "、".join(sorted(slot["herbs"])[:10])
+        lines = render_bath_schedule(bath_schedule(MEDICINE_BATH_TIME_CONFIG, now_t))
+        schedule_block = "\n".join(lines) if lines else "（当前未配置任何药浴时段）"
         await handle_send(
             bot,
             event,
             f"【炼体药浴】\n"
             f"当前时段：{slot['name']}\n"
-            f"本时段有效药材：{herbs}\n"
             f"药材效果：每1份有效药材+{MEDICINE_BATH_UNIT_EFFECT * 100:.2f}%结算效果，"
             f"{MEDICINE_BATH_FULL_EFFECT_UNITS}份达到150%，{MEDICINE_BATH_MAX_UNITS}份达到200%封顶\n"
             f"其他时段药材：无效果，不消耗\n"
             f"持续时间：{MEDICINE_BATH_DURATION_MINUTES}分钟\n"
-            f"用法：炼体药浴 恒心草x20 天青花x20"
+            f"用法：炼体药浴 恒心草x20 天青花x20\n"
+            f"\n【药浴时段】◇为当前时段\n"
+            f"{schedule_block}"
         )
         return
 
@@ -481,7 +502,10 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         return
     status = str(result.get("status", outcome.status))
     if status == "bath_active":
-        await handle_send(bot, event, "当前药浴仍在生效，药浴结束后再使用新的药材。")
+        active_suffix = render_bath_remaining_suffix(
+            bath_status(tianti_training_application.read_profile(user_id), now_t)
+        )
+        await handle_send(bot, event, "当前药浴仍在生效，药浴结束后再使用新的药材。" + active_suffix)
         return
     if status in {"item_insufficient", "item_changed"}:
         detail = "\n".join(
@@ -508,6 +532,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         ignored_msgs.append(f"当前时段无效未消耗：{'、'.join(no_effect_items)}")
     ignored_msg = "\n" + "\n".join(ignored_msgs) if ignored_msgs else ""
 
+    remainder = bath_remaining_text(result.get("end_time"), now_t)
     await handle_send(
         bot,
         event,
@@ -517,6 +542,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         f"炼体结算效果：{_format_medicine_bath_percent(effect)}%\n"
         f"持续时间：{MEDICINE_BATH_DURATION_MINUTES}分钟\n"
         f"有效至：{result.get('end_time', '')}"
+        f"{'（' + remainder + '）' if remainder else ''}"
         f"{ignored_msg}"
         f"{pre_msg}"
     )
@@ -625,7 +651,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         brk = "已达炼体最高境界"
 
     now_t = runtime_clock.now()
-    bath = _get_active_medicine_bath(data, now_t)
+    bath_info = bath_status(data, now_t)
     sect_fairyland_level = _get_tianti_sect_fairyland_level(user_info)
     sect_bonus = get_sect_fairyland_bonus(sect_fairyland_level)
     rate_info = calculate_tianti_gain_rate(
@@ -636,13 +662,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         spirit_vein_multiplier=get_spirit_vein_tianti_multiplier(),
     )
     efficiency_percent = int(rate_info["efficiency"] * 100)
-    if bath:
-        bath_msg = (
-            f"\n药浴：{bath['name']}，结算效果{_format_medicine_bath_percent(bath['effect'])}%"
-            f"（有效至{bath['end_time'].strftime('%H:%M')}）"
-        )
-    else:
-        bath_msg = "\n药浴：无"
+    bath_msg = render_bath_status(bath_info, percent=_format_medicine_bath_percent)
     sect_msg = f"\n宗门炼体堂：{sect_fairyland_level}级（炼体气血+{sect_bonus * 100:.0f}%）" if sect_bonus > 0 else "\n宗门炼体堂：无加成"
     spirit_vein_msg = _format_spirit_vein_msg(rate_info)
 
@@ -825,3 +845,15 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 太初境→鸿蒙境→永恒体
 """.strip()
     await handle_send(bot, event, msg)
+
+
+@tianti_bath_history.handle(parameterless=[Cooldown(cd_time=1.2)])
+async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    bot, _ = await assign_bot(bot=bot, event=event)
+    is_user, user_info, msg = check_user(event)
+    if not is_user:
+        await handle_send(bot, event, msg, md_type="我要修仙")
+        return
+
+    summary = tianti_bath_history_application.summary(str(user_info["user_id"]))
+    await handle_send(bot, event, format_tianti_bath_history(summary))
