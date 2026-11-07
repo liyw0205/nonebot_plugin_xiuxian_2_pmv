@@ -2,6 +2,59 @@
 
 最后核验：2026-10-17。本文是唯一活跃进度入口；旧重构文档仅作为历史记录，不再定义当前分支或禁止事项。
 
+## 已完成目标：炼体药浴生命周期闭环（时段 / 剩余 / 记录，五包阶段）
+
+新功能（非修复）。目标卡 `.codex-next-goal.md`（local-only，未提交）。承接 `docs/features/tianti.md`。
+
+**缺口证据**：`tianti_medicine_bath_operations` 由真实写路径落行并被重放查询，但
+**没有任何玩家面读取它**；`MEDICINE_BATH_TIME_CONFIG` 每个时段的 `range` 字段从未被读取；
+`炼体药浴` 无参数只打印当前时段前 10 味药材（无时段表、无剩余时间）；两条过期路径都会把
+`medicine_end_time/_effect/_name` 静默清空，`我的炼体` 的「药浴：无」因此无法区分
+「从未使用」与「上次药浴已过期」；「是否生效」判定在 presentation / `tianti_training` 仓储 /
+`tianti_settlement` 仓储 / `sect_fairyland` 领取共四处各写一份。
+
+交付内容：
+
+- P1 时段表可见：`features/tianti_training/presentation.py` 新增纯函数 `bath_schedule` /
+  `bath_slot_remaining` / `render_bath_schedule`（跨零点时段如 23→5 正确环绕）；`炼体药浴`
+  无参数时列出全部时段、起止小时、有效药材（各前 10），用 `◇` 标注当前时段并给本时段剩余时间。
+- P2 开启回执：新增 `bath_remaining_text`，成功回执在「有效至」后追加「剩余 N 分钟」，
+  既有消耗/效果/上限提示行逐字不变。
+- P3 三态状态：新增 `bath_status` / `render_bath_status`，`我的炼体` 区分 生效中（名称、
+  效果、剩余分钟）／已过期（「上次药浴已结束」+ 名称与到期时刻）／从未开启（沿用
+  「药浴：无」逐字）。`render_bath_remaining_suffix` 给 `bath_active` 拒绝文案追加剩余分钟。
+- P4 `我的药浴记录`（别名 `药浴记录`，priority 10）注册在 `xiuxian_tianti`；新增只读
+  `features/tianti_training/bath_history.py`：近 7 天（只用下界）本人药浴的次数、累计消耗
+  药材份数与种类数、最高结算效果，最近 10 次含消耗清单与有效至；缺库/缺表/缺列/坏 JSON
+  返回空态，不建表不补列；`user_id` 只取会话身份，handler 不解析 `args`。
+- P5 生效判定单一来源：`medicine_bath_active` 被 `tianti_training.apply_bath`（`bath_active`
+  拒绝）、`tianti_settlement` 结算与 `sect_fairyland` 领取三处共用，四处内联判定删除。
+- 帮助与文档：`炼体帮助` 补两条条目（药浴无参数说明 + `我的药浴记录`）；
+  `docs/features/tianti.md` 新增「炼体药浴生命周期（时段 / 剩余 / 记录）」段与 Manifest 清单两条。
+- 零 schema/命令名之外的变更：不新增表、列、索引、迁移版本、配置键或 Web 路由；不改药材消耗、
+  效果公式、抽取、结算、统计与任何资产写路径。
+- 测试：新 `tests/test_tianti_bath_lifecycle.py` `18`、`tests/test_tianti_bath_history.py` `16`
+  （时段边界与跨零点环绕、脏配置容错、三态状态、四处共享谓词参数化、真实回执表读写与
+  玩家隔离、只用下界含未来行、缺表/缺库/缺列/坏 JSON 不建表、`request_json.plan` 回退、
+  渲染与不变量、handler/manifest/帮助源合同）；`tests/test_help_discoverability.py` 的
+  `EXPECTED` 扩到第九条并新增 `炼体帮助` 块（`使用炼体神物` 是既有描述行，显式列入
+  `DESCRIPTIVE_ENTRIES`，不放宽反向防漂移）；`tests/test_tianti_frozen_entry_owner.py` 与
+  `scripts/check_full_refactor_progress.py` 的 tianti 静态契约改钉共享 helper
+  （`bath_status`/`medicine_bath_active`），并把 `tianti_level_help_handler` 切片终点收紧到
+  下一个 `@tianti_` 装饰器，行号耦合改为路径级证据。
+- 派生计数 658→659、344→345；`tests/test_phase2_legacy_path_gate.py` 按既有先例同步期望值，
+  `test_tianti_display_commands_share_existing_read_owners` 的证据断言改为按文件路径判定
+  （不钉绝对行号），**冻结成员文件与哈希保持不变**（`git archive HEAD` 隔离快照实测
+  `659/345`、`frozen_membership_valid: True`、`integrity_errors: []`、`failures: None`、47/47 通过）。
+- 三门禁真实 exit 0（progress `failures: None`；`exit_ready: False` 仍由用户删除的冻结文件
+  造成，11 条既有 blocker）；`compileall` 与 `git diff --check` 干净。
+- 交付与 CI：功能提交 `d9a02944` 的 develop run `42422642102` **failure**——仅两个静态契约
+  断言（`test_progress_report_tracks_tianti_frozen_display_owners`、`test_tianti_profile_read`）
+  仍钉改动前的 `_get_active_medicine_bath(data, now_t)` 与四处内联共享函数名；修正提交
+  `db4a441e` 的 develop run `42423838542` success。随后一次性 `--ff-only` 合入 main。
+  未部署、未读写真实游戏库、未发真实 QQ 消息；用户删除的四个文件保持未暂存，
+  `.codex-next-goal.md` 未提交。
+
 ## 已完成目标：排行榜本人名次 / 商店限购行 / 出关祝福回执 / BOSS 伤害上限说明（四包阶段）
 
 本轮沿上一阶段基线 `18115743` 连续交付四个包，全部先在 develop 实施、定向验证并推送，
