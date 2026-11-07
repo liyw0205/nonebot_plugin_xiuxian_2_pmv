@@ -48,6 +48,9 @@ class TrainingApplication(MigratedFeatureApplication):
     def leaderboard(self, field: str, *, limit: int = 50) -> list[dict[str, Any]]:
         return self.repository.leaderboard(field, limit=limit)
 
+    def rank_of(self, field: str, user_id: str):
+        return self.repository.rank_of(field, user_id)
+
     def resume_event(self, *, operation_id: str, user_id: str):
         return self.repository.resume_event(operation_id, user_id)
 

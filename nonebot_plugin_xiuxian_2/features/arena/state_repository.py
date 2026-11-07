@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from ...infrastructure.database import DatabaseUnitOfWork
+from ..base.ranking_position import PersonalRank
 from .schema import ArenaSchemaMissing, table_ready
 
 
@@ -209,6 +210,44 @@ class ArenaStateRepository:
                 (max(0, int(limit)),),
             )
         return tuple((str(row["user_id"]), int(row["score"])) for row in rows)
+
+    def rank_of(self, user_id: str) -> PersonalRank:
+        """本人竞技场名次：并列名次 + 有分人数 + 本人积分（只读、缺库/缺表降级）。"""
+        user_id = str(user_id).strip()
+        if not user_id or not Path(self.player_database).is_file():
+            return PersonalRank()
+        try:
+            with DatabaseUnitOfWork(self.player_database, read_only=True) as uow:
+                if not table_ready(uow, "arena", frozenset({"user_id", "score"})):
+                    return PersonalRank()
+                value = int(
+                    (uow.query_one(
+                        "SELECT CAST(COALESCE(score,0) AS INTEGER) AS value "
+                        "FROM arena WHERE user_id=? ORDER BY rowid ASC LIMIT 1",
+                        (user_id,),
+                    ) or {"value": 0})["value"]
+                    or 0
+                )
+                total = int(
+                    (uow.query_one(
+                        "SELECT COUNT(*) AS n FROM arena "
+                        "WHERE CAST(COALESCE(score,0) AS INTEGER)>0"
+                    ) or {"n": 0})["n"]
+                    or 0
+                )
+                if value <= 0:
+                    return PersonalRank(0, total, 0)
+                better = int(
+                    (uow.query_one(
+                        "SELECT COUNT(*) AS n FROM arena "
+                        "WHERE CAST(COALESCE(score,0) AS INTEGER)>?",
+                        (value,),
+                    ) or {"n": 0})["n"]
+                    or 0
+                )
+        except (OSError, ValueError, TypeError, KeyError):
+            return PersonalRank()
+        return PersonalRank(better + 1, total, value)
 
 
 __all__ = ["ARENA_FIELDS", "ArenaStateRepository"]

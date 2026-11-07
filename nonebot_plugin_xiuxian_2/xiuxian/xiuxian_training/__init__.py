@@ -26,6 +26,7 @@ from ...features.base.keyword_page import (
     page_command,
     parse_page_arg,
 )
+from ...features.base.ranking_position import personal_rank_line
 from ...features.player_state.application import PlayerStateApplication
 from ...infrastructure.clock import SystemClock
 from ...infrastructure.ids import UUIDGenerator
@@ -430,7 +431,9 @@ async def training_rank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         await training_rank.finish()
 
     try:
-        rank_msg = _training_rank_message("completed", "历练排行榜")
+        rank_msg = _training_rank_message(
+            "completed", "历练排行榜", viewer_id=str(user_info["user_id"])
+        )
     except Exception:
         logger.exception("历练排行榜读取失败")
         rank_msg = "暂时无法查询历练排行榜，请稍后再试。"
@@ -447,7 +450,9 @@ async def training_integral_rank_(bot: Bot, event: GroupMessageEvent | PrivateMe
         await training_integral_rank.finish()
 
     try:
-        rank_msg = _training_rank_message("points", "历练积分排行榜")
+        rank_msg = _training_rank_message(
+            "points", "历练积分排行榜", viewer_id=str(user_info["user_id"])
+        )
     except Exception:
         logger.exception("历练积分排行榜读取失败")
         rank_msg = "暂时无法查询历练积分排行榜，请稍后再试。"
@@ -455,12 +460,20 @@ async def training_integral_rank_(bot: Bot, event: GroupMessageEvent | PrivateMe
     await training_integral_rank.finish()
 
 
-def _training_rank_message(field: str, title: str) -> str:
+def _training_rank_message(field: str, title: str, *, viewer_id: str = "") -> str:
     rows = training_application.leaderboard(field, limit=50)
-    return f"【{title}】\n" + "".join(
+    message = f"【{title}】\n" + "".join(
         f"第{index}位 | {row['user_name']} | {number_to(row['value'])}\n"
         for index, row in enumerate(rows, start=1)
     )
+    if viewer_id:
+        message += personal_rank_line(
+            training_application.rank_of(field, viewer_id),
+            label="历练完成次数" if field == "completed" else "历练积分",
+            unit="次" if field == "completed" else "点",
+            number=number_to,
+        )
+    return message
 
 
 def make_choice(user_id, operation_id):

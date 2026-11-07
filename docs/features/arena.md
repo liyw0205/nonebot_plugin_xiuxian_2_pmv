@@ -91,6 +91,12 @@ Web API 保留 `/api/v1/arena/purchase`、`/challenge-purchase`、`/settle`，�
 - 结算时区沿用 `SystemClock` 的 UTC 业务日，展示 `season_key` 原值；不改变每日重置
   时刻、段位/排名/荣誉公式或任何奖励写入。
 
+## 排行榜本人名次
+`竞技场排行榜` 的前 10 名徽章列表不变，末尾追加本人名次行，取数走
+`ArenaLimit.rank_of` -> `ArenaStateApplication.rank_of`（只读 UoW，缺库缺表返回空
+`PersonalRank`，不建库、不补列）。名次与空态口径见 `docs/features/base.md` 的
+「排行榜本人名次（共享合同）」。
+
 ## 个人挑战战绩
 
 `我的竞技场战绩`（别名 `竞技场战绩`、`竞技场记录`）补齐玩家侧每一场挑战的可见性：

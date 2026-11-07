@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from ...infrastructure.database import DatabaseUnitOfWork
+from ..base.ranking_position import PersonalRank
 
 
 class TrainingLeaderboardSqlRepository:
@@ -70,6 +71,57 @@ class TrainingLeaderboardSqlRepository:
                 )
             self._cache[field] = (now + self.cache_ttl, rows)
             return [dict(row) for row in rows]
+
+    def rank_of(self, field: str, user_id: str) -> PersonalRank:
+        """本人历练名次：并列名次 + 有效人数 + 本人数值（只读，缺库/缺表降级）。"""
+        field = str(field).casefold()
+        if field not in self._FIELDS:
+            raise ValueError("unsupported training leaderboard field")
+        user_id = str(user_id).strip()
+        if not user_id or not self.game_database.is_file() or not self.player_database.is_file():
+            return PersonalRank()
+        try:
+            with DatabaseUnitOfWork(self.game_database, read_only=True) as uow:
+                uow.attach_database(self.player_database, "player_data")
+                training_columns = {
+                    str(row["name"]).casefold()
+                    for row in uow.query_all('PRAGMA player_data.table_info("training")')
+                }
+                if not {"user_id", field}.issubset(training_columns):
+                    return PersonalRank()
+                deduped = (
+                    'SELECT t.user_id AS user_id,'
+                    f'CAST(COALESCE(t."{field}",0) AS INTEGER) AS value '
+                    "FROM player_data.training AS t "
+                    "WHERE t.user_id IS NOT NULL "
+                    "AND TRIM(CAST(t.user_id AS TEXT))<>'' "
+                    "AND t.rowid=(SELECT MIN(c.rowid) FROM player_data.training AS c "
+                    "WHERE c.user_id=t.user_id)"
+                )
+                row = uow.query_one(
+                    f'SELECT CAST(COALESCE("{field}",0) AS INTEGER) AS value '
+                    "FROM player_data.training WHERE user_id=? ORDER BY rowid ASC LIMIT 1",
+                    (user_id,),
+                )
+                value = int(row["value"] or 0) if row is not None else 0
+                total = int(
+                    (uow.query_one(
+                        f"SELECT COUNT(*) AS n FROM ({deduped}) WHERE value>0"
+                    ) or {"n": 0})["n"]
+                    or 0
+                )
+                if value <= 0:
+                    return PersonalRank(0, total, 0)
+                better = int(
+                    (uow.query_one(
+                        f"SELECT COUNT(*) AS n FROM ({deduped}) WHERE value>?",
+                        (value,),
+                    ) or {"n": 0})["n"]
+                    or 0
+                )
+        except (OSError, ValueError, TypeError, KeyError):
+            return PersonalRank()
+        return PersonalRank(better + 1, total, value)
 
 
 __all__ = ["TrainingLeaderboardSqlRepository"]

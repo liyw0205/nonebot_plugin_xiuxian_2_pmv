@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from ...infrastructure.database import DatabaseUnitOfWork
+from ..base.ranking_position import PersonalRank
 
 
 @dataclass(frozen=True)
@@ -75,6 +76,46 @@ class BossIntegralSqlRepository:
                 (limit,),
             )
         return [(str(row["user_id"]), int(row["integral"] or 0)) for row in rows]
+
+    def integral_rank(self, user_id: str) -> PersonalRank:
+        """本人世界积分名次：并列名次 + 有分人数 + 本人积分。"""
+        user_id = str(user_id).strip()
+        if not user_id or not self.database.is_file():
+            return PersonalRank()
+        deduped = (
+            "SELECT entry.user_id AS user_id,"
+            "CAST(COALESCE(entry.integral,0) AS INTEGER) AS value "
+            "FROM boss_limit AS entry "
+            "WHERE entry.user_id IS NOT NULL "
+            "AND TRIM(CAST(entry.user_id AS TEXT))<>'' "
+            "AND entry.rowid=(SELECT MIN(candidate.rowid) FROM boss_limit AS candidate "
+            "WHERE candidate.user_id=entry.user_id)"
+        )
+        with DatabaseUnitOfWork(self.database, read_only=True) as uow:
+            if not self._ready(uow):
+                return PersonalRank()
+            row = uow.query_one(
+                "SELECT CAST(COALESCE(integral,0) AS INTEGER) AS value "
+                "FROM boss_limit WHERE user_id=? ORDER BY rowid ASC LIMIT 1",
+                (user_id,),
+            )
+            value = int(row["value"] or 0) if row is not None else 0
+            total = int(
+                (uow.query_one(
+                    f"SELECT COUNT(*) AS n FROM ({deduped}) WHERE value>0"
+                ) or {"n": 0})["n"]
+                or 0
+            )
+            if value <= 0:
+                return PersonalRank(0, total, 0)
+            better = int(
+                (uow.query_one(
+                    f"SELECT COUNT(*) AS n FROM ({deduped}) WHERE value>?",
+                    (value,),
+                ) or {"n": 0})["n"]
+                or 0
+            )
+        return PersonalRank(better + 1, total, value)
 
     def get_integral(self, user_id: str) -> BossIntegralSnapshot:
         user_id = str(user_id)

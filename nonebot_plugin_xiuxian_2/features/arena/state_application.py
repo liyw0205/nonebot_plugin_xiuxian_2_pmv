@@ -5,6 +5,7 @@ from threading import RLock
 from typing import Any
 
 from ...infrastructure.clock import SystemClock
+from ..base.ranking_position import PersonalRank
 from .state_repository import ArenaStateRepository
 
 
@@ -30,6 +31,10 @@ class ArenaStateApplication:
     def ranking(self, limit: int) -> tuple[tuple[str, int], ...]:
         with self.lock:
             return self.repository.ranking(limit)
+
+    def rank_of(self, user_id: str) -> PersonalRank:
+        with self.lock:
+            return self.repository.rank_of(user_id)
 
 
 __all__ = ["ArenaStateApplication"]

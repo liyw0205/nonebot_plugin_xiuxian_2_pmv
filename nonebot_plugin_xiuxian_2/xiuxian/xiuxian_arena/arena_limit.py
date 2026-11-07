@@ -110,6 +110,10 @@ class ArenaLimit:
         state_application = self._state_application()
         return state_application.ranking(limit)
 
+    def rank_of(self, user_id):
+        state_application = self._state_application()
+        return state_application.rank_of(user_id)
+
     @staticmethod
     def get_rank_order():
         return ["青铜", "白银", "黄金", "铂金", "钻石", "王者"]

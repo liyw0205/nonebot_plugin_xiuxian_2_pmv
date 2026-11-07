@@ -51,6 +51,12 @@ Legacy event settlement, shop exchange and administrator reset remain available 
 
 The default event path now persists a resolved plan before settlement and uses a read-only game-database context repository; event resolution no longer calls legacy player/inventory managers. Leaderboards now use SQL top-50 ordering and a short in-process cache instead of a full-roster Python sort plus per-user lookups. The legacy command and help transport adapters remain during compatibility; the static help handler is intentionally retained as an allowed compatibility path. Cross-file power-loss recovery and production latency measurements remain outside this slice.
 
+## 排行榜本人名次
+`历练排行榜`（`completed`）与 `历练积分排行榜`（`points`）的前 50 名输出不变，
+列表后追加本人名次行，取数走 `TrainingApplication.rank_of`（同一仓储、只读 UoW，
+缺库缺表或缺字段返回空 `PersonalRank`，不建库、不补列）。名次与空态口径见
+`docs/features/base.md` 的「排行榜本人名次（共享合同）」。
+
 ## 列表检索
 `历练商店 [关键词|页码]`：商店列表按物品名/ID/描述筛选，翻页提示与按钮携带关键词
 （`历练商店 灵草 2`），解析与续查走 `docs/features/base.md` 的「列表检索与翻页续查

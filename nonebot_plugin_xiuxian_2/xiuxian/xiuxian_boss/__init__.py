@@ -56,6 +56,7 @@ from .boss_limit import (
 )
 from ...compatibility.boss import WorldBossBattleSettlementService
 from ...features.boss.application import BossApplication
+from ...features.base.ranking_position import personal_rank_line
 from ...features.boss.exp_reward import boss_exp_reward
 from ...features.boss.purchase_command_application import BossPurchaseCommandApplication
 from ...features.boss.purchase_command_replies import render_boss_purchase_reply
@@ -1530,6 +1531,7 @@ async def boss_integral_rank_(bot: Bot, event: GroupMessageEvent | PrivateMessag
         await boss_integral_rank.finish()
 
     ranked_integral = boss_integral_application.top_integrals(50)
+    viewer_id = str(user_info["user_id"])
     
     # 生成排行榜
     rank_msg = "【世界BOSS积分排行榜】\n"
@@ -1537,6 +1539,12 @@ async def boss_integral_rank_(bot: Bot, event: GroupMessageEvent | PrivateMessag
         user_info = _sql_message().get_user_info_with_id(user_id)
         user_name = user_info.get("user_name") if user_info else None
         rank_msg += f"第{i}位 | {user_name or user_id} | {number_to(integral)}\n"
+    rank_msg += personal_rank_line(
+        boss_integral_application.integral_rank(viewer_id),
+        label="世界积分",
+        unit="点",
+        number=number_to,
+    )
     
     await handle_send(bot, event, rank_msg)
     await boss_integral_rank.finish()

@@ -44,6 +44,24 @@ manifest 新增命令而索引漏扫时直接失败。不带参数的 `修仙帮
 `查看修仙界物品`、`世界BOSS商店`、`通天塔商店`、`历练商店`、`传承背包`，
 由 `tests/test_list_search_remaining_views.py` 钉住真实渲染、翻页续查与帮助文本。
 本切片零 schema/命令变更：不新增表、列、迁移、配置键、命令或别名。
+## 排行榜本人名次（共享合同）
+`features/base/ranking_position.py` 是六个排行榜视图唯一的「本人名次」口径：
+
+- `PersonalRank(rank, total, value)`：`rank` 为**并列名次**（`1 + 严格高于本人的人数`），
+  同分同名次；`total` 为有有效记录（数值 > 0）的去重人数；`rank <= 0` 表示本人无有效记录。
+- `personal_rank_line(entry, *, label, unit, number)`：渲染
+  `你的名次：第N名 / 共M人（{label} {value}{unit}）`；无记录（含 `entry=None`）渲染
+  `你还没有{label}记录。`，不伪造名次。`total` 小于 `rank` 时上取到 `rank`，避免自相矛盾。
+- 取数在各自 feature 仓储（`rank_of` / `integral_rank`），使用只读 UoW；
+  缺库、缺表、缺列时返回空 `PersonalRank`（不抛错、不建表、不补列），
+  命令层只拼接渲染行，不自行计算名次。
+
+覆盖六个视图：`世界BOSS积分排行榜`（`BossIntegralApplication.integral_rank`）、
+`通天塔排行榜`/`通天塔积分排行榜`（`TowerStateApplication.rank_of`）、
+`历练排行榜`/`历练积分排行榜`（`TrainingApplication.rank_of`）、
+`竞技场排行榜`（`ArenaStateApplication.rank_of`）。前 N 名列表输出不变，本人名次行追加在列表之后。
+本切片零 schema/命令变更：不新增表、列、迁移、配置键、命令或别名；
+由 `tests/test_ranking_position.py` 钉住并列名次、榜外名次、空态、缺库缺表降级与六个视图接线。
 ## Web API
 `POST /api/v1/base/{breakthrough,tribulation,rename,stone_contest,stone_robbery,sign}`，权限 `user`，要求幂等键。
 `POST /api/v1/base/xiangyuan/{create,claim}` 与 `GET /api/v1/base/xiangyuan/group`，权限 `user`；写入请求要求幂等键和 CSRF。

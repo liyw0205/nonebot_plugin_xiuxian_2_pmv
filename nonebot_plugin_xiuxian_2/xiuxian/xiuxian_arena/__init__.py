@@ -28,6 +28,7 @@ from ...compatibility.legacy_arena_transactions import (
     ArenaChallengeTicketResult,
     ArenaChallengeSettlementResult,
 )
+from ...features.base.ranking_position import personal_rank_line
 from ...features.arena.application import ArenaApplication
 from ...features.arena.opponent_application import ArenaOpponentApplication
 from ...features.arena.opponent_repository import ArenaOpponentRepository
@@ -454,6 +455,7 @@ async def arena_ranking_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     
     ranking = arena_limit.get_arena_ranking(limit=10)
+    viewer_id = str(event.get_user_id())
     
     msg = "🏆 【竞技场排行榜】🏆\n"
     msg += "═" * 12 + "\n"
@@ -465,6 +467,13 @@ async def arena_ranking_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
             icon = rank_icon[i-1] if i <= 10 else f"{i}."
             msg += f"{icon} {user_info['user_name']} - {score}分 ({arena_limit.calculate_rank(score)})\n"
     
+    msg += personal_rank_line(
+        arena_limit.rank_of(viewer_id),
+        label="竞技场积分",
+        unit="分",
+        number=number_to,
+    )
+
     await handle_send(bot, event, msg)
     await arena_ranking.finish()
 

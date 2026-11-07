@@ -100,6 +100,9 @@ class TrainingRepository(ServicePort):
     def leaderboard(self, field: str, *, limit: int = 50) -> list[dict[str, Any]]:
         return self._leaderboard().top(field, limit=limit)
 
+    def rank_of(self, field: str, user_id: str):
+        return self._leaderboard().rank_of(field, user_id)
+
     def resume_event(self, operation_id: str, user_id: str):
         if self.player_database is None:
             return None

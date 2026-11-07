@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from ...infrastructure.database import DatabaseUnitOfWork
+from ..base.ranking_position import PersonalRank
 
 
 TOWER_FIELDS = ("current_floor", "max_floor", "score", "weekly_purchases")
@@ -235,6 +236,44 @@ class TowerStateRepository:
                 (limit,),
             )
         return [(str(row["user_id"]), int(row["value"] or 0)) for row in rows]
+
+    def rank_of(self, user_id: str, field: str = "current_floor") -> PersonalRank:
+        """本人通天塔名次：并列名次 + 有记录人数 + 本人数值。"""
+        if field not in {"current_floor", "score"}:
+            raise ValueError("unsupported tower ranking field")
+        user_id = str(user_id).strip()
+        if not user_id or not Path(self.player_database).is_file():
+            return PersonalRank()
+        with DatabaseUnitOfWork(self.player_database, read_only=True) as uow:
+            columns = {
+                str(row["name"]) for row in uow.query_all("PRAGMA table_info(tower)")
+            }
+            if not {"user_id", field} <= columns:
+                return PersonalRank()
+            row = uow.query_one(
+                f'SELECT CAST(COALESCE("{field}",0) AS INTEGER) AS value '
+                "FROM tower WHERE user_id=? ORDER BY rowid ASC LIMIT 1",
+                (user_id,),
+            )
+            value = int(row["value"] or 0) if row is not None else 0
+            total = int(
+                (uow.query_one(
+                    f'SELECT COUNT(*) AS n FROM tower '
+                    f'WHERE CAST(COALESCE("{field}",0) AS INTEGER)>0'
+                ) or {"n": 0})["n"]
+                or 0
+            )
+            if value <= 0:
+                return PersonalRank(0, total, 0)
+            better = int(
+                (uow.query_one(
+                    f'SELECT COUNT(*) AS n FROM tower '
+                    f'WHERE CAST(COALESCE("{field}",0) AS INTEGER)>?',
+                    (value,),
+                ) or {"n": 0})["n"]
+                or 0
+            )
+        return PersonalRank(better + 1, total, value)
 
 
 __all__ = ["TOWER_FIELDS", "TowerFloorResetResult", "TowerStateRepository"]
