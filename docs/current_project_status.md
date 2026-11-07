@@ -2,6 +2,56 @@
 
 最后核验：2026-10-17。本文是唯一活跃进度入口；旧重构文档仅作为历史记录，不再定义当前分支或禁止事项。
 
+## 已完成目标：排行榜本人名次 / 商店限购行 / 出关祝福回执 / BOSS 伤害上限说明（四包阶段）
+
+本轮沿上一阶段基线 `18115743` 连续交付四个包，全部先在 develop 实施、定向验证并推送，
+再一次性普通快进合入 main。未部署、未读写真实游戏库、未发真实 QQ 消息、未打 tag。
+
+- P1 排行榜本人名次（`8c9675b2`，develop CI run `42388880659` success）：新增共享
+  `features/base/ranking_position.py`（`PersonalRank` + `personal_rank_line`）；
+  四个 feature 仓储补齐 `rank_of`/`integral_rank`（并列名次 = 1 + 严格高于本人的人数、
+  有有效记录去重人数、本人数值；缺库/缺表返回空 `PersonalRank`，不建表不补列）；
+  六个视图（世界BOSS积分、通天塔层数与积分、历练完成与积分、竞技场积分）在前 N 名后
+  追加本人名次行，零/无记录输出「你还没有…记录。」。前 N 名输出逐字不变。
+  聚焦测试 `tests/test_ranking_position.py` 24 项，受影响套件 270 项通过。
+- P2 商店每周限购行统一（`c439222c`，develop CI run `42394319564` success）：新增共享
+  `features/base/shop_limit.py`（`shop_limit_line`/`shop_limit_parts`）：剩余/总量、
+  售罄 `已售罄（N/N个）`、`limit<=0` → `不限购`；五个商店（宗门、世界BOSS、通天塔、
+  历练、竞技场）全部改调该 helper。宗门商店补齐已购数量：新增只读
+  `SectApplication.weekly_shop_progress`（同一张 `sect_shop_weekly_purchases` 与
+  同一 `%G-W%V` 周键，缺库/缺表/跨周返回空，不建表不补列），旧库回退迁移前个人 JSON
+  记录（`get_sect_weekly_purchases_snapshot`，与购买路径 `legacy_purchased` 同序）。
+  不改购买校验、周限购判定、扣费、周键写入与任何回执。
+  聚焦测试 `tests/test_shop_limit_line.py` 16 项，受影响套件 349 项通过。
+- P3 虚神界出关祝福回执（`98e173ee`，develop CI run `42399404175` success）：新增纯渲染
+  `features/impart_pk/closing_status.py::closing_settlement_lines`——有消耗渲染
+  `本次消耗虚神界祝福 N 分钟，剩余 M 分钟`（applied 追加本次闭关分钟数），无消耗渲染
+  `本次未消耗虚神界祝福，剩余 M 分钟`；applied 与 duplicate（重放）两条回执路径都追加
+  该段，数值取自 `ImpartClosingSettlementResult` 同一字段。零 schema/数学变更：扣减、
+  修为、概率、statistics 投影与 `result_json`（仍写 [exp_gain, blessing_cost,
+  exp_day_remaining]）均未改，旧行重放照常渲染。
+  聚焦测试 `tests/test_impart_closing_receipt.py` 14 项，受影响套件 324 项通过。
+- P4 世界BOSS 伤害上限说明（`8e1106f0`，develop CI run `42399561025` success）：在
+  `features/boss/schemas.py` 新增纯函数 `boss_damage_note(total, actual, max_single,
+  hp_left)`——未被截断（`actual >= total`）返回空串；单次上限最紧（与剩余血量同分时
+  优先）命名「单次讨伐最多削减世界BOSS最大血量的20%（本次上限 N），超出的伤害不结算」；
+  否则命名「世界BOSS剩余血量只剩 N，超出的伤害无处结算」；两个上限缺失或值无法解析
+  返回空串。讨伐回执三个分支（击杀、战胜化身、战败逃遁）在「实际削减」行后插入该说明，
+  空说明时输出逐字不变。只读渲染：不改 `actual_damage` 公式、`max_single_damage`、
+  `damage_ratio`、积分/灵石/修为奖励与结算 CAS。
+  聚焦测试 `tests/test_boss_damage_note.py` 13 项，受影响套件 324 项通过。
+- 文档：`docs/features/base.md` 新增「排行榜本人名次」「商店每周限购行」两段共享合同；
+  `boss.md`、`tower.md`、`training.md`、`arena.md`、`sect.md`、`impart_pk.md` 各自补
+  对应段落。零 schema/命令/迁移/配置键变更，派生计数保持 `645 / 331` 不变。
+- 门禁与验证：architecture、inventory `--check`、progress `--json`（`failures: None`）
+  在开发中与提交后均真实 exit 0（`exit_ready: False` 仍由用户删除的冻结文件导致，
+  blocker 属既有）；`compileall` 与 `git diff --check` 干净；冻结 Phase-2 门禁在
+  `git archive HEAD` 隔离快照 + 本轮改动中 47/47 通过。用户删除的四个文件保持未暂存，
+  `.codex-next-goal.md` 与 `docs/goals/**` 未提交。
+- 交付与 CI：四个功能提交（`8c9675b2`/`c439222c`/`98e173ee`/`8e1106f0`）的 develop run
+  依次 `42388880659`/`42394319564`/`42399404175`/`42399561025` 全部 success；整阶段完成
+  后一次性快进合入 main，main CI 与本节状态记录提交随后完成。
+
 ## CI 稳定化（2026-10-12）
 
 - develop/main 已同步至 `0c55b1fa`：quality job 通过 `fetch-depth: 0` + `fetch-tags: true` 取得真实 tag，`test_repository_has_no_release_after_the_only_tag` 在 run 1497/1498 语境下不再复现。
