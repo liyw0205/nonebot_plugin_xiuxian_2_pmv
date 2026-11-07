@@ -345,13 +345,22 @@ def get_config():
 
 def get_sect_weekly_purchases(user_id, item_id):
     """获取用户本周已购买宗门商店某商品的数量"""
+    return get_sect_weekly_purchases_snapshot(user_id).get(str(item_id), 0)
+
+
+def get_sect_weekly_purchases_snapshot(user_id):
+    """获取用户本周全部商品的已购数量（迁移前的个人 JSON 记录，只读一次）。
+
+    与 `purchase` 的 `legacy_purchased` 回退同源；跨周或记录缺失时返回空 dict，
+    并在缺文件/跨周时按既有行为初始化记录文件。
+    """
     user_id = str(user_id)
     file_path = PLAYERSDATA / user_id / "sect_purchases.json"
 
     if not file_path.exists():
         # 初始化文件并设置重置日期
         init_sect_purchase_file(user_id)
-        return 0
+        return {}
 
     data = load_json_file(file_path, {}, dict)
     try:
@@ -364,15 +373,19 @@ def get_sect_weekly_purchases(user_id, item_id):
 
             if current_week != last_week or current_year != last_year:
                 init_sect_purchase_file(user_id)
-                return 0
+                return {}
         else:
             init_sect_purchase_file(user_id)
-            return 0
+            return {}
 
-        return data.get(str(item_id), 0)
+        return {
+            str(key): int(value)
+            for key, value in data.items()
+            if str(key) != "_last_reset"
+        }
     except (TypeError, ValueError):
         init_sect_purchase_file(user_id)
-        return 0
+        return {}
 
 
 def init_sect_purchase_file(user_id):

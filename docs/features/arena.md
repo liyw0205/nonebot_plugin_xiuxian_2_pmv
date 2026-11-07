@@ -97,6 +97,11 @@ Web API 保留 `/api/v1/arena/purchase`、`/challenge-purchase`、`/settle`，�
 `PersonalRank`，不建库、不补列）。名次与空态口径见 `docs/features/base.md` 的
 「排行榜本人名次（共享合同）」。
 
+## 商店每周限购行
+`竞技场商店` 的商品行改走共享 `shop_limit_line`（口径见 `docs/features/base.md` 的
+「商店每周限购行（共享合同）」）；已购数量仍取 `arena_limit.get_weekly_purchases`。
+只读渲染，不改兑换与周限购判定。
+
 ## 个人挑战战绩
 
 `我的竞技场战绩`（别名 `竞技场战绩`、`竞技场记录`）补齐玩家侧每一场挑战的可见性：

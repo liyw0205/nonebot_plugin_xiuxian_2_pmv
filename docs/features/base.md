@@ -62,6 +62,22 @@ manifest 新增命令而索引漏扫时直接失败。不带参数的 `修仙帮
 `竞技场排行榜`（`ArenaStateApplication.rank_of`）。前 N 名列表输出不变，本人名次行追加在列表之后。
 本切片零 schema/命令变更：不新增表、列、迁移、配置键、命令或别名；
 由 `tests/test_ranking_position.py` 钉住并列名次、榜外名次、空态、缺库缺表降级与六个视图接线。
+## 商店每周限购行（共享合同）
+`features/base/shop_limit.py` 是四个商店视图（宗门、世界BOSS、通天塔、历练、竞技场）
+唯一的「每周限购」渲染口径：
+
+- `shop_limit_line(limit, purchased)`：`limit > 0` → `每周限购：{剩余}/{总量}个`
+  （`剩余 = max(limit - purchased, 0)`）；`剩余 == 0` → `每周限购：已售罄（{总量}/{总量}个）`；
+  `limit <= 0`（配置未设置或显式不限购）→ `每周限购：不限购`。
+- 已购数量一律来自各店自己的读路径（宗门为 `SectApplication.weekly_shop_progress`，
+  其余在命令层已有的 `already_purchased`），渲染层不再自算差值或手写字面量。
+- 宗门商店此前只写总量 `每周限购：{limit}个`，与其余三家形状不一致；现在补齐
+  `已购/剩余`，并对旧库（`sect_shop_weekly_purchases` 未迁移）回退到迁移前的
+  个人 JSON 记录（`get_sect_weekly_purchases_snapshot`），与购买路径的
+  `legacy_purchased` 同序。
+- 只读渲染改动：不改购买校验、周限购判定、扣费、周键或任何回执。
+  由 `tests/test_shop_limit_line.py` 钉住渲染形态与五个视图的接线。
+
 ## Web API
 `POST /api/v1/base/{breakthrough,tribulation,rename,stone_contest,stone_robbery,sign}`，权限 `user`，要求幂等键。
 `POST /api/v1/base/xiangyuan/{create,claim}` 与 `GET /api/v1/base/xiangyuan/group`，权限 `user`；写入请求要求幂等键和 CSRF。

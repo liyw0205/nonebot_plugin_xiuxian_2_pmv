@@ -36,6 +36,7 @@ from ...features.base.keyword_page import (
     parse_page_arg,
 )
 from ...features.base.ranking_position import personal_rank_line
+from ...features.base.shop_limit import shop_limit_line
 from ...features.player_state.application import PlayerStateApplication
 from ...infrastructure.ids import UUIDGenerator
 from ...infrastructure.clock import SystemClock
@@ -410,7 +411,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
                 f"名称：{item_info['name']}\n"
                 f"描述：{item_info.get('desc', '暂无描述')}\n"
                 f"价格：{item_data['cost']}积分\n"
-                f"每周限购：{item_data['weekly_limit'] - already_purchased}/{item_data['weekly_limit']}个"
+                f"{shop_limit_line(item_data['weekly_limit'], already_purchased)}"
             )
     
     next_cmd = page_command("通天塔商店", keyword, min(page + 1, total_pages))

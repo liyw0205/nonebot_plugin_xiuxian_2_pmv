@@ -21,6 +21,13 @@
 
 `sect.011` 在 game DB 创建/补齐 `sect_weekly_goal` 和 `sect_weekly_reward_operations`；`sect.012` 仅在 player DB 创建/补齐 `boss_limit.integral`，保留已有周常进度与玩家记录；`sect.013` 在 game DB 预建手动解散回执并保留已有操作记录；`sect.016` 预建宗门任务状态表；`sect.017` 在 game DB 预建接取/刷新幂等回执；`sect.018` 在 game DB 预建任务结算回执。周常、手动解散及任务状态/接取/刷新/结算请求只检查已登记 schema，不建表或补列。任务结算时间由注入的 Clock 提供。周常奖励由 `SectWeeklyRewardSqlRepository` 使用 attached game/player transaction 校验宗门归属、目标进度、重复领取与背包容量，再更新玩家、宗门、背包、BOSS 积分及领取标记。晚期 SQL 异常会回滚两个库；SQLite WAL 下 attached 多库事务不承诺进程/主机崩溃时的跨库原子性。手动解散由 `SectManualDisbandSqlRepository` 在 game-db immediate UoW 内重验宗主身份、解绑全部成员、删除宗门并写幂等回执；旧 `SectDisbandService` 仅保留兼容对照。关闭 `XIUXIAN_SECT_ENABLED` 即回退兼容入口。
 
+## 商店每周限购行
+`宗门商店` 的商品行渲染 `每周限购：{剩余}/{总量}个`（售罄写 `已售罄（N/N个）`，
+不限购写 `不限购`），已购数量读取本周 `sect_shop_weekly_purchases`
+（`SectApplication.weekly_shop_progress`），旧库回退迁移前的个人 JSON 记录；
+口径与共享合同见 `docs/features/base.md` 的「商店每周限购行（共享合同）」。
+只读渲染，不改兑换校验与扣费。
+
 ## 命令与别名
 
 保留 `加入宗门`、`宗门商店兑换`、`学习宗门功法`、`领取宗门炼体堂`、`领取宗门周常` 及历史别名。

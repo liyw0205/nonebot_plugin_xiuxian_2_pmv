@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Any, Mapping, Protocol
 
 from ...infrastructure.database import DatabaseUnitOfWork
 from ...infrastructure.clock import SystemClock
@@ -9,6 +9,11 @@ from ...infrastructure.clock import SystemClock
 
 class _StateChanged(Exception):
     """Abort a compare-and-set mutation without turning it into a hard error."""
+
+
+def weekly_shop_key(moment) -> str:
+    """本周限购的周期键：与 `purchase` 写入 `sect_shop_weekly_purchases.week_key` 同源。"""
+    return str(moment.strftime("%G-W%V"))
 
 
 class SectRepository(Protocol):
@@ -19,6 +24,7 @@ class SectRepository(Protocol):
     def rename(self, *args: Any, **kwargs: Any) -> Any: ...
     def join(self, *args: Any, **kwargs: Any) -> Any: ...
     def purchase(self, *args: Any, **kwargs: Any) -> Any: ...
+    def weekly_shop_progress(self, *args: Any, **kwargs: Any) -> Any: ...
     def learn_main(self, *args: Any, **kwargs: Any) -> Any: ...
     def learn_secondary(self, *args: Any, **kwargs: Any) -> Any: ...
     def claim_elixir(self, *args: Any, **kwargs: Any) -> Any: ...
@@ -125,7 +131,7 @@ class SectRenameSqlRepository:
                 return {"status":"state_changed","user_id":user_id,"sect_id":sect_id,"buff_id":buff_id}
             return {"status":"learned","user_id":user_id,"sect_id":sect_id,"buff_id":buff_id,"materials_cost":materials_cost,"materials_left":left}
     def purchase(self, operation_id, user_id, sect_id, item_id, item_name, item_type, quantity, unit_cost, weekly_limit, legacy_purchased, max_goods_num, week_key=None):
-        operation_id,user_id=str(operation_id).strip(),str(user_id);sect_id,item_id,quantity,unit_cost,weekly_limit,legacy_purchased,max_goods_num=int(sect_id),int(item_id),int(quantity),int(unit_cost),int(weekly_limit),int(legacy_purchased),int(max_goods_num);week_key=str(week_key or self.clock.now().strftime('%G-W%V'));payload=f'{user_id}|{sect_id}|{item_id}|{item_name}|{item_type}|{quantity}|{unit_cost}|{weekly_limit}|{week_key}'
+        operation_id,user_id=str(operation_id).strip(),str(user_id);sect_id,item_id,quantity,unit_cost,weekly_limit,legacy_purchased,max_goods_num=int(sect_id),int(item_id),int(quantity),int(unit_cost),int(weekly_limit),int(legacy_purchased),int(max_goods_num);week_key=str(week_key or weekly_shop_key(self.clock.now()));payload=f'{user_id}|{sect_id}|{item_id}|{item_name}|{item_type}|{quantity}|{unit_cost}|{weekly_limit}|{week_key}'
         with DatabaseUnitOfWork(self.database, immediate=True) as uow:
             old=uow.query_one("SELECT payload,quantity,cost,contribution,materials,purchased FROM sect_shop_purchase_operations WHERE operation_id=?",(operation_id,))
             if old:
@@ -272,5 +278,47 @@ class SectRenameSqlRepository:
             uow.execute("INSERT INTO sect_rename_operations(operation_id,payload,previous_name,new_name) VALUES(?,?,?,?)", (operation_id, payload, previous_name, new_name))
             return {"status": "renamed", "previous_name": previous_name, "new_name": new_name}
 
+    def weekly_shop_progress(self, user_id, *, item_ids=None, week_key=None, fallback=None) -> dict[str, int]:
+        """本人本周在各商品上的已购数量（只读）；缺库/缺表或未迁移返回空 dict。
 
-__all__ = ["SectRepository", "LegacySectRepository", "SectRenameSqlRepository"]
+        与 `purchase` 写路径共用同一张 `sect_shop_weekly_purchases` 与同一周期键，
+        因此商店视图不会与限购判定出现口径分歧；`fallback`（迁移前的个人 JSON 记录）
+        仅在表中没有该商品行时补位，与 `purchase` 的 `legacy_purchased` 同序。
+        请求路径不做任何 DDL。
+        """
+        user_id = str(user_id).strip()
+        if not user_id:
+            return {}
+        week_key = str(week_key or weekly_shop_key(self.clock.now()))
+        purchased: dict[str, int] = {}
+        if Path(self.database).is_file():
+            try:
+                with DatabaseUnitOfWork(self.database, read_only=True) as uow:
+                    table = uow.query_one(
+                        "SELECT 1 AS present FROM sqlite_master "
+                        "WHERE type='table' AND name='sect_shop_weekly_purchases'"
+                    )
+                    if table is not None:
+                        rows = uow.query_all(
+                            "SELECT item_id,quantity FROM sect_shop_weekly_purchases "
+                            "WHERE user_id=? AND week_key=?",
+                            (user_id, week_key),
+                        )
+                    else:
+                        rows = ()
+            except (OSError, ValueError, TypeError, KeyError):
+                rows = ()
+            purchased = {str(row["item_id"]): max(0, int(row["quantity"] or 0)) for row in rows}
+        if isinstance(fallback, Mapping):
+            for key, value in fallback.items():
+                try:
+                    purchased.setdefault(str(key), max(0, int(value or 0)))
+                except (TypeError, ValueError):
+                    continue
+        if item_ids is None:
+            return purchased
+        wanted = {str(item_id) for item_id in item_ids}
+        return {key: value for key, value in purchased.items() if key in wanted}
+
+
+__all__ = ["SectRepository", "LegacySectRepository", "SectRenameSqlRepository", "weekly_shop_key"]

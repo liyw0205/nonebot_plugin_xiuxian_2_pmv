@@ -57,6 +57,11 @@ The default event path now persists a resolved plan before settlement and uses a
 缺库缺表或缺字段返回空 `PersonalRank`，不建库、不补列）。名次与空态口径见
 `docs/features/base.md` 的「排行榜本人名次（共享合同）」。
 
+## 商店每周限购行
+`历练商店` 的商品行改走共享 `shop_limit_line`（口径见 `docs/features/base.md` 的
+「商店每周限购行（共享合同）」）；已购数量仍取本周 `training.weekly_purchases`。
+只读渲染，不改兑换与周限购判定。
+
 ## 列表检索
 `历练商店 [关键词|页码]`：商店列表按物品名/ID/描述筛选，翻页提示与按钮携带关键词
 （`历练商店 灵草 2`），解析与续查走 `docs/features/base.md` 的「列表检索与翻页续查

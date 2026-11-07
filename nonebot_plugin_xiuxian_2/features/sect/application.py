@@ -418,6 +418,10 @@ class SectApplication:
         payload = {"user_id": str(user_id), **kwargs}
         return self._execute(operation_id=str(operation_id), user_id=str(user_id), action="sect.purchase", payload=payload, call=lambda: self._repository().purchase(operation_id, user_id, **kwargs))
 
+    def weekly_shop_progress(self, user_id: str, *, item_ids=None, fallback=None) -> dict[str, int]:
+        """本人本周宗门商店已购数量（只读；与限购判定同源，缺表返回空）。"""
+        return self._repository().weekly_shop_progress(user_id, item_ids=item_ids, fallback=fallback)
+
     def learn_main(self, *, operation_id: str, user_id: str, **kwargs: Any) -> OperationOutcome[dict[str, Any]]:
         return self._learn(operation_id=operation_id, user_id=user_id, action="sect.learn_main", method="learn_main", kwargs=kwargs)
 

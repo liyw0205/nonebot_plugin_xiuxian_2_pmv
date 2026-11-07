@@ -47,6 +47,11 @@
 
 世界BOSS积分排行榜通过 `BossIntegralApplication.top_integrals` 读取长期 `boss_limit.integral` 投影，只返回最多 50 项且不在 Python 中物化全量积分表。重复 user_id 保持与积分发放相同的首 rowid 语义；缺数据库/schema 返回空列表，不建库、不建表。旧积分榜曾读取错误的 `integral.boss_integral` 表，不能作为当前数据源。榜外玩家另见 `BossIntegralApplication.integral_rank`：并列名次 + 有分人数 + 本人积分，行追加在前 50 名之后，缺库缺表返回空 `PersonalRank`；共享渲染与口径见 `docs/features/base.md` 的「排行榜本人名次（共享合同）」。
 
+### 商店每周限购行
+`世界BOSS商店` 的商品行改走共享 `shop_limit_line`，渲染 `每周限购：{剩余}/{总量}个`、
+售罄写 `已售罄（N/N个）`、不限购写 `不限购`；口径见 `docs/features/base.md` 的
+「商店每周限购行（共享合同）」。只读渲染，不改兑换与周限购判定。
+
 ### 每日额度与剩余次数
 
 每日讨伐次数、积分上限、灵石上限原先在结算与 `世界BOSS信息` 各写死一遍

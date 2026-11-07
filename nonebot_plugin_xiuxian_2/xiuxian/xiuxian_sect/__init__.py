@@ -30,7 +30,11 @@ from ...features.economy_ledger.contribution_flow import (
     format_contribution_flow,
 )
 from ..xiuxian_utils.game_events import safe_record_game_event
-from .sectconfig import get_config, get_sect_weekly_purchases
+from .sectconfig import (
+    get_config,
+    get_sect_weekly_purchases,
+    get_sect_weekly_purchases_snapshot,
+)
 from .sect_tasks import sect_task_state_manager
 from .sect_weekly_commands import sect_weekly, sect_weekly_claim, sect_weekly_rank
 from .sect_member_utils import (
@@ -78,6 +82,7 @@ from ..xiuxian_utils.numeric_bind import percent_exp_reward
 from ...features.sect_fairyland.application import SectFairylandApplication
 
 from ...features.sect.application import SectApplication
+from ...features.base.shop_limit import shop_limit_line
 from ...features.base.keyword_page import (
     empty_notice,
     matches_keyword,
@@ -3467,6 +3472,11 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     title = f"\n道友目前拥有的宗门贡献度：{number_to(user_info['sect_contribution'])}点"
     msg_list = []
     msg_list.append(f"════════════\n【宗门商店】第{page}/{total_pages}页")
+    weekly_shop_progress = sect_application.weekly_shop_progress(
+        user_id,
+        item_ids=[item_id for item_id, _ in current_page_items],
+        fallback=get_sect_weekly_purchases_snapshot(user_id),
+    )
     
     for item_id, item_data in current_page_items:
         item_info = items.get_data_by_item_id(item_id)
@@ -3477,7 +3487,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
             f"名称：{item_info['name']}\n"
             f"描述：{item_info.get('desc', '暂无描述')}\n"
             f"价格：{number_to(item_data['cost'])}贡献度\n"
-            f"每周限购：{item_data['weekly_limit']}个"
+            f"{shop_limit_line(item_data['weekly_limit'], weekly_shop_progress.get(str(item_id), 0))}"
         )
     
     msg_list.append(

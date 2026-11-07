@@ -57,6 +57,7 @@ from .boss_limit import (
 from ...compatibility.boss import WorldBossBattleSettlementService
 from ...features.boss.application import BossApplication
 from ...features.base.ranking_position import personal_rank_line
+from ...features.base.shop_limit import shop_limit_line
 from ...features.boss.exp_reward import boss_exp_reward
 from ...features.boss.purchase_command_application import BossPurchaseCommandApplication
 from ...features.boss.purchase_command_replies import render_boss_purchase_reply
@@ -1435,7 +1436,7 @@ async def boss_integral_store_(bot: Bot, event: GroupMessageEvent | PrivateMessa
             msg += f"名字：{item_data['name']}\n"
             msg += f"描述：{item_data.get('desc', '暂无描述')}\n"
             msg += f"所需世界积分：{item_info['cost']}点\n"
-            msg += f"每周限购：{weekly_limit - already_purchased}/{weekly_limit}个"
+            msg += shop_limit_line(weekly_limit, already_purchased)
             l_msg.append(msg)
     else:
         l_msg.append(f"世界积分商店内空空如也！")
