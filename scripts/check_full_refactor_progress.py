@@ -1143,7 +1143,11 @@ def _slice_status() -> dict[str, dict[str, object]]:
     tianti_help_handler = tianti_facade[
         tianti_facade.index("@tianti_help.handle") : tianti_facade.index("@tianti_settle.handle")
     ]
-    tianti_level_help_handler = tianti_facade[tianti_facade.index("@tianti_level_help.handle") :]
+    tianti_level_help_start = tianti_facade.index("@tianti_level_help.handle")
+    tianti_level_help_next = tianti_facade.find("\n@tianti_", tianti_level_help_start + 1)
+    tianti_level_help_handler = tianti_facade[
+        tianti_level_help_start : tianti_level_help_next if tianti_level_help_next != -1 else len(tianti_facade)
+    ]
     tianti_static_handler_awaits = {
         "help": re.findall(r"\bawait\s+([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)\s*\(", tianti_help_handler),
         "level_help": re.findall(r"\bawait\s+([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)\s*\(", tianti_level_help_handler),
@@ -4160,7 +4164,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
             ),
             "my_tianti_display_uses_feature_presentation": (
                 "calculate_tianti_gain_rate(" in tianti_my_profile_handler
-                and "_get_active_medicine_bath(data, now_t)" in tianti_my_profile_handler
+                and "bath_status(data, now_t)" in tianti_my_profile_handler
                 and "get_sect_fairyland_bonus(sect_fairyland_level)" in tianti_my_profile_handler
                 and "_get_tianti_sect_fairyland_level(user_info)" in tianti_my_profile_handler
                 and "sect_application.get_sect_info(sect_id)" in tianti_facade[
@@ -4232,7 +4236,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "gain_display_rules_are_feature_owned": "from ...features.tianti_training.presentation import" in tianti_facade and "calc_tianti_gain_rate" not in tianti_facade,
             "settlement_and_display_share_rules": all(
                 name in tianti_settlement_repository and name in tianti_presentation
-                for name in ("calc_qiaoxue_bonus", "get_active_medicine_bath", "get_sect_fairyland_bonus", "parse_tianti_time")
+                for name in ("calc_qiaoxue_bonus", "medicine_bath_active", "get_sect_fairyland_bonus", "parse_tianti_time")
             ) and "_parse_tianti_time" in tianti_training_repository and "_get_sect_fairyland_bonus" in tianti_training_repository,
             "profile_cap_query_feature_owned": "tianti_training_application.profile_cap(data)" in tianti_facade and "transaction_service import" not in tianti_facade and "def profile_cap(" in tianti_training_application,
             "sect_bonus_display_is_feature_owned": "from ...features.tianti_training.presentation import get_sect_fairyland_bonus" in sect_facade,
