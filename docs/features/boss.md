@@ -66,6 +66,17 @@
 
 数值本身未调整，仍是既有上限；本条只消除重复字面量与信息缺口。
 
+### 讨伐伤害上限说明
+`actual_damage = min(total_damage, boss_all_hp*0.2, boss_old_hp)` 一直生效，但回执
+原本只写「受天道限制，实际削减…」；现在被截断时由
+`features/boss/schemas.py::boss_damage_note` 追加一句原因（未截断时零输出）：
+
+- 单次上限是最紧的一项 → `说明：单次讨伐最多削减世界BOSS最大血量的20%（本次上限 N），超出的伤害不结算。`；
+- 剩余血量是最紧的一项 → `说明：世界BOSS剩余血量只剩 N，超出的伤害无处结算。`。
+
+上限与剩余血量同分时优先报单次上限（固定规则）。只读渲染，不改伤害公式、
+`damage_ratio`、积分/灵石/修为奖励与结算 CAS。由 `tests/test_boss_damage_note.py` 钉住。
+
 ## 定时任务
 
 世界BOSS刷新和天罚仍由显式兼容生命周期注册，手动生成、全量刷新与每日重置的持久化由 feature-owned repository 承担；手动与定时全量刷新共享 operation receipt，未在 feature 导入时重复注册。

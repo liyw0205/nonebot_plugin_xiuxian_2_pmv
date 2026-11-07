@@ -60,6 +60,7 @@ from ...features.base.ranking_position import personal_rank_line
 from ...features.base.shop_limit import shop_limit_line
 from ...features.boss.exp_reward import boss_exp_reward
 from ...features.boss.purchase_command_application import BossPurchaseCommandApplication
+from ...features.boss.schemas import boss_damage_note
 from ...features.boss.purchase_command_replies import render_boss_purchase_reply
 from ...features.boss.integral_application import BossIntegralApplication
 from ...features.player_state.application import PlayerStateApplication
@@ -744,6 +745,12 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
     boss_now_hp = max(boss_old_hp - actual_damage, 0)
     bossinfo_new['气血'] = boss_now_hp
 
+    # 被上限截断时说明真实原因（单次 20% 上限 / 剩余血量见底），不改变伤害或奖励
+    damage_note = boss_damage_note(
+        total_damage, actual_damage, max_single_damage, boss_old_hp
+    )
+    damage_note_line = f"{damage_note}\n" if damage_note else ""
+
     # 奖励按实际扣除血量计算
     damage_ratio = actual_damage / boss_all_hp if boss_all_hp > 0 else 0
 
@@ -961,6 +968,7 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
             f"恭喜道友击败{bossinfo['name']}！\n"
             f"本次战斗造成伤害：{number_to(total_damage)}\n"
             f"实际削减世界BOSS血量：{number_to(actual_damage)}\n"
+            f"{damage_note_line}"
             f"{stone_msg}，{more_msg}{integral_msg}{exp_msg}"
         )
 
@@ -975,6 +983,7 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
                 f"道友战胜了{bossinfo['name']}的化身，但世界BOSS气机未绝！\n"
                 f"本次战斗造成伤害：{number_to(total_damage)}\n"
                 f"受天道限制，实际削减世界BOSS血量：{number_to(actual_damage)}\n"
+                f"{damage_note_line}"
                 f"Boss剩余血量：{number_to(boss_now_hp)} / {number_to(boss_all_hp)}\n"
                 f"{stone_msg}，{more_msg}{integral_msg}{exp_msg}"
             )
@@ -983,6 +992,7 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
                 f"道友不敌{bossinfo['name']}，重伤逃遁。\n"
                 f"本次战斗造成伤害：{number_to(total_damage)}\n"
                 f"实际削减世界BOSS血量：{number_to(actual_damage)}\n"
+                f"{damage_note_line}"
                 f"Boss剩余血量：{number_to(boss_now_hp)} / {number_to(boss_all_hp)}\n"
                 f"临逃前{stone_msg}，{more_msg}{integral_msg}"
             )
