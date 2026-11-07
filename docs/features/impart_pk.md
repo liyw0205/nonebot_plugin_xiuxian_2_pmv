@@ -89,6 +89,18 @@ Mutating calls carry an `operation_id` and are recorded in the operation ledger.
 无 NoneBot），命令适配器只提供 `user_cd`/`exp_day`/当前修为/上限。非闭关状态返回空元组，
 因此未闭关玩家的面板逐字不变；不新增表、列、迁移、配置键或命令。
 
+### `虚神界出关` 的祝福消耗与余额回执
+`ImpartClosingSettlementResult` 一直携带 `blessing_cost` 与 `exp_day_remaining`，
+但出关回执只渲染分钟数与修为。现在 applied 与 duplicate（重放）两条路径都在正文后
+追加一行纯渲染说明（`features/impart_pk/closing_status.py::closing_settlement_lines`）：
+
+- 有消耗：`本次消耗虚神界祝福 N 分钟，剩余 M 分钟`（applied 追加 `（本次闭关 X 分钟）`）；
+- 无消耗（祝福已耗尽或本次全为普通修炼）：`本次未消耗虚神界祝福，剩余 M 分钟`。
+
+数值来自结算结果的同一字段，渲染层不改扣减、修为、概率或 `result_json`
+（仍写 `[exp_gain, blessing_cost, exp_day_remaining]` 三个整数，旧行重放照常渲染）。
+由 `tests/test_impart_closing_receipt.py` 钉住。
+
 ## 定时任务
 No new scheduled jobs. Legacy jobs stay registered through the compatibility scheduler.
 

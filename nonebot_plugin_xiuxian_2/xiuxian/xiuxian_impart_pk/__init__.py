@@ -16,7 +16,10 @@ SQLITE_MAX_INT = 2**63 - 1
 from typing import Dict, List
 from ...paths import get_paths
 from ...features.impart_pk.application import ImpartPkApplication
-from ...features.impart_pk.closing_status import closing_status_lines
+from ...features.impart_pk.closing_status import (
+    closing_settlement_lines,
+    closing_status_lines,
+)
 from ...infrastructure.ids import UUIDGenerator
 from ...infrastructure.random_source import SystemRandom
 from ...infrastructure.clock import SystemClock
@@ -1161,6 +1164,12 @@ async def impart_pk_out_closing_(bot: Bot, event: GroupMessageEvent | PrivateMes
             f"虚神界闭关结束（重放），本次闭关增加修为：{number_to(settlement.exp_gain)}\n"
             f"该出关请求已经处理，无需重复提交。"
         )
+        replay_lines = closing_settlement_lines(
+            blessing_cost=settlement.blessing_cost,
+            exp_day_remaining=settlement.exp_day_remaining,
+        )
+        if replay_lines:
+            msg += "\n" + "\n".join(replay_lines)
         await handle_send(bot, event, msg, md_type="虚神界", k1="闭关", v1="虚神界闭关", k2="信息", v2="虚神界信息", k3="帮助", v3="虚神界帮助")
         await impart_pk_out_closing.finish()
     if not settlement.succeeded:
@@ -1188,6 +1197,13 @@ async def impart_pk_out_closing_(bot: Bot, event: GroupMessageEvent | PrivateMes
         user_id,
         f"[虚神界出关] 闭关{exp_time}分钟，祝福{int(exp_day_cost)}分钟，获得修为{number_to(total_exp)}"
     )
+    settlement_lines = closing_settlement_lines(
+        blessing_cost=settlement.blessing_cost,
+        exp_day_remaining=settlement.exp_day_remaining,
+        minutes=exp_time,
+    )
+    if settlement_lines:
+        msg += "\n" + "\n".join(settlement_lines)
     record_task_progress(
         user_id,
         "xu_out_closing",
