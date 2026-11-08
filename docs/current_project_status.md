@@ -1,6 +1,48 @@
 # 当前项目状态
 
-最后核验：2026-10-17。本文是唯一活跃进度入口；旧重构文档仅作为历史记录，不再定义当前分支或禁止事项。
+最后核验：2026-11-08。本文是唯一活跃进度入口；旧重构文档仅作为历史记录，不再定义当前分支或禁止事项。
+
+## 已完成修复：签到 QQ 投递走真实 Markdown + 表格日历
+
+线上 `/root/xiu2` 只读确认：迁移后的签到走 `NoneBotMessageGateway → delivery_service.reply(reply.content)`，
+`ReplyPlan.content` 里的 Markdown 被当纯文本发出（`**`、`---` 原样可见，空格补齐的日历列散开）。
+
+- 显式 intent：`ReplyPlan` 新增 `intent`（默认 `plain`，既有调用逐字不变）；签到与补签声明
+  `intent=markdown`。`adapters/nonebot/gateway.py` 对 markdown intent 的字符串计划走既有
+  Markdown 投递 `reply_enhanced`（按 `xiuxian_qq_capabilities` 能力判定），失败/非 QQ Bot
+  回退同一文案的纯文本（复用 `strip_md_command_links`）；媒体段与 `plain` 计划仍走 `reply`。
+- 日历：`features/sign_in/calendar.py` 改为真实七列表格（表头 + 分隔行 + 按当月生成的周行），
+  保留 ✓已签/·今日/—非本月 与 本月已签/连续天数；不再用空格或全角竖线拼列。
+- 文案：签到/补签的 `---` 前后留空行；`docs/message_channel.md` 修正「禁止 `#` 标题」「不解析 Markdown」
+  等与实际不符的说法，并链接新增的 `docs/qq-markdown-reference.md`（随仓库维护的支持语法清单：
+  表格、代码块、公式、行内命令）。
+- 能力配置核对：部署 `.env` 未配置 `xiuxian_qq_capabilities`，`QQCapabilityRegistry` 默认
+  `markdown=True`，该投递路径默认生效；按 Bot AppID 可单独关闭（测试覆盖两种情形）。
+- 测试：新 `tests/test_qq_markdown_delivery.py` `12`（markdown intent 走 enhanced、群/私聊、
+  最终 Markdown 消息段含真表格、OneBot 纯文本回退、无 markdown 能力回退、发送异常回退、
+  媒体段不被改写、能力默认/按 Bot 覆盖、纯度回退保留表格）；签到日历与补签套件同步改为表格断言。
+  定向合计 `47`，含静态契约与 mentor 的回归合计 `338` 全绿。
+- 交付：`f6863b2b` 推送 develop，CI run `42493438120`。
+
+## 已完成目标：师徒解除清算（120% 权威传功修为，五包阶段）
+
+缺口证据：`拜师 → 传功 → 解除 → 再拜` 无成本，解除路径不结清任何传功收益。
+
+- P1 纯规则 `features/buff/mentor_dissolution.py`：应收 = 该配对**尚未结清**传功收益 ×120%，
+  向上取整（`-(-gained*6//5)`），坏值/负数按 0；`render_dissolution_line` 输出应收、当前修为与缺口。
+- P2 原子清算 `features/buff/mentor_dissolution_repository.py`：经 `AttachedDatabaseUnitOfWork`
+  （attached game+player）单事务完成回执重放判定 → 权威账目重算 → 配对/境界 CAS →
+  `exp >= charge` 守卫扣减 → 清关系/写冷却、重绑定、统计、历史 → 写回执；请求路径不执行 DDL，
+  回执表由 `buff.016`、`statistics."师徒清退修为"` 由 `buff.017` 预建（player allowlist 已登记）。
+  架构门禁未放宽：feature 不再 import 驱动层，`check_architecture.py` `ok=True`。
+- 防刷不加价：账目**读不出来**（缺表/缺列/回退扫描失败）→ `ledger_unavailable`，零写入、
+  关系保持，绝不按 0 放行；重复解除 `state_changed`、重放 `duplicate`、输入不同
+  `operation_conflict`，均不二次扣费。
+- 接线：`逐出师门` 与 `解除师徒` 共用同一清算；拒绝语义回文给出应收/当前/缺口或账目暂不可读。
+- 测试：`tests/test_mentor_dissolution.py` `22`（120% 取整、配对隔离、余额不足、扣不成负数、
+  重放/冲突/二次解除/境界漂移、缺表缺列、**缺账目与坏账目 fail-closed**、统计与历史、
+  迁列幂等、整循环不产生净修为）。
+- 交付：`9bafdf40` 推送 develop，CI run `42492407071` success。
 
 ## 已完成目标：炼体记录与突破/冲窍门控单一来源（四包阶段）
 
