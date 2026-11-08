@@ -258,6 +258,108 @@ def render_bath_remaining_suffix(status: BathStatus) -> str:
     return f"（当前药浴剩余 {status.remaining_minutes} 分钟）"
 
 
+@dataclass(frozen=True)
+class BreakthroughProgress:
+    """One canonical answer to "can this player break through right now?"."""
+
+    next_name: str = ""
+    required_rank: int = 0
+    required_hp: int = 0
+    current_hp: int = 0
+    hp_shortfall: int = 0
+    max_level: bool = False
+    rank_ok: bool = False
+    hp_ok: bool = False
+
+    @property
+    def ready(self) -> bool:
+        return not self.max_level and self.rank_ok and self.hp_ok
+
+    @property
+    def reason(self) -> str:
+        if self.max_level:
+            return "max_level"
+        if not self.rank_ok:
+            return "cultivation_insufficient"
+        if not self.hp_ok:
+            return "hp_insufficient"
+        return "ready"
+
+
+QIAOXUE_TOTAL = 108
+QIAOXUE_PER_RANK = 3
+
+
+def qiaoxue_unlock_limit(level_rank: Any) -> int:
+    """Cumulative qiaoxue cap for a 炼体 level rank: ``min(rank * 3, 108)``."""
+    try:
+        rank = int(level_rank or 0)
+    except (TypeError, ValueError, OverflowError):
+        rank = 0
+    return max(0, min(rank * QIAOXUE_PER_RANK, QIAOXUE_TOTAL))
+
+
+def breakthrough_progress(
+    data: Mapping[str, Any] | None,
+    *,
+    next_level: str | None,
+    next_config: Mapping[str, Any] | None,
+    required_rank: Any,
+    cultivation_rank: Any,
+) -> BreakthroughProgress:
+    """Resolve the breakthrough gate once, so the view and the receipt agree.
+
+    Same comparison direction as the write path: ``cultivation_rank`` must reach
+    ``required_rank`` (a higher number is a LOWER realm in the game's rank scale),
+    and the player's 炼体气血 must reach the level's ``need_hp``.
+    """
+    current_hp = 0
+    if isinstance(data, Mapping):
+        try:
+            current_hp = max(0, int(data.get("tianti_hp", 0) or 0))
+        except (TypeError, ValueError, OverflowError):
+            current_hp = 0
+    if not next_level or not isinstance(next_config, Mapping):
+        return BreakthroughProgress(current_hp=current_hp, max_level=True)
+    try:
+        required_rank = int(required_rank)
+    except (TypeError, ValueError, OverflowError):
+        required_rank = 0
+    try:
+        rank_value = int(cultivation_rank)
+    except (TypeError, ValueError, OverflowError):
+        rank_value = 0
+    # 需求气血不可解析时 fail-closed：既不显示「可以突破」，也不给出错误的缺口数字。
+    required_hp: int | None
+    try:
+        required_hp = max(0, int(next_config.get("need_hp", 0) or 0))
+    except (TypeError, ValueError, OverflowError):
+        required_hp = None
+    rank_ok = rank_value <= required_rank
+    hp_ok = required_hp is not None and current_hp >= required_hp
+    return BreakthroughProgress(
+        next_name=str(next_level),
+        required_rank=required_rank,
+        required_hp=0 if required_hp is None else required_hp,
+        current_hp=current_hp,
+        hp_shortfall=0 if required_hp is None else max(0, required_hp - current_hp),
+        max_level=False,
+        rank_ok=rank_ok,
+        hp_ok=hp_ok,
+    )
+
+
+def render_breakthrough_status(progress: BreakthroughProgress) -> str:
+    """One actionable line telling the player what to do next."""
+    if progress.max_level:
+        return "\n已达炼体最高境界"
+    if progress.reason == "cultivation_insufficient":
+        return f"\n暂不可突破：修仙境界不足（下一境需【{progress.next_name}】对应境界）"
+    if progress.reason == "hp_insufficient":
+        return f"\n暂不可突破：还差{progress.hp_shortfall}炼体气血"
+    return "\n现在可以突破，发送【炼体突破】"
+
+
 def calculate_tianti_gain_rate(
     data: Mapping[str, Any],
     *,
@@ -290,14 +392,23 @@ def calculate_tianti_gain_rate(
 __all__ = [
     "BathSlotView",
     "BathStatus",
+    "BreakthroughProgress",
+    "QIAOXUE_PER_RANK",
+    "QIAOXUE_TOTAL",
     "bath_remaining_text",
     "bath_schedule",
     "bath_slot_remaining",
     "bath_status",
+    "breakthrough_progress",
     "calc_qiaoxue_bonus",
     "calculate_tianti_gain_rate",
     "get_active_medicine_bath",
     "get_sect_fairyland_bonus",
     "medicine_bath_active",
     "parse_tianti_time",
+    "qiaoxue_unlock_limit",
+    "render_bath_remaining_suffix",
+    "render_bath_schedule",
+    "render_bath_status",
+    "render_breakthrough_status",
 ]

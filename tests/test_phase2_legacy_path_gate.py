@@ -846,8 +846,12 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
         # (我的药浴记录, registered in the legacy xiuxian_tianti package),
         # moving the derived counts 658->659 and 344->345 while the frozen
         # membership file and its hash remain untouched.
-        self.assertEqual(report["default_legacy_command_count"], 659)
-        self.assertEqual(report["default_legacy_command_backlog_count"], 345)
+        # The tianti progress-history slice adds one more player command
+        # (我的炼体记录, registered in the legacy xiuxian_tianti package),
+        # moving the derived counts 659->660 and 345->346 while the frozen
+        # membership file and its hash remain untouched.
+        self.assertEqual(report["default_legacy_command_count"], 660)
+        self.assertEqual(report["default_legacy_command_backlog_count"], 346)
         scope_path = Path(__file__).resolve().parents[1] / "docs/refactor_phase2_legacy_paths.json"
         scope = json.loads(scope_path.read_text(encoding="utf-8"))
         inventory_drift_count = sum(len(entries) for entries in report["source_inventory_added"].values())

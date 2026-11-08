@@ -7,7 +7,8 @@ The compatibility command remains available while the new application boundary i
 The historical package owns command names during the compatibility release. New names are added only through this feature manifest.
 
 本包命令：`炼体帮助`、`炼体结算`、`灵石炼体`、`炼体突破`、`我的炼体`（别名 `炼体状态`）、
-`冲窍`、`我的体窍`、`炼体境界`、`炼体药浴`（别名 `药浴`）、`我的药浴记录`（别名 `药浴记录`）。
+`冲窍`、`我的体窍`、`炼体境界`、`炼体药浴`（别名 `药浴`）、`我的药浴记录`（别名 `药浴记录`）、
+`我的炼体记录`（别名 `炼体记录`）。
 
 ### 炼体药浴生命周期（时段 / 剩余 / 记录）
 `炼体药浴` 的完整生命周期由 `features/tianti_training/presentation.py` 的纯函数承载：
@@ -50,11 +51,33 @@ Run the feature application test and the full architecture gate. Repeat the same
 ## 灰度开关、回滚和已知限制
 Legacy algorithms and schemas remain behind the repository adapter for one complete release cycle; the compatibility hit counter determines when removal is safe.
 
+### 炼体记录与门控单一来源
+`我的炼体记录`（别名 `炼体记录`）补齐玩家侧逐次炼体成长的可见性：三张回执行此前只被写入与
+幂等重放读取，玩家错过一次性回执后无法回看。
+
+- `features/tianti_training/progress_history.py`（只读）：近 7 天（只用下界）分三段读取
+  `tianti_breakthrough_operations`/`tianti_qiaoxue_operations`（player DB）与
+  `tianti_stone_training_operations`（game DB），聚合突破次数/成功/失败/累计气血消耗、
+  冲窍次数/累计气血/已开数、灵石炼体次数/累计灵石/累计气血，各取最近 10 次明细；
+  缺库/缺表/半迁移表/坏 JSON/读失败只让该段消失，不建表、不补列。
+- 门控与上限单一来源（同模块 `presentation.py`）：
+  - `breakthrough_progress(data, *, next_level, next_config, required_rank, cultivation_rank)`
+    一次产出下一境界、需求气血、当前气血、缺口、是否可达；`required_hp` 不可解析时
+    **fail-closed**（绝不显示可突破）。`我的炼体` 与 `TiantiBreakthroughSqlRepository`
+    共用该解析；`cultivation_insufficient`/`hp_insufficient` 判定方向与数值不变。
+  - `qiaoxue_unlock_limit(level_rank)` = `min(rank × 3, 108)`（常量 `QIAOXUE_PER_RANK`/
+    `QIAOXUE_TOTAL`）：命令辅助 `_get_qiaoxue_unlock_limit`、仓储 `open` 与 `我的体窍`
+    经同一函数取上限；`炼体帮助` 的冲窍说明同步为「每个炼体小境界解锁 3 个」。
+  - `render_breakthrough_status(progress)`：`我的炼体` 在突破需求段后追加一行结论
+    （现在可以突破／还差 N 炼体气血／修仙境界不足／已达炼体最高境界），既有各行不变。
+
 ## Manifest 清单
 - `command: 我的体窍`
 - `command: 我的炼体`
 - `alias: 炼体状态`
 - `command: 我的药浴记录`
 - `alias: 药浴记录`
+- `command: 我的炼体记录`
+- `alias: 炼体记录`
 - `command: 炼体境界`
 - `command: 炼体帮助`

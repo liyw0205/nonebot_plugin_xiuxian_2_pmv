@@ -25,17 +25,24 @@ from ...features.tianti_training.bath_history import (
     TiantiBathHistoryApplication,
     format_tianti_bath_history,
 )
+from ...features.tianti_training.progress_history import (
+    TiantiProgressHistoryApplication,
+    format_tianti_progress_history,
+)
 from ...features.tianti_training.presentation import (
     bath_remaining_text,
     bath_schedule,
     bath_status,
+    breakthrough_progress,
     calc_qiaoxue_bonus,
     calculate_tianti_gain_rate,
     get_active_medicine_bath,
     get_sect_fairyland_bonus,
+    qiaoxue_unlock_limit,
     render_bath_remaining_suffix,
     render_bath_schedule,
     render_bath_status,
+    render_breakthrough_status,
 )
 from ...paths import get_paths
 from ...infrastructure.ids import UUIDGenerator
@@ -51,6 +58,11 @@ tianti_training_application = TiantiTrainingApplication(
 )
 tianti_bath_history_application = TiantiBathHistoryApplication(
     get_paths().game_db,
+    clock=SystemClock(),
+)
+tianti_progress_history_application = TiantiProgressHistoryApplication(
+    get_paths().game_db,
+    get_paths().player_db,
     clock=SystemClock(),
 )
 runtime_ids = UUIDGenerator()
@@ -72,6 +84,9 @@ tianti_level_help = on_command("炼体境界", priority=10, block=True)
 tianti_medicine_bath = on_command("炼体药浴", aliases={"药浴"}, priority=10, block=True)
 tianti_bath_history = on_command(
     "我的药浴记录", aliases={"药浴记录"}, priority=10, block=True
+)
+tianti_progress_history = on_command(
+    "我的炼体记录", aliases={"炼体记录"}, priority=10, block=True
 )
 
 MEDICINE_BATH_DURATION_MINUTES = 360
@@ -201,11 +216,10 @@ def _format_spirit_vein_msg(result: dict) -> str:
 
 def _get_qiaoxue_unlock_limit(data: dict) -> int:
     """
-    冲窍额度规则：
-    每个炼体小境界解锁 1 个可开窍数量
-    例如 rank=15，则累计最多可开 15 个窍穴
+    冲窍额度规则（单一来源：presentation.qiaoxue_unlock_limit）：
+    每个炼体小境界解锁 3 个可开窍数量，上限 108
     """
-    return int(min(get_tianti_level_data(data["tianti_level"])["rank"] * 3, 108))
+    return qiaoxue_unlock_limit(get_tianti_level_data(data["tianti_level"])["rank"])
 
 
 @tianti_help.handle(parameterless=[Cooldown(cd_time=1.2)])
@@ -226,6 +240,8 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 > 按当前时段消耗药材，获得360分钟炼体结算加成（不带参数查看全部时段）
 - 我的药浴记录
 > 查看本人近7天药浴开启、消耗与效果
+- 我的炼体记录
+> 查看本人近7天突破、冲窍与灵石炼体记录
 - 使用炼体神物
 > 按神物提供的分钟数获得炼体结算气血
 - 我的体窍 [窍穴名/天罡/地煞]
@@ -236,7 +252,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 > 查看炼体境界表
 
 **冲窍说明**
-> 每提升1个炼体小境界，累计解锁1个可开窍数量。
+> 每提升1个炼体小境界，累计解锁3个可开窍数量（上限108个）。
 """
     await send_help_message(
         bot, event, msg,
@@ -638,17 +654,29 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     unlock_limit = _get_qiaoxue_unlock_limit(data)
 
     next_name = get_next_tianti_level_name(lvl)
-    if next_name:
-        need_hp = int(get_tianti_level_data(next_name)["need_hp"])
-        remain = max(0, need_hp - hp)
-        cap = _get_tianti_cap(data)
+    next_cfg = get_tianti_level_data(next_name) if next_name else {}
+    cap = _get_tianti_cap(data)
+    user_xx_rank = get_tianti_level_index(user_info["level"], is_xiuxian=True)
+    required_rank = (
+        get_tianti_level_index(next_cfg["min_xx_level"], is_xiuxian=True) if next_cfg else 0
+    )
+    progress = breakthrough_progress(
+        data,
+        next_level=next_name,
+        next_config=next_cfg,
+        required_rank=required_rank,
+        cultivation_rank=user_xx_rank,
+    )
+    if not progress.max_level:
         brk = (
             f"下一境界：{next_name}\n"
-            f"突破需求：{number_to(need_hp)}（还需{number_to(remain)}）\n"
+            f"突破需求：{number_to(progress.required_hp)}"
+            f"（还需{number_to(progress.hp_shortfall)}）\n"
             f"当前境界气血上限：{number_to(cap)}"
         )
     else:
         brk = "已达炼体最高境界"
+    next_step = render_breakthrough_status(progress)
 
     now_t = runtime_clock.now()
     bath_info = bath_status(data, now_t)
@@ -675,7 +703,8 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         f"每分钟气血：{number_to(rate_info['per_min'])}\n"
         f"已开窍：{opened}/108\n"
         f"当前可开上限：{unlock_limit}/108\n"
-        f"{brk}"
+        f"{brk}\n"
+        f"{next_step}"
         f"{bath_msg}"
         f"{sect_msg}"
         f"{spirit_vein_msg}"
@@ -857,3 +886,15 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 
     summary = tianti_bath_history_application.summary(str(user_info["user_id"]))
     await handle_send(bot, event, format_tianti_bath_history(summary))
+
+
+@tianti_progress_history.handle(parameterless=[Cooldown(cd_time=1.2)])
+async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    bot, _ = await assign_bot(bot=bot, event=event)
+    is_user, user_info, msg = check_user(event)
+    if not is_user:
+        await handle_send(bot, event, msg, md_type="我要修仙")
+        return
+
+    summary = tianti_progress_history_application.summary(str(user_info["user_id"]))
+    await handle_send(bot, event, format_tianti_progress_history(summary))

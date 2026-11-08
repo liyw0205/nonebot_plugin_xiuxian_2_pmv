@@ -10,7 +10,9 @@ from ...infrastructure.database import DatabaseUnitOfWork
 from .profile_persistence import upsert_tianti_profile
 from .presentation import get_sect_fairyland_bonus as _get_sect_fairyland_bonus
 from .presentation import medicine_bath_active
+from .presentation import breakthrough_progress
 from .presentation import parse_tianti_time as _parse_tianti_time
+from .presentation import qiaoxue_unlock_limit
 from .domain import (
     decide_breakthrough,
     decide_medicine_bath_activation,
@@ -526,7 +528,22 @@ class TiantiBreakthroughSqlRepository:
             old_level = str(data["tianti_level"])
             next_level, next_config = self.profile.next_level(old_level)
             required_rank = self.profile.cultivation_rank(str(next_config["min_xx_level"])) if next_config else 0
-            decision = decide_breakthrough(old_level=old_level, next_level=next_level, cultivation_rank=int(cultivation_rank), required_rank=required_rank, old_hp=int(data["tianti_hp"]), required_hp=int(next_config.get("need_hp", 0)), roll_success=bool(roll_success))
+            progress = breakthrough_progress(
+                data,
+                next_level=next_level,
+                next_config=next_config,
+                required_rank=required_rank,
+                cultivation_rank=int(cultivation_rank),
+            )
+            decision = decide_breakthrough(
+                old_level=old_level,
+                next_level=next_level,
+                cultivation_rank=int(cultivation_rank),
+                required_rank=progress.required_rank,
+                old_hp=int(data["tianti_hp"]),
+                required_hp=progress.required_hp,
+                roll_success=bool(roll_success),
+            )
             if decision.status != "completed":
                 return BreakthroughPersistenceResult(decision.status, user_id, old_level, old_level, 0, decision.new_hp, False)
             data["tianti_level"], data["tianti_hp"] = decision.new_level, decision.new_hp
@@ -564,7 +581,7 @@ class TiantiQiaoxueSqlRepository:
             data = self.profile.clean(row)
             opened = list(data.get("opened_qiaoxue", []) or [])
             opened_count = len(opened)
-            unlock_limit = min(int(self.profile.levels()[str(data["tianti_level"])]["rank"]) * 3, 108)
+            unlock_limit = qiaoxue_unlock_limit(self.profile.levels()[str(data["tianti_level"])]["rank"])
             candidates = [item for item in self.profile.qiaoxue_pool() if item["name"] not in set(opened)]
             if opened_count >= unlock_limit or not candidates:
                 return QiaoxuePersistenceResult("limit_reached", user_id, {}, 0, int(data["tianti_hp"]), opened_count, unlock_limit)

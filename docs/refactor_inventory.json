@@ -1202,6 +1202,14 @@
     },
     {
       "aliases": [
+        "炼体记录"
+      ],
+      "feature": "tianti",
+      "name": "我的炼体记录",
+      "permission": "user"
+    },
+    {
+      "aliases": [
         "物品流水",
         "道具流水"
       ],
