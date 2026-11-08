@@ -9,6 +9,7 @@ from pathlib import Path
 from threading import RLock
 from datetime import datetime
 from ..xiuxian.xiuxian_utils import db_backend
+from ..features.pet.receipt_codec import decode_receipt, encode_receipt
 import time
 
 @dataclass(frozen=True)
@@ -348,12 +349,11 @@ class PetHatchService:
         bag_limit = 0
         if result_json:
             try:
-                data = json.loads(result_json)
-                pets = tuple((dict(pet), bool(active)) for pet, active in (data.get("pets") or []))
-                updated_meta = tuple(data.get("updated_meta") or ())
-                bag_limit = int(data.get("bag_limit") or 0)
+                pets, updated_meta, bag_limit = decode_receipt(result_json)
             except Exception:
-                pets, updated_meta, bag_limit = (), (), 0
+                # Fail closed: the receipt exists but is unreadable, so report an
+                # explicit error instead of an empty "successful" replay.
+                return PetHatchResult("receipt_unreadable", cost=cost)
         if not pets and count:
             # keep cost/count recoverable even if result blob missing
             pass
@@ -391,15 +391,7 @@ class PetHatchService:
         normalized = tuple((dict(pet), bool(active)) for pet, active in pets)
         count = len(normalized)
         payload = self._payload(user_id, cost, count)
-        result_json = json.dumps(
-            {
-                "pets": [[pet, bool(active)] for pet, active in normalized],
-                "updated_meta": list(updated_meta),
-                "bag_limit": bag_limit,
-            },
-            ensure_ascii=True,
-            separators=(",", ":"),
-        )
+        result_json = encode_receipt(normalized, updated_meta, bag_limit)
         if not operation_id or cost < 0 or not normalized:
             raise ValueError("valid operation and hatch batch are required")
         with self._lock, closing(db_backend.connect(self._game_database)) as conn:

@@ -63,6 +63,34 @@ application 先调用带 operation replay/CAS 的 feature-owned repository；重
 调用该 keyword-only 方法，导致 `砸蛋` 在真正执行前就抛 `TypeError`、玩家收不到任何回复。
 缺少 `pet_hatch_operations` 表时读取直接失败且**不建表**、不写请求期 DDL。
 
+### 砸蛋回执的存储编码（`receipt_codec`）
+
+`pet_hatch_operations.result_json` 只用于回答「这个 operation 已经发过什么」，但历史上写入的是
+`_normalize_pet` 生成的整份宠物快照，而该函数同时设置 `pet["skill"] = pet["skills"][0]`，
+于是同一份 33 键技能定义每个宠物存两遍。线上实测：`pet_hatch_operations` 占
+`xiuxian.db` 94.2 MB / 290 MB（4,600 行，18.4 KB/行），其中每宠 1.30 KB（37.9%）就是这份重复。
+
+`features/pet/receipt_codec.py` 提供 `encode_receipt` / `decode_receipt`（纯函数，无 I/O）：
+
+- 每个宠物的**全部既有键**原样保留（身份、实例状态、未知字段），并保留
+  `skill` 与 `skills` 的原始形状：多技能列表、`skill` 不等于 `skills[0]`、
+  非映射条目、显式 `None` 都逐字还原；技能定义抽成每条回执一张引用表，按内容去重，
+  宠物按索引引用；一批十个蛋共享重复定义。
+- 技能只冻结**展示/身份子集**（`skill_id`、`name`、`type`、`scope`、`category`、`desc`）。
+  展示文案在写入时冻结，因此之后目录改名不会改写历史回放；`base_power`、`effect`、
+  `star_bonus` 等目录属性保持可由 `skill_id` 重新解析，不再逐宠复制进回执。
+- JSON 以 `ensure_ascii=False` 写入，中文按 3 字节 UTF-8 而不是 6 字节转义保存；回执只经
+  `json.loads` 读回。
+- `v: 2` 文档带版本标记；没有标记的旧行按 v1 结构解析。**损坏回执 fail-closed**：
+  非法 JSON、未知版本、坏行、越界技能槽位一律抛 `ReceiptDecodeError`，仓储把它转成
+  `receipt_unreadable`（`succeeded=False`），绝不伪装成「成功但零宠物」，也绝不再次扣费。
+
+兼容性：`features/pet/repository.py`（`hatch`/`get_result`/duplicate 分支）与
+`compatibility/legacy_pet_transactions.py`（`_result_from_row`/`hatch`）共用该编解码器；
+`payload`（CAS 令牌）、扣费、落库、`state_changed` 语义均未改。实测 200 行真实回执
+平均 18,427 B → 3,993 B（-78.3%，键集完全保留），按 383 行/活跃日计算写入量约
+7.06 MB/日 → 1.53 MB/日。旧行不重写（不做后台 UPDATE/VACUUM），空间只通过后续新增行体现。
+
 ## 配置项与回滚
 
 `pet_enabled`（`XIUXIAN_PET_ENABLED`）控制灰度。关闭后可以继续使用旧入口，待融合、放生和技能动作迁移完成、兼容命中归零后再删除门面。

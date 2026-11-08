@@ -8,6 +8,7 @@ from typing import Any, Protocol
 
 from ...infrastructure.clock import SystemClock
 from ...infrastructure.database import DatabaseUnitOfWork, OutboxStore
+from .receipt_codec import ReceiptDecodeError, decode_receipt, encode_receipt
 from .schema import (
     ACTIVE_SWITCH_COLUMNS,
     FEED_COLUMNS,
@@ -325,6 +326,12 @@ class PetTravelClaimSqlRepository:
             return PetTravelClaimResult("applied", stone, exp, tuple((row[0], row[3]) for row in rewards), effects_event_id)
 
 
+# A receipt row exists but its payload cannot be interpreted.  The hatch did
+# happen, so the command must report an explicit failure and must not charge
+# again; it is deliberately not part of ``PetHatchResult.succeeded``.
+RECEIPT_CORRUPT = "receipt_unreadable"
+
+
 @dataclass(frozen=True)
 class PetHatchResult:
     status: str
@@ -352,8 +359,13 @@ class PetHatchSqlRepository:
             row = uow.query_one("SELECT payload,result_json FROM pet_hatch_operations WHERE operation_id=?", (operation_id,))
         if row is None:
             return None
-        data = json.loads(row["result_json"] or "{}")
-        return PetHatchResult("duplicate", 0, tuple((dict(pet), bool(active)) for pet, active in data.get("pets", [])), tuple(data.get("updated_meta", [])), int(data.get("bag_limit", 0) or 0))
+        try:
+            pets, stored_meta, stored_limit = decode_receipt(row["result_json"])
+        except ReceiptDecodeError:
+            # The receipt exists, so the operation did happen: fail closed instead
+            # of replaying "no pets" (which would look like a successful hatch).
+            return PetHatchResult(RECEIPT_CORRUPT)
+        return PetHatchResult("duplicate", 0, pets, stored_meta, stored_limit)
 
     @staticmethod
     def _normalize_travel(value: Any) -> Any:
@@ -374,15 +386,20 @@ class PetHatchSqlRepository:
         if not operation_id or cost < 0 or not normalized:
             raise ValueError("valid operation and hatch batch are required")
         payload = json.dumps([user_id, cost, len(normalized)], ensure_ascii=True, separators=(",", ":"))
-        result_json = json.dumps({"pets": [[pet, active] for pet, active in normalized], "updated_meta": list(updated_meta), "bag_limit": bag_limit}, ensure_ascii=True, separators=(",", ":"))
+        result_json = encode_receipt(normalized, updated_meta, bag_limit)
         with DatabaseUnitOfWork(self.game_database, immediate=True) as uow:
             uow.attach_database(self.player_database, "player_data")
             old = uow.query_one("SELECT payload,result_json FROM pet_hatch_operations WHERE operation_id=?", (operation_id,))
             if old is not None:
                 if str(old["payload"]) != payload:
                     return PetHatchResult("state_changed")
-                data = json.loads(old["result_json"] or "{}")
-                return PetHatchResult("duplicate", cost, tuple((dict(pet), bool(active)) for pet, active in data.get("pets", [])), tuple(data.get("updated_meta", [])), int(data.get("bag_limit", bag_limit)))
+                try:
+                    pets, stored_meta, stored_limit = decode_receipt(old["result_json"])
+                except ReceiptDecodeError:
+                    # Receipt exists but is unreadable: never fall through to a
+                    # second charge, and never pretend the replay was empty.
+                    return PetHatchResult(RECEIPT_CORRUPT)
+                return PetHatchResult("duplicate", cost, pets, stored_meta, stored_limit or bag_limit)
             user = uow.query_one("SELECT stone FROM user_xiuxian WHERE user_id=?", (user_id,))
             if user is None:
                 return PetHatchResult("user_missing")
