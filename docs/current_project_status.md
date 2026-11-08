@@ -2,6 +2,48 @@
 
 最后核验：2026-11-09。本文是唯一活跃进度入口；旧重构文档仅作为历史记录，不再定义当前分支或禁止事项。
 
+## 已完成优化：启动期历史回执整理 + 受控一次性空间回收（v1.2.12）
+
+v1.2.10/v1.2.11 只改变**新写入**；线上既有旧行不会自己变小，且仅改写行并不会让文件变小
+（就地更新先释放页内空间）。本阶段把历史整理放进既有启动维护钩子，并给出一条有守卫的
+一次性回收路径。
+
+- 实测旧行（只读审计）：`pet_hatch_operations.result_json` 94.2 MB / 4,600 行、
+  `past_life_choice_operations.payload` 79.8 MB / 1,276 行、`past_life_final` 6.8 MB、
+  `past_life_start` 6.0 MB、`world_boss_full_refresh_operations.payload` 47.5 MB。
+- 新 feature `features/maintenance/`（manifest/application/repository/schemas/migrations/
+  commands/web/jobs + tests + `docs/features/maintenance.md`）；`runtime._maintain_database()`
+  在宠物存储迁移后调用 `compact_receipts`，受既有 `xiuxian_startup_database_maintenance`
+  控制；**零新增配置键、零表结构**（进度写 `data/maintenance/receipt_compaction.json`，
+  原子写）。
+- 五个任务各只改一列；**绝不改写** `response_json` 与前世/世界Boss 的 `result_json`，
+  操作号保留，因此重放/冲突语义不变。每批 200 行单事务，`rowid` + 原值 CAS（并发写入的行
+  跳过）；批次提交后才推进 watermark，进程中断只重扫一批；每轮 20s 预算，未完成的任务
+  下次启动继续；已收敛的任务不再扫描。
+- 损坏/未知版本/非字符串行**字节不变**，计入 `skipped` 并记日志，绝不删除、绝不猜测。
+- 宠物存储迁移与回执整理互相隔离：任一步失败只警告，不阻断另一步。
+- 空间回收 `infrastructure/database/maintenance.py`：`database_space()` 报文件/页/freelist/
+  dbstat unused；`reclaim_space()` 仅在**本轮确有转换**、`freelist>0`、
+  `data/backups/db_backup` 已有 `.zip` 备份、剩余空间 ≥ max(256 MB, 2.2×库) 时执行
+  `VACUUM`；一次性 `vacuum_done` 标记；`no_backup`/`no_headroom` 保持待重试；
+  `VACUUM` 在启动早段、后台任务启动前、不在事务内执行。日志输出每批转换/跳过/失败与
+  watermark、总览与用时、每库`文件字节 → 文件字节（freelist 页 → 页）`、回收状态；
+  **没有回收就不声称缩小**。
+- 测试：`tests/test_receipt_compaction_startup.py` 13 项（旧行全转换且回放列字节不变、
+  玩家状态不变、操作号经真实仓储/服务仍 `duplicate`；新旧混合；损坏行不动；预算 0 中断后
+  补齐；第二次启动 0 转换；缺表不建表；空间测量；无备份/无余量拒绝；有余量回收后文件变小；
+  未转换不回收；一次性标记）；`features/maintenance/tests/test_receipt_compaction_units.py`
+  9 项（转换器只返回快照列、跳过 compact/损坏/未知版本、保留身份字段）。
+  受影响集合：326 + 55 + 56 项通过。
+- 启动端到端（隔离 data 目录，未触碰 `/root/xiu2`）：有备份+余量
+  `102400 B → 98304 B (reclaimed)`；无备份 `102400 → 102400 B (no_backup,
+  vacuum_done=false)`；第二轮两库均 0 转换、文件不变。
+- 门禁：architecture（含新 feature 契约与文档，`ok=True`）、inventory `--check`、
+  progress `--json`（`failures: None`）真实 exit 0；`compileall`、`git diff --check` 干净。
+- 交付：`f9029fb8` 推送 develop（CI run `42532505693` success），`--ff-only` 合入 main，
+  main CI `42532842499` success。未部署、未写生产库、未在生产 VACUUM、未删除任何回执或日志、
+  未发真实消息；用户删除的四个文件保持未暂存，`.codex-*` 未提交。
+
 ## 已完成优化：存储审计第二阶段——幂等回执摘要化（v1.2.11）
 
 只读审计（`mode=ro` + dbstat，含 `unused` 列；字节一律 UTF-8，`LENGTH(CAST(x AS BLOB))`）
