@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from ...core.errors import ConflictError, DomainError, ValidationError
-from ...core.result import OperationOutcome, ReplyPlan
+from ...core.result import INTENT_MARKDOWN, OperationOutcome, ReplyPlan
 from ...infrastructure.database import DatabaseUnitOfWork, OperationLedger, OutboxStore
 from ...infrastructure.observability import trace_context
 from ...infrastructure.clock import SystemClock
@@ -454,7 +454,9 @@ class SignInApplication:
             return ReplyPlan(result.message or "补签未完成，请稍后重试。", reference=True)
         lines = [
             "**修仙补签**",
+            "",
             "---",
+            "",
             f"✅ 补签成功：{makeup.get('business_date', '')}",
             f"消耗：{int(makeup.get('cost', 0) or 0)} 灵石"
             f"｜余额：{int(makeup.get('stone_after', 0) or 0)} 灵石",
@@ -466,7 +468,7 @@ class SignInApplication:
         if result.replayed:
             lines.append("")
             lines.append("该补签请求已经处理，无需重复提交。")
-        return ReplyPlan("\n".join(lines), reference=True)
+        return ReplyPlan("\n".join(lines), reference=True, intent=INTENT_MARKDOWN)
 
     def calendar_text(self, user_id: str) -> str:
         """Render the current-month calendar, or an empty string when unavailable."""
@@ -492,13 +494,13 @@ class SignInApplication:
         else:
             sign_in = (result.data or {}).get("sign_in", {}) if isinstance(result.data, dict) else {}
             stone = sign_in.get("stone", result.granted.get("stone", 0))
-            content = f"**修仙签到**\n---\n✅ 签到成功，获取{stone}块灵石!"
+            content = f"**修仙签到**\n\n---\n\n✅ 签到成功，获取{stone}块灵石!"
         user_id = str(kwargs.get("user_id", ""))
         if user_id and (result.ok or result.code == "already_signed"):
             calendar_text = self.calendar_text(user_id)
             if calendar_text:
                 content = f"{content}\n{calendar_text}"
-        return ReplyPlan(content, reference=True)
+        return ReplyPlan(content, reference=True, intent=INTENT_MARKDOWN)
 
 
 __all__ = ["SignInApplication"]

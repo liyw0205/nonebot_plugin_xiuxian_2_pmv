@@ -145,16 +145,18 @@ class SignInDailyReceiptTests(unittest.TestCase):
         reply = self.application.reply(user_id="u1", operation_id="sign-1")
 
         self.assertIn("签到成功", reply.content)
-        self.assertIn("【签到日历 2026-10】", reply.content)
+        self.assertIn("**签到日历 2026-10**", reply.content)
         self.assertIn("15✓", reply.content)
         self.assertIn("本月已签 1 天｜连续 1 天", reply.content)
+        self.assertEqual("markdown", reply.intent)
 
     def test_reply_contains_the_calendar_when_already_signed(self) -> None:
         self.application.claim(user_id="u1", operation_id="sign-1")
         reply = self.application.reply(user_id="u1", operation_id="sign-2")
 
         self.assertIn("今日已经签到", reply.content)
-        self.assertIn("【签到日历 2026-10】", reply.content)
+        self.assertIn("**签到日历 2026-10**", reply.content)
+        self.assertEqual("markdown", reply.intent)
 
 
 class SignInDailyCompatibilityTests(unittest.TestCase):
@@ -218,25 +220,35 @@ class SignInCalendarRenderingTests(unittest.TestCase):
     def test_calendar_marks_signed_and_today(self) -> None:
         lines = render_sign_in_calendar("2026-10-15", ["2026-10-13", "2026-10-14"])
 
-        self.assertEqual("【签到日历 2026-10】", lines[0])
-        self.assertEqual("一  二  三  四  五  六  日", lines[1])
+        self.assertEqual("**签到日历 2026-10**", lines[0])
+        self.assertEqual("| 一 | 二 | 三 | 四 | 五 | 六 | 日 |", lines[2])
+        self.assertEqual("| --- | --- | --- | --- | --- | --- | --- |", lines[3])
         self.assertIn("13✓", "\n".join(lines))
         self.assertIn("14✓", "\n".join(lines))
         self.assertIn("15·", "\n".join(lines))
-        self.assertEqual("本月已签 2 天｜连续 2 天", lines[-1])
+        self.assertEqual(
+            "✓ 已签｜· 今日｜— 非本月｜本月已签 2 天｜连续 2 天", lines[-1]
+        )
 
-    def test_calendar_aligns_the_first_day_of_the_month(self) -> None:
+    def test_calendar_is_a_real_table_not_padded_columns(self) -> None:
         lines = render_sign_in_calendar("2026-10-15", [])
 
-        # 2026-10-01 is a Thursday, so the first week starts with three blanks.
-        self.assertTrue(lines[2].startswith("            "))
-        self.assertIn(" 1 ", lines[2])
+        grid = [line for line in lines if line.startswith("|")]
+        # 2026-10-01 is a Thursday: the leading Mon-Wed slots are table cells,
+        # not space padding, and every row keeps all seven columns.
+        self.assertEqual("| — | — | — | 1 | 2 | 3 | 4 |", grid[2])
+        self.assertTrue(all(line.count("|") == 8 for line in grid))
+        self.assertTrue(all("  " not in line for line in grid))
 
     def test_calendar_includes_every_week_of_the_month(self) -> None:
         lines = render_sign_in_calendar("2026-10-31", ["2026-10-31"])
 
-        self.assertIn("31✓", "\n".join(lines))
-        self.assertEqual("本月已签 1 天｜连续 1 天", lines[-1])
+        joined = "\n".join(lines)
+        self.assertIn("31✓", joined)
+        self.assertIn("本月已签 1 天", joined)
+        self.assertIn("连续 1 天", joined)
+        # header + separator + five week rows
+        self.assertEqual(7, len([line for line in lines if line.startswith("|")]))
 
 
 class SignInWiringTests(unittest.TestCase):

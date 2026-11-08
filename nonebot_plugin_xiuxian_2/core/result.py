@@ -6,6 +6,9 @@ from typing import Any, Generic, Mapping, Protocol, TypeVar
 
 T = TypeVar("T")
 
+INTENT_PLAIN = "plain"
+INTENT_MARKDOWN = "markdown"
+
 
 class _Clock(Protocol):
     def now(self) -> Any: ...
@@ -25,12 +28,24 @@ def utc_now(clock: _Clock | None = None) -> str:
 
 @dataclass(frozen=True)
 class ReplyPlan:
-    """A transport-neutral response returned by an application use case."""
+    """A transport-neutral response returned by an application use case.
+
+    ``intent`` declares how the content wants to be rendered, not how the
+    transport happens to be able to render it.  ``plain`` (the default) keeps
+    every existing caller byte-identical; ``markdown`` asks the adapter to use
+    its Markdown-capable delivery when the Bot supports it, and to fall back to
+    the same text otherwise.  Media/segment content keeps going out untouched.
+    """
 
     content: Any
     reference: bool = True
     revoke_after: float | None = None
     audit_timeout: float = 0
+    intent: str = INTENT_PLAIN
+
+
+def is_markdown_intent(intent: Any) -> bool:
+    return str(intent or "").strip().casefold() == INTENT_MARKDOWN
 
 
 @dataclass(frozen=True)
@@ -138,4 +153,11 @@ class OperationOutcome(Generic[T]):
         }
 
 
-__all__ = ["OperationOutcome", "ReplyPlan", "utc_now"]
+__all__ = [
+    "INTENT_MARKDOWN",
+    "INTENT_PLAIN",
+    "OperationOutcome",
+    "ReplyPlan",
+    "is_markdown_intent",
+    "utc_now",
+]

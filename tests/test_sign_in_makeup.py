@@ -122,10 +122,11 @@ class MakeupApplicationTests(unittest.TestCase):
         outcome = self._makeup("2026-11-01")
         calendar = outcome.data["calendar"]
         text = "\n".join(calendar)
-        self.assertIn("【签到日历 2026-11】", text)
+        self.assertIn("**签到日历 2026-11**", text)
+        self.assertIn("| 一 | 二 | 三 | 四 | 五 | 六 | 日 |", text)
         self.assertIn("本月已签 1 天", text)
         self.assertIn("连续 1 天", text)
-        self.assertIn(" 1✓", text)
+        self.assertIn("1✓", text)
 
     def test_same_operation_replay_does_not_charge_twice(self) -> None:
         first = self._makeup("2026-11-01")
