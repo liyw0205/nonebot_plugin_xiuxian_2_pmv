@@ -51,7 +51,12 @@
   `test_source_quality`+`test_refactor_progress`+三个 tianti 套件合计 320、
   `features/tianti_training/tests` 隔离 43、含冻结清单门禁 57 均通过。
 - 交付与 CI：功能提交 `d470a584` 的 develop run `42429077343` success（`quality` success、
-  `build-and-release` 按分支规则 skipped）。随后一次性 `--ff-only` 合入 main。
+  `build-and-release` 按分支规则 skipped）；状态记录 `c26d4b49` 的 develop run `42429546764`
+  success，随后一次性 `--ff-only` 合入 main，main CI run `42429887262` success。据此发布
+  **v1.2.6**：tag workflow run `42436536309` success（`quality` + `build-and-release` 均 success），
+  Release `targetCommitish` `c26d4b49dc20859232431a7b14614a4c3b389b34`，资产 `project.tar.gz`
+  7,000,152 字节、sha256 `c1cf161498c0918b47bb5c219e9a28abce2c07a31efc821b78034bf5a2e9507d`、
+  3,642 条目，含本轮三个新文件且不含本地目标卡/数据库/`.env`；既有 tag 未移动。
   未部署、未读写真实游戏库、未发真实 QQ 消息；用户删除的四个文件保持未暂存，
   `.codex-next-goal.md` 未提交。
 
