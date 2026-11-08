@@ -1,6 +1,57 @@
 # 当前项目状态
 
-最后核验：2026-11-08。本文是唯一活跃进度入口；旧重构文档仅作为历史记录，不再定义当前分支或禁止事项。
+最后核验：2026-11-09。本文是唯一活跃进度入口；旧重构文档仅作为历史记录，不再定义当前分支或禁止事项。
+
+## 已完成优化：数据库体积诊断 + 砸蛋回执冻结 ID 存储（v1.2.10）
+
+只读诊断（`mode=ro` + dbstat，未写生产库、未 VACUUM、未部署）后实施的一项存储修复。
+字节口径一律为 **UTF-8 字节**（`LENGTH(CAST(x AS BLOB))`），不用 `LENGTH(text)` 的字符数。
+
+- 部署实际数据库：`xiuxian.db` 290,131,968 B / 70,833 页、`player.db` 115,892,224 B、
+  `message.db` 23,334,912 B、`xiuxian_impart.db` 1,507,328 B、`activity.db` 925,696 B、
+  `trade.db` 458,752 B；全部 `freelist_count=0`（体积全是活数据，不是删除残留），
+  `journal=wal`，侧车 `message.db-wal` 3.57 MB、其余 4–62 KB。`backups/` 3.0 GB 另行保留。
+- 最大对象：`pet_hatch_operations` 94.2 MB（32.5%）、`past_life_choice_operations` 79.8 MB
+  （27.5%）、`economy_log`+4 索引 27.2 MB、`dungeon_explore_operations` 10.1 MB、
+  `work_daily_refresh_reset_targets` 12.3 MB；`player.db` 的
+  `world_boss_full_refresh_operations` 68.2 MB（58.8%）。
+- **ID-only 物品存储被否**：`back.goods_name` 仅 458,192 B、`goods_type` 248,703 B
+  （38,334 行，合计 0.71 MB = `xiuxian.db` 的 0.24%）。为 0.24% 引入启动期全局
+  `items.json` 缓存依赖与「改名/删除/未知 ID」语义不划算，保留实例冻结名。
+- 真正的冗余是**回执逐行重写整份定义**：`_normalize_pet` 设置 `pet["skill"] = pet["skills"][0]`，
+  于是每宠 1.84 KB 中有 1.40 KB（37.9%）是同一份 33 键技能定义的第二份拷贝。
+  修复形态：静态目录定义改为按内容去重 + 按 id 引用；`past_life` 的 `event_snapshots`
+  属**必需的冻结结算快照**（历史叙事不可由目录重算），只有 `expected`/`final` 之间的
+  逐字节重复（45%）是表示层冗余，留待独立阶段。
+- 新增 `features/pet/receipt_codec.py`（纯函数）：每条回执 = `[stored_pet_dict, active,
+  skill_ref, skills_refs, flags]` + 一张去重定义表；**保留全部宠物键**（未知字段、多技能、
+  `skill != skills[0]`、非映射条目、显式 `None` 均逐字还原），只冻结技能的展示子集
+  （`skill_id/name/type/scope/category/desc`），`base_power/effect/...` 由 id 重解析；
+  `ensure_ascii=False` 让中文按 3 字节而非 6 字节转义；`v: 2` 带版本，旧行按 v1 读。
+- **损坏回执 fail-closed**：非法 JSON、未知版本、坏行、越界引用一律 `ReceiptDecodeError`
+  → 仓储/兼容门面返回 `receipt_unreadable`（`succeeded=False`，零扣费、零宠物、零新回执），
+  `砸蛋` 给出明确文案「砸蛋回执损坏，本次不会重复扣除灵石；请联系管理员核对数据。」，
+  绝不伪装成「成功但零宠物」，也不会因此再扣一次灵石。
+- 接线：`features/pet/repository.py`（`hatch`/`get_result`/duplicate）、
+  `compatibility/legacy_pet_transactions.py`（`_result_from_row`/`hatch`）、
+  `xiuxian/xiuxian_pet/__init__.py`（仅新增一条失败映射）。`payload`（CAS 令牌）、扣费、
+  落库与 `state_changed` 语义未改；零 schema/迁移/命令/配置键变更。
+- 实测收益（真实 200 行、只读、不落库）：18,427 B/行 → 3,993 B/行（**-78.3%**），
+  键集完全保留；4,600 行等效 84.8 MB → 18.4 MB；活跃日写入 ~7.06 MB → ~1.53 MB。
+  既有旧行不重写（不做后台 UPDATE/VACUUM），空间只体现在后续新增行。
+- 测试：新 `tests/test_pet_hatch_receipt_codec.py` 24 项（往返/多技能/未知字段/去重/
+  字节缩减/损坏与未知版本显式报错/仓储 fail-closed 不二次扣费/v1 旧行/兼容门面双形态）。
+  定向合计 304 项 + `features/pet/tests` 30 项全绿。
+- 门禁：`check_architecture.py`、`export_refactor_inventory.py --check`、
+  `check_full_refactor_progress.py --json`（`failures: None`；`exit_ready: False` 仍由用户
+  删除的冻结文件造成，11 条既有 blocker）真实 exit 0；`compileall`、`git diff --check` 干净。
+- 交付：`b2cf19d6` 推送 develop，CI run `42509288094` success（`quality` success、
+  `build-and-release` 按分支规则 skipped），随后一次性 `--ff-only` 合入 main。未部署、
+  未写生产库、未 VACUUM、未发真实 QQ 消息；用户删除的四个文件保持未暂存，
+  `.codex-next-goal.md` 未提交。
+- 只报告不执行的维护建议：`VACUUM`（需停机+备份+≥1× 库大小临时空间，当前 3.8 GB 余量
+  对 406 MB 库可行）；`economy_log`（48,934 行/149 天）与两张 `*_daily_reset_targets`
+  （138k 行）无保留期；`backups/` 3.0 GB（62 个 zip）是磁盘占用最大单项。
 
 ## 已完成修复：签到 QQ 投递走真实 Markdown + 表格日历
 
