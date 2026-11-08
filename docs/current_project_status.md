@@ -2,6 +2,59 @@
 
 最后核验：2026-10-17。本文是唯一活跃进度入口；旧重构文档仅作为历史记录，不再定义当前分支或禁止事项。
 
+## 已完成目标：炼体记录与突破/冲窍门控单一来源（四包阶段）
+
+新功能（非修复）。目标卡 `.codex-next-goal.md`（local-only，未提交）。承接
+`docs/features/tianti.md` 与上一阶段「炼体药浴生命周期」。
+
+**缺口证据**：`tianti_breakthrough_operations`/`tianti_qiaoxue_operations`（player DB）与
+`tianti_stone_training_operations`（game DB）三张回执行只被写入与幂等重放查询使用，
+**没有任何玩家面**——玩家错过一次性回执后无法回看突破成败、冲窍开出的窍穴与灵石炼体消耗；
+突破门控在 handler 与仓储各解析一遍（且「所需修仙境界」分别走 `convert_rank` 硬编码表与
+`境界.json` 键序）；冲窍上限在命令辅助、仓储与 `我的体窍` 三处独立计算，
+`炼体帮助` 的说明（解锁 1 个）与代码（`×3`）不一致；`我的炼体` 只列数字，不回答
+「现在能不能突破、还差多少」。
+
+- P1 `我的炼体记录`（别名 `炼体记录`，priority 10，注册在 `xiuxian_tianti`）：新增只读
+  `features/tianti_training/progress_history.py`，近 7 天（只用下界）分三段读取上述三表
+  （突破与冲窍在 player DB、灵石炼体在 game DB），聚合突破次数/成功/失败/累计气血消耗、
+  冲窍次数/累计气血/已开数、灵石炼体次数/累计灵石/累计气血，各取最近 10 次明细；
+  缺库/缺表/半迁移表/坏 JSON/读失败只让该段消失，**不建表不补列**；`user_id` 只取会话身份，
+  handler 不解析 `args`。
+- P2 突破门控单一来源：`presentation.breakthrough_progress(...)` 一次产出下一境界、需求气血、
+  当前气血、缺口与可达性，`我的炼体` 与 `TiantiBreakthroughSqlRepository` 共用；
+  `need_hp` 不可解析时 **fail-closed**（绝不显示可突破），淡出错误的缺口数字。
+- P3 冲窍上限单一来源：`presentation.qiaoxue_unlock_limit(rank)` = `min(rank*3, 108)`
+  （常量 `QIAOXUE_PER_RANK`/`QIAOXUE_TOTAL`）；命令辅助 `_get_qiaoxue_unlock_limit`、
+  仓储 `open` 与 `我的体窍` 共用同一函数；`炼体帮助` 的冲窍说明同步为
+  「每提升1个炼体小境界，累计解锁3个可开窍数量（上限108个）」（只改文案，数值未动）。
+- P4 `我的炼体` 可执行下一步：`presentation.render_breakthrough_status(progress)` 在突破需求段
+  后追加一行结论（`现在可以突破，发送【炼体突破】`／`暂不可突破：还差 N 炼体气血`／
+  `暂不可突破：修仙境界不足（下一境需【X】对应境界）`／沿用「已达炼体最高境界」），
+  既有各行逐字保留。
+- 零 schema/迁移/配置键变更：不新增表、列、索引、迁移版本、配置键或 Web 路由；不改药材与
+  灵石消耗、奖励数值、结算、统计与任何资产写路径。
+- 帮助与文档：`炼体帮助` 登记 `我的炼体记录`（带一行说明）；`docs/features/tianti.md`
+  新增「炼体记录与门控单一来源」段，命令清单与 Manifest 清单各补两条
+  （`我的炼体记录`/`炼体记录`）。
+- 测试：新 `tests/test_tianti_progress_history.py` `17`（三段聚合、缺段为 None、最近 10 次
+  倒序与上限、7 天窗外排除与未来行计入、玩家隔离、坏 JSON 容错、缺表/缺库不建文件、
+  半迁移表跳过、空 `user_id`、渲染与不变量、handler/manifest/帮助源合同；
+  另有 P2/P3/P4 纯函数用例：`qiaoxue_unlock_limit` 边界（0/1/36/1000/负/None/坏值）、
+  `breakthrough_progress` 四种 reason 与坏数据 fail-closed、`render_breakthrough_status`
+  四态）。
+- 派生计数 659→660、345→346；`tests/test_phase2_legacy_path_gate.py` 同步期望值并记录 delta
+  注释，**冻结成员文件与哈希保持不变**（`git archive HEAD` 隔离快照实测
+  `frozen_membership_valid: True`、`integrity_errors: []`、47/47 通过）。
+- 三门禁真实 exit 0（progress `failures: None`；`exit_ready: False` 仍由用户删除的冻结文件
+  造成，11 条既有 blocker）；`compileall` 与 `git diff --check` 干净。定向套件：新套件 17、
+  `test_source_quality`+`test_refactor_progress`+三个 tianti 套件合计 320、
+  `features/tianti_training/tests` 隔离 43、含冻结清单门禁 57 均通过。
+- 交付与 CI：功能提交 `d470a584` 的 develop run `42429077343` success（`quality` success、
+  `build-and-release` 按分支规则 skipped）。随后一次性 `--ff-only` 合入 main。
+  未部署、未读写真实游戏库、未发真实 QQ 消息；用户删除的四个文件保持未暂存，
+  `.codex-next-goal.md` 未提交。
+
 ## 已完成目标：炼体药浴生命周期闭环（时段 / 剩余 / 记录，五包阶段）
 
 新功能（非修复）。目标卡 `.codex-next-goal.md`（local-only，未提交）。承接 `docs/features/tianti.md`。
