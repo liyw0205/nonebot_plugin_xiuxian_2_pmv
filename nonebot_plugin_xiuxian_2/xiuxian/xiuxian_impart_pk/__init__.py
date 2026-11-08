@@ -12,7 +12,6 @@ from ..adapter_compat import (
 import random
 import time
 
-SQLITE_MAX_INT = 2**63 - 1
 from typing import Dict, List
 from ...paths import get_paths
 from ...features.impart_pk.application import ImpartPkApplication
@@ -711,7 +710,7 @@ async def impart_pk_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         exp_cost=exp_cost_time,
         exp_gain=exp,
         exp_load_gain=actual_exp_load,
-        power=min(SQLITE_MAX_INT, int(round((current_exp + exp) * level_rate * realm_rate))),
+        power=int(round((current_exp + exp) * level_rate * realm_rate)),
         legacy_state=user_data,
     )
     if result.status == "duplicate":

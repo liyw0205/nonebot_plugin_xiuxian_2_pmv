@@ -11,7 +11,6 @@ from ..xiuxian_utils.numeric_bind import as_int_like, number_count
 
 _LOCKS_GUARD = RLock()
 _DATABASE_LOCKS = {}
-
 def _database_lock(path):
     key = Path(path).expanduser().resolve()
     with _LOCKS_GUARD:
@@ -341,8 +340,6 @@ class ImpartClosingEnterService:
                 conn.rollback()
                 raise
 
-SQLITE_MAX_INT = 2**63 - 1
-
 @dataclass(frozen=True)
 class ImpartClosingSettlementResult:
     status: str
@@ -534,8 +531,6 @@ class ImpartClosingSettlementService:
                 conn.rollback()
                 raise
 
-SQLITE_MAX_INT = 2**63 - 1
-
 from .settlement_state import increment_stat, load_daily_state
 
 @dataclass(frozen=True)
@@ -606,9 +601,9 @@ class ImpartTrainingSettlementService:
         expected_exp, expected_exp_day, exp_cost, exp_gain, exp_load_gain, power = map(
             int, (expected_exp, expected_exp_day, exp_cost, exp_gain, exp_load_gain, power)
         )
-        power = max(0, min(power, SQLITE_MAX_INT))
-        expected_exp = max(0, min(expected_exp, SQLITE_MAX_INT))
-        exp_gain = max(0, min(exp_gain, SQLITE_MAX_INT))
+        power = max(0, power)
+        expected_exp = max(0, expected_exp)
+        exp_gain = max(0, exp_gain)
         if not operation_id or exp_cost <= 0 or exp_gain <= 0 or exp_load_gain < 0 or power < 0:
             raise ValueError("invalid impart training settlement")
         # Request identity only — exp/daily snapshots are concurrency checks; roll outcome in result_json.
@@ -644,7 +639,7 @@ class ImpartTrainingSettlementService:
                     conn.rollback(); return ImpartTrainingSettlementResult("time_insufficient", 0, 0, 0, 0, 0, 0)
 
                 new_exp_day = expected_exp_day - exp_cost
-                new_exp = min(SQLITE_MAX_INT, expected_exp + exp_gain)
+                new_exp = expected_exp + exp_gain
                 new_used = expected_daily["exp_used"] + exp_cost
                 new_count = expected_daily["exp_count"] + 1
                 new_load = min(100, expected_daily["exp_load"] + exp_load_gain)
@@ -994,5 +989,4 @@ __all__ = [
     "ImpartExploreSettlementService",
     "ImpartBattleBatchResult",
     "ImpartBattleBatchService",
-    "SQLITE_MAX_INT",
 ]

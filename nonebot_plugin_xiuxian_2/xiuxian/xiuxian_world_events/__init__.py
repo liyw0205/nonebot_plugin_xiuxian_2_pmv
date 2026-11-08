@@ -1,5 +1,5 @@
 import random
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from threading import RLock
 import time
 
@@ -253,16 +253,33 @@ def _format_time(value: datetime) -> str:
 
 
 def _parse_time(value) -> datetime | None:
+    """把库内墙钟解析成与 ``_now()`` 同一时区帧的 datetime。
+
+    ``_format_time`` 用 ``strftime`` 落库，会丢掉 tz 偏移；读回来是 **naive**，
+    而 ``_now()``（``SystemClock``）是 **aware UTC**。两侧直接比较会抛
+
+        TypeError: can't compare offset-naive and offset-aware datetimes
+
+    这正是线上「虚神界出关」等结算法在灵脉加成处崩溃的原因。墙钟一直由同一个 UTC
+    时钟写入，所以 naive 一律按 UTC 解释；aware 值统一换算回 UTC，比较与展示都不变。
+    """
     if not value:
         return None
+    parsed: datetime | None = None
     if isinstance(value, datetime):
-        return value
-    for fmt in (TIME_FORMAT, "%Y-%m-%d %H:%M:%S.%f"):
-        try:
-            return datetime.strptime(str(value), fmt)
-        except ValueError:
-            continue
-    return None
+        parsed = value
+    else:
+        for fmt in (TIME_FORMAT, "%Y-%m-%d %H:%M:%S.%f"):
+            try:
+                parsed = datetime.strptime(str(value), fmt)
+                break
+            except ValueError:
+                continue
+    if parsed is None:
+        return None
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
 
 
 def _to_int(value, default: int = 0) -> int:

@@ -35,14 +35,18 @@ def refresh_card_bonuses(
         ).fetchall()
     }
     bonuses = calculate_card_bonuses(cards, definitions)
-    assignments = ",".join(f'"{field}"=?' for field in BONUS_FIELDS)
+    assignments = ", ".join(f'"{field}"=?' for field in BONUS_FIELDS)
     values = [bonuses[field] for field in BONUS_FIELDS]
     updated = connection.execute(
         f"UPDATE {safe_schema}.xiuxian_impart SET {assignments} WHERE user_id=?",
         (*values, str(user_id)),
     )
+    if updated.rowcount == 0:
+        # 该玩家还没有 xiuxian_impart 行（例如只建了主用户表就抽卡/祈愿）。
+        # 没有行可写、也就没有加成可刷新；跳过而不是抛异常让整条指令失败。
+        return bonuses
     if updated.rowcount != 1:
-        raise ValueError("impart user is missing")
+        raise ValueError("invalid impart card bonus update")
     return bonuses
 
 
