@@ -63,6 +63,37 @@ owner；任务和活动底层 legacy sink 仍是显式兼容依赖，不宣称�
 进入 backlog。Phase 2 `496` 项 membership/hash 不变。
 ## 事务与失败回滚
 统一 operation ledger 和审计，旧事务异常可重试。
+
+### 师徒解除清算（120% 权威传功修为）
+
+解除师徒关系必须同时结清该徒弟**通过本段师徒获得**的修为，否则
+`拜师 → 传功 → 解除 → 再拜入同一师父` 是无成本收益循环。
+
+- 权威账目：`mentor_transmission_operations` 中该**配对**（`json_extract(payload,'$[0]')=mentor`、
+  `'$[1]'=apprentice`）的 `reward_exp` 之和；调用方传入的数值一律不采信，事务内重算。
+  表/列缺失或无 JSON1 时按有界回退扫描（上限 5000 行）。
+  **账目读不出来（缺表、缺 `reward_exp`、回退扫描失败）一律 fail-closed**：
+  返回 `ledger_unavailable`、零写入、关系保持——绝不按 0 处理，
+  否则“先弄坏账目再解除”就是免费解除。
+- 应收 = 该配对**尚未结清**收益的 120%，**向上取整**（`-(-gained * 6 // 5)`）；
+  已经结清过的收益在后续解除中不再重复收取（已结清额度记在回执表 `gained_exp` 里）。
+  `gained <= 0` 或坏值 → 0（历史关系、确实没有权威传功时不收费）。
+- 原子性：单个 `BEGIN IMMEDIATE`（`AttachedDatabaseUnitOfWork`，attached game+player）事务内完成——
+  回执重放判定 → 权威账目重算 → 配对/境界 CAS → 余额判定 →
+  扣减修为（`exp = exp - charge`，带 `exp >= charge` 守卫，永不为负）→
+  清关系字段、写冷却/重绑定、统计、历史 → 写回执。任一步失败整体回滚。
+- 幂等：同 operation_id 重放且稳定输入一致 → `duplicate` 并返回首次实际扣减额；
+  输入不同 → `operation_conflict`。重复解除第二次必然 `state_changed`（关系已不在），
+  不会二次扣减；并发传功按事务内最新权威账目判定。
+- 拒绝语义：修为不足 → `insufficient_cultivation`，**不解除关系、零资产变化**，
+  回复应收修为、当前修为与缺口；绝不扣成负数，也绝不补修为凑数。
+- 缺表/缺列 → `schema_missing` 零写入。请求路径**不执行 DDL**：回执表
+  `mentor_dissolution_operations` 由 `buff.016` 预建，玩家统计列 `statistics."师徒清退修为"`
+  由 `buff.017` 预建；`feature` 只经基础设施 UoW 读写，不自行打开连接、不 import 驱动层。
+- 防刷保证：每一步解除都先付出 120% 且余额不足时关系保持，因此关系循环不产生净修为；
+  `逐出师门` 与徒弟自行 `解除师徒` 共用同一清算事务（分别记 `expel`/`leave`）。
+- 范围：出师（`MentorGraduationService`）路径不变，其判定与灵石奖励不参与本清算。
+
 ## 定时任务
 无。
 ## 配置项

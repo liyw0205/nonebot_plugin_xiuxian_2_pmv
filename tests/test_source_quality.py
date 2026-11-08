@@ -3609,12 +3609,14 @@ class SourceQualityTests(unittest.TestCase):
         start = source.index("async def unbind_mentor_")
         end = source.index("@mentor_transmission.handle", start)
         handler = source[start:end]
-        self.assertIn("_mentor_expel_service_instance = None", source)
-        self.assertIn("def _mentor_expel_service(", source)
-        self.assertIn("_mentor_expel_service().apply(", handler)
-        self.assertNotIn("mentor_expel_service.apply(", handler)
+        # 解除关系同时清算 120% 传功修为：由 feature 清算服务承担，仍为惰性单例。
+        self.assertIn("_mentor_dissolution_service_instance = None", source)
+        self.assertIn("def _mentor_dissolution_service(", source)
+        self.assertIn("_mentor_dissolution_service().settle(", handler)
+        self.assertIn('action="expel"', handler)
+        self.assertNotIn("mentor_dissolution_service.settle(", handler)
         self.assertIn("mentor_cd_until=mentor_cd_until", handler)
-        self.assertIn("apprentice_cd_until=apprentice_cd_until", handler)
+        self.assertIn("cooldown_until=apprentice_cd_until", handler)
         self.assertIn("pair_rebind_until=pair_rebind_until", handler)
 
     def test_mentor_breakthrough_reward_uses_lazy_transactional_service(self) -> None:
@@ -3636,13 +3638,14 @@ class SourceQualityTests(unittest.TestCase):
         start = source.index("async def unbind_mentor_")
         end = source.index("@mentor_transmission.handle", start)
         handler = source[start:end]
-        self.assertIn("_apprentice_leave_service_instance = None", source)
-        self.assertIn("def _apprentice_leave_service(", source)
-        self.assertIn("_apprentice_leave_service().apply(", handler)
+        # 徒弟自行解除同样走 feature 清算服务（与逐出共用同一原子事务）。
+        self.assertIn("_mentor_dissolution_service_instance = None", source)
+        self.assertIn("def _mentor_dissolution_service(", source)
+        self.assertIn("_mentor_dissolution_service().settle(", handler)
+        self.assertIn('action="leave"', handler)
         self.assertNotIn("apprentice_leave_service.apply(", handler)
-        self.assertIn("expected_apprentice_level=user_info[\"level\"]", handler)
-        self.assertIn("graduation_eligible=False", handler)
-        self.assertIn("apprentice_cd_until=apprentice_cd_until", handler)
+        self.assertIn('expected_apprentice_level=user_info["level"]', handler)
+        self.assertIn("cooldown_until=apprentice_cd_until", handler)
         self.assertIn("pair_rebind_until=pair_rebind_until", handler)
 
     def test_mentor_graduation_uses_lazy_transactional_service(self) -> None:

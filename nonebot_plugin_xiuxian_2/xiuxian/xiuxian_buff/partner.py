@@ -38,6 +38,8 @@ from .transaction_service import MentorTransmissionService
 from .transaction_service import PartnerBreakthroughService
 from .transaction_service import PartnerInviteService
 from .transaction_service import PartnerProtectionService
+from ...features.buff.mentor_dissolution import render_dissolution_line
+from ...features.buff.mentor_dissolution_repository import MentorDissolutionService
 from ...features.buff.partner_token_application import PartnerTokenUseApplication
 from ...features.base.economy_application import PlayerEconomyApplication
 from ...features.buff.partner_cultivation_application import PartnerCultivationApplication
@@ -85,6 +87,7 @@ _mentor_application_service_instance = None
 _partner_invite_service_instance = None
 _partner_protection_service_instance = None
 _mentor_expel_service_instance = None
+_mentor_dissolution_service_instance = None
 _mentor_breakthrough_reward_service_instance = None
 _player_economy_application_instance = None
 _apprentice_leave_service_instance = None
@@ -238,6 +241,16 @@ def _mentor_expel_service():
             get_paths().game_db, get_paths().player_db
         )
     return _mentor_expel_service_instance
+
+
+def _mentor_dissolution_service():
+    """师徒解除清算（120% 权威传功修为）：逐出师门与徒弟自行解除共用。"""
+    global _mentor_dissolution_service_instance
+    if _mentor_dissolution_service_instance is None:
+        _mentor_dissolution_service_instance = MentorDissolutionService(
+            get_paths().game_db, get_paths().player_db
+        )
+    return _mentor_dissolution_service_instance
 
 
 def _mentor_breakthrough_reward_service():
@@ -2370,13 +2383,39 @@ async def unbind_mentor_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         mentor_cd_until = (now + timedelta(days=MENTOR_COOLDOWN_DAYS)).strftime("%Y-%m-%d %H:%M:%S")
         apprentice_cd_until = (now + timedelta(days=APPRENTICE_COOLDOWN_DAYS)).strftime("%Y-%m-%d %H:%M:%S")
         pair_rebind_until = (now + timedelta(days=MENTOR_SAME_PAIR_REBIND_COOLDOWN_DAYS)).strftime("%Y-%m-%d %H:%M:%S")
-        settlement = _mentor_expel_service().apply(
+        settlement = _mentor_dissolution_service().settle(
             _relation_operation_id(event, "expel", user_id, target_id), user_id, target_id,
-            occurred_at=occurred_at, mentor_cd_until=mentor_cd_until,
-            apprentice_cd_until=apprentice_cd_until, pair_rebind_until=pair_rebind_until,
+            action="expel",
+            expected_apprentice_level=target_info["level"] if target_info else "",
+            occurred_at=occurred_at,
+            cooldown_field="apprentice_cd_until", cooldown_until=apprentice_cd_until,
+            pair_rebind_until=pair_rebind_until,
+            mentor_cd_until=mentor_cd_until,
             history_limit=MENTOR_HISTORY_LIMIT, mentor_desc=f"将{target_name}逐出师门",
             apprentice_desc=f"被师父{mentor_name}逐出师门",
         )
+        if settlement.status == "schema_missing":
+            await handle_send(bot, event, "师徒清算数据尚未就绪，请检查启动迁移。", **buttons)
+            await unbind_mentor.finish()
+        if settlement.status == "ledger_unavailable":
+            await handle_send(
+                bot, event,
+                f"未能逐出{target_name}：师徒传功账目暂时无法读取，请稍后重试（关系与资产均未变动）。",
+                **buttons,
+            )
+            await unbind_mentor.finish()
+        if settlement.status == "insufficient_cultivation":
+            await handle_send(
+                bot, event,
+                f"未能逐出{target_name}：需先清退其通过本段师徒获得的修为。"
+                + render_dissolution_line(
+                    settlement,
+                    format_number=number_to,
+                    refusal_tail="修为不足时师徒关系保持，师门未变。",
+                ),
+                **buttons,
+            )
+            await unbind_mentor.finish()
         if not settlement.succeeded:
             await handle_send(bot, event, "逐出未执行：对方已非门下弟子，或师徒关系已解除。", **buttons)
             await unbind_mentor.finish()
@@ -2387,6 +2426,7 @@ async def unbind_mentor_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
             f"你已将{target_name}逐出师门。\n"
             f"你进入{MENTOR_COOLDOWN_DAYS}天收徒冷却，对方进入{APPRENTICE_COOLDOWN_DAYS}天拜师冷却。\n"
             f"对方{MENTOR_SAME_PAIR_REBIND_COOLDOWN_DAYS}天内不能再次拜入你门下。"
+            f"{render_dissolution_line(settlement, format_number=number_to)}"
         )
         await unbind_mentor.finish()
 
@@ -2440,14 +2480,35 @@ async def unbind_mentor_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     occurred_at = now.strftime("%Y-%m-%d %H:%M:%S")
     apprentice_cd_until = (now + timedelta(days=APPRENTICE_COOLDOWN_DAYS)).strftime("%Y-%m-%d %H:%M:%S")
     pair_rebind_until = (now + timedelta(days=MENTOR_SAME_PAIR_REBIND_COOLDOWN_DAYS)).strftime("%Y-%m-%d %H:%M:%S")
-    settlement = _apprentice_leave_service().apply(
+    settlement = _mentor_dissolution_service().settle(
         _relation_operation_id(event, "leave", mentor_id, user_id), mentor_id, user_id,
-        occurred_at=occurred_at, expected_apprentice_level=user_info["level"],
-        graduation_eligible=False, apprentice_cd_until=apprentice_cd_until,
-        pair_rebind_until=pair_rebind_until, history_limit=MENTOR_HISTORY_LIMIT,
+        action="leave",
+        expected_apprentice_level=user_info["level"],
+        occurred_at=occurred_at,
+        cooldown_field="apprentice_cd_until", cooldown_until=apprentice_cd_until,
+        pair_rebind_until=pair_rebind_until,
+        history_limit=MENTOR_HISTORY_LIMIT,
         mentor_desc=f"徒弟{user_info['user_name']}离开师门",
         apprentice_desc=f"离开师父{mentor_name}门下",
     )
+    if settlement.status == "schema_missing":
+        await handle_send(bot, event, "师徒清算数据尚未就绪，请检查启动迁移。", **buttons)
+        await unbind_mentor.finish()
+    if settlement.status == "ledger_unavailable":
+        await handle_send(
+            bot, event,
+            "未能解除师徒：师徒传功账目暂时无法读取，请稍后重试（关系与资产均未变动）。",
+            **buttons,
+        )
+        await unbind_mentor.finish()
+    if settlement.status == "insufficient_cultivation":
+        await handle_send(
+            bot, event,
+            f"未能离开{mentor_name}门下：需先清退你通过本段师徒获得的修为。"
+            + render_dissolution_line(settlement, format_number=number_to),
+            **buttons,
+        )
+        await unbind_mentor.finish()
     if not settlement.succeeded:
         await handle_send(bot, event, "离师未执行：师徒关系当前状态已更新。", **buttons)
         await unbind_mentor.finish()
@@ -2457,6 +2518,7 @@ async def unbind_mentor_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     msg = (
         f"你已离开{mentor_name}门下，进入{APPRENTICE_COOLDOWN_DAYS}天拜师冷却。\n"
         f"{MENTOR_SAME_PAIR_REBIND_COOLDOWN_DAYS}天内不能再次拜入同一位师父门下。"
+        f"{render_dissolution_line(settlement, format_number=number_to)}"
     )
     await handle_send(bot, event, msg, **buttons)
     await unbind_mentor.finish()

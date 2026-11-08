@@ -193,9 +193,33 @@ def apply_stone_training_operations(uow: DatabaseUnitOfWork) -> None:
         uow.execute(statement)
 
 
+def apply_mentor_dissolution_operations(uow: DatabaseUnitOfWork) -> None:
+    """Create the game-owned 师徒解除清算 receipt table (request paths never DDL)."""
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS mentor_dissolution_operations ("
+        "operation_id TEXT PRIMARY KEY, payload TEXT NOT NULL, "
+        "gained_exp INTEGER NOT NULL, charge INTEGER NOT NULL, "
+        "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+    )
+
+
+def apply_mentor_dissolution_player_schema(uow: DatabaseUnitOfWork) -> None:
+    """Add the player-owned 师徒清退修为 statistic (request paths never DDL)."""
+    columns = {
+        str(row["name"]).casefold()
+        for row in uow.query_all('PRAGMA table_info("statistics")')
+    }
+    if not columns:
+        return
+    if "师徒清退修为" not in columns:
+        uow.execute('ALTER TABLE statistics ADD COLUMN "师徒清退修为" INTEGER DEFAULT 0')
+
+
 __all__ = [
     "apply_buff",
     "apply_blessed_spot_operations",
+    "apply_mentor_dissolution_operations",
+    "apply_mentor_dissolution_player_schema",
     "apply_stone_training_operations",
     "apply_partner_token_operations",
     "apply_partner_token_usage",
