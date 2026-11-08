@@ -71,11 +71,44 @@ def _download_resources() -> None:
 
 
 def _maintain_database() -> None:
+    from ..paths import get_paths
+    from ..features.maintenance.application import compact_receipts
     from .xiuxian_utils.pet_system import migrate_pet_storage_once
 
-    migrated = migrate_pet_storage_once()
-    if migrated:
-        logger.info(f"宠物数据库自动整理完成：{migrated} 条")
+    # Each maintenance step is isolated: a failure in one must not stop the other.
+    try:
+        migrated = migrate_pet_storage_once()
+        if migrated:
+            logger.info(f"宠物数据库自动整理完成：{migrated} 条")
+    except Exception as exc:
+        logger.warning(f"宠物数据库自动整理失败：{exc}")
+
+    # Historical rows written before v1.2.10/v1.2.11 still hold full snapshots.
+    # This is bounded and resumable, and it never rewrites replay columns.
+    try:
+        paths = get_paths()
+        report = compact_receipts(
+            paths.game_db,
+            paths.player_db,
+            state_path=paths.data / "maintenance" / "receipt_compaction.json",
+            # The rebuild is a file rewrite, so follow the existing backup rule:
+            # only reclaim once a snapshot archive already exists.
+            backup_dir=paths.backups / "db_backup",
+            logger=logger,
+        )
+        logger.info(
+            "历史回执整理：%s；用时 %.2fs" % (report.summary(), report.elapsed_seconds)
+        )
+        for name, space in (report.space_before or {}).items():
+            after = (report.space_after or {}).get(name) or {}
+            if space.get("file_bytes") and after.get("file_bytes"):
+                logger.info(
+                    "回执整理文件大小 %s：%s B → %s B（freelist %s → %s 页）"
+                    % (name, space.get("file_bytes"), after.get("file_bytes"),
+                       space.get("freelist_pages"), after.get("freelist_pages"))
+                )
+    except Exception as exc:
+        logger.warning(f"历史回执整理失败：{exc}")
 
 
 def _install_dependencies() -> None:

@@ -2959,6 +2959,7 @@
     "cultivation_reset_operations",
     "daily_fortune_claims",
     "dao_record",
+    "dbstat",
     "demon_attack_settlement_operations",
     "demon_claim_operations",
     "demon_event_lifecycle_operations",
