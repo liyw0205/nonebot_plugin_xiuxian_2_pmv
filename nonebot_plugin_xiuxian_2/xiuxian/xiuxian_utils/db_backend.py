@@ -142,8 +142,9 @@ def _convert_sql(sql: str) -> str:
 
 def _adapt_param(value: Any) -> Any:
     # Central SQLite INTEGER overflow guard for ALL transaction_service writes.
-    # Oversized Python ints are bound as plain decimal digits (no precision loss,
-    # no int64 clamping); int64-range ints, floats/rates and strings stay as-is.
+    # Oversized Python ints are bound as plain decimal digits since 636cab6e
+    # (before that: "{:.2e}" with three significant digits); no int64 clamp.
+    # int64-range ints, floats/rates and strings stay as-is.
     try:
         from .numeric_bind import bind_sqlite_param
     except ImportError:  # file-loaded tests / bare module

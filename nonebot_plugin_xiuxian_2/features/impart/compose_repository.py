@@ -77,6 +77,13 @@ class ImpartCardComposeSqlRepository:
                 "SELECT quantity FROM impart_cards WHERE user_id=? AND card_name=?",
                 (user_id, target_card),
             )
+            if card_definitions is not None and uow.query_one(
+                "SELECT 1 FROM xiuxian_impart WHERE user_id=?", (user_id,)
+            ) is None:
+                # 卡牌加成只能写进 xiuxian_impart。没有该行时若照常合成，
+                # 会「给了卡却没有持久化加成」——按 user_missing 拒绝，与
+                # 祈愿/抽卡路径的前置检查保持一致。
+                return CardComposeResult("user_missing")
             source_quantity = 0 if source is None else int(source["quantity"])
             target_quantity = 0 if target is None else int(target["quantity"])
             if (source_quantity, target_quantity) != (

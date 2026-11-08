@@ -748,16 +748,20 @@ def _normalize_leading_at_for_command(event: "Event") -> None:
             pass
 
 
-def _message_is_empty(message: object) -> bool:
-    """没有任何消息段的事件无法匹配指令。
+def _message_is_empty(event: object) -> bool:
+    """仅当**消息事件**确实带了空的消息段时返回 True。
 
-    nonebot 的 ``TrieRule.get_value`` 会直接取 ``message[0]``，空消息因此抛
+    nonebot 的 ``TrieRule.get_value`` 直接取 ``message[0]``，空消息因此抛
     ``IndexError: list index out of range``（线上 ``Error while parsing command
-    for event`` 的根因）。这里提前判断，让包装层直接跳过这类事件。
+    for event`` 的根因）。
+
+    非消息事件（notice / request / meta）本来就没有 ``message``，它们有各自的
+    handler，必须继续分发——所以缺少 ``message`` 一律**不算**空消息。
     """
 
+    message = getattr(event, "message", None)
     if message is None:
-        return True
+        return False
     try:
         return len(message) == 0  # type: ignore[arg-type]
     except Exception:
@@ -773,7 +777,7 @@ def _wrap_handle_event(handle_event):
             _normalize_leading_at_for_command(event)
         except Exception:
             pass
-        if _message_is_empty(getattr(event, "message", None)):
+        if _message_is_empty(event):
             return None
         token = _CURRENT_EVENT.set(event)
         try:

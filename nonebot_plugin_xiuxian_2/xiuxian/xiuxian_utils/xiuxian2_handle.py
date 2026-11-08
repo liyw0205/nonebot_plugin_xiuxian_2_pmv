@@ -4585,10 +4585,16 @@ def _safe_parse_dt(dt_str):
 def number_count(num):
     """
     数据库安全处理：
-    如果数值超过 SQLite INTEGER 限制 (9,223,372,036,854,775,807)，返回科学计数法字符串。
-    否则返回 int。
+    如果数值超过 SQLite INTEGER 限制 (9,223,372,036,854,775,807)，
+    返回**纯十进制数字**字符串（避免 ``{:.2e}`` 只保留 3 位有效数字的精度损失）；
+    否则原样返回 int。超过 int64 的值不会被截断到上限。
 
-    实现迁至 ``numeric_bind``，供 ``db_backend`` 绑定层与原子 service 共用。
+    实现迁至 ``numeric_bind``（唯一实现），供 ``db_backend`` 绑定层
+    （``bind_sqlite_param``）与原子 service 共用；本函数只做转发。
+
+    注意：绑定纯数字只是让语句不因 OverflowError 中断，SQLite 的
+    NUMERIC/INTEGER 亲和性仍会把超 int64 的值存成 REAL（约 15–17 位有效数字），
+    该存储上限见 ``docs/features/base.md``。
     """
     from .numeric_bind import number_count as _number_count
 

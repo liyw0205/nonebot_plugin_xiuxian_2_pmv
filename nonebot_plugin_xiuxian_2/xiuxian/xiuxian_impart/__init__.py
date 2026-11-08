@@ -809,7 +809,7 @@ async def impart_compose_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
     )
     result = outcome
 
-    messages = {"same_card": "合成材料卡与目标卡不能相同！", "card_missing": "重复卡不足5张，无法合成！", "state_changed": "卡牌操作未结算：卡牌当前状态已更新，请重新操作。"}
+    messages = {"same_card": "合成材料卡与目标卡不能相同！", "card_missing": "重复卡不足5张，无法合成！", "state_changed": "卡牌操作未结算：卡牌当前状态已更新，请重新操作。", "user_missing": "未找到传承数据！"}
     if result.status == "duplicate":
         await handle_send(
             bot, event,

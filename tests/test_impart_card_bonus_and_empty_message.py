@@ -103,7 +103,8 @@ class EmptyMessageGuardTests(unittest.TestCase):
         self.assertIsNone(result)
         self.assertEqual([], calls)
 
-    def test_none_message_is_skipped(self) -> None:
+    def test_non_message_events_still_delegate(self) -> None:
+        """notice / request / meta 没有 ``message``，必须照常分发到 handler。"""
         calls: list[object] = []
 
         async def handle_event(bot, event):
@@ -111,8 +112,21 @@ class EmptyMessageGuardTests(unittest.TestCase):
             return "handled"
 
         wrapped = on_compat._wrap_handle_event(handle_event)
-        self.assertIsNone(asyncio.run(wrapped(object(), SimpleEvent(message=None))))
-        self.assertEqual([], calls)
+        for event in (
+            NoticeEvent(),      # 入群/退群等 notice
+            RequestEvent(),     # 好友/入群请求
+            MetaEvent(),        # meta_event（心跳不会被分发，但语义必须保留）
+            SimpleEvent(message=None),  # 显式 message=None 的消息事件
+        ):
+            with self.subTest(event=type(event).__name__):
+                self.assertEqual("handled", asyncio.run(wrapped(object(), event)))
+        self.assertEqual(4, len(calls))
+
+    def test_empty_check_distinguishes_missing_from_empty(self) -> None:
+        self.assertFalse(on_compat._message_is_empty(NoticeEvent()))
+        self.assertFalse(on_compat._message_is_empty(SimpleEvent(message=None)))
+        self.assertTrue(on_compat._message_is_empty(SimpleEvent(message=[])))
+        self.assertFalse(on_compat._message_is_empty(SimpleEvent(message=["签到"])))
 
     def test_normal_message_still_reaches_handle_event(self) -> None:
         calls: list[object] = []
@@ -139,7 +153,7 @@ class EmptyMessageGuardTests(unittest.TestCase):
 
 
 class SimpleEvent:
-    """足够让包装层跑起来的最小事件。"""
+    """足够让包装层跑起来的最小消息事件。"""
 
     def __init__(self, *, message) -> None:
         self.message = message
@@ -148,6 +162,23 @@ class SimpleEvent:
         self.message_type = "group"
         self.group_id = 1
         self.user_id = 2
+
+
+class NoticeEvent:
+    """notice 事件：没有 message 属性，只有各自字段。"""
+
+    notice_type = "group_increase"
+    group_id = 1
+    user_id = 2
+
+
+class RequestEvent:
+    request_type = "friend"
+    user_id = 2
+
+
+class MetaEvent:
+    meta_event_type = "heartbeat"
 
 
 if __name__ == "__main__":

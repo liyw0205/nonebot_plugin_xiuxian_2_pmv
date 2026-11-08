@@ -10,18 +10,27 @@ normalization, causing:
 Rules:
 1. Bind-time safety belongs in ``db_backend._adapt_param`` (all SQL params) —
    every oversized Python int is rewritten, regardless of column name.
-2. Domain helpers should still call ``number_count`` / ``sql_num`` for clarity
-   and for result payloads that re-bind values.  Both predate the shared guard
-   and have always returned **plain decimal digits** for values beyond int64
-   (never scientific notation, never an int64 clamp).
+2. ``number_count`` is the original write-path helper, preserved and
+   generalized into the shared ``bind_sqlite_param``; domain code may still
+   call ``number_count`` / ``sql_num`` for clarity and for result payloads that
+   re-bind values.  **Current** behavior for values beyond int64 is plain
+   decimal digits — no scientific notation, no int64 clamp.  That formatting
+   changed long before v1.2.7, in ``636cab6e`` (2026-07-21), which replaced
+   ``"{:.2e}".format(...)`` (three significant digits — massive precision
+   loss) with ``str(val_int)`` for both ``number_count`` and
+   ``bind_sqlite_param``.
 3. Read-path ``normalize_user_row`` / ``normalize_numeric_row`` /
-   ``as_int_like`` coerce numeric TEXT back to int.  They also tolerate the
-   scientific-notation TEXT that much older writers left behind — that legacy
-   tolerance is about historic rows, not about what the current write path
-   produces.
+   ``as_int_like`` coerce numeric TEXT back to int.  The scientific-notation
+   tolerance exists for rows written **before** ``636cab6e`` — it is legacy
+   compatibility, not something the current write path produces.
 4. Core table schema (``user_xiuxian`` / ``user_cd`` / …) is still ensured only
    by ``XiuxianDateManage._check_data`` at plugin load — services must not
    recreate core columns; op tables may ``CREATE TABLE IF NOT EXISTS``.
+
+Note: binding plain digits keeps the statement alive, but SQLite's
+NUMERIC/INTEGER affinity still stores a value beyond int64 as REAL (double,
+~15–17 significant digits).  That storage limit is unchanged and documented in
+``docs/features/base.md``.
 """
 
 from __future__ import annotations
