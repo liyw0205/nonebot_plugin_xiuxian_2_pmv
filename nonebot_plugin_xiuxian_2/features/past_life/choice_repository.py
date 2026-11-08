@@ -4,6 +4,7 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 from ...infrastructure.database import DatabaseUnitOfWork
+from ..base.receipt_payload import build_payload
 from .schema import CHOICE_OPERATIONS_COLUMNS, PAST_LIFE_COLUMNS, SCHEMA_MISSING, table_ready
 
 FIELDS=("state","stage","revision","alloc","accumulated","talent","birth_scenario","total_score","score_breakdown","event_indices","event_snapshots","early_death_rolls","history","last_run_time","total_runs","best_ending","best_score","endings_log","achievement_points")
@@ -78,6 +79,7 @@ class PastLifeChoiceSqlRepository:
         for f in IMMUTABLE:
             if self._canon(final[f])!=self._canon(exp[f]): raise ValueError(f'past life choice changed immutable field: {f}')
         payload=self._canon({'user_id':user_id,'choice_idx':choice_idx,'expected':exp,'final':final})
+        payload=build_payload(kind='advance',snapshot=payload,user_id=user_id,choice_idx=choice_idx,stage=int(exp['stage']),revision=int(exp['revision']))
         with DatabaseUnitOfWork(self.game_database,immediate=True) as uow:
             uow.attach_database(self.player_database,'player_data')
             if not self._schema_ready(uow):return PastLifeChoiceResult(SCHEMA_MISSING)

@@ -77,6 +77,22 @@
 上限与剩余血量同分时优先报单次上限（固定规则）。只读渲染，不改伤害公式、
 `damage_ratio`、积分/灵石/修为奖励与结算 CAS。由 `tests/test_boss_damage_note.py` 钉住。
 
+### 全量刷新回执的紧凑编码
+
+`world_boss_full_refresh_operations.payload` 原先写入 25 个 BOSS 的**完整定义**（`bosses` 与
+`expected_bosses` 各一份）加配置快照。该列在代码里只用于判等（`operation_conflict`），
+可回放的 BOSS 列表另存在 `result_json`。线上实测该列 47.5 MB（`player.db` 的 41%，
+0.40 MB/日，单行 12,842 B）。
+
+现改为 `features/base/receipt_payload.py::build_payload` 的紧凑回执
+（`kind="full_refresh"`、`trigger`、`expected_revision`、`boss_count`、`digest`）：
+
+- `payload_matches` 对 v2 比 digest，对旧行按原文算 sha256，升级后重放旧 operation 仍为
+  `duplicate`；不同 `trigger`/`expected_revision` 仍是 `operation_conflict`。
+- 回放内容不变：`get_result` 继续从 `result_json` 返回 BOSS 列表与 revision。
+- 取舍：回执不再保存当时的期望 BOSS 定义（当前 BOSS 仍在 `world_boss_state`，回放用
+  `result_json`）。既有旧行不重写（单行 12,842 → 168 B）。
+
 ## 定时任务
 
 世界BOSS刷新和天罚仍由显式兼容生命周期注册，手动生成、全量刷新与每日重置的持久化由 feature-owned repository 承担；手动与定时全量刷新共享 operation receipt，未在 feature 导入时重复注册。

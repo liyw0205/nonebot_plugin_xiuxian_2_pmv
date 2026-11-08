@@ -49,6 +49,23 @@ Lifecycle writes for `投胎`、`前尘选择`、终局奖励和 `重置前尘` 
 
 奖励物品目录只在实际生成终局奖励时按需构造，导入前尘模块不会预加载全量 `Items` 缓存；共享目录不在 feature 内复制或主动清空。
 
+### 回执 payload 的紧凑编码
+
+`past_life_choice_operations` / `past_life_final_operations` / `past_life_start_operations` 的
+`payload` 列原先写入整份内部快照（选择前/后的完整状态、开局计划与事件快照）。代码里对该列的
+唯一用途是**判等**（重放/冲突），玩家可见文案另存在 `response_json`。线上实测这三列合计
+92.6 MB（`xiuxian.db` 的 31.9%，0.93 + 0.08 + 0.07 MB/日）。
+
+现改为 `features/base/receipt_payload.py::build_payload` 产出的紧凑回执：
+`{"v":2,"kind":...,"user_id":...,"digest":<sha256>, stage/revision/choice_idx/...}`。
+
+- 判等由 `payload_matches` 完成：v2 比 `digest`；**旧行按原文算 sha256 比对**，
+  因此升级后重放旧 operation 仍返回 `duplicate` 而不是 `operation_conflict`。
+- 身份（`user_id`/`kind`）仍在回执内，`payload_identity` 供旧行 `user_id` 反解回退。
+- 回放内容不变：`response_json` / `result_json` 原样保留，玩家看到的文案逐字相同。
+- 取舍：不再能从旧回执恢复某一步的完整内部状态（当前进度仍在 `past_life` 表，叙事仍在
+  `response_json`）。既有旧行不重写；收益只体现在后续新增行（单行 60,943 → 184 B）。
+
 ## 定时任务
 No new scheduled jobs. Legacy jobs stay registered through the compatibility scheduler.
 

@@ -6,13 +6,7 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from threading import RLock
 from ..xiuxian_utils import db_backend
-from .past_life_state import (
-    INTEGER_FIELDS,
-    PAST_LIFE_FIELDS,
-    canonical,
-    encode_field,
-    normalize_state,
-)
+from ...features.base.receipt_payload import build_payload, payload_identity, payload_matches
 from datetime import datetime
 from .past_life_state import (
     INTEGER_FIELDS,
@@ -96,7 +90,7 @@ class PastLifeChoiceService:
             if (
                 str(previous[0]) == str(user_id)
                 and str(previous[1]) == str(kind)
-                and str(previous[2]) == str(payload)
+                and payload_matches(previous[2], payload)
                 and str(previous[3]) == response_json
             ):
                 return "duplicate"
@@ -201,13 +195,23 @@ class PastLifeChoiceService:
             if canonical(final[field_name]) != canonical(expected[field_name]):
                 raise ValueError(f"past life choice changed immutable field: {field_name}")
 
-        payload = canonical(
+        snapshot = canonical(
             {
                 "user_id": user_id,
                 "choice_idx": choice_idx,
                 "expected": expected,
                 "final": final,
             }
+        )
+        # Only the snapshot's identity and a digest are stored: the receipt is an
+        # idempotency token, and the player-visible text lives in response_json.
+        payload = build_payload(
+            kind="advance",
+            snapshot=snapshot,
+            user_id=user_id,
+            choice_idx=choice_idx,
+            stage=int(expected["stage"]),
+            revision=int(expected["revision"]),
         )
         with self._lock, closing(db_backend.connect(self._game_database)) as conn:
             attached = False
@@ -475,7 +479,7 @@ class PastLifeStartService:
             "event_indices": event_indices,
             "event_snapshots": event_snapshots,
         }
-        payload = canonical(
+        snapshot = canonical(
             {
                 "user_id": user_id,
                 "plan": plan,
@@ -483,6 +487,13 @@ class PastLifeStartService:
                 "choices_count": choices_count,
                 "refresh_slot_start": slot_start.strftime("%Y-%m-%d %H:%M:%S"),
             }
+        )
+        payload = build_payload(
+            kind="start",
+            snapshot=snapshot,
+            user_id=user_id,
+            choices_count=choices_count,
+            refresh_slot_start=slot_start.strftime("%Y-%m-%d %H:%M:%S"),
         )
 
         with self._lock, closing(db_backend.connect(self._game_database)) as conn:
@@ -647,7 +658,7 @@ class PastLifeFinalSettlementService:
         completed_at = str(completed_at or datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
         choice_response = None if choice_response is None else dict(choice_response)
         expected_snapshot = normalize_state(expected_state)
-        payload = _canonical({
+        snapshot = _canonical({
             "user_id": user_id,
             "expected": expected_snapshot,
             "ending": str(ending_name),
@@ -659,6 +670,17 @@ class PastLifeFinalSettlementService:
             "completed_at": completed_at,
             "choice_response": choice_response,
         })
+        payload = build_payload(
+            kind="final",
+            snapshot=snapshot,
+            user_id=user_id,
+            ending=str(ending_name),
+            score=score,
+            exp=exp_reward,
+            stone=stone_reward,
+            points=achievement_points,
+            completed_at=completed_at,
+        )
 
         with self.lock, closing(db_backend.connect(self.game_db)) as conn:
             try:
@@ -673,6 +695,10 @@ class PastLifeFinalSettlementService:
                 if old:
                     conn.rollback()
                     old_user_id = old[0]
+                    if old_user_id is None:
+                        # Compact payloads carry the identity; legacy rows stored
+                        # it inside the snapshot itself.
+                        old_user_id = payload_identity(old[1]).get("user_id")
                     if old_user_id is None:
                         try:
                             old_user_id = json.loads(str(old[1])).get("user_id")

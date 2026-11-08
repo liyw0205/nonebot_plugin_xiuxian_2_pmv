@@ -9,6 +9,7 @@ from typing import Any, Callable
 
 from ...infrastructure.database import DatabaseUnitOfWork
 from ...infrastructure.clock import SystemClock
+from ..base.receipt_payload import build_payload, payload_matches
 
 
 @dataclass(frozen=True)
@@ -340,13 +341,22 @@ class WorldBossFullRefreshSqlRepository:
             raise ValueError("valid operation and trigger are required")
         if not self.database.is_file():
             return WorldBossFullRefreshResult("schema_missing", trigger=trigger)
-        payload = self._json({
+        snapshot = self._json({
             "trigger": trigger,
             "expected_revision": expected_revision,
             "expected_bosses": expected_bosses,
             "expected_config": expected_config,
             "bosses": bosses,
         })
+        # The receipt is an idempotency token: identity + digest, not a second copy
+        # of 25 boss definitions.  The replayable boss list lives in result_json.
+        payload = build_payload(
+            kind="full_refresh",
+            snapshot=snapshot,
+            trigger=trigger,
+            expected_revision=expected_revision,
+            boss_count=len(bosses),
+        )
         with self.lock, DatabaseUnitOfWork(self.database, immediate=True) as uow:
             if not self._schema_ready(uow):
                 return WorldBossFullRefreshResult("schema_missing", trigger=trigger)
@@ -355,7 +365,7 @@ class WorldBossFullRefreshSqlRepository:
                 (operation_id,),
             )
             if previous is not None:
-                if str(previous["payload"]) != payload:
+                if not payload_matches(previous["payload"], payload):
                     return WorldBossFullRefreshResult("operation_conflict", trigger=trigger)
                 return self._from_json(previous["result_json"], "duplicate")
 

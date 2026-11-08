@@ -7,6 +7,7 @@ from pathlib import Path
 from threading import RLock
 from datetime import date, datetime
 from ..xiuxian_utils import db_backend
+from ...features.base.receipt_payload import build_payload, payload_matches
 from datetime import datetime
 from typing import Any
 from typing import Any, Callable
@@ -1027,7 +1028,7 @@ class WorldBossFullRefreshService:
         bosses = [dict(boss) for boss in bosses]
         if not operation_id or trigger not in {"manual", "scheduled"}:
             raise ValueError("valid operation and trigger are required")
-        payload = self._json(
+        snapshot = self._json(
             {
                 "trigger": trigger,
                 "expected_revision": expected_revision,
@@ -1035,6 +1036,13 @@ class WorldBossFullRefreshService:
                 "expected_config": expected_config,
                 "bosses": bosses,
             }
+        )
+        payload = build_payload(
+            kind="full_refresh",
+            snapshot=snapshot,
+            trigger=trigger,
+            expected_revision=expected_revision,
+            boss_count=len(bosses),
         )
 
         with self._lock, closing(db_backend.connect(self._player_database)) as conn:
@@ -1049,7 +1057,7 @@ class WorldBossFullRefreshService:
                 ).fetchone()
                 if previous is not None:
                     conn.rollback()
-                    if str(previous[0]) != payload:
+                    if not payload_matches(previous[0], payload):
                         return WorldBossFullRefreshResult("operation_conflict")
                     return self._result_from_json(previous[1], "duplicate")
 
