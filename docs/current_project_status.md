@@ -2,6 +2,54 @@
 
 最后核验：2026-11-09。本文是唯一活跃进度入口；旧重构文档仅作为历史记录，不再定义当前分支或禁止事项。
 
+## 已完成优化：存储审计第二阶段——幂等回执摘要化（v1.2.11）
+
+只读审计（`mode=ro` + dbstat，含 `unused` 列；字节一律 UTF-8，`LENGTH(CAST(x AS BLOB))`）
+之后的第二项存储修复。未写生产库、未 checkpoint、未 VACUUM、未删除任何行、未部署。
+
+- 页级事实：`xiuxian.db` 290.1 MB（页内碎片 22.2 MB / 7.65%）、`player.db` 115.9 MB
+  （4.3 MB / 3.75%）、`message.db` 23.4 MB（3.7 MB / 15.87%），全部 `freelist_count=0`
+  —— 没有可回收空页，只有页内碎片（只能靠 VACUUM/REINDEX，属维护动作）。
+- 按 UTF-8 字节与增长排序（宠物回执已在上阶段修完）：`past_life_choice_operations`
+  79.8 MB / 0.93 MB/日、`world_boss_full_refresh_operations` 68.2 MB / 0.40 MB/日、
+  `economy_log`+6 索引 27.2 MB、`past_life_final` 6.8 MB、`dungeon_explore` 10.1 MB、
+  `past_life_start` 6.0 MB、`work_daily_refresh_reset_targets` 12.3 MB、
+  `messages`+13 索引 22.8 MB。
+- **读写归属决定分类**：四个 `payload` 列（前尘选择/开局/终局、世界BOSS全量刷新）在代码里
+  只用于**判等**（重放/冲突），玩家可见文案在 `response_json`、可回放 BOSS 列表在
+  `result_json`；`economy_log` 是无界流水、`messages` 是可重建缓存、两张
+  `*_daily_reset_targets` 只按当日查询 —— 后三者属「保留 + 需要保留期」，本轮不改。
+- 新增 `features/base/receipt_payload.py`（纯函数）：`build_payload` 写
+  `{"v":2,"kind","user_id","digest":sha256(既有 canonical 快照), 少量身份字段}`；
+  `payload_matches` 对 v2 比 digest、**对旧行按原文算 sha256 再比**，因此升级后重放旧
+  operation 仍是 `duplicate`，不同输入仍是 `operation_conflict`；`payload_identity`
+  供旧行 `user_id` 反解回退。
+- 接线（每条路径的写方与读方同时改，避免两条写路径写出不同格式）：
+  `xiuxian/xiuxian_past_life/transaction_service.py`（advance/start/final + `record_result`
+  判等 + final 旧 user_id 反解）、`features/past_life/choice_repository.py`、
+  `features/boss/world_boss_repository.py`、`xiuxian/xiuxian_boss/transaction_service.py`。
+- 回放内容零变更：`response_json` / `result_json` 逐字保留；零 schema/迁移/命令/配置键。
+- 实测单行：选择 60,943 → 184 B、开局 30,597 → 205 B、终局 34,804 → 253 B、
+  BOSS 刷新 12,842 → 168 B；合计增长 ~1.48 MB/日 → ~0.03 MB/日。既有旧行不重写。
+- 取舍（已写入功能文档）：不再能从旧回执恢复某一步的完整内部状态；当前进度仍在
+  `past_life` 表，玩家可见叙事仍在 `response_json`。
+- 测试：新 `tests/test_receipt_payload_compaction.py` 11 项（digest 稳定性与不含快照、
+  v2 判等、旧行判等、旧候选保字节相等、身份读取；真实 `PastLifeChoiceService`
+  应用/重放/冲突/旧行重放/字节上限；真实 `WorldBossFullRefreshSqlRepository`
+  刷新/重放返回 bosses/冲突/旧行重放/字节上限）。受影响套件：`test_past_life*` 55、
+  `test_boss*` 56、source_quality+refactor_progress+新套件 280 均通过。
+- 门禁：architecture、inventory `--check`、progress `--json`（`failures: None`；
+  `exit_ready: False` 仍由用户删除的冻结文件造成）真实 exit 0；`compileall`、
+  `git diff --check` 干净。
+- 交付：`ad2d7ccb` 推送 develop（CI run `42527316070` success）。因 main 上已有 v1.2.10
+  状态记录提交、而 develop 有功能提交，两者各多 1 个提交；按「不重写历史、不强推」用一次
+  普通 merge 收口 `4ca5c0ba`（仅带入状态记录），develop CI `42527671157` success 后
+  `--ff-only` 合入 main，main CI `42528083863` success。
+- 只报告不执行的维护建议（与上阶段一致）：`VACUUM` 可回收 22.2 MB 页内碎片（需停机+冷备份+
+  ≥1× 库空间，当前 3.8 GB 余量可行）；`economy_log` 建议 180 天保留/按月归档；两张
+  `*_daily_reset_targets` 的旧日期可安全清除；`messages` 建议 30–90 天保留；`backups/`
+  3.0 GB 按用户策略不动。
+
 ## 已完成优化：数据库体积诊断 + 砸蛋回执冻结 ID 存储（v1.2.10）
 
 只读诊断（`mode=ro` + dbstat，未写生产库、未 VACUUM、未部署）后实施的一项存储修复。
