@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from decimal import Decimal, InvalidOperation
-from typing import Any, Iterable
+from typing import Any, Iterable, Mapping
 
 
 OVERFLOW_NUM_FIELDS = frozenset(
@@ -100,6 +100,50 @@ def _coerce_field(value: Any) -> Any:
         return as_int_like(text)
 
 
+SQLITE_MAX_INT = 2**63 - 1  # 9_223_372_036_854_775_807
+SQLITE_MIN_INT = -(2**63)  # -9_223_372_036_854_775_808
+
+
+def bind_sqlite_param(value: Any) -> Any:
+    """SQLite param guard for oversized integers (int64 limit).
+
+    Python's ``sqlite3`` raises ``OverflowError: Python int too large to convert
+    to SQLite INTEGER`` for any int outside int64, which aborts the enclosing
+    transaction.  The economy is allowed to produce such values: ``境界.json``
+    tops out at ``至高.power = 10**29`` and 修为 caps are ``power ×
+    closing_exp_upper_limit``, so 虚神界出关 and the hourly sect grant used to
+    fail outright for high realms.
+
+    This adapter binds such values as plain decimal digits, which keeps the
+    statement (and the whole settlement) alive.  SQLite's NUMERIC/INTEGER
+    affinity columns still store them as REAL (double, ~15-17 significant
+    digits) — a historical storage limit, documented in
+    ``docs/features/base.md`` ("高境界整数存储边界") — while receipts and
+    ``result_json`` keep the full computed integer.  Nothing is clamped or
+    truncated to int64.
+
+    Values inside int64 stay ``int`` and round-trip as exact SQLite INTEGER.
+    Floats, strings and ``None`` are untouched — rates and ratios must not be
+    forced through ``int``.  Booleans normalize to 0/1.
+    """
+    if isinstance(value, bool):
+        return int(value)
+    if isinstance(value, int) and (value > SQLITE_MAX_INT or value < SQLITE_MIN_INT):
+        return str(value)
+    return value
+
+
+def adapt_sqlite_params(params: Any) -> Any:
+    """Apply :func:`bind_sqlite_param` to a params mapping/sequence/scalar."""
+    if params is None:
+        return ()
+    if isinstance(params, Mapping):
+        return {key: bind_sqlite_param(value) for key, value in params.items()}
+    if isinstance(params, (list, tuple)):
+        return tuple(bind_sqlite_param(value) for value in params)
+    return (bind_sqlite_param(params),)
+
+
 def normalize_numeric_row(row: Any, fields: Iterable[str] | None = None) -> Any:
     """Coerce overflow-normalized fields on user, sect, and wallet rows."""
     if not isinstance(row, dict):
@@ -127,7 +171,11 @@ def normalize_sect_row(row: Any) -> Any:
 
 __all__ = [
     "OVERFLOW_NUM_FIELDS",
+    "SQLITE_MAX_INT",
+    "SQLITE_MIN_INT",
+    "adapt_sqlite_params",
     "as_int_like",
+    "bind_sqlite_param",
     "normalize_numeric_row",
     "normalize_sect_row",
     "normalize_user_row",

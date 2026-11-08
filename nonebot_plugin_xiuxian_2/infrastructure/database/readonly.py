@@ -6,6 +6,8 @@ import sqlite3
 from pathlib import Path
 from typing import Any, Mapping
 
+from ...core.numeric import adapt_sqlite_params
+
 
 class ReadOnlyQuery:
     """A deliberately small query-only boundary.
@@ -32,13 +34,16 @@ class ReadOnlyQuery:
     def one(self, sql: str, params: Any = ()) -> Mapping[str, Any] | None:
         self._validate(sql)
         with self._connect() as connection:
-            row = connection.execute(sql, params).fetchone()
+            row = connection.execute(sql, adapt_sqlite_params(params)).fetchone()
             return dict(row) if row is not None else None
 
     def all(self, sql: str, params: Any = ()) -> list[Mapping[str, Any]]:
         self._validate(sql)
         with self._connect() as connection:
-            return [dict(row) for row in connection.execute(sql, params).fetchall()]
+            return [
+                dict(row)
+                for row in connection.execute(sql, adapt_sqlite_params(params)).fetchall()
+            ]
 
 
 __all__ = ["ReadOnlyQuery"]

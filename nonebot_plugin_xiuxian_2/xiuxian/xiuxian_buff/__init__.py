@@ -9,6 +9,7 @@ from ...paths import get_paths
 from ...features.buff.application import BuffApplication
 from ...features.base.economy_application import PlayerEconomyApplication
 from ...features.player_state.application import PlayerStateApplication
+from ...features.mixelixir.harvest_rules import field_status_text
 from ...features.buff.pvp_battle import calculate_battle
 from ...infrastructure.clock import SystemClock
 from ...infrastructure.random_source import SystemRandom
@@ -1311,17 +1312,7 @@ async def daily_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     # 3. 获取灵田收取时间信息
     mix_elixir_info = get_player_info(user_id, "mix_elixir_info")
     if mix_elixir_info and '收取时间' in mix_elixir_info:
-        last_collect_time = datetime.strptime(mix_elixir_info['收取时间'], '%Y-%m-%d %H:%M:%S')
-        next_collect_time = last_collect_time + timedelta(hours=23)
-        now_time = runtime_clock.now()
-        
-        if now_time >= next_collect_time:
-            lingtian_msg = "🌱 已成熟"
-        else:
-            time_left = next_collect_time - now_time
-            hours_left = time_left.seconds // 3600
-            minutes_left = (time_left.seconds % 3600) // 60
-            lingtian_msg = f"⏳ {hours_left}时{minutes_left}分后"
+        lingtian_msg = field_status_text(mix_elixir_info['收取时间'], runtime_clock.now())
     else:
         lingtian_msg = "⬜ 未开启"
     

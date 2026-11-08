@@ -16,6 +16,7 @@ from .training_data import training_data
 from .training_limit import training_limit
 from ...paths import get_paths
 from ...features.training.application import TrainingApplication
+from ...features.training.hourly_window import training_hour_window
 from ...features.training.event_history import (
     TrainingEventHistoryApplication,
     format_training_event_history,
@@ -181,12 +182,10 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     # 检查历练时间 - 同小时内不可重复历练
     training_info = training_application.get_state(user_id)
     now = runtime_clock.now()
-    last_time = training_info["last_time"]
-    
-    if last_time and last_time.year == now.year and last_time.month == now.month and last_time.day == now.day and last_time.hour == now.hour:
-        next_hour = (last_time + timedelta(hours=1)).replace(minute=0, second=0, microsecond=0)
-        wait_minutes = (next_hour - now).seconds // 60
-        msg = f"本小时内已历练过，下次可历练时间: {next_hour.strftime('%H:%M')} (还需等待{wait_minutes}分钟)"
+    window = training_hour_window(last_time=training_info["last_time"], now=now)
+
+    if window["in_same_hour"]:
+        msg = f"本小时内已历练过，下次可历练时间: {window['next_time_local']} (还需等待{window['wait_minutes']}分钟)"
         await handle_send(bot, event, msg, md_type="历练", k1="开始历练", v1="开始历练", k2="历练状态", v2="历练状态", k3="商店", v3="历练商店")
         await training_start.finish()
     
@@ -221,18 +220,10 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     now = runtime_clock.now()
     
     # 计算下次可历练时间
-    if training_info["last_time"]:
-        last_time = training_info["last_time"]
-        in_same_hour = last_time.year == now.year and last_time.month == now.month and last_time.day == now.day and last_time.hour == now.hour
-        
-        if in_same_hour:
-            next_time = (last_time + timedelta(hours=1)).replace(minute=0, second=0, microsecond=0)
-            wait_minutes = (next_time - now).seconds // 60
-            status_msg = f"本小时内已历练过，还需等待{wait_minutes}分钟"
-            next_time_str = next_time.strftime("%H:%M")
-        else:
-            status_msg = "可立即开始历练"
-            next_time_str = "现在"
+    window = training_hour_window(last_time=training_info["last_time"], now=now)
+    if window["in_same_hour"]:
+        status_msg = f"本小时内已历练过，还需等待{window['wait_minutes']}分钟"
+        next_time_str = window["next_time_local"]
     else:
         status_msg = "可立即开始历练"
         next_time_str = "现在"

@@ -88,6 +88,7 @@ from ...features.auction.settlement import AuctionSettlementApplication
 from ...features.auction.pending import AuctionPendingApplication
 from ...features.auction.my_auction_view import render_live_lots, render_settlements
 from ...features.auction.query_application import AuctionQueryApplication
+from ...features.auction.domain import session_window
 from ...features.trade.guishi_deposit_repository import GuishiDepositSqlRepository
 from ...features.trade.guishi_withdraw_repository import GuishiWithdrawSqlRepository
 from ...infrastructure.ids import UUIDGenerator
@@ -3554,18 +3555,18 @@ async def _check_auction_end_job_impl():
         logger.error("拍卖库内存在拍品，但数据库场次不存在，停止自动收尾。")
         return
     now_dt = runtime_clock.now()
-    end_dt = datetime.fromtimestamp(session["end_time"])
+    window = session_window(session, now_dt)
+    end_dt = window["end_time"]
     n = current_auction_count
 
-    if now_dt >= end_dt:
+    if window["expired"]:
         logger.info(f"拍卖到点收尾，拍品 {n} 件，开始结算。")
         await _end_auction_with_application(
             f"auction-session:auto-finish:{session['session_id']}"
         )
         return
 
-    remaining_seconds = int((end_dt - now_dt).total_seconds())
-    remaining_minutes = remaining_seconds // 60
+    remaining_minutes = window["remaining_seconds"] // 60
     if remaining_minutes > 0 and remaining_minutes % 30 == 0:
         logger.info(f"拍卖进行中，距结束约 {remaining_minutes} 分钟。")
 

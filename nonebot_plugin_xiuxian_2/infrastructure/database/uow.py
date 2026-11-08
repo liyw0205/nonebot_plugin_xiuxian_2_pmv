@@ -7,6 +7,8 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Mapping
 
+from ...core.numeric import adapt_sqlite_params
+
 
 class DatabaseUnitOfWork:
     """SQLite transaction with explicit commit/rollback semantics."""
@@ -123,10 +125,14 @@ class DatabaseUnitOfWork:
         self._conn().commit()
 
     def execute(self, sql: str, params: Any = ()) -> sqlite3.Cursor:
-        return self._conn().execute(sql, params)
+        # Central overflow guard: the raw driver aborts the whole transaction on
+        # any int outside int64, so every statement binds normalized params.
+        return self._conn().execute(sql, adapt_sqlite_params(params))
 
     def executemany(self, sql: str, params: Any) -> sqlite3.Cursor:
-        return self._conn().executemany(sql, params)
+        return self._conn().executemany(
+            sql, (adapt_sqlite_params(row) for row in params)
+        )
 
     def query_one(self, sql: str, params: Any = ()) -> Mapping[str, Any] | None:
         row = self.execute(sql, params).fetchone()

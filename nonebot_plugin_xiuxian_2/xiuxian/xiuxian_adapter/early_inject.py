@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import Enum
-from typing import Any
+from typing import Any, Mapping
 
 
 def inject_vendor_adapter_paths(plugin_root=None) -> list[str]:
@@ -255,6 +255,61 @@ def force_group_member_events() -> bool:
     )
 
 
+def normalize_payload_data(data: Any) -> dict[str, Any]:
+    """Normalize inbound QQ ``Dispatch.data`` into a mapping the model accepts.
+
+    Two real-world shapes break event validation for otherwise valid messages:
+
+    * ``RESUMED`` reconnect dispatches send ``data`` as a plain string, so the
+      adapter's ``{"event_id": payload.id, **payload.data}`` raises
+      ``TypeError: 'str' object is not a mapping`` and the connection state is
+      lost.  Those become an empty mapping (the connection handler only needs
+      the type).
+    * A reference (引用) message can carry ``msg_elements`` entries with only
+      ``content``.  The pip model requires ``message_type`` and ``msg_idx``, so
+      validation fails and the whole group message is dropped before any handler
+      runs.  Missing fields are filled with neutral defaults; present values are
+      kept untouched (``msg_elements[0]`` is what reply detection reads).
+
+    Anything else is returned unchanged (shallow copy only when rewritten).
+    """
+    if not isinstance(data, Mapping):
+        return {}
+    elements = data.get("msg_elements")
+    if not isinstance(elements, list):
+        return dict(data)
+
+    normalized: list[Any] = []
+    changed = False
+    for element in elements:
+        if isinstance(element, Mapping) and (
+            "message_type" not in element or "msg_idx" not in element
+        ):
+            filled = dict(element)
+            filled.setdefault("content", "")
+            filled.setdefault("message_type", 0)
+            filled.setdefault("msg_idx", "")
+            normalized.append(filled)
+            changed = True
+        else:
+            normalized.append(element)
+    if not changed:
+        return dict(data)
+    patched = dict(data)
+    patched["msg_elements"] = normalized
+    return patched
+
+
+def _payload_to_event_with_guard(original: Any, payload: Any) -> Any:
+    """Apply :func:`normalize_payload_data`, then defer to the adapter."""
+    data = getattr(payload, "data", None)
+    normalized = normalize_payload_data(data)
+    if normalized != data or not isinstance(data, Mapping):
+        copy_payload = getattr(payload, "model_copy", None) or payload.copy
+        payload = copy_payload(update={"data": normalized})
+    return original(payload)
+
+
 def force_payload_mapping_guard() -> bool:
     """给已预加载的 QQ 类补上 vendor 的字符串 Dispatch 保护。"""
     try:
@@ -267,11 +322,8 @@ def force_payload_mapping_guard() -> bool:
         return True
 
     def payload_to_event(payload):  # type: ignore[no-untyped-def]
-        # RESUMED 的 data 可以是字符串；保留原始 payload 供连接状态处理。
-        if not isinstance(payload.data, dict):
-            copy_payload = getattr(payload, "model_copy", None) or payload.copy
-            payload = copy_payload(update={"data": {}})
-        return original(payload)
+        # RESUMED 的 data 可以是字符串；引用消息的 msg_elements 可能缺字段。
+        return _payload_to_event_with_guard(original, payload)
 
     payload_to_event.__xiuxian_payload_mapping_guard__ = True  # type: ignore[attr-defined]
     Adapter.payload_to_event = staticmethod(payload_to_event)

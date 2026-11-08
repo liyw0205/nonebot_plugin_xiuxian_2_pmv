@@ -47,8 +47,12 @@ normalize_numeric_row = _core_numeric.normalize_numeric_row
 normalize_sect_row = _core_numeric.normalize_sect_row
 normalize_user_row = _core_numeric.normalize_user_row
 
-SQLITE_MAX_INT = 2**63 - 1  # 9_223_372_036_854_775_807
-SQLITE_MIN_INT = -(2**63)  # -9_223_372_036_854_775_808
+SQLITE_MAX_INT = _core_numeric.SQLITE_MAX_INT  # 9_223_372_036_854_775_807
+SQLITE_MIN_INT = _core_numeric.SQLITE_MIN_INT  # -9_223_372_036_854_775_808
+
+# Single implementation lives in ``core.numeric`` (shared with the UoW/readonly
+# SQLite boundary); this module only re-exports it for legacy call sites.
+bind_sqlite_param = _core_numeric.bind_sqlite_param
 
 _NUM_LIKE_RE = re.compile(
     r"^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$"
@@ -340,23 +344,6 @@ def percent_exp_reward(
         except Exception:
             pass
     return max(0, reward)
-
-
-def bind_sqlite_param(value: Any) -> Any:
-    """
-    Param adapter for SQLite drivers.
-
-    Oversized ints → plain-digit TEXT (not scientific float).
-    Leaves floats/rates/strings untouched (unlike ``number_count`` which
-    coerces every number through ``int`` when in range).
-
-    Column-agnostic: stone, contribution, points, power, exp all covered.
-    """
-    if isinstance(value, bool):
-        return int(value)
-    if isinstance(value, int) and (value > SQLITE_MAX_INT or value < SQLITE_MIN_INT):
-        return str(value)
-    return value
 
 
 def format_plain_number(value: Any) -> str:

@@ -37,6 +37,10 @@ class BankAccountInfoApplication:
         savestone = bank_data.get("savestone", 0)
         savetime = bank_data.get("savetime", str(default_saved_at))
         bank_level = str(bank_data.get("banklevel", "1"))
+        if savetime is None or not str(savetime).strip():
+            # 历史行可能只有 active 标记、没有时间；用调用方给的默认时间，
+            # 避免把空串直接交给利息计算。
+            savetime = str(default_saved_at)
         try:
             savestone = int(savestone)
         except Exception:

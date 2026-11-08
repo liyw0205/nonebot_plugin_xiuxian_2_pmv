@@ -13,7 +13,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Iterable, Mapping
 
 DEFAULT_TIME_COST_HOURS = 23.0
@@ -145,6 +145,33 @@ def remaining_text(remaining_hours: float) -> str:
     return f"{hours}小时{minutes}分钟"
 
 
+def field_status_text(
+    last_time: Any,
+    now: datetime,
+    *,
+    time_cost_hours: float = DEFAULT_TIME_COST_HOURS,
+) -> str:
+    """``日常`` 灵田行文案：已成熟 / 剩余 X时Y分后 / 未开启。
+
+    ``收取时间`` 存的是 naive UTC 文本，而 ``runtime_clock.now()`` 是 aware UTC；
+    旧实现直接 ``strptime`` 后与 aware 时间相减，线上抛
+    ``TypeError: can't subtract offset-naive and offset-aware datetimes``。
+    这里复用同一份解析/归一函数（``parse_harvest_time`` / ``normalize_now``），
+    缺值、``'0'`` 与不可信脏值返回「未开启」，绝不凭空显示已成熟。
+    """
+    parsed = parse_harvest_time(last_time)
+    if parsed is None:
+        return "⬜ 未开启"
+    moment = normalize_now(now)
+    next_collect = parsed + timedelta(hours=float(time_cost_hours))
+    if moment >= next_collect:
+        return "🌱 已成熟"
+    time_left = next_collect - moment
+    hours_left = time_left.seconds // 3600
+    minutes_left = (time_left.seconds % 3600) // 60
+    return f"⏳ {hours_left}时{minutes_left}分后"
+
+
 def normalize_rewards(
     rewards: Iterable[Any],
 ) -> tuple[tuple[int, str, int], ...]:
@@ -174,6 +201,7 @@ __all__ = [
     "READY",
     "WAITING",
     "as_int",
+    "field_status_text",
     "harvest_count",
     "is_never_harvested",
     "maturity_interval_hours",
