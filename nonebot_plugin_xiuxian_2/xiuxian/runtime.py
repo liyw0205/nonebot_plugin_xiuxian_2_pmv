@@ -131,6 +131,24 @@ def _maintain_database() -> None:
     except Exception as exc:
         logger.warning(f"每日重置明细清理失败：{exc}")
 
+    # Terminal dungeon team invites: only rows that already expired or were
+    # consumed (and are past the retention window) may go; pending invites and
+    # the dungeon_team_operations receipts are never touched.
+    try:
+        from ..features.maintenance.terminal_invite_retention import maintain_terminal_invites
+
+        invites = maintain_terminal_invites(
+            paths.player_db,
+            state_path=paths.data / "maintenance" / "terminal_invite_retention.json",
+            logger=logger,
+        )
+        logger.info(
+            "终态组队邀请保留（cutoff_epoch=%.0f）：%s；用时 %.2fs"
+            % (invites.cutoff_epoch, invites.summary(), invites.elapsed_seconds)
+        )
+    except Exception as exc:
+        logger.warning(f"终态组队邀请清理失败：{exc}")
+
 
 def _install_dependencies() -> None:
     from .xiuxian_utils.ensure_dependencies import ensure_plugin_dependencies

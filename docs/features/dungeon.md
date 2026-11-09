@@ -18,7 +18,7 @@
 
 ## 数据模型与迁移
 
-`dungeon.001` 在 `game_db` 创建 `dungeon_feature_migrations`；game-only `dungeon.008` 为探索回执补齐 `intent_json`。player-only `dungeon.006/.007` 预建队伍/global/status/reset schema，`dungeon.009` 以 JSON1 回填成员索引并由 mutation 同事务维护，`dungeon.010` 增加邀请通知路由和只覆盖未消费 pending 行的到期索引。历史邀请和持久回执保留，缺 schema/index fail closed，不做请求期 DDL。
+`dungeon.001` 在 `game_db` 创建 `dungeon_feature_migrations`；game-only `dungeon.008` 为探索回执补齐 `intent_json`。player-only `dungeon.006/.007` 预建队伍/global/status/reset schema，`dungeon.009` 以 JSON1 回填成员索引并由 mutation 同事务维护，`dungeon.010` 增加邀请通知路由和只覆盖未消费 pending 行的到期索引。pending 邀请、持久回执与历史探索/结算记录保留；终态邀请行（expired/joined 等，且过期已超保留期）由启动维护回收（见 `docs/features/maintenance.md`）。缺 schema/index fail closed，不做请求期 DDL。
 
 ## 事务与失败回滚
 

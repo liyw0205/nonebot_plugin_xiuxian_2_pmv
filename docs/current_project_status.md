@@ -2,6 +2,31 @@
 
 最后核验：2026-11-10。本文是唯一活跃进度入口；旧重构文档仅作为历史记录，不再定义当前分支或禁止事项。
 
+## 已完成：终态组队邀请行启动期保留期清理（v1.2.18）
+
+按 `.codex-db-storage-audit.md` 逐条核验后，唯一「确实过期且不再被业务读取」且不属于
+幂等回执／经济流水／玩家可见数据的对象是 `dungeon_team_invites` 的**终态行**：每发一次
+邀请留一行，终态只由 `UPDATE ... SET consumed_at=CURRENT_TIMESTAMP` 产生，从不删除。
+
+- 代码证据：`due_invites`/`pending_for_user` 都带 `status='pending'`；`join` 对终态行与
+  缺失行都返回 `invite_invalid`；`team_manager.py:130` 的 60 秒通知任务在
+  `invite_by_id` 为 None 时静默返回，终态行让 `expire()` 返回非 `applied`，同样静默。
+- 新 `features/maintenance/terminal_invite_retention.py`，由
+  `runtime._maintain_database` 在 reset-target 保留之后单独 try 调用：只删「终态 +
+  `expires_at` 为数值 + 早于 30 天」的行；`pending` 行永久保留；`dungeon_team_operations`
+  回执、`economy_log`、`messages` 与玩家可见数据一律不动；缺表/缺列返回 `schema_missing`
+  且不建表；每批 500 行单 `BEGIN IMMEDIATE`、整轮 10s 预算、进度原子写
+  `data/maintenance/terminal_invite_retention.json`；零新增配置键、零表结构。
+- 未纳入本轮（有代码证据但违反边界）：`economy_log`（48 处读路径，保留流水）、
+  `messages`（已有按配置天数的保留期）、两张 `*_daily_reset_targets`（v1.2.13 已交付）、
+  所有 `*_operations` 回执（用户明确不删）、`dungeon_explore_operations`（玩家可见探索历史）、
+  活动 `*_log`（后台统计与当日查重有真实读者）、`VACUUM`（需停机，属部署动作）。
+- 测试：新 `tests/test_terminal_invite_retention.py` 13 项（只删过期终态、pending 保留、
+  回执逐字不变、缺表/缺列不建表、二次运行零删除、批大小与预算中断补齐、`due_invites`
+  不变、删除前后 `invite_by_id`/`expire()` 等价）。受影响套件 37 + 4 项通过。
+- 门禁：architecture、inventory `--check` exit 0；`compileall`、`git diff --check` 干净。
+- 未部署、未触碰真实库、未打标签、未合 main。
+
 ## 已完成：我的仙肆 关键词筛选 + 翻页续查（v1.2.17）
 
 列表检索路线（`docs/goals/goal-list-search-remaining.md`）明确把 `我的仙肆` 排除在

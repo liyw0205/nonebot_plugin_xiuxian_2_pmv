@@ -119,3 +119,27 @@ pending 0 行。同一批数据下 14/60/90 天分别对应 86.5%/46.0%/20.4%（
 
 手工验收（不得在生产直接执行）：在数据副本上启动一次，确认日志出现
 `回执整理 … 转换 N` 与 `回执整理文件大小 … → …`，重启后任务显示已完成。
+
+### 终态组队邀请保留期（`terminal_invite_retention`）
+
+`dungeon_team_invites` 每发一次邀请留一行，终态（`expired`/`joined` 等）行只由
+`UPDATE ... SET consumed_at=CURRENT_TIMESTAMP` 产生，从不删除，因此无限累积。所有业务
+读者都只取 `status='pending'`：`due_invites`/`pending_for_user` 带 pending 条件；`join`
+对终态行与缺失行都返回 `invite_invalid`；60 秒通知任务在 `invite_by_id` 为 None 时静默
+返回，而终态行让 `expire()` 返回非 `applied`，同样静默。
+
+因此只回收同时满足「终态」（`status <> 'pending'` 或 `consumed_at IS NOT NULL`）、
+「`expires_at` 为数值」且「早于 30 天窗口」的行：
+
+- `pending` 行永久保留（即便已过期，交给既有到期/过期流程）；
+- `dungeon_team_operations` 幂等回执、`economy_log`、`messages` 与玩家可见数据一律不动；
+- 缺表或缺列（旧库）直接返回 `schema_missing`，**不建表、不补列**。
+
+事务与限制：每批 `DEFAULT_BATCH_SIZE`（500）行在单个 `BEGIN IMMEDIATE` 中删除，
+整轮 `DEFAULT_BUDGET_SECONDS`（10s）预算；中断后下次启动从同一稳定谓词继续（无需
+watermark）。进度写 `data/maintenance/terminal_invite_retention.json`（原子写，含
+`cutoff_epoch/deleted/complete/last_run`）。保留窗口为模块常量，不新增配置键。
+
+测试：`tests/test_terminal_invite_retention.py`（13 项）钉住只删过期终态行、pending
+永久保留、回执逐字不变、缺表/缺列不建表、二次运行零删除、批大小与预算中断后补齐、
+`due_invites` 不变，以及删除前后 `invite_by_id`/`expire()` 结果等价。
