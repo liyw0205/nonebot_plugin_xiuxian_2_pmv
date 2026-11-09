@@ -17,6 +17,7 @@ aware UTC。本套件锁定修正后的单一时间帧，并覆盖调度任务�
 from __future__ import annotations
 
 import unittest
+from contextlib import ExitStack
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -89,7 +90,18 @@ class ParseTimeFrameTests(unittest.TestCase):
 
 class SpiritVeinActiveTests(unittest.TestCase):
     def _patched(self, state: dict):
-        return patch.object(world_events, "_load_state", return_value=dict(state))
+        """Patch the stored state **and** the wall clock to ``NOW``.
+
+        The fixtures encode a window that is open at ``NOW`` and the gate calls
+        ``_now()``; without pinning the clock the assertions silently depended on
+        the real date and started failing once the wall clock passed
+        2026-11-08 23:50.
+        """
+
+        stack = ExitStack()
+        stack.enter_context(patch.object(world_events, "_load_state", return_value=dict(state)))
+        stack.enter_context(patch.object(world_events, "_now", return_value=NOW))
+        return stack
 
     def test_active_window_inside_the_frame(self) -> None:
         with self._patched(_active("2026-11-08 23:50:00")):
