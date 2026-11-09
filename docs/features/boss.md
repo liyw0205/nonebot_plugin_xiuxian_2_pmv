@@ -97,6 +97,12 @@
 
 世界BOSS刷新和天罚仍由显式兼容生命周期注册，手动生成、全量刷新与每日重置的持久化由 feature-owned repository 承担；手动与定时全量刷新共享 operation receipt，未在 feature 导入时重复注册。
 
+每日限额重置的逐用户明细（`world_boss_daily_limit_reset_targets`）由启动维护
+`features/maintenance/reset_target_retention.py` 保留 30 天：只清理「日期规范、状态为
+`applied/skipped`、且该业务日父操作行已 `completed`」的行；`pending`/未知状态/非 ISO 日期/
+缺父行一律保留，父操作行（含总计与变更数）与 `boss.boss_*` 永不改动。
+详见 `docs/features/maintenance.md`「每日重置明细保留」。
+
 ## 配置项
 
 `boss_enabled`（`XIUXIAN_BOSS_ENABLED`）控制新资产边界，默认启用。

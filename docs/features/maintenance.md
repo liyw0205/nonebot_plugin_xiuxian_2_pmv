@@ -61,6 +61,30 @@ skipped/failed` 与一次性 `vacuum_done` 标记。
 
 无（`features/maintenance/jobs.py` 显式声明 `JOBS = ()`）。收敛后每次启动只读状态文件即返回。
 
+### 每日重置明细保留（`reset_target_retention`）
+
+`work_daily_refresh_reset_targets`（99,032 行 / 12.3 MB）与
+`world_boss_daily_limit_reset_targets`（39,231 行 / 4.4 MB）都是「每个业务日 × 每个玩家」一行，
+由分块每日重置写入，只服务于**当次**运行：重置按日期读取 pending 行续跑，而父操作行
+（`*_reset_operations`，`business_date` + `status`）一旦是 `completed`，feature 仓储与
+legacy 兼容服务都会先返回 `duplicate`（总计/已处理/变更来自父行），根本不会读 target 行。
+
+因此只允许「很久以前、已完成运行」的明细过期，且必须同时满足：
+
+1. `status IN ('applied','skipped')` —— `pending` 与任何未知状态一律保留（中断可续跑）；
+2. `business_date` 是规范 `YYYY-MM-DD`（`GLOB` 校验）—— 非 ISO 的历史行无法与 cutoff 安全比较，保留；
+3. 该日期存在父操作行且 `status='completed'` —— 缺父行（历史遗留）按「未完成」处理，保留。
+
+父操作行（含 `total/completed/changed/skipped` 与 `reset_count`）**永不删除**，
+玩家状态（`user_xiuxian.work_num`、`boss.boss_*`）不触碰。启动日志输出 cutoff、
+每批删除行数、总览与用时；进度写 `data/maintenance/reset_target_retention.json`。
+
+保留窗口固定为 **30 天**（模块常量 `DEFAULT_RETENTION_DAYS`，无新配置键）。只读实测证据
+（部署库，2026-11-09）：work 保留 30 天可清理 71,544 / 99,032 行（72.2%），
+boss 28,716 / 39,231（73.2%）；两者全部行都是 `applied` + 父 `completed`，非 ISO 日期 0 行，
+pending 0 行。同一批数据下 14/60/90 天分别对应 86.5%/46.0%/20.4%（work）与
+87.0%/47.5%/21.9%（boss），30 天是在「保留一个月人工重跑余量」与「回收约七成」之间的保守取值。
+
 ## 配置项
 
 不新增配置键，复用既有 `xiuxian_startup_database_maintenance` 开关。批量、预算、

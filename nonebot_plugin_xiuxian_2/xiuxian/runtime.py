@@ -76,6 +76,7 @@ def _maintain_database() -> None:
     from .xiuxian_utils.pet_system import migrate_pet_storage_once
 
     # Each maintenance step is isolated: a failure in one must not stop the other.
+    paths = get_paths()
     try:
         migrated = migrate_pet_storage_once()
         if migrated:
@@ -86,7 +87,6 @@ def _maintain_database() -> None:
     # Historical rows written before v1.2.10/v1.2.11 still hold full snapshots.
     # This is bounded and resumable, and it never rewrites replay columns.
     try:
-        paths = get_paths()
         report = compact_receipts(
             paths.game_db,
             paths.player_db,
@@ -109,6 +109,27 @@ def _maintain_database() -> None:
                 )
     except Exception as exc:
         logger.warning(f"历史回执整理失败：{exc}")
+
+    # Per-user daily-reset detail of long-finished runs: only terminal rows of a
+    # date whose parent run is completed may expire (see the module docstring).
+    try:
+        from datetime import date
+
+        from ..features.maintenance.reset_target_retention import prune_reset_targets
+
+        retention = prune_reset_targets(
+            paths.game_db,
+            paths.player_db,
+            state_path=paths.data / "maintenance" / "reset_target_retention.json",
+            today=date.today(),
+            logger=logger,
+        )
+        logger.info(
+            "每日重置明细保留（cutoff=%s）：%s；用时 %.2fs"
+            % (retention.cutoff, retention.summary(), retention.elapsed_seconds)
+        )
+    except Exception as exc:
+        logger.warning(f"每日重置明细清理失败：{exc}")
 
 
 def _install_dependencies() -> None:

@@ -40,6 +40,12 @@
 
 刷新、结算、过期清理和每日重置仍由兼容调度管理，本切片不新增任务。
 
+每日重置的逐用户明细（`work_daily_refresh_reset_targets`）由启动维护
+`features/maintenance/reset_target_retention.py` 保留 30 天：只清理「日期规范、状态为
+`applied/skipped`、且该业务日父操作行已 `completed`」的行；`pending`/未知状态/非 ISO 日期/
+缺父行一律保留，父操作行（含总计与变更数）与 `user_xiuxian.work_num` 永不改动。
+详见 `docs/features/maintenance.md`「每日重置明细保留」。
+
 ## 配置项
 
 - `work_claim_enabled` / `XIUXIAN_WORK_CLAIM_ENABLED`：默认启用，可关闭新应用接入。
