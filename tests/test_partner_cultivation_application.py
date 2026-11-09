@@ -268,10 +268,12 @@ class PartnerCultivationApplicationTests(unittest.TestCase):
                     "get_paths",
                     return_value=SimpleNamespace(player_db=player),
                 ):
-                    with self.assertRaisesRegex(RuntimeError, "partner_two_exp_usage"):
-                        tracker.find_user("legacy")
+                    # Missing table is self-healed (see test_two_exp_cd_self_heal):
+                    # the read falls back to the legacy ledger, creates the
+                    # migration-owned schema and backfills it, without raising.
+                    self.assertEqual(7, tracker.find_user("legacy"))
                     with db_backend.connection(player) as conn:
-                        self.assertIsNone(conn.execute(
+                        self.assertIsNotNone(conn.execute(
                             "SELECT 1 FROM sqlite_master WHERE name='partner_two_exp_usage'"
                         ).fetchone())
                     with DatabaseUnitOfWork(player) as uow:

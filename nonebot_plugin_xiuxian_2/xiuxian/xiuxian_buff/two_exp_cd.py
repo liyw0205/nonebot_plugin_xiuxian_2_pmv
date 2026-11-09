@@ -22,7 +22,24 @@ class TWO_EXP_CD:
                 "SELECT 1 FROM sqlite_master WHERE type='table' AND name='partner_two_exp_usage'"
             ).fetchone()
             if table is None:
-                raise RuntimeError("required migration table is missing: partner_two_exp_usage")
+                # The buff.003 migration may be recorded as applied while the
+                # table was dropped by `re_data` (the `two_exp_cd_up` reset
+                # command), so the migration runner never recreates it and
+                # every read used to raise.  Self-heal instead: recreate the
+                # exact schema the migration owns and fall back to the legacy
+                # JSON ledger, so the feature keeps working without touching
+                # schema_migrations.
+                conn.execute(
+                    "CREATE TABLE IF NOT EXISTS partner_two_exp_usage("
+                    "user_id TEXT PRIMARY KEY,used_count INTEGER NOT NULL DEFAULT 0,"
+                    "updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+                )
+                legacy_count = int(self.data["two_exp_cd"].get(user_id, 0) or 0)
+                conn.execute(
+                    "INSERT INTO partner_two_exp_usage(user_id,used_count) VALUES(%s,%s)",
+                    (user_id, legacy_count),
+                )
+                return legacy_count
             row = conn.execute(
                 "SELECT used_count FROM partner_two_exp_usage WHERE user_id=%s", (user_id,)
             ).fetchone()
