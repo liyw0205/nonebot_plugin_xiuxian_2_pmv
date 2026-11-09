@@ -2,6 +2,36 @@
 
 最后核验：2026-11-09。本文是唯一活跃进度入口；旧重构文档仅作为历史记录，不再定义当前分支或禁止事项。
 
+## 已完成优化：每日重置明细保留 + 启动期回收（v1.2.13）
+
+仅清理「很久前已完成」的逐用户重置明细（不清理父行、pending/未知/非 ISO/缺父行保留）。
+
+- `work_daily_refresh_reset_targets`（99,032 行 / 12.3 MB）与
+  `world_boss_daily_limit_reset_targets`（39,231 行 / 4.4 MB）的每行只服务于一次分块重置；
+  一旦父操作行 `status=completed`，feature 仓储与 legacy 服务均先返回
+  `duplicate`（总计/已处理/变更来自父行），不会读 target 行 —— 因此很久前已完成运行的明细
+  属纯死重。
+- 新模块 `features/maintenance/reset_target_retention.py`，在启动维护中、回执整理后独立 try：
+  只删除同时满足「`YYYY-MM-DD` 规范日期且早于 30 天窗口」、「`status IN ('applied','skipped')」、
+  「该日期存在父操作行且 `status='completed'」的行；其余（`pending`/未知状态/非 ISO/缺父行）
+  一律保留；父操作行（含总计/变更/`reset_count`）与玩家状态（`user_xiuxian.work_num`、
+  `boss.boss_*`）永不改动。
+- 500 行单事务 `BEGIN IMMEDIATE`、10s 预算、`rowid IN (SELECT ... LIMIT)` 逐批删除；
+  进度写 `data/maintenance/reset_target_retention.json`（原子写）；收敛的 cutoff 下次启动
+  经一次索引探针跳过，而之后才完成的日期仍被拾取。
+- 只读证据（生产库，2026-11-09）：两表各行均为 `applied` + 父 `completed`，pending 0，
+  非 ISO 0；30 天窗口 work 72.2%（71,544 / 99,032）可清理、boss 73.2%（28,716 / 39,231）；
+  14 天 86.5%/87.0%、60 天 46.0%/47.5%。30 天是「留一个月人工重跑余量」与「回收约七成」
+  之间的保守取值。
+- 测试：`tests/test_reset_target_retention.py` 11 项（守卫保持/重放对等/中断续跑/第二次启动
+  0 删除/缺表不建表/feature 与 legacy 重放响应逐字段不变/替换测试日期确保 never expired）。
+- 并发修复了一个「过窗即永久失败」的既有测试（`test_spirit_vein_timeframe.py`：
+  `_patched` 现在也钉住 `_now()`，断言强度不变）。
+- 门禁：architecture（`ok=True`）、inventory `--check`、progress `--json`（`failures: None`）、
+  compileall、`git diff --check` 全 exit 0；337 + 71 + 56 项通过。
+- 交付：`9f7daf02` 推送 develop（run `42539333241` success）→ `--ff-only` 合入 main
+  （run `42543522335` success）。未部署、未写生产库、未删父行或玩家数据。
+
 ## 已完成优化：启动期历史回执整理 + 受控一次性空间回收（v1.2.12）
 
 v1.2.10/v1.2.11 只改变**新写入**；线上既有旧行不会自己变小，且仅改写行并不会让文件变小
