@@ -34,6 +34,7 @@ from ...features.base.keyword_page import (
     empty_notice,
     matches_keyword,
     page_command,
+    parse_page_arg,
     parse_typed_page_arg,
 )
 from . import auction_config
@@ -1297,10 +1298,10 @@ async def my_xian_shop_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         )
         await my_xian_shop.finish()
 
-    try:
-        current_page = int(command_text)
-    except ValueError:
-        current_page = 1
+    # 关键词 + 页码（纯数字仍等价旧页码行为；关键词按物品名/ID 过滤）
+    parsed_query = parse_page_arg(command_text)
+    keyword = parsed_query["keyword"]
+    current_page = parsed_query["page"]
 
     user_items = trade_application.xianshi_get_items(user_id=user_id)
 
@@ -1311,6 +1312,21 @@ async def my_xian_shop_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     
     # 按名称排序
     user_items.sort(key=lambda x: x['name'])
+
+    if keyword:
+        filtered_items = [
+            item
+            for item in user_items
+            if matches_keyword([item.get("name"), item.get("id")], keyword)
+        ]
+        if not filtered_items:
+            await handle_send(
+                bot, event, empty_notice(keyword, "仙肆摊位"),
+                md_type="交易", k1="查看", v1="仙肆查看", k2="我的", v2="我的仙肆",
+                k3="帮助", v3="交易帮助",
+            )
+            await my_xian_shop.finish()
+        user_items = filtered_items
     
     # 分页处理
     per_page = 20
@@ -1324,6 +1340,8 @@ async def my_xian_shop_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     
     title = f"【{user_info['user_name']}的仙肆物品】"
     msg_list = []
+    if keyword:
+        msg_list.append(f"筛选「{keyword}」")
     for item in paged_items:
         price_str = number_to(item['price'])
         msg_line = f"{item['name']} {price_str}灵石"
@@ -1333,7 +1351,7 @@ async def my_xian_shop_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     
     msg_list.append(f"\n第 {current_page}/{total_pages} 页")
     msg_list.append("使用【我的仙肆 记录】查看最近成交")
-    page = ["翻页", f"我的仙肆 {current_page + 1}", "下架", "仙肆下架", "查看", "仙肆查看", f"{current_page}/{total_pages}"]
+    page = ["翻页", page_command("我的仙肆", keyword, current_page + 1), "下架", "仙肆下架", "查看", "仙肆查看", f"{current_page}/{total_pages}"]
     await send_msg_handler(bot, event, '我的仙肆', bot.self_id, msg_list, title=title, page=page)
     await my_xian_shop.finish()
 

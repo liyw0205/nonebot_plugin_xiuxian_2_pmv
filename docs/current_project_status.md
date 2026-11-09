@@ -2,6 +2,27 @@
 
 最后核验：2026-11-10。本文是唯一活跃进度入口；旧重构文档仅作为历史记录，不再定义当前分支或禁止事项。
 
+## 已完成：我的仙肆 关键词筛选 + 翻页续查（v1.2.17）
+
+列表检索路线（`docs/goals/goal-list-search-remaining.md`）明确把 `我的仙肆` 排除在
+六个视图之外，本项就是这条被留下的同类缺口：`my_xian_shop_` 用
+`int(command_text)` 解析参数，`我的仙肆 灵芝` 抛 `ValueError` 后**静默回到第 1 页
+未筛选集合**，第 1336 行的翻页按钮又写死 `f"我的仙肆 {current_page + 1}"`。
+
+- `xiuxian/xiuxian_trade/__init__.py`：`我的仙肆` 改用 `parse_page_arg`，按
+  `matches_keyword([name, id], keyword)` 过滤既有 `xianshi_get_items(user_id=...)`
+  结果（**无新查询**）；筛选后重算总页/钳制页码；翻页统一
+  `page_command("我的仙肆", keyword, current_page + 1)`；有关键词时列表前标
+  `筛选「关键词」`，无命中走 `empty_notice(keyword, "仙肆摊位")`，与真空摊提示区分。
+- 兼容：空参数、纯数字页码、`记录`/`成交`/`历史` 路由与无关键词输出逐字不变。
+- 文案/文档：`trade_help.py` 的 `我的仙肆 [页码|关键词]`，`docs/features/trade.md`
+  与 `docs/gameplay_notes.md` 登记检索字段与翻页续查。
+- 测试：新 `tests/test_my_xianshi_search.py` 14 项（关键词命中/大小写不敏感/ID 命中、
+  筛选后第 2 页仍是筛选集合、翻页命令携带关键词、无关键词逐字回归、超界钳制、
+  无命中与真空态区分、记录路由、三条源合同）。受影响套件 92 项通过。
+- 门禁：architecture、inventory `--check` exit 0；`compileall`、`git diff --check` 干净。
+- 未部署、未写生产库/日志、未打标签、未合 main。
+
 ## 已完成修复：宠物指令失败不再静默（v1.2.16）
 
 同一份日志（`xiu2.log-20261103-033001.gz`）在第 7 次撞号之外还留下 7 条
