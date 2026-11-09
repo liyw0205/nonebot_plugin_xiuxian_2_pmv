@@ -14,7 +14,6 @@
 
 from __future__ import annotations
 
-import json
 import sqlite3
 import tempfile
 import unittest
@@ -40,7 +39,6 @@ from nonebot_plugin_xiuxian_2.infrastructure.database import DatabaseUnitOfWork
 DAY = 86400.0
 NOW = 1_800_000_000.0  # 固定参考时刻，避免真实时钟影响断言
 
-
 class _SeqClock:
     """按序返回时间戳；用尽后回落到最后一个值。"""
 
@@ -55,7 +53,6 @@ class _SeqClock:
             return value
         return self.values[-1] if self.values else 0.0
 
-
 class CutoffTests(unittest.TestCase):
     def test_cutoff_is_now_minus_retention(self) -> None:
         self.assertEqual(cutoff_epoch(NOW, 30), NOW - 30 * DAY)
@@ -66,13 +63,11 @@ class CutoffTests(unittest.TestCase):
     def test_negative_retention_is_clamped(self) -> None:
         self.assertEqual(cutoff_epoch(NOW, -5), NOW)
 
-
 class InviteRetentionTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temp = tempfile.TemporaryDirectory()
         self.root = Path(self.temp.name)
         self.player = self.root / "player.db"
-        self.state = self.root / "maintenance" / "terminal_invite_retention.json"
         with DatabaseUnitOfWork(self.player) as uow:
             apply_dungeon_team(uow)
             apply_dungeon_team_invite_expiry(uow)
@@ -108,12 +103,7 @@ class InviteRetentionTests(unittest.TestCase):
             }
 
     def _prune(self, **kwargs):
-        params = {
-            "state_path": self.state,
-            "now": NOW,
-            "logger": None,
-            "clock": None,
-        }
+        params = {"now": NOW, "logger": None, "clock": None}
         params.update(kwargs)
         clock = params.pop("clock")
         if clock is None:
@@ -187,7 +177,7 @@ class InviteRetentionTests(unittest.TestCase):
     def test_missing_table_is_schema_missing_without_ddl(self) -> None:
         empty = self.root / "empty.db"
         sqlite3.connect(empty).close()
-        report = prune_terminal_invites(empty, state_path=self.state, now=NOW)
+        report = prune_terminal_invites(empty, now=NOW)
         self.assertTrue(report.schema_missing)
         with DatabaseUnitOfWork(empty, read_only=True) as uow:
             tables = [row["name"] for row in uow.query_all("SELECT name FROM sqlite_master WHERE type='table'")]
@@ -199,7 +189,7 @@ class InviteRetentionTests(unittest.TestCase):
             uow.execute(
                 "CREATE TABLE dungeon_team_invites(invite_id TEXT PRIMARY KEY,expires_at REAL NOT NULL,status TEXT NOT NULL)"
             )
-        report = prune_terminal_invites(partial, state_path=self.state, now=NOW)
+        report = prune_terminal_invites(partial, now=NOW)
         self.assertTrue(report.schema_missing)
 
     def test_second_run_deletes_nothing(self) -> None:
@@ -248,17 +238,14 @@ class InviteRetentionTests(unittest.TestCase):
 
     def test_state_file_records_the_pass(self) -> None:
         self._invite("old-expired", status="expired", expires_at=NOW - 40 * DAY, consumed_at="2027-01-01 00:00:00")
-        report = maintain_terminal_invites(
-            self.player, state_path=self.state, now=NOW, logger=None
-        )
+        before = sorted(path.name for path in self.root.iterdir())
+        report = maintain_terminal_invites(self.player, now=NOW, logger=None)
+        after = sorted(path.name for path in self.root.iterdir())
         self.assertEqual(report.deleted, 1)
-        document = json.loads(self.state.read_text(encoding="utf-8"))
-        self.assertEqual(document["version"], 1)
-        self.assertEqual(document["cutoff_epoch"], cutoff_epoch(NOW, 30))
-        self.assertEqual(document["deleted"], 1)
-        self.assertTrue(document["complete"])
-        self.assertIn("last_run", document)
-
+        self.assertEqual(report.batches, 1)
+        self.assertEqual(report.cutoff_epoch, cutoff_epoch(NOW, 30))
+        # 谓词幂等，因此不写任何进度/状态文件
+        self.assertEqual(before, after)
 
 if __name__ == "__main__":
     unittest.main()

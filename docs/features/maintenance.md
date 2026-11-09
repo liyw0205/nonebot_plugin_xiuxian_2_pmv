@@ -136,9 +136,14 @@ pending 0 行。同一批数据下 14/60/90 天分别对应 86.5%/46.0%/20.4%（
 - 缺表或缺列（旧库）直接返回 `schema_missing`，**不建表、不补列**。
 
 事务与限制：每批 `DEFAULT_BATCH_SIZE`（500）行在单个 `BEGIN IMMEDIATE` 中删除，
-整轮 `DEFAULT_BUDGET_SECONDS`（10s）预算；中断后下次启动从同一稳定谓词继续（无需
-watermark）。进度写 `data/maintenance/terminal_invite_retention.json`（原子写，含
-`cutoff_epoch/deleted/complete/last_run`）。保留窗口为模块常量，不新增配置键。
+整轮 `DEFAULT_BUDGET_SECONDS`（10s）预算。谓词稳定且幂等，因此**不写进度/状态文件**：
+预算中断后下次启动重新选中同一批剩余可删行即可。日志只输出一行聚合口径
+（cutoff_epoch、清理行数、批数、是否「下次启动继续」与用时）。保留窗口为模块常量，
+不新增配置键、不新增表结构。
+
+生命周期依据：邀请创建时 `expires_at = now + 60`（`xiuxian_dungeon/__init__.py:491`），
+`join` 要求 `expires_at > now`，过期通知任务在 60 秒后运行——单条邀请可操作期最多 60 秒，
+30 天窗口约为其 43,200 倍，任何真实重放/通知路径都不可能再关心该行。
 
 测试：`tests/test_terminal_invite_retention.py`（13 项）钉住只删过期终态行、pending
 永久保留、回执逐字不变、缺表/缺列不建表、二次运行零删除、批大小与预算中断后补齐、

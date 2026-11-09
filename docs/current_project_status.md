@@ -15,8 +15,8 @@
   `runtime._maintain_database` 在 reset-target 保留之后单独 try 调用：只删「终态 +
   `expires_at` 为数值 + 早于 30 天」的行；`pending` 行永久保留；`dungeon_team_operations`
   回执、`economy_log`、`messages` 与玩家可见数据一律不动；缺表/缺列返回 `schema_missing`
-  且不建表；每批 500 行单 `BEGIN IMMEDIATE`、整轮 10s 预算、进度原子写
-  `data/maintenance/terminal_invite_retention.json`；零新增配置键、零表结构。
+  且不建表；每批 500 行单 `BEGIN IMMEDIATE`、整轮 10s 预算；谓词幂等，因此不写任何
+  进度文件，日志只有一行聚合口径；零新增配置键、零表结构。
 - 未纳入本轮（有代码证据但违反边界）：`economy_log`（48 处读路径，保留流水）、
   `messages`（已有按配置天数的保留期）、两张 `*_daily_reset_targets`（v1.2.13 已交付）、
   所有 `*_operations` 回执（用户明确不删）、`dungeon_explore_operations`（玩家可见探索历史）、

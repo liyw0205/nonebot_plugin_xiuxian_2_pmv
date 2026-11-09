@@ -15,17 +15,22 @@ Only the *pending* rows are business state.  Every reader filters on
   ``None`` returns silently, and a terminal row makes ``expire()`` return a
   non-``applied`` status, which is also silent
 
-So a terminal row whose expiry is well in the past is dead weight: deleting it
-cannot change any player-visible result.  Two things are deliberately untouched:
+An invitation is created with ``expires_at = now + 60`` and ``join`` requires
+``expires_at > now``, so one invitation is actionable for at most 60 seconds.
+The 30-day window is therefore ~43,200x the whole invite lifecycle: no real
+replay or notification path can still care about such a row.
 
-* ``pending`` rows, whatever their age -- the existing expiry flow owns them;
-* ``dungeon_team_operations`` -- that table is the idempotency/replay receipt
-  and is never referenced from this module.
+The deletion predicate is stable and idempotent, so a pass stopped by the time
+budget simply selects the same remaining eligible rows on the next boot -- there
+is deliberately no progress/state file.  Only one aggregate log line is emitted.
+
+Two things are never touched: ``pending`` rows (whatever their age -- the
+existing expiry flow owns them) and ``dungeon_team_operations``, which is the
+idempotency/replay receipt.
 """
 
 from __future__ import annotations
 
-import json
 import time
 from dataclasses import dataclass
 from datetime import datetime
@@ -33,9 +38,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from ...infrastructure.database import DatabaseUnitOfWork
-from ...infrastructure.filesystem.atomic import atomic_write
 
-STATE_VERSION = 1
 DEFAULT_RETENTION_DAYS = 30
 DEFAULT_BATCH_SIZE = 500
 DEFAULT_BUDGET_SECONDS = 10.0
@@ -56,11 +59,11 @@ class InviteRetentionReport:
 
     def summary(self) -> str:
         if self.schema_missing:
-            return "终态组队邀请：缺表或缺列，跳过（不建表）"
+            return "缺表或缺列，跳过（不建表）"
         if self.skipped:
-            return "终态组队邀请：本轮已收敛"
-        tail = "（下次启动继续）" if self.candidates_remaining else "（本轮已收敛）"
-        return "终态组队邀请：清理 %d 行%s" % (self.deleted, tail)
+            return "数据库不可用，跳过"
+        tail = "下次启动继续" if self.candidates_remaining else "本轮已收敛"
+        return "清理 %d 行（%s）" % (self.deleted, tail)
 
 
 def cutoff_epoch(now: float | datetime, retention_days: int = DEFAULT_RETENTION_DAYS) -> float:
@@ -95,28 +98,9 @@ def _table_ready(uow: DatabaseUnitOfWork) -> bool:
     return REQUIRED_COLUMNS.issubset(columns)
 
 
-def _load_state(path: Path) -> dict[str, Any]:
-    try:
-        document = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, TypeError, ValueError):
-        return {"version": STATE_VERSION}
-    if not isinstance(document, dict):
-        return {"version": STATE_VERSION}
-    document.setdefault("version", STATE_VERSION)
-    return document
-
-
-def _save_state(path: Path, state: dict[str, Any]) -> None:
-    atomic_write(
-        path,
-        json.dumps(state, ensure_ascii=False, sort_keys=True, indent=2).encode("utf-8"),
-    )
-
-
 def prune_terminal_invites(
     player_database: str | Path,
     *,
-    state_path: str | Path,
     now: float | datetime | None = None,
     retention_days: int = DEFAULT_RETENTION_DAYS,
     batch_size: int = DEFAULT_BATCH_SIZE,
@@ -127,8 +111,9 @@ def prune_terminal_invites(
     """Delete terminal invite rows older than the retention window.
 
     Bounded by ``batch_size`` rows per ``BEGIN IMMEDIATE`` transaction and by
-    ``budget_seconds`` for the whole pass; an interrupted pass simply resumes on
-    the next boot because the predicate is stable.
+    ``budget_seconds`` for the whole pass.  The predicate is stable, so a stopped
+    pass needs no bookkeeping: the next call selects the same remaining rows.
+    Exactly one aggregate log line is emitted.
     """
 
     report = InviteRetentionReport()
@@ -136,7 +121,6 @@ def prune_terminal_invites(
     cutoff = cutoff_epoch(now if now is not None else time.time(), retention_days)
     report.cutoff_epoch = cutoff
     path = Path(player_database)
-    state_file = Path(state_path)
     if not path.is_file():
         report.skipped = True
         return report
@@ -146,12 +130,15 @@ def prune_terminal_invites(
         with DatabaseUnitOfWork(path, immediate=True) as uow:
             if not _table_ready(uow):
                 report.schema_missing = True
+                report.elapsed_seconds = round(clock() - started, 3)
                 return report
             probe = uow.query_one("SELECT 1 AS present " + clause + " LIMIT 1", (cutoff,))
             if probe is None:
+                report.elapsed_seconds = round(clock() - started, 3)
                 return report
             if clock() - started >= budget_seconds:
                 report.candidates_remaining = True
+                report.elapsed_seconds = round(clock() - started, 3)
                 return report
             cursor = uow.execute(
                 'DELETE FROM "%s" WHERE invite_id IN '
@@ -162,18 +149,14 @@ def prune_terminal_invites(
             deleted = int(getattr(cursor, "rowcount", 0) or 0)
             report.deleted += deleted
             report.batches += 1
-        if deleted and logger is not None:
-            logger.info(
-                "终态组队邀请清理：本批删除 %d 行（cutoff_epoch=%.0f）" % (deleted, cutoff)
-            )
         if deleted == 0:
+            report.elapsed_seconds = round(clock() - started, 3)
             return report
 
 
 def maintain_terminal_invites(
     player_database: str | Path,
     *,
-    state_path: str | Path,
     now: float | datetime | None = None,
     retention_days: int = DEFAULT_RETENTION_DAYS,
     batch_size: int = DEFAULT_BATCH_SIZE,
@@ -181,11 +164,10 @@ def maintain_terminal_invites(
     logger: Any = None,
     clock: Callable[[], float] = time.monotonic,
 ) -> InviteRetentionReport:
-    """Run the pass, skipping it when this cutoff already converged."""
+    """Run the pass and emit the single aggregate log line."""
 
     report = prune_terminal_invites(
         player_database,
-        state_path=state_path,
         now=now,
         retention_days=retention_days,
         batch_size=batch_size,
@@ -193,23 +175,11 @@ def maintain_terminal_invites(
         logger=logger,
         clock=clock,
     )
-    state_file = Path(state_path)
-    state = _load_state(state_file)
-    converged = not report.candidates_remaining and not report.schema_missing
-    previous = float(state.get("cutoff_epoch") or 0)
-    carried = int(state.get("deleted") or 0) if previous == report.cutoff_epoch else 0
-    state.update(
-        {
-            "version": STATE_VERSION,
-            "cutoff_epoch": report.cutoff_epoch,
-            "deleted": carried + report.deleted,
-            "complete": converged,
-            "last_run": datetime.now().isoformat(timespec="seconds"),
-            "schema_missing": report.schema_missing,
-        }
-    )
-    if not report.schema_missing:
-        _save_state(state_file, state)
+    if logger is not None:
+        logger.info(
+            "终态组队邀请保留（cutoff_epoch=%.0f）：%s；%d 批；用时 %.2fs"
+            % (report.cutoff_epoch, report.summary(), report.batches, report.elapsed_seconds)
+        )
     return report
 
 
