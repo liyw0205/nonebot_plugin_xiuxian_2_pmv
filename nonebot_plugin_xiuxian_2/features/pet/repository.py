@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -330,6 +331,9 @@ class PetTravelClaimSqlRepository:
 # happen, so the command must report an explicit failure and must not charge
 # again; it is deliberately not part of ``PetHatchResult.succeeded``.
 RECEIPT_CORRUPT = "receipt_unreadable"
+# A brand-new pet's uid already belongs to another row for this player (legacy
+# import or a racing writer).  The insert is rolled back and nothing is charged.
+UID_CONFLICT = "uid_conflict"
 
 
 @dataclass(frozen=True)
@@ -417,9 +421,24 @@ class PetHatchSqlRepository:
             if int(owned["count"]) + len(normalized) > bag_limit:
                 return PetHatchResult("inventory_full")
             now = int(self.clock.now().timestamp())
-            for pet, active in normalized:
-                skill = pet.get("skill") or ((pet.get("skills") or [{}])[0])
-                uow.execute("INSERT INTO player_data.player_pet_item(id,user_id,uid,is_active,pet_id,stars,exp,total_exp,skill_id,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)", (f"{user_id}:{pet['uid']}", user_id, str(pet["uid"]), int(active), str(pet.get("pet_id", "")), int(pet.get("stars", 1)), int(pet.get("exp", 0)), int(pet.get("total_exp", 0)), str(skill.get("skill_id", "")) or None, now, now))
+            # A UID is allocated per pet at creation time (``new_pet_uid``), but a
+            # pre-existing row can still own the same uid (imported/legacy data or
+            # two writers racing).  The UNIQUE(user_id, uid) violation used to
+            # escape as an unhandled IntegrityError, so the player saw a bare
+            # failure with no explanation.  Roll the item rows back within a
+            # savepoint and report a typed status instead: the stone is never
+            # charged and the operation row is never written.
+            try:
+                with uow.savepoint("pet_hatch_items"):
+                    for pet, active in normalized:
+                        skill = pet.get("skill") or ((pet.get("skills") or [{}])[0])
+                        uow.execute("INSERT INTO player_data.player_pet_item(id,user_id,uid,is_active,pet_id,stars,exp,total_exp,skill_id,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)", (f"{user_id}:{pet['uid']}", user_id, str(pet["uid"]), int(active), str(pet.get("pet_id", "")), int(pet.get("stars", 1)), int(pet.get("exp", 0)), int(pet.get("total_exp", 0)), str(skill.get("skill_id", "")) or None, now, now))
+            except sqlite3.IntegrityError as exc:
+                # Only the ``UNIQUE(user_id, uid)`` clash is a UID conflict; any
+                # other integrity failure is a real defect and must still surface.
+                if "player_pet_item.user_id" in str(exc):
+                    return PetHatchResult(UID_CONFLICT)
+                raise
             if uow.execute("UPDATE user_xiuxian SET stone=stone-? WHERE user_id=? AND stone=?", (cost, user_id, expected_stone)).rowcount != 1:
                 return PetHatchResult("state_changed")
             if meta is None:

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 from contextlib import closing
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -450,26 +451,36 @@ class PetHatchService:
                     conn.rollback()
                     return PetHatchResult("inventory_full")
                 now = int(time.time())
-                for pet, active in normalized:
-                    skill = pet.get("skill") or ((pet.get("skills") or [{}])[0])
-                    conn.execute(
-                        "INSERT INTO player_data.player_pet_item("
-                        "id,user_id,uid,is_active,pet_id,stars,exp,total_exp,skill_id,created_at,updated_at) "
-                        "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
-                        (
-                            f"{user_id}:{pet['uid']}",
-                            user_id,
-                            str(pet["uid"]),
-                            int(active),
-                            str(pet.get("pet_id", "")),
-                            int(pet.get("stars", 1)),
-                            int(pet.get("exp", 0)),
-                            int(pet.get("total_exp", 0)),
-                            str(skill.get("skill_id", "")) or None,
-                            now,
-                            now,
-                        ),
-                    )
+                try:
+                    for pet, active in normalized:
+                        skill = pet.get("skill") or ((pet.get("skills") or [{}])[0])
+                        conn.execute(
+                            "INSERT INTO player_data.player_pet_item("
+                            "id,user_id,uid,is_active,pet_id,stars,exp,total_exp,skill_id,created_at,updated_at) "
+                            "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
+                            (
+                                f"{user_id}:{pet['uid']}",
+                                user_id,
+                                str(pet["uid"]),
+                                int(active),
+                                str(pet.get("pet_id", "")),
+                                int(pet.get("stars", 1)),
+                                int(pet.get("exp", 0)),
+                                int(pet.get("total_exp", 0)),
+                                str(skill.get("skill_id", "")) or None,
+                                now,
+                                now,
+                            ),
+                        )
+                except sqlite3.IntegrityError as exc:
+                    # UNIQUE(user_id, uid): a pet UID allocated for this batch is
+                    # already owned by another row.  Fail closed -- the whole
+                    # hatch rolls back, nothing is charged, no receipt is written.
+                    # Other integrity failures keep propagating unchanged.
+                    if "player_pet_item.user_id" in str(exc):
+                        conn.rollback()
+                        return PetHatchResult("uid_conflict")
+                    raise
                 stone_updated = conn.execute(
                     "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)-CAST(%s AS REAL) "
                     "WHERE user_id=%s AND CAST(COALESCE(stone,0) AS REAL)=CAST(%s AS REAL)",

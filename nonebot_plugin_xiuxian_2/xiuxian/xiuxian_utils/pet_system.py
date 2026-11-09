@@ -3,6 +3,7 @@ try:
 except ImportError:
     import json
 import random
+import threading
 import time
 from pathlib import Path
 
@@ -200,11 +201,39 @@ def _normalize_pet_doc(doc: dict):
     return doc
 
 
+# Pet UIDs used to be ``pet_<epoch_seconds>_<random 1000..9999>``.  Ten eggs
+# opened inside the same second therefore collided with ~0.5% probability, and
+# the colliding INSERT into ``player_pet_item`` (UNIQUE ``user_id, uid``)
+# aborted the whole hatch -- nothing was charged and the player got no reply.
+# Allocation now keeps the same shape but draws from a per-process token plus a
+# monotonic per-second sequence, so two pets created in the same second can
+# never share a UID.
+_PET_UID_LOCK = threading.Lock()
+_PET_UID_TOKEN = random.randint(1000, 9999)
+_PET_UID_LAST_SECOND = -1
+_PET_UID_SEQUENCE = 0
+
+
+def new_pet_uid() -> str:
+    """Return a pet UID that is unique for the lifetime of this process."""
+
+    global _PET_UID_LAST_SECOND, _PET_UID_SEQUENCE
+    second = int(time.time())
+    with _PET_UID_LOCK:
+        if second != _PET_UID_LAST_SECOND:
+            _PET_UID_LAST_SECOND = second
+            _PET_UID_SEQUENCE = 0
+        else:
+            _PET_UID_SEQUENCE += 1
+        sequence = _PET_UID_SEQUENCE
+    return f"pet_{second}_{_PET_UID_TOKEN:04d}{sequence:03d}"
+
+
 def _normalize_pet(pet: dict):
     if not isinstance(pet, dict):
         return pet
 
-    pet["uid"] = str(pet.get("uid") or f"pet_{int(time.time())}_{random.randint(1000, 9999)}")
+    pet["uid"] = str(pet.get("uid") or new_pet_uid())
     pet["pet_id"] = str(pet.get("pet_id", ""))
     pet["name"] = str(pet.get("name", "未知宠物"))
     pet["rarity"] = str(pet.get("rarity", "常见"))
@@ -1570,7 +1599,7 @@ def create_pet_instance(template: dict | None = None):
         template = roll_pet_template()
 
     pet = {
-        "uid": f"pet_{int(time.time())}_{random.randint(1000, 9999)}",
+        "uid": new_pet_uid(),
         "pet_id": template["pet_id"],
         "name": template["name"],
         "rarity": template["rarity"],

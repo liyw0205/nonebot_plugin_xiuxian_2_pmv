@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 from dataclasses import dataclass
 from pathlib import Path
 from threading import RLock
@@ -161,23 +162,33 @@ class PetEggUseSqlRepository:
 
                 now = int(time.time())
                 active_uid = expected_active_uid
-                for pet, location in normalized_pets:
-                    uid = str(pet["uid"])
-                    is_active = location == "active"
-                    if is_active:
-                        active_uid = uid
-                    skill = pet.get("skill") or ((pet.get("skills") or [{}])[0])
-                    conn.execute(
-                        "INSERT INTO player_data.player_pet_item "
-                        "(id,user_id,uid,is_active,pet_id,stars,exp,total_exp,skill_id,created_at,updated_at) "
-                        "VALUES (?,?,?,?,?,?,?,?,?,?,?)",
-                        (
-                            f"{user_id}:{uid}", user_id, uid, int(is_active),
-                            str(pet.get("pet_id", "")), int(pet.get("stars", 1)),
-                            int(pet.get("exp", 0)), int(pet.get("total_exp", 0)),
-                            str(skill.get("skill_id", "") or "") or None, now, now,
-                        ),
-                    )
+                try:
+                    for pet, location in normalized_pets:
+                        uid = str(pet["uid"])
+                        is_active = location == "active"
+                        if is_active:
+                            active_uid = uid
+                        skill = pet.get("skill") or ((pet.get("skills") or [{}])[0])
+                        conn.execute(
+                            "INSERT INTO player_data.player_pet_item "
+                            "(id,user_id,uid,is_active,pet_id,stars,exp,total_exp,skill_id,created_at,updated_at) "
+                            "VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                            (
+                                f"{user_id}:{uid}", user_id, uid, int(is_active),
+                                str(pet.get("pet_id", "")), int(pet.get("stars", 1)),
+                                int(pet.get("exp", 0)), int(pet.get("total_exp", 0)),
+                                str(skill.get("skill_id", "") or "") or None, now, now,
+                            ),
+                        )
+                except sqlite3.IntegrityError as exc:
+                    # UNIQUE(user_id, uid): the pre-rolled pet UID is already owned.
+                    # Roll the batch back so no egg is consumed and no receipt is
+                    # written, and report a typed status the command can explain.
+                    # Any other integrity failure must keep propagating.
+                    if "player_pet_item.user_id" in str(exc):
+                        conn.connection.rollback()
+                        return result("uid_conflict", ())
+                    raise
                 conn.execute(
                     "UPDATE player_data.player_pet SET active_uid=? WHERE user_id=?",
                     (active_uid, user_id),

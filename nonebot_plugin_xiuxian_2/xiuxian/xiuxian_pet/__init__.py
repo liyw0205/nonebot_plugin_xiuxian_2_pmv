@@ -1255,6 +1255,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
             "user_missing": "角色不存在，无法砸蛋。",
             "state_changed": "砸蛋未结算：当前状态已更新，请重新发起。",
             "receipt_unreadable": "砸蛋回执损坏，本次不会重复扣除灵石；请联系管理员核对数据。",
+            "uid_conflict": "砸蛋未结算：宠物编号冲突，本次不会扣除灵石，请重新砸蛋。",
         }.get(hatched.status, f"砸蛋失败（{hatched.status}）。")
         await handle_send(bot, event, status_msg)
         return

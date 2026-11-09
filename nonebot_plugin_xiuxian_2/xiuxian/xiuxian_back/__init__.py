@@ -284,6 +284,7 @@ def _back_op_fail_msg(result, *, action: str = "操作") -> str:
         "already_learned": "已学会该技能。",
         "accessory_missing": "饰品不存在或已消失。",
         "accessory_full": "饰品栏已满。",
+        "uid_conflict": f"宠物编号冲突，{action}未结算、道具未消耗，请重试。",
     }
     return mapping.get(status, f"{action}未结算（{status}），请刷新后重试。")
 

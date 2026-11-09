@@ -1,6 +1,39 @@
 # 当前项目状态
 
-最后核验：2026-11-09。本文是唯一活跃进度入口；旧重构文档仅作为历史记录，不再定义当前分支或禁止事项。
+最后核验：2026-11-10。本文是唯一活跃进度入口；旧重构文档仅作为历史记录，不再定义当前分支或禁止事项。
+
+## 已完成修复：砸蛋宠物 UID 冲突（v1.2.14）
+
+只读审计 `/root/xiu2/logs/xiu2.log-20261103-033001.gz`（窗口内唯一日志，覆盖 10-26～11-03）。
+1184 个 traceback 中，877 个 `FileNotFoundError`、171 个 `TypeError: 'str' object is not
+a mapping`、126 个 `GroupMessageCreateEvent` pydantic 校验错误全部来自
+`nonebot/adapters/qq/adapter.py`（上游 QQ 适配器），与本插件无关；插件自有帧只有两类：
+
+- `on_compat.py:727` 空消息 `IndexError`（3 次，10-31/11-01）：`nonebot/rule.py:101`
+  取 `message[0]`。该守卫（`_message_is_empty`，`57153918`）已在 develop 落地并有
+  `tests/test_impart_card_bonus_and_empty_message.py` 覆盖，线上日志早于该提交。
+- `player_pet_item` 的 `UNIQUE constraint failed: player_pet_item.user_id, player_pet_item.uid`
+  （7 次，11-01 连续 `砸蛋10`，栈为 `xiuxian_pet/transaction_service.py:461` →
+  `db_backend.py:249`）：本轮修复对象。
+
+根因：新宠物 UID 为 `pet_<epoch_seconds>_<randint(1000,9999)>`，同一秒内砸 10 颗蛋按
+生日问题约 0.5% 概率撞号；撞号的 INSERT 让整个跨库事务回滚，玩家既没扣灵石也收不到任何回复。
+
+- `xiuxian_utils/pet_system.py` 新增 `new_pet_uid()`：保持 `pet_<数字>_<数字>` 外形，
+  改为「每进程固定 token + 每秒单调序号」，同秒内不可能重复；`create_pet_instance`
+  与 `_normalize_pet` 的缺省 UID 均改用它（砸蛋、批量宠物蛋、`grant_pet` 同源）。
+- 三处 `player_pet_item` 写入（`features/pet/repository.py` 现代仓储、
+  `compatibility/legacy_pet_transactions.py` 旧服务、`features/back/pet_egg_repository.py`
+  批量孵蛋）在残余撞号时 fail-closed：只对 `UNIQUE(user_id, uid)` 返回
+  `uid_conflict` 并回滚（现代仓储用 savepoint），不扣灵石、不消耗道具、不写回执；
+  其他完整性错误继续抛出。
+- 文案：`砸蛋` 与 `_back_op_fail_msg` 增加 `uid_conflict` 说明（「宠物编号冲突，
+  本次不会扣除灵石／道具未消耗」），不再是无回复的 500。
+- 测试：新 `tests/test_pet_uid_collision.py` 6 项（冻结时钟下 5000 次分配零重复、
+  旧公式在同一时钟下确实重复、同一秒砸 10 颗蛋全部落库、现代仓储/旧服务/批量孵蛋
+  三条写入路径各自 `uid_conflict` 且灵石与道具不变、无回执行）。
+- 门禁：`check_architecture.py`、`export_refactor_inventory.py --check` exit 0；
+  受影响套件 62 项 + 新套件 6 项通过。未部署、未写生产库、未读生产数据。
 
 ## 已完成优化：每日重置明细保留 + 启动期回收（v1.2.13）
 
