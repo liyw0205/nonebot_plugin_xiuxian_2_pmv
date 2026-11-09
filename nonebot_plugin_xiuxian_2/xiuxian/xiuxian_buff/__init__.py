@@ -7,6 +7,7 @@ from types import SimpleNamespace
 from nonebot.log import logger
 from ...paths import get_paths
 from ...features.buff.application import BuffApplication
+from ..command_guard import guard_command
 from ...features.base.economy_application import PlayerEconomyApplication
 from ...features.player_state.application import PlayerStateApplication
 from ...features.mixelixir.harvest_rules import field_status_text
@@ -1254,6 +1255,7 @@ async def buffinfo_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 
 
 @del_exp_decimal.handle(parameterless=[Cooldown(cd_time=0)])
+@guard_command("抑制黑暗动乱")
 async def del_exp_decimal_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """清除修为浮点数"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -1279,6 +1281,7 @@ async def del_exp_decimal_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
 
 
 @daily_info.handle(parameterless=[Cooldown(cd_time=0)])
+@guard_command("日常")
 async def daily_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """日常信息"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)

@@ -15,6 +15,7 @@ import time
 from typing import Dict, List
 from ...paths import get_paths
 from ...features.impart_pk.application import ImpartPkApplication
+from ..command_guard import guard_command
 from ...features.impart_pk.closing_status import (
     closing_settlement_lines,
     closing_status_lines,
@@ -997,6 +998,7 @@ async def impart_pk_go_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     await impart_pk_go.finish()
 
 @impart_pk_in_closing.handle(parameterless=[Cooldown(cd_time=0)])
+@guard_command("虚神界闭关")
 async def impart_pk_in_closing_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """虚神界闭关"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)

@@ -15,6 +15,7 @@ from nonebot.log import logger
 
 from .. import NICKNAME
 from ...features.impart.application import ImpartApplication
+from ..command_guard import guard_command
 from ...infrastructure.ids import UUIDGenerator
 from ..xiuxian_config import XiuConfig
 from ..xiuxian_utils.lay_out import Cooldown, assign_bot
@@ -177,6 +178,7 @@ async def impart_pk_help_(
     await impart_pk_help.finish()
 
 @impart_draw.handle(parameterless=[Cooldown(cd_time=0)])
+@guard_command("传承祈愿")
 async def impart_draw_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """传承祈愿"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)

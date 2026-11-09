@@ -2,6 +2,31 @@
 
 最后核验：2026-11-10。本文是唯一活跃进度入口；旧重构文档仅作为历史记录，不再定义当前分支或禁止事项。
 
+## 已完成：非宠物命令的静默失败收口（v1.2.19）
+
+v1.2.16 只给 `xiuxian_pet` 的 10 个 handler 加了「失败必回一条」的守卫。两份 xiu2 日志
+合计 33 条 `Running Matcher(...) failed`，其中 26 条不在宠物模块：`虚神界闭关`（8）、
+`双修`（7）、`传承祈愿`（4）、`抑制黑暗动乱`（1）、`日常`（1）——这些 handler 内部直接
+调用 application 层且零兜底，异常只留一行日志，玩家完全收不到回复。
+
+- 新增 `xiuxian/command_guard.py`（与宠物版同构、文案不含「宠物」）：`failure_text()`
+  把 `ConflictError`/`ValidationError`/`DomainError`/数据繁忙/其他异常收敛为四种固定文案
+  （繁忙判定在 `is_database_busy` 之外补驱动消息兜底，因为调用方重抛的
+  `OperationalError` 没有 `sqlite_errorcode`）；`guard_command(action)` 异常时用
+  `logger.opt(exception=exc)` 留栈、**只回一条**不含栈/SQL/路径的提示，不回抛、不吞
+  `BaseException`；`functools.wraps` 保 nonebot 依赖注入。
+- 接线 5 个 handler：`虚神界闭关`、`双修`、`传承祈愿`、`抑制黑暗动乱`、`日常`。
+  `xiuxian_pet/failure_reply.py` 原样保留（宠物专属文案与 9 项测试不变）。
+- 分层：守卫放在 `xiuxian/` 层而非 `features/`，architecture 门禁要求 features 不得直接
+  import 框架/驱动。
+- 未纳入：`xiuxian_bank`（4 次）与 `xiuxian_training`（1 次）的日志注册行已随
+  `2fca6ba6` 重写而失效，需重新取证后单独接线。
+- 测试：新 `tests/test_command_guard.py` 10 项（单次且不泄漏、繁忙/冲突/参数文案、
+  成功路径零额外发送、投递失败不掩盖原异常、签名与真实 `get_typed_signature` DI 契约、
+  AST 合约钉住 5 个 handler 的动作名、宠物模块不混入通用守卫）。
+- 门禁：architecture、inventory `--check` exit 0；`compileall`、`git diff --check` 干净。
+- 未部署、未触碰真实库、未打标签。
+
 ## 已完成：终态组队邀请行启动期保留期清理（v1.2.18）
 
 按 `.codex-db-storage-audit.md` 逐条核验后，唯一「确实过期且不再被业务读取」且不属于

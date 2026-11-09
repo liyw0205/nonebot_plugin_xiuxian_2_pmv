@@ -8,6 +8,7 @@ from pathlib import Path
 from ...paths import get_paths
 from ...infrastructure.clock import SystemClock
 from ...infrastructure.ids import UUIDGenerator
+from ..command_guard import guard_command
 from ...infrastructure.random_source import SystemRandom
 
 from ..on_compat import on_command
@@ -418,6 +419,7 @@ def load_player_user(user_id):
     return _partner_protection_service().get_status(user_id)
 
 @two_exp_invite.handle(parameterless=[Cooldown(stamina_cost=10)])
+@guard_command("双修")
 async def two_exp_invite_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """双修邀请"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
