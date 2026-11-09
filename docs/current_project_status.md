@@ -2,6 +2,29 @@
 
 最后核验：2026-11-10。本文是唯一活跃进度入口；旧重构文档仅作为历史记录，不再定义当前分支或禁止事项。
 
+## 已完成：账本结果日志自描述（v1.2.20）
+
+live 日志（`/root/xiu2/xiu2.log` 11-10 06:40，01:09 部署之后）三行只有
+`operation outcome` 五个字：没有 action、status、operation_id、audit_category，无法判断
+是哪次操作、为何被拒。根因是 `ledger.py` 的 `emit()` 把字段 `logger.bind(**payload)` 成
+loguru 额外字段，而 nonebot 的文件格式器只渲染 `message` —— 结构化数据在内存里有、日志
+文件里没有。此前 76 条连续 `拍卖后台任务失败 … failure_count=N` 必须依赖另一条 traceback
+才能定位，也属同一族问题。
+
+- `infrastructure/database/ledger.py` 新增 `outcome_message()`，把
+  `action`/`status`/`op` 拼进 message，`audit_category` 非空时追加 `category=`，
+  非 ok 且 `code` 非空时追加 `code=`；`action` 截断 60、`operation_id` 截断 96，
+  message 恒 ≤ 300 字符；`before/after/consumed/granted` 一律不出现（仍只落
+  `operation_audit` 表）。
+- `finish()` 用它生成 message，`record_failure()` 复用 `finish()`，因此失败路径自动获得
+  `status=failed code=internal_error category=failure`；`emit()` 的签名与 bind 字段不变，
+  零表结构改动、零行为改动。
+- 测试：新 `tests/test_ledger_outcome_log.py` 8 项（applied/rejected/failed 三类 message
+  内容与 level、结构化字段仍被 bind、空 category/code 省略、超长截断、payload 不泄漏、
+  一次 finish 只发一条）。受影响套件 40 + 21 项通过。
+- 门禁：architecture、inventory `--check` exit 0；`compileall`、`git diff --check` 干净。
+- 未部署、未触碰真实库、未打标签。
+
 ## 已完成：非宠物命令的静默失败收口（v1.2.19）
 
 v1.2.16 只给 `xiuxian_pet` 的 10 个 handler 加了「失败必回一条」的守卫。两份 xiu2 日志

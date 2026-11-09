@@ -22,6 +22,42 @@ def _now(clock: Any | None = None) -> str:
     return (clock or SystemClock()).now().isoformat()
 
 
+OUTCOME_ACTION_LIMIT = 60
+OUTCOME_OPERATION_LIMIT = 96
+OUTCOME_FIELD_LIMIT = 32
+
+
+def _clip(value: Any, limit: int) -> str:
+    text = str(value or "").strip()
+    if len(text) <= limit:
+        return text
+    return text[: max(limit - 1, 0)] + "…"
+
+
+def outcome_message(outcome: OperationOutcome[Any]) -> str:
+    """Self-describing ``operation outcome`` line.
+
+    ``emit`` binds these values onto the loguru record, but nonebot's file
+    formatter renders only the message, so the action/status/operation id never
+    reached the log file -- the line read ``operation outcome`` and nothing else.
+    The bound fields stay in place for machine consumers.
+    """
+
+    parts = [
+        "operation outcome",
+        f"action={_clip(outcome.action, OUTCOME_ACTION_LIMIT) or '-'}",
+        f"status={_clip(outcome.status, OUTCOME_FIELD_LIMIT) or '-'}",
+        f"op={_clip(outcome.operation_id, OUTCOME_OPERATION_LIMIT) or '-'}",
+    ]
+    category = _clip(outcome.audit_category, OUTCOME_FIELD_LIMIT)
+    if category:
+        parts.append(f"category={category}")
+    code = _clip(outcome.code, 48)
+    if code and not outcome.ok:
+        parts.append(f"code={code}")
+    return " ".join(parts)
+
+
 @dataclass(frozen=True)
 class OperationRecord:
     operation_id: str
@@ -158,7 +194,7 @@ class OperationLedger:
         )
         emit(
             "info" if outcome.ok else "warning",
-            "operation outcome",
+            outcome_message(outcome),
             operation_id=outcome.operation_id,
             operation_action=outcome.action,
             operation_status=outcome.status,
