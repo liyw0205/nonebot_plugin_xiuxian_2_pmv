@@ -108,5 +108,40 @@ class TwoExpCdSelfHealTests(unittest.TestCase):
         self.assertTrue(self.table_exists())
 
 
+    def test_migration_marker_present_but_table_missing_self_heals(self) -> None:
+        """Exact production shape: buff.003 recorded as applied, table dropped.
+
+        This is the /root/xiu2 failure mode -- schema_migrations says buff.003
+        ran (2026-11-07T22:01:03Z) but the table is gone after a
+        `two_exp_cd_up` reset.  The migration runner treats it as applied and
+        never recreates it; the read path must heal without touching the
+        marker, and the marker must still be there afterwards.
+        """
+        import sqlite3
+
+        with sqlite3.connect(self.player) as conn:
+            conn.execute(
+                "CREATE TABLE schema_migrations(version TEXT PRIMARY KEY,name TEXT NOT NULL,"
+                "checksum TEXT NOT NULL,applied_at TEXT NOT NULL,duration_ms INTEGER NOT NULL)"
+            )
+            conn.execute(
+                "INSERT INTO schema_migrations VALUES('buff.003','partner_two_exp_usage',"
+                "'9b2752e021c5','2026-11-07T22:01:03.435844+00:00',0)"
+            )
+            self.assertIsNone(
+                conn.execute("SELECT name FROM sqlite_master WHERE name='partner_two_exp_usage'").fetchone()
+            )
+        self.cd.data["two_exp_cd"]["legacy"] = 7
+        self.assertEqual(self.cd.find_user("legacy"), 7)
+        self.assertEqual(self.usage("legacy"), 7)
+        with sqlite3.connect(self.player) as conn:
+            self.assertIsNotNone(
+                conn.execute("SELECT 1 FROM schema_migrations WHERE version='buff.003'").fetchone()
+            )
+            self.assertIsNotNone(
+                conn.execute("SELECT name FROM sqlite_master WHERE name='partner_two_exp_usage'").fetchone()
+            )
+
+
 if __name__ == "__main__":
     unittest.main()
