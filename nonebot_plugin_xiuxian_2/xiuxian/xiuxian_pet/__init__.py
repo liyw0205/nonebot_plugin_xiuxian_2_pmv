@@ -58,6 +58,7 @@ from ..xiuxian_utils.utils import (
     send_help_message,
     send_msg_handler,
 )
+from .failure_reply import guard_pet_handler
 from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage
 from ...paths import get_paths
 from ...features.pet.application import PetApplication
@@ -794,6 +795,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 
 
 @pet_travel.handle(parameterless=[Cooldown(cd_time=0)])
+@guard_pet_handler("宠物游历")
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     is_user, user_info, msg = check_user(event)
     if not is_user:
@@ -897,6 +899,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 
 
 @pet_travel_claim.handle(parameterless=[Cooldown(cd_time=0)])
+@guard_pet_handler("宠物游历结算")
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     is_user, user_info, msg = check_user(event)
     if not is_user:
@@ -1077,6 +1080,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
 
 
 @pet_egg.handle(parameterless=[Cooldown(cd_time=0)])
+@guard_pet_handler("砸蛋")
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     is_user, user_info, msg = check_user(event)
     if not is_user:
@@ -1322,6 +1326,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
 
 
 @pet_set_active.handle(parameterless=[Cooldown(cd_time=0)])
+@guard_pet_handler("出战宠物")
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     is_user, user_info, msg = check_user(event)
     if not is_user:
@@ -1378,6 +1383,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
 
 
 @pet_release.handle(parameterless=[Cooldown(cd_time=0)])
+@guard_pet_handler("放生宠物")
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     is_user, user_info, msg = check_user(event)
     if not is_user:
@@ -1431,6 +1437,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
 
 
 @pet_release_batch.handle(parameterless=[Cooldown(cd_time=0)])
+@guard_pet_handler("一键放生")
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     is_user, user_info, msg = check_user(event)
     if not is_user:
@@ -1500,6 +1507,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
 
 
 @pet_feed.handle(parameterless=[Cooldown(cd_time=0)])
+@guard_pet_handler("宠物喂食")
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     is_user, user_info, msg = check_user(event)
     if not is_user:
@@ -1649,6 +1657,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
 
 
 @pet_fusion.handle(parameterless=[Cooldown(cd_time=0)])
+@guard_pet_handler("宠物融合")
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     is_user, user_info, msg = check_user(event)
     if not is_user:
@@ -1712,6 +1721,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
 
 
 @pet_reroll_skill.handle(parameterless=[Cooldown(cd_time=0)])
+@guard_pet_handler("宠物技能洗练")
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     is_user, user_info, msg = check_user(event)
     if not is_user:
@@ -1761,6 +1771,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
 
 
 @pet_replace_skill.handle(parameterless=[Cooldown(cd_time=0)])
+@guard_pet_handler("宠物技能替换")
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     is_user, user_info, msg = check_user(event)
     if not is_user:

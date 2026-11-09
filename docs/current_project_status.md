@@ -2,7 +2,32 @@
 
 最后核验：2026-11-10。本文是唯一活跃进度入口；旧重构文档仅作为历史记录，不再定义当前分支或禁止事项。
 
-## 已完成修复：砸蛋宠物 UID 冲突（v1.2.14）
+## 已完成修复：宠物指令失败不再静默（v1.2.16）
+
+同一份日志（`xiu2.log-20261103-033001.gz`）在第 7 次撞号之外还留下 7 条
+`Running Matcher(type='message', module=...xiuxian_pet, lineno=93) failed`——`lineno=93`
+即 `砸蛋`；玩家**一条回复都没收到**。`d64ce230` 只搬掉「撞号」这一个诱因，
+`xiuxian_pet/__init__.py` 的 12 个 `pet_application.*` 调用点（10 个 handler）仍无任何兜底。
+
+- 新增 `xiuxian/xiuxian_pet/failure_reply.py`：`failure_text()` 把
+  `ConflictError`/`ValidationError`/`DomainError`/数据繁忙/其他异常映射成四种固定文案
+  （繁忙判定在 `is_database_busy` 之外补了驱动消息兜底，因为调用方重新抛出的
+  `OperationalError` 没有 `sqlite_errorcode`）；`guard_pet_handler(action)` 在异常时
+  用 `logger.opt(exception=exc)` 留下栈并**只回一条**不含栈/SQL/路径的提示，
+  不回抛、不吞 `BaseException`（`CancelledError` 照常传播）。
+- 10 个 handler（游历/游历结算/砸蛋/出战/放生/一键放生/喂食/融合/技能洗练/技能替换）
+  全部套上守卫，成功路径逐字不变；`functools.wraps` 保证 nonebot 依赖注入不变
+  （已用真实 `get_typed_signature` 验证 `bot/event/args` 与 `DependsInner(_command_arg)` 未变）。
+- `xiuxian_back` 的批量孵蛋本就有 try/except 与「未消耗道具」文案，未改动。
+- 测试：新 `tests/test_pet_failure_reply.py` 9 项（单次回复且不泄漏 `sqlite3`/`.db` 等、
+  繁忙与冲突文案、成功路径零额外发送、投递失败不掩盖原异常、签名与 DI 契约、
+  真实仓储异常端到端到达玩家且灵石不变、AST 合约钉住 10 个 handler/12 个调用点）。
+  受影响合计 85 项通过。门禁：architecture、inventory `--check` exit 0。
+- 未部署、未写生产库/日志、未打标签。
+
+## 已完成修复：砸蛋宠物 UID 冲突（v1.2.15）
+
+（版本说明：`v1.2.14` 标签指向 buff 自愈修复 `2ced9de4`；本项未打标签。）
 
 只读审计 `/root/xiu2/logs/xiu2.log-20261103-033001.gz`（窗口内唯一日志，覆盖 10-26～11-03）。
 1184 个 traceback 中，877 个 `FileNotFoundError`、171 个 `TypeError: 'str' object is not
