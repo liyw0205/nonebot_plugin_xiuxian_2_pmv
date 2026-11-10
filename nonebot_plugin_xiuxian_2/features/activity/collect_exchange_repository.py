@@ -6,8 +6,10 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from ...core.numeric import as_int_like
 from ...infrastructure.database import DatabaseUnitOfWork
 from ._operation_payload import operation_payload_matches
+from .redemption import ActivityRedemptionRejected, require_redemption_write
 
 
 @dataclass(frozen=True)
@@ -49,19 +51,29 @@ class ActivityCollectExchangeSqlRepository:
             )
         if previous is None:
             return None
+        return self._decode_receipt(previous, user_id)
+
+    @staticmethod
+    def _decode_receipt(previous, user_id: str) -> ActivityCollectExchangeResult:
         try:
             payload = json.loads(str(previous["payload"]))
             previous_result = json.loads(str(previous["result_json"]))
             if not isinstance(payload, list) or len(payload) < 3:
                 raise ValueError("invalid operation payload")
-            if not isinstance(previous_result, list) or len(previous_result) < 2:
+            if str(payload[0]) != str(user_id):
+                return ActivityCollectExchangeResult("operation_conflict")
+            if not isinstance(previous_result, list) or len(previous_result) not in {2, 3}:
                 raise ValueError("invalid operation result")
-            claim_count = int(previous_result[0])
-            rewards = tuple(str(value) for value in previous_result[1])
-        except (TypeError, ValueError, json.JSONDecodeError) as exc:
-            raise RuntimeError("invalid activity collect exchange receipt") from exc
-        if str(payload[0]) != str(user_id):
-            return ActivityCollectExchangeResult("operation_conflict")
+            claim_count = as_int_like(previous_result[0], None)
+            if claim_count is None or claim_count < 1 or not isinstance(previous_result[1], list):
+                raise ValueError("invalid collect result")
+            if any(not isinstance(value, str) for value in previous_result[1]):
+                raise ValueError("invalid collect rewards")
+            if len(previous_result) == 3 and not isinstance(previous_result[2], str):
+                raise ValueError("invalid collect response")
+            rewards = tuple(previous_result[1])
+        except (TypeError, ValueError, KeyError) as exc:
+            raise ActivityRedemptionRejected("receipt_corrupt") from exc
         response = str(previous_result[2]) if len(previous_result) > 2 else ""
         if not response:
             response = f"集字兑换成功：{payload[2]}"
@@ -172,18 +184,12 @@ class ActivityCollectExchangeSqlRepository:
             if previous is not None:
                 if not operation_payload_matches(previous["payload"], payload):
                     return ActivityCollectExchangeResult("operation_conflict")
-                previous_result = json.loads(str(previous["result_json"]))
-                response = str(previous_result[2]) if len(previous_result) > 2 else ""
-                return ActivityCollectExchangeResult(
-                    "duplicate",
-                    int(previous_result[0]),
-                    rewards=tuple(previous_result[1]),
-                    response=response,
-                )
+                return self._decode_receipt(previous, user_id)
 
-            if uow.query_one(
-                "SELECT 1 AS found FROM user_xiuxian WHERE user_id=?", (user_id,)
-            ) is None:
+            player_rows = uow.query_one(
+                "SELECT COUNT(*) AS count FROM user_xiuxian WHERE user_id=?", (user_id,)
+            )["count"]
+            if not player_rows:
                 return ActivityCollectExchangeResult("user_missing")
 
             claim_row = uow.query_one(
@@ -226,24 +232,25 @@ class ActivityCollectExchangeSqlRepository:
                     "WHERE activity_key=? AND user_id=? AND word_char=? AND count>=?",
                     (quantity, now, activity_key, user_id, word_char, quantity),
                 )
-                if changed.rowcount != 1:
-                    raise RuntimeError("collect inventory state changed")
-            uow.execute(
+                require_redemption_write(changed, "activity_tokens_write_rejected")
+            changed = uow.execute(
                 "INSERT INTO activity_collect_claim(activity_key,user_id,phrase,count,update_time) "
                 "VALUES(?,?,?,1,?) ON CONFLICT(activity_key,user_id,phrase) DO UPDATE SET "
                 "count=activity_collect_claim.count+1,update_time=excluded.update_time",
                 (activity_key, user_id, phrase, now),
             )
+            require_redemption_write(changed, "activity_collect_claim_write_rejected")
             claim_count += 1
 
             if stone:
-                uow.execute(
+                changed = uow.execute(
                     "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)+? "
                     "WHERE user_id=?",
                     (stone, user_id),
                 )
+                require_redemption_write(changed, "activity_reward_stone_write_rejected", expected=player_rows)
             for item_id, name, item_type, quantity in item_rows:
-                uow.execute(
+                changed = uow.execute(
                     "INSERT INTO back(user_id,goods_id,goods_name,goods_type,goods_num,"
                     "create_time,update_time,bind_num) VALUES(?,?,?,?,?,?,?,?) "
                     "ON CONFLICT(user_id,goods_id) DO UPDATE SET goods_name=excluded.goods_name,"
@@ -252,8 +259,9 @@ class ActivityCollectExchangeSqlRepository:
                     "update_time=excluded.update_time",
                     (user_id, item_id, name, item_type, quantity, now, now, quantity),
                 )
+                require_redemption_write(changed, "activity_reward_item_write_rejected")
 
-            uow.execute(
+            changed = uow.execute(
                 f"INSERT INTO {self.operation_table}(operation_id,payload,result_json) "
                 "VALUES(?,?,?)",
                 (
@@ -272,6 +280,7 @@ class ActivityCollectExchangeSqlRepository:
                     ),
                 ),
             )
+            require_redemption_write(changed, "activity_redemption_receipt_write_rejected")
         return ActivityCollectExchangeResult(
             "applied",
             claim_count,

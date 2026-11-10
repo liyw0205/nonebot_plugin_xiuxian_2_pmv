@@ -598,12 +598,19 @@ def _find_collect_phrase(config: dict, query: str) -> tuple[dict, dict] | None:
     return None
 
 
+def _redemption_rejection(reason: str, message: str, detailed: bool):
+    if detailed:
+        return {"status": "rejected", "reason": reason, "subject": "actor", "message": message}
+    return False, message
+
+
 def claim_collect_phrase(
     user_id: str,
     query: str,
     operation_id: str | None = None,
     *,
     settlement_repository=None,
+    detailed_result: bool = False,
 ) -> tuple[bool, str]:
     uid = str(user_id)
     target = _clean_text(query)
@@ -613,29 +620,29 @@ def claim_collect_phrase(
         replay = lookup_receipt(operation_id, uid) if callable(lookup_receipt) else None
         if replay is not None:
             if not replay.succeeded:
-                return False, "兑换请求冲突，请重新发送"
+                return _redemption_rejection(replay.status, "兑换请求冲突，请重新发送", detailed_result)
             return True, replay.response
     if not target:
-        return False, "请发送：活动兑换 端午安康"
+        return _redemption_rejection("query_required", "请发送：活动兑换 端午安康", detailed_result)
 
     cfg = load_config()
     runtime = activity_runtime_state(cfg)
     if not runtime.get("ok"):
-        return False, runtime.get("reason") or "活动未开放"
+        return _redemption_rejection("activity_unavailable", runtime.get("reason") or "活动未开放", detailed_result)
     if "exchange" not in set(runtime.get("features") or []):
-        return False, f"当前阶段【{runtime.get('stage_name', '活动阶段')}】不开放集字兑换"
+        return _redemption_rejection("exchange_stage_closed", f"当前阶段【{runtime.get('stage_name', '活动阶段')}】不开放集字兑换", detailed_result)
     found = _find_collect_phrase(cfg, target)
     if not found:
-        return False, "未找到可兑换的活动词组，或活动当前不可兑换"
+        return _redemption_rejection("collect_phrase_unavailable", "未找到可兑换的活动词组，或活动当前不可兑换", detailed_result)
 
     activity, phrase = found
     need = _phrase_need_counter(phrase["phrase"])
     if not need:
-        return False, "兑换词组配置错误"
+        return _redemption_rejection("collect_phrase_invalid", "兑换词组配置错误", detailed_result)
     try:
         reward_items = parse_reward(phrase.get("reward") or "")
     except Exception as e:
-        return False, f"兑换奖励配置错误：{e}"
+        return _redemption_rejection("collect_reward_invalid", f"兑换奖励配置错误：{e}", detailed_result)
 
     feature_settlement = settlement_repository is not None
     if settlement_repository is None:
@@ -657,8 +664,11 @@ def claim_collect_phrase(
     )
     if not result.succeeded:
         if result.status == "tokens_insufficient":
-            return False, "字牌不足，还缺：" + "、".join(f"{char}x{count}" for char, count in result.missing)
-        return False, {"limit_reached":"该词组已达到兑换次数上限","inventory_full":"背包空间不足，奖励未领取","user_missing":"角色不存在","operation_conflict":"兑换请求冲突，请重新发送"}.get(result.status,"兑换未完成：活动进度已更新，请重新兑换")
+            return _redemption_rejection(result.status, "字牌不足，还缺：" + "、".join(f"{char}x{count}" for char, count in result.missing), detailed_result)
+        messages = {"limit_reached": "该词组已达到兑换次数上限", "inventory_full": "背包空间不足，奖励未领取", "user_missing": "角色不存在", "operation_conflict": "兑换请求冲突，请重新发送"}
+        if result.status not in messages:
+            raise RuntimeError(f"unexpected collect redemption status: {result.status}")
+        return _redemption_rejection(result.status, messages[result.status], detailed_result)
     response = getattr(result, "response", "")
     if response:
         return True, response
@@ -1180,31 +1190,39 @@ def claim_point_shop_item(
     operation_id: str | None = None,
     *,
     settlement_repository=None,
+    detailed_result: bool = False,
 ) -> tuple[bool, str]:
     uid = str(user_id)
+    if operation_id and settlement_repository is not None:
+        lookup = getattr(settlement_repository, "lookup_receipt", None)
+        replay = lookup(operation_id, uid) if callable(lookup) else None
+        if replay is not None:
+            if not replay.succeeded:
+                return _redemption_rejection(replay.status, "兑换请求冲突，请重新发送", detailed_result)
+            return True, replay.response
     target, quantity = _parse_shop_query(query)
     if not target:
-        return False, "请发送：活动购买 灵石补给"
+        return _redemption_rejection("query_required", "请发送：活动购买 灵石补给", detailed_result)
 
     cfg = load_config()
     runtime = activity_runtime_state(cfg)
     if not runtime.get("ok"):
-        return False, runtime.get("reason") or "活动未开放"
+        return _redemption_rejection("activity_unavailable", runtime.get("reason") or "活动未开放", detailed_result)
     if "shop" not in set(runtime.get("features") or []):
-        return False, f"当前阶段【{runtime.get('stage_name', '活动阶段')}】不开放活动商店"
+        return _redemption_rejection("shop_stage_closed", f"当前阶段【{runtime.get('stage_name', '活动阶段')}】不开放活动商店", detailed_result)
     found = _find_point_shop_item(cfg, target)
     if not found:
-        return False, "未找到可兑换的活动商品，或活动当前不可兑换"
+        return _redemption_rejection("shop_item_unavailable", "未找到可兑换的活动商品，或活动当前不可兑换", detailed_result)
 
     activity, item = found
     cost = _as_int(item.get("cost"), 0)
     if cost <= 0:
-        return False, "商品积分价格配置错误"
+        return _redemption_rejection("shop_price_invalid", "商品积分价格配置错误", detailed_result)
     reward_text = _clean_text(item.get("reward"))
     try:
         reward_items = _multiply_reward_items(parse_reward(reward_text), quantity)
     except Exception as e:
-        return False, f"商品奖励配置错误：{e}"
+        return _redemption_rejection("shop_reward_invalid", f"商品奖励配置错误：{e}", detailed_result)
 
     item_key = _clean_text(item.get("item_key"))
     point_name = activity.get("point_name") or "活动积分"
@@ -1213,6 +1231,15 @@ def claim_point_shop_item(
         ensure_activity_files()
     operation_id = str(operation_id or f"activity-shop:{uid}:{activity['key']}:{item_key}:{now_str()}")
     settlement = settlement_repository or _point_shop_purchase_service()
+    reward_msg = [
+        f"获得灵石 {number_to(reward['quantity'])} 枚"
+        if reward["type"] == "stone" else f"获得 {reward['name']} x{reward['quantity']}"
+        for reward in reward_items
+    ]
+    reward_result = "，".join(reward_msg) if reward_msg else reward_text
+    item_name = item.get("name") or item_key
+    quantity_text = f"x{quantity}" if quantity > 1 else ""
+    response = f"{activity['name']}兑换成功：{item_name}{quantity_text}\n消耗：{total_cost}{point_name}\n奖励：{reward_result}"
     result = settlement.purchase(
         operation_id,
         uid,
@@ -1224,28 +1251,23 @@ def claim_point_shop_item(
         _as_int(item.get("stock_limit"), 0),
         reward_items,
         XiuConfig().max_goods_num,
+        **({"response": response} if settlement_repository is not None else {}),
     )
     if result.status == "points_insufficient":
-        return False, f"{point_name}不足，还缺 {max(total_cost - result.points, 0)}"
+        return _redemption_rejection(result.status, f"{point_name}不足，还缺 {max(total_cost - result.points, 0)}", detailed_result)
     if result.status == "personal_limit":
-        return False, f"该商品兑换次数不足，当前已兑换 {result.personal_count}/{_as_int(item.get('limit'), 1)}"
+        return _redemption_rejection(result.status, f"该商品兑换次数不足，当前已兑换 {result.personal_count}/{_as_int(item.get('limit'), 1)}", detailed_result)
     if result.status == "stock_insufficient":
-        return False, f"该商品全服库存不足，当前已兑换 {result.total_count}/{_as_int(item.get('stock_limit'), 0)}"
+        return _redemption_rejection(result.status, f"该商品全服库存不足，当前已兑换 {result.total_count}/{_as_int(item.get('stock_limit'), 0)}", detailed_result)
     if result.status == "inventory_full":
-        return False, "背包中该奖励物品已达持有上限"
-    if result.status in {"operation_conflict", "state_changed", "user_missing"}:
-        return False, "兑换未完成：活动进度已更新，请重新兑换"
-
-    reward_msg = [
-        f"获得灵石 {number_to(reward['quantity'])} 枚"
-        if reward["type"] == "stone" else f"获得 {reward['name']} x{reward['quantity']}"
-        for reward in reward_items
-    ]
-
-    reward_result = "，".join(reward_msg) if reward_msg else reward_text
-    item_name = item.get("name") or item_key
-    quantity_text = f"x{quantity}" if quantity > 1 else ""
-    return True, f"{activity['name']}兑换成功：{item_name}{quantity_text}\n消耗：{total_cost}{point_name}\n奖励：{reward_result}"
+        return _redemption_rejection(result.status, "背包中该奖励物品已达持有上限", detailed_result)
+    if result.status == "operation_conflict":
+        return _redemption_rejection(result.status, "兑换请求冲突，请重新发送", detailed_result)
+    if result.status == "user_missing":
+        return _redemption_rejection(result.status, "角色不存在，请先创建角色", detailed_result)
+    if not result.succeeded:
+        raise RuntimeError(f"unexpected shop redemption status: {result.status}")
+    return True, getattr(result, "response", "") or response
 
 
 def _fetch_count(cur, sql: str, params=()) -> int:

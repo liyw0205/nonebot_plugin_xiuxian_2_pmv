@@ -12,6 +12,7 @@ from typing import Callable, Mapping
 import hashlib
 from ..xiuxian_compensation.common import get_item_list
 from ..xiuxian_config import XiuConfig
+from ...features.activity.redemption import require_redemption_write
 
 @dataclass(frozen=True)
 class ActivityBossSettlementResult:
@@ -672,7 +673,12 @@ class ActivityPointShopPurchaseService:
                 ).fetchone()
                 if previous is not None:
                     conn.rollback()
-                    if not operation_payload_matches(previous[0], payload):
+                    previous_payload = json.loads(previous[0])
+                    # New feature receipts append display text; the first ten
+                    # fields remain the full legacy settlement identity.
+                    if isinstance(previous_payload, list) and len(previous_payload) == 11 and isinstance(previous_payload[10], str):
+                        previous_payload = previous_payload[:10]
+                    if not operation_payload_matches(previous_payload, payload):
                         return ActivityPointShopPurchaseResult("operation_conflict")
                     return ActivityPointShopPurchaseResult("duplicate", *(int(value) for value in previous[1:]))
 
@@ -699,7 +705,8 @@ class ActivityPointShopPurchaseService:
                 if stock_limit > 0 and total_count + quantity > stock_limit:
                     conn.rollback()
                     return ActivityPointShopPurchaseResult("stock_insufficient", points=int(balance[0]), personal_count=personal_count, total_count=total_count)
-                if conn.execute(f"SELECT 1 FROM {game_prefix}user_xiuxian WHERE user_id=%s", (user_id,)).fetchone() is None:
+                player_rows = int(conn.execute(f"SELECT COUNT(*) FROM {game_prefix}user_xiuxian WHERE user_id=%s", (user_id,)).fetchone()[0])
+                if not player_rows:
                     conn.rollback()
                     return ActivityPointShopPurchaseResult("user_missing")
                 for item_id, _, _, amount in item_rows:
@@ -720,30 +727,32 @@ class ActivityPointShopPurchaseService:
                     "WHERE activity_key=%s AND user_id=%s AND points >= %s",
                     (cost, now, activity_key, user_id, cost),
                 )
-                if changed.rowcount != 1:
-                    conn.rollback()
-                    return ActivityPointShopPurchaseResult("state_changed")
-                conn.execute(
+                require_redemption_write(changed, "activity_points_write_rejected")
+                changed = conn.execute(
                     "INSERT INTO activity_point_purchase(activity_key,user_id,item_key,count,update_time) "
                     "VALUES (%s,%s,%s,%s,%s) ON CONFLICT(activity_key,user_id,item_key) DO UPDATE SET "
                     "count=activity_point_purchase.count+excluded.count,update_time=excluded.update_time",
                     (activity_key, user_id, item_key, quantity, now),
                 )
+                require_redemption_write(changed, "activity_purchase_write_rejected")
                 if stone:
-                    conn.execute(f"UPDATE {game_prefix}user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)+CAST(%s AS REAL) WHERE user_id=%s", (stone, user_id))
+                    changed = conn.execute(f"UPDATE {game_prefix}user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)+CAST(%s AS REAL) WHERE user_id=%s", (stone, user_id))
+                    require_redemption_write(changed, "activity_reward_stone_write_rejected", expected=player_rows)
                 for item_id, name, item_type, amount in item_rows:
-                    conn.execute(
+                    changed = conn.execute(
                         f"INSERT INTO {game_prefix}back(user_id,goods_id,goods_name,goods_type,goods_num,create_time,update_time,bind_num) "
                         "VALUES (%s,%s,%s,%s,%s,%s,%s,%s) ON CONFLICT(user_id,goods_id) DO UPDATE SET "
                         "goods_name=excluded.goods_name,goods_type=excluded.goods_type,goods_num=back.goods_num+excluded.goods_num,"
                         "bind_num=COALESCE(back.bind_num,0)+excluded.bind_num,update_time=excluded.update_time",
                         (user_id, item_id, name, item_type, amount, now, now, amount),
                     )
-                conn.execute(
+                    require_redemption_write(changed, "activity_reward_item_write_rejected")
+                changed = conn.execute(
                     "INSERT INTO activity_point_purchase_operations(operation_id,payload,quantity,cost,points,personal_count,total_count) "
                     "VALUES (%s,%s,%s,%s,%s,%s,%s)",
                     (operation_id, payload, quantity, cost, points, personal_count, total_count),
                 )
+                require_redemption_write(changed, "activity_redemption_receipt_write_rejected")
                 conn.commit()
                 return ActivityPointShopPurchaseResult("applied", quantity, cost, points, personal_count, total_count)
             except Exception:
@@ -870,9 +879,10 @@ class ActivityCollectExchangeService:
                         rewards=tuple(previous_result[1]),
                     )
 
-                if conn.execute(
-                    f"SELECT 1 FROM {game_prefix}user_xiuxian WHERE user_id=%s", (user_id,)
-                ).fetchone() is None:
+                player_rows = int(conn.execute(
+                    f"SELECT COUNT(*) FROM {game_prefix}user_xiuxian WHERE user_id=%s", (user_id,)
+                ).fetchone()[0])
+                if not player_rows:
                     conn.rollback()
                     return ActivityCollectExchangeResult("user_missing")
 
@@ -917,23 +927,24 @@ class ActivityCollectExchangeService:
                         "WHERE activity_key=%s AND user_id=%s AND word_char=%s AND count>=%s",
                         (quantity, now, activity_key, user_id, word_char, quantity),
                     )
-                    if changed.rowcount != 1:
-                        raise RuntimeError("collect inventory state changed")
-                conn.execute(
+                    require_redemption_write(changed, "activity_tokens_write_rejected")
+                changed = conn.execute(
                     "INSERT INTO activity_collect_claim(activity_key,user_id,phrase,count,update_time) "
                     "VALUES(%s,%s,%s,1,%s) ON CONFLICT(activity_key,user_id,phrase) DO UPDATE SET "
                     "count=activity_collect_claim.count+1,update_time=excluded.update_time",
                     (activity_key, user_id, phrase, now),
                 )
+                require_redemption_write(changed, "activity_collect_claim_write_rejected")
                 claim_count += 1
 
                 if stone:
-                    conn.execute(
+                    changed = conn.execute(
                         f"UPDATE {game_prefix}user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)+CAST(%s AS REAL) WHERE user_id=%s",
                         (stone, user_id),
                     )
+                    require_redemption_write(changed, "activity_reward_stone_write_rejected", expected=player_rows)
                 for item_id, name, item_type, quantity in item_rows:
-                    conn.execute(
+                    changed = conn.execute(
                         f"INSERT INTO {game_prefix}back(user_id,goods_id,goods_name,goods_type,goods_num,"
                         "create_time,update_time,bind_num) VALUES(%s,%s,%s,%s,%s,%s,%s,%s) "
                         "ON CONFLICT(user_id,goods_id) DO UPDATE SET goods_name=excluded.goods_name,"
@@ -941,15 +952,17 @@ class ActivityCollectExchangeService:
                         "bind_num=COALESCE(back.bind_num,0)+excluded.bind_num,update_time=excluded.update_time",
                         (user_id, item_id, name, item_type, quantity, now, now, quantity),
                     )
+                    require_redemption_write(changed, "activity_reward_item_write_rejected")
 
                 result_json = json.dumps(
                     [claim_count, reward_descriptions], ensure_ascii=True, separators=(",", ":")
                 )
-                conn.execute(
+                changed = conn.execute(
                     "INSERT INTO activity_collect_exchange_operations(operation_id,payload,result_json) "
                     "VALUES(%s,%s,%s)",
                     (operation_id, payload, result_json),
                 )
+                require_redemption_write(changed, "activity_redemption_receipt_write_rejected")
                 conn.commit()
                 return ActivityCollectExchangeResult(
                     "applied", claim_count, rewards=reward_descriptions

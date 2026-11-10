@@ -169,7 +169,7 @@ body `operation_id` 仍兼容）。它复用既有 `ActivityRewardApplication` �
 请求路径创建文件、表或迁移，也不回写独立旧 `activity/activity.db`。同 operation ID 重放由外层
 ledger 回放；若进程在签到事务提交后、外层 ledger 完成前中断，`claim_sign` 可依据同事务提交的
 `activity_sign_settlement_operations` 业务回执续跑并返回 duplicate，不重复发奖。其他活动动作的
-started 状态恢复白名单不变。
+同样具备同事务业务回执的集字兑换、积分商店购买也允许匹配请求恢复 started 状态。
 
 ## 数据模型与迁移
 Manifest 保留历史 migration 标记 `legacy.activity.001`；当前启动 migration `activity_state.001/.002` 在 `game_db` 预建活动玩法表，并从 `data/activity/activity.db` 以只读、每批最多 200 行的方式回填。目标身份冲突、旧 schema 不完整或磁盘空间预检不通过时拒绝继续；迁移不会删除旧文件，也不在请求路径建表。活动模块导入不再抢先校验目标表，避免 startup migration 尚未运行时阻断新库/旧库升级。默认签到、集字、积分、道具、任务、战令和活动首领状态读写统一使用 `game_db`。
@@ -179,7 +179,32 @@ Manifest 保留历史 migration 标记 `legacy.activity.001`；当前启动 migr
 旧 `activity.db` 仍承载 `activity_config_*` 配置/事件数据及对应管理路径，并保留作备份与迁移核验来源；不能将整个文件描述为只读或缓存。活动积分、战令、集字掉落和首领战斗日志均参与每日上限、资格判断或审计，不得按缓存清理。
 
 ## 事务与失败回滚
-Mutating calls carry an `operation_id` and are recorded in the operation ledger. Collect exchange also commits its existing business receipt in the same transaction as inventory and asset changes. Only this receipt-backed action opts into retrying a matching interrupted `started` operation; recovery checks the business receipt before revalidating current activity configuration, while a missing receipt proceeds through the current request once. Historical two-field receipts remain replayable after backfill. Disable the feature flag or restore the pre-migration backup to roll back.
+`活动购买` 与 `活动兑换` 经应用请求账本进入各自的 feature 仓储。积分/字牌扣除、
+购买/兑换次数、灵石、物品及绑定数量、业务回执在一个 `BEGIN IMMEDIATE` 中提交。
+任何一步写入被忽略时，以对应的具体 reason 和 `subject=actor` 抛出业务拒绝，
+由事务 owner 完整回滚后才保存外层拒绝回执并回复玩家；不把写入拒绝冒充余额不足
+或通用状态变化。显式旧兼容 service 的同库与 attached 两库路径执行同样的检查与
+完整回滚。历史重复角色行继续按原语义逐行发放灵石，写入行数必须匹配实际角色行数。
+
+两条兑换动作与签到均以同事务唯一业务回执保证匹配的 `started` 请求可恢复。若业务
+已提交、外层 `finish` 中断，同一 operation ID/用户/原始参数先读取业务回执，恢复
+已经发放的结果，不再次消耗或发奖，也不重新按当前配置计算奖励。新商店回执在原
+payload 尾部附加原成功文案（不新增列）；新集字 result 在原两字段后附加原成功
+文案。旧十字段商店 payload、旧两字段集字 result 仍用冻结资产/词组生成兼容回复。
+商店 JSON 请求身份保持精确；超大 INTEGER-affinity 投影按既有 REAL `int(value)`
+存储规范核对，精确 TEXT 的一位变化仍视为坏回执。坏回执保留 `receipt_corrupt`，
+不会绕过校验重新发奖；旧外层拒绝回执缺少 reason 时保持原记录。
+
+恢复优先于配置读取，因此活动关闭、时间结束或奖励配置变更后仍可返回原请求结果；
+外层请求 hash 拒绝不同用户或不同参数复用。没有业务回执的 started 请求与新请求
+仍经过当前活动窗口、阶段开放内容、资格、个人限购、全服库存及背包上限校验。
+事务内重新读取状态并串行持写锁，竞争请求只能有一个拿到最后库存/兑换资格。
+已知拒绝的具体文案和结构化 reason/subject 保存到请求回执并在重放时保持一致。
+
+两条命令的异常守卫保留 NoneBot 正常流程异常。消息发送失败可能发生在结算之后，
+只提示处理或回复异常和安全定位号，不声称业务未提交；重复投递同一请求可重放原结果。
+手动重新发送命令会产生新请求，仍按正常规则尝试新的兑换，不等同于旧请求恢复。
+本阶段没有修改奖励、概率、资格、表结构或数值解析，也没有真实 QQ 投递验收。
 
 ## 最近活动签到
 

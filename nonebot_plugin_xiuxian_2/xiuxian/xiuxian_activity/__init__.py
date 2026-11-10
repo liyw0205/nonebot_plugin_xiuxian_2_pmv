@@ -6,6 +6,7 @@ from ..adapter_compat import Bot, GroupMessageEvent, Message, MessageEvent, Priv
 from ..on_compat import on_command
 from ..xiuxian_utils.lay_out import Cooldown, assign_bot
 from ..xiuxian_utils.message_markdown import strip_md_command_links
+from ..command_guard import guard_command, result_failure
 from ..xiuxian_utils.utils import check_user, handle_send, send_help_message
 from ...features.activity.application import ActivityApplication
 from ...paths import get_paths
@@ -374,6 +375,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 
 
 @activity_exchange_cmd.handle(parameterless=[Cooldown(cd_time=0)])
+@guard_command("活动兑换")
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     await assign_bot(bot=bot, event=event)
     is_user, user_info, msg = await _ensure_user(event)
@@ -382,13 +384,16 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         return
 
     user_id = str(user_info["user_id"])
-    ok, text, _ = _run_activity_action(
+    ok, text, data = _run_activity_action(
         "claim_collect_phrase",
         _activity_operation_id(event, "collect-exchange", user_id),
         user_id,
         query=args.extract_plain_text(),
     )
-    await handle_send(bot, event, text if ok else f"活动兑换失败：{text}")
+    reply = text if ok else f"活动兑换失败：{text}"
+    if not ok and data.get("reason"):
+        reply = result_failure("活动兑换失败", data, messages={data["reason"]: text})
+    await handle_send(bot, event, reply)
 
 
 @activity_points_cmd.handle(parameterless=[Cooldown(cd_time=0)])
@@ -429,6 +434,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 
 
 @activity_buy_cmd.handle(parameterless=[Cooldown(cd_time=0)])
+@guard_command("活动购买")
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     await assign_bot(bot=bot, event=event)
     is_user, user_info, msg = await _ensure_user(event)
@@ -437,13 +443,16 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         return
 
     user_id = str(user_info["user_id"])
-    ok, text, _ = _run_activity_action(
+    ok, text, data = _run_activity_action(
         "claim_point_shop_item",
         _activity_operation_id(event, "point-shop", user_id),
         user_id,
         query=args.extract_plain_text(),
     )
-    await handle_send(bot, event, text if ok else f"活动购买失败：{text}")
+    reply = text if ok else f"活动购买失败：{text}"
+    if not ok and data.get("reason"):
+        reply = result_failure("活动购买失败", data, messages={data["reason"]: text})
+    await handle_send(bot, event, reply)
 
 
 @activity_boss_cmd.handle(parameterless=[Cooldown(cd_time=0)])

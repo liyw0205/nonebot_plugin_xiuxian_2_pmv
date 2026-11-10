@@ -9,6 +9,7 @@ from .collect_exchange_repository import ActivityCollectExchangeSqlRepository
 from .boss_settlement_repository import ActivityBossSettlementSqlRepository
 from .point_shop_purchase_repository import ActivityPointShopPurchaseSqlRepository
 from .sign_settlement_repository import ActivitySignSettlementSqlRepository
+from .redemption import ActivityRedemptionRejected
 
 
 class ActivityRepository(ServicePort):
@@ -32,7 +33,7 @@ class ActivityRepository(ServicePort):
         self.collect_exchange = ActivityCollectExchangeSqlRepository(database)
         self.point_shop_purchase = ActivityPointShopPurchaseSqlRepository(database)
         self.boss_settlement = ActivityBossSettlementSqlRepository(database)
-        self.retry_started_actions = frozenset({"claim_collect_phrase", "claim_sign"})
+        self.retry_started_actions = frozenset({"claim_collect_phrase", "claim_sign", "claim_point_shop_item"})
 
     def _claim_all(self, **kwargs: Any):
         from ...compatibility.legacy_activity_claim_steps import build_legacy_activity_claim_runners
@@ -79,21 +80,31 @@ class ActivityRepository(ServicePort):
 
     def _claim_collect(self, **kwargs: Any):
         from ...xiuxian.xiuxian_activity.service import claim_collect_phrase
-        return claim_collect_phrase(
+        return self._redeem(claim_collect_phrase,
             str(kwargs.get("user_id", "")),
             str(kwargs.get("query", "")),
             str(kwargs.get("operation_id", "")),
             settlement_repository=self.collect_exchange,
+            detailed_result=True,
         )
 
     def _claim_shop(self, **kwargs: Any):
         from ...xiuxian.xiuxian_activity.service import claim_point_shop_item
-        return claim_point_shop_item(
+        return self._redeem(claim_point_shop_item,
             str(kwargs.get("user_id", "")),
             str(kwargs.get("query", "")),
             str(kwargs.get("operation_id", "")),
             settlement_repository=self.point_shop_purchase,
+            detailed_result=True,
         )
+
+    @staticmethod
+    def _redeem(call, *args, **kwargs):
+        try:
+            return call(*args, **kwargs)
+        except ActivityRedemptionRejected as exc:
+            # Transaction owners have already rolled back before this boundary.
+            return {"status": "rejected", **exc.details, "message": exc.message}
 
     def _claim_boss(self, **kwargs: Any):
         from ...xiuxian.xiuxian_activity.activity_boss import claim_boss_rewards
