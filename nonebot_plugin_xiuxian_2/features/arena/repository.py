@@ -219,10 +219,10 @@ class ArenaChallengePurchaseSqlRepository(LegacyArenaRepository):
             used=min(requested_count,expected_item_count,expected_challenges_used);remaining=expected_item_count-used;new_used=expected_challenges_used-used;new_remaining=max(0,challenge_cap-new_used);bound=min(max(0,int(item["bind_num"])-used),remaining)
             changed = uow.execute("UPDATE back SET goods_num=?,bind_num=? WHERE user_id=? AND goods_id=? AND COALESCE(goods_num,0)=?",(remaining,bound,user_id,item_id,expected_item_count))
             if changed.rowcount != 1:
-                raise DomainError("arena_ticket_write_rejected", "arena ticket item write did not affect one row")
+                raise DomainError("arena_ticket_item_write_rejected", "arena ticket item write did not affect one row")
             changed = uow.execute("UPDATE player_data.arena SET daily_challenges_used=? WHERE user_id=? AND xiuxian_int_cmp(COALESCE(daily_challenges_used,0),?)=0 AND xiuxian_int_cmp(COALESCE(daily_extra_challenges,0),?)=0",(new_used,user_id,expected_challenges_used,expected_extra_challenges))
             if changed.rowcount != 1:
-                raise DomainError("arena_ticket_write_rejected", "arena ticket count write did not affect one row")
+                raise DomainError("arena_ticket_count_write_rejected", "arena ticket count write did not affect one row")
             return self._record_ticket(uow,operation_id,payload,self._ticket_result("applied",remaining,new_used,challenge_cap,used))
 
     @staticmethod

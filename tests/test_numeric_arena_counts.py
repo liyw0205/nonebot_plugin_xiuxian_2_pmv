@@ -47,7 +47,9 @@ class NumericArenaCountsTests(unittest.TestCase):
                 if scenario.endswith('ignore'):
                     with self.assertRaises(DomainError) as caught:
                         use()
-                    self.assertEqual('arena_ticket_write_rejected', caught.exception.code)
+                    expected_reason = ('arena_ticket_item_write_rejected' if scenario == 'item_ignore'
+                                       else 'arena_ticket_count_write_rejected')
+                    self.assertEqual(expected_reason, caught.exception.code)
                 elif scenario == 'receipt':
                     with self.assertRaisesRegex(sqlite3.IntegrityError, 'receipt refused'):
                         use()

@@ -308,7 +308,9 @@ class UpgradeProductionPathTests(unittest.TestCase):
         ).read_text(encoding="utf-8")
         self.assertNotIn('\\"控火等级\\"', source, "the nonexistent column is back in SQL")
         self.assertIn('_LEVEL_FIELD = "丹药控火"', source)
-        self.assertIn("CAST({level_field} AS INTEGER)", source)
+        self.assertIn("xiuxian_int_cmp({level_field},?)=0", source)
+        self.assertIn("xiuxian_int_cmp({experience_field},?)=0", source)
+        self.assertNotIn("CAST({level_field} AS INTEGER)", source)
 
 
 class UpgradeHandlerContractTests(unittest.TestCase):

@@ -2467,7 +2467,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "ranking_query_bounded_and_stable": (
                 'field not in {"current_floor", "score"}' in tower_state_repository
                 and "limit = min(50, max(0, int(limit)))" in tower_state_repository
-                and 'ORDER BY value DESC,user_id ASC LIMIT ?' in tower_state_repository
+                and 'ORDER BY xiuxian_int_text(COALESCE("{field}",0)) COLLATE xiuxian_integer DESC,user_id ASC LIMIT ?' in tower_state_repository
             ),
             "ranking_legacy_full_scan_removed": (
                 "get_all_field_data" not in tower_facade

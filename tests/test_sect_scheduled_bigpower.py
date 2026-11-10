@@ -77,7 +77,7 @@ class ScheduledMaterialBigPowerTests(unittest.TestCase):
             ).fetchone()
 
     def stored_power_total(self) -> int:
-        """What the SQL sum reports for this sect (double -> int), i.e. the applied value."""
+        """Historical SQL SUM rounds away the small member; the receipt is REAL too."""
         with sqlite3.connect(self.database) as connection:
             total = connection.execute(
                 "SELECT COALESCE(SUM(power),0) FROM user_xiuxian WHERE sect_id=1"
@@ -102,7 +102,7 @@ class ScheduledMaterialBigPowerTests(unittest.TestCase):
         self.assertEqual((240, 500), self.receipt())
 
     def test_high_power_grant_finishes_and_records_the_receipt(self) -> None:
-        expected_power = self.stored_power_total()
+        expected_power = int(float(10**25)) + 6
         self.assertGreater(expected_power, 2**63 - 1)
 
         result = self.service.grant_scheduled_materials("sect-materials:2026-11-08", 1, 2)
@@ -110,6 +110,7 @@ class ScheduledMaterialBigPowerTests(unittest.TestCase):
         self.assertEqual("granted", result.status)
         self.assertEqual(240, result.materials)
         self.assertEqual(expected_power, result.combat_power)
+        self.assertEqual(6, result.combat_power - self.stored_power_total())
         materials_kind, materials, power_kind, power = self.sect_row()
         self.assertEqual(("integer", 290), (materials_kind, materials))
         # Beyond int64 the column keeps REAL (double) instead of raising.
