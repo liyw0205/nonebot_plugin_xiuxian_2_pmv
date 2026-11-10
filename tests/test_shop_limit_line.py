@@ -181,7 +181,7 @@ class ShopLimitWiringTests(unittest.TestCase):
         source = _read("xiuxian/xiuxian_sect/__init__.py")
         body = _handler_body(source, "sect_shop")
 
-        self.assertIn('page_command("宗门商店", keyword, page + 1)', body)
+        self.assertIn('next_page_command("宗门商店", keyword, page, total_pages)', body)
         self.assertIn("empty_notice(keyword, \"宗门商店\")", body)
 
     def test_purchase_paths_are_untouched(self):
