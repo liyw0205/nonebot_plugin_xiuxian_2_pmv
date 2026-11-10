@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import Any, Mapping
 
 from ...infrastructure.database import DatabaseUnitOfWork
+from ...core.numeric import as_int_like
 from .schemas import (
     CONTRIBUTION_FLOW_DAYS,
     CONTRIBUTION_FLOW_RECENT,
@@ -39,10 +40,7 @@ ACTION_LABELS = {
 
 
 def _int(value: Any) -> int:
-    try:
-        return int(value or 0)
-    except (TypeError, ValueError):
-        return 0
+    return as_int_like(value)
 
 
 class ContributionFlowApplication:
@@ -140,10 +138,10 @@ class ContributionFlowApplication:
                 params = (user_id, since)
                 totals = uow.query_one(
                     f'SELECT COUNT(*) AS records,'
-                    f'COALESCE(SUM(CASE WHEN "{FIELD}">0 THEN "{FIELD}" ELSE 0 END),0) AS gained,'
-                    f'COALESCE(SUM(CASE WHEN "{FIELD}"<0 THEN -"{FIELD}" ELSE 0 END),0) AS spent,'
-                    f'COALESCE(SUM("{FIELD}"),0) AS net '
-                    f'FROM "economy_log" {where} AND COALESCE("{FIELD}",0)<>0',
+                    f'COALESCE(xiuxian_int_sum(CASE WHEN xiuxian_int_cmp("{FIELD}",0)>0 THEN "{FIELD}" ELSE 0 END),0) AS gained,'
+                    f'xiuxian_int_abs(COALESCE(xiuxian_int_sum(CASE WHEN xiuxian_int_cmp("{FIELD}",0)<0 THEN "{FIELD}" ELSE 0 END),0)) AS spent,'
+                    f'COALESCE(xiuxian_int_sum("{FIELD}"),0) AS net '
+                    f'FROM "economy_log" {where} AND xiuxian_int_cmp(COALESCE("{FIELD}",0),0)<>0',
                     params,
                 )
                 payload = self._empty()
@@ -158,12 +156,13 @@ class ContributionFlowApplication:
                 groups = uow.query_all(
                     f'SELECT COALESCE(source,\'\') AS source,COALESCE(action,\'\') AS action,'
                     f'COUNT(*) AS records,'
-                    f'COALESCE(SUM(CASE WHEN "{FIELD}">0 THEN "{FIELD}" ELSE 0 END),0) AS gained,'
-                    f'COALESCE(SUM(CASE WHEN "{FIELD}"<0 THEN -"{FIELD}" ELSE 0 END),0) AS spent '
-                    f'FROM "economy_log" {where} AND COALESCE("{FIELD}",0)<>0 '
+                    f'COALESCE(xiuxian_int_sum(CASE WHEN xiuxian_int_cmp("{FIELD}",0)>0 THEN "{FIELD}" ELSE 0 END),0) AS gained,'
+                    f'xiuxian_int_abs(COALESCE(xiuxian_int_sum(CASE WHEN xiuxian_int_cmp("{FIELD}",0)<0 THEN "{FIELD}" ELSE 0 END),0)) AS spent '
+                    f'FROM "economy_log" {where} AND xiuxian_int_cmp(COALESCE("{FIELD}",0),0)<>0 '
                     f'GROUP BY COALESCE(source,\'\'),COALESCE(action,\'\')',
                     params,
                 )
+                groups = [{**row, "gained": _int(row["gained"]), "spent": _int(row["spent"])} for row in groups]
                 payload["sources"] = sorted(
                     (dict(row) for row in groups if _int(row["gained"]) > 0),
                     key=lambda row: (-_int(row["gained"]), -_int(row["records"])),
@@ -175,11 +174,11 @@ class ContributionFlowApplication:
 
                 recent = uow.query_all(
                     f'SELECT source,action,"{FIELD}" AS delta,created_at,detail '
-                    f'FROM "economy_log" {where} AND COALESCE("{FIELD}",0)<>0 '
+                    f'FROM "economy_log" {where} AND xiuxian_int_cmp(COALESCE("{FIELD}",0),0)<>0 '
                     f"ORDER BY created_at DESC,id DESC LIMIT ?",
                     (*params, CONTRIBUTION_FLOW_RECENT),
                 )
-                payload["recent"] = [dict(row) for row in recent]
+                payload["recent"] = [{**row, "delta": _int(row["delta"])} for row in recent]
                 return payload
         except Exception:
             # 只读视图绝不向玩家抛异常；库不可读时按"暂无记录"降级。

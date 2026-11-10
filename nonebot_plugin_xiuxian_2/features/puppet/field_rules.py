@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from typing import Any
+from ...core.numeric import as_int_like
 
 DEFAULT_TIME_COST_HOURS = 23.0
 DEFAULT_SPEED_BASE = 0.05
@@ -40,10 +41,7 @@ def parse_harvest_time(value: Any) -> datetime | None:
 
 
 def as_int(value: Any, default: int = 0) -> int:
-    try:
-        return int(value)
-    except (TypeError, ValueError):
-        return default
+    return as_int_like(value, default)
 
 
 def maturity_interval_hours(

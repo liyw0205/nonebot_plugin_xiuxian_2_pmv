@@ -140,9 +140,9 @@ class WorldBossBattleSettlementSqlRepository:
             int(boss_hp),
             int(expected_stamina if stamina is None else stamina),
             int(expected_battle_count if battle_count is None else battle_count),
-            int(expected_stone if stone is None else stone),
-            int(expected_exp if exp is None else exp),
-            int(expected_integral if integral is None else integral),
+            as_int_like(expected_stone if stone is None else stone),
+            as_int_like(expected_exp if exp is None else exp),
+            as_int_like(expected_integral if integral is None else integral),
             tuple(activity_lines),
         )
 
@@ -171,7 +171,7 @@ class WorldBossBattleSettlementSqlRepository:
             int(row["battle_count"] or 0),
             as_int_like(row["stone"] or 0),
             as_int_like(row["exp"] or 0),
-            int(row["integral"] or 0),
+            as_int_like(row["integral"]),
             tuple(str(line) for line in lines),
         )
 
@@ -340,8 +340,8 @@ class WorldBossBattleSettlementSqlRepository:
 
             daily = uow.query_one("SELECT COALESCE(boss_stone,0) AS stone,COALESCE(boss_integral,0) AS integral,COALESCE(boss_battle_count,0) AS count FROM player_data.boss WHERE user_id=?", (user_id,))
             total = uow.query_one("SELECT COALESCE(integral,0) AS integral FROM player_data.boss_limit WHERE user_id=?", (user_id,))
-            actual_daily = (0, 0, 0) if daily is None else (as_int_like(daily["stone"]), int(daily["integral"]), int(daily["count"]))
-            actual_total = 0 if total is None else int(total["integral"])
+            actual_daily = (0, 0, 0) if daily is None else (as_int_like(daily["stone"]), as_int_like(daily["integral"]), as_int_like(daily["count"]))
+            actual_total = 0 if total is None else as_int_like(total["integral"])
             if actual_daily != (int(expected_daily_stone), int(expected_daily_integral), int(expected_battle_count)) or actual_total != int(expected_total_integral):
                 return _reason_replace(self._result("state_changed", expected_stamina=expected_stamina, expected_battle_count=expected_battle_count, expected_stone=expected_stone, expected_exp=expected_exp, expected_integral=expected_total_integral), reason=first_difference((*actual_daily,actual_total), (int(expected_daily_stone),int(expected_daily_integral),int(expected_battle_count),int(expected_total_integral)), ("boss_daily_stone_changed","boss_daily_integral_changed","boss_daily_count_changed","boss_integral_changed")), subject="")
             if expected_battle_count >= battle_limit:
@@ -365,11 +365,11 @@ class WorldBossBattleSettlementSqlRepository:
                 raise RuntimeError("cooldown changed")
             if daily is None:
                 uow.execute("INSERT INTO player_data.boss(user_id,boss_stone,boss_integral,boss_battle_count) VALUES (?,?,?,?)", (user_id, int(expected_daily_stone) + int(stone_reward), int(expected_daily_integral) + int(integral_reward), count))
-            elif uow.execute("UPDATE player_data.boss SET boss_stone=?,boss_integral=?,boss_battle_count=? WHERE user_id=? AND boss_stone=? AND boss_integral=? AND boss_battle_count=?", (int(expected_daily_stone) + int(stone_reward), int(expected_daily_integral) + int(integral_reward), count, user_id, expected_daily_stone, expected_daily_integral, expected_battle_count)).rowcount != 1:
+            elif uow.execute("UPDATE player_data.boss SET boss_stone=?,boss_integral=?,boss_battle_count=? WHERE user_id=? AND xiuxian_int_cmp(COALESCE(boss_stone,0),?)=0 AND xiuxian_int_cmp(COALESCE(boss_integral,0),?)=0 AND xiuxian_int_cmp(COALESCE(boss_battle_count,0),?)=0", (int(expected_daily_stone) + int(stone_reward), int(expected_daily_integral) + int(integral_reward), count, user_id, expected_daily_stone, expected_daily_integral, expected_battle_count)).rowcount != 1:
                 raise RuntimeError("boss state changed")
             if total is None:
                 uow.execute("INSERT INTO player_data.boss_limit(user_id,integral) VALUES (?,?)", (user_id, integral))
-            elif uow.execute("UPDATE player_data.boss_limit SET integral=? WHERE user_id=? AND integral=?", (integral, user_id, expected_total_integral)).rowcount != 1:
+            elif uow.execute("UPDATE player_data.boss_limit SET integral=? WHERE user_id=? AND xiuxian_int_cmp(COALESCE(integral,0),?)=0", (integral, user_id, expected_total_integral)).rowcount != 1:
                 raise RuntimeError("boss integral changed")
             if quantity:
                 stamp = self.clock.now().strftime("%Y-%m-%d %H:%M:%S")

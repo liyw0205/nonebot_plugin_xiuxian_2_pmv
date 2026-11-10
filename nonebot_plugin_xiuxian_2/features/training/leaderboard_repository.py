@@ -4,6 +4,7 @@ import threading
 import time
 from pathlib import Path
 from typing import Any, Callable
+from ...core.numeric import as_int_like
 
 from ...infrastructure.database import DatabaseUnitOfWork
 from ..base.ranking_position import PersonalRank
@@ -62,13 +63,14 @@ class TrainingLeaderboardSqlRepository:
                 ):
                     raise RuntimeError("历练排行榜 schema 尚未迁移。")
                 rows = uow.query_all(
-                    f'SELECT t.user_id,CAST(COALESCE(t."{field}",0) AS INTEGER) AS value,'
+                    f'SELECT t.user_id,COALESCE(t."{field}",0) AS value,'
                     "(SELECT ux.user_name FROM user_xiuxian ux "
                     "WHERE ux.user_id=t.user_id ORDER BY ux.rowid ASC LIMIT 1) AS user_name "
                     "FROM player_data.training t "
-                    f'ORDER BY CAST(COALESCE(t."{field}",0) AS INTEGER) DESC,t.rowid ASC LIMIT ?',
+                    f'ORDER BY xiuxian_int_text(COALESCE(t."{field}",0)) COLLATE xiuxian_integer DESC,t.rowid ASC LIMIT ?',
                     (limit,),
                 )
+            rows = [{**row, "value": as_int_like(row["value"])} for row in rows]
             self._cache[field] = (now + self.cache_ttl, rows)
             return [dict(row) for row in rows]
 
@@ -91,7 +93,7 @@ class TrainingLeaderboardSqlRepository:
                     return PersonalRank()
                 deduped = (
                     'SELECT t.user_id AS user_id,'
-                    f'CAST(COALESCE(t."{field}",0) AS INTEGER) AS value '
+                    f'COALESCE(t."{field}",0) AS value '
                     "FROM player_data.training AS t "
                     "WHERE t.user_id IS NOT NULL "
                     "AND TRIM(CAST(t.user_id AS TEXT))<>'' "
@@ -99,14 +101,14 @@ class TrainingLeaderboardSqlRepository:
                     "WHERE c.user_id=t.user_id)"
                 )
                 row = uow.query_one(
-                    f'SELECT CAST(COALESCE("{field}",0) AS INTEGER) AS value '
+                    f'SELECT COALESCE("{field}",0) AS value '
                     "FROM player_data.training WHERE user_id=? ORDER BY rowid ASC LIMIT 1",
                     (user_id,),
                 )
-                value = int(row["value"] or 0) if row is not None else 0
+                value = as_int_like(row["value"]) if row is not None else 0
                 total = int(
                     (uow.query_one(
-                        f"SELECT COUNT(*) AS n FROM ({deduped}) WHERE value>0"
+                        f"SELECT COUNT(*) AS n FROM ({deduped}) WHERE xiuxian_int_cmp(value,0)>0"
                     ) or {"n": 0})["n"]
                     or 0
                 )
@@ -114,7 +116,7 @@ class TrainingLeaderboardSqlRepository:
                     return PersonalRank(0, total, 0)
                 better = int(
                     (uow.query_one(
-                        f"SELECT COUNT(*) AS n FROM ({deduped}) WHERE value>?",
+                        f"SELECT COUNT(*) AS n FROM ({deduped}) WHERE xiuxian_int_cmp(value,?)>0",
                         (value,),
                     ) or {"n": 0})["n"]
                     or 0

@@ -90,3 +90,43 @@ def test_inactive_activity_event_is_receipted_before_future_replay(monkeypatch, 
     ) == []
     with DatabaseUnitOfWork(database, read_only=True) as uow:
         assert uow.query_one("SELECT COUNT(*) AS count FROM activity_point_balance")["count"] == 0
+
+
+def test_daily_point_limit_and_read_model_sum_without_overflow(monkeypatch, tmp_path):
+    from nonebot_plugin_xiuxian_2.features.activity.read_model_repository import ActivityReadModelSqlRepository
+    database = tmp_path / 'game.db'
+    _configure_activity(monkeypatch, database, [{
+        'key': 'event', 'name': 'test', 'type': 'event_points',
+        'event_rules': [{'event': 'work', 'points': 3, 'daily_limit': 2**63}],
+    }])
+    with DatabaseUnitOfWork(database) as uow:
+        uow.executemany("INSERT INTO activity_point_event_log(activity_key,user_id,event_key,points,record_date) VALUES('event','u','work',?,'2026-10-02')", [(2**62,), (2**62,)])
+    args = dict(event_id='large-daily', occurred_at='2026-10-02T10:00:00+08:00')
+    assert service.record_activity_event('u', 'work', 1, **args) == []
+    assert service.record_activity_event('u', 'work', 1, **args) == []
+    assert ActivityReadModelSqlRepository(database).point_event_daily_totals('u', ['event'], '2026-10-02') == {('event', 'work'): 2**63}
+    with DatabaseUnitOfWork(database, read_only=True) as uow:
+        assert uow.query_one('SELECT COUNT(*) AS n FROM activity_point_event_log')['n'] == 2
+        assert uow.query_one('SELECT COUNT(*) AS n FROM activity_point_balance')['n'] == 0
+        assert uow.query_one('SELECT COUNT(*) AS n FROM activity_event_operations')['n'] == 1
+
+
+def test_daily_pass_limit_sums_legal_integer_rows_without_overflow(monkeypatch, tmp_path):
+    database = tmp_path / 'game.db'
+    _configure_activity(monkeypatch, database, [])
+    cfg = {'enabled': True, 'event_rules': [{'event': 'work', 'exp': 3, 'daily_limit': 2**63}]}
+    runtime = lambda _config: {'ok': True, 'can_produce': True, 'features': {'pass'}, 'multiplier': 1}
+    for module in (service, activity_pass):
+        monkeypatch.setattr(module, '_activity_pass_config', lambda _config: cfg)
+        monkeypatch.setattr(module, 'activity_runtime_state', runtime)
+        monkeypatch.setattr(module, '_activity_config_key', lambda _config: 'pass-test')
+    monkeypatch.setattr(activity_pass, '_pass_catchup_state', lambda *args: {'active': False, 'multiplier': 1})
+    with DatabaseUnitOfWork(database) as uow:
+        uow.executemany("INSERT INTO activity_pass_event_log(activity_key,user_id,event_key,exp,record_date) VALUES('pass-test','u','work',?,'2026-10-02')", [(2**62,), (2**62,)])
+    args = dict(event_id='large-pass', occurred_at='2026-10-02T10:00:00+08:00')
+    assert service.record_activity_event('u', 'work', 1, **args) == []
+    assert service.record_activity_event('u', 'work', 1, **args) == []
+    with DatabaseUnitOfWork(database, read_only=True) as uow:
+        assert uow.query_one('SELECT COUNT(*) AS n FROM activity_pass_event_log')['n'] == 2
+        assert uow.query_one('SELECT COUNT(*) AS n FROM activity_pass_balance')['n'] == 0
+        assert uow.query_one('SELECT COUNT(*) AS n FROM activity_event_operations')['n'] == 1

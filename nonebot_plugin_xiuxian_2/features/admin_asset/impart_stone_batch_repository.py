@@ -158,7 +158,7 @@ class AdminImpartStoneBatchSqlRepository:
         if int(target_count["total"]) > 0:
             counts = uow.query_one(
                 "SELECT SUM(CASE WHEN status!='pending' THEN 1 ELSE 0 END) AS completed,"
-                "COALESCE(SUM(applied_delta),0) AS applied_delta,"
+                "COALESCE(xiuxian_int_sum(applied_delta),0) AS applied_delta,"
                 "SUM(CASE WHEN status!='pending' AND applied_delta!=0 THEN 1 ELSE 0 END) "
                 "AS affected_users FROM admin_impart_stone_batch_targets "
                 "WHERE operation_id=?",
@@ -166,7 +166,7 @@ class AdminImpartStoneBatchSqlRepository:
             )
         else:
             counts = uow.query_one(
-                "SELECT COUNT(*) AS completed,COALESCE(SUM(applied_delta),0) AS applied_delta,"
+                "SELECT COUNT(*) AS completed,COALESCE(xiuxian_int_sum(applied_delta),0) AS applied_delta,"
                 "SUM(CASE WHEN applied_delta!=0 THEN 1 ELSE 0 END) AS affected_users "
                 "FROM admin_impart_stone_batch_progress WHERE operation_id=?",
                 (operation_id,),
@@ -423,8 +423,8 @@ class AdminImpartStoneBatchSqlRepository:
                 "(operation_id,user_id,status,applied_delta,result_json) VALUES(?,?,?,?,?) "
                 "ON CONFLICT(operation_id,user_id) DO UPDATE SET status=excluded.status,"
                 "applied_delta=excluded.applied_delta,result_json=excluded.result_json "
-                "WHERE ABS(excluded.applied_delta)>"
-                "ABS(admin_impart_stone_batch_progress.applied_delta)",
+                "WHERE xiuxian_int_cmp(xiuxian_int_abs(excluded.applied_delta),"
+                "xiuxian_int_abs(admin_impart_stone_batch_progress.applied_delta))>0",
                 (operation_id, user_id, result.status, result.applied_delta, result_json),
             )
             counts = uow.query_one(

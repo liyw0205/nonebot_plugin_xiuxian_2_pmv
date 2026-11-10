@@ -161,7 +161,7 @@ class ActivityPointShopPurchaseSqlRepository:
             )
             personal_count = int((personal or {}).get("count") or 0)
             total_row = uow.query_one(
-                "SELECT COALESCE(SUM(count),0) AS count FROM activity_point_purchase "
+                "SELECT COALESCE(xiuxian_int_sum(count),0) AS count FROM activity_point_purchase "
                 "WHERE activity_key=? AND item_key=?",
                 (activity_key, item_key),
             )

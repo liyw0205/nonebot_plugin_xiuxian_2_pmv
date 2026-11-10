@@ -59,6 +59,14 @@ def test_candidates_use_one_readonly_join_and_exclude_self_or_missing_profiles(r
     assert not any(statement.startswith(("INSERT", "UPDATE", "DELETE", "CREATE")) for statement in statements)
 
 
+def test_scientific_text_score_is_a_candidate_without_rounding(runtime):
+    with sqlite3.connect(runtime.player) as connection:
+        connection.execute("UPDATE arena SET score='1.00000000000000000001e20' WHERE user_id='near1'")
+    candidates = {row['user_id']: row for row in runtime.repository.candidates('self')}
+    assert candidates['near1']['score'] == 100000000000000000001
+    assert 'bad' not in candidates
+
+
 def test_find_uses_seeded_nearby_selection_then_nearest_fallback(runtime):
     expected = random.Random("operation").choice(["near1", "near2"])
     assert runtime.application.find("self", "operation") == expected
@@ -95,8 +103,10 @@ def test_empty_candidates_are_distinct_from_missing_or_broken_storage(runtime, t
     assert not missing.exists()
     with sqlite3.connect(runtime.player) as connection:
         connection.execute("DROP TABLE arena")
-    with pytest.raises(sqlite3.OperationalError):
-        runtime.application.find("self")
+    # Missing startup-owned schema follows test_arena_schema_ownership's
+    # empty-candidate contract; unreadable databases still raise above.
+    assert runtime.application.find("self") is None
+    assert runtime.repository.candidates("self") == []
 
 
 def test_view_and_cache_methods_share_owner_and_keep_scores_until_expiry(runtime):
@@ -143,8 +153,8 @@ def test_stale_view_targets_are_rebuilt_with_matching_challenge_indices(runtime)
     assert [row["user_id"] for row in runtime.application.get_cache("self")] == ["near2", "far"]
     with sqlite3.connect(runtime.player) as connection:
         connection.execute("DROP TABLE arena")
-    with pytest.raises(sqlite3.OperationalError):
-        runtime.application.view("self")
+    assert runtime.application.view("self")["targets"] == []
+    assert runtime.application.get_cache("self") is None
 
 
 def test_concurrent_cache_mutations_return_detached_bounded_snapshots(runtime):

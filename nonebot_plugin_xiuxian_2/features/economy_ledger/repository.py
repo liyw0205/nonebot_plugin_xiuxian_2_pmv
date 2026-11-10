@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any, Iterator, Mapping
 
 from ...infrastructure.database import DatabaseUnitOfWork
+from ...core.numeric import as_int_like
 from .schemas import (
     DEFAULT_ANOMALY_STONE_DELTA,
     DELTA_FIELDS,
@@ -87,7 +88,7 @@ def _prepare_row(row: Mapping[str, Any]) -> dict[str, Any]:
     prepared = dict(row)
     for field in DELTA_FIELDS:
         try:
-            prepared[field] = int(prepared.get(field) or 0)
+            prepared[field] = as_int_like(prepared.get(field))
         except (TypeError, ValueError):
             prepared[field] = 0
         prepared[f"{field}_class"] = (
@@ -135,7 +136,7 @@ class EconomyLedgerSqlRepository:
                 params.append(filters[field])
 
         if filters.get("min_abs_stone_delta") and "stone_delta" in columns:
-            where_parts.append('ABS("stone_delta") >= ?')
+            where_parts.append('xiuxian_int_cmp(xiuxian_int_abs("stone_delta"),?) >= 0')
             params.append(max(int(filters["min_abs_stone_delta"]), 0))
 
         if filters.get("has_item_delta") and "item_delta" in columns:
@@ -152,7 +153,7 @@ class EconomyLedgerSqlRepository:
                     threshold = max(int(filters.get("anomaly_stone_delta", DEFAULT_ANOMALY_STONE_DELTA)), 0)
                 except (TypeError, ValueError):
                     threshold = DEFAULT_ANOMALY_STONE_DELTA
-                anomaly_parts.append('ABS("stone_delta") >= ?')
+                anomaly_parts.append('xiuxian_int_cmp(xiuxian_int_abs("stone_delta"),?) >= 0')
                 params.append(threshold)
             if "source" in columns:
                 anomaly_parts.append(
@@ -206,14 +207,14 @@ class EconomyLedgerSqlRepository:
             return _empty_summary()
 
         def sum_expr(field: str) -> str:
-            return f'COALESCE(SUM({_quote(field)}), 0)' if field in columns else "0"
+            return f'COALESCE(xiuxian_int_sum({_quote(field)}), 0)' if field in columns else "0"
 
         stone_in = (
-            'COALESCE(SUM(CASE WHEN "stone_delta" > 0 THEN "stone_delta" ELSE 0 END), 0)'
+            'COALESCE(xiuxian_int_sum(CASE WHEN xiuxian_int_cmp("stone_delta",0)>0 THEN "stone_delta" ELSE 0 END),0)'
             if "stone_delta" in columns else "0"
         )
         stone_out = (
-            'COALESCE(SUM(CASE WHEN "stone_delta" < 0 THEN -"stone_delta" ELSE 0 END), 0)'
+            'xiuxian_int_abs(COALESCE(xiuxian_int_sum(CASE WHEN xiuxian_int_cmp("stone_delta",0)<0 THEN "stone_delta" ELSE 0 END),0))'
             if "stone_delta" in columns else "0"
         )
         unique_users = "COUNT(DISTINCT user_id)" if "user_id" in columns else "0"
@@ -242,10 +243,10 @@ class EconomyLedgerSqlRepository:
             return {"stone_in": "0", "stone_out": "0", "stone_net": "0", "gross_stone": "0"}
         stone = f'{alias}.{_quote("stone_delta")}' if alias else _quote("stone_delta")
         return {
-            "stone_in": f"COALESCE(SUM(CASE WHEN {stone} > 0 THEN {stone} ELSE 0 END), 0)",
-            "stone_out": f"COALESCE(SUM(CASE WHEN {stone} < 0 THEN -{stone} ELSE 0 END), 0)",
-            "stone_net": f"COALESCE(SUM({stone}), 0)",
-            "gross_stone": f"COALESCE(SUM(ABS({stone})), 0)",
+            "stone_in": f"COALESCE(xiuxian_int_sum(CASE WHEN xiuxian_int_cmp({stone},0)>0 THEN {stone} ELSE 0 END),0)",
+            "stone_out": f"xiuxian_int_abs(COALESCE(xiuxian_int_sum(CASE WHEN xiuxian_int_cmp({stone},0)<0 THEN {stone} ELSE 0 END),0))",
+            "stone_net": f"COALESCE(xiuxian_int_sum({stone}),0)",
+            "gross_stone": f"COALESCE(xiuxian_int_sum(xiuxian_int_abs({stone})),0)",
         }
 
     @staticmethod
@@ -255,7 +256,7 @@ class EconomyLedgerSqlRepository:
             item = dict(row)
             for field in int_fields:
                 try:
-                    item[field] = int(item.get(field) or 0)
+                    item[field] = as_int_like(item.get(field))
                 except (TypeError, ValueError):
                     item[field] = 0
             result.append(item)
@@ -276,7 +277,7 @@ class EconomyLedgerSqlRepository:
             f'{stone["stone_net"]} AS stone_net,{stone["gross_stone"]} AS gross_stone '
             f'FROM "economy_log"{where_sql} '
             f'GROUP BY COALESCE({source}, \'\'),COALESCE({action}, \'\') '
-            "ORDER BY gross_stone DESC,records DESC LIMIT ?",
+            "ORDER BY gross_stone COLLATE xiuxian_integer DESC,records DESC LIMIT ?",
             [*params, limit],
         )
         return cls._coerce_stats(rows, ("records", "stone_in", "stone_out", "stone_net", "gross_stone"))
@@ -302,7 +303,7 @@ class EconomyLedgerSqlRepository:
             f'{stone["stone_in"]} AS stone_in,{stone["stone_out"]} AS stone_out,'
             f'{stone["stone_net"]} AS stone_net,{stone["gross_stone"]} AS gross_stone '
             f'FROM filtered f {join} WHERE f."user_id" IS NOT NULL AND f."user_id" <> \'\' '
-            'GROUP BY f."user_id" ORDER BY gross_stone DESC,records DESC LIMIT ?',
+            'GROUP BY f."user_id" ORDER BY gross_stone COLLATE xiuxian_integer DESC,records DESC LIMIT ?',
             [*params, limit],
         )
         return cls._coerce_stats(rows, ("records", "stone_in", "stone_out", "stone_net", "gross_stone"))
@@ -325,7 +326,7 @@ class EconomyLedgerSqlRepository:
             f'{stone["stone_in"]} AS stone_in,{stone["stone_out"]} AS stone_out,'
             f'{stone["stone_net"]} AS stone_net,{stone["gross_stone"]} AS gross_stone '
             f'FROM filtered f {join} WHERE f."sect_id" IS NOT NULL AND f."sect_id" <> \'\' '
-            'GROUP BY f."sect_id" ORDER BY gross_stone DESC,records DESC LIMIT ?',
+            'GROUP BY f."sect_id" ORDER BY gross_stone COLLATE xiuxian_integer DESC,records DESC LIMIT ?',
             [*params, limit],
         )
         return cls._coerce_stats(rows, ("records", "stone_in", "stone_out", "stone_net", "gross_stone"))
@@ -337,7 +338,7 @@ class EconomyLedgerSqlRepository:
     ) -> list[dict[str, Any]]:
         if "stone_delta" not in columns:
             return []
-        order = ['ABS("stone_delta") DESC']
+        order = ['xiuxian_int_abs("stone_delta") COLLATE xiuxian_integer DESC']
         order.extend(f'{_quote(field)} DESC' for field in ("created_at", "id") if field in columns)
         rows = cls._rows(uow, selected, where_sql, params, " ORDER BY " + ", ".join(order), limit=limit)
         return [_prepare_row(row) for row in rows]

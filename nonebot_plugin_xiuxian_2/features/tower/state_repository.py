@@ -1,4 +1,5 @@
 from __future__ import annotations
+from ...core.numeric import as_int_like
 
 import json
 from dataclasses import dataclass
@@ -87,9 +88,9 @@ class TowerStateRepository:
             )
             if row is not None:
                 result = dict(row)
-                result["current_floor"] = int(result["current_floor"] or 0)
-                result["max_floor"] = int(result["max_floor"] or 0)
-                result["score"] = int(result["score"] or 0)
+                result["current_floor"] = as_int_like(result["current_floor"])
+                result["max_floor"] = as_int_like(result["max_floor"])
+                result["score"] = as_int_like(result["score"])
                 weekly, weekly_changed = self._weekly(result["weekly_purchases"], today)
                 result["weekly_purchases"] = weekly
                 if weekly_changed:
@@ -231,11 +232,11 @@ class TowerStateRepository:
             if not {"user_id", field} <= columns:
                 return []
             rows = uow.query_all(
-                f'SELECT user_id,CAST(COALESCE("{field}",0) AS INTEGER) AS value '
-                f'FROM tower ORDER BY value DESC,user_id ASC LIMIT ?',
+                f'SELECT user_id,COALESCE("{field}",0) AS value '
+                f'FROM tower ORDER BY xiuxian_int_text(COALESCE("{field}",0)) COLLATE xiuxian_integer DESC,user_id ASC LIMIT ?',
                 (limit,),
             )
-        return [(str(row["user_id"]), int(row["value"] or 0)) for row in rows]
+        return [(str(row["user_id"]), as_int_like(row["value"])) for row in rows]
 
     def rank_of(self, user_id: str, field: str = "current_floor") -> PersonalRank:
         """本人通天塔名次：并列名次 + 有记录人数 + 本人数值。"""
@@ -251,15 +252,15 @@ class TowerStateRepository:
             if not {"user_id", field} <= columns:
                 return PersonalRank()
             row = uow.query_one(
-                f'SELECT CAST(COALESCE("{field}",0) AS INTEGER) AS value '
+                f'SELECT COALESCE("{field}",0) AS value '
                 "FROM tower WHERE user_id=? ORDER BY rowid ASC LIMIT 1",
                 (user_id,),
             )
-            value = int(row["value"] or 0) if row is not None else 0
+            value = as_int_like(row["value"]) if row is not None else 0
             total = int(
                 (uow.query_one(
                     f'SELECT COUNT(*) AS n FROM tower '
-                    f'WHERE CAST(COALESCE("{field}",0) AS INTEGER)>0'
+                    f'WHERE xiuxian_int_cmp(COALESCE("{field}",0),0)>0'
                 ) or {"n": 0})["n"]
                 or 0
             )
@@ -268,7 +269,7 @@ class TowerStateRepository:
             better = int(
                 (uow.query_one(
                     f'SELECT COUNT(*) AS n FROM tower '
-                    f'WHERE CAST(COALESCE("{field}",0) AS INTEGER)>?',
+                    f'WHERE xiuxian_int_cmp(COALESCE("{field}",0),?)>0',
                     (value,),
                 ) or {"n": 0})["n"]
                 or 0

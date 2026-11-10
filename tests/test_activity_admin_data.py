@@ -198,6 +198,39 @@ class ActivityAdminDataTests(unittest.TestCase):
         self.assertEqual(120, migrated["activities"][0]["user"]["balance"]["total_points"])
         self.assertEqual(2, migrated["activity_pass"]["user"]["level"])
 
+    def test_numeric_aggregates_do_not_overflow_across_players(self):
+        with DatabaseUnitOfWork(self.database) as uow:
+            uow.execute('UPDATE activity_point_balance SET points=?,total_points=?', (2**62, 2**62))
+            uow.execute("INSERT INTO activity_point_balance(activity_key,user_id,points,total_points) VALUES('points','other',?,?)", (2**62, 2**62))
+            uow.execute('UPDATE activity_boss_damage SET total_damage=?', (2**62,))
+            uow.execute("INSERT INTO activity_boss_damage(activity_key,user_id,total_damage) VALUES('boss','other',?)", (2**62,))
+            for table in ('activity_point_purchase', 'activity_collect_inventory', 'activity_collect_claim', 'activity_item_inventory'):
+                uow.execute(f'UPDATE {table} SET count=?', (2**62,))
+            uow.execute("INSERT INTO activity_point_purchase(activity_key,user_id,item_key,count) VALUES('points','other','potion',?)", (2**62,))
+            uow.execute("INSERT INTO activity_collect_inventory(activity_key,user_id,word_char,count) VALUES('words','other','甲',?)", (2**62,))
+            uow.execute("INSERT INTO activity_collect_claim(activity_key,user_id,phrase,count) VALUES('words','other','甲乙',?)", (2**62,))
+            uow.execute("INSERT INTO activity_item_inventory(activity_key,user_id,item_id,count) VALUES('boss','other','firework',?)", (2**62,))
+        with ExitStack() as stack:
+            for context in self._config_patches():
+                stack.enter_context(context)
+            data = self.application.overview()
+            stack.enter_context(patch.object(service, 'DB_PATH', self.database))
+            stack.enter_context(patch.object(service, 'load_config', return_value=self.config))
+            stack.enter_context(patch.object(service, 'today_str', return_value='2026-10-06'))
+            stack.enter_context(patch.object(service, '_attach_display_names', side_effect=lambda rows, id_key='user_id': [
+                {**row, 'user_name': '測試修士' if row.get(id_key) == 'user-0001' else row.get(id_key),
+                 'display_name': '測試修士' if row.get(id_key) == 'user-0001' else row.get(id_key)} for row in rows
+            ]))
+            legacy = service.get_activity_data_overview()
+        self.assertEqual(legacy, data)
+        rows = {r['key']: r for r in data['activities']}
+        self.assertEqual(2**63, rows['points']['counts']['current_points'])
+        self.assertEqual(2**63, rows['boss']['counts']['total_damage'])
+        self.assertEqual(2**63, rows['points']['counts']['purchase_count'])
+        self.assertEqual(2**63, rows['boss']['counts']['item_count'])
+        self.assertEqual(2**63, rows['words']['counts']['inventory_count'])
+        self.assertEqual(2**63, rows['words']['counts']['claim_count'])
+
     def test_reset_is_atomic_and_preserves_each_scope(self) -> None:
         message = self.application.reset("activity", "words")
         self.assertIn("影响记录 4 条", message)

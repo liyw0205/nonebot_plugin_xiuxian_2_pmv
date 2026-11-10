@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Any, Protocol
+from ...core.numeric import as_int_like
+from ...core.errors import DomainError
 
 import json
 from datetime import date, datetime
@@ -133,7 +135,7 @@ class BossPurchaseSqlRepository:
             uow.attach_database(self.player_database,"player_data");old=uow.query_one("SELECT payload,quantity,cost,integral,purchased,inventory FROM boss_purchase_operations WHERE operation_id=?",(operation_id,))
             if old:
                 if str(old["payload"])!=payload:return result("state_changed")
-                return {"status":"duplicate","quantity":int(old["quantity"]),"cost":int(old["cost"]),"integral":int(old["integral"]),"purchased":int(old["purchased"]),"inventory":int(old["inventory"])}
+                return {"status":"duplicate","quantity":int(old["quantity"]),"cost":int(old["cost"]),"integral":as_int_like(old["integral"]),"purchased":int(old["purchased"]),"inventory":int(old["inventory"])}
             if uow.query_one("SELECT 1 AS ok FROM user_xiuxian WHERE user_id=?",(user_id,)) is None:return self._record(uow,operation_id,payload,result("user_missing"))
             integral=uow.query_one("SELECT COALESCE(integral,0) AS integral FROM player_data.boss_limit WHERE user_id=?",(user_id,));boss_columns={str(row[1]) for row in uow.execute("PRAGMA player_data.table_info(boss)").fetchall()}
             if "weekly_purchases" in boss_columns:
@@ -146,14 +148,17 @@ class BossPurchaseSqlRepository:
                 boss = weekly_row or {"weekly": "{}"}
             if integral is None:return self._record(uow,operation_id,payload,result("state_changed"))
             current=self._weekly(boss["weekly"],today)
-            if int(integral["integral"])!=expected_integral or current!=weekly:return self._record(uow,operation_id,payload,result("state_changed"))
+            if as_int_like(integral["integral"])!=expected_integral or current!=weekly:return self._record(uow,operation_id,payload,result("state_changed"))
             purchased=int(weekly.get(str(item_id),0) or 0)
             if purchased+quantity>weekly_limit:return self._record(uow,operation_id,payload,result("limit_reached",purchased=purchased))
             cost=quantity*unit_cost
             if expected_integral<cost:return self._record(uow,operation_id,payload,result("integral_insufficient",purchased=purchased))
             item=uow.query_one("SELECT COALESCE(goods_num,0) AS n FROM back WHERE user_id=? AND goods_id=?",(user_id,item_id));inventory=int(item["n"]) if item else 0
             if inventory+quantity>max_goods_num:return self._record(uow,operation_id,payload,result("inventory_full",purchased=purchased,inventory=inventory))
-            new_integral,new_purchased,new_inventory=expected_integral-cost,purchased+quantity,inventory+quantity;weekly[str(item_id)]=new_purchased;uow.execute("UPDATE player_data.boss_limit SET integral=? WHERE user_id=? AND COALESCE(integral,0)=?",(new_integral,user_id,expected_integral));
+            new_integral,new_purchased,new_inventory=expected_integral-cost,purchased+quantity,inventory+quantity;weekly[str(item_id)]=new_purchased
+            changed = uow.execute("UPDATE player_data.boss_limit SET integral=? WHERE user_id=? AND xiuxian_int_cmp(COALESCE(integral,0),?)=0", (new_integral,user_id,expected_integral))
+            if changed.rowcount != 1:
+                raise DomainError("boss_integral_write_rejected", "boss integral write did not affect one row")
             if weekly_table == "boss":
                 uow.execute("INSERT INTO player_data.boss(user_id,weekly_purchases) VALUES(?,?) ON CONFLICT(user_id) DO UPDATE SET weekly_purchases=excluded.weekly_purchases",(user_id,json.dumps(weekly,ensure_ascii=True)))
             else:

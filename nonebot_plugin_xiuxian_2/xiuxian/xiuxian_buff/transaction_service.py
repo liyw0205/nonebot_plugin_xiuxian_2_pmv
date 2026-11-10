@@ -712,8 +712,8 @@ class PartnerUnbindService:
         user_id, partner_id = str(user_id), str(partner_id)
         expected_user_bind_time = self._text_or_none(expected_user_bind_time)
         expected_partner_bind_time = self._text_or_none(expected_partner_bind_time)
-        expected_user_affection = int(expected_user_affection or 0)
-        expected_partner_affection = int(expected_partner_affection or 0)
+        expected_user_affection = _as_int_like_num(expected_user_affection)
+        expected_partner_affection = _as_int_like_num(expected_partner_affection)
         checked_at = str(checked_at).strip()
         minimum_days = int(minimum_days)
         if not operation_id or user_id == partner_id or not checked_at or minimum_days < 0:
@@ -752,7 +752,7 @@ class PartnerUnbindService:
                     (user_id, partner_id),
                 ).fetchall()
                 actual = {
-                    str(row[0]): (self._text_or_none(row[1]), self._text_or_none(row[2]), int(row[3]))
+                    str(row[0]): (self._text_or_none(row[1]), self._text_or_none(row[2]), _as_int_like_num(row[3]))
                     for row in rows
                 }
                 expected = {
@@ -778,7 +778,7 @@ class PartnerUnbindService:
                     changed = conn.execute(
                         "UPDATE player_data.partner SET partner_id=NULL,bind_time=NULL,affection=0 "
                         "WHERE user_id=%s AND partner_id=%s AND "
-                        "COALESCE(bind_time,'')=%s AND COALESCE(affection,0)=%s",
+                        "COALESCE(bind_time,'')=%s AND xiuxian_int_cmp(COALESCE(affection,0),%s)=0",
                         (owner_id, related_id, bind_time or "", affection),
                     )
                     if changed.rowcount != 1:
@@ -973,8 +973,8 @@ class PartnerBreakthroughService:
 
     def apply(self, operation_id, user_id, partner_id, new_level, *, expected_user_exp, expected_partner_exp, expected_affection, reward_exp, partner_power):
         operation_id, user_id, partner_id = str(operation_id).strip(), str(user_id), str(partner_id)
-        expected_user_exp, expected_partner_exp = int(expected_user_exp), int(expected_partner_exp)
-        expected_affection = int(expected_affection)
+        expected_user_exp, expected_partner_exp = _as_int_like_num(expected_user_exp), _as_int_like_num(expected_partner_exp)
+        expected_affection = _as_int_like_num(expected_affection)
         reward_exp = _sql_num_nonneg(reward_exp)
         partner_power = _sql_num_nonneg(partner_power)
         if not operation_id or float(reward_exp) <= 0:
@@ -999,10 +999,10 @@ class PartnerBreakthroughService:
                 ).fetchone()
                 if previous is not None:
                     conn.rollback()
-                    return PartnerBreakthroughResult("duplicate" if str(previous[0]) == payload else "operation_conflict", int(previous[1]))
+                    return PartnerBreakthroughResult("duplicate" if str(previous[0]) == payload else "operation_conflict", _as_int_like_num(previous[1]))
                 relation = conn.execute("SELECT partner_id,affection FROM player_data.partner WHERE user_id=%s", (user_id,)).fetchone()
                 reciprocal = conn.execute("SELECT partner_id FROM player_data.partner WHERE user_id=%s", (partner_id,)).fetchone()
-                if relation is None or reciprocal is None or str(relation[0]) != partner_id or str(reciprocal[0]) != user_id or int(relation[1] or 0) != expected_affection:
+                if relation is None or reciprocal is None or str(relation[0]) != partner_id or str(reciprocal[0]) != user_id or _as_int_like_num(relation[1]) != expected_affection:
                     conn.rollback()
                     return PartnerBreakthroughResult("state_changed", _as_int_like_num(reward_exp))
                 users = conn.execute("SELECT user_id,exp FROM user_xiuxian WHERE user_id IN (%s,%s)", (user_id, partner_id)).fetchall()

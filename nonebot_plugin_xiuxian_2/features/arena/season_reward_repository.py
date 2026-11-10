@@ -5,6 +5,7 @@ import sqlite3
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping, Sequence
+from ...core.numeric import as_int_like
 
 from ...infrastructure.database import DatabaseUnitOfWork
 from .schema import SCHEMA_MISSING, table_ready
@@ -57,13 +58,13 @@ class ArenaSeasonRewardRepository:
 
     @staticmethod
     def _result(status: str, honor: int, honor_points: int, earned: int) -> ArenaSeasonRewardResult:
-        return ArenaSeasonRewardResult(status, int(honor), int(honor_points), int(earned))
+        return ArenaSeasonRewardResult(status, as_int_like(honor), as_int_like(honor_points), as_int_like(earned))
 
     @staticmethod
     def _settlement(row: Mapping[str, Any]) -> ArenaHonorSettlement:
-        total = max(int(row["honor"] or 0), 0)
-        honor_after = max(int(row["honor_points"] or 0), 0)
-        earned_after = max(int(row["total_honor_earned"] or 0), 0)
+        total = max(as_int_like(row["honor"]), 0)
+        honor_after = max(as_int_like(row["honor_points"]), 0)
+        earned_after = max(as_int_like(row["total_honor_earned"]), 0)
         base = bonus = position = 0
         rank = ""
         details = False
@@ -129,10 +130,11 @@ class ArenaSeasonRewardRepository:
                 "COALESCE(a.daily_challenge_buys,0) AS daily_challenge_buys,"
                 "COALESCE(a.last_reset_date,'') AS last_reset_date,"
                 "COALESCE(a.last_buy_date,'') AS last_buy_date,"
-                "1+(SELECT COUNT(*) FROM arena AS higher WHERE COALESCE(higher.score,0)>COALESCE(a.score,0)) AS position "
-                "FROM arena AS a ORDER BY COALESCE(a.score,0) DESC,a.user_id"
+                "1+(SELECT COUNT(*) FROM arena AS higher WHERE xiuxian_int_cmp(COALESCE(higher.score,0),COALESCE(a.score,0))>0) AS position "
+                "FROM arena AS a ORDER BY xiuxian_int_text(COALESCE(a.score,0)) COLLATE xiuxian_integer DESC,a.user_id"
             )
-        return tuple(dict(row) for row in rows)
+        numeric_fields = DAILY_CANDIDATE_COLUMNS - {"user_id", "rank", "last_reset_date", "last_buy_date"}
+        return tuple({key: as_int_like(value) if key in numeric_fields else value for key, value in row.items()} for row in rows)
 
     def claim(
         self,
@@ -214,11 +216,11 @@ class ArenaSeasonRewardRepository:
                 (user_id,),
             )
             if arena is None or (
-                int(arena["score"]), str(arena["rank"]), int(arena["honor_points"]), int(arena["total_honor_earned"])
+                as_int_like(arena["score"]), str(arena["rank"]), as_int_like(arena["honor_points"]), as_int_like(arena["total_honor_earned"])
             ) != (expected_score, str(expected_rank), expected_honor, expected_total_honor):
                 return self._result("state_changed", 0, expected_honor, expected_total_honor)
             ranking = uow.query_one(
-                "SELECT COUNT(*)+1 AS position FROM player_data.arena WHERE COALESCE(score,0)>?",
+                "SELECT COUNT(*)+1 AS position FROM player_data.arena WHERE xiuxian_int_cmp(COALESCE(score,0),?)>0",
                 (expected_score,),
             )
             if ranking is None or (expected_position > 0 and int(ranking["position"]) != expected_position):
@@ -246,8 +248,8 @@ class ArenaSeasonRewardRepository:
             honor_points, total_honor = expected_honor + total_reward, expected_total_honor + total_reward
             changed = uow.execute(
                 "UPDATE player_data.arena SET honor_points=?,total_honor_earned=? WHERE user_id=? "
-                "AND COALESCE(score,0)=? AND COALESCE(rank,'')=? AND COALESCE(honor_points,0)=? "
-                "AND COALESCE(total_honor_earned,0)=?",
+                "AND xiuxian_int_cmp(COALESCE(score,0),?)=0 AND COALESCE(rank,'')=? AND xiuxian_int_cmp(COALESCE(honor_points,0),?)=0 "
+                "AND xiuxian_int_cmp(COALESCE(total_honor_earned,0),?)=0",
                 (honor_points, total_honor, user_id, expected_score, str(expected_rank), expected_honor, expected_total_honor),
             )
             if changed.rowcount != 1:

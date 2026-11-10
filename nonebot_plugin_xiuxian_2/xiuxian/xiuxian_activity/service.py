@@ -367,7 +367,7 @@ def record_activity_event(
                     if daily_limit > 0:
                         cur.execute(
                             """
-                            SELECT COALESCE(SUM(points), 0) AS count
+                            SELECT COALESCE(xiuxian_int_sum(points), 0) AS count
                             FROM activity_point_event_log
                             WHERE activity_key=%s AND user_id=%s AND event_key=%s AND record_date=%s
                             """,
@@ -704,7 +704,7 @@ def _get_point_purchase_map(cur, activity_key: str, user_id: str) -> dict[str, i
 def _get_point_shop_total_purchase(cur, activity_key: str, item_key: str) -> int:
     cur.execute(
         """
-        SELECT COALESCE(SUM(count), 0) AS count
+        SELECT COALESCE(xiuxian_int_sum(count), 0) AS count
         FROM activity_point_purchase
         WHERE activity_key=%s AND item_key=%s
         """,
@@ -717,7 +717,7 @@ def _get_point_shop_total_purchase(cur, activity_key: str, item_key: str) -> int
 def _get_point_shop_total_purchase_map(cur, activity_key: str) -> dict[str, int]:
     cur.execute(
         """
-        SELECT item_key, COALESCE(SUM(count), 0) AS count
+        SELECT item_key, COALESCE(xiuxian_int_sum(count), 0) AS count
         FROM activity_point_purchase
         WHERE activity_key=%s
         GROUP BY item_key
@@ -1267,8 +1267,8 @@ def _activity_data_counts(cur, activity_key: str, activity_type: str) -> dict:
             """
             SELECT
                 COUNT(*) AS user_count,
-                COALESCE(SUM(points), 0) AS current_points,
-                COALESCE(SUM(total_points), 0) AS total_points
+                COALESCE(xiuxian_int_sum(points), 0) AS current_points,
+                COALESCE(xiuxian_int_sum(total_points), 0) AS total_points
             FROM activity_point_balance
             WHERE activity_key=%s
             """,
@@ -1277,7 +1277,7 @@ def _activity_data_counts(cur, activity_key: str, activity_type: str) -> dict:
         row = cur.fetchone()
         cur.execute(
             """
-            SELECT COALESCE(SUM(count), 0) AS count
+            SELECT COALESCE(xiuxian_int_sum(count), 0) AS count
             FROM activity_point_purchase
             WHERE activity_key=%s
             """,
@@ -1305,7 +1305,7 @@ def _activity_data_counts(cur, activity_key: str, activity_type: str) -> dict:
             """
             SELECT
                 COUNT(*) AS user_count,
-                COALESCE(SUM(total_damage), 0) AS total_damage
+                COALESCE(xiuxian_int_sum(total_damage), 0) AS total_damage
             FROM activity_boss_damage
             WHERE activity_key=%s
             """,
@@ -1324,7 +1324,7 @@ def _activity_data_counts(cur, activity_key: str, activity_type: str) -> dict:
         )
         item_count = _fetch_count(
             cur,
-            "SELECT COALESCE(SUM(count), 0) AS count FROM activity_item_inventory WHERE activity_key=%s",
+            "SELECT COALESCE(xiuxian_int_sum(count), 0) AS count FROM activity_item_inventory WHERE activity_key=%s",
             (activity_key,),
         )
         return {
@@ -1341,7 +1341,7 @@ def _activity_data_counts(cur, activity_key: str, activity_type: str) -> dict:
         """
         SELECT
             COUNT(DISTINCT user_id) AS user_count,
-            COALESCE(SUM(count), 0) AS inventory_count
+            COALESCE(xiuxian_int_sum(count), 0) AS inventory_count
         FROM activity_collect_inventory
         WHERE activity_key=%s
         """,
@@ -1355,7 +1355,7 @@ def _activity_data_counts(cur, activity_key: str, activity_type: str) -> dict:
     )
     cur.execute(
         """
-        SELECT COALESCE(SUM(count), 0) AS count
+        SELECT COALESCE(xiuxian_int_sum(count), 0) AS count
         FROM activity_collect_claim
         WHERE activity_key=%s
         """,
@@ -1426,7 +1426,7 @@ def _activity_pass_data_overview(cur, config: dict, uid: str = "", limit: int = 
         """
         SELECT
             COUNT(*) AS user_count,
-            COALESCE(SUM(total_exp), 0) AS total_exp,
+            COALESCE(xiuxian_int_sum(total_exp), 0) AS total_exp,
             COALESCE(MAX(level), 0) AS max_level
         FROM activity_pass_balance
         WHERE activity_key=%s

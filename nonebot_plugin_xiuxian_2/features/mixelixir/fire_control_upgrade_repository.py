@@ -65,17 +65,17 @@ class MixelixirFireControlUpgradeSqlRepository:
                 if previous is not None:
                     if str(previous["payload"]) != payload:
                         return MixelixirFireControlUpgradeResult("state_changed")
-                    return MixelixirFireControlUpgradeResult("duplicate", int(previous["cost"]), as_int_like(previous["wallet_stone"]), int(previous["level"]), int(previous["experience"]))
+                    return MixelixirFireControlUpgradeResult("duplicate", int(previous["cost"]), as_int_like(previous["wallet_stone"]), as_int_like(previous["level"]), as_int_like(previous["experience"]))
                 row = uow.query_one("SELECT COALESCE(stone,0) AS stone FROM user_xiuxian WHERE user_id=?", (user_id,))
                 state = uow.query_one(
-                    f"SELECT CAST(COALESCE({level_field},'0') AS INTEGER) AS level,"
-                    f"CAST(COALESCE({experience_field},'0') AS INTEGER) AS experience "
+                    f"SELECT COALESCE({level_field},'0') AS level,"
+                    f"COALESCE({experience_field},'0') AS experience "
                     "FROM player_data.mix_elixir_info WHERE user_id=?",
                     (user_id,),
                 )
                 if row is None or state is None:
                     return MixelixirFireControlUpgradeResult("state_changed")
-                current_level, current_exp, current_stone = int(state["level"]), int(state["experience"]), as_int_like(row["stone"])
+                current_level, current_exp, current_stone = as_int_like(state["level"]), as_int_like(state["experience"]), as_int_like(row["stone"])
                 if (current_level, current_exp) != (expected_level, expected_experience) or (expected_stone is not None and current_stone != expected_stone):
                     return MixelixirFireControlUpgradeResult("state_changed", wallet_stone=current_stone, level=current_level, experience=current_exp)
                 if current_exp < cost:
@@ -83,7 +83,7 @@ class MixelixirFireControlUpgradeSqlRepository:
                 remaining = current_exp - cost
                 changed = uow.execute(
                     f"UPDATE player_data.mix_elixir_info SET {level_field}=?,{experience_field}=? "
-                    f"WHERE user_id=? AND CAST({level_field} AS INTEGER)=? AND CAST({experience_field} AS INTEGER)=?",
+                    f"WHERE user_id=? AND xiuxian_int_cmp({level_field},?)=0 AND xiuxian_int_cmp({experience_field},?)=0",
                     (str(next_level), str(remaining), user_id, expected_level, expected_experience),
                 )
                 if changed.rowcount != 1:

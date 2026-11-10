@@ -690,7 +690,7 @@ class ActivityPointShopPurchaseService:
                 ).fetchone()
                 personal_count = int(personal[0]) if personal else 0
                 total_count = int(conn.execute(
-                    "SELECT COALESCE(SUM(count),0) FROM activity_point_purchase WHERE activity_key=%s AND item_key=%s",
+                    "SELECT COALESCE(xiuxian_int_sum(count),0) FROM activity_point_purchase WHERE activity_key=%s AND item_key=%s",
                     (activity_key, item_key),
                 ).fetchone()[0])
                 if personal_limit > 0 and personal_count + quantity > personal_limit:

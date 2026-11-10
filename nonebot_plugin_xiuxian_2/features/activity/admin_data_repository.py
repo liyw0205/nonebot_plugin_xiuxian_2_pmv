@@ -160,8 +160,8 @@ class ActivityAdminDataSqlRepository:
                 }
                 if activity_type == "event_points":
                     stats = uow.query_one(
-                        "SELECT COUNT(*) AS user_count,COALESCE(SUM(points),0) AS current_points,"
-                        "COALESCE(SUM(total_points),0) AS total_points FROM activity_point_balance "
+                        "SELECT COUNT(*) AS user_count,COALESCE(xiuxian_int_sum(points),0) AS current_points,"
+                        "COALESCE(xiuxian_int_sum(total_points),0) AS total_points FROM activity_point_balance "
                         "WHERE activity_key=?",
                         (key,),
                     ) or {}
@@ -171,7 +171,7 @@ class ActivityAdminDataSqlRepository:
                         "total_points": int(stats.get("total_points") or 0),
                         "purchase_count": self._count(
                             uow,
-                            "SELECT COALESCE(SUM(count),0) AS count FROM activity_point_purchase "
+                            "SELECT COALESCE(xiuxian_int_sum(count),0) AS count FROM activity_point_purchase "
                             "WHERE activity_key=?",
                             (key,),
                         ),
@@ -209,7 +209,7 @@ class ActivityAdminDataSqlRepository:
                         (key,),
                     ) or {}
                     damage = uow.query_one(
-                        "SELECT COUNT(*) AS user_count,COALESCE(SUM(total_damage),0) AS total_damage "
+                        "SELECT COUNT(*) AS user_count,COALESCE(xiuxian_int_sum(total_damage),0) AS total_damage "
                         "FROM activity_boss_damage WHERE activity_key=?",
                         (key,),
                     ) or {}
@@ -223,7 +223,7 @@ class ActivityAdminDataSqlRepository:
                         ),
                         "item_count": self._count(
                             uow,
-                            "SELECT COALESCE(SUM(count),0) AS count FROM activity_item_inventory "
+                            "SELECT COALESCE(xiuxian_int_sum(count),0) AS count FROM activity_item_inventory "
                             "WHERE activity_key=?",
                             (key,),
                         ),
@@ -268,7 +268,7 @@ class ActivityAdminDataSqlRepository:
                         }
                 else:
                     inventory = uow.query_one(
-                        "SELECT COUNT(DISTINCT user_id) AS user_count,COALESCE(SUM(count),0) "
+                        "SELECT COUNT(DISTINCT user_id) AS user_count,COALESCE(xiuxian_int_sum(count),0) "
                         "AS inventory_count FROM activity_collect_inventory WHERE activity_key=?",
                         (key,),
                     ) or {}
@@ -282,7 +282,7 @@ class ActivityAdminDataSqlRepository:
                         ),
                         "claim_count": self._count(
                             uow,
-                            "SELECT COALESCE(SUM(count),0) AS count FROM activity_collect_claim "
+                            "SELECT COALESCE(xiuxian_int_sum(count),0) AS count FROM activity_collect_claim "
                             "WHERE activity_key=?",
                             (key,),
                         ),
@@ -349,7 +349,7 @@ class ActivityAdminDataSqlRepository:
             else:
                 pass_key = str(activity_key)
                 pass_stats = uow.query_one(
-                    "SELECT COUNT(*) AS user_count,COALESCE(SUM(total_exp),0) AS total_exp,"
+                    "SELECT COUNT(*) AS user_count,COALESCE(xiuxian_int_sum(total_exp),0) AS total_exp,"
                     "COALESCE(MAX(level),0) AS max_level FROM activity_pass_balance "
                     "WHERE activity_key=?",
                     (pass_key,),

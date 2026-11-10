@@ -2293,7 +2293,7 @@ class AdminImpartStoneBatchAdjustmentService:
             (operation_id,),
         ).fetchone()
         counts = conn.execute(
-            "SELECT COUNT(*),COALESCE(SUM(applied_delta),0),"
+            "SELECT COUNT(*),COALESCE(xiuxian_int_sum(applied_delta),0),"
             "COALESCE(SUM(CASE WHEN applied_delta!=0 THEN 1 ELSE 0 END),0) "
             "FROM admin_impart_stone_batch_progress WHERE operation_id=%s",
             (operation_id,),
@@ -2406,8 +2406,8 @@ class AdminImpartStoneBatchAdjustmentService:
                     "DO UPDATE SET status=EXCLUDED.status,"
                     "applied_delta=EXCLUDED.applied_delta,"
                     "result_json=EXCLUDED.result_json "
-                    "WHERE ABS(EXCLUDED.applied_delta)>"
-                    "ABS(admin_impart_stone_batch_progress.applied_delta)",
+                    "WHERE xiuxian_int_cmp(xiuxian_int_abs(EXCLUDED.applied_delta),"
+                    "xiuxian_int_abs(admin_impart_stone_batch_progress.applied_delta))>0",
                     (
                         operation_id,
                         user_id,

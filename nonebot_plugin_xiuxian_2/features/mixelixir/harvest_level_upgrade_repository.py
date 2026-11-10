@@ -58,18 +58,18 @@ class MixelixirHarvestLevelUpgradeSqlRepository:
                 if previous is not None:
                     if str(previous["payload"]) != payload:
                         return MixelixirHarvestLevelUpgradeResult("state_changed")
-                    return MixelixirHarvestLevelUpgradeResult("duplicate", int(previous["cost"]), as_int_like(previous["wallet_stone"]), int(previous["level"]), int(previous["experience"]))
+                    return MixelixirHarvestLevelUpgradeResult("duplicate", int(previous["cost"]), as_int_like(previous["wallet_stone"]), as_int_like(previous["level"]), as_int_like(previous["experience"]))
                 row = uow.query_one("SELECT COALESCE(stone,0) AS stone FROM user_xiuxian WHERE user_id=?", (user_id,))
-                state = uow.query_one("SELECT CAST(COALESCE(\"收取等级\",'0') AS INTEGER) AS level,CAST(COALESCE(\"炼丹经验\",'0') AS INTEGER) AS experience FROM player_data.mix_elixir_info WHERE user_id=?", (user_id,))
+                state = uow.query_one("SELECT COALESCE(\"收取等级\",'0') AS level,COALESCE(\"炼丹经验\",'0') AS experience FROM player_data.mix_elixir_info WHERE user_id=?", (user_id,))
                 if row is None or state is None:
                     return MixelixirHarvestLevelUpgradeResult("state_changed")
-                current_level, current_exp, current_stone = int(state["level"]), int(state["experience"]), as_int_like(row["stone"])
+                current_level, current_exp, current_stone = as_int_like(state["level"]), as_int_like(state["experience"]), as_int_like(row["stone"])
                 if (current_level, current_exp) != (expected_level, expected_experience) or (expected_stone is not None and current_stone != expected_stone):
                     return MixelixirHarvestLevelUpgradeResult("state_changed", wallet_stone=current_stone, level=current_level, experience=current_exp)
                 if current_exp < cost:
                     return MixelixirHarvestLevelUpgradeResult("experience_insufficient", wallet_stone=current_stone, level=current_level, experience=current_exp)
                 remaining = current_exp - cost
-                changed = uow.execute("UPDATE player_data.mix_elixir_info SET \"收取等级\"=?,\"炼丹经验\"=? WHERE user_id=? AND CAST(\"收取等级\" AS INTEGER)=? AND CAST(\"炼丹经验\" AS INTEGER)=?", (str(next_level), str(remaining), user_id, expected_level, expected_experience))
+                changed = uow.execute("UPDATE player_data.mix_elixir_info SET \"收取等级\"=?,\"炼丹经验\"=? WHERE user_id=? AND xiuxian_int_cmp(\"收取等级\",?)=0 AND xiuxian_int_cmp(\"炼丹经验\",?)=0", (str(next_level), str(remaining), user_id, expected_level, expected_experience))
                 if changed.rowcount != 1:
                     return MixelixirHarvestLevelUpgradeResult("state_changed")
                 uow.execute("INSERT INTO mixelixir_harvest_level_upgrade_operations(operation_id,payload,cost,wallet_stone,level,experience) VALUES(?,?,?,?,?,?)", (operation_id, payload, cost, current_stone, next_level, remaining))

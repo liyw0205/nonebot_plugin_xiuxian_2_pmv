@@ -15,7 +15,7 @@ class SectScheduledMaterialSqlRepository:
         with DatabaseUnitOfWork(self.database, read_only=True) as uow:
             rows = uow.query_all(
                 "SELECT sect_id,sect_scale,elixir_room_level FROM sects "
-                "WHERE sect_owner IS NOT NULL ORDER BY sect_scale DESC"
+                "WHERE sect_owner IS NOT NULL ORDER BY xiuxian_int_text(sect_scale) COLLATE xiuxian_integer DESC"
             )
             return [
                 (row["sect_id"], row["sect_scale"], row["elixir_room_level"])
@@ -63,12 +63,12 @@ class SectScheduledMaterialSqlRepository:
             if sect["sect_owner"] is None:
                 return {"status": "sect_inactive", **base}
 
-            materials = max(int(sect["sect_scale"] or 0), 0) * multiplier
-            power = uow.query_one(
-                "SELECT COALESCE(SUM(power),0) AS total FROM user_xiuxian WHERE sect_id=?",
+            materials = max(as_int_like(sect["sect_scale"]), 0) * multiplier
+            members = uow.query_all(
+                "SELECT power FROM user_xiuxian WHERE sect_id=?",
                 (sect_id,),
             )
-            combat_power = int(power["total"] or 0)
+            combat_power = sum(as_int_like(row["power"]) for row in members)
             uow.execute(
                 "UPDATE sects SET sect_materials=CAST(COALESCE(sect_materials,0) AS REAL)+?,"
                 "combat_power=? WHERE sect_id=?",

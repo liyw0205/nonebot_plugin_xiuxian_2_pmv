@@ -1,4 +1,5 @@
 from __future__ import annotations
+from ...core.numeric import as_int_like, sqlite_int_compare
 
 import json
 from datetime import date
@@ -40,11 +41,9 @@ class ArenaStateRepository:
 
     @staticmethod
     def _integer(value: Any, default: int) -> tuple[int, bool]:
-        try:
-            normalized = int(value)
-        except (TypeError, ValueError):
+        if value is None or sqlite_int_compare(value, value) is None:
             return default, True
-        return normalized, value is None
+        return as_int_like(value), False
 
     @staticmethod
     def _business_date(value: Any, today: date) -> tuple[str, bool]:
@@ -205,11 +204,11 @@ class ArenaStateRepository:
             if not table_ready(uow, "arena", frozenset({"user_id", "score"})):
                 return ()
             rows = uow.query_all(
-                "SELECT user_id,CAST(COALESCE(score,0) AS INTEGER) AS score "
-                "FROM arena ORDER BY CAST(COALESCE(score,0) AS INTEGER) DESC LIMIT ?",
+                "SELECT user_id,COALESCE(score,0) AS score "
+                "FROM arena ORDER BY xiuxian_int_text(COALESCE(score,0)) COLLATE xiuxian_integer DESC LIMIT ?",
                 (max(0, int(limit)),),
             )
-        return tuple((str(row["user_id"]), int(row["score"])) for row in rows)
+        return tuple((str(row["user_id"]), as_int_like(row["score"])) for row in rows)
 
     def rank_of(self, user_id: str) -> PersonalRank:
         """本人竞技场名次：并列名次 + 有分人数 + 本人积分（只读、缺库/缺表降级）。"""
@@ -220,9 +219,9 @@ class ArenaStateRepository:
             with DatabaseUnitOfWork(self.player_database, read_only=True) as uow:
                 if not table_ready(uow, "arena", frozenset({"user_id", "score"})):
                     return PersonalRank()
-                value = int(
+                value = as_int_like(
                     (uow.query_one(
-                        "SELECT CAST(COALESCE(score,0) AS INTEGER) AS value "
+                        "SELECT COALESCE(score,0) AS value "
                         "FROM arena WHERE user_id=? ORDER BY rowid ASC LIMIT 1",
                         (user_id,),
                     ) or {"value": 0})["value"]
@@ -231,7 +230,7 @@ class ArenaStateRepository:
                 total = int(
                     (uow.query_one(
                         "SELECT COUNT(*) AS n FROM arena "
-                        "WHERE CAST(COALESCE(score,0) AS INTEGER)>0"
+                        "WHERE xiuxian_int_cmp(COALESCE(score,0),0)>0"
                     ) or {"n": 0})["n"]
                     or 0
                 )
@@ -240,7 +239,7 @@ class ArenaStateRepository:
                 better = int(
                     (uow.query_one(
                         "SELECT COUNT(*) AS n FROM arena "
-                        "WHERE CAST(COALESCE(score,0) AS INTEGER)>?",
+                        "WHERE xiuxian_int_cmp(COALESCE(score,0),?)>0",
                         (value,),
                     ) or {"n": 0})["n"]
                     or 0

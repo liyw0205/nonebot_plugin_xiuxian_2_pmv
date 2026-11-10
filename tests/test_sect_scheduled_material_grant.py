@@ -70,6 +70,18 @@ class SectScheduledMaterialGrantTests(unittest.TestCase):
         self.assertEqual(result.combat_power, 500)
         self.assertEqual(self.sect_row(), (290, 500))
 
+    def test_integer_sum_overflow_and_scientific_receipt_replay(self):
+        with db_backend.transaction(self.database) as conn:
+            conn.execute('UPDATE user_xiuxian SET power=%s', (2**62,))
+        result = self.service.grant_scheduled_materials('large', 1, 2)
+        self.assertEqual(2**63, result.combat_power)
+        with db_backend.transaction(self.database) as conn:
+            conn.execute('DROP TABLE sect_scheduled_material_grants')
+            conn.execute('CREATE TABLE sect_scheduled_material_grants(grant_key TEXT,sect_id INTEGER,materials TEXT,combat_power TEXT)')
+            conn.execute("INSERT INTO sect_scheduled_material_grants VALUES('large',1,'2.4e2','1.00000000000000000001e20')")
+        replay = self.service.grant_scheduled_materials('large', 1, 99)
+        self.assertEqual(('duplicate', 240, 100000000000000000001), (replay.status, replay.materials, replay.combat_power))
+
     def test_same_business_day_is_idempotent(self) -> None:
         key = "sect-materials:2026-07-11"
         first = self.service.grant_scheduled_materials(key, 1, 2)

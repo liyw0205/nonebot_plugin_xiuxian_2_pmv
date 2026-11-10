@@ -16,6 +16,7 @@ from .periods import get_season_key
 from .season_service import build_season_rank_key, normalize_season_mode
 from .xiuxian2_handle import XiuxianDateManage
 from ...infrastructure.database import DatabaseUnitOfWork, message_store
+from ...core.numeric import as_int_like
 
 _sql_message_instance = None
 
@@ -59,10 +60,7 @@ def _log_warning(message: str) -> None:
 
 
 def _to_int(value: Any, default: int = 0) -> int:
-    try:
-        return int(value)
-    except (TypeError, ValueError):
-        return default
+    return as_int_like(value, default)
 
 
 def _now_text() -> str:
@@ -303,7 +301,7 @@ def get_top_season_rank(
         LEFT JOIN user_xiuxian AS u ON u.user_id = r.user_id AND r.user_id <> ''
         LEFT JOIN sects AS s ON s.sect_id = r.sect_id AND r.sect_id <> 0
         WHERE r.rank_key = %s
-        ORDER BY r.score DESC, r.updated_at ASC
+        ORDER BY xiuxian_int_text(r.score) COLLATE xiuxian_integer DESC, r.updated_at ASC
         LIMIT %s
         """,
         (rank_key, limit_value),
@@ -343,7 +341,7 @@ def get_user_season_rank(
         FROM season_rank AS r
         LEFT JOIN user_xiuxian AS u ON u.user_id = r.user_id AND r.user_id <> ''
         WHERE r.rank_key = %s AND r.user_id = %s
-        ORDER BY r.score DESC, r.updated_at ASC
+        ORDER BY xiuxian_int_text(r.score) COLLATE xiuxian_integer DESC, r.updated_at ASC
         LIMIT 1
         """,
         (rank_key, user_id_text),
@@ -357,7 +355,7 @@ def get_user_season_rank(
         """
         SELECT COUNT(1) + 1 AS rank_value
         FROM season_rank
-        WHERE rank_key = %s AND score > %s
+        WHERE rank_key = %s AND xiuxian_int_cmp(score,%s)>0
         """,
         (rank_key, _to_int(row.get("score"))),
         one=True,

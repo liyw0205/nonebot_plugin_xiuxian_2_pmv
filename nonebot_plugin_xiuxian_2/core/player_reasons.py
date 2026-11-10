@@ -1,6 +1,10 @@
 """Allowlisted business diagnostics; never render exception messages."""
 
 REASONS = {
+    "arena_ticket_write_rejected": "竞技场挑战券或挑战次数保存失败，本次使用已撤销，请联系管理员核对背包和次数记录。",
+    "training_points_write_rejected": "历练积分扣除保存失败，本次兑换已撤销，请联系管理员核对积分记录。",
+    "arena_honor_write_rejected": "竞技场荣誉扣除保存失败，本次兑换已撤销，请联系管理员核对荣誉记录。",
+    "boss_integral_write_rejected": "世界BOSS积分扣除保存失败，本次兑换已撤销，请联系管理员核对积分记录。",
     "partner_affection_write_rejected": "双修亲密度保存失败，本次双修未结算，请联系管理员核对道侣记录。",
     "mentor_stone_write_rejected": "出师灵石奖励保存失败，请联系管理员核对该次出师奖励记录。",
     "boss_reward_not_participant": "首领讨伐参与记录已不存在，请联系管理员核对该次讨伐。",

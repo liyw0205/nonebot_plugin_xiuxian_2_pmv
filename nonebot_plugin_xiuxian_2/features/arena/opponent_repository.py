@@ -8,6 +8,7 @@ from threading import RLock
 
 from ...infrastructure.clock import SystemClock
 from ...infrastructure.database import DatabaseUnitOfWork
+from ...core.numeric import as_int_like, sqlite_int_compare
 from .schema import table_ready
 
 
@@ -62,10 +63,9 @@ class ArenaOpponentRepository:
             )
             candidates = {}
             for row in rows:
-                try:
-                    score = int(row["score"])
-                except (TypeError, ValueError, OverflowError):
+                if row["score"] is None or sqlite_int_compare(row["score"], row["score"]) is None:
                     continue
+                score = as_int_like(row["score"])
                 candidates.setdefault(row["user_id"], {
                     "user_id": row["user_id"], "user_name": str(row["user_name"] or row["user_id"]),
                     "score": score,

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from ...core.errors import DomainError
+from ...core.numeric import as_int_like, sqlite_int_compare
 
 from pathlib import Path
 from typing import Any, Mapping, Protocol, Sequence
@@ -77,9 +78,9 @@ class TowerPurchaseSqlRepository(LegacyTowerRepository):
                 saved=json.loads(str(old["result_json"]));saved["status"]="duplicate" if saved.get("status", "applied") in {"applied","duplicate"} else saved["status"];return saved
             user=uow.query_one("SELECT hp,mp,user_stamina FROM user_xiuxian WHERE user_id=?",(user_id,));tower=uow.query_one("SELECT current_floor,max_floor,score FROM player_data.tower WHERE user_id=?",(user_id,))
             if user is None:return self._record_settlement(uow,operation_id,payload,result("user_missing"))
-            if player is not None and tuple(map(int,user.values()))!=tuple(player.values()):return self._record_settlement(uow,operation_id,payload,result("state_changed", reason=next({"hp":"hp_changed","mp":"mp_changed","user_stamina":"stamina_changed"}[key] for key in player if int(user[key]) != player[key])))
+            if player is not None and any(sqlite_int_compare(user[key],value)!=0 for key,value in player.items()):return self._record_settlement(uow,operation_id,payload,result("state_changed", reason=next({"hp":"hp_changed","mp":"mp_changed","user_stamina":"stamina_changed"}[key] for key in player if sqlite_int_compare(user[key],player[key]) != 0)))
             if player is not None and player["user_stamina"]<stamina_cost:return self._record_settlement(uow,operation_id,payload,result("stamina_insufficient"))
-            if tower is None or tuple(map(int,tower.values()))!=tuple(expected.values()):return self._record_settlement(uow,operation_id,payload,result("state_changed", reason="tower_missing" if tower is None else next({"current_floor":"tower_floor_changed","max_floor":"tower_max_changed","score":"tower_score_changed"}[key] for key in expected if int(tower[key]) != expected[key])))
+            if tower is None or any(sqlite_int_compare(tower[key],value)!=0 for key,value in expected.items()):return self._record_settlement(uow,operation_id,payload,result("state_changed", reason="tower_missing" if tower is None else next({"current_floor":"tower_floor_changed","max_floor":"tower_max_changed","score":"tower_score_changed"}[key] for key in expected if sqlite_int_compare(tower[key],expected[key]) != 0)))
             for item_id,_,_,amount in rewards:
                 row=uow.query_one("SELECT COALESCE(goods_num,0) AS n FROM back WHERE user_id=? AND goods_id=?",(user_id,item_id))
                 if (int(row["n"]) if row else 0)+amount>max_goods_num:return self._record_settlement(uow,operation_id,payload,result("inventory_full"))
@@ -130,12 +131,12 @@ class TowerPurchaseSqlRepository(LegacyTowerRepository):
                 saved = json.loads(str(old["payload"]))
                 if isinstance(saved, dict) and "_rejection" in saved:
                     return saved["_rejection"]
-                return {"status":"duplicate","quantity":int(old["quantity"]),"cost":int(old["cost"]),"score":int(old["score"]),"purchased":int(old["purchased"]),"inventory":int(old["inventory"])}
+                return {"status":"duplicate","quantity":int(old["quantity"]),"cost":as_int_like(old["cost"]),"score":as_int_like(old["score"]),"purchased":int(old["purchased"]),"inventory":int(old["inventory"])}
             if uow.query_one("SELECT 1 AS ok FROM user_xiuxian WHERE user_id=?",(user_id,)) is None:return self._record(uow,operation_id,payload,result("user_missing"))
             tower=uow.query_one("SELECT COALESCE(score,0) AS score,COALESCE(weekly_purchases,'{}') AS weekly FROM player_data.tower WHERE user_id=?",(user_id,))
             if tower is None:return self._record(uow,operation_id,payload,result("state_changed", reason="tower_missing"))
             current_weekly=self._weekly(tower["weekly"],today)
-            if int(tower["score"])!=expected_score or current_weekly!=weekly:return self._record(uow,operation_id,payload,result("state_changed", reason="tower_score_changed" if int(tower["score"])!=expected_score else "weekly_purchase_changed"))
+            if as_int_like(tower["score"])!=expected_score or current_weekly!=weekly:return self._record(uow,operation_id,payload,result("state_changed", reason="tower_score_changed" if as_int_like(tower["score"])!=expected_score else "weekly_purchase_changed"))
             purchased=int(weekly.get(str(item_id),0) or 0)
             if purchased+quantity>weekly_limit:return self._record(uow,operation_id,payload,result("limit_reached",purchased=purchased))
             cost=quantity*unit_cost
@@ -143,7 +144,7 @@ class TowerPurchaseSqlRepository(LegacyTowerRepository):
             item=uow.query_one("SELECT COALESCE(goods_num,0) AS goods_num FROM back WHERE user_id=? AND goods_id=?",(user_id,item_id));inventory=int(item["goods_num"]) if item else 0
             if inventory+quantity>max_goods_num:return self._record(uow,operation_id,payload,result("inventory_full",purchased=purchased,inventory=inventory))
             new_score,new_purchased,new_inventory=expected_score-cost,purchased+quantity,inventory+quantity;weekly[str(item_id)]=new_purchased
-            updated=uow.execute("UPDATE player_data.tower SET score=?,weekly_purchases=? WHERE user_id=? AND COALESCE(score,0)=?",(new_score,json.dumps(weekly,ensure_ascii=True),user_id,expected_score))
+            updated=uow.execute("UPDATE player_data.tower SET score=?,weekly_purchases=? WHERE user_id=? AND xiuxian_int_cmp(COALESCE(score,0),?)=0",(new_score,json.dumps(weekly,ensure_ascii=True),user_id,expected_score))
             if updated.rowcount!=1:raise DomainError("tower_purchase_write_rejected", "tower purchase write count mismatch")
             stamp=self._date(today).isoformat();uow.execute("INSERT INTO back(user_id,goods_id,goods_name,goods_type,goods_num,create_time,update_time,bind_num) VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(user_id,goods_id) DO UPDATE SET goods_name=excluded.goods_name,goods_type=excluded.goods_type,goods_num=back.goods_num+excluded.goods_num,bind_num=COALESCE(back.bind_num,0)+excluded.bind_num,update_time=excluded.update_time",(user_id,item_id,item_name,item_type,quantity,stamp,stamp,quantity if bind_flag else 0));return self._record(uow,operation_id,payload,result("applied",new_score,new_purchased,new_inventory))
 

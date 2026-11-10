@@ -6,6 +6,8 @@ from dataclasses import dataclass
 from datetime import date, datetime
 from pathlib import Path
 from typing import Any, Mapping
+from ...core.numeric import as_int_like
+from ...core.errors import DomainError
 
 from ...infrastructure.database.attached_uow import AttachedDatabaseUnitOfWork
 from ...infrastructure.clock import SystemClock
@@ -259,7 +261,7 @@ class TrainingPurchaseSqlRepository:
                     "duplicate",
                     int(previous["quantity"]),
                     int(previous["cost"]),
-                    int(previous["points"]),
+                    as_int_like(previous["points"]),
                     int(previous["purchased"]),
                     int(previous["inventory"]),
                 )
@@ -280,7 +282,7 @@ class TrainingPurchaseSqlRepository:
             if training is None:
                 return self._result("state_changed", quantity, unit_cost, points=expected_points)
             current_weekly = _normalize_weekly(training["weekly"], today)
-            if int(training["points"]) != expected_points or current_weekly != weekly:
+            if as_int_like(training["points"]) != expected_points or current_weekly != weekly:
                 return self._result("state_changed", quantity, unit_cost, points=expected_points)
             purchased = int(weekly.get(str(item_id), 0))
             if purchased + quantity > weekly_limit:
@@ -311,11 +313,11 @@ class TrainingPurchaseSqlRepository:
             weekly_json = json.dumps(weekly, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
             changed = uow.execute(
                 "UPDATE player_data.training SET points=?,weekly_purchases=? "
-                "WHERE user_id=? AND COALESCE(points,0)=?",
+                "WHERE user_id=? AND xiuxian_int_cmp(COALESCE(points,0),?)=0",
                 (points, weekly_json, user_id, expected_points),
             )
             if changed.rowcount != 1:
-                raise RuntimeError("training points changed during purchase")
+                raise DomainError("training_points_write_rejected", "training points write did not affect one row")
 
             timestamp = self.clock.now().isoformat(sep=" ", timespec="seconds")
             if inventory_row is None:

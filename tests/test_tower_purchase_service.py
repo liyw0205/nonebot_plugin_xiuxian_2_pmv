@@ -54,6 +54,16 @@ class TowerPurchaseServiceTests(unittest.TestCase):
         self.assertEqual((result.status, result.cost, result.score, result.purchased, result.inventory), ("applied", 20, 80, 3, 2))
         self.assertEqual(self.state(), (80, {"_last_reset": "2026-07-13", "1": 3}, (2, 2)))
 
+    def test_legacy_text_balance_keeps_purchase_replay_and_rejection(self):
+        with db_backend.transaction(self.player_database) as conn:
+            conn.execute('DROP TABLE tower')
+            conn.execute('CREATE TABLE tower(user_id TEXT PRIMARY KEY,score TEXT,weekly_purchases TEXT)')
+            conn.execute('INSERT INTO tower VALUES(%s,%s,%s)', ('user', '1e2', json.dumps(self.weekly)))
+        self.assertEqual('state_changed', self.purchase('stale', expected_score=99).status)
+        self.assertEqual('applied', self.purchase().status)
+        self.assertEqual('duplicate', self.purchase().status)
+        self.assertEqual(self.state(), (80, {"_last_reset": "2026-07-13", "1": 3}, (2, 2)))
+
     def test_business_rejections_change_nothing(self) -> None:
         self.assertEqual(self.purchase("score", expected_score=100, unit_cost=60).status, "score_insufficient")
         self.assertEqual(self.purchase("limit", quantity=5).status, "limit_reached")

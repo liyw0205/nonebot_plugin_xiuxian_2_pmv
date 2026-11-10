@@ -101,6 +101,32 @@ def sqlite_int_compare(left: Any, right: Any) -> int | None:
 
 def register_numeric_functions(connection: Any) -> None:
     connection.create_function("xiuxian_int_cmp", 2, sqlite_int_compare, deterministic=True)
+    connection.create_function("xiuxian_int_text", 1, sqlite_int_text, deterministic=True)
+    connection.create_collation("xiuxian_integer", lambda left, right: (int(left) > int(right)) - (int(left) < int(right)))
+    connection.create_aggregate("xiuxian_int_sum", 1, _IntegerSum)
+    connection.create_function("xiuxian_int_abs", 1, lambda value: str(abs(as_int_like(value))), deterministic=True)
+
+
+class _IntegerSum:
+    """Accumulate integer business values without SQLite overflow or REAL rounding."""
+
+    def __init__(self):
+        self.total = 0
+
+    def step(self, value):
+        self.total += as_int_like(value)
+
+    def finalize(self):
+        return str(self.total)
+
+
+def sqlite_int_text(value: Any) -> str | None:
+    """Return a canonical sort value without crossing SQLite's int64 boundary.
+
+    Sort using COLLATE xiuxian_integer; CAST(value AS TEXT) first would lose
+    the existing int(REAL) semantics. NULL retains SQLite's usual sort order.
+    """
+    return None if value is None else str(as_int_like(value))
 
 
 def _coerce_field(value: Any) -> Any:
@@ -205,4 +231,5 @@ __all__ = [
     "normalize_user_row",
     "register_numeric_functions",
     "sqlite_int_compare",
+    "sqlite_int_text",
 ]

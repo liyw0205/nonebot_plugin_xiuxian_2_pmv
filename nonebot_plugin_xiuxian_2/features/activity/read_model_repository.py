@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from ...infrastructure.database import DatabaseUnitOfWork
+from ...core.numeric import as_int_like
 from .claim_receipt_view import ActivityClaimReceiptView
 from .sign_history_view import ActivitySignDayView
 
@@ -336,7 +337,7 @@ class ActivityReadModelSqlRepository:
                 if "activity_point_event_log" not in self._table_names(uow):
                     return None
                 rows = uow.query_all(
-                    "SELECT activity_key,event_key,COALESCE(SUM(points),0) AS earned "
+                    "SELECT activity_key,event_key,COALESCE(xiuxian_int_sum(points),0) AS earned "
                     "FROM activity_point_event_log "
                     f"WHERE activity_key IN ({placeholders}) AND user_id=? AND record_date=? "
                     "GROUP BY activity_key,event_key",
@@ -375,7 +376,7 @@ class ActivityReadModelSqlRepository:
                 params,
             )
             stock_rows = uow.query_all(
-                "SELECT activity_key,item_key,COALESCE(SUM(count),0) AS count "
+                "SELECT activity_key,item_key,COALESCE(xiuxian_int_sum(count),0) AS count "
                 "FROM activity_point_purchase "
                 f"WHERE activity_key IN ({placeholders}) GROUP BY activity_key,item_key",
                 keys,
@@ -556,9 +557,9 @@ class ActivityReadModelSqlRepository:
         ),
         "collect": (
             "activity_collect_inventory",
-            "SELECT {name}b.user_id,SUM(b.count) AS value FROM activity_collect_inventory b {join}"
-            "WHERE b.activity_key=? GROUP BY b.user_id HAVING SUM(b.count)>0 "
-            "ORDER BY value DESC,b.user_id ASC LIMIT ?",
+            "SELECT {name}b.user_id,xiuxian_int_sum(b.count) AS value FROM activity_collect_inventory b {join}"
+            "WHERE b.activity_key=? GROUP BY b.user_id HAVING xiuxian_int_cmp(xiuxian_int_sum(b.count),0)>0 "
+            "ORDER BY value COLLATE xiuxian_integer DESC,b.user_id ASC LIMIT ?",
         ),
         "pass": (
             "activity_pass_balance",
@@ -588,13 +589,13 @@ class ActivityReadModelSqlRepository:
         ),
         "collect": (
             "activity_collect_inventory",
-            "SELECT COALESCE(SUM(b.count),0) AS value,0 AS tie FROM activity_collect_inventory b "
+            "SELECT COALESCE(xiuxian_int_sum(b.count),0) AS value,0 AS tie FROM activity_collect_inventory b "
             "WHERE b.activity_key=? AND b.user_id=?",
-            "SELECT COUNT(*) AS better FROM (SELECT b.user_id AS user_id,SUM(b.count) AS value "
+            "SELECT COUNT(*) AS better FROM (SELECT b.user_id AS user_id,xiuxian_int_sum(b.count) AS value "
             "FROM activity_collect_inventory b WHERE b.activity_key=? GROUP BY b.user_id "
-            "HAVING SUM(b.count)>0) t WHERE t.value>? OR (t.value=? AND t.user_id<?)",
+            "HAVING xiuxian_int_cmp(xiuxian_int_sum(b.count),0)>0) t WHERE xiuxian_int_cmp(t.value,?)>0 OR (xiuxian_int_cmp(t.value,?)=0 AND t.user_id<?)",
             "SELECT COUNT(*) AS total FROM (SELECT b.user_id FROM activity_collect_inventory b "
-            "WHERE b.activity_key=? GROUP BY b.user_id HAVING SUM(b.count)>0) t",
+            "WHERE b.activity_key=? GROUP BY b.user_id HAVING xiuxian_int_cmp(xiuxian_int_sum(b.count),0)>0) t",
         ),
     }
 
@@ -644,7 +645,7 @@ class ActivityReadModelSqlRepository:
         return [
             {
                 "user_id": str(row["user_id"] or ""),
-                "value": max(0, int(row["value"] or 0)),
+                "value": max(0, as_int_like(row["value"])),
                 "user_name": str(row.get("user_name") or "").strip(),
             }
             for row in rows
@@ -723,10 +724,10 @@ class ActivityReadModelSqlRepository:
         if table not in self._table_names(uow):
             return 0, 0
         mine = uow.query_one(self_sql, (key, uid))
-        value = max(0, int((mine or {}).get("value") or 0))
+        value = max(0, as_int_like((mine or {}).get("value")))
         if value <= 0:
             return 0, 0
-        tie = max(0, int((mine or {}).get("tie") or 0))
+        tie = max(0, as_int_like((mine or {}).get("tie")))
         if source == "collect":
             better = uow.query_one(better_sql, (key, value, value, uid))
         else:
@@ -1081,7 +1082,7 @@ class ActivityReadModelSqlRepository:
                 )
                 point_event_daily_totals = {}
                 for row in uow.query_all(
-                    "SELECT activity_key,event_key,COALESCE(SUM(points),0) AS earned "
+                    "SELECT activity_key,event_key,COALESCE(xiuxian_int_sum(points),0) AS earned "
                     "FROM activity_point_event_log "
                     f"WHERE activity_key IN ({point_placeholders}) AND user_id=? AND record_date=? "
                     "GROUP BY activity_key,event_key",

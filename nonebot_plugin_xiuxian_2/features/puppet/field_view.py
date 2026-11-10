@@ -128,7 +128,7 @@ class PuppetFieldApplication:
             return None
         cutoff = (normalize_now(now) - timedelta(days=self.recent_days)).strftime("%Y-%m-%d %H:%M:%S")
         aggregate = uow.query_one(
-            "SELECT COUNT(*) AS count,COALESCE(SUM(stone_cost),0) AS stone_cost,"
+            "SELECT COUNT(*) AS count,COALESCE(xiuxian_int_sum(stone_cost),0) AS stone_cost,"
             "MAX(created_at) AS last_at FROM puppet_harvest_operations "
             "WHERE user_id=? AND created_at >= ?",
             (user_id, cutoff),

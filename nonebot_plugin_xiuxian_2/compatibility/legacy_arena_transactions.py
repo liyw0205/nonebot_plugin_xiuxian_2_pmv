@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from ..core.numeric import as_int_like
+from ..core.numeric import as_int_like, sqlite_int_compare
+from ..core.errors import DomainError
 import json
 from contextlib import closing
 from dataclasses import asdict, dataclass, field
@@ -111,11 +112,11 @@ def normalize_daily_purchase_state(bought, extra, last_buy_date, today=None) -> 
     if last_buy != today:
         return 0, 0, today.isoformat()
     try:
-        bought = max(0, int(bought or 0))
+        bought = max(0, as_int_like(bought))
     except (TypeError, ValueError):
         bought = 0
     try:
-        extra = max(0, int(extra or 0))
+        extra = max(0, as_int_like(extra))
     except (TypeError, ValueError):
         extra = 0
     return bought, extra, last_buy.isoformat()
@@ -152,11 +153,9 @@ class ArenaStateService:
 
     @staticmethod
     def _integer(value, default) -> tuple[int, bool]:
-        try:
-            normalized = int(value)
-        except (TypeError, ValueError):
+        if value is None or sqlite_int_compare(value, value) is None:
             return int(default), True
-        return normalized, value is None
+        return as_int_like(value), False
 
     @staticmethod
     def _business_date(value, today) -> tuple[str, bool]:
@@ -388,7 +387,7 @@ class ArenaPurchaseService:
                     conn.rollback()
                     if str(previous[0]) != payload:
                         return result("state_changed")
-                    return ArenaPurchaseResult("duplicate", *(int(value) for value in previous[1:]))
+                    return ArenaPurchaseResult("duplicate", *(as_int_like(value) for value in previous[1:]))
                 if conn.execute("SELECT 1 FROM user_xiuxian WHERE user_id=%s", (user_id,)).fetchone() is None:
                     conn.rollback()
                     return result("user_missing")
@@ -404,7 +403,7 @@ class ArenaPurchaseService:
                     conn.rollback()
                     return result("state_changed")
                 current_weekly = normalize_weekly_purchases(arena[1], today)
-                if int(arena[0]) != expected_honor or current_weekly != weekly:
+                if as_int_like(arena[0]) != expected_honor or current_weekly != weekly:
                     conn.rollback()
                     return result("state_changed")
                 purchased = int(weekly.get(str(item_id), 0))
@@ -425,11 +424,10 @@ class ArenaPurchaseService:
                 honor_points, purchased, inventory = expected_honor - cost, purchased + quantity, inventory + quantity
                 weekly[str(item_id)] = purchased
                 if conn.execute(
-                    "UPDATE player_data.arena SET honor_points=%s, weekly_purchases=%s WHERE user_id=%s AND COALESCE(honor_points, 0)=%s",
+                    "UPDATE player_data.arena SET honor_points=%s, weekly_purchases=%s WHERE user_id=%s AND xiuxian_int_cmp(COALESCE(honor_points, 0),%s)=0",
                     (honor_points, json.dumps(weekly, ensure_ascii=False), user_id, expected_honor),
                 ).rowcount != 1:
-                    conn.rollback()
-                    return result("state_changed")
+                    raise DomainError("arena_honor_write_rejected", "arena honor write did not affect one row")
                 now = datetime.now()
                 conn.execute(
                     "INSERT INTO back (user_id, goods_id, goods_name, goods_type, goods_num, create_time, update_time, bind_num) "
@@ -664,7 +662,7 @@ class ArenaChallengeSettlementService:
             if field in {"rank", "last_challenge_time"}:
                 values.append(str(value or ""))
             else:
-                values.append(int(value or 0))
+                values.append(as_int_like(value or 0) if sqlite_int_compare(value or 0, value or 0) == 0 else None)
         return tuple(values)
 
     def settle(
@@ -1307,9 +1305,9 @@ class ArenaWeeklyRankReductionService:
                     users = tuple(
                         (
                             str(row[0]),
-                            int(row[1] or 0),
+                            as_int_like(row[1]),
                             str(row[2] or ""),
-                            int(row[3] or 0),
+                            as_int_like(row[3]),
                         )
                         for row in conn.execute(
                             "SELECT user_id,COALESCE(score,1000),COALESCE(rank,''),"
@@ -1384,8 +1382,8 @@ class ArenaWeeklyRankReductionService:
                 conflicted = 0
                 for row in pending:
                     user_id = str(row[0])
-                    previous = (int(row[1]), str(row[2]), int(row[3]))
-                    target = (int(row[4]), str(row[5]), 0)
+                    previous = (as_int_like(row[1]), str(row[2]), as_int_like(row[3]))
+                    target = (as_int_like(row[4]), str(row[5]), 0)
                     current = conn.execute(
                         "SELECT COALESCE(score,1000),COALESCE(rank,''),"
                         "COALESCE(win_streak,0) FROM arena WHERE user_id=%s",
@@ -1400,8 +1398,10 @@ class ArenaWeeklyRankReductionService:
                             (updated_at, business_week, user_id),
                         )
                         continue
-                    actual = (int(current[0]), str(current[1]), int(current[2]))
-                    if actual != previous:
+                    actual = (as_int_like(current[0]), str(current[1]), as_int_like(current[2]))
+                    if (sqlite_int_compare(current[0], previous[0]) != 0
+                            or str(current[1]) != previous[1]
+                            or sqlite_int_compare(current[2], previous[2]) != 0):
                         skipped += 1
                         conflicted += 1
                         conn.execute(
@@ -1414,8 +1414,8 @@ class ArenaWeeklyRankReductionService:
                     if actual != target:
                         updated = conn.execute(
                             "UPDATE arena SET score=%s,rank=%s,win_streak=0 WHERE user_id=%s "
-                            "AND COALESCE(score,1000)=%s AND COALESCE(rank,'')=%s "
-                            "AND COALESCE(win_streak,0)=%s",
+                            "AND xiuxian_int_cmp(COALESCE(score,1000),%s)=0 AND COALESCE(rank,'')=%s "
+                            "AND xiuxian_int_cmp(COALESCE(win_streak,0),%s)=0",
                             (
                                 target[0],
                                 target[1],
@@ -1579,12 +1579,12 @@ class ArenaSeasonRewardService:
                     "SELECT COALESCE(score,0),COALESCE(rank,''),COALESCE(honor_points,0),COALESCE(total_honor_earned,0) "
                     "FROM player_data.arena WHERE user_id=%s", (user_id,),
                 ).fetchone()
-                if arena is None or (int(arena[0]), str(arena[1]), int(arena[2]), int(arena[3])) != (
+                if arena is None or (as_int_like(arena[0]), str(arena[1]), as_int_like(arena[2]), as_int_like(arena[3])) != (
                     expected_score, expected_rank, expected_honor, expected_total_honor
                 ):
                     conn.rollback(); return result("state_changed")
                 ranking = conn.execute(
-                    "SELECT COUNT(*)+1 FROM player_data.arena WHERE COALESCE(score,0)>%s", (expected_score,)
+                    "SELECT COUNT(*)+1 FROM player_data.arena WHERE xiuxian_int_cmp(COALESCE(score,0),%s)>0", (expected_score,)
                 ).fetchone()
                 if ranking is None or (expected_position > 0 and int(ranking[0]) != expected_position):
                     conn.rollback(); return result("state_changed")
@@ -1610,8 +1610,8 @@ class ArenaSeasonRewardService:
                 honor_points, total_honor = expected_honor + total_reward, expected_total_honor + total_reward
                 if conn.execute(
                     "UPDATE player_data.arena SET honor_points=%s,total_honor_earned=%s WHERE user_id=%s "
-                    "AND COALESCE(score,0)=%s AND COALESCE(rank,'')=%s AND COALESCE(honor_points,0)=%s "
-                    "AND COALESCE(total_honor_earned,0)=%s",
+                    "AND xiuxian_int_cmp(COALESCE(score,0),%s)=0 AND COALESCE(rank,'')=%s AND xiuxian_int_cmp(COALESCE(honor_points,0),%s)=0 "
+                    "AND xiuxian_int_cmp(COALESCE(total_honor_earned,0),%s)=0",
                     (honor_points, total_honor, user_id, expected_score, expected_rank, expected_honor, expected_total_honor),
                 ).rowcount != 1:
                     conn.rollback(); return result("state_changed")

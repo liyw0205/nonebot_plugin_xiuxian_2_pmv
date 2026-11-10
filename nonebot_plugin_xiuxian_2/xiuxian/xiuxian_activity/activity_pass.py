@@ -146,7 +146,7 @@ def _record_activity_pass_progress(
         if daily_limit > 0:
             cur.execute(
                 """
-                SELECT COALESCE(SUM(exp), 0) AS count
+                SELECT COALESCE(xiuxian_int_sum(exp), 0) AS count
                 FROM activity_pass_event_log
                 WHERE activity_key=%s AND user_id=%s AND event_key=%s AND record_date=%s
                 """,

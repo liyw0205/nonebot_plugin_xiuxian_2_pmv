@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+from ...core.numeric import as_int_like
+from ...core.errors import DomainError
 from contextlib import closing
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -133,7 +135,7 @@ class BossPurchaseService:
                     conn.rollback()
                     return rejected("state_changed")
                 current_weekly = normalize_weekly_purchases(current_weekly, today)
-                if int(integral_row[0]) != expected_integral or current_weekly != weekly:
+                if as_int_like(integral_row[0]) != expected_integral or current_weekly != weekly:
                     conn.rollback()
                     return rejected("state_changed")
 
@@ -158,11 +160,10 @@ class BossPurchaseService:
                 new_inventory = inventory + quantity
                 weekly[str(item_id)] = new_purchased
                 if conn.execute(
-                    "UPDATE player_data.boss_limit SET integral=%s WHERE user_id=%s AND COALESCE(integral, 0)=%s",
+                    "UPDATE player_data.boss_limit SET integral=%s WHERE user_id=%s AND xiuxian_int_cmp(COALESCE(integral, 0),%s)=0",
                     (new_integral, user_id, expected_integral),
                 ).rowcount != 1:
-                    conn.rollback()
-                    return rejected("state_changed")
+                    raise DomainError("boss_integral_write_rejected", "boss integral write did not affect one row")
                 conn.execute(
                     "UPDATE player_data.boss SET weekly_purchases=%s WHERE user_id=%s",
                     (json.dumps(weekly, ensure_ascii=False), user_id),
@@ -504,7 +505,7 @@ class WorldBossBattleSettlementService:
                     conn.rollback()
                     if str(previous[0]) != payload:
                         return result("state_changed")
-                    return result("duplicate", *map(int, previous[1:7]), tuple(self._loads(previous[7], [])))
+                    return result("duplicate", *map(as_int_like, previous[1:7]), tuple(self._loads(previous[7], [])))
 
                 conn.execute(
                     "CREATE TABLE IF NOT EXISTS player_data.world_boss_state(state_key TEXT PRIMARY KEY,"
@@ -533,7 +534,7 @@ class WorldBossBattleSettlementService:
                     conn.rollback()
                     return result("user_missing")
                 expected_user = (int(expected_stamina), int(expected_hp), int(expected_mp), int(expected_exp), int(expected_stone))
-                if tuple(map(int, user)) != expected_user or str(cooldown[0]) != str(expected_checked_at or ""):
+                if tuple(map(as_int_like, user)) != expected_user or str(cooldown[0]) != str(expected_checked_at or ""):
                     conn.rollback()
                     return result("state_changed")
                 if expected_stamina < stamina_cost:
@@ -555,9 +556,9 @@ class WorldBossBattleSettlementService:
                 total = conn.execute(
                     "SELECT COALESCE(integral,0) FROM player_data.boss_limit WHERE user_id=%s", (user_id,)
                 ).fetchone()
-                actual_daily = tuple(map(int, daily)) if daily else (0, 0, 0)
+                actual_daily = tuple(map(as_int_like, daily)) if daily else (0, 0, 0)
                 if actual_daily != (int(expected_daily_stone), int(expected_daily_integral), int(expected_battle_count)) \
-                        or (int(total[0]) if total else 0) != int(expected_total_integral):
+                        or (as_int_like(total[0]) if total else 0) != int(expected_total_integral):
                     conn.rollback()
                     return result("state_changed")
                 if expected_battle_count >= battle_limit:

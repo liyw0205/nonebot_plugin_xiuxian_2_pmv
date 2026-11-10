@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from ...core.numeric import as_int_like
 from contextlib import closing
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -436,7 +437,7 @@ class MixelixirHarvestLevelUpgradeService:
                     if str(previous[0]) != payload:
                         return result("state_changed")
                     return MixelixirHarvestLevelUpgradeResult(
-                        "duplicate", int(previous[1]), int(previous[2]), int(previous[3]), int(previous[4])
+                        "duplicate", int(previous[1]), as_int_like(previous[2]), as_int_like(previous[3]), as_int_like(previous[4])
                     )
 
                 user = conn.execute(
@@ -467,11 +468,11 @@ class MixelixirHarvestLevelUpgradeService:
                     f"SELECT {quoted_level},{quoted_experience} FROM player_data.mix_elixir_info WHERE user_id=%s",
                     (user_id,),
                 ).fetchone()
-                current_stone = int(user[0])
+                current_stone = as_int_like(user[0])
                 if (
                     mix_state is None
                     or current_stone != expected_stone
-                    or (int(mix_state[0] or 0), int(mix_state[1] or 0))
+                    or (as_int_like(mix_state[0]), as_int_like(mix_state[1]))
                     != (expected_level, expected_experience)
                 ):
                     conn.rollback()
@@ -488,8 +489,8 @@ class MixelixirHarvestLevelUpgradeService:
                 upgraded = conn.execute(
                     f"UPDATE player_data.mix_elixir_info "
                     f"SET {quoted_level}=%s,{quoted_experience}=%s "
-                    f"WHERE user_id=%s AND CAST({quoted_level} AS INTEGER)=%s "
-                    f"AND CAST({quoted_experience} AS INTEGER)=%s",
+                    f"WHERE user_id=%s AND xiuxian_int_cmp({quoted_level},%s)=0 "
+                    f"AND xiuxian_int_cmp({quoted_experience},%s)=0",
                     (
                         str(next_level),
                         str(remaining_experience),
@@ -618,7 +619,7 @@ class MixelixirFireControlUpgradeService:
                     if str(previous[0]) != payload:
                         return result("state_changed")
                     return MixelixirFireControlUpgradeResult(
-                        "duplicate", int(previous[1]), int(previous[2]), int(previous[3]), int(previous[4])
+                        "duplicate", int(previous[1]), as_int_like(previous[2]), as_int_like(previous[3]), as_int_like(previous[4])
                     )
 
                 user = conn.execute(
@@ -649,11 +650,11 @@ class MixelixirFireControlUpgradeService:
                     f"SELECT {quoted_level},{quoted_experience} FROM player_data.mix_elixir_info WHERE user_id=%s",
                     (user_id,),
                 ).fetchone()
-                current_stone = int(user[0])
+                current_stone = as_int_like(user[0])
                 if (
                     mix_state is None
                     or current_stone != expected_stone
-                    or (int(mix_state[0] or 0), int(mix_state[1] or 0))
+                    or (as_int_like(mix_state[0]), as_int_like(mix_state[1]))
                     != (expected_level, expected_experience)
                 ):
                     conn.rollback()
@@ -670,8 +671,8 @@ class MixelixirFireControlUpgradeService:
                 upgraded = conn.execute(
                     f"UPDATE player_data.mix_elixir_info "
                     f"SET {quoted_level}=%s,{quoted_experience}=%s "
-                    f"WHERE user_id=%s AND CAST({quoted_level} AS INTEGER)=%s "
-                    f"AND CAST({quoted_experience} AS INTEGER)=%s",
+                    f"WHERE user_id=%s AND xiuxian_int_cmp({quoted_level},%s)=0 "
+                    f"AND xiuxian_int_cmp({quoted_experience},%s)=0",
                     (
                         str(next_level),
                         str(remaining_experience),

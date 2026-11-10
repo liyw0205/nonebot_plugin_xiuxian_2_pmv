@@ -1631,8 +1631,8 @@ class SectMembershipService:
                         "duplicate",
                         grant_key,
                         sect_id,
-                        int(previous[0]),
-                        int(previous[1]),
+                        as_int_like(previous[0]),
+                        as_int_like(previous[1]),
                     )
 
                 sect = conn.execute(
@@ -1647,11 +1647,11 @@ class SectMembershipService:
                     return SectScheduledMaterialGrant("sect_inactive", grant_key, sect_id)
 
                 materials = max(as_int_like(sect[0] or 0), 0) * multiplier
-                power_row = conn.execute(
-                    "SELECT COALESCE(SUM(power), 0) FROM user_xiuxian WHERE sect_id=%s",
+                power_rows = conn.execute(
+                    "SELECT power FROM user_xiuxian WHERE sect_id=%s",
                     (sect_id,),
-                ).fetchone()
-                combat_power = int(power_row[0] or 0)
+                )
+                combat_power = sum(as_int_like(row[0]) for row in power_rows)
                 conn.execute(
                     """
                     UPDATE sects

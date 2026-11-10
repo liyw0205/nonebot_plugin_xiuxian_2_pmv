@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+from ...core.numeric import as_int_like
 
 from ...infrastructure.database import DatabaseUnitOfWork
 from ..base.ranking_position import PersonalRank
@@ -65,17 +66,17 @@ class BossIntegralSqlRepository:
                 return []
             rows = uow.query_all(
                 "SELECT entry.user_id AS user_id,"
-                "CAST(COALESCE(entry.integral,0) AS INTEGER) AS integral "
+                "COALESCE(entry.integral,0) AS integral "
                 "FROM boss_limit AS entry "
                 "WHERE entry.user_id IS NOT NULL "
                 "AND TRIM(CAST(entry.user_id AS TEXT))<>'' "
                 "AND entry.rowid=(SELECT MIN(candidate.rowid) FROM boss_limit AS candidate "
                 "WHERE candidate.user_id=entry.user_id) "
-                "ORDER BY CAST(COALESCE(entry.integral,0) AS INTEGER) DESC,entry.rowid ASC "
+                "ORDER BY xiuxian_int_text(COALESCE(entry.integral,0)) COLLATE xiuxian_integer DESC,entry.rowid ASC "
                 "LIMIT ?",
                 (limit,),
             )
-        return [(str(row["user_id"]), int(row["integral"] or 0)) for row in rows]
+        return [(str(row["user_id"]), as_int_like(row["integral"])) for row in rows]
 
     def integral_rank(self, user_id: str) -> PersonalRank:
         """本人世界积分名次：并列名次 + 有分人数 + 本人积分。"""
@@ -84,7 +85,7 @@ class BossIntegralSqlRepository:
             return PersonalRank()
         deduped = (
             "SELECT entry.user_id AS user_id,"
-            "CAST(COALESCE(entry.integral,0) AS INTEGER) AS value "
+            "COALESCE(entry.integral,0) AS value "
             "FROM boss_limit AS entry "
             "WHERE entry.user_id IS NOT NULL "
             "AND TRIM(CAST(entry.user_id AS TEXT))<>'' "
@@ -95,14 +96,14 @@ class BossIntegralSqlRepository:
             if not self._ready(uow):
                 return PersonalRank()
             row = uow.query_one(
-                "SELECT CAST(COALESCE(integral,0) AS INTEGER) AS value "
+                "SELECT COALESCE(integral,0) AS value "
                 "FROM boss_limit WHERE user_id=? ORDER BY rowid ASC LIMIT 1",
                 (user_id,),
             )
-            value = int(row["value"] or 0) if row is not None else 0
+            value = as_int_like(row["value"]) if row is not None else 0
             total = int(
                 (uow.query_one(
-                    f"SELECT COUNT(*) AS n FROM ({deduped}) WHERE value>0"
+                    f"SELECT COUNT(*) AS n FROM ({deduped}) WHERE xiuxian_int_cmp(value,0)>0"
                 ) or {"n": 0})["n"]
                 or 0
             )
@@ -110,7 +111,7 @@ class BossIntegralSqlRepository:
                 return PersonalRank(0, total, 0)
             better = int(
                 (uow.query_one(
-                    f"SELECT COUNT(*) AS n FROM ({deduped}) WHERE value>?",
+                    f"SELECT COUNT(*) AS n FROM ({deduped}) WHERE xiuxian_int_cmp(value,?)>0",
                     (value,),
                 ) or {"n": 0})["n"]
                 or 0
@@ -126,13 +127,13 @@ class BossIntegralSqlRepository:
             if not self._ready(uow):
                 return BossIntegralSnapshot("schema_missing", user_id)
             row = uow.query_one(
-                "SELECT CAST(COALESCE(integral,0) AS INTEGER) AS integral "
+                "SELECT COALESCE(integral,0) AS integral "
                 "FROM boss_limit WHERE user_id=? ORDER BY rowid ASC LIMIT 1",
                 (user_id,),
             )
         if row is None:
             return BossIntegralSnapshot("user_missing", user_id)
-        return BossIntegralSnapshot("found", user_id, int(row["integral"] or 0))
+        return BossIntegralSnapshot("found", user_id, as_int_like(row["integral"]))
 
     def grant_integral(self, user_id: str, amount: int) -> BossIntegralMutation:
         user_id = str(user_id).strip()
@@ -154,11 +155,11 @@ class BossIntegralSqlRepository:
             )
             if row is None:
                 return self._result("user_missing", user_id, amount)
-            current = int(row["value"] or 0)
+            current = as_int_like(row["value"])
             target = current + amount
             changed = uow.execute(
                 "UPDATE boss_limit SET integral=? WHERE rowid=? AND user_id=? "
-                "AND COALESCE(integral,0)=?",
+                "AND xiuxian_int_cmp(COALESCE(integral,0),?)=0",
                 (target, row["_rowid"], user_id, current),
             )
             if changed.rowcount != 1:

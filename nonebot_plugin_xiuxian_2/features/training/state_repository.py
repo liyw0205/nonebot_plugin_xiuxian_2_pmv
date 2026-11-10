@@ -4,6 +4,7 @@ import json
 from datetime import date, datetime
 from pathlib import Path
 from typing import Any
+from ...core.numeric import as_int_like
 
 from ...infrastructure.database import DatabaseUnitOfWork
 
@@ -81,7 +82,7 @@ class TrainingStateRepository:
             if row is not None:
                 result = dict(row)
                 for key in ("progress", "points", "completed", "max_progress"):
-                    result[key] = int(result[key] or 0)
+                    result[key] = as_int_like(result[key])
                 if result["last_time"]:
                     result["last_time"] = datetime.fromisoformat(str(result["last_time"]))
                 else:

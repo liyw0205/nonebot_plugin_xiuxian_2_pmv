@@ -7,6 +7,7 @@ from pathlib import Path
 from threading import RLock
 from datetime import date, datetime
 from ..xiuxian_utils import db_backend
+from ...core.numeric import as_int_like, sqlite_int_compare
 from datetime import datetime
 
 TOWER_FIELDS = ("current_floor", "max_floor", "score", "weekly_purchases")
@@ -96,7 +97,7 @@ class TowerStateService:
     @staticmethod
     def _integer(value) -> int:
         try:
-            return int(value or 0)
+            return as_int_like(value)
         except (TypeError, ValueError):
             return 0
 
@@ -300,7 +301,7 @@ class TowerPurchaseService:
                     conn.rollback()
                     if str(previous[0]) != payload:
                         return result("state_changed")
-                    return TowerPurchaseResult("duplicate", *(int(value) for value in previous[1:]))
+                    return TowerPurchaseResult("duplicate", *(as_int_like(value) for value in previous[1:]))
 
                 user = conn.execute("SELECT 1 FROM user_xiuxian WHERE user_id=%s", (user_id,)).fetchone()
                 if user is None:
@@ -326,7 +327,7 @@ class TowerPurchaseService:
                     conn.rollback()
                     return result("state_changed")
                 current_weekly = normalize_weekly_purchases(tower[1], today)
-                if int(tower[0]) != expected_score or current_weekly != weekly:
+                if as_int_like(tower[0]) != expected_score or current_weekly != weekly:
                     conn.rollback()
                     return result("state_changed")
 
@@ -353,7 +354,7 @@ class TowerPurchaseService:
                 weekly[str(item_id)] = new_purchased
                 if (
                     conn.execute(
-                        "UPDATE player_data.tower SET score=%s, weekly_purchases=%s WHERE user_id=%s AND COALESCE(score, 0)=%s",
+                        "UPDATE player_data.tower SET score=%s, weekly_purchases=%s WHERE user_id=%s AND xiuxian_int_cmp(COALESCE(score, 0),%s)=0",
                         (new_score, json.dumps(weekly, ensure_ascii=False), user_id, expected_score),
                     ).rowcount
                     != 1
@@ -558,7 +559,7 @@ class TowerSettlementService:
                 if user is None:
                     conn.rollback()
                     return result("user_missing")
-                if player is not None and tuple(map(int, user)) != (player["hp"], player["mp"], player["user_stamina"]):
+                if player is not None and any(sqlite_int_compare(actual, player[key]) != 0 for actual, key in zip(user, ("hp", "mp", "user_stamina"))):
                     conn.rollback()
                     return result("state_changed")
                 if player is not None and player["user_stamina"] < stamina_cost:
@@ -572,11 +573,7 @@ class TowerSettlementService:
                     "SELECT current_floor, max_floor, score FROM player_data.tower WHERE user_id=%s",
                     (user_id,),
                 ).fetchone()
-                if tower is None or tuple(map(int, tower)) != (
-                    expected["current_floor"],
-                    expected["max_floor"],
-                    expected["score"],
-                ):
+                if tower is None or any(sqlite_int_compare(actual, expected[key]) != 0 for actual, key in zip(tower, ("current_floor", "max_floor", "score"))):
                     conn.rollback()
                     return result("state_changed")
                 for item_id, _, _, amount in rewards:

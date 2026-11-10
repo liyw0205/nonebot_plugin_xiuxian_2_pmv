@@ -1,4 +1,5 @@
 from __future__ import annotations
+from ...core.numeric import as_int_like, sqlite_int_compare
 
 from dataclasses import dataclass
 from datetime import date, datetime
@@ -140,9 +141,9 @@ class ArenaWeeklyRankRepository:
                     users = tuple(
                         (
                             str(row["user_id"]),
-                            int(row["score"] or 0),
+                            as_int_like(row["score"]),
                             str(row["rank"] or ""),
-                            int(row["win_streak"] or 0),
+                            as_int_like(row["win_streak"]),
                         )
                         for row in uow.query_all(
                             "SELECT user_id,COALESCE(score,1000) AS score,"
@@ -185,11 +186,11 @@ class ArenaWeeklyRankRepository:
                 for row in pending:
                     user_id = str(row["user_id"])
                     previous = (
-                        int(row["previous_score"]),
+                        as_int_like(row["previous_score"]),
                         str(row["previous_rank"]),
-                        int(row["previous_win_streak"]),
+                        as_int_like(row["previous_win_streak"]),
                     )
-                    target = (int(row["target_score"]), str(row["target_rank"]), 0)
+                    target = (as_int_like(row["target_score"]), str(row["target_rank"]), 0)
                     current = uow.query_one(
                         "SELECT COALESCE(score,1000) AS score,COALESCE(rank,'') AS rank,"
                         "COALESCE(win_streak,0) AS win_streak FROM arena WHERE user_id=?",
@@ -205,11 +206,13 @@ class ArenaWeeklyRankRepository:
                         )
                         continue
                     actual = (
-                        int(current["score"]),
+                        as_int_like(current["score"]),
                         str(current["rank"]),
-                        int(current["win_streak"]),
+                        as_int_like(current["win_streak"]),
                     )
-                    if actual != previous:
+                    if (sqlite_int_compare(current["score"], previous[0]) != 0
+                            or str(current["rank"]) != previous[1]
+                            or sqlite_int_compare(current["win_streak"], previous[2]) != 0):
                         skipped += 1
                         conflicted += 1
                         uow.execute(
@@ -222,8 +225,8 @@ class ArenaWeeklyRankRepository:
                     if actual != target:
                         updated = uow.execute(
                             "UPDATE arena SET score=?,rank=?,win_streak=0 WHERE user_id=? "
-                            "AND COALESCE(score,1000)=? AND COALESCE(rank,'')=? "
-                            "AND COALESCE(win_streak,0)=?",
+                            "AND xiuxian_int_cmp(COALESCE(score,1000),?)=0 AND COALESCE(rank,'')=? "
+                            "AND xiuxian_int_cmp(COALESCE(win_streak,0),?)=0",
                             (target[0], target[1], user_id, previous[0], previous[1], previous[2]),
                         )
                         if updated.rowcount != 1:

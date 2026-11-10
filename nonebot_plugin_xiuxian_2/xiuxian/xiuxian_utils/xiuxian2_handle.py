@@ -783,7 +783,7 @@ class XiuxianDateManage:
             sql = """
                 SELECT * FROM user_xiuxian
                 WHERE level = %s AND user_name IS NOT NULL
-                ORDER BY exp DESC
+                ORDER BY xiuxian_int_text(exp) COLLATE xiuxian_integer DESC
                 LIMIT %s
             """
             return self._read_query(sql, (level_name, limit), dict_row=True)
@@ -805,7 +805,7 @@ class XiuxianDateManage:
         sql = f"""
             SELECT * FROM user_xiuxian
             WHERE level IN ({placeholders}) AND user_name IS NOT NULL
-            ORDER BY exp DESC
+            ORDER BY xiuxian_int_text(exp) COLLATE xiuxian_integer DESC
             LIMIT %s
         """
         return self._read_query(sql, (*matched_levels, limit), dict_row=True)
@@ -1434,17 +1434,17 @@ class XiuxianDateManage:
 
     def get_exp_rank(self, user_id):
         """修为排行"""
-        sql = "SELECT rank_value FROM (SELECT user_id, exp, dense_rank() OVER (ORDER BY exp DESC) AS rank_value FROM user_xiuxian) AS ranked_users WHERE user_id=%s"
+        sql = "SELECT rank_value FROM (SELECT user_id, exp, dense_rank() OVER (ORDER BY xiuxian_int_text(exp) COLLATE xiuxian_integer DESC) AS rank_value FROM user_xiuxian) AS ranked_users WHERE user_id=%s"
         return self._read_query(sql, (user_id,), one=True)
 
     def get_stone_rank(self, user_id):
         """灵石排行"""
-        sql = "SELECT rank_value FROM (SELECT user_id, stone, dense_rank() OVER (ORDER BY stone DESC) AS rank_value FROM user_xiuxian) AS ranked_users WHERE user_id=%s"
+        sql = "SELECT rank_value FROM (SELECT user_id, stone, dense_rank() OVER (ORDER BY xiuxian_int_text(stone) COLLATE xiuxian_integer DESC) AS rank_value FROM user_xiuxian) AS ranked_users WHERE user_id=%s"
         return self._read_query(sql, (user_id,), one=True)
 
     def get_ls_rank(self):
         """灵石排行榜"""
-        sql = f"SELECT user_id,stone FROM user_xiuxian  WHERE stone>0 ORDER BY stone DESC LIMIT 5"
+        sql = "SELECT user_id,stone FROM user_xiuxian WHERE xiuxian_int_cmp(stone,0)>0 ORDER BY xiuxian_int_text(stone) COLLATE xiuxian_integer DESC LIMIT 5"
         return self._read_query(sql)
 
     def sign_remake(self):
@@ -1643,7 +1643,7 @@ class XiuxianDateManage:
 
     def combat_power_top(self):
         """宗门战力排行榜"""
-        sql = f"SELECT sect_id, sect_name, combat_power FROM sects WHERE sect_owner is NOT NULL ORDER BY combat_power DESC LIMIT 50"
+        sql = "SELECT sect_id, sect_name, combat_power FROM sects WHERE sect_owner is NOT NULL ORDER BY xiuxian_int_text(combat_power) COLLATE xiuxian_integer DESC LIMIT 50"
         return self._read_query(sql)
 
     def get_sect_info_by_id(self, sect_id):
@@ -1817,7 +1817,7 @@ class XiuxianDateManage:
 
             sql = """SELECT user_name, level, exp FROM user_xiuxian 
                 WHERE user_name IS NOT NULL
-                ORDER BY exp DESC, (CASE level """
+                ORDER BY xiuxian_int_text(exp) COLLATE xiuxian_integer DESC, (CASE level """
 
             for level, value in sorted(rank_mapping.items(), key=lambda x: x[1], reverse=True):
                 sql += f"WHEN '{level}' THEN '{value:02}' "
@@ -1831,17 +1831,17 @@ class XiuxianDateManage:
 
     def stone_top(self):
         """这也是灵石排行榜"""
-        sql = f"SELECT user_name,stone FROM user_xiuxian WHERE user_name is NOT NULL ORDER BY stone DESC LIMIT 50"
+        sql = "SELECT user_name,stone FROM user_xiuxian WHERE user_name is NOT NULL ORDER BY xiuxian_int_text(stone) COLLATE xiuxian_integer DESC LIMIT 50"
         return self._read_query(sql)
 
     def power_top(self):
         """战力排行榜"""
-        sql = f"SELECT user_name,power FROM user_xiuxian WHERE user_name is NOT NULL ORDER BY power DESC LIMIT 50"
+        sql = "SELECT user_name,power FROM user_xiuxian WHERE user_name is NOT NULL ORDER BY xiuxian_int_text(power) COLLATE xiuxian_integer DESC LIMIT 50"
         return self._read_query(sql)
 
     def scale_top(self):
         """宗门建设度排行榜"""
-        sql = f"SELECT sect_id, sect_name, sect_scale FROM sects WHERE sect_owner is NOT NULL ORDER BY sect_scale DESC"
+        sql = "SELECT sect_id, sect_name, sect_scale FROM sects WHERE sect_owner is NOT NULL ORDER BY xiuxian_int_text(sect_scale) COLLATE xiuxian_integer DESC"
         return self._read_query(sql)
 
     def root_top(self):
@@ -1874,7 +1874,7 @@ class XiuxianDateManage:
     def get_top1_user(self):
         """获取修为第一的用户"""
         return self._read_query(
-            "select * from user_xiuxian ORDER BY exp DESC LIMIT 1",
+            "select * from user_xiuxian ORDER BY xiuxian_int_text(exp) COLLATE xiuxian_integer DESC LIMIT 1",
             one=True,
             dict_row=True,
         )
@@ -1886,7 +1886,7 @@ class XiuxianDateManage:
 
             sql = """SELECT user_name, level, exp FROM user_xiuxian 
                 WHERE user_name IS NOT NULL
-                ORDER BY exp DESC, (CASE level """
+                ORDER BY xiuxian_int_text(exp) COLLATE xiuxian_integer DESC, (CASE level """
 
             for level, value in sorted(rank_mapping.items(), key=lambda x: x[1], reverse=True):
                 sql += f"WHEN '{level}' THEN '{value:02}' "
@@ -3947,7 +3947,7 @@ class XIUXIAN_IMPART_BUFF:
     def get_impart_rank(self):
         """获取虚神界等级排行榜"""
         with self._conn_lock:
-            sql = "SELECT user_id, impart_lv FROM xiuxian_impart WHERE impart_lv > 0 ORDER BY impart_lv DESC, stone_num DESC LIMIT 50"
+            sql = "SELECT user_id, impart_lv FROM xiuxian_impart WHERE impart_lv > 0 ORDER BY impart_lv DESC, xiuxian_int_text(stone_num) COLLATE xiuxian_integer DESC LIMIT 50"
             cur = self.conn.cursor()
             cur.execute(sql)
             result = cur.fetchall()

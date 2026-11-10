@@ -12,6 +12,7 @@ from nonebot.log import logger
 from ...paths import get_paths
 
 from . import db_backend
+from ...core.numeric import as_int_like, sqlite_int_compare
 
 
 DATABASE = get_paths().data
@@ -22,6 +23,39 @@ FIELD_LIST_CACHE_MAX_BYTES = 8 * 1024 * 1024
 FIELD_LIST_CACHE_MAX_ENTRY_BYTES = 1024 * 1024
 FIELD_LIST_CACHE_MAX_NODES = 8192
 FIELD_LIST_CACHE_MAX_DEPTH = 64
+
+# These columns are integer business values, even in historical TEXT tables.
+# Decode them before JSON can round a scientific scalar through float.
+_INTEGER_FIELDS = {
+    "partner": {"affection"},
+    "mentor": {"breakthrough_reward_count"},
+    "bankinfo": {"savestone", "banklevel"},
+    "stone_limit": {"send_limit", "receive_limit"},
+    "xiangyuan_limit": {"send_count", "receive_count"},
+    "boss": {"integral", "boss_integral", "boss_stone", "boss_battle_count"},
+    "boss_limit": {"integral"},
+    "training": {"points", "completed", "progress", "max_progress"},
+    "tower": {"score", "current_floor", "max_floor"},
+    "arena": {"score", "honor_points", "total_honor_earned", "daily_challenges_used",
+              "daily_extra_challenges", "daily_challenge_buys", "win_count", "lose_count"},
+    "mix_elixir_info": {"收取等级", "灵田数量", "灵田傀儡", "丹药控火", "炼丹经验"},
+    "natal_treasure": {"form", "level", "exp", "max_exp", "charge_status",
+                       "fate_revive_count", "immortal_revive_count", "invincible_gain_count",
+                       "nirvana_revive_count", "soul_return_revive_count",
+                       *(f"effect{i}_{kind}" for i in range(1, 4) for kind in ("type", "level"))},
+}
+
+
+def _decode_field(table, field, value):
+    if field in _INTEGER_FIELDS.get(table, ()) and value is not None:
+        if sqlite_int_compare(value, value) is not None:
+            return as_int_like(value)
+    if isinstance(value, str):
+        try:
+            return json.loads(value)
+        except json.JSONDecodeError:
+            pass
+    return value
 
 
 def _field_list_cache_charge(key, value):
@@ -192,13 +226,7 @@ class PlayerDataManager:
             columns = [column[0] for column in cursor.description]
             user_dict = {}
             for col, val in zip(columns, result):
-                if isinstance(val, str):
-                    try:
-                        user_dict[col] = json.loads(val)
-                    except json.JSONDecodeError:
-                        user_dict[col] = val
-                else:
-                    user_dict[col] = val
+                user_dict[col] = _decode_field(table_name, col, val)
 
             return user_dict
 
@@ -219,13 +247,7 @@ class PlayerDataManager:
             result = cursor.fetchone()
 
             if result and result[0] is not None:
-                val = result[0]
-                if isinstance(val, str):
-                    try:
-                        return json.loads(val)
-                    except json.JSONDecodeError:
-                        pass
-                return val
+                return _decode_field(table_name, field, result[0])
             return None
 
     def get_all_field_data(self, table_name, field, *, cache_ttl: float = 45.0):
@@ -247,13 +269,7 @@ class PlayerDataManager:
 
             processed_results = []
             for user_id_str, val in result:
-                if isinstance(val, str):
-                    try:
-                        processed_results.append((user_id_str, json.loads(val)))
-                    except json.JSONDecodeError:
-                        processed_results.append((user_id_str, val))
-                else:
-                    processed_results.append((user_id_str, val))
+                processed_results.append((user_id_str, _decode_field(table_name, field, val)))
             self._store_cached_field_list(cache_key, processed_results, ttl, deep=True)
             return processed_results
 
@@ -374,13 +390,7 @@ class PlayerDataManager:
             for row in rows:
                 record = {}
                 for col, val in zip(columns, row):
-                    if isinstance(val, str):
-                        try:
-                            record[col] = json.loads(val)
-                        except json.JSONDecodeError:
-                            record[col] = val
-                    else:
-                        record[col] = val
+                    record[col] = _decode_field(table_name, col, val)
                 results.append(record)
             return results
 

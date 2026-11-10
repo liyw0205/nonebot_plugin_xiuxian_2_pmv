@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+from ...core.numeric import as_int_like
+from ...core.errors import DomainError
 from contextlib import closing
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -473,7 +475,7 @@ class TrainingPurchaseService:
                     conn.rollback()
                     if not operation_payload_matches(previous[0], payload):
                         return result("state_changed")
-                    return TrainingPurchaseResult("duplicate", *(int(value) for value in previous[1:]))
+                    return TrainingPurchaseResult("duplicate", *(as_int_like(value) for value in previous[1:]))
                 if conn.execute("SELECT 1 FROM user_xiuxian WHERE user_id=%s", (user_id,)).fetchone() is None:
                     conn.rollback()
                     return result("user_missing")
@@ -489,7 +491,7 @@ class TrainingPurchaseService:
                     conn.rollback()
                     return result("state_changed")
                 current_weekly = normalize_weekly_purchases(training[1], today)
-                if int(training[0]) != expected_points or current_weekly != weekly:
+                if as_int_like(training[0]) != expected_points or current_weekly != weekly:
                     conn.rollback()
                     return result("state_changed")
                 purchased = int(weekly.get(str(item_id), 0))
@@ -510,11 +512,10 @@ class TrainingPurchaseService:
                 points, purchased, inventory = expected_points - cost, purchased + quantity, inventory + quantity
                 weekly[str(item_id)] = purchased
                 if conn.execute(
-                    "UPDATE player_data.training SET points=%s, weekly_purchases=%s WHERE user_id=%s AND COALESCE(points, 0)=%s",
+                    "UPDATE player_data.training SET points=%s, weekly_purchases=%s WHERE user_id=%s AND xiuxian_int_cmp(COALESCE(points, 0),%s)=0",
                     (points, json.dumps(weekly, ensure_ascii=False), user_id, expected_points),
                 ).rowcount != 1:
-                    conn.rollback()
-                    return result("state_changed")
+                    raise DomainError("training_points_write_rejected", "training points write did not affect one row")
                 now = datetime.now()
                 conn.execute(
                     "INSERT INTO back (user_id, goods_id, goods_name, goods_type, goods_num, create_time, update_time, bind_num) "

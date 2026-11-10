@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import tempfile
 import unittest
+import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -17,6 +18,7 @@ from nonebot_plugin_xiuxian_2.features.arena.migrations import (
 )
 from nonebot_plugin_xiuxian_2.infrastructure.database import DatabaseUnitOfWork
 from tests.test_db_backend import db_backend
+from nonebot_plugin_xiuxian_2.features.arena.season_reward_repository import ArenaSeasonRewardRepository
 
 
 class ArenaSeasonRewardServiceTests(unittest.TestCase):
@@ -94,6 +96,70 @@ class ArenaSeasonRewardServiceTests(unittest.TestCase):
         with self.assertRaises(db_backend.IntegrityError):
             self.claim("rollback")
         self.assertEqual(self.state(), ((10, 20, 3, 1, 1, "old", "old"), None))
+
+    def legacy_text(self):
+        with db_backend.transaction(self.player) as conn:
+            conn.execute('DROP TABLE arena')
+            conn.execute('CREATE TABLE arena(user_id TEXT PRIMARY KEY,score TEXT,rank TEXT,honor_points TEXT,total_honor_earned TEXT,daily_challenges_used INTEGER,daily_extra_challenges INTEGER,daily_challenge_buys INTEGER,last_reset_date TEXT,last_buy_date TEXT)')
+            conn.execute("INSERT INTO arena VALUES('user','2e3','黄金','1e1','2e1',3,1,1,'old','old')")
+            conn.execute("INSERT INTO arena VALUES('lower','900','黄金','0','0',0,0,0,'old','old')")
+
+    def snapshot(self):
+        result = []
+        for path in (self.game, self.player):
+            with sqlite3.connect(path) as conn:
+                result.append(list(conn.iterdump()))
+        return result
+
+    def test_legacy_score_ranking_claim_and_replay_agree(self):
+        self.legacy_text()
+        candidates = ArenaSeasonRewardRepository(self.game, self.player).daily_candidates()
+        self.assertEqual([('user', 1), ('lower', 2)], [(row['user_id'], row['position']) for row in candidates])
+        self.assertEqual('applied', self.claim().status)
+        before = self.snapshot()
+        self.assertEqual('duplicate', self.claim().status)
+        self.assertEqual(before, self.snapshot())
+
+    def test_legacy_score_real_changes_and_full_rollback(self):
+        self.legacy_text()
+        with db_backend.transaction(self.player) as conn:
+            conn.execute("UPDATE arena SET honor_points='11' WHERE user_id='user'")
+        before = self.snapshot()
+        self.assertEqual('state_changed', self.claim().status)
+        self.assertEqual(before, self.snapshot())
+
+        with db_backend.transaction(self.player) as conn:
+            conn.execute("UPDATE arena SET honor_points='1e1' WHERE user_id='user'")
+        with db_backend.transaction(self.game) as conn:
+            conn.execute("CREATE TRIGGER refuse_legacy_reward BEFORE INSERT ON arena_season_reward_operations BEGIN SELECT RAISE(ABORT,'receipt refused'); END")
+        before = self.snapshot()
+        with self.assertRaisesRegex(db_backend.IntegrityError, 'receipt refused'):
+            self.claim()
+        self.assertEqual(before, self.snapshot())
+
+    def test_compatibility_season_claim_keeps_numeric_snapshot_contract(self):
+        from nonebot_plugin_xiuxian_2.compatibility.legacy_arena_transactions import ArenaSeasonRewardService
+        self.legacy_text()
+        self.service = ArenaSeasonRewardService(self.game, self.player)
+        with db_backend.transaction(self.player) as conn:
+            conn.execute("UPDATE arena SET score='2001' WHERE user_id='user'")
+        before = self.snapshot()
+        self.assertEqual('state_changed', self.claim().status)
+        self.assertEqual(before, self.snapshot())
+        with db_backend.transaction(self.player) as conn:
+            conn.execute("UPDATE arena SET score='2e3' WHERE user_id='user'")
+        with db_backend.transaction(self.game) as conn:
+            conn.execute("CREATE TRIGGER refuse_compat_reward BEFORE INSERT ON arena_season_reward_operations BEGIN SELECT RAISE(ABORT,'compat receipt refused'); END")
+        before = self.snapshot()
+        with self.assertRaisesRegex(db_backend.IntegrityError, 'compat receipt refused'):
+            self.claim()
+        self.assertEqual(before, self.snapshot())
+        with db_backend.transaction(self.game) as conn:
+            conn.execute('DROP TRIGGER refuse_compat_reward')
+        self.assertEqual('applied', self.claim().status)
+        before = self.snapshot()
+        self.assertEqual('duplicate', self.claim().status)
+        self.assertEqual(before, self.snapshot())
 
 
 if __name__ == "__main__":

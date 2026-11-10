@@ -131,6 +131,22 @@ class ArenaWeeklyRankReductionTests(unittest.TestCase):
         )
         self.assertEqual(self.users()["u2"], (1000, "青铜", 0))
 
+    def test_legacy_text_score_reduction_replay_and_real_change(self):
+        with db_backend.transaction(self.database) as conn:
+            conn.execute('DROP TABLE arena')
+            conn.execute('CREATE TABLE arena(user_id TEXT PRIMARY KEY,score TEXT,rank TEXT,win_streak TEXT)')
+            conn.executemany('INSERT INTO arena VALUES(%s,%s,%s,%s)', [('a','2e3','黄金','3e0'), ('b','3.3e3','王者','5e0')])
+        self.assertEqual('running', self.reduce(chunk_size=1).task_status)
+        with db_backend.transaction(self.database) as conn:
+            conn.execute("UPDATE arena SET score='3301' WHERE user_id='b'")
+        done = self.reduce(chunk_size=1)
+        self.assertEqual(('completed', 1), (done.task_status, done.conflicted))
+        self.assertEqual('duplicate', self.reduce().status)
+        with db_backend.connection(self.database) as conn:
+            self.assertEqual(('1000', '青铜', '0'), tuple(conn.execute("SELECT score,rank,win_streak FROM arena WHERE user_id='a'").fetchone()))
+            self.assertEqual(('3301', '5e0'), tuple(conn.execute("SELECT score,win_streak FROM arena WHERE user_id='b'").fetchone()))
+        self.assertEqual('conflict', self.targets()[1][-2])
+
     def users(self):
         with db_backend.connection(self.database) as conn:
             return {
@@ -139,6 +155,36 @@ class ArenaWeeklyRankReductionTests(unittest.TestCase):
                     "SELECT user_id,score,rank,win_streak FROM arena ORDER BY user_id"
                 ).fetchall()
             }
+
+    def test_compatibility_text_reduction_preserves_changes_and_replay(self):
+        from nonebot_plugin_xiuxian_2.compatibility.legacy_arena_transactions import ArenaWeeklyRankReductionService
+        self.service = ArenaWeeklyRankReductionService(self.database)
+        self.test_legacy_text_score_reduction_replay_and_real_change()
+
+    def test_invalid_current_value_cannot_match_zero_target(self):
+        with db_backend.transaction(self.database) as conn:
+            conn.execute('DROP TABLE arena')
+            conn.execute('CREATE TABLE arena(user_id TEXT PRIMARY KEY,score TEXT,rank TEXT,win_streak TEXT)')
+            conn.executemany('INSERT INTO arena VALUES(%s,%s,%s,%s)', [('a', '2e3', '黄金', '3e0'), ('z', '1e3', '青铜', '0e0')])
+        self.assertEqual('running', self.reduce(chunk_size=1).task_status)
+        with db_backend.transaction(self.database) as conn:
+            conn.execute("UPDATE arena SET win_streak='invalid' WHERE user_id='z'")
+        done = self.reduce(chunk_size=1)
+        self.assertEqual(('completed', 1), (done.task_status, done.conflicted))
+        self.assertEqual(('conflict', 'state_changed'), self.targets()[1][-2:])
+        with db_backend.connection(self.database) as conn:
+            self.assertEqual(('1e3', '青铜', 'invalid'), tuple(conn.execute("SELECT score,rank,win_streak FROM arena WHERE user_id='z'").fetchone()))
+        self.assertEqual('duplicate', self.reduce().status)
+
+    def test_compatibility_invalid_current_value_cannot_match_zero_target(self):
+        from nonebot_plugin_xiuxian_2.compatibility.legacy_arena_transactions import ArenaWeeklyRankReductionService
+        self.service = ArenaWeeklyRankReductionService(self.database)
+        self.test_invalid_current_value_cannot_match_zero_target()
+
+    def test_compatibility_reduction_failure_rolls_back_chunk_and_resumes(self):
+        from nonebot_plugin_xiuxian_2.compatibility.legacy_arena_transactions import ArenaWeeklyRankReductionService
+        self.service = ArenaWeeklyRankReductionService(self.database)
+        self.test_failed_chunk_rolls_back_and_records_error_before_resume()
 
     def targets(self):
         with db_backend.connection(self.database) as conn:
