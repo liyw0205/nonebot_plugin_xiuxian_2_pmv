@@ -152,6 +152,100 @@ class PartnerCultivationApplicationTests(unittest.TestCase):
         self.assertGreaterEqual(float(users[0][2]), 1e20)
         self.assertEqual("state_changed", self.apply("stale", expected_used_count_1=1).status)
 
+    def legacy_affection_storage(self, first="3", second="4") -> None:
+        with db_backend.transaction(self.player) as conn:
+            conn.execute("DROP TABLE partner")
+            conn.execute(
+                "CREATE TABLE partner(user_id TEXT PRIMARY KEY,partner_id TEXT,"
+                "bind_time TEXT,affection TEXT)"
+            )
+            conn.executemany(
+                "INSERT INTO partner VALUES(?,?,NULL,?)",
+                [("a", "b", first), ("b", "a", second)],
+            )
+
+    def full_snapshot(self):
+        snapshots = []
+        for database in (self.game, self.player):
+            with sqlite3.connect(database) as conn:
+                snapshots.append(tuple(conn.iterdump()))
+        return snapshots
+
+    def test_legacy_text_affection_settles_and_replays_once(self) -> None:
+        self.legacy_affection_storage()
+        self.assertEqual("applied", self.apply().status)
+        after = self.full_snapshot()
+        self.assertEqual("duplicate", self.apply().status)
+        self.assertEqual(after, self.full_snapshot())
+        users, usage, affection, statistics = self.state()
+        self.assertEqual([1100, 2200], [int(row[1]) for row in users])
+        self.assertEqual([2, 2], [row[1] for row in usage])
+        self.assertEqual(["43", "24"], [row[1] for row in affection])
+        self.assertEqual([2, 2], [row[1] for row in statistics])
+
+    def test_scientific_text_affection_uses_the_existing_integer_parser(self) -> None:
+        self.legacy_affection_storage("3e0", "4.0e0")
+        self.assertEqual("applied", self.apply().status)
+        self.assertEqual(["43", "24"], [row[1] for row in self.state()[2]])
+
+    def test_changed_text_affection_still_rejects_the_correct_user(self) -> None:
+        for user_id in ("a", "b"):
+            with self.subTest(user=user_id):
+                self.legacy_affection_storage("4" if user_id == "a" else "3", "5" if user_id == "b" else "4")
+                before = self.full_snapshot()
+                result = self.apply()
+                self.assertEqual(("state_changed", "affection_changed", user_id),
+                                 (result.status, result.reason, result.subject))
+                self.assertEqual(before, self.full_snapshot())
+
+    def test_ignored_affection_write_names_the_party_and_rolls_back_every_table(self) -> None:
+        self.ensure_nonebot_initialized()
+        from nonebot_plugin_xiuxian_2.xiuxian.command_guard import failure_reply
+
+        self.legacy_affection_storage()
+        for user_id, subject, label in (("a", "actor", "发起方"), ("b", "target", "目标方")):
+            with self.subTest(user=user_id):
+                with db_backend.transaction(self.player) as conn:
+                    conn.execute(
+                        "CREATE TRIGGER reject_affection BEFORE UPDATE ON partner "
+                        f"WHEN OLD.user_id='{user_id}' BEGIN SELECT RAISE(IGNORE); END"
+                    )
+                before = self.full_snapshot()
+                try:
+                    with self.assertRaises(DomainError) as caught:
+                        self.apply()
+                    self.assertEqual("partner_affection_write_rejected", caught.exception.code)
+                    self.assertEqual(subject, caught.exception.details["subject"])
+                    self.assertEqual(before, self.full_snapshot())
+                    reply = failure_reply("双修", caught.exception)
+                    self.assertIn(label, reply)
+                    self.assertIn("亲密度", reply)
+                    self.assertNotIn("定位号", reply)
+                    self.assertNotIn("已变化", reply)
+                finally:
+                    with db_backend.transaction(self.player) as conn:
+                        conn.execute("DROP TRIGGER reject_affection")
+
+    def test_exact_affection_write_guard_remains_active_after_preflight(self) -> None:
+        from nonebot_plugin_xiuxian_2.features.buff import partner_cultivation_repository as module
+
+        self.legacy_affection_storage()
+        before = self.full_snapshot()
+        base = module.AttachedDatabaseUnitOfWork
+
+        class ChangedAffectionUow(base):
+            def execute(uow, sql, params=()):
+                if sql.startswith("UPDATE player_data.partner SET affection=") and params[1] == "b":
+                    super().execute("UPDATE player_data.partner SET affection='5' WHERE user_id='b'")
+                return super().execute(sql, params)
+
+        with patch.object(module, "AttachedDatabaseUnitOfWork", ChangedAffectionUow):
+            with self.assertRaises(DomainError) as caught:
+                self.apply()
+        self.assertEqual("partner_affection_write_rejected", caught.exception.code)
+        self.assertEqual("target", caught.exception.details["subject"])
+        self.assertEqual(before, self.full_snapshot())
+
     def numeric_snapshot(self, value, *, text_storage=False):
         if text_storage:
             with db_backend.transaction(self.game) as conn:

@@ -102,6 +102,12 @@ owner；任务和活动底层 legacy sink 仍是显式兼容依赖，不宣称�
 命令/Web 仅组装 DTO，不直接访问数据库。
 ## 测试与手工验收
 覆盖 fake repository 成功、拒绝、重复和异常路径。
+
+双修亲密度快照与写入守卫均沿用 `core.numeric` 的整数解释，兼容旧库
+`partner.affection TEXT`；不会把相同的数字文本误判为关系变化，也不容忍真实
+数值变化。亲密度写入被拒绝时，以 `partner_affection_write_rejected` 和发起方/
+目标方返回具体原因，整笔 attached UoW 回滚。定向回归包含旧表结算、回执重放、
+真实变化拒绝及两库完整回滚，不需要迁移或改写生产亲密度。
 ## 灰度开关、回滚和已知限制
 关闭开关后使用旧功法入口；双修令牌默认经 `PartnerTokenUseApplication` 原子消费库存并更新次数。双修结算默认经 `PartnerCultivationApplication`，把修为、属性、次数、统计、亲密度和邀请状态置于同一 attached UoW；随机计算仍由领域 handler 预滚。普通切磋默认经 `BuffApplication -> NormalPvpSqlRepository`，在 attached UoW 内完成双方 HP/MP/体力 CAS、胜负统计和回执，缺 schema、用户或快照冲突时 fail closed；请求路径不执行 DDL。切磋 handler 的动态属性读取也经 `PlayerAttributeApplication`，不再直接读取 `get_user_real_info`。旧 `NormalPvpSettlementService` 仅保留显式兼容用途，`pvp_battle` 只承载纯战斗计算适配。双修/师徒默认 handler 的姓名、境界、修为和存在性读取统一经 `PlayerProfileApplication`；信息页、功法状态和默认玩家战斗辅助的动态属性读取统一经 `PlayerAttributeApplication`，旧 `get_final_attributes` 仅作为显式兼容公式 provider。
 

@@ -299,11 +299,18 @@ class PartnerCultivationSqlRepository:
                 ):
                     changed = uow.execute(
                         "UPDATE player_data.partner SET affection=? "
-                        "WHERE user_id=? AND COALESCE(affection,0)=?",
+                        "WHERE user_id=? AND xiuxian_int_cmp(COALESCE(affection,0),?)=0",
                         (expected + increase, user_id, expected),
                     )
                     if changed.rowcount != 1:
-                        raise RuntimeError("partner relation changed inside settlement transaction")
+                        raise DomainError(
+                            "partner_affection_write_rejected",
+                            "partner affection write did not affect one row",
+                            {
+                                "reason": "partner_affection_write_rejected",
+                                "subject": "actor" if user_id == user_id_1 else "target",
+                            },
+                        )
 
             for user_id, expected in (
                 (user_id_1, usage_snapshot_1),

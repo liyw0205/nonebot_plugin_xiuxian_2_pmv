@@ -1,6 +1,7 @@
 """Allowlisted business diagnostics; never render exception messages."""
 
 REASONS = {
+    "partner_affection_write_rejected": "双修亲密度保存失败，本次双修未结算，请联系管理员核对道侣记录。",
     "mentor_stone_write_rejected": "出师灵石奖励保存失败，请联系管理员核对该次出师奖励记录。",
     "boss_reward_not_participant": "首领讨伐参与记录已不存在，请联系管理员核对该次讨伐。",
     "boss_reward_not_eligible": "当前首领排名不在申请的奖励档位内，请查看可领档位。",
