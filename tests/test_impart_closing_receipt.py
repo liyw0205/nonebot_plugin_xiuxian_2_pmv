@@ -132,7 +132,7 @@ class ClosingReceiptWiringTests(unittest.TestCase):
 
         self.assertIn(
             "uow.execute('UPDATE impart_data.xiuxian_impart SET exp_day=exp_day-? "
-            "WHERE user_id=? AND exp_day=? AND exp_day>=?',"
+            "WHERE user_id=? AND xiuxian_int_cmp(exp_day,?)=0 AND xiuxian_int_cmp(exp_day,?)>=0',"
             "(blessing_cost,user_id,expected_exp_day,blessing_cost))",
             repository,
         )

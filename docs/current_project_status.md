@@ -29,6 +29,11 @@
   `/tmp/xiuxian-numeric-{architecture,inventory,compile,diff}.log`。控制端审查后普通推送
   develop，CI 通过再快进合入 main，正式 tag 的质量门通过后核验 Release 安装包。
 
+首轮 CI 执行 5,841 项，暴露两个缺口：虚神界回执源码契约仍匹配旧 SQL，以及
+`db_backend` 的绝对导入破坏 `src.plugins` 命名空间安装。已同步守卫断言，改成相对
+导入并沿用项目现有的无包上下文加载方式；独立数据库模块、虚神界大数/结算/回执、
+新增数值矩阵及命名空间门禁共 49 项通过，证据 `/tmp/xiuxian-numeric-ci-recheck.log`。
+
 本次没有存储结构迁移，也不会恢复 REAL 历史上已丢失的末位精度；低于 REAL 精度的
 奖励/消耗仍属于既有算术限制，不能把本次比较修复描述成任意精度经济系统。部署库只读
 汇总确认已有 20 条超 int64 战力及超限修为/气血/真元等，未输出用户标识、未写玩家库、

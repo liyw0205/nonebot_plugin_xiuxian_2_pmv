@@ -6,7 +6,18 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Iterable, Iterator
 
-from nonebot_plugin_xiuxian_2.core.numeric import register_numeric_functions
+try:
+    from ...core.numeric import register_numeric_functions
+except ImportError:  # Source-file loading has no package context.
+    import importlib.util
+
+    _numeric_path = Path(__file__).resolve().parents[2] / "core" / "numeric.py"
+    _numeric_spec = importlib.util.spec_from_file_location("_xiuxian_core_numeric", _numeric_path)
+    if _numeric_spec is None or _numeric_spec.loader is None:
+        raise ImportError(f"Unable to load numeric helpers: {_numeric_path}")
+    _numeric_module = importlib.util.module_from_spec(_numeric_spec)
+    _numeric_spec.loader.exec_module(_numeric_module)
+    register_numeric_functions = _numeric_module.register_numeric_functions
 
 try:
     from nonebot.log import logger
