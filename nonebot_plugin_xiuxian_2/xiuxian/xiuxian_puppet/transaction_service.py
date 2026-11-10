@@ -213,7 +213,7 @@ class PuppetOperationService:
                     """
                     UPDATE user_xiuxian
                     SET stone=CAST(COALESCE(stone,0) AS REAL)-CAST(%s AS REAL)
-                    WHERE user_id=%s AND CAST(COALESCE(stone,0) AS REAL)>=CAST(%s AS REAL)
+                    WHERE user_id=%s AND xiuxian_int_cmp(COALESCE(stone,0),%s)>=0
                     """,
                     (stone_cost, user_id, stone_cost),
                 )
@@ -520,7 +520,7 @@ class PuppetHarvestService:
                 deducted = conn.execute(
                     """
                     UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)-CAST(%s AS REAL)
-                    WHERE user_id=%s AND stone >= %s AND puppet_status=1
+                    WHERE user_id=%s AND xiuxian_int_cmp(stone,%s)>=0 AND puppet_status=1
                     """,
                     (harvest_cost, user_id, harvest_cost),
                 )

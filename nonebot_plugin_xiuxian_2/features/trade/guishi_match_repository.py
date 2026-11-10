@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from ...core.numeric import as_int_like
 import json
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -58,7 +59,7 @@ class GuishiOrderMatchSqlRepository:
                 normalized[str(key)] = int(value)
             except (TypeError, ValueError):
                 continue
-        return int(row.get("stored_stone") or 0), normalized
+        return as_int_like(row.get("stored_stone") or 0), normalized
 
     @staticmethod
     def _save_info(

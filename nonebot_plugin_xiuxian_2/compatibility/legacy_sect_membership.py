@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from ..core.numeric import as_int_like
 import json
 from contextlib import closing
 from dataclasses import dataclass, field, replace
@@ -557,7 +558,7 @@ class SectMembershipService:
                 if conflict is not None:
                     conn.rollback()
                     return result("name_exists", current_name)
-                if int(sect[2]) < stone_cost:
+                if as_int_like(sect[2]) < stone_cost:
                     conn.rollback()
                     return result("stone_insufficient", current_name)
 
@@ -583,7 +584,7 @@ class SectMembershipService:
                 renamed = conn.execute(
                     "UPDATE sects SET sect_name=%s, sect_used_stone=CAST(COALESCE(sect_used_stone,0) AS REAL)-CAST(%s AS REAL) "
                     "WHERE sect_id=%s AND sect_owner=%s AND sect_name=%s "
-                    "AND COALESCE(sect_used_stone, 0)>=%s",
+                    "AND xiuxian_int_cmp(COALESCE(sect_used_stone, 0),%s)>=0",
                     (new_name, stone_cost, sect_id, actor_id, current_name, stone_cost),
                 )
                 if renamed.rowcount != 1:
@@ -1074,7 +1075,7 @@ class SectMembershipService:
                     conn.rollback()
                     return SectNameRefresh("already_member", user_id, stone_cost)
                 charged = conn.execute(
-                    "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)-CAST(%s AS REAL) WHERE user_id=%s AND sect_id IS NULL AND stone >= %s",
+                    "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)-CAST(%s AS REAL) WHERE user_id=%s AND sect_id IS NULL AND xiuxian_int_cmp(stone,%s)>=0",
                     (stone_cost, user_id, stone_cost),
                 )
                 if charged.rowcount != 1:
@@ -1125,7 +1126,7 @@ class SectMembershipService:
                 if user[0] is not None:
                     conn.rollback()
                     return SectCreation("already_member", user_id, sect_name, stone_cost)
-                if int(user[1] or 0) < stone_cost:
+                if as_int_like(user[1] or 0) < stone_cost:
                     conn.rollback()
                     return SectCreation("stone_insufficient", user_id, sect_name, stone_cost)
                 if conn.execute("SELECT 1 FROM sects WHERE sect_name=%s", (sect_name,)).fetchone():
@@ -1152,7 +1153,7 @@ class SectMembershipService:
                     """
                     UPDATE user_xiuxian
                     SET sect_id=%s, sect_position=%s, stone=CAST(COALESCE(stone,0) AS REAL)-CAST(%s AS REAL)
-                    WHERE user_id=%s AND sect_id IS NULL AND stone >= %s
+                    WHERE user_id=%s AND sect_id IS NULL AND xiuxian_int_cmp(stone,%s)>=0
                     """,
                     (sect_id, owner_position, stone_cost, user_id, stone_cost),
                 )
@@ -1345,7 +1346,7 @@ class SectMembershipService:
                 if user[0] is None or int(user[0]) != sect_id:
                     conn.rollback()
                     return result("sect_changed")
-                balance = int((user[2] if cost_type == "hp" else user[1]) or 0)
+                balance = as_int_like((user[2] if cost_type == "hp" else user[1]) or 0)
                 if balance < cost:
                     conn.rollback()
                     return result(f"{cost_type}_insufficient")
@@ -1361,7 +1362,7 @@ class SectMembershipService:
                         exp=CAST(COALESCE(exp,0) AS REAL)+CAST(%s AS REAL),
                         sect_task=COALESCE(sect_task, 0)+1,
                         sect_contribution=CAST(COALESCE(sect_contribution,0) AS REAL)+CAST(%s AS REAL)
-                    WHERE user_id=%s AND sect_id=%s AND {cost_column} >= %s
+                    WHERE user_id=%s AND sect_id=%s AND xiuxian_int_cmp({cost_column},%s)>=0
                     """,
                     (cost, exp_reward, sect_reward, user_id, sect_id, cost),
                 )
@@ -1443,7 +1444,7 @@ class SectMembershipService:
                 if user[0] is None or int(user[0]) != sect_id:
                     conn.rollback()
                     return result("sect_changed")
-                if int(user[1] or 0) < stone:
+                if as_int_like(user[1] or 0) < stone:
                     conn.rollback()
                     return result("stone_insufficient")
                 if conn.execute(
@@ -1457,7 +1458,7 @@ class SectMembershipService:
                     UPDATE user_xiuxian
                     SET stone=CAST(COALESCE(stone,0) AS REAL)-CAST(%s AS REAL),
                         sect_contribution=CAST(COALESCE(sect_contribution,0) AS REAL)+CAST(%s AS REAL)
-                    WHERE user_id=%s AND sect_id=%s AND stone >= %s
+                    WHERE user_id=%s AND sect_id=%s AND xiuxian_int_cmp(stone,%s)>=0
                     """,
                     (stone, stone, user_id, sect_id, stone),
                 )
@@ -1557,7 +1558,7 @@ class SectMembershipService:
                     outcome = "no_room"
                 elif room_level not in normalized_costs:
                     outcome = "level_unsupported"
-                elif int(sect[3]) < materials_cost:
+                elif as_int_like(sect[3]) < materials_cost:
                     outcome = "insufficient"
                 else:
                     outcome = "charged"
@@ -1645,7 +1646,7 @@ class SectMembershipService:
                     conn.rollback()
                     return SectScheduledMaterialGrant("sect_inactive", grant_key, sect_id)
 
-                materials = max(int(sect[0] or 0), 0) * multiplier
+                materials = max(as_int_like(sect[0] or 0), 0) * multiplier
                 power_row = conn.execute(
                     "SELECT COALESCE(SUM(power), 0) FROM user_xiuxian WHERE sect_id=%s",
                     (sect_id,),
@@ -1874,7 +1875,7 @@ class SectMembershipService:
                     return SectFairylandUpgrade(
                         "level_changed", actor_id, sect_id, current_level, next_level
                     )
-                if int(sect[2] or 0) < stone_cost:
+                if as_int_like(sect[2] or 0) < stone_cost:
                     conn.rollback()
                     return SectFairylandUpgrade(
                         "stone_insufficient",
@@ -1885,7 +1886,7 @@ class SectMembershipService:
                         stone_cost,
                         materials_cost,
                     )
-                if int(sect[3] or 0) < materials_cost:
+                if as_int_like(sect[3] or 0) < materials_cost:
                     conn.rollback()
                     return SectFairylandUpgrade(
                         "materials_insufficient",
@@ -1902,8 +1903,8 @@ class SectMembershipService:
                     "sect_materials=CAST(COALESCE(sect_materials,0) AS REAL)-CAST(%s AS REAL), sect_fairyland=%s "
                     "WHERE sect_id=%s AND sect_owner=%s "
                     "AND COALESCE(sect_fairyland, 0)=%s "
-                    "AND COALESCE(sect_used_stone, 0)>=%s "
-                    "AND COALESCE(sect_materials, 0)>=%s",
+                    "AND xiuxian_int_cmp(COALESCE(sect_used_stone, 0),%s)>=0 "
+                    "AND xiuxian_int_cmp(COALESCE(sect_materials, 0),%s)>=0",
                     (
                         stone_cost,
                         materials_cost,
@@ -2018,7 +2019,7 @@ class SectMembershipService:
                     return SectElixirRoomUpgrade(
                         "level_changed", actor_id, sect_id, current_level, next_level
                     )
-                if int(sect[2] or 0) < stone_cost:
+                if as_int_like(sect[2] or 0) < stone_cost:
                     conn.rollback()
                     return SectElixirRoomUpgrade(
                         "stone_insufficient",
@@ -2029,7 +2030,7 @@ class SectMembershipService:
                         stone_cost,
                         scale_cost,
                     )
-                if int(sect[3] or 0) < scale_cost:
+                if as_int_like(sect[3] or 0) < scale_cost:
                     conn.rollback()
                     return SectElixirRoomUpgrade(
                         "scale_insufficient",
@@ -2046,8 +2047,8 @@ class SectMembershipService:
                     "sect_scale=CAST(COALESCE(sect_scale,0) AS REAL)-CAST(%s AS REAL), elixir_room_level=%s "
                     "WHERE sect_id=%s AND sect_owner=%s "
                     "AND COALESCE(elixir_room_level, 0)=%s "
-                    "AND COALESCE(sect_used_stone, 0)>=%s "
-                    "AND COALESCE(sect_scale, 0)>=%s",
+                    "AND xiuxian_int_cmp(COALESCE(sect_used_stone, 0),%s)>=0 "
+                    "AND xiuxian_int_cmp(COALESCE(sect_scale, 0),%s)>=0",
                     (
                         stone_cost,
                         scale_cost,
@@ -2181,10 +2182,10 @@ class SectMembershipService:
                 if current_value != expected_value:
                     conn.rollback()
                     return result("buff_changed", current_value, current_value)
-                if int(sect[1] or 0) < stone_cost:
+                if as_int_like(sect[1] or 0) < stone_cost:
                     conn.rollback()
                     return result("stone_insufficient")
-                if int(sect[2] or 0) < materials_cost:
+                if as_int_like(sect[2] or 0) < materials_cost:
                     conn.rollback()
                     return result("materials_insufficient")
 
@@ -2193,8 +2194,8 @@ class SectMembershipService:
                     f"sect_materials=CAST(COALESCE(sect_materials,0) AS REAL)-CAST(%s AS REAL), {column}=%s "
                     "WHERE sect_id=%s AND sect_owner=%s "
                     f"AND COALESCE({column}, '')=%s "
-                    "AND COALESCE(sect_used_stone, 0)>=%s "
-                    "AND COALESCE(sect_materials, 0)>=%s",
+                    "AND xiuxian_int_cmp(COALESCE(sect_used_stone, 0),%s)>=0 "
+                    "AND xiuxian_int_cmp(COALESCE(sect_materials, 0),%s)>=0",
                     (
                         stone_cost,
                         materials_cost,
@@ -2310,7 +2311,7 @@ class SectMembershipService:
                 if current_level != expected_level:
                     conn.rollback()
                     return result("level_changed", current_level, current_level)
-                if int(user[1] or 0) < stone_cost:
+                if as_int_like(user[1] or 0) < stone_cost:
                     conn.rollback()
                     return result("stone_insufficient", current_level, next_level)
 
@@ -2320,7 +2321,7 @@ class SectMembershipService:
                 if sect is None:
                     conn.rollback()
                     return result("sect_missing", current_level, next_level)
-                if int(sect[0] or 0) < materials_cost:
+                if as_int_like(sect[0] or 0) < materials_cost:
                     conn.rollback()
                     return result("materials_insufficient", current_level, next_level)
 

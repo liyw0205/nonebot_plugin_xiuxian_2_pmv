@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from ...core.numeric import as_int_like
 import json
 from pathlib import Path
 from typing import Any
@@ -47,14 +48,14 @@ class BankWithdrawalApplication:
                 return {"status": status, "reason": "bank_account_missing", "operation_id": operation_id}
             if expected_saved_stone is not None:
                 for actual, wanted, reason in (
-                    (int(account["saved_stone"]), int(expected_saved_stone), "bank_saved_changed"),
+                    (as_int_like(account["saved_stone"]), int(expected_saved_stone), "bank_saved_changed"),
                     (str(account["updated_at"]), str(expected_saved_at or ""), "bank_saved_at_changed"),
                     (str(account["bank_level"]), str(bank_level), "bank_level_changed"),
                 ):
                     if actual != wanted:
                         return {"status": "state_changed", "reason": reason, "operation_id": operation_id}
             try:
-                decision = decide_withdraw(wallet=int(wallet["stone"] or 0), saved=int(account["saved_stone"]), amount=int(amount), interest=int(interest))
+                decision = decide_withdraw(wallet=as_int_like(wallet["stone"] or 0), saved=as_int_like(account["saved_stone"]), amount=int(amount), interest=int(interest))
             except ValueError as exc:
                 if str(exc) == "saved_stone_insufficient":
                     return {"status": str(exc), "operation_id": operation_id}

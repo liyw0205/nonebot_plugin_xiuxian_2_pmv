@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from ...core.numeric import as_int_like
 import json
 import random
 from typing import Any, Callable, Mapping
@@ -190,8 +191,8 @@ class IllusionRepository:
         return IllusionChoiceResult(
             status=status,
             choice_count=int(count),
-            stone=int(data.get("stone") or 0),
-            exp=int(data.get("exp") or 0),
+            stone=as_int_like(data.get("stone") or 0),
+            exp=as_int_like(data.get("exp") or 0),
             item_id=int(data.get("item_id") or 0),
             item_name=str(data.get("item_name") or ""),
             item_type=str(data.get("item_type") or ""),

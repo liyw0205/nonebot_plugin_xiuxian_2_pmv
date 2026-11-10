@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from ...core.numeric import as_int_like
 from pathlib import Path
 from datetime import date
 from typing import Any, Protocol
@@ -110,8 +111,8 @@ class ArenaChallengePurchaseSqlRepository(LegacyArenaRepository):
         win_points, lose_points, no_match_points = map(int, (win_points, lose_points, no_match_points))
         challenger = {key: (str(expected_challenger_arena.get(key, "") or "") if key in {"rank", "last_challenge_time"} else int(expected_challenger_arena.get(key, 0) or 0)) for key in ("score", "total_wins", "total_losses", "win_streak", "max_win_streak", "rank", "daily_challenges_used", "daily_extra_challenges", "last_challenge_time")}
         opponent = None if expected_opponent_arena is None else {key: (str(expected_opponent_arena.get(key, "") or "") if key == "rank" else int(expected_opponent_arena.get(key, 0) or 0)) for key in ("score", "total_wins", "total_losses", "win_streak", "max_win_streak", "rank")}
-        challenger_player = {"hp": int(expected_challenger_player.get("hp", 0) or 0), "mp": int(expected_challenger_player.get("mp", 0) or 0), "user_stamina": int(expected_challenger_player.get("user_stamina", 0) or 0)}
-        opponent_player = None if expected_opponent_player is None else {"hp": int(expected_opponent_player.get("hp", 0) or 0), "mp": int(expected_opponent_player.get("mp", 0) or 0)}
+        challenger_player = {"hp": as_int_like(expected_challenger_player.get("hp", 0) or 0), "mp": as_int_like(expected_challenger_player.get("mp", 0) or 0), "user_stamina": int(expected_challenger_player.get("user_stamina", 0) or 0)}
+        opponent_player = None if expected_opponent_player is None else {"hp": as_int_like(expected_opponent_player.get("hp", 0) or 0), "mp": as_int_like(expected_opponent_player.get("mp", 0) or 0)}
         final_challenger_hp, final_challenger_mp = max(1, int(final_challenger_hp)), max(1, int(final_challenger_mp))
         final_opponent_hp = None if final_opponent_hp is None else max(1, int(final_opponent_hp))
         final_opponent_mp = None if final_opponent_mp is None else max(1, int(final_opponent_mp))
@@ -161,10 +162,10 @@ class ArenaChallengePurchaseSqlRepository(LegacyArenaRepository):
             if opponent_new is not None:
                 opponent_update = uow.execute("UPDATE player_data.arena SET score=?,total_wins=?,total_losses=?,win_streak=?,max_win_streak=?,rank=? WHERE user_id=?", tuple(opponent_new[key] for key in ("score", "total_wins", "total_losses", "win_streak", "max_win_streak", "rank")) + (opponent_id,))
                 if opponent_update.rowcount != 1: raise RuntimeError("opponent arena state changed")
-            stamina = challenger_player["user_stamina"] - stamina_cost; challenger_vitals_update = uow.execute("UPDATE user_xiuxian SET hp=?,mp=?,user_stamina=? WHERE user_id=? AND COALESCE(hp,0)=? AND COALESCE(mp,0)=? AND COALESCE(user_stamina,0)=?", (final_challenger_hp, final_challenger_mp, stamina, challenger_id, challenger_player["hp"], challenger_player["mp"], challenger_player["user_stamina"]))
+            stamina = challenger_player["user_stamina"] - stamina_cost; challenger_vitals_update = uow.execute("UPDATE user_xiuxian SET hp=?,mp=?,user_stamina=? WHERE user_id=? AND xiuxian_int_cmp(COALESCE(hp,0),?)=0 AND xiuxian_int_cmp(COALESCE(mp,0),?)=0 AND COALESCE(user_stamina,0)=?", (final_challenger_hp, final_challenger_mp, stamina, challenger_id, challenger_player["hp"], challenger_player["mp"], challenger_player["user_stamina"]))
             if challenger_vitals_update.rowcount != 1: raise RuntimeError("challenger player state changed")
             if opponent_player is not None:
-                opponent_vitals_update = uow.execute("UPDATE user_xiuxian SET hp=?,mp=? WHERE user_id=? AND COALESCE(hp,0)=? AND COALESCE(mp,0)=?", (final_opponent_hp, final_opponent_mp, opponent_id, opponent_player["hp"], opponent_player["mp"]))
+                opponent_vitals_update = uow.execute("UPDATE user_xiuxian SET hp=?,mp=? WHERE user_id=? AND xiuxian_int_cmp(COALESCE(hp,0),?)=0 AND xiuxian_int_cmp(COALESCE(mp,0),?)=0", (final_opponent_hp, final_opponent_mp, opponent_id, opponent_player["hp"], opponent_player["mp"]))
                 if opponent_vitals_update.rowcount != 1: raise RuntimeError("opponent player state changed")
             final = result("applied", challenger_new["score"], challenger_new["rank"], None if opponent_new is None else opponent_new["score"], challenger_new["daily_challenges_used"], stamina); return self._record_settlement(uow, operation_id, challenger_id, payload, final)
 
@@ -181,7 +182,7 @@ class ArenaChallengePurchaseSqlRepository(LegacyArenaRepository):
                 if key in {"daily_challenges_used", "daily_extra_challenges"}: return "challenge_count_changed"
                 return "record_changed"
         for key, value in vitals.items():
-            if int(player[key] or 0) != value:
+            if as_int_like(player[key]) != value:
                 return {"hp": "hp_changed", "mp": "mp_changed", "user_stamina": "stamina_changed"}[key]
         return ""
 
@@ -347,7 +348,7 @@ class ArenaChallengePurchaseSqlRepository(LegacyArenaRepository):
             if old:
                 if str(old["payload"]) != payload:
                     return {**self._result("state_changed", 0, 0, expected_stone, expected_bought, expected_extra), "reason": "operation_conflict"}
-                return self._result("duplicate", int(old["amount"]), int(old["cost"]), int(old["stone"]), int(old["bought"]), int(old["extra"]))
+                return self._result("duplicate", int(old["amount"]), int(old["cost"]), as_int_like(old["stone"]), int(old["bought"]), int(old["extra"]))
             user = uow.query_one("SELECT COALESCE(stone,0) AS stone FROM user_xiuxian WHERE user_id=?", (user_id,))
             arena = uow.query_one("SELECT COALESCE(daily_challenge_buys,0) AS bought,COALESCE(daily_extra_challenges,0) AS extra,last_buy_date FROM player_data.arena WHERE user_id=?", (user_id,))
             if user is None or arena is None:
@@ -358,15 +359,15 @@ class ArenaChallengePurchaseSqlRepository(LegacyArenaRepository):
             if current_date != today_str:
                 bought, extra = 0, 0
                 expected_bought, expected_extra, expected_last_buy_date = 0, 0, today_str
-            if (int(user["stone"]), bought, extra, current_date if current_date == today_str else today_str) != (expected_stone, expected_bought, expected_extra, str(expected_last_buy_date)):
-                return self._record(uow, operation_id, payload, self._result("state_changed", 0, 0, expected_stone, expected_bought, expected_extra, reason="stone_changed" if int(user["stone"]) != expected_stone else "buy_count_changed"))
+            if (as_int_like(user["stone"]), bought, extra, current_date if current_date == today_str else today_str) != (expected_stone, expected_bought, expected_extra, str(expected_last_buy_date)):
+                return self._record(uow, operation_id, payload, self._result("state_changed", 0, 0, expected_stone, expected_bought, expected_extra, reason="stone_changed" if as_int_like(user["stone"]) != expected_stone else "buy_count_changed"))
             real_amount = min(amount, max(0, daily_limit - expected_bought)); cost = real_amount * unit_cost
             if real_amount == 0:
                 return self._record(uow, operation_id, payload, self._result("limit_reached", 0, 0, expected_stone, expected_bought, expected_extra))
             if expected_stone < cost:
                 return self._record(uow, operation_id, payload, self._result("stone_insufficient", 0, 0, expected_stone, expected_bought, expected_extra))
             new_stone, new_bought, new_extra = expected_stone - cost, expected_bought + real_amount, expected_extra + real_amount
-            uow.execute("UPDATE user_xiuxian SET stone=? WHERE user_id=? AND COALESCE(stone,0)=?", (new_stone, user_id, expected_stone))
+            uow.execute("UPDATE user_xiuxian SET stone=? WHERE user_id=? AND xiuxian_int_cmp(COALESCE(stone,0),?)=0", (new_stone, user_id, expected_stone))
             uow.execute("UPDATE player_data.arena SET daily_challenge_buys=?,daily_extra_challenges=?,last_buy_date=? WHERE user_id=?", (new_bought, new_extra, today_str, user_id))
             return self._record(uow, operation_id, payload, self._result("applied", real_amount, cost, new_stone, new_bought, new_extra))
 

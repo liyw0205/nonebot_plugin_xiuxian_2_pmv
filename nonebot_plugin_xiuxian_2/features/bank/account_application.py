@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from ...core.numeric import as_int_like
 import json
 from pathlib import Path
 from typing import Any, Mapping
@@ -51,15 +52,15 @@ class BankDepositApplication:
                 if snapshot is None:
                     return {"status": "state_changed", "reason": "bank_account_missing", "operation_id": operation_id}
                 for actual, wanted, reason in (
-                    (int(snapshot.get("saved_stone", 0)), int(expected_saved_stone), "bank_saved_changed"),
+                    (as_int_like(snapshot.get("saved_stone", 0)), int(expected_saved_stone), "bank_saved_changed"),
                     (str(snapshot.get("updated_at", "")), str(expected_saved_at or ""), "bank_saved_at_changed"),
                     (str(snapshot.get("bank_level", "")), str(bank_level), "bank_level_changed"),
                 ):
                     if actual != wanted:
                         return {"status": "state_changed", "reason": reason, "operation_id": operation_id}
-            saved = 0 if snapshot is None else int(snapshot["saved_stone"])
+            saved = 0 if snapshot is None else as_int_like(snapshot["saved_stone"])
             try:
-                decision = decide_deposit(wallet=int(wallet["stone"] or 0), saved=saved, amount=int(amount), interest=int(interest), limit=int(limit))
+                decision = decide_deposit(wallet=as_int_like(wallet["stone"] or 0), saved=saved, amount=int(amount), interest=int(interest), limit=int(limit))
             except ValueError as exc:
                 if str(exc) in {"stone_insufficient", "limit_exceeded"}:
                     return {"status": str(exc), "operation_id": operation_id}

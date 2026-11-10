@@ -177,7 +177,7 @@ class DongfuExpansionSqlRepository:
                     ).rowcount != 1:
                         raise _ExpansionConflict("deed_changed")
                     if uow.execute(
-                        "UPDATE user_xiuxian SET stone=stone-? WHERE user_id=? AND stone>=?",
+                        "UPDATE user_xiuxian SET stone=stone-? WHERE user_id=? AND xiuxian_int_cmp(stone,?)>=0",
                         (stone_cost, user_id, stone_cost),
                     ).rowcount != 1:
                         raise _ExpansionConflict("stone_changed")

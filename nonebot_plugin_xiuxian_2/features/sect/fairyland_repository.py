@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from ...core.numeric import as_int_like
 from pathlib import Path
 from typing import Any
 
@@ -105,9 +106,9 @@ class SectFairylandSqlRepository:
                 return {"status": "not_owner", "reason": "sect_owner_changed" if str(sect["sect_owner"]) != actor_id else "sect_position_changed", **result}
             if current_level != expected_level or next_level != current_level + 1:
                 return {"status": "level_changed", "reason": "sect_fairyland_level_changed" if current_level != expected_level else "sect_upgrade_invalid", **result}
-            if int(sect["stones"]) < stone_cost:
+            if as_int_like(sect["stones"]) < stone_cost:
                 return {"status": "stone_insufficient", "reason": "sect_stone_insufficient", **result}
-            if int(sect["materials"]) < materials_cost:
+            if as_int_like(sect["materials"]) < materials_cost:
                 return {"status": "materials_insufficient", **result}
 
             changed = uow.execute(
@@ -115,7 +116,7 @@ class SectFairylandSqlRepository:
                 "sect_used_stone=CAST(COALESCE(sect_used_stone,0) AS REAL)-CAST(? AS REAL),"
                 "sect_materials=CAST(COALESCE(sect_materials,0) AS REAL)-CAST(? AS REAL) "
                 "WHERE sect_id=? AND sect_owner=? AND COALESCE(sect_fairyland,0)=? "
-                "AND COALESCE(sect_used_stone,0)>=? AND COALESCE(sect_materials,0)>=?",
+                "AND xiuxian_int_cmp(COALESCE(sect_used_stone,0),?)>=0 AND xiuxian_int_cmp(COALESCE(sect_materials,0),?)>=0",
                 (
                     next_level,
                     stone_cost,

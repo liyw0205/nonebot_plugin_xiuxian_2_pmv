@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from ...core.numeric import as_int_like
 from ...core.snapshot_reason import first_difference
 
 import json
@@ -54,7 +55,7 @@ class BegRepository:
         )
         if row is None:
             return None
-        return BegDailyRewardResult("duplicate", int(row["stone_reward"]), int(row["stone"]))
+        return BegDailyRewardResult("duplicate", int(row["stone_reward"]), as_int_like(row["stone"]))
 
     def novice_result(self, uow: DatabaseUnitOfWork, operation_id: str) -> NoviceGiftClaimResult | None:
         row = uow.query_one(
@@ -63,7 +64,7 @@ class BegRepository:
         )
         if row is None:
             return None
-        return NoviceGiftClaimResult("duplicate", int(row["stone"]))
+        return NoviceGiftClaimResult("duplicate", as_int_like(row["stone"]))
 
     def settle_daily(
         self,
@@ -102,7 +103,7 @@ class BegRepository:
         if previous is not None:
             if str(previous["payload"]) != payload:
                 return BegDailyRewardResult("operation_conflict")
-            return BegDailyRewardResult("duplicate", int(previous["stone_reward"]), int(previous["stone"]))
+            return BegDailyRewardResult("duplicate", int(previous["stone_reward"]), as_int_like(previous["stone"]))
 
         user = uow.query_one(
             "SELECT COALESCE(stone,0) AS stone,create_time,COALESCE(is_beg,0) AS is_beg,"
@@ -112,7 +113,7 @@ class BegRepository:
         if user is None:
             return BegDailyRewardResult("user_missing")
         actual_state = (
-            int(user["stone"]),
+            as_int_like(user["stone"]),
             canonical_datetime(user["create_time"]),
             normalize_optional(user["sect_id"]),
             str(user["root_type"]),
@@ -135,7 +136,7 @@ class BegRepository:
         final_stone = expected_stone + stone_reward
         changed = uow.execute(
             "UPDATE user_xiuxian SET stone = ?,is_beg = 1 "
-            "WHERE user_id = ? AND COALESCE(stone,0) = ? AND COALESCE(is_beg,0) = 0",
+            "WHERE user_id = ? AND xiuxian_int_cmp(COALESCE(stone,0),?)=0 AND COALESCE(is_beg,0) = 0",
             (final_stone, user_id, expected_stone),
         )
         if changed.rowcount < 1:
@@ -176,7 +177,7 @@ class BegRepository:
         )
         if previous is not None:
             status = "duplicate" if str(previous["payload"]) == payload else "operation_conflict"
-            return NoviceGiftClaimResult(status, int(previous["stone"]))
+            return NoviceGiftClaimResult(status, as_int_like(previous["stone"]))
 
         user = uow.query_one(
             "SELECT create_time,COALESCE(is_novice,0) AS is_novice FROM user_xiuxian WHERE user_id = ?",

@@ -1613,7 +1613,7 @@ class BossRewardService:
                     if (int(item[0]) if item else 0) + item_quantity > max_goods_num:
                         conn.rollback(); return rejected("inventory_full", user[0])
                 total_exp, wallet = expected_exp + exp, int(user[0]) + stone
-                if conn.execute("UPDATE user_xiuxian SET stone=%s,exp=%s WHERE user_id=%s AND COALESCE(stone,0)=%s AND COALESCE(exp,0)=%s",
+                if conn.execute("UPDATE user_xiuxian SET stone=%s,exp=%s WHERE user_id=%s AND xiuxian_int_cmp(COALESCE(stone,0),%s)=0 AND xiuxian_int_cmp(COALESCE(exp,0),%s)=0",
                                 (wallet, total_exp, user_id, int(user[0]), expected_exp)).rowcount != 1:
                     conn.rollback(); return rejected("state_changed", user[0])
                 daily_stone, daily_integral, total_integral = (expected_daily_stone + stone,

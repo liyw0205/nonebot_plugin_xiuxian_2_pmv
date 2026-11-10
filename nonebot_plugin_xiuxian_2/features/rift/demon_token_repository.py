@@ -1,4 +1,6 @@
 from __future__ import annotations
+
+from ...core.numeric import as_int_like
 from dataclasses import replace as _reason_replace
 from ...core.snapshot_reason import first_difference
 
@@ -94,8 +96,8 @@ class RiftDemonTokenBattleSqlRepository:
         operation_id, user_id, item_id = str(operation_id).strip(), str(user_id), int(item_id)
         expected_count, max_goods_num = int(expected_explore_count), int(max_goods_num)
         rift_snapshot = json.dumps(expected_rift, ensure_ascii=False, sort_keys=True)
-        expected = tuple(int(expected_user.get(key, 0)) for key in ("stone", "exp", "hp", "mp"))
-        delta = tuple(int(outcome.get("delta", {}).get(key, 0)) for key in ("stone", "exp", "hp", "mp"))
+        expected = tuple(as_int_like(expected_user.get(key)) for key in ("stone", "exp", "hp", "mp"))
+        delta = tuple(as_int_like(outcome.get("delta", {}).get(key)) for key in ("stone", "exp", "hp", "mp"))
         rewards = tuple(
             (int(item["id"]), str(item["name"]), str(item["type"]), int(item.get("amount", 1)))
             for item in outcome.get("items", ())
@@ -166,8 +168,8 @@ class RiftDemonTokenBattleSqlRepository:
             )
             if entry is None or str(entry["status"]) != "active" or cd is None or int(cd["type"]) != 3:
                 return RiftDemonTokenBattleResult("not_active")
-            if json.loads(str(entry["rift_data"])) != json.loads(rift_snapshot) or user is None or tuple(map(int, user.values())) != expected:
-                return _reason_replace(RiftDemonTokenBattleResult("state_changed"), reason="rift_snapshot_changed" if json.loads(str(entry["rift_data"])) != json.loads(rift_snapshot) else "user_missing" if user is None else first_difference(tuple(map(int,user.values())), expected, ("stone_changed","exp_changed","hp_changed","mp_changed")), subject="")
+            if json.loads(str(entry["rift_data"])) != json.loads(rift_snapshot) or user is None or tuple(map(as_int_like, user.values())) != expected:
+                return _reason_replace(RiftDemonTokenBattleResult("state_changed"), reason="rift_snapshot_changed" if json.loads(str(entry["rift_data"])) != json.loads(rift_snapshot) else "user_missing" if user is None else first_difference(tuple(map(as_int_like,user.values())), expected, ("stone_changed","exp_changed","hp_changed","mp_changed")), subject="")
 
             item = uow.query_one(
                 "SELECT COALESCE(goods_num,0) AS goods_num FROM back WHERE user_id=? AND goods_id=?",

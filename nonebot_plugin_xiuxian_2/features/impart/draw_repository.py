@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from ...core.numeric import as_int_like
 import json
 from collections import Counter
 from dataclasses import dataclass
@@ -184,7 +185,7 @@ class ImpartDrawSqlRepository:
                 return ImpartDrawResult("schema_missing")
             if user is None or state is None:
                 return ImpartDrawResult("schema_missing", reason="user_missing" if user is None else "impart_missing")
-            if int(user["stone"]) != expected_stone:
+            if as_int_like(user["stone"]) != expected_stone:
                 return ImpartDrawResult("state_changed", reason="stone_changed")
             if int(state["wish"]) != expected_wish:
                 return ImpartDrawResult("state_changed", reason="wish_changed")
@@ -205,7 +206,7 @@ class ImpartDrawSqlRepository:
 
             charged = uow.execute(
                 "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)-? "
-                "WHERE user_id=? AND CAST(COALESCE(stone,0) AS REAL)>=?",
+                "WHERE user_id=? AND xiuxian_int_cmp(COALESCE(stone,0),?)>=0",
                 (cost, user_id, cost),
             )
             if charged.rowcount != 1:
@@ -341,8 +342,8 @@ class ImpartCrystalDrawSqlRepository:
             return ImpartCrystalDrawResult(
                 "duplicate",
                 int(old["wish"]),
-                int(old["stone_num"]),
-                int(old["exp_day"]),
+                as_int_like(old["stone_num"]),
+                as_int_like(old["exp_day"]),
                 tuple(self._decode_cards(old["cards_json"])),
             )
 
@@ -392,8 +393,8 @@ class ImpartCrystalDrawSqlRepository:
                 if str(old["payload"]) != payload:
                     return ImpartCrystalDrawResult("operation_conflict")
                 return ImpartCrystalDrawResult(
-                    "duplicate", int(old["wish"]), int(old["stone_num"]),
-                    int(old["exp_day"]), tuple(self._decode_cards(old["cards_json"])),
+                    "duplicate", int(old["wish"]), as_int_like(old["stone_num"]),
+                    as_int_like(old["exp_day"]), tuple(self._decode_cards(old["cards_json"])),
                 )
             if not ImpartDrawSqlRepository._statistics_schema_ready(uow):
                 return ImpartCrystalDrawResult("schema_missing")
@@ -403,7 +404,7 @@ class ImpartCrystalDrawSqlRepository:
             )
             if state is None:
                 return ImpartCrystalDrawResult("user_missing")
-            if int(state["stone_num"]) != expected_stone:
+            if as_int_like(state["stone_num"]) != expected_stone:
                 return ImpartCrystalDrawResult("state_changed", reason="crystal_changed")
             if int(state["wish"]) != expected_wish:
                 return ImpartCrystalDrawResult("state_changed", reason="wish_changed")
@@ -418,10 +419,10 @@ class ImpartCrystalDrawSqlRepository:
             )
             duplicate_count = len(cards) - len(new_cards)
             stone_num = expected_stone - cost
-            exp_day = int(state["exp_day"] or 0) + exp_minutes
+            exp_day = as_int_like(state["exp_day"] or 0) + exp_minutes
             changed = uow.execute(
                 "UPDATE xiuxian_impart SET stone_num=?,wish=?,exp_day=? WHERE user_id=? "
-                "AND stone_num=? AND wish=?",
+                "AND xiuxian_int_cmp(stone_num,?)=0 AND wish=?",
                 (stone_num, new_wish, exp_day, user_id, expected_stone, expected_wish),
             )
             check_state_write(changed, state_count)

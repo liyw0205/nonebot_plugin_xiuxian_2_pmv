@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from ...core.numeric import as_int_like
 import json
 from dataclasses import dataclass
 from pathlib import Path
@@ -137,7 +138,7 @@ class DufangShareSqlRepository:
                     str(row["target_name"]),
                     recipient_status,
                     int(row["actual_amount"]),
-                    int(row["wallet_stone"]),
+                    as_int_like(row["wallet_stone"]),
                 )
             )
         return DufangShareSettlementResult(
@@ -274,7 +275,7 @@ class DufangShareSqlRepository:
                     )
                     continue
 
-                previous_stone = int(target["stone"])
+                previous_stone = as_int_like(target["stone"])
                 actual_amount = (
                     frozen_amount if frozen_type == "profit" else min(frozen_amount, previous_stone)
                 )

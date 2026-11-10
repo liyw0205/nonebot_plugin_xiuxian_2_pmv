@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from ...core.numeric import as_int_like
+
 import json
 from dataclasses import dataclass
 from pathlib import Path
@@ -143,7 +145,7 @@ class XianshiPlanListingSqlRepository:
             )
             if player is None or int(player["stamina"] or 0) < stamina_cost:
                 return self._result("stamina_insufficient", seller_id, item_count)
-            if float(player["stone"] or 0) < fee:
+            if as_int_like(player["stone"]) < fee:
                 return self._result("stone_insufficient", seller_id, item_count)
 
             required_stock: dict[int, int] = {}
@@ -172,7 +174,7 @@ class XianshiPlanListingSqlRepository:
                 raise RuntimeError("xianshi plan stamina snapshot changed")
             stone_update = uow.execute(
                 "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)-CAST(? AS REAL) "
-                "WHERE user_id=? AND COALESCE(stone,0)>=?",
+                "WHERE user_id=? AND xiuxian_int_cmp(COALESCE(stone,0),?)>=0",
                 (fee, seller_id, fee),
             )
             if stone_update.rowcount != 1:

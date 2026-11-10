@@ -558,7 +558,7 @@ class TradeRepository:
                         return result("stamina_insufficient")
                     stone_update = conn.execute(
                         "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)-CAST(%s AS REAL) "
-                        "WHERE user_id=%s AND COALESCE(stone, 0)>=%s",
+                        "WHERE user_id=%s AND xiuxian_int_cmp(COALESCE(stone, 0),%s)>=0",
                         (fee_charged, seller_id, fee_charged),
                     )
                     if stone_update.rowcount <= 0:
@@ -755,7 +755,7 @@ class TradeRepository:
                         return result("stamina_insufficient")
                     stone_update = conn.execute(
                         "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)-CAST(%s AS REAL) "
-                        "WHERE user_id=%s AND COALESCE(stone, 0)>=%s",
+                        "WHERE user_id=%s AND xiuxian_int_cmp(COALESCE(stone, 0),%s)>=0",
                         (fee_charged, seller_id, fee_charged),
                     )
                     if stone_update.rowcount <= 0:
@@ -1960,7 +1960,7 @@ class TradeRepository:
                 debit = bid_price - current_bids.get(bidder_id,0)
                 if debit <= 0:
                     conn.rollback(); return AuctionBid("bid_too_low",auction_id,bidder_id)
-                changed = conn.execute("UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)-CAST(%s AS REAL) WHERE user_id=%s AND stone>=%s", (debit,bidder_id,debit))
+                changed = conn.execute("UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)-CAST(%s AS REAL) WHERE user_id=%s AND xiuxian_int_cmp(stone,%s)>=0", (debit,bidder_id,debit))
                 if changed.rowcount != 1:
                     conn.rollback(); return AuctionBid("stone_insufficient",auction_id,bidder_id)
                 refunded_bidder, refunded_amount = "",0

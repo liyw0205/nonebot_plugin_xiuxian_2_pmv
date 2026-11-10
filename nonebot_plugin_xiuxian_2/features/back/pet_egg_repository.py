@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from ...core.numeric import as_int_like
 import json
 import sqlite3
 from dataclasses import dataclass
@@ -177,7 +178,7 @@ class PetEggUseSqlRepository:
                             (
                                 f"{user_id}:{uid}", user_id, uid, int(is_active),
                                 str(pet.get("pet_id", "")), int(pet.get("stars", 1)),
-                                int(pet.get("exp", 0)), int(pet.get("total_exp", 0)),
+                                as_int_like(pet.get("exp", 0)), as_int_like(pet.get("total_exp", 0)),
                                 str(skill.get("skill_id", "") or "") or None, now, now,
                             ),
                         )

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from ..core.numeric import as_int_like
 from contextlib import closing
 from dataclasses import dataclass
 from pathlib import Path
@@ -77,7 +78,7 @@ class SectMainBuffLearnService:
                     ):
                         return SectMainBuffLearnResult("state_changed", user_id, sect_id, buff_id)
                     return SectMainBuffLearnResult(
-                        "duplicate", user_id, sect_id, buff_id, int(previous[3]), int(previous[4])
+                        "duplicate", user_id, sect_id, buff_id, as_int_like(previous[3]), as_int_like(previous[4])
                     )
 
                 user = conn.execute(
@@ -98,7 +99,7 @@ class SectMainBuffLearnService:
                 if sect is None or str(sect[0]) != str(expected_catalog):
                     conn.rollback()
                     return SectMainBuffLearnResult("catalog_changed", user_id, sect_id, buff_id)
-                materials = int(sect[1])
+                materials = as_int_like(sect[1])
                 if materials < materials_cost:
                     conn.rollback()
                     return SectMainBuffLearnResult(
@@ -117,7 +118,7 @@ class SectMainBuffLearnService:
 
                 materials_left = materials - materials_cost
                 sect_update = conn.execute(
-                    "UPDATE sects SET sect_materials=%s WHERE sect_id=%s AND sect_materials=%s AND mainbuff=%s",
+                    "UPDATE sects SET sect_materials=%s WHERE sect_id=%s AND xiuxian_int_cmp(sect_materials,%s)=0 AND mainbuff=%s",
                     (materials_left, sect_id, materials, str(expected_catalog)),
                 )
                 buff_update = conn.execute(

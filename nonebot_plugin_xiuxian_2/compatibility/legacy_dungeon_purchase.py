@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from ..core.numeric import as_int_like
 import json
 from contextlib import closing
 from dataclasses import dataclass
@@ -286,7 +287,7 @@ class DungeonPurchaseService:
                     self._record(conn, operation_id, payload, result)
                     conn.commit()
                     return result
-                stone = int(user[0])
+                stone = as_int_like(user[0])
                 if stone != expected_stone:
                     result = rejected("state_changed", stone)
                     self._record(conn, operation_id, payload, result)
@@ -322,7 +323,7 @@ class DungeonPurchaseService:
                 new_bound = bound + (quantity if bind_flag else 0)
                 changed = conn.execute(
                     "UPDATE user_xiuxian SET stone=%s "
-                    "WHERE user_id=%s AND COALESCE(stone,0)=%s",
+                    "WHERE user_id=%s AND xiuxian_int_cmp(COALESCE(stone,0),%s)=0",
                     (new_stone, user_id, expected_stone),
                 )
                 if changed.rowcount != 1:

@@ -1,4 +1,5 @@
 from __future__ import annotations
+from ...core.numeric import as_int_like
 from dataclasses import replace as _reason_replace
 
 import json
@@ -112,7 +113,7 @@ class XiangyuanSqlRepository:
                 "VALUES (?,?,?,?,?,?,?,?,?)",
                 (
                     group_id, gift_id, str(gift.get("giver_id", "")), str(gift.get("giver_name", "")),
-                    int(gift.get("stone_amount", 0)), int(gift.get("remaining_stone", 0)),
+                    int(gift.get("stone_amount", 0)), as_int_like(gift.get("remaining_stone", 0)),
                     int(gift.get("receiver_count", 0)), int(gift.get("received", 0)),
                     str(gift.get("create_time", "")),
                 ),

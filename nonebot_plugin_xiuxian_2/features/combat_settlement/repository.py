@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from ...core.numeric import as_int_like
 from pathlib import Path
 import json
 from datetime import datetime
@@ -40,7 +41,7 @@ class CombatSettlementSqlRepository:
             if previous:
                 if str(previous["payload"]) != payload:
                     return {"status": "state_changed", "reason": "operation_conflict", "stone": 0, "rewards": ()}
-                return {"status": "duplicate", "stone": int(previous["stone"]), "rewards": tuple(tuple(map(int, value)) for value in json.loads(str(previous["rewards"]))) }
+                return {"status": "duplicate", "stone": as_int_like(previous["stone"]), "rewards": tuple(tuple(map(int, value)) for value in json.loads(str(previous["rewards"]))) }
             if uow.query_one("SELECT 1 FROM user_xiuxian WHERE user_id=?", (user_id,)) is None:
                 return {"status": "user_missing", "stone": 0, "rewards": ()}
             daily = uow.query_one("SELECT date,combat_count,resource_total_count FROM player_data.map_daily_limit WHERE user_id=?", (user_id,))

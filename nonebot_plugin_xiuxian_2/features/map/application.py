@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from ...core.numeric import as_int_like
 from collections.abc import Awaitable
 from dataclasses import replace
 import json
@@ -298,7 +299,7 @@ class MapApplication(LegacyApplication):
             )
         data = {
             "status": "applied",
-            "stone": int(receipt["stone"]),
+            "stone": as_int_like(receipt["stone"]),
             "rewards": tuple(
                 tuple(int(value) for value in row)
                 for row in json.loads(str(receipt["rewards"]))

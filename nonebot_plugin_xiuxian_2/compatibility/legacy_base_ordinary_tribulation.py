@@ -1,4 +1,5 @@
 from __future__ import annotations
+from ..core.numeric import as_int_like
 from dataclasses import replace as _reason_replace
 
 import json
@@ -113,11 +114,11 @@ class OrdinaryTribulationService:
                 ).fetchone()
                 # 无渡劫状态行时，与 get_user_tribulation_info 默认值一致（base=30）
                 actual_rate = int(state[0]) if state else 30
-                if user is None or str(user[0]) != expected_level or int(user[1] or 0) != expected_exp or actual_rate != expected_rate:
+                if user is None or str(user[0]) != expected_level or as_int_like(user[1] or 0) != expected_exp or actual_rate != expected_rate:
                     conn.rollback()
                     return _reason_replace(OrdinaryTribulationResult(
                         "state_changed", False, actual_rate, False, user_id, target_level
-                    ), reason="user_missing" if user is None else "level_changed" if str(user[0]) != expected_level else "exp_changed" if int(user[1] or 0) != expected_exp else "tribulation_rate_changed", subject="")
+                    ), reason="user_missing" if user is None else "level_changed" if str(user[0]) != expected_level else "exp_changed" if as_int_like(user[1] or 0) != expected_exp else "tribulation_rate_changed", subject="")
                 if consume_destiny_pill:
                     changed = conn.execute(
                         "UPDATE back SET goods_num=goods_num-1,bind_num=MIN(COALESCE(bind_num,0),goods_num-1),"
@@ -132,7 +133,7 @@ class OrdinaryTribulationService:
                         )
                 if successful:
                     changed = conn.execute(
-                        "UPDATE user_xiuxian SET level=%s,power=%s WHERE user_id=%s AND level=%s AND exp=%s",
+                        "UPDATE user_xiuxian SET level=%s,power=%s WHERE user_id=%s AND level=%s AND xiuxian_int_cmp(exp,%s)=0",
                         (target_level, power, user_id, expected_level, expected_exp),
                     )
                     conn.execute("DELETE FROM user_tribulation WHERE user_id=%s", (user_id,))

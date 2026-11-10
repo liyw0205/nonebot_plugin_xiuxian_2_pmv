@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from ...core.numeric import as_int_like
 import json
 from pathlib import Path
 from typing import Any
@@ -28,7 +29,7 @@ class AccessoryWashSqlRepository:
     @classmethod
     def _result(cls, status: str, result_json: str) -> AccessoryWashChange:
         value = json.loads(result_json)
-        return AccessoryWashChange(status, str(value.get("action", "wash")), str(value.get("user_id", "")), int(value.get("affected", 0)), int(value.get("stone_delta", 0)), value.get("accessory"))
+        return AccessoryWashChange(status, str(value.get("action", "wash")), str(value.get("user_id", "")), int(value.get("affected", 0)), as_int_like(value.get("stone_delta", 0)), value.get("accessory"))
 
     def replay(self, operation_id: str) -> AccessoryWashChange | None:
         with DatabaseUnitOfWork(self.game_database, read_only=True) as uow:

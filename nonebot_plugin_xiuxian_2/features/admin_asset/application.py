@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from ...core.numeric import as_int_like
 from ...core.player_reasons import reason_text
 
 from collections.abc import Callable, Mapping
@@ -83,7 +84,7 @@ class AdminAssetApplication:
                 }
                 result = StoneAdjustmentResult(
                     status, request.operation_id, request.user_id,
-                    int(values["previous_stone"] or 0), int(values["final_stone"] or 0), int(values["applied_delta"] or 0),
+                    as_int_like(values["previous_stone"] or 0), as_int_like(values["final_stone"] or 0), int(values["applied_delta"] or 0),
                 )
                 data = result.to_dict()
                 diagnostics = raw if isinstance(raw, dict) else vars(raw)

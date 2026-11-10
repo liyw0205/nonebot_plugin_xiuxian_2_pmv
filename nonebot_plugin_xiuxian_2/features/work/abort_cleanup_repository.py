@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from ...core.numeric import as_int_like
 import json
 from dataclasses import dataclass
 from pathlib import Path
@@ -140,7 +141,7 @@ class WorkAbortCleanupSqlRepository:
             if stored_offer is not None and stored_offer != expected_offer:
                 return WorkAbortCleanupResult("state_changed")
 
-            stone = int(user["stone"])
+            stone = as_int_like(user["stone"])
             if expected_stone is not None and stone != expected_stone:
                 return WorkAbortCleanupResult("state_changed")
             applied_penalty = min(penalty, stone) if reason == "active_abort" else 0
@@ -148,7 +149,7 @@ class WorkAbortCleanupSqlRepository:
             if applied_penalty:
                 changed = uow.execute(
                     "UPDATE user_xiuxian SET stone=? WHERE user_id=? "
-                    "AND CAST(COALESCE(stone,0) AS REAL)=CAST(? AS REAL)",
+                    "AND xiuxian_int_cmp(COALESCE(stone,0),?)=0",
                     (remaining, user_id, stone),
                 )
                 if changed.rowcount < 1:

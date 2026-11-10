@@ -1,4 +1,5 @@
 from __future__ import annotations
+from ..core.numeric import as_int_like
 from dataclasses import replace as _reason_replace
 
 import json
@@ -106,7 +107,7 @@ class DestinyTribulationService:
                 if (
                     user is None
                     or str(user[0]) != expected_level
-                    or int(user[1] or 0) != expected_exp
+                    or as_int_like(user[1] or 0) != expected_exp
                 ):
                     conn.rollback()
                     return _reason_replace(DestinyTribulationResult("state_changed", target_level, user_id), reason="user_missing" if user is None else "level_changed" if str(user[0]) != expected_level else "exp_changed", subject="")
@@ -123,7 +124,7 @@ class DestinyTribulationService:
                     return DestinyTribulationResult("item_missing", target_level, user_id)
                 changed = conn.execute(
                     "UPDATE user_xiuxian SET level=%s,power=%s "
-                    "WHERE user_id=%s AND level=%s AND exp=%s",
+                    "WHERE user_id=%s AND level=%s AND xiuxian_int_cmp(exp,%s)=0",
                     (target_level, power, user_id, expected_level, expected_exp),
                 )
                 if changed.rowcount != 1:

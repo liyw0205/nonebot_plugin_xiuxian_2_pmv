@@ -7,7 +7,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Mapping
 
-from ...core.numeric import adapt_sqlite_params
+from ...core.numeric import adapt_sqlite_params, register_numeric_functions
 
 
 class DatabaseUnitOfWork:
@@ -55,6 +55,7 @@ class DatabaseUnitOfWork:
             self.database.parent.mkdir(parents=True, exist_ok=True)
             self.connection = sqlite3.connect(self.database, timeout=self.timeout)
         try:
+            register_numeric_functions(self.connection)
             self.connection.row_factory = sqlite3.Row
             # busy_timeout must be in effect before any statement that could
             # block on another connection's lock.

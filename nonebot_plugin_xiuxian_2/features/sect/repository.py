@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from ...core.numeric import as_int_like
 from pathlib import Path
 from typing import Any, Mapping, Protocol
 
@@ -72,8 +73,8 @@ class SectRenameSqlRepository:
             if user is None or sect is None or int(user["sect_id"] or 0)!=sect_id:return {"status":"membership_changed", "reason":"user_missing" if user is None else "sect_missing" if sect is None else "sect_changed"}
             if int(user["sect_position"] or 0)==15:return {"status":"position_ineligible"}
             if int(sect["level"])<=0:return {"status":"room_missing"}
-            if int(user["contribution"])<contribution_required:return {"status":"contribution_insufficient"}
-            if int(sect["materials"])<materials_required:return {"status":"materials_insufficient"}
+            if as_int_like(user["contribution"])<contribution_required:return {"status":"contribution_insufficient"}
+            if as_int_like(sect["materials"])<materials_required:return {"status":"materials_insufficient"}
             if int(user["claimed"])==1:return {"status":"already_claimed"}
             for item_id,_,_,qty in normalized:
                 row=uow.query_one("SELECT COALESCE(goods_num,0) AS n FROM back WHERE user_id=? AND goods_id=?",(user_id,item_id))
@@ -93,14 +94,14 @@ class SectRenameSqlRepository:
             if int(user["sect_position"] or 0) in {int(v) for v in forbidden_positions}:return {"status":"position_forbidden","user_id":user_id,"sect_id":sect_id,"buff_id":buff_id}
             sect=uow.query_one("SELECT secbuff,COALESCE(sect_materials,0) AS materials FROM sects WHERE sect_id=?",(sect_id,));
             if sect is None or str(sect["secbuff"])!=str(expected_catalog):return {"status":"catalog_changed","user_id":user_id,"sect_id":sect_id,"buff_id":buff_id,"reason":"sect_missing" if sect is None else "sect_catalog_changed"}
-            materials=int(sect["materials"]);buff=uow.query_one("SELECT sec_buff FROM BuffInfo WHERE user_id=?",(user_id,))
+            materials=as_int_like(sect["materials"]);buff=uow.query_one("SELECT sec_buff FROM BuffInfo WHERE user_id=?",(user_id,))
             if materials<materials_cost:return {"status":"materials_insufficient","user_id":user_id,"sect_id":sect_id,"buff_id":buff_id,"materials_cost":materials_cost,"materials_left":materials}
             if buff is None:return {"status":"buff_missing","user_id":user_id,"sect_id":sect_id,"buff_id":buff_id}
             if int(buff["sec_buff"] or 0)==buff_id:return {"status":"already_learned","user_id":user_id,"sect_id":sect_id,"buff_id":buff_id}
             left=materials-materials_cost
             try:
                 with uow.savepoint("sect_secondary_apply"):
-                    sa=uow.execute("UPDATE sects SET sect_materials=? WHERE sect_id=? AND sect_materials=? AND secbuff=?",(left,sect_id,materials,str(expected_catalog)))
+                    sa=uow.execute("UPDATE sects SET sect_materials=? WHERE sect_id=? AND xiuxian_int_cmp(sect_materials,?)=0 AND secbuff=?",(left,sect_id,materials,str(expected_catalog)))
                     ba=uow.execute("UPDATE BuffInfo SET sec_buff=? WHERE user_id=? AND COALESCE(sec_buff,0)<>?",(buff_id,user_id,buff_id))
                     if sa.rowcount!=1 or ba.rowcount!=1:
                         raise _StateChanged
@@ -122,14 +123,14 @@ class SectRenameSqlRepository:
             if int(user["sect_position"] or 0) in {int(v) for v in forbidden_positions}:return {"status":"position_forbidden","user_id":user_id,"sect_id":sect_id,"buff_id":buff_id}
             sect=uow.query_one("SELECT mainbuff,COALESCE(sect_materials,0) AS materials FROM sects WHERE sect_id=?",(sect_id,));
             if sect is None or str(sect["mainbuff"])!=str(expected_catalog):return {"status":"catalog_changed","user_id":user_id,"sect_id":sect_id,"buff_id":buff_id,"reason":"sect_missing" if sect is None else "sect_catalog_changed"}
-            materials=int(sect["materials"]);buff=uow.query_one("SELECT main_buff FROM BuffInfo WHERE user_id=?",(user_id,))
+            materials=as_int_like(sect["materials"]);buff=uow.query_one("SELECT main_buff FROM BuffInfo WHERE user_id=?",(user_id,))
             if materials<materials_cost:return {"status":"materials_insufficient","user_id":user_id,"sect_id":sect_id,"buff_id":buff_id,"materials_cost":materials_cost,"materials_left":materials}
             if buff is None:return {"status":"buff_missing","user_id":user_id,"sect_id":sect_id,"buff_id":buff_id}
             if int(buff["main_buff"] or 0)==buff_id:return {"status":"already_learned","user_id":user_id,"sect_id":sect_id,"buff_id":buff_id}
             left=materials-materials_cost
             try:
                 with uow.savepoint("sect_mainbuff_apply"):
-                    sa=uow.execute("UPDATE sects SET sect_materials=? WHERE sect_id=? AND sect_materials=? AND mainbuff=?",(left,sect_id,materials,str(expected_catalog)))
+                    sa=uow.execute("UPDATE sects SET sect_materials=? WHERE sect_id=? AND xiuxian_int_cmp(sect_materials,?)=0 AND mainbuff=?",(left,sect_id,materials,str(expected_catalog)))
                     ba=uow.execute("UPDATE BuffInfo SET main_buff=? WHERE user_id=? AND COALESCE(main_buff,0)<>?",(buff_id,user_id,buff_id))
                     if sa.rowcount!=1 or ba.rowcount!=1:
                         raise _StateChanged
@@ -146,7 +147,7 @@ class SectRenameSqlRepository:
                 return {"status":"duplicate","quantity":old["quantity"],"cost":old["cost"],"contribution":old["contribution"],"materials":old["materials"],"purchased":old["purchased"]}
             user=uow.query_one("SELECT sect_id,COALESCE(sect_contribution,0) AS contribution FROM user_xiuxian WHERE user_id=?",(user_id,));sect=uow.query_one("SELECT COALESCE(sect_materials,0) AS materials,COALESCE(closed,0) AS closed FROM sects WHERE sect_id=?",(sect_id,))
             if user is None or sect is None or int(user["sect_id"] or 0)!=sect_id:return {"status":"membership_changed", "reason":"user_missing" if user is None else "sect_missing" if sect is None else "sect_changed"}
-            contribution,materials=int(float(user["contribution"] or 0)),int(float(sect["materials"] or 0))
+            contribution,materials=as_int_like(user["contribution"] or 0),as_int_like(sect["materials"] or 0)
             if int(sect["closed"]):return {"status":"sect_closed","contribution":contribution,"materials":materials}
             row=uow.query_one("SELECT quantity FROM sect_shop_weekly_purchases WHERE user_id=? AND week_key=? AND item_id=?",(user_id,week_key,item_id));purchased=int(row["quantity"]) if row else legacy_purchased
             if purchased+quantity>weekly_limit:return {"status":"limit_reached","contribution":contribution,"materials":materials,"purchased":purchased}
@@ -166,9 +167,9 @@ class SectRenameSqlRepository:
             user=uow.query_one("SELECT sect_id,stone FROM user_xiuxian WHERE user_id=?",(user_id,));sect=uow.query_one("SELECT sect_id FROM sects WHERE sect_id=?",(sect_id,))
             if user is None:return {"status":"user_missing","user_id":user_id,"sect_id":sect_id,"stone":stone,"materials":materials}
             if user["sect_id"] is None or int(user["sect_id"])!=sect_id:return {"status":"sect_changed","user_id":user_id,"sect_id":sect_id,"stone":stone,"materials":materials}
-            if int(user["stone"] or 0)<stone:return {"status":"stone_insufficient","user_id":user_id,"sect_id":sect_id,"stone":stone,"materials":materials}
+            if as_int_like(user["stone"] or 0)<stone:return {"status":"stone_insufficient","user_id":user_id,"sect_id":sect_id,"stone":stone,"materials":materials}
             if sect is None:return {"status":"sect_missing","user_id":user_id,"sect_id":sect_id,"stone":stone,"materials":materials}
-            updated=uow.execute("UPDATE user_xiuxian SET stone=stone-?,sect_contribution=COALESCE(sect_contribution,0)+? WHERE user_id=? AND sect_id=? AND stone>=?",(stone,stone,user_id,sect_id,stone));sect_updated=uow.execute("UPDATE sects SET sect_used_stone=COALESCE(sect_used_stone,0)+?,sect_scale=COALESCE(sect_scale,0)+?,sect_materials=COALESCE(sect_materials,0)+? WHERE sect_id=?",(stone,stone,materials,sect_id))
+            updated=uow.execute("UPDATE user_xiuxian SET stone=stone-?,sect_contribution=COALESCE(sect_contribution,0)+? WHERE user_id=? AND sect_id=? AND xiuxian_int_cmp(stone,?)>=0",(stone,stone,user_id,sect_id,stone));sect_updated=uow.execute("UPDATE sects SET sect_used_stone=COALESCE(sect_used_stone,0)+?,sect_scale=COALESCE(sect_scale,0)+?,sect_materials=COALESCE(sect_materials,0)+? WHERE sect_id=?",(stone,stone,materials,sect_id))
             if updated.rowcount!=1:return {"status":"user_changed","user_id":user_id,"sect_id":sect_id,"stone":stone,"materials":materials}
             if sect_updated.rowcount!=1:return {"status":"sect_changed","user_id":user_id,"sect_id":sect_id,"stone":stone,"materials":materials}
             uow.execute("INSERT INTO sect_donation_operations(operation_id,user_id,sect_id,stone,materials) VALUES(?,?,?,?,?)",(operation_id,user_id,sect_id,stone,materials));return {"status":"donated","user_id":user_id,"sect_id":sect_id,"stone":stone,"materials":materials}
@@ -275,7 +276,7 @@ class SectRenameSqlRepository:
             if str(sect["sect_name"]) == new_name or uow.query_one("SELECT 1 AS ok FROM sects WHERE sect_name=? AND sect_id<>?", (new_name, sect_id)):
                 return {"status": "name_exists"}
             card = uow.query_one("SELECT goods_num,bind_num FROM back WHERE user_id=? AND goods_id=?", (actor_id, card_id))
-            if int(sect["sect_used_stone"] or 0) < cost:
+            if as_int_like(sect["sect_used_stone"] or 0) < cost:
                 return {"status": "stone_insufficient"}
             if card is None or int(card["goods_num"] or 0) <= 0 or int(card["bind_num"] or 0) <= 0:
                 return {"status": "card_insufficient"}

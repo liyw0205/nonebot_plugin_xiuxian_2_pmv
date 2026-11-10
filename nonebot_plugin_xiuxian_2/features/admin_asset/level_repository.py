@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from ...core.numeric import as_int_like
 from ...core.errors import DomainError
 from ...core.snapshot_reason import first_difference
 
@@ -57,14 +58,14 @@ class AdminLevelChangeSqlRepository:
 
     @staticmethod
     def _snapshot(row) -> tuple:
-        return (str(row["level"] or ""), int(row["exp"] or 0), int(row["hp"] or 0), int(row["mp"] or 0), int(row["atk"] or 0), int(row["power"] or 0), str(row["root_type"] or ""), int(row["root_level"] or 0))
+        return (str(row["level"] or ""), as_int_like(row["exp"] or 0), as_int_like(row["hp"] or 0), as_int_like(row["mp"] or 0), as_int_like(row["atk"] or 0), as_int_like(row["power"] or 0), str(row["root_type"] or ""), int(row["root_level"] or 0))
 
     def change(self, operation_id: str, operator_id: str, user_id: str, expected_snapshot, new_level: str, new_exp: int, level_spend: float, root_rate: float, *, target_name: str = "") -> AdminLevelChangeResult:
         operation_id, operator_id, user_id, new_level = str(operation_id).strip(), str(operator_id).strip(), str(user_id).strip(), str(new_level).strip()
         expected = tuple(expected_snapshot)
         if not operation_id or not operator_id or not user_id or not new_level or len(expected) != 8 or int(new_exp) < 0 or float(level_spend) <= 0 or float(root_rate) <= 0:
             raise ValueError("invalid realm change snapshot or configuration")
-        expected = (str(expected[0] or ""), *[int(value or 0) for value in expected[1:6]], str(expected[6] or ""), int(expected[7] or 0))
+        expected = (str(expected[0] or ""), *[as_int_like(value) for value in expected[1:6]], str(expected[6] or ""), int(expected[7] or 0))
         payload = json.dumps([operator_id, user_id, new_level, int(new_exp), float(level_spend), float(root_rate)], ensure_ascii=True, separators=(",", ":"))
         if not self.database.is_file():
             return AdminLevelChangeResult("schema_missing")
@@ -82,7 +83,7 @@ class AdminLevelChangeSqlRepository:
             if self._snapshot(row) != expected:
                 return AdminLevelChangeResult("state_changed", reason=first_difference(self._snapshot(row), expected, ("level_changed", "exp_changed", "hp_changed", "mp_changed", "atk_changed", "power_changed", "root_type_changed", "root_level_changed")))
             values = (new_level, int(new_exp), int(new_exp) // 2, int(new_exp), int(new_exp) // 10, round(int(new_exp) * float(root_rate) * float(level_spend)), user_id, *expected)
-            if uow.execute("UPDATE user_xiuxian SET level=?,exp=?,hp=?,mp=?,atk=?,power=? WHERE user_id=? AND level=? AND COALESCE(exp,0)=? AND COALESCE(hp,0)=? AND COALESCE(mp,0)=? AND COALESCE(atk,0)=? AND COALESCE(power,0)=? AND COALESCE(root_type,'')=? AND COALESCE(root_level,0)=?", values).rowcount != 1:
+            if uow.execute("UPDATE user_xiuxian SET level=?,exp=?,hp=?,mp=?,atk=?,power=? WHERE user_id=? AND level=? AND xiuxian_int_cmp(COALESCE(exp,0),?)=0 AND xiuxian_int_cmp(COALESCE(hp,0),?)=0 AND xiuxian_int_cmp(COALESCE(mp,0),?)=0 AND xiuxian_int_cmp(COALESCE(atk,0),?)=0 AND xiuxian_int_cmp(COALESCE(power,0),?)=0 AND COALESCE(root_type,'')=? AND COALESCE(root_level,0)=?", values).rowcount != 1:
                 raise DomainError("admin_level_write_rejected", "admin level change was not saved")
             data = {"level": new_level, "exp": int(new_exp), "hp": int(new_exp) // 2, "mp": int(new_exp), "atk": int(new_exp) // 10, "power": round(int(new_exp) * float(root_rate) * float(level_spend))}
             uow.execute("INSERT INTO admin_level_change_operations(operation_id,payload,result_json) VALUES(?,?,?)", (operation_id, payload, json.dumps(data, ensure_ascii=True, separators=(",", ":"))))

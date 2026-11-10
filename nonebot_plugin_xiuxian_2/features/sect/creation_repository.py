@@ -1,4 +1,5 @@
 from __future__ import annotations
+from ...core.numeric import as_int_like
 from pathlib import Path
 from typing import Any
 from ...core.errors import DomainError
@@ -21,11 +22,11 @@ class SectCreationSqlRepository:
             user=uow.query_one('SELECT sect_id,stone FROM user_xiuxian WHERE user_id=?',(user_id,))
             if user is None:return {'status':'user_missing',**base}
             if user['sect_id'] is not None:return {'status':'already_member',**base}
-            if int(user['stone'] or 0)<stone_cost:return {'status':'stone_insufficient',**base}
+            if as_int_like(user['stone'] or 0)<stone_cost:return {'status':'stone_insufficient',**base}
             if uow.query_one('SELECT sect_id FROM sects WHERE sect_name=?',(sect_name,)):return {'status':'name_exists',**base}
             uow.execute('INSERT INTO sects(sect_name,sect_owner,sect_scale,sect_used_stone,join_open,closed,combat_power) VALUES(?,?,0,0,1,0,0)',(sect_name,user_id)); created=uow.query_one('SELECT sect_id FROM sects WHERE sect_owner=? AND sect_name=?',(user_id,sect_name))
             if created is None: raise DomainError('sect_creation_write_rejected', 'sect creation was not saved')
-            sect_id=int(created['sect_id']); changed=uow.execute('UPDATE user_xiuxian SET sect_id=?,sect_position=?,stone=stone-? WHERE user_id=? AND sect_id IS NULL AND stone>=?',(sect_id,owner_position,stone_cost,user_id,stone_cost))
+            sect_id=int(created['sect_id']); changed=uow.execute('UPDATE user_xiuxian SET sect_id=?,sect_position=?,stone=stone-? WHERE user_id=? AND sect_id IS NULL AND xiuxian_int_cmp(stone,?)>=0',(sect_id,owner_position,stone_cost,user_id,stone_cost))
             if changed.rowcount!=1:
                 raise DomainError('sect_member_write_rejected', 'sect membership was not saved')
             uow.execute('INSERT INTO sect_creation_operations(operation_id,user_id,sect_id,sect_name,stone_cost) VALUES(?,?,?,?,?)',(operation_id,user_id,sect_id,sect_name,stone_cost))

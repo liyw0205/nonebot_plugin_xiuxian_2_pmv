@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from ...core.numeric import as_int_like
 from ...core.errors import DomainError
 
 import json
@@ -95,10 +96,10 @@ class DufangBetSqlRepository:
             resolution = self._resolution(uow, operation_id)
             if resolution is None:
                 return DufangBetResult(
-                    "resolution_missing", int(row["cost"]), int(row["wallet_stone"]), str(row["bet_id"])
+                    "resolution_missing", int(row["cost"]), as_int_like(row["wallet_stone"]), str(row["bet_id"])
                 )
             return DufangBetResult(
-                "applied", int(row["cost"]), int(row["wallet_stone"]), str(row["bet_id"]), resolution
+                "applied", int(row["cost"]), as_int_like(row["wallet_stone"]), str(row["bet_id"]), resolution
             )
 
     def schema_ready(self) -> bool:
@@ -182,19 +183,19 @@ class DufangBetSqlRepository:
                 frozen = self._resolution(uow, operation_id)
                 if frozen is None:
                     return DufangBetResult(
-                        "resolution_missing", int(previous["cost"]), int(previous["wallet_stone"]), str(previous["bet_id"])
+                        "resolution_missing", int(previous["cost"]), as_int_like(previous["wallet_stone"]), str(previous["bet_id"])
                     )
                 return DufangBetResult(
-                    "duplicate", int(previous["cost"]), int(previous["wallet_stone"]),
+                    "duplicate", int(previous["cost"]), as_int_like(previous["wallet_stone"]),
                     str(previous["bet_id"]), frozen,
                 )
             user = uow.query_one("SELECT COALESCE(stone,0) AS stone FROM user_xiuxian WHERE user_id=?", (user_id,))
             if user is None:
                 return DufangBetResult("user_missing")
-            wallet = int(user["stone"])
+            wallet = as_int_like(user["stone"])
             if wallet < cost:
                 return DufangBetResult("stone_insufficient", wallet_stone=wallet)
-            if uow.execute("UPDATE user_xiuxian SET stone=stone-? WHERE user_id=? AND stone>=?", (cost, user_id, cost)).rowcount != 1:
+            if uow.execute("UPDATE user_xiuxian SET stone=stone-? WHERE user_id=? AND xiuxian_int_cmp(stone,?)>=0", (cost, user_id, cost)).rowcount != 1:
                 raise DomainError("stone_write_rejected", "dufang bet debit count mismatch")
             uow.execute("INSERT INTO dufang_bets VALUES(?,?,?,?,?,NULL)", (operation_id, user_id, cost, "pending", placed_at))
             uow.execute("INSERT INTO dufang_bet_operations VALUES(?,?,?,?,?,CURRENT_TIMESTAMP)", (operation_id, payload, cost, wallet - cost, operation_id))

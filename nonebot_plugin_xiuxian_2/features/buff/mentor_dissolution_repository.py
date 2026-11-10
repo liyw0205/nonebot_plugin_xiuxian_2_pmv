@@ -20,6 +20,8 @@
 
 from __future__ import annotations
 
+from ...core.numeric import as_int_like
+
 import json
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -81,7 +83,7 @@ class MentorDissolutionResult:
 
 def _as_int(value: Any) -> int:
     try:
-        number = int(value)
+        number = as_int_like(value)
     except (TypeError, ValueError, OverflowError):
         return 0
     return number if number > 0 else 0
@@ -374,7 +376,7 @@ class MentorDissolutionService:
             if decision.charge > 0:
                 changed = uow.execute(
                     "UPDATE user_xiuxian SET exp=COALESCE(exp,0)-?"
-                    " WHERE user_id=? AND COALESCE(exp,0)>=?",
+                    " WHERE user_id=? AND xiuxian_int_cmp(COALESCE(exp,0),?)>=0",
                     (decision.charge, apprentice_id, decision.charge),
                 )
                 if changed.rowcount != 1:

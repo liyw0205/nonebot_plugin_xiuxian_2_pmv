@@ -142,7 +142,7 @@ class NatalTrainingService:
                     else:
                         new_exp = current_max_exp
                 charged = conn.execute(
-                    "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)-CAST(%s AS REAL) WHERE user_id=%s AND stone>=%s",
+                    "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)-CAST(%s AS REAL) WHERE user_id=%s AND xiuxian_int_cmp(stone,%s)>=0",
                     (stone_cost, user_id, stone_cost),
                 )
                 updated = conn.execute(

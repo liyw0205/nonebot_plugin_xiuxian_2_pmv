@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from ...core.numeric import as_int_like
+
 from ...core.errors import DomainError
 from ...core.player_reasons import reason_text
 from ...core.snapshot_reason import first_difference
@@ -54,6 +56,9 @@ class TrainingEventSqlRepository:
                 except (TypeError, ValueError, json.JSONDecodeError):
                     actual_value = {}
                 if actual_value == wanted:
+                    continue
+            elif field in {"progress", "points", "completed", "max_progress"}:
+                if as_int_like(actual) == as_int_like(wanted):
                     continue
             elif str(actual) == str(wanted):
                 continue
@@ -439,9 +444,9 @@ class TrainingEventSqlRepository:
                 "SELECT stone,exp,hp,mp FROM user_xiuxian WHERE user_id=?",
                 (user_id,),
             )
-            wanted = tuple(int(expected_user.get(key, 0)) for key in ("stone", "exp", "hp", "mp"))
+            wanted = tuple(as_int_like(expected_user.get(key)) for key in ("stone", "exp", "hp", "mp"))
             actual_user = (
-                tuple(int(user[key] or 0) for key in ("stone", "exp", "hp", "mp"))
+                tuple(as_int_like(user[key]) for key in ("stone", "exp", "hp", "mp"))
                 if user is not None
                 else None
             )

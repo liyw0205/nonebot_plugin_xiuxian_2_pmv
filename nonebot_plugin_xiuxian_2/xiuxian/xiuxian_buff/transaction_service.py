@@ -483,7 +483,7 @@ class PartnerCultivationService:
                         row = conn.execute(
                             "SELECT partner_id,affection FROM player_data.partner WHERE user_id=%s", (user_id,),
                         ).fetchone()
-                        if row is None or str(row[0]) != partner_id or int(float(row[1] or 0)) != expected:
+                        if row is None or str(row[0]) != partner_id or _as_int_like_num(row[1]) != expected:
                             conn.rollback()
                             return result("state_changed")
 
@@ -1850,7 +1850,7 @@ class MentorBreakthroughRewardService:
         )
         if not operation_id or not business_event_id or mentor_id == apprentice_id or float(values[4]) <= 0 or values[2] < 0 or values[2] >= values[3]:
             raise ValueError("invalid mentor breakthrough reward")
-        if expected_mentor_exp + float(reward_exp) > max_mentor_exp:
+        if expected_mentor_exp + _as_int_like_num(reward_exp) > max_mentor_exp:
             raise ValueError("mentor exp cap exceeded")
         payload = json.dumps([mentor_id, apprentice_id, new_level, business_event_id, *values, mentor_desc, apprentice_desc],
                              ensure_ascii=False, separators=(",", ":"))
@@ -1875,13 +1875,12 @@ class MentorBreakthroughRewardService:
                 exps = {str(row[0]): _as_int_like_num(row[1]) for row in users}
                 if apprentice_id not in apprentices or parent is None or str(parent[0]) != mentor_id or int(count or 0) != values[2] or exps != {mentor_id: _as_int_like_num(values[0]), apprentice_id: _as_int_like_num(values[1])}:
                     conn.rollback(); return result("state_changed")
-                # High-realm: avoid CAST(exp)=CAST(%s) truncation on huge ints.
                 changed = conn.execute(
                     "UPDATE user_xiuxian SET "
                     "exp=CAST(COALESCE(exp,0) AS REAL)+CAST(%s AS REAL),power=%s "
                     "WHERE user_id=%s "
-                    "AND CAST(COALESCE(exp,0) AS REAL)+CAST(%s AS REAL)<=%s",
-                    (values[4], values[6], mentor_id, values[4], values[5]),
+                    "AND xiuxian_int_cmp(COALESCE(exp,0),%s)<=0",
+                    (values[4], values[6], mentor_id, values[5] - _as_int_like_num(values[4])),
                 )
                 if changed.rowcount != 1:
                     conn.rollback(); return result("state_changed")
@@ -2002,20 +2001,20 @@ class MentorGraduationService:
                 previous = conn.execute("SELECT payload,apprentice_stone,mentor_stone FROM mentor_graduation_operations WHERE operation_id=%s", (operation_id,)).fetchone()
                 if previous is not None:
                     conn.rollback()
-                    return MentorGraduationResult("duplicate" if str(previous[0]) == payload else "operation_conflict", int(previous[1]), int(previous[2]))
+                    return MentorGraduationResult("duplicate" if str(previous[0]) == payload else "operation_conflict", _as_int_like_num(previous[1]), _as_int_like_num(previous[2]))
                 mentor_apprentices = [str(v) for v in get_json_field(conn, "mentor", mentor_id, "apprentice_ids", [])]
                 apprentice_mentor = conn.execute("SELECT mentor_id FROM player_data.mentor WHERE user_id=%s", (apprentice_id,)).fetchone()
                 if apprentice_id not in mentor_apprentices or apprentice_mentor is None or str(apprentice_mentor[0]) != mentor_id:
                     conn.rollback()
                     return result("state_changed", "mentor_relation_changed")
                 stones = conn.execute("SELECT user_id,stone FROM user_xiuxian WHERE user_id IN (%s,%s)", (mentor_id, apprentice_id)).fetchall()
-                if {str(row[0]): int(row[1]) for row in stones} != {mentor_id: values[0], apprentice_id: values[1]}:
+                if {str(row[0]): _as_int_like_num(row[1]) for row in stones} != {mentor_id: values[0], apprentice_id: values[1]}:
                     conn.rollback()
-                    actual = {str(row[0]): int(row[1]) for row in stones}
+                    actual = {str(row[0]): _as_int_like_num(row[1]) for row in stones}
                     subject = next(uid for uid, expected in ((mentor_id, values[0]), (apprentice_id, values[1])) if actual.get(uid) != expected)
                     return result("state_changed", "user_missing" if subject not in actual else "stone_changed", subject)
                 for uid, expected, reward in ((mentor_id, values[0], values[3]), (apprentice_id, values[1], values[2])):
-                    if conn.execute("UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)+CAST(%s AS REAL) WHERE user_id=%s AND stone=%s", (reward, uid, expected)).rowcount != 1:
+                    if conn.execute("UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)+CAST(%s AS REAL) WHERE user_id=%s AND xiuxian_int_cmp(stone,%s)=0", (reward, uid, expected)).rowcount != 1:
                         conn.rollback()
                         raise DomainError("mentor_stone_write_rejected", "mentor graduation balance write did not affect one user", {"subject": "mentor" if uid == mentor_id else "apprentice"})
                     increment_stat(conn, uid, "灵石获取", reward)
@@ -2220,12 +2219,12 @@ class BlessedSpotService:
                 if int(user[1]) != 0:
                     conn.rollback()
                     return BlessedSpotResult("already_owned", user_id)
-                if int(user[0]) < stone_cost:
+                if _as_int_like_num(user[0]) < stone_cost:
                     conn.rollback()
                     return BlessedSpotResult("stone_insufficient", user_id, stone_cost)
                 changed = conn.execute(
                     "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)-CAST(%s AS REAL),blessed_spot_flag=1,blessed_spot_name=%s "
-                    "WHERE user_id=%s AND stone>=%s AND COALESCE(blessed_spot_flag,0)=0",
+                    "WHERE user_id=%s AND xiuxian_int_cmp(stone,%s)>=0 AND COALESCE(blessed_spot_flag,0)=0",
                     (stone_cost, default_name, user_id, stone_cost),
                 )
                 if changed.rowcount != 1:
@@ -2295,10 +2294,10 @@ class BlessedSpotService:
                 if current >= max_level:
                     conn.rollback()
                     return BlessedSpotResult("max_level", user_id, previous_level=current, current_level=current)
-                if int(user[0]) < stone_cost:
+                if _as_int_like_num(user[0]) < stone_cost:
                     conn.rollback()
                     return BlessedSpotResult("stone_insufficient", user_id, stone_cost, previous_level=current, current_level=current)
-                conn.execute("UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)-CAST(%s AS REAL) WHERE user_id=%s AND stone>=%s", (stone_cost, user_id, stone_cost))
+                conn.execute("UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)-CAST(%s AS REAL) WHERE user_id=%s AND xiuxian_int_cmp(stone,%s)>=0", (stone_cost, user_id, stone_cost))
                 changed = conn.execute(f"UPDATE player_data.mix_elixir_info SET {db_backend.quote_ident('灵田数量')}=%s WHERE user_id=%s AND CAST({db_backend.quote_ident('灵田数量')} AS INTEGER)=%s", (str(current + 1), user_id, current))
                 if changed.rowcount != 1:
                     conn.rollback()
@@ -2395,11 +2394,11 @@ class ClosingSettlementService:
         )
         # result_json keeps numeric-friendly values for duplicate replay
         saved_nums = [
-            int(float(exp_gain)) if not isinstance(exp_gain, str) else exp_gain,
+            _as_int_like_num(exp_gain) if not isinstance(exp_gain, str) else exp_gain,
             stone_cost,
-            int(float(hp)) if not isinstance(hp, str) else hp,
-            int(float(mp)) if not isinstance(mp, str) else mp,
-            int(float(atk)) if not isinstance(atk, str) else atk,
+            _as_int_like_num(hp) if not isinstance(hp, str) else hp,
+            _as_int_like_num(mp) if not isinstance(mp, str) else mp,
+            _as_int_like_num(atk) if not isinstance(atk, str) else atk,
         ]
         result = ClosingSettlementResult("", *[_as_int_like(v) for v in saved_nums])
         with self._lock, closing(db_backend.connect(self._database)) as conn:
@@ -2424,7 +2423,7 @@ class ClosingSettlementService:
                 if int(cd[0] or 0) != 1 or not cd_time_matches(cd[1], expected_create_time):
                     conn.rollback()
                     return ClosingSettlementResult("state_changed")
-                if int(user[0]) < stone_cost:
+                if _as_int_like_num(user[0]) < stone_cost:
                     conn.rollback()
                     return ClosingSettlementResult("stone_insufficient")
                 # exp may already be TEXT scientific; use CAST for arithmetic
@@ -2433,7 +2432,7 @@ class ClosingSettlementService:
                     "exp=CAST(COALESCE(exp,0) AS REAL)+CAST(%s AS REAL),"
                     "stone=CAST(COALESCE(stone,0) AS REAL)-CAST(%s AS REAL),"
                     "hp=%s,mp=%s,atk=%s,power=%s "
-                    "WHERE user_id=%s AND stone>=%s",
+                    "WHERE user_id=%s AND xiuxian_int_cmp(stone,%s)>=0",
                     (exp_gain, stone_cost, hp, mp, atk, power, user_id, stone_cost),
                 )
                 # 坏时间只按 type 清；正常时间仍带 create_time 防并发
@@ -2483,10 +2482,7 @@ class ClosingSettlementService:
 
 
 def _as_int_like(value):
-    try:
-        return int(float(value))
-    except (TypeError, ValueError, OverflowError):
-        return 0
+    return _as_int_like_num(value)
 @dataclass(frozen=True)
 class NormalTrainingResult:
     status: str
@@ -2582,7 +2578,7 @@ class NormalTrainingLifecycleService:
                 if int(cd[0]) != 0:
                     conn.rollback()
                     return NormalTrainingResult("state_changed")
-                if (int(user[0]), int(user[1])) != (expected_exp, expected_stone):
+                if (_as_int_like_num(user[0]), _as_int_like_num(user[1])) != (expected_exp, expected_stone):
                     conn.rollback()
                     return NormalTrainingResult("state_changed")
                 changed = conn.execute(
@@ -2639,7 +2635,7 @@ class NormalTrainingLifecycleService:
                 if user is None or cd is None:
                     conn.rollback()
                     return NormalTrainingResult("user_missing")
-                if (int(user[0]), int(user[1])) != (expected_exp, expected_stone) or int(cd[0] or 0) != 5 or str(cd[1]) != create_time:
+                if (_as_int_like_num(user[0]), _as_int_like_num(user[1])) != (expected_exp, expected_stone) or int(cd[0] or 0) != 5 or str(cd[1]) != create_time:
                     conn.rollback()
                     return NormalTrainingResult("state_changed", kind, create_time)
 
@@ -2648,13 +2644,13 @@ class NormalTrainingLifecycleService:
                 hp_gain = mp_gain = 0
                 if kind == "cultivation":
                     new_exp = expected_exp + exp_gain
-                    old_hp, old_mp = int(user[2]), int(user[3])
+                    old_hp, old_mp = _as_int_like_num(user[2]), _as_int_like_num(user[3])
                     new_hp = min(new_exp // 2, old_hp + expected_exp // 10)
                     new_mp = min(new_exp, old_mp + expected_exp // 20)
                     hp_gain, mp_gain = max(0, new_hp - old_hp), max(0, new_mp - old_mp)
                     changed = conn.execute(
                         "UPDATE user_xiuxian SET exp=%s,hp=%s,mp=%s,atk=%s,power=ROUND(%s*%s,0) "
-                        "WHERE user_id=%s AND COALESCE(exp,0)=%s AND COALESCE(stone,0)=%s",
+                        "WHERE user_id=%s AND xiuxian_int_cmp(COALESCE(exp,0),%s)=0 AND xiuxian_int_cmp(COALESCE(stone,0),%s)=0",
                         (new_exp, new_hp, new_mp, expected_exp // 10, new_exp, power_multiplier,
                          user_id, expected_exp, expected_stone),
                     )
@@ -2663,7 +2659,7 @@ class NormalTrainingLifecycleService:
                     self._increment_training_task(conn, user_id, task_period)
                 else:
                     changed = conn.execute(
-                        "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)+CAST(%s AS REAL) WHERE user_id=%s AND COALESCE(exp,0)=%s AND COALESCE(stone,0)=%s",
+                        "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)+CAST(%s AS REAL) WHERE user_id=%s AND xiuxian_int_cmp(COALESCE(exp,0),%s)=0 AND xiuxian_int_cmp(COALESCE(stone,0),%s)=0",
                         (stone_gain, user_id, expected_exp, expected_stone),
                     )
                     increment_stat(conn, user_id, "凡人挖矿次数", 1)
@@ -2842,7 +2838,7 @@ class NormalPvpSettlementService:
             expected_opponent_stamina,
             expected_opponent_exp,
         )
-        snapshots = tuple(int(value) for value in snapshots)
+        snapshots = tuple(_as_int_like_num(value) for value in snapshots)
         finals = tuple(
             max(1, int(value))
             for value in (challenger_final_hp, challenger_final_mp, opponent_final_hp, opponent_final_mp)
@@ -2885,7 +2881,7 @@ class NormalPvpSettlementService:
                     "FROM user_xiuxian WHERE user_id IN (%s,%s)",
                     (challenger_id, opponent_id),
                 ).fetchall()
-                current = {str(row[0]): tuple(int(value) for value in row[1:]) for row in rows}
+                current = {str(row[0]): tuple(_as_int_like_num(value) for value in row[1:]) for row in rows}
                 if challenger_id not in current or opponent_id not in current:
                     conn.rollback()
                     return NormalPvpResult("user_missing")
@@ -2902,14 +2898,14 @@ class NormalPvpSettlementService:
 
                 changed = conn.execute(
                     "UPDATE user_xiuxian SET hp=%s,mp=%s,user_stamina=user_stamina-%s "
-                    "WHERE user_id=%s AND hp=%s AND mp=%s AND user_stamina=%s AND exp=%s AND user_stamina>=%s",
+                    "WHERE user_id=%s AND xiuxian_int_cmp(hp,%s)=0 AND xiuxian_int_cmp(mp,%s)=0 AND user_stamina=%s AND xiuxian_int_cmp(exp,%s)=0 AND user_stamina>=%s",
                     (finals[0], finals[1], stamina_cost, challenger_id, *challenger_snapshot, stamina_cost),
                 )
                 if changed.rowcount != 1:
                     conn.rollback()
                     return NormalPvpResult("state_changed")
                 changed = conn.execute(
-                    "UPDATE user_xiuxian SET hp=%s,mp=%s WHERE user_id=%s AND hp=%s AND mp=%s AND user_stamina=%s AND exp=%s",
+                    "UPDATE user_xiuxian SET hp=%s,mp=%s WHERE user_id=%s AND xiuxian_int_cmp(hp,%s)=0 AND xiuxian_int_cmp(mp,%s)=0 AND user_stamina=%s AND xiuxian_int_cmp(exp,%s)=0",
                     (finals[2], finals[3], opponent_id, *opponent_snapshot),
                 )
                 if changed.rowcount != 1:
@@ -3004,7 +3000,7 @@ class StoneTrainingSettlementService:
                 if user is None:
                     conn.rollback()
                     return StoneTrainingResult("user_missing")
-                if (int(user[0]), int(user[1])) != (expected_exp, expected_stone):
+                if (_as_int_like_num(user[0]), _as_int_like_num(user[1])) != (expected_exp, expected_stone):
                     conn.rollback()
                     return StoneTrainingResult("state_changed")
                 if exp_gain <= 0:
@@ -3015,7 +3011,7 @@ class StoneTrainingSettlementService:
                     return StoneTrainingResult("stone_insufficient", exp_gain, stone_cost)
                 changed = conn.execute(
                     "UPDATE user_xiuxian SET exp=CAST(COALESCE(exp,0) AS REAL)+CAST(%s AS REAL),stone=CAST(COALESCE(stone,0) AS REAL)-CAST(%s AS REAL),power=ROUND((exp+%s)*%s,0) "
-                    "WHERE user_id=%s AND exp=%s AND stone=%s AND stone>=%s",
+                    "WHERE user_id=%s AND xiuxian_int_cmp(exp,%s)=0 AND xiuxian_int_cmp(stone,%s)=0 AND xiuxian_int_cmp(stone,%s)>=0",
                     (exp_gain, stone_cost, exp_gain, power_multiplier, user_id, expected_exp, expected_stone, stone_cost),
                 )
                 if changed.rowcount != 1:

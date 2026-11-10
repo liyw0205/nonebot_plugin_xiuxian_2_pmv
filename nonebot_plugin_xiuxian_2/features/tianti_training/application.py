@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from ...core.numeric import as_int_like
 from ...core.player_reasons import reason_text
 
 from dataclasses import asdict, is_dataclass
@@ -226,7 +227,7 @@ class TiantiTrainingApplication:
             result_summary=lambda data: {
                 "after": {"tianti_hp": int(data.get("new_hp", 0) or 0)},
                 "consumed": {"stone": int(data.get("stone_cost", 0) or 0)},
-                "granted": {"tianti_hp": int(data.get("hp_gain", 0) or 0)},
+                "granted": {"tianti_hp": as_int_like(data.get("hp_gain", 0) or 0)},
             },
         )
 

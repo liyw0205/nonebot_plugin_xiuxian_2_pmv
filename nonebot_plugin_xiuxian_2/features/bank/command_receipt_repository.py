@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from ...core.numeric import SQLITE_MAX_INT, SQLITE_MIN_INT, as_int_like
 from ...infrastructure.database import DatabaseUnitOfWork
 
 
@@ -34,38 +35,60 @@ class BankCommandReceiptRepository:
             raise ValueError("invalid receipt number")
         return value
 
+    @staticmethod
+    def _stored_number(value):
+        number = as_int_like(value, -1)
+        if isinstance(value, bool) or number < 0:
+            raise ValueError("invalid stored receipt number")
+        return number
+
+    @staticmethod
+    def _stored_matches(value, expected):
+        # INTEGER-affinity receipts historically round oversized integers to
+        # REAL. Identity still comes from the exact JSON payload, never REAL.
+        if isinstance(value, float) and not SQLITE_MIN_INT <= expected <= SQLITE_MAX_INT:
+            try:
+                expected = as_int_like(float(expected), -1)
+            except OverflowError:
+                return False
+        return not isinstance(value, bool) and as_int_like(value, None) == expected
+
     def _unified(self, row):
         payload = json.loads(row["payload"])
         if not isinstance(payload, list):
             raise ValueError("invalid receipt payload")
         user = str(row["user_id"])
         result = {
-            "status": "duplicate", "wallet_stone": self._number(row["wallet_after"]),
-            "saved_stone": self._number(row["saved_after"]), "interest": self._number(row["interest"]),
+            "status": "duplicate", "wallet_stone": self._stored_number(row["wallet_after"]),
+            "saved_stone": self._stored_number(row["saved_after"]), "interest": self._stored_number(row["interest"]),
             "saved_at": str(row["created_at"]),
         }
         amount = None
         if len(payload) == 5 and payload[0] == user and type(payload[1]) is int:
             action, amount = "deposit", self._number(payload[1])
-            if amount <= 0 or row["deposited"] != amount or payload[2] != result["interest"]:
+            interest = self._number(payload[2])
+            if amount <= 0 or not self._stored_matches(row["deposited"], amount) or not self._stored_matches(row["interest"], interest):
                 raise ValueError("deposit receipt mismatch")
             self._number(payload[3])
-            result.update(deposited=amount, bank_level=str(payload[4]))
+            result.update(deposited=amount, interest=interest, bank_level=str(payload[4]))
         elif len(payload) == 5 and payload[:2] == ["withdraw", user]:
             action, amount = "withdrawal", self._number(payload[2])
-            if amount <= 0 or row["deposited"] != -amount or payload[3] != result["interest"]:
+            interest = self._number(payload[3])
+            if amount <= 0 or not self._stored_matches(row["deposited"], -amount) or not self._stored_matches(row["interest"], interest):
                 raise ValueError("withdrawal receipt mismatch")
-            result.update(withdrawn=amount, bank_level=str(payload[4]))
+            result.update(withdrawn=amount, interest=interest, bank_level=str(payload[4]))
         elif len(payload) == 4 and payload[:2] == ["upgrade", user]:
             action = "upgrade"
-            if row["deposited"] != 0 or result["interest"] != 0:
+            if not self._stored_matches(row["deposited"], 0) or result["interest"] != 0:
                 raise ValueError("upgrade receipt mismatch")
             result.update(cost=self._number(payload[3]), bank_level=str(payload[2]))
         elif len(payload) == 4 and payload[:2] == ["interest", user]:
             action = "interest"
-            if row["deposited"] != 0 or payload[2] != result["interest"]:
+            interest = self._number(payload[2])
+            if not self._stored_matches(row["deposited"], 0) or not self._stored_matches(row["interest"], interest):
                 raise ValueError("interest receipt mismatch")
             result["bank_level"] = str(payload[3])
+            result["interest"] = interest
         else:
             raise ValueError("unrecognized receipt payload")
         return user, action, amount, result
@@ -77,16 +100,19 @@ class BankCommandReceiptRepository:
             raise ValueError("invalid legacy receipt identity")
         result = {"status": "duplicate"}
         for key in self._LEGACY[action][1]:
-            result[key] = str(row[key]) if key in {"saved_at", "bank_level"} else self._number(row[key])
+            result[key] = str(row[key]) if key in {"saved_at", "bank_level"} else self._stored_number(row[key])
         amount = None
         if action in {"deposit", "withdrawal"}:
             amount = self._number(payload[1])
             field = "deposited" if action == "deposit" else "withdrawn"
-            if amount <= 0 or result[field] != amount:
+            if amount <= 0 or not self._stored_matches(row[field], amount):
                 raise ValueError("legacy receipt amount mismatch")
+            result[field] = amount
         elif action == "upgrade":
-            if str(payload[1]) != result["bank_level"] or self._number(payload[2]) != result["cost"]:
+            cost = self._number(payload[2])
+            if str(payload[1]) != result["bank_level"] or not self._stored_matches(row["cost"], cost):
                 raise ValueError("legacy upgrade receipt mismatch")
+            result["cost"] = cost
         return payload[0], action, amount, result
 
     def find(self, *, operation_id: str, user_id: str, action: str, amount: int | None = None) -> dict | None:

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from ...core.numeric import as_int_like
 from typing import Any, Mapping
 from ...core.player_reasons import reason_text
 
@@ -14,10 +15,10 @@ def render_bank_reply(result: Mapping[str, Any], bank_levels: Mapping[str, Any])
         config = bank_levels.get(level, {})
         message = (
             "**灵庄信息**\n---\n"
-            f"已存\n> {int(result.get('saved_stone', 0))}灵石\n"
+            f"已存\n> {as_int_like(result.get('saved_stone', 0))}灵石\n"
             f"存入时间\n> {result.get('updated_at') or '尚未存入'}\n"
             f"会员等级\n> {config.get('level', level)}\n"
-            f"当前灵石\n> {int(result.get('wallet_stone', 0))}\n"
+            f"当前灵石\n> {as_int_like(result.get('wallet_stone', 0))}\n"
             f"存储上限\n> {config.get('savemax', '暂不可用')}枚"
         )
         if "operations" in result:

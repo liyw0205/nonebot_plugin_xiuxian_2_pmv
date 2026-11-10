@@ -235,7 +235,7 @@ class PuppetHarvestSqlRepository:
 
             deducted = uow.execute(
                 "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)-CAST(? AS REAL) "
-                "WHERE user_id=? AND stone>=? AND puppet_status=1",
+                "WHERE user_id=? AND xiuxian_int_cmp(stone,?)>=0 AND puppet_status=1",
                 (stone_cost, user_id, stone_cost),
             )
             if deducted.rowcount != 1:

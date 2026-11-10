@@ -1,4 +1,5 @@
 from __future__ import annotations
+from ...core.numeric import as_int_like
 from dataclasses import replace as _reason_replace
 
 from dataclasses import dataclass
@@ -67,9 +68,9 @@ class BaseStoneTheftSqlRepository:
             outcome=str(row["outcome"]),
             payer_id=str(row["payer_id"]),
             receiver_id=str(row["receiver_id"]),
-            requested_amount=int(row["requested_amount"]),
-            transferred_amount=int(row["transferred_amount"]),
-            payer_balance=int(row["payer_balance"]),
+            requested_amount=as_int_like(row["requested_amount"]),
+            transferred_amount=as_int_like(row["transferred_amount"]),
+            payer_balance=as_int_like(row["payer_balance"]),
             stamina_cost=int(row["stamina_cost"]),
             thief_stamina=int(row["thief_stamina"]),
         )
@@ -167,7 +168,7 @@ class BaseStoneTheftSqlRepository:
             )
             users = {
                 str(row["user_id"]): (
-                    max(0, int(row["stone"])),
+                    max(0, as_int_like(row["stone"])),
                     max(0, int(row["user_stamina"])),
                 )
                 for row in rows
@@ -197,12 +198,12 @@ class BaseStoneTheftSqlRepository:
                 with uow.savepoint("stone_theft_assets"):
                     charged = uow.execute(
                         "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)-? "
-                        "WHERE user_id=? AND COALESCE(stone,0)=? AND stone>=?",
+                        "WHERE user_id=? AND xiuxian_int_cmp(COALESCE(stone,0),?)=0 AND xiuxian_int_cmp(stone,?)>=0",
                         (transferred, payer_id, payer_stone, transferred),
                     )
                     credited = uow.execute(
                         "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)+? "
-                        "WHERE user_id=? AND COALESCE(stone,0)=?",
+                        "WHERE user_id=? AND xiuxian_int_cmp(COALESCE(stone,0),?)=0",
                         (transferred, receiver_id, receiver_stone),
                     )
                     stamina = uow.execute(

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from ...core.numeric import as_int_like
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -106,10 +107,10 @@ class RecoveryItemSqlRepository:
             if item is None or int(item["goods_num"] or 0) < quantity:
                 return result("item_insufficient")
 
-            exp = int(user["exp"] or 0)
-            hp_before = int(user["hp"] or 0)
-            mp_before = int(user["mp"] or 0)
-            atk_before = int(user["atk"] or 0)
+            exp = as_int_like(user["exp"] or 0)
+            hp_before = as_int_like(user["hp"] or 0)
+            mp_before = as_int_like(user["mp"] or 0)
+            atk_before = as_int_like(user["atk"] or 0)
             stamina_before = int(user["user_stamina"] or 0)
             hp_after = hp_before
             mp_after = mp_before

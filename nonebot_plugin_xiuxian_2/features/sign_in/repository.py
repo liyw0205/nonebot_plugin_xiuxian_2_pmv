@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from ...core.numeric import as_int_like
 from typing import Any
 
 from ...infrastructure.database import DatabaseUnitOfWork
@@ -26,7 +27,7 @@ class SignInRepository:
             "SELECT operation_id, user_id, stone FROM sign_in_operations WHERE operation_id = ?",
             (operation_id,),
         )
-        return SignInRecord(str(row["user_id"]), str(row["operation_id"]), int(row["stone"])) if row else None
+        return SignInRecord(str(row["user_id"]), str(row["operation_id"]), as_int_like(row["stone"])) if row else None
 
     def user_sign_states(self, uow: DatabaseUnitOfWork, user_id: str) -> list[int]:
         rows = uow.query_all(
@@ -38,13 +39,13 @@ class SignInRepository:
     def user_snapshot(self, uow: DatabaseUnitOfWork, user_id: str) -> dict[str, int]:
         rows = uow.query_all(
             "SELECT CAST(COALESCE(is_sign, 0) AS INTEGER) AS is_sign, "
-            "CAST(COALESCE(stone, 0) AS REAL) AS stone FROM user_xiuxian WHERE user_id = ?",
+            "COALESCE(stone, 0) AS stone FROM user_xiuxian WHERE user_id = ?",
             (user_id,),
         )
         return {
             "rows": len(rows),
             "signed_rows": sum(int(row["is_sign"] or 0) for row in rows),
-            "stone": sum(int(float(row["stone"] or 0)) for row in rows),
+            "stone": sum(as_int_like(row["stone"] or 0) for row in rows),
         }
 
     def apply(self, uow: DatabaseUnitOfWork, user_id: str, stone: int) -> int:
@@ -84,18 +85,18 @@ class SignInRepository:
         """Read-only balance probe; ``None`` when the player row does not exist."""
 
         row = uow.query_one(
-            "SELECT CAST(COALESCE(stone, 0) AS REAL) AS stone FROM user_xiuxian "
+            "SELECT COALESCE(stone, 0) AS stone FROM user_xiuxian "
             "WHERE user_id = ? LIMIT 1",
             (str(user_id),),
         )
-        return int(float(row["stone"] or 0)) if row else None
+        return as_int_like(row["stone"] or 0) if row else None
 
     def charge_stone(self, uow: DatabaseUnitOfWork, user_id: str, cost: int) -> int:
         """Deduct ``cost`` from one player row; never allows a negative balance."""
 
         cursor = uow.execute(
             "UPDATE user_xiuxian SET stone = CAST(COALESCE(stone, 0) AS REAL) - ? "
-            "WHERE user_id = ? AND CAST(COALESCE(stone, 0) AS REAL) >= ?",
+            "WHERE user_id = ? AND xiuxian_int_cmp(COALESCE(stone, 0),?)>=0",
             (int(cost), str(user_id), int(cost)),
         )
         return int(cursor.rowcount)

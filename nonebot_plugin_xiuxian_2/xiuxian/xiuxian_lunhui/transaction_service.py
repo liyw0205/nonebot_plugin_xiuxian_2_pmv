@@ -94,7 +94,7 @@ class CultivationResetService:
 
                 changed = conn.execute(
                     "UPDATE user_xiuxian SET level='江湖好手',level_up_rate=0,exp=100,"
-                    "power=0,hp=50,mp=100,atk=10 WHERE user_id=%s AND level=%s AND exp=%s",
+                    "power=0,hp=50,mp=100,atk=10 WHERE user_id=%s AND level=%s AND xiuxian_int_cmp(exp,%s)=0",
                     (user_id, expected_level, expected_exp),
                 )
                 if changed.rowcount != 1:

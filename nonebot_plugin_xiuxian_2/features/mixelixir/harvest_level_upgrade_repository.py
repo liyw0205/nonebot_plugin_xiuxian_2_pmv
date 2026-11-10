@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from ...core.numeric import as_int_like
 import json
 from pathlib import Path
 
@@ -57,12 +58,12 @@ class MixelixirHarvestLevelUpgradeSqlRepository:
                 if previous is not None:
                     if str(previous["payload"]) != payload:
                         return MixelixirHarvestLevelUpgradeResult("state_changed")
-                    return MixelixirHarvestLevelUpgradeResult("duplicate", int(previous["cost"]), int(previous["wallet_stone"]), int(previous["level"]), int(previous["experience"]))
+                    return MixelixirHarvestLevelUpgradeResult("duplicate", int(previous["cost"]), as_int_like(previous["wallet_stone"]), int(previous["level"]), int(previous["experience"]))
                 row = uow.query_one("SELECT COALESCE(stone,0) AS stone FROM user_xiuxian WHERE user_id=?", (user_id,))
                 state = uow.query_one("SELECT CAST(COALESCE(\"收取等级\",'0') AS INTEGER) AS level,CAST(COALESCE(\"炼丹经验\",'0') AS INTEGER) AS experience FROM player_data.mix_elixir_info WHERE user_id=?", (user_id,))
                 if row is None or state is None:
                     return MixelixirHarvestLevelUpgradeResult("state_changed")
-                current_level, current_exp, current_stone = int(state["level"]), int(state["experience"]), int(row["stone"])
+                current_level, current_exp, current_stone = int(state["level"]), int(state["experience"]), as_int_like(row["stone"])
                 if (current_level, current_exp) != (expected_level, expected_experience) or (expected_stone is not None and current_stone != expected_stone):
                     return MixelixirHarvestLevelUpgradeResult("state_changed", wallet_stone=current_stone, level=current_level, experience=current_exp)
                 if current_exp < cost:

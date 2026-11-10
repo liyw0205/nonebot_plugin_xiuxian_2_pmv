@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from ...core.numeric import as_int_like
 import json
 from pathlib import Path
 from typing import Any
@@ -123,7 +124,7 @@ class SectTaskSettlementSqlRepository:
             if user["sect_id"] is None or int(user["sect_id"]) != sect_id:
                 return {"status": "sect_changed", **base}
 
-            balance = int(user["hp"] if cost_type == "hp" else user["stone"] or 0)
+            balance = as_int_like(user["hp"] if cost_type == "hp" else user["stone"] or 0)
             if balance < cost:
                 return {"status": f"{cost_type}_insufficient", **base}
             if uow.query_one("SELECT sect_id FROM sects WHERE sect_id=?", (sect_id,)) is None:
@@ -137,7 +138,7 @@ class SectTaskSettlementSqlRepository:
                 f"UPDATE user_xiuxian SET {column}={column}-?,"
                 "exp=COALESCE(exp,0)+?,sect_task=COALESCE(sect_task,0)+1,"
                 "sect_contribution=COALESCE(sect_contribution,0)+? "
-                f"WHERE user_id=? AND sect_id=? AND {column}>=?",
+                f"WHERE user_id=? AND sect_id=? AND xiuxian_int_cmp({column},?)>=0",
                 (cost, exp_reward, sect_reward, user_id, sect_id, cost),
             )
             sect_update = uow.execute(

@@ -8,6 +8,8 @@
 
 from __future__ import annotations
 
+from ...core.numeric import as_int_like
+
 from typing import Any
 
 from .domain import BossPurchaseRequest, BossSettlementRequest
@@ -15,7 +17,7 @@ from .domain import BossPurchaseRequest, BossSettlementRequest
 
 def _int(value: Any, default: int = 0) -> int:
     try:
-        return int(value)
+        return as_int_like(value, default)
     except (TypeError, ValueError, OverflowError):
         return default
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from ...core.numeric import as_int_like
 from dataclasses import asdict, is_dataclass
 from pathlib import Path
 from typing import Any, Callable, Mapping
@@ -292,7 +293,7 @@ class WorkSettlementApplication:
                 normalized = {
                     "status": status,
                     "operation_id": request.operation_id,
-                    "exp": int(data.get("exp", 0) or 0),
+                    "exp": as_int_like(data.get("exp", 0) or 0),
                     "item_awarded": bool(data.get("item_awarded", False)),
                     "success_kind": replay_success_kind,
                     "item_msg": replay_item_msg,

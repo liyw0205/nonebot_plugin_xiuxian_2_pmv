@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from ...core.numeric import as_int_like
 from dataclasses import asdict, is_dataclass
 from pathlib import Path
 from typing import Any, Mapping
@@ -115,8 +116,8 @@ class DemonClaimApplication:
                     "operation_id": request.operation_id,
                     "event_id": request.event_id,
                     "user_id": request.user_id,
-                    "stone": int(service_data.get("stone", request.stone) or 0),
-                    "exp": int(service_data.get("exp", request.exp) or 0),
+                    "stone": as_int_like(service_data.get("stone", request.stone) or 0),
+                    "exp": as_int_like(service_data.get("exp", request.exp) or 0),
                     "items": [dict(item) for item in request.items],
                 }
                 if status in {"applied", "duplicate"}:

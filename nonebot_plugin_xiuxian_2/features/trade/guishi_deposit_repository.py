@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from ...core.numeric import as_int_like
 import json
 from dataclasses import dataclass
 from pathlib import Path
@@ -98,7 +99,7 @@ class GuishiDepositSqlRepository:
                     "duplicate",
                     user_id,
                     int(previous["amount"]),
-                    int(previous["stored_balance"]),
+                    as_int_like(previous["stored_balance"]),
                 )
 
             legacy = self._legacy_operation(uow, operation_id)
@@ -113,7 +114,7 @@ class GuishiDepositSqlRepository:
                     "duplicate",
                     user_id,
                     int(legacy["amount"]),
-                    int(legacy["stored_balance"]),
+                    as_int_like(legacy["stored_balance"]),
                 )
 
             player = uow.query_one(
@@ -126,7 +127,7 @@ class GuishiDepositSqlRepository:
                 "FROM guishi_trade.guishi_info WHERE user_id=?",
                 (user_id,),
             )
-            stored_balance = int(stored["stored_stone"]) if stored is not None else 0
+            stored_balance = as_int_like(stored["stored_stone"]) if stored is not None else 0
             # A rejected deposit must not persist a normalization that the old
             # transaction would have rolled back with the rejected request.
             stored_balance = min(stored_balance, self.STORED_CAP)
@@ -138,7 +139,7 @@ class GuishiDepositSqlRepository:
             charged = uow.execute(
                 "UPDATE user_xiuxian "
                 "SET stone=CAST(COALESCE(stone,0) AS REAL)-CAST(? AS REAL) "
-                "WHERE user_id=? AND COALESCE(stone,0)>=?",
+                "WHERE user_id=? AND xiuxian_int_cmp(COALESCE(stone,0),?)>=0",
                 (amount, user_id, amount),
             )
             if charged.rowcount != 1:

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from ..core.numeric import as_int_like
 import json
 from contextlib import closing
 from dataclasses import dataclass
@@ -50,7 +51,7 @@ class BankUpgradeService:
             ).fetchone()
             if previous is None:
                 return None
-            return BankUpgradeResult("duplicate", int(previous[1]), int(previous[2]), str(previous[3]))
+            return BankUpgradeResult("duplicate", as_int_like(previous[1]), as_int_like(previous[2]), str(previous[3]))
 
     def upgrade(self, operation_id, user_id, expected_level, next_level, cost) -> BankUpgradeResult:
         operation_id = str(operation_id).strip()
@@ -85,7 +86,7 @@ class BankUpgradeService:
                     conn.rollback()
                     if str(previous[0]) != payload:
                         return result("state_changed")
-                    return BankUpgradeResult("duplicate", int(previous[1]), int(previous[2]), str(previous[3]))
+                    return BankUpgradeResult("duplicate", as_int_like(previous[1]), as_int_like(previous[2]), str(previous[3]))
 
                 user = conn.execute(
                     "SELECT COALESCE(stone, 0) FROM user_xiuxian WHERE user_id=%s", (user_id,)
@@ -93,9 +94,9 @@ class BankUpgradeService:
                 if user is None:
                     conn.rollback()
                     return result("user_missing")
-                if int(user[0]) < cost:
+                if as_int_like(user[0]) < cost:
                     conn.rollback()
-                    return result("stone_insufficient", wallet_stone=int(user[0]))
+                    return result("stone_insufficient", wallet_stone=as_int_like(user[0]))
                 table = conn.execute(
                     "SELECT 1 FROM player_data.sqlite_master WHERE type='table' AND name=%s", ("bankinfo",)
                 ).fetchone()
@@ -122,11 +123,11 @@ class BankUpgradeService:
                     account = (expected_level,)
                 if str(account[0]) != expected_level:
                     conn.rollback()
-                    return result("state_changed", wallet_stone=int(user[0]))
+                    return result("state_changed", wallet_stone=as_int_like(user[0]))
 
-                wallet_stone = int(user[0]) - cost
+                wallet_stone = as_int_like(user[0]) - cost
                 charged = conn.execute(
-                    "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)-CAST(%s AS REAL) WHERE user_id=%s AND stone>=%s",
+                    "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)-CAST(%s AS REAL) WHERE user_id=%s AND xiuxian_int_cmp(stone,%s)>=0",
                     (cost, user_id, cost),
                 )
                 updated = conn.execute(
@@ -135,7 +136,7 @@ class BankUpgradeService:
                 )
                 if charged.rowcount != 1 or updated.rowcount != 1:
                     conn.rollback()
-                    return result("state_changed", wallet_stone=int(user[0]))
+                    return result("state_changed", wallet_stone=as_int_like(user[0]))
                 conn.execute(
                     "INSERT INTO bank_upgrade_operations VALUES (%s, %s, %s, %s, %s, CURRENT_TIMESTAMP)",
                     (operation_id, payload, cost, wallet_stone, next_level),
@@ -191,7 +192,7 @@ class BankInterestService:
             ).fetchone()
             if previous is None:
                 return None
-            return BankInterestResult("duplicate", int(previous[1]), int(previous[2]), str(previous[3]))
+            return BankInterestResult("duplicate", as_int_like(previous[1]), as_int_like(previous[2]), str(previous[3]))
 
     def settle(
         self,
@@ -237,7 +238,7 @@ class BankInterestService:
                     conn.rollback()
                     if str(previous[0]) != payload:
                         return result("state_changed")
-                    return BankInterestResult("duplicate", int(previous[1]), int(previous[2]), str(previous[3]))
+                    return BankInterestResult("duplicate", as_int_like(previous[1]), as_int_like(previous[2]), str(previous[3]))
 
                 user = conn.execute(
                     "SELECT COALESCE(stone, 0) FROM user_xiuxian WHERE user_id=%s", (user_id,)
@@ -270,24 +271,24 @@ class BankInterestService:
                         (user_id, expected_saved_stone, expected_saved_at, bank_level),
                     )
                     account = (expected_saved_stone, expected_saved_at, bank_level)
-                if (int(account[0]), str(account[1] or ""), str(account[2])) != (
+                if (as_int_like(account[0]), str(account[1] or ""), str(account[2])) != (
                     expected_saved_stone, expected_saved_at, bank_level
                 ):
                     conn.rollback()
-                    return result("state_changed", wallet_stone=int(user[0]))
+                    return result("state_changed", wallet_stone=as_int_like(user[0]))
 
-                wallet_stone = int(user[0]) + interest
+                wallet_stone = as_int_like(user[0]) + interest
                 credited = conn.execute(
                     "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)+CAST(%s AS REAL) WHERE user_id=%s", (interest, user_id)
                 )
                 updated = conn.execute(
                     "UPDATE player_data.bankinfo SET savetime=%s WHERE user_id=%s "
-                    "AND COALESCE(savestone, 0)=%s AND COALESCE(savetime, '')=%s AND banklevel=%s",
+                    "AND xiuxian_int_cmp(COALESCE(savestone, 0),%s)=0 AND COALESCE(savetime, '')=%s AND banklevel=%s",
                     (settled_at, user_id, expected_saved_stone, expected_saved_at, bank_level),
                 )
                 if credited.rowcount != 1 or updated.rowcount != 1:
                     conn.rollback()
-                    return result("state_changed", wallet_stone=int(user[0]))
+                    return result("state_changed", wallet_stone=as_int_like(user[0]))
                 conn.execute(
                     "INSERT INTO bank_interest_operations VALUES (%s, %s, %s, %s, %s, CURRENT_TIMESTAMP)",
                     (operation_id, payload, interest, wallet_stone, settled_at),

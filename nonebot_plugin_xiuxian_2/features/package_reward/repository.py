@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from ...core.numeric import as_int_like
 from ...core.errors import DomainError
 
 import json
@@ -47,13 +48,11 @@ class PackageRewardRepository:
         }
 
     def snapshot(self, uow: DatabaseUnitOfWork, user_id: str) -> dict[str, int]:
-        row = uow.query_one(
-            "SELECT COUNT(*) AS rows, "
-            "CAST(COALESCE(SUM(CAST(COALESCE(stone, 0) AS REAL)), 0) AS INTEGER) AS stone "
-            "FROM user_xiuxian WHERE user_id = ?",
+        rows = uow.query_all(
+            "SELECT stone FROM user_xiuxian WHERE user_id = ?",
             (user_id,),
         )
-        return {"rows": int(row["rows"] if row else 0), "stone": int(row["stone"] if row else 0)}
+        return {"rows": len(rows), "stone": sum(as_int_like(row["stone"]) for row in rows)}
 
     def apply(
         self,
@@ -98,8 +97,8 @@ class PackageRewardRepository:
         if stone_delta:
             changed = uow.execute(
                 "UPDATE user_xiuxian SET stone = CAST(COALESCE(stone, 0) AS REAL) + CAST(? AS REAL) "
-                "WHERE user_id = ? AND CAST(COALESCE(stone, 0) AS REAL) + CAST(? AS REAL) >= 0",
-                (stone_delta, user_id, stone_delta),
+                "WHERE user_id = ? AND xiuxian_int_cmp(COALESCE(stone,0),?)>=0",
+                (stone_delta, user_id, -stone_delta),
             )
             if changed.rowcount != 1:
                 raise DomainError("stone_write_rejected", "package stone reward was not saved")

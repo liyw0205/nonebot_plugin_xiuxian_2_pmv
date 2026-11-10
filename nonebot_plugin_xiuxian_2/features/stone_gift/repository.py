@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from ...core.numeric import as_int_like
 from typing import Any
 
 from ...infrastructure.database import DatabaseUnitOfWork
@@ -51,7 +52,7 @@ class StoneGiftRepository:
             (transfer_date, *result),
         )
         for row in rows:
-            result[str(row["user_id"])] = {"sent": int(row["sent_amount"] or 0), "received": int(row["received_amount"] or 0)}
+            result[str(row["user_id"])] = {"sent": as_int_like(row["sent_amount"] or 0), "received": as_int_like(row["received_amount"] or 0)}
         return result
 
     @staticmethod
@@ -62,9 +63,9 @@ class StoneGiftRepository:
             str(row["operation_id"]),
             str(row["sender_id"]),
             str(row["recipient_id"]),
-            int(row["gross_amount"]),
-            int(row["net_amount"]),
-            int(row["fee_amount"]),
+            as_int_like(row["gross_amount"]),
+            as_int_like(row["net_amount"]),
+            as_int_like(row["fee_amount"]),
         )
 
     def operation(self, uow: DatabaseUnitOfWork, operation_id: str) -> StoneGiftRecord | None:
@@ -84,13 +85,13 @@ class StoneGiftRepository:
             return result
         placeholders = ",".join("?" for _ in unique_ids)
         rows = uow.query_all(
-            f"SELECT user_id, COUNT(*) AS rows, "
-            f"CAST(COALESCE(SUM(CAST(COALESCE(stone, 0) AS REAL)), 0) AS INTEGER) AS stone "
-            f"FROM user_xiuxian WHERE user_id IN ({placeholders}) GROUP BY user_id",
+            f"SELECT user_id,stone FROM user_xiuxian WHERE user_id IN ({placeholders})",
             unique_ids,
         )
         for row in rows:
-            result[str(row["user_id"])] = {"rows": int(row["rows"]), "stone": int(row["stone"] or 0)}
+            account = result[str(row["user_id"])]
+            account["rows"] += 1
+            account["stone"] += as_int_like(row["stone"])
         return result
 
     def transfer(
@@ -124,8 +125,8 @@ class StoneGiftRepository:
             # Legacy player.db stored today's counters without a date.  Keep
             # them in memory until the transfer succeeds so a rejection does
             # not itself mutate the new projection.
-            baseline_sent = int(totals.get(record.sender_id, {}).get("sent_amount", send_used or 0))
-            baseline_received = int(totals.get(record.recipient_id, {}).get("received_amount", receive_used or 0))
+            baseline_sent = as_int_like(totals.get(record.sender_id, {}).get("sent_amount", send_used or 0))
+            baseline_received = as_int_like(totals.get(record.recipient_id, {}).get("received_amount", receive_used or 0))
             sent = baseline_sent
             received = baseline_received
             if send_limit is not None and sent + record.gross_amount > send_limit:
@@ -139,12 +140,12 @@ class StoneGiftRepository:
             with uow.savepoint("stone_gift_assets"):
                 charged = uow.execute(
                     "UPDATE user_xiuxian SET stone = CAST(COALESCE(stone, 0) AS REAL) - CAST(? AS REAL) "
-                    "WHERE user_id = ? AND CAST(COALESCE(stone, 0) AS REAL) >= CAST(? AS REAL)",
+                    "WHERE user_id = ? AND xiuxian_int_cmp(COALESCE(stone, 0),?)>=0",
                     (record.gross_amount, record.sender_id, record.gross_amount),
                 )
                 if charged.rowcount != 1:
                     sender = uow.query_all("SELECT stone FROM user_xiuxian WHERE user_id=?", (record.sender_id,))
-                    reason = "sender_missing" if not sender else "account_rows_inconsistent" if len(sender) != 1 else "stone_insufficient" if int(sender[0]["stone"] or 0) < record.gross_amount else "stone_write_rejected"
+                    reason = "sender_missing" if not sender else "account_rows_inconsistent" if len(sender) != 1 else "stone_insufficient" if as_int_like(sender[0]["stone"] or 0) < record.gross_amount else "stone_write_rejected"
                     raise _TransferRejected(TransferStatus("stone_insufficient", reason, "sender"))
                 credited = uow.execute(
                     "UPDATE user_xiuxian SET stone = CAST(COALESCE(stone, 0) AS REAL) + CAST(? AS REAL) WHERE user_id = ?",

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from ...core.numeric import as_int_like
 import json
 import secrets
 from dataclasses import dataclass
@@ -111,7 +112,7 @@ class GuishiQiugouSqlRepository:
                 "FROM guishi_info WHERE user_id=?",
                 (user_id,),
             )
-            if balance is None or int(balance["stored_stone"]) < total_cost:
+            if balance is None or as_int_like(balance["stored_stone"]) < total_cost:
                 return GuishiQiugouCreateResult("stone_insufficient", total_cost=total_cost)
 
             order_id = ""
@@ -149,7 +150,7 @@ class GuishiQiugouSqlRepository:
 
             charged = uow.execute(
                 "UPDATE guishi_info SET stored_stone=CAST(COALESCE(stored_stone,0) AS REAL)-CAST(? AS REAL) "
-                "WHERE user_id=? AND COALESCE(stored_stone,0)>=?",
+                "WHERE user_id=? AND xiuxian_int_cmp(COALESCE(stored_stone,0),?)>=0",
                 (total_cost, user_id, total_cost),
             )
             if charged.rowcount != 1:

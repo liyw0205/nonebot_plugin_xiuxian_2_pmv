@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from ...core.numeric import as_int_like
 from datetime import date, datetime
 from typing import Any
 
@@ -48,7 +49,7 @@ class LotteryApplication:
             if user is None:
                 return LotterySettlement("user_missing", operation_id, user_id=user_id, user_name=user_name, business_date=day)
             if self.repository.participant(uow, day, user_id) is not None:
-                return LotterySettlement("already_participated", operation_id, user_id=user_id, user_name=str(user["user_name"]), business_date=day, pool_before=self.repository.pool(uow), pool_after=self.repository.pool(uow), participants=self.repository.participant_count(uow, day), wallet_stone=int(user["stone"]))
+                return LotterySettlement("already_participated", operation_id, user_id=user_id, user_name=str(user["user_name"]), business_date=day, pool_before=self.repository.pool(uow), pool_after=self.repository.pool(uow), participants=self.repository.participant_count(uow, day), wallet_stone=as_int_like(user["stone"]))
             number = int(self.random_source.randint(1, 100000))
             if not 1 <= number <= 100000:
                 raise ValueError("lottery number must be between 1 and 100000")
@@ -56,7 +57,7 @@ class LotteryApplication:
             tier = lottery_tier(number)
             prize = lottery_prize(before + deposit, tier)
             after = before + deposit - prize
-            wallet = int(user["stone"]) + prize
+            wallet = as_int_like(user["stone"]) + prize
             if prize:
                 changed = uow.execute("UPDATE user_xiuxian SET stone=COALESCE(stone,0)+? WHERE user_id=?", (prize, user_id))
                 if changed.rowcount != 1:

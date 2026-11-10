@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from ..core.numeric import as_int_like
 import json
 from contextlib import closing
 from dataclasses import dataclass, field
@@ -323,10 +324,7 @@ class DongfuExpansionService:
 
     @staticmethod
     def _as_int(value: object) -> int:
-        try:
-            return int(value or 0)
-        except (TypeError, ValueError):
-            return 0
+        return as_int_like(value)
 
     @staticmethod
     def _ensure_operations(conn) -> None:
@@ -440,7 +438,7 @@ class DongfuExpansionService:
                     (deed_cost, user_id, int(deed_id), deed_cost),
                 )
                 deducted_stone = conn.execute(
-                    "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)-CAST(%s AS REAL) WHERE user_id=%s AND stone >= %s",
+                    "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)-CAST(%s AS REAL) WHERE user_id=%s AND xiuxian_int_cmp(stone,%s)>=0",
                     (stone_cost, user_id, stone_cost),
                 )
                 updated_dongfu = conn.execute(
@@ -507,14 +505,14 @@ class DongfuArrayUpgradeService:
                     conn.rollback(); return DongfuArrayUpgradeResult("duplicate", int(old[1])) if str(old[0]) == payload else DongfuArrayUpgradeResult("state_changed")
                 user = conn.execute("SELECT stone FROM user_xiuxian WHERE user_id=%s", (user_id,)).fetchone()
                 if user is None: conn.rollback(); return DongfuArrayUpgradeResult("user_missing")
-                if int(user[0] or 0) < stone_cost: conn.rollback(); return DongfuArrayUpgradeResult("stone_insufficient")
+                if as_int_like(user[0] or 0) < stone_cost: conn.rollback(); return DongfuArrayUpgradeResult("stone_insufficient")
                 row = conn.execute('SELECT built,array_level FROM player_data."dongfu_status" WHERE user_id=%s', (user_id,)).fetchone()
                 if row is None or int(row[0] or 0) != 1: conn.rollback(); return DongfuArrayUpgradeResult("dongfu_missing")
                 if int(row[1] or 0) != expected_level: conn.rollback(); return DongfuArrayUpgradeResult("state_changed")
                 if item_cost:
                     item = conn.execute("SELECT goods_num FROM back WHERE user_id=%s AND goods_id=%s", (user_id, item_id)).fetchone()
                     if item is None or int(item[0] or 0) < item_cost: conn.rollback(); return DongfuArrayUpgradeResult("item_insufficient")
-                stone = conn.execute("UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)-CAST(%s AS REAL) WHERE user_id=%s AND stone>=%s", (stone_cost, user_id, stone_cost))
+                stone = conn.execute("UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)-CAST(%s AS REAL) WHERE user_id=%s AND xiuxian_int_cmp(stone,%s)>=0", (stone_cost, user_id, stone_cost))
                 item = conn.execute("UPDATE back SET goods_num=goods_num-%s WHERE user_id=%s AND goods_id=%s AND goods_num>=%s", (item_cost, user_id, item_id, item_cost)) if item_cost else None
                 dongfu = conn.execute('UPDATE player_data."dongfu_status" SET array_level=%s WHERE user_id=%s AND array_level=%s', (next_level, user_id, expected_level))
                 if stone.rowcount != 1 or dongfu.rowcount != 1 or (item is not None and item.rowcount != 1): conn.rollback(); return DongfuArrayUpgradeResult("state_changed")

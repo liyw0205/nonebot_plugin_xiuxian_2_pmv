@@ -1,4 +1,5 @@
 from __future__ import annotations
+from ...core.numeric import as_int_like
 import json
 from pathlib import Path
 from typing import Any, Iterable
@@ -29,10 +30,10 @@ class SectBuffSearchSqlRepository:
             if sect is None:return {'status':'sect_missing',**base}
             if int(user['sect_id'] or 0)!=sect_id:return {'status':'membership_changed',**base}
             if str(sect['sect_owner'])!=actor_id or int(user['sect_position'] or 0)!=owner_position:return {'status':'not_owner','reason':'sect_owner_changed' if str(sect['sect_owner'])!=actor_id else 'sect_position_changed',**base}
-            if int(sect['stones'])<stone_cost:return {'status':'stone_insufficient','reason':'sect_stone_insufficient',**base}
-            if int(sect['materials'])<materials_cost:return {'status':'materials_insufficient',**base}
+            if as_int_like(sect['stones'])<stone_cost:return {'status':'stone_insufficient','reason':'sect_stone_insufficient',**base}
+            if as_int_like(sect['materials'])<materials_cost:return {'status':'materials_insufficient',**base}
             if column is None: return {'status':'invalid_buff_type',**base}
-            changed=uow.execute(f'UPDATE sects SET {column}=?,sect_used_stone=sect_used_stone-?,sect_materials=sect_materials-? WHERE sect_id=? AND sect_owner=? AND COALESCE(sect_used_stone,0)>=? AND COALESCE(sect_materials,0)>=?',(new_value,stone_cost,materials_cost,sect_id,actor_id,stone_cost,materials_cost))
+            changed=uow.execute(f'UPDATE sects SET {column}=?,sect_used_stone=sect_used_stone-?,sect_materials=sect_materials-? WHERE sect_id=? AND sect_owner=? AND xiuxian_int_cmp(COALESCE(sect_used_stone,0),?)>=0 AND xiuxian_int_cmp(COALESCE(sect_materials,0),?)>=0',(new_value,stone_cost,materials_cost,sect_id,actor_id,stone_cost,materials_cost))
             if changed.rowcount!=1: raise DomainError('sect_catalog_write_rejected','buff search write count mismatch')
             uow.execute('INSERT INTO sect_buff_search_operations(operation_id,actor_id,sect_id,buff_type,previous_value,new_value,stone_cost,materials_cost) VALUES(?,?,?,?,?,?,?,?)',(operation_id,actor_id,sect_id,buff_type,previous_value,new_value,stone_cost,materials_cost))
             return {'status':'applied',**base}

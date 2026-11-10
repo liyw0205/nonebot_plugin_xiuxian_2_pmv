@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from ..core.numeric import as_int_like
 import json
 from contextlib import closing
 from dataclasses import dataclass
@@ -81,7 +82,7 @@ class WorkSettlementService:
             ).fetchone()
             if previous is None:
                 return None
-            return self._from_row("duplicate", int(previous[1]), bool(previous[2]), previous[3])
+            return self._from_row("duplicate", as_int_like(previous[1]), bool(previous[2]), previous[3])
 
     def settle(
         self,
@@ -116,7 +117,7 @@ class WorkSettlementService:
                     conn.rollback()
                     if not operation_payload_matches(previous[0], payload):
                         return WorkSettlementResult("state_changed", 0, False)
-                    return self._from_row("duplicate", int(previous[1]), bool(previous[2]), previous[3])
+                    return self._from_row("duplicate", as_int_like(previous[1]), bool(previous[2]), previous[3])
 
                 user = conn.execute("SELECT COALESCE(exp, 0) FROM user_xiuxian WHERE user_id=%s", (user_id,)).fetchone()
                 work = conn.execute(
@@ -138,7 +139,7 @@ class WorkSettlementService:
                     conn.rollback()
                     return WorkSettlementResult("state_changed", 0, False)
 
-                applied_exp = max(0, min(exp_gain, max_exp - int(user[0] or 0)))
+                applied_exp = max(0, min(exp_gain, max_exp - as_int_like(user[0] or 0)))
                 if reward is not None:
                     current_item = conn.execute(
                         "SELECT COALESCE(goods_num, 0) FROM back WHERE user_id=%s AND goods_id=%s",

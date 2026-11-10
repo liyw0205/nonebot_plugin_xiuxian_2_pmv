@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from ...core.numeric import as_int_like
 import json
 from pathlib import Path
 
@@ -61,8 +62,8 @@ class AdminStoneSqlRepository:
                 return AdminStoneResult(
                     "duplicate",
                     user_id,
-                    int(previous["previous_stone"]),
-                    int(previous["final_stone"]),
+                    as_int_like(previous["previous_stone"]),
+                    as_int_like(previous["final_stone"]),
                     int(previous["applied_delta"]),
                 )
 
@@ -85,16 +86,16 @@ class AdminStoneSqlRepository:
                         isinstance(old_payload, list)
                         and old_payload == [operator_id, user_id]
                         and str(old_receipt["user_id"]) == user_id
-                        and int(old_receipt["previous_stone"]) == expected_stone
+                        and as_int_like(old_receipt["previous_stone"]) == expected_stone
                         and int(old_receipt["applied_delta"]) == requested_delta
-                        and int(old_receipt["final_stone"]) == max(0, expected_stone + requested_delta)
+                        and as_int_like(old_receipt["final_stone"]) == max(0, expected_stone + requested_delta)
                     )
                     if same_effect:
                         return AdminStoneResult(
                             "duplicate",
                             user_id,
-                            int(old_receipt["previous_stone"]),
-                            int(old_receipt["final_stone"]),
+                            as_int_like(old_receipt["previous_stone"]),
+                            as_int_like(old_receipt["final_stone"]),
                             int(old_receipt["applied_delta"]),
                         )
                     return AdminStoneResult("operation_conflict", user_id)
@@ -102,13 +103,13 @@ class AdminStoneSqlRepository:
             row = uow.query_one("SELECT COALESCE(stone,0) AS stone FROM user_xiuxian WHERE user_id=?", (user_id,))
             if row is None:
                 return AdminStoneResult("user_missing", user_id)
-            current = int(row["stone"])
+            current = as_int_like(row["stone"])
             if current != int(expected_stone):
                 return AdminStoneResult("state_changed", user_id, current, current, 0, reason="stone_changed")
             final = max(0, current + requested_delta)
             applied_delta = final - current
             changed = uow.execute(
-                "UPDATE user_xiuxian SET stone=? WHERE user_id=? AND COALESCE(stone,0)=?",
+                "UPDATE user_xiuxian SET stone=? WHERE user_id=? AND xiuxian_int_cmp(COALESCE(stone,0),?)=0",
                 (final, user_id, current),
             )
             if changed.rowcount != 1:

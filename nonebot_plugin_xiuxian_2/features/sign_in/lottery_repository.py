@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from ...core.numeric import as_int_like
 from typing import Any
 
 from ...infrastructure.database import DatabaseUnitOfWork
@@ -56,7 +57,7 @@ class LotteryRepository:
         return LotterySnapshot(business_date, pool, participants, winner)
 
     def _result(self, row: Any, status: str) -> LotterySettlement:
-        return LotterySettlement(status=status, operation_id=str(row["operation_id"]), user_id=str(row["user_id"]), user_name=str(row["user_name"]), business_date=str(row["business_date"]), lottery_number=int(row["lottery_number"]), prize_tier=str(row["prize_tier"]), prize=int(row["prize_amount"]), deposit=int(row["deposit_amount"]), pool_before=int(row["pool_before"]), pool_after=int(row["pool_after"]), participants=int(row["participant_count"]), wallet_stone=int(row["wallet_stone"]))
+        return LotterySettlement(status=status, operation_id=str(row["operation_id"]), user_id=str(row["user_id"]), user_name=str(row["user_name"]), business_date=str(row["business_date"]), lottery_number=int(row["lottery_number"]), prize_tier=str(row["prize_tier"]), prize=int(row["prize_amount"]), deposit=int(row["deposit_amount"]), pool_before=int(row["pool_before"]), pool_after=int(row["pool_after"]), participants=int(row["participant_count"]), wallet_stone=as_int_like(row["wallet_stone"]))
 
     def insert(self, uow: DatabaseUnitOfWork, result: LotterySettlement, occurred_at: str) -> None:
         uow.execute("INSERT INTO lottery_participants(business_date,user_id,operation_id,participated_at) VALUES(?,?,?,?)", (result.business_date, result.user_id, result.operation_id, occurred_at))

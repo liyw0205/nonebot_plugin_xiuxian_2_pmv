@@ -1,4 +1,5 @@
 from __future__ import annotations
+from ...core.numeric import as_int_like
 from dataclasses import replace as _reason_replace
 from ...core.snapshot_reason import first_difference
 
@@ -63,7 +64,7 @@ class WorldBossBattleSettlementSqlRepository:
     @staticmethod
     def _integer(value: Any) -> int:
         try:
-            return int(value or 0)
+            return as_int_like(value or 0)
         except (TypeError, ValueError, OverflowError):
             return 0
 
@@ -168,8 +169,8 @@ class WorldBossBattleSettlementSqlRepository:
             int(row["boss_hp"] or 0),
             int(row["stamina"] or 0),
             int(row["battle_count"] or 0),
-            int(row["stone"] or 0),
-            int(row["exp"] or 0),
+            as_int_like(row["stone"] or 0),
+            as_int_like(row["exp"] or 0),
             int(row["integral"] or 0),
             tuple(str(line) for line in lines),
         )
@@ -227,7 +228,7 @@ class WorldBossBattleSettlementSqlRepository:
 
         def safe_int(value: Any, default: int = 0) -> int:
             try:
-                number = int(value)
+                number = as_int_like(value, default)
             except (TypeError, ValueError):
                 number = int(default)
             return min(sqlite_max, max(0, number))
@@ -330,8 +331,8 @@ class WorldBossBattleSettlementSqlRepository:
             cooldown = uow.query_one("SELECT COALESCE(last_check_info_time,'') AS checked_at FROM user_cd WHERE user_id=?", (user_id,))
             if user is None or cooldown is None:
                 return self._result("user_missing", expected_stamina=expected_stamina, expected_battle_count=expected_battle_count, expected_stone=expected_stone, expected_exp=expected_exp, expected_integral=expected_total_integral)
-            if (int(user["stamina"]), int(user["hp"]), int(user["mp"]), int(user["exp"]), int(user["stone"])) != (int(expected_stamina), int(expected_hp), int(expected_mp), int(expected_exp), int(expected_stone)) or str(cooldown["checked_at"]) != str(expected_checked_at or ""):
-                return _reason_replace(self._result("state_changed", expected_stamina=expected_stamina, expected_battle_count=expected_battle_count, expected_stone=expected_stone, expected_exp=expected_exp, expected_integral=expected_total_integral), reason=first_difference((int(user["stamina"]),int(user["hp"]),int(user["mp"]),int(user["exp"]),int(user["stone"]),str(cooldown["checked_at"])), (int(expected_stamina),int(expected_hp),int(expected_mp),int(expected_exp),int(expected_stone),str(expected_checked_at or "")), ("stamina_changed","hp_changed","mp_changed","exp_changed","stone_changed","boss_checked_at_changed")), subject="")
+            if (int(user["stamina"]), as_int_like(user["hp"]), as_int_like(user["mp"]), as_int_like(user["exp"]), as_int_like(user["stone"])) != (int(expected_stamina), int(expected_hp), int(expected_mp), int(expected_exp), int(expected_stone)) or str(cooldown["checked_at"]) != str(expected_checked_at or ""):
+                return _reason_replace(self._result("state_changed", expected_stamina=expected_stamina, expected_battle_count=expected_battle_count, expected_stone=expected_stone, expected_exp=expected_exp, expected_integral=expected_total_integral), reason=first_difference((int(user["stamina"]),as_int_like(user["hp"]),as_int_like(user["mp"]),as_int_like(user["exp"]),as_int_like(user["stone"]),str(cooldown["checked_at"])), (int(expected_stamina),int(expected_hp),int(expected_mp),int(expected_exp),int(expected_stone),str(expected_checked_at or "")), ("stamina_changed","hp_changed","mp_changed","exp_changed","stone_changed","boss_checked_at_changed")), subject="")
             if expected_stamina < stamina_cost:
                 return self._result("stamina_insufficient", expected_stamina=expected_stamina, expected_battle_count=expected_battle_count, expected_stone=expected_stone, expected_exp=expected_exp, expected_integral=expected_total_integral)
             if expected_hp <= expected_exp / 10:
@@ -339,7 +340,7 @@ class WorldBossBattleSettlementSqlRepository:
 
             daily = uow.query_one("SELECT COALESCE(boss_stone,0) AS stone,COALESCE(boss_integral,0) AS integral,COALESCE(boss_battle_count,0) AS count FROM player_data.boss WHERE user_id=?", (user_id,))
             total = uow.query_one("SELECT COALESCE(integral,0) AS integral FROM player_data.boss_limit WHERE user_id=?", (user_id,))
-            actual_daily = (0, 0, 0) if daily is None else (int(daily["stone"]), int(daily["integral"]), int(daily["count"]))
+            actual_daily = (0, 0, 0) if daily is None else (as_int_like(daily["stone"]), int(daily["integral"]), int(daily["count"]))
             actual_total = 0 if total is None else int(total["integral"])
             if actual_daily != (int(expected_daily_stone), int(expected_daily_integral), int(expected_battle_count)) or actual_total != int(expected_total_integral):
                 return _reason_replace(self._result("state_changed", expected_stamina=expected_stamina, expected_battle_count=expected_battle_count, expected_stone=expected_stone, expected_exp=expected_exp, expected_integral=expected_total_integral), reason=first_difference((*actual_daily,actual_total), (int(expected_daily_stone),int(expected_daily_integral),int(expected_battle_count),int(expected_total_integral)), ("boss_daily_stone_changed","boss_daily_integral_changed","boss_daily_count_changed","boss_integral_changed")), subject="")
@@ -358,7 +359,7 @@ class WorldBossBattleSettlementSqlRepository:
             exp = int(expected_exp) + int(exp_reward)
             count = int(expected_battle_count) + 1
             integral = int(expected_total_integral) + int(integral_reward)
-            if uow.execute("UPDATE user_xiuxian SET user_stamina=?,hp=?,mp=?,exp=?,stone=? WHERE user_id=? AND user_stamina=? AND hp=? AND mp=? AND exp=? AND stone=?", (stamina, max(1, int(final_hp)), max(1, int(final_mp)), exp, stone, user_id, expected_stamina, expected_hp, expected_mp, expected_exp, expected_stone)).rowcount != 1:
+            if uow.execute("UPDATE user_xiuxian SET user_stamina=?,hp=?,mp=?,exp=?,stone=? WHERE user_id=? AND user_stamina=? AND xiuxian_int_cmp(hp,?)=0 AND xiuxian_int_cmp(mp,?)=0 AND xiuxian_int_cmp(exp,?)=0 AND xiuxian_int_cmp(stone,?)=0", (stamina, max(1, int(final_hp)), max(1, int(final_mp)), exp, stone, user_id, expected_stamina, expected_hp, expected_mp, expected_exp, expected_stone)).rowcount != 1:
                 raise RuntimeError("player state changed")
             if uow.execute("UPDATE user_cd SET last_check_info_time=? WHERE user_id=? AND last_check_info_time=?", (str(checked_at), user_id, str(expected_checked_at))).rowcount != 1:
                 raise RuntimeError("cooldown changed")

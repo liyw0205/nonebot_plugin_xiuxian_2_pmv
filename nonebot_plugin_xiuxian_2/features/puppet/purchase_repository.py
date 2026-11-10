@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from ...core.numeric import as_int_like
 from dataclasses import dataclass
 from pathlib import Path
 from threading import RLock
@@ -86,9 +87,9 @@ class PuppetPurchaseSqlRepository:
             previous_level = int(player["灵田傀儡"] or 0)
             if previous_level > 0:
                 return PuppetPurchaseResult("already_owned", user_id, previous_level=previous_level, current_level=previous_level)
-            if int(user["stone"] or 0) < stone_cost:
+            if as_int_like(user["stone"] or 0) < stone_cost:
                 return PuppetPurchaseResult("stone_insufficient", user_id, stone_cost=stone_cost)
-            if uow.execute("UPDATE user_xiuxian SET stone=stone-? WHERE user_id=? AND stone>=?", (stone_cost, user_id, stone_cost)).rowcount != 1:
+            if uow.execute("UPDATE user_xiuxian SET stone=stone-? WHERE user_id=? AND xiuxian_int_cmp(stone,?)>=0", (stone_cost, user_id, stone_cost)).rowcount != 1:
                 return PuppetPurchaseResult("stone_changed", user_id, stone_cost=stone_cost)
             if uow.execute('UPDATE player_data.mix_elixir_info SET "灵田傀儡"=1 WHERE user_id=? AND CAST(COALESCE("灵田傀儡",0) AS INTEGER)=0', (user_id,)).rowcount != 1:
                 return PuppetPurchaseResult("puppet_level_changed", user_id, stone_cost=stone_cost)
@@ -118,9 +119,9 @@ class PuppetPurchaseSqlRepository:
             cost = int(upgrade_costs.get(previous_level, -1))
             if cost < 0:
                 return PuppetPurchaseResult("invalid_puppet_level", user_id, action="upgrade", previous_level=previous_level)
-            if int(user["stone"] or 0) < cost:
+            if as_int_like(user["stone"] or 0) < cost:
                 return PuppetPurchaseResult("stone_insufficient", user_id, action="upgrade", previous_level=previous_level, stone_cost=cost)
-            if uow.execute("UPDATE user_xiuxian SET stone=stone-? WHERE user_id=? AND stone>=?", (cost, user_id, cost)).rowcount != 1:
+            if uow.execute("UPDATE user_xiuxian SET stone=stone-? WHERE user_id=? AND xiuxian_int_cmp(stone,?)>=0", (cost, user_id, cost)).rowcount != 1:
                 return PuppetPurchaseResult("stone_changed", user_id, action="upgrade", previous_level=previous_level, stone_cost=cost)
             current_level = previous_level + 1
             if uow.execute('UPDATE player_data.mix_elixir_info SET "灵田傀儡"=? WHERE user_id=? AND CAST(COALESCE("灵田傀儡",0) AS INTEGER)=?', (current_level, user_id, previous_level)).rowcount != 1:

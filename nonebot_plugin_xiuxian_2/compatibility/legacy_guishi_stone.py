@@ -136,7 +136,7 @@ class LegacyGuishiStoneService:
                     "WHERE user_id=%s",
                     (user_id,),
                 ).fetchone()
-                stored_balance = int(stored[0]) if stored is not None else 0
+                stored_balance = as_int_like(stored[0]) if stored is not None else 0
                 if stored_balance > self.STORED_CAP:
                     stored_balance = self.STORED_CAP
                     conn.execute(
@@ -155,7 +155,7 @@ class LegacyGuishiStoneService:
                         )
                     charged = conn.execute(
                         "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)-CAST(%s AS REAL) "
-                        "WHERE user_id=%s AND COALESCE(stone, 0)>=%s",
+                        "WHERE user_id=%s AND xiuxian_int_cmp(COALESCE(stone, 0),%s)>=0",
                         (amount, user_id, amount),
                     )
                     if charged.rowcount != 1:

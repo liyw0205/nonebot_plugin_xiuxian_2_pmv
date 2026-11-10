@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
+from ...core.numeric import as_int_like
 from ...infrastructure.database import DatabaseUnitOfWork
 
 
@@ -97,7 +99,7 @@ class PlayerEconomySqlRepository:
             )
             if row is None:
                 return self._result("user_missing", user_id, amount)
-            current = int(row["value"] or 0)
+            current = as_int_like(row["value"])
             if expected_value is not None and current != int(expected_value):
                 return self._result("state_changed", user_id, amount, 0, current)
             target = current + amount
@@ -106,7 +108,7 @@ class PlayerEconomySqlRepository:
             applied = max(0, target - current)
             changed = uow.execute(
                 f"UPDATE user_xiuxian SET \"{field}\"=? WHERE rowid=? "
-                f"AND user_id=? AND COALESCE(\"{field}\",0)=?",
+                f"AND user_id=? AND xiuxian_int_cmp(COALESCE(\"{field}\",0),?)=0",
                 (target, row["_rowid"], user_id, current),
             )
             if changed.rowcount != 1:
@@ -153,9 +155,11 @@ class PlayerEconomySqlRepository:
     ) -> ExperienceNormalizationResult:
         user_id = str(user_id).strip()
         try:
-            expected_numeric = float(expected_exp)
-            target = int(expected_numeric)
-        except (TypeError, ValueError, OverflowError):
+            expected_numeric = Decimal(expected_exp)
+            if not expected_numeric.is_finite():
+                raise ValueError("non-finite experience")
+            target = as_int_like(expected_exp)
+        except (InvalidOperation, TypeError, ValueError, OverflowError):
             return ExperienceNormalizationResult("invalid", user_id)
         if not user_id:
             return ExperienceNormalizationResult("invalid", user_id)
@@ -174,8 +178,10 @@ class PlayerEconomySqlRepository:
                 return ExperienceNormalizationResult("user_missing", user_id)
             current = row["exp"]
             try:
-                current_numeric = float(current)
-            except (TypeError, ValueError, OverflowError):
+                current_numeric = Decimal(current)
+                if not current_numeric.is_finite():
+                    raise ValueError("non-finite experience")
+            except (InvalidOperation, TypeError, ValueError, OverflowError):
                 return ExperienceNormalizationResult("invalid", user_id)
             if current_numeric != expected_numeric:
                 return ExperienceNormalizationResult(

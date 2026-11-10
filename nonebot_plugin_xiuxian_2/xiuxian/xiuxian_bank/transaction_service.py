@@ -125,12 +125,12 @@ class BankDepositService:
                 if user is None:
                     conn.rollback()
                     return result("user_missing")
-                if int(user[0]) < amount:
+                if as_int_like(user[0]) < amount:
                     conn.rollback()
-                    return result("stone_insufficient", wallet_stone=int(user[0]))
+                    return result("stone_insufficient", wallet_stone=as_int_like(user[0]))
                 if expected_saved_stone + amount > save_limit:
                     conn.rollback()
-                    return result("limit_exceeded", wallet_stone=int(user[0]))
+                    return result("limit_exceeded", wallet_stone=as_int_like(user[0]))
 
                 table = conn.execute(
                     "SELECT 1 FROM player_data.sqlite_master WHERE type='table' AND name=%s", ("bankinfo",)
@@ -157,26 +157,26 @@ class BankDepositService:
                         (user_id, expected_saved_stone, expected_saved_at, bank_level),
                     )
                     account = (expected_saved_stone, expected_saved_at, bank_level)
-                if (int(account[0]), str(account[1]), str(account[2])) != (
+                if (as_int_like(account[0]), str(account[1]), str(account[2])) != (
                     expected_saved_stone, expected_saved_at, bank_level
                 ):
                     conn.rollback()
-                    return result("state_changed", wallet_stone=int(user[0]))
+                    return result("state_changed", wallet_stone=as_int_like(user[0]))
 
-                wallet_stone = int(user[0]) - amount + interest
+                wallet_stone = as_int_like(user[0]) - amount + interest
                 charged = conn.execute(
-                    "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)-CAST(%s AS REAL)+%s WHERE user_id=%s AND stone>=%s",
+                    "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)-CAST(%s AS REAL)+%s WHERE user_id=%s AND xiuxian_int_cmp(stone,%s)>=0",
                     (amount, interest, user_id, amount),
                 )
                 saved_stone = expected_saved_stone + amount
                 updated = conn.execute(
                     "UPDATE player_data.bankinfo SET savestone=%s, savetime=%s WHERE user_id=%s "
-                    "AND COALESCE(savestone, 0)=%s AND savetime=%s AND banklevel=%s",
+                    "AND xiuxian_int_cmp(COALESCE(savestone, 0),%s)=0 AND savetime=%s AND banklevel=%s",
                     (saved_stone, settled_at, user_id, expected_saved_stone, expected_saved_at, bank_level),
                 )
                 if charged.rowcount != 1 or updated.rowcount != 1:
                     conn.rollback()
-                    return result("state_changed", wallet_stone=int(user[0]))
+                    return result("state_changed", wallet_stone=as_int_like(user[0]))
                 conn.execute(
                     "INSERT INTO bank_deposit_operations VALUES (%s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP)",
                     (operation_id, payload, amount, interest, wallet_stone, saved_stone, settled_at),
@@ -298,27 +298,27 @@ class BankWithdrawalService:
                 ).fetchone()
                 if table is None:
                     conn.rollback()
-                    return result("state_changed", wallet_stone=int(user[0]))
+                    return result("state_changed", wallet_stone=as_int_like(user[0]))
                 columns = {
                     str(column[1]) for column in conn.execute("PRAGMA player_data.table_info(bankinfo)").fetchall()
                 }
                 if not {"savestone", "savetime", "banklevel"}.issubset(columns):
                     conn.rollback()
-                    return result("state_changed", wallet_stone=int(user[0]))
+                    return result("state_changed", wallet_stone=as_int_like(user[0]))
                 account = conn.execute(
                     "SELECT COALESCE(savestone, 0), savetime, banklevel FROM player_data.bankinfo WHERE user_id=%s",
                     (user_id,),
                 ).fetchone()
-                if account is None or (int(account[0]), str(account[1]), str(account[2])) != (
+                if account is None or (as_int_like(account[0]), str(account[1]), str(account[2])) != (
                     expected_saved_stone, expected_saved_at, bank_level
                 ):
                     conn.rollback()
-                    return result("state_changed", wallet_stone=int(user[0]))
+                    return result("state_changed", wallet_stone=as_int_like(user[0]))
                 if expected_saved_stone < amount:
                     conn.rollback()
-                    return result("saved_stone_insufficient", wallet_stone=int(user[0]))
+                    return result("saved_stone_insufficient", wallet_stone=as_int_like(user[0]))
 
-                wallet_stone = int(user[0]) + amount + interest
+                wallet_stone = as_int_like(user[0]) + amount + interest
                 credited = conn.execute(
                     "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)+CAST(%s AS REAL)+%s WHERE user_id=%s",
                     (amount, interest, user_id),
@@ -326,12 +326,12 @@ class BankWithdrawalService:
                 saved_stone = expected_saved_stone - amount
                 updated = conn.execute(
                     "UPDATE player_data.bankinfo SET savestone=%s, savetime=%s WHERE user_id=%s "
-                    "AND COALESCE(savestone, 0)=%s AND savetime=%s AND banklevel=%s",
+                    "AND xiuxian_int_cmp(COALESCE(savestone, 0),%s)=0 AND savetime=%s AND banklevel=%s",
                     (saved_stone, settled_at, user_id, expected_saved_stone, expected_saved_at, bank_level),
                 )
                 if credited.rowcount != 1 or updated.rowcount != 1:
                     conn.rollback()
-                    return result("state_changed", wallet_stone=int(user[0]))
+                    return result("state_changed", wallet_stone=as_int_like(user[0]))
                 conn.execute(
                     "INSERT INTO bank_withdrawal_operations VALUES (%s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP)",
                     (operation_id, payload, amount, interest, wallet_stone, saved_stone, settled_at),

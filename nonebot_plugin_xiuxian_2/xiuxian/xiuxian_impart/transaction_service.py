@@ -127,7 +127,7 @@ class ImpartDrawService:
                     return ImpartDrawResult("limit_exceeded")
                 charged = conn.execute(
                     "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)-CAST(%s AS REAL) "
-                    "WHERE user_id=%s AND CAST(COALESCE(stone,0) AS REAL)>=CAST(%s AS REAL)",
+                    "WHERE user_id=%s AND xiuxian_int_cmp(COALESCE(stone,0),%s)>=0",
                     (cost, user_id, cost),
                 )
                 if charged.rowcount != 1:
@@ -393,7 +393,7 @@ class CardDisassembleService:
                 )
                 rewarded = conn.execute(
                     "UPDATE xiuxian_impart SET stone_num=CAST(COALESCE(stone_num,0) AS REAL)+CAST(%s AS REAL) WHERE user_id=%s "
-                    "AND stone_num=%s",
+                    "AND xiuxian_int_cmp(stone_num,%s)=0",
                     (quantity * reward_per_card, user_id, stone_quantity),
                 )
                 if consumed.rowcount != 1 or rewarded.rowcount != 1:

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from ...core.numeric import as_int_like
 from ...core.errors import DomainError
 
 import json
@@ -59,7 +60,7 @@ class TiantiProfileReader:
         if not isinstance(data["tianti_level"], str) or data["tianti_level"] not in self.levels():
             data["tianti_level"] = self.default_data()["tianti_level"]
         try:
-            data["tianti_hp"] = max(0, int(data.get("tianti_hp", 0) or 0))
+            data["tianti_hp"] = max(0, as_int_like(data.get("tianti_hp", 0) or 0))
         except (TypeError, ValueError, OverflowError):
             data["tianti_hp"] = 0
 
@@ -348,11 +349,11 @@ class StoneTrainingSqlRepository:
             if previous:
                 if str(previous["user_id"]) != user_id or int(previous["requested_stone"]) != requested_stone:
                     return StoneTrainingPersistenceResult("state_changed", user_id, requested_stone, 0, 0, 0, reason="operation_conflict")
-                return StoneTrainingPersistenceResult("duplicate", user_id, requested_stone, int(previous["stone_cost"]), int(previous["hp_gain"]), int(previous["new_hp"]))
+                return StoneTrainingPersistenceResult("duplicate", user_id, requested_stone, int(previous["stone_cost"]), as_int_like(previous["hp_gain"]), int(previous["new_hp"]))
             user = uow.query_one("SELECT COALESCE(stone, 0) AS stone FROM user_xiuxian WHERE user_id=?", (user_id,))
             if user is None:
                 return StoneTrainingPersistenceResult("user_missing", user_id, requested_stone, 0, 0, 0)
-            if int(user["stone"]) < requested_stone:
+            if as_int_like(user["stone"]) < requested_stone:
                 return StoneTrainingPersistenceResult("stone_insufficient", user_id, requested_stone, 0, 0, 0)
             row = uow.query_one("SELECT * FROM player_data.tianti_info WHERE user_id=?", (user_id,))
             data = self._profile_reader.clean(dict(row) if row else {})
@@ -360,7 +361,7 @@ class StoneTrainingSqlRepository:
             decision = decide_stone_training(old_hp=int(data["tianti_hp"]), requested_stone=requested_stone, hp_cap=cap)
             if decision.status == "at_cap":
                 return StoneTrainingPersistenceResult("at_cap", user_id, requested_stone, 0, 0, int(data["tianti_hp"]))
-            charged = uow.execute("UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)-? WHERE user_id=? AND CAST(COALESCE(stone,0) AS REAL)>=?", (decision.stone_cost, user_id, decision.stone_cost))
+            charged = uow.execute("UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)-? WHERE user_id=? AND xiuxian_int_cmp(COALESCE(stone,0),?)>=0", (decision.stone_cost, user_id, decision.stone_cost))
             if charged.rowcount != 1:
                 raise DomainError("stone_write_rejected", "tianti training debit was not saved")
             data["tianti_hp"] = decision.new_hp

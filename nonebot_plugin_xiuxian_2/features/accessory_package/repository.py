@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from ...core.numeric import as_int_like
 from ...core.errors import DomainError
 
 import json
@@ -113,7 +114,7 @@ class AccessoryPackageGameRepository:
                 stone_delta += reward.quantity
             elif reward.item_id is not None:
                 totals[reward.item_id] = totals.get(reward.item_id, 0) + reward.quantity
-        if int(before["stone"] or 0) + stone_delta < 0:
+        if as_int_like(before["stone"] or 0) + stone_delta < 0:
             return "stone_insufficient", before
         for item_id, amount in totals.items():
             row = before["rewards"].get(str(item_id))

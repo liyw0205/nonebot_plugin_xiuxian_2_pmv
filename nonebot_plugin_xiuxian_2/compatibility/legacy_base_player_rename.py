@@ -146,7 +146,7 @@ class PlayerRenameService:
                 elif stone_cost:
                     charged = conn.execute(
                         "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)-CAST(%s AS REAL) "
-                        "WHERE user_id=%s AND stone>=%s",
+                        "WHERE user_id=%s AND xiuxian_int_cmp(stone,%s)>=0",
                         (stone_cost, user_id, stone_cost),
                     )
                     if charged.rowcount != 1:

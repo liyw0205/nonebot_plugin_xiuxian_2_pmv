@@ -6,6 +6,8 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Iterable, Iterator
 
+from nonebot_plugin_xiuxian_2.core.numeric import register_numeric_functions
+
 try:
     from nonebot.log import logger
 except Exception:  # pragma: no cover
@@ -302,6 +304,7 @@ def connect(database: str | Path, *args, **kwargs) -> SQLiteConnection:
     db_path = Path(database)
     db_path.parent.mkdir(parents=True, exist_ok=True)
     raw = sqlite3.connect(db_path, *args, **kwargs)
+    register_numeric_functions(raw)
     raw.execute("PRAGMA journal_mode=WAL")
     raw.execute("PRAGMA busy_timeout=30000")
     raw.execute("PRAGMA synchronous=NORMAL")
@@ -316,6 +319,7 @@ def connect_readonly(database: str | Path, *args, **kwargs) -> SQLiteConnection:
     uri = f"{db_path.resolve().as_uri()}?mode=ro"
     kwargs.pop("uri", None)
     raw = sqlite3.connect(uri, *args, uri=True, **kwargs)
+    register_numeric_functions(raw)
     raw.execute("PRAGMA busy_timeout=30000")
     raw.create_function("LEAST", -1, _least)
     raw.create_function("GREATEST", -1, _greatest)

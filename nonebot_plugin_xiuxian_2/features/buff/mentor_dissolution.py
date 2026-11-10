@@ -15,6 +15,8 @@
 
 from __future__ import annotations
 
+from ...core.numeric import as_int_like
+
 from dataclasses import dataclass
 from typing import Any, Callable
 
@@ -30,7 +32,7 @@ STATUS_INSUFFICIENT = "insufficient_cultivation"
 def _as_int(value: Any) -> int:
     """Map any value to a non-negative int; unusable values become 0."""
     try:
-        number = int(value)
+        number = as_int_like(value)
     except (TypeError, ValueError, OverflowError):
         return 0
     return number if number > 0 else 0

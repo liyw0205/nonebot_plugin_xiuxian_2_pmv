@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from ...core.numeric import as_int_like
+
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -146,7 +148,7 @@ class XianshiListingSqlRepository:
                     "stamina_insufficient", operation_id, seller_id, goods_id, name,
                     goods_type, price, quantity,
                 )
-            if float(player["stone"] or 0) < fee:
+            if as_int_like(player["stone"]) < fee:
                 return self._result(
                     "stone_insufficient", operation_id, seller_id, goods_id, name,
                     goods_type, price, quantity,
@@ -172,7 +174,7 @@ class XianshiListingSqlRepository:
                     raise RuntimeError("xianshi listing stamina snapshot changed")
             changed_stone = uow.execute(
                 "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)-CAST(? AS REAL) "
-                "WHERE user_id=? AND COALESCE(stone,0)>=?",
+                "WHERE user_id=? AND xiuxian_int_cmp(COALESCE(stone,0),?)>=0",
                 (fee, seller_id, fee),
             )
             if changed_stone.rowcount != 1:

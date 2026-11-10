@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from ...core.numeric import as_int_like
 import json
 from dataclasses import dataclass
 from pathlib import Path
@@ -83,16 +84,16 @@ class AdminExpAdjustmentSqlRepository:
             if previous is not None:
                 if str(previous["payload"]) != payload:
                     return AdminExpAdjustmentResult("operation_conflict")
-                return AdminExpAdjustmentResult("duplicate", int(previous["previous_exp"]), int(previous["final_exp"]), int(previous["applied_delta"]))
+                return AdminExpAdjustmentResult("duplicate", as_int_like(previous["previous_exp"]), as_int_like(previous["final_exp"]), int(previous["applied_delta"]))
             row = uow.query_one("SELECT COALESCE(exp,0) AS exp FROM user_xiuxian WHERE user_id=?", (user_id,))
             if row is None:
                 return AdminExpAdjustmentResult("user_missing")
-            actual = int(row["exp"])
+            actual = as_int_like(row["exp"])
             if actual != expected_exp:
                 return AdminExpAdjustmentResult("state_changed", actual, actual, reason="exp_changed")
             final = max(0, expected_exp + requested_delta)
             applied = final - expected_exp
-            if uow.execute("UPDATE user_xiuxian SET exp=? WHERE user_id=? AND COALESCE(exp,0)=?", (final, user_id, expected_exp)).rowcount != 1:
+            if uow.execute("UPDATE user_xiuxian SET exp=? WHERE user_id=? AND xiuxian_int_cmp(COALESCE(exp,0),?)=0", (final, user_id, expected_exp)).rowcount != 1:
                 raise DomainError("exp_write_rejected", "admin exp adjustment was not saved")
             detail = json.dumps({"operator_id": operator_id, "target_name": str(target_name), "requested_delta": requested_delta, "previous_exp": expected_exp, "final_exp": final}, ensure_ascii=True, sort_keys=True, separators=(",", ":"))
             uow.execute("INSERT INTO economy_log(user_id,source,action,exp_delta,item_delta,detail,trace_id,created_at) VALUES(?,'admin',?,?,'[]',?,?,CURRENT_TIMESTAMP)", (user_id, "admin_exp_add" if applied > 0 else "admin_exp_cost", applied, detail, operation_id))

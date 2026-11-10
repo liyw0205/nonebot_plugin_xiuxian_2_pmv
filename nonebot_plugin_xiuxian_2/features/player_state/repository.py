@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from ...core.numeric import as_int_like
+
 from pathlib import Path
 from typing import Any, Callable
 
@@ -141,18 +143,18 @@ class PlayerStateRepository:
             if row is None:
                 return self._result("user_missing", user_id)
             current_hp, current_mp = row.get("hp"), row.get("mp")
-            if expected_hp is not None and int(current_hp or 0) != int(expected_hp):
+            if expected_hp is not None and as_int_like(current_hp) != as_int_like(expected_hp):
                 return self._result("state_changed", user_id, dict(row))
-            if expected_mp is not None and int(current_mp or 0) != int(expected_mp):
+            if expected_mp is not None and as_int_like(current_mp) != as_int_like(expected_mp):
                 return self._result("state_changed", user_id, dict(row))
             predicates = ["rowid=?", "user_id=?"]
             params: list[Any] = [hp, mp, row["_rowid"], user_id]
             if expected_hp is not None:
-                predicates.append("COALESCE(hp,0)=?")
-                params.append(int(expected_hp))
+                predicates.append("xiuxian_int_cmp(COALESCE(hp,0),?)=0")
+                params.append(as_int_like(expected_hp))
             if expected_mp is not None:
-                predicates.append("COALESCE(mp,0)=?")
-                params.append(int(expected_mp))
+                predicates.append("xiuxian_int_cmp(COALESCE(mp,0),?)=0")
+                params.append(as_int_like(expected_mp))
             changed = uow.execute(
                 "UPDATE user_xiuxian SET hp=?,mp=? WHERE "
                 + " AND ".join(predicates),

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from ...core.numeric import as_int_like
 import json
 from datetime import datetime
 from pathlib import Path
@@ -134,7 +135,7 @@ class WorkSettlementSqlRepository:
                 result = _result_from_receipt(previous["result_json"])
                 return WorkSettlementResult(
                     "duplicate",
-                    int(previous["exp"]),
+                    as_int_like(previous["exp"]),
                     bool(previous["item_awarded"]),
                     result,
                 )
@@ -148,7 +149,7 @@ class WorkSettlementSqlRepository:
             user = uow.query_one("SELECT COALESCE(exp,0) AS exp FROM user_xiuxian WHERE user_id=?", (user_id,))
             if user is None:
                 return WorkSettlementResult("user_missing")
-            current_exp = int(user["exp"])
+            current_exp = as_int_like(user["exp"])
             applied_exp = max(0, min(exp_gain, max_exp - current_exp))
             item_awarded = False
             result = {

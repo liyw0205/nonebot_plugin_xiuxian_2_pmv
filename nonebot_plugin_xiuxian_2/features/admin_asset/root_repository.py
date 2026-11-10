@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from ...core.numeric import as_int_like
 from ...core.errors import DomainError
 from ...core.snapshot_reason import first_difference
 
@@ -68,7 +69,7 @@ class AdminRootChangeSqlRepository:
         expected = tuple(expected_snapshot)
         if not operation_id or not operator_id or not user_id or len(expected) != 7 or float(level_spend) <= 0 or float(new_root_rate) <= 0:
             raise ValueError("invalid root change snapshot or configuration")
-        expected = (str(expected[0] or ""), str(expected[1] or ""), int(expected[2] or 0), str(expected[3] or ""), int(expected[4] or 0), int(expected[5] or 0), str(expected[6] or ""))
+        expected = (str(expected[0] or ""), str(expected[1] or ""), int(expected[2] or 0), str(expected[3] or ""), as_int_like(expected[4]), as_int_like(expected[5]), str(expected[6] or ""))
         payload = json.dumps([operator_id, user_id, int(root_id), float(level_spend), float(new_root_rate)], ensure_ascii=True, separators=(",", ":"))
         if not self.database.is_file():
             return AdminRootChangeResult("schema_missing")
@@ -83,12 +84,12 @@ class AdminRootChangeSqlRepository:
             row = uow.query_one("SELECT COALESCE(root,'') AS root,COALESCE(root_type,'') AS root_type,COALESCE(root_level,0) AS root_level,COALESCE(level,'') AS level,COALESCE(exp,0) AS exp,COALESCE(power,0) AS power,COALESCE(user_name,'') AS user_name FROM user_xiuxian WHERE user_id=?", (user_id,))
             if row is None:
                 return AdminRootChangeResult("user_missing")
-            actual = (str(row["root"]), str(row["root_type"]), int(row["root_level"]), str(row["level"]), int(row["exp"]), int(row["power"]), str(row["user_name"]))
+            actual = (str(row["root"]), str(row["root_type"]), int(row["root_level"]), str(row["level"]), as_int_like(row["exp"]), as_int_like(row["power"]), str(row["user_name"]))
             if actual != expected:
                 return AdminRootChangeResult("state_changed", reason=first_difference(actual, expected, ("root_changed", "root_type_changed", "root_level_changed", "level_changed", "exp_changed", "power_changed", "user_name_changed")))
             root, root_type = self.root_values(root_id, expected[6])
             power = round(expected[4] * float(new_root_rate) * float(level_spend))
-            if uow.execute("UPDATE user_xiuxian SET root=?,root_type=?,power=? WHERE user_id=? AND root=? AND root_type=? AND root_level=? AND level=? AND exp=? AND power=? AND user_name=?", (root, root_type, power, user_id, *expected)).rowcount != 1:
+            if uow.execute("UPDATE user_xiuxian SET root=?,root_type=?,power=? WHERE user_id=? AND root=? AND root_type=? AND root_level=? AND level=? AND xiuxian_int_cmp(exp,?)=0 AND xiuxian_int_cmp(power,?)=0 AND user_name=?", (root, root_type, power, user_id, *expected)).rowcount != 1:
                 raise DomainError("root_write_rejected", "admin root change was not saved")
             data = {"root": root, "root_type": root_type, "power": power}
             uow.execute("INSERT INTO admin_root_change_operations(operation_id,payload,result_json) VALUES(?,?,?)", (operation_id, payload, json.dumps(data, ensure_ascii=True, separators=(",", ":"))))

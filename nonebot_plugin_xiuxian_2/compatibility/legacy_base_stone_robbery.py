@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from ..core.numeric import as_int_like
 import json
 from contextlib import closing
 from dataclasses import dataclass, field
@@ -59,7 +60,7 @@ class StoneRobberySettlementService:
         data = dict(value)
         return tuple(
             None if field in {"hp", "mp"} and data[field] is None
-            else int(data[field] or 0)
+            else as_int_like(data[field] or 0)
             for field in cls._SNAPSHOT_FIELDS
         )
 
@@ -151,7 +152,7 @@ class StoneRobberySettlementService:
                 ).fetchall()
                 users = {
                     str(row[0]): tuple(
-                        None if index < 2 and item is None else int(item or 0)
+                        None if index < 2 and item is None else as_int_like(item or 0)
                         for index, item in enumerate(row[1:])
                     )
                     for row in rows
@@ -195,9 +196,9 @@ class StoneRobberySettlementService:
 
                 robber_changed = conn.execute(
                     "UPDATE user_xiuxian SET hp=%s,mp=%s,user_stamina=%s,stone=%s "
-                    "WHERE user_id=%s AND hp IS %s AND mp IS %s "
-                    "AND COALESCE(user_stamina,0)=%s AND COALESCE(exp,0)=%s "
-                    "AND COALESCE(stone,0)=%s",
+                    "WHERE user_id=%s AND xiuxian_int_cmp(hp,%s)=0 AND xiuxian_int_cmp(mp,%s)=0 "
+                    "AND COALESCE(user_stamina,0)=%s AND xiuxian_int_cmp(COALESCE(exp,0),%s)=0 "
+                    "AND xiuxian_int_cmp(COALESCE(stone,0),%s)=0",
                     (
                         robber_final[0], robber_final[1], robber_snapshot[2] - stamina_cost,
                         robber_stone, robber_id, *robber_snapshot,
@@ -205,9 +206,9 @@ class StoneRobberySettlementService:
                 )
                 victim_changed = conn.execute(
                     "UPDATE user_xiuxian SET hp=%s,mp=%s,stone=%s "
-                    "WHERE user_id=%s AND hp IS %s AND mp IS %s "
-                    "AND COALESCE(user_stamina,0)=%s AND COALESCE(exp,0)=%s "
-                    "AND COALESCE(stone,0)=%s",
+                    "WHERE user_id=%s AND xiuxian_int_cmp(hp,%s)=0 AND xiuxian_int_cmp(mp,%s)=0 "
+                    "AND COALESCE(user_stamina,0)=%s AND xiuxian_int_cmp(COALESCE(exp,0),%s)=0 "
+                    "AND xiuxian_int_cmp(COALESCE(stone,0),%s)=0",
                     (
                         victim_final[0], victim_final[1], victim_stone,
                         victim_id, *victim_snapshot,

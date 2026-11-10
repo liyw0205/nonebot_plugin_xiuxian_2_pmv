@@ -6,7 +6,7 @@ import sqlite3
 from pathlib import Path
 from typing import Any, Mapping
 
-from ...core.numeric import adapt_sqlite_params
+from ...core.numeric import adapt_sqlite_params, register_numeric_functions
 
 
 class ReadOnlyQuery:
@@ -22,6 +22,7 @@ class ReadOnlyQuery:
     def _connect(self) -> sqlite3.Connection:
         uri = f"file:{self.database.resolve()}?mode=ro"
         connection = sqlite3.connect(uri, uri=True)
+        register_numeric_functions(connection)
         connection.row_factory = sqlite3.Row
         return connection
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from ...core.numeric import as_int_like
 import json
 from pathlib import Path
 from typing import Any
@@ -42,7 +43,7 @@ class AccessoryDecomposeSqlRepository:
             action=str(value.get("action", "decompose")),
             user_id=str(value.get("user_id", "")),
             affected=int(value.get("affected", 0)),
-            stone_delta=int(value.get("stone_delta", 0)),
+            stone_delta=as_int_like(value.get("stone_delta", 0)),
             accessory=value.get("accessory"),
         )
 

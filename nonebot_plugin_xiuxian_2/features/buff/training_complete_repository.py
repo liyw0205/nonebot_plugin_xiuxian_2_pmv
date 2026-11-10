@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from ...core.numeric import as_int_like
 import json
 from pathlib import Path
 
@@ -89,11 +90,11 @@ class NormalTrainingCompleteSqlRepository:
         if user is None or cd is None:
             return NormalTrainingCompleteResult("user_missing", kind, create_time)
         if (
-            (int(user["exp"]), int(user["stone"])) != (expected_exp, expected_stone)
+            (as_int_like(user["exp"]), as_int_like(user["stone"])) != (expected_exp, expected_stone)
             or int(cd["type"] or 0) != 5
             or str(cd["create_time"]) != create_time
         ):
-            return NormalTrainingCompleteResult("state_changed", kind, create_time, reason="exp_changed" if int(user["exp"]) != expected_exp else "stone_changed" if int(user["stone"]) != expected_stone else "activity_type_changed" if int(cd["type"] or 0) != 5 else "training_start_changed")
+            return NormalTrainingCompleteResult("state_changed", kind, create_time, reason="exp_changed" if as_int_like(user["exp"]) != expected_exp else "stone_changed" if as_int_like(user["stone"]) != expected_stone else "activity_type_changed" if int(cd["type"] or 0) != 5 else "training_start_changed")
         if not Path(self.player_database).is_file():
             return NormalTrainingCompleteResult("schema_missing", kind, create_time)
         uow.attach_database(self.player_database, "player_data")
@@ -110,19 +111,19 @@ class NormalTrainingCompleteSqlRepository:
         hp_gain = mp_gain = 0
         if kind == "cultivation":
             new_exp = expected_exp + exp_gain
-            new_hp = min(new_exp // 2, int(user["hp"]) + expected_exp // 10)
-            new_mp = min(new_exp, int(user["mp"]) + expected_exp // 20)
-            hp_gain, mp_gain = max(0, new_hp - int(user["hp"])), max(0, new_mp - int(user["mp"]))
+            new_hp = min(new_exp // 2, as_int_like(user["hp"]) + expected_exp // 10)
+            new_mp = min(new_exp, as_int_like(user["mp"]) + expected_exp // 20)
+            hp_gain, mp_gain = max(0, new_hp - as_int_like(user["hp"])), max(0, new_mp - as_int_like(user["mp"]))
             changed = uow.execute(
                 "UPDATE user_xiuxian SET exp=?,hp=?,mp=?,atk=?,power=ROUND(?*?,0) "
-                "WHERE user_id=? AND COALESCE(exp,0)=? AND COALESCE(stone,0)=?",
+                "WHERE user_id=? AND xiuxian_int_cmp(COALESCE(exp,0),?)=0 AND xiuxian_int_cmp(COALESCE(stone,0),?)=0",
                 (new_exp, new_hp, new_mp, expected_exp // 10, new_exp, multiplier,
                  saved_user_id, expected_exp, expected_stone),
             )
         else:
             changed = uow.execute(
                 "UPDATE user_xiuxian SET stone=COALESCE(stone,0)+? "
-                "WHERE user_id=? AND COALESCE(exp,0)=? AND COALESCE(stone,0)=?",
+                "WHERE user_id=? AND xiuxian_int_cmp(COALESCE(exp,0),?)=0 AND xiuxian_int_cmp(COALESCE(stone,0),?)=0",
                 (stone_gain, saved_user_id, expected_exp, expected_stone),
             )
         if changed.rowcount != 1:

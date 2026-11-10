@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from ..core.numeric import as_int_like
 from contextlib import closing
 from dataclasses import dataclass
 from pathlib import Path
@@ -91,9 +92,9 @@ class StoneContestService:
             outcome=str(row[3]),
             payer_id=str(row[4]),
             receiver_id=str(row[5]),
-            requested_amount=int(row[6]),
-            transferred_amount=int(row[7]),
-            payer_balance=int(row[8]),
+            requested_amount=as_int_like(row[6]),
+            transferred_amount=as_int_like(row[7]),
+            payer_balance=as_int_like(row[8]),
             stamina_cost=int(row[9]),
             thief_stamina=int(row[10]),
         )
@@ -150,7 +151,7 @@ class StoneContestService:
                         str(previous[5]) != "transfer"
                         or str(previous[0]) != payer_id
                         or str(previous[1]) != receiver_id
-                        or int(previous[2]) != requested_amount
+                        or as_int_like(previous[2]) != requested_amount
                     ):
                         return self._result("state_changed", payer_id, receiver_id, requested_amount)
                     return self._result(
@@ -167,14 +168,14 @@ class StoneContestService:
                 if payer is None or receiver is None:
                     conn.rollback()
                     return self._result("user_missing", payer_id, receiver_id, requested_amount)
-                payer_balance = max(0, int(payer[0]))
+                payer_balance = max(0, as_int_like(payer[0]))
                 transferred = min(requested_amount, payer_balance)
                 if transferred <= 0:
                     conn.rollback()
                     return self._result("payer_empty", payer_id, receiver_id, requested_amount)
 
                 charged = conn.execute(
-                    "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)-CAST(%s AS REAL) WHERE user_id=%s AND stone>=%s",
+                    "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)-CAST(%s AS REAL) WHERE user_id=%s AND xiuxian_int_cmp(stone,%s)>=0",
                     (transferred, payer_id, transferred),
                 )
                 credited = conn.execute(
@@ -264,7 +265,7 @@ class StoneContestService:
                     (thief_id, victim_id),
                 ).fetchall()
                 users = {
-                    str(row[0]): (max(0, int(row[1])), max(0, int(row[2])))
+                    str(row[0]): (max(0, as_int_like(row[1])), max(0, int(row[2])))
                     for row in rows
                 }
                 if thief_id not in users or victim_id not in users:
@@ -296,12 +297,12 @@ class StoneContestService:
 
                 charged = conn.execute(
                     "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)-CAST(%s AS REAL) "
-                    "WHERE user_id=%s AND COALESCE(stone,0)=%s AND stone>=%s",
+                    "WHERE user_id=%s AND xiuxian_int_cmp(COALESCE(stone,0),%s)=0 AND xiuxian_int_cmp(stone,%s)>=0",
                     (transferred, payer_id, payer_stone, transferred),
                 )
                 credited = conn.execute(
                     "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)+CAST(%s AS REAL) "
-                    "WHERE user_id=%s AND COALESCE(stone,0)=%s",
+                    "WHERE user_id=%s AND xiuxian_int_cmp(COALESCE(stone,0),%s)=0",
                     (transferred, receiver_id, receiver_stone),
                 )
                 stamina = conn.execute(

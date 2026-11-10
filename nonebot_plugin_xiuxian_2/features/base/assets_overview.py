@@ -10,6 +10,8 @@
 
 from __future__ import annotations
 
+from ...core.numeric import as_int_like
+
 from pathlib import Path
 from typing import Any, Mapping
 
@@ -18,7 +20,7 @@ from ...infrastructure.database import DatabaseUnitOfWork
 
 def _int(value: Any) -> int:
     try:
-        return int(value or 0)
+        return as_int_like(value or 0)
     except (TypeError, ValueError):
         return 0
 

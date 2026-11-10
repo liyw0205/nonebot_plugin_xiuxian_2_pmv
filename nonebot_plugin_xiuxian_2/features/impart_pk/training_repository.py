@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from ...core.numeric import as_int_like
 from ...core.errors import DomainError
 import json
 from dataclasses import dataclass
@@ -28,14 +29,14 @@ class ImpartTrainingSqlRepository:
             if user is None: return ImpartTrainingResult('state_changed', reason='user_missing')
             if impart is None: return ImpartTrainingResult('state_changed', reason='impart_missing')
             if daily is None: return ImpartTrainingResult('state_changed', reason='daily_missing')
-            if int(user['exp'] or 0)!=expected_exp: return ImpartTrainingResult('state_changed', reason='exp_changed')
-            if int(impart['exp_day'] or 0)!=expected_exp_day: return ImpartTrainingResult('state_changed', reason='impart_time_changed')
+            if as_int_like(user['exp'] or 0)!=expected_exp: return ImpartTrainingResult('state_changed', reason='exp_changed')
+            if as_int_like(impart['exp_day'] or 0)!=expected_exp_day: return ImpartTrainingResult('state_changed', reason='impart_time_changed')
             for key, value in expected_daily.items():
                 if int(daily[key] or 0) != value:
                     return ImpartTrainingResult('state_changed', reason={'exp_used':'training_time_changed','exp_count':'training_count_changed','exp_load':'soul_load_changed','exp_gain':'training_gain_changed'}[key])
             if expected_exp_day<exp_cost: return ImpartTrainingResult('time_insufficient')
             new_exp_day,new_exp,new_used,new_count,new_load,new_gain=expected_exp_day-exp_cost,expected_exp+exp_gain,expected_daily['exp_used']+exp_cost,expected_daily['exp_count']+1,min(100,expected_daily['exp_load']+exp_load_gain),expected_daily['exp_gain']+exp_gain
             uow.execute('UPDATE impart_data.xiuxian_impart SET exp_day=? WHERE user_id=?',(new_exp_day,user_id))
-            if uow.execute('UPDATE user_xiuxian SET exp=?,power=? WHERE user_id=? AND exp=?',(new_exp,power,user_id,expected_exp)).rowcount!=1: raise DomainError("cultivation_write_rejected", 'training player write count mismatch')
+            if uow.execute('UPDATE user_xiuxian SET exp=?,power=? WHERE user_id=? AND xiuxian_int_cmp(exp,?)=0',(new_exp,power,user_id,expected_exp)).rowcount!=1: raise DomainError("cultivation_write_rejected", 'training player write count mismatch')
             if uow.execute('UPDATE player_data.impart_pk_daily SET exp_used=?,exp_count=?,exp_load=?,exp_gain=? WHERE user_id=?',(new_used,new_count,new_load,new_gain,user_id)).rowcount!=1: raise DomainError("impart_pk_daily_write_rejected", 'training daily write count mismatch')
             saved=[new_exp_day,new_exp,new_used,new_count,new_load,new_gain]; uow.execute('INSERT INTO impart_training_operations(operation_id,payload,result_json) VALUES(?,?,?)',(operation_id,payload,json.dumps(saved,separators=(',',':')))); return ImpartTrainingResult('applied',*saved)

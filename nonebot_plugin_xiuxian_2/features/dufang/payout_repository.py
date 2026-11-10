@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from ...core.numeric import as_int_like
 from ...core.errors import DomainError
 
 import json
@@ -80,7 +81,7 @@ class DufangPayoutSqlRepository:
             if not self._payout_schema_ready(uow):
                 return DufangPayoutResult("schema_missing")
             row = uow.query_one("SELECT wallet_stone,gain,loss FROM dufang_payout_operations WHERE operation_id=?", (str(operation_id).strip(),))
-            return None if row is None else DufangPayoutResult("duplicate", int(row["wallet_stone"]), int(row["gain"]), int(row["loss"]))
+            return None if row is None else DufangPayoutResult("duplicate", as_int_like(row["wallet_stone"]), int(row["gain"]), int(row["loss"]))
 
     def settle(self, operation_id: str, bet_id: str, user_id: str, settled_at: str) -> DufangPayoutResult:
         operation_id, bet_id, user_id = str(operation_id).strip(), str(bet_id).strip(), str(user_id)
@@ -97,7 +98,7 @@ class DufangPayoutSqlRepository:
             if previous is not None:
                 if str(previous["payload"]) != payload:
                     return DufangPayoutResult("state_changed", reason="operation_conflict")
-                return DufangPayoutResult("duplicate", int(previous["wallet_stone"]), int(previous["gain"]), int(previous["loss"]))
+                return DufangPayoutResult("duplicate", as_int_like(previous["wallet_stone"]), int(previous["gain"]), int(previous["loss"]))
             bet = uow.query_one("SELECT user_id,status FROM dufang_bets WHERE bet_id=?", (bet_id,))
             if bet is None or str(bet["user_id"]) != user_id:
                 return DufangPayoutResult("state_changed", reason="bet_missing" if bet is None else "bet_subject_mismatch")
@@ -118,8 +119,8 @@ class DufangPayoutSqlRepository:
             if user is None:
                 return DufangPayoutResult("user_missing")
             actual_gain = gain if outcome == "win" else 0
-            actual_loss = min(requested_loss, int(user["stone"])) if outcome == "loss" else 0
-            wallet = int(user["stone"]) + actual_gain - actual_loss
+            actual_loss = min(requested_loss, as_int_like(user["stone"])) if outcome == "loss" else 0
+            wallet = as_int_like(user["stone"]) + actual_gain - actual_loss
             if uow.execute("UPDATE dufang_bets SET status=?,settled_at=? WHERE bet_id=? AND status='pending'", (outcome, str(settled_at), bet_id)).rowcount != 1:
                 raise DomainError("bet_receipt_write_rejected", "dufang payout status write count mismatch")
             if uow.execute("UPDATE user_xiuxian SET stone=? WHERE user_id=?", (wallet, user_id)).rowcount != 1:

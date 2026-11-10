@@ -49,11 +49,11 @@ class AdminLevelChangeService:
     def _snapshot(row) -> tuple:
         return (
             str(row[0] or ""),
-            int(row[1] or 0),
-            int(row[2] or 0),
-            int(row[3] or 0),
-            int(row[4] or 0),
-            int(row[5] or 0),
+            as_int_like(row[1] or 0),
+            as_int_like(row[2] or 0),
+            as_int_like(row[3] or 0),
+            as_int_like(row[4] or 0),
+            as_int_like(row[5] or 0),
             str(row[6] or ""),
             int(row[7] or 0),
         )
@@ -82,8 +82,8 @@ class AdminLevelChangeService:
         if len(expected) != 8 or new_exp < 0 or level_spend <= 0 or root_rate <= 0:
             raise ValueError("invalid realm change snapshot or configuration")
         expected = (
-            str(expected[0] or ""), int(expected[1] or 0), int(expected[2] or 0),
-            int(expected[3] or 0), int(expected[4] or 0), int(expected[5] or 0),
+            str(expected[0] or ""), as_int_like(expected[1] or 0), as_int_like(expected[2] or 0),
+            as_int_like(expected[3] or 0), as_int_like(expected[4] or 0), as_int_like(expected[5] or 0),
             str(expected[6] or ""), int(expected[7] or 0),
         )
         payload = json.dumps(
@@ -120,9 +120,9 @@ class AdminLevelChangeService:
 
                 changed = conn.execute(
                     "UPDATE user_xiuxian SET level=%s,exp=%s,hp=%s/2,mp=%s,atk=%s/10,"
-                    "power=ROUND(%s*%s*%s,0) WHERE user_id=%s AND level=%s AND COALESCE(exp,0)=%s "
-                    "AND COALESCE(hp,0)=%s AND COALESCE(mp,0)=%s AND COALESCE(atk,0)=%s "
-                    "AND COALESCE(power,0)=%s AND COALESCE(root_type,'')=%s "
+                    "power=ROUND(%s*%s*%s,0) WHERE user_id=%s AND level=%s AND xiuxian_int_cmp(COALESCE(exp,0),%s)=0 "
+                    "AND xiuxian_int_cmp(COALESCE(hp,0),%s)=0 AND xiuxian_int_cmp(COALESCE(mp,0),%s)=0 AND xiuxian_int_cmp(COALESCE(atk,0),%s)=0 "
+                    "AND xiuxian_int_cmp(COALESCE(power,0),%s)=0 AND COALESCE(root_type,'')=%s "
                     "AND COALESCE(root_level,0)=%s",
                     (
                         new_level, new_exp, new_exp, new_exp, new_exp, new_exp, root_rate,
@@ -137,9 +137,9 @@ class AdminLevelChangeService:
                     (user_id,),
                 ).fetchone()
                 result_data = {
-                    "level": str(result_row[0]), "exp": int(result_row[1]),
-                    "hp": int(result_row[2]), "mp": int(result_row[3]),
-                    "atk": int(result_row[4]), "power": int(result_row[5]),
+                    "level": str(result_row[0]), "exp": as_int_like(result_row[1]),
+                    "hp": as_int_like(result_row[2]), "mp": as_int_like(result_row[3]),
+                    "atk": as_int_like(result_row[4]), "power": as_int_like(result_row[5]),
                 }
                 conn.execute(
                     "INSERT INTO admin_level_change_operations(operation_id,payload,result_json) "
@@ -222,7 +222,7 @@ class AdminRootChangeService:
             raise ValueError("invalid root change snapshot or configuration")
         expected = (
             str(expected[0] or ""), str(expected[1] or ""), int(expected[2] or 0),
-            str(expected[3] or ""), int(expected[4] or 0), int(expected[5] or 0),
+            str(expected[3] or ""), as_int_like(expected[4] or 0), as_int_like(expected[5] or 0),
             str(expected[6] or ""),
         )
         new_root, new_root_type = self.root_values(root_id, expected[6])
@@ -255,8 +255,8 @@ class AdminRootChangeService:
                     conn.rollback()
                     return AdminRootChangeResult("user_missing")
                 actual = (
-                    str(row[0]), str(row[1]), int(row[2]), str(row[3]), int(row[4]),
-                    int(row[5]), str(row[6]),
+                    str(row[0]), str(row[1]), int(row[2]), str(row[3]), as_int_like(row[4]),
+                    as_int_like(row[5]), str(row[6]),
                 )
                 if actual != expected:
                     conn.rollback()
@@ -266,7 +266,7 @@ class AdminRootChangeService:
                     "UPDATE user_xiuxian SET root=%s,root_type=%s,power=ROUND(%s*%s*%s,0) "
                     "WHERE user_id=%s AND COALESCE(root,'')=%s AND COALESCE(root_type,'')=%s "
                     "AND COALESCE(root_level,0)=%s AND COALESCE(level,'')=%s "
-                    "AND COALESCE(exp,0)=%s AND COALESCE(power,0)=%s AND COALESCE(user_name,'')=%s",
+                    "AND xiuxian_int_cmp(COALESCE(exp,0),%s)=0 AND xiuxian_int_cmp(COALESCE(power,0),%s)=0 AND COALESCE(user_name,'')=%s",
                     (new_root, new_root_type, expected[4], new_root_rate, level_spend, user_id, *expected),
                 )
                 if changed.rowcount != 1:
@@ -365,7 +365,7 @@ class AdminExpAdjustmentService:
                     if str(previous[0]) != payload:
                         return AdminExpAdjustmentResult("operation_conflict")
                     return AdminExpAdjustmentResult(
-                        "duplicate", int(previous[1]), int(previous[2]), int(previous[3])
+                        "duplicate", as_int_like(previous[1]), as_int_like(previous[2]), as_int_like(previous[3])
                     )
 
                 row = conn.execute(
@@ -375,7 +375,7 @@ class AdminExpAdjustmentService:
                 if row is None:
                     conn.rollback()
                     return AdminExpAdjustmentResult("user_missing")
-                actual_exp = int(row[0])
+                actual_exp = as_int_like(row[0])
                 if actual_exp != expected_exp:
                     conn.rollback()
                     return AdminExpAdjustmentResult("state_changed", actual_exp, actual_exp)
@@ -383,7 +383,7 @@ class AdminExpAdjustmentService:
                 final_exp = max(0, expected_exp + requested_delta)
                 applied_delta = final_exp - expected_exp
                 changed = conn.execute(
-                    "UPDATE user_xiuxian SET exp=%s WHERE user_id=%s AND COALESCE(exp,0)=%s",
+                    "UPDATE user_xiuxian SET exp=%s WHERE user_id=%s AND xiuxian_int_cmp(COALESCE(exp,0),%s)=0",
                     (final_exp, user_id, expected_exp),
                 )
                 if changed.rowcount != 1:
@@ -504,7 +504,7 @@ class AdminStoneAdjustmentService:
                     if str(previous[0]) != payload:
                         return AdminStoneAdjustmentResult("operation_conflict")
                     return AdminStoneAdjustmentResult(
-                        "duplicate", int(previous[1]), int(previous[2]), int(previous[3])
+                        "duplicate", as_int_like(previous[1]), as_int_like(previous[2]), as_int_like(previous[3])
                     )
 
                 row = conn.execute(
@@ -514,7 +514,7 @@ class AdminStoneAdjustmentService:
                 if row is None:
                     conn.rollback()
                     return AdminStoneAdjustmentResult("user_missing")
-                actual_stone = int(row[0])
+                actual_stone = as_int_like(row[0])
                 if actual_stone != expected_stone:
                     conn.rollback()
                     return AdminStoneAdjustmentResult(
@@ -524,7 +524,7 @@ class AdminStoneAdjustmentService:
                 final_stone = max(0, expected_stone + requested_delta)
                 applied_delta = final_stone - expected_stone
                 changed = conn.execute(
-                    "UPDATE user_xiuxian SET stone=%s WHERE user_id=%s AND COALESCE(stone,0)=%s",
+                    "UPDATE user_xiuxian SET stone=%s WHERE user_id=%s AND xiuxian_int_cmp(COALESCE(stone,0),%s)=0",
                     (final_stone, user_id, expected_stone),
                 )
                 if changed.rowcount != 1:
@@ -2115,9 +2115,9 @@ class AdminImpartStoneAdjustmentService:
                         )
                     return AdminImpartStoneAdjustmentResult(
                         "duplicate",
-                        int(previous[1]),
-                        int(previous[2]),
-                        int(previous[3]),
+                        as_int_like(previous[1]),
+                        as_int_like(previous[2]),
+                        as_int_like(previous[3]),
                     )
 
                 if conn.execute(
@@ -2133,7 +2133,7 @@ class AdminImpartStoneAdjustmentService:
                 if len(rows) > 1:
                     conn.rollback()
                     return AdminImpartStoneAdjustmentResult("invalid_state")
-                actual_stone = int(rows[0][0]) if rows else None
+                actual_stone = as_int_like(rows[0][0]) if rows else None
                 if actual_stone != expected_stone:
                     conn.rollback()
                     current = int(actual_stone or 0)
@@ -2153,7 +2153,7 @@ class AdminImpartStoneAdjustmentService:
                 else:
                     changed = conn.execute(
                         "UPDATE impart_data.xiuxian_impart SET stone_num=%s "
-                        "WHERE user_id=%s AND COALESCE(stone_num,0)=%s",
+                        "WHERE user_id=%s AND xiuxian_int_cmp(COALESCE(stone_num,0),%s)=0",
                         (final_stone, user_id, previous_stone),
                     )
                     if changed.rowcount != 1:

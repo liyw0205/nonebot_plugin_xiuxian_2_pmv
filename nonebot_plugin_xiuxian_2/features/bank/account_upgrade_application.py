@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from ...core.numeric import as_int_like
 import json
 from pathlib import Path
 from typing import Any, Mapping
@@ -52,7 +53,7 @@ class BankUpgradeApplication:
             if current_level != str(expected_level):
                 return {"status": "state_changed", "reason": "bank_level_changed", "operation_id": operation_id}
             try:
-                decision = decide_upgrade(wallet=int(wallet["stone"] or 0), current_level=current_level, expected_level=str(expected_level), next_level=str(next_level), cost=int(cost))
+                decision = decide_upgrade(wallet=as_int_like(wallet["stone"] or 0), current_level=current_level, expected_level=str(expected_level), next_level=str(next_level), cost=int(cost))
             except ValueError as exc:
                 if str(exc) == "stone_insufficient":
                     return {"status": str(exc), "operation_id": operation_id}
@@ -61,7 +62,7 @@ class BankUpgradeApplication:
                 self.repository.create_account(
                     uow,
                     user_id=user_id,
-                    saved_stone=int(initial_account.get("saved_stone", 0) or 0),
+                    saved_stone=as_int_like(initial_account.get("saved_stone", 0) or 0),
                     bank_level=current_level,
                     updated_at=str(initial_account.get("updated_at") or settled_at),
                 )

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from ...core.numeric import as_int_like
 from ...core.errors import DomainError
 
 import json
@@ -103,7 +104,7 @@ class GuishiWithdrawSqlRepository:
                     int(previous["amount"]),
                     int(previous["fee"]),
                     int(previous["actual_amount"]),
-                    int(previous["stored_balance"]),
+                    as_int_like(previous["stored_balance"]),
                 )
 
             legacy = self._legacy_operation(uow, operation_id)
@@ -120,7 +121,7 @@ class GuishiWithdrawSqlRepository:
                     int(legacy["amount"]),
                     int(legacy["fee"]),
                     int(legacy["actual_amount"]),
-                    int(legacy["stored_balance"]),
+                    as_int_like(legacy["stored_balance"]),
                 )
 
             if not withdrawal_open:
@@ -136,7 +137,7 @@ class GuishiWithdrawSqlRepository:
                 "FROM guishi_trade.guishi_info WHERE user_id=?",
                 (user_id,),
             )
-            stored_balance = int(stored["stored_stone"]) if stored is not None else 0
+            stored_balance = as_int_like(stored["stored_stone"]) if stored is not None else 0
             effective_balance = min(stored_balance, self.STORED_CAP)
             if effective_balance < amount:
                 return GuishiWithdrawResult(

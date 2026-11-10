@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from ..core.numeric import as_int_like
 import json
 from contextlib import closing
 from dataclasses import dataclass
@@ -505,10 +506,10 @@ class DungeonExploreOperationService:
                         conn.commit()
                         return conflict
                     current_resources = {
-                        "hp": int(user[0]),
-                        "mp": int(user[1]),
-                        "stone": int(user[2]),
-                        "exp": int(user[3]),
+                        "hp": as_int_like(user[0]),
+                        "mp": as_int_like(user[1]),
+                        "stone": as_int_like(user[2]),
+                        "exp": as_int_like(user[3]),
                     }
                     expected_resources = {
                         key: int(expected.get(key, 0))

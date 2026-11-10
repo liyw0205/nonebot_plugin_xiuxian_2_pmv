@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from ...core.numeric import as_int_like
+
 import json
 from dataclasses import asdict
 from pathlib import Path
@@ -36,7 +38,7 @@ class DemonAttackSettlementSqlRepository:
     @staticmethod
     def _integer(value: Any, default: int = 0) -> int:
         try:
-            return int(value)
+            return as_int_like(value, default)
         except (TypeError, ValueError):
             return default
 

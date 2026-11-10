@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from ...core.numeric import as_int_like
 import json
 from dataclasses import dataclass
 from pathlib import Path
@@ -71,7 +72,7 @@ class AdminImpartStoneSqlRepository:
             if len(rows) > 1:
                 return AdminImpartStoneSnapshot("invalid_state")
             return AdminImpartStoneSnapshot(
-                "ok", int(rows[0]["stone_num"]) if rows else None
+                "ok", as_int_like(rows[0]["stone_num"]) if rows else None
             )
 
     def adjust(
@@ -119,8 +120,8 @@ class AdminImpartStoneSqlRepository:
                     return AdminImpartStoneResult("operation_conflict")
                 return AdminImpartStoneResult(
                     "duplicate",
-                    int(previous["previous_stone"]),
-                    int(previous["final_stone"]),
+                    as_int_like(previous["previous_stone"]),
+                    as_int_like(previous["final_stone"]),
                     int(previous["applied_delta"]),
                 )
 
@@ -135,7 +136,7 @@ class AdminImpartStoneSqlRepository:
             )
             if len(rows) > 1:
                 return AdminImpartStoneResult("invalid_state", reason="admin_impart_rows_duplicate")
-            actual_stone = int(rows[0]["stone_num"]) if rows else None
+            actual_stone = as_int_like(rows[0]["stone_num"]) if rows else None
             if actual_stone != expected_stone:
                 current = int(actual_stone or 0)
                 return AdminImpartStoneResult("state_changed", current, current, reason="crystal_changed" if rows else "impart_missing")
@@ -152,7 +153,7 @@ class AdminImpartStoneSqlRepository:
             else:
                 changed = uow.execute(
                     "UPDATE impart_data.xiuxian_impart SET stone_num=? "
-                    "WHERE user_id=? AND COALESCE(stone_num,0)=?",
+                    "WHERE user_id=? AND xiuxian_int_cmp(COALESCE(stone_num,0),?)=0",
                     (final_stone, user_id, previous_stone),
                 )
                 if changed.rowcount != 1:

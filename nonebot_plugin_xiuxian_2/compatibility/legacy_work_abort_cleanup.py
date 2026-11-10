@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from ..core.numeric import as_int_like
 import json
 from contextlib import closing
 from dataclasses import dataclass
@@ -112,7 +113,7 @@ class WorkAbortCleanupService:
                     conn.rollback()
                     return WorkAbortCleanupResult("state_changed")
 
-                stone = int(user[0])
+                stone = as_int_like(user[0])
                 if expected_stone is not None and stone != expected_stone:
                     conn.rollback()
                     return WorkAbortCleanupResult("state_changed")
@@ -121,7 +122,7 @@ class WorkAbortCleanupService:
                 if applied_penalty:
                     changed = conn.execute(
                         "UPDATE user_xiuxian SET stone=%s WHERE user_id=%s "
-                        "AND CAST(COALESCE(stone,0) AS REAL)=CAST(%s AS REAL)",
+                        "AND xiuxian_int_cmp(COALESCE(stone,0),%s)=0",
                         (remaining, user_id, stone),
                     )
                     if changed.rowcount < 1:

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from ...core.numeric import as_int_like
 import json
 from pathlib import Path
 from typing import Any, Mapping
@@ -46,13 +47,13 @@ class BankInterestApplication:
                 if initial_account is None:
                     return {"status": "user_missing", "operation_id": operation_id}
                 current_level = str(initial_account.get("bank_level", ""))
-                saved_stone = int(initial_account.get("saved_stone", 0) or 0)
+                saved_stone = as_int_like(initial_account.get("saved_stone", 0) or 0)
                 initial_updated_at = str(initial_account.get("updated_at", settled_at))
                 if current_level != str(bank_level):
                     return {"status": "state_changed", "reason": "bank_level_changed", "operation_id": operation_id}
             else:
                 current_level = str(account["bank_level"])
-                saved_stone = int(account["saved_stone"])
+                saved_stone = as_int_like(account["saved_stone"])
                 initial_updated_at = str(account["updated_at"])
             if expected_saved_stone is not None:
                 if saved_stone != int(expected_saved_stone):
@@ -61,7 +62,7 @@ class BankInterestApplication:
                     return {"status": "state_changed", "reason": "bank_saved_at_changed", "operation_id": operation_id}
             if current_level != str(bank_level):
                 return {"status": "state_changed", "reason": "bank_level_changed", "operation_id": operation_id}
-            decision = decide_interest(wallet=int(wallet["stone"] or 0), interest=int(interest), settled_at=str(settled_at))
+            decision = decide_interest(wallet=as_int_like(wallet["stone"] or 0), interest=int(interest), settled_at=str(settled_at))
             if account is None:
                 self.repository.create_account(
                     uow,

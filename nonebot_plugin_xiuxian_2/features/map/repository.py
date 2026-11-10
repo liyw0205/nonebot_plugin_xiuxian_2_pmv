@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from ...core.numeric import as_int_like
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Protocol
@@ -552,7 +553,7 @@ class MapNearbyPlayersSqlQueryRepository:
                     "user_id": str(row["user_id"]),
                     "user_name": str(row["user_name"] or ""),
                     "level": str(row["level"] or ""),
-                    "power": int(row["power"] or 0),
+                    "power": as_int_like(row["power"] or 0),
                 }
         except Exception:
             return MapNearbyTargetResult()
@@ -578,7 +579,7 @@ class MapNearbyPlayersSqlQueryRepository:
                 "user_id": str(row["user_id"]),
                 "user_name": str(row["user_name"] or ""),
                 "level": str(row["level"] or ""),
-                "power": int(row["power"] or 0),
+                "power": as_int_like(row["power"] or 0),
             }
             for row in rows
         ]
@@ -732,7 +733,7 @@ class MapResourceRewardSqlRepository:
             if old:
                 if str(old["payload"]) != payload:
                     return {"status": "state_changed", "stone": 0, "rewards": ()}
-                return {"status": "duplicate", "stone": int(old["stone"]), "rewards": tuple(tuple(map(int, value)) for value in json.loads(str(old["rewards"]))) }
+                return {"status": "duplicate", "stone": as_int_like(old["stone"]), "rewards": tuple(tuple(map(int, value)) for value in json.loads(str(old["rewards"]))) }
             if uow.query_one("SELECT 1 FROM user_xiuxian WHERE user_id=?", (user_id,)) is None:
                 return {"status": "user_missing", "stone": 0, "rewards": ()}
             action = uow.query_one("SELECT status,settlement_json FROM player_data.map_interactive_actions WHERE user_id=? AND action_id=?", (user_id, action_id))
@@ -832,7 +833,7 @@ class MapExploreSettlementSqlRepository:
             if old:
                 if str(old["payload"]) != payload:
                     return {"status": "state_changed", "reason": "operation_conflict", "stone": 0, "rewards": ()}
-                return {"status": "duplicate", "stone": int(old["stone"]), "rewards": tuple(tuple(map(int, x)) for x in json.loads(str(old["rewards"])))}
+                return {"status": "duplicate", "stone": as_int_like(old["stone"]), "rewards": tuple(tuple(map(int, x)) for x in json.loads(str(old["rewards"])))}
             if uow.query_one("SELECT 1 FROM user_xiuxian WHERE user_id=?", (user_id,)) is None:
                 return {"status": "user_missing", "stone": 0, "rewards": ()}
             current = uow.query_one("SELECT running,node_type,node_name,start_time,duration_min,settlement,max_duration_min,interval_min FROM player_data.map_explore_status WHERE user_id=?", (user_id,))
@@ -882,7 +883,7 @@ class MapMissionClaimSqlRepository:
             if old:
                 if str(old['payload']) != payload:
                     return {'status':'state_changed','reason':'operation_conflict','stone':0,'rewards':()}
-                result = {'status':'duplicate','stone':int(old['stone']),'rewards':tuple(tuple(map(int,x)) for x in json.loads(str(old['rewards'])))}
+                result = {'status':'duplicate','stone':as_int_like(old['stone']),'rewards':tuple(tuple(map(int,x)) for x in json.loads(str(old['rewards'])))}
                 if self.outbox.get(uow, effects_event_id) is not None:
                     result['effects_event_id'] = effects_event_id
                 return result
@@ -945,10 +946,10 @@ class MapSeedPurchaseSqlRepository:
         with DatabaseUnitOfWork(self.game_database,immediate=True) as uow:
             old=uow.query_one('SELECT payload,quantity,cost,stone,inventory FROM map_seed_purchase_operations WHERE operation_id=?',(operation_id,))
             if old:
-                return {'status':'duplicate','quantity':int(old['quantity']),'cost':int(old['cost']),'stone':int(old['stone']),'inventory':int(old['inventory'])} if str(old['payload'])==payload else {'status':'state_changed','quantity':0,'cost':0,'stone':expected_stone,'inventory':0}
+                return {'status':'duplicate','quantity':int(old['quantity']),'cost':int(old['cost']),'stone':as_int_like(old['stone']),'inventory':int(old['inventory'])} if str(old['payload'])==payload else {'status':'state_changed','quantity':0,'cost':0,'stone':expected_stone,'inventory':0}
             user=uow.query_one('SELECT stone FROM user_xiuxian WHERE user_id=?',(user_id,))
             if user is None:return {'status':'user_missing','quantity':0,'cost':0,'stone':expected_stone,'inventory':0}
-            stone=int(user['stone'] or 0)
+            stone=as_int_like(user['stone'] or 0)
             if stone!=expected_stone:return {'status':'state_changed','quantity':0,'cost':0,'stone':stone,'inventory':0}
             cost=quantity*unit_cost
             if stone<cost:return {'status':'stone_insufficient','quantity':0,'cost':0,'stone':stone,'inventory':0}
@@ -965,10 +966,10 @@ class MapDongfuBuildSqlRepository:
         payload=json.dumps([user_id,expected_stone,cost,position,dongfu],ensure_ascii=True,sort_keys=True)
         with DatabaseUnitOfWork(self.game_database,immediate=True) as uow:
             uow.attach_database(self.player_database,'player_data');old=uow.query_one('SELECT payload,stone FROM map_dongfu_build_operations WHERE operation_id=?',(operation_id,))
-            if old:return {'status':'duplicate','stone':int(old['stone'])} if str(old['payload'])==payload else {'status':'state_changed','stone':expected_stone}
+            if old:return {'status':'duplicate','stone':as_int_like(old['stone'])} if str(old['payload'])==payload else {'status':'state_changed','stone':expected_stone}
             user=uow.query_one('SELECT stone FROM user_xiuxian WHERE user_id=?',(user_id,))
             if user is None:return {'status':'user_missing','stone':expected_stone}
-            stone=int(user['stone'] or 0)
+            stone=as_int_like(user['stone'] or 0)
             if stone!=expected_stone:return {'status':'state_changed','stone':stone}
             if stone<cost:return {'status':'stone_insufficient','stone':stone}
             pos=uow.query_one('SELECT realm,heaven,node_id FROM player_data.map_status WHERE user_id=?',(user_id,))

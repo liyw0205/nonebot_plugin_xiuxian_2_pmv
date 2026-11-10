@@ -79,6 +79,30 @@ def as_int_like(value: Any, default: int = 0) -> int:
         return default
 
 
+def sqlite_int_compare(left: Any, right: Any) -> int | None:
+    """Compare canonical integers without SQLite affinity or REAL rounding.
+
+    Bare NULL remains distinct for nullable snapshots; callers use COALESCE
+    when the business field defaults to zero. Only the small comparison result
+    crosses SQLite's int64 return boundary. Invalid/non-finite operands return
+    SQL NULL so they cannot satisfy a numeric snapshot or balance guard.
+    """
+    try:
+        for operand in (left, right):
+            if operand is not None and not Decimal(operand).is_finite():
+                return None
+    except (InvalidOperation, TypeError, ValueError, OverflowError):
+        return None
+    if left is None or right is None:
+        return (left is not None) - (right is not None)
+    left, right = as_int_like(left), as_int_like(right)
+    return (left > right) - (left < right)
+
+
+def register_numeric_functions(connection: Any) -> None:
+    connection.create_function("xiuxian_int_cmp", 2, sqlite_int_compare, deterministic=True)
+
+
 def _coerce_field(value: Any) -> Any:
     if value is None or isinstance(value, bool):
         return value
@@ -179,4 +203,6 @@ __all__ = [
     "normalize_numeric_row",
     "normalize_sect_row",
     "normalize_user_row",
+    "register_numeric_functions",
+    "sqlite_int_compare",
 ]

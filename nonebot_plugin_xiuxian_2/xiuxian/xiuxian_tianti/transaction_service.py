@@ -366,7 +366,7 @@ class StoneTrainingService:
 
                 charged = conn.execute(
                     "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)-CAST(%s AS REAL) "
-                    "WHERE user_id=%s AND CAST(COALESCE(stone,0) AS REAL)>=CAST(%s AS REAL)",
+                    "WHERE user_id=%s AND xiuxian_int_cmp(COALESCE(stone,0),%s)>=0",
                     (stone_cost, user_id, stone_cost),
                 )
                 if charged.rowcount != 1:

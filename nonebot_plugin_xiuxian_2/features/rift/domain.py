@@ -1,3 +1,4 @@
+from ...core.numeric import as_int_like
 from dataclasses import dataclass
 from typing import Any, Awaitable, Callable, Mapping, Protocol, Sequence
 
@@ -98,8 +99,8 @@ class RiftDamageEventResolver:
             now_mp = now_mp if now_mp > 0 else 1
             delta = {
                 "exp": -int(exp),
-                "hp": int(now_hp) - int(user_info["hp"]),
-                "mp": int(now_mp) - int(user_info["mp"]),
+                "hp": int(now_hp) - as_int_like(user_info["hp"]),
+                "mp": int(now_mp) - as_int_like(user_info["mp"]),
             }
             detail = f"修为减少了：{self.format_number(exp)}点！"
         elif cost_type == "hp":
@@ -107,7 +108,7 @@ class RiftDamageEventResolver:
             now_hp = user_info["hp"] - cost_hp
             if now_hp < 0:
                 now_hp = 1
-            delta = {"hp": int(now_hp) - int(user_info["hp"])}
+            delta = {"hp": int(now_hp) - as_int_like(user_info["hp"])}
             detail = f"气血减少了：{self.format_number(cost_hp)}点！"
         elif cost_type == "stone":
             cost_stone = int(value)
@@ -208,7 +209,7 @@ class RiftBossBattleResolver:
         result, victor, _, status_list = await self.battle_runner(
             user_info["user_id"], boss_info, **runner_kwargs
         )
-        final_hp, final_mp = int(user_info["hp"]), int(user_info["mp"])
+        final_hp, final_mp = as_int_like(user_info["hp"]), as_int_like(user_info["mp"])
         for status in status_list:
             for attr in status.values():
                 if str(attr.get("user_id")) != str(user_info["user_id"]):
@@ -219,8 +220,8 @@ class RiftBossBattleResolver:
                 final_mp = max(1, int(attr.get("mp", final_mp) / mp_multiplier))
         outcome: dict[str, Any] = {
             "delta": {
-                "hp": final_hp - int(user_info["hp"]),
-                "mp": final_mp - int(user_info["mp"]),
+                "hp": final_hp - as_int_like(user_info["hp"]),
+                "mp": final_mp - as_int_like(user_info["mp"]),
             },
             "statistics": {"秘境打怪": 1},
         }

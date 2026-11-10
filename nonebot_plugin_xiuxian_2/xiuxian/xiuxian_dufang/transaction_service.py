@@ -102,7 +102,7 @@ class DufangBetService:
                 )
                 charged = conn.execute(
                     "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)-CAST(%s AS REAL) "
-                    "WHERE user_id=%s AND CAST(COALESCE(stone,0) AS REAL)>=CAST(%s AS REAL)",
+                    "WHERE user_id=%s AND xiuxian_int_cmp(COALESCE(stone,0),%s)>=0",
                     (cost, user_id, cost),
                 )
                 if charged.rowcount != 1:

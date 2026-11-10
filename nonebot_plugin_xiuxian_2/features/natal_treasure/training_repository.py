@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from ...core.numeric import as_int_like
 from ...core.errors import DomainError
 
 from pathlib import Path
@@ -56,21 +57,21 @@ class NatalTrainingSqlRepository:
                 return self._result("user_missing")
             if treasure is None or int(treasure["form"]) == 0:
                 return self._result("treasure_missing")
-            level, current_exp, current_max_exp = int(treasure["level"]), int(treasure["exp"]), max_exp_base + int(treasure["level"]) * max_exp_growth
+            level, current_exp, current_max_exp = int(treasure["level"]), as_int_like(treasure["exp"]), max_exp_base + int(treasure["level"]) * max_exp_growth
             if level >= max_level:
                 return self._result("max_level", level=level, exp=current_exp, max_exp=current_max_exp)
             exp_added = min(requested_exp, max(0, current_max_exp - current_exp))
             if exp_added <= 0:
                 return self._result("exp_full", level=level, exp=current_exp, max_exp=current_max_exp)
             stone_cost = int(base_cost * (1 + level * growth_rate)) * exp_added
-            if int(user["stone"]) < stone_cost:
+            if as_int_like(user["stone"]) < stone_cost:
                 return self._result("stone_insufficient", exp_added=exp_added, stone_cost=stone_cost, level=level, exp=current_exp, max_exp=current_max_exp)
             new_exp, new_level, new_max_exp = current_exp + exp_added, level, current_max_exp
             if new_exp >= current_max_exp:
                 new_level += 1
                 new_exp -= current_max_exp
                 new_max_exp = max_exp_base + new_level * max_exp_growth if new_level < max_level else current_max_exp
-            if uow.execute("UPDATE user_xiuxian SET stone=stone-? WHERE user_id=? AND stone>=?", (stone_cost, user_id, stone_cost)).rowcount != 1:
+            if uow.execute("UPDATE user_xiuxian SET stone=stone-? WHERE user_id=? AND xiuxian_int_cmp(stone,?)>=0", (stone_cost, user_id, stone_cost)).rowcount != 1:
                 raise DomainError("stone_write_rejected", "natal treasure write count mismatch")
             if uow.execute("UPDATE player_data.natal_treasure SET level=?,exp=?,max_exp=? WHERE user_id=?", (new_level, new_exp, new_max_exp, user_id)).rowcount != 1:
                 raise DomainError("treasure_training_write_rejected", "natal treasure write count mismatch")

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from ...core.numeric import as_int_like
+
 from ...core.errors import DomainError
 
 import json
@@ -127,7 +129,7 @@ class NormalPvpSqlRepository:
         winner_id = str(winner_id or "")
         stamina_cost = int(stamina_cost)
         snapshots = tuple(
-            int(value)
+            as_int_like(value)
             for value in (
                 expected_challenger_hp,
                 expected_challenger_mp,
@@ -186,7 +188,7 @@ class NormalPvpSqlRepository:
                 (challenger_id, opponent_id),
             )
             current = {
-                str(row["user_id"]): tuple(int(row[field]) for field in ("hp", "mp", "user_stamina", "exp"))
+                str(row["user_id"]): tuple(as_int_like(row[field]) for field in ("hp", "mp", "user_stamina", "exp"))
                 for row in rows
             }
             if challenger_id not in current or opponent_id not in current:
@@ -205,14 +207,14 @@ class NormalPvpSqlRepository:
                 with uow.savepoint("normal_pvp_assets"):
                     changed = uow.execute(
                         "UPDATE user_xiuxian SET hp=?,mp=?,user_stamina=user_stamina-? "
-                        "WHERE user_id=? AND hp=? AND mp=? AND user_stamina=? AND exp=? AND user_stamina>=?",
+                        "WHERE user_id=? AND xiuxian_int_cmp(hp,?)=0 AND xiuxian_int_cmp(mp,?)=0 AND user_stamina=? AND xiuxian_int_cmp(exp,?)=0 AND user_stamina>=?",
                         (finals[0], finals[1], stamina_cost, challenger_id, *challenger_snapshot, stamina_cost),
                     )
                     if changed.rowcount != 1:
                         raise _StateChanged
                     changed = uow.execute(
                         "UPDATE user_xiuxian SET hp=?,mp=? "
-                        "WHERE user_id=? AND hp=? AND mp=? AND user_stamina=? AND exp=?",
+                        "WHERE user_id=? AND xiuxian_int_cmp(hp,?)=0 AND xiuxian_int_cmp(mp,?)=0 AND user_stamina=? AND xiuxian_int_cmp(exp,?)=0",
                         (finals[2], finals[3], opponent_id, *opponent_snapshot),
                     )
                     if changed.rowcount != 1:

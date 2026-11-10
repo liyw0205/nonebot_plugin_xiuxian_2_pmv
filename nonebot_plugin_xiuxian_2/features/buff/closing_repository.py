@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from ...core.numeric import as_int_like
 from ...core.errors import DomainError
 
 import json
@@ -123,7 +124,7 @@ class ClosingSettlementSqlRepository:
         power: int,
         exp_time: int = 0,
     ) -> ClosingSettlementResult:
-        values = tuple(int(float(value)) for value in (exp_gain, stone_cost, hp, mp, atk, power))
+        values = tuple(as_int_like(value) for value in (exp_gain, stone_cost, hp, mp, atk, power))
         duration = int(exp_time)
         if not operation_id or min((*values, duration)) < 0:
             raise ValueError("valid closing settlement values are required")
@@ -160,13 +161,13 @@ class ClosingSettlementSqlRepository:
                 cd["create_time"], expected_create_time
             ):
                 return ClosingSettlementResult("state_changed", reason="closing_type_changed" if int(cd["type"] or 0) != 1 else "closing_time_changed")
-            if int(user["stone"]) < values[1]:
+            if as_int_like(user["stone"]) < values[1]:
                 return ClosingSettlementResult("stone_insufficient")
 
             changed = uow.execute(
                 "UPDATE user_xiuxian SET exp=COALESCE(exp,0)+?,stone=COALESCE(stone,0)-?,"
                 "hp=?,mp=?,atk=?,power=? WHERE rowid=(SELECT rowid FROM user_xiuxian "
-                "WHERE user_id=? ORDER BY rowid LIMIT 1) AND stone>=?",
+                "WHERE user_id=? ORDER BY rowid LIMIT 1) AND xiuxian_int_cmp(stone,?)>=0",
                 (values[0], values[1], values[2], values[3], values[4], values[5], user_id, values[1]),
             )
             if is_blank_cd_time(cd["create_time"]) or is_blank_cd_time(expected_create_time):

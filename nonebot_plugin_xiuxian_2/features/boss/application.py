@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from ...core.numeric import as_int_like
 from dataclasses import asdict, dataclass, is_dataclass
 from pathlib import Path
 from typing import Any, Mapping
@@ -199,8 +200,8 @@ class BossApplication:
             int(data.get("boss_hp", 0) or 0),
             int(data.get("stamina", 0) or 0),
             int(data.get("battle_count", 0) or 0),
-            int(data.get("stone", 0) or 0),
-            int(data.get("exp", 0) or 0),
+            as_int_like(data.get("stone", 0) or 0),
+            as_int_like(data.get("exp", 0) or 0),
             int(data.get("integral", 0) or 0),
             lines,
         )

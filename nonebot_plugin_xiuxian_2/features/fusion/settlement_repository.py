@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from ...core.numeric import as_int_like
+
 from ...core.errors import DomainError
 
 import json
@@ -164,7 +166,7 @@ class FusionService:
                         raise DomainError("fusion_protection_write_rejected", "fusion write count mismatch")
                 else:
                     # 0 灵石配方（如追捕令）不扣灵石；负灵石也不应拦零成本合成
-                    current_stone = float(user[0] or 0)
+                    current_stone = as_int_like(user[0])
                     if stone_cost > 0 and current_stone < stone_cost:
                         conn.rollback()
                         return FusionResult("stone_insufficient", successful, False)
@@ -185,7 +187,7 @@ class FusionService:
                         charged = conn.execute(
                             "UPDATE user_xiuxian "
                             "SET stone=CAST(COALESCE(stone,0) AS REAL)-CAST(%s AS REAL) "
-                            "WHERE user_id=%s AND CAST(COALESCE(stone,0) AS REAL)>=CAST(%s AS REAL)",
+                            "WHERE user_id=%s AND xiuxian_int_cmp(COALESCE(stone,0),%s)>=0",
                             (stone_cost, user_id, stone_cost),
                         )
                         if charged.rowcount != 1:
@@ -314,7 +316,7 @@ class FusionService:
                     item_id: quantity * charged_attempts for item_id, quantity in materials.items()
                 }
 
-                current_stone = float(user[0] or 0)
+                current_stone = as_int_like(user[0])
                 # 0 灵石总成本不校验/不扣费（负灵石也可合成追捕令这类配方）
                 if total_stone > 0 and current_stone < total_stone:
                     conn.rollback()
@@ -347,7 +349,7 @@ class FusionService:
                     charged = conn.execute(
                         "UPDATE user_xiuxian "
                         "SET stone=CAST(COALESCE(stone,0) AS REAL)-CAST(%s AS REAL) "
-                        "WHERE user_id=%s AND CAST(COALESCE(stone,0) AS REAL)>=CAST(%s AS REAL)",
+                        "WHERE user_id=%s AND xiuxian_int_cmp(COALESCE(stone,0),%s)>=0",
                         (total_stone, user_id, total_stone),
                     )
                     if charged.rowcount != 1:

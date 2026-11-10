@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from ...core.numeric import as_int_like
 from pathlib import Path
 from typing import Any
 
@@ -50,8 +51,8 @@ class SectScheduledMaterialSqlRepository:
                 return {
                     "status": "duplicate",
                     **base,
-                    "materials": int(old["materials"]),
-                    "combat_power": int(old["combat_power"]),
+                    "materials": as_int_like(old["materials"]),
+                    "combat_power": as_int_like(old["combat_power"]),
                 }
 
             sect = uow.query_one(

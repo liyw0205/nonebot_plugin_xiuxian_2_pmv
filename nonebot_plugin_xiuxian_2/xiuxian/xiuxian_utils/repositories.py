@@ -199,7 +199,7 @@ class EconomyRepository:
                     """
                     UPDATE user_xiuxian
                     SET stone=CAST(COALESCE(stone,0) AS REAL)-CAST(%s AS REAL)
-                    WHERE user_id=%s AND CAST(COALESCE(stone,0) AS REAL) >= CAST(%s AS REAL)
+                    WHERE user_id=%s AND xiuxian_int_cmp(COALESCE(stone,0),%s)>=0
                     """,
                     (amount, user_id, amount),
                 )
@@ -254,7 +254,7 @@ class EconomyRepository:
                 """
                 UPDATE user_xiuxian
                 SET stone=CAST(COALESCE(stone,0) AS REAL)-CAST(%s AS REAL)
-                WHERE user_id=%s AND CAST(COALESCE(stone,0) AS REAL) >= CAST(%s AS REAL)
+                WHERE user_id=%s AND xiuxian_int_cmp(COALESCE(stone,0),%s)>=0
                 """,
                 (amount, sender_id, amount),
             )

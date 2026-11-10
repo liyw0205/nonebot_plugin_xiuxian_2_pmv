@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from ...core.numeric import as_int_like
 import json
 from pathlib import Path
 from typing import Any, Protocol
@@ -96,7 +97,7 @@ class GuishiQuerySqlRepository:
             items = json.loads(row.get("items") or "{}")
         except (TypeError, ValueError):
             items = {}
-        return int(row.get("stored_stone") or 0), items if isinstance(items, dict) else {}
+        return as_int_like(row.get("stored_stone") or 0), items if isinstance(items, dict) else {}
 
 
 __all__ = ["GuishiQueryRepository", "GuishiQuerySqlRepository"]

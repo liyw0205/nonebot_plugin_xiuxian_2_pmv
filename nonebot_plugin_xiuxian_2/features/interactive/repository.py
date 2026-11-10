@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from ...core.numeric import as_int_like
 from ...core.errors import DomainError
 
 import hashlib
@@ -60,18 +61,18 @@ class InteractiveRepository:
         if previous:
             if str(previous["payload"]) != payload:
                 return ExpRewardResult("operation_conflict")
-            return ExpRewardResult("duplicate", bool(previous["granted"]), int(previous["exp_reward"]), int(previous["exp"]))
+            return ExpRewardResult("duplicate", bool(previous["granted"]), int(previous["exp_reward"]), as_int_like(previous["exp"]))
         user = uow.query_one("SELECT COALESCE(exp,0) AS exp,level FROM user_xiuxian WHERE user_id = ?", (user_id,))
         if user is None:
             return ExpRewardResult("user_missing")
-        if (int(user["exp"]), str(user["level"])) != (expected_exp, expected_level):
-            return ExpRewardResult("state_changed", reason="exp_changed" if int(user["exp"]) != expected_exp else "level_changed")
+        if (as_int_like(user["exp"]), str(user["level"])) != (expected_exp, expected_level):
+            return ExpRewardResult("state_changed", reason="exp_changed" if as_int_like(user["exp"]) != expected_exp else "level_changed")
         if uow.query_one("SELECT 1 AS present FROM interactive_exp_daily_claims WHERE user_id = ? AND business_date = ?", (user_id, day)):
             return ExpRewardResult("already_claimed")
         final_exp = expected_exp
         if granted:
             final_exp += reward
-            changed = uow.execute("UPDATE user_xiuxian SET exp = ? WHERE user_id = ? AND COALESCE(exp,0) = ? AND level = ?", (final_exp, user_id, expected_exp, expected_level))
+            changed = uow.execute("UPDATE user_xiuxian SET exp = ? WHERE user_id = ? AND xiuxian_int_cmp(COALESCE(exp,0),?)=0 AND level = ?", (final_exp, user_id, expected_exp, expected_level))
             if changed.rowcount != 1:
                 raise DomainError("exp_write_rejected", "interactive exp write count mismatch")
             uow.execute("INSERT INTO interactive_exp_daily_claims(user_id,business_date,operation_id,exp_reward) VALUES (?,?,?,?)", (user_id, day, operation_id, reward))
@@ -91,18 +92,18 @@ class InteractiveRepository:
         if previous:
             if str(previous["payload"]) != payload:
                 return StoneRewardResult("operation_conflict")
-            return StoneRewardResult("duplicate", bool(previous["granted"]), int(previous["stone_reward"]), int(previous["stone"]))
+            return StoneRewardResult("duplicate", bool(previous["granted"]), int(previous["stone_reward"]), as_int_like(previous["stone"]))
         user = uow.query_one("SELECT COALESCE(stone,0) AS stone FROM user_xiuxian WHERE user_id = ?", (user_id,))
         if user is None:
             return StoneRewardResult("user_missing")
-        if int(user["stone"]) != expected_stone:
+        if as_int_like(user["stone"]) != expected_stone:
             return StoneRewardResult("state_changed", reason="stone_changed")
         if uow.query_one("SELECT 1 AS present FROM interactive_stone_daily_claims WHERE user_id = ? AND business_date = ?", (user_id, day)):
             return StoneRewardResult("already_claimed")
         final_stone = expected_stone
         if granted:
             final_stone += reward
-            changed = uow.execute("UPDATE user_xiuxian SET stone = ? WHERE user_id = ? AND COALESCE(stone,0) = ?", (final_stone, user_id, expected_stone))
+            changed = uow.execute("UPDATE user_xiuxian SET stone = ? WHERE user_id = ? AND xiuxian_int_cmp(COALESCE(stone,0),?)=0", (final_stone, user_id, expected_stone))
             if changed.rowcount != 1:
                 raise DomainError("stone_write_rejected", "interactive stone write count mismatch")
             uow.execute("INSERT INTO interactive_stone_daily_claims(user_id,business_date,operation_id,stone_reward) VALUES (?,?,?,?)", (user_id, day, operation_id, reward))

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from ...core.numeric import as_int_like
 from pathlib import Path
 from typing import Any
 
@@ -222,7 +223,7 @@ class ActivityRepository(ServicePort):
                     (key, user_id, str(item_def["id"])),
                 )
                 have = max(0, int((inventory or {}).get("count") or 0))
-            atk = max(0, int(profile.get("atk") or 0))
+            atk = max(0, as_int_like(profile.get("atk") or 0))
 
         multiplier = max(0.0, float(runtime.get("multiplier") or 1.0))
         if item_mode:

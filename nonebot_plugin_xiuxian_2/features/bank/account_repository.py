@@ -43,7 +43,7 @@ class BankAccountRepository:
         return None if row is None else dict(row)
 
     def save_deposit(self, uow: DatabaseUnitOfWork, *, operation_id: str, user_id: str, payload: str, amount: int, decision: BankDepositDecision, bank_level: str, settled_at: str) -> None:
-        changed = uow.execute("UPDATE user_xiuxian SET stone=? WHERE user_id=? AND stone>=?", (decision.wallet_after, user_id, amount))
+        changed = uow.execute("UPDATE user_xiuxian SET stone=? WHERE user_id=? AND xiuxian_int_cmp(stone,?)>=0", (decision.wallet_after, user_id, amount))
         if changed.rowcount != 1:
             raise DomainError("stone_write_rejected", "wallet state changed during bank deposit")
         uow.execute("INSERT INTO bank_accounts(user_id,saved_stone,bank_level,updated_at) VALUES (?,?,?,?) ON CONFLICT(user_id) DO UPDATE SET saved_stone=excluded.saved_stone, bank_level=excluded.bank_level, updated_at=excluded.updated_at", (user_id, decision.saved_after, bank_level, settled_at))
@@ -60,7 +60,7 @@ class BankAccountRepository:
 
     def save_upgrade(self, uow: DatabaseUnitOfWork, *, operation_id: str, user_id: str, payload: str, amount: int, expected_level: str, decision: BankUpgradeDecision, settled_at: str) -> None:
         changed = uow.execute(
-            "UPDATE user_xiuxian SET stone=? WHERE user_id=? AND stone>=?",
+            "UPDATE user_xiuxian SET stone=? WHERE user_id=? AND xiuxian_int_cmp(stone,?)>=0",
             (decision.wallet_after, user_id, amount),
         )
         if changed.rowcount != 1:

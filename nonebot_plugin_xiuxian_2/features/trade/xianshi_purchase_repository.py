@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from ...core.numeric import as_int_like
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Literal, Mapping
@@ -152,7 +153,7 @@ class XianshiPurchaseSqlRepository:
             )
             if buyer is None:
                 return replace(result, status="buyer_missing")
-            if int(buyer["stone"] or 0) < total_cost:
+            if as_int_like(buyer["stone"] or 0) < total_cost:
                 return replace(result, status="stone_insufficient")
 
             if seller_id != "0" and uow.query_one(

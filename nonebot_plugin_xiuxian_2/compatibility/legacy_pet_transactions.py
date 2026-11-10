@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from ..core.numeric import as_int_like
 import json
 import sqlite3
 from contextlib import closing
@@ -289,12 +290,7 @@ class PetHatchService:
 
     @staticmethod
     def _as_int_like(value, default: int = 0) -> int:
-        try:
-            if value is None or value == "":
-                return default
-            return int(float(value))
-        except Exception:
-            return default
+        return as_int_like(value, default)
 
     @staticmethod
     def _normalize_travel_snapshot(value):
@@ -483,7 +479,7 @@ class PetHatchService:
                     raise
                 stone_updated = conn.execute(
                     "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)-CAST(%s AS REAL) "
-                    "WHERE user_id=%s AND CAST(COALESCE(stone,0) AS REAL)=CAST(%s AS REAL)",
+                    "WHERE user_id=%s AND xiuxian_int_cmp(COALESCE(stone,0),%s)=0",
                     (cost, user_id, expected_stone),
                 )
                 if getattr(stone_updated, "rowcount", 1) == 0:
@@ -790,7 +786,7 @@ class PetFusionBreakthroughService:
                     return PetFusionBreakthroughResult("state_changed")
                 updated = conn.execute(
                     "UPDATE player_pet_item SET stars=%s,exp=%s,updated_at=%s "
-                    "WHERE user_id=%s AND uid=%s AND stars=%s AND exp=%s AND is_active=1",
+                    "WHERE user_id=%s AND uid=%s AND stars=%s AND xiuxian_int_cmp(exp,%s)=0 AND is_active=1",
                     (updated_stars, updated_exp, int(time.time()), user_id, str(main[0]), int(main[2]), int(main[3])),
                 ).rowcount
                 if updated != 1:

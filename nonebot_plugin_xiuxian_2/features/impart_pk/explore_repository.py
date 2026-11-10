@@ -1,4 +1,5 @@
 from __future__ import annotations
+from ...core.numeric import as_int_like
 import json
 from dataclasses import dataclass
 from pathlib import Path
@@ -25,7 +26,7 @@ class ImpartExploreSqlRepository:
             impart=uow.query_one('SELECT exp_day,impart_lv FROM impart_data.xiuxian_impart WHERE user_id=?',(user_id,)); daily=uow.query_one('SELECT impart_num FROM player_data.impart_pk_daily WHERE user_id=?',(user_id,))
             if impart is None: return ImpartExploreResult('state_changed', reason='impart_missing')
             if daily is None: return ImpartExploreResult('state_changed', reason='daily_missing')
-            if int(impart['exp_day'] or 0)!=expected_exp_day: return ImpartExploreResult('state_changed', reason='impart_time_changed')
+            if as_int_like(impart['exp_day'] or 0)!=expected_exp_day: return ImpartExploreResult('state_changed', reason='impart_time_changed')
             if int(impart['impart_lv'] or 0)!=expected_impart_lv: return ImpartExploreResult('state_changed', reason='impart_level_changed')
             if int(daily['impart_num'] or 0)!=expected_impart_num: return ImpartExploreResult('state_changed', reason='explore_count_changed')
             if expected_exp_day<time_cost: return ImpartExploreResult('time_insufficient')

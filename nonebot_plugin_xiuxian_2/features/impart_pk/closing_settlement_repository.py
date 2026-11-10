@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from ...core.numeric import as_int_like
 from ...core.errors import DomainError
 import json
 from dataclasses import dataclass
@@ -31,11 +32,11 @@ class ImpartClosingSettlementSqlRepository:
             if user is None or cd is None or impart is None: return ImpartClosingSettlementResult('user_missing', reason='user_missing' if user is None else 'closing_missing' if cd is None else 'impart_missing')
             if int(cd['type'] or 0)!=4: return ImpartClosingSettlementResult('state_changed', reason='closing_type_changed')
             if str(cd['create_time']) not in {expected_create_time,'0',''}: return ImpartClosingSettlementResult('state_changed', reason='closing_time_changed')
-            if int(impart['exp_day'] or 0)!=expected_exp_day: return ImpartClosingSettlementResult('state_changed', reason='impart_time_changed')
+            if as_int_like(impart['exp_day'] or 0)!=expected_exp_day: return ImpartClosingSettlementResult('state_changed', reason='impart_time_changed')
             state_count = state_row_count(uow, user_id, ("exp_day",), schema="impart_data")
             if uow.execute('UPDATE user_xiuxian SET exp=COALESCE(exp,0)+?,hp=?,mp=?,atk=?,power=? WHERE user_id=?',(exp_gain,hp,mp,atk,power,user_id)).rowcount!=1: raise DomainError("closing_player_write_rejected", 'closing player write count mismatch')
             if uow.execute('UPDATE user_cd SET type=0,create_time=0,scheduled_time=NULL WHERE user_id=? AND type=4',(user_id,)).rowcount!=1: raise DomainError("closing_session_write_rejected", 'closing session write count mismatch')
-            check_state_write(uow.execute('UPDATE impart_data.xiuxian_impart SET exp_day=exp_day-? WHERE user_id=? AND exp_day=? AND exp_day>=?',(blessing_cost,user_id,expected_exp_day,blessing_cost)), state_count)
+            check_state_write(uow.execute('UPDATE impart_data.xiuxian_impart SET exp_day=exp_day-? WHERE user_id=? AND xiuxian_int_cmp(exp_day,?)=0 AND xiuxian_int_cmp(exp_day,?)>=0',(blessing_cost,user_id,expected_exp_day,blessing_cost)), state_count)
             for field,amount in zip(CLOSING_SETTLEMENT_FIELDS,(closing_minutes,exp_gain,blessing_cost)):
                 if uow.execute(f'UPDATE player_data.statistics SET "{field}"=COALESCE("{field}",0)+? WHERE user_id=?',(amount,user_id)).rowcount==0: uow.execute(f'INSERT INTO player_data.statistics(user_id,"{field}") VALUES(?,?)',(user_id,amount))
             saved=[exp_gain,blessing_cost,expected_exp_day-blessing_cost]; uow.execute('INSERT INTO impart_closing_operations(operation_id,payload,result_json) VALUES(?,?,?)',(operation_id,payload,json.dumps(saved,separators=(',',':')))); return ImpartClosingSettlementResult('applied',*saved)

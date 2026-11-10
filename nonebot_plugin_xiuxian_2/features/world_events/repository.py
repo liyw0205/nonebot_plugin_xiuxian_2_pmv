@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from ...core.numeric import as_int_like
+
 import json
 from pathlib import Path
 from typing import Any, Mapping, Protocol, Sequence
@@ -31,7 +33,7 @@ class WorldEventClaimSqlRepository:
     @staticmethod
     def _integer(value: Any) -> int:
         try:
-            return int(value)
+            return as_int_like(value)
         except (TypeError, ValueError, OverflowError):
             return 0
 

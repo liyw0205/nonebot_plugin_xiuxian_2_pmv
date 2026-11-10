@@ -1,4 +1,6 @@
 from __future__ import annotations
+
+from ...core.numeric import as_int_like
 from dataclasses import replace as _reason_replace
 from ...core.snapshot_reason import first_difference
 
@@ -69,7 +71,7 @@ class BaseStoneRobberySqlRepository:
         data = dict(value)
         return tuple(
             None if field in {"hp", "mp"} and data.get(field) is None
-            else int(data.get(field) or 0)
+            else as_int_like(data.get(field))
             for field in BaseStoneRobberySqlRepository.SNAPSHOT_FIELDS
         )
 
@@ -153,7 +155,7 @@ class BaseStoneRobberySqlRepository:
             )
             users = {
                 str(row["user_id"]): tuple(
-                    None if index < 2 and row[field] is None else int(row[field] or 0)
+                    None if index < 2 and row[field] is None else as_int_like(row[field])
                     for index, field in enumerate(self.SNAPSHOT_FIELDS)
                 )
                 for row in rows
@@ -186,13 +188,13 @@ class BaseStoneRobberySqlRepository:
             try:
                 with uow.savepoint("stone_robbery_assets"):
                     robber_changed = uow.execute(
-                        "UPDATE user_xiuxian SET hp=?,mp=?,user_stamina=?,stone=? WHERE user_id=? AND hp IS ? AND mp IS ? "
-                        "AND COALESCE(user_stamina,0)=? AND COALESCE(exp,0)=? AND COALESCE(stone,0)=?",
+                        "UPDATE user_xiuxian SET hp=?,mp=?,user_stamina=?,stone=? WHERE user_id=? AND xiuxian_int_cmp(hp,?)=0 AND xiuxian_int_cmp(mp,?)=0 "
+                        "AND COALESCE(user_stamina,0)=? AND xiuxian_int_cmp(COALESCE(exp,0),?)=0 AND xiuxian_int_cmp(COALESCE(stone,0),?)=0",
                         (robber_final[0], robber_final[1], robber_snapshot[2] - stamina_cost, robber_stone, robber_id, *robber_snapshot),
                     )
                     victim_changed = uow.execute(
-                        "UPDATE user_xiuxian SET hp=?,mp=?,stone=? WHERE user_id=? AND hp IS ? AND mp IS ? "
-                        "AND COALESCE(user_stamina,0)=? AND COALESCE(exp,0)=? AND COALESCE(stone,0)=?",
+                        "UPDATE user_xiuxian SET hp=?,mp=?,stone=? WHERE user_id=? AND xiuxian_int_cmp(hp,?)=0 AND xiuxian_int_cmp(mp,?)=0 "
+                        "AND COALESCE(user_stamina,0)=? AND xiuxian_int_cmp(COALESCE(exp,0),?)=0 AND xiuxian_int_cmp(COALESCE(stone,0),?)=0",
                         (victim_final[0], victim_final[1], victim_stone, victim_id, *victim_snapshot),
                     )
                     if robber_changed.rowcount != 1 or victim_changed.rowcount != 1:

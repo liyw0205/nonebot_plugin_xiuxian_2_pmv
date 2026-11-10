@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from ...core.numeric import as_int_like
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
@@ -77,9 +78,9 @@ class BaseStoneContestSqlRepository:
             status=status,
             payer_id=str(row["payer_id"]),
             receiver_id=str(row["receiver_id"]),
-            requested_amount=int(row["requested_amount"]),
-            transferred_amount=int(row["transferred_amount"]),
-            payer_balance=int(row["payer_balance"]),
+            requested_amount=as_int_like(row["requested_amount"]),
+            transferred_amount=as_int_like(row["transferred_amount"]),
+            payer_balance=as_int_like(row["payer_balance"]),
         )
 
     def get_result(
@@ -108,7 +109,7 @@ class BaseStoneContestSqlRepository:
             str(row["operation_type"]) != "transfer"
             or str(row["payer_id"]) != payer_id
             or str(row["receiver_id"]) != receiver_id
-            or (requested_amount is not None and int(row["requested_amount"]) != int(requested_amount))
+            or (requested_amount is not None and as_int_like(row["requested_amount"]) != int(requested_amount))
         ):
             return self._result("state_changed", payer_id, receiver_id, requested_amount or 0)
         return self._from_row(row)
@@ -142,7 +143,7 @@ class BaseStoneContestSqlRepository:
                     str(previous["operation_type"]) != "transfer"
                     or str(previous["payer_id"]) != payer_id
                     or str(previous["receiver_id"]) != receiver_id
-                    or int(previous["requested_amount"]) != requested_amount
+                    or as_int_like(previous["requested_amount"]) != requested_amount
                 ):
                     return self._result("state_changed", payer_id, receiver_id, requested_amount)
                 return self._from_row(previous)
@@ -152,7 +153,7 @@ class BaseStoneContestSqlRepository:
                 "WHERE user_id IN (?,?)",
                 (payer_id, receiver_id),
             )
-            users = {str(row["user_id"]): max(0, int(row["stone"])) for row in rows}
+            users = {str(row["user_id"]): max(0, as_int_like(row["stone"])) for row in rows}
             if payer_id not in users or receiver_id not in users:
                 return self._result("user_missing", payer_id, receiver_id, requested_amount)
             payer_balance = users[payer_id]
@@ -165,12 +166,12 @@ class BaseStoneContestSqlRepository:
                 with uow.savepoint("stone_contest_assets"):
                     charged = uow.execute(
                         "UPDATE user_xiuxian SET stone=stone-? WHERE user_id=? "
-                        "AND COALESCE(stone,0)=? AND COALESCE(stone,0)>=?",
+                        "AND xiuxian_int_cmp(COALESCE(stone,0),?)=0 AND xiuxian_int_cmp(COALESCE(stone,0),?)>=0",
                         (transferred, payer_id, payer_balance, transferred),
                     )
                     credited = uow.execute(
                         "UPDATE user_xiuxian SET stone=stone+? WHERE user_id=? "
-                        "AND COALESCE(stone,0)=?",
+                        "AND xiuxian_int_cmp(COALESCE(stone,0),?)=0",
                         (transferred, receiver_id, receiver_balance),
                     )
                     if charged.rowcount != 1 or credited.rowcount != 1:

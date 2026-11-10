@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from ...core.numeric import as_int_like
 import json
 import sqlite3
 from pathlib import Path
@@ -13,7 +14,7 @@ from .legacy_account_repository import BankLegacyAccountReadRepository
 
 def _integer(value: Any, default: int = 0) -> int:
     try:
-        return int(value)
+        return as_int_like(value, default)
     except (TypeError, ValueError):
         return default
 
@@ -125,14 +126,14 @@ class BankAccountInfoApplication:
         if account is None:
             return {
                 "status": "account_missing", "user_id": user_id,
-                "wallet_stone": int(wallet["stone"] or 0), "saved_stone": 0,
+                "wallet_stone": as_int_like(wallet["stone"] or 0), "saved_stone": 0,
                 "bank_level": "1", "updated_at": "",
             }
         return {
             "status": "ok",
             "user_id": user_id,
-            "wallet_stone": int(wallet["stone"] or 0),
-            "saved_stone": int(account["saved_stone"]),
+            "wallet_stone": as_int_like(wallet["stone"] or 0),
+            "saved_stone": as_int_like(account["saved_stone"]),
             "bank_level": str(account["bank_level"]),
             "updated_at": str(account["updated_at"]),
         }

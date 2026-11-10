@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from ...core.numeric import as_int_like
 from ...core.errors import DomainError
 
 import json
@@ -38,17 +39,17 @@ class StoneTrainingSqlRepository:
             user = uow.query_one("SELECT COALESCE(exp,0) AS exp,COALESCE(stone,0) AS stone FROM user_xiuxian WHERE user_id=?", (user_id,))
             if user is None:
                 return StoneTrainingResult("user_missing")
-            if (int(user["exp"]), int(user["stone"])) != (expected_exp, expected_stone):
-                return StoneTrainingResult("state_changed", reason="exp_changed" if int(user["exp"]) != expected_exp else "stone_changed")
+            if (as_int_like(user["exp"]), as_int_like(user["stone"])) != (expected_exp, expected_stone):
+                return StoneTrainingResult("state_changed", reason="exp_changed" if as_int_like(user["exp"]) != expected_exp else "stone_changed")
             if exp_gain <= 0:
                 return StoneTrainingResult("exp_capped")
             if expected_stone < stone_cost:
                 return StoneTrainingResult("stone_insufficient", exp_gain, stone_cost)
-            changed = uow.execute("UPDATE user_xiuxian SET exp=exp+?,stone=stone-?,power=ROUND((exp+?)*?,0) WHERE user_id=? AND exp=? AND stone>=?", (exp_gain, stone_cost, exp_gain, float(power_multiplier), user_id, expected_exp, stone_cost))
+            changed = uow.execute("UPDATE user_xiuxian SET exp=exp+?,stone=stone-?,power=ROUND((exp+?)*?,0) WHERE user_id=? AND xiuxian_int_cmp(exp,?)=0 AND xiuxian_int_cmp(stone,?)>=0", (exp_gain, stone_cost, exp_gain, float(power_multiplier), user_id, expected_exp, stone_cost))
             if changed.rowcount != 1:
                 raise DomainError("stone_training_write_rejected", "stone training write count mismatch")
             power_row = uow.query_one("SELECT power FROM user_xiuxian WHERE user_id=?", (user_id,))
-            power = int(power_row["power"] or 0)
+            power = as_int_like(power_row["power"] or 0)
             saved = {"exp_gain": exp_gain, "stone_cost": stone_cost, "power": power}
             uow.execute("INSERT INTO stone_training_operations(operation_id,payload,result_json) VALUES(?,?,?)", (operation_id, payload, json.dumps(saved, separators=(",", ":"))))
             return StoneTrainingResult("applied", **saved)

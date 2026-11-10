@@ -2618,7 +2618,7 @@ class XiuxianDateManage:
 
                 if stone_cost > 0:
                     cur.execute(
-                        "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)-CAST(%s AS REAL) WHERE user_id=%s AND COALESCE(stone, 0) >= %s",
+                        "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)-CAST(%s AS REAL) WHERE user_id=%s AND xiuxian_int_cmp(COALESCE(stone, 0),%s)>=0",
                         (stone_cost, user_id, stone_cost),
                     )
                     if cur.rowcount <= 0:
@@ -3246,7 +3246,7 @@ class TradeDataManager:
                     """
                     UPDATE guishi_info
                     SET stored_stone=CAST(COALESCE(stored_stone,0) AS REAL)-CAST(%s AS REAL)
-                    WHERE user_id=%s AND COALESCE(stored_stone, 0) >= %s
+                    WHERE user_id=%s AND xiuxian_int_cmp(COALESCE(stored_stone, 0),%s)>=0
                     """,
                     (amount, user_id, amount),
                 )

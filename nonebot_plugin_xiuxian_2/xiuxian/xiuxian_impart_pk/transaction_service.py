@@ -509,7 +509,7 @@ class ImpartClosingSettlementService:
                     )
                 blessed = conn.execute(
                     "UPDATE impart_data.xiuxian_impart SET exp_day=exp_day-%s "
-                    "WHERE user_id=%s AND exp_day=%s AND exp_day>=%s",
+                    "WHERE user_id=%s AND xiuxian_int_cmp(exp_day,%s)=0 AND xiuxian_int_cmp(exp_day,%s)>=0",
                     (blessing_cost, user_id, expected_exp_day, blessing_cost),
                 )
                 if changed.rowcount != 1 or cleared.rowcount != 1 or blessed.rowcount != 1:
@@ -646,7 +646,7 @@ class ImpartTrainingSettlementService:
                 new_gain = expected_daily["exp_gain"] + exp_gain
                 conn.execute("UPDATE impart_data.xiuxian_impart SET exp_day=%s WHERE user_id=%s", (new_exp_day, user_id))
                 changed = conn.execute(
-                    "UPDATE user_xiuxian SET exp=%s,power=%s WHERE user_id=%s AND exp=%s",
+                    "UPDATE user_xiuxian SET exp=%s,power=%s WHERE user_id=%s AND xiuxian_int_cmp(exp,%s)=0",
                     (new_exp, power, user_id, expected_exp),
                 )
                 if changed.rowcount != 1:

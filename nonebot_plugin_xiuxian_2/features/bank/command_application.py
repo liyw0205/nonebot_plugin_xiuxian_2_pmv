@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from ...core.numeric import as_int_like
 import re
 from pathlib import Path
 
@@ -102,7 +103,7 @@ class BankCommandApplication:
         level = str(account["bank_level"])
         try:
             configuration = self.bank_levels[level]
-            saved = int(account["saved_stone"])
+            saved = as_int_like(account["saved_stone"])
             if saved < 0:
                 raise ValueError("negative bank balance")
             saved_at = str(account["updated_at"]) if not missing else settled_at

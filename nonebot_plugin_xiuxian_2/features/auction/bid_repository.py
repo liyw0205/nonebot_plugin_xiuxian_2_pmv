@@ -101,7 +101,7 @@ class AuctionBidSqlRepository:
                 return AuctionBidWriteResult("bid_too_low", operation_id, auction_id, bidder_id)
             if uow.execute(
                 "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)-CAST(? AS REAL) "
-                "WHERE user_id=? AND stone>=?",
+                "WHERE user_id=? AND xiuxian_int_cmp(stone,?)>=0",
                 (debit, bidder_id, debit),
             ).rowcount != 1:
                 return AuctionBidWriteResult("stone_insufficient", operation_id, auction_id, bidder_id)

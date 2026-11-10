@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from ...core.numeric import as_int_like
 import json
 from dataclasses import dataclass
 from pathlib import Path
@@ -49,7 +50,7 @@ class SectDailyMaintenanceSqlRepository:
             rows = uow.query_all("SELECT sect_id,COALESCE(sect_name,'') AS sect_name,sect_owner,COALESCE(elixir_room_level,0) AS level,COALESCE(sect_materials,0) AS materials FROM sects ORDER BY sect_id")
             outcomes = []
             for row in rows:
-                sid, name, owner, level, materials = int(row["sect_id"]), str(row["sect_name"]), row["sect_owner"], int(row["level"]), int(row["materials"])
+                sid, name, owner, level, materials = int(row["sect_id"]), str(row["sect_name"]), row["sect_owner"], int(row["level"]), as_int_like(row["materials"])
                 cost = costs.get(level, 0)
                 target = level
                 if owner is None: status = "inactive"

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from ...core.numeric import as_int_like
 import json
 from dataclasses import dataclass
 from pathlib import Path
@@ -83,7 +84,7 @@ class LoveSandSqlRepository:
                 return LoveSandResult(
                     status,
                     int(old["gained"]),
-                    int(old["stone_num"]),
+                    as_int_like(old["stone_num"]),
                     int(old["item_remaining"]),
                 )
 
@@ -102,7 +103,7 @@ class LoveSandSqlRepository:
                 return LoveSandResult("state_changed", reason="user_missing")
             if int(item["goods_num"]) != expected_item_count:
                 return LoveSandResult("state_changed", reason="item_changed")
-            if int(impart["stone_num"]) != expected_stone_num:
+            if as_int_like(impart["stone_num"]) != expected_stone_num:
                 return LoveSandResult("state_changed", reason="crystal_changed")
             if expected_item_count < quantity:
                 return LoveSandResult("item_missing")

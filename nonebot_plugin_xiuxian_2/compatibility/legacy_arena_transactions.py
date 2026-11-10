@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from ..core.numeric import as_int_like
 import json
 from contextlib import closing
 from dataclasses import asdict, dataclass, field
@@ -502,7 +503,7 @@ class ArenaChallengePurchaseService:
                 user = conn.execute("SELECT stone FROM user_xiuxian WHERE user_id=%s", (user_id,)).fetchone()
                 arena = conn.execute("SELECT daily_challenge_buys,daily_extra_challenges,last_buy_date FROM player_data.arena WHERE user_id=%s", (user_id,)).fetchone()
                 current = normalize_daily_purchase_state(*arena, today) if arena else None
-                if not user or current != (expected_bought, expected_extra, expected_last_buy_date) or int(user[0]) != expected_stone:
+                if not user or current != (expected_bought, expected_extra, expected_last_buy_date) or as_int_like(user[0]) != expected_stone:
                     conn.rollback(); return ArenaChallengePurchaseResult("state_changed", 0, 0, expected_stone, expected_bought, expected_extra)
                 real_amount = min(amount, max(0, daily_limit - expected_bought))
                 cost = real_amount * unit_cost
@@ -828,7 +829,7 @@ class ArenaChallengeSettlementService:
                     or challenger_player_row is None
                     or self._normalize_arena_row(challenger_arena_row, True)
                     != tuple(challenger[field] for field in self._CHALLENGER_FIELDS)
-                    or tuple(map(int, challenger_player_row))
+                    or tuple(map(as_int_like, challenger_player_row))
                     != (
                         challenger_player["hp"],
                         challenger_player["mp"],
@@ -854,7 +855,7 @@ class ArenaChallengeSettlementService:
                         or opponent_player_row is None
                         or self._normalize_arena_row(opponent_arena_row, False)
                         != tuple(opponent[field] for field in self._BATTLE_FIELDS)
-                        or tuple(map(int, opponent_player_row))
+                        or tuple(map(as_int_like, opponent_player_row))
                         != (opponent_player["hp"], opponent_player["mp"])
                     ):
                         conn.rollback()
@@ -914,7 +915,7 @@ class ArenaChallengeSettlementService:
                 stamina = challenger_player["user_stamina"] - stamina_cost
                 if conn.execute(
                     "UPDATE user_xiuxian SET hp=%s,mp=%s,user_stamina=%s WHERE user_id=%s "
-                    "AND COALESCE(hp,0)=%s AND COALESCE(mp,0)=%s "
+                    "AND xiuxian_int_cmp(COALESCE(hp,0),%s)=0 AND xiuxian_int_cmp(COALESCE(mp,0),%s)=0 "
                     "AND COALESCE(user_stamina,0)=%s",
                     (
                         final_challenger_hp,
@@ -929,7 +930,7 @@ class ArenaChallengeSettlementService:
                     raise RuntimeError("challenger player state changed")
                 if opponent_player is not None and conn.execute(
                     "UPDATE user_xiuxian SET hp=%s,mp=%s WHERE user_id=%s "
-                    "AND COALESCE(hp,0)=%s AND COALESCE(mp,0)=%s",
+                    "AND xiuxian_int_cmp(COALESCE(hp,0),%s)=0 AND xiuxian_int_cmp(COALESCE(mp,0),%s)=0",
                     (
                         final_opponent_hp,
                         final_opponent_mp,
@@ -1087,7 +1088,7 @@ class ArenaBattleSettlementService:
                     expected = expected_arena[user_id]
                     if row is None or player_row is None or (
                         int(row[0]), int(row[1]), int(row[2]), int(row[3]), int(row[4]), str(row[5])
-                    ) != tuple(expected[field] for field in self._ARENA_FIELDS) or tuple(map(int, player_row)) != (
+                    ) != tuple(expected[field] for field in self._ARENA_FIELDS) or tuple(map(as_int_like, player_row)) != (
                         expected_players[user_id]["hp"], expected_players[user_id]["mp"]
                     ):
                         conn.rollback(); return result("state_changed")
@@ -1124,12 +1125,12 @@ class ArenaBattleSettlementService:
                 if opponent_new is not None and update_arena(opponent_id, opponent_new) != 1:
                     conn.rollback(); return result("state_changed")
                 if conn.execute(
-                    "UPDATE user_xiuxian SET hp=%s,mp=%s WHERE user_id=%s AND COALESCE(hp,0)=%s AND COALESCE(mp,0)=%s",
+                    "UPDATE user_xiuxian SET hp=%s,mp=%s WHERE user_id=%s AND xiuxian_int_cmp(COALESCE(hp,0),%s)=0 AND xiuxian_int_cmp(COALESCE(mp,0),%s)=0",
                     (final_challenger_hp, final_challenger_mp, challenger_id, challenger_player["hp"], challenger_player["mp"]),
                 ).rowcount != 1:
                     conn.rollback(); return result("state_changed")
                 if opponent_player is not None and conn.execute(
-                    "UPDATE user_xiuxian SET hp=%s,mp=%s WHERE user_id=%s AND COALESCE(hp,0)=%s AND COALESCE(mp,0)=%s",
+                    "UPDATE user_xiuxian SET hp=%s,mp=%s WHERE user_id=%s AND xiuxian_int_cmp(COALESCE(hp,0),%s)=0 AND xiuxian_int_cmp(COALESCE(mp,0),%s)=0",
                     (final_opponent_hp, final_opponent_mp, opponent_id, opponent_player["hp"], opponent_player["mp"]),
                 ).rowcount != 1:
                     conn.rollback(); return result("state_changed")

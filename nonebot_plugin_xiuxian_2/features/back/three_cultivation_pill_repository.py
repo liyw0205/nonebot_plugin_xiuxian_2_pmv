@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from ...core.numeric import as_int_like
 from ...core.errors import DomainError
 
 from dataclasses import dataclass
@@ -79,7 +80,7 @@ class ThreeCultivationPillSqlRepository:
                     (
                         int(previous["quantity"]),
                         int(previous["requested_exp"]),
-                        int(previous["exp_gain"]),
+                        as_int_like(previous["exp_gain"]),
                         int(previous["hp_before"]),
                         int(previous["hp_after"]),
                         int(previous["mp_before"]),
@@ -99,9 +100,9 @@ class ThreeCultivationPillSqlRepository:
             if item is None or int(item["goods_num"] or 0) < quantity:
                 return result("item_insufficient")
 
-            current_exp = int(user["exp"] or 0)
-            hp_before = int(user["hp"] or 0)
-            mp_before = int(user["mp"] or 0)
+            current_exp = as_int_like(user["exp"] or 0)
+            hp_before = as_int_like(user["hp"] or 0)
+            mp_before = as_int_like(user["mp"] or 0)
             exp_gain = min(requested_exp, max(0, max_exp - current_exp))
             final_exp = current_exp + exp_gain
             max_hp = int(final_exp / 2)

@@ -7,6 +7,7 @@ facade explicitly requests the old implementation.
 
 from __future__ import annotations
 
+from ..core.numeric import as_int_like
 from contextlib import closing
 from dataclasses import dataclass
 from pathlib import Path
@@ -104,7 +105,7 @@ class StoneGiftService:
                     return result("recipient_missing")
                 charged = conn.execute(
                     "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)-CAST(%s AS REAL) "
-                    "WHERE user_id=%s AND COALESCE(stone, 0)>=%s",
+                    "WHERE user_id=%s AND xiuxian_int_cmp(COALESCE(stone, 0),%s)>=0",
                     (gross_amount, sender_id, gross_amount),
                 )
                 if charged.rowcount != 1:
@@ -146,7 +147,7 @@ class StoneGiftService:
             ).fetchone()
             if previous is None:
                 return None
-            return StoneGiftResult("duplicate", str(previous[0]), str(previous[1]), int(previous[2]), int(previous[3]), int(previous[4]))
+            return StoneGiftResult("duplicate", str(previous[0]), str(previous[1]), as_int_like(previous[2]), as_int_like(previous[3]), as_int_like(previous[4]))
 
     def get_operation(self, operation_id, sender_id, recipient_id) -> StoneGiftResult | None:
         operation_id = str(operation_id).strip()

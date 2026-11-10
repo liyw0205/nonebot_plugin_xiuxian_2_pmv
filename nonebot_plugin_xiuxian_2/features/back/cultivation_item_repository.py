@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from ...core.numeric import as_int_like
 from ...core.errors import DomainError
 
 from dataclasses import dataclass
@@ -67,7 +68,7 @@ class CultivationItemSqlRepository:
                 (operation_id,),
             )
             if previous is not None:
-                return result("duplicate", int(previous["quantity"]), int(previous["exp_gain"]))
+                return result("duplicate", int(previous["quantity"]), as_int_like(previous["exp_gain"]))
 
             if uow.query_one("SELECT 1 AS present FROM user_xiuxian WHERE user_id=?", (user_id,)) is None:
                 return result("user_missing")

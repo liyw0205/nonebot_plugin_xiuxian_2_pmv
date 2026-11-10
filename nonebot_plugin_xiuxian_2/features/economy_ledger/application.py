@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from ...core.numeric import as_int_like
 from datetime import timedelta
 from pathlib import Path
 from typing import Any, Mapping
@@ -197,7 +198,7 @@ class EconomyLedgerApplication:
             (row for row in sources if int(row.get("stone_out") or 0) > 0),
             key=lambda row: (-int(row.get("stone_out") or 0), -int(row.get("records") or 0)),
         )[:STONE_FLOW_TOP_N]
-        recent = [row for row in (page.get("rows") or []) if int(row.get("stone_delta") or 0) != 0]
+        recent = [row for row in (page.get("rows") or []) if as_int_like(row.get("stone_delta") or 0) != 0]
         return {
             "ok": True,
             "notice": None,
@@ -269,7 +270,7 @@ def format_stone_flow(payload: Mapping[str, Any], *, format_number=None) -> str:
         lines.append("")
         lines.append(f"最近 {len(recent)} 笔：")
         for row in recent:
-            delta = int(row.get("stone_delta") or 0)
+            delta = as_int_like(row.get("stone_delta") or 0)
             lines.append(
                 f"· {_flow_time(row)} {_flow_label(row)} "
                 f"{'+' if delta >= 0 else '-'}{fmt(abs(delta))}"

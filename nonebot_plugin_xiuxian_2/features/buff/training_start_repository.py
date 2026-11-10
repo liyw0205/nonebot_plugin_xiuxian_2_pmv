@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from ...core.numeric import as_int_like
 import json
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -54,8 +55,8 @@ class NormalTrainingStartSqlRepository:
         cd = uow.query_one("SELECT COALESCE(type,0) AS type FROM user_cd WHERE user_id=?", (user_id,))
         if user is None or cd is None:
             return NormalTrainingStartResult("user_missing")
-        if int(cd["type"]) != 0 or (int(user["exp"]), int(user["stone"])) != (int(expected_exp), int(expected_stone)):
-            return NormalTrainingStartResult("state_changed", reason="activity_type_changed" if int(cd["type"]) != 0 else "exp_changed" if int(user["exp"]) != int(expected_exp) else "stone_changed")
+        if int(cd["type"]) != 0 or (as_int_like(user["exp"]), as_int_like(user["stone"])) != (int(expected_exp), int(expected_stone)):
+            return NormalTrainingStartResult("state_changed", reason="activity_type_changed" if int(cd["type"]) != 0 else "exp_changed" if as_int_like(user["exp"]) != int(expected_exp) else "stone_changed")
         if uow.execute("UPDATE user_cd SET type=5,create_time=?,scheduled_time=? WHERE user_id=? AND COALESCE(type,0)=0", (create_time, scheduled_time, user_id)).rowcount != 1:
             return NormalTrainingStartResult("state_changed", reason="activity_write_rejected")
         uow.execute("INSERT INTO normal_training_operations(operation_id,user_id,payload,kind,create_time,scheduled_time,status) VALUES(?,?,?,?,?,?,?)", (operation_id, user_id, payload, kind, create_time, scheduled_time, "pending"))

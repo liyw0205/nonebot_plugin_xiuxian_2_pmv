@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from ...core.numeric import as_int_like
 from dataclasses import asdict, is_dataclass
 from pathlib import Path
 from typing import Any, Mapping
@@ -80,7 +81,7 @@ class TowerApplication:
         return self._execute(
             operation_id=request.operation_id, user_id=request.user_id, action="tower.settle", payload=request.payload(),
             call=lambda: self._repository().settle(request.operation_id, request.user_id, request.expected_tower, request.floor, request.score, request.stone, request.exp, request.items, request.max_goods_num, expected_player=request.expected_player, final_hp=request.final_hp, final_mp=request.final_mp, stamina_cost=request.stamina_cost, challenge_succeeded=request.challenge_succeeded),
-            normalize=lambda data: {"reason": data.get("reason", ""), "status": data.get("status", "failed"), "score": int(data.get("score", 0) or 0), "stone": int(data.get("stone", 0) or 0), "exp": int(data.get("exp", 0) or 0), "floor": int(data.get("floor", 0) or 0), "challenge_succeeded": bool(data.get("challenge_succeeded", True)), "rewards": data.get("rewards", ()), "stamina_cost": int(data.get("stamina_cost", 0) or 0), "granted": {"score": int(data.get("score", 0) or 0), "stone": int(data.get("stone", 0) or 0), "exp": int(data.get("exp", 0) or 0)}},
+            normalize=lambda data: {"reason": data.get("reason", ""), "status": data.get("status", "failed"), "score": int(data.get("score", 0) or 0), "stone": as_int_like(data.get("stone", 0) or 0), "exp": as_int_like(data.get("exp", 0) or 0), "floor": int(data.get("floor", 0) or 0), "challenge_succeeded": bool(data.get("challenge_succeeded", True)), "rewards": data.get("rewards", ()), "stamina_cost": int(data.get("stamina_cost", 0) or 0), "granted": {"score": int(data.get("score", 0) or 0), "stone": as_int_like(data.get("stone", 0) or 0), "exp": as_int_like(data.get("exp", 0) or 0)}},
             messages={"stamina_insufficient": "体力不足。", "inventory_full": "通天塔奖励无法放入背包。", "state_changed": "通天塔状态已更新，请重新挑战。", "user_missing": "未找到道友数据。"},
         )
 

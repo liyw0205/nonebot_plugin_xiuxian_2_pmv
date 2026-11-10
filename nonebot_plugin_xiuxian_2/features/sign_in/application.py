@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from ...core.numeric import as_int_like
 from datetime import date, datetime, time
 from dataclasses import replace
 from calendar import monthrange
@@ -162,7 +163,7 @@ class SignInApplication:
                         if previous is not None:
                             replayed = previous.replay()
                             uow.commit()
-                            return self._apply_effects(replayed, user_id=request.user_id, operation_id=request.operation_id, stone=int((replayed.data or {}).get("sign_in", {}).get("stone", 0)), replayed=True)
+                            return self._apply_effects(replayed, user_id=request.user_id, operation_id=request.operation_id, stone=as_int_like((replayed.data or {}).get("sign_in", {}).get("stone", 0)), replayed=True)
                         raise ConflictError("操作正在处理中", reason="operation_pending")
                     legacy_operation = self.repository.operation(uow, request.operation_id)
                     if legacy_operation is not None:
@@ -392,8 +393,8 @@ class SignInApplication:
                             "makeup": {
                                 "business_date": target.isoformat(),
                                 "cost": request.cost,
-                                "stone_before": int(before.get("stone", 0)),
-                                "stone_after": int(after.get("stone", 0)),
+                                "stone_before": as_int_like(before.get("stone", 0)),
+                                "stone_after": as_int_like(after.get("stone", 0)),
                             },
                             "calendar": list(render_sign_in_calendar(today, dates)),
                         },
