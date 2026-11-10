@@ -29,6 +29,7 @@ from __future__ import annotations
 import functools
 from typing import Any, Awaitable, Callable
 
+from nonebot.exception import FinishedException
 from nonebot.log import logger
 
 from ..core.errors import ConflictError, DomainError, ValidationError
@@ -98,6 +99,8 @@ def guard_command(
         async def wrapper(*args: Any, **kwargs: Any) -> Any:
             try:
                 return await func(*args, **kwargs)
+            except FinishedException:
+                raise
             except Exception as exc:  # noqa: BLE001 - answering is the point
                 bot = _argument(args, kwargs, 0, "bot")
                 event = _argument(args, kwargs, 1, "event")

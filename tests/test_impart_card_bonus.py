@@ -7,6 +7,7 @@ nonebot.init()
 
 from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_impart.transaction_service import CardComposeService
 from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_impart.transaction_service import CardDisassembleService
+from nonebot_plugin_xiuxian_2.features.impart.card_bonus import BONUS_FIELDS, refresh_card_bonuses
 from tests.test_db_backend import db_backend
 
 
@@ -41,6 +42,27 @@ class CardBonusRefreshTests(unittest.TestCase):
         result = CardDisassembleService(self.db).disassemble("split", "u", "攻击卡", 1, 6, 0, 2, self.defs)
         self.assertTrue(result.succeeded)
         self.assertEqual(self.bonuses(), (0.2, 0.2))
+
+    def test_legacy_duplicate_player_rows_are_all_refreshed(self):
+        bonus_columns = ",".join(f'"{field}" REAL' for field in BONUS_FIELDS)
+        with db_backend.transaction(self.db) as conn:
+            conn.execute("DROP TABLE xiuxian_impart")
+            conn.execute(
+                f"CREATE TABLE xiuxian_impart(user_id TEXT,stone_num INTEGER,{bonus_columns})"
+            )
+            conn.executemany(
+                "INSERT INTO xiuxian_impart(user_id,stone_num) VALUES(%s,%s)",
+                [("u", 0), ("u", 1)],
+            )
+            refresh_card_bonuses(conn, "u", self.defs, schema="main")
+            rows = conn.execute(
+                "SELECT impart_atk_per,impart_hp_per FROM xiuxian_impart WHERE user_id=%s",
+                ("u",),
+            ).fetchall()
+
+        self.assertEqual(
+            [tuple(map(float, row)) for row in rows], [(0.2, 0.2), (0.2, 0.2)]
+        )
 
     def test_bonus_failure_rolls_back_card_change(self):
         with db_backend.transaction(self.db) as conn:

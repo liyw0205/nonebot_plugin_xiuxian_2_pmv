@@ -20,6 +20,7 @@ import nonebot
 nonebot.init()
 
 from nonebot.params import CommandArg
+from nonebot.exception import FinishedException
 
 from nonebot_plugin_xiuxian_2.core.errors import ConflictError, DomainError, ValidationError
 from nonebot_plugin_xiuxian_2.xiuxian.command_guard import (
@@ -102,6 +103,18 @@ class GuardUnitTests(unittest.IsolatedAsyncioTestCase):
             return ("ok", args)
 
         self.assertEqual(await handler("bot", "event", args="x"), ("ok", "x"))
+        self.assertEqual(recorder.calls, [])
+
+    async def test_matcher_finish_is_propagated_without_failure_reply(self) -> None:
+        recorder = _Recorder()
+
+        @guard_command("双修", send=recorder)
+        async def handler(bot, event):
+            raise FinishedException
+
+        with self.assertRaises(FinishedException):
+            await handler("bot", "event")
+
         self.assertEqual(recorder.calls, [])
 
     async def test_delivery_failure_does_not_mask_the_original(self) -> None:
