@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import sqlite3
 import tempfile
 import unittest
@@ -27,6 +28,43 @@ from nonebot_plugin_xiuxian_2.features.activity_reward.boss_rank_claim_applicati
 from nonebot_plugin_xiuxian_2.features.activity_reward.boss_milestone_claim_repository import ActivityBossMilestoneClaimRepository
 from nonebot_plugin_xiuxian_2.features.activity_reward.boss_milestone_claim_application import ActivityBossMilestoneClaimApplication
 from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_activity import activity_boss
+from tests import test_accessory_upgrade_application as _accessory
+
+
+class AccessoryMaterialReasonTests(unittest.TestCase):
+    setUp = _accessory.AccessoryUpgradeApplicationTests.setUp
+    tearDown = _accessory.AccessoryUpgradeApplicationTests.tearDown
+    state = _accessory.AccessoryUpgradeApplicationTests.state
+
+    def assert_material_reason(self, bag, uids, reason, *, repository=True):
+        with sqlite3.connect(self.player) as conn:
+            conn.execute("UPDATE player_accessory SET bag=? WHERE user_id='u'", (json.dumps(bag),))
+        equipped, bag = self.state()
+        result = self.application.upgrade("reason", "u", "戒指", equipped, bag, uids)
+        self.assertEqual(result.reason, reason)
+        message = result_failure("饰品升品", result)
+        self.assertIn(reason_text(reason), message)
+        self.assertNotIn("或", message)
+        self.assertNotIn("定位号", message)
+        if repository:
+            stored = self.application.repository.upgrade("reason", "u", "戒指", equipped, bag, uids, self.main)
+            self.assertEqual((stored.status, stored.reason), (result.status, result.reason))
+        self.assertEqual(self.state(), (equipped, bag))
+        with sqlite3.connect(self.game) as conn:
+            self.assertEqual(conn.execute("SELECT COUNT(*) FROM accessory_transaction_operations").fetchone()[0], 0)
+
+    def test_count_duplicate_choice_and_ambiguous_material_are_distinct(self):
+        bag = [self.material_one, self.material_two, self.other]
+        self.assert_material_reason(bag, ("material-1",), "accessory_material_count")
+        self.assert_material_reason(bag, ("material-1", "material-1"), "accessory_material_duplicate_selection", repository=False)
+        self.assert_material_reason(bag, ("missing", "material-2"), "accessory_material_missing")
+        self.assert_material_reason(bag + [dict(self.material_one)], ("material-1", "material-2"), "accessory_material_uid_duplicate")
+
+    def test_each_material_attribute_reaches_the_reply_separately(self):
+        for field, value in (("item_id", 999), ("part", "手镯"), ("set_type", "寒月"), ("quality", 2)):
+            with self.subTest(field=field):
+                bag = [dict(self.material_one, **{field: value}), self.material_two, self.other]
+                self.assert_material_reason(bag, ("material-1", "material-2"), "accessory_material_" + field)
 
 
 class SectCreationRollbackTests(unittest.TestCase):

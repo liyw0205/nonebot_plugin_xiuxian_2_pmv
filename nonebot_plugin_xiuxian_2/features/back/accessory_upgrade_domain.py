@@ -44,6 +44,14 @@ def _signature(accessory: dict[str, Any]) -> tuple[int, str, str, int]:
     )
 
 
+def material_mismatch_reason(main: dict[str, Any], material: dict[str, Any]) -> str:
+    fields = ("item_id", "part", "set_type", "quality")
+    for field, expected, actual in zip(fields, _signature(main), _signature(material)):
+        if expected != actual:
+            return f"accessory_material_{field}"
+    return ""
+
+
 def _target_affix_count(quality: int) -> int:
     return 3 if max(1, min(5, int(quality))) >= 4 else 2
 
@@ -123,20 +131,24 @@ def plan_upgrade(
 
     material_uids = tuple(str(uid).strip() for uid in material_uids)
     required = upgrade_material_count(quality)
-    if len(material_uids) != required or len(set(material_uids)) != len(material_uids):
+    if len(material_uids) != required:
         return AccessoryUpgradePlan("material_mismatch", reason="accessory_material_count")
+    if len(set(material_uids)) != len(material_uids):
+        return AccessoryUpgradePlan("material_mismatch", reason="accessory_material_duplicate_selection")
 
     by_uid: dict[str, list[dict[str, Any]]] = {}
     for item in expected_bag:
         if isinstance(item, dict):
             by_uid.setdefault(str(item.get("uid", "")), []).append(item)
-    main_signature = _signature(main)
     for uid in material_uids:
         matches = by_uid.get(uid, [])
-        if len(matches) != 1:
+        if not matches:
             return AccessoryUpgradePlan("material_missing", reason="accessory_material_missing")
-        if _signature(matches[0]) != main_signature:
-            return AccessoryUpgradePlan("material_mismatch", reason="accessory_material_signature")
+        if len(matches) > 1:
+            return AccessoryUpgradePlan("material_missing", reason="accessory_material_uid_duplicate")
+        mismatch = material_mismatch_reason(main, matches[0])
+        if mismatch:
+            return AccessoryUpgradePlan("material_mismatch", reason=mismatch)
 
     upgraded = deepcopy(main)
     upgraded["quality"] = quality + 1

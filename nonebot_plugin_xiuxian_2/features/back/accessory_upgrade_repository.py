@@ -6,7 +6,7 @@ from typing import Any
 
 from ...infrastructure.database import DatabaseUnitOfWork
 from ...infrastructure.database.attached_uow import AttachedDatabaseUnitOfWork
-from .accessory_upgrade_domain import AccessoryUpgradeChange, upgrade_material_count
+from .accessory_upgrade_domain import AccessoryUpgradeChange, material_mismatch_reason, upgrade_material_count
 
 
 class AccessoryUpgradeSqlRepository:
@@ -26,15 +26,6 @@ class AccessoryUpgradeSqlRepository:
             return expected_type()
         decoded = json.loads(value) if isinstance(value, str) else value
         return decoded if isinstance(decoded, expected_type) else expected_type()
-
-    @staticmethod
-    def _signature(accessory: dict[str, Any]) -> tuple[int, str, str, int]:
-        return (
-            int(accessory.get("item_id", 0)),
-            str(accessory.get("part", "")),
-            str(accessory.get("set_type", "")),
-            int(accessory.get("quality", 1)),
-        )
 
     @classmethod
     def _result(cls, status: str, result_json: str) -> AccessoryUpgradeChange:
@@ -127,18 +118,20 @@ class AccessoryUpgradeSqlRepository:
                 return AccessoryUpgradeChange("material_mismatch", "upgrade", user_id, reason="accessory_material_count")
 
             material_indexes = []
-            current_signature = self._signature(current)
             for uid in material_uids:
                 matches = [
                     (index, item)
                     for index, item in enumerate(bag)
                     if isinstance(item, dict) and str(item.get("uid", "")) == uid
                 ]
-                if len(matches) != 1:
+                if not matches:
                     return AccessoryUpgradeChange("material_missing", "upgrade", user_id, reason="accessory_material_missing")
+                if len(matches) > 1:
+                    return AccessoryUpgradeChange("material_missing", "upgrade", user_id, reason="accessory_material_uid_duplicate")
                 index, material = matches[0]
-                if self._signature(material) != current_signature:
-                    return AccessoryUpgradeChange("material_mismatch", "upgrade", user_id, reason="accessory_material_signature")
+                mismatch = material_mismatch_reason(current, material)
+                if mismatch:
+                    return AccessoryUpgradeChange("material_mismatch", "upgrade", user_id, reason=mismatch)
                 material_indexes.append(index)
 
             updated = dict(upgraded_accessory)
