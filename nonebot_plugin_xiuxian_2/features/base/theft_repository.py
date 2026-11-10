@@ -1,4 +1,5 @@
 from __future__ import annotations
+from dataclasses import replace as _reason_replace
 
 from dataclasses import dataclass
 from pathlib import Path
@@ -23,6 +24,8 @@ class BaseStoneTheftResult:
     payer_balance: int = 0
     stamina_cost: int = 0
     thief_stamina: int = 0
+    reason: str = ""
+    subject: str = ""
 
     @property
     def succeeded(self) -> bool:
@@ -210,7 +213,7 @@ class BaseStoneTheftSqlRepository:
                     if charged.rowcount != 1 or credited.rowcount != 1 or stamina.rowcount != 1:
                         raise _StateChanged
             except _StateChanged:
-                return result("state_changed", thief_stamina=thief_stamina)
+                return _reason_replace(result("state_changed", thief_stamina=thief_stamina), reason="stone_write_rejected" if charged.rowcount != 1 or credited.rowcount != 1 else "stamina_write_rejected", subject=payer_id if charged.rowcount != 1 else receiver_id if credited.rowcount != 1 else thief_id)
 
             payer_balance = payer_stone - transferred
             final_stamina = thief_stamina - stamina_cost

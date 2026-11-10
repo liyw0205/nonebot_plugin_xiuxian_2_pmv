@@ -7,7 +7,8 @@ from ...infrastructure.database import DatabaseUnitOfWork
 
 
 class _InfiltrateFailureStateChanged(Exception):
-    pass
+    def __init__(self, reason: str, subject: str):
+        self.reason, self.subject = reason, subject
 
 
 @dataclass(frozen=True)
@@ -15,6 +16,8 @@ class DongfuInfiltrateFailureResult:
     status: str
     infiltrate_left: int = 0
     intrude_left: int = 0
+    reason: str = ""
+    subject: str = ""
 
     @property
     def succeeded(self) -> bool:
@@ -81,7 +84,7 @@ class DongfuInfiltrateFailureSqlRepository:
                 )
                 if previous is not None:
                     if str(previous["payload"]) != payload:
-                        return DongfuInfiltrateFailureResult("state_changed")
+                        return DongfuInfiltrateFailureResult("state_changed", reason="operation_conflict")
                     return DongfuInfiltrateFailureResult(
                         "duplicate",
                         int(previous["infiltrate_left"]),
@@ -108,7 +111,7 @@ class DongfuInfiltrateFailureSqlRepository:
                     or int(visitor["built"] or 0) != 1
                     or int(target["built"] or 0) != 1
                 ):
-                    return DongfuInfiltrateFailureResult("state_changed")
+                    return DongfuInfiltrateFailureResult("state_changed", reason="user_missing" if user is None else "dongfu_missing", subject="visitor" if user is None or visitor is None or int(visitor["built"] or 0) != 1 else "target")
 
                 mode_count = (
                     int(visitor[mode_field] or 0)
@@ -125,6 +128,7 @@ class DongfuInfiltrateFailureSqlRepository:
                         "daily_limit",
                         max(0, mode_limit - mode_count),
                         max(0, target_limit - intrude_count),
+                        reason="infiltrate_limit" if mode_count >= mode_limit else "intrude_limit",
                     )
 
                 mode_count += 1
@@ -146,12 +150,13 @@ class DongfuInfiltrateFailureSqlRepository:
                     "WHERE user_id=?",
                     (loss, visitor_id),
                 )
-                if (
-                    visitor_update.rowcount != 1
-                    or target_update.rowcount != 1
-                    or stone_update.rowcount != 1
+                for changed, reason, subject in (
+                    (visitor_update, "infiltrate_write_rejected", "visitor"),
+                    (target_update, "intrude_write_rejected", "target"),
+                    (stone_update, "stone_write_rejected", "visitor"),
                 ):
-                    raise _InfiltrateFailureStateChanged
+                    if changed.rowcount != 1:
+                        raise _InfiltrateFailureStateChanged(reason, subject)
 
                 infiltrate_left = max(0, mode_limit - mode_count)
                 intrude_left = max(0, target_limit - intrude_count)
@@ -163,8 +168,8 @@ class DongfuInfiltrateFailureSqlRepository:
                 return DongfuInfiltrateFailureResult(
                     "settled", infiltrate_left, intrude_left
                 )
-        except _InfiltrateFailureStateChanged:
-            return DongfuInfiltrateFailureResult("state_changed")
+        except _InfiltrateFailureStateChanged as exc:
+            return DongfuInfiltrateFailureResult("state_changed", reason=exc.reason, subject=exc.subject)
 
 
 __all__ = ["DongfuInfiltrateFailureResult", "DongfuInfiltrateFailureSqlRepository"]

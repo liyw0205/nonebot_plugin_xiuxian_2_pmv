@@ -15,7 +15,7 @@ from nonebot.log import logger
 
 from .. import NICKNAME
 from ...features.impart.application import ImpartApplication
-from ..command_guard import guard_command
+from ..command_guard import guard_command, result_failure
 from ...infrastructure.ids import UUIDGenerator
 from ..xiuxian_config import XiuConfig
 from ..xiuxian_utils.lay_out import Cooldown, assign_bot
@@ -53,7 +53,7 @@ impart_application = ImpartApplication(
 runtime_ids = UUIDGenerator()
 
 def _impart_state(user_id: str, *, ensure: bool = False):
-    return impart_application.state(str(user_id), ensure=ensure)
+    return impart_application.state(str(user_id), ensure=True)
 
 
 def _rank_success(state: dict) -> bool:
@@ -190,7 +190,10 @@ async def impart_draw_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
     user_id = user_info["user_id"]
     # 解析抽卡次数
     msg_text = args.extract_plain_text().strip()
-    times = int(msg_text) if msg_text and 0 < int(msg_text) else 1
+    if msg_text and (not msg_text.isascii() or not msg_text.isdigit() or int(msg_text) <= 0):
+        await handle_send(bot, event, "传承祈愿次数必须为正整数，例如：传承祈愿 2。")
+        return
+    times = int(msg_text) if msg_text else 1
 
     # 检查思恋结晶是否足够
     times = times * 10
@@ -213,7 +216,7 @@ async def impart_draw_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
 
     impart_data_draw = _impart_state(user_id, ensure=True)
     if impart_data_draw is None:
-        await handle_send(bot, event, "发生未知错误！")
+        await handle_send(bot, event, "传承角色资料初始化未完成，请联系管理员检查初始化记录。")
         return
     if impart_data_draw["stone_num"] < required_crystals:
         await handle_send(bot, event, f"思恋结晶数量不足，需要{required_crystals}颗!")
@@ -285,7 +288,7 @@ async def impart_draw_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
         await handle_send(bot, event, "道友的传承祈愿已完成，该请求已经处理，无需重复提交。")
         return
     if not result.succeeded:
-        await handle_send(bot, event, "祈愿未结算：传承当前状态已更新，请刷新后重试。")
+        await handle_send(bot, event, result_failure("传承祈愿", result))
         return
     new_cards = list(result.new_cards)
     total_new_cards = len(new_cards)
@@ -332,6 +335,7 @@ async def impart_draw_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
     await impart_draw.finish()
 
 @impart_draw2.handle(parameterless=[Cooldown(cd_time=0)])
+@guard_command("传承抽卡")
 async def impart_draw2_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """传承抽卡"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -343,7 +347,10 @@ async def impart_draw2_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     user_id = user_info["user_id"]
     user_stone_num = user_info['stone']
     msg_text = args.extract_plain_text().strip()
-    requested_times = int(msg_text) if msg_text and msg_text.isdigit() and int(msg_text) > 0 else 1
+    if msg_text and (not msg_text.isascii() or not msg_text.isdigit() or int(msg_text) <= 0):
+        await handle_send(bot, event, "传承抽卡次数必须为正整数，例如：传承抽卡 2。")
+        return
+    requested_times = int(msg_text) if msg_text else 1
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
     operation_id = f"impart-draw:{event_id}:{user_id}" if event_id else f"impart-draw:{user_id}:{runtime_ids.new_id()}"
     prior = impart_application.draw_result(operation_id, str(user_id), requested_times)
@@ -359,7 +366,7 @@ async def impart_draw2_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
 
     impart_data_draw = _impart_state(user_id, ensure=True)
     if impart_data_draw is None:
-        await handle_send(bot, event, "发生未知错误！")
+        await handle_send(bot, event, "传承角色资料初始化未完成，请联系管理员检查初始化记录。")
         return
     times = requested_times
     if impart_data_draw['impart_num'] >= 100:
@@ -440,7 +447,7 @@ async def impart_draw2_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         )
         return
     if not result.succeeded:
-        await handle_send(bot, event, "抽卡未结算：抽卡当前状态已更新，请重新发起。")
+        await handle_send(bot, event, result_failure("传承抽卡", result))
         return
     new_cards = list(result.new_cards)
     total_new_cards = len(new_cards)
@@ -480,6 +487,7 @@ async def impart_draw2_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     await handle_send(bot, event, summary_msg, md_type="传承", k1="抽卡", v1="传承抽卡", k2="背包", v2="传承背包", k3="卡图", v3="传承卡图")
     await impart_draw2.finish()
 
+@guard_command("使用祈愿石")
 async def use_wishing_stone(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, item_id, quantity):
     """使用祈愿石"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -491,7 +499,7 @@ async def use_wishing_stone(bot: Bot, event: GroupMessageEvent | PrivateMessageE
 
     impart_data_draw = _impart_state(user_id, ensure=True)
     if impart_data_draw is None:
-        await handle_send(bot, event, "发生未知错误！")
+        await handle_send(bot, event, "传承角色资料初始化未完成，请联系管理员检查初始化记录。")
         return
     card_definitions = impart_application.card_definitions()
     img_list = tuple(card_definitions)
@@ -516,7 +524,7 @@ async def use_wishing_stone(bot: Bot, event: GroupMessageEvent | PrivateMessageE
         await handle_send(bot, event, "祈愿石数量不足，未进行祈愿。")
         return
     if not result.succeeded:
-        await handle_send(bot, event, "祈愿未结算：祈愿当前状态已更新，请重新查看背包。")
+        await handle_send(bot, event, result_failure("使用祈愿石", result))
         return
 
     drawn_cards = list(result.cards)
@@ -558,6 +566,7 @@ async def use_wishing_stone(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     await handle_send(bot, event, final_msg, md_type="传承", k1="再次", v1="道具使用 祈愿石", k2="背包", v2="传承背包", k3="卡图", v3="传承卡图")
     return
 
+@guard_command("使用思恋流沙")
 async def use_love_sand(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, item_id, quantity):
     """使用思恋流沙"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -570,7 +579,7 @@ async def use_love_sand(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     # 获取当前思恋结晶数量
     impart_data_draw = _impart_state(user_id, ensure=True)
     if impart_data_draw is None:
-        await handle_send(bot, event, "发生未知错误！")
+        await handle_send(bot, event, "传承角色资料初始化未完成，请联系管理员检查初始化记录。")
         return
     
     current_stones = impart_data_draw["stone_num"]
@@ -594,7 +603,7 @@ async def use_love_sand(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         await handle_send(bot, event, final_msg)
         return
     if not result.succeeded:
-        await handle_send(bot, event, "操作未结算：传承当前状态已更新，请刷新后重试。")
+        await handle_send(bot, event, result_failure("使用思恋流沙", result))
         return
     log_message(user_id, f"[思恋流沙] 使用{quantity}个，获得思恋结晶{result.gained}颗")
     final_msg = f"获得思恋结晶 {result.gained} 颗\n当前思恋结晶：{result.stone_num}颗"
@@ -602,6 +611,7 @@ async def use_love_sand(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     return
 
 @impart_back.handle(parameterless=[Cooldown(cd_time=0)])
+@guard_command("传承背包")
 async def impart_back_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """传承背包"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -613,7 +623,7 @@ async def impart_back_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
     user_id = user_info["user_id"]
     impart_data_draw = _impart_state(user_id)
     if impart_data_draw is None:
-        await handle_send(bot, event, "发生未知错误！")
+        await handle_send(bot, event, "传承角色资料初始化未完成，请联系管理员检查初始化记录。")
         return
 
     card_dict = impart_application.cards(user_id)
@@ -679,6 +689,7 @@ async def impart_back_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
     await send_msg_handler(bot, event, '传承背包', bot.self_id, l_msg, title=title, page=page)
 
 @re_impart_load.handle(parameterless=[Cooldown(cd_time=0)])
+@guard_command("加载传承数据")
 async def re_impart_load_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """加载传承数据"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -691,7 +702,7 @@ async def re_impart_load_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
     impart_data_draw = _impart_state(user_id)
     if impart_data_draw is None:
         await handle_send(
-            bot, event, send_group_id, "发生未知错误！"
+            bot, event, "传承角色资料初始化未完成，请联系管理员检查初始化记录。"
         )
         return
     # 更新传承数据
@@ -704,6 +715,7 @@ async def re_impart_load_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
 
 
 @impart_info.handle(parameterless=[Cooldown(cd_time=0)])
+@guard_command("传承信息")
 async def impart_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """传承信息"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -715,7 +727,7 @@ async def impart_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
     impart_data_draw = _impart_state(user_id)
     if impart_data_draw is None:
         await handle_send(
-            bot, event, send_group_id, "发生未知错误！"
+            bot, event, "传承角色资料初始化未完成，请联系管理员检查初始化记录。"
         )
         return
 
@@ -780,6 +792,7 @@ async def impart_img_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
 
 
 @impart_compose.handle(parameterless=[Cooldown(cd_time=0)])
+@guard_command("传承合成")
 async def impart_compose_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     bot, _ = await assign_bot(bot=bot, event=event)
     is_user, user_info, msg = check_user(event)
@@ -811,7 +824,6 @@ async def impart_compose_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
     )
     result = outcome
 
-    messages = {"same_card": "合成材料卡与目标卡不能相同！", "card_missing": "重复卡不足5张，无法合成！", "state_changed": "卡牌操作未结算：卡牌当前状态已更新，请重新操作。", "user_missing": "未找到传承数据！"}
     if result.status == "duplicate":
         await handle_send(
             bot, event,
@@ -820,12 +832,13 @@ async def impart_compose_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
         )
         return
     if not result.succeeded:
-        await handle_send(bot, event, messages.get(result.status, "传承合成失败！"))
+        await handle_send(bot, event, result_failure("传承合成", result))
         return
     await handle_send(bot, event, f"合成成功：{source_card}剩余{result.source_quantity}张，{target_card}现有{result.target_quantity}张")
 
 
 @impart_disassemble.handle(parameterless=[Cooldown(cd_time=0)])
+@guard_command("传承分解")
 async def impart_disassemble_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     bot, _ = await assign_bot(bot=bot, event=event)
     is_user, user_info, msg = check_user(event)
@@ -861,7 +874,6 @@ async def impart_disassemble_(bot: Bot, event: GroupMessageEvent | PrivateMessag
         card_definitions=card_definitions,
     )
 
-    messages = {"card_missing": "卡牌不足；分解后必须至少保留1张！", "state_changed": "卡牌操作未结算：卡牌当前状态已更新，请重新操作。", "user_missing": "未找到传承数据！"}
     if result.status == "duplicate":
         await handle_send(
             bot, event,
@@ -870,6 +882,6 @@ async def impart_disassemble_(bot: Bot, event: GroupMessageEvent | PrivateMessag
         )
         return
     if not result.succeeded:
-        await handle_send(bot, event, messages.get(result.status, "传承分解失败！"))
+        await handle_send(bot, event, result_failure("传承分解", result))
         return
     await handle_send(bot, event, f"分解成功：{card_name}剩余{result.card_quantity}张，思恋结晶现有{result.stone_quantity}颗")

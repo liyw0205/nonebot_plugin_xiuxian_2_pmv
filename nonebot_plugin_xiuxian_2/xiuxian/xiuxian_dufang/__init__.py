@@ -21,6 +21,7 @@ from ..xiuxian_utils.utils import check_user, get_msg_pic, handle_send, number_t
 from ..xiuxian_config import XiuConfig
 from nonebot.permission import SUPERUSER
 from nonebot.log import logger
+from ..command_guard import result_failure
 from ...paths import get_paths
 from ...infrastructure.clock import SystemClock
 from ...infrastructure.random_source import SystemRandom
@@ -604,13 +605,13 @@ async def unseal_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
         await handle_send(bot, event, "鉴石暂不可用：下注数据迁移尚未就绪。", md_type="鉴石")
         return
     if bet.status == "stone_insufficient":
-        await handle_send(bot, event, "灵石余额已变化，本次鉴石未下注。", md_type="鉴石")
+        await handle_send(bot, event, f"灵石不足：本次需{cost}，当前余额{bet.wallet_stone}，请补足灵石后再鉴石。", md_type="鉴石")
         return
     if bet.status == "user_missing":
         await handle_send(bot, event, "未找到修仙数据，本次鉴石未下注。", md_type="我要修仙")
         return
     if not bet.succeeded:
-        await handle_send(bot, event, "鉴石未结算：下注当前状态已更新。", md_type="鉴石")
+        await handle_send(bot, event, result_failure("鉴石下注", bet), md_type="鉴石")
         return
     cost = int(bet.cost)
     resolution = bet.resolution or resolution
@@ -628,7 +629,7 @@ async def unseal_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
         await handle_send(bot, event, "鉴石暂不可用：派彩数据迁移尚未就绪。", md_type="鉴石")
         return
     if not payout.succeeded:
-        await handle_send(bot, event, "鉴石派彩未入账或已处理，请稍后查看灵石余额。", md_type="鉴石")
+        await handle_send(bot, event, result_failure("鉴石派彩", payout), md_type="鉴石")
         return
 
     payout_outcome_type = str(resolution["payout_outcome"])

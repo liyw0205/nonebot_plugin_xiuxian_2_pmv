@@ -4,6 +4,7 @@ import json
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
+from ...core.errors import DomainError
 
 from ...infrastructure.database.attached_uow import AttachedDatabaseUnitOfWork
 
@@ -36,6 +37,8 @@ class PartnerCultivationResult:
     used_count: int
     affection_1: int
     affection_2: int
+    reason: str = ""
+    subject: str = ""
 
     @property
     def succeeded(self) -> bool:
@@ -57,7 +60,7 @@ class PartnerCultivationSqlRepository:
             (table,),
         )
         if row is None:
-            raise RuntimeError(f"required migration table is missing: {schema}.{table}")
+            raise DomainError("schema_missing", "partner cultivation migration is missing")
 
     @staticmethod
     def _protection(value: str) -> str:
@@ -163,7 +166,7 @@ class PartnerCultivationSqlRepository:
             ensure_ascii=True,
         )
 
-        def result(status, exp_result_1=exp_1, exp_result_2=exp_2, count=used_count):
+        def result(status, exp_result_1=exp_1, exp_result_2=exp_2, count=used_count, *, reason="", subject=""):
             return PartnerCultivationResult(
                 status,
                 _integer_like(exp_result_1),
@@ -171,6 +174,8 @@ class PartnerCultivationSqlRepository:
                 int(count),
                 affection_1,
                 affection_2,
+                reason,
+                subject,
             )
 
         with AttachedDatabaseUnitOfWork(
@@ -206,7 +211,7 @@ class PartnerCultivationSqlRepository:
                 )
                 actual = self._protection(status["two_exp_protect"] if status else "off")
                 if actual != expected_target_protection:
-                    return result("protection_changed")
+                    return result("protection_changed", subject=user_id_2)
 
             if invite_id:
                 invite = uow.query_one(
@@ -214,15 +219,17 @@ class PartnerCultivationSqlRepository:
                     "FROM player_data.partner_cultivation_invites WHERE invite_id=?",
                     (invite_id,),
                 )
-                if (
-                    invite is None
-                    or str(invite["inviter_id"]) != user_id_1
-                    or str(invite["target_id"]) != user_id_2
-                    or str(invite["status"]) != "pending"
-                    or float(invite["expires_at"]) <= float(now_timestamp)
-                    or int(invite["count"]) < used_count
-                ):
-                    return result("invitation_changed")
+                if invite is None:
+                    return result("invitation_changed", reason="invite_missing")
+                if str(invite["inviter_id"]) != user_id_1 or str(invite["target_id"]) != user_id_2:
+                    return result("invitation_changed", reason="invite_subject_mismatch")
+                if str(invite["status"]) != "pending":
+                    reason = {"accepted": "invite_accepted", "rejected": "invite_rejected", "expired": "invite_expired"}.get(str(invite["status"]), "invite_resolved")
+                    return result("invitation_changed", reason=reason)
+                if float(invite["expires_at"]) <= float(now_timestamp):
+                    return result("invitation_changed", reason="invite_expired")
+                if int(invite["count"]) < used_count:
+                    return result("invitation_changed", reason="invite_count_mismatch")
 
             for user_id, expected in (
                 (user_id_1, usage_snapshot_1),
@@ -234,18 +241,18 @@ class PartnerCultivationSqlRepository:
                 )
                 current = int(usage["used_count"]) if usage is not None else 0
                 if current != expected:
-                    return result("state_changed")
+                    return result("state_changed", reason="usage_changed", subject=user_id)
 
             rows = uow.query_all(
                 "SELECT user_id,exp FROM user_xiuxian WHERE user_id IN (?,?)",
                 (user_id_1, user_id_2),
             )
             current_exp = {str(row["user_id"]): _integer_like(row["exp"]) for row in rows}
-            if current_exp != {
-                user_id_1: _integer_like(expected_exp_1),
-                user_id_2: _integer_like(expected_exp_2),
-            }:
-                return result("state_changed")
+            for user_id, expected in ((user_id_1, expected_exp_1), (user_id_2, expected_exp_2)):
+                if user_id not in current_exp:
+                    return result("state_changed", reason="user_missing", subject=user_id)
+                if current_exp[user_id] != _integer_like(expected):
+                    return result("state_changed", reason="exp_changed", subject=user_id)
 
             if expected_affection_1 is not None:
                 for user_id, partner_id, expected in (
@@ -256,12 +263,12 @@ class PartnerCultivationSqlRepository:
                         "SELECT partner_id,affection FROM player_data.partner WHERE user_id=?",
                         (user_id,),
                     )
-                    if (
-                        relation is None
-                        or str(relation["partner_id"]) != partner_id
-                        or _integer_like(relation["affection"]) != expected
-                    ):
-                        return result("state_changed")
+                    if relation is None:
+                        return result("state_changed", reason="relation_missing", subject=user_id)
+                    if str(relation["partner_id"]) != partner_id:
+                        return result("state_changed", reason="relation_changed", subject=user_id)
+                    if _integer_like(relation["affection"]) != expected:
+                        return result("state_changed", reason="affection_changed", subject=user_id)
 
             for user_id, gain, power, hp, mp, atk, rate in (
                 (user_id_1, exp_1, power_1, hp_1, mp_1, atk_1, level_rate_1),

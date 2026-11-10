@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from ...core.errors import DomainError
+
 import json
 from dataclasses import dataclass
 from pathlib import Path
@@ -26,6 +28,7 @@ class FusionResult:
     status: str
     successful: bool
     protected: bool
+    reason: str = ""
 
     @property
     def succeeded(self) -> bool:
@@ -38,6 +41,7 @@ class FusionBatchResult:
     successful_count: int
     failed_count: int
     protected_count: int
+    reason: str = ""
 
     @property
     def succeeded(self) -> bool:
@@ -132,7 +136,7 @@ class FusionService:
                 if previous is not None:
                     conn.rollback()
                     if str(previous[0]) != payload:
-                        return FusionResult("state_changed", successful, False)
+                        return FusionResult("state_changed", successful, False, reason="operation_conflict")
                     return FusionResult("duplicate", bool(previous[1]), bool(previous[2]))
 
                 user = conn.execute(
@@ -157,7 +161,7 @@ class FusionService:
                     )
                     if consumed.rowcount != 1:
                         conn.rollback()
-                        return FusionResult("state_changed", successful, False)
+                        raise DomainError("fusion_protection_write_rejected", "fusion write count mismatch")
                 else:
                     # 0 灵石配方（如追捕令）不扣灵石；负灵石也不应拦零成本合成
                     current_stone = float(user[0] or 0)
@@ -186,7 +190,7 @@ class FusionService:
                         )
                         if charged.rowcount != 1:
                             conn.rollback()
-                            return FusionResult("state_changed", successful, False)
+                            raise DomainError("stone_write_rejected", "fusion write count mismatch")
                     for item_id, quantity in materials.items():
                         reserve = max(0, int(reserved.get(item_id, 0)))
                         if has_bind:
@@ -207,7 +211,7 @@ class FusionService:
                             )
                         if consumed.rowcount != 1:
                             conn.rollback()
-                            return FusionResult("state_changed", successful, False)
+                            raise DomainError("fusion_material_write_rejected", "fusion write count mismatch")
 
                 if successful:
                     if "bind_num" in set(conn.column_names("back")):
@@ -282,7 +286,7 @@ class FusionService:
                 if previous is not None:
                     conn.rollback()
                     if str(previous[0]) != payload:
-                        return FusionBatchResult("state_changed", 0, 0, 0)
+                        return FusionBatchResult("state_changed", 0, 0, 0, reason="operation_conflict")
                     return FusionBatchResult(
                         "duplicate", int(previous[1]), int(previous[2]), int(previous[3])
                     )
@@ -348,7 +352,7 @@ class FusionService:
                     )
                     if charged.rowcount != 1:
                         conn.rollback()
-                        return FusionBatchResult("state_changed", 0, 0, 0)
+                        raise DomainError("stone_write_rejected", "fusion write count mismatch")
                 for item_id, quantity in total_materials.items():
                     reserve = max(0, int(reserved.get(item_id, 0)))
                     if has_bind:
@@ -368,7 +372,7 @@ class FusionService:
                         )
                     if consumed.rowcount != 1:
                         conn.rollback()
-                        return FusionBatchResult("state_changed", 0, 0, 0)
+                        raise DomainError("fusion_material_write_rejected", "fusion write count mismatch")
                 if protected_count:
                     consumed = conn.execute(
                         "UPDATE back SET goods_num=goods_num-%s WHERE user_id=%s AND goods_id=%s "
@@ -377,7 +381,7 @@ class FusionService:
                     )
                     if consumed.rowcount != 1:
                         conn.rollback()
-                        return FusionBatchResult("state_changed", 0, 0, 0)
+                        raise DomainError("fusion_protection_write_rejected", "fusion write count mismatch")
 
                 if successful_count:
                     if "bind_num" in columns:

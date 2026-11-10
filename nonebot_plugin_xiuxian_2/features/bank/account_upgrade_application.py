@@ -46,9 +46,11 @@ class BankUpgradeApplication:
                     return {"status": "user_missing", "operation_id": operation_id}
                 current_level = str(initial_account.get("bank_level", ""))
                 if current_level != str(expected_level):
-                    return {"status": "state_changed", "operation_id": operation_id}
+                    return {"status": "state_changed", "reason": "bank_level_changed", "operation_id": operation_id}
             else:
                 current_level = str(account["bank_level"])
+            if current_level != str(expected_level):
+                return {"status": "state_changed", "reason": "bank_level_changed", "operation_id": operation_id}
             try:
                 decision = decide_upgrade(wallet=int(wallet["stone"] or 0), current_level=current_level, expected_level=str(expected_level), next_level=str(next_level), cost=int(cost))
             except ValueError as exc:

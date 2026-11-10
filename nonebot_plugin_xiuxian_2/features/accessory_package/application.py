@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from ...core.player_reasons import reason_text
+
 import json
 from dataclasses import dataclass
 from pathlib import Path
@@ -26,6 +28,8 @@ class AccessoryPackageResult:
     quantity: int
     rewards: tuple[PackageReward, ...]
     accessories: tuple[dict[str, Any], ...]
+    reason: str = ""
+    subject: str = ""
 
     @property
     def succeeded(self) -> bool:
@@ -197,14 +201,14 @@ class AccessoryPackageApplication:
             row = self.game.get(uow, request.operation_id)
             before = json.loads(row["before_json"]) if row else {}
             self.game.compensate(uow, request.operation_id, status)
-            message = {"accessory_full": "饰品栏已满，礼包未结算。"}.get(status, "饰品礼包未结算。")
+            message = reason_text(status) or {"accessory_full": "饰品栏已满，礼包未结算。"}.get(status, "饰品礼包发放需要核对，请联系管理员查询该次开包记录。")
             if status == "accessory_full":
                 outcome = OperationOutcome.rejected(
                     request.operation_id,
                     self.action,
                     message,
                     code=status,
-                    data={"status": status, "compensated": True},
+                    data={"status": status, "compensated": True, "reason": status},
                     before=before,
                     after=before,
                     audit_category="accessory_package",
@@ -215,7 +219,7 @@ class AccessoryPackageApplication:
                     self.action,
                     message,
                     code="needs_reconcile",
-                    data={"status": status, "compensated": True},
+                    data={"status": status, "compensated": True, **({"reason": status} if reason_text(status) else {})},
                     before=before,
                     after=before,
                     audit_category="accessory_package_compensation",
@@ -232,7 +236,8 @@ class AccessoryPackageApplication:
             "inventory_full": "背包已满，礼包未结算。",
             "state_changed": "礼包状态已变化，请刷新后重试。",
         }
-        return OperationOutcome.rejected(request.operation_id, self.action, messages.get(status, "礼包未结算。"), code=status, before=before, after=before, audit_category="accessory_package")
+        legacy_status = "state_changed" if status == "package_already_applied" else status
+        return OperationOutcome.rejected(request.operation_id, self.action, reason_text(status) or messages.get(status, "礼包未结算。"), code=legacy_status, data={"reason": status}, before=before, after=before, audit_category="accessory_package")
 
     def _record_failure(self, request: AccessoryPackageRequest, payload: Mapping[str, Any], exc: Exception) -> None:
         try:

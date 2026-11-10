@@ -2,6 +2,49 @@
 
 最后核验：2026-11-10。本文是唯一活跃进度入口；旧重构文档仅作为历史记录，不再定义当前分支或禁止事项。
 
+## 已完成收尾：玩家可知失败原因贯通（待控制端审查 v1.2.17）
+
+本轮只收尾 develop 已有未提交修复及指定缺口，没有重新全量审计。已知拒绝从判定处
+保留具体 `reason` 和适用的 `subject`，经应用、持久回执、重放与命令回复到达玩家；
+保留既有 status/payload 和历史回执兼容，不调整奖励、概率、消耗与资格。
+
+- 建宗门成员写入拒绝改为白名单 `DomainError` 触发整事务回滚，移除 DELETE 宗门的
+  部分补偿；重复历史用户、忽略成员更新、回执插入失败均验证全库不变。
+- 灵庄账户、互动、幻境、称号、战斗结算、历练、炼体、礼包、乞讨、活动首领领奖和
+  管理员资产修正的已命中原因完成透传；仓储已有 reason 时应用优先使用，不再合因。
+- 本次新增写入守卫使用具体白名单异常并回滚；灵田扣费与灵田更新、出师两方灵石奖励、
+  传功修为更新分别用触发器验证两库及回执不变。玩家文案不暴露行数/SQL，也不猜测多个原因。
+- 饰品升级计划补齐 reason 字段；洞府写入拒绝维持具体原因与回滚。旧 third/fourth
+  日志中的饰品缺字段、洞府契约失败均有最终通过证据。
+- 出师/传功 handler 使用 settlement 并标明哪方失败；共用修为变化原因不再错误提示
+  重新邀请双修。旧传承表重复用户的抽卡、结晶祈愿、分解、虚神界出关验证一次扣费/
+  发奖与回执幂等，不一致历史值具体命名，部分写入全回滚。
+- `result_failure` 不把新失败伪装为 `legacy_rejection`；只有实际解码无原因的旧拒绝
+  回执才补历史标记。冷启动不把 command_guard 当插件，NoneBot 流程异常透传；
+  提交后的发送异常不宣称未扣费或未结算。法宝失败句直接发送，避免重复动作与标点。
+- `AGENTS.md` 已记录原因、回滚、守卫和后续无人值守维护不得回退的长期规则。
+
+验证均用仓库 `.venv`、隔离临时 SQLite，外层统一
+`flock -w 600 /tmp/nonebot-project-validation.lock timeout 180` 串行执行。
+复用未变化基线，不跑本地全量测试；以下初跑失败均已修复并只重跑受影响文件：
+
+| 定向组与命令 | 结果与证据（均在 `/tmp/`） |
+| --- | --- |
+| 既有 `python -m unittest -q` 绿基线 | 70 项通过，`xiuxian-reasons-finish-2.log` |
+| 核心原因/守卫/饰品/洞府 `python -m unittest -q`（9 文件） | 初跑 57 项中 55 过、2 个饰品错误；修后 `tests.test_accessory_upgrade_application` 4 项全过。`xiuxian-reasons-final-core.log`、`xiuxian-reasons-final-accessory.log` |
+| 边界 `python -m pytest -q`（43 文件） | 初跑 216 项中 215 过、1 个炼体库存失败；修后 item_reward_repository、admin_asset_application、package_reward_repository、combat_repository 四文件 14 项全过。`xiuxian-reasons-final-boundaries.log`、`xiuxian-reasons-final-boundaries-recheck.log` |
+| 写入回滚 `python -m pytest -q`（39 文件） | 初跑 196 项中 193 过、3 失败；修后 partner_token_application、fusion_batch_transaction、trade_guishi_withdraw_repository、reason_finalization 四文件 31 项及 88 子测试全过。`xiuxian-reasons-final-writes.log`、`xiuxian-reasons-final-writes-recheck.log` |
+| 最后修改组 `python -m pytest -q tests/test_mentor_graduation_transaction.py tests/test_mentor_transmission_transaction.py tests/test_partner_unbind_transaction.py nonebot_plugin_xiuxian_2/features/buff/tests/test_upgrade_repository.py tests/test_reason_finalization.py tests/test_player_failure_finish.py` | 30 项及 105 子测试全过；修正新测试独立收集时缺少 NoneBot 初始化的问题。`xiuxian-reasons-final-last-writes.log` |
+
+门禁：`python scripts/check_architecture.py`（ok=true）、
+`python scripts/export_refactor_inventory.py --check`、
+`python -m compileall -q nonebot_plugin_xiuxian_2 tests`、`git diff --check` 均 exit 0；
+证据为 `/tmp/xiuxian-reasons-final-{architecture,inventory,compile,diff}.log`。
+未解决缺口：本次指定清单内未发现剩余项；QQ 官方消息/界面呈现未实测。
+按本次授权仅在 develop 普通本地提交后停止，不推送、不合 main、不打标签；
+未部署、未动 `/root/xiu2`、真实玩家库或独立 pet/xiu3，未发送 QQ 消息。
+四个既有文档删除和两个 `.codex-*` 临时文件保留原状且不暂存。
+
 ## 已完成修复：部署日志中的命令误报与祈愿失败（待 v1.2.16 发布）
 
 `/root/xiu2/xiu2.log` 的 11-10 18:16 记录显示，双修 handler 在已完成处理后调用

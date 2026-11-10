@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from ...infrastructure.database import DatabaseUnitOfWork
+from ...core.errors import DomainError
 
 
 @dataclass(frozen=True)
@@ -13,6 +14,7 @@ class AdminExpAdjustmentResult:
     previous_exp: int = 0
     final_exp: int = 0
     applied_delta: int = 0
+    reason: str = ""
 
     @property
     def succeeded(self) -> bool:
@@ -87,11 +89,11 @@ class AdminExpAdjustmentSqlRepository:
                 return AdminExpAdjustmentResult("user_missing")
             actual = int(row["exp"])
             if actual != expected_exp:
-                return AdminExpAdjustmentResult("state_changed", actual, actual)
+                return AdminExpAdjustmentResult("state_changed", actual, actual, reason="exp_changed")
             final = max(0, expected_exp + requested_delta)
             applied = final - expected_exp
             if uow.execute("UPDATE user_xiuxian SET exp=? WHERE user_id=? AND COALESCE(exp,0)=?", (final, user_id, expected_exp)).rowcount != 1:
-                return AdminExpAdjustmentResult("state_changed")
+                raise DomainError("exp_write_rejected", "admin exp adjustment was not saved")
             detail = json.dumps({"operator_id": operator_id, "target_name": str(target_name), "requested_delta": requested_delta, "previous_exp": expected_exp, "final_exp": final}, ensure_ascii=True, sort_keys=True, separators=(",", ":"))
             uow.execute("INSERT INTO economy_log(user_id,source,action,exp_delta,item_delta,detail,trace_id,created_at) VALUES(?,'admin',?,?,'[]',?,?,CURRENT_TIMESTAMP)", (user_id, "admin_exp_add" if applied > 0 else "admin_exp_cost", applied, detail, operation_id))
             uow.execute("INSERT INTO admin_exp_adjustment_operations(operation_id,payload,previous_exp,final_exp,applied_delta) VALUES(?,?,?,?,?)", (operation_id, payload, expected_exp, final, applied))

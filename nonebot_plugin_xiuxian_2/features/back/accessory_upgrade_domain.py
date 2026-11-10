@@ -12,6 +12,7 @@ class AccessoryUpgradePlan:
     status: str
     accessory: dict[str, Any] | None = None
     affected: int = 0
+    reason: str = ""
 
 
 @dataclass(frozen=True)
@@ -22,6 +23,7 @@ class AccessoryUpgradeChange:
     affected: int = 0
     stone_delta: int = 0
     accessory: dict[str, Any] | None = None
+    reason: str = ""
 
     @property
     def succeeded(self) -> bool:
@@ -122,7 +124,7 @@ def plan_upgrade(
     material_uids = tuple(str(uid).strip() for uid in material_uids)
     required = upgrade_material_count(quality)
     if len(material_uids) != required or len(set(material_uids)) != len(material_uids):
-        return AccessoryUpgradePlan("material_mismatch")
+        return AccessoryUpgradePlan("material_mismatch", reason="accessory_material_count")
 
     by_uid: dict[str, list[dict[str, Any]]] = {}
     for item in expected_bag:
@@ -132,9 +134,9 @@ def plan_upgrade(
     for uid in material_uids:
         matches = by_uid.get(uid, [])
         if len(matches) != 1:
-            return AccessoryUpgradePlan("material_missing")
+            return AccessoryUpgradePlan("material_missing", reason="accessory_material_missing")
         if _signature(matches[0]) != main_signature:
-            return AccessoryUpgradePlan("material_mismatch")
+            return AccessoryUpgradePlan("material_mismatch", reason="accessory_material_signature")
 
     upgraded = deepcopy(main)
     upgraded["quality"] = quality + 1

@@ -264,7 +264,7 @@ class IllusionRepository:
         ).fetchone()
         if previous is not None:
             if str(previous[0]) != payload:
-                return IllusionChoiceResult("state_changed")
+                return IllusionChoiceResult("state_changed", reason="operation_conflict")
             return self._from_row("duplicate", int(previous[1]), previous[2])
         if uow.execute("SELECT 1 FROM user_xiuxian WHERE user_id = ?", (user_id,)).fetchone() is None:
             return IllusionChoiceResult("user_missing")
@@ -285,7 +285,7 @@ class IllusionRepository:
                 (user_id, period, question_index, now),
             )
         elif str(state[0]) != period or int(state[1]) != question_index:
-            return IllusionChoiceResult("state_changed")
+            return IllusionChoiceResult("state_changed", reason="illusion_period_changed" if str(state[0]) != period else "illusion_question_changed")
         elif state[2] is not None:
             return IllusionChoiceResult("already_chosen")
         if item_data:

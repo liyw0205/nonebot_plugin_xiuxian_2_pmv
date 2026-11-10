@@ -17,6 +17,23 @@ DRAW_STATISTICS_COLUMNS = (
 )
 
 
+def apply_impart_base_schema(uow: DatabaseUnitOfWork) -> None:
+    """Own the legacy base schema at startup, preserving duplicate legacy rows."""
+    uow.execute("CREATE TABLE IF NOT EXISTS xiuxian_impart(id INTEGER PRIMARY KEY,user_id TEXT DEFAULT 0)")
+    columns = {str(row[1]) for row in uow.execute("PRAGMA table_info(xiuxian_impart)").fetchall()}
+    for column in (
+        "impart_hp_per", "impart_atk_per", "impart_mp_per", "impart_exp_up", "boss_atk",
+        "impart_know_per", "impart_burst_per", "impart_mix_per", "impart_reap_per",
+        "impart_two_exp", "stone_num", "impart_lv", "impart_num", "exp_day", "wish",
+    ):
+        if column not in columns:
+            uow.execute(f'ALTER TABLE xiuxian_impart ADD COLUMN "{column}" INTEGER DEFAULT 0')
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS impart_cards(user_id TEXT NOT NULL,card_name TEXT NOT NULL,"
+        "quantity INTEGER DEFAULT 1,PRIMARY KEY(user_id,card_name))"
+    )
+
+
 def apply_impart(uow: DatabaseUnitOfWork) -> None:
     uow.execute("CREATE TABLE IF NOT EXISTS impart_feature_migrations (version TEXT PRIMARY KEY)")
     uow.execute("INSERT OR IGNORE INTO impart_feature_migrations(version) VALUES ('legacy.impart.001')")

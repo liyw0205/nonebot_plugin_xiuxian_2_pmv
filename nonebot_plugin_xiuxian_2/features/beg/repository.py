@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from ...core.snapshot_reason import first_difference
+
 import json
 from datetime import datetime, timedelta
 from typing import Any, Callable, Iterable
@@ -118,7 +120,7 @@ class BegRepository:
         )
         expected_state = (expected_stone, expected_create_time, expected_sect_id, expected_root_type, expected_level)
         if actual_state != expected_state:
-            return BegDailyRewardResult("state_changed")
+            return BegDailyRewardResult("state_changed", reason=first_difference(actual_state, expected_state, ("stone_changed", "create_time_changed", "sect_changed", "root_type_changed", "level_changed")))
         if int(user["is_beg"]) != 0:
             return BegDailyRewardResult("already_claimed")
         if expected_sect_id is not None and expected_root_type == "伪灵根":
@@ -137,7 +139,7 @@ class BegRepository:
             (final_stone, user_id, expected_stone),
         )
         if changed.rowcount < 1:
-            return BegDailyRewardResult("state_changed")
+            return BegDailyRewardResult("state_changed", reason="beg_daily_write_rejected")
         self._checkpoint("after_user_update")
         uow.execute(
             "INSERT INTO beg_daily_reward_operations(operation_id,payload,stone_reward,stone) VALUES (?,?,?,?)",
@@ -184,7 +186,7 @@ class BegRepository:
             return NoviceGiftClaimResult("user_missing")
         actual_create_time = canonical_datetime(user["create_time"])
         if actual_create_time != expected_create_time:
-            return NoviceGiftClaimResult("state_changed")
+            return NoviceGiftClaimResult("state_changed", reason="create_time_changed")
         if int(user["is_novice"]) != 0:
             return NoviceGiftClaimResult("already_claimed")
         if claimed_at > parse_datetime(user["create_time"]) + timedelta(days=max_age_days):
@@ -204,7 +206,7 @@ class BegRepository:
             (stone, user_id, user["create_time"]),
         )
         if changed.rowcount < 1:
-            return NoviceGiftClaimResult("state_changed")
+            return NoviceGiftClaimResult("state_changed", reason="novice_write_rejected")
         self._checkpoint("after_user_update")
 
         now = self.now()

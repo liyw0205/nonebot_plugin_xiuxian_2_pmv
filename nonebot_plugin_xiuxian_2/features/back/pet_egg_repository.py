@@ -17,6 +17,7 @@ class BatchPetEggUseResult:
     item_id: int
     quantity: int
     pets: tuple[tuple[dict, str], ...]
+    reason: str = ""
 
     @property
     def succeeded(self) -> bool:
@@ -95,9 +96,9 @@ class PetEggUseSqlRepository:
         if any(not uid for uid in pet_uids) or len(set(pet_uids)) != len(pet_uids):
             raise ValueError("pet uids must be non-empty and unique")
 
-        def result(status: str, result_pets=normalized_pets) -> BatchPetEggUseResult:
+        def result(status: str, result_pets=normalized_pets, reason="") -> BatchPetEggUseResult:
             return BatchPetEggUseResult(
-                status, user_id, item_id, quantity, tuple(result_pets)
+                status, user_id, item_id, quantity, tuple(result_pets), reason
             )
 
         with self._lock, AttachedDatabaseUnitOfWork(
@@ -137,7 +138,7 @@ class PetEggUseSqlRepository:
                     return result("pet_state_missing", ())
                 if current_snapshot != (expected_active_uid, expected_pet_uids):
                     conn.connection.rollback()
-                    return result("state_changed", ())
+                    return result("state_changed", (), "active_changed" if current_snapshot[0] != expected_active_uid else "pet_bag_changed")
                 if len(expected_pet_uids) + quantity > bag_limit:
                     conn.connection.rollback()
                     return result("inventory_full", ())
@@ -158,7 +159,7 @@ class PetEggUseSqlRepository:
                 )
                 if consumed.rowcount != 1:
                     conn.connection.rollback()
-                    return result("state_changed", ())
+                    return result("state_changed", (), "item_changed")
 
                 now = int(time.time())
                 active_uid = expected_active_uid

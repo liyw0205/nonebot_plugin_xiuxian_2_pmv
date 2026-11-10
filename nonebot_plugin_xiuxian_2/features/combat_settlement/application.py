@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from ...core.player_reasons import reason_text
+
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
@@ -78,6 +80,8 @@ class CombatSettlementApplication:
                     raw_rewards = raw.get("rewards", ())
                 rewards = tuple((int(item[0]), int(item[1])) for item in (raw_rewards or ()))
                 data = CombatSettlementResult(status, request.operation_id, request.user_id, int(raw_stone or 0), rewards).to_dict()
+                diagnostics = raw if isinstance(raw, dict) else vars(raw)
+                data.update({key: diagnostics[key] for key in ("reason", "subject") if diagnostics.get(key)})
                 if status in {"applied", "duplicate"}:
                     outcome = OperationOutcome.applied(
                         request.operation_id,
@@ -97,7 +101,7 @@ class CombatSettlementApplication:
                     outcome = OperationOutcome.rejected(
                         request.operation_id,
                         self.action,
-                        messages.get(status, "节点战斗未结算。"),
+                        reason_text(data.get("reason")) or messages.get(status, "节点战斗未结算。"),
                         code=status,
                         data=data,
                         audit_category="combat_settlement",
@@ -130,7 +134,8 @@ class CombatSettlementApplication:
                 if status in {"applied", "duplicate"}:
                     outcome = OperationOutcome.applied(str(operation_id), "combat.dao_battle", data=data, audit_category="combat_settlement")
                 else:
-                    outcome = OperationOutcome.rejected(str(operation_id), "combat.dao_battle", {"position_changed": "对方已离开当前节点，论道未结算。", "user_missing": "未找到论道玩家。", "state_changed": "论道状态已更新，请重新发起。"}.get(status, "论道未完成。"), code=status, data=data, audit_category="combat_settlement")
+                    message = reason_text(data.get("reason")) or {"position_changed": "所在节点与发起论道时不一致，请查看当前位置。", "user_missing": "未找到论道玩家。"}.get(status, "论道记录需要核对，请联系管理员。")
+                    outcome = OperationOutcome.rejected(str(operation_id), "combat.dao_battle", message, code=status, data=data, audit_category="combat_settlement")
                 with DatabaseUnitOfWork(self.player_database, immediate=True) as uow:
                     self.ledger.finish(uow, outcome)
                 return outcome

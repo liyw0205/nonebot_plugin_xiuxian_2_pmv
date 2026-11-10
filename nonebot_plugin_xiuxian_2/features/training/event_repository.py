@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+from ...core.errors import DomainError
+from ...core.player_reasons import reason_text
+from ...core.snapshot_reason import first_difference
+
 import json
 from pathlib import Path
 from typing import Any, Callable, Mapping
@@ -40,8 +44,8 @@ class TrainingEventSqlRepository:
         return str(value)
 
     @classmethod
-    def _state_matches(cls, current: Mapping[str, Any], expected: Mapping[str, Any]) -> bool:
-        for field in cls._FIELDS:
+    def _state_matches(cls, current: Mapping[str, Any], expected: Mapping[str, Any], fields=None) -> bool:
+        for field in cls._FIELDS if fields is None else fields:
             actual = current.get(field)
             wanted = expected.get(field)
             if field == "weekly_purchases":
@@ -314,7 +318,7 @@ class TrainingEventSqlRepository:
             tuple(values),
         )
         if changed.rowcount != 1:
-            raise RuntimeError("training inventory changed")
+            raise DomainError("item_write_rejected", "training inventory was not saved")
 
     def apply(
         self,
@@ -442,7 +446,8 @@ class TrainingEventSqlRepository:
                 else None
             )
             if actual_user != wanted:
-                return {"status": "state_changed", "message": "玩家状态已变化，请重新开始历练。"}
+                reason = "user_missing" if user is None else first_difference(actual_user, wanted, ("stone_changed", "exp_changed", "hp_changed", "mp_changed"))
+                return {"status": "state_changed", "reason": reason, "message": reason_text(reason)}
 
             current = uow.query_one(
                 "SELECT progress,last_time,points,completed,max_progress,last_event,weekly_purchases "
@@ -450,7 +455,9 @@ class TrainingEventSqlRepository:
                 (user_id,),
             )
             if current is None or not self._state_matches(current, expected_state):
-                return {"status": "state_changed", "message": "历练状态已变化，请重新开始。"}
+                reasons = ("training_progress_changed", "training_last_time_changed", "training_points_changed", "training_completed_changed", "training_max_progress_changed", "training_event_changed", "weekly_purchase_changed")
+                reason = "training_missing" if current is None else next(reason for field, reason in zip(self._FIELDS, reasons) if not self._state_matches(current, expected_state, (field,)))
+                return {"status": "state_changed", "reason": reason, "message": reason_text(reason)}
 
             columns = self._inventory_columns(uow)
             for item_id, _, _, amount in rewards:
@@ -463,8 +470,9 @@ class TrainingEventSqlRepository:
                     return {"status": "item_missing", "message": "历练物品数量不足。"}
                 if amount > 0 and count + amount > max_goods_num:
                     return {"status": "inventory_full", "message": "背包容量不足。"}
-            if wanted[0] + stone_delta < 0 or wanted[1] + exp_delta < 0 or wanted[2] + hp_delta < 0:
-                return {"status": "resource_missing", "message": "玩家资源不足。"}
+            for total, reason in ((wanted[0] + stone_delta, "stone_insufficient"), (wanted[1] + exp_delta, "exp_insufficient"), (wanted[2] + hp_delta, "hp_insufficient")):
+                if total < 0:
+                    return {"status": "resource_missing", "reason": reason, "message": reason_text(reason)}
 
             assignments = ",".join(f'"{field}"=?' for field in self._FIELDS)
             changed = uow.execute(
@@ -472,12 +480,14 @@ class TrainingEventSqlRepository:
                 tuple(self._state_value(field, state.get(field)) for field in self._FIELDS) + (user_id,),
             )
             if changed.rowcount != 1:
-                raise RuntimeError("training state changed during event")
-            uow.execute(
+                raise DomainError("training_event_write_rejected", "training event was not saved")
+            assets = uow.execute(
                 "UPDATE user_xiuxian SET stone=COALESCE(stone,0)+?,exp=COALESCE(exp,0)+?,"
                 "hp=COALESCE(hp,0)+? WHERE user_id=?",
                 (stone_delta, exp_delta, hp_delta, user_id),
             )
+            if assets.rowcount != 1:
+                raise DomainError("training_player_write_rejected", "training player assets were not saved")
             for item_id, name, item_type, amount in rewards:
                 self._apply_item(
                     uow,

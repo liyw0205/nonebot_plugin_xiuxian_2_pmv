@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from ...core.errors import DomainError
+
 import hashlib
 import json
 from datetime import date, datetime
@@ -63,7 +65,7 @@ class InteractiveRepository:
         if user is None:
             return ExpRewardResult("user_missing")
         if (int(user["exp"]), str(user["level"])) != (expected_exp, expected_level):
-            return ExpRewardResult("state_changed")
+            return ExpRewardResult("state_changed", reason="exp_changed" if int(user["exp"]) != expected_exp else "level_changed")
         if uow.query_one("SELECT 1 AS present FROM interactive_exp_daily_claims WHERE user_id = ? AND business_date = ?", (user_id, day)):
             return ExpRewardResult("already_claimed")
         final_exp = expected_exp
@@ -71,7 +73,7 @@ class InteractiveRepository:
             final_exp += reward
             changed = uow.execute("UPDATE user_xiuxian SET exp = ? WHERE user_id = ? AND COALESCE(exp,0) = ? AND level = ?", (final_exp, user_id, expected_exp, expected_level))
             if changed.rowcount != 1:
-                return ExpRewardResult("state_changed")
+                raise DomainError("exp_write_rejected", "interactive exp write count mismatch")
             uow.execute("INSERT INTO interactive_exp_daily_claims(user_id,business_date,operation_id,exp_reward) VALUES (?,?,?,?)", (user_id, day, operation_id, reward))
             self._checkpoint("after_claim")
         uow.execute("INSERT INTO interactive_exp_daily_reward_operations(operation_id,payload,granted,exp_reward,exp) VALUES (?,?,?,?,?)", (operation_id, payload, int(granted), reward, final_exp))
@@ -94,7 +96,7 @@ class InteractiveRepository:
         if user is None:
             return StoneRewardResult("user_missing")
         if int(user["stone"]) != expected_stone:
-            return StoneRewardResult("state_changed")
+            return StoneRewardResult("state_changed", reason="stone_changed")
         if uow.query_one("SELECT 1 AS present FROM interactive_stone_daily_claims WHERE user_id = ? AND business_date = ?", (user_id, day)):
             return StoneRewardResult("already_claimed")
         final_stone = expected_stone
@@ -102,7 +104,7 @@ class InteractiveRepository:
             final_stone += reward
             changed = uow.execute("UPDATE user_xiuxian SET stone = ? WHERE user_id = ? AND COALESCE(stone,0) = ?", (final_stone, user_id, expected_stone))
             if changed.rowcount != 1:
-                return StoneRewardResult("state_changed")
+                raise DomainError("stone_write_rejected", "interactive stone write count mismatch")
             uow.execute("INSERT INTO interactive_stone_daily_claims(user_id,business_date,operation_id,stone_reward) VALUES (?,?,?,?)", (user_id, day, operation_id, reward))
             self._checkpoint("after_claim")
         uow.execute("INSERT INTO interactive_stone_daily_reward_operations(operation_id,payload,granted,stone_reward,stone) VALUES (?,?,?,?,?)", (operation_id, payload, int(granted), reward, final_stone))

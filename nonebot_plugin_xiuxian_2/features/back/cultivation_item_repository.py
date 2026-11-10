@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from ...core.errors import DomainError
+
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -110,7 +112,7 @@ class CultivationItemSqlRepository:
                 (exp_gain, hp_gain, mp_gain, atk_gain, exp_gain, power_multiplier, user_id),
             )
             if consumed.rowcount != 1 or updated.rowcount != 1:
-                return result("state_changed")
+                raise DomainError("item_write_rejected" if consumed.rowcount != 1 else "cultivation_write_rejected", "item effect write count mismatch")
             uow.execute(
                 "INSERT INTO cultivation_item_operations "
                 "(operation_id,user_id,item_id,quantity,exp_gain,hp_gain,mp_gain,atk_gain,power_multiplier) "

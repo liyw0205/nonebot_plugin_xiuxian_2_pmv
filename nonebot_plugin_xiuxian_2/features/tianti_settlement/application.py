@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from ...core.player_reasons import reason_text
+
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable
@@ -101,6 +103,10 @@ class TiantiSettlementApplication:
             detail = raw.get("detail", {})
         detail = dict(detail or {})
         data = TiantiSettlementResult(status, request.operation_id, request.user_id, detail).to_dict()
+        diagnostics = raw if isinstance(raw, dict) else vars(raw)
+        for key in ("reason", "subject"):
+            if diagnostics.get(key) or detail.get(key):
+                data[key] = diagnostics.get(key) or detail[key]
         if status in {"settled", "duplicate"}:
             return OperationOutcome.applied(
                 request.operation_id,
@@ -117,7 +123,7 @@ class TiantiSettlementApplication:
         return OperationOutcome.rejected(
             request.operation_id,
             self.action,
-            messages.get(status, "炼体结算未完成。"),
+            reason_text(data.get("reason")) or messages.get(status, "炼体结算未完成。"),
             code=status,
             data=data,
             audit_category="tianti_settlement",

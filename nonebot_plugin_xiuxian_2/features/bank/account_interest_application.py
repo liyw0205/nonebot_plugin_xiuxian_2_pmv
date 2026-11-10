@@ -49,18 +49,18 @@ class BankInterestApplication:
                 saved_stone = int(initial_account.get("saved_stone", 0) or 0)
                 initial_updated_at = str(initial_account.get("updated_at", settled_at))
                 if current_level != str(bank_level):
-                    return {"status": "state_changed", "operation_id": operation_id}
+                    return {"status": "state_changed", "reason": "bank_level_changed", "operation_id": operation_id}
             else:
                 current_level = str(account["bank_level"])
                 saved_stone = int(account["saved_stone"])
                 initial_updated_at = str(account["updated_at"])
-            if expected_saved_stone is not None and (
-                saved_stone != int(expected_saved_stone)
-                or initial_updated_at != str(expected_saved_at or "")
-            ):
-                return {"status": "state_changed", "operation_id": operation_id}
+            if expected_saved_stone is not None:
+                if saved_stone != int(expected_saved_stone):
+                    return {"status": "state_changed", "reason": "bank_saved_changed", "operation_id": operation_id}
+                if initial_updated_at != str(expected_saved_at or ""):
+                    return {"status": "state_changed", "reason": "bank_saved_at_changed", "operation_id": operation_id}
             if current_level != str(bank_level):
-                return {"status": "state_changed", "operation_id": operation_id}
+                return {"status": "state_changed", "reason": "bank_level_changed", "operation_id": operation_id}
             decision = decide_interest(wallet=int(wallet["stone"] or 0), interest=int(interest), settled_at=str(settled_at))
             if account is None:
                 self.repository.create_account(

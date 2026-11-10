@@ -120,8 +120,8 @@ class ArenaChallengePurchaseSqlRepository(LegacyArenaRepository):
         if outcome != "no_match" and (not opponent_id or opponent is None or opponent_player is None):
             raise ValueError("opponent snapshot is required")
         payload = json.dumps([challenger_id, opponent_id, outcome, challenge_cap, stamina_cost, challenged_at, challenger, opponent, challenger_player, opponent_player, final_challenger_hp, final_challenger_mp, final_opponent_hp, final_opponent_mp, win_points, lose_points, no_match_points], ensure_ascii=True, sort_keys=True, separators=(",", ":"))
-        def result(status, score=None, rank=None, opponent_score=None, used=None, stamina=None):
-            return {"status": status, "outcome": outcome, "challenger_score": int(challenger["score"] if score is None else score), "challenger_rank": str(challenger["rank"] if rank is None else rank), "opponent_score": None if opponent_score is None else int(opponent_score), "score_delta": win_points if outcome == "win" else no_match_points if outcome == "no_match" else 0, "used": int(challenger["daily_challenges_used"] if used is None else used), "remaining": max(0, challenge_cap - int(challenger["daily_challenges_used"] if used is None else used)), "stamina": int(challenger_player["user_stamina"] if stamina is None else stamina), "challenged_at": challenged_at}
+        def result(status, score=None, rank=None, opponent_score=None, used=None, stamina=None, *, reason="", subject=""):
+            return {"status": status, "reason": reason, "subject": subject, "outcome": outcome, "challenger_score": int(challenger["score"] if score is None else score), "challenger_rank": str(challenger["rank"] if rank is None else rank), "opponent_score": None if opponent_score is None else int(opponent_score), "score_delta": win_points if outcome == "win" else no_match_points if outcome == "no_match" else 0, "used": int(challenger["daily_challenges_used"] if used is None else used), "remaining": max(0, challenge_cap - int(challenger["daily_challenges_used"] if used is None else used)), "stamina": int(challenger_player["user_stamina"] if stamina is None else stamina), "challenged_at": challenged_at}
         with DatabaseUnitOfWork(self.game_database, immediate=True) as uow:
             uow.attach_database(self.player_database, "player_data")
             if not table_ready(uow, "arena_challenge_settlement_operations", _SETTLEMENT_RECEIPT_COLUMNS) or not table_ready(
@@ -136,15 +136,17 @@ class ArenaChallengePurchaseSqlRepository(LegacyArenaRepository):
             arena = uow.query_one("SELECT score,total_wins,total_losses,win_streak,max_win_streak,rank,daily_challenges_used,daily_extra_challenges,last_challenge_time FROM player_data.arena WHERE user_id=?", (challenger_id,))
             player = uow.query_one("SELECT COALESCE(hp,0) AS hp,COALESCE(mp,0) AS mp,COALESCE(user_stamina,0) AS user_stamina FROM user_xiuxian WHERE user_id=?", (challenger_id,))
             actual = dict(arena) if arena else None
-            if actual is None or player is None or any(int(actual[key] or 0) != challenger[key] for key in ("score", "total_wins", "total_losses", "win_streak", "max_win_streak", "daily_challenges_used", "daily_extra_challenges")) or str(actual.get("rank") or "") != challenger["rank"] or str(actual.get("last_challenge_time") or "") != challenger["last_challenge_time"] or tuple(int(player[key]) for key in ("hp", "mp", "user_stamina")) != tuple(challenger_player[key] for key in ("hp", "mp", "user_stamina")):
-                return self._record_settlement(uow, operation_id, challenger_id, payload, result("state_changed"))
+            reason = self._battle_reason(actual, player, challenger, challenger_player)
+            if reason:
+                return self._record_settlement(uow, operation_id, challenger_id, payload, result("state_changed", reason=reason, subject="challenger"))
             if opponent is not None:
                 if opponent_player is None:
-                    return self._record_settlement(uow, operation_id, challenger_id, payload, result("state_changed"))
+                    return self._record_settlement(uow, operation_id, challenger_id, payload, result("state_changed", reason="user_missing", subject="opponent"))
                 opponent_actual = uow.query_one("SELECT score,total_wins,total_losses,win_streak,max_win_streak,rank FROM player_data.arena WHERE user_id=?", (opponent_id,))
                 opponent_vitals = uow.query_one("SELECT COALESCE(hp,0) AS hp,COALESCE(mp,0) AS mp FROM user_xiuxian WHERE user_id=?", (opponent_id,))
-                if opponent_actual is None or opponent_vitals is None or any(int(opponent_actual[key] or 0) != opponent[key] for key in ("score", "total_wins", "total_losses", "win_streak", "max_win_streak")) or str(opponent_actual.get("rank") or "") != opponent["rank"] or tuple(int(opponent_vitals[key]) for key in ("hp", "mp")) != tuple(opponent_player[key] for key in ("hp", "mp")):
-                    return self._record_settlement(uow, operation_id, challenger_id, payload, result("state_changed"))
+                reason = self._battle_reason(opponent_actual, opponent_vitals, opponent, opponent_player)
+                if reason:
+                    return self._record_settlement(uow, operation_id, challenger_id, payload, result("state_changed", reason=reason, subject="opponent"))
             if challenger["daily_challenges_used"] >= challenge_cap: return self._record_settlement(uow, operation_id, challenger_id, payload, result("limit_reached"))
             if challenger_player["user_stamina"] < stamina_cost: return self._record_settlement(uow, operation_id, challenger_id, payload, result("stamina_insufficient"))
             challenger_new = dict(challenger); opponent_new = None if opponent is None else dict(opponent)
@@ -167,6 +169,23 @@ class ArenaChallengePurchaseSqlRepository(LegacyArenaRepository):
             final = result("applied", challenger_new["score"], challenger_new["rank"], None if opponent_new is None else opponent_new["score"], challenger_new["daily_challenges_used"], stamina); return self._record_settlement(uow, operation_id, challenger_id, payload, final)
 
     @staticmethod
+    def _battle_reason(actual, player, expected, vitals):
+        if actual is None or player is None:
+            return "user_missing"
+        for key, value in expected.items():
+            current = str(actual.get(key) or "") if key in {"rank", "last_challenge_time"} else int(actual.get(key) or 0)
+            if current != value:
+                if key == "score": return "score_changed"
+                if key == "rank": return "rank_changed"
+                if key == "last_challenge_time": return "cooldown_changed"
+                if key in {"daily_challenges_used", "daily_extra_challenges"}: return "challenge_count_changed"
+                return "record_changed"
+        for key, value in vitals.items():
+            if int(player[key] or 0) != value:
+                return {"hp": "hp_changed", "mp": "mp_changed", "user_stamina": "stamina_changed"}[key]
+        return ""
+
+    @staticmethod
     def _rank(score): return "王者" if score >= 3200 else "钻石" if score >= 2700 else "铂金" if score >= 2300 else "黄金" if score >= 1900 else "白银" if score >= 1500 else "青铜"
     @staticmethod
     def _record_settlement(uow, operation_id, challenger_id, payload, result):
@@ -186,15 +205,15 @@ class ArenaChallengePurchaseSqlRepository(LegacyArenaRepository):
                 if str(old["payload"])!=payload:return self._ticket_result("operation_conflict",expected_item_count,expected_challenges_used,challenge_cap)
                 return self._ticket_result("duplicate",int(old["item_remaining"]),int(old["challenges_used"]),int(old["challenge_cap"]),int(old["used_tickets"]))
             arena=uow.query_one("SELECT COALESCE(daily_challenges_used,0) AS used,COALESCE(daily_extra_challenges,0) AS extra FROM player_data.arena WHERE user_id=?",(user_id,));item=uow.query_one("SELECT COALESCE(goods_num,0) AS goods_num,COALESCE(bind_num,0) AS bind_num FROM back WHERE user_id=? AND goods_id=?",(user_id,item_id))
-            if arena is None or (int(arena["used"]),int(arena["extra"]))!=(expected_challenges_used,expected_extra_challenges):return self._record_ticket(uow,operation_id,payload,self._ticket_result("state_changed",expected_item_count,expected_challenges_used,challenge_cap))
+            if arena is None or (int(arena["used"]),int(arena["extra"]))!=(expected_challenges_used,expected_extra_challenges):return self._record_ticket(uow,operation_id,payload,self._ticket_result("state_changed",expected_item_count,expected_challenges_used,challenge_cap,reason="user_missing" if arena is None else "challenge_count_changed"))
             if item is None or int(item["goods_num"])<=0:return self._record_ticket(uow,operation_id,payload,self._ticket_result("item_missing",expected_item_count,expected_challenges_used,challenge_cap))
-            if int(item["goods_num"])!=expected_item_count:return self._record_ticket(uow,operation_id,payload,self._ticket_result("state_changed",expected_item_count,expected_challenges_used,challenge_cap))
+            if int(item["goods_num"])!=expected_item_count:return self._record_ticket(uow,operation_id,payload,self._ticket_result("state_changed",expected_item_count,expected_challenges_used,challenge_cap,reason="item_changed"))
             if expected_challenges_used<=0:return self._record_ticket(uow,operation_id,payload,self._ticket_result("no_challenges_used",expected_item_count,expected_challenges_used,challenge_cap))
             used=min(requested_count,expected_item_count,expected_challenges_used);remaining=expected_item_count-used;new_used=expected_challenges_used-used;new_remaining=max(0,challenge_cap-new_used);bound=min(max(0,int(item["bind_num"])-used),remaining)
             uow.execute("UPDATE back SET goods_num=?,bind_num=? WHERE user_id=? AND goods_id=? AND COALESCE(goods_num,0)=?",(remaining,bound,user_id,item_id,expected_item_count));uow.execute("UPDATE player_data.arena SET daily_challenges_used=? WHERE user_id=? AND CAST(COALESCE(daily_challenges_used,0) AS INTEGER)=? AND CAST(COALESCE(daily_extra_challenges,0) AS INTEGER)=?",(new_used,user_id,expected_challenges_used,expected_extra_challenges));return self._record_ticket(uow,operation_id,payload,self._ticket_result("applied",remaining,new_used,challenge_cap,used))
 
     @staticmethod
-    def _ticket_result(status,item_remaining,challenges_used,challenge_cap,used_tickets=0): return {"status":status,"used_tickets":used_tickets,"item_remaining":item_remaining,"challenges_used":challenges_used,"challenges_remaining":max(0,challenge_cap-challenges_used),"challenge_cap":challenge_cap}
+    def _ticket_result(status,item_remaining,challenges_used,challenge_cap,used_tickets=0, *, reason=""): return {"status":status,"reason":reason,"used_tickets":used_tickets,"item_remaining":item_remaining,"challenges_used":challenges_used,"challenges_remaining":max(0,challenge_cap-challenges_used),"challenge_cap":challenge_cap}
     @staticmethod
     def _record_ticket(uow,operation_id,payload,result):
         uow.execute("INSERT INTO arena_challenge_ticket_operations(operation_id,payload,used_tickets,item_remaining,challenges_used,challenges_remaining,challenge_cap) VALUES(?,?,?,?,?,?,?)",(operation_id,payload,result["used_tickets"],result["item_remaining"],result["challenges_used"],result["challenges_remaining"],result["challenge_cap"]));return result
@@ -245,9 +264,10 @@ class ArenaChallengePurchaseSqlRepository(LegacyArenaRepository):
         today_key = today.isoformat() if hasattr(today, "isoformat") else str(today)
         business_date = date.fromisoformat(today_key)
 
-        def record(uow, status, *, cost=0, honor=expected_honor, purchased=0, inventory=0):
+        def record(uow, status, *, cost=0, honor=expected_honor, purchased=0, inventory=0, reason=""):
             result = self._purchase_result(status, quantity, cost, honor, purchased, inventory)
             result["item_name"] = item_name
+            result["reason"] = reason
             return self._record_purchase(uow, operation_id, payload, result)
 
         with DatabaseUnitOfWork(self.game_database, immediate=True) as uow:
@@ -259,15 +279,17 @@ class ArenaChallengePurchaseSqlRepository(LegacyArenaRepository):
             old = uow.query_one("SELECT payload,status,result_json FROM arena_purchase_operations WHERE operation_id=?", (operation_id,))
             if old:
                 if str(old["payload"]) != payload:
-                    return self._purchase_result("state_changed", quantity, 0, expected_honor, 0, 0)
+                    return {**self._purchase_result("state_changed", quantity, 0, expected_honor, 0, 0), "reason": "operation_conflict"}
                 return self._purchase_replay(old)
             user = uow.query_one("SELECT 1 FROM user_xiuxian WHERE user_id=?", (user_id,))
             arena = uow.query_one("SELECT COALESCE(honor_points,0) AS honor,COALESCE(weekly_purchases,'{}') AS weekly FROM player_data.arena WHERE user_id=?", (user_id,))
             if user is None or arena is None:
                 return record(uow, "user_missing")
             weekly, _ = ArenaStateRepository._weekly(arena["weekly"], business_date)
-            if int(arena["honor"]) != expected_honor or weekly.get(str(item_id), 0) != expected_weekly_purchases.get(str(item_id), 0):
-                return record(uow, "state_changed")
+            if int(arena["honor"]) != expected_honor:
+                return record(uow, "state_changed", reason="honor_changed")
+            if weekly.get(str(item_id), 0) != expected_weekly_purchases.get(str(item_id), 0):
+                return record(uow, "state_changed", reason="weekly_purchase_changed")
             purchased = int(weekly.get(str(item_id), 0) or 0)
             if clamp_quantity:
                 quantity = min(quantity, max(0, weekly_limit - purchased))
@@ -324,12 +346,12 @@ class ArenaChallengePurchaseSqlRepository(LegacyArenaRepository):
             old = uow.query_one("SELECT payload,amount,cost,stone,bought,extra FROM arena_challenge_purchase_operations WHERE operation_id=?", (operation_id,))
             if old:
                 if str(old["payload"]) != payload:
-                    return self._result("state_changed", 0, 0, expected_stone, expected_bought, expected_extra)
+                    return {**self._result("state_changed", 0, 0, expected_stone, expected_bought, expected_extra), "reason": "operation_conflict"}
                 return self._result("duplicate", int(old["amount"]), int(old["cost"]), int(old["stone"]), int(old["bought"]), int(old["extra"]))
             user = uow.query_one("SELECT COALESCE(stone,0) AS stone FROM user_xiuxian WHERE user_id=?", (user_id,))
             arena = uow.query_one("SELECT COALESCE(daily_challenge_buys,0) AS bought,COALESCE(daily_extra_challenges,0) AS extra,last_buy_date FROM player_data.arena WHERE user_id=?", (user_id,))
             if user is None or arena is None:
-                return self._record(uow, operation_id, payload, self._result("state_changed", 0, 0, expected_stone, expected_bought, expected_extra))
+                return self._record(uow, operation_id, payload, self._result("state_changed", 0, 0, expected_stone, expected_bought, expected_extra, reason="user_missing"))
             current_date = str(arena["last_buy_date"] or "")
             today_str = today.isoformat() if hasattr(today, "isoformat") else str(today)
             bought = int(arena["bought"]); extra = int(arena["extra"])
@@ -337,7 +359,7 @@ class ArenaChallengePurchaseSqlRepository(LegacyArenaRepository):
                 bought, extra = 0, 0
                 expected_bought, expected_extra, expected_last_buy_date = 0, 0, today_str
             if (int(user["stone"]), bought, extra, current_date if current_date == today_str else today_str) != (expected_stone, expected_bought, expected_extra, str(expected_last_buy_date)):
-                return self._record(uow, operation_id, payload, self._result("state_changed", 0, 0, expected_stone, expected_bought, expected_extra))
+                return self._record(uow, operation_id, payload, self._result("state_changed", 0, 0, expected_stone, expected_bought, expected_extra, reason="stone_changed" if int(user["stone"]) != expected_stone else "buy_count_changed"))
             real_amount = min(amount, max(0, daily_limit - expected_bought)); cost = real_amount * unit_cost
             if real_amount == 0:
                 return self._record(uow, operation_id, payload, self._result("limit_reached", 0, 0, expected_stone, expected_bought, expected_extra))
@@ -349,8 +371,8 @@ class ArenaChallengePurchaseSqlRepository(LegacyArenaRepository):
             return self._record(uow, operation_id, payload, self._result("applied", real_amount, cost, new_stone, new_bought, new_extra))
 
     @staticmethod
-    def _result(status, amount, cost, stone, bought, extra):
-        return {"status": status, "amount": amount, "cost": cost, "stone": stone, "bought": bought, "extra": extra}
+    def _result(status, amount, cost, stone, bought, extra, *, reason=""):
+        return {"status": status, "reason": reason, "amount": amount, "cost": cost, "stone": stone, "bought": bought, "extra": extra}
 
     @staticmethod
     def _record(uow, operation_id, payload, result):

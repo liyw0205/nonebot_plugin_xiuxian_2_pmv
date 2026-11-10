@@ -2,6 +2,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 from ...infrastructure.database import DatabaseUnitOfWork
+from ...core.errors import DomainError
 from .schema import OWNER_TRANSFER_COLUMNS, SCHEMA_MISSING, table_ready
 
 class SectOwnerTransferSqlRepository:
@@ -22,10 +23,10 @@ class SectOwnerTransferSqlRepository:
             sect_id=int(actor['sect_id']); sect=uow.query_one('SELECT sect_owner,sect_name FROM sects WHERE sect_id=?',(sect_id,))
             base={'actor_id':actor_id,'target_id':target_id,'sect_id':sect_id,'actor_name':str(actor['user_name'] or ''),'target_name':str(target['user_name'] or ''),'sect_name':str(sect['sect_name'] or '') if sect else ''}
             if sect is None:return {'status':'sect_missing',**base}
-            if str(sect['sect_owner'])!=actor_id or int(actor['sect_position'] or 0)!=int(owner_position):return {'status':'not_owner',**base}
+            if str(sect['sect_owner'])!=actor_id or int(actor['sect_position'] or 0)!=int(owner_position):return {'status':'not_owner','reason':'sect_owner_changed' if str(sect['sect_owner'])!=actor_id else 'sect_position_changed',**base}
             if target['sect_id']!=actor['sect_id']:return {'status':'target_not_member',**base}
             if int(target['sect_position'] or 0)==int(owner_position):return {'status':'target_already_owner',**base}
             a=uow.execute('UPDATE user_xiuxian SET sect_position=? WHERE user_id=? AND sect_id=? AND sect_position=?',(former_owner_position,actor_id,sect_id,owner_position)); t=uow.execute('UPDATE user_xiuxian SET sect_position=? WHERE user_id=? AND sect_id=?',(owner_position,target_id,sect_id)); s=uow.execute('UPDATE sects SET sect_owner=? WHERE sect_id=? AND sect_owner=?',(target_id,sect_id,actor_id))
-            if a.rowcount!=1 or t.rowcount!=1 or s.rowcount!=1: raise RuntimeError('sect membership changed concurrently')
+            if a.rowcount!=1 or t.rowcount!=1 or s.rowcount!=1: raise DomainError('sect_position_write_rejected' if a.rowcount!=1 or t.rowcount!=1 else 'sect_owner_write_rejected','sect owner transfer write count mismatch',{'subject':'actor' if a.rowcount!=1 else 'target' if t.rowcount!=1 else 'sect'})
             uow.execute('INSERT INTO sect_operations(operation_id,operation_type,actor_id,target_id,sect_id) VALUES(?,?,?,?,?)',(operation_id,'transfer_owner',actor_id,target_id,sect_id))
             return {'status':'transferred',**base}

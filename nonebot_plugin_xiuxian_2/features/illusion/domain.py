@@ -18,6 +18,7 @@ class IllusionChoiceResult:
     selected_option: str = ""
     question_index: int = 0
     choice_index: int = 0
+    reason: str = ""
 
     @property
     def succeeded(self) -> bool:
@@ -35,6 +36,7 @@ class IllusionChoiceResult:
             "selected_option": self.selected_option,
             "question_index": self.question_index,
             "choice_index": self.choice_index,
+            "reason": self.reason,
         }
 
 

@@ -1,4 +1,6 @@
 from __future__ import annotations
+from dataclasses import replace as _reason_replace
+from ...core.snapshot_reason import first_difference
 
 import json
 from dataclasses import dataclass
@@ -16,6 +18,8 @@ class RiftSettlementResult:
     status: str
     explore_count: int = 0
     message: str = ""
+    reason: str = ""
+    subject: str = ""
 
     @property
     def succeeded(self) -> bool:
@@ -127,7 +131,7 @@ class RiftSettlementSqlRepository(RiftDemonTokenBattleSqlRepository):
             if old is not None:
                 if str(old["payload"]) == payload:
                     return RiftSettlementResult("duplicate", int(old["explore_count"]), str(old["message"]))
-                return RiftSettlementResult("state_changed")
+                return _reason_replace(RiftSettlementResult("state_changed"), reason="operation_conflict", subject="")
 
             entry = uow.query_one("SELECT rift_data,status FROM rift_entries WHERE user_id=?", (user_id,))
             cd = uow.query_one("SELECT COALESCE(type,0) AS type,create_time,scheduled_time FROM user_cd WHERE user_id=?", (user_id,))
@@ -138,21 +142,21 @@ class RiftSettlementSqlRepository(RiftDemonTokenBattleSqlRepository):
                 expected_duration = int(expected_rift.get("time", 0))
                 scheduled_duration = int(cd["scheduled_time"])
             except (TypeError, ValueError):
-                return RiftSettlementResult("state_changed")
+                return _reason_replace(RiftSettlementResult("state_changed"), reason="rift_duration_invalid", subject="")
             elapsed = self._elapsed_minutes(cd["create_time"])
             if expected_duration <= 0 or scheduled_duration != expected_duration or elapsed is None:
-                return RiftSettlementResult("state_changed")
+                return _reason_replace(RiftSettlementResult("state_changed"), reason="rift_duration_invalid" if expected_duration <= 0 else "rift_duration_changed" if scheduled_duration != expected_duration else "rift_start_invalid", subject="")
             if elapsed < expected_duration:
                 return RiftSettlementResult("not_ready")
             if json.loads(str(entry["rift_data"])) != json.loads(rift_snapshot) or user is None or tuple(map(int, user.values())) != expected:
-                return RiftSettlementResult("state_changed")
+                return _reason_replace(RiftSettlementResult("state_changed"), reason="rift_snapshot_changed" if json.loads(str(entry["rift_data"])) != json.loads(rift_snapshot) else "user_missing" if user is None else first_difference(tuple(map(int,user.values())), expected, ("stone_changed","exp_changed","hp_changed","mp_changed")), subject="")
 
             count_row = uow.query_one('SELECT "explore_count" FROM player_data.rift WHERE user_id=?', (user_id,))
             current_count = int(count_row["explore_count"] or 0) if count_row else 0
             if current_count != expected_count:
-                return RiftSettlementResult("state_changed")
+                return _reason_replace(RiftSettlementResult("state_changed"), reason="rift_explore_count_changed", subject="")
             if expected[0] + delta[0] < 0:
-                return RiftSettlementResult("resource_missing")
+                return RiftSettlementResult("resource_missing", reason="stone_insufficient")
 
             totals: dict[int, int] = {}
             metadata: dict[int, tuple[str, str]] = {}

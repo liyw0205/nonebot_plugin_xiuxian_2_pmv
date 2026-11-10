@@ -1,13 +1,18 @@
 from __future__ import annotations
+
+from ...core.errors import DomainError
 import json
 from dataclasses import dataclass
 from pathlib import Path
 from ...infrastructure.database import DatabaseUnitOfWork
 from .operation_schema import operation_databases_ready, operation_schema_ready
+from .plant_diagnostics import plant_diagnosis
 
 @dataclass(frozen=True)
 class DongfuAccelerateResult:
     status:str
+    reason:str=""
+    subject:str=""
     @property
     def succeeded(self): return self.status in {'accelerated','duplicate'}
 
@@ -22,16 +27,16 @@ class DongfuAccelerateSqlRepository:
             uow.attach_database(self.player_database,'player_data')
             if not operation_schema_ready(uow, 'dongfu_accelerate_operations'): return DongfuAccelerateResult('schema_missing')
             old=uow.query_one('SELECT payload FROM dongfu_accelerate_operations WHERE operation_id=?',(operation_id,))
-            if old is not None: return DongfuAccelerateResult('duplicate' if str(old['payload'])==payload else 'state_changed')
+            if old is not None: return DongfuAccelerateResult('duplicate') if str(old['payload'])==payload else DongfuAccelerateResult('state_changed', reason='operation_conflict')
             row=uow.query_one('SELECT built,plant_slots FROM player_data.dongfu_status WHERE user_id=?',(user_id,));
             if row is None or int(row['built'] or 0)!=1: return DongfuAccelerateResult('dongfu_missing')
             slots=json.loads(str(row['plant_slots'] or '')); 
-            if self._canonical(slots)!=expected_slots: return DongfuAccelerateResult('state_changed')
+            if self._canonical(slots)!=expected_slots: return DongfuAccelerateResult('state_changed', **plant_diagnosis(slots, expected_slots))
             if slot_no>len(slots) or int(slots[slot_no-1].get('seed_id') or 0)<=0: return DongfuAccelerateResult('plot_empty')
             old_finish=str(slots[slot_no-1].get('plant_finish') or '');
-            if not old_finish or old_finish<=now: return DongfuAccelerateResult('already_mature')
+            if not old_finish or old_finish<=now: return DongfuAccelerateResult('already_mature', reason='plant_finish_missing' if not old_finish else 'already_mature')
             if uow.query_one('SELECT goods_num FROM back WHERE user_id=? AND goods_id=? AND goods_num>=1',(user_id,item_id)) is None: return DongfuAccelerateResult('item_insufficient')
             slots[slot_no-1]['plant_finish']=new_finish; active=next((slot for slot in slots if int(slot.get('seed_id') or 0)>0),None); legacy=(1,int(active['seed_id']),active.get('plant_start',''),active.get('plant_finish','')) if active else (0,0,'','')
-            if uow.execute('UPDATE back SET goods_num=goods_num-1 WHERE user_id=? AND goods_id=? AND goods_num>=1',(user_id,item_id)).rowcount!=1: return DongfuAccelerateResult('state_changed')
-            if uow.execute('UPDATE player_data.dongfu_status SET plant_slots=?,planting=?,plant_seed_id=?,plant_start=?,plant_finish=? WHERE user_id=?',(self._canonical(slots),*legacy,user_id)).rowcount!=1: return DongfuAccelerateResult('state_changed')
+            if uow.execute('UPDATE back SET goods_num=goods_num-1 WHERE user_id=? AND goods_id=? AND goods_num>=1',(user_id,item_id)).rowcount!=1: raise DomainError("item_write_rejected", 'accelerate write count mismatch')
+            if uow.execute('UPDATE player_data.dongfu_status SET plant_slots=?,planting=?,plant_seed_id=?,plant_start=?,plant_finish=? WHERE user_id=?',(self._canonical(slots),*legacy,user_id)).rowcount!=1: raise DomainError("plant_write_rejected", 'accelerate write count mismatch')
             uow.execute('INSERT INTO dongfu_accelerate_operations(operation_id,payload) VALUES(?,?)',(operation_id,payload)); return DongfuAccelerateResult('accelerated')

@@ -81,7 +81,7 @@ class TiantiSettlementSqlRepository:
         previous = uow.query_one("SELECT user_id, sect_level, detail_json FROM tianti_settlement_operations WHERE operation_id=?", (operation_id,))
         if previous:
             if str(previous["user_id"]) != user_id or int(previous["sect_level"]) != int(sect_fairyland_level):
-                return {"status": "state_changed", "user_id": user_id, "detail": {}}
+                return {"status": "state_changed", "reason": "operation_conflict", "user_id": user_id, "detail": {}}
             return {"status": "duplicate", "user_id": user_id, "detail": json.loads(previous["detail_json"])}
         row = uow.query_one("SELECT * FROM tianti_info WHERE user_id=?", (user_id,))
         data = self.profile.clean(row or {})

@@ -1,6 +1,7 @@
 import random
 
 from ..on_compat import on_command
+from ..command_guard import guard_command, result_failure
 from nonebot.params import CommandArg
 
 from ..adapter_compat import Bot, GroupMessageEvent, Message, PrivateMessageEvent, is_group_event
@@ -35,6 +36,7 @@ def _avatar_operation_id(event, action: str, user_id: str) -> str:
 
 
 @avatar_switch_cmd.handle(parameterless=[Cooldown(cd_time=0)])
+@guard_command("身外化身")
 async def avatar_switch_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """
     身外化身命令
@@ -53,11 +55,7 @@ async def avatar_switch_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessage
     if arg_text in ["本体", "回来", "返回", "切回"]:
         info = init_avatar_if_needed(main_id, operation_id=operation_id)
         if info.get("operation_status"):
-            message = (
-                "身份数据迁移未就绪，切回本体失败，请联系管理员"
-                if info["operation_status"] == "schema_missing"
-                else "化身初始化失败，切回本体失败，请重试"
-            )
+            message = result_failure("初始化化身", {"status":info["operation_status"]})
             await handle_send(bot, event, message)
             await avatar_switch_cmd.finish()
         result = _player_avatar_application().restore_active(
@@ -65,11 +63,7 @@ async def avatar_switch_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessage
             user_id=main_id,
         )
         if not result.ok:
-            message = (
-                "身份数据迁移未就绪，切回本体失败，请联系管理员"
-                if result.status == "schema_missing"
-                else "切回本体失败，请重试"
-            )
+            message = result_failure("切回本体", result)
             await handle_send(bot, event, message)
             await avatar_switch_cmd.finish()
         await handle_send(
@@ -87,11 +81,7 @@ async def avatar_switch_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessage
 
     role, info = toggle_avatar(main_id, operation_id=operation_id)
     if role is None:
-        message = (
-            "身份数据迁移未就绪，身外化身切换失败，请联系管理员"
-            if info.get("operation_status") == "schema_missing"
-            else "化身状态已变化或尚未初始化，请重试"
-        )
+        message = result_failure("切换化身", {"status":info.get("operation_status", "")})
         await handle_send(bot, event, message)
         await avatar_switch_cmd.finish()
 

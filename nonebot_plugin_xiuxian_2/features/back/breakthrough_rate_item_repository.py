@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from ...core.errors import DomainError
+
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -96,7 +98,7 @@ class BreakthroughRateItemSqlRepository:
                 (rate_gain, user_id),
             )
             if consumed.rowcount != 1 or updated.rowcount != 1:
-                return result("state_changed")
+                raise DomainError("item_write_rejected" if consumed.rowcount != 1 else "breakthrough_rate_write_rejected", "item effect write count mismatch")
             uow.execute(
                 "INSERT INTO breakthrough_rate_item_operations "
                 "(operation_id,user_id,item_id,quantity,rate_gain) VALUES(?,?,?,?,?)",

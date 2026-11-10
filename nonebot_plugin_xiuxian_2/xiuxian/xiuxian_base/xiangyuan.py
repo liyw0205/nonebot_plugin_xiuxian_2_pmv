@@ -7,6 +7,7 @@ from ...infrastructure.random_source import SystemRandom
 from ...infrastructure.ids import UUIDGenerator
 from ..on_compat import on_command
 from nonebot.log import logger
+from ..command_guard import result_failure
 from nonebot.params import CommandArg
 
 from ..adapter_compat import Bot, GroupMessageEvent, PrivateMessageEvent, Message
@@ -289,10 +290,10 @@ async def give_xiangyuan_(bot: Bot, event: GroupMessageEvent, args: Message = Co
         await handle_send(bot, event, "道友的灵石不够，请重新输入！")
         await give_xiangyuan.finish()
     if result.status == "item_insufficient":
-        await handle_send(bot, event, "可交易物品数量已发生变化，请重新输入！")
+        await handle_send(bot, event, "仙缘所需可交易物品数量不足，请查看背包并补足物品。")
         await give_xiangyuan.finish()
     if not result.succeeded:
-        await handle_send(bot, event, "仙缘创建未结算：抽奖当前状态已更新，请重新操作。")
+        await handle_send(bot, event, result_failure("创建仙缘", result))
         await give_xiangyuan.finish()
     xiangyuan_id = result.gift_id
     
@@ -368,7 +369,7 @@ async def get_xiangyuan_(bot: Bot, event: GroupMessageEvent):
         await handle_send(bot, event, "背包空间不足，无法领取仙缘！")
         await get_xiangyuan.finish()
     if not result.succeeded:
-        await handle_send(bot, event, "这份仙缘已被抢先领取，请重新尝试！")
+        await handle_send(bot, event, result_failure("领取仙缘", result))
         await get_xiangyuan.finish()
     reward = result.stone
     received_items = [f"{name}x{amount}" for _, name, amount in result.items]

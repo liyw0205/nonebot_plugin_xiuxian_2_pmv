@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from ...core.errors import DomainError
+
 import json
 from typing import Any
 
@@ -96,7 +98,7 @@ class AccessoryPackageGameRepository:
             elif existing["status"] == "pending_accessory":
                 return "applied", json.loads(existing["before_json"])
             elif existing["status"] == "applied":
-                return "state_changed", json.loads(existing["before_json"])
+                return "package_already_applied", json.loads(existing["before_json"])
         before = self.snapshot(uow, request)
         if before["stone"] is None:
             return "user_missing", before
@@ -131,14 +133,14 @@ class AccessoryPackageGameRepository:
                 (request.quantity, request.user_id, request.package_id, request.quantity),
             )
         if changed.rowcount != 1:
-            return "state_changed", before
+            raise DomainError("package_consume_write_rejected", "accessory package consumption was not saved")
         if stone_delta:
             changed = uow.execute(
                 "UPDATE user_xiuxian SET stone = CAST(stone AS REAL) + ? WHERE user_id = ? AND CAST(stone AS REAL) + ? >= 0",
                 (stone_delta, request.user_id, stone_delta),
             )
             if changed.rowcount != 1:
-                return "stone_insufficient", before
+                raise DomainError("stone_write_rejected", "accessory package stone reward was not saved")
         for reward in request.rewards:
             if reward.name == "灵石" or reward.item_id is None:
                 continue
@@ -251,7 +253,7 @@ class AccessoryPackagePlayerRepository:
     def apply(self, uow: DatabaseUnitOfWork, *, operation_id: str, user_id: str, accessories: tuple[AccessoryReward, ...], limit: int) -> str:
         previous = uow.query_one("SELECT status FROM accessory_package_operations WHERE operation_id=?", (operation_id,))
         if previous is not None:
-            return "applied" if previous["status"] == "applied" else "state_changed"
+            return "applied" if previous["status"] == "applied" else "accessory_package_phase_invalid"
         row = uow.query_one("SELECT equipped, bag FROM player_accessory WHERE user_id=?", (user_id,))
         equipped = json.loads(row["equipped"]) if row and row.get("equipped") else {}
         bag = json.loads(row["bag"]) if row and row.get("bag") else []

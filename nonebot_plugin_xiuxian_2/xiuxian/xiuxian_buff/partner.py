@@ -8,7 +8,7 @@ from pathlib import Path
 from ...paths import get_paths
 from ...infrastructure.clock import SystemClock
 from ...infrastructure.ids import UUIDGenerator
-from ..command_guard import guard_command
+from ..command_guard import guard_command, result_failure
 from ...infrastructure.random_source import SystemRandom
 
 from ..on_compat import on_command
@@ -436,7 +436,11 @@ async def two_exp_invite_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
         other_id = existing_invite.target_id if existing_invite.inviter_id == str(user_id) else existing_invite.inviter_id
         target_info = get_user_profile(other_id)
         remaining_time = existing_invite.expires_at - runtime_clock.now().timestamp()
-        msg = f"你已经向{target_info['user_name']}发送了双修邀请，请等待{int(remaining_time)}秒后邀请过期或对方回应后再发送新邀请！"
+        name = target_info['user_name'] if target_info else other_id
+        if existing_invite.inviter_id == str(user_id):
+            msg = f"你已向{name}发送双修邀请，请等待对方回应或{max(0, int(remaining_time))}秒后过期。"
+        else:
+            msg = f"{name}向你发出了双修邀请，请发送「同意双修」或「拒绝双修」，剩余{max(0, int(remaining_time))}秒。"
         await handle_send(bot, event, msg, md_type="buff", k1="同意", v1="同意双修", k2="拒绝", v2="拒绝双修", k3="双修", v3="双修")
         await two_exp_invite.finish()
 
@@ -444,12 +448,22 @@ async def two_exp_invite_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
     exp_count = 1  # 默认双修次数
 
     arg_text = args.extract_plain_text().strip()
-    # 尝试解析次数
-    count_match = re.search(r'(\d+)次', arg_text)
-    if count_match:
-        exp_count = int(count_match.group(1))
-        # 移除次数信息，保留道号
-        arg_text = re.sub(r'\d+次', '', arg_text).strip()
+    parts = arg_text.rsplit(maxsplit=1)
+    count_text = None
+    if two_qq and arg_text:
+        count_text, arg_text = arg_text, ""
+    elif len(parts) == 2:
+        arg_text, count_text = parts
+    elif arg_text.endswith("次"):
+        match = re.fullmatch(r"(.+?)\s*([+-]?\d+)次", arg_text)
+        if match:
+            arg_text, count_text = match.groups()
+    if count_text is not None:
+        count_text = count_text.removesuffix("次")
+        if not re.fullmatch(r"[0-9]+", count_text) or int(count_text) <= 0:
+            await handle_send(bot, event, "双修次数必须为正整数。格式：双修 道号 [次数]，例如：双修 道友 2次。")
+            return
+        exp_count = int(count_text)
 
     if not two_qq and arg_text:
         user_info = _sql_message().get_user_info_with_name(arg_text)
@@ -486,7 +500,7 @@ async def two_exp_invite_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
     max_count_1 = two_exp_limit + impart_two_exp_1 + main_two_1 - limt_1
 
     if max_count_1 <= 0:
-        msg = "你的双修次数已用尽，无法发送邀请！"
+        msg = f"你的今日双修次数已用尽（已用{limt_1}/上限{limt_1 + max_count_1}），请等待每日重置或使用双修令。"
         await handle_send(bot, event, msg, md_type="buff", k1="双修", v1="双修", k2="次数", v2="我的双修次数", k3="修为", v3="我的修为")
         await two_exp_invite.finish()
 
@@ -520,7 +534,7 @@ async def two_exp_invite_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
         max_count_2 = two_exp_limit + impart_two_exp_2 + main_two_2 - limt_2
 
         if max_count_2 <= 0:
-            msg = "对方今日双修次数已用尽，无法邀请！"
+            msg = f"{user_2_info['user_name']}今日双修次数已用尽（已用{limt_2}/上限{limt_2 + max_count_2}），请对方等待每日重置或使用双修令。"
             await handle_send(bot, event, msg, md_type="buff", k1="双修", v1="双修", k2="次数", v2="我的双修次数", k3="修为", v3="我的修为")
             await two_exp_invite.finish()
         
@@ -534,10 +548,7 @@ async def two_exp_invite_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
             expected_target_protection="on",
         )
         if not created.succeeded:
-            if created.status == "protection_changed":
-                msg = "对方已开启或变更双修保护，本次未发起，请重新确认后再请。"
-            else:
-                msg = "双方已有待处理的双修邀请，请稍后再试！"
+            msg = result_failure("发送双修邀请", created)
             await handle_send(
                 bot, event, msg, md_type="buff",
                 k1="双修", v1="双修",
@@ -593,17 +604,16 @@ async def direct_two_exp(
     user_id_1 = str(user_id_1)
     user_id_2 = str(user_id_2)
 
-    try:
-        exp_count = int(exp_count)
-    except (ValueError, TypeError):
-        exp_count = 1
-    exp_count = max(1, exp_count)
+    if not re.fullmatch(r"[0-9]+", str(exp_count)) or int(exp_count) <= 0:
+        await handle_send(bot, event, "双修次数必须为正整数，请重新指定次数。")
+        return
+    exp_count = int(exp_count)
 
     user_1 = _sql_message().get_user_info_with_id(user_id_1)
     user_2 = _sql_message().get_user_info_with_id(user_id_2)
 
     if not user_1 or not user_2:
-        msg = "无法获取玩家信息，无法进行双修。"
+        msg = f"双修无法开始：{'发起人' if not user_1 else '受邀人'}（{user_id_1 if not user_1 else user_id_2}）的角色资料不存在，请确认角色已创建。"
         await handle_send(
             bot, event, msg,
             md_type="buff",
@@ -633,7 +643,7 @@ async def direct_two_exp(
     max_count_2 = two_exp_limit + impart_two_exp_2 + main_two_2 - limt_2
 
     if max_count_1 <= 0:
-        msg = "你的双修次数不足，无法进行双修！"
+        msg = f"发起人{user_1.get('user_name', user_id_1)}今日双修次数已用尽（已用{limt_1}/上限{limt_1 + max_count_1}），请等待每日重置或使用双修令。"
         await handle_send(
             bot, event, msg,
             md_type="buff",
@@ -644,7 +654,7 @@ async def direct_two_exp(
         return
 
     if max_count_2 <= 0:
-        msg = "对方的双修次数不足，无法进行双修！"
+        msg = f"受邀人{user_2.get('user_name', user_id_2)}今日双修次数已用尽（已用{limt_2}/上限{limt_2 + max_count_2}），请等待每日重置或使用双修令。"
         await handle_send(
             bot, event, msg,
             md_type="buff",
@@ -671,6 +681,7 @@ async def direct_two_exp(
     total_exp_2 = 0
     event_descriptions = []
     actual_used_count = 0
+    stop_reason = ""
 
     # 关键：临时修为，用于多次双修逐次重新计算上限（兼容科学计数法 TEXT）
     temp_exp_1 = safe_int(user_1["exp"])
@@ -687,6 +698,7 @@ async def direct_two_exp(
 
         # 双方都无法获得修为时停止
         if exp_1 == 0 and exp_2 == 0:
+            stop_reason = event_desc
             break
 
         total_exp_1 += exp_1
@@ -702,7 +714,7 @@ async def direct_two_exp(
         actual_used_count += 1
 
     if actual_used_count == 0:
-        msg = "双修过程中修为已达上限，无法进行双修！"
+        msg = f"双修未开始：{stop_reason}"
         await handle_send(
             bot, event, msg,
             md_type="buff",
@@ -745,7 +757,10 @@ async def direct_two_exp(
         # 必须传 k1/v1，否则 md 模板按钮会显示 None
         await handle_send(
             bot, event,
-            "双修未结算：双修当前状态已更新，请重新发起。",
+            result_failure(
+                "双修" + (f"（{'发起人' if settlement.subject == user_id_1 else '受邀人'}：{(user_1 if settlement.subject == user_id_1 else user_2).get('user_name', settlement.subject)}）" if settlement.subject else ""),
+                settlement,
+            ),
             md_type="buff",
             k1="双修", v1="双修",
             k2="次数", v2="我的双修次数",
@@ -785,6 +800,8 @@ async def direct_two_exp(
     msg += f"{user_1_info['user_name']}获得修为：{number_to(total_exp_1)}\n"
     msg += f"{user_2_info['user_name']}获得修为：{number_to(total_exp_2)}"
     msg += affection_msg
+    if stop_reason:
+        msg += f"\n后续双修停止：{stop_reason}"
 
     await handle_send(
         bot, event, msg,
@@ -812,13 +829,13 @@ async def process_two_exp(
     user_2 = get_user_profile(user_id_2)
 
     if not user_1 or not user_2:
-        return 0, 0, "无法获取玩家信息，无法进行双修。"
+        return 0, 0, f"{'发起人' if not user_1 else '受邀人'}（{user_id_1 if not user_1 else user_id_2}）角色资料不存在，请确认角色已创建。"
 
     user_mes_1 = _sql_message().get_user_info_with_id(user_id_1)
     user_mes_2 = _sql_message().get_user_info_with_id(user_id_2)
 
     if not user_mes_1 or not user_mes_2:
-        return 0, 0, "无法获取玩家信息，无法进行双修。"
+        return 0, 0, f"{'发起人' if not user_mes_1 else '受邀人'}的修炼资料不存在，请联系管理员检查角色资料。"
 
     level_1 = user_mes_1["level"]
     level_2 = user_mes_2["level"]
@@ -835,7 +852,12 @@ async def process_two_exp(
 
     # 非道侣：任意一方到上限就停止
     if not is_partner and (remaining_exp_1 <= 0 or remaining_exp_2 <= 0):
-        return 0, 0, "修为已达上限，无法继续双修。"
+        limits = []
+        if remaining_exp_1 <= 0:
+            limits.append(f"发起人{user_1['user_name']}修为{calc_exp_1}/本境上限{max_exp_1_limit}")
+        if remaining_exp_2 <= 0:
+            limits.append(f"受邀人{user_2['user_name']}修为{calc_exp_2}/本境上限{max_exp_2_limit}")
+        return 0, 0, "；".join(limits) + "，已达上限，请先突破境界。"
 
     user_buff_data_1 = UserBuffDate(user_id_1)
     user_buff_data_2 = UserBuffDate(user_id_2)
@@ -955,11 +977,12 @@ async def process_two_exp(
     exp_limit_2 = int(max(0, exp_limit_2))
 
     if not is_partner and exp_limit_1 <= 0 and exp_limit_2 <= 0:
-        return 0, 0, "修为已达上限，无法继续双修。"
+        return 0, 0, f"双方当前修为（{calc_exp_1}、{calc_exp_2}）计算的双修收益取整后均为0，请先通过其他修炼方式积累修为。"
 
     return exp_limit_1, exp_limit_2, event_desc
 
 @two_exp_accept.handle(parameterless=[Cooldown(cd_time=0)])
+@guard_command("同意双修")
 async def two_exp_accept_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """同意双修"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -1062,7 +1085,7 @@ async def two_exp_protect_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
         current_status,
     )
     if not changed.succeeded:
-        await handle_send(bot, event, "**双修保护**\n---\n⚠️ 设置未生效：双修保护开关已更新，请重新设置。", md_type="buff", k1="开启", v1="双修保护 开启", k2="关闭", v2="双修保护 关闭", k3="拒绝", v3="双修保护 拒绝", k4="状态", v4="双修保护 状态")
+        await handle_send(bot, event, result_failure("设置双修保护", changed, messages={"state_changed": "双修保护开关与设置前不一致，请查询双修保护状态后重新设置。"}), md_type="buff", k1="开启", v1="双修保护 开启", k2="关闭", v2="双修保护 关闭", k3="拒绝", v3="双修保护 拒绝", k4="状态", v4="双修保护 状态")
         await two_exp_protect.finish()
     await handle_send(bot, event, msg, md_type="buff", k1="开启", v1="双修保护 开启", k2="关闭", v2="双修保护 关闭", k3="拒绝", v3="双修保护 拒绝", k4="状态", v4="双修保护 状态")
     await two_exp_protect.finish()
@@ -1176,7 +1199,7 @@ async def use_two_exp_token(bot, event, item_id, num):
     elif result.status == "limit_full":
         msg = "当前剩余双修次数已满！"
     else:
-        msg = "双修未结算：当前状态已更新，请刷新背包后重试。"
+        msg = result_failure("使用双修令", result)
     
     await handle_send(bot, event, msg, md_type="buff", k1="双修", v1="双修", k2="我的修为", v2="我的修为", k3="次数", v3="我的双修次数")
 
@@ -1271,6 +1294,7 @@ async def expire_partner_invite(user_id, invite_id, bot, event):
         del partner_invite_cache[str(user_id)]
 
 @agree_bind.handle(parameterless=[Cooldown(cd_time=0)])
+@guard_command("同意道侣")
 async def agree_bind_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """同意道侣绑定"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -1287,6 +1311,12 @@ async def agree_bind_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await handle_send(bot, event, msg, md_type="buff", k1="同意", v1="同意道侣", k2="绑定", v2="绑定道侣", k3="道侣", v3="我的道侣")
         await agree_bind.finish()
         
+    invite_data = partner_invite_cache[str(user_id)]
+    inviter_id = str(invite_data['inviter'])
+    inviter_info = get_user_profile(inviter_id)
+    if inviter_info is None:
+        await handle_send(bot, event, "同意道侣：发起人的角色资料不存在，请确认对方已创建角色。")
+        await agree_bind.finish()
     bind_time = runtime_clock.now().strftime('%Y-%m-%d %H:%M:%S')
     invitee_partner = load_partner(user_id).get("partner_id")
     inviter_partner = load_partner(inviter_id).get("partner_id")
@@ -1297,19 +1327,13 @@ async def agree_bind_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         expected_invitee_partner=invitee_partner, expected_inviter_partner=inviter_partner,
     )
     if not result.succeeded:
-        await handle_send(bot, event, "道侣邀请未成立：邀请当前状态已更新，请重新发起。", md_type="buff")
+        await handle_send(bot, event, result_failure("同意道侣", result), md_type="buff")
         await agree_bind.finish()
     if result.status == "applied" and str(user_id) in partner_invite_cache:
         del partner_invite_cache[str(user_id)]
 
     msg = f"你已与{inviter_info['user_name']}结为道侣，绑定时间为{result.bind_time}。"
     await handle_send(bot, event, msg)
-    await agree_bind.finish()
-    # 删除邀请
-    del partner_invite_cache[str(user_id)]
-    
-    msg = f"你已与{inviter_info['user_name']}结为道侣，绑定时间为{partner_data['bind_time']}。"
-    await handle_send(bot, event, msg)    
     await agree_bind.finish()
 
 @unbind_partner.handle(parameterless=[Cooldown(cd_time=0)])
@@ -1347,7 +1371,7 @@ async def unbind_partner_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
         await handle_send(bot, event, "你与道侣的绑定时间不足7天，暂时不能解除关系。", md_type="buff")
         await unbind_partner.finish()
     if not result.succeeded:
-        await handle_send(bot, event, "道侣操作未执行：道侣关系当前状态已更新。", md_type="buff")
+        await handle_send(bot, event, result_failure("解除道侣", result, messages={"too_early": "绑定尚未满7天，请满7天后再解除。"}), md_type="buff")
         await unbind_partner.finish()
     msg = "你已与道侣断绝关系。"
     await handle_send(bot, event, msg, md_type="buff", k1="绑定", v1="绑定道侣", k2="解除", v2="断绝关系", k3="道侣", v3="我的道侣")
@@ -1879,7 +1903,7 @@ def _mentor_application_result_message(result, requested_mentor_id):
         )
     mentor_info = get_user_profile(requested_mentor_id)
     mentor_name = mentor_info["user_name"] if mentor_info else str(requested_mentor_id)
-    return f"向{mentor_name}拜师未成功：双方当前状态已更新，请稍后重试。"
+    return result_failure(f"向{mentor_name}拜师", result, messages={"protected": "对方已开启拜师保护。", "already_pending": "已有待处理的拜师申请，请先查看申请。", "duplicate": "该拜师申请已有回执，但申请详情缺失，请联系管理员核对申请记录。", "invite_conflict": "该事件已用于其他拜师申请，请发送一条新命令。"})
 
 
 @apply_mentor.handle(parameterless=[Cooldown(cd_time=0)])
@@ -2087,15 +2111,7 @@ async def agree_mentor_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         )
         await agree_mentor.finish()
 
-    # 分状态提示，避免一律「申请当前状态已更新」
-    fail_msg = {
-        "invitation_changed": "拜师未成立：申请已过期、已处理或不存在，请让对方重新拜师。",
-        "state_changed": "拜师未成立：双方境界刚变动，请重新申请后再同意。",
-        "already_bound": "拜师未成立：对方已有师父。",
-        "cooldown_active": "拜师未成立：师徒冷却中。",
-        "capacity_reached": "拜师未成立：你的收徒名额已满。",
-        "operation_conflict": "拜师未成立：该确认事件已用于其他操作。",
-    }.get(result.status, "拜师未成立：请稍后重试或让对方重新申请。")
+    fail_msg = result_failure("同意拜师", result, subjects={str(mentor_id): "师父", str(apprentice_id): "徒弟"})
     await handle_send(bot, event, fail_msg, **buttons)
     await agree_mentor.finish()
 
@@ -2419,7 +2435,7 @@ async def unbind_mentor_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
             )
             await unbind_mentor.finish()
         if not settlement.succeeded:
-            await handle_send(bot, event, "逐出未执行：对方已非门下弟子，或师徒关系已解除。", **buttons)
+            await handle_send(bot, event, result_failure("逐出师门", settlement), **buttons)
             await unbind_mentor.finish()
         if settlement.status == "applied":
             log_message(user_id, f"[师徒] 将{target_name}逐出师门")
@@ -2461,7 +2477,7 @@ async def unbind_mentor_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
             apprentice_title_ids=[MENTOR_TITLE_IDS["graduate"]], mentor_title_ids=mentor_titles,
         )
         if not settlement.succeeded:
-            await handle_send(bot, event, "出师未结算：师徒当前状态已更新。", **buttons)
+            await handle_send(bot, event, result_failure("出师", settlement, subjects={str(mentor_id): "师父", str(user_id): "徒弟"}), **buttons)
             await unbind_mentor.finish()
         reward_lines = [
             f"徒弟获得灵石{number_to(settlement.apprentice_stone)}",
@@ -2512,7 +2528,7 @@ async def unbind_mentor_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         )
         await unbind_mentor.finish()
     if not settlement.succeeded:
-        await handle_send(bot, event, "离师未执行：师徒关系当前状态已更新。", **buttons)
+        await handle_send(bot, event, result_failure("离开师门", settlement), **buttons)
         await unbind_mentor.finish()
     if settlement.status == "applied":
         log_message(user_id, f"[师徒] 离开师父{mentor_name}门下")
@@ -2620,7 +2636,7 @@ async def mentor_transmission_(bot: Bot, event: GroupMessageEvent | PrivateMessa
         apprentice_desc=f"师父{mentor_info['user_name']}传功，获得修为{number_to(give_exp)}",
     )
     if not settlement.succeeded:
-        await handle_send(bot, event, "传功未结算：当前状态已更新，请重新发起。", **buttons)
+        await handle_send(bot, event, result_failure("传功", settlement, subjects={str(mentor_id): "师父", str(target_id): "徒弟"}), **buttons)
         await mentor_transmission.finish()
     if settlement.status == "applied":
         mentor_exp_cd.add_user(mentor_id)

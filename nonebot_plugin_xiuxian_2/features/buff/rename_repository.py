@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from ...core.errors import DomainError
+
 import json
 from pathlib import Path
 
@@ -8,8 +10,9 @@ from .operation_schema import SCHEMA_MISSING, operations_ready
 
 
 class BlessedSpotRenameResult:
-    def __init__(self, status: str, user_id: str, name: str = "") -> None:
+    def __init__(self, status: str, user_id: str, name: str = "", reason: str = "") -> None:
         self.status = status
+        self.reason = reason
         self.user_id = user_id
         self.name = name
 
@@ -29,16 +32,16 @@ class BlessedSpotRenameSqlRepository:
             previous = uow.query_one("SELECT payload,result_json FROM blessed_spot_operations WHERE operation_id=? AND action=?", (operation_id, "rename"))
             if previous is not None:
                 if str(previous["payload"]) != payload:
-                    return BlessedSpotRenameResult("state_changed", user_id)
+                    return BlessedSpotRenameResult("state_changed", user_id, reason="operation_conflict")
                 return BlessedSpotRenameResult("duplicate", user_id, json.loads(str(previous["result_json"]))["name"])
             row = uow.query_one("SELECT COALESCE(blessed_spot_flag,0) AS enabled,COALESCE(blessed_spot_name,'') AS name FROM user_xiuxian WHERE user_id=?", (user_id,))
             if row is None or int(row["enabled"]) == 0:
                 return BlessedSpotRenameResult("blessed_spot_missing", user_id)
             if str(row["name"]) != expected_name:
-                return BlessedSpotRenameResult("state_changed", user_id)
+                return BlessedSpotRenameResult("state_changed", user_id, reason="blessed_name_changed")
             changed = uow.execute("UPDATE user_xiuxian SET blessed_spot_name=? WHERE user_id=? AND COALESCE(blessed_spot_name,'')=? AND COALESCE(blessed_spot_flag,0)<>0", (new_name, user_id, expected_name))
             if changed.rowcount != 1:
-                return BlessedSpotRenameResult("state_changed", user_id)
+                raise DomainError("blessed_name_write_rejected", "blessed name write count mismatch")
             uow.execute("INSERT INTO blessed_spot_operations(operation_id,action,payload,result_json) VALUES(?,?,?,?)", (operation_id, "rename", payload, json.dumps({"name": new_name}, ensure_ascii=False)))
             return BlessedSpotRenameResult("applied", user_id, new_name)
 

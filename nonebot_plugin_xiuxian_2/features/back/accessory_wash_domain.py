@@ -29,6 +29,7 @@ class AccessoryWashChange:
     affected: int = 0
     stone_delta: int = 0
     accessory: dict[str, Any] | None = None
+    reason: str = ""
 
     @property
     def succeeded(self) -> bool:

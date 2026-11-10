@@ -2,6 +2,7 @@ from ..xiuxian_utils.lay_out import assign_bot, Cooldown
 from types import SimpleNamespace
 from nonebot.params import CommandArg
 from ..on_compat import on_command
+from ..command_guard import guard_command, result_failure
 from ..xiuxian_config import XiuConfig
 from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage
 from ..adapter_compat import (
@@ -78,6 +79,7 @@ async def fusion_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
     await fusion_help.finish()
 
 @fusion_item.handle(parameterless=[Cooldown(cd_time=0)])
+@guard_command("合成")
 async def fusion_item_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
@@ -120,6 +122,7 @@ async def fusion_item_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
     await fusion_item.finish()
 
 @force_fusion.handle(parameterless=[Cooldown(cd_time=0)])
+@guard_command("合成")
 async def force_fusion_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
@@ -276,7 +279,7 @@ async def general_fusion(user_id, equipment_id, equipment, operation_id, quantit
             reserved_items=reserved_items, max_goods_num=XiuConfig().max_goods_num,
         )
         result = SimpleNamespace(**dict(outcome.data or {}))
-        result.status = "duplicate" if outcome.replayed else outcome.status
+        result.status = "duplicate" if outcome.ok and outcome.replayed else (outcome.data or {}).get("status", outcome.code or outcome.status)
         result.succeeded = outcome.ok
         if result.status == "duplicate":
             if result.successful:
@@ -291,13 +294,8 @@ async def general_fusion(user_id, equipment_id, equipment, operation_id, quantit
                 "item_insufficient": "材料不足，本次合成未结算。",
                 "user_missing": "未找到修仙数据，本次合成未结算。",
                 "inventory_full": "成品将超过背包上限，本次合成未结算。",
-                "state_changed": "合成扣费扣材时当前状态已更新，本次未结算，请重新【合成】。",
-                "operation_conflict": "合成请求冲突（重复点击），请稍后再试。",
             }
-            return False, status_messages.get(
-                result.status,
-                f"合成未结算（{result.status}），请重新【合成】。",
-            )
+            return False, result_failure("合成", result, messages=status_messages)
         if result.successful:
             item_type = equipment.get('type', '物品')
             return True, f"道友成功合成了{item_type}: {equipment['name']}！！"
@@ -314,7 +312,7 @@ async def general_fusion(user_id, equipment_id, equipment, operation_id, quantit
     )
     batch_data = dict(batch_outcome.data or {})
     result = SimpleNamespace(**batch_data)
-    result.status = "duplicate" if batch_outcome.replayed else batch_outcome.status
+    result.status = "duplicate" if batch_outcome.ok and batch_outcome.replayed else (batch_outcome.data or {}).get("status", batch_outcome.code or batch_outcome.status)
     result.succeeded = batch_outcome.ok
     if result.status == "duplicate":
         consumed_failures = result.failed_count - result.protected_count
@@ -329,13 +327,8 @@ async def general_fusion(user_id, equipment_id, equipment, operation_id, quantit
             "item_insufficient": "材料不足，批量合成未结算。",
             "inventory_full": "成品数量将超过背包上限，批量合成未结算。",
             "user_missing": "未找到修仙数据，批量合成未结算。",
-            "state_changed": "批量合成扣费扣材时当前状态已更新，本次未结算，请重新【合成】。",
-            "operation_conflict": "合成请求冲突（重复点击），请稍后再试。",
         }
-        return False, status_messages.get(
-            result.status,
-            f"批量合成未结算（{result.status}），请重新【合成】。",
-        )
+        return False, result_failure("批量合成", result, messages=status_messages)
     consumed_failures = result.failed_count - result.protected_count
     return result.successful_count > 0, (
         f"批量合成完成：共 {quantity} 次，成功 {result.successful_count} 次，"

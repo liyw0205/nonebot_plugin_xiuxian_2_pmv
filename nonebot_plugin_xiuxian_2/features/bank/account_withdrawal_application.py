@@ -44,13 +44,15 @@ class BankWithdrawalApplication:
                 return {"status": "user_missing", "operation_id": operation_id}
             if account is None:
                 status = "state_changed" if expected_saved_stone is not None else "user_missing"
-                return {"status": status, "operation_id": operation_id}
-            if expected_saved_stone is not None and (
-                int(account["saved_stone"]) != int(expected_saved_stone)
-                or str(account["updated_at"]) != str(expected_saved_at or "")
-                or str(account["bank_level"]) != str(bank_level)
-            ):
-                return {"status": "state_changed", "operation_id": operation_id}
+                return {"status": status, "reason": "bank_account_missing", "operation_id": operation_id}
+            if expected_saved_stone is not None:
+                for actual, wanted, reason in (
+                    (int(account["saved_stone"]), int(expected_saved_stone), "bank_saved_changed"),
+                    (str(account["updated_at"]), str(expected_saved_at or ""), "bank_saved_at_changed"),
+                    (str(account["bank_level"]), str(bank_level), "bank_level_changed"),
+                ):
+                    if actual != wanted:
+                        return {"status": "state_changed", "reason": reason, "operation_id": operation_id}
             try:
                 decision = decide_withdraw(wallet=int(wallet["stone"] or 0), saved=int(account["saved_stone"]), amount=int(amount), interest=int(interest))
             except ValueError as exc:

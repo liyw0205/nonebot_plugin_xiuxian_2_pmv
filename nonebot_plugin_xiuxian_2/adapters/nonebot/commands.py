@@ -13,9 +13,11 @@ from datetime import date, timedelta
 from typing import Any
 
 from nonebot.adapters import Bot, Event, Message
+from nonebot.exception import MatcherException, ProcessException
 
 from ...core.errors import DomainError
 from ...core.result import ReplyPlan
+from ...xiuxian.command_guard import report_exception, result_failure
 from .context import CommandContext, context_from_event
 
 
@@ -93,12 +95,11 @@ async def _dispatch(
     try:
         runtime = _runtime(holder)
         plan = build(context, runtime.services[feature])
-    except DomainError as exc:
-        plan = ReplyPlan(exc.message, reference=True)
-    except (KeyError, RuntimeError) as exc:
-        plan = ReplyPlan(str(exc), reference=True)
-    except Exception:
-        plan = ReplyPlan("当前服务暂不可用，请稍后重试。", reference=True)
+    except (MatcherException, ProcessException):
+        raise
+    except Exception as exc:
+        action = {"sign_in": "签到", "daily_fortune": "每日运势", "stone_gift": "赠送灵石", "impart": "传承", "pet": "宠物", "bank": "银行"}.get(feature, "修仙命令")
+        plan = ReplyPlan(report_exception(action, exc, phase="业务处理"), reference=True)
     return await _send(holder, event, bot, plan)
 
 
@@ -236,12 +237,10 @@ def register_bank_first_use_matcher(driver: Any, holder: dict[str, Any], *, limi
         try:
             runtime = _runtime(holder)
             plan = _build_bank_first_use(context, runtime.services["bank_first_use"], args, clock=runtime.clock, limit=limit)
-        except DomainError as exc:
-            plan = ReplyPlan(exc.message, reference=True)
-        except (KeyError, RuntimeError, TypeError, ValueError) as exc:
-            plan = ReplyPlan(str(exc), reference=True)
-        except Exception:
-            plan = ReplyPlan("当前服务暂不可用，请稍后重试。", reference=True)
+        except (MatcherException, ProcessException):
+            raise
+        except Exception as exc:
+            plan = ReplyPlan(report_exception("灵庄新存灵石", exc), reference=True)
         return await _send(holder, event, bot, plan)
 
     setattr(driver, marker, matcher)
@@ -278,12 +277,14 @@ def register_bank_first_use_extended_matchers(driver: Any, holder: dict[str, Any
                 "user_missing": "未找到修仙数据。",
                 "saved_stone_insufficient": "灵庄存款不足。",
                 "stone_insufficient": "灵石不足。",
-                "state_changed": "账户状态已变化，请刷新后重试。",
                 "operation_conflict": "请求冲突，请勿重复提交不同内容。",
             }
-            plan = ReplyPlan(labels.get(str(result.get("status")), "操作未结算。"), reference=True)
-        except (DomainError, KeyError, RuntimeError, TypeError, ValueError) as exc:
-            plan = ReplyPlan(str(exc), reference=True)
+            operation = {"withdraw":"灵庄取款", "upgrade":"灵庄升级", "settle_interest":"灵庄结息"}.get(action, "灵庄操作")
+            plan = ReplyPlan(labels.get(str(result.get("status"))) or result_failure(operation, result), reference=True)
+        except (MatcherException, ProcessException):
+            raise
+        except Exception as exc:
+            plan = ReplyPlan(report_exception("灵庄操作", exc), reference=True)
         return await _send(holder, event, bot, plan)
 
     if "bank_first_use_withdrawal" in services:
@@ -375,12 +376,10 @@ def register_migrated_matchers(driver: Any, holder: dict[str, Any]) -> tuple[typ
             plan = _build_sign_makeup(
                 context, runtime.services["sign_in"], args
             )
-        except DomainError as exc:
-            plan = ReplyPlan(exc.message, reference=True)
-        except (KeyError, RuntimeError) as exc:
-            plan = ReplyPlan(str(exc), reference=True)
-        except Exception:
-            plan = ReplyPlan("当前服务暂不可用，请稍后重试。", reference=True)
+        except (MatcherException, ProcessException):
+            raise
+        except Exception as exc:
+            plan = ReplyPlan(report_exception("补签", exc), reference=True)
         return await _send(holder, event, bot, plan)
 
     @stone.handle()
@@ -389,12 +388,10 @@ def register_migrated_matchers(driver: Any, holder: dict[str, Any]) -> tuple[typ
         try:
             runtime = _runtime(holder)
             plan = _build_stone(context, runtime.services["stone_gift"], args)
-        except DomainError as exc:
-            plan = ReplyPlan(exc.message, reference=True)
-        except (KeyError, RuntimeError) as exc:
-            plan = ReplyPlan(str(exc), reference=True)
-        except Exception:
-            plan = ReplyPlan("当前服务暂不可用，请稍后重试。", reference=True)
+        except (MatcherException, ProcessException):
+            raise
+        except Exception as exc:
+            plan = ReplyPlan(report_exception("赠送灵石", exc), reference=True)
         return await _send(holder, event, bot, plan)
 
     @stone_history.handle()

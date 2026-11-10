@@ -106,7 +106,7 @@ class AccessoryAffixSqlRepository:
             )
             if previous is not None:
                 if str(previous["action"]) != action or str(previous["payload"]) != payload_json:
-                    return AccessoryAffixChange("state_changed", action, user_id)
+                    return AccessoryAffixChange("state_changed", action, user_id, reason="operation_conflict")
                 return self._result(action, user_id, "duplicate", str(previous["result_json"]))
 
             row = uow.query_one(
@@ -121,7 +121,7 @@ class AccessoryAffixSqlRepository:
             if current is None:
                 return AccessoryAffixChange("accessory_missing", action, user_id)
             if self._json(current) != self._json(expected_accessory):
-                return AccessoryAffixChange("state_changed", action, user_id)
+                return AccessoryAffixChange("state_changed", action, user_id, reason="accessory_changed")
 
             if where == "bag":
                 bag[key] = accessory

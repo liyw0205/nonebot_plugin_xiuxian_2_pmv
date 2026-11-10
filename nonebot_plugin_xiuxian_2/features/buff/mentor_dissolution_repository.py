@@ -67,6 +67,8 @@ class MentorDissolutionResult:
     apprentice_exp: int = 0
     shortfall: int = 0
     extra: dict[str, Any] = field(default_factory=dict)
+    reason: str = ""
+    subject: str = ""
 
     @property
     def succeeded(self) -> bool:
@@ -356,7 +358,10 @@ class MentorDissolutionService:
                 or str(user["level"]) != str(expected_apprentice_level)
             ):
                 return MentorDissolutionResult(
-                    "state_changed", charge=decision.charge, gained=decision.gained
+                    "state_changed", charge=decision.charge, gained=decision.gained,
+                    reason=("mentor_relation_changed" if apprentice_id not in apprentices or parent is None or str(parent["mentor_id"]) != mentor_id
+                            else "user_missing" if user is None else "level_changed"),
+                    subject=apprentice_id,
                 )
             if decision.status == "insufficient_cultivation":
                 return MentorDissolutionResult(

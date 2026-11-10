@@ -1,6 +1,8 @@
 from typing import List
 import random
 from ..xiuxian_utils.xiuxian2_handle import XIUXIAN_IMPART_BUFF
+from ...features.impart.repository import ImpartRepository
+from ...paths import get_paths
 
 xiuxian_impart = XIUXIAN_IMPART_BUFF()
 
@@ -16,6 +18,7 @@ def random_bullet() -> List[int]:
 
 
 async def impart_pk_check(user_id):
+    ImpartRepository(get_paths().impart_db).state(str(user_id), ensure=True)
     if xiuxian_impart.get_user_impart_info_with_id(user_id) is None:
         xiuxian_impart._create_user(user_id)
         return xiuxian_impart.get_user_impart_info_with_id(user_id)

@@ -13,6 +13,7 @@ class EquipmentChange:
     user_id: str
     goods_id: int
     previous_id: int = 0
+    reason: str = ""
 
     @property
     def succeeded(self) -> bool:
@@ -64,7 +65,7 @@ class EquipmentSqlRepository:
             )
             if previous is not None:
                 if str(previous["payload"] or "") != payload:
-                    return EquipmentChange("state_changed", user_id, goods_id, int(previous["previous_id"]))
+                    return EquipmentChange("state_changed", user_id, goods_id, int(previous["previous_id"]), reason="operation_conflict")
                 return EquipmentChange("duplicate", user_id, goods_id, int(previous["previous_id"]))
 
             inventory = uow.query_one(

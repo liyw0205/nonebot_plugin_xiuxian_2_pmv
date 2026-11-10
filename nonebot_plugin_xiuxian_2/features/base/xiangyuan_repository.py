@@ -1,4 +1,5 @@
 from __future__ import annotations
+from dataclasses import replace as _reason_replace
 
 import json
 from dataclasses import dataclass
@@ -14,6 +15,8 @@ class XiangyuanCreateResult:
     status: str
     gift_id: int = 0
     send_count: int = 0
+    reason: str = ""
+    subject: str = ""
 
     @property
     def succeeded(self) -> bool:
@@ -30,6 +33,8 @@ class XiangyuanClaimResult:
     receiver_count: int = 0
     remaining_stone: int = 0
     receive_count: int = 0
+    reason: str = ""
+    subject: str = ""
 
     @property
     def succeeded(self) -> bool:
@@ -281,7 +286,7 @@ class XiangyuanSqlRepository:
                 ).fetchone()
                 if gift is None or int(gift[3]) >= int(gift[2]):
                     conn.rollback()
-                    return XiangyuanClaimResult("unavailable", gift_id=gift_id)
+                    return _reason_replace(XiangyuanClaimResult("unavailable", gift_id=gift_id), reason="gift_missing" if gift is None else "gift_exhausted", subject="")
                 if conn.execute(
                     "SELECT 1 FROM xiangyuan_receivers WHERE group_id=? AND gift_id=? AND user_id=?",
                     (group_id, gift_id, user_id),
@@ -292,7 +297,7 @@ class XiangyuanSqlRepository:
                 is_last = int(gift[3]) + 1 >= int(gift[2])
                 if stone_reward > remaining_stone or (is_last and stone_reward != remaining_stone):
                     conn.rollback()
-                    return XiangyuanClaimResult("state_changed", gift_id=gift_id)
+                    return _reason_replace(XiangyuanClaimResult("state_changed", gift_id=gift_id), reason="gift_stone_changed", subject="")
                 available_items = {}
                 for row in conn.execute(
                     "SELECT goods_id,goods_name,goods_type,quantity FROM xiangyuan_gift_items "
@@ -301,7 +306,7 @@ class XiangyuanSqlRepository:
                     available_items[int(row[0])] = (str(row[1]), str(row[2]), int(row[3]))
                 if any(item_id not in available_items for item_id in item_ids):
                     conn.rollback()
-                    return XiangyuanClaimResult("state_changed", gift_id=gift_id)
+                    return _reason_replace(XiangyuanClaimResult("state_changed", gift_id=gift_id), reason="gift_item_changed", subject="")
                 awarded = tuple((item_id, available_items[item_id][0], 1) for item_id in item_ids)
                 for item_id, _, amount in awarded:
                     current = conn.execute(

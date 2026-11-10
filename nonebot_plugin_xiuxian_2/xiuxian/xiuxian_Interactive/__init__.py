@@ -1,4 +1,5 @@
 from ..on_compat import on_command
+from ..command_guard import result_failure
 from .. import NICKNAME
 from ...paths import get_paths
 from ..adapter_compat import (
@@ -970,7 +971,7 @@ async def handle_give_exp(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
     elif result.get("status") in {"applied", "duplicate", "already_claimed"}:
         message = runtime_random.choice(REFUSE_EXP_MESSAGES)
     elif result.get("status") in {"state_changed", "operation_conflict"}:
-        message = "互动未结算：角色当前状态已更新。"
+        message = result_failure("互动", result)
     else:
         message = "未找到角色信息，无法发放修为。"
     await handle_send(bot, event, message)
@@ -997,7 +998,7 @@ async def handle_give_stone(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     elif result.get("status") in {"applied", "duplicate", "already_claimed"}:
         message = runtime_random.choice(REFUSE_STONE_MESSAGES)
     elif result.get("status") in {"state_changed", "operation_conflict"}:
-        message = "互动未结算：角色当前状态已更新。"
+        message = result_failure("互动", result)
     else:
         message = "未找到角色信息，无法发放灵石。"
     await handle_send(bot, event, message)

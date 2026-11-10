@@ -7,8 +7,9 @@ from ...infrastructure.database import DatabaseUnitOfWork
 
 
 class RiftSpeedupResult:
-    def __init__(self, status: str, new_time: int = 0, rift_data: dict | None = None, create_time: str | None = None) -> None:
+    def __init__(self, status: str, new_time: int = 0, rift_data: dict | None = None, create_time: str | None = None, *, reason: str = "") -> None:
         self.status, self.new_time, self.rift_data, self.create_time = status, new_time, rift_data or {}, create_time
+        self.reason = reason
 
 
 class RiftSpeedupSqlRepository:
@@ -49,12 +50,12 @@ class RiftSpeedupSqlRepository:
             )
             if previous is not None:
                 if str(previous["payload"]) != payload:
-                    return RiftSpeedupResult("state_changed")
+                    return RiftSpeedupResult("state_changed", reason="operation_conflict")
                 return RiftSpeedupResult("duplicate", int(previous["new_time"]), json.loads(str(previous["rift_data"])), previous["create_time"])
             entry = uow.query_one("SELECT rift_data,status,duration FROM rift_entries WHERE user_id=?", (user_id,))
             cd = uow.query_one("SELECT type,create_time,scheduled_time FROM user_cd WHERE user_id=?", (user_id,))
             if entry is None or str(entry["status"]) != "active" or cd is None or int(cd["type"]) != 3:
-                return RiftSpeedupResult("not_active")
+                return RiftSpeedupResult("not_active", reason="rift_entry_missing" if entry is None else "rift_entry_resolved" if str(entry["status"]) != "active" else "rift_activity_missing" if cd is None else "activity_type_changed")
             current = json.loads(str(entry["rift_data"]))
             current_cd = {"type": int(cd["type"]), "create_time": cd["create_time"], "scheduled_time": cd["scheduled_time"]}
             current_duration = int(entry["duration"])
@@ -62,7 +63,7 @@ class RiftSpeedupSqlRepository:
                 expected_snapshot is not None
                 and (current != expected_rift or current_cd != expected_cd)
             ):
-                return RiftSpeedupResult("state_changed", int(entry["duration"]), current, cd["create_time"])
+                return RiftSpeedupResult("state_changed", int(entry["duration"]), current, cd["create_time"], reason="rift_duration_changed" if current_duration != int(current.get("time", 0)) else "rift_snapshot_changed" if current != expected_rift else "activity_type_changed" if current_cd["type"] != expected_cd["type"] else "training_start_changed" if current_cd["create_time"] != expected_cd["create_time"] else "rift_duration_changed")
             if int(entry["duration"]) <= 10:
                 return RiftSpeedupResult("not_needed", int(entry["duration"]), current, cd["create_time"])
             new_time = max(1, int(entry["duration"]) * int(remaining_ratio) // 100)
@@ -83,9 +84,9 @@ class RiftSpeedupSqlRepository:
                 return RiftSpeedupResult("item_missing", int(entry["duration"]), current, cd["create_time"])
             snapshot = json.dumps(updated, ensure_ascii=False, sort_keys=True)
             if uow.execute("UPDATE rift_entries SET rift_data=?,duration=? WHERE user_id=? AND status='active'", (snapshot, new_time, user_id)).rowcount != 1:
-                return RiftSpeedupResult("state_changed", int(entry["duration"]), current, cd["create_time"])
+                return RiftSpeedupResult("state_changed", int(entry["duration"]), current, cd["create_time"], reason="rift_duration_changed" if current_duration != int(current.get("time", 0)) else "rift_snapshot_changed" if current != expected_rift else "activity_type_changed" if current_cd["type"] != expected_cd["type"] else "training_start_changed" if current_cd["create_time"] != expected_cd["create_time"] else "rift_duration_changed")
             if uow.execute("UPDATE user_cd SET scheduled_time=? WHERE user_id=? AND type=3", (new_time, user_id)).rowcount != 1:
-                return RiftSpeedupResult("state_changed", int(entry["duration"]), current, cd["create_time"])
+                return RiftSpeedupResult("state_changed", int(entry["duration"]), current, cd["create_time"], reason="rift_duration_changed" if current_duration != int(current.get("time", 0)) else "rift_snapshot_changed" if current != expected_rift else "activity_type_changed" if current_cd["type"] != expected_cd["type"] else "training_start_changed" if current_cd["create_time"] != expected_cd["create_time"] else "rift_duration_changed")
             uow.execute("INSERT INTO rift_speedup_operations(operation_id,payload,new_time,rift_data,create_time) VALUES(?,?,?,?,?)", (operation_id, payload, new_time, snapshot, cd["create_time"]))
             return RiftSpeedupResult("applied", new_time, updated, cd["create_time"])
 

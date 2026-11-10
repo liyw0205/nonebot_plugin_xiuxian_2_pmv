@@ -1,4 +1,5 @@
 from __future__ import annotations
+from dataclasses import replace as _reason_replace
 
 import json
 from contextlib import closing
@@ -15,6 +16,8 @@ class DestinyTribulationResult:
     status: str
     target_level: str = ""
     user_id: str = ""
+    reason: str = ""
+    subject: str = ""
 
     @property
     def succeeded(self) -> bool:
@@ -106,7 +109,7 @@ class DestinyTribulationService:
                     or int(user[1] or 0) != expected_exp
                 ):
                     conn.rollback()
-                    return DestinyTribulationResult("state_changed", target_level, user_id)
+                    return _reason_replace(DestinyTribulationResult("state_changed", target_level, user_id), reason="user_missing" if user is None else "level_changed" if str(user[0]) != expected_level else "exp_changed", subject="")
                 consumed = conn.execute(
                     "UPDATE back SET goods_num=goods_num-1,"
                     "bind_num=MIN(COALESCE(bind_num,0),goods_num-1),"
@@ -125,7 +128,7 @@ class DestinyTribulationService:
                 )
                 if changed.rowcount != 1:
                     conn.rollback()
-                    return DestinyTribulationResult("state_changed", target_level, user_id)
+                    return _reason_replace(DestinyTribulationResult("state_changed", target_level, user_id), reason="breakthrough_write_rejected", subject="")
                 conn.execute("DELETE FROM user_tribulation WHERE user_id=%s", (user_id,))
                 increment_stat(conn, user_id, "渡劫次数", 1)
                 increment_stat(conn, user_id, "渡劫成功", 1)

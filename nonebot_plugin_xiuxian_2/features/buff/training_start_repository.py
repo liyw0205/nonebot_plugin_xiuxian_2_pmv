@@ -9,8 +9,9 @@ from ...infrastructure.database import DatabaseUnitOfWork
 
 
 class NormalTrainingStartResult:
-    def __init__(self, status: str, kind: str = "", create_time: str = "", scheduled_time: str = "") -> None:
+    def __init__(self, status: str, kind: str = "", create_time: str = "", scheduled_time: str = "", reason: str = "") -> None:
         self.status, self.kind, self.create_time, self.scheduled_time = status, kind, create_time, scheduled_time
+        self.reason = reason
 
 
 class NormalTrainingStartSqlRepository:
@@ -54,9 +55,9 @@ class NormalTrainingStartSqlRepository:
         if user is None or cd is None:
             return NormalTrainingStartResult("user_missing")
         if int(cd["type"]) != 0 or (int(user["exp"]), int(user["stone"])) != (int(expected_exp), int(expected_stone)):
-            return NormalTrainingStartResult("state_changed")
+            return NormalTrainingStartResult("state_changed", reason="activity_type_changed" if int(cd["type"]) != 0 else "exp_changed" if int(user["exp"]) != int(expected_exp) else "stone_changed")
         if uow.execute("UPDATE user_cd SET type=5,create_time=?,scheduled_time=? WHERE user_id=? AND COALESCE(type,0)=0", (create_time, scheduled_time, user_id)).rowcount != 1:
-            return NormalTrainingStartResult("state_changed")
+            return NormalTrainingStartResult("state_changed", reason="activity_write_rejected")
         uow.execute("INSERT INTO normal_training_operations(operation_id,user_id,payload,kind,create_time,scheduled_time,status) VALUES(?,?,?,?,?,?,?)", (operation_id, user_id, payload, kind, create_time, scheduled_time, "pending"))
         return NormalTrainingStartResult("started", kind, create_time, scheduled_time)
 

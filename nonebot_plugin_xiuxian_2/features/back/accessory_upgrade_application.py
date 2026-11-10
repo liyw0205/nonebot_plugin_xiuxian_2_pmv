@@ -45,7 +45,7 @@ class AccessoryUpgradeApplication:
             self.random_source,
         )
         if plan.status != "applied" or plan.accessory is None:
-            return AccessoryUpgradeChange(plan.status, "upgrade", str(user_id))
+            return AccessoryUpgradeChange(plan.status, "upgrade", str(user_id), reason=plan.reason)
         return self.repository.upgrade(
             operation_id,
             user_id,

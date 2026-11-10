@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from ...infrastructure.database import DatabaseUnitOfWork
+from ...core.errors import DomainError
 from .._service_port import ServicePort
 from .catalog import card_definitions
 from .love_sand_repository import LoveSandSqlRepository
@@ -32,8 +33,8 @@ class ImpartRepository(ServicePort):
                 "SELECT 1 AS present FROM sqlite_master "
                 "WHERE type='table' AND name='xiuxian_impart'"
             ) is None:
-                return None
-            if ensure:
+                raise DomainError("schema_missing", "impart base schema missing")
+            if ensure and uow.query_one("SELECT 1 FROM xiuxian_impart WHERE user_id=?", (user_id,)) is None:
                 uow.execute(
                     "INSERT OR IGNORE INTO xiuxian_impart("
                     "user_id,impart_hp_per,impart_atk_per,impart_mp_per,impart_exp_up,boss_atk,"

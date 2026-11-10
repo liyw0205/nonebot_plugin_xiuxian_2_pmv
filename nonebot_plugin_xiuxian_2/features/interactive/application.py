@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from ...core.player_reasons import reason_text
+
 from pathlib import Path
 from typing import Any, Mapping
 
@@ -129,7 +131,7 @@ class InteractiveApplication:
                         outcome = OperationOutcome.rejected(
                             operation_id,
                             action,
-                            messages.get(result.status, "互动操作未完成。"),
+                            reason_text(data.get("reason")) or messages.get(result.status, "互动操作未完成。"),
                             code=result.status,
                             data=data,
                             audit_category="interactive",

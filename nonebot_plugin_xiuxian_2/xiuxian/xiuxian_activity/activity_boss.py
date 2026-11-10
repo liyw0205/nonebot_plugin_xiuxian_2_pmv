@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from ...core.player_reasons import reason_text
+
 import hashlib
 import time
 
@@ -675,7 +677,7 @@ def claim_boss_milestone_reward(
                 "state_changed": "首领进度领奖状态已变化，请重新查询",
                 "operation_conflict": "领取请求冲突，请重新发送",
             }
-            return False, messages.get(previous.status, f"领取失败（{previous.status}）")
+            return False, reason_text(getattr(previous, "reason", "")) or messages.get(previous.status, f"领取失败（{previous.status}）")
     allowed, reason, _ = _runtime_gate("claim")
     if not allowed:
         return False, reason
@@ -706,7 +708,7 @@ def claim_boss_milestone_reward(
         "state_changed": "首领进度领奖状态已变化，请重新查询",
         "operation_conflict": "领取请求冲突，请重新发送",
     }
-    return False, messages.get(result.status, f"领取失败（{result.status}）")
+    return False, reason_text(getattr(result, "reason", "")) or messages.get(result.status, f"领取失败（{result.status}）")
 
 
 def claim_boss_rank_reward(
@@ -732,7 +734,7 @@ def claim_boss_rank_reward(
                 "user_missing": "角色不存在",
                 "operation_conflict": "领取请求冲突，请重新发送",
             }
-            return False, messages.get(previous.status, f"领取失败（{previous.status}）")
+            return False, reason_text(getattr(previous, "reason", "")) or messages.get(previous.status, f"领取失败（{previous.status}）")
     allowed, reason, _ = _runtime_gate("claim")
     if not allowed:
         return False, reason
@@ -767,7 +769,7 @@ def claim_boss_rank_reward(
         "user_missing": "角色不存在",
         "operation_conflict": "领取请求冲突，请重新发送",
     }
-    return False, messages.get(result.status, f"领取失败（{result.status}）")
+    return False, reason_text(getattr(result, "reason", "")) or messages.get(result.status, f"领取失败（{result.status}）")
 
 
 def claim_boss_rewards(

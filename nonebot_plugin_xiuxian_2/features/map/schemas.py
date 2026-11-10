@@ -54,6 +54,7 @@ class MapCombatLifecycleResult:
     stamina: int = 0
     task: dict[str, Any] | None = None
     snapshot: str = ""
+    reason: str = ""
 
     @property
     def succeeded(self) -> bool:
@@ -64,6 +65,7 @@ class MapCombatLifecycleResult:
 class MapExploreStartResult:
     status: str
     stamina: int
+    reason: str = ""
 
     @property
     def succeeded(self) -> bool:
@@ -75,6 +77,7 @@ class MapExploreSettlementResult:
     status: str
     stone: int
     rewards: tuple[tuple[int, int], ...]
+    reason: str = ""
 
     @property
     def succeeded(self) -> bool:
@@ -86,6 +89,7 @@ class MapMissionClaimResult:
     status: str
     stone: int
     rewards: tuple[tuple[int, int], ...]
+    reason: str = ""
 
     @property
     def succeeded(self) -> bool:

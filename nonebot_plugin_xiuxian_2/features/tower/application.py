@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any, Mapping
 
 from ...core.errors import ConflictError, DomainError, ValidationError
+from ...core.player_reasons import reason_text
 from ...core.result import OperationOutcome, ReplyPlan
 from ...infrastructure.database import DatabaseUnitOfWork, OperationLedger
 from ...infrastructure.clock import SystemClock
@@ -41,13 +42,13 @@ class TowerApplication:
                         previous = existing.outcome()
                         if previous is not None:
                             return previous.replay()
-                        raise ConflictError("操作正在处理中")
+                        raise ConflictError("操作正在处理中", reason="operation_pending")
                 data = normalize(_data(call()))
                 status = str(data.get("status", "failed"))
                 if status in {"applied", "duplicate"}:
                     outcome = OperationOutcome.applied(operation_id, action, data=data, granted=data.get("granted", {}), audit_category="tower")
                 else:
-                    outcome = OperationOutcome.rejected(operation_id, action, messages.get(status, "通天塔操作未完成。"), code=status, data=data, audit_category="tower")
+                    outcome = OperationOutcome.rejected(operation_id, action, reason_text(data.get("reason") or status) or messages.get(status, "通天塔结果无法识别，请联系管理员核对该请求。"), code=status, data=data, audit_category="tower")
                 with DatabaseUnitOfWork(self.game_database, immediate=True) as uow:
                     self.ledger.finish(uow, outcome)
                 return outcome
@@ -66,7 +67,7 @@ class TowerApplication:
         return self._execute(
             operation_id=request.operation_id, user_id=request.user_id, action="tower.purchase", payload=request.payload(),
             call=lambda: self._repository().purchase(request.operation_id, request.user_id, request.item_id, request.item_name, request.item_type, request.quantity, request.unit_cost, request.weekly_limit, request.expected_score, request.expected_weekly_purchases, request.max_goods_num, request.bind_flag, request.today),
-            normalize=lambda data: {"status": data.get("status", "failed"), "quantity": int(data.get("quantity", 0) or 0), "cost": int(data.get("cost", 0) or 0), "score": int(data.get("score", 0) or 0), "purchased": int(data.get("purchased", 0) or 0), "inventory": int(data.get("inventory", 0) or 0), "granted": {"item": request.item_id, "quantity": int(data.get("quantity", 0) or 0)}},
+            normalize=lambda data: {"reason": data.get("reason", ""), "status": data.get("status", "failed"), "quantity": int(data.get("quantity", 0) or 0), "cost": int(data.get("cost", 0) or 0), "score": int(data.get("score", 0) or 0), "purchased": int(data.get("purchased", 0) or 0), "inventory": int(data.get("inventory", 0) or 0), "granted": {"item": request.item_id, "quantity": int(data.get("quantity", 0) or 0)}},
             messages={"score_insufficient": "积分不足。", "limit_reached": "该物品已达到每周限购。", "inventory_full": "物品数量已达上限。", "state_changed": "通天塔状态已更新，请重新兑换。", "user_missing": "未找到道友数据。"},
         )
 
@@ -79,7 +80,7 @@ class TowerApplication:
         return self._execute(
             operation_id=request.operation_id, user_id=request.user_id, action="tower.settle", payload=request.payload(),
             call=lambda: self._repository().settle(request.operation_id, request.user_id, request.expected_tower, request.floor, request.score, request.stone, request.exp, request.items, request.max_goods_num, expected_player=request.expected_player, final_hp=request.final_hp, final_mp=request.final_mp, stamina_cost=request.stamina_cost, challenge_succeeded=request.challenge_succeeded),
-            normalize=lambda data: {"status": data.get("status", "failed"), "score": int(data.get("score", 0) or 0), "stone": int(data.get("stone", 0) or 0), "exp": int(data.get("exp", 0) or 0), "floor": int(data.get("floor", 0) or 0), "challenge_succeeded": bool(data.get("challenge_succeeded", True)), "rewards": data.get("rewards", ()), "stamina_cost": int(data.get("stamina_cost", 0) or 0), "granted": {"score": int(data.get("score", 0) or 0), "stone": int(data.get("stone", 0) or 0), "exp": int(data.get("exp", 0) or 0)}},
+            normalize=lambda data: {"reason": data.get("reason", ""), "status": data.get("status", "failed"), "score": int(data.get("score", 0) or 0), "stone": int(data.get("stone", 0) or 0), "exp": int(data.get("exp", 0) or 0), "floor": int(data.get("floor", 0) or 0), "challenge_succeeded": bool(data.get("challenge_succeeded", True)), "rewards": data.get("rewards", ()), "stamina_cost": int(data.get("stamina_cost", 0) or 0), "granted": {"score": int(data.get("score", 0) or 0), "stone": int(data.get("stone", 0) or 0), "exp": int(data.get("exp", 0) or 0)}},
             messages={"stamina_insufficient": "体力不足。", "inventory_full": "通天塔奖励无法放入背包。", "state_changed": "通天塔状态已更新，请重新挑战。", "user_missing": "未找到道友数据。"},
         )
 

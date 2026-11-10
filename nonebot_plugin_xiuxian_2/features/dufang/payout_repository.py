@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from ...core.errors import DomainError
+
 import json
 from dataclasses import dataclass
 from pathlib import Path
@@ -15,6 +17,7 @@ class DufangPayoutResult:
     wallet_stone: int = 0
     gain: int = 0
     loss: int = 0
+    reason: str = ""
 
     @property
     def succeeded(self) -> bool:
@@ -93,11 +96,11 @@ class DufangPayoutSqlRepository:
             previous = uow.query_one("SELECT payload,wallet_stone,gain,loss FROM dufang_payout_operations WHERE operation_id=?", (operation_id,))
             if previous is not None:
                 if str(previous["payload"]) != payload:
-                    return DufangPayoutResult("state_changed")
+                    return DufangPayoutResult("state_changed", reason="operation_conflict")
                 return DufangPayoutResult("duplicate", int(previous["wallet_stone"]), int(previous["gain"]), int(previous["loss"]))
             bet = uow.query_one("SELECT user_id,status FROM dufang_bets WHERE bet_id=?", (bet_id,))
             if bet is None or str(bet["user_id"]) != user_id:
-                return DufangPayoutResult("state_changed")
+                return DufangPayoutResult("state_changed", reason="bet_missing" if bet is None else "bet_subject_mismatch")
             resolution = uow.query_one(
                 "SELECT plan_json FROM dufang_bet_resolutions WHERE operation_id=?",
                 (bet_id,),
@@ -110,7 +113,7 @@ class DufangPayoutSqlRepository:
             if outcome not in {"win", "loss"} or gain < 0 or requested_loss < 0:
                 raise RuntimeError("dufang frozen payout plan is invalid")
             if str(bet["status"]) != "pending":
-                return DufangPayoutResult("state_changed")
+                return DufangPayoutResult("state_changed", reason="bet_resolved")
             user = uow.query_one("SELECT COALESCE(stone,0) AS stone FROM user_xiuxian WHERE user_id=?", (user_id,))
             if user is None:
                 return DufangPayoutResult("user_missing")
@@ -118,7 +121,7 @@ class DufangPayoutSqlRepository:
             actual_loss = min(requested_loss, int(user["stone"])) if outcome == "loss" else 0
             wallet = int(user["stone"]) + actual_gain - actual_loss
             if uow.execute("UPDATE dufang_bets SET status=?,settled_at=? WHERE bet_id=? AND status='pending'", (outcome, str(settled_at), bet_id)).rowcount != 1:
-                return DufangPayoutResult("state_changed")
+                raise DomainError("bet_receipt_write_rejected", "dufang payout status write count mismatch")
             if uow.execute("UPDATE user_xiuxian SET stone=? WHERE user_id=?", (wallet, user_id)).rowcount != 1:
                 raise RuntimeError("dufang payout user state changed")
             uow.execute("INSERT INTO dufang_payout_operations VALUES(?,?,?,?,?,CURRENT_TIMESTAMP)", (operation_id, payload, wallet, actual_gain, actual_loss))

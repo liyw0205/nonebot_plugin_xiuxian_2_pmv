@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from ...core.player_reasons import reason_text
+
 import json
 from pathlib import Path
 from typing import Any, Mapping
@@ -39,6 +41,7 @@ class ActivityBossRankClaimApplication:
     @staticmethod
     def _outcome(operation_id: str, result: ActivityBossRankClaimResult) -> OperationOutcome[Any]:
         data = {"status": "applied" if result.succeeded else result.status, "name": result.name, "rank": result.rank}
+        data.update({key: getattr(result, key) for key in ("reason", "subject") if getattr(result, key)})
         if result.succeeded:
             return OperationOutcome.applied(
                 operation_id,
@@ -60,7 +63,7 @@ class ActivityBossRankClaimApplication:
         return OperationOutcome.rejected(
             operation_id,
             ActivityBossRankClaimApplication.action,
-            messages.get(result.status, f"领取失败（{result.status}）"),
+            reason_text(result.reason) or messages.get(result.status, f"领取失败（{result.status}）"),
             code=result.status,
             data=data,
             audit_category="activity_reward",
@@ -72,7 +75,7 @@ class ActivityBossRankClaimApplication:
         status = str(data.get("status") or outcome.code or outcome.status)
         if status == "applied" and outcome.replayed:
             status = "duplicate"
-        return ActivityBossRankClaimResult(status, str(data.get("name") or ""), int(data.get("rank", 0)))
+        return ActivityBossRankClaimResult(status, str(data.get("name") or ""), int(data.get("rank", 0)), str(data.get("reason") or ("legacy_rejection" if status == "state_changed" else "")), str(data.get("subject") or ""))
 
     def get_result(self, operation_id: str, user_id: str | None = None) -> ActivityBossRankClaimResult | None:
         return self.repository.get_result(operation_id, user_id)

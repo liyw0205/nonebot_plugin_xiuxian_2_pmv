@@ -1,4 +1,5 @@
 from __future__ import annotations
+from dataclasses import replace as _reason_replace
 
 import json
 from collections.abc import Callable
@@ -14,6 +15,8 @@ class AdminAccessorySnapshot:
     status: str
     equipped: dict[str, Any] = field(default_factory=dict)
     bag: list[dict[str, Any]] = field(default_factory=list)
+    reason: str = ""
+    subject: str = ""
 
 
 @dataclass(frozen=True)
@@ -24,6 +27,8 @@ class AdminAccessoryAdjustmentResult:
     requested_quantity: int = 0
     affected_quantity: int = 0
     accessories: tuple[dict[str, Any], ...] = ()
+    reason: str = ""
+    subject: str = ""
 
     @property
     def succeeded(self) -> bool:
@@ -316,7 +321,7 @@ class AdminAccessorySqlRepository:
                 return AdminAccessoryAdjustmentResult("user_missing", "grant", user_id, quantity)
             current = self._load_owned(uow, user_id)
             if not self._validate_snapshot(current, expected_equipped, expected_bag):
-                return AdminAccessoryAdjustmentResult("state_changed", "grant", user_id, quantity)
+                return _reason_replace(AdminAccessoryAdjustmentResult("state_changed", "grant", user_id, quantity), reason="accessory_rows_inconsistent" if current is None else "accessory_equipped_changed" if self._json(current[0]) != self._json(expected_equipped) else "accessory_bag_changed", subject="")
             equipped, bag = current
             known_uids = self._owned_uids(equipped, bag)
             if known_uids is None:
@@ -392,7 +397,7 @@ class AdminAccessorySqlRepository:
                 return AdminAccessoryAdjustmentResult("user_missing", "destroy", user_id, quantity)
             current = self._load_owned(uow, user_id)
             if not self._validate_snapshot(current, expected_equipped, expected_bag):
-                return AdminAccessoryAdjustmentResult("state_changed", "destroy", user_id, quantity)
+                return _reason_replace(AdminAccessoryAdjustmentResult("state_changed", "destroy", user_id, quantity), reason="accessory_rows_inconsistent" if current is None else "accessory_equipped_changed" if self._json(current[0]) != self._json(expected_equipped) else "accessory_bag_changed", subject="")
             equipped, bag = current
             if self._owned_uids(equipped, bag) is None:
                 return AdminAccessoryAdjustmentResult("invalid_state", "destroy", user_id, quantity)

@@ -236,6 +236,7 @@ class BuffApplication(LegacyApplication):
             for name in (
                 "status", "kind", "create_time", "scheduled_time",
                 "exp_gain", "stone_gain", "hp_gain", "mp_gain",
+                "reason", "subject",
             )
             if hasattr(result, name)
         }
@@ -265,7 +266,7 @@ class BuffApplication(LegacyApplication):
                     previous = existing.outcome()
                     if previous is not None:
                         return previous.replay()
-                    raise ConflictError("修炼操作正在处理中")
+                    raise ConflictError("修炼操作正在处理中", reason="operation_pending")
                 result = call(uow)
                 data = self._training_result_data(result)
                 if str(data.get("status")) == "schema_missing":
@@ -312,6 +313,7 @@ class BuffApplication(LegacyApplication):
     def _closing_data(result: Any) -> dict[str, Any]:
         return {
             "status": str(result.status),
+            "reason": getattr(result, "reason", ""),
             "exp_gain": int(result.exp_gain),
             "stone_cost": int(result.stone_cost),
             "hp": int(result.hp),

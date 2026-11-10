@@ -46,7 +46,7 @@ class PetApplication:
                         previous = existing.outcome()
                         if previous is not None:
                             return previous.replay()
-                        raise ConflictError("操作正在处理中")
+                        raise ConflictError("操作正在处理中", reason="operation_pending")
                 raw = _data(call())
                 status = str(raw.get("status", "failed"))
                 data = {"status": status, **raw}

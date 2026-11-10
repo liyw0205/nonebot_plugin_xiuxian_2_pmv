@@ -1,4 +1,6 @@
 from __future__ import annotations
+
+from ...core.errors import DomainError
 import json
 from dataclasses import dataclass
 from pathlib import Path
@@ -8,6 +10,7 @@ from .operation_schema import operation_databases_ready, operation_schema_ready
 @dataclass(frozen=True)
 class DongfuPatrolResult:
     status:str; patrol_count:int=0; patrol_guard:int=0
+    reason:str=""
     @property
     def succeeded(self): return self.status in {'patrolled','duplicate'}
 
@@ -20,7 +23,7 @@ class DongfuPatrolSqlRepository:
             uow.attach_database(self.player_database,'player_data')
             if not operation_schema_ready(uow, 'dongfu_patrol_operations'): return DongfuPatrolResult('schema_missing')
             old=uow.query_one('SELECT payload,patrol_count,patrol_guard FROM dongfu_patrol_operations WHERE operation_id=?',(operation_id,))
-            if old is not None: return DongfuPatrolResult('duplicate',int(old['patrol_count']),int(old['patrol_guard'])) if str(old['payload'])==payload else DongfuPatrolResult('state_changed')
+            if old is not None: return DongfuPatrolResult('duplicate',int(old['patrol_count']),int(old['patrol_guard'])) if str(old['payload'])==payload else DongfuPatrolResult('state_changed', reason='operation_conflict')
             user=uow.query_one('SELECT user_stamina FROM user_xiuxian WHERE user_id=?',(user_id,));
             if user is None: return DongfuPatrolResult('user_missing')
             if int(user['user_stamina'] or 0)<stamina_cost: return DongfuPatrolResult('stamina_insufficient')
@@ -32,7 +35,7 @@ class DongfuPatrolSqlRepository:
                 item=uow.query_one('SELECT COALESCE(goods_num,0) AS goods_num FROM back WHERE user_id=? AND goods_id=?',(user_id,int(reward[0]))); 
                 if (0 if item is None else int(item['goods_num']))+int(reward[2])>max_goods_num: return DongfuPatrolResult('inventory_full',count,guard)
             count,guard=count+1,min(3,guard+1)
-            if uow.execute('UPDATE user_xiuxian SET user_stamina=user_stamina-?,stone=COALESCE(stone,0)+? WHERE user_id=? AND user_stamina>=?',(stamina_cost,stone_gain,user_id,stamina_cost)).rowcount!=1: return DongfuPatrolResult('state_changed')
-            if uow.execute('UPDATE player_data.dongfu_status SET patrol_date=?,patrol_count=?,patrol_guard=? WHERE user_id=?',(day,count,guard,user_id)).rowcount!=1: return DongfuPatrolResult('state_changed')
+            if uow.execute('UPDATE user_xiuxian SET user_stamina=user_stamina-?,stone=COALESCE(stone,0)+? WHERE user_id=? AND user_stamina>=?',(stamina_cost,stone_gain,user_id,stamina_cost)).rowcount!=1: raise DomainError("patrol_player_write_rejected", 'patrol write count mismatch')
+            if uow.execute('UPDATE player_data.dongfu_status SET patrol_date=?,patrol_count=?,patrol_guard=? WHERE user_id=?',(day,count,guard,user_id)).rowcount!=1: raise DomainError("patrol_write_rejected", 'patrol write count mismatch')
             if reward: uow.execute('INSERT INTO back(user_id,goods_id,goods_name,goods_type,goods_num,bind_num) VALUES(?,?,?,?,?,?) ON CONFLICT(user_id,goods_id) DO UPDATE SET goods_num=back.goods_num+excluded.goods_num,bind_num=COALESCE(back.bind_num,0)+excluded.bind_num',(user_id,int(reward[0]),str(reward[1]),'特殊物品',int(reward[2]),int(reward[2])))
             uow.execute('INSERT INTO dongfu_patrol_operations(operation_id,payload,patrol_count,patrol_guard) VALUES(?,?,?,?)',(operation_id,payload,count,guard)); return DongfuPatrolResult('patrolled',count,guard)

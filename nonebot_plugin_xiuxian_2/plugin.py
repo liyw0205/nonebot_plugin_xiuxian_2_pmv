@@ -20,6 +20,7 @@ from .features.daily_fortune.migrations import apply_daily_fortune
 from .features.illusion.manifest import FEATURE as ILLUSION_FEATURE
 from .features.illusion.migrations import apply_illusion, apply_illusion_state
 from .features.impart.migrations import (
+    apply_impart_base_schema,
     apply_impart_crystal_and_card_operations,
     apply_impart_draw_operations,
     apply_impart_draw_player_statistics,
@@ -459,6 +460,7 @@ def build_migrations() -> tuple[Migration, ...]:
         Migration("impart.006", "impart_draw_operations", apply_impart_draw_operations),
         Migration("impart.007", "impart_crystal_and_card_operations", apply_impart_crystal_and_card_operations),
         Migration("impart.008", "impart_draw_player_statistics", apply_impart_draw_player_statistics),
+        Migration("impart.009", "impart_base_schema", apply_impart_base_schema),
         Migration("impart_pk.002", "impart_pk_operations", apply_impart_pk_operations),
         Migration("impart_pk.003", "impart_pk_player_operations", apply_impart_pk_player_operations),
         Migration("impart_pk.004", "impart_pk_impart_operations", apply_impart_pk_impart_operations),
@@ -764,7 +766,7 @@ _PLAYER_DATABASE_MIGRATION_VERSIONS = frozenset(
     }
 )
 _TRADE_DATABASE_MIGRATION_VERSIONS = frozenset({"legacy.admin.003", "legacy.admin.005", "platform.001", "trade.003", "trade.005", "trade.006", "trade.007", "trade.008", "auction.004"})
-_IMPART_DATABASE_MIGRATION_VERSIONS = frozenset({"legacy.admin.003", "legacy.admin.005", "platform.001", "impart.007", "impart_pk.004"})
+_IMPART_DATABASE_MIGRATION_VERSIONS = frozenset({"legacy.admin.003", "legacy.admin.005", "platform.001", "impart.007", "impart.009", "impart_pk.004"})
 _MESSAGE_DATABASE_MIGRATION_VERSIONS = frozenset({"platform.001", "message.001"})
 
 

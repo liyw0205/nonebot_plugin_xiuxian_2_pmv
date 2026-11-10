@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Iterable
 
 from ...infrastructure.database import DatabaseUnitOfWork
+from .plant_diagnostics import plant_diagnosis
 
 
 @dataclass(frozen=True)
@@ -13,6 +14,8 @@ class DongfuInfiltrateSuccessResult:
     status: str
     infiltrate_left: int = 0
     intrude_left: int = 0
+    reason: str = ""
+    subject: str = ""
 
     @property
     def succeeded(self) -> bool:
@@ -97,7 +100,7 @@ class DongfuInfiltrateSuccessSqlRepository:
             )
             if previous is not None:
                 if str(previous["payload"]) != payload:
-                    return DongfuInfiltrateSuccessResult("state_changed")
+                    return DongfuInfiltrateSuccessResult("state_changed", reason="operation_conflict")
                 return DongfuInfiltrateSuccessResult(
                     "duplicate",
                     int(previous["infiltrate_left"]),
@@ -107,7 +110,7 @@ class DongfuInfiltrateSuccessSqlRepository:
             if uow.query_one(
                 "SELECT 1 AS present FROM user_xiuxian WHERE user_id=?", (visitor_id,)
             ) is None:
-                return DongfuInfiltrateSuccessResult("state_changed")
+                return DongfuInfiltrateSuccessResult("state_changed", reason="user_missing", subject="visitor")
             visitor = uow.query_one(
                 f"SELECT built,infiltrate_date,{mode_field} "
                 "FROM player_data.dongfu_status WHERE user_id=?",
@@ -124,22 +127,22 @@ class DongfuInfiltrateSuccessSqlRepository:
                 or int(visitor["built"] or 0) != 1
                 or int(target["built"] or 0) != 1
             ):
-                return DongfuInfiltrateSuccessResult("state_changed")
+                return DongfuInfiltrateSuccessResult("state_changed", reason="dongfu_missing", subject="visitor" if visitor is None or int(visitor["built"] or 0) != 1 else "target")
             try:
                 slots = json.loads(str(target["plant_slots"] or ""))
             except (TypeError, ValueError):
-                return DongfuInfiltrateSuccessResult("state_changed")
+                return DongfuInfiltrateSuccessResult("state_changed", reason="plant_record_invalid", subject="target")
             if (
                 self._canonical(slots) != expected_slots_value
                 or slot_no < 1
                 or slot_no > len(slots)
             ):
-                return DongfuInfiltrateSuccessResult("state_changed")
+                return DongfuInfiltrateSuccessResult("state_changed", **(plant_diagnosis(slots, expected_slots_value) if self._canonical(slots) != expected_slots_value else {"reason":"plot_invalid"}))
 
             mode_count = int(visitor[mode_field] or 0) if str(visitor["infiltrate_date"] or "") == day else 0
             intrude_count = int(target["intrude_count"] or 0) if str(target["intrude_date"] or "") == day else 0
             if mode_count >= mode_limit or intrude_count >= target_limit:
-                return DongfuInfiltrateSuccessResult("daily_limit")
+                return DongfuInfiltrateSuccessResult("daily_limit", reason="infiltrate_limit" if mode_count >= mode_limit else "intrude_limit")
 
             totals: dict[int, int] = {}
             metadata: dict[int, tuple[str, str]] = {}

@@ -5,6 +5,7 @@ from typing import Any
 
 from ...core.errors import ConflictError, DomainError, ValidationError
 from ...core.result import OperationOutcome, ReplyPlan
+from ...core.player_reasons import reason_text
 from ...infrastructure.database import DatabaseUnitOfWork, OperationLedger
 from ...infrastructure.observability import trace_context
 from ...infrastructure.clock import SystemClock
@@ -121,7 +122,7 @@ class StoneGiftApplication:
                         previous = existing.outcome()
                         if previous is not None:
                             return previous.replay()
-                        raise ConflictError("操作正在处理中")
+                        raise ConflictError("操作正在处理中", reason="operation_pending")
                     before = self.repository.snapshot(uow, (request.sender_id, request.recipient_id))
                     legacy = self.repository.operation(uow, request.operation_id)
                     if legacy is not None:
@@ -169,17 +170,22 @@ class StoneGiftApplication:
                         messages = {
                             "recipient_missing": ("对方未踏入修仙界，不可赠送！", "recipient_missing"),
                             "stone_insufficient": ("灵石不足", "stone_insufficient"),
-                            "state_changed": ("转账未结算：双方灵石刚被其他操作改动，请稍后重试。", "state_changed"),
+                            "state_changed": ("接收方灵石写入未通过校验，请联系管理员核对账户记录。", "state_changed"),
                             "send_limit_reached": ("今日赠送额度不足", "send_limit_reached"),
                             "receive_limit_reached": ("对方今日可接收额度不足", "receive_limit_reached"),
                             "schema_missing": ("赠送数据尚未就绪，请检查启动迁移。", "schema_missing"),
                         }
                         message, code = messages.get(status, ("转账失败", "rejected"))
+                        diagnostic = reason_text(getattr(status, "reason", ""))
+                        if diagnostic:
+                            label = {"sender": "赠送方", "recipient": "接收方"}.get(getattr(status, "subject", ""), "")
+                            message = (label + "，" if label else "") + diagnostic
                         outcome = OperationOutcome.rejected(
                             request.operation_id,
                             self.action,
                             message,
                             code=code,
+                            data={"status": str(status), "reason": getattr(status, "reason", ""), "subject": getattr(status, "subject", "")},
                             before=before,
                             after=before,
                             audit_category="stone_gift",

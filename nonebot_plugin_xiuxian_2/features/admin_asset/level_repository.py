@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from ...core.errors import DomainError
+from ...core.snapshot_reason import first_difference
+
 import json
 from dataclasses import dataclass
 from pathlib import Path
@@ -16,6 +19,7 @@ class AdminLevelChangeResult:
     mp: int = 0
     atk: int = 0
     power: int = 0
+    reason: str = ""
 
     @property
     def succeeded(self) -> bool:
@@ -76,10 +80,10 @@ class AdminLevelChangeSqlRepository:
             if row is None:
                 return AdminLevelChangeResult("user_missing")
             if self._snapshot(row) != expected:
-                return AdminLevelChangeResult("state_changed")
+                return AdminLevelChangeResult("state_changed", reason=first_difference(self._snapshot(row), expected, ("level_changed", "exp_changed", "hp_changed", "mp_changed", "atk_changed", "power_changed", "root_type_changed", "root_level_changed")))
             values = (new_level, int(new_exp), int(new_exp) // 2, int(new_exp), int(new_exp) // 10, round(int(new_exp) * float(root_rate) * float(level_spend)), user_id, *expected)
             if uow.execute("UPDATE user_xiuxian SET level=?,exp=?,hp=?,mp=?,atk=?,power=? WHERE user_id=? AND level=? AND COALESCE(exp,0)=? AND COALESCE(hp,0)=? AND COALESCE(mp,0)=? AND COALESCE(atk,0)=? AND COALESCE(power,0)=? AND COALESCE(root_type,'')=? AND COALESCE(root_level,0)=?", values).rowcount != 1:
-                return AdminLevelChangeResult("state_changed")
+                raise DomainError("admin_level_write_rejected", "admin level change was not saved")
             data = {"level": new_level, "exp": int(new_exp), "hp": int(new_exp) // 2, "mp": int(new_exp), "atk": int(new_exp) // 10, "power": round(int(new_exp) * float(root_rate) * float(level_spend))}
             uow.execute("INSERT INTO admin_level_change_operations(operation_id,payload,result_json) VALUES(?,?,?)", (operation_id, payload, json.dumps(data, ensure_ascii=True, separators=(",", ":"))))
             return AdminLevelChangeResult("applied", **data)

@@ -13,6 +13,7 @@ class CardComposeResult:
     status: str
     source_quantity: int = 0
     target_quantity: int = 0
+    reason: str = ""
 
     @property
     def succeeded(self) -> bool:
@@ -63,7 +64,7 @@ class ImpartCardComposeSqlRepository:
             if old is not None:
                 if str(old["payload"]) != payload:
                     return CardComposeResult(
-                        "state_changed", int(old["source_quantity"]), int(old["target_quantity"])
+                        "state_changed", int(old["source_quantity"]), int(old["target_quantity"]), reason="operation_conflict"
                     )
                 return CardComposeResult(
                     "duplicate", int(old["source_quantity"]), int(old["target_quantity"])
@@ -90,7 +91,7 @@ class ImpartCardComposeSqlRepository:
                 expected_source_quantity,
                 expected_target_quantity,
             ):
-                return CardComposeResult("state_changed", source_quantity, target_quantity)
+                return CardComposeResult("state_changed", source_quantity, target_quantity, reason="card_changed")
             if source_quantity < cost:
                 return CardComposeResult("card_missing", source_quantity, target_quantity)
 
@@ -100,7 +101,7 @@ class ImpartCardComposeSqlRepository:
                 (cost, user_id, source_card, source_quantity),
             )
             if consumed.rowcount != 1:
-                return CardComposeResult("state_changed")
+                return CardComposeResult("state_changed", reason="card_changed")
             uow.execute(
                 "DELETE FROM impart_cards WHERE user_id=? AND card_name=? AND quantity=0",
                 (user_id, source_card),

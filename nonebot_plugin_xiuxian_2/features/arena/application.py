@@ -48,7 +48,7 @@ class ArenaApplication:
                             return previous.replay()
                         # Only these SQL owners atomically persist both effects and receipts.
                         if not recoverable:
-                            raise ConflictError("操作正在处理中")
+                            raise ConflictError("操作正在处理中", reason="operation_pending")
                 data = _data(call())
                 status = str(data.get("status", "failed"))
                 if status in {"applied", "duplicate"}:

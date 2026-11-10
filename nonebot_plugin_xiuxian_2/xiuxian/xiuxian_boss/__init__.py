@@ -28,6 +28,7 @@ from nonebot.permission import SUPERUSER
 from nonebot.log import logger
 from ...core.errors import ConflictError
 from ...paths import get_paths
+from ..command_guard import result_failure
 from ..xiuxian_utils.xiuxian2_handle import (
     XiuxianDateManage,
     UserBuffDate,
@@ -937,7 +938,7 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
         await battle.finish()
     if settlement.status == "state_changed":
         battle_flag[GLOBAL_BOSS_KEY] = False
-        await handle_send(bot, event, "世界BOSS状态已更新，本次奖励未发放，请重新讨伐。")
+        await handle_send(bot, event, result_failure("世界BOSS讨伐", settlement))
         await battle.finish()
     if settlement.status == "user_missing":
         battle_flag[GLOBAL_BOSS_KEY] = False
@@ -955,7 +956,7 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
         await battle.finish()
     if not settlement.succeeded:
         battle_flag[GLOBAL_BOSS_KEY] = False
-        await handle_send(bot, event, "讨伐未结算：世界BOSS当前状态已更新，本次未扣体力，请重新讨伐。")
+        await handle_send(bot, event, result_failure("世界BOSS讨伐", settlement))
         await battle.finish()
     group_boss[GLOBAL_BOSS_KEY] = settled_bosses
 

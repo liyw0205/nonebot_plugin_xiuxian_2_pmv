@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from pathlib import Path
+from ...core.errors import DomainError
 
 from ...infrastructure.database.attached_uow import AttachedDatabaseUnitOfWork
 
@@ -13,6 +14,7 @@ class PartnerTokenUseResult:
     used_tokens: int = 0
     used_count: int = 0
     item_remaining: int = 0
+    reason: str = ""
 
     @property
     def succeeded(self) -> bool:
@@ -34,7 +36,7 @@ class PartnerTokenUseSqlRepository:
             (table,),
         )
         if row is None:
-            raise RuntimeError(f"required migration table is missing: {qualified}")
+            raise DomainError("schema_missing", "partner token migration is missing")
 
     def apply(
         self,
@@ -95,7 +97,7 @@ class PartnerTokenUseSqlRepository:
                 (user_id,),
             )
             if usage is not None and int(usage["used_count"]) != expected_used_count:
-                return PartnerTokenUseResult("state_changed")
+                return PartnerTokenUseResult("state_changed", reason="usage_changed")
             item = uow.query_one(
                 "SELECT COALESCE(goods_num,0) AS goods_num,COALESCE(bind_num,0) AS bind_num "
                 "FROM back WHERE user_id=? AND goods_id=?",
@@ -104,7 +106,7 @@ class PartnerTokenUseSqlRepository:
             if item is None:
                 return PartnerTokenUseResult("item_missing")
             if int(item["goods_num"]) != expected_item_count:
-                return PartnerTokenUseResult("state_changed")
+                return PartnerTokenUseResult("state_changed", reason="item_changed")
 
             used_tokens = min(requested_count, expected_used_count, expected_item_count)
             if used_tokens <= 0:
@@ -120,7 +122,7 @@ class PartnerTokenUseSqlRepository:
                 (item_remaining, bind_remaining, user_id, item_id, expected_item_count),
             )
             if changed.rowcount != 1:
-                return PartnerTokenUseResult("state_changed")
+                raise DomainError("item_write_rejected", "partner token inventory write did not affect one row")
 
             if usage is None:
                 uow.execute(
@@ -134,7 +136,7 @@ class PartnerTokenUseSqlRepository:
                     (new_used_count, user_id, expected_used_count),
                 )
                 if changed.rowcount != 1:
-                    return PartnerTokenUseResult("state_changed")
+                    raise DomainError("partner_usage_write_rejected", "partner token usage write did not affect one row")
             uow.execute(
                 "INSERT INTO partner_token_operations "
                 "(operation_id,payload,used_tokens,used_count,item_remaining) VALUES(?,?,?,?,?)",

@@ -59,6 +59,7 @@ from ..xiuxian_utils.utils import (
     send_msg_handler,
 )
 from .failure_reply import guard_pet_handler
+from ..command_guard import result_failure
 from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage
 from ...paths import get_paths
 from ...features.pet.application import PetApplication
@@ -849,9 +850,10 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     )
     started_data = start_outcome.data or {}
     started = type("PetTravelStartView", (), started_data)()
+    started.status = str(started_data.get("status", start_outcome.code or "failed"))
     started.succeeded = start_outcome.ok
     if not started.succeeded:
-        await handle_send(bot, event, "游历未完成：游历进度已更新，请重新查询游历。")
+        await handle_send(bot, event, result_failure("宠物游历", started))
         return
     result_msg = "派遣成功。"
 
@@ -953,14 +955,8 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     if claim_result.status == "inventory_full":
         await handle_send(bot, event, "背包物品已达上限，宠物游历奖励尚未领取。")
         return
-    if claim_result.status == "state_changed":
-        await handle_send(bot, event, "游历领奖未完成：奖励状态已更新，请重新领取。")
-        return
-    if claim_result.status == "pet_missing":
-        await handle_send(bot, event, "游历领奖未入账：游历状态已更新，请重新领取。")
-        return
-    if claim_result.status == "user_missing":
-        await handle_send(bot, event, "未找到道友数据，宠物游历奖励领取失败。")
+    if not claim_result.succeeded:
+        await handle_send(bot, event, result_failure("宠物游历领奖", claim_result))
         return
     reward_lines = []
     if claim_result.stone > 0:
@@ -1253,14 +1249,13 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         await handle_send(bot, event, msg, md_type="背包", k1="宠物", v1="我的宠物", k2="宠物背包", v2="宠物背包", k3="帮助", v3="宠物帮助")
         return
     if not hatched.succeeded:
-        status_msg = {
+        status_msg = result_failure("砸蛋", hatched, messages={
             "stone_missing": f"砸蛋{count}次需要{number_to(total_cost)}灵石，道友当前灵石不足。",
             "inventory_full": "宠物背包容量不足，请先放生或整理后再砸蛋。",
             "user_missing": "角色不存在，无法砸蛋。",
-            "state_changed": "砸蛋未结算：当前状态已更新，请重新发起。",
             "receipt_unreadable": "砸蛋回执损坏，本次不会重复扣除灵石；请联系管理员核对数据。",
             "uid_conflict": "砸蛋未结算：宠物编号冲突，本次不会扣除灵石，请重新砸蛋。",
-        }.get(hatched.status, f"砸蛋失败（{hatched.status}）。")
+        })
         await handle_send(bot, event, status_msg)
         return
     success_cost = total_cost
@@ -1366,10 +1361,9 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         messages = {
             "pet_missing": "未找到该宠物UID。",
             "pet_traveling": "游历中的宠物无法出战。",
-            "state_changed": "宠物操作未完成：宠物状态已更新，请重新操作。",
             "operation_conflict": "本次出战请求与已处理记录冲突，请重新操作。",
         }
-        result_msg = messages.get(result.status, "宠物出战切换失败，请重试。")
+        result_msg = result_failure("宠物出战", result, messages=messages)
     await handle_send(
         bot,
         event,
@@ -1420,7 +1414,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         await handle_send(bot, event, "背包物品已达上限，宠物未放生。")
         return
     if not release_result.succeeded:
-        await handle_send(bot, event, "宠物操作未完成：宠物状态已更新，请重新操作。")
+        await handle_send(bot, event, result_failure("放生宠物", release_result))
         return
     refund_msg = _format_pet_release_refund([pet], refund_item, release_result.refund)
 
@@ -1476,7 +1470,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         await handle_send(bot, event, "背包物品已达上限，宠物未放生。")
         return
     if not release_result.succeeded:
-        await handle_send(bot, event, "宠物操作未完成：宠物状态已更新，请重新操作。")
+        await handle_send(bot, event, result_failure("一键放生宠物", release_result))
         return
     refund_msg = _format_pet_release_refund(pets, refund_item, release_result.refund)
     lines = [
@@ -1597,8 +1591,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         await handle_send(bot, event, f"材料不足：当前仅有{have}个{item_info.get('name', item_name)}。")
         return
     if not result.succeeded:
-        messages = {"state_changed": "操作未完成：当前状态已更新，请重新发起。"}
-        await handle_send(bot, event, messages.get(result.status, "喂食结算失败，请重试。"))
+        await handle_send(bot, event, result_failure("喂食宠物", result))
         return
     pet = get_pet_doc(user_id).get("active")
     upgraded = new_stars - old_stars
@@ -1685,7 +1678,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
             skill_offer=skill_offer,
         )
         if not result.succeeded:
-            result_msg = "宠物融合未完成：宠物状态已更新，请重新融合。"
+            result_msg = result_failure("宠物融合", result)
             pet = None
             skill_offer = None
     has_skill_offer = False
@@ -1749,9 +1742,8 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     if not result.succeeded:
         messages = {
             "item_missing": "背包中没有启明石，无法重置宠物技能。",
-            "state_changed": "启明失败：当前状态已更新，请重新发起。",
         }
-        await handle_send(bot, event, messages.get(result.status, "启明结算失败，请重试。"))
+        await handle_send(bot, event, result_failure("宠物启明", result, messages=messages))
         return
     PET_SKILL_REPLACE_CACHE.pop(user_id, None)
     await handle_send(
@@ -1798,7 +1790,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     )
     PET_SKILL_REPLACE_CACHE.pop(user_id, None)
     if not result.succeeded:
-        await handle_send(bot, event, "替换失败：未找到对应宠物，或技能类型不匹配。")
+        await handle_send(bot, event, result_failure("替换宠物技能", result))
         return
     pet = replace_pet_skill(user_id, pending["uid"], pending["skill"])
 

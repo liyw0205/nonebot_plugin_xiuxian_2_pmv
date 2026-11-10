@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Any
 
 from ...infrastructure.database import DatabaseUnitOfWork
+from ...core.errors import DomainError
 
 
 class SectFairylandSqlRepository:
@@ -101,11 +102,11 @@ class SectFairylandSqlRepository:
             if int(actor["sect_id"] or 0) != sect_id:
                 return {"status": "membership_changed", **result}
             if str(sect["sect_owner"]) != actor_id or int(actor["sect_position"] or 0) != int(owner_position):
-                return {"status": "not_owner", **result}
+                return {"status": "not_owner", "reason": "sect_owner_changed" if str(sect["sect_owner"]) != actor_id else "sect_position_changed", **result}
             if current_level != expected_level or next_level != current_level + 1:
-                return {"status": "level_changed", **result}
+                return {"status": "level_changed", "reason": "sect_fairyland_level_changed" if current_level != expected_level else "sect_upgrade_invalid", **result}
             if int(sect["stones"]) < stone_cost:
-                return {"status": "stone_insufficient", **result}
+                return {"status": "stone_insufficient", "reason": "sect_stone_insufficient", **result}
             if int(sect["materials"]) < materials_cost:
                 return {"status": "materials_insufficient", **result}
 
@@ -127,7 +128,7 @@ class SectFairylandSqlRepository:
                 ),
             )
             if changed.rowcount != 1:
-                raise RuntimeError("sect fairyland changed concurrently")
+                raise DomainError("sect_fairyland_write_rejected", "sect fairyland write count mismatch")
 
             uow.execute(
                 "INSERT INTO sect_fairyland_operations(operation_id,actor_id,sect_id,from_level,"

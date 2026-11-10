@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from ...core.errors import DomainError
+
 from pathlib import Path
 from typing import Any, Protocol
 
@@ -90,30 +92,39 @@ class DungeonPurchaseSqlRepository(LegacyDungeonRepository):
         if row is None:
             return None
         if str(row["payload"]) != payload:
-            return self._result("state_changed", int(quantity), 0, 0, 0, "")
+            return self._result("state_changed", int(quantity), 0, 0, 0, "", reason="operation_conflict")
         status = "duplicate" if str(row["result_status"]) == "applied" else str(row["result_status"])
-        return {"status": status, "quantity": int(row["quantity"]), "cost": int(row["cost"]), "stone": int(row["stone"]), "inventory": int(row["inventory"]), "response": str(row["response"])}
+        return {"status": status, "quantity": int(row["quantity"]), "cost": int(row["cost"]), "stone": int(row["stone"]), "inventory": int(row["inventory"]), "response": str(row["response"]), "reason": self._receipt_reason(status, row["response"])}
 
     def purchase(self, operation_id: str, user_id: str, item_id: int, item_name: str, item_type: str, quantity: int, unit_cost: int, expected_stone: int, max_goods: int, bind_flag: int = 1) -> dict[str, Any]:
         operation_id,user_id,item_name,item_type=str(operation_id).strip(),str(user_id),str(item_name),str(item_type);item_id,quantity,unit_cost,expected_stone,max_goods,bind_flag=map(int,(item_id,quantity,unit_cost,expected_stone,max_goods,bind_flag));payload=self._payload(user_id,item_id,quantity,bind_flag);cost=quantity*unit_cost
         with DatabaseUnitOfWork(self.game_database, immediate=True) as uow:
             old=uow.query_one("SELECT payload,result_status,quantity,cost,stone,inventory,response FROM dungeon_purchase_operations WHERE operation_id=?",(operation_id,))
             if old:
-                if str(old["payload"])!=payload:return self._result("state_changed",quantity,cost,0,0,item_name)
-                status="duplicate" if str(old["result_status"])=="applied" else str(old["result_status"]);return {"status":status,"quantity":int(old["quantity"]),"cost":int(old["cost"]),"stone":int(old["stone"]),"inventory":int(old["inventory"]),"response":str(old["response"])}
+                if str(old["payload"])!=payload:return self._result("state_changed",quantity,cost,0,0,item_name,reason="operation_conflict")
+                status="duplicate" if str(old["result_status"])=="applied" else str(old["result_status"]);return {"status":status,"quantity":int(old["quantity"]),"cost":int(old["cost"]),"stone":int(old["stone"]),"inventory":int(old["inventory"]),"response":str(old["response"]),"reason":self._receipt_reason(status,old["response"])}
             user=uow.query_one("SELECT COALESCE(stone,0) AS stone FROM user_xiuxian WHERE user_id=?",(user_id,))
             if user is None:return self._record(uow,operation_id,payload,self._result("user_missing",quantity,cost,0,0,item_name))
             stone=int(user["stone"])
-            if stone!=expected_stone:return self._record(uow,operation_id,payload,self._result("state_changed",quantity,cost,stone,0,item_name))
+            if stone!=expected_stone:return self._record(uow,operation_id,payload,self._result("state_changed",quantity,cost,stone,0,item_name,reason="stone_changed"))
             if stone<cost:return self._record(uow,operation_id,payload,self._result("stone_insufficient",quantity,cost,stone,0,item_name))
             item=uow.query_one("SELECT COALESCE(goods_num,0) AS goods_num,COALESCE(bind_num,0) AS bind_num FROM back WHERE user_id=? AND goods_id=?",(user_id,item_id));inventory,bound=(int(item["goods_num"]),int(item["bind_num"])) if item else (0,0)
-            if inventory<0 or bound<0 or bound>inventory:return self._record(uow,operation_id,payload,self._result("state_changed",quantity,cost,stone,inventory,item_name))
+            if inventory<0 or bound<0 or bound>inventory:return self._record(uow,operation_id,payload,self._result("state_changed",quantity,cost,stone,inventory,item_name,reason="inventory_invalid"))
             if inventory+quantity>max_goods:return self._record(uow,operation_id,payload,self._result("inventory_full",quantity,cost,stone,inventory,item_name))
             new_stone,new_inventory=stone-cost,inventory+quantity;now=self.clock.now().isoformat();uow.execute("UPDATE user_xiuxian SET stone=? WHERE user_id=? AND COALESCE(stone,0)=?",(new_stone,user_id,expected_stone));uow.execute("INSERT INTO back(user_id,goods_id,goods_name,goods_type,goods_num,create_time,update_time,bind_num) VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(user_id,goods_id) DO UPDATE SET goods_name=excluded.goods_name,goods_type=excluded.goods_type,goods_num=back.goods_num+excluded.goods_num,bind_num=COALESCE(back.bind_num,0)+excluded.bind_num,update_time=excluded.update_time",(user_id,item_id,item_name,item_type,quantity,now,now,quantity if bind_flag else 0));return self._record(uow,operation_id,payload,self._result("applied",quantity,cost,new_stone,new_inventory,item_name))
 
-    def _result(self,status:str,quantity:int,cost:int,stone:int,inventory:int,item_name:str)->dict[str,Any]:
+    @staticmethod
+    def _receipt_reason(status, response):
+        if status != "state_changed":
+            return ""
+        from ...core.player_reasons import reason_text
+        return next((code for code in ("stone_changed", "inventory_invalid") if reason_text(code) == str(response)), "legacy_rejection")
+
+    def _result(self,status:str,quantity:int,cost:int,stone:int,inventory:int,item_name:str, *, reason:str="")->dict[str,Any]:
         response=f"成功兑换{item_name}×{quantity}，消耗{cost}灵石。" if status in {"applied","duplicate"} else self.REJECTIONS.get(status,"兑换失败。")
-        return {"status":status,"quantity":quantity,"cost":cost,"stone":stone,"inventory":inventory,"response":response}
+        from ...core.player_reasons import reason_text
+        response = reason_text(reason) or response
+        return {"status":status,"quantity":quantity,"cost":cost,"stone":stone,"inventory":inventory,"response":response,"reason":reason}
 
     @staticmethod
     def _record(uow:DatabaseUnitOfWork,operation_id:str,payload:str,result:dict[str,Any])->dict[str,Any]:
@@ -121,6 +132,15 @@ class DungeonPurchaseSqlRepository(LegacyDungeonRepository):
 
 
 class DungeonSessionSqlRepository(DungeonPurchaseSqlRepository):
+    @staticmethod
+    def _status_reason(current, expected):
+        if not current:
+            return "dungeon_record_missing"
+        for key, value in expected.items():
+            if current.get(key) != value:
+                return {"dungeon_id":"dungeon_instance_changed", "dungeon_name":"dungeon_instance_changed", "dungeon_status":"dungeon_phase_changed", "current_layer":"dungeon_layer_changed", "total_layers":"dungeon_total_changed", "last_reset_date":"dungeon_reset_changed", "reset_generation":"dungeon_reset_changed", "reset_operation_id":"dungeon_reset_changed"}.get(key, "invalid_snapshot")
+        return "invalid_snapshot"
+
     _STATUS_INTEGER_FIELDS = {"current_layer", "total_layers", "reset_generation"}
     _STATUS_FIELDS = (
         "dungeon_id", "dungeon_name", "dungeon_status", "current_layer",
@@ -445,9 +465,10 @@ class DungeonSessionSqlRepository(DungeonPurchaseSqlRepository):
         return result
 
     @staticmethod
-    def _explore_conflict(uow: DatabaseUnitOfWork, operation_id: str, status: str, plan: dict[str, Any]) -> dict[str, Any]:
+    def _explore_conflict(uow: DatabaseUnitOfWork, operation_id: str, status: str, plan: dict[str, Any], reason: str = "", subject: str = "") -> dict[str, Any]:
         expected = plan.get("expected_status") if isinstance(plan.get("expected_status"), dict) else {}
-        response = {"battle_messages": [], "message": "探索未结算：状态已被其他操作改动，请重新发起。"}
+        from ...core.player_reasons import reason_text
+        response = {"battle_messages": [], "reason": reason or status, "subject": subject, "message": "副本探索：" + (reason_text(reason or status) or "探索计划记录不完整，请联系管理员核对该请求。")}
         if status == "team_changed":
             response["message"] = "探索未结算：队伍已解散或成员变动，请重新组队发起。"
         elif status == "user_missing":
@@ -509,12 +530,12 @@ class DungeonSessionSqlRepository(DungeonPurchaseSqlRepository):
             status_columns = {str(item["name"]) for item in uow.query_all("PRAGMA player_data.table_info(player_dungeon_status)")}
             required = set(self._STATUS_FIELDS) & status_columns
             if not expected_status or not required.issubset(expected_status) or any(key not in status_columns for key in expected_status):
-                return self._explore_conflict(uow, operation_id, "state_changed", plan)
+                return self._explore_conflict(uow, operation_id, "state_changed", plan, "invalid_snapshot")
             selected = list(expected_status)
             status_row = uow.query_one("SELECT " + ",".join(selected) + " FROM player_data.player_dungeon_status WHERE user_id=?", (user_id,))
             current_status = self._normalize_status(status_row or {})
             if current_status != expected_status:
-                return self._explore_conflict(uow, operation_id, "state_changed", plan)
+                return self._explore_conflict(uow, operation_id, "state_changed", plan, self._status_reason(current_status, expected_status), user_id)
             expected_team = plan.get("team")
             current_team = self._current_team(uow, user_id)
             if expected_team is None:
@@ -544,7 +565,8 @@ class DungeonSessionSqlRepository(DungeonPurchaseSqlRepository):
                     return {"status": "invalid_plan", "phase": "prepared", "result_status": "", "response": {}, "plan": plan, "current_layer": 0, "dungeon_status": ""}
                 cd = uow.query_one("SELECT COALESCE(type,0) AS type FROM user_cd WHERE user_id=? ORDER BY rowid DESC LIMIT 1", (member_id,))
                 if current_resources != expected_resources or int(cd["type"] if cd else 0) != int(expected.get("cd_type", 0) or 0):
-                    return self._explore_conflict(uow, operation_id, "state_changed", plan)
+                    reason = next((key + "_changed" for key in current_resources if current_resources[key] != expected_resources[key]), "activity_type_changed")
+                    return self._explore_conflict(uow, operation_id, "state_changed", plan, reason, member_id)
                 for item in member.get("items", []):
                     item_id, amount = int(item.get("id", 0)), int(item.get("amount", 0))
                     if item_id <= 0 or amount <= 0:
@@ -552,7 +574,8 @@ class DungeonSessionSqlRepository(DungeonPurchaseSqlRepository):
                     inventory = uow.query_one("SELECT COALESCE(goods_num,0) AS goods_num,COALESCE(bind_num,0) AS bind_num FROM back WHERE user_id=? AND goods_id=?", (member_id, item_id))
                     goods_num, bind_num = (int(inventory["goods_num"]), int(inventory["bind_num"])) if inventory else (0, 0)
                     if goods_num < 0 or bind_num < 0 or bind_num > goods_num or goods_num != int(item.get("expected_num", 0) or 0) or bind_num != int(item.get("expected_bind_num", 0) or 0):
-                        return self._explore_conflict(uow, operation_id, "state_changed", plan)
+                        reason = "inventory_invalid" if goods_num < 0 or bind_num < 0 or bind_num > goods_num else "item_changed" if goods_num != int(item.get("expected_num", 0) or 0) else "bound_count_changed"
+                        return self._explore_conflict(uow, operation_id, "state_changed", plan, reason, member_id)
                     if goods_num + amount > max_goods_num:
                         return self._explore_conflict(uow, operation_id, "inventory_full", plan)
                     inventory_rows.append((member_id, item, goods_num, bind_num))
@@ -570,7 +593,7 @@ class DungeonSessionSqlRepository(DungeonPurchaseSqlRepository):
             where = " AND ".join(f"{column}=?" for column in selected)
             updated = uow.execute("UPDATE player_data.player_dungeon_status SET current_layer=?,dungeon_status=? WHERE user_id=? AND " + where, (final_layer, final_status, user_id, *(expected_status[column] for column in selected)))
             if updated.rowcount != 1:
-                return self._explore_conflict(uow, operation_id, "state_changed", plan)
+                raise DomainError("dungeon_progress_write_rejected", "dungeon progress write count mismatch")
             response = plan.get("response", {}) if isinstance(plan.get("response"), dict) else {}
             uow.execute("UPDATE dungeon_explore_operations SET phase='completed',result_status='applied',result_json=?,current_layer=?,dungeon_status=?" + self._explore_updated_at(self._explore_columns(uow)) + " WHERE operation_id=? AND phase='prepared'", (json.dumps(response, ensure_ascii=True, sort_keys=True), final_layer, final_status, operation_id))
             return {"status": "applied", "phase": "completed", "result_status": "applied", "response": response, "plan": None, "current_layer": final_layer, "dungeon_status": final_status}
@@ -615,17 +638,18 @@ class DungeonSessionSqlRepository(DungeonPurchaseSqlRepository):
         try:
             payload = json.loads(str(row["payload"]))
         except (TypeError, ValueError, json.JSONDecodeError):
-            return {"status": "state_changed", "dungeon_status": str(row["dungeon_status"])}
+            return {"status": "state_changed", "dungeon_status": str(row["dungeon_status"]), "reason":"receipt_corrupt"}
         if (
             not isinstance(payload, dict)
             or str(payload.get("user_id", "")) != user_id
             or str(payload.get("action", "")) != action
         ):
-            return {"status": "state_changed", "dungeon_status": str(row["dungeon_status"])}
+            return {"status": "state_changed", "dungeon_status": str(row["dungeon_status"]), "reason":"operation_conflict"}
         status = str(row["result_status"])
         return {
             "status": "duplicate" if status == "applied" else status,
             "dungeon_status": str(row["dungeon_status"]),
+            "reason": payload.get("_rejection_reason", "") or ("legacy_rejection" if status == "state_changed" else ""),
         }
 
     def session_transition(self, operation_id: str, user_id: str, expected: dict[str, Any], dungeon: dict[str, Any], action: str) -> dict[str, Any]:
@@ -643,7 +667,7 @@ class DungeonSessionSqlRepository(DungeonPurchaseSqlRepository):
             )
             if old:
                 status = str(old["result_status"])
-                return {"status": "state_changed" if str(old["payload"]) != payload else ("duplicate" if status == "applied" else status), "dungeon_status": str(old["dungeon_status"])}
+                return self._session_replay(old, payload)
             if not self._session_status_ready(uow):
                 return {"status": "schema_missing", "dungeon_status": ""}
         with DatabaseUnitOfWork(self.player_database,immediate=True) as uow:
@@ -651,22 +675,43 @@ class DungeonSessionSqlRepository(DungeonPurchaseSqlRepository):
                 return {"status": "schema_missing", "dungeon_status": ""}
             old=uow.query_one("SELECT payload,result_status,dungeon_status FROM dungeon_session_operations WHERE operation_id=?",(operation_id,))
             if old:
-                status=str(old["result_status"]);return {"status":"state_changed" if str(old["payload"])!=payload else ("duplicate" if status=="applied" else status),"dungeon_status":str(old["dungeon_status"])}
+                return self._session_replay(old, payload)
             if not self._session_status_ready(uow):
                 return {"status": "schema_missing", "dungeon_status": ""}
             columns = self._SESSION_STATUS_FIELDS
             row=uow.query_one("SELECT " + ",".join(columns) + " FROM player_dungeon_status WHERE user_id=?",(user_id,))
-            if row is None:return self._record_session(uow,operation_id,payload,"state_changed","")
+            if row is None:return self._record_session(uow,operation_id,payload,"state_changed","", "dungeon_record_missing")
             current={k:(int(row[k] or 0) if k in {"current_layer","total_layers","reset_generation"} else str(row[k] or "")) for k in row.keys()}
             normalized={k:(int(expected.get(k,0) or 0) if k in {"current_layer","total_layers","reset_generation"} else str(expected.get(k,"") or "")) for k in current}
-            if not set(columns) <= expected.keys() or current!=normalized or current["dungeon_id"]!=str(dungeon.get("dungeon_id","")) or current["last_reset_date"]!=str(dungeon.get("date","")):return self._record_session(uow,operation_id,payload,"state_changed",current["dungeon_status"])
+            if not set(columns) <= expected.keys():
+                return self._record_session(uow,operation_id,payload,"state_changed",current["dungeon_status"], "invalid_snapshot")
+            if current != normalized:
+                return self._record_session(uow,operation_id,payload,"state_changed",current["dungeon_status"], self._status_reason(current, normalized))
+            if current["dungeon_id"]!=str(dungeon.get("dungeon_id","")) or current["last_reset_date"]!=str(dungeon.get("date","")):
+                return self._record_session(uow,operation_id,payload,"state_changed",current["dungeon_status"], "dungeon_instance_changed" if current["dungeon_id"]!=str(dungeon.get("dungeon_id","")) else "dungeon_reset_changed")
             if current["dungeon_status"]=="completed":return self._record_session(uow,operation_id,payload,"completed","completed")
             if action=="exit" and current["dungeon_status"]!="exploring":return self._record_session(uow,operation_id,payload,"not_exploring",current["dungeon_status"])
             new_status="exploring" if action=="enter" else "exited";uow.execute("UPDATE player_dungeon_status SET dungeon_status=? WHERE user_id=?",(new_status,user_id));return self._record_session(uow,operation_id,payload,"applied",new_status)
 
     @staticmethod
-    def _record_session(uow:DatabaseUnitOfWork,operation_id:str,payload:str,status:str,dungeon_status:str)->dict[str,Any]:
-        uow.execute("INSERT INTO dungeon_session_operations(operation_id,payload,result_status,dungeon_status) VALUES(?,?,?,?)",(operation_id,payload,status,dungeon_status));return {"status":status,"dungeon_status":dungeon_status}
+    def _record_session(uow:DatabaseUnitOfWork,operation_id:str,payload:str,status:str,dungeon_status:str,reason:str="")->dict[str,Any]:
+        if reason:
+            data = json.loads(payload)
+            data["_rejection_reason"] = reason
+            payload = json.dumps(data, ensure_ascii=True, sort_keys=True)
+        uow.execute("INSERT INTO dungeon_session_operations(operation_id,payload,result_status,dungeon_status) VALUES(?,?,?,?)",(operation_id,payload,status,dungeon_status));return {"status":status,"dungeon_status":dungeon_status,"reason":reason}
+
+    @staticmethod
+    def _session_replay(row, payload):
+        try:
+            stored = json.loads(str(row["payload"]))
+            reason = stored.pop("_rejection_reason", "")
+            matches = stored == json.loads(payload)
+        except (TypeError, ValueError):
+            return {"status":"state_changed", "dungeon_status":str(row["dungeon_status"]), "reason":"receipt_corrupt"}
+        status = str(row["result_status"])
+        return {"status":"state_changed" if not matches else "duplicate" if status == "applied" else status,
+                "dungeon_status":str(row["dungeon_status"]), "reason":"operation_conflict" if not matches else reason or ("legacy_rejection" if status == "state_changed" else "")}
 
 
 __all__ = ["DungeonPurchaseSqlRepository", "DungeonRepository", "DungeonSessionSqlRepository", "LegacyDungeonRepository"]

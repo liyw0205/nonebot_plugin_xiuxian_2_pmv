@@ -2,6 +2,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 from ...infrastructure.database import DatabaseUnitOfWork
+from ...core.errors import DomainError
 from .schema import ELIXIR_ROOM_COLUMNS, SCHEMA_MISSING, table_ready
 
 class SectElixirRoomSqlRepository:
@@ -19,11 +20,11 @@ class SectElixirRoomSqlRepository:
             if sect is None:return {'status':'sect_missing','actor_id':actor_id,'sect_id':sect_id}
             base={'actor_id':actor_id,'sect_id':sect_id,'from_level':int(sect['level']),'to_level':next_level,'stone_cost':stone_cost,'scale_cost':scale_cost}
             if int(user['sect_id'] or 0)!=sect_id:return {'status':'membership_changed',**base}
-            if str(sect['sect_owner'])!=actor_id or int(user['sect_position'] or 0)!=int(owner_position):return {'status':'not_owner',**base}
-            if int(sect['level'])!=expected_level:return {'status':'level_changed',**base}
-            if int(sect['stones'])<stone_cost:return {'status':'stone_insufficient',**base}
+            if str(sect['sect_owner'])!=actor_id or int(user['sect_position'] or 0)!=int(owner_position):return {'status':'not_owner','reason':'sect_owner_changed' if str(sect['sect_owner'])!=actor_id else 'sect_position_changed',**base}
+            if int(sect['level'])!=expected_level:return {'status':'level_changed','reason':'sect_elixir_level_changed',**base}
+            if int(sect['stones'])<stone_cost:return {'status':'stone_insufficient','reason':'sect_stone_insufficient',**base}
             if int(sect['scale'])<scale_cost:return {'status':'scale_insufficient',**base}
             changed=uow.execute('UPDATE sects SET elixir_room_level=?,sect_used_stone=sect_used_stone-?,sect_scale=sect_scale-? WHERE sect_id=? AND sect_owner=? AND COALESCE(elixir_room_level,0)=? AND COALESCE(sect_used_stone,0)>=? AND COALESCE(sect_scale,0)>=?',(next_level,stone_cost,scale_cost,sect_id,actor_id,expected_level,stone_cost,scale_cost))
-            if changed.rowcount!=1: raise RuntimeError('elixir room state changed concurrently')
+            if changed.rowcount!=1: raise DomainError('sect_elixir_write_rejected','elixir room write count mismatch')
             uow.execute('INSERT INTO sect_elixir_room_operations(operation_id,actor_id,sect_id,from_level,to_level,stone_cost,scale_cost) VALUES(?,?,?,?,?,?,?)',(operation_id,actor_id,sect_id,expected_level,next_level,stone_cost,scale_cost))
             return {'status':'upgraded',**base}

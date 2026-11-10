@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from ...core.errors import DomainError
+
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -137,7 +139,7 @@ class ThreeCultivationPillSqlRepository:
                 (final_exp, hp_after, mp_after, final_exp, power_multiplier, user_id),
             )
             if consumed.rowcount != 1 or updated.rowcount != 1:
-                return result("state_changed")
+                raise DomainError("item_write_rejected" if consumed.rowcount != 1 else "cultivation_write_rejected", "item effect write count mismatch")
 
             values = (
                 quantity,

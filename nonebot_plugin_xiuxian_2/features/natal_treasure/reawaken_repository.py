@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from ...core.errors import DomainError
+
 import random
 from pathlib import Path
 from typing import Any
@@ -33,8 +35,8 @@ class NatalReawakenSqlRepository:
         return cls.OPERATION_COLUMNS.issubset(columns)
 
     @staticmethod
-    def _result(status: str, form: int = 0, name: str = "", effect_type: int = 0, base_value: float = 0.0, scripture_change: int = 0) -> dict[str, Any]:
-        return {"status": status, "form": int(form), "name": str(name), "effect_type": int(effect_type), "base_value": float(base_value), "scripture_change": int(scripture_change)}
+    def _result(status: str, form: int = 0, name: str = "", effect_type: int = 0, base_value: float = 0.0, scripture_change: int = 0, reason: str = "") -> dict[str, Any]:
+        return {"reason": reason, "status": status, "form": int(form), "name": str(name), "effect_type": int(effect_type), "base_value": float(base_value), "scripture_change": int(scripture_change)}
 
     def reawaken(self, operation_id: str, user_id: str, scripture_id: int, scripture_name: str, scripture_type: str, scripture_cost: int, max_slots: int, max_goods_num: int, effect_configs: dict[str, Any], effect_names: dict[str, Any], fixed_base_effects: set[str], choice_seed: int) -> dict[str, Any]:
         operation_id, user_id = str(operation_id).strip(), str(user_id)
@@ -51,14 +53,14 @@ class NatalReawakenSqlRepository:
             old = uow.query_one("SELECT user_id,scripture_id,scripture_cost,form,name,effect_type,base_value,scripture_change FROM natal_reawaken_operations WHERE operation_id=?", (operation_id,))
             if old is not None:
                 if str(old["user_id"]) != user_id or int(old["scripture_id"]) != scripture_id or int(old["scripture_cost"]) != scripture_cost:
-                    return self._result("state_changed")
+                    return self._result("state_changed", reason="operation_conflict")
                 return self._result("duplicate", old["form"], old["name"], old["effect_type"], old["base_value"], old["scripture_change"])
             columns = {str(row["name"]) for row in uow.query_all("PRAGMA player_data.table_info(natal_treasure)")}
             required = {"form", "name", "level", "exp", "max_exp", "fate_revive_count", "immortal_revive_count", "invincible_gain_count", "nirvana_revive_count", "soul_return_revive_count", "charge_status", "soul_summon_count", "enlightenment_count"}
             for slot in range(1, max_slots + 1):
                 required.update((f"effect{slot}_type", f"effect{slot}_base_value", f"effect{slot}_level"))
             if not required.issubset(columns):
-                return self._result("treasure_missing")
+                return self._result("treasure_missing", reason="schema_missing")
             fields = ["form"] + [f"effect{slot}_level" for slot in range(1, max_slots + 1)]
             treasure = uow.query_one("SELECT " + ",".join(fields) + " FROM player_data.natal_treasure WHERE user_id=?", (user_id,))
             if treasure is None or int(treasure["form"] or 0) == 0:
@@ -79,17 +81,17 @@ class NatalReawakenSqlRepository:
             base_value = minimum if effect_type in fixed else round(rng.uniform(minimum, maximum), 3)
             if scripture_change < 0:
                 if uow.execute("UPDATE back SET goods_num=goods_num-? WHERE user_id=? AND goods_id=? AND goods_num>=?", (-scripture_change, user_id, scripture_id, -scripture_change)).rowcount != 1:
-                    return self._result("state_changed")
+                    raise DomainError("item_write_rejected", "natal treasure write count mismatch")
             elif scripture_change > 0:
                 if item is None:
                     uow.execute("INSERT INTO back(user_id,goods_id,goods_name,goods_type,goods_num,bind_num) VALUES(?,?,?,?,?,?)", (user_id, scripture_id, scripture_name, scripture_type, scripture_change, 0))
                 elif uow.execute("UPDATE back SET goods_num=goods_num+? WHERE user_id=? AND goods_id=? AND goods_num+?<=?", (scripture_change, user_id, scripture_id, scripture_change, max_goods_num)).rowcount != 1:
-                    return self._result("state_changed")
+                    raise DomainError("item_write_rejected", "natal treasure write count mismatch")
             assignments = [("form", form), ("name", name), ("level", 0), ("exp", 0), ("max_exp", 100), ("fate_revive_count", 0), ("immortal_revive_count", 0), ("invincible_gain_count", 0), ("nirvana_revive_count", 0), ("soul_return_revive_count", 0), ("charge_status", 0), ("soul_summon_count", "{}"), ("enlightenment_count", "{}")] 
             for slot in range(1, max_slots + 1):
                 assignments.extend(((f"effect{slot}_type", effect_type if slot == 1 else 0), (f"effect{slot}_base_value", base_value if slot == 1 else 0.0), (f"effect{slot}_level", 1 if slot == 1 else 0)))
             updated = uow.execute("UPDATE player_data.natal_treasure SET " + ",".join(f'"{field}"=?' for field, _ in assignments) + " WHERE user_id=? AND form=?", tuple(value for _, value in assignments) + (user_id, int(treasure["form"])))
             if updated.rowcount != 1:
-                return self._result("state_changed")
+                raise DomainError("treasure_awaken_write_rejected", "natal treasure write count mismatch")
             uow.execute("INSERT INTO natal_reawaken_operations VALUES(?,?,?,?,?,?,?,?,?,?,?)", (operation_id, user_id, scripture_id, scripture_cost, max_slots, choice_seed, form, name, effect_type, base_value, scripture_change))
             return self._result("reawakened", form, name, effect_type, base_value, scripture_change)

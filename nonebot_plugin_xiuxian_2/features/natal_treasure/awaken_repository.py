@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from ...core.errors import DomainError
+
 import json
 import random
 from pathlib import Path
@@ -32,8 +34,8 @@ class NatalAwakenSqlRepository:
         return cls.OPERATION_COLUMNS.issubset(columns)
 
     @staticmethod
-    def _result(status: str, form: int = 0, name: str = "", effect_type: int = 0, base_value: float = 0.0) -> dict[str, Any]:
-        return {"status": status, "form": int(form), "name": str(name), "effect_type": int(effect_type), "base_value": float(base_value)}
+    def _result(status: str, form: int = 0, name: str = "", effect_type: int = 0, base_value: float = 0.0, reason: str = "") -> dict[str, Any]:
+        return {"reason": reason, "status": status, "form": int(form), "name": str(name), "effect_type": int(effect_type), "base_value": float(base_value)}
 
     def get_result(self, operation_id: str) -> dict[str, Any] | None:
         with DatabaseUnitOfWork(self.player_database) as uow:
@@ -55,17 +57,17 @@ class NatalAwakenSqlRepository:
             previous = uow.query_one("SELECT user_id,max_slots,choice_seed,form,name,effect_type,base_value FROM natal_awaken_operations WHERE operation_id=?", (operation_id,))
             if previous is not None:
                 if str(previous["user_id"]) != user_id:
-                    return self._result("state_changed")
+                    return self._result("state_changed", reason="operation_conflict")
                 return self._result("duplicate", previous["form"], previous["name"], previous["effect_type"], previous["base_value"])
             required = {"form", "name", "level", "exp", "max_exp", "fate_revive_count", "immortal_revive_count", "invincible_gain_count", "nirvana_revive_count", "soul_return_revive_count", "charge_status", "soul_summon_count", "enlightenment_count"}
             for slot in range(1, max_slots + 1):
                 required.update((f"effect{slot}_type", f"effect{slot}_base_value", f"effect{slot}_level"))
             table = uow.query_one("SELECT 1 AS present FROM sqlite_master WHERE type='table' AND name='natal_treasure'")
             if table is None:
-                return self._result("treasure_missing")
+                return self._result("treasure_missing", reason="schema_missing")
             columns = {str(row["name"]) for row in uow.query_all("PRAGMA table_info(natal_treasure)")}
             if not required.issubset(columns):
-                return self._result("treasure_missing")
+                return self._result("treasure_missing", reason="schema_missing")
             current = uow.query_one("SELECT form FROM natal_treasure WHERE user_id=?", (user_id,))
             if current is None:
                 return self._result("treasure_missing")
@@ -82,7 +84,7 @@ class NatalAwakenSqlRepository:
                 assignments.extend(((f"effect{slot}_type", effect_type if slot == 1 else 0), (f"effect{slot}_base_value", base_value if slot == 1 else 0.0), (f"effect{slot}_level", 1 if slot == 1 else 0)))
             updated = uow.execute("UPDATE natal_treasure SET " + ", ".join(f'"{field}"=?' for field, _ in assignments) + " WHERE user_id=? AND COALESCE(form,0)=0", tuple(value for _, value in assignments) + (user_id,))
             if updated.rowcount != 1:
-                return self._result("state_changed")
+                raise DomainError("treasure_awaken_write_rejected", "natal treasure write count mismatch")
             uow.execute("INSERT INTO natal_awaken_operations(operation_id,user_id,max_slots,choice_seed,form,name,effect_type,base_value) VALUES(?,?,?,?,?,?,?,?)", (operation_id, user_id, max_slots, choice_seed, form, name, effect_type, base_value))
             return self._result("awakened", form, name, effect_type, base_value)
 

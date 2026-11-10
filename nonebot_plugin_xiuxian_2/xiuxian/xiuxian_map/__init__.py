@@ -39,6 +39,7 @@ from ...features.map.rewards import MapRewardResolver
 from ...features.map.static_data import MapStaticDataProvider
 from ...compatibility.legacy_map_battle import build_legacy_map_battle_runner
 from ...features._legacy_application import result_data
+from ..command_guard import result_failure
 from ...infrastructure.clock import SystemClock
 from ...infrastructure.random_source import SystemRandom
 from ...infrastructure.json_document import JsonDocumentReader
@@ -93,7 +94,7 @@ map_item_catalog = _LazyMapItemCatalog()
 def _combat_lifecycle_result(data):
     if data is None:
         return None
-    return MapCombatLifecycleResult(str(data.get("status", "state_changed")), int(data.get("stamina", 0) or 0), data.get("task") or {}, str(data.get("snapshot", "")))
+    return MapCombatLifecycleResult(str(data.get("status", "state_changed")), int(data.get("stamina", 0) or 0), data.get("task") or {}, str(data.get("snapshot", "")), reason=str(data.get("reason") or (data.get("task") or {}).get("_rejection_reason") or ("legacy_rejection" if data.get("status") == "state_changed" else "")))
 
 
 def _finish_interactive_failure(operation_id, user_id, action_id, outcome, cooldown_until):
@@ -1799,7 +1800,7 @@ async def _process_node_combat(bot: Bot, event: GroupMessageEvent | PrivateMessa
                     return
                 snapshot, raw_snapshot = current.task, current.snapshot
             else:
-                await handle_send(bot, event, "节点战斗未结算：战斗当前状态已更新。")
+                await handle_send(bot, event, result_failure("节点战斗", replayed))
                 return
         else:
             position = get_player_current_position(uid)
@@ -1865,7 +1866,7 @@ async def _process_node_combat(bot: Bot, event: GroupMessageEvent | PrivateMessa
                     return
                 snapshot, raw_snapshot = current.task, current.snapshot
             elif not started.succeeded or started.task is None:
-                await handle_send(bot, event, "节点战斗未结算：战斗当前状态已更新。")
+                await handle_send(bot, event, result_failure("节点战斗", started))
                 return
             else:
                 snapshot, raw_snapshot = started.task, started.snapshot
@@ -1953,7 +1954,7 @@ async def _process_node_combat(bot: Bot, event: GroupMessageEvent | PrivateMessa
         await handle_send(bot, event, "背包物品已达上限，节点战斗结算尚未领取。")
         return
     if result_status in {"limit_reached", "state_changed", "user_missing", "not_ready"}:
-        await handle_send(bot, event, "节点战斗未结算：战斗当前状态已更新。")
+        await handle_send(bot, event, result_failure("节点战斗结算", result, messages={"limit_reached": "今日节点战斗次数已达上限，请明日再来。", "not_ready": "战斗任务尚未到结算阶段，请先完成战斗。"}))
         return
 
     decay_tip = f"\n当前收益系数：{int(snapshot['decay'] * 100)}%" if snapshot["decay"] < 1 else ""
@@ -2154,6 +2155,7 @@ async def _start_explore(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         result = MapExploreStartResult(
             str(data.get("status", outcome.code)),
             int(data.get("stamina", stamina) or 0),
+            reason=str(data.get("reason", "")),
         )
     except Exception:
         logger.exception("地图探索发起事务失败 user_id={}", uid)
@@ -2169,7 +2171,7 @@ async def _start_explore(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         await handle_send(bot, event, f"今日探索发起次数已达上限（{DAILY_LIMIT_CONFIG['explore']}次），请明日再来。")
         return
     if not result.succeeded:
-        await handle_send(bot, event, "探索未结算：探索当前状态已更新，请重新发起。")
+        await handle_send(bot, event, result_failure("发起探索", result))
         return
 
     await handle_send(
@@ -2290,6 +2292,7 @@ async def _settle_explore(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
             str(data.get("status", outcome.code)),
             int(data.get("stone", 0) or 0),
             tuple(data.get("rewards", ())),
+            reason=str(data.get("reason", "")),
         )
     except Exception:
         logger.exception("地图探索结算事务失败 user_id={}", uid)
@@ -2299,7 +2302,7 @@ async def _settle_explore(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
         await handle_send(bot, event, "背包物品已达上限，探索奖励尚未领取。")
         return
     if result.status in {"limit_reached", "state_changed", "user_missing"}:
-        await handle_send(bot, event, "探索未结算：探索当前状态已更新，请重新发起。")
+        await handle_send(bot, event, result_failure("探索结算", result, messages={"limit_reached": "今日探索次数已达上限，请明日再来。"}))
         return
 
     decay_tip = f"\n当前收益系数：{int(snapshot['decay'] * 100)}%" if snapshot["decay"] < 1 else ""
@@ -2492,12 +2495,12 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         event_meta=reward_meta,
     )
     data = result_data(outcome.data)
-    result = MapMissionClaimResult(str(data.get("status", outcome.code)), int(data.get("stone", 0) or 0), tuple(data.get("rewards", ())))
+    result = MapMissionClaimResult(str(data.get("status", outcome.code)), int(data.get("stone", 0) or 0), tuple(data.get("rewards", ())), reason=str(data.get("reason", "")))
     if result.status == "inventory_full":
         await handle_send(bot, event, "背包物品已达上限，委托奖励尚未领取。")
         return
     if result.status in {"not_completed", "already_claimed", "state_changed", "user_missing"}:
-        await handle_send(bot, event, "委托未结算：委托当前状态已更新，请重新发起。")
+        await handle_send(bot, event, result_failure("领取地图委托", result, messages={"not_completed": "委托目标尚未完成，请完成目标后领取。", "already_claimed": "该委托奖励已经领取，请查看背包。"}))
         return
 
     completion_message = f"✅ 地图委托完成！\n任务：{_get_mission_desc(mission)}\n获得奖励：{_merge_reward_text(rewards)}"

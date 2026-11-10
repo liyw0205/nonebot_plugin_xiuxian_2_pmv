@@ -6,6 +6,7 @@ from typing import Any
 
 from ...infrastructure.clock import SystemClock
 from ...infrastructure.database import DatabaseUnitOfWork
+from ...core.errors import DomainError
 
 
 class SectTaskSettlementSqlRepository:
@@ -109,9 +110,9 @@ class SectTaskSettlementSqlRepository:
             if int(task["sect_id"]) != sect_id:
                 return {"status": "task_sect_changed", **base}
             if expected_task_key is not None and str(task["task_key"]) != str(expected_task_key):
-                return {"status": "task_snapshot_changed", **base}
+                return {**{"status": "task_snapshot_changed", **base}, "reason": "task_key_changed", "subject": ""}
             if expected_task_data is not None and json.loads(task["task_data"] or "{}") != dict(expected_task_data):
-                return {"status": "task_snapshot_changed", **base}
+                return {**{"status": "task_snapshot_changed", **base}, "reason": "task_contents_changed", "subject": ""}
 
             user = uow.query_one(
                 "SELECT sect_id,stone,hp FROM user_xiuxian WHERE user_id=?",
@@ -152,7 +153,7 @@ class SectTaskSettlementSqlRepository:
                 (now, now, user_id, period, sect_id),
             )
             if user_update.rowcount != 1 or sect_update.rowcount != 1 or task_update.rowcount != 1:
-                raise RuntimeError("task settlement state changed concurrently")
+                raise DomainError("sect_member_write_rejected" if user_update.rowcount != 1 else "sect_assets_write_rejected" if sect_update.rowcount != 1 else "task_write_rejected", "task settlement write count mismatch")
 
             uow.execute(
                 "INSERT INTO sect_task_settlement_operations("

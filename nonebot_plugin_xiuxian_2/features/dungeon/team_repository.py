@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from ...core.errors import DomainError
+
 import json
 from dataclasses import dataclass, replace
 from datetime import datetime
@@ -24,6 +26,7 @@ class TeamMutationResult:
     group_id: str = ""
     cooldown_until: str = ""
     cooldown_seconds: int = 0
+    reason: str = ""
 
 
 @dataclass(frozen=True)
@@ -69,9 +72,17 @@ class TeamExitResult:
     cooldown_until: str = ""
     version: int = 0
     target_id: str = ""
+    reason: str = ""
 
 
 class DungeonTeamRepository:
+    @staticmethod
+    def _snapshot_reason(current, expected):
+        for field, reason in (("team_id", "team_changed"), ("team_name", "team_name_changed"), ("leader_id", "team_leader_changed"), ("members", "team_members_changed"), ("version", "team_version_changed")):
+            if getattr(current, field) != getattr(expected, field):
+                return reason
+        raise ValueError("identical team snapshots")
+
     MAX_INVITE_EXPIRY_BATCH = 100
     _TEAM_COLUMNS = (
         "user_id,team_id,team_name,group_id,leader,members,"
@@ -388,9 +399,10 @@ class DungeonTeamRepository:
                 group_id=str(data.get("group_id", "")),
                 cooldown_until=str(data.get("cooldown_until", "")),
                 cooldown_seconds=int(data.get("cooldown_seconds", 0) or 0),
+                reason=str(data.get("reason") or ("legacy_rejection" if row["result_status"] == "state_changed" else "")),
             )
         except (TypeError, ValueError, json.JSONDecodeError):
-            return TeamMutationResult(str(row["result_status"]), team_id=str(row["team_id"]))
+            return TeamMutationResult(str(row["result_status"]), team_id=str(row["team_id"]), reason="receipt_corrupt")
 
     def _finish(self, uow: DatabaseUnitOfWork, operation_id: str, action: str, payload: str, result: TeamMutationResult, *, retry_receipt: bool = False) -> TeamMutationResult:
         if retry_receipt:
@@ -414,7 +426,7 @@ class DungeonTeamRepository:
                 return TeamMutationResult("schema_missing", team_id=str(team_id), target_id=str(leader_id), group_id=str(group_id))
             old = uow.query_one("SELECT payload,result_status,team_id,result_json FROM dungeon_team_operations WHERE operation_id=?", (operation_id,))
             if old is not None:
-                return self._decode_mutation(old) if old["payload"] == payload else TeamMutationResult("state_changed", team_id=str(old["team_id"]))
+                return self._decode_mutation(old) if old["payload"] == payload else TeamMutationResult("state_changed", team_id=str(old["team_id"]), reason="operation_conflict")
             base = dict(team_id=str(team_id), team_name=str(team_name), leader_id=str(leader_id), target_id=str(leader_id), group_id=str(group_id))
             if not group_id: return self._finish(uow, operation_id, "create", payload, TeamMutationResult("group_required", **base))
             user_exists = self._user_exists(uow, leader_id)
@@ -439,7 +451,7 @@ class DungeonTeamRepository:
         if row is None:
             return None
         if action and str(row["action"]) != str(action):
-            return TeamMutationResult("state_changed", team_id=str(row["team_id"]))
+            return TeamMutationResult("state_changed", team_id=str(row["team_id"]), reason="operation_conflict")
         result = self._decode_mutation(row)
         return TeamMutationResult(**{**result.__dict__, "status": "duplicate" if result.status == "applied" else result.status})
 
@@ -468,18 +480,18 @@ class DungeonTeamRepository:
             if not self._mutation_schema_ready(uow):
                 return TeamMutationResult("schema_missing", team_id=expected.team_id, target_id=str(target_id), version=expected.version)
             old = uow.query_one("SELECT payload,result_status,team_id,result_json FROM dungeon_team_operations WHERE operation_id=?", (operation_id,))
-            if old is not None: return self._decode_mutation(old) if old["payload"] == payload else TeamMutationResult("state_changed", team_id=str(old["team_id"]))
+            if old is not None: return self._decode_mutation(old) if old["payload"] == payload else TeamMutationResult("state_changed", team_id=str(old["team_id"]), reason="operation_conflict")
             row = uow.query_one("SELECT team_name,leader,members,version FROM teams WHERE user_id=?", (expected.team_id,))
             base = dict(team_id=expected.team_id, team_name=expected.team_name, leader_id=expected.leader_id, member_count=len(expected.members), target_id=str(target_id), version=expected.version)
             if row is None: return self._finish(uow, operation_id, "transfer", payload, TeamMutationResult("team_missing", **base))
             current = TeamStateSnapshot(expected.team_id, str(row["team_name"] or ""), str(row["leader"] or ""), tuple(self._members(row["members"])), int(row["version"] or 0))
-            if current != expected: return self._finish(uow, operation_id, "transfer", payload, TeamMutationResult("state_changed", **base))
+            if current != expected: return self._finish(uow, operation_id, "transfer", payload, TeamMutationResult("state_changed", reason=self._snapshot_reason(current, expected), **base))
             if actor_id != current.leader_id: return self._finish(uow, operation_id, "transfer", payload, TeamMutationResult("actor_not_leader", **base))
             if target_id == actor_id: return self._finish(uow, operation_id, "transfer", payload, TeamMutationResult("self_target", **base))
             if target_id not in current.members: return self._finish(uow, operation_id, "transfer", payload, TeamMutationResult("target_not_member", **base))
             if any(self._active_session(uow, member) for member in current.members): return self._finish(uow, operation_id, "transfer", payload, TeamMutationResult("session_active", **base))
             changed = uow.execute("UPDATE teams SET leader=?,version=version+1 WHERE user_id=? AND version=?", (target_id, current.team_id, current.version))
-            if changed.rowcount != 1: return TeamMutationResult("state_changed", **base)
+            if changed.rowcount != 1: raise DomainError("team_leader_write_rejected", "team mutation write count mismatch")
             uow.execute(
                 "UPDATE dungeon_team_members SET version=? WHERE team_id=?",
                 (current.version + 1, current.team_id),
@@ -495,7 +507,7 @@ class DungeonTeamRepository:
             if not self._mutation_schema_ready(uow):
                 return TeamMutationResult("schema_missing", team_id=str(team_id), invite_id=str(invite_id), target_id=str(invitee_id), group_id=str(group_id))
             old = uow.query_one("SELECT payload,result_status,team_id,result_json FROM dungeon_team_operations WHERE operation_id=?", (operation_id,))
-            if old is not None: return self._decode_mutation(old) if old["payload"] == payload else TeamMutationResult("state_changed", team_id=str(old["team_id"]))
+            if old is not None: return self._decode_mutation(old) if old["payload"] == payload else TeamMutationResult("state_changed", team_id=str(old["team_id"]), reason="operation_conflict")
             base = dict(team_id=team_id, invite_id=invite_id, target_id=invitee_id, group_id=group_id, expires_at=float(expires_at))
             routing = bool(bot_id or source_message_id or notification_scene)
             if routing and not self._invite_expiry_schema_ready(uow):
@@ -533,11 +545,20 @@ class DungeonTeamRepository:
             if not self._mutation_schema_ready(uow):
                 return TeamMutationResult("schema_missing", team_id=str(team_id), invite_id=str(invite_id), target_id=str(user_id), group_id=str(group_id))
             old = uow.query_one("SELECT payload,result_status,team_id,result_json FROM dungeon_team_operations WHERE operation_id=?", (operation_id,))
-            if old is not None: return self._decode_mutation(old) if old["payload"] == payload else TeamMutationResult("state_changed", team_id=str(old["team_id"]))
+            if old is not None: return self._decode_mutation(old) if old["payload"] == payload else TeamMutationResult("state_changed", team_id=str(old["team_id"]), reason="operation_conflict")
             invite = uow.query_one("SELECT team_id,inviter_id,invitee_id,group_id,expires_at,status,consumed_at FROM dungeon_team_invites WHERE invite_id=?", (invite_id,))
             base = dict(team_id=team_id, invite_id=invite_id, target_id=user_id, group_id=group_id)
-            if invite is None or (str(invite["team_id"]), str(invite["inviter_id"]), str(invite["invitee_id"]), str(invite["group_id"])) != (team_id, inviter_id, user_id, group_id) or str(invite["status"]) != "pending" or invite["consumed_at"] is not None or float(invite["expires_at"]) <= float(now_timestamp):
-                return self._finish(uow, operation_id, "join", payload, TeamMutationResult("invite_invalid", **base))
+            invite_reason = ""
+            if invite is None:
+                invite_reason = "team_invite_missing"
+            elif (str(invite["team_id"]), str(invite["inviter_id"]), str(invite["invitee_id"]), str(invite["group_id"])) != (team_id, inviter_id, user_id, group_id):
+                invite_reason = "invite_subject_mismatch"
+            elif str(invite["status"]) != "pending" or invite["consumed_at"] is not None:
+                invite_reason = "team_invite_resolved"
+            elif float(invite["expires_at"]) <= float(now_timestamp):
+                invite_reason = "team_invite_expired"
+            if invite_reason:
+                return self._finish(uow, operation_id, "join", payload, TeamMutationResult("invite_invalid", reason=invite_reason, **base))
             user_exists = self._user_exists(uow, user_id)
             if user_exists is None: return TeamMutationResult("schema_missing", **base)
             if not user_exists: return self._finish(uow, operation_id, "join", payload, TeamMutationResult("user_missing", **base))
@@ -550,7 +571,7 @@ class DungeonTeamRepository:
             if self._active_session(uow, user_id) or any(self._active_session(uow, member) for member in members): return self._finish(uow, operation_id, "join", payload, TeamMutationResult("session_active", **base))
             members.append(user_id)
             changed = uow.execute("UPDATE teams SET members=?,version=version+1 WHERE user_id=? AND version=?", (json.dumps(members), team_id, int(team["version"] or 0)))
-            if changed.rowcount != 1: return TeamMutationResult("state_changed", **base)
+            if changed.rowcount != 1: raise DomainError("team_members_write_rejected", "team mutation write count mismatch")
             self._sync_membership(uow, team_id, members, int(team["version"] or 0) + 1)
             uow.execute("INSERT INTO team_cd(user_id,join_cd_until,had_first_join) VALUES(?,?,1) ON CONFLICT(user_id) DO UPDATE SET had_first_join=1", (user_id, ""))
             uow.execute("UPDATE dungeon_team_invites SET consumed_at=CURRENT_TIMESTAMP,status='joined',resolved_operation_id=? WHERE invite_id=? AND status='pending'", (operation_id, invite_id))
@@ -569,13 +590,13 @@ class DungeonTeamRepository:
             retry_receipt = False
             if old is not None:
                 if old["payload"] != payload or str(old["action"] or "") not in {"", action}:
-                    return TeamMutationResult("state_changed", team_id=str(old["team_id"]))
+                    return TeamMutationResult("state_changed", team_id=str(old["team_id"]), reason="operation_conflict")
                 try:
                     stored = json.loads(str(old["result_json"] or "{}"))
                 except (TypeError, ValueError):
-                    return TeamMutationResult("state_changed", team_id=str(old["team_id"]))
+                    return TeamMutationResult("state_changed", team_id=str(old["team_id"]), reason="receipt_corrupt")
                 if not isinstance(stored, dict) or str(stored.get("status", old["result_status"])) != str(old["result_status"]):
-                    return TeamMutationResult("state_changed", team_id=str(old["team_id"]))
+                    return TeamMutationResult("state_changed", team_id=str(old["team_id"]), reason="receipt_corrupt")
                 previous = self._decode_mutation(old)
                 retry_receipt = action == "expire" and previous.status == "not_expired"
                 if not retry_receipt:
@@ -592,7 +613,7 @@ class DungeonTeamRepository:
                 return TeamMutationResult("not_expired", **base)
             status = "expired" if action == "expire" else "rejected"
             changed = uow.execute("UPDATE dungeon_team_invites SET status=?,consumed_at=CURRENT_TIMESTAMP,resolved_operation_id=? WHERE invite_id=? AND status='pending'", (status, operation_id, invite_id))
-            if changed.rowcount != 1: return TeamMutationResult("state_changed", **base)
+            if changed.rowcount != 1: raise DomainError("team_invite_write_rejected", "team mutation write count mismatch")
             return self._finish(uow, operation_id, action, payload, TeamMutationResult("applied", **base), retry_receipt=retry_receipt)
 
     def reject(self, operation_id: str, invite_id: str, user_id: str, group_id: str = "", now_timestamp: float = 0) -> TeamMutationResult:
@@ -616,12 +637,12 @@ class DungeonTeamRepository:
             payload = json.loads(str(row["payload"]))
             data = json.loads(str(row["result_json"]))
             if payload.get("action") != action or str(payload.get("actor_id")) != str(actor_id) or (target_id is not None and str(payload.get("target_id")) != str(target_id)):
-                return TeamExitResult("state_changed")
+                return TeamExitResult("state_changed", reason="operation_conflict")
             data["cooldown_members"] = tuple(data.get("cooldown_members") or ())
             data["status"] = "duplicate" if data.get("status") == "applied" else data.get("status", "state_changed")
             return TeamExitResult(**data)
         except (TypeError, ValueError, json.JSONDecodeError):
-            return TeamExitResult("state_changed")
+            return TeamExitResult("state_changed", reason="receipt_corrupt")
 
     def _finish_exit(self, uow: DatabaseUnitOfWork, operation_id: str, payload: str, result: TeamExitResult) -> TeamExitResult:
         uow.execute("INSERT INTO dungeon_team_exit_operations(operation_id,payload,result_json) VALUES(?,?,?)", (operation_id, payload, json.dumps(result.__dict__, ensure_ascii=True, default=list)))
@@ -638,11 +659,18 @@ class DungeonTeamRepository:
                 return TeamExitResult("schema_missing", expected.team_id, expected.team_name, target_id=target_id)
             old = uow.query_one("SELECT payload,result_json FROM dungeon_team_exit_operations WHERE operation_id=?", (operation_id,))
             if old is not None:
-                data = json.loads(str(old["result_json"])); data["cooldown_members"] = tuple(data.get("cooldown_members") or ()); data["status"] = "duplicate" if data.get("status") == "applied" else data.get("status", "state_changed"); return TeamExitResult(**data)
+                if str(old["payload"]) != payload:
+                    return TeamExitResult("state_changed", reason="operation_conflict")
+                data = json.loads(str(old["result_json"]))
+                data["cooldown_members"] = tuple(data.get("cooldown_members") or ())
+                data["status"] = "duplicate" if data.get("status") == "applied" else data.get("status", "state_changed")
+                if data["status"] == "state_changed" and not data.get("reason"):
+                    data["reason"] = "legacy_rejection"
+                return TeamExitResult(**data)
             row = uow.query_one("SELECT team_name,leader,members,version FROM teams WHERE user_id=?", (expected.team_id,))
             if row is None: return self._finish_exit(uow, operation_id, payload, TeamExitResult("team_missing", expected.team_id, expected.team_name, target_id=target_id))
             current = TeamStateSnapshot(expected.team_id, str(row["team_name"] or ""), str(row["leader"] or ""), tuple(self._members(row["members"])), int(row["version"] or 0))
-            if current != expected: return self._finish_exit(uow, operation_id, payload, TeamExitResult("state_changed", expected.team_id, expected.team_name, target_id=target_id))
+            if current != expected: return self._finish_exit(uow, operation_id, payload, TeamExitResult("state_changed", expected.team_id, expected.team_name, target_id=target_id, reason=self._snapshot_reason(current, expected)))
             if actor_id not in current.members: return self._finish_exit(uow, operation_id, payload, TeamExitResult("actor_not_member", current.team_id, current.team_name, target_id=target_id))
             if action in {"kick", "disband"} and actor_id != current.leader_id: return self._finish_exit(uow, operation_id, payload, TeamExitResult("actor_not_leader", current.team_id, current.team_name, target_id=target_id))
             if action in {"leave", "kick"} and target_id not in current.members: return self._finish_exit(uow, operation_id, payload, TeamExitResult("target_not_member", current.team_id, current.team_name, target_id=target_id))
@@ -652,7 +680,7 @@ class DungeonTeamRepository:
             if disbanded: changed = uow.execute("DELETE FROM teams WHERE user_id=? AND version=?", (current.team_id, current.version))
             else:
                 members.remove(target_id); new_leader = members[0] if target_id == current.leader_id else current.leader_id; changed = uow.execute("UPDATE teams SET members=?,leader=?,version=version+1 WHERE user_id=? AND version=?", (json.dumps(members), new_leader, current.team_id, current.version))
-            if changed.rowcount != 1: return TeamExitResult("state_changed", current.team_id, current.team_name, target_id=target_id)
+            if changed.rowcount != 1: raise DomainError("team_members_write_rejected", "team exit write count mismatch")
             if disbanded:
                 uow.execute("DELETE FROM dungeon_team_members WHERE team_id=?", (current.team_id,))
             else:

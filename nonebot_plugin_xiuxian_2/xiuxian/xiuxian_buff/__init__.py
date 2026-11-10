@@ -7,7 +7,7 @@ from types import SimpleNamespace
 from nonebot.log import logger
 from ...paths import get_paths
 from ...features.buff.application import BuffApplication
-from ..command_guard import guard_command
+from ..command_guard import guard_command, result_failure, report_exception
 from ...features.base.economy_application import PlayerEconomyApplication
 from ...features.player_state.application import PlayerStateApplication
 from ...features.mixelixir.harvest_rules import field_status_text
@@ -327,7 +327,7 @@ async def blessed_spot_creat_(bot: Bot, event: GroupMessageEvent | PrivateMessag
         name=default_name,
         harvest_time=harvest_time,
     )
-    result = SimpleNamespace(**dict(outcome.data or {})); result.status = outcome.status; result.succeeded = outcome.ok
+    result = SimpleNamespace(**dict(outcome.data or {})); result.status = (outcome.data or {}).get("status", outcome.code or outcome.status); result.succeeded = outcome.ok
 
     if result.status == "duplicate":
         msg = (
@@ -346,7 +346,7 @@ async def blessed_spot_creat_(bot: Bot, event: GroupMessageEvent | PrivateMessag
         await handle_send(bot, event, msg, md_type="buff", k1="查看", v1="洞天福地查看", k2="购买", v2="洞天福地购买", k3="开垦", v3="灵田开垦")
         await blessed_spot_creat.finish()
     if not result.succeeded:
-        msg = "洞天福地操作未完成：灵石或洞天状态已更新，请重新查看。"
+        msg = result_failure("购买洞天福地", result)
         await handle_send(bot, event, msg, md_type="buff", k1="查看", v1="洞天福地查看", k2="购买", v2="洞天福地购买", k3="开垦", v3="灵田开垦")
         await blessed_spot_creat.finish()
     msg = "恭喜道友拥有了自己的洞天福地，请收集聚灵旗来提升洞天福地的等级吧~\n"
@@ -384,6 +384,7 @@ async def blessed_spot_info_(bot: Bot, event: GroupMessageEvent | PrivateMessage
 
 
 @ling_tian_up.handle(parameterless=[Cooldown(cd_time=0)])
+@guard_command("灵田开垦")
 async def ling_tian_up_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """洞天福地灵田升级"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -448,12 +449,13 @@ async def ling_tian_up_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
             elif result.succeeded:
                 msg = f"道友成功消耗灵石：{result.stone_cost}，灵田数量+1,目前数量:{result.current_level}"
             else:
-                msg = "灵田操作未完成：灵田状态已更新，请重新查看灵田。"
+                msg = result_failure("灵田开垦", result)
     await handle_send(bot, event, msg, md_type="buff", k1="查看", v1="洞天福地查看", k2="购买", v2="洞天福地购买", k3="开垦", v3="灵田开垦")
     await ling_tian_up.finish()
 
 
 @blessed_spot_rename.handle(parameterless=[Cooldown(cd_time=0)])
+@guard_command("洞天改名")
 async def blessed_spot_rename_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """洞天福地改名"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -481,7 +483,7 @@ async def blessed_spot_rename_(bot: Bot, event: GroupMessageEvent | PrivateMessa
             expected_name=str(user_info.get("blessed_spot_name", "") or ""),
             new_name=arg,
         )
-        result = SimpleNamespace(**dict(outcome.data or {})); result.status = outcome.status; result.succeeded = outcome.ok
+        result = SimpleNamespace(**dict(outcome.data or {})); result.status = (outcome.data or {}).get("status", outcome.code or outcome.status); result.succeeded = outcome.ok
 
         if outcome.code == "schema_missing":
             msg = "洞天福地数据尚未就绪，请检查启动迁移。"
@@ -490,12 +492,13 @@ async def blessed_spot_rename_(bot: Bot, event: GroupMessageEvent | PrivateMessa
         elif result.succeeded:
             msg = f"道友的洞天福地成功改名为：{result.name}"
         else:
-            msg = "洞天操作未结算：洞天当前状态已更新。"
+            msg = result_failure("洞天改名", result)
     await handle_send(bot, event, msg, md_type="buff", k1="查看", v1="洞天福地查看", k2="购买", v2="洞天福地购买", k3="开垦", v3="灵田开垦")
     await blessed_spot_rename.finish()
 
 
 @qc.handle(parameterless=[Cooldown(cd_time=60)])
+@guard_command("切磋")
 async def qc_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """切磋"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -583,7 +586,7 @@ async def qc_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Me
     elif settlement.status == "stamina_insufficient":
         msg = "你没有足够的体力，请等待体力恢复后再试！"
     else:
-        msg = "切磋未结算：双方战斗当前状态已更新，请重新发起。"
+        msg = result_failure("切磋", settlement, subjects={str(base1["user_id"]):"发起方", str(base2["user_id"]):"应战方"})
     await handle_send(bot, event, msg, md_type="buff", k1="切磋", v1="切磋", k2="状态", v2="我的状态", k3="修为", v3="我的修为")
     await qc.finish()
 
@@ -667,7 +670,7 @@ async def up_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
                 exp_cap=max_exp, power_multiplier=level_rate * realm_rate,
             )
             if not start_result.ok:
-                await handle_send(bot, event, "修炼操作未完成：闭关或出关状态已更新，请重新操作。")
+                await handle_send(bot, event, result_failure("挖矿", start_result))
                 await up_exp.finish()
             msg = f"开始挖矿⛏️！【{user_info['user_name']}开始挖矿】\n挥起玄铁镐砸向发光岩壁\n碎石里蹦出带灵气的矿石\n预计时间：60秒"
             await handle_send(bot, event, msg)
@@ -677,7 +680,7 @@ async def up_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
                 operation_id=operation_id, user_id=str(user_id), task_period=f"{iso.year}-W{iso.week:02d}"
             )
             if not result.ok:
-                await handle_send(bot, event, result.message or "挖矿结算未完成，请稍后重试。")
+                await handle_send(bot, event, result_failure("挖矿结算", result))
                 await up_exp.finish()
             stone_gain = int((result.data or {}).get("stone_gain", 0))
             msg = f"挖矿结束，增加灵石：{stone_gain}"
@@ -692,7 +695,7 @@ async def up_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
                 exp_cap=max_exp, power_multiplier=level_rate * realm_rate,
             )
             if not start_result.ok:
-                await handle_send(bot, event, "修炼操作未完成：闭关或出关状态已更新，请重新操作。")
+                await handle_send(bot, event, result_failure("修炼", start_result))
                 await up_exp.finish()
             msg = f"【{user_info['user_name']}开始修炼】\n盘膝而坐，五心朝天，闭目凝神，渐入空明之境...\n周身灵气如涓涓细流汇聚，在经脉中缓缓流转\n丹田内真元涌动，与天地灵气相互呼应\n渐入佳境，物我两忘，进入深度修炼状态\n预计修炼时间：60秒"
         await handle_send(bot, event, msg)
@@ -703,7 +706,7 @@ async def up_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
             task_period=f"{iso.year}-W{iso.week:02d}",
         )
         if not result.ok:
-            await handle_send(bot, event, result.message or "修炼结算未完成，请稍后重试。")
+            await handle_send(bot, event, result_failure("修炼结算", result))
             await up_exp.finish()
         result_data = result.data or {}
         exp_gain = int(result_data.get("exp_gain", 0))
@@ -723,6 +726,7 @@ async def up_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 
  
 @stone_exp.handle(parameterless=[Cooldown(cd_time=0)])
+@guard_command("灵石修炼")
 async def stone_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """灵石修炼"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -770,7 +774,7 @@ async def stone_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, a
     elif result.status == "exp_capped":
         msg = "当前修为已到达上限，无法继续灵石修炼！"
     elif not result.succeeded:
-        msg = "修炼结算失败：当前状态已更新，请重新尝试。"
+        msg = result_failure("灵石修炼", result)
     else:
         capped = result.exp_gain >= user_get_exp_max
         prefix = "修炼结束，本次修炼到达上限" if capped else "修炼结束"
@@ -818,6 +822,7 @@ async def in_closing_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     await handle_send(bot, event, msg, md_type="0", k2="修仙帮助", v2="修仙帮助", k3="闭关", v3="闭关")
     await in_closing.finish()
 @out_closing.handle(parameterless=[Cooldown(cd_time=0)])
+@guard_command("闭关结算")
 async def out_closing_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """结算闭关收益、恢复和灵石消耗。"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -829,8 +834,8 @@ async def out_closing_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
     closing_operation_id = _closing_settlement_operation_id(event, user_id)
     try:
         previous = buff_application.closing_replay(closing_operation_id)
-    except Exception:
-        await handle_send(bot, event, "出关结算状态暂时无法确认，请稍后重试。")
+    except Exception as exc:
+        await handle_send(bot, event, report_exception("查询出关回执", exc))
         await out_closing.finish()
     if previous is not None:
         if previous.ok:
@@ -842,7 +847,7 @@ async def out_closing_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
             if previous.message:
                 replay_message += f"\n{previous.message}"
         else:
-            replay_message = previous.message or "闭关操作未完成：闭关状态或资源已更新，请重新查看。"
+            replay_message = result_failure("出关回执", previous)
         await handle_send(
             bot,
             event,
@@ -881,11 +886,11 @@ async def out_closing_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
             new_power=reward.new_power,
             exp_time=reward.exp_time,
         )
-    except Exception:
-        await handle_send(bot, event, "出关结算失败：结算过程异常。")
+    except Exception as exc:
+        await handle_send(bot, event, report_exception("出关结算", exc))
         await out_closing.finish()
     if not result.ok:
-        await handle_send(bot, event, "闭关操作未完成：闭关状态或资源已更新，请重新查看。")
+        await handle_send(bot, event, result_failure("出关结算", result))
         await out_closing.finish()
 
     hp_msg = (
@@ -1271,11 +1276,11 @@ async def del_exp_decimal_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
     elif result.status == "user_missing":
         msg = "未找到用户数据，请重新查询后操作。"
     elif result.status == "state_changed":
-        msg = "修为数据已变化，请重新查询后重试。"
+        msg = result_failure("整理修为", {"status":"exp_changed"})
     elif result.succeeded:
         msg = "黑暗动乱暂时抑制成功！"
     else:
-        msg = "修为整理未完成，请稍后重试。"
+        msg = result_failure("整理修为", result)
     await handle_send(bot, event, msg)
     await del_exp_decimal.finish()
 

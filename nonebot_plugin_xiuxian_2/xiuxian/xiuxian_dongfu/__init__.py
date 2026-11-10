@@ -21,6 +21,7 @@ from ...infrastructure.ids import UUIDGenerator
 from ...infrastructure.random_source import SystemRandom
 from ...infrastructure.clock import SystemClock
 from ..on_compat import on_command
+from ..command_guard import guard_command, result_failure
 from nonebot.params import CommandArg
 
 from ..adapter_compat import Bot, Message, GroupMessageEvent, PrivateMessageEvent
@@ -566,6 +567,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 
 
 @dongfu_plant.handle(parameterless=[Cooldown(cd_time=0, stamina_cost=2, stamina_operation_prefix="dongfu:plant")])
+@guard_command("洞府种植")
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     bot, _ = await assign_bot(bot=bot, event=event)
     ok, user_info, m = check_user(event)
@@ -632,8 +634,8 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     if result.status == "seed_insufficient":
         await handle_send(bot, event, f"你没有【{seed_name}】，请先去种子商店购买。")
         return
-    if result.status in {"plot_occupied", "state_changed", "dongfu_missing"}:
-        await handle_send(bot, event, "灵田操作未结算：灵田当前状态已更新，请重新尝试。")
+    if not result.succeeded:
+        await handle_send(bot, event, result_failure("灵田操作", result))
         return
     d = _get_dongfu(uid)
 
@@ -645,6 +647,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
 
 
 @dongfu_harvest.handle(parameterless=[Cooldown(cd_time=0, stamina_cost=2, stamina_operation_prefix="dongfu:harvest")])
+@guard_command("洞府收获")
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     bot, _ = await assign_bot(bot=bot, event=event)
     ok, user_info, m = check_user(event)
@@ -754,7 +757,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
             if prepared.status == "snapshot_invalid":
                 await handle_send(bot, event, "洞府收获结算数据异常，请联系管理员处理。")
             else:
-                await handle_send(bot, event, "洞府收获尚未结算：灵田状态已更新，请重新尝试。")
+                await handle_send(bot, event, result_failure("准备灵田收获", prepared))
             return
         snapshot = prepared.snapshot
         operation_id = str(snapshot.get("operation_id") or operation_id)
@@ -786,8 +789,8 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     if result.status == "inventory_full":
         await handle_send(bot, event, "背包物品已达上限，洞府收获尚未领取。")
         return
-    if result.status in {"not_mature", "state_changed", "user_missing", "dongfu_missing"}:
-        await handle_send(bot, event, "种植未结算：种植当前状态已更新，请重新尝试。")
+    if not result.succeeded:
+        await handle_send(bot, event, result_failure("灵田收获", result))
         return
 
     reward_map = {
@@ -833,6 +836,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 
 
 @dongfu_patrol.handle(parameterless=[Cooldown(cd_time=0)])
+@guard_command("洞府巡山")
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     bot, _ = await assign_bot(bot=bot, event=event)
     ok, user_info, m = check_user(event)
@@ -896,7 +900,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await handle_send(bot, event, "背包空间不足，无法领取巡山奖励。")
         return
     if not result.succeeded:
-        await handle_send(bot, event, "洞府状态或资产已发生变化，请稍后重试。")
+        await handle_send(bot, event, result_failure("洞府巡山", result))
         return
     d = _get_dongfu(uid)
     rewards = [f"灵石x{number_to(stone_gain)}"]
@@ -915,6 +919,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 
 
 @dongfu_fertilize.handle(parameterless=[Cooldown(cd_time=0, stamina_cost=1, stamina_operation_prefix="dongfu:fertilize")])
+@guard_command("洞府施肥")
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     bot, _ = await assign_bot(bot=bot, event=event)
     ok, user_info, m = check_user(event)
@@ -966,14 +971,15 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     if result.status == "item_insufficient":
         await handle_send(bot, event, "你没有【五色灵壤】。可通过地图采集/探索获得。")
         return
-    if result.status in {"fertilizer_full", "plot_empty", "state_changed", "dongfu_missing"}:
-        await handle_send(bot, event, "灵田操作未结算：灵田当前状态已更新，请重新尝试。")
+    if not result.succeeded:
+        await handle_send(bot, event, result_failure("灵田操作", result))
         return
     d = _get_dongfu(uid)
     await handle_send(bot, event, f"已对{slot_no}号灵田施肥，当前肥力+{fertilizer + 1}。\n{_format_plant_slots(d)}")
 
 
 @dongfu_accelerate.handle(parameterless=[Cooldown(cd_time=0, stamina_cost=1, stamina_operation_prefix="dongfu:accelerate")])
+@guard_command("洞府催熟")
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     bot, _ = await assign_bot(bot=bot, event=event)
     ok, user_info, m = check_user(event)
@@ -1034,8 +1040,8 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     if result.status == "item_insufficient":
         await handle_send(bot, event, "你没有【灵息露】。可通过地图钓鱼/探索获得。")
         return
-    if result.status in {"plot_empty", "already_mature", "state_changed", "dongfu_missing"}:
-        await handle_send(bot, event, "灵田操作未结算：灵田当前状态已更新，请重新尝试。")
+    if not result.succeeded:
+        await handle_send(bot, event, result_failure("灵田操作", result))
         return
     d = _get_dongfu(uid)
     await handle_send(bot, event, f"已使用【灵息露】催熟{slot_no}号灵田，成熟时间缩短{accelerate_minutes}分钟。\n{_format_plant_slots(d)}")
@@ -1080,13 +1086,14 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await handle_send(bot, event, f"洞府灵田已扩建至上限：{DONGFU_PLOT_MAX}块。")
         return
     if not result.succeeded:
-        await handle_send(bot, event, "洞府状态或资产已发生变化，请稍后重试。")
+        await handle_send(bot, event, result_failure("洞府巡山", result))
         return
     d = _get_dongfu(uid)
     await handle_send(bot, event, f"洞府扩建成功，灵田数量提升至{result.current_count}块。\n{_format_plant_slots(d)}")
 
 
 @visit_friend.handle(parameterless=[Cooldown(cd_time=0, stamina_cost=VISIT_STAMINA, stamina_operation_prefix="dongfu:visit")])
+@guard_command("拜访洞府")
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     bot, _ = await assign_bot(bot=bot, event=event)
     ok, user_info, m = check_user(event)
@@ -1125,13 +1132,14 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         gain=requested_gain,
     )
     if not result.succeeded:
-        await handle_send(bot, event, "洞府操作未结算：洞府当前状态已更新，请稍后重试。")
+        await handle_send(bot, event, result_failure("拜访洞府", result))
         return
     replay = "（该请求已处理）" if result.status == "duplicate" else ""
     await handle_send(bot, event, f"你拜访了【{tname}】的洞府（{td.get('node_name')}），获得灵石{number_to(result.gain)}。{replay}")
 
 
 @dongfu_array.handle(parameterless=[Cooldown(cd_time=0)])
+@guard_command("洞府阵法升级")
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     bot, _ = await assign_bot(bot=bot, event=event)
     ok, user_info, m = check_user(event)
@@ -1172,7 +1180,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await handle_send(bot, event, f"升级至{next_lv}级阵法需要【玄铁阵石】x{array_stone_need}。可通过地图挖矿/战斗获得。")
         return
     if not result.succeeded:
-        await handle_send(bot, event, "洞府状态或资产已发生变化，请稍后重试。")
+        await handle_send(bot, event, result_failure("洞府巡山", result))
         return
     item_msg = f"，玄铁阵石x{array_stone_need}" if array_stone_need > 0 else ""
     await handle_send(bot, event, f"消耗{number_to(cost)}灵石{item_msg}，洞府布阵成功，当前阵法等级：{next_lv}")
@@ -1193,7 +1201,7 @@ async def _settle_infiltration_plan(bot, event, plan):
             consume_guard=plan["guarded"],
         )
         if not result.succeeded:
-            await handle_send(bot, event, "潜入未结算：潜入进度当前状态已更新，请稍后重试。")
+            await handle_send(bot, event, result_failure("潜入洞府", result))
             return
         guard_msg = "\n目标洞府巡山护府尚有余威。" if plan["guarded"] else ""
         replay_msg = "\n该潜入请求已经处理。" if result.status == "duplicate" else ""
@@ -1227,7 +1235,7 @@ async def _settle_infiltration_plan(bot, event, plan):
         await handle_send(bot, event, "背包空间不足，潜入所得无法结算。")
         return
     if not result.succeeded:
-        await handle_send(bot, event, "潜入未结算：潜入进度当前状态已更新，请稍后重试。")
+        await handle_send(bot, event, result_failure("潜入洞府", result))
         return
 
     infiltrate_left, left = result.infiltrate_left, result.intrude_left
@@ -1276,6 +1284,7 @@ async def _settle_infiltration_plan(bot, event, plan):
 
 
 @infiltrate_dongfu.handle(parameterless=[Cooldown(cd_time=1.8, stamina_cost=INFILTRATE_STAMINA, stamina_operation_prefix="dongfu:infiltrate")])
+@guard_command("潜入洞府")
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     bot, _ = await assign_bot(bot=bot, event=event)
     ok, user_info, m = check_user(event)
@@ -1298,7 +1307,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         await _settle_infiltration_plan(bot, event, {**plan_result.plan, "operation_id": operation_id})
         return
     if plan_result.status != "missing":
-        await handle_send(bot, event, "潜入计划不可用，未执行本次操作。")
+        await handle_send(bot, event, result_failure("读取潜入计划", plan_result))
         return
 
     if event_message_id:
@@ -1450,7 +1459,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         operation_id, my_uid, request_identity, plan
     )
     if not prepared.succeeded:
-        await handle_send(bot, event, "潜入计划未能保存，本次操作未结算。")
+        await handle_send(bot, event, result_failure("保存潜入计划", prepared))
         return
     await _settle_infiltration_plan(
         bot, event, {**prepared.plan, "operation_id": operation_id}

@@ -99,7 +99,7 @@ class AccessoryQuickEquipSqlRepository:
             )
             if previous is not None:
                 if str(previous["action"]) != "quick_equip_preset" or str(previous["payload"]) != payload_json:
-                    return AccessoryQuickEquipChange("state_changed", "quick_equip_preset", user_id)
+                    return AccessoryQuickEquipChange("state_changed", "quick_equip_preset", user_id, reason="operation_conflict")
                 return self._result("duplicate", str(previous["result_json"]))
 
             columns = {
@@ -113,7 +113,7 @@ class AccessoryQuickEquipSqlRepository:
                 (user_id,),
             )
             if row is None:
-                return AccessoryQuickEquipChange("state_changed", "quick_equip_preset", user_id)
+                return AccessoryQuickEquipChange("state_changed", "quick_equip_preset", user_id, reason="accessory_missing")
             current_equipped = self._normalize_equipped(self._decode(row["equipped"], dict))
             current_bag = self._decode(row["bag"], list)
             current_preset = normalize_preset(self._decode(row[column], dict))
@@ -122,7 +122,7 @@ class AccessoryQuickEquipSqlRepository:
                 or self._json(current_bag) != self._json(plan.expected_bag)
                 or self._json(current_preset) != self._json(plan.expected_preset)
             ):
-                return AccessoryQuickEquipChange("state_changed", "quick_equip_preset", user_id)
+                return AccessoryQuickEquipChange("state_changed", "quick_equip_preset", user_id, reason="accessory_equipped_changed" if self._json(current_equipped) != self._json(plan.expected_equipped) else "accessory_bag_changed" if self._json(current_bag) != self._json(plan.expected_bag) else "accessory_preset_changed")
 
             if plan.details is None or self._json(normalize_preset(plan.preset)) != self._json(normalize_preset(plan.details.get("preset", {}))):
                 return AccessoryQuickEquipChange("invalid_plan", "quick_equip_preset", user_id)

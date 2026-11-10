@@ -8,6 +8,7 @@ from datetime import datetime
 from ..on_compat import on_command
 from nonebot.params import CommandArg
 from nonebot.log import logger
+from ..command_guard import result_failure
 from ..adapter_compat import (
     Bot,
     Message,
@@ -293,7 +294,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         await handle_send(bot, event, "幻境寻心失败：未找到角色数据。")
         await illusion_choice.finish()
     if choice_result.status == "state_changed":
-        await handle_send(bot, event, "幻境寻心未结算：当前状态已更新。")
+        await handle_send(bot, event, result_failure("幻境寻心", choice_result))
         await illusion_choice.finish()
 
     choice_count = choice_result.choice_count

@@ -1,4 +1,5 @@
 from __future__ import annotations
+from dataclasses import replace as _reason_replace
 
 import json
 from contextlib import closing
@@ -18,6 +19,8 @@ class OrdinaryTribulationResult:
     item_used: bool = False
     user_id: str = ""
     target_level: str = ""
+    reason: str = ""
+    subject: str = ""
 
     @property
     def succeeded(self) -> bool:
@@ -112,9 +115,9 @@ class OrdinaryTribulationService:
                 actual_rate = int(state[0]) if state else 30
                 if user is None or str(user[0]) != expected_level or int(user[1] or 0) != expected_exp or actual_rate != expected_rate:
                     conn.rollback()
-                    return OrdinaryTribulationResult(
+                    return _reason_replace(OrdinaryTribulationResult(
                         "state_changed", False, actual_rate, False, user_id, target_level
-                    )
+                    ), reason="user_missing" if user is None else "level_changed" if str(user[0]) != expected_level else "exp_changed" if int(user[1] or 0) != expected_exp else "tribulation_rate_changed", subject="")
                 if consume_destiny_pill:
                     changed = conn.execute(
                         "UPDATE back SET goods_num=goods_num-1,bind_num=MIN(COALESCE(bind_num,0),goods_num-1),"
@@ -151,9 +154,9 @@ class OrdinaryTribulationService:
                         )
                 if changed.rowcount != 1:
                     conn.rollback()
-                    return OrdinaryTribulationResult(
+                    return _reason_replace(OrdinaryTribulationResult(
                         "state_changed", False, actual_rate, False, user_id, target_level
-                    )
+                    ), reason="tribulation_write_rejected", subject="")
                 increment_stat(conn, user_id, "渡劫次数", 1)
                 increment_stat(conn, user_id, "渡劫成功" if successful else "渡劫失败", 1)
                 if consume_destiny_pill:

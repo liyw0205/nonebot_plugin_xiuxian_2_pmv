@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from ...core.errors import DomainError
+
 import json
 from datetime import datetime, timedelta
 from dataclasses import dataclass
@@ -226,6 +228,7 @@ class StoneTrainingPersistenceResult:
     stone_cost: int
     hp_gain: int
     new_hp: int
+    reason: str = ""
 
 
 @dataclass(frozen=True)
@@ -237,6 +240,7 @@ class BreakthroughPersistenceResult:
     hp_cost: int
     new_hp: int
     success: bool
+    reason: str = ""
 
 
 @dataclass(frozen=True)
@@ -248,6 +252,7 @@ class QiaoxuePersistenceResult:
     new_hp: int
     opened_count: int
     unlock_limit: int
+    reason: str = ""
 
 
 @dataclass(frozen=True)
@@ -260,6 +265,7 @@ class MedicineBathPersistenceResult:
     end_time: str = ""
     settlement: dict[str, Any] | None = None
     insufficient: tuple[dict[str, Any], ...] = ()
+    reason: str = ""
 
 
 @dataclass(frozen=True)
@@ -270,6 +276,7 @@ class ItemRewardPersistenceResult:
     quantity: int
     minutes: int
     detail: dict[str, Any]
+    reason: str = ""
 
     @property
     def succeeded(self) -> bool:
@@ -340,7 +347,7 @@ class StoneTrainingSqlRepository:
             previous = uow.query_one("SELECT user_id, requested_stone, stone_cost, hp_gain, new_hp FROM tianti_stone_training_operations WHERE operation_id=?", (operation_id,))
             if previous:
                 if str(previous["user_id"]) != user_id or int(previous["requested_stone"]) != requested_stone:
-                    return StoneTrainingPersistenceResult("state_changed", user_id, requested_stone, 0, 0, 0)
+                    return StoneTrainingPersistenceResult("state_changed", user_id, requested_stone, 0, 0, 0, reason="operation_conflict")
                 return StoneTrainingPersistenceResult("duplicate", user_id, requested_stone, int(previous["stone_cost"]), int(previous["hp_gain"]), int(previous["new_hp"]))
             user = uow.query_one("SELECT COALESCE(stone, 0) AS stone FROM user_xiuxian WHERE user_id=?", (user_id,))
             if user is None:
@@ -355,7 +362,7 @@ class StoneTrainingSqlRepository:
                 return StoneTrainingPersistenceResult("at_cap", user_id, requested_stone, 0, 0, int(data["tianti_hp"]))
             charged = uow.execute("UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)-? WHERE user_id=? AND CAST(COALESCE(stone,0) AS REAL)>=?", (decision.stone_cost, user_id, decision.stone_cost))
             if charged.rowcount != 1:
-                return StoneTrainingPersistenceResult("stone_changed", user_id, requested_stone, 0, 0, int(data["tianti_hp"]))
+                raise DomainError("stone_write_rejected", "tianti training debit was not saved")
             data["tianti_hp"] = decision.new_hp
             upsert_tianti_profile(uow, user_id, fields, data, database_alias="player_data")
             uow.execute("INSERT INTO tianti_stone_training_operations(operation_id,user_id,requested_stone,stone_cost,hp_gain,new_hp) VALUES(?,?,?,?,?,?)", (operation_id, user_id, requested_stone, decision.stone_cost, decision.hp_gain, decision.new_hp))
@@ -387,7 +394,7 @@ class TiantiMedicineBathSqlRepository:
             previous = uow.query_one("SELECT user_id, result_json FROM tianti_medicine_bath_operations WHERE operation_id=?", (operation_id,))
             if previous:
                 if str(previous["user_id"]) != user_id:
-                    return MedicineBathPersistenceResult("state_changed", user_id)
+                    return MedicineBathPersistenceResult("state_changed", user_id, reason="operation_conflict")
                 return MedicineBathPersistenceResult("duplicate", user_id, **json.loads(previous["result_json"]))
             row = uow.query_one("SELECT * FROM player_data.tianti_info WHERE user_id=?", (user_id,))
             if row is None:
@@ -423,7 +430,7 @@ class TiantiMedicineBathSqlRepository:
             for item in plan:
                 changed = uow.execute("UPDATE back SET goods_num=goods_num-?, bind_num=MIN(COALESCE(bind_num,0), goods_num-?) WHERE user_id=? AND goods_id=? AND goods_num>=?", (item["amount"], item["amount"], user_id, item["item_id"], item["amount"]))
                 if changed.rowcount != 1:
-                    return MedicineBathPersistenceResult("item_changed", user_id)
+                    raise DomainError("item_write_rejected", "medicine bath material debit was not saved")
             upsert_tianti_profile(uow, user_id, fields, data, database_alias="player_data")
             payload = {"consumed": list(plan), "effect": float(effect), "bath_name": bath_name, "end_time": data["medicine_end_time"], "settlement": settlement}
             uow.execute("INSERT INTO tianti_medicine_bath_operations(operation_id,user_id,request_json,result_json) VALUES(?,?,?,?)", (operation_id, user_id, json.dumps({"plan": list(plan), "effect": effect}, ensure_ascii=False), json.dumps(payload, ensure_ascii=False, default=str)))
@@ -456,11 +463,14 @@ class TiantiItemRewardSqlRepository:
             previous = uow.query_one("SELECT user_id, item_id, quantity, minutes, detail_json FROM tianti_item_reward_operations WHERE operation_id=?", (operation_id,))
             if previous:
                 if (str(previous["user_id"]), int(previous["item_id"]), int(previous["quantity"]), int(previous["minutes"])) != (user_id, item_id, quantity, total_minutes):
-                    return ItemRewardPersistenceResult("state_changed", user_id, item_id, quantity, total_minutes, {})
+                    return ItemRewardPersistenceResult("state_changed", user_id, item_id, quantity, total_minutes, {}, reason="operation_conflict")
                 return ItemRewardPersistenceResult("duplicate", user_id, item_id, int(previous["quantity"]), int(previous["minutes"]), json.loads(previous["detail_json"]))
             row = uow.query_one("SELECT * FROM player_data.tianti_info WHERE user_id=?", (user_id,))
             if row is None:
                 return ItemRewardPersistenceResult("user_missing", user_id, item_id, quantity, total_minutes, {})
+            item = uow.query_one("SELECT goods_num FROM back WHERE user_id=? AND goods_id=?", (user_id, item_id))
+            if item is None or int(item["goods_num"] or 0) < quantity:
+                return ItemRewardPersistenceResult("item_insufficient", user_id, item_id, quantity, total_minutes, {})
             data = self.profile.clean(row)
             for field in ("opened_qiaoxue", "opened_qiaoxue_detail", "qiaoxue_stage_opened"):
                 if isinstance(data.get(field), str):
@@ -475,7 +485,7 @@ class TiantiItemRewardSqlRepository:
             gain = decide_tianti_gain(minutes=total_minutes, base_per_min=int(level.get("hp_gain_per_min", 0)), base_ratio=base_ratio, gain_pct=gain_pct, bath_effect=1.0, sect_bonus=_sect_bonus(sect_fairyland_level), spirit_vein_multiplier=float(self.spirit_vein_multiplier()), old_hp=int(data["tianti_hp"]), hp_cap=self.profile.cap(data))
             consumed = uow.execute("UPDATE back SET goods_num=goods_num-?, bind_num=MIN(COALESCE(bind_num,0), goods_num-?) WHERE user_id=? AND goods_id=? AND goods_num>=?", (quantity, quantity, user_id, item_id, quantity))
             if consumed.rowcount != 1:
-                return ItemRewardPersistenceResult("item_insufficient", user_id, item_id, quantity, total_minutes, {})
+                raise DomainError("item_write_rejected", "tianti item debit was not saved")
             data["tianti_hp"] = gain.new_hp
             upsert_tianti_profile(uow, user_id, fields, data, database_alias="player_data")
             detail = {"status": "ok", "real_gain": gain.real_gain, "new_hp": gain.new_hp, "bath": None, "bath_expired": False, "sect_bonus": _sect_bonus(sect_fairyland_level), "spirit_vein_bonus": float(self.spirit_vein_multiplier()) - 1}
@@ -519,7 +529,7 @@ class TiantiBreakthroughSqlRepository:
             previous = uow.query_one("SELECT user_id, cultivation_rank, roll_success, old_level, new_level, hp_cost, new_hp, success FROM tianti_breakthrough_operations WHERE operation_id=?", (operation_id,))
             if previous:
                 if str(previous["user_id"]) != user_id or int(previous["cultivation_rank"]) != int(cultivation_rank):
-                    return BreakthroughPersistenceResult("state_changed", user_id, "", "", 0, 0, False)
+                    return BreakthroughPersistenceResult("state_changed", user_id, "", "", 0, 0, False, reason="operation_conflict")
                 return BreakthroughPersistenceResult("duplicate", user_id, str(previous["old_level"]), str(previous["new_level"]), int(previous["hp_cost"]), int(previous["new_hp"]), bool(previous["success"]))
             row = uow.query_one("SELECT * FROM tianti_info WHERE user_id=?", (user_id,))
             if row is None:
@@ -573,7 +583,7 @@ class TiantiQiaoxueSqlRepository:
             previous = uow.query_one("SELECT user_id, roll, qiaoxue_json, hp_cost, new_hp, opened_count, unlock_limit FROM tianti_qiaoxue_operations WHERE operation_id=?", (operation_id,))
             if previous:
                 if str(previous["user_id"]) != user_id or int(previous["roll"]) != roll:
-                    return QiaoxuePersistenceResult("state_changed", user_id, {}, 0, 0, 0, 0)
+                    return QiaoxuePersistenceResult("state_changed", user_id, {}, 0, 0, 0, 0, reason="operation_conflict")
                 return QiaoxuePersistenceResult("duplicate", user_id, json.loads(previous["qiaoxue_json"]), int(previous["hp_cost"]), int(previous["new_hp"]), int(previous["opened_count"]), int(previous["unlock_limit"]))
             row = uow.query_one("SELECT * FROM tianti_info WHERE user_id=?", (user_id,))
             if row is None:

@@ -7,6 +7,7 @@ from typing import Any, Callable, Protocol, Sequence
 
 from ...infrastructure.clock import SystemClock
 from ...infrastructure.database import DatabaseUnitOfWork
+from ...core.snapshot_reason import first_difference
 
 
 class CombatSettlementRepository(Protocol):
@@ -38,14 +39,19 @@ class CombatSettlementSqlRepository:
             previous = uow.query_one("SELECT payload,stone,rewards FROM map_combat_settlement_operations WHERE operation_id=?", (operation_id,))
             if previous:
                 if str(previous["payload"]) != payload:
-                    return {"status": "state_changed", "stone": 0, "rewards": ()}
+                    return {"status": "state_changed", "reason": "operation_conflict", "stone": 0, "rewards": ()}
                 return {"status": "duplicate", "stone": int(previous["stone"]), "rewards": tuple(tuple(map(int, value)) for value in json.loads(str(previous["rewards"]))) }
             if uow.query_one("SELECT 1 FROM user_xiuxian WHERE user_id=?", (user_id,)) is None:
                 return {"status": "user_missing", "stone": 0, "rewards": ()}
             daily = uow.query_one("SELECT date,combat_count,resource_total_count FROM player_data.map_daily_limit WHERE user_id=?", (user_id,))
             stored = uow.query_one("SELECT snapshot FROM player_data.map_combat_settlement WHERE user_id=?", (user_id,))
             if daily is None or (str(daily["date"]), str(daily["combat_count"]), str(daily["resource_total_count"])) != (expected["date"], expected.get("combat_count", "0"), expected.get("resource_total_count", "0")) or stored is None or str(stored["snapshot"] or "") != snapshot:
-                return {"status": "state_changed", "stone": 0, "rewards": ()}
+                reason = "combat_daily_missing" if daily is None else ""
+                if not reason:
+                    actual = (str(daily["date"]), str(daily["combat_count"]), str(daily["resource_total_count"]))
+                    wanted = (expected["date"], expected.get("combat_count", "0"), expected.get("resource_total_count", "0"))
+                    reason = first_difference(actual, wanted, ("combat_date_changed", "combat_count_changed", "combat_resource_count_changed")) if actual != wanted else "combat_snapshot_missing" if stored is None else "combat_snapshot_changed"
+                return {"status": "state_changed", "reason": reason, "stone": 0, "rewards": ()}
             if int(daily["combat_count"] or 0) >= daily_limit:
                 return {"status": "limit_reached", "stone": 0, "rewards": ()}
             totals: dict[int, int] = {}
@@ -86,15 +92,15 @@ class DaoBattleSqlRepository:
             uow.attach_database(self.game_database, "game_data")
             previous = uow.query_one("SELECT payload FROM map_dao_battle_operations WHERE operation_id=?", (operation_id,))
             if previous:
-                return {"status": "duplicate" if str(previous["payload"]) == payload else "state_changed"}
+                return {"status": "duplicate"} if str(previous["payload"]) == payload else {"status": "state_changed", "reason": "operation_conflict"}
             users = uow.query_all("SELECT user_id FROM game_data.user_xiuxian WHERE user_id IN (?,?)", (challenger_id, target_id))
             if {str(row["user_id"]) for row in users} != {challenger_id, target_id}:
-                return {"status": "user_missing"}
+                return {"status": "user_missing", "subject": "challenger" if challenger_id not in {str(row["user_id"]) for row in users} else "target"}
             rows = uow.query_all("SELECT user_id,realm,heaven,node_id FROM map_status WHERE user_id IN (?,?)", (challenger_id, target_id))
             current = {str(row["user_id"]): (str(row["realm"]), str(row["heaven"]), str(row["node_id"])) for row in rows}
             expected = (position["realm"], position["heaven"], position["node_id"])
             if current.get(challenger_id) != expected or current.get(target_id) != expected:
-                return {"status": "position_changed"}
+                return {"status": "position_changed", "reason": "position_changed", "subject": "challenger" if current.get(challenger_id) != expected else "target"}
             uow.execute("INSERT INTO dao_record(user_id,total,win,lose) VALUES(?,?,?,?) ON CONFLICT(user_id) DO UPDATE SET total=dao_record.total+1,win=dao_record.win+excluded.win,lose=dao_record.lose+excluded.lose", (challenger_id, 1, int(bool(challenger_won)), int(not challenger_won)))
             uow.execute("INSERT INTO dao_record(user_id,total,win,lose) VALUES(?,?,?,?) ON CONFLICT(user_id) DO UPDATE SET total=dao_record.total+1,win=dao_record.win+excluded.win,lose=dao_record.lose+excluded.lose", (target_id, 1, int(not challenger_won), int(bool(challenger_won))))
             uow.execute("INSERT INTO map_dao_battle_operations(operation_id,payload) VALUES(?,?)", (operation_id, payload))

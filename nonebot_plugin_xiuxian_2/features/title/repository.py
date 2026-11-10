@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from ...core.errors import DomainError
+
 import json
 import sqlite3
 import tempfile
@@ -211,7 +213,7 @@ class TitleRepository:
         actual_unlocked = _decode_titles(row["unlocked"]) if row else ()
         actual_equipped = str(row["equipped"] or "") if row else ""
         if actual_unlocked != unlocked or actual_equipped != expected_equipped:
-            return TitleTransactionResult("state_changed")
+            return TitleTransactionResult("state_changed", reason="title_unlocked_changed" if actual_unlocked != unlocked else "title_equipped_changed")
         if title_id not in actual_unlocked:
             return TitleTransactionResult("title_locked")
         status = "already_equipped" if actual_equipped == title_id else "applied"
@@ -221,7 +223,7 @@ class TitleRepository:
                 (title_id, user_id, expected_equipped),
             )
             if changed.rowcount != 1:
-                return TitleTransactionResult("state_changed")
+                raise DomainError("title_equip_write_rejected", "title equip write count mismatch")
         self._record(uow, operation_id, payload, status, title_id)
         return TitleTransactionResult(status, title_id)
 
@@ -244,7 +246,7 @@ class TitleRepository:
         row = uow.query_one("SELECT equipped FROM title WHERE user_id = ?", (user_id,))
         actual = str(row["equipped"] or "") if row else ""
         if actual != expected_equipped:
-            return TitleTransactionResult("state_changed")
+            return TitleTransactionResult("state_changed", reason="title_equipped_changed")
         if not actual:
             return TitleTransactionResult("not_equipped")
         changed = uow.execute(
@@ -252,7 +254,7 @@ class TitleRepository:
             (user_id, expected_equipped),
         )
         if changed.rowcount != 1:
-            return TitleTransactionResult("state_changed")
+            raise DomainError("title_equip_write_rejected", "title unequip write count mismatch")
         self._record(uow, operation_id, payload, "applied", expected_equipped)
         return TitleTransactionResult("applied", expected_equipped)
 
@@ -276,7 +278,7 @@ class TitleRepository:
         row = uow.query_one("SELECT unlocked FROM title WHERE user_id = ?", (user_id,))
         actual = _decode_titles(row["unlocked"]) if row else ()
         if actual != unlocked:
-            return TitleTransactionResult("state_changed")
+            return TitleTransactionResult("state_changed", reason="title_unlocked_changed")
         if title_id in actual:
             return TitleTransactionResult("already_unlocked", title_id)
         updated = tuple(sorted((*actual, title_id)))
@@ -289,7 +291,7 @@ class TitleRepository:
                 (value, user_id, str(row["unlocked"] or "")),
             )
             if changed.rowcount != 1:
-                return TitleTransactionResult("state_changed")
+                raise DomainError("title_unlock_write_rejected", "title unlock write count mismatch")
         self._record(uow, operation_id, payload, "applied", title_id)
         return TitleTransactionResult("applied", title_id)
 
@@ -314,7 +316,7 @@ class TitleRepository:
         row = uow.query_one("SELECT unlocked FROM title WHERE user_id = ?", (user_id,))
         actual = _decode_titles(row["unlocked"]) if row else ()
         if actual != expected:
-            return TitleTransactionResult("state_changed")
+            return TitleTransactionResult("state_changed", reason="title_unlocked_changed")
         result_ids = tuple(sorted(set(actual) | set(additions)))
         if additions:
             value = json.dumps(result_ids, ensure_ascii=False)

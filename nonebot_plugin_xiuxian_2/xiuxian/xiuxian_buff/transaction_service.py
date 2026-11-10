@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from ...core.errors import DomainError
+from dataclasses import replace as _reason_replace
+
 import json
 import time
 from contextlib import closing
@@ -553,6 +556,8 @@ class PartnerCultivationService:
 class PartnerBindResult:
     status: str
     bind_time: str = ""
+    reason: str = ""
+    subject: str = ""
 
     @property
     def succeeded(self) -> bool:
@@ -614,7 +619,8 @@ class PartnerBindService:
                 ).fetchall()
                 if {str(row[0]) for row in users} != {invitee_id, inviter_id}:
                     conn.rollback()
-                    return PartnerBindResult("user_missing")
+                    missing = next(uid for uid in (invitee_id, inviter_id) if uid not in {str(row[0]) for row in users})
+                    return PartnerBindResult("user_missing", subject=missing)
                 actual = {
                     user_id: self._current_partner(conn, user_id)
                     for user_id in (invitee_id, inviter_id)
@@ -624,7 +630,8 @@ class PartnerBindService:
                     inviter_id: expected_inviter_partner,
                 }:
                     conn.rollback()
-                    return PartnerBindResult("state_changed")
+                    subject = invitee_id if actual[invitee_id] != expected_invitee_partner else inviter_id
+                    return PartnerBindResult("state_changed", reason="relation_changed", subject=subject)
                 for user_id, partner_id in ((invitee_id, inviter_id), (inviter_id, invitee_id)):
                     changed = conn.execute(
                         "UPDATE player_data.partner SET partner_id=%s,bind_time=%s,affection=0 "
@@ -675,6 +682,8 @@ class PartnerBindService:
 class PartnerUnbindResult:
     status: str
     partner_id: str = ""
+    reason: str = ""
+    subject: str = ""
 
     @property
     def succeeded(self) -> bool:
@@ -752,7 +761,13 @@ class PartnerUnbindService:
                 }
                 if actual != expected:
                     conn.rollback()
-                    return PartnerUnbindResult("state_changed", partner_id)
+                    for subject, snapshot in expected.items():
+                        current = actual.get(subject)
+                        if current is None:
+                            return PartnerUnbindResult("state_changed", partner_id, "relation_missing", subject)
+                        for index, reason in enumerate(("relation_changed", "bind_time_changed", "affection_changed")):
+                            if current[index] != snapshot[index]:
+                                return PartnerUnbindResult("state_changed", partner_id, reason, subject)
                 if self._within_minimum_period(expected_user_bind_time, checked_at, minimum_days):
                     conn.rollback()
                     return PartnerUnbindResult("too_early", partner_id)
@@ -767,8 +782,7 @@ class PartnerUnbindService:
                         (owner_id, related_id, bind_time or "", affection),
                     )
                     if changed.rowcount != 1:
-                        conn.rollback()
-                        return PartnerUnbindResult("state_changed", partner_id)
+                        raise DomainError("partner_relation_write_rejected", "partner unbind write did not affect one relationship", {"subject": "actor" if owner_id == user_id else "target"})
                 conn.execute(
                     "INSERT INTO partner_unbind_operations(operation_id,payload,partner_id) VALUES(%s,%s,%s)",
                     (operation_id, payload, partner_id),
@@ -1028,6 +1042,8 @@ class PartnerBreakthroughService:
 class MentorBindResult:
     status: str
     bind_time: str
+    reason: str = ""
+    subject: str = ""
 
     @property
     def succeeded(self) -> bool:
@@ -1144,17 +1160,17 @@ class MentorBindService:
                     valid_legacy = invitation_validator and invitation_validator(mentor_id, apprentice_id, invite_id)
                     if not valid_legacy:
                         conn.rollback()
-                        return MentorBindResult("invitation_changed", bind_time)
+                        return _reason_replace(MentorBindResult("invitation_changed", bind_time), reason="mentor_invite_missing", subject="")
                 elif str(application[0]) != "pending" or float(application[1]) <= check_time.timestamp():
                     conn.rollback()
-                    return MentorBindResult("invitation_changed", bind_time)
+                    return _reason_replace(MentorBindResult("invitation_changed", bind_time), reason="mentor_invite_resolved" if str(application[0]) != "pending" else "mentor_invite_expired", subject="")
                 users = conn.execute(
                     "SELECT user_id,level FROM user_xiuxian WHERE user_id IN (%s,%s)", (mentor_id, apprentice_id)
                 ).fetchall()
                 levels = {str(row[0]): str(row[1]) for row in users}
                 if levels != {mentor_id: str(expected_mentor_level), apprentice_id: str(expected_apprentice_level)}:
                     conn.rollback()
-                    return MentorBindResult("state_changed", bind_time)
+                    return _reason_replace(MentorBindResult("state_changed", bind_time), reason="user_missing" if mentor_id not in levels or apprentice_id not in levels else "level_changed", subject=mentor_id if levels.get(mentor_id) != str(expected_mentor_level) else apprentice_id)
                 mentor_parent = conn.execute(
                     "SELECT mentor_id FROM player_data.mentor WHERE user_id=%s", (mentor_id,)
                 ).fetchone()
@@ -1192,7 +1208,7 @@ class MentorBindService:
                     return MentorBindResult("already_bound", bind_time)
                 if mentor_parent is not None and str(mentor_parent[0]) == apprentice_id:
                     conn.rollback()
-                    return MentorBindResult("state_changed", bind_time)
+                    return _reason_replace(MentorBindResult("state_changed", bind_time), reason="mentor_cycle", subject=mentor_id)
                 ensure_player_field(conn, "mentor", "mentor_cd_until")
                 ensure_player_field(conn, "mentor", "apprentice_cd_until")
                 mentor_cd_row = conn.execute(
@@ -1206,7 +1222,7 @@ class MentorBindService:
                 rebind = get_json_field(conn, "mentor", apprentice_id, "mentor_rebind_cd", {})
                 if _active(mentor_cd, check_time) or _active(apprentice_cd, check_time) or _active(rebind.get(mentor_id), check_time):
                     conn.rollback()
-                    return MentorBindResult("cooldown_active", bind_time)
+                    return _reason_replace(MentorBindResult("cooldown_active", bind_time), reason="mentor_cooldown" if _active(mentor_cd, check_time) else "apprentice_cooldown" if _active(apprentice_cd, check_time) else "mentor_pair_cooldown", subject=mentor_id if _active(mentor_cd, check_time) else apprentice_id)
                 apprentices = [str(value) for value in get_json_field(conn, "mentor", mentor_id, "apprentice_ids", [])]
                 valid = []
                 for user_id in apprentices:
@@ -1232,7 +1248,7 @@ class MentorBindService:
                     )
                     if consumed.rowcount != 1:
                         conn.rollback()
-                        return MentorBindResult("invitation_changed", bind_time)
+                        return _reason_replace(MentorBindResult("invitation_changed", bind_time), reason="mentor_invite_write_rejected", subject="")
                 conn.execute(
                     "INSERT INTO mentor_bind_operations (operation_id,payload,bind_time) VALUES (%s,%s,%s)",
                     (operation_id, payload, bind_time),
@@ -1950,6 +1966,8 @@ class MentorGraduationResult:
     status: str
     apprentice_stone: int
     mentor_stone: int
+    reason: str = ""
+    subject: str = ""
 
     @property
     def succeeded(self) -> bool:
@@ -1969,7 +1987,7 @@ class MentorGraduationService:
         apprentice_title_ids = tuple(sorted(str(v) for v in apprentice_title_ids))
         mentor_title_ids = tuple(sorted(str(v) for v in mentor_title_ids))
         payload = json.dumps([mentor_id, apprentice_id, *values, mentor_desc, apprentice_desc, apprentice_title_ids, mentor_title_ids], separators=(",", ":"), ensure_ascii=False)
-        result = lambda status: MentorGraduationResult(status, values[2], values[3])
+        result = lambda status, reason="", subject="": MentorGraduationResult(status, values[2], values[3], reason, subject)
         with self._lock, closing(db_backend.connect(self._game_database)) as conn:
             attached = False
             try:
@@ -1989,15 +2007,17 @@ class MentorGraduationService:
                 apprentice_mentor = conn.execute("SELECT mentor_id FROM player_data.mentor WHERE user_id=%s", (apprentice_id,)).fetchone()
                 if apprentice_id not in mentor_apprentices or apprentice_mentor is None or str(apprentice_mentor[0]) != mentor_id:
                     conn.rollback()
-                    return result("state_changed")
+                    return result("state_changed", "mentor_relation_changed")
                 stones = conn.execute("SELECT user_id,stone FROM user_xiuxian WHERE user_id IN (%s,%s)", (mentor_id, apprentice_id)).fetchall()
                 if {str(row[0]): int(row[1]) for row in stones} != {mentor_id: values[0], apprentice_id: values[1]}:
                     conn.rollback()
-                    return result("state_changed")
+                    actual = {str(row[0]): int(row[1]) for row in stones}
+                    subject = next(uid for uid, expected in ((mentor_id, values[0]), (apprentice_id, values[1])) if actual.get(uid) != expected)
+                    return result("state_changed", "user_missing" if subject not in actual else "stone_changed", subject)
                 for uid, expected, reward in ((mentor_id, values[0], values[3]), (apprentice_id, values[1], values[2])):
                     if conn.execute("UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)+CAST(%s AS REAL) WHERE user_id=%s AND stone=%s", (reward, uid, expected)).rowcount != 1:
                         conn.rollback()
-                        return result("state_changed")
+                        raise DomainError("mentor_stone_write_rejected", "mentor graduation balance write did not affect one user", {"subject": "mentor" if uid == mentor_id else "apprentice"})
                     increment_stat(conn, uid, "灵石获取", reward)
                 increment_stat(conn, apprentice_id, "正常出师次数", 1)
                 increment_stat(conn, mentor_id, "培养出师徒弟", 1)
@@ -2031,6 +2051,8 @@ class MentorGraduationService:
 class MentorTransmissionResult:
     status: str
     reward_exp: int
+    reason: str = ""
+    subject: str = ""
 
     @property
     def succeeded(self) -> bool:
@@ -2059,7 +2081,7 @@ class MentorTransmissionService:
         if not operation_id or float(values[1]) <= 0 or values[6] >= values[8] or values[7] >= values[8]:
             raise ValueError("invalid mentor transmission operation")
         payload = json.dumps([mentor_id, apprentice_id, *values, mentor_desc, apprentice_desc], separators=(",", ":"), ensure_ascii=False)
-        result = lambda status: MentorTransmissionResult(status, _as_int_like_num(values[1]))
+        result = lambda status, reason="", subject="": MentorTransmissionResult(status, _as_int_like_num(values[1]), reason, subject)
         with self._lock, closing(db_backend.connect(self._game_database)) as conn:
             attached = False
             try:
@@ -2072,13 +2094,13 @@ class MentorTransmissionService:
                 apprentices = [str(v) for v in get_json_field(conn, "mentor", mentor_id, "apprentice_ids", [])]
                 apprentice_row = conn.execute("SELECT mentor_id FROM player_data.mentor WHERE user_id=%s", (apprentice_id,)).fetchone()
                 if apprentice_id not in apprentices or apprentice_row is None or str(apprentice_row[0]) != mentor_id:
-                    conn.rollback(); return result("state_changed")
+                    conn.rollback(); return result("state_changed", "mentor_relation_changed")
                 # Concurrency: verify apprentice exp in Python (high-realm REAL safe).
                 exp_row = conn.execute(
                     "SELECT exp FROM user_xiuxian WHERE user_id=%s", (apprentice_id,)
                 ).fetchone()
                 if exp_row is None or _as_int_like_num(exp_row[0]) != _as_int_like_num(values[0]):
-                    conn.rollback(); return result("state_changed")
+                    conn.rollback(); return result("state_changed", "user_missing" if exp_row is None else "exp_changed", apprentice_id)
                 changed = conn.execute(
                     "UPDATE user_xiuxian SET "
                     "exp=CAST(COALESCE(exp,0) AS REAL)+CAST(%s AS REAL),"
@@ -2087,7 +2109,7 @@ class MentorTransmissionService:
                     (values[1], values[2], values[3], values[4], values[5], apprentice_id),
                 )
                 if changed.rowcount != 1:
-                    conn.rollback(); return result("state_changed")
+                    raise DomainError("mentor_exp_write_rejected", "mentor transmission write did not affect one user", {"subject": "apprentice"})
                 increment_stat(conn, mentor_id, "师徒传功次数", 1)
                 increment_stat(conn, apprentice_id, "接受传功次数", 1)
                 increment_stat(conn, apprentice_id, "传功获得修为", values[1])
@@ -2110,6 +2132,8 @@ class BlessedSpotResult:
     name: str = ""
     previous_level: int = 0
     current_level: int = 0
+    reason: str = ""
+    subject: str = ""
 
     @property
     def succeeded(self) -> bool:
@@ -2182,7 +2206,7 @@ class BlessedSpotService:
                 if previous is not None:
                     conn.rollback()
                     if str(previous[0]) != payload:
-                        return BlessedSpotResult("state_changed", user_id)
+                        return _reason_replace(BlessedSpotResult("state_changed", user_id), reason="operation_conflict", subject="")
                     saved = json.loads(str(previous[1]))
                     return BlessedSpotResult("duplicate", user_id, saved["stone_cost"], saved["name"])
 
@@ -2206,7 +2230,7 @@ class BlessedSpotService:
                 )
                 if changed.rowcount != 1:
                     conn.rollback()
-                    return BlessedSpotResult("state_changed", user_id)
+                    return _reason_replace(BlessedSpotResult("state_changed", user_id), reason="blessed_open_write_rejected", subject="")
 
                 values = dict(self.MIX_DEFAULTS)
                 values["收取时间"] = harvest_time
@@ -2256,7 +2280,7 @@ class BlessedSpotService:
                 if previous is not None:
                     conn.rollback()
                     if str(previous[0]) != payload:
-                        return BlessedSpotResult("state_changed", user_id)
+                        return _reason_replace(BlessedSpotResult("state_changed", user_id), reason="operation_conflict", subject="")
                     saved = json.loads(str(previous[1]))
                     return BlessedSpotResult("duplicate", user_id, saved["stone_cost"], previous_level=saved["previous_level"], current_level=saved["current_level"])
                 user = conn.execute("SELECT COALESCE(stone,0),COALESCE(blessed_spot_flag,0) FROM user_xiuxian WHERE user_id=%s", (user_id,)).fetchone()
@@ -2267,7 +2291,7 @@ class BlessedSpotService:
                 current = int(level[0] or 0)
                 if current != expected_level:
                     conn.rollback()
-                    return BlessedSpotResult("state_changed", user_id, previous_level=current, current_level=current)
+                    return _reason_replace(BlessedSpotResult("state_changed", user_id, previous_level=current, current_level=current), reason="blessed_level_changed", subject="")
                 if current >= max_level:
                     conn.rollback()
                     return BlessedSpotResult("max_level", user_id, previous_level=current, current_level=current)
@@ -2278,7 +2302,7 @@ class BlessedSpotService:
                 changed = conn.execute(f"UPDATE player_data.mix_elixir_info SET {db_backend.quote_ident('灵田数量')}=%s WHERE user_id=%s AND CAST({db_backend.quote_ident('灵田数量')} AS INTEGER)=%s", (str(current + 1), user_id, current))
                 if changed.rowcount != 1:
                     conn.rollback()
-                    return BlessedSpotResult("state_changed", user_id)
+                    return _reason_replace(BlessedSpotResult("state_changed", user_id), reason="blessed_field_write_rejected", subject="")
                 saved = {"stone_cost": stone_cost, "previous_level": current, "current_level": current + 1}
                 conn.execute("INSERT INTO blessed_spot_operations (operation_id,action,payload,result_json) VALUES (%s,%s,%s,%s)", (operation_id, "upgrade", payload, json.dumps(saved)))
                 conn.commit()
@@ -2304,7 +2328,7 @@ class BlessedSpotService:
                 if previous is not None:
                     conn.rollback()
                     if str(previous[0]) != payload:
-                        return BlessedSpotResult("state_changed", user_id)
+                        return _reason_replace(BlessedSpotResult("state_changed", user_id), reason="operation_conflict", subject="")
                     return BlessedSpotResult("duplicate", user_id, name=json.loads(str(previous[1]))["name"])
                 row = conn.execute("SELECT COALESCE(blessed_spot_flag,0),COALESCE(blessed_spot_name,'') FROM user_xiuxian WHERE user_id=%s", (user_id,)).fetchone()
                 if row is None or int(row[0]) == 0:
@@ -2312,11 +2336,11 @@ class BlessedSpotService:
                     return BlessedSpotResult("blessed_spot_missing", user_id)
                 if str(row[1]) != expected_name:
                     conn.rollback()
-                    return BlessedSpotResult("state_changed", user_id)
+                    return _reason_replace(BlessedSpotResult("state_changed", user_id), reason="blessed_name_changed", subject="")
                 changed = conn.execute("UPDATE user_xiuxian SET blessed_spot_name=%s WHERE user_id=%s AND COALESCE(blessed_spot_name,'')=%s AND COALESCE(blessed_spot_flag,0)<>0", (new_name, user_id, expected_name))
                 if changed.rowcount != 1:
                     conn.rollback()
-                    return BlessedSpotResult("state_changed", user_id)
+                    return _reason_replace(BlessedSpotResult("state_changed", user_id), reason="blessed_name_write_rejected", subject="")
                 conn.execute("INSERT INTO blessed_spot_operations (operation_id,action,payload,result_json) VALUES (%s,%s,%s,%s)", (operation_id, "rename", payload, json.dumps({"name": new_name}, ensure_ascii=False)))
                 conn.commit()
                 return BlessedSpotResult("applied", user_id, name=new_name)

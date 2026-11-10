@@ -1,4 +1,5 @@
 from __future__ import annotations
+from dataclasses import replace as _reason_replace
 
 import json
 from dataclasses import dataclass, field
@@ -15,6 +16,8 @@ class RiftEntryResult:
     entries: int = 0
     rift_data: dict[str, Any] = field(default_factory=dict)
     world: dict[str, Any] | None = None
+    reason: str = ""
+    subject: str = ""
 
     @property
     def succeeded(self) -> bool:
@@ -138,7 +141,7 @@ class RiftEntrySqlRepository:
             )
             if previous is not None:
                 if previous["payload"] != payload:
-                    return RiftEntryResult("state_changed")
+                    return _reason_replace(RiftEntryResult("state_changed"), reason="operation_conflict", subject="")
                 current = self._read_world(uow, rift_key)
                 return RiftEntryResult(
                     "duplicate",
@@ -157,7 +160,7 @@ class RiftEntrySqlRepository:
                 or int(world["rift_data"].get("time", 0)) != duration
                 or int(world["revision"]) != expected_revision
             ):
-                return RiftEntryResult("rift_changed", world=world)
+                return RiftEntryResult("rift_changed", world=world, reason="rift_world_missing" if world is None else "rift_generation_changed" if world["generation_id"] != expected_generation_id else "rift_snapshot_changed" if self._canonical(world["rift_data"]) != self._canonical(expected_rift) else "rift_duration_changed" if int(world["rift_data"].get("time", 0)) != duration else "rift_revision_changed")
             if user_id in world["participants"] and not ticket_id:
                 return RiftEntryResult("already_joined", world=world)
             if uow.query_one(
@@ -166,12 +169,12 @@ class RiftEntrySqlRepository:
                 return RiftEntryResult("already_active", world=world)
             cd = uow.query_one("SELECT COALESCE(type,0) AS type FROM user_cd WHERE user_id=?", (user_id,))
             if cd is None or int(cd["type"]) != 0:
-                return RiftEntryResult("busy", world=world)
+                return RiftEntryResult("busy", world=world, reason="rift_activity_missing" if cd is None else "rift_activity_busy")
 
             if stamina_cost:
                 stamina = uow.query_one("SELECT COALESCE(user_stamina,0) AS user_stamina FROM user_xiuxian WHERE user_id=?", (user_id,))
                 if stamina is None or int(stamina["user_stamina"]) != expected_stamina:
-                    return RiftEntryResult("state_changed", world=world)
+                    return _reason_replace(RiftEntryResult("state_changed", world=world), reason="stamina_changed", subject="")
                 if expected_stamina < stamina_cost:
                     return RiftEntryResult("stamina_missing", world=world)
 
@@ -192,7 +195,7 @@ class RiftEntrySqlRepository:
                     (stamina_cost, user_id, expected_stamina, stamina_cost),
                 )
                 if updated.rowcount != 1:
-                    return RiftEntryResult("state_changed", world=world)
+                    return _reason_replace(RiftEntryResult("state_changed", world=world), reason="stamina_write_rejected", subject="")
 
             snapshot = self._canonical(expected_rift)
             uow.execute(
@@ -207,7 +210,7 @@ class RiftEntrySqlRepository:
                 "WHERE user_id=? AND COALESCE(type,0)=0",
                 (duration, user_id),
             ).rowcount != 1:
-                return RiftEntryResult("state_changed", world=world)
+                return _reason_replace(RiftEntryResult("state_changed", world=world), reason="rift_activity_write_rejected", subject="")
 
             participants = tuple((*world["participants"], user_id))
             next_revision = int(world["revision"]) + 1
@@ -216,7 +219,7 @@ class RiftEntrySqlRepository:
                 "WHERE rift_key=? AND generation_id=? AND revision=?",
                 (self._canonical(participants), next_revision, rift_key, expected_generation_id, expected_revision),
             ).rowcount != 1:
-                return RiftEntryResult("rift_changed", world=world)
+                return RiftEntryResult("rift_changed", world=world, reason="rift_world_missing" if world is None else "rift_generation_changed" if world["generation_id"] != expected_generation_id else "rift_snapshot_changed" if self._canonical(world["rift_data"]) != self._canonical(expected_rift) else "rift_duration_changed" if int(world["rift_data"].get("time", 0)) != duration else "rift_revision_changed")
             uow.execute(
                 f"INSERT INTO {self.count_table}(user_id,entry_count) VALUES(?,1) "
                 f"ON CONFLICT(user_id) DO UPDATE SET entry_count={self.count_table}.entry_count+1",

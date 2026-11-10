@@ -1,4 +1,6 @@
 from __future__ import annotations
+from dataclasses import replace as _reason_replace
+from ..core.snapshot_reason import first_difference
 
 import json
 from contextlib import closing
@@ -18,6 +20,8 @@ class DirectBreakthroughResult:
     from_level: str = ""
     to_level: str = ""
     exp_loss: int = 0
+    reason: str = ""
+    subject: str = ""
 
     @property
     def applied(self) -> bool:
@@ -32,6 +36,8 @@ class ContinuousBreakthroughResult:
     attempts: int
     fail_count: int
     exp_loss: int
+    reason: str = ""
+    subject: str = ""
 
     @property
     def applied(self) -> bool:
@@ -187,10 +193,10 @@ class BreakthroughService:
                     or int(user[4] or 0) != expected_rate
                 ):
                     conn.rollback()
-                    return ContinuousBreakthroughResult(
+                    return _reason_replace(ContinuousBreakthroughResult(
                         "state_changed", user_id, str(user[0]), str(user[0]),
                         attempts, fail_count, -exp_gain,
-                    )
+                    ), reason=first_difference((str(user[0]), *(int(user[i] or 0) for i in range(1,5))), (expected_level,expected_exp,expected_hp,expected_mp,expected_rate), ("level_changed","exp_changed","hp_changed","mp_changed","breakthrough_rate_changed")), subject="")
 
                 item = conn.execute(
                     "SELECT goods_num FROM back WHERE user_id=%s AND goods_id=%s",
@@ -341,10 +347,10 @@ class BreakthroughService:
                     or int(user[4] or 0) != expected_rate
                 ):
                     conn.rollback()
-                    return ContinuousBreakthroughResult(
+                    return _reason_replace(ContinuousBreakthroughResult(
                         "state_changed", user_id, str(user[0]), str(user[0]),
                         attempts, fail_count, exp_loss,
-                    )
+                    ), reason=first_difference((str(user[0]), *(int(user[i] or 0) for i in range(1,5))), (expected_level,expected_exp,expected_hp,expected_mp,expected_rate), ("level_changed","exp_changed","hp_changed","mp_changed","breakthrough_rate_changed")), subject="")
 
                 if final_level != expected_level:
                     conn.execute(
@@ -597,9 +603,9 @@ class BreakthroughService:
                     or int(user[4] or 0) != expected_rate
                 ):
                     conn.rollback()
-                    return DirectBreakthroughResult(
+                    return _reason_replace(DirectBreakthroughResult(
                         "state_changed", user_id, outcome, str(user[0]), str(user[0])
-                    )
+                    ), reason=first_difference((str(user[0]), *(int(user[i] or 0) for i in range(1,5))), (expected_level,expected_exp,expected_hp,expected_mp,expected_rate), ("level_changed","exp_changed","hp_changed","mp_changed","breakthrough_rate_changed")), subject="")
 
                 item = conn.execute(
                     "SELECT goods_num FROM back WHERE user_id=%s AND goods_id=%s",
@@ -740,9 +746,9 @@ class BreakthroughService:
                     or int(user[4] or 0) != expected_rate
                 ):
                     conn.rollback()
-                    return DirectBreakthroughResult(
+                    return _reason_replace(DirectBreakthroughResult(
                         "state_changed", user_id, outcome, str(user[0]), str(user[0])
-                    )
+                    ), reason=first_difference((str(user[0]), *(int(user[i] or 0) for i in range(1,5))), (expected_level,expected_exp,expected_hp,expected_mp,expected_rate), ("level_changed","exp_changed","hp_changed","mp_changed","breakthrough_rate_changed")), subject="")
 
                 if outcome == "failure":
                     # REAL floor-sub: high-realm overflow TEXT/REAL exp.

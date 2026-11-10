@@ -136,7 +136,7 @@ class GuardUnitTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_failure_reply_is_short_and_action_scoped(self) -> None:
         text = failure_reply("宠物技能洗练", sqlite3.OperationalError("no such table: x"))
-        self.assertTrue(text.startswith("宠物技能洗练未完成："))
+        self.assertTrue(text.startswith("宠物技能洗练处理提示："))
         self.assertLess(len(text), 80)
 
 
@@ -179,7 +179,7 @@ class GuardEndToEndTests(unittest.IsolatedAsyncioTestCase):
 
             self.assertIsNone(await handler("bot", "event"))
             self.assertEqual(len(recorder.calls), 1)
-            self.assertIn("砸蛋未完成", recorder.calls[0][2])
+            self.assertIn("砸蛋处理提示", recorder.calls[0][2])
             with DatabaseUnitOfWork(game) as uow:
                 self.assertEqual(
                     uow.query_one("SELECT stone FROM user_xiuxian WHERE user_id='u'")["stone"], 100

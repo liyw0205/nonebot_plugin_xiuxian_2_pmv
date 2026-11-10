@@ -27,18 +27,21 @@ Design is deliberately narrow:
 from __future__ import annotations
 
 import functools
+import sqlite3
+from uuid import uuid4
 from typing import Any, Awaitable, Callable
 
-from nonebot.exception import FinishedException
+from nonebot.exception import MatcherException, ProcessException
 from nonebot.log import logger
 
-from ..core.errors import ConflictError, DomainError, ValidationError
+from ..core.errors import ConflictError, DomainError, OperationConflictError, ValidationError
+from ..core.player_reasons import reason_text
 from ..infrastructure.database import is_database_busy
 
-GENERIC_FAILURE_TEXT = "操作失败，本次未结算；如持续失败请联系管理员。"
-BUSY_FAILURE_TEXT = "数据繁忙，本次未结算，请稍后重试。"
-CONFLICT_FAILURE_TEXT = "上一次请求仍在处理中，本次未结算，请稍后重试。"
-VALIDATION_FAILURE_TEXT = "操作参数无效，本次未结算。"
+GENERIC_FAILURE_TEXT = "处理或回复时发生内部异常，请查询结果并联系管理员核对。"
+BUSY_FAILURE_TEXT = "数据库繁忙，请稍后查询结果再操作。"
+CONFLICT_FAILURE_TEXT = "请求发生冲突，请查询当前操作结果。"
+VALIDATION_FAILURE_TEXT = "命令参数未通过校验，请检查命令格式。"
 
 
 def _looks_busy(exc: BaseException) -> bool:
@@ -51,6 +54,8 @@ def _looks_busy(exc: BaseException) -> bool:
 
     if is_database_busy(exc):
         return True
+    if not isinstance(exc, sqlite3.OperationalError):
+        return False
     text = str(exc).lower()
     return (
         "database is locked" in text
@@ -62,6 +67,13 @@ def _looks_busy(exc: BaseException) -> bool:
 def failure_text(exc: BaseException) -> str:
     """Map an exception to one short, leak-free hint."""
 
+    if isinstance(exc, OperationConflictError):
+        return reason_text("operation_conflict")
+    if isinstance(exc, DomainError):
+        known = reason_text(exc.details.get("reason", "")) or reason_text(exc.code)
+        if known:
+            label = _subject_label(exc.details.get("subject", ""))
+            return (label + "，" if label else "") + known
     if isinstance(exc, ConflictError):
         return CONFLICT_FAILURE_TEXT
     if isinstance(exc, ValidationError):
@@ -73,10 +85,45 @@ def failure_text(exc: BaseException) -> str:
     return GENERIC_FAILURE_TEXT
 
 
-def failure_reply(action: str, exc: BaseException) -> str:
+def failure_reply(action: str, exc: BaseException, *, reference: str | None = None) -> str:
     """Full reply line for one failed command."""
 
-    return f"{action}未完成：{failure_text(exc)}"
+    text = failure_text(exc)
+    suffix = f"（定位号：{reference or uuid4().hex[:12]}）" if text == GENERIC_FAILURE_TEXT else ""
+    return f"{action}处理提示：{text}{suffix}"
+
+
+def result_failure(action: str, result, *, messages: dict[str, str] | None = None, subjects: dict[str, str] | None = None) -> str:
+    data = getattr(result, "data", None)
+    if isinstance(data, dict):
+        result = {"status": getattr(result, "code", "") or result.status, **data}
+    if isinstance(result, dict):
+        status = result.get("status", "")
+        code = result.get("reason") or status
+        subject = result.get("subject", "")
+    else:
+        status = result.status
+        code = getattr(result, "reason", "") or status
+        subject = getattr(result, "subject", "")
+    text = (messages or {}).get(code) or reason_text(code)
+    if text:
+        label = {str(key): value for key, value in (subjects or {}).items()}.get(str(subject), "")
+        if not label:
+            label = _subject_label(subject)
+        if str(subject).startswith("plot:") and str(subject)[5:].isdigit():
+            label = str(subject)[5:] + "号灵田"
+        return f"{action}：{label + '，' if label else ''}{text}"
+    return report_exception(action, RuntimeError(f"unmapped result status={status!r} reason={code!r}"))
+
+
+def _subject_label(subject) -> str:
+    return {"visitor": "来访方", "target": "目标方", "source": "材料", "destination": "目标", "sender": "赠送方", "recipient": "接收方", "actor": "发起方", "challenger": "挑战者", "opponent": "对手", "sect": "宗门", "mentor": "师父", "apprentice": "徒弟"}.get(str(subject), "")
+
+
+def report_exception(action: str, exc: BaseException, *, phase: str = "处理或回复") -> str:
+    reference = uuid4().hex[:12]
+    logger.opt(exception=exc).error(f"[command] {action} phase={phase} reference={reference}")
+    return failure_reply(action, exc, reference=reference)
 
 
 def _argument(args: tuple[Any, ...], kwargs: dict[str, Any], index: int, name: str) -> Any:
@@ -99,21 +146,21 @@ def guard_command(
         async def wrapper(*args: Any, **kwargs: Any) -> Any:
             try:
                 return await func(*args, **kwargs)
-            except FinishedException:
+            except (MatcherException, ProcessException):
                 raise
             except Exception as exc:  # noqa: BLE001 - answering is the point
                 bot = _argument(args, kwargs, 0, "bot")
                 event = _argument(args, kwargs, 1, "event")
-                logger.opt(exception=exc).error(
-                    f"[command] {action} handler failed ({type(exc).__name__}); replied with a hint"
-                )
+                reply = report_exception(action, exc)
                 sender = send
                 if sender is None:
                     from .xiuxian_utils.utils import handle_send
 
                     sender = handle_send
                 try:
-                    await sender(bot, event, failure_reply(action, exc))
+                    await sender(bot, event, reply)
+                except (MatcherException, ProcessException):
+                    raise
                 except Exception:  # noqa: BLE001 - delivery must not mask the original
                     logger.opt(exception=True).error(
                         f"[command] {action} failure reply was not delivered"
@@ -133,4 +180,6 @@ __all__ = [
     "failure_reply",
     "failure_text",
     "guard_command",
+    "report_exception",
+    "result_failure",
 ]

@@ -49,13 +49,14 @@ class BankDepositApplication:
             snapshot = account or initial_account
             if expected_saved_stone is not None:
                 if snapshot is None:
-                    return {"status": "state_changed", "operation_id": operation_id}
-                if (
-                    int(snapshot.get("saved_stone", 0)) != int(expected_saved_stone)
-                    or str(snapshot.get("updated_at", "")) != str(expected_saved_at or "")
-                    or str(snapshot.get("bank_level", "")) != str(bank_level)
+                    return {"status": "state_changed", "reason": "bank_account_missing", "operation_id": operation_id}
+                for actual, wanted, reason in (
+                    (int(snapshot.get("saved_stone", 0)), int(expected_saved_stone), "bank_saved_changed"),
+                    (str(snapshot.get("updated_at", "")), str(expected_saved_at or ""), "bank_saved_at_changed"),
+                    (str(snapshot.get("bank_level", "")), str(bank_level), "bank_level_changed"),
                 ):
-                    return {"status": "state_changed", "operation_id": operation_id}
+                    if actual != wanted:
+                        return {"status": "state_changed", "reason": reason, "operation_id": operation_id}
             saved = 0 if snapshot is None else int(snapshot["saved_stone"])
             try:
                 decision = decide_deposit(wallet=int(wallet["stone"] or 0), saved=saved, amount=int(amount), interest=int(interest), limit=int(limit))

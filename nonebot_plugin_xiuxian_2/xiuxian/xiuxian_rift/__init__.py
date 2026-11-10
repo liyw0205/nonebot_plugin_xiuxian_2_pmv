@@ -5,6 +5,7 @@ from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from nonebot import get_bots, get_bot
 from ...paths import get_paths
+from ..command_guard import result_failure, report_exception
 from ...infrastructure.ids import UUIDGenerator
 from ...infrastructure.clock import SystemClock
 from ..on_compat import on_command
@@ -225,6 +226,7 @@ def _termination_outcome(outcome):
     return SimpleNamespace(
         status="duplicate" if outcome.replayed else data.get("status", outcome.code),
         rift_name=str(data.get("rift_name", "")),
+        reason=str(data.get("reason", "")),
         succeeded=outcome.ok,
     )
 
@@ -543,21 +545,15 @@ async def create_rift(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
             rift_plan=_rift_world_snapshot(rift),
         )
         result = _generation_outcome(outcome)
-    except ConflictError:
-        await handle_send(bot, event, "生成请求冲突，本次未改写，请重新查询当前秘境。")
+    except ConflictError as exc:
+        await handle_send(bot, event, report_exception("生成秘境", exc))
         return
     except Exception as exc:
         logger.error("manual rift generation failed: {}", type(exc).__name__)
-        await handle_send(bot, event, "生成请求未确认：存储或配置异常，请检查服务日志与当前秘境。")
+        await handle_send(bot, event, report_exception("生成秘境", exc))
         return
     if not result.succeeded or result.state is None:
-        status = outcome.code or result.status
-        if status == "schema_missing":
-            msg = "秘境生成服务尚未就绪，请检查启动迁移。"
-        elif status in {"state_changed", "operation_conflict", "conflict", "superseded"}:
-            msg = "生成请求冲突或已被更新的秘境替代，本次未改写，请查询当前秘境。"
-        else:
-            msg = "生成请求未完成，请检查服务日志与当前秘境。"
+        msg = result_failure("生成秘境", outcome)
         await handle_send(bot, event, msg)
         return
     try:
@@ -658,7 +654,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
             if entry.status == "stamina_missing":
                 await handle_send(bot, event, "你没有足够的体力，请等待体力恢复后再试！")
                 await explore_rift.finish()
-            await handle_send(bot, event, "进入秘境未完成：秘境状态已更新，请重新进入。")
+            await handle_send(bot, event, result_failure("进入秘境", entry_outcome))
             await explore_rift.finish()
         _sync_entry_projection(user_id, entry)
         msg = _entry_success_message(entry.rift_data)
@@ -729,7 +725,7 @@ async def use_rift_explore(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
             if entry.status == "ticket_missing":
                 await handle_send(bot, event, "秘藏令数量不足，请重新查看背包。")
                 return
-            await handle_send(bot, event, "开启秘境未完成：秘境状态已更新，请重新开启。")
+            await handle_send(bot, event, result_failure("开启秘境", entry_outcome))
             return
         _sync_entry_projection(user_id, entry)
         msg = _entry_success_message(entry.rift_data, bypass_position=True)
@@ -842,7 +838,7 @@ async def complete_rift_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
             rift_info = read_rift_data(user_id)
         except Exception as e:
             logger.error(f"读取用户 {user_id} 秘境数据失败: {e}")
-            msg = '发生未知错误，秘境数据读取失败！'
+            msg = report_exception("读取秘境", e)
             await handle_send(bot, event, msg)
             await complete_rift.finish()
 
@@ -852,7 +848,7 @@ async def complete_rift_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
             time2 = int(rift_info["time"])
         except Exception as exc:
             logger.opt(exception=exc).error("秘境结算时间读取失败")
-            await handle_send(bot, event, "秘境结算失败：请求未生效。")
+            await handle_send(bot, event, report_exception("秘境结算", exc))
             await complete_rift.finish()
         if exp_time < time2:
             msg = f"进行中的：{rift_info['name']}探索，预计{time2 - exp_time}分钟后可结束"
@@ -883,7 +879,7 @@ async def complete_rift_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
                 )
             except Exception as exc:
                 logger.opt(exception=exc).error("秘境普通结算事务执行失败")
-                await handle_send(bot, event, "秘境结算失败：请求未生效。")
+                await handle_send(bot, event, report_exception("秘境结算", exc))
                 await complete_rift.finish()
             if not result.succeeded:
                 messages = {
@@ -896,7 +892,7 @@ async def complete_rift_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
                     event,
                     messages.get(
                         result.status,
-                        "秘境结算未完成：未到结算时间或已结算，请重新查询秘境。",
+                        result_failure("秘境结算", result),
                     ),
                 )
                 await complete_rift.finish()
@@ -960,7 +956,7 @@ async def break_rift_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
             rift_info = read_rift_data(user_id)
         except Exception as e:
             logger.error(f"读取用户 {user_id} 秘境数据失败: {e}")
-            msg = '发生未知错误，秘境数据读取失败！'
+            msg = report_exception("读取秘境", e)
             await handle_send(bot, event, msg)
             await break_rift.finish()
 
@@ -979,9 +975,9 @@ async def break_rift_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         if not result.succeeded:
             msg = {
                 "not_active": "终止失败：当前没有进行中的秘境。",
-                "state_changed": "终止未结算：秘境当前状态已更新。",
+                "state_changed": result_failure("终止秘境", result),
                 "duplicate": "该终止请求已处理。",
-            }.get(result.status, f"终止失败（{result.status}）。")
+            }.get(result.status, result_failure("终止秘境", result))
             await handle_send(bot, event, msg)
             await break_rift.finish()
         msg = f"已终止{rift_info['name']}秘境的探索！"
@@ -1043,7 +1039,7 @@ async def use_rift_key(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
         )
     except Exception as exc:
         logger.opt(exception=exc).error("秘境钥匙结算事务执行失败")
-        await handle_send(bot, event, "秘境钥匙结算失败：请求未生效。")
+        await handle_send(bot, event, report_exception("秘境钥匙结算", exc))
         return
     if not result.succeeded:
         messages = {
@@ -1057,7 +1053,7 @@ async def use_rift_key(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
             event,
             messages.get(
                 result.status,
-                "使用秘境钥匙未完成：钥匙或秘境状态已更新，请重新查看背包。",
+                result_failure("秘境钥匙", result),
             ),
         )
         return
@@ -1135,7 +1131,7 @@ async def use_rift_boss(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         )
     except Exception as exc:
         logger.opt(exception=exc).error("斩妖令结算事务执行失败")
-        await handle_send(bot, event, "斩妖令结算失败：请求未生效。")
+        await handle_send(bot, event, report_exception("斩妖令结算", exc))
         return
     if not settlement.succeeded:
         messages = {
@@ -1149,7 +1145,7 @@ async def use_rift_boss(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
             event,
             messages.get(
                 settlement.status,
-                "使用斩妖令未完成：斩妖令或秘境状态已更新，请重新查看背包。",
+                result_failure("斩妖令", settlement),
             ),
         )
         return
@@ -1191,7 +1187,7 @@ async def _use_rift_speedup(
             "item_missing": "加速券数量不足，请重新查看背包。",
             "not_active": "当前没有可加速的秘境探索。",
         }
-        await handle_send(bot, event, messages.get(result.status, f"加速失败（{result.status}）。"))
+        await handle_send(bot, event, messages.get(result.status, result_failure("秘境加速", result)))
         return
 
     # The database is authoritative; keep the legacy file as a post-commit projection.

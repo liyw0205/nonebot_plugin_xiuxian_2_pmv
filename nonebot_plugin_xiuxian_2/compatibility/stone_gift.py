@@ -20,6 +20,8 @@ class StoneGiftResult:
     gross_amount: int
     net_amount: int
     fee_amount: int
+    reason: str = ""
+    subject: str = ""
 
     @property
     def succeeded(self) -> bool:
@@ -133,7 +135,7 @@ class StoneGiftService:
         fee = int(raw.get("fee_amount", gross - net) or 0)
         if outcome.ok:
             return self._result("duplicate" if outcome.status == "replayed" else "transferred", raw.get("sender_id", sender_id), raw.get("recipient_id", recipient_id), gross, net, fee)
-        return self._result(outcome.code or outcome.status, sender_id, recipient_id, gross, net, fee)
+        return StoneGiftResult(outcome.code or outcome.status, str(sender_id), str(recipient_id), gross, net, fee, str(data.get("reason", "")), str(data.get("subject", "")))
 
 
 __all__ = ["StoneGiftResult", "StoneGiftService"]

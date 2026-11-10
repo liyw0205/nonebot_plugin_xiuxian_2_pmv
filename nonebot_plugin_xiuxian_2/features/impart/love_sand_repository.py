@@ -14,6 +14,7 @@ class LoveSandResult:
     gained: int = 0
     stone_num: int = 0
     item_remaining: int = 0
+    reason: str = ""
 
     @property
     def succeeded(self) -> bool:
@@ -95,13 +96,14 @@ class LoveSandSqlRepository:
                 "SELECT stone_num FROM impart_data.xiuxian_impart WHERE user_id=?",
                 (user_id,),
             )
-            if (
-                item is None
-                or impart is None
-                or int(item["goods_num"]) != expected_item_count
-                or int(impart["stone_num"]) != expected_stone_num
-            ):
-                return LoveSandResult("state_changed")
+            if item is None:
+                return LoveSandResult("state_changed", reason="item_missing")
+            if impart is None:
+                return LoveSandResult("state_changed", reason="user_missing")
+            if int(item["goods_num"]) != expected_item_count:
+                return LoveSandResult("state_changed", reason="item_changed")
+            if int(impart["stone_num"]) != expected_stone_num:
+                return LoveSandResult("state_changed", reason="crystal_changed")
             if expected_item_count < quantity:
                 return LoveSandResult("item_missing")
 
@@ -119,7 +121,7 @@ class LoveSandSqlRepository:
                 ),
             )
             if consumed.rowcount != 1:
-                return LoveSandResult("state_changed")
+                return LoveSandResult("state_changed", reason="item_changed")
             uow.execute(
                 "UPDATE impart_data.xiuxian_impart SET stone_num=? WHERE user_id=?",
                 (stone_num, user_id),

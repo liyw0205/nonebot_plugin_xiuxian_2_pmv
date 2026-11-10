@@ -35,6 +35,7 @@ from ...features.arena.opponent_application import ArenaOpponentApplication
 from ...features.arena.opponent_repository import ArenaOpponentRepository
 from ...features.arena.state_application import ArenaStateApplication
 from ...features.info.profile_application import PlayerProfileApplication
+from ..command_guard import result_failure, report_exception
 from ...core.errors import ConflictError, DomainError
 from ...features.arena.repository import ArenaChallengePurchaseSqlRepository
 from ...features.arena.match_history import (
@@ -162,6 +163,7 @@ def _arena_purchase_result(outcome) -> ArenaPurchaseResult:
         int(data.get("honor_points", 0) or 0),
         int(data.get("purchased", 0) or 0),
         int(data.get("inventory", 0) or 0),
+        reason=str(data.get("reason", "")),
     )
 
 
@@ -173,10 +175,9 @@ def _arena_purchase_message(result, item_name):
         "limit_reached": "该物品已到限购，无法再购买。",
         "inventory_full": "该物品持有数量已达上限。",
         "user_missing": "兑换失败：未找到角色数据。",
-        "state_changed": "兑换未完成：活动进度已更新，请重新兑换。",
         "schema_missing": "竞技场兑换服务尚未就绪，请检查启动迁移。",
     }
-    return messages.get(result.status, "兑换未结算，请检查原请求和服务日志。")
+    return result_failure("竞技场兑换", result, messages=messages)
 
 
 def _arena_challenge_purchase_result(outcome) -> ArenaChallengePurchaseResult:
@@ -188,12 +189,13 @@ def _arena_challenge_purchase_result(outcome) -> ArenaChallengePurchaseResult:
         int(data.get("stone", 0) or 0),
         int(data.get("bought", 0) or 0),
         int(data.get("extra", 0) or 0),
+        reason=str(data.get("reason", "")),
     )
 
 
 def _arena_challenge_ticket_result(outcome) -> ArenaChallengeTicketResult:
     data = outcome.data or {}
-    return ArenaChallengeTicketResult(str(data.get("status", outcome.code or "failed")), int(data.get("used_tickets", 0) or 0), int(data.get("item_remaining", 0) or 0), int(data.get("challenges_used", 0) or 0), int(data.get("challenges_remaining", 0) or 0), int(data.get("challenge_cap", 0) or 0))
+    return ArenaChallengeTicketResult(str(data.get("status", outcome.code or "failed")), int(data.get("used_tickets", 0) or 0), int(data.get("item_remaining", 0) or 0), int(data.get("challenges_used", 0) or 0), int(data.get("challenges_remaining", 0) or 0), int(data.get("challenge_cap", 0) or 0), reason=str(data.get("reason", "")))
 
 
 def _arena_settlement_result(outcome) -> ArenaChallengeSettlementResult:
@@ -209,6 +211,7 @@ def _arena_settlement_result(outcome) -> ArenaChallengeSettlementResult:
         int(data.get("remaining", 0) or 0),
         int(data.get("stamina", 0) or 0),
         str(data.get("challenged_at", "")),
+        reason=str(data.get("reason", "")), subject=str(data.get("subject", "")),
     )
 
 __arena_help__ = """
@@ -369,11 +372,11 @@ async def arena_challenge_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
             lose_points=arena_limit.lose_points,
             no_match_points=arena_limit.no_match_points,
         ))
-    except ConflictError:
-        await handle_send(bot, event, "竞技场挑战请求冲突，本次未结算。")
+    except ConflictError as exc:
+        await handle_send(bot, event, report_exception("竞技场挑战", exc))
         return
     except DomainError as exc:
-        await handle_send(bot, event, exc.message)
+        await handle_send(bot, event, report_exception("竞技场", exc))
         return
     except Exception as exc:
         logger.warning("arena challenge failed: {}", type(exc).__name__)
@@ -387,7 +390,7 @@ async def arena_challenge_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
         elif settlement.status == "schema_missing":
             message = "竞技场数据尚未就绪，请检查启动迁移。"
         else:
-            message = "挑战未结算：战斗当前状态已更新。"
+            message = result_failure("竞技场挑战" + {"challenger": "（挑战者）", "opponent": "（对手）"}.get(settlement.subject, ""), settlement)
         await handle_send(bot, event, message)
         return
     if use_cached_target:
@@ -792,7 +795,7 @@ async def arena_buy_challenge_(bot: Bot, event: GroupMessageEvent | PrivateMessa
             f"当前灵石：{number_to(int(user_info.get('stone', 0)))}",
         )
         await arena_buy_challenge.finish()
-    await handle_send(bot, event, "购买未结算：当前状态已更新。")
+    await handle_send(bot, event, result_failure("购买竞技场次数", result))
     await arena_buy_challenge.finish()
 
 def check_rank_requirement(current_rank, required_rank):
@@ -912,5 +915,5 @@ async def use_arena_challenge_ticket(bot: Bot, event: GroupMessageEvent | Privat
     elif result.status == "schema_missing":
         message = "竞技场数据尚未就绪，请检查启动迁移。"
     else:
-        message = "挑战券使用未结算：次数当前状态已更新，请重新操作。"
+        message = result_failure("使用竞技场挑战券", result)
     await handle_send(bot, event, message, md_type="竞技场")

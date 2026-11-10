@@ -1,4 +1,6 @@
 from __future__ import annotations
+from dataclasses import replace as _reason_replace
+from ...core.snapshot_reason import first_difference
 
 import json
 from contextlib import closing
@@ -2490,6 +2492,8 @@ class AdminPlayerStatusResetResult:
     status: str
     previous_state: tuple[int, int, int, int, int] = ()
     final_state: tuple[int, int, int, int, int] = ()
+    reason: str = ""
+    subject: str = ""
 
     @property
     def succeeded(self) -> bool:
@@ -2594,9 +2598,9 @@ class AdminPlayerStatusResetService:
                     and actual_state != normalized_expected
                 ):
                     conn.rollback()
-                    return AdminPlayerStatusResetResult(
+                    return _reason_replace(AdminPlayerStatusResetResult(
                         "state_changed", actual_state, actual_state
-                    )
+                    ), reason=first_difference(actual_state, normalized_expected, ("exp_changed","hp_changed","mp_changed","atk_changed","stamina_changed")), subject="target")
 
                 exp = actual_state[0]
                 final_state = (
@@ -2623,7 +2627,7 @@ class AdminPlayerStatusResetService:
                 )
                 if changed.rowcount != 1:
                     conn.rollback()
-                    return AdminPlayerStatusResetResult("state_changed", actual_state, actual_state)
+                    return _reason_replace(AdminPlayerStatusResetResult("state_changed", actual_state, actual_state), reason="status_write_rejected", subject="target")
 
                 conn.execute(
                     "INSERT INTO admin_player_status_reset_operations("

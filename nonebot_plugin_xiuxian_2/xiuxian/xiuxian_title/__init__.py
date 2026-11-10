@@ -8,6 +8,7 @@
 """
 from ..on_compat import on_command
 from nonebot.log import logger
+from ..command_guard import result_failure
 from nonebot.params import CommandArg
 from nonebot.permission import SUPERUSER
 
@@ -287,10 +288,9 @@ async def title_equip_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
         "duplicate": f"成功装备称号【{title_data.get('name', title_id)}】！\n该装备请求已经处理，无需重复提交。",
         "already_equipped": f"称号【{title_data.get('name', title_id)}】已在装备中。",
         "title_locked": "你还未解锁该称号！",
-        "state_changed": "称号操作未结算：称号当前状态已更新，请重新查看。",
         "operation_conflict": "本次称号请求与已处理记录冲突，请重新操作。",
     }
-    result_msg = messages.get(result.status, "装备称号失败，请重试。")
+    result_msg = messages.get(result.status) or result_failure("装备称号", result)
     await handle_send(bot, event, result_msg, md_type="修仙", k1="称号", v1="我的称号", k2="卸下", v2="卸下称号", k3="存档", v3="我的修仙信息")
     await title_equip_cmd.finish()
 
@@ -325,10 +325,9 @@ async def title_unequip_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         "applied": f"成功卸下称号【{title_data.get('name', equipped)}】！",
         "duplicate": f"成功卸下称号【{title_data.get('name', result.title_id)}】！\n该卸下请求已经处理，无需重复提交。",
         "not_equipped": "你当前没有装备任何称号！",
-        "state_changed": "称号操作未结算：称号当前状态已更新，请重新查看。",
         "operation_conflict": "本次称号请求与已处理记录冲突，请重新操作。",
     }
-    result_msg = messages.get(result.status, "卸下称号失败，请重试。")
+    result_msg = messages.get(result.status) or result_failure("卸下称号", result)
     await handle_send(bot, event, result_msg, md_type="修仙", k1="称号", v1="我的称号", k2="装备", v2="装备称号", k3="存档", v3="我的修仙信息")
     await title_unequip_cmd.finish()
 
@@ -596,10 +595,9 @@ async def title_grant_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
     else:
         messages = {
             "already_unlocked": f"用户已拥有称号【{title_name}】",
-            "state_changed": "称号发放/回收未结算：用户当前状态已更新，请重新发起",
             "operation_conflict": "本次赠送请求与已处理记录冲突",
         }
-        await handle_send(bot, event, f"赠送失败：{messages.get(result.status, '请重试')}")
+        await handle_send(bot, event, result_failure("发放或回收称号", result, messages=messages))
 
 
 @title_refresh_cmd.handle(parameterless=[Cooldown(cd_time=30)])

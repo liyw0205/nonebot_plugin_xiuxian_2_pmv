@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from ...core.errors import DomainError
+
 import json
 from pathlib import Path
 from typing import Any, Mapping
@@ -67,7 +69,9 @@ class NormalPvpSqlRepository:
     @staticmethod
     def _saved_result(value: Any, status: str = "duplicate") -> dict[str, Any]:
         saved = json.loads(str(value))
-        return {"status": status, **dict(saved)}
+        return {"status": status,
+                "reason": "",
+                "subject": "", **dict(saved)}
 
     def get_result(self, operation_id: str, challenger_id: str, opponent_id: str) -> dict[str, Any] | None:
         operation_id = str(operation_id).strip()
@@ -146,9 +150,11 @@ class NormalPvpSqlRepository:
         payload = self._payload(challenger_id, opponent_id, stamina_cost)
         messages = list(battle_messages or [])
 
-        def result(status: str) -> dict[str, Any]:
+        def result(status: str, reason: str = "", subject: str = "") -> dict[str, Any]:
             return {
                 "status": status,
+                "reason": reason,
+                "subject": subject,
                 "winner_id": winner_id,
                 "winner_name": str(winner_name),
                 "battle_messages": messages,
@@ -186,8 +192,10 @@ class NormalPvpSqlRepository:
             if challenger_id not in current or opponent_id not in current:
                 return result("user_missing")
             challenger_snapshot, opponent_snapshot = snapshots[:4], snapshots[4:]
-            if current[challenger_id] != challenger_snapshot or current[opponent_id] != opponent_snapshot:
-                return result("state_changed")
+            for uid, snapshot in ((challenger_id, challenger_snapshot), (opponent_id, opponent_snapshot)):
+                for actual, expected, reason in zip(current[uid], snapshot, ("hp_changed", "mp_changed", "stamina_changed", "exp_changed")):
+                    if actual != expected:
+                        return result("state_changed", reason, uid)
             if challenger_snapshot[0] <= challenger_snapshot[3] / 10:
                 return result("challenger_injured")
             if challenger_snapshot[2] < stamina_cost:
@@ -210,7 +218,7 @@ class NormalPvpSqlRepository:
                     if changed.rowcount != 1:
                         raise _StateChanged
             except _StateChanged:
-                return result("state_changed")
+                raise DomainError("pvp_player_write_rejected", "pvp write count mismatch")
 
             if winner_id:
                 loser_id = opponent_id if winner_id == challenger_id else challenger_id

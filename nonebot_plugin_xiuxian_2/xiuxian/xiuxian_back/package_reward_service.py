@@ -25,6 +25,8 @@ class PackageOpenResult:
     package_id: int
     quantity: int
     rewards: tuple[PackageReward, ...]
+    reason: str = ""
+    subject: str = ""
 
     @property
     def succeeded(self) -> bool:
@@ -57,8 +59,8 @@ class PackageRewardService:
         record_compatibility_hit("package_reward")
 
     @staticmethod
-    def _result(status: str, user_id: str, package_id: int, quantity: int, rewards: tuple[PackageReward, ...]) -> PackageOpenResult:
-        return PackageOpenResult(status, str(user_id), int(package_id), int(quantity), tuple(rewards))
+    def _result(status: str, user_id: str, package_id: int, quantity: int, rewards: tuple[PackageReward, ...], reason: str = "", subject: str = "") -> PackageOpenResult:
+        return PackageOpenResult(status, str(user_id), int(package_id), int(quantity), tuple(rewards), reason, subject)
 
     def apply(self, operation_id: str, user_id: str, package_id: int, quantity: int, rewards: Any, *, max_goods_num: int) -> PackageOpenResult:
         self._warn()
@@ -69,7 +71,7 @@ class PackageRewardService:
         previous = self.application.lookup(operation_id)
         if previous is not None:
             if previous["user_id"] != str(user_id) or previous["package_id"] != int(package_id) or previous["quantity"] != int(quantity):
-                return self._result("state_changed", user_id, package_id, quantity, normalized)
+                return self._result("state_changed", user_id, package_id, quantity, normalized, reason="operation_conflict")
             return self._result("duplicate", previous["user_id"], previous["package_id"], previous["quantity"], previous["rewards"])
         try:
             outcome = self.application.open_package(
@@ -88,7 +90,7 @@ class PackageRewardService:
         raw = data.get("package_reward", {}) if isinstance(data, dict) else {}
         decoded = tuple(PackageReward(**item) for item in raw.get("rewards", []))
         status = "applied" if outcome.status == "applied" else "duplicate" if outcome.status == "replayed" else outcome.code or outcome.status
-        return self._result(status, raw.get("user_id", user_id), raw.get("package_id", package_id), raw.get("quantity", quantity), decoded or normalized)
+        return self._result(status, raw.get("user_id", user_id), raw.get("package_id", package_id), raw.get("quantity", quantity), decoded or normalized, str(data.get("reason") or ""), str(data.get("subject") or ""))
 
 
 __all__ = ["PackageOpenResult", "PackageReward", "PackageRewardService", "OPERATION_TABLE"]

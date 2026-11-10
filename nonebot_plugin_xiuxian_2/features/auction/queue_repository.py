@@ -17,6 +17,7 @@ class AuctionQueueResult:
     item_name: str = ""
     start_price: int = 0
     user_name: str = ""
+    reason: str = ""
 
     @property
     def succeeded(self) -> bool:
@@ -111,7 +112,7 @@ class AuctionQueueSqlRepository:
             or str(row["user_id"]) != user_id
             or int(row["item_id"]) != item_id
         ):
-            return AuctionQueueResult("state_changed", action, user_id, item_id)
+            return AuctionQueueResult("state_changed", action, user_id, item_id, reason="operation_conflict")
         return AuctionQueueResult(
             "duplicate",
             action,

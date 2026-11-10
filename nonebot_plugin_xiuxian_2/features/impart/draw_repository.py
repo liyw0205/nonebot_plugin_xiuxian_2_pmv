@@ -8,6 +8,7 @@ from typing import Any, Mapping
 
 from ...infrastructure.database import DatabaseUnitOfWork
 from .card_bonus import refresh_card_bonuses
+from .legacy_state import state_row_count, check_state_write
 
 
 @dataclass(frozen=True)
@@ -18,6 +19,7 @@ class ImpartDrawResult:
     cards: tuple[str, ...] = ()
     new_cards: tuple[str, ...] = ()
     existing_cards: tuple[str, ...] = ()
+    reason: str = ""
 
     @property
     def succeeded(self) -> bool:
@@ -152,7 +154,7 @@ class ImpartDrawSqlRepository:
             if "cards_json" not in columns:
                 return ImpartDrawResult("schema_missing")
             old = uow.query_one(
-                "SELECT payload,wish,draw_count,COALESCE(cards_json,'[]') "
+                "SELECT payload,wish,draw_count,COALESCE(cards_json,'[]') AS cards_json "
                 "FROM impart_draw_operations WHERE operation_id=?",
                 (operation_id,),
             )
@@ -178,17 +180,22 @@ class ImpartDrawSqlRepository:
                 "SELECT 1 AS present FROM impart_data.sqlite_master "
                 "WHERE type='table' AND name='impart_cards'"
             )
-            if user is None or state is None or cards_table is None:
+            if cards_table is None:
                 return ImpartDrawResult("schema_missing")
-            if int(user["stone"]) != expected_stone or tuple(map(int, (state["wish"], state["impart_num"]))) != (
-                expected_wish,
-                expected_count,
-            ):
-                return ImpartDrawResult("state_changed")
+            if user is None or state is None:
+                return ImpartDrawResult("schema_missing", reason="user_missing" if user is None else "impart_missing")
+            if int(user["stone"]) != expected_stone:
+                return ImpartDrawResult("state_changed", reason="stone_changed")
+            if int(state["wish"]) != expected_wish:
+                return ImpartDrawResult("state_changed", reason="wish_changed")
+            if int(state["impart_num"]) != expected_count:
+                return ImpartDrawResult("state_changed", reason="draw_count_changed")
             if expected_stone < cost:
                 return ImpartDrawResult("stone_missing")
             if expected_count + pulls > 100:
                 return ImpartDrawResult("limit_exceeded")
+
+            state_count = state_row_count(uow, user_id, ("wish", "impart_num"), schema="impart_data")
 
             existing_card_counts = self._card_counts(uow, "impart_data", user_id)
             new_cards = tuple(
@@ -202,14 +209,13 @@ class ImpartDrawSqlRepository:
                 (cost, user_id, cost),
             )
             if charged.rowcount != 1:
-                return ImpartDrawResult("state_changed")
+                return ImpartDrawResult("state_changed", reason="stone_changed")
             changed = uow.execute(
                 "UPDATE impart_data.xiuxian_impart SET wish=?,impart_num=impart_num+? "
                 "WHERE user_id=?",
                 (new_wish, pulls, user_id),
             )
-            if changed.rowcount != 1:
-                return ImpartDrawResult("state_changed")
+            check_state_write(changed, state_count)
             for card_name, quantity in Counter(cards).items():
                 uow.execute(
                     "INSERT INTO impart_data.impart_cards(user_id,card_name,quantity) "
@@ -290,6 +296,7 @@ class ImpartCrystalDrawResult:
     cards: tuple[str, ...] = ()
     new_cards: tuple[str, ...] = ()
     existing_cards: tuple[str, ...] = ()
+    reason: str = ""
 
     @property
     def succeeded(self) -> bool:
@@ -396,10 +403,13 @@ class ImpartCrystalDrawSqlRepository:
             )
             if state is None:
                 return ImpartCrystalDrawResult("user_missing")
-            if (int(state["stone_num"]), int(state["wish"])) != (expected_stone, expected_wish):
-                return ImpartCrystalDrawResult("state_changed")
+            if int(state["stone_num"]) != expected_stone:
+                return ImpartCrystalDrawResult("state_changed", reason="crystal_changed")
+            if int(state["wish"]) != expected_wish:
+                return ImpartCrystalDrawResult("state_changed", reason="wish_changed")
             if expected_stone < cost:
-                return ImpartCrystalDrawResult("stone_missing")
+                return ImpartCrystalDrawResult("stone_missing", reason="crystal_missing")
+            state_count = state_row_count(uow, user_id, ("stone_num", "wish", "exp_day"))
             existing_card_counts = ImpartDrawSqlRepository._card_counts(
                 uow, "main", user_id
             )
@@ -414,8 +424,7 @@ class ImpartCrystalDrawSqlRepository:
                 "AND stone_num=? AND wish=?",
                 (stone_num, new_wish, exp_day, user_id, expected_stone, expected_wish),
             )
-            if changed.rowcount != 1:
-                return ImpartCrystalDrawResult("state_changed")
+            check_state_write(changed, state_count)
             for card_name, quantity in Counter(cards).items():
                 uow.execute(
                     "INSERT INTO impart_cards(user_id,card_name,quantity) VALUES(?,?,?) "

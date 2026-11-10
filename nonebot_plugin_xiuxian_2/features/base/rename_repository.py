@@ -7,8 +7,9 @@ from ...infrastructure.database import DatabaseUnitOfWork
 
 
 class BaseRenameResult:
-    def __init__(self, status: str, user_id: str, rename_kind: str, new_name: str, previous_name: str = "") -> None:
+    def __init__(self, status: str, user_id: str, rename_kind: str, new_name: str, previous_name: str = "", reason: str = "") -> None:
         self.status = status
+        self.reason = reason
         self.user_id = user_id
         self.rename_kind = rename_kind
         self.new_name = new_name
@@ -83,7 +84,7 @@ class BaseRenameSqlRepository:
             previous = uow.query_one("SELECT payload,user_id,rename_type,new_name,previous_name FROM player_rename_operations WHERE operation_id=?", (operation_id,))
             if previous is not None:
                 if previous["payload"] is not None and str(previous["payload"]) != payload:
-                    return BaseRenameResult("state_changed", user_id, rename_kind, new_name)
+                    return BaseRenameResult("state_changed", user_id, rename_kind, new_name, reason="operation_conflict")
                 return BaseRenameResult("duplicate", str(previous["user_id"]), str(previous["rename_type"]), str(previous["new_name"]), str(previous["previous_name"]))
             row = uow.query_one(f"SELECT COALESCE({column},'') AS name,COALESCE(stone,0) AS stone FROM user_xiuxian WHERE user_id=?", (user_id,))
             if row is None:

@@ -1,4 +1,6 @@
 from __future__ import annotations
+
+from ...core.errors import DomainError
 import json
 from dataclasses import dataclass
 from pathlib import Path
@@ -9,6 +11,8 @@ from .operation_schema import operation_databases_ready, operation_schema_ready
 class DongfuVisitRewardResult:
     status:str
     gain:int=0
+    reason:str=""
+    subject:str=""
     @property
     def succeeded(self): return self.status in {'rewarded','duplicate'}
 
@@ -39,9 +43,9 @@ class DongfuVisitRewardSqlRepository:
             old=uow.query_one('SELECT payload,gain FROM dongfu_visit_reward_operations WHERE operation_id=?',(operation_id,))
             if old is not None:
                 receipt=self._receipt(old['payload'],old['gain'])
-                return DongfuVisitRewardResult('duplicate',receipt[2]) if receipt is not None and receipt[:2]==(visitor_id,target_id) else DongfuVisitRewardResult('state_changed')
+                return DongfuVisitRewardResult('duplicate',receipt[2]) if receipt is not None and receipt[:2]==(visitor_id,target_id) else DongfuVisitRewardResult('state_changed', reason='receipt_corrupt' if receipt is None else 'operation_conflict')
             if uow.query_one('SELECT 1 FROM user_xiuxian WHERE user_id=?',(visitor_id,)) is None: return DongfuVisitRewardResult('user_missing')
             visitor=uow.query_one('SELECT built FROM player_data.dongfu_status WHERE user_id=?',(visitor_id,)); target=uow.query_one('SELECT built FROM player_data.dongfu_status WHERE user_id=?',(target_id,))
-            if visitor is None or int(visitor['built'] or 0)!=1 or target is None or int(target['built'] or 0)!=1: return DongfuVisitRewardResult('dongfu_changed')
-            if uow.execute('UPDATE user_xiuxian SET stone=COALESCE(stone,0)+? WHERE user_id=?',(gain,visitor_id)).rowcount!=1: return DongfuVisitRewardResult('state_changed')
+            if visitor is None or int(visitor['built'] or 0)!=1 or target is None or int(target['built'] or 0)!=1: return DongfuVisitRewardResult('dongfu_changed', reason='dongfu_missing', subject='visitor' if visitor is None or int(visitor['built'] or 0)!=1 else 'target')
+            if uow.execute('UPDATE user_xiuxian SET stone=COALESCE(stone,0)+? WHERE user_id=?',(gain,visitor_id)).rowcount!=1: raise DomainError("stone_write_rejected", 'visit reward write count mismatch')
             uow.execute('INSERT INTO dongfu_visit_reward_operations(operation_id,payload,gain) VALUES(?,?,?)',(operation_id,payload,gain)); return DongfuVisitRewardResult('rewarded',gain)

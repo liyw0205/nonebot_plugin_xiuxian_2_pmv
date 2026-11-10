@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from ...core.errors import DomainError
+
 import json
 from dataclasses import dataclass
 from pathlib import Path
@@ -16,6 +18,7 @@ class GuishiWithdrawResult:
     fee: int = 0
     actual_amount: int = 0
     stored_balance: int = 0
+    reason: str = ""
 
     @property
     def operation_type(self) -> str:
@@ -142,16 +145,18 @@ class GuishiWithdrawSqlRepository:
 
             fee = withdrawal_fee(effective_balance, amount)
             actual_amount = amount - fee
-            credited = uow.execute(
-                "UPDATE user_xiuxian "
-                "SET stone=CAST(COALESCE(stone,0) AS REAL)+CAST(? AS REAL) "
-                "WHERE user_id=?",
-                (actual_amount, user_id),
-            )
-            if credited.rowcount != 1:
-                return GuishiWithdrawResult(
-                    "state_changed", user_id, amount, fee, actual_amount, effective_balance
-                )
+            try:
+                with uow.savepoint("withdraw_credit"):
+                    credited = uow.execute(
+                        "UPDATE user_xiuxian "
+                        "SET stone=CAST(COALESCE(stone,0) AS REAL)+CAST(? AS REAL) "
+                        "WHERE user_id=?",
+                        (actual_amount, user_id),
+                    )
+                    if credited.rowcount != 1:
+                        raise DomainError("stone_write_rejected", "withdraw player credit count mismatch")
+            except DomainError as exc:
+                return GuishiWithdrawResult("state_changed", user_id, amount, reason=exc.code)
             new_balance = effective_balance - amount
             uow.execute(
                 "INSERT INTO guishi_trade.guishi_info(user_id,stored_stone,items) "

@@ -19,13 +19,14 @@ class ExpRewardResult:
     granted: bool = False
     exp_reward: int = 0
     exp: int = 0
+    reason: str = ""
 
     @property
     def succeeded(self) -> bool:
         return self.status in {"applied", "duplicate"}
 
     def to_dict(self) -> dict[str, Any]:
-        return {"status": self.status, "granted": self.granted, "exp_reward": self.exp_reward, "exp": self.exp}
+        return {"status": self.status, "granted": self.granted, "exp_reward": self.exp_reward, "exp": self.exp, "reason": self.reason}
 
 
 @dataclass(frozen=True)
@@ -34,13 +35,14 @@ class StoneRewardResult:
     granted: bool = False
     stone_reward: int = 0
     stone: int = 0
+    reason: str = ""
 
     @property
     def succeeded(self) -> bool:
         return self.status in {"applied", "duplicate"}
 
     def to_dict(self) -> dict[str, Any]:
-        return {"status": self.status, "granted": self.granted, "stone_reward": self.stone_reward, "stone": self.stone}
+        return {"status": self.status, "granted": self.granted, "stone_reward": self.stone_reward, "stone": self.stone, "reason": self.reason}
 
 
 @dataclass(frozen=True)

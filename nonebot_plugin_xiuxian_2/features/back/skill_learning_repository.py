@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from ...core.errors import DomainError
+
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -94,7 +96,7 @@ class SkillLearningSqlRepository:
                 (skill_item_id, user_id),
             )
             if consumed.rowcount != 1 or updated.rowcount != 1:
-                return result("state_changed", previous_item_id)
+                raise DomainError("item_write_rejected" if consumed.rowcount != 1 else "buff_write_rejected", "skill learning write count mismatch")
             uow.execute(
                 "INSERT INTO skill_learning_operations "
                 "(operation_id,user_id,skill_item_id,skill_type,previous_item_id) VALUES(?,?,?,?,?)",

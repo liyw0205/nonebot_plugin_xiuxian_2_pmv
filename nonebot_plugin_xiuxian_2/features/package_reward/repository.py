@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from ...core.errors import DomainError
+
 import json
 from typing import Any
 
@@ -72,6 +74,9 @@ class PackageRewardRepository:
         )
         if package is None or int(package["goods_num"] or 0) < quantity:
             return "item_insufficient"
+        stone_delta = sum(item.quantity for item in rewards if item.name == "灵石")
+        if self.snapshot(uow, user_id)["stone"] + stone_delta < 0:
+            return "stone_insufficient"
 
         columns = {str(row["name"]) for row in uow.query_all("PRAGMA table_info(back)")}
         if "bind_num" in columns:
@@ -88,9 +93,8 @@ class PackageRewardRepository:
                 (quantity, user_id, package_id, quantity),
             )
         if consumed.rowcount != 1:
-            return "state_changed"
+            raise DomainError("package_consume_write_rejected", "package consumption was not saved")
 
-        stone_delta = sum(item.quantity for item in rewards if item.name == "灵石")
         if stone_delta:
             changed = uow.execute(
                 "UPDATE user_xiuxian SET stone = CAST(COALESCE(stone, 0) AS REAL) + CAST(? AS REAL) "
@@ -98,7 +102,7 @@ class PackageRewardRepository:
                 (stone_delta, user_id, stone_delta),
             )
             if changed.rowcount != 1:
-                return "stone_insufficient"
+                raise DomainError("stone_write_rejected", "package stone reward was not saved")
 
         totals: dict[int, int] = {}
         for reward in rewards:

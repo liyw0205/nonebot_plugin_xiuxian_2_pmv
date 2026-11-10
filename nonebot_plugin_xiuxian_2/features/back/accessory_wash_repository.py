@@ -47,7 +47,7 @@ class AccessoryWashSqlRepository:
             previous = uow.query_one("SELECT action,payload,result_json FROM accessory_transaction_operations WHERE operation_id=?", (operation_id,))
             if previous is not None:
                 if str(previous["action"]) != "wash" or str(previous["payload"]) != payload_json:
-                    return AccessoryWashChange("state_changed", "wash", user_id)
+                    return AccessoryWashChange("state_changed", "wash", user_id, reason="operation_conflict")
                 return self._result("duplicate", str(previous["result_json"]))
             row = uow.query_one("SELECT equipped,bag FROM player_data.player_accessory WHERE user_id=?", (user_id,))
             if row is None:
@@ -66,10 +66,10 @@ class AccessoryWashSqlRepository:
             if current is None:
                 return AccessoryWashChange("accessory_missing", "wash", user_id)
             if self._json(current) != self._json(expected_accessory):
-                return AccessoryWashChange("state_changed", "wash", user_id)
+                return AccessoryWashChange("state_changed", "wash", user_id, reason="accessory_changed")
             stones = uow.query_one("SELECT goods_num FROM back WHERE user_id=? AND goods_id=?", (user_id, int(stone_id)))
             if stones is None or int(stones["goods_num"] or 0) != int(expected_stones):
-                return AccessoryWashChange("state_changed", "wash", user_id)
+                return AccessoryWashChange("state_changed", "wash", user_id, reason="item_missing" if stones is None else "wash_stone_changed")
             changed = uow.execute("UPDATE back SET goods_num=goods_num-?,bind_num=MIN(COALESCE(bind_num,0),goods_num-?) WHERE user_id=? AND goods_id=? AND goods_num>=?", (int(stone_cost), int(stone_cost), user_id, int(stone_id), int(stone_cost)))
             if changed.rowcount != 1:
                 return AccessoryWashChange("item_insufficient", "wash", user_id)

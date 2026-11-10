@@ -15,7 +15,7 @@ import time
 from typing import Dict, List
 from ...paths import get_paths
 from ...features.impart_pk.application import ImpartPkApplication
-from ..command_guard import guard_command
+from ..command_guard import guard_command, result_failure
 from ...features.impart_pk.closing_status import (
     closing_settlement_lines,
     closing_status_lines,
@@ -220,6 +220,7 @@ def _daily_impart_state(user_id):
     return _impart_training_settlement_service().get_daily_state(user_id, impart_pk.find_user_data(user_id))
 
 @impart_pk_project.handle(parameterless=[Cooldown(stamina_cost = 1)])
+@guard_command("投影虚神界")
 async def impart_pk_project_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """投影虚神界"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -231,7 +232,7 @@ async def impart_pk_project_(bot: Bot, event: GroupMessageEvent | PrivateMessage
     user_id = user_info['user_id']
     impart_data_draw = await impart_pk_check(user_id)
     if impart_data_draw is None:
-        msg = f"发生未知错误！"
+        msg = "传承角色资料初始化未完成，请联系管理员检查初始化记录。"
         await handle_send(bot, event, msg, md_type="虚神界", k1="投影", v1="投影虚神界", k2="信息", v2="虚神界信息", k3="帮助", v3="虚神界帮助")
         await impart_pk_project.finish()
     # 加入虚神界
@@ -256,9 +257,9 @@ async def impart_pk_project_(bot: Bot, event: GroupMessageEvent | PrivateMessage
     elif result.status == "capacity_full":
         msg = "虚神界人数已满，道友现在无法加入！"
     elif result.status == "schema_missing":
-        msg = "投影未结算：虚神界数据尚未就绪，请稍后重试。"
+        msg = result_failure("投影虚神界", result)
     else:
-        msg = "投影操作未结算：投影当前状态已更新。"
+        msg = result_failure("投影虚神界", result)
     await handle_send(bot, event, msg, md_type="虚神界", k1="投影", v1="投影虚神界", k2="信息", v2="虚神界信息", k3="帮助", v3="虚神界帮助")
     await impart_pk_project.finish()
 
@@ -296,6 +297,7 @@ async def impart_top_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     await impart_top.finish()
         
 @impart_pk_list.handle(parameterless=[Cooldown(cd_time=0)])
+@guard_command("虚神界列表")
 async def impart_pk_list_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """虚神界列表"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -306,7 +308,7 @@ async def impart_pk_list_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
     user_id = user_info['user_id']
     impart_data_draw = await impart_pk_check(user_id)
     if impart_data_draw is None:
-        msg = f"发生未知错误！"
+        msg = "传承角色资料初始化未完成，请联系管理员检查初始化记录。"
         await handle_send(bot, event, msg, md_type="虚神界", k1="列表", v1="虚神界列表", k2="信息", v2="虚神界信息", k3="帮助", v3="虚神界帮助")
         await impart_pk_list.finish()
     xu_list = xu_world.all_xu_world_user()
@@ -333,6 +335,7 @@ async def impart_pk_list_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
     await impart_pk_list.finish()
 
 @impart_pk_now.handle(parameterless=[Cooldown(stamina_cost=3)])
+@guard_command("虚神界对决")
 async def impart_pk_now_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """虚神界对决"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -345,7 +348,7 @@ async def impart_pk_now_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     update_last_check_info_time(user_id)
     impart_data_draw = await impart_pk_check(user_id)
     if impart_data_draw is None:
-        msg = f"发生未知错误！"
+        msg = "传承角色资料初始化未完成，请联系管理员检查初始化记录。"
         await handle_send(bot, event, msg, md_type="虚神界", k1="对决", v1="虚神界对决", k2="信息", v2="虚神界信息", k3="帮助", v3="虚神界帮助")
         await impart_pk_now.finish()
 
@@ -442,15 +445,15 @@ async def impart_pk_now_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
             await impart_pk_now.finish()
         if not settlement.succeeded:
             if settlement.status == "state_changed":
-                msg = "对决未结算：对决当前状态已更新。"
+                msg = result_failure("虚神界对决", settlement)
             elif settlement.status == "operation_conflict":
                 msg = "对决失败：请求冲突。"
             elif settlement.status == "user_missing":
                 msg = "对决失败：未找到角色数据。"
             elif settlement.status == "schema_missing":
-                msg = "对决未结算：虚神界数据尚未就绪，请稍后重试。"
+                msg = result_failure("虚神界对决", settlement)
             else:
-                msg = f"对决未结算（{settlement.status}）。"
+                msg = result_failure("虚神界对决", settlement)
             await handle_send(bot, event, msg, md_type="虚神界", k1="对决", v1="虚神界对决", k2="信息", v2="虚神界信息", k3="祈愿", v3="传承祈愿")
             await impart_pk_now.finish()
 
@@ -585,13 +588,13 @@ async def impart_pk_now_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         await impart_pk_now.finish()
     if not settlement.succeeded:
         if settlement.status == "state_changed":
-            msg = "对决未结算：对决当前状态已更新。"
+            msg = result_failure("虚神界对决", settlement)
         elif settlement.status == "operation_conflict":
             msg = "对决失败：请求冲突。"
         elif settlement.status == "user_missing":
             msg = "对决失败：未找到角色数据。"
         else:
-            msg = f"对决未结算（{settlement.status}）。"
+            msg = result_failure("虚神界对决", settlement)
         await handle_send(bot, event, msg, md_type="虚神界", k1="对决", v1="虚神界对决", k2="信息", v2="虚神界信息", k3="祈愿", v3="传承祈愿")
         await impart_pk_now.finish()
 
@@ -623,6 +626,7 @@ async def impart_pk_now_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     await impart_pk_now.finish()
 
 @impart_pk_exp.handle(parameterless=[Cooldown(cd_time=0)])
+@guard_command("虚神界修炼")
 async def impart_pk_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """虚神界修炼"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -642,7 +646,7 @@ async def impart_pk_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
 
     impart_data_draw = await impart_pk_check(user_id)
     if impart_data_draw is None:
-        msg = f"发生未知错误！"
+        msg = "传承角色资料初始化未完成，请联系管理员检查初始化记录。"
         await handle_send(bot, event, msg, md_type="虚神界", k1="修炼", v1="虚神界修炼", k2="信息", v2="虚神界信息", k3="帮助", v3="虚神界帮助")
         await impart_pk_exp.finish()
 
@@ -726,13 +730,13 @@ async def impart_pk_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         if result.status == "time_insufficient":
             msg = "累计时间不足，修炼失败!"
         elif result.status == "state_changed":
-            msg = "修炼未结算：虚神界当前状态已更新。"
+            msg = result_failure("虚神界修炼", result)
         elif result.status == "user_missing":
             msg = "修炼失败：未找到角色数据。"
         elif result.status == "schema_missing":
-            msg = "修炼未结算：虚神界数据尚未就绪，请稍后重试。"
+            msg = result_failure("虚神界修炼", result)
         else:
-            msg = f"修炼未结算（{result.status}）。"
+            msg = result_failure("虚神界修炼", result)
         await handle_send(bot, event, msg, md_type="虚神界", k1="修炼", v1="虚神界修炼", k2="信息", v2="虚神界信息", k3="帮助", v3="虚神界帮助")
         await impart_pk_exp.finish()
     
@@ -759,6 +763,7 @@ async def impart_pk_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     await impart_pk_exp.finish()
 
 @impart_pk_info.handle(parameterless=[Cooldown(cd_time=0)])
+@guard_command("虚神界信息")
 async def impart_pk_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """虚神界信息"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -841,6 +846,7 @@ def get_rates_by_floor(floor):
     return rates
 
 @impart_pk_go.handle(parameterless=[Cooldown(cd_time=0)])
+@guard_command("虚神界探索")
 async def impart_pk_go_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """探索虚神界"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -975,13 +981,13 @@ async def impart_pk_go_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         if result.status == "time_insufficient":
             msg = "虚神界时间不足，探索失败。"
         elif result.status == "state_changed":
-            msg = "探索未结算：虚神界当前状态已更新。"
+            msg = result_failure("虚神界探索", result)
         elif result.status == "user_missing":
             msg = "探索失败：未找到角色数据。"
         elif result.status == "schema_missing":
-            msg = "探索未结算：虚神界数据尚未就绪，请稍后重试。"
+            msg = result_failure("虚神界探索", result)
         else:
-            msg = f"探索未结算（{result.status}）。"
+            msg = result_failure("虚神界探索", result)
         await handle_send(bot, event, msg, md_type="虚神界", k1="探索", v1="虚神界探索", k2="信息", v2="虚神界信息", k3="帮助", v3="虚神界帮助")
         await impart_pk_go.finish()
     
@@ -1029,7 +1035,7 @@ async def impart_pk_in_closing_(bot: Bot, event: GroupMessageEvent | PrivateMess
         await handle_send(bot, event, msg, md_type="虚神界", k1="出关", v1="虚神界出关", k2="信息", v2="虚神界信息", k3="帮助", v3="虚神界帮助")
         await impart_pk_in_closing.finish()
     if result.status == "schema_missing":
-        msg = "闭关未结算：虚神界数据尚未就绪，请稍后重试。"
+        msg = result_failure("虚神界闭关", result)
         await handle_send(bot, event, msg, md_type="虚神界", k1="闭关", v1="虚神界闭关", k2="信息", v2="虚神界信息", k3="帮助", v3="虚神界帮助")
         await impart_pk_in_closing.finish()
     msg = "当前状态无法进入虚神界闭关。"
@@ -1037,6 +1043,7 @@ async def impart_pk_in_closing_(bot: Bot, event: GroupMessageEvent | PrivateMess
     await impart_pk_in_closing.finish()
         
 @impart_pk_out_closing.handle(parameterless=[Cooldown(cd_time=0)])
+@guard_command("虚神界出关")
 async def impart_pk_out_closing_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """虚神界出关"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -1067,7 +1074,7 @@ async def impart_pk_out_closing_(bot: Bot, event: GroupMessageEvent | PrivateMes
     
     impart_data_draw = await impart_pk_check(user_id)
     if impart_data_draw is None:
-        msg = f"发生未知错误！"
+        msg = "传承角色资料初始化未完成，请联系管理员检查初始化记录。"
         await handle_send(bot, event, msg)
         await impart_pk_out_closing.finish()
 
@@ -1175,9 +1182,9 @@ async def impart_pk_out_closing_(bot: Bot, event: GroupMessageEvent | PrivateMes
         await impart_pk_out_closing.finish()
     if not settlement.succeeded:
         if settlement.status == "schema_missing":
-            msg = "出关未结算：虚神界数据尚未就绪，请稍后重试。"
+            msg = result_failure("虚神界出关", settlement)
         else:
-            msg = "出关未结算：闭关当前状态已更新。"
+            msg = result_failure("虚神界出关", settlement)
         await handle_send(bot, event, msg)
         await impart_pk_out_closing.finish()
 

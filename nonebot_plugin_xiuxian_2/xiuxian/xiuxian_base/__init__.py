@@ -9,6 +9,7 @@ from typing import Any
 
 from nonebot.typing import T_State
 from ...paths import get_paths
+from ..command_guard import result_failure
 from ...features.base.application import BaseApplication
 from ...infrastructure.clock import SystemClock
 from ...infrastructure.random_source import SystemRandom
@@ -795,7 +796,7 @@ async def remaname_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, ar
         if result.status == "duplicate":
             msg += "\n该改名请求已经处理，无需重复提交。"
     else:
-        msg = "改名未结算：当前状态已更新，请稍后重试。"
+        msg = result_failure("修仙改名", result)
     await handle_send(bot, event, msg, md_type="修仙", k1="改名", v1="修仙改名", k2="存档", v2="我的修仙信息", k3="帮助", v3="修仙帮助")
     await remaname.finish()
 
@@ -830,7 +831,7 @@ async def root_rename_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
     elif result.succeeded:
         msg = f"灵根已改名为：{result.new_name}"
     else:
-        msg = "灵根改名未结算：当前状态已更新。"
+        msg = result_failure("灵根改名", result)
     await handle_send(bot, event, msg, md_type="修仙", k1="改名", v1="灵根改名", k2="存档", v2="我的修仙信息", k3="帮助", v3="修仙帮助")
     await root_rename.finish()
 
@@ -1235,7 +1236,7 @@ async def restart_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, sta
         elif result.status == "stone_insufficient":
             msg = "你的灵石还不够呢，快去赚点灵石吧！"
         elif result.status == "state_changed":
-            msg = "角色状态已变化，请重新发起重入仙途。"
+            msg = result_failure("重入仙途", result)
         else:
             msg = "重入仙途服务暂不可用，请检查数据库迁移后重试。"
         await handle_send(bot, event, msg)
@@ -1301,7 +1302,7 @@ async def handle_user_choice(bot: Bot, event: GroupMessageEvent | PrivateMessage
     elif result.status == "stone_insufficient":
         msg += f"重入仙途需要消耗{XiuConfig().remake}灵石，你的灵石不足！"
     elif result.status == "state_changed":
-        msg += "角色状态已变化，请重新发起重入仙途。"
+        msg += result_failure("重入仙途", result)
     else:
         msg += "重入仙途服务暂不可用，请检查数据库迁移后重试。"
 
@@ -1646,7 +1647,7 @@ async def give_stone_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
             f"收取手续费{number_to(result.fee_amount)}枚"
         )
     else:
-        msg = "转账未结算：双方灵石刚被其他操作改动，请稍后重试。"
+        msg = result_failure("赠送灵石", result)
     await handle_send(bot, event, msg)
     await give_stone.finish()
 
@@ -1737,7 +1738,7 @@ async def steal_stone_(bot: Bot, event: GroupMessageEvent, args: Message = Comma
     elif settlement.status == "user_missing":
         msg = "对方未踏入修仙界，不要对杂修出手！"
     elif not settlement.succeeded:
-        msg = "偷窃未结算：当前状态已更新。"
+        msg = result_failure("偷窃", settlement, subjects={user_id: "偷窃方", steal_qq: "被偷方"})
     else:
         msg, victim_msg = _stone_theft_messages(
             settlement, user_info['user_name'], steal_user['user_name']
@@ -1856,7 +1857,7 @@ async def rob_stone_(bot: Bot, event: GroupMessageEvent, args: Message = Command
     elif settlement.status == "user_missing":
         msg = "对方未踏入修仙界，不可抢劫！"
     elif not settlement.succeeded:
-        msg = "抢劫未结算：当前状态已更新，请重新发起。"
+        msg = result_failure("抢劫", settlement, subjects={user_id: "发起方", give_qq: "目标方"})
     else:
         await send_msg_handler(bot, event, '决斗场', bot.self_id, settlement.battle_messages)
         msg, victim_msg = _stone_robbery_messages(settlement, user_mes['user_name'])

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from ...core.errors import DomainError
+
 from pathlib import Path
 from typing import Any
 
@@ -32,8 +34,8 @@ class NatalTrainingSqlRepository:
         return cls.OPERATION_COLUMNS.issubset(columns)
 
     @staticmethod
-    def _result(status: str, exp_added: int = 0, stone_cost: int = 0, level: int = 0, exp: int = 0, max_exp: int = 0) -> dict[str, Any]:
-        return {"status": status, "exp_added": int(exp_added), "stone_cost": int(stone_cost), "level": int(level), "exp": int(exp), "max_exp": int(max_exp)}
+    def _result(status: str, exp_added: int = 0, stone_cost: int = 0, level: int = 0, exp: int = 0, max_exp: int = 0, reason: str = "") -> dict[str, Any]:
+        return {"reason": reason, "status": status, "exp_added": int(exp_added), "stone_cost": int(stone_cost), "level": int(level), "exp": int(exp), "max_exp": int(max_exp)}
 
     def train(self, operation_id: str, user_id: str, requested_exp: int, *, base_cost: int, growth_rate: float, max_level: int, max_exp_base: int, max_exp_growth: int) -> dict[str, Any]:
         operation_id, user_id = str(operation_id).strip(), str(user_id)
@@ -47,7 +49,7 @@ class NatalTrainingSqlRepository:
                 return self._result("schema_missing")
             old = uow.query_one("SELECT user_id,requested_exp,exp_added,stone_cost,level,exp,max_exp FROM natal_training_operations WHERE operation_id=?", (operation_id,))
             if old is not None:
-                return self._result("duplicate", old["exp_added"], old["stone_cost"], old["level"], old["exp"], old["max_exp"]) if str(old["user_id"]) == user_id and int(old["requested_exp"]) == requested_exp else self._result("state_changed")
+                return self._result("duplicate", old["exp_added"], old["stone_cost"], old["level"], old["exp"], old["max_exp"]) if str(old["user_id"]) == user_id and int(old["requested_exp"]) == requested_exp else self._result("state_changed", reason="operation_conflict")
             user = uow.query_one("SELECT COALESCE(stone,0) AS stone FROM user_xiuxian WHERE user_id=?", (user_id,))
             treasure = uow.query_one("SELECT COALESCE(form,0) AS form,COALESCE(level,0) AS level,COALESCE(exp,0) AS exp,COALESCE(max_exp,?) AS max_exp FROM player_data.natal_treasure WHERE user_id=?", (max_exp_base, user_id))
             if user is None:
@@ -69,8 +71,8 @@ class NatalTrainingSqlRepository:
                 new_exp -= current_max_exp
                 new_max_exp = max_exp_base + new_level * max_exp_growth if new_level < max_level else current_max_exp
             if uow.execute("UPDATE user_xiuxian SET stone=stone-? WHERE user_id=? AND stone>=?", (stone_cost, user_id, stone_cost)).rowcount != 1:
-                return self._result("state_changed")
+                raise DomainError("stone_write_rejected", "natal treasure write count mismatch")
             if uow.execute("UPDATE player_data.natal_treasure SET level=?,exp=?,max_exp=? WHERE user_id=?", (new_level, new_exp, new_max_exp, user_id)).rowcount != 1:
-                return self._result("state_changed")
+                raise DomainError("treasure_training_write_rejected", "natal treasure write count mismatch")
             uow.execute("INSERT INTO natal_training_operations VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)", (operation_id, user_id, requested_exp, base_cost, growth_rate, max_level, max_exp_base, max_exp_growth, exp_added, stone_cost, new_level, new_exp, new_max_exp))
             return self._result("trained", exp_added, stone_cost, new_level, new_exp, new_max_exp)

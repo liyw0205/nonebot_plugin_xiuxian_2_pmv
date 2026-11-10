@@ -1,4 +1,6 @@
 from __future__ import annotations
+from dataclasses import replace as _reason_replace
+from ...core.snapshot_reason import first_difference
 
 import json
 import math
@@ -23,6 +25,8 @@ class BaseDirectBreakthroughResult:
     exp_loss: int = 0
     message: str = ""
     effects_event_id: str = ""
+    reason: str = ""
+    subject: str = ""
 
     @property
     def applied(self) -> bool:
@@ -100,7 +104,7 @@ class BaseDirectBreakthroughSqlRepository:
                 as_int_like(row[key]) != as_int_like(expected.get(key))
                 for key in ("exp", "hp", "mp", "level_up_rate")
             ):
-                return self._result("state_changed", user_id)
+                return _reason_replace(self._result("state_changed", user_id), reason=first_difference(tuple(str(row[k] or "") for k in ("level","level_up_cd")) + tuple(as_int_like(row[k]) for k in ("exp","hp","mp","level_up_rate")), tuple(str(expected.get(k) or "") for k in ("level","level_up_cd")) + tuple(as_int_like(expected.get(k)) for k in ("exp","hp","mp","level_up_rate")), ("level_changed","breakthrough_cooldown_changed","exp_changed","hp_changed","mp_changed","breakthrough_rate_changed")), subject="")
             occurred_at = self.clock.now().astimezone().replace(tzinfo=None).isoformat(sep=" ")
             # The factory is read-only: no effects escape a rolled-back random plan.
             plan = plan_factory(uow, dict(row), occurred_at)
@@ -252,7 +256,7 @@ class BaseDirectBreakthroughSqlRepository:
                 or as_int_like(row["level_up_rate"]) != expected_rate
             ):
                 current_level = str(row["level"] or "")
-                return self._result("state_changed", user_id, outcome, current_level, current_level)
+                return _reason_replace(self._result("state_changed", user_id, outcome, current_level, current_level), reason=first_difference((str(row["level"] or ""), *(as_int_like(row[k]) for k in ("exp","hp","mp","level_up_rate"))), (expected_level, expected_exp, expected_hp, expected_mp, expected_rate), ("level_changed","exp_changed","hp_changed","mp_changed","breakthrough_rate_changed")), subject="")
 
             occurred_value: Any = event_time
             if outcome == "failure":
@@ -277,7 +281,7 @@ class BaseDirectBreakthroughSqlRepository:
                     ),
                 )
             if changed.rowcount != 1:
-                return self._result("state_changed", user_id, outcome)
+                return _reason_replace(self._result("state_changed", user_id, outcome), reason="breakthrough_write_rejected", subject="")
 
             uow.execute(
                 f"INSERT INTO {self.OPERATION_TABLE} "

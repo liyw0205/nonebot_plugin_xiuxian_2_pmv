@@ -24,6 +24,7 @@ class AccessoryPresetChange:
     user_id: str
     affected: int = 0
     details: dict[str, Any] | None = None
+    reason: str = ""
 
     @property
     def succeeded(self) -> bool:

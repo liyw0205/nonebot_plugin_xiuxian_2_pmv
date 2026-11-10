@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from ...infrastructure.database import DatabaseUnitOfWork
+from ...core.errors import DomainError
 
 
 @dataclass(frozen=True)
@@ -19,6 +20,7 @@ class AdminImpartStoneResult:
     previous_stone: int = 0
     final_stone: int = 0
     applied_delta: int = 0
+    reason: str = ""
 
     @property
     def succeeded(self) -> bool:
@@ -132,11 +134,11 @@ class AdminImpartStoneSqlRepository:
                 (user_id,),
             )
             if len(rows) > 1:
-                return AdminImpartStoneResult("invalid_state")
+                return AdminImpartStoneResult("invalid_state", reason="admin_impart_rows_duplicate")
             actual_stone = int(rows[0]["stone_num"]) if rows else None
             if actual_stone != expected_stone:
                 current = int(actual_stone or 0)
-                return AdminImpartStoneResult("state_changed", current, current)
+                return AdminImpartStoneResult("state_changed", current, current, reason="crystal_changed" if rows else "impart_missing")
 
             previous_stone = int(actual_stone or 0)
             final_stone = max(0, previous_stone + requested_delta)
@@ -154,7 +156,7 @@ class AdminImpartStoneSqlRepository:
                     (final_stone, user_id, previous_stone),
                 )
                 if changed.rowcount != 1:
-                    return AdminImpartStoneResult("state_changed", previous_stone, previous_stone)
+                    raise DomainError("impart_write_rejected", "admin impart adjustment was not saved")
 
             item_delta = json.dumps(
                 [{

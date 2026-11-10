@@ -118,7 +118,7 @@ class AccessoryPresetSqlRepository:
             )
             if previous is not None:
                 if str(previous["action"]) != "save_preset" or str(previous["payload"]) != payload_json:
-                    return AccessoryPresetChange("state_changed", "save_preset", user_id)
+                    return AccessoryPresetChange("state_changed", "save_preset", user_id, reason="operation_conflict")
                 return self._result("duplicate", str(previous["result_json"]))
 
             columns = {
@@ -145,7 +145,7 @@ class AccessoryPresetSqlRepository:
                 self._json(current_equipped) != self._json(expected_equipped)
                 or self._json(current_preset) != self._json(expected_preset)
             ):
-                return AccessoryPresetChange("state_changed", "save_preset", user_id)
+                return AccessoryPresetChange("state_changed", "save_preset", user_id, reason="accessory_equipped_changed" if self._json(current_equipped) != self._json(expected_equipped) else "accessory_preset_changed")
             if self._json(self._preset_from_equipped(current_equipped)) != self._json(preset):
                 return AccessoryPresetChange("invalid_plan", "save_preset", user_id)
 

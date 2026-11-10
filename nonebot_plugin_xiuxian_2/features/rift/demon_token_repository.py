@@ -1,4 +1,6 @@
 from __future__ import annotations
+from dataclasses import replace as _reason_replace
+from ...core.snapshot_reason import first_difference
 
 import json
 from dataclasses import dataclass
@@ -15,6 +17,8 @@ class RiftDemonTokenBattleResult:
     status: str
     explore_count: int = 0
     message: str = ""
+    reason: str = ""
+    subject: str = ""
 
     @property
     def succeeded(self) -> bool:
@@ -153,7 +157,7 @@ class RiftDemonTokenBattleSqlRepository:
                     return RiftDemonTokenBattleResult(
                         "duplicate", int(old["explore_count"]), str(old["message"])
                     )
-                return RiftDemonTokenBattleResult("state_changed")
+                return _reason_replace(RiftDemonTokenBattleResult("state_changed"), reason="operation_conflict", subject="")
 
             entry = uow.query_one("SELECT rift_data,status FROM rift_entries WHERE user_id=?", (user_id,))
             cd = uow.query_one("SELECT COALESCE(type,0) AS type FROM user_cd WHERE user_id=?", (user_id,))
@@ -163,7 +167,7 @@ class RiftDemonTokenBattleSqlRepository:
             if entry is None or str(entry["status"]) != "active" or cd is None or int(cd["type"]) != 3:
                 return RiftDemonTokenBattleResult("not_active")
             if json.loads(str(entry["rift_data"])) != json.loads(rift_snapshot) or user is None or tuple(map(int, user.values())) != expected:
-                return RiftDemonTokenBattleResult("state_changed")
+                return _reason_replace(RiftDemonTokenBattleResult("state_changed"), reason="rift_snapshot_changed" if json.loads(str(entry["rift_data"])) != json.loads(rift_snapshot) else "user_missing" if user is None else first_difference(tuple(map(int,user.values())), expected, ("stone_changed","exp_changed","hp_changed","mp_changed")), subject="")
 
             item = uow.query_one(
                 "SELECT COALESCE(goods_num,0) AS goods_num FROM back WHERE user_id=? AND goods_id=?",
@@ -176,9 +180,9 @@ class RiftDemonTokenBattleSqlRepository:
             )
             current_count = int(count_row["explore_count"] or 0) if count_row else 0
             if current_count != expected_count:
-                return RiftDemonTokenBattleResult("state_changed")
+                return _reason_replace(RiftDemonTokenBattleResult("state_changed"), reason="rift_explore_count_changed", subject="")
             if expected[0] + delta[0] < 0:
-                return RiftDemonTokenBattleResult("resource_missing")
+                return RiftDemonTokenBattleResult("resource_missing", reason="stone_insufficient")
 
             totals: dict[int, int] = {}
             metadata: dict[int, tuple[str, str]] = {}

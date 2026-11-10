@@ -69,7 +69,7 @@ class SectRenameSqlRepository:
             old=uow.query_one("SELECT rewards FROM sect_elixir_claim_operations WHERE operation_id=?",(operation_id,))
             if old:return {"status":"duplicate","rewards":tuple(tuple(x) for x in __import__('json').loads(old["rewards"]))}
             user=uow.query_one("SELECT sect_id,sect_position,COALESCE(sect_contribution,0) AS contribution,COALESCE(sect_elixir_get,0) AS claimed FROM user_xiuxian WHERE user_id=?",(user_id,));sect=uow.query_one("SELECT COALESCE(elixir_room_level,0) AS level,COALESCE(sect_materials,0) AS materials FROM sects WHERE sect_id=?",(sect_id,))
-            if user is None or sect is None or int(user["sect_id"] or 0)!=sect_id:return {"status":"membership_changed"}
+            if user is None or sect is None or int(user["sect_id"] or 0)!=sect_id:return {"status":"membership_changed", "reason":"user_missing" if user is None else "sect_missing" if sect is None else "sect_changed"}
             if int(user["sect_position"] or 0)==15:return {"status":"position_ineligible"}
             if int(sect["level"])<=0:return {"status":"room_missing"}
             if int(user["contribution"])<contribution_required:return {"status":"contribution_insufficient"}
@@ -86,19 +86,26 @@ class SectRenameSqlRepository:
         with DatabaseUnitOfWork(self.database, immediate=True) as uow:
             old=uow.query_one("SELECT user_id,sect_id,buff_id,materials_cost,materials_left FROM sect_secbuff_learn_operations WHERE operation_id=?",(operation_id,))
             if old:
-                if (str(old["user_id"]),int(old["sect_id"]),int(old["buff_id"]))!=(user_id,sect_id,buff_id):return {"status":"state_changed","user_id":user_id,"sect_id":sect_id,"buff_id":buff_id}
+                if (str(old["user_id"]),int(old["sect_id"]),int(old["buff_id"]))!=(user_id,sect_id,buff_id):return {**{"status":"state_changed","user_id":user_id,"sect_id":sect_id,"buff_id":buff_id}, "reason": "operation_conflict", "subject": ""}
                 return {"status":"duplicate","user_id":user_id,"sect_id":sect_id,"buff_id":buff_id,"materials_cost":old["materials_cost"],"materials_left":old["materials_left"]}
             user=uow.query_one("SELECT sect_id,sect_position FROM user_xiuxian WHERE user_id=?",(user_id,));
-            if user is None or user["sect_id"] is None or int(user["sect_id"])!=sect_id:return {"status":"membership_changed","user_id":user_id,"sect_id":sect_id,"buff_id":buff_id}
+            if user is None or user["sect_id"] is None or int(user["sect_id"])!=sect_id:return {"status":"membership_changed","user_id":user_id,"sect_id":sect_id,"buff_id":buff_id,"reason":"user_missing" if user is None else "sect_changed"}
             if int(user["sect_position"] or 0) in {int(v) for v in forbidden_positions}:return {"status":"position_forbidden","user_id":user_id,"sect_id":sect_id,"buff_id":buff_id}
             sect=uow.query_one("SELECT secbuff,COALESCE(sect_materials,0) AS materials FROM sects WHERE sect_id=?",(sect_id,));
-            if sect is None or str(sect["secbuff"])!=str(expected_catalog):return {"status":"catalog_changed","user_id":user_id,"sect_id":sect_id,"buff_id":buff_id}
+            if sect is None or str(sect["secbuff"])!=str(expected_catalog):return {"status":"catalog_changed","user_id":user_id,"sect_id":sect_id,"buff_id":buff_id,"reason":"sect_missing" if sect is None else "sect_catalog_changed"}
             materials=int(sect["materials"]);buff=uow.query_one("SELECT sec_buff FROM BuffInfo WHERE user_id=?",(user_id,))
             if materials<materials_cost:return {"status":"materials_insufficient","user_id":user_id,"sect_id":sect_id,"buff_id":buff_id,"materials_cost":materials_cost,"materials_left":materials}
             if buff is None:return {"status":"buff_missing","user_id":user_id,"sect_id":sect_id,"buff_id":buff_id}
             if int(buff["sec_buff"] or 0)==buff_id:return {"status":"already_learned","user_id":user_id,"sect_id":sect_id,"buff_id":buff_id}
-            left=materials-materials_cost;sa=uow.execute("UPDATE sects SET sect_materials=? WHERE sect_id=? AND sect_materials=? AND secbuff=?",(left,sect_id,materials,str(expected_catalog)));ba=uow.execute("UPDATE BuffInfo SET sec_buff=? WHERE user_id=? AND COALESCE(sec_buff,0)<>?",(buff_id,user_id,buff_id))
-            if sa.rowcount!=1 or ba.rowcount!=1:return {"status":"state_changed","user_id":user_id,"sect_id":sect_id,"buff_id":buff_id}
+            left=materials-materials_cost
+            try:
+                with uow.savepoint("sect_secondary_apply"):
+                    sa=uow.execute("UPDATE sects SET sect_materials=? WHERE sect_id=? AND sect_materials=? AND secbuff=?",(left,sect_id,materials,str(expected_catalog)))
+                    ba=uow.execute("UPDATE BuffInfo SET sec_buff=? WHERE user_id=? AND COALESCE(sec_buff,0)<>?",(buff_id,user_id,buff_id))
+                    if sa.rowcount!=1 or ba.rowcount!=1:
+                        raise _StateChanged
+            except _StateChanged:
+                return {"status":"state_changed","user_id":user_id,"sect_id":sect_id,"buff_id":buff_id,"reason":"sect_materials_write_rejected" if sa.rowcount != 1 else "buff_write_rejected"}
             uow.execute("INSERT INTO sect_secbuff_learn_operations(operation_id,user_id,sect_id,buff_id,materials_cost,materials_left) VALUES(?,?,?,?,?,?)",(operation_id,user_id,sect_id,buff_id,materials_cost,left));return {"status":"learned","user_id":user_id,"sect_id":sect_id,"buff_id":buff_id,"materials_cost":materials_cost,"materials_left":left}
     def learn_main(self, operation_id, user_id, sect_id, buff_id, materials_cost, *, expected_catalog, forbidden_positions=(12,14,15)):
         operation_id,user_id=str(operation_id).strip(),str(user_id);sect_id,buff_id,materials_cost=int(sect_id),int(buff_id),int(materials_cost)
@@ -108,13 +115,13 @@ class SectRenameSqlRepository:
         with DatabaseUnitOfWork(self.database, immediate=True) as uow:
             old=uow.query_one("SELECT user_id,sect_id,buff_id,materials_cost,materials_left FROM sect_mainbuff_learn_operations WHERE operation_id=?",(operation_id,))
             if old:
-                if (str(old["user_id"]),int(old["sect_id"]),int(old["buff_id"]))!=(user_id,sect_id,buff_id):return {"status":"state_changed","user_id":user_id,"sect_id":sect_id,"buff_id":buff_id}
+                if (str(old["user_id"]),int(old["sect_id"]),int(old["buff_id"]))!=(user_id,sect_id,buff_id):return {**{"status":"state_changed","user_id":user_id,"sect_id":sect_id,"buff_id":buff_id}, "reason": "operation_conflict", "subject": ""}
                 return {"status":"duplicate","user_id":user_id,"sect_id":sect_id,"buff_id":buff_id,"materials_cost":old["materials_cost"],"materials_left":old["materials_left"]}
             user=uow.query_one("SELECT sect_id,sect_position FROM user_xiuxian WHERE user_id=?",(user_id,));
-            if user is None or user["sect_id"] is None or int(user["sect_id"])!=sect_id:return {"status":"membership_changed","user_id":user_id,"sect_id":sect_id,"buff_id":buff_id}
+            if user is None or user["sect_id"] is None or int(user["sect_id"])!=sect_id:return {"status":"membership_changed","user_id":user_id,"sect_id":sect_id,"buff_id":buff_id,"reason":"user_missing" if user is None else "sect_changed"}
             if int(user["sect_position"] or 0) in {int(v) for v in forbidden_positions}:return {"status":"position_forbidden","user_id":user_id,"sect_id":sect_id,"buff_id":buff_id}
             sect=uow.query_one("SELECT mainbuff,COALESCE(sect_materials,0) AS materials FROM sects WHERE sect_id=?",(sect_id,));
-            if sect is None or str(sect["mainbuff"])!=str(expected_catalog):return {"status":"catalog_changed","user_id":user_id,"sect_id":sect_id,"buff_id":buff_id}
+            if sect is None or str(sect["mainbuff"])!=str(expected_catalog):return {"status":"catalog_changed","user_id":user_id,"sect_id":sect_id,"buff_id":buff_id,"reason":"sect_missing" if sect is None else "sect_catalog_changed"}
             materials=int(sect["materials"]);buff=uow.query_one("SELECT main_buff FROM BuffInfo WHERE user_id=?",(user_id,))
             if materials<materials_cost:return {"status":"materials_insufficient","user_id":user_id,"sect_id":sect_id,"buff_id":buff_id,"materials_cost":materials_cost,"materials_left":materials}
             if buff is None:return {"status":"buff_missing","user_id":user_id,"sect_id":sect_id,"buff_id":buff_id}
@@ -128,17 +135,17 @@ class SectRenameSqlRepository:
                         raise _StateChanged
                     uow.execute("INSERT INTO sect_mainbuff_learn_operations(operation_id,user_id,sect_id,buff_id,materials_cost,materials_left) VALUES(?,?,?,?,?,?)",(operation_id,user_id,sect_id,buff_id,materials_cost,left))
             except _StateChanged:
-                return {"status":"state_changed","user_id":user_id,"sect_id":sect_id,"buff_id":buff_id}
+                return {**{"status":"state_changed","user_id":user_id,"sect_id":sect_id,"buff_id":buff_id}, "reason": "sect_materials_write_rejected" if sa.rowcount != 1 else "buff_write_rejected", "subject": ""}
             return {"status":"learned","user_id":user_id,"sect_id":sect_id,"buff_id":buff_id,"materials_cost":materials_cost,"materials_left":left}
     def purchase(self, operation_id, user_id, sect_id, item_id, item_name, item_type, quantity, unit_cost, weekly_limit, legacy_purchased, max_goods_num, week_key=None):
         operation_id,user_id=str(operation_id).strip(),str(user_id);sect_id,item_id,quantity,unit_cost,weekly_limit,legacy_purchased,max_goods_num=int(sect_id),int(item_id),int(quantity),int(unit_cost),int(weekly_limit),int(legacy_purchased),int(max_goods_num);week_key=str(week_key or weekly_shop_key(self.clock.now()));payload=f'{user_id}|{sect_id}|{item_id}|{item_name}|{item_type}|{quantity}|{unit_cost}|{weekly_limit}|{week_key}'
         with DatabaseUnitOfWork(self.database, immediate=True) as uow:
             old=uow.query_one("SELECT payload,quantity,cost,contribution,materials,purchased FROM sect_shop_purchase_operations WHERE operation_id=?",(operation_id,))
             if old:
-                if str(old["payload"])!=payload:return {"status":"state_changed"}
+                if str(old["payload"])!=payload:return {**{"status":"state_changed"}, "reason": "operation_conflict", "subject": ""}
                 return {"status":"duplicate","quantity":old["quantity"],"cost":old["cost"],"contribution":old["contribution"],"materials":old["materials"],"purchased":old["purchased"]}
             user=uow.query_one("SELECT sect_id,COALESCE(sect_contribution,0) AS contribution FROM user_xiuxian WHERE user_id=?",(user_id,));sect=uow.query_one("SELECT COALESCE(sect_materials,0) AS materials,COALESCE(closed,0) AS closed FROM sects WHERE sect_id=?",(sect_id,))
-            if user is None or sect is None or int(user["sect_id"] or 0)!=sect_id:return {"status":"membership_changed"}
+            if user is None or sect is None or int(user["sect_id"] or 0)!=sect_id:return {"status":"membership_changed", "reason":"user_missing" if user is None else "sect_missing" if sect is None else "sect_changed"}
             contribution,materials=int(float(user["contribution"] or 0)),int(float(sect["materials"] or 0))
             if int(sect["closed"]):return {"status":"sect_closed","contribution":contribution,"materials":materials}
             row=uow.query_one("SELECT quantity FROM sect_shop_weekly_purchases WHERE user_id=? AND week_key=? AND item_id=?",(user_id,week_key,item_id));purchased=int(row["quantity"]) if row else legacy_purchased
@@ -184,7 +191,7 @@ class SectRenameSqlRepository:
             if limits[requested_position]>0 and int(count["n"])>=limits[requested_position]:return {"status":"position_full","actor_id":actor_id,"target_id":target_id,"sect_id":actor["sect_id"]}
             if current==requested_position:return {"status":"unchanged","actor_id":actor_id,"target_id":target_id,"sect_id":actor["sect_id"],"old_position":current,"new_position":requested_position}
             changed=uow.execute("UPDATE user_xiuxian SET sect_position=? WHERE user_id=? AND sect_id=? AND sect_position=?",(requested_position,target_id,actor["sect_id"],current))
-            if changed.rowcount!=1:return {"status":"state_changed","actor_id":actor_id,"target_id":target_id}
+            if changed.rowcount!=1:return {**{"status":"state_changed","actor_id":actor_id,"target_id":target_id}, "reason": "sect_position_write_rejected", "subject": ""}
             uow.execute("INSERT INTO sect_position_change_operations(operation_id,actor_id,target_id,sect_id,actor_name,target_name,old_position,new_position) VALUES(?,?,?,?,?,?,?,?)",(operation_id,actor_id,target_id,actor["sect_id"],str(actor["user_name"] or ""),str(target["user_name"] or ""),current,requested_position))
             return {"status":"changed","actor_id":actor_id,"target_id":target_id,"sect_id":actor["sect_id"],"actor_name":str(actor["user_name"] or ""),"target_name":str(target["user_name"] or ""),"old_position":current,"new_position":requested_position}
     def kick(self, operation_id, actor_id, target_id, *, manager_max_position):
@@ -204,7 +211,7 @@ class SectRenameSqlRepository:
             sect=uow.query_one("SELECT sect_name FROM sects WHERE sect_id=?",(actor["sect_id"],));
             if sect is None:return {"status":"sect_not_found","actor_id":actor_id,"target_id":target_id,"sect_id":actor["sect_id"]}
             changed=uow.execute("UPDATE user_xiuxian SET sect_id=NULL,sect_position=NULL,sect_contribution=0 WHERE user_id=? AND sect_id=? AND sect_position=?",(target_id,target["sect_id"],target["sect_position"]))
-            if changed.rowcount!=1:return {"status":"state_changed","actor_id":actor_id,"target_id":target_id}
+            if changed.rowcount!=1:return {**{"status":"state_changed","actor_id":actor_id,"target_id":target_id}, "reason": "sect_member_write_rejected", "subject": ""}
             uow.execute("INSERT INTO sect_member_removal_operations(operation_id,operation_type,actor_id,target_id,sect_id,sect_name,actor_name,target_name,actor_position,target_position) VALUES(?,?,?,?,?,?,?,?,?,?)",(operation_id,"kick",actor_id,target_id,actor["sect_id"],str(sect["sect_name"] or ""),str(actor["user_name"] or ""),str(target["user_name"] or ""),actor["sect_position"],target["sect_position"]))
             return {"status":"kicked","actor_id":actor_id,"target_id":target_id,"sect_id":actor["sect_id"],"sect_name":str(sect["sect_name"] or ""),"actor_name":str(actor["user_name"] or ""),"target_name":str(target["user_name"] or ""),"actor_position":actor["sect_position"],"target_position":target["sect_position"]}
     def leave(self, operation_id, user_id, *, owner_position=0):
@@ -220,7 +227,7 @@ class SectRenameSqlRepository:
             sect = uow.query_one("SELECT sect_name FROM sects WHERE sect_id=?", (actor["sect_id"],))
             if sect is None: return {"status": "sect_not_found", "user_id": user_id, "target_id": user_id, "sect_id": actor["sect_id"]}
             changed = uow.execute("UPDATE user_xiuxian SET sect_id=NULL,sect_position=NULL,sect_contribution=0 WHERE user_id=? AND sect_id=? AND sect_position=?", (user_id,actor["sect_id"],actor["sect_position"]))
-            if changed.rowcount != 1: return {"status": "state_changed", "user_id": user_id, "target_id": user_id}
+            if changed.rowcount != 1: return {**{"status": "state_changed", "user_id": user_id, "target_id": user_id}, "reason": "sect_member_write_rejected", "subject": ""}
             uow.execute("INSERT INTO sect_member_removal_operations(operation_id,operation_type,actor_id,target_id,sect_id,sect_name,actor_name,target_name,actor_position,target_position) VALUES(?,?,?,?,?,?,?,?,?,?)", (operation_id,"leave",user_id,user_id,actor["sect_id"],str(sect["sect_name"] or ""),str(actor["user_name"] or ""),str(actor["user_name"] or ""),actor["sect_position"],actor["sect_position"]))
             return {"status": "left", "user_id": user_id, "target_id": user_id, "sect_id": actor["sect_id"], "sect_name": str(sect["sect_name"] or ""), "actor_name": str(actor["user_name"] or ""), "target_name": str(actor["user_name"] or ""), "actor_position": actor["sect_position"], "target_position": actor["sect_position"]}
     @staticmethod
@@ -246,7 +253,7 @@ class SectRenameSqlRepository:
             limit = self._member_limit(int(sect["sect_scale"] or 0));count = int(uow.query_one("SELECT COUNT(*) AS n FROM user_xiuxian WHERE sect_id=?", (sect_id,))["n"])
             if count >= limit: return {"status": "sect_full", "user_id": user_id, "sect_id": sect_id, "sect_name": str(sect["sect_name"] or ""), "member_count": count, "member_limit": limit}
             changed = uow.execute("UPDATE user_xiuxian SET sect_id=?,sect_position=? WHERE user_id=? AND sect_id IS NULL", (sect_id,member_position,user_id))
-            if changed.rowcount != 1: return {"status": "state_changed", "user_id": user_id, "sect_id": sect_id}
+            if changed.rowcount != 1: return {**{"status": "state_changed", "user_id": user_id, "sect_id": sect_id}, "reason": "sect_member_write_rejected", "subject": ""}
             count += 1
             uow.execute("INSERT INTO sect_member_join_operations(operation_id,user_id,sect_id,member_count,member_limit) VALUES(?,?,?,?,?)", (operation_id,user_id,sect_id,count,limit))
             return {"status": "joined", "user_id": user_id, "sect_id": sect_id, "sect_name": str(sect["sect_name"] or ""), "member_count": count, "member_limit": limit}

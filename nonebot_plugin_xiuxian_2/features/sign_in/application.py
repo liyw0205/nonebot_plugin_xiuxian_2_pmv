@@ -163,7 +163,7 @@ class SignInApplication:
                             replayed = previous.replay()
                             uow.commit()
                             return self._apply_effects(replayed, user_id=request.user_id, operation_id=request.operation_id, stone=int((replayed.data or {}).get("sign_in", {}).get("stone", 0)), replayed=True)
-                        raise ConflictError("操作正在处理中")
+                        raise ConflictError("操作正在处理中", reason="operation_pending")
                     legacy_operation = self.repository.operation(uow, request.operation_id)
                     if legacy_operation is not None:
                         snapshot = self.repository.user_snapshot(uow, request.user_id)
@@ -308,7 +308,7 @@ class SignInApplication:
                             return self._apply_makeup_effects(
                                 replayed, request=request, target=None, replayed=True
                             )
-                        raise ConflictError("操作正在处理中")
+                        raise ConflictError("操作正在处理中", reason="operation_pending")
 
                     before = self.repository.user_snapshot(uow, request.user_id)
 
@@ -365,14 +365,14 @@ class SignInApplication:
                     if not self.repository.record_makeup_daily(
                         uow, request.user_id, target.isoformat(), request.operation_id
                     ):
-                        raise ConflictError("该日期已有签到回执，请刷新后重试")
+                        raise ConflictError("该日期已有签到回执，请刷新后重试", reason="sign_receipt_exists")
                     if (
                         self.repository.charge_stone(
                             uow, request.user_id, request.cost
                         )
                         != 1
                     ):
-                        raise ConflictError("灵石余额已变化，请重试")
+                        raise ConflictError("灵石余额已变化，请重试", reason="stone_changed")
 
                     after = self.repository.user_snapshot(uow, request.user_id)
                     month_start = today.replace(day=1)

@@ -13,6 +13,8 @@ from ...infrastructure.database import DatabaseUnitOfWork
 class RiftGenerationSqlResult:
     status: str
     state: dict[str, Any] | None = None
+    reason: str = ""
+    subject: str = ""
 
 
 class RiftGenerationSqlRepository:
@@ -173,7 +175,7 @@ class RiftGenerationSqlRepository:
                     status = "superseded"
                 else:
                     status = "duplicate"
-                return RiftGenerationSqlResult(status, current)
+                return RiftGenerationSqlResult(status, current, "operation_conflict" if status == "state_changed" else "")
 
             current = self._read_world(uow, rift_key)
             revision = (int(current["revision"]) if current is not None else 0) + 1

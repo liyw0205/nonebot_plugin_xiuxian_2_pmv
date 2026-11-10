@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from ...core.player_reasons import reason_text
+
 import json
 from pathlib import Path
 from typing import Any
@@ -67,7 +69,7 @@ class PackageRewardApplication:
                     legacy = self.repository.operation(uow, request.operation_id)
                     if legacy is not None:
                         if legacy["user_id"] != request.user_id or legacy["package_id"] != request.package_id or legacy["quantity"] != request.quantity:
-                            outcome = OperationOutcome.rejected(request.operation_id, self.action, "操作参数已变化", code="state_changed", before=before, after=before, audit_category="package_reward")
+                            outcome = OperationOutcome.rejected(request.operation_id, self.action, reason_text("operation_conflict"), code="state_changed", data={"reason": "operation_conflict"}, before=before, after=before, audit_category="package_reward")
                         else:
                             data = {"package_reward": {**legacy, "rewards": [item.to_dict() for item in legacy["rewards"]]}}
                             outcome = OperationOutcome.applied(request.operation_id, self.action, data=data, before=before, after=before, granted={"rewards": data["package_reward"]["rewards"]}, audit_category="package_reward")

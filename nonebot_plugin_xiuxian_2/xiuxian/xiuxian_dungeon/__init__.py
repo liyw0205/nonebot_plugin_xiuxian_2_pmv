@@ -12,6 +12,8 @@ from ..on_compat import on_command
 from nonebot.params import CommandArg
 from nonebot.permission import SUPERUSER
 from nonebot.log import logger
+from ..command_guard import result_failure, report_exception
+from nonebot.exception import MatcherException, ProcessException
 
 from ..adapter_compat import (
     Bot,
@@ -228,6 +230,8 @@ def _missing_team_snapshot(team_id: str = "") -> TeamStateSnapshot:
 
 
 def _team_mutation_message(action: str, result: TeamMutationResult) -> str:
+    if result.status not in {"applied", "duplicate"} and getattr(result, "reason", ""):
+        return result_failure("队伍操作", result)
     target_info = _sql_message().get_user_info_with_id(result.target_id) or {}
     target_name = target_info.get("user_name", result.target_id or "指定用户")
     if action == "create":
@@ -241,11 +245,10 @@ def _team_mutation_message(action: str, result: TeamMutationResult) -> str:
             "user_missing": "未找到道友数据，创建队伍失败！",
             "user_has_team": "你已经在一个队伍中了，请先退出当前队伍！",
             "session_active": "副本探索会话进行中，无法创建队伍！",
-            "state_changed": "队伍当前状态已更新。",
         }
         if result.status == "cooldown_active":
             return f"你当前处于组队冷却中，剩余：{format_seconds(result.cooldown_seconds)}，不可创建队伍。"
-        return messages.get(result.status, "创建队伍失败！")
+        return messages.get(result.status) or result_failure("创建队伍", result)
     if action == "invite":
         if result.status in {"applied", "duplicate"}:
             return f"📨 已向{target_name}发送组队邀请，等待对方回应..."
@@ -259,11 +262,10 @@ def _team_mutation_message(action: str, result: TeamMutationResult) -> str:
             "user_has_team": f"{target_name}已有队伍！",
             "invite_pending": "对方已有待处理的组队邀请，请稍后再试！",
             "session_active": "副本探索会话进行中，无法变更队伍！",
-            "state_changed": "队伍当前状态已更新。",
         }
         if result.status == "cooldown_active":
             return f"{target_name}当前处于组队冷却中（剩余{format_seconds(result.cooldown_seconds)}），不可被邀请。"
-        return messages.get(result.status, "发送组队邀请失败！")
+        return messages.get(result.status) or result_failure("邀请组队", result)
     if action == "join":
         if result.status in {"applied", "duplicate"}:
             leader = _sql_message().get_user_info_with_id(result.leader_id) or {}
@@ -283,17 +285,16 @@ def _team_mutation_message(action: str, result: TeamMutationResult) -> str:
             "user_has_team": "你已经在一个队伍中了，无法接受邀请！",
             "team_full": "该队伍已满员！",
             "session_active": "副本探索会话进行中，无法变更队伍！",
-            "state_changed": "加入失败：当前状态已更新。",
         }
         if result.status == "cooldown_active":
             return "你当前处于组队冷却中，无法加入队伍！"
-        return messages.get(result.status, "加入队伍失败！")
+        return messages.get(result.status) or result_failure("加入队伍", result)
     if action == "reject":
         if result.status in {"applied", "duplicate"}:
             return build_invite_response_message(TeamInviteResponseResult("rejected"))
         if result.status == "wrong_group":
             return f"此邀请是在群{result.group_id}发出的，请在该群或私聊中进行操作。"
-        return build_invite_response_message(TeamInviteResponseResult("no_invite"))
+        return result_failure("拒绝组队", result, messages={"invite_invalid": "没有有效的待处理组队邀请。"})
     if action == "transfer":
         if result.status in {"applied", "duplicate"}:
             return build_transfer_team_success_message(target_name)
@@ -303,12 +304,13 @@ def _team_mutation_message(action: str, result: TeamMutationResult) -> str:
             "self_target": build_transfer_team_self_message(),
             "target_not_member": build_transfer_team_not_member_message(),
             "session_active": "副本探索会话进行中，无法变更队伍！",
-            "state_changed": "队伍当前状态已更新。",
-        }.get(result.status, f"转移队长失败（{result.status}）。")
-    return f"队伍操作失败（未知操作）。"
+        }.get(result.status) or result_failure("转移队长", result)
+    return report_exception("队伍操作", ValueError("unsupported team action"))
 
 
 def _team_exit_message(action: str, result: TeamExitResult) -> str:
+    if result.status not in {"applied", "duplicate"} and getattr(result, "reason", ""):
+        return result_failure("退出队伍", result)
     if result.status not in {"applied", "duplicate"}:
         return {
             "team_missing": "你不在任何队伍中！",
@@ -317,8 +319,7 @@ def _team_exit_message(action: str, result: TeamExitResult) -> str:
             "target_not_member": "该成员不在你的队伍中！",
             "self_target": "不能踢出自己！",
             "session_active": "副本探索会话进行中，无法变更队伍！",
-            "state_changed": "队伍当前状态已更新。",
-        }.get(result.status, f"队伍操作失败（{result.status}）。")
+        }.get(result.status) or result_failure("退出队伍", result)
     if action == "leave":
         if result.disbanded:
             return f"你已离开队伍【{result.team_name}】，队伍已解散。\n你进入了{TEAM_JOIN_CD_HOURS}小时组队冷却。"
@@ -1185,10 +1186,12 @@ async def handle_dungeon_purchase(bot: Bot, event: GroupMessageEvent | PrivateMe
             max_goods=XiuConfig().max_goods_num,
             bind_flag=1,
         )
-        await handle_send(bot, event, str((outcome.data or {}).get("response") or outcome.message or "兑换失败。"))
-    except Exception:
+        await handle_send(bot, event, str((outcome.data or {}).get("response") or outcome.message) if outcome.ok else result_failure("副本兑换", outcome))
+    except (MatcherException, ProcessException):
+        raise
+    except Exception as exc:
         logger.exception("副本商店兑换事务失败")
-        await handle_send(bot, event, "副本兑换失败：处理过程异常。")
+        await handle_send(bot, event, report_exception("副本兑换", exc))
     await dungeon_purchase.finish()
 
 
@@ -1216,13 +1219,13 @@ async def handle_dungeon_exit(bot: Bot, event: GroupMessageEvent | PrivateMessag
         result = raw_result
     result_status = str(result.get("status", "state_changed"))
     if result_status == "schema_missing":
-        await handle_send(bot, event, "副本数据结构未就绪，请稍后重试。")
+        await handle_send(bot, event, result_failure("副本操作", {"status":"schema_missing"}))
     elif result_status == "not_exploring":
         await handle_send(bot, event, "当前未在副本探索中。")
     elif result_status == "completed":
         await handle_send(bot, event, "今日副本已完成，无需退出。")
     elif result_status == "state_changed":
-        await handle_send(bot, event, "副本操作未结算：副本进度当前状态已更新，请重新发起。")
+        await handle_send(bot, event, result_failure("退出副本", result))
     else:
         await handle_send(bot, event, "已退出当前副本，进度将保留。")
     await dungeon_exit.finish()
@@ -1312,7 +1315,8 @@ async def handle_explore_dungeon(bot: Bot, event: GroupMessageEvent | PrivateMes
         str(player_status.get("dungeon_id", "")) != str(dungeon.get("dungeon_id", player_status.get("dungeon_id", "")))
         or str(player_status.get("last_reset_date", "")) != str(dungeon.get("date", ""))
     ):
-        await reject("state_changed", "副本操作未结算：副本进度当前状态已更新，请重新发起。", player_status)
+        reason = "dungeon_instance_changed" if str(player_status.get("dungeon_id", "")) != str(dungeon.get("dungeon_id", player_status.get("dungeon_id", ""))) else "dungeon_reset_changed"
+        await reject("state_changed", result_failure("副本探索", {"status":"state_changed", "reason":reason}), player_status)
         await explore_dungeon.finish()
 
     current_layer = int(player_status["current_layer"])

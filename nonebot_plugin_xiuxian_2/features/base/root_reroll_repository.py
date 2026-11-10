@@ -1,4 +1,6 @@
 from __future__ import annotations
+from dataclasses import replace as _reason_replace
+from ...core.snapshot_reason import first_difference
 
 import json
 import math
@@ -18,6 +20,8 @@ class BaseRootRerollResult:
     root_type: str = ""
     power: int = 0
     stone: int = 0
+    reason: str = ""
+    subject: str = ""
 
     @property
     def succeeded(self) -> bool:
@@ -154,7 +158,7 @@ class BaseRootRerollSqlRepository:
             if row is None:
                 return self._result("user_missing", user_id)
             if self._row_snapshot(row) != expected:
-                return self._result("state_changed", user_id)
+                return _reason_replace(self._result("state_changed", user_id), reason=first_difference(self._row_snapshot(row), expected, ("root_changed","root_type_changed","root_level_changed","level_changed","exp_changed","power_changed","stone_changed")), subject="")
             if as_int_like(row["stone"]) < stone_cost:
                 return self._result("stone_insufficient", user_id)
 
@@ -171,7 +175,7 @@ class BaseRootRerollSqlRepository:
                 ),
             )
             if changed.rowcount != 1:
-                return self._result("state_changed", user_id)
+                return _reason_replace(self._result("state_changed", user_id), reason="root_write_rejected", subject="")
             updated = uow.query_one(
                 "SELECT root,root_type,power,stone FROM user_xiuxian WHERE rowid=?",
                 (row["_rowid"],),

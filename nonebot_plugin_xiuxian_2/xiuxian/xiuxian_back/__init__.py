@@ -231,6 +231,8 @@ def _package_open_result(outcome, user_id, package_id, quantity, rewards):
         int(raw.get("package_id", package_id)),
         int(raw.get("quantity", quantity)),
         decoded or tuple(rewards),
+        str(data.get("reason") or ""),
+        str(data.get("subject") or ""),
     )
 
 def _accessory_package_service():
@@ -270,6 +272,7 @@ _confirm_use_cache_expiry_task: asyncio.Task | None = None
 
 
 def _back_op_fail_msg(result, *, action: str = "操作") -> str:
+    from ..command_guard import result_failure
     status = getattr(result, "status", None) or "unknown"
     mapping = {
         "item_insufficient": f"物品数量不足，{action}未结算，请刷新背包。",
@@ -277,8 +280,6 @@ def _back_op_fail_msg(result, *, action: str = "操作") -> str:
         "user_missing": f"未找到修仙数据，{action}未结算。",
         "inventory_full": f"背包已满，{action}未结算。",
         "duplicate": f"该请求已处理，无需重复提交。",
-        "state_changed": f"{action}时当前状态已更新，未结算，请刷新后重试。",
-        "operation_conflict": "请求冲突（重复点击），请稍后再试。",
         "not_bound": "该物品未绑定，无法解绑。",
         "already_equipped": "已处于穿戴状态。",
         "not_equipped": "未处于穿戴状态。",
@@ -287,7 +288,7 @@ def _back_op_fail_msg(result, *, action: str = "操作") -> str:
         "accessory_full": "饰品栏已满。",
         "uid_conflict": f"宠物编号冲突，{action}未结算、道具未消耗，请重试。",
     }
-    return mapping.get(status, f"{action}未结算（{status}），请刷新后重试。")
+    return result_failure(action, result, messages=mapping)
 
 
 def _equipment_operation_id(event, action, goods_id):

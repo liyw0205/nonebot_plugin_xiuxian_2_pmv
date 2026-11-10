@@ -12,6 +12,18 @@ from .schema import (
 )
 
 
+class TransferStatus(str):
+    def __new__(cls, status, reason="", subject=""):
+        value = super().__new__(cls, status)
+        value.reason, value.subject = reason, subject
+        return value
+
+
+class _TransferRejected(Exception):
+    def __init__(self, status):
+        self.status = status
+
+
 class StoneGiftRepository:
     """Owns the game database projection for spirit-stone transfers."""
 
@@ -123,19 +135,25 @@ class StoneGiftRepository:
         recipient = uow.query_one("SELECT 1 AS present FROM user_xiuxian WHERE user_id = ?", (record.recipient_id,))
         if recipient is None:
             return "recipient_missing"
-        charged = uow.execute(
-            "UPDATE user_xiuxian SET stone = CAST(COALESCE(stone, 0) AS REAL) - CAST(? AS REAL) "
-            "WHERE user_id = ? AND CAST(COALESCE(stone, 0) AS REAL) >= CAST(? AS REAL)",
-            (record.gross_amount, record.sender_id, record.gross_amount),
-        )
-        if charged.rowcount != 1:
-            return "stone_insufficient"
-        credited = uow.execute(
-            "UPDATE user_xiuxian SET stone = CAST(COALESCE(stone, 0) AS REAL) + CAST(? AS REAL) WHERE user_id = ?",
-            (record.net_amount, record.recipient_id),
-        )
-        if credited.rowcount != 1:
-            return "state_changed"
+        try:
+            with uow.savepoint("stone_gift_assets"):
+                charged = uow.execute(
+                    "UPDATE user_xiuxian SET stone = CAST(COALESCE(stone, 0) AS REAL) - CAST(? AS REAL) "
+                    "WHERE user_id = ? AND CAST(COALESCE(stone, 0) AS REAL) >= CAST(? AS REAL)",
+                    (record.gross_amount, record.sender_id, record.gross_amount),
+                )
+                if charged.rowcount != 1:
+                    sender = uow.query_all("SELECT stone FROM user_xiuxian WHERE user_id=?", (record.sender_id,))
+                    reason = "sender_missing" if not sender else "account_rows_inconsistent" if len(sender) != 1 else "stone_insufficient" if int(sender[0]["stone"] or 0) < record.gross_amount else "stone_write_rejected"
+                    raise _TransferRejected(TransferStatus("stone_insufficient", reason, "sender"))
+                credited = uow.execute(
+                    "UPDATE user_xiuxian SET stone = CAST(COALESCE(stone, 0) AS REAL) + CAST(? AS REAL) WHERE user_id = ?",
+                    (record.net_amount, record.recipient_id),
+                )
+                if credited.rowcount != 1:
+                    raise _TransferRejected(TransferStatus("state_changed", "stone_write_rejected", "recipient"))
+        except _TransferRejected as exc:
+            return exc.status
         if transfer_date is not None:
             sent_initial = baseline_sent if not sender_limit_exists else 0
             received_initial = baseline_received if not recipient_limit_exists else 0

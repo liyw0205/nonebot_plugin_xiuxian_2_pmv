@@ -1,4 +1,6 @@
 from __future__ import annotations
+from dataclasses import replace as _reason_replace
+from ...core.snapshot_reason import first_difference
 
 import json
 from dataclasses import dataclass
@@ -21,6 +23,8 @@ class WorldBossBattleSettlementResult:
     exp: int = 0
     integral: int = 0
     activity_lines: tuple[str, ...] = ()
+    reason: str = ""
+    subject: str = ""
 
     @property
     def succeeded(self) -> bool:
@@ -313,7 +317,7 @@ class WorldBossBattleSettlementSqlRepository:
                 )
             if previous is not None:
                 if str(previous["payload"]) != payload:
-                    return self._result("state_changed", expected_stamina=expected_stamina, expected_battle_count=expected_battle_count, expected_stone=expected_stone, expected_exp=expected_exp, expected_integral=expected_total_integral)
+                    return _reason_replace(self._result("state_changed", expected_stamina=expected_stamina, expected_battle_count=expected_battle_count, expected_stone=expected_stone, expected_exp=expected_exp, expected_integral=expected_total_integral), reason="operation_conflict", subject="")
                 lines = self._loads(previous["activity_lines"], [])
                 return self._result("duplicate", expected_stamina=expected_stamina, expected_battle_count=expected_battle_count, expected_stone=expected_stone, expected_exp=expected_exp, expected_integral=expected_total_integral, boss_hp=previous["boss_hp"], stamina=previous["stamina"], battle_count=previous["battle_count"], stone=previous["stone"], exp=previous["exp"], integral=previous["integral"], activity_lines=tuple(lines))
 
@@ -327,7 +331,7 @@ class WorldBossBattleSettlementSqlRepository:
             if user is None or cooldown is None:
                 return self._result("user_missing", expected_stamina=expected_stamina, expected_battle_count=expected_battle_count, expected_stone=expected_stone, expected_exp=expected_exp, expected_integral=expected_total_integral)
             if (int(user["stamina"]), int(user["hp"]), int(user["mp"]), int(user["exp"]), int(user["stone"])) != (int(expected_stamina), int(expected_hp), int(expected_mp), int(expected_exp), int(expected_stone)) or str(cooldown["checked_at"]) != str(expected_checked_at or ""):
-                return self._result("state_changed", expected_stamina=expected_stamina, expected_battle_count=expected_battle_count, expected_stone=expected_stone, expected_exp=expected_exp, expected_integral=expected_total_integral)
+                return _reason_replace(self._result("state_changed", expected_stamina=expected_stamina, expected_battle_count=expected_battle_count, expected_stone=expected_stone, expected_exp=expected_exp, expected_integral=expected_total_integral), reason=first_difference((int(user["stamina"]),int(user["hp"]),int(user["mp"]),int(user["exp"]),int(user["stone"]),str(cooldown["checked_at"])), (int(expected_stamina),int(expected_hp),int(expected_mp),int(expected_exp),int(expected_stone),str(expected_checked_at or "")), ("stamina_changed","hp_changed","mp_changed","exp_changed","stone_changed","boss_checked_at_changed")), subject="")
             if expected_stamina < stamina_cost:
                 return self._result("stamina_insufficient", expected_stamina=expected_stamina, expected_battle_count=expected_battle_count, expected_stone=expected_stone, expected_exp=expected_exp, expected_integral=expected_total_integral)
             if expected_hp <= expected_exp / 10:
@@ -338,7 +342,7 @@ class WorldBossBattleSettlementSqlRepository:
             actual_daily = (0, 0, 0) if daily is None else (int(daily["stone"]), int(daily["integral"]), int(daily["count"]))
             actual_total = 0 if total is None else int(total["integral"])
             if actual_daily != (int(expected_daily_stone), int(expected_daily_integral), int(expected_battle_count)) or actual_total != int(expected_total_integral):
-                return self._result("state_changed", expected_stamina=expected_stamina, expected_battle_count=expected_battle_count, expected_stone=expected_stone, expected_exp=expected_exp, expected_integral=expected_total_integral)
+                return _reason_replace(self._result("state_changed", expected_stamina=expected_stamina, expected_battle_count=expected_battle_count, expected_stone=expected_stone, expected_exp=expected_exp, expected_integral=expected_total_integral), reason=first_difference((*actual_daily,actual_total), (int(expected_daily_stone),int(expected_daily_integral),int(expected_battle_count),int(expected_total_integral)), ("boss_daily_stone_changed","boss_daily_integral_changed","boss_daily_count_changed","boss_integral_changed")), subject="")
             if expected_battle_count >= battle_limit:
                 return self._result("limit_reached", expected_stamina=expected_stamina, expected_battle_count=expected_battle_count, expected_stone=expected_stone, expected_exp=expected_exp, expected_integral=expected_total_integral)
 

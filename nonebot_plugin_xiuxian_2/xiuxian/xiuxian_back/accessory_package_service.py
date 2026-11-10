@@ -48,7 +48,7 @@ class AccessoryPackageService:
             accessory_limit=accessory_limit,
         )
         data = outcome.data if isinstance(outcome.data, dict) else {}
-        status = "duplicate" if outcome.status == "replayed" else outcome.status
+        status = "duplicate" if outcome.status == "replayed" else outcome.code or outcome.status
         return AccessoryPackageResult(
             status=status,
             user_id=str(data.get("user_id", user_id)),
@@ -56,6 +56,8 @@ class AccessoryPackageService:
             quantity=int(data.get("quantity", quantity)),
             rewards=tuple(rewards),
             accessories=tuple(data.get("accessories", accessories)),
+            reason=str(data.get("reason") or ""),
+            subject=str(data.get("subject") or ""),
         )
 
 

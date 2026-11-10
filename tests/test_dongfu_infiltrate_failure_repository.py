@@ -124,8 +124,11 @@ class DongfuInfiltrateFailureSqlRepositoryTests(unittest.TestCase):
                 "CREATE TRIGGER ignore_stone BEFORE UPDATE ON user_xiuxian "
                 "BEGIN SELECT RAISE(IGNORE); END"
             )
-        self.assertEqual(self.settle("rowcount").status, "state_changed")
+        result = self.settle("rowcount")
+        self.assertEqual((result.status, result.reason, result.subject), ("state_changed", "stone_write_rejected", "visitor"))
         self.assertEqual(self.state(), (1000, ("", 0), ("", 0, 1)))
+        with DatabaseUnitOfWork(self.game_database) as uow:
+            self.assertEqual(uow.query_one("SELECT COUNT(*) AS n FROM dongfu_infiltrate_failure_operations")["n"], 0)
 
     def test_application_default_uses_feature_repository(self) -> None:
         result = DongfuApplication(

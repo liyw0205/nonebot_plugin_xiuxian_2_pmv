@@ -326,6 +326,7 @@ class ArenaPurchaseResult:
     honor_points: int
     purchased: int
     inventory: int
+    reason: str = ""
 
     @property
     def succeeded(self) -> bool:
@@ -458,6 +459,7 @@ class ArenaChallengePurchaseResult:
     stone: int
     bought: int
     extra: int
+    reason: str = ""
 
     @property
     def succeeded(self) -> bool:
@@ -526,6 +528,7 @@ class ArenaChallengeTicketResult:
     challenges_used: int
     challenges_remaining: int
     challenge_cap: int
+    reason: str = ""
 
     @property
     def succeeded(self) -> bool:
@@ -543,6 +546,8 @@ class ArenaChallengeSettlementResult:
     remaining: int = 0
     stamina: int = 0
     challenged_at: str = ""
+    reason: str = ""
+    subject: str = ""
 
     @property
     def succeeded(self) -> bool:

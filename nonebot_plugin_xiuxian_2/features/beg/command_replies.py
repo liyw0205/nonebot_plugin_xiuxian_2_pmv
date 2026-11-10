@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from ...core.player_reasons import reason_text
+
 from typing import Any, Mapping
 
 
@@ -18,6 +20,8 @@ def render_beg_reply(result: Mapping[str, Any]) -> str:
             f"> 当前时间：{result['current_time']}"
         )
     if status not in {"applied", "duplicate"}:
+        if reason_text(result.get("reason")):
+            return reason_text(result["reason"])
         if status == "already_claimed":
             return "您已经领取过新手礼包了！" if action == "novice_claim" else "今日机缘已经领取，请明日再来。"
         if status == "expired":
@@ -30,7 +34,7 @@ def render_beg_reply(result: Mapping[str, Any]) -> str:
             "ineligible_level": "当前修为已超过新手机缘范围。",
             "inventory_full": "背包空间不足，无法领取新手礼包。",
             "operation_conflict": "领取失败：请求冲突，请勿重复提交。",
-            "state_changed": "领取未结算：角色当前状态已更新，请重试。",
+            "state_changed": "领取记录需要核对，请联系管理员查询该次请求。",
             "user_missing": "未找到角色信息，无法领取。",
             "schema_missing": "机缘服务尚未就绪，本次未结算。",
             "receipt_invalid": "机缘回执异常，本次未结算，请联系管理员核查。",

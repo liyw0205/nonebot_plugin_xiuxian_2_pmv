@@ -1,4 +1,5 @@
 from __future__ import annotations
+from dataclasses import replace as _reason_replace
 
 import json
 from dataclasses import dataclass
@@ -12,6 +13,8 @@ from ...infrastructure.database import DatabaseUnitOfWork
 class RiftTerminationSqlResult:
     status: str
     rift_name: str = ""
+    reason: str = ""
+    subject: str = ""
 
     @property
     def succeeded(self) -> bool:
@@ -67,7 +70,7 @@ class RiftTerminationSqlRepository:
                 return None
             stored_user_id, snapshot = json.loads(str(row["payload"]))
             if str(stored_user_id) != user_id:
-                return RiftTerminationSqlResult("state_changed")
+                return _reason_replace(RiftTerminationSqlResult("state_changed"), reason="operation_conflict", subject="")
             rift_data = json.loads(str(snapshot))
             return RiftTerminationSqlResult(
                 "duplicate", str(rift_data.get("name", ""))
@@ -98,9 +101,9 @@ class RiftTerminationSqlRepository:
                     if self._payload_matches(previous["payload"], payload)
                     else "state_changed"
                 )
-                return RiftTerminationSqlResult(
+                return _reason_replace(RiftTerminationSqlResult(
                     status, str(rift_data.get("name", ""))
-                )
+                ), reason='operation_conflict' if status == 'state_changed' else "", subject="")
 
             entry = uow.query_one(
                 "SELECT rift_data,status FROM rift_entries WHERE user_id=?",
@@ -109,13 +112,13 @@ class RiftTerminationSqlRepository:
             if entry is None or str(entry["status"]) != "active":
                 return RiftTerminationSqlResult("not_active")
             if json.loads(str(entry["rift_data"])) != json.loads(snapshot):
-                return RiftTerminationSqlResult("state_changed")
+                return _reason_replace(RiftTerminationSqlResult("state_changed"), reason="rift_snapshot_changed", subject="")
             cooldown = uow.query_one(
                 "SELECT COALESCE(type,0) AS type FROM user_cd WHERE user_id=?",
                 (user_id,),
             )
             if cooldown is None or int(cooldown["type"]) != 3:
-                return RiftTerminationSqlResult("state_changed")
+                return _reason_replace(RiftTerminationSqlResult("state_changed"), reason="closing_missing" if cooldown is None else "activity_type_changed", subject="")
 
             uow.execute(
                 "UPDATE rift_entries SET status='terminated' "

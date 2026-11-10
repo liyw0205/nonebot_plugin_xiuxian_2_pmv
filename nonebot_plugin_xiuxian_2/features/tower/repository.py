@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from ...core.errors import DomainError
+
 from pathlib import Path
 from typing import Any, Mapping, Protocol, Sequence
 
@@ -37,6 +39,13 @@ class LegacyTowerRepository:
 
 
 class TowerPurchaseSqlRepository(LegacyTowerRepository):
+    @staticmethod
+    def _request_payload(payload):
+        data = json.loads(str(payload))
+        if isinstance(data, dict) and "request" in data:
+            data = data["request"]
+        return json.dumps(data, ensure_ascii=True, separators=(",", ":"))
+
     def __init__(self, game_database: str | Path, player_database: str | Path, *, clock=None) -> None:
         super().__init__(game_database, player_database)
         self.clock = clock or SystemClock()
@@ -49,26 +58,28 @@ class TowerPurchaseSqlRepository(LegacyTowerRepository):
         try:
             result = json.loads(str(row["result_json"] or "{}"))
         except (TypeError, ValueError):
-            return {"status": "state_changed"}
+            return {"status": "state_changed", "reason": "receipt_corrupt"}
         if not isinstance(result, dict):
-            return {"status": "state_changed"}
-        result["status"] = "duplicate"
+            return {"status": "state_changed", "reason": "receipt_corrupt"}
+        result["status"] = "duplicate" if result.get("status", "applied") in {"applied", "duplicate"} else result["status"]
+        if result["status"] == "state_changed" and not result.get("reason"):
+            result["reason"] = "legacy_rejection"
         return result
 
     def settle(self, operation_id, user_id, expected_tower, floor, score, stone, exp, items, max_goods_num, *, expected_player=None, final_hp=None, final_mp=None, stamina_cost=0, challenge_succeeded=True):
         operation_id,user_id=str(operation_id).strip(),str(user_id);floor,score,stone,exp,max_goods_num,stamina_cost=map(int,(floor,score,stone,exp,max_goods_num,stamina_cost));expected={k:int(dict(expected_tower)[k]) for k in ("current_floor","max_floor","score")};player=None if expected_player is None else {k:int(dict(expected_player)[k]) for k in ("hp","mp","user_stamina")};rewards=tuple((int(i["id"]),str(i["name"]),str(i["type"]),int(i["amount"])) for i in items if int(i.get("amount",0))>0);payload=json.dumps([user_id,floor,stamina_cost],ensure_ascii=True,separators=(",",":"));result_json=json.dumps({"score":score,"stone":stone,"exp":exp,"floor":floor,"stamina_cost":stamina_cost,"challenge_succeeded":bool(challenge_succeeded),"rewards":[list(r) for r in rewards]},ensure_ascii=True,separators=(",",":"))
         if not operation_id or floor<=0 or min(score,stone,exp,max_goods_num,*expected.values())<0:raise ValueError("valid tower settlement required")
-        def result(status):return {"status":status,"score":score if status in {"applied","duplicate"} else 0,"stone":stone if status in {"applied","duplicate"} else 0,"exp":exp if status in {"applied","duplicate"} else 0,"floor":floor if status in {"applied","duplicate"} else 0,"challenge_succeeded":bool(challenge_succeeded) if status in {"applied","duplicate"} else True,"rewards":rewards if status in {"applied","duplicate"} else (),"stamina_cost":stamina_cost if status in {"applied","duplicate"} else 0}
+        def result(status, reason=""):return {"reason":reason,"status":status,"score":score if status in {"applied","duplicate"} else 0,"stone":stone if status in {"applied","duplicate"} else 0,"exp":exp if status in {"applied","duplicate"} else 0,"floor":floor if status in {"applied","duplicate"} else 0,"challenge_succeeded":bool(challenge_succeeded) if status in {"applied","duplicate"} else True,"rewards":rewards if status in {"applied","duplicate"} else (),"stamina_cost":stamina_cost if status in {"applied","duplicate"} else 0}
         with DatabaseUnitOfWork(self.game_database,immediate=True) as uow:
             uow.attach_database(self.player_database,"player_data");old=uow.query_one("SELECT payload,result_json FROM tower_settlement_operations WHERE operation_id=?",(operation_id,))
             if old:
-                if str(old["payload"])!=payload:return result("state_changed")
-                saved=json.loads(str(old["result_json"]));saved["status"]="duplicate";return saved
+                if self._request_payload(old["payload"])!=payload:return result("state_changed", reason="operation_conflict")
+                saved=json.loads(str(old["result_json"]));saved["status"]="duplicate" if saved.get("status", "applied") in {"applied","duplicate"} else saved["status"];return saved
             user=uow.query_one("SELECT hp,mp,user_stamina FROM user_xiuxian WHERE user_id=?",(user_id,));tower=uow.query_one("SELECT current_floor,max_floor,score FROM player_data.tower WHERE user_id=?",(user_id,))
             if user is None:return self._record_settlement(uow,operation_id,payload,result("user_missing"))
-            if player is not None and tuple(map(int,user.values()))!=tuple(player.values()):return self._record_settlement(uow,operation_id,payload,result("state_changed"))
+            if player is not None and tuple(map(int,user.values()))!=tuple(player.values()):return self._record_settlement(uow,operation_id,payload,result("state_changed", reason=next({"hp":"hp_changed","mp":"mp_changed","user_stamina":"stamina_changed"}[key] for key in player if int(user[key]) != player[key])))
             if player is not None and player["user_stamina"]<stamina_cost:return self._record_settlement(uow,operation_id,payload,result("stamina_insufficient"))
-            if tower is None or tuple(map(int,tower.values()))!=tuple(expected.values()):return self._record_settlement(uow,operation_id,payload,result("state_changed"))
+            if tower is None or tuple(map(int,tower.values()))!=tuple(expected.values()):return self._record_settlement(uow,operation_id,payload,result("state_changed", reason="tower_missing" if tower is None else next({"current_floor":"tower_floor_changed","max_floor":"tower_max_changed","score":"tower_score_changed"}[key] for key in expected if int(tower[key]) != expected[key])))
             for item_id,_,_,amount in rewards:
                 row=uow.query_one("SELECT COALESCE(goods_num,0) AS n FROM back WHERE user_id=? AND goods_id=?",(user_id,item_id))
                 if (int(row["n"]) if row else 0)+amount>max_goods_num:return self._record_settlement(uow,operation_id,payload,result("inventory_full"))
@@ -109,19 +120,22 @@ class TowerPurchaseSqlRepository(LegacyTowerRepository):
         if today is None: today=dict(expected_weekly_purchases or {}).get("_last_reset",self.clock.now().date().isoformat())
         weekly=self._weekly(expected_weekly_purchases,today);payload=json.dumps([user_id,item_id,quantity,unit_cost,weekly_limit,max_goods_num,bind_flag],ensure_ascii=True,separators=(",",":"))
         if not operation_id or quantity<=0 or min(item_id,unit_cost,weekly_limit,expected_score,max_goods_num)<0:raise ValueError("valid tower purchase required")
-        def result(status,score=expected_score,purchased=0,inventory=0):
-            ok=status in {"applied","duplicate"};return {"status":status,"quantity":quantity if ok else 0,"cost":quantity*unit_cost if ok else 0,"score":int(score),"purchased":int(purchased),"inventory":int(inventory)}
+        def result(status,score=expected_score,purchased=0,inventory=0,reason=""):
+            ok=status in {"applied","duplicate"};return {"reason":reason,"status":status,"quantity":quantity if ok else 0,"cost":quantity*unit_cost if ok else 0,"score":int(score),"purchased":int(purchased),"inventory":int(inventory)}
         with DatabaseUnitOfWork(self.game_database,immediate=True) as uow:
             uow.attach_database(self.player_database,"player_data")
             old=uow.query_one("SELECT payload,quantity,cost,score,purchased,inventory FROM tower_purchase_operations WHERE operation_id=?",(operation_id,))
             if old:
-                if str(old["payload"])!=payload:return result("state_changed")
+                if self._request_payload(old["payload"])!=payload:return result("state_changed", reason="operation_conflict")
+                saved = json.loads(str(old["payload"]))
+                if isinstance(saved, dict) and "_rejection" in saved:
+                    return saved["_rejection"]
                 return {"status":"duplicate","quantity":int(old["quantity"]),"cost":int(old["cost"]),"score":int(old["score"]),"purchased":int(old["purchased"]),"inventory":int(old["inventory"])}
             if uow.query_one("SELECT 1 AS ok FROM user_xiuxian WHERE user_id=?",(user_id,)) is None:return self._record(uow,operation_id,payload,result("user_missing"))
             tower=uow.query_one("SELECT COALESCE(score,0) AS score,COALESCE(weekly_purchases,'{}') AS weekly FROM player_data.tower WHERE user_id=?",(user_id,))
-            if tower is None:return self._record(uow,operation_id,payload,result("state_changed"))
+            if tower is None:return self._record(uow,operation_id,payload,result("state_changed", reason="tower_missing"))
             current_weekly=self._weekly(tower["weekly"],today)
-            if int(tower["score"])!=expected_score or current_weekly!=weekly:return self._record(uow,operation_id,payload,result("state_changed"))
+            if int(tower["score"])!=expected_score or current_weekly!=weekly:return self._record(uow,operation_id,payload,result("state_changed", reason="tower_score_changed" if int(tower["score"])!=expected_score else "weekly_purchase_changed"))
             purchased=int(weekly.get(str(item_id),0) or 0)
             if purchased+quantity>weekly_limit:return self._record(uow,operation_id,payload,result("limit_reached",purchased=purchased))
             cost=quantity*unit_cost
@@ -130,11 +144,13 @@ class TowerPurchaseSqlRepository(LegacyTowerRepository):
             if inventory+quantity>max_goods_num:return self._record(uow,operation_id,payload,result("inventory_full",purchased=purchased,inventory=inventory))
             new_score,new_purchased,new_inventory=expected_score-cost,purchased+quantity,inventory+quantity;weekly[str(item_id)]=new_purchased
             updated=uow.execute("UPDATE player_data.tower SET score=?,weekly_purchases=? WHERE user_id=? AND COALESCE(score,0)=?",(new_score,json.dumps(weekly,ensure_ascii=True),user_id,expected_score))
-            if updated.rowcount!=1:return self._record(uow,operation_id,payload,result("state_changed"))
+            if updated.rowcount!=1:raise DomainError("tower_purchase_write_rejected", "tower purchase write count mismatch")
             stamp=self._date(today).isoformat();uow.execute("INSERT INTO back(user_id,goods_id,goods_name,goods_type,goods_num,create_time,update_time,bind_num) VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(user_id,goods_id) DO UPDATE SET goods_name=excluded.goods_name,goods_type=excluded.goods_type,goods_num=back.goods_num+excluded.goods_num,bind_num=COALESCE(back.bind_num,0)+excluded.bind_num,update_time=excluded.update_time",(user_id,item_id,item_name,item_type,quantity,stamp,stamp,quantity if bind_flag else 0));return self._record(uow,operation_id,payload,result("applied",new_score,new_purchased,new_inventory))
 
     @staticmethod
     def _record(uow, operation_id, payload, result):
+        if result["status"] not in {"applied", "duplicate"}:
+            payload = json.dumps({"request":json.loads(payload), "_rejection":result}, ensure_ascii=True, separators=(",",":"))
         uow.execute("INSERT INTO tower_purchase_operations(operation_id,payload,quantity,cost,score,purchased,inventory) VALUES(?,?,?,?,?,?,?)",(operation_id,payload,result["quantity"],result["cost"],result["score"],result["purchased"],result["inventory"]));return result
 
 

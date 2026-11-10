@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from ...core.errors import DomainError
+
 import json
 from collections import Counter
 from dataclasses import dataclass
@@ -127,7 +129,7 @@ class ImpartPrayerSqlRepository:
                 (*update_params, user_id, item_id, quantity),
             )
             if consumed.rowcount != 1:
-                return ImpartPrayerResult("state_changed")
+                raise DomainError("item_write_rejected", "prayer item row count changed inside transaction")
 
             existing = {
                 str(row["card_name"]): int(row["quantity"])

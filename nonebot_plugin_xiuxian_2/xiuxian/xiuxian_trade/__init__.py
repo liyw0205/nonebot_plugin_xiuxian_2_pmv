@@ -16,6 +16,7 @@ from ..adapter_compat import (
 )
 from ..xiuxian_utils.lay_out import assign_bot, assign_bot_group, Cooldown, CooldownIsolateLevel
 from nonebot.log import logger
+from ..command_guard import result_failure, guard_command
 from nonebot.params import CommandArg
 from nonebot.permission import SUPERUSER
 from ..xiuxian_utils.item_json import Items
@@ -653,11 +654,9 @@ def buy_xianshi_item_safely(
         "stone_insufficient": f"灵石不足！需要 {number_to(result.total_cost)} 灵石",
         "stamina_insufficient": "体力不足！快速购买需要10点体力",
         "inventory_full": f"背包中的 {item_to_buy['name']} 已达到数量上限！",
-        "state_changed": "购买未完成：当前状态已更新，请重新【仙肆查看】后再买。",
-        "operation_conflict": "购买请求冲突（重复点击或并发），请稍后再试。",
     }
     if not result.succeeded:
-        return False, messages[result.status], None
+        return False, result_failure("仙肆购买", result, messages=messages), None
 
     if result.applied:
         trace_id = operation_id or f"xianshi:{result.listing_id}:{buyer_id}"
@@ -1966,9 +1965,7 @@ async def guishi_deposit_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
             "stone_insufficient": "灵石不足，存入失败。",
             "stored_cap_exceeded": "鬼市账户已达存储上限。",
             "amount_capped": "单次存入数量过大。",
-            "state_changed": "存入时灵石或鬼市账户被其他操作改动，未结算，请重试。",
-            "operation_conflict": "请求冲突，请稍后再试。",
-        }.get(result.status, f"鬼市存入未结算（{result.status}），请重试。")
+        }.get(result.status) or result_failure("鬼市存入", result)
         msg = status_msg
         await handle_send(bot, event, msg, md_type="交易", k1="存灵石", v1="鬼市存灵石", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
         await guishi_deposit.finish()
@@ -2030,9 +2027,7 @@ async def guishi_withdraw_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
             "weekend_closed": "鬼市取灵石功能仅在周六和周日开放！",
             "stored_insufficient": "鬼市账户余额不足。",
             "amount_capped": "单次取出数量过大。",
-            "state_changed": "取出时账户数据被其他操作改动，未结算，请重试。",
-            "operation_conflict": "请求冲突，请稍后再试。",
-        }.get(result.status, f"鬼市取出未结算（{result.status}），请重试。")
+        }.get(result.status) or result_failure("鬼市取出", result)
         msg = status_msg
         await handle_send(bot, event, msg, md_type="交易", k1="取灵石", v1="鬼市取灵石", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
         await guishi_withdraw.finish()
@@ -2445,7 +2440,7 @@ async def guishi_take_item_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
         await handle_send(bot, event, msg, md_type="交易", k1="取物品", v1="鬼市取物品", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
         await guishi_take_item.finish()
     if not result.succeeded:
-        msg = {"item_insufficient":"物品数量不足，暂存未结算。","inventory_full":"背包已满，无法取回。","state_changed":"鬼市暂存未完成：背包或暂存状态已更新。","operation_conflict":"鬼市取物请求冲突，请重新操作。","user_missing":"未找到修仙数据。"}.get(result.status, f"鬼市暂存未结算（{result.status}），请重试。")
+        msg = result_failure("鬼市取物", result, messages={"user_missing":"未找到鬼市账户，请先打开鬼市信息。", "item_missing":"鬼市暂存中没有该物品，请查看鬼市暂存后重新选择。"})
         await handle_send(bot, event, msg, md_type="交易", k1="取物品", v1="鬼市取物品", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
         await guishi_take_item.finish()
 
@@ -3077,9 +3072,7 @@ async def auction_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
             "already_queued": f"{item_name} 已在拍卖等待区。",
             "item_insufficient": f"可交易的 {item_name} 数量不足，上架失败。",
             "user_missing": "未找到修仙数据，上架未结算。",
-            "state_changed": "上架时背包或等待区被改动，未结算，请重试。",
-            "operation_conflict": "请求冲突，请稍后再试。",
-        }.get(result.status, f"拍卖上架未结算（{result.status}），请重试。")
+        }.get(result.status) or result_failure("拍卖上架", result)
         await handle_send(bot, event, msg, md_type="拍卖", k1="上架", v1="拍卖上架", k2="my", v2="我的拍卖", k3="help", v3="拍卖帮助")
         await auction_add.finish()
     
@@ -3169,9 +3162,7 @@ async def auction_remove_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
             "queue_missing": "该物品已不在拍卖等待区。",
             "inventory_full": "背包中该物品已达上限，无法下架。",
             "user_missing": "未找到修仙数据，下架未结算。",
-            "state_changed": "下架时等待区或背包被改动，未结算，请重试。",
-            "operation_conflict": "请求冲突，请稍后再试。",
-        }.get(result.status, f"拍卖下架未结算（{result.status}），请重试。")
+        }.get(result.status) or result_failure("拍卖下架", result)
         await handle_send(bot, event, msg, md_type="拍卖", k1="下架", v1="拍卖下架", k2="my", v2="我的拍卖", k3="help", v3="拍卖帮助")
         await auction_remove.finish()
     

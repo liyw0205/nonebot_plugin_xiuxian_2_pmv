@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from ...core.errors import DomainError
+from ...core.snapshot_reason import first_difference
+
 import json
 from dataclasses import dataclass
 from pathlib import Path
@@ -16,6 +19,7 @@ class AdminRootChangeResult:
     root: str = ""
     root_type: str = ""
     power: int = 0
+    reason: str = ""
 
     @property
     def succeeded(self) -> bool:
@@ -81,11 +85,11 @@ class AdminRootChangeSqlRepository:
                 return AdminRootChangeResult("user_missing")
             actual = (str(row["root"]), str(row["root_type"]), int(row["root_level"]), str(row["level"]), int(row["exp"]), int(row["power"]), str(row["user_name"]))
             if actual != expected:
-                return AdminRootChangeResult("state_changed")
+                return AdminRootChangeResult("state_changed", reason=first_difference(actual, expected, ("root_changed", "root_type_changed", "root_level_changed", "level_changed", "exp_changed", "power_changed", "user_name_changed")))
             root, root_type = self.root_values(root_id, expected[6])
             power = round(expected[4] * float(new_root_rate) * float(level_spend))
             if uow.execute("UPDATE user_xiuxian SET root=?,root_type=?,power=? WHERE user_id=? AND root=? AND root_type=? AND root_level=? AND level=? AND exp=? AND power=? AND user_name=?", (root, root_type, power, user_id, *expected)).rowcount != 1:
-                return AdminRootChangeResult("state_changed")
+                raise DomainError("root_write_rejected", "admin root change was not saved")
             data = {"root": root, "root_type": root_type, "power": power}
             uow.execute("INSERT INTO admin_root_change_operations(operation_id,payload,result_json) VALUES(?,?,?)", (operation_id, payload, json.dumps(data, ensure_ascii=True, separators=(",", ":"))))
             return AdminRootChangeResult("applied", **data)

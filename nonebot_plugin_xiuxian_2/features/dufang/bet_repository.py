@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from ...core.errors import DomainError
+
 import json
 from dataclasses import dataclass
 from pathlib import Path
@@ -16,6 +18,7 @@ class DufangBetResult:
     wallet_stone: int = 0
     bet_id: str = ""
     resolution: Mapping[str, Any] | None = None
+    reason: str = ""
 
     @property
     def succeeded(self) -> bool:
@@ -175,7 +178,7 @@ class DufangBetSqlRepository:
             previous = uow.query_one("SELECT payload,cost,wallet_stone,bet_id FROM dufang_bet_operations WHERE operation_id=?", (operation_id,))
             if previous is not None:
                 if str(previous["payload"]) != payload:
-                    return DufangBetResult("state_changed")
+                    return DufangBetResult("state_changed", reason="operation_conflict")
                 frozen = self._resolution(uow, operation_id)
                 if frozen is None:
                     return DufangBetResult(
@@ -192,7 +195,7 @@ class DufangBetSqlRepository:
             if wallet < cost:
                 return DufangBetResult("stone_insufficient", wallet_stone=wallet)
             if uow.execute("UPDATE user_xiuxian SET stone=stone-? WHERE user_id=? AND stone>=?", (cost, user_id, cost)).rowcount != 1:
-                return DufangBetResult("state_changed", wallet_stone=wallet)
+                raise DomainError("stone_write_rejected", "dufang bet debit count mismatch")
             uow.execute("INSERT INTO dufang_bets VALUES(?,?,?,?,?,NULL)", (operation_id, user_id, cost, "pending", placed_at))
             uow.execute("INSERT INTO dufang_bet_operations VALUES(?,?,?,?,?,CURRENT_TIMESTAMP)", (operation_id, payload, cost, wallet - cost, operation_id))
             uow.execute(

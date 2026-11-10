@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from ...core.errors import DomainError
+
 import json
 from dataclasses import dataclass
 from datetime import datetime
@@ -10,6 +12,7 @@ from ...infrastructure.clock import SystemClock
 from ...infrastructure.database import DatabaseUnitOfWork, OutboxStore
 from .operation_schema import operation_databases_ready, operation_schema_ready
 from .plant_slots import canonical_plant_slots, legacy_plant_fields, normalize_plant_slots
+from .plant_diagnostics import plant_diagnosis
 
 
 @dataclass(frozen=True)
@@ -18,6 +21,8 @@ class DongfuHarvestResult:
     rewards: tuple = ()
     effects_event_id: str | None = None
     effects_pending: bool = False
+    reason: str = ""
+    subject: str = ""
 
     @property
     def succeeded(self):
@@ -28,6 +33,8 @@ class DongfuHarvestResult:
 class DongfuHarvestSnapshotResult:
     status: str
     snapshot: dict | None = None
+    reason: str = ""
+    subject: str = ""
 
     @property
     def succeeded(self):
@@ -127,7 +134,7 @@ class DongfuHarvestSqlRepository:
                 seed_names=seed_names,
             )
             if self._canonical(slots) != self._canonical(expected_slots):
-                return DongfuHarvestSnapshotResult("state_changed")
+                return DongfuHarvestSnapshotResult("state_changed", **plant_diagnosis(slots, expected_slots))
 
             existing_raw = row.get("harvest_settlement")
             existing = self._decode_snapshot(existing_raw) if existing_raw else None
@@ -152,7 +159,7 @@ class DongfuHarvestSqlRepository:
                 ),
             )
             if changed.rowcount != 1:
-                return DongfuHarvestSnapshotResult("state_changed")
+                raise DomainError("harvest_snapshot_write_rejected", "harvest snapshot write count mismatch")
             return DongfuHarvestSnapshotResult("prepared", snapshot)
 
     def harvest(self, operation_id, user_id, expected_slots, slot_numbers, rewards, max_goods_num, settled_at, failed_slots=()):
@@ -201,7 +208,7 @@ class DongfuHarvestSqlRepository:
                         and (len(decoded) == 4 or self._canonical(decoded[4]) == self._canonical(failed_slots))
                     )
                 if old_payload != payload and not legacy_duplicate:
-                    return DongfuHarvestResult("state_changed")
+                    return DongfuHarvestResult("state_changed", reason="operation_conflict")
                 event_id = effects_event_id if self.outbox.get(uow, effects_event_id) is not None else None
                 return DongfuHarvestResult(
                     "duplicate",
@@ -220,10 +227,10 @@ class DongfuHarvestSqlRepository:
                 return DongfuHarvestResult("dongfu_missing")
             actual = json.loads(str(row["plant_slots"]))
             if self._canonical(actual) != self._canonical(expected_slots):
-                return DongfuHarvestResult("state_changed")
+                return DongfuHarvestResult("state_changed", **plant_diagnosis(actual, expected_slots))
             for slot_no in slot_numbers:
                 if slot_no < 1 or slot_no > len(actual):
-                    return DongfuHarvestResult("state_changed")
+                    return DongfuHarvestResult("state_changed", reason="plot_invalid")
                 finish = str(actual[slot_no - 1].get("plant_finish") or "")
                 if not finish or finish > str(settled_at):
                     return DongfuHarvestResult("not_mature")
@@ -256,7 +263,7 @@ class DongfuHarvestSqlRepository:
                 "UPDATE player_data.dongfu_status SET plant_slots=?,planting=?,plant_seed_id=?,plant_start=?,plant_finish=?,harvest_settlement=? WHERE user_id=?",
                 (self._canonical(actual), *legacy, "", user_id),
             ).rowcount != 1:
-                return DongfuHarvestResult("state_changed")
+                raise DomainError("plant_write_rejected", "harvest write count mismatch")
 
             now = self.clock.now().isoformat()
             for item_id, amount in totals.items():

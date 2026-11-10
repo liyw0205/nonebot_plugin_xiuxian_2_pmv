@@ -787,23 +787,23 @@ class MapExploreStartSqlRepository:
             uow.attach_database(self.player_database, "player_data")
             old = uow.query_one("SELECT payload,stamina FROM map_explore_start_operations WHERE operation_id=?", (operation_id,))
             if old:
-                return {"status": "duplicate" if str(old["payload"]) == payload else "state_changed", "stamina": int(old["stamina"]) if str(old["payload"]) == payload else stamina}
+                return {"status": "duplicate" if str(old["payload"]) == payload else "state_changed", "stamina": int(old["stamina"]) if str(old["payload"]) == payload else stamina, "reason": "" if str(old["payload"]) == payload else "operation_conflict"}
             user = uow.query_one("SELECT user_stamina FROM user_xiuxian WHERE user_id=?", (user_id,))
             if user is None: return {"status": "user_missing", "stamina": stamina}
             current_stamina = int(user["user_stamina"] or 0)
-            if current_stamina != stamina: return {"status": "state_changed", "stamina": current_stamina}
+            if current_stamina != stamina: return {"status": "state_changed", "reason": "stamina_changed", "stamina": current_stamina}
             if current_stamina < cost: return {"status": "stamina_insufficient", "stamina": current_stamina}
             pos = uow.query_one("SELECT realm,heaven,node_id FROM player_data.map_status WHERE user_id=?", (user_id,))
-            if pos is None or tuple(str(pos[key]) for key in position) != tuple(position.values()): return {"status": "state_changed", "stamina": current_stamina}
+            if pos is None or tuple(str(pos[key]) for key in position) != tuple(position.values()): return {"status": "state_changed", "reason": "position_changed", "stamina": current_stamina}
             state = uow.query_one("SELECT running,node_type,node_name,start_time,duration_min,settlement,max_duration_min,interval_min FROM player_data.map_explore_status WHERE user_id=?", (user_id,))
             if state is None or any(str("" if state[key] is None else state[key]) != wanted for key, wanted in status.items()):
-                return {"status": "already_running" if state is not None and int(state["running"] or 0) == 1 else "state_changed", "stamina": current_stamina}
+                return {"status": "already_running" if state is not None and int(state["running"] or 0) == 1 else "state_changed", "reason": "explore_changed", "stamina": current_stamina}
             daily_row = uow.query_one("SELECT date,explore_count,resource_total_count FROM player_data.map_daily_limit WHERE user_id=?", (user_id,))
-            if daily_row is None or (str(daily_row["date"]), str(daily_row["explore_count"]), str(daily_row["resource_total_count"])) != (daily["date"], daily.get("explore_count", "0"), daily.get("resource_total_count", "0")): return {"status": "state_changed", "stamina": current_stamina}
+            if daily_row is None or (str(daily_row["date"]), str(daily_row["explore_count"]), str(daily_row["resource_total_count"])) != (daily["date"], daily.get("explore_count", "0"), daily.get("resource_total_count", "0")): return {"status": "state_changed", "reason": "daily_changed", "stamina": current_stamina}
             if int(daily_row["explore_count"] or 0) >= limit: return {"status": "limit_reached", "stamina": current_stamina}
             cd = uow.query_one("SELECT explore_start_cd_until FROM player_data.map_cooldown WHERE user_id=?", (user_id,))
             current_cd = "" if cd is None or cd["explore_start_cd_until"] is None else str(cd["explore_start_cd_until"])
-            if current_cd != expected_cooldown: return {"status": "state_changed", "stamina": current_stamina}
+            if current_cd != expected_cooldown: return {"status": "state_changed", "reason": "cooldown_changed", "stamina": current_stamina}
             remaining = current_stamina - cost
             uow.execute("UPDATE user_xiuxian SET user_stamina=? WHERE user_id=?", (remaining, user_id))
             fields = ("running", "node_type", "node_name", "start_time", "duration_min", "settlement", "max_duration_min", "interval_min")
@@ -831,16 +831,16 @@ class MapExploreSettlementSqlRepository:
             old = uow.query_one("SELECT payload,stone,rewards FROM map_explore_settlement_operations WHERE operation_id=?", (operation_id,))
             if old:
                 if str(old["payload"]) != payload:
-                    return {"status": "state_changed", "stone": 0, "rewards": ()}
+                    return {"status": "state_changed", "reason": "operation_conflict", "stone": 0, "rewards": ()}
                 return {"status": "duplicate", "stone": int(old["stone"]), "rewards": tuple(tuple(map(int, x)) for x in json.loads(str(old["rewards"])))}
             if uow.query_one("SELECT 1 FROM user_xiuxian WHERE user_id=?", (user_id,)) is None:
                 return {"status": "user_missing", "stone": 0, "rewards": ()}
             current = uow.query_one("SELECT running,node_type,node_name,start_time,duration_min,settlement,max_duration_min,interval_min FROM player_data.map_explore_status WHERE user_id=?", (user_id,))
             if current is None or any(str("" if current[k] is None else current[k]) != wanted for k, wanted in state.items()):
-                return {"status": "state_changed", "stone": 0, "rewards": ()}
+                return {"status": "state_changed", "reason": "explore_changed", "stone": 0, "rewards": ()}
             daily_row = uow.query_one("SELECT date,explore_count,resource_total_count FROM player_data.map_daily_limit WHERE user_id=?", (user_id,))
             if daily_row is None or (str(daily_row["date"]), str(daily_row["explore_count"]), str(daily_row["resource_total_count"])) != (daily["date"], daily.get("explore_count", "0"), daily.get("resource_total_count", "0")):
-                return {"status": "state_changed", "stone": 0, "rewards": ()}
+                return {"status": "state_changed", "reason": "daily_changed", "stone": 0, "rewards": ()}
             if int(daily_row["explore_count"] or 0) >= daily_limit:
                 return {"status": "limit_reached", "stone": 0, "rewards": ()}
             totals: dict[int, int] = {}
@@ -881,16 +881,16 @@ class MapMissionClaimSqlRepository:
             uow.attach_database(self.player_database,'player_data');old=uow.query_one('SELECT payload,stone,rewards FROM map_mission_claim_operations WHERE operation_id=?',(operation_id,))
             if old:
                 if str(old['payload']) != payload:
-                    return {'status':'state_changed','stone':0,'rewards':()}
+                    return {'status':'state_changed','reason':'operation_conflict','stone':0,'rewards':()}
                 result = {'status':'duplicate','stone':int(old['stone']),'rewards':tuple(tuple(map(int,x)) for x in json.loads(str(old['rewards'])))}
                 if self.outbox.get(uow, effects_event_id) is not None:
                     result['effects_event_id'] = effects_event_id
                 return result
             if uow.query_one('SELECT 1 FROM user_xiuxian WHERE user_id=?',(user_id,)) is None:return {'status':'user_missing','stone':0,'rewards':()}
             row=uow.query_one('SELECT date,mission_type,target,claimed,settlement FROM player_data.map_mission WHERE user_id=?',(user_id,))
-            if row is None or any(str('' if row[k] is None else row[k])!=v for k,v in mission.items()):return {'status':'state_changed','stone':0,'rewards':()}
+            if row is None or any(str('' if row[k] is None else row[k])!=v for k,v in mission.items()):return {'status':'state_changed','reason':'mission_changed','stone':0,'rewards':()}
             progress=uow.query_one(f'SELECT date,"{progress_key}" AS progress FROM player_data.map_daily_limit WHERE user_id=?',(user_id,))
-            if progress is None or (str(progress['date']),str(progress['progress']))!=(daily.get('date',''),daily.get(progress_key,'0')):return {'status':'state_changed','stone':0,'rewards':()}
+            if progress is None or (str(progress['date']),str(progress['progress']))!=(daily.get('date',''),daily.get(progress_key,'0')):return {'status':'state_changed','reason':'progress_changed','stone':0,'rewards':()}
             if int(mission.get('claimed','0'))!=0:return {'status':'already_claimed','stone':0,'rewards':()}
             if int(progress['progress'] or 0)<int(mission.get('target','0')):return {'status':'not_completed','stone':0,'rewards':()}
             totals={};meta={}
@@ -1023,14 +1023,14 @@ class MapCombatLifecycleStartSqlRepository:
             user = uow.query_one("SELECT user_stamina FROM user_xiuxian WHERE user_id=?", (user_id,))
             if user is None: return self._record(uow, operation_id, payload, "user_missing", expected_stamina, {})
             stamina = int(user["user_stamina"] or 0)
-            if stamina != expected_stamina: return self._record(uow, operation_id, payload, "state_changed", stamina, {})
+            if stamina != expected_stamina: return self._record(uow, operation_id, payload, "state_changed", stamina, {}, reason="stamina_changed")
             pos = uow.query_one("SELECT realm,heaven,node_id FROM player_data.map_status WHERE user_id=?", (user_id,))
-            if pos is None or tuple(str(pos[k]) for k in position) != tuple(position.values()): return self._record(uow, operation_id, payload, "state_changed", stamina, {})
+            if pos is None or tuple(str(pos[k]) for k in position) != tuple(position.values()): return self._record(uow, operation_id, payload, "state_changed", stamina, {}, reason="position_changed")
             dr = uow.query_one("SELECT date,combat_count,resource_total_count FROM player_data.map_daily_limit WHERE user_id=?", (user_id,))
-            if dr is None or (str(dr["date"]), str(dr["combat_count"]), str(dr["resource_total_count"])) != (daily.get("date", ""), daily.get("combat_count", "0"), daily.get("resource_total_count", "0")): return self._record(uow, operation_id, payload, "state_changed", stamina, {})
+            if dr is None or (str(dr["date"]), str(dr["combat_count"]), str(dr["resource_total_count"])) != (daily.get("date", ""), daily.get("combat_count", "0"), daily.get("resource_total_count", "0")): return self._record(uow, operation_id, payload, "state_changed", stamina, {}, reason="daily_changed")
             if int(dr["combat_count"] or 0) >= daily_limit: return self._record(uow, operation_id, payload, "limit_reached", stamina, {})
             cd = uow.query_one("SELECT combat_cd_until FROM player_data.map_cooldown WHERE user_id=?", (user_id,)); current_cd = "" if cd is None or cd["combat_cd_until"] is None else str(cd["combat_cd_until"])
-            if current_cd != expected_cooldown: return self._record(uow, operation_id, payload, "state_changed", stamina, {})
+            if current_cd != expected_cooldown: return self._record(uow, operation_id, payload, "state_changed", stamina, {}, reason="cooldown_changed")
             if current_cd and current_cd > str(task["started_at"]): return self._record(uow, operation_id, payload, "cooldown", stamina, {"cooldown_until": current_cd})
             pending = uow.query_one("SELECT snapshot FROM player_data.map_combat_settlement WHERE user_id=?", (user_id,))
             if pending is not None and str(pending["snapshot"] or ""): return self._record(uow, operation_id, payload, "already_running", stamina, self._parse(pending["snapshot"]))
@@ -1048,10 +1048,11 @@ class MapCombatLifecycleStartSqlRepository:
         return parsed if isinstance(parsed, dict) else {}
 
     @staticmethod
-    def _record(uow: DatabaseUnitOfWork, operation_id: str, payload: str, status: str, stamina: int, task: dict[str, Any]) -> dict[str, Any]:
+    def _record(uow: DatabaseUnitOfWork, operation_id: str, payload: str, status: str, stamina: int, task: dict[str, Any], *, reason: str = "") -> dict[str, Any]:
+        task = {**task, "_rejection_reason": reason} if reason else task
         task_json = json.dumps(task, ensure_ascii=False, sort_keys=True)
         uow.execute("INSERT INTO map_combat_start_operations(operation_id,payload,result_status,stamina,task_json) VALUES(?,?,?,?,?)", (operation_id, payload, status, stamina, task_json))
-        return {"status": status, "stamina": stamina, "task": task, "snapshot": task_json if task else ""}
+        return {"status": status, "reason": reason, "stamina": stamina, "task": task, "snapshot": task_json if task else ""}
 
 
 class MapCombatLifecyclePlanSqlRepository:

@@ -10,6 +10,8 @@ class BegDailyRewardResult:
     status: str
     stone_reward: int = 0
     stone: int = 0
+    reason: str = ""
+    subject: str = ""
 
     @property
     def succeeded(self) -> bool:
@@ -20,6 +22,7 @@ class BegDailyRewardResult:
             "status": self.status,
             "stone_reward": self.stone_reward,
             "stone": self.stone,
+            **({"reason": self.reason, "subject": self.subject} if self.reason else {}),
         }
 
 
@@ -27,13 +30,15 @@ class BegDailyRewardResult:
 class NoviceGiftClaimResult:
     status: str
     stone: int = 0
+    reason: str = ""
+    subject: str = ""
 
     @property
     def succeeded(self) -> bool:
         return self.status in {"applied", "duplicate"}
 
     def to_dict(self) -> dict[str, Any]:
-        return {"status": self.status, "stone": self.stone}
+        return {"status": self.status, "stone": self.stone, **({"reason": self.reason, "subject": self.subject} if self.reason else {})}
 
 
 def parse_datetime(value: Any) -> datetime:

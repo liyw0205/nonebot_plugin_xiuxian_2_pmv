@@ -63,7 +63,7 @@ def count_sect_positions(rows):
     return counts
 
 
-def create_user_sect_task(user_id, sect_id=None, operation_id=None, replace_existing=False):
+def create_user_sect_task(user_id, sect_id=None, operation_id=None, replace_existing=False, *, return_failure=False):
     tasklist = config["宗门任务"]
     if sect_id is None:
         user_info = sect_application.get_user_profile(user_id) or {}
@@ -78,7 +78,7 @@ def create_user_sect_task(user_id, sect_id=None, operation_id=None, replace_exis
             replace_existing=replace_existing,
         )
         if not claim.applied:
-            return None
+            return claim if return_failure else None
         task = {"任务名称": claim.task_key, "任务内容": dict(claim.task_data or {}),
                 "sect_id": claim.sect_id, "period": claim.period, "status": "accepted",
                 "progress": 0, "target": 1}
@@ -91,10 +91,10 @@ def create_user_sect_task(user_id, sect_id=None, operation_id=None, replace_exis
 
 
 
-def refresh_user_sect_task(user_id, sect_id, operation_id):
+def refresh_user_sect_task(user_id, sect_id, operation_id, *, return_failure=False):
     current = sect_application.get_active_task(user_id)
     if not current:
-        return None
+        return {"status": "task_missing"} if return_failure else None
     tasklist = config["宗门任务"]
     refreshed = sect_application.refresh_task(
         operation_id,
@@ -105,7 +105,7 @@ def refresh_user_sect_task(user_id, sect_id, operation_id):
         config["每日宗门任务次上限"],
     )
     if not refreshed.applied:
-        return None
+        return refreshed if return_failure else None
     task = {"任务名称": refreshed.task_key, "任务内容": dict(refreshed.task_data or {}),
             "sect_id": refreshed.sect_id, "period": refreshed.period, "status": "accepted",
             "progress": 0, "target": 1}

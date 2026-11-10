@@ -389,7 +389,7 @@ class SectApplication:
                         if previous is not None:
                             return previous.replay()
                         if not retry_started:
-                            raise ConflictError("操作正在处理中")
+                            raise ConflictError("操作正在处理中", reason="operation_pending")
                 raw = _data(call())
                 status = str(raw.get("status", "failed"))
                 data = {"status": status, **raw}

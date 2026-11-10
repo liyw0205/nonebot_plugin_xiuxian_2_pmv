@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from ...core.errors import DomainError
+
 import json
 from pathlib import Path
 from typing import Any
@@ -22,8 +24,10 @@ class ClosingSettlementResult:
         exp_time: int = 0,
         effects_event_id: str | None = None,
         occurred_at: str | None = None,
+        reason: str = "",
     ) -> None:
         self.status = status
+        self.reason = reason
         self.exp_gain = int(exp_gain)
         self.stone_cost = int(stone_cost)
         self.hp = int(hp)
@@ -139,7 +143,7 @@ class ClosingSettlementSqlRepository:
             )
             if previous is not None:
                 if str(previous["payload"]) != payload:
-                    return ClosingSettlementResult("state_changed")
+                    return ClosingSettlementResult("state_changed", reason="operation_conflict")
                 return self._from_row(previous, "duplicate")
 
             user = uow.query_one(
@@ -155,7 +159,7 @@ class ClosingSettlementSqlRepository:
             if int(cd["type"] or 0) != 1 or not cd_time_matches(
                 cd["create_time"], expected_create_time
             ):
-                return ClosingSettlementResult("state_changed")
+                return ClosingSettlementResult("state_changed", reason="closing_type_changed" if int(cd["type"] or 0) != 1 else "closing_time_changed")
             if int(user["stone"]) < values[1]:
                 return ClosingSettlementResult("stone_insufficient")
 
@@ -180,7 +184,7 @@ class ClosingSettlementSqlRepository:
                     (user_id, str(expected_create_time)),
                 )
             if changed.rowcount != 1 or cleared.rowcount != 1:
-                return ClosingSettlementResult("state_changed")
+                raise DomainError("closing_player_write_rejected" if changed.rowcount != 1 else "closing_session_write_rejected", "closing settlement write count mismatch")
 
             event_payload = self._effect_payload(
                 operation_id=operation_id,

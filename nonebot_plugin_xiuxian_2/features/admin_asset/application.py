@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from ...core.player_reasons import reason_text
+
 from collections.abc import Callable, Mapping
 from dataclasses import asdict, is_dataclass
 from pathlib import Path
@@ -84,6 +86,8 @@ class AdminAssetApplication:
                     int(values["previous_stone"] or 0), int(values["final_stone"] or 0), int(values["applied_delta"] or 0),
                 )
                 data = result.to_dict()
+                diagnostics = raw if isinstance(raw, dict) else vars(raw)
+                data.update({key: diagnostics[key] for key in ("reason", "subject") if diagnostics.get(key)})
                 if status in {"adjusted", "applied", "duplicate"}:
                     outcome = OperationOutcome.applied(
                         request.operation_id,
@@ -102,7 +106,7 @@ class AdminAssetApplication:
                         "not_ready": "管理员资产服务尚未就绪。",
                     }
                     outcome = OperationOutcome.rejected(
-                        request.operation_id, self.action, messages.get(status, "灵石调整未结算。"),
+                        request.operation_id, self.action, reason_text(data.get("reason")) or messages.get(status, "灵石调整未结算。"),
                         code=status, data=data, audit_category="admin_asset",
                     )
                 with DatabaseUnitOfWork(self.database, immediate=True) as uow:

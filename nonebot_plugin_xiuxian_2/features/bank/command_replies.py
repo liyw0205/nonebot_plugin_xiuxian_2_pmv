@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import Any, Mapping
+from ...core.player_reasons import reason_text
 
 from .history_view import render_bank_history
 
@@ -23,6 +24,8 @@ def render_bank_reply(result: Mapping[str, Any], bank_levels: Mapping[str, Any])
             message += render_bank_history(result.get("operations") or ())
         return message
     if status not in {"applied", "duplicate"}:
+        if reason_text(result.get("reason")):
+            return reason_text(result["reason"])
         return {
             "invalid_argument": "请输入正确的金额或指令！本次未结算。",
             "invalid_amount": "请输入正确的金额！本次未结算。",

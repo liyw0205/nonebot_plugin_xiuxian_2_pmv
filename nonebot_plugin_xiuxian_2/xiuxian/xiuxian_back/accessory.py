@@ -172,6 +172,7 @@ def configure_quick_equip_application(application: AccessoryQuickEquipApplicatio
 
 
 def _acc_fail_msg(result, *, action: str = "饰品操作") -> str:
+    from ..command_guard import result_failure
     status = getattr(result, "status", None) or "unknown"
     mapping = {
         "item_insufficient": f"材料不足，{action}未结算。",
@@ -180,10 +181,8 @@ def _acc_fail_msg(result, *, action: str = "饰品操作") -> str:
         "inventory_full": "背包已满，无法放入。",
         "user_missing": "未找到修仙数据。",
         "duplicate": "该请求已处理，无需重复提交。",
-        "state_changed": f"{action}时当前状态已更新，未结算。",
-        "operation_conflict": "请求冲突，请稍后再试。",
     }
-    return mapping.get(status, f"{action}未结算（{status}）。")
+    return result_failure(action, result, messages=mapping)
 
 
 def _accessory_operation_id(event, action, user_id, target):

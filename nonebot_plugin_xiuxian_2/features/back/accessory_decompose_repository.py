@@ -135,7 +135,7 @@ class AccessoryDecomposeSqlRepository:
             )
             if previous is not None:
                 if str(previous["action"]) != "decompose" or str(previous["payload"]) != payload_json:
-                    return AccessoryDecomposeChange("state_changed", "decompose", user_id)
+                    return AccessoryDecomposeChange("state_changed", "decompose", user_id, reason="operation_conflict")
                 return self._result("duplicate", str(previous["result_json"]))
 
             row = uow.query_one(
@@ -150,7 +150,7 @@ class AccessoryDecomposeSqlRepository:
             if index is None or current is None:
                 return AccessoryDecomposeChange("accessory_missing", "decompose", user_id)
             if self._json(current) != self._json(expected_accessory):
-                return AccessoryDecomposeChange("state_changed", "decompose", user_id)
+                return AccessoryDecomposeChange("state_changed", "decompose", user_id, reason="accessory_changed")
             if not self._add_stones(
                 uow, user_id, stone_id, stone_name, stone_gain, max_goods_num
             ):
@@ -223,7 +223,7 @@ class AccessoryDecomposeSqlRepository:
             )
             if previous is not None:
                 if str(previous["action"]) != "batch_decompose" or str(previous["payload"]) != payload_json:
-                    return AccessoryDecomposeChange("state_changed", "batch_decompose", user_id)
+                    return AccessoryDecomposeChange("state_changed", "batch_decompose", user_id, reason="operation_conflict")
                 return self._result("duplicate", str(previous["result_json"]))
 
             row = uow.query_one(
@@ -235,7 +235,7 @@ class AccessoryDecomposeSqlRepository:
             equipped = self._decode(row["equipped"], dict)
             bag = self._decode(row["bag"], list)
             if self._json(bag) != self._json(expected_bag):
-                return AccessoryDecomposeChange("state_changed", "batch_decompose", user_id)
+                return AccessoryDecomposeChange("state_changed", "batch_decompose", user_id, reason="accessory_bag_changed")
             selected = set(selected_uids)
             hit = [item for item in bag if isinstance(item, dict) and str(item.get("uid", "")) in selected]
             if len(hit) != len(selected_uids):

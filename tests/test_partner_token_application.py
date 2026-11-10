@@ -13,6 +13,7 @@ from nonebot_plugin_xiuxian_2.features.buff.partner_token_application import (
     PartnerTokenUseApplication,
 )
 from nonebot_plugin_xiuxian_2.infrastructure.database import DatabaseUnitOfWork
+from nonebot_plugin_xiuxian_2.core.errors import DomainError
 from nonebot_plugin_xiuxian_2.plugin import build_migrations, migrations_for_database
 from tests.test_db_backend import db_backend
 
@@ -105,11 +106,12 @@ class PartnerTokenUseApplicationTests(unittest.TestCase):
             with db_backend.transaction(player):
                 pass
             application = PartnerTokenUseApplication(game, player)
-            with self.assertRaisesRegex(RuntimeError, "partner_token_operations"):
+            with self.assertRaises(DomainError) as caught:
                 application.apply(
                     "missing", "u", 9001, requested_count=1,
                     expected_item_count=1, expected_used_count=1,
                 )
+            self.assertEqual(caught.exception.code, "schema_missing")
             with db_backend.connection(game) as conn:
                 self.assertIsNone(conn.execute(
                     "SELECT 1 FROM sqlite_master WHERE name='partner_token_operations'"

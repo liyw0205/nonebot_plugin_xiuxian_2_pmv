@@ -25,6 +25,7 @@ from ...features.work.admin_refresh_reset_application import WorkAdminRefreshRes
 from nonebot.typing import T_State
 from nonebot.permission import SUPERUSER
 from nonebot.log import logger
+from ..command_guard import result_failure, report_exception
 from ...bootstrap.legacy import register_legacy_startup
 from nonebot.params import CommandArg
 from nonebot import require, get_bot
@@ -468,7 +469,7 @@ async def admin_rename_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     elif status == "schema_missing":
         message = "改名服务尚未就绪，请检查启动迁移。"
     elif status == "user_missing":
-        message = "目标用户数据已变化，请重新查询后操作。"
+        message = "目标角色资料不存在，请确认目标角色已创建。"
     elif outcome.ok:
         message = "道友的道号更新成啦~"
     else:
@@ -1184,7 +1185,7 @@ async def cz_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Me
             if result.status == "inventory_full":
                 msg = f"{target} 的饰品背包容量不足！"
             elif result.status == "state_changed":
-                msg = "调整未结算：玩家饰品当前状态已更新，请重新执行。"
+                msg = result_failure("调整玩家饰品", result)
             elif result.status == "operation_conflict":
                 msg = "本次管理员饰品操作与已记录事件冲突"
             elif result.status == "schema_missing":
@@ -1244,7 +1245,7 @@ async def cz_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Me
         if result.status == "inventory_full":
             msg = "您的饰品背包容量不足！"
         elif result.status == "state_changed":
-            msg = "操作未结算：您的饰品当前状态已更新，请重新执行。"
+            msg = result_failure("调整饰品", result)
         elif result.status == "operation_conflict":
             msg = "本次管理员饰品操作与已记录事件冲突"
         elif result.status == "schema_missing":
@@ -1459,7 +1460,7 @@ async def hmll_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: 
                 target,
             )
             if result.status == "state_changed":
-                msg = "调整未结算：玩家饰品当前状态已更新，请重新执行。"
+                msg = result_failure("调整玩家饰品", result)
             elif result.status == "operation_conflict":
                 msg = "本次管理员饰品操作与已记录事件冲突"
             elif result.status == "schema_missing":
@@ -1521,7 +1522,7 @@ async def hmll_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: 
             "self",
         )
         if result.status == "state_changed":
-            msg = "操作未结算：您的饰品当前状态已更新，请重新执行。"
+            msg = result_failure("调整饰品", result)
         elif result.status == "operation_conflict":
             msg = "本次管理员饰品操作与已记录事件冲突"
         elif result.status == "schema_missing":
@@ -1634,7 +1635,7 @@ async def restate_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
             msg = (
                 "状态重置服务尚未就绪，请检查启动迁移。"
                 if str(e) == "schema_missing"
-                else f"重置状态失败：{e}"
+                else report_exception("读取角色状态", e)
             )
             await handle_send(bot, event, msg)
             await restate.finish()
@@ -1649,10 +1650,10 @@ async def restate_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
             )
         except Exception as e:
             logger.opt(exception=e).error(f"重置状态失败 user={give_qq}")
-            await handle_send(bot, event, f"重置状态失败：{e}")
+            await handle_send(bot, event, report_exception("重置角色状态", e))
             await restate.finish()
         if result.status == "state_changed":
-            msg = "操作未结算：玩家当前状态已更新，请重新执行。"
+            msg = result_failure("重置角色状态", result)
         elif result.status == "schema_missing":
             msg = "状态重置服务尚未就绪，请检查启动迁移。"
         elif result.status == "operation_conflict":
@@ -1934,7 +1935,7 @@ async def tower_reset_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
         period_key=period_key,
     )
     if not result.succeeded:
-        await handle_send(bot, event, "用户通天塔层数重置失败：数据结构尚未就绪或操作状态已变化。")
+        await handle_send(bot, event, result_failure("重置通天塔层数", result))
         await tower_reset.finish()
     msg = f"用户通天塔层数重置成功：重置 {result.changed}/{result.total} 人"
     await handle_send(bot, event, msg)

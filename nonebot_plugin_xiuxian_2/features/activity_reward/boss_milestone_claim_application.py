@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from ...core.player_reasons import reason_text
+
 import json
 from pathlib import Path
 from typing import Any, Mapping
@@ -42,6 +44,7 @@ class ActivityBossMilestoneClaimApplication:
     @staticmethod
     def _outcome(operation_id: str, result: ActivityBossMilestoneClaimResult) -> OperationOutcome[Any]:
         data = {"status": "applied" if result.succeeded else result.status, "names": list(result.names)}
+        data.update({key: getattr(result, key) for key in ("reason", "subject") if getattr(result, key)})
         if result.succeeded:
             return OperationOutcome.applied(
                 operation_id,
@@ -62,7 +65,7 @@ class ActivityBossMilestoneClaimApplication:
         return OperationOutcome.rejected(
             operation_id,
             ActivityBossMilestoneClaimApplication.action,
-            messages.get(result.status, f"领取失败（{result.status}）"),
+            reason_text(result.reason) or messages.get(result.status, f"领取失败（{result.status}）"),
             code=result.status,
             data=data,
             audit_category="activity_reward",
@@ -74,7 +77,7 @@ class ActivityBossMilestoneClaimApplication:
         status = str(data.get("status") or outcome.code or outcome.status)
         if status == "applied" and outcome.replayed:
             status = "duplicate"
-        return ActivityBossMilestoneClaimResult(status, tuple(str(name) for name in data.get("names", ())))
+        return ActivityBossMilestoneClaimResult(status, tuple(str(name) for name in data.get("names", ())), str(data.get("reason") or ("legacy_rejection" if status == "state_changed" else "")), str(data.get("subject") or ""))
 
     def get_result(
         self,

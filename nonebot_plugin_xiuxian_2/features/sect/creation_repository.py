@@ -1,6 +1,7 @@
 from __future__ import annotations
 from pathlib import Path
 from typing import Any
+from ...core.errors import DomainError
 from ...infrastructure.database import DatabaseUnitOfWork
 from .schema import CREATION_COLUMNS, SCHEMA_MISSING, table_ready
 
@@ -23,8 +24,9 @@ class SectCreationSqlRepository:
             if int(user['stone'] or 0)<stone_cost:return {'status':'stone_insufficient',**base}
             if uow.query_one('SELECT sect_id FROM sects WHERE sect_name=?',(sect_name,)):return {'status':'name_exists',**base}
             uow.execute('INSERT INTO sects(sect_name,sect_owner,sect_scale,sect_used_stone,join_open,closed,combat_power) VALUES(?,?,0,0,1,0,0)',(sect_name,user_id)); created=uow.query_one('SELECT sect_id FROM sects WHERE sect_owner=? AND sect_name=?',(user_id,sect_name))
-            if created is None: raise RuntimeError('created sect could not be read back')
+            if created is None: raise DomainError('sect_creation_write_rejected', 'sect creation was not saved')
             sect_id=int(created['sect_id']); changed=uow.execute('UPDATE user_xiuxian SET sect_id=?,sect_position=?,stone=stone-? WHERE user_id=? AND sect_id IS NULL AND stone>=?',(sect_id,owner_position,stone_cost,user_id,stone_cost))
-            if changed.rowcount!=1: return {'status':'user_changed',**base}
+            if changed.rowcount!=1:
+                raise DomainError('sect_member_write_rejected', 'sect membership was not saved')
             uow.execute('INSERT INTO sect_creation_operations(operation_id,user_id,sect_id,sect_name,stone_cost) VALUES(?,?,?,?,?)',(operation_id,user_id,sect_id,sect_name,stone_cost))
             return {'status':'created',**base,'sect_id':sect_id}

@@ -4,15 +4,17 @@ import json
 from pathlib import Path
 
 from ...infrastructure.database import DatabaseUnitOfWork
+from ...core.errors import DomainError
 
 
 class AdminStoneResult:
-    def __init__(self, status: str, user_id: str, previous_stone: int = 0, final_stone: int = 0, applied_delta: int = 0) -> None:
+    def __init__(self, status: str, user_id: str, previous_stone: int = 0, final_stone: int = 0, applied_delta: int = 0, reason: str = "") -> None:
         self.status = status
         self.user_id = user_id
         self.previous_stone = previous_stone
         self.final_stone = final_stone
         self.applied_delta = applied_delta
+        self.reason = reason
 
 
 class AdminStoneSqlRepository:
@@ -102,7 +104,7 @@ class AdminStoneSqlRepository:
                 return AdminStoneResult("user_missing", user_id)
             current = int(row["stone"])
             if current != int(expected_stone):
-                return AdminStoneResult("state_changed", user_id, current, current, 0)
+                return AdminStoneResult("state_changed", user_id, current, current, 0, reason="stone_changed")
             final = max(0, current + requested_delta)
             applied_delta = final - current
             changed = uow.execute(
@@ -110,7 +112,7 @@ class AdminStoneSqlRepository:
                 (final, user_id, current),
             )
             if changed.rowcount != 1:
-                return AdminStoneResult("state_changed", user_id)
+                raise DomainError("stone_write_rejected", "admin stone adjustment was not saved")
             detail = json.dumps(
                 {
                     "operator_id": operator_id,

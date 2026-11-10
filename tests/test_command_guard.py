@@ -137,7 +137,7 @@ class GuardUnitTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_failure_reply_is_short_and_action_scoped(self) -> None:
         text = failure_reply("传承祈愿", sqlite3.OperationalError("no such table: x"))
-        self.assertTrue(text.startswith("传承祈愿未完成："))
+        self.assertTrue(text.startswith("传承祈愿处理提示："))
         self.assertLess(len(text), 80)
 
 
@@ -201,9 +201,9 @@ class GuardCoverageContractTests(unittest.TestCase):
         pet = (
             PACKAGE / "xiuxian" / "xiuxian_pet" / "failure_reply.py"
         ).read_text(encoding="utf-8")
-        # 宠物模块保留自己的文案与测试，不并入通用守卫
+        # 两种入口共享安全异常映射，保留宠物调用接口。
         self.assertIn("guard_pet_handler", pet)
-        self.assertNotIn("guard_command", pet)
+        self.assertIn("guard_command as _guard", pet)
 
 
 if __name__ == "__main__":

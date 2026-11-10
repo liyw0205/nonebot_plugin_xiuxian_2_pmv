@@ -1,4 +1,5 @@
 import json
+import sqlite3
 import tempfile
 import unittest
 from pathlib import Path
@@ -6,6 +7,8 @@ import nonebot
 nonebot.init()
 from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_buff.transaction_service import MentorTransmissionService
 from tests.test_db_backend import db_backend
+from nonebot_plugin_xiuxian_2.core.errors import DomainError
+from nonebot_plugin_xiuxian_2.xiuxian.command_guard import failure_reply
 
 class Tests(unittest.TestCase):
  def test_partner_facade_defers_mentor_transmission_service_construction(self):
@@ -34,3 +37,13 @@ class Tests(unittest.TestCase):
   with db_backend.transaction(self.g) as c:c.execute("CREATE TRIGGER fail BEFORE INSERT ON mentor_transmission_operations BEGIN SELECT RAISE(ABORT,'x'); END");c.execute("UPDATE user_xiuxian SET exp=1000,power=0,hp=1,mp=1,atk=1 WHERE user_id='a'")
   with self.assertRaises(Exception):self.call('fail')
   with db_backend.connection(self.g) as c:self.assertEqual(1000,c.execute("SELECT exp FROM user_xiuxian WHERE user_id='a'").fetchone()[0])
+ def test_reward_write_rejection_preserves_apprentice_and_rolls_back(self):
+  with db_backend.transaction(self.g) as c:c.execute("CREATE TRIGGER skip_reward BEFORE UPDATE ON user_xiuxian BEGIN SELECT RAISE(IGNORE); END")
+  def snapshot():
+   with sqlite3.connect(self.g) as g,sqlite3.connect(self.p) as p:return tuple(g.iterdump()),tuple(p.iterdump())
+  before=snapshot()
+  with self.assertRaises(DomainError) as caught:self.call('blocked')
+  self.assertEqual((caught.exception.code,caught.exception.details['subject']),('mentor_exp_write_rejected','apprentice'))
+  reply=failure_reply('传功',caught.exception)
+  self.assertIn('徒弟',reply);self.assertIn('修为',reply)
+  self.assertEqual(snapshot(),before)

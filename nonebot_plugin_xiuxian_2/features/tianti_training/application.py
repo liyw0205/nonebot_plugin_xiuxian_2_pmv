@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from ...core.player_reasons import reason_text
+
 from dataclasses import asdict, is_dataclass
 from datetime import datetime
 from pathlib import Path
@@ -108,7 +110,7 @@ class TiantiTrainingApplication:
                     outcome = OperationOutcome.rejected(
                         operation_id,
                         action,
-                        messages.get(status, "炼体操作未完成。"),
+                        reason_text(data.get("reason")) or messages.get(status, "炼体操作未完成。"),
                         code=status,
                         data=data,
                         audit_category="tianti_training",

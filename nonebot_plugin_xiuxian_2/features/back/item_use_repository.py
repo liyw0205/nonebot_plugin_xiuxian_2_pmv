@@ -14,6 +14,7 @@ class ItemUseResult:
     item_id: int
     quantity: int
     item_remaining: int = 0
+    reason: str = ""
 
     @property
     def succeeded(self) -> bool:
@@ -29,7 +30,8 @@ class ItemUseResult:
 
     @property
     def message(self) -> str:
-        return "" if self.succeeded else f"物品使用未完成：{self.status}。"
+        from ...core.player_reasons import reason_text
+        return "" if self.succeeded else (reason_text(self.reason or self.status) or "物品使用结果无法识别，请联系管理员核对该请求。")
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -38,6 +40,7 @@ class ItemUseResult:
             "item_id": self.item_id,
             "quantity": self.quantity,
             "item_remaining": self.item_remaining,
+            "reason": self.reason,
         }
 
 
@@ -57,7 +60,7 @@ class ItemUseSqlRepository:
 
     @staticmethod
     def _result(status: str, user_id: str, item_id: int, quantity: int, remaining: int = 0) -> ItemUseResult:
-        return ItemUseResult(status, str(user_id), int(item_id), int(quantity), int(remaining))
+        return ItemUseResult(status, str(user_id), int(item_id), int(quantity), int(remaining), "item_changed" if status == "state_changed" else "")
 
     def apply(
         self,

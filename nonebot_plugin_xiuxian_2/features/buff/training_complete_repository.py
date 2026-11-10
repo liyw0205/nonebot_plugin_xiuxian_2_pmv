@@ -7,9 +7,10 @@ from ...infrastructure.database import DatabaseUnitOfWork
 
 
 class NormalTrainingCompleteResult:
-    def __init__(self, status: str, kind: str = "", create_time: str = "", exp_gain: int = 0, stone_gain: int = 0, hp_gain: int = 0, mp_gain: int = 0) -> None:
+    def __init__(self, status: str, kind: str = "", create_time: str = "", exp_gain: int = 0, stone_gain: int = 0, hp_gain: int = 0, mp_gain: int = 0, reason: str = "") -> None:
         self.status, self.kind, self.create_time = status, kind, create_time
         self.exp_gain, self.stone_gain, self.hp_gain, self.mp_gain = exp_gain, stone_gain, hp_gain, mp_gain
+        self.reason = reason
 
 
 class NormalTrainingCompleteSqlRepository:
@@ -72,7 +73,7 @@ class NormalTrainingCompleteSqlRepository:
             saved = json.loads(str(row["result_json"] or "{}"))
             return NormalTrainingCompleteResult("duplicate", kind, create_time, **saved)
         if str(row["status"]) != "pending":
-            return NormalTrainingCompleteResult("state_changed", kind, create_time)
+            return NormalTrainingCompleteResult("state_changed", kind, create_time, reason="training_resolved")
         values = json.loads(str(row["payload"]))
         expected_exp, expected_stone, reward, exp_cap = map(int, values[2:6])
         multiplier = float(values[6])
@@ -92,7 +93,7 @@ class NormalTrainingCompleteSqlRepository:
             or int(cd["type"] or 0) != 5
             or str(cd["create_time"]) != create_time
         ):
-            return NormalTrainingCompleteResult("state_changed", kind, create_time)
+            return NormalTrainingCompleteResult("state_changed", kind, create_time, reason="exp_changed" if int(user["exp"]) != expected_exp else "stone_changed" if int(user["stone"]) != expected_stone else "activity_type_changed" if int(cd["type"] or 0) != 5 else "training_start_changed")
         if not Path(self.player_database).is_file():
             return NormalTrainingCompleteResult("schema_missing", kind, create_time)
         uow.attach_database(self.player_database, "player_data")

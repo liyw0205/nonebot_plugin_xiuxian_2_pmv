@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from ...core.errors import DomainError
+from ...core.snapshot_reason import first_difference
+
 import json
 from dataclasses import dataclass
 from pathlib import Path
@@ -14,6 +17,8 @@ class ActivityBossRankClaimResult:
     status: str
     name: str = ""
     rank: int = 0
+    reason: str = ""
+    subject: str = ""
 
     @property
     def succeeded(self) -> bool:
@@ -114,7 +119,7 @@ class ActivityBossRankClaimRepository:
         status = str(row["result_status"])
         if replay and status == "applied":
             status = "duplicate"
-        return ActivityBossRankClaimResult(status, str(data.get("name") or ""), int(data.get("rank", 0)))
+        return ActivityBossRankClaimResult(status, str(data.get("name") or ""), int(data.get("rank", 0)), str(data.get("reason") or ("legacy_rejection" if status == "state_changed" else "")), str(data.get("subject") or ""))
 
     def get_result(
         self,
@@ -199,16 +204,16 @@ class ActivityBossRankClaimRepository:
     def _legacy_rank_still_claimable(self, uow: DatabaseUnitOfWork, request: Mapping[str, Any]) -> str:
         rank, status, snapshot = self._rank_snapshot(uow, request)
         if rank != int(request["rank"]):
-            return "state_changed"
+            return "boss_reward_rank_changed"
         if status:
-            return "already_claimed" if status == "already_claimed" else "state_changed"
+            return "already_claimed" if status == "already_claimed" else "boss_reward_" + status
         if (
             snapshot["tier_key"] != request["tier_key"]
             or snapshot["name"] != request["name"]
             or snapshot["reward"] != request["reward"]
             or snapshot["reward_items"] != request["reward_items"]
         ):
-            return "state_changed"
+            return first_difference(tuple(snapshot[key] for key in ("tier_key", "name", "reward", "reward_items")), tuple(request[key] for key in ("tier_key", "name", "reward", "reward_items")), ("boss_reward_tier_changed", "boss_reward_name_changed", "boss_reward_text_changed", "boss_reward_items_changed"))
         return ""
 
     def prepare_operation(self, uow, operation_id, user_id, activity_key, tiers, max_goods_num):
@@ -267,15 +272,17 @@ class ActivityBossRankClaimRepository:
 
     @staticmethod
     def _reject(uow, operation_id: str, status: str, rank: int = 0) -> ActivityBossRankClaimResult:
+        reason = status
+        status = "state_changed" if reason.startswith("boss_reward_") else status
         changed = uow.execute(
             "UPDATE activity_boss_rank_claim_operations SET status='rejected',result_status=?,"
             "result_json=?,updated_at=CURRENT_TIMESTAMP WHERE operation_id=? AND status='started'",
-            (status, _json({"rank": int(rank)}), operation_id),
+            (status, _json({"rank": int(rank), "reason": reason}), operation_id),
         )
         if changed.rowcount != 1:
             raise RuntimeError("cannot reject a non-started activity boss rank operation")
         uow.execute("DELETE FROM activity_boss_rank_claim_reservations WHERE operation_id=?", (operation_id,))
-        return ActivityBossRankClaimResult(status, rank=int(rank))
+        return ActivityBossRankClaimResult(status, rank=int(rank), reason=reason)
 
     @staticmethod
     def _aggregate_rewards(request: Mapping[str, Any]) -> tuple[int, list[dict[str, Any]]]:
@@ -341,8 +348,7 @@ class ActivityBossRankClaimRepository:
                 (stone, request["user_id"]),
             )
             if changed.rowcount != 1:
-                self._reject(game, operation_id, "user_missing", int(request["rank"]))
-                return False
+                raise DomainError("stone_write_rejected", "boss rank reward was not saved")
         columns = {str(row["name"]) for row in game.query_all("PRAGMA table_info(back)")}
         for item in items:
             existing = game.query_one(

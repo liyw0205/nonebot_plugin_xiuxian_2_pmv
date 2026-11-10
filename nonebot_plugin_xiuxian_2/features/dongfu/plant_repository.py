@@ -1,13 +1,18 @@
 from __future__ import annotations
+
+from ...core.errors import DomainError
 import json
 from dataclasses import dataclass
 from pathlib import Path
 from ...infrastructure.database import DatabaseUnitOfWork
 from .operation_schema import operation_databases_ready, operation_schema_ready
+from .plant_diagnostics import plant_diagnosis
 
 @dataclass(frozen=True)
 class DongfuPlantResult:
     status:str
+    reason:str=""
+    subject:str=""
     @property
     def succeeded(self): return self.status in {'planted','duplicate'}
 
@@ -22,15 +27,15 @@ class DongfuPlantSqlRepository:
             uow.attach_database(self.player_database,'player_data')
             if not operation_schema_ready(uow, 'dongfu_plant_operations'): return DongfuPlantResult('schema_missing')
             old=uow.query_one('SELECT payload FROM dongfu_plant_operations WHERE operation_id=?',(operation_id,))
-            if old is not None: return DongfuPlantResult('duplicate' if str(old['payload'])==payload else 'state_changed')
+            if old is not None: return DongfuPlantResult('duplicate') if str(old['payload'])==payload else DongfuPlantResult('state_changed', reason='operation_conflict')
             row=uow.query_one('SELECT built,plant_slots FROM player_data.dongfu_status WHERE user_id=?',(user_id,));
             if row is None or int(row['built'] or 0)!=1: return DongfuPlantResult('dongfu_missing')
             slots=json.loads(str(row['plant_slots'] or ''))
-            if self._canonical(slots)!=expected_slots: return DongfuPlantResult('state_changed')
+            if self._canonical(slots)!=expected_slots: return DongfuPlantResult('state_changed', **plant_diagnosis(slots, expected_slots))
             if slot_no<1 or slot_no>len(slots) or int(slots[slot_no-1].get('seed_id') or 0)>0: return DongfuPlantResult('plot_occupied')
             if uow.query_one('SELECT goods_num FROM back WHERE user_id=? AND goods_id=? AND goods_num>=1',(user_id,seed_id)) is None: return DongfuPlantResult('seed_insufficient')
             slots[slot_no-1].update({'seed_id':seed_id,'seed_name':str(seed_name),'plant_start':str(plant_start),'plant_finish':str(plant_finish),'fertilizer':0})
-            if uow.execute('UPDATE back SET goods_num=goods_num-1 WHERE user_id=? AND goods_id=? AND goods_num>=1',(user_id,seed_id)).rowcount!=1: return DongfuPlantResult('state_changed')
+            if uow.execute('UPDATE back SET goods_num=goods_num-1 WHERE user_id=? AND goods_id=? AND goods_num>=1',(user_id,seed_id)).rowcount!=1: raise DomainError("item_write_rejected", 'plant write count mismatch')
             active=next((s for s in slots if int(s.get('seed_id') or 0)>0),None); legacy=(1,int(active['seed_id']),active.get('plant_start',''),active.get('plant_finish','')) if active else (0,0,'','')
-            if uow.execute('UPDATE player_data.dongfu_status SET plant_slots=?,planting=?,plant_seed_id=?,plant_start=?,plant_finish=? WHERE user_id=?',(self._canonical(slots),*legacy,user_id)).rowcount!=1: return DongfuPlantResult('state_changed')
+            if uow.execute('UPDATE player_data.dongfu_status SET plant_slots=?,planting=?,plant_seed_id=?,plant_start=?,plant_finish=? WHERE user_id=?',(self._canonical(slots),*legacy,user_id)).rowcount!=1: raise DomainError("plant_write_rejected", 'plant write count mismatch')
             uow.execute('INSERT INTO dongfu_plant_operations(operation_id,payload) VALUES(?,?)',(operation_id,payload)); return DongfuPlantResult('planted')

@@ -73,6 +73,7 @@ _INTERNAL_PACKAGES = {
     "qq_compat",
 }
 _NON_PLUGIN_MODULES = {
+    "command_guard",
     "xiuxian_adapter",
     "xiuxian_utils",
     "adapter_compat",

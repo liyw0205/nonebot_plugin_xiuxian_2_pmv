@@ -93,7 +93,7 @@ class MigratedFeatureApplication:
                                 uow, operation_id, ledger_action, ledger_request
                             )
                         if existing is not None:
-                            raise ConflictError("操作正在处理中")
+                            raise ConflictError("操作正在处理中", reason="operation_pending")
                 raw = _result_data(self.repository.execute(operation_id, user_id, action, request))
                 status = str(raw.get("status", "failed")).casefold()
                 raw.setdefault("status", status)
@@ -159,7 +159,7 @@ class MigratedFeatureApplication:
                         previous = existing.outcome()
                         if previous is not None:
                             return previous.replay()
-                        raise ConflictError("操作正在处理中")
+                        raise ConflictError("操作正在处理中", reason="operation_pending")
                 execute_callback = getattr(self.repository, "execute_callback", None)
                 if callable(execute_callback):
                     raw = _result_data(execute_callback(operation_id, user_id, action, request, call))

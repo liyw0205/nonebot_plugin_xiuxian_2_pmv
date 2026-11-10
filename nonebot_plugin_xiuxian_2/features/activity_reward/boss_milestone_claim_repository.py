@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from ...core.errors import DomainError
+
 import json
 from dataclasses import dataclass
 from pathlib import Path
@@ -13,6 +15,8 @@ from ...infrastructure.database import DatabaseUnitOfWork
 class ActivityBossMilestoneClaimResult:
     status: str
     names: tuple[str, ...] = ()
+    reason: str = ""
+    subject: str = ""
 
     @property
     def succeeded(self) -> bool:
@@ -135,7 +139,7 @@ class ActivityBossMilestoneClaimRepository:
         status = str(row["result_status"])
         if replay and status == "applied":
             status = "duplicate"
-        return ActivityBossMilestoneClaimResult(status, tuple(str(name) for name in data.get("names", ())))
+        return ActivityBossMilestoneClaimResult(status, tuple(str(name) for name in data.get("names", ())), str(data.get("reason") or ("legacy_rejection" if status == "state_changed" else "")), str(data.get("subject") or ""))
 
     def get_result(
         self,
@@ -245,7 +249,7 @@ class ActivityBossMilestoneClaimRepository:
                 return self._reject(uow, operation_id, "claim_in_progress"), False
         return None, operation is None
 
-    def _legacy_claimable(self, request: Mapping[str, Any]) -> tuple[bool, bool]:
+    def _legacy_claimable(self, request: Mapping[str, Any]) -> tuple[bool, str]:
         with DatabaseUnitOfWork(self.activity_database, read_only=True) as uow:
             unlocked_rows = uow.query_all(
                 "SELECT milestone_key FROM activity_boss_milestone WHERE activity_key=?",
@@ -253,19 +257,19 @@ class ActivityBossMilestoneClaimRepository:
             )
             unlocked = {str(row["milestone_key"]) for row in unlocked_rows}
             if not unlocked:
-                return False, False
+                return False, "not_unlocked"
             claimed_rows = uow.query_all(
                 "SELECT milestone_key FROM activity_boss_milestone_claim "
                 "WHERE activity_key=? AND user_id=?",
                 (request["activity_key"], request["user_id"]),
             )
             claimed = {str(row["milestone_key"]) for row in claimed_rows}
-            if any(
-                str(milestone["key"]) not in unlocked or str(milestone["key"]) in claimed
-                for milestone in request["milestones"]
-            ):
-                return False, True
-        return True, True
+            for milestone in request["milestones"]:
+                if str(milestone["key"]) not in unlocked:
+                    return False, "boss_milestone_unlock_changed"
+                if str(milestone["key"]) in claimed:
+                    return False, "boss_milestone_claimed"
+        return True, ""
 
     def _select_claimable(
         self, request: Mapping[str, Any]
@@ -301,10 +305,12 @@ class ActivityBossMilestoneClaimRepository:
 
     @staticmethod
     def _reject(uow, operation_id: str, status: str) -> ActivityBossMilestoneClaimResult:
+        reason = status
+        status = "state_changed" if reason.startswith("boss_milestone_") else status
         changed = uow.execute(
             "UPDATE activity_boss_milestone_claim_operations SET status='rejected',result_status=?,"
-            "result_json='{}',updated_at=CURRENT_TIMESTAMP WHERE operation_id=? AND status='started'",
-            (status, operation_id),
+            "result_json=?,updated_at=CURRENT_TIMESTAMP WHERE operation_id=? AND status='started'",
+            (status, _json({"reason": reason}), operation_id),
         )
         if changed.rowcount != 1:
             raise RuntimeError("cannot reject a non-started activity boss milestone operation")
@@ -312,7 +318,7 @@ class ActivityBossMilestoneClaimRepository:
             "DELETE FROM activity_boss_milestone_claim_reservations WHERE operation_id=?",
             (operation_id,),
         )
-        return ActivityBossMilestoneClaimResult(status)
+        return ActivityBossMilestoneClaimResult(status, reason=reason)
 
     def claim(
         self,
@@ -367,9 +373,9 @@ class ActivityBossMilestoneClaimRepository:
                 if operation is None:
                     raise RuntimeError("activity boss milestone operation is missing")
                 if operation["status"] == "started":
-                    claimable, unlocked = self._legacy_claimable(request)
+                    claimable, reason = self._legacy_claimable(request)
                     if not claimable:
-                        return self._reject(uow, operation_id, "state_changed" if unlocked else "not_unlocked")
+                        return self._reject(uow, operation_id, reason)
                     if uow.query_one("SELECT 1 AS present FROM user_xiuxian WHERE user_id=?", (request["user_id"],)) is None:
                         return self._reject(uow, operation_id, "user_missing")
                     for item in request["items"]:
@@ -386,7 +392,7 @@ class ActivityBossMilestoneClaimRepository:
                             (int(request["stone"]), request["user_id"]),
                         )
                         if changed.rowcount != 1:
-                            return self._reject(uow, operation_id, "user_missing")
+                            raise DomainError("stone_write_rejected", "boss milestone reward was not saved")
                     columns = {str(row["name"]) for row in uow.query_all("PRAGMA table_info(back)")}
                     for item in request["items"]:
                         existing = uow.query_one(

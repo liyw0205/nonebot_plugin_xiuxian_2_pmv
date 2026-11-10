@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from ...core.errors import DomainError
+
 import json
 import sqlite3
 import time
@@ -22,10 +24,16 @@ from .schema import (
 )
 
 
+def _pet_snapshot_reason(current, expected):
+    reasons = ("pet_changed", "pet_species_changed", "pet_stars_changed", "pet_exp_changed", "pet_total_exp_changed", "skill_changed", "active_changed")
+    return next(reason for left, right, reason in zip(current, expected, reasons) if left != right)
+
+
 @dataclass(frozen=True)
 class PetActiveSwitchResult:
     status: str
     active_uid: str = ""
+    reason: str = ""
 
     @property
     def succeeded(self) -> bool:
@@ -68,15 +76,19 @@ class PetActiveSwitchSqlRepository:
             )
             current_uids = tuple(str(row["uid"]) for row in current)
             actual_active = current_uids[0] if len(current_uids) == 1 else ""
-            if len(current_uids) > 1 or actual_active != expected_active_uid:
-                return PetActiveSwitchResult("state_changed")
+            if len(current_uids) > 1:
+                return PetActiveSwitchResult("state_changed", reason="active_inconsistent")
+            if actual_active != expected_active_uid:
+                return PetActiveSwitchResult("state_changed", reason="active_changed")
             if target_uid == actual_active:
                 return PetActiveSwitchResult("already_active", target_uid)
             if target_uid == travel_pet_uid:
                 return PetActiveSwitchResult("pet_traveling")
             meta = uow.query_one("SELECT active_uid FROM player_pet WHERE user_id=?", (user_id,))
-            if meta is None or str(meta["active_uid"] or "") != expected_active_uid:
-                return PetActiveSwitchResult("state_changed")
+            if meta is None:
+                return PetActiveSwitchResult("state_changed", reason="meta_missing")
+            if str(meta["active_uid"] or "") != expected_active_uid:
+                return PetActiveSwitchResult("state_changed", reason="active_changed")
             now = int(time.time())
             uow.execute(
                 "UPDATE player_pet_item SET is_active=0,updated_at=? WHERE user_id=? AND COALESCE(is_active,0)=1",
@@ -107,6 +119,7 @@ class PetFeedResult:
     stars: int = 0
     exp: int = 0
     total_exp: int = 0
+    reason: str = ""
 
     @property
     def succeeded(self) -> bool:
@@ -137,13 +150,19 @@ class PetFeedSqlRepository:
                 return PetFeedResult(
                     "duplicate" if str(old["payload"]) == payload else "state_changed",
                     int(old["stars"]), int(old["exp"]), int(old["total_exp"]),
+                    reason="" if str(old["payload"]) == payload else "operation_conflict",
                 )
             pet = uow.query_one(
                 "SELECT stars,exp,total_exp,is_active FROM player_data.player_pet_item WHERE user_id=? AND uid=?",
                 (user_id, uid),
             )
-            if pet is None or tuple(int(pet[field]) for field in ("stars", "exp", "total_exp")) != expected or int(pet["is_active"]) != 1:
-                return PetFeedResult("state_changed")
+            if pet is None:
+                return PetFeedResult("state_changed", reason="pet_missing")
+            if int(pet["is_active"]) != 1:
+                return PetFeedResult("state_changed", reason="pet_inactive")
+            if tuple(int(pet[field]) for field in ("stars", "exp", "total_exp")) != expected:
+                reason = next(reason for field, value, reason in zip(("stars", "exp", "total_exp"), expected, ("pet_stars_changed", "pet_exp_changed", "pet_total_exp_changed")) if int(pet[field]) != value)
+                return PetFeedResult("state_changed", reason=reason)
             item = uow.query_one("SELECT goods_num FROM back WHERE user_id=? AND goods_id=?", (user_id, item_id))
             if item is None or int(item["goods_num"]) < count:
                 return PetFeedResult("item_missing")
@@ -162,6 +181,7 @@ class PetFeedSqlRepository:
 @dataclass(frozen=True)
 class PetTravelStartResult:
     status: str
+    reason: str = ""
 
     @property
     def succeeded(self) -> bool:
@@ -184,18 +204,20 @@ class PetTravelStartSqlRepository:
                 return PetTravelStartResult(SCHEMA_MISSING)
             previous = uow.query_one("SELECT payload FROM pet_travel_start_operations WHERE operation_id=?", (operation_id,))
             if previous is not None:
-                return PetTravelStartResult("duplicate" if str(previous["payload"]) == payload else "state_changed")
+                return PetTravelStartResult("duplicate" if str(previous["payload"]) == payload else "state_changed", reason="" if str(previous["payload"]) == payload else "operation_conflict")
             meta = uow.query_one("SELECT travel FROM player_pet WHERE user_id=?", (user_id,))
             if meta is None:
                 return PetTravelStartResult("user_missing")
             current = None if meta["travel"] is None else json.dumps(json.loads(str(meta["travel"])), ensure_ascii=False, sort_keys=True)
             if current != expected_json:
-                return PetTravelStartResult("state_changed")
+                return PetTravelStartResult("state_changed", reason="travel_changed")
             pet = uow.query_one("SELECT is_active FROM player_pet_item WHERE user_id=? AND uid=?", (user_id, pet_uid))
-            if pet is None or int(pet["is_active"]) != 1:
-                return PetTravelStartResult("pet_changed")
+            if pet is None:
+                return PetTravelStartResult("pet_changed", reason="pet_missing")
+            if int(pet["is_active"]) != 1:
+                return PetTravelStartResult("pet_changed", reason="pet_inactive")
             if uow.execute("UPDATE player_pet SET travel=? WHERE user_id=? AND travel IS NULL", (travel_json, user_id)).rowcount != 1:
-                return PetTravelStartResult("state_changed")
+                return PetTravelStartResult("state_changed", reason="travel_changed")
             uow.execute("INSERT INTO pet_travel_start_operations(operation_id,payload) VALUES(?,?)", (operation_id, payload))
             return PetTravelStartResult("applied")
 
@@ -207,6 +229,7 @@ class PetTravelClaimResult:
     exp: int = 0
     items: tuple[tuple[int, int], ...] = ()
     effects_event_id: str | None = None
+    reason: str = ""
 
     @property
     def succeeded(self) -> bool:
@@ -262,15 +285,15 @@ class PetTravelClaimSqlRepository:
                     if status == "duplicate" and self.outbox.get(uow, effects_event_id) is not None
                     else None
                 )
-                return PetTravelClaimResult(status, stone if status == "duplicate" else 0, exp if status == "duplicate" else 0, tuple((row[0], row[3]) for row in rewards) if status == "duplicate" else (), event_id)
+                return PetTravelClaimResult(status, stone if status == "duplicate" else 0, exp if status == "duplicate" else 0, tuple((row[0], row[3]) for row in rewards) if status == "duplicate" else (), event_id, reason="" if status == "duplicate" else "operation_conflict")
             if uow.query_one("SELECT 1 AS present FROM user_xiuxian WHERE user_id=?", (user_id,)) is None:
                 return PetTravelClaimResult("user_missing")
             meta = uow.query_one("SELECT travel FROM player_data.player_pet WHERE user_id=?", (user_id,))
             if meta is None:
-                return PetTravelClaimResult("state_changed")
+                return PetTravelClaimResult("state_changed", reason="meta_missing")
             current = None if meta["travel"] is None else json.dumps(json.loads(str(meta["travel"])), ensure_ascii=False, sort_keys=True, separators=(",", ":"))
             if current != travel_json:
-                return PetTravelClaimResult("state_changed")
+                return PetTravelClaimResult("state_changed", reason="travel_changed")
             pet_uid = str(expected_travel.get("pet_uid", ""))
             if uow.query_one("SELECT 1 AS present FROM player_data.player_pet_item WHERE user_id=? AND uid=?", (user_id, pet_uid)) is None:
                 return PetTravelClaimResult("pet_missing")
@@ -279,7 +302,7 @@ class PetTravelClaimSqlRepository:
                 if (int(inventory["goods_num"]) if inventory else 0) + amount > max_goods_num:
                     return PetTravelClaimResult("inventory_full")
             if uow.execute("UPDATE player_data.player_pet SET travel=NULL WHERE user_id=? AND travel=?", (user_id, meta["travel"])).rowcount != 1:
-                return PetTravelClaimResult("state_changed")
+                return PetTravelClaimResult("state_changed", reason="travel_changed")
             uow.execute("UPDATE user_xiuxian SET stone=COALESCE(stone,0)+?,exp=COALESCE(exp,0)+? WHERE user_id=?", (stone, exp, user_id))
             for item_id, name, item_type, amount in rewards:
                 uow.execute(
@@ -343,6 +366,7 @@ class PetHatchResult:
     pets: tuple = ()
     updated_meta: tuple = ()
     bag_limit: int = 0
+    reason: str = ""
 
     @property
     def succeeded(self) -> bool:
@@ -393,10 +417,12 @@ class PetHatchSqlRepository:
         result_json = encode_receipt(normalized, updated_meta, bag_limit)
         with DatabaseUnitOfWork(self.game_database, immediate=True) as uow:
             uow.attach_database(self.player_database, "player_data")
+            if not operations_ready(uow, "pet_hatch_operations", frozenset({"operation_id", "payload", "result_json"})):
+                return PetHatchResult(SCHEMA_MISSING)
             old = uow.query_one("SELECT payload,result_json FROM pet_hatch_operations WHERE operation_id=?", (operation_id,))
             if old is not None:
                 if str(old["payload"]) != payload:
-                    return PetHatchResult("state_changed")
+                    return PetHatchResult("state_changed", reason="operation_conflict")
                 try:
                     pets, stored_meta, stored_limit = decode_receipt(old["result_json"])
                 except ReceiptDecodeError:
@@ -408,15 +434,19 @@ class PetHatchSqlRepository:
             if user is None:
                 return PetHatchResult("user_missing")
             if int(user["stone"] or 0) != expected_stone:
-                return PetHatchResult("state_changed")
+                return PetHatchResult("state_changed", reason="stone_changed")
             if expected_stone < cost:
                 return PetHatchResult("stone_missing")
             meta = uow.query_one("SELECT active_uid,egg_pity_count,egg_pity_no_mythic_count,travel FROM player_data.player_pet WHERE user_id=?", (user_id,))
             expected = list(expected_meta or []) + [None] * 4
             actual = ["" if meta is None else str(meta["active_uid"] or ""), 0 if meta is None else int(meta["egg_pity_count"] or 0), 0 if meta is None else int(meta["egg_pity_no_mythic_count"] or 0), None if meta is None else self._normalize_travel(meta["travel"])]
             expected[0], expected[3] = str(expected[0] or ""), self._normalize_travel(expected[3])
-            if actual != expected[:4]:
-                return PetHatchResult("state_changed")
+            if actual[0] != expected[0]:
+                return PetHatchResult("state_changed", reason="active_changed")
+            if actual[1:3] != expected[1:3]:
+                return PetHatchResult("state_changed", reason="pity_changed")
+            if actual[3] != expected[3]:
+                return PetHatchResult("state_changed", reason="travel_changed")
             owned = uow.query_one("SELECT COUNT(*) AS count FROM player_data.player_pet_item WHERE user_id=?", (user_id,))
             if int(owned["count"]) + len(normalized) > bag_limit:
                 return PetHatchResult("inventory_full")
@@ -440,11 +470,11 @@ class PetHatchSqlRepository:
                     return PetHatchResult(UID_CONFLICT)
                 raise
             if uow.execute("UPDATE user_xiuxian SET stone=stone-? WHERE user_id=? AND stone=?", (cost, user_id, expected_stone)).rowcount != 1:
-                return PetHatchResult("state_changed")
+                raise DomainError("stone_write_rejected", "stone row count changed inside hatch transaction")
             if meta is None:
                 uow.execute("INSERT INTO player_data.player_pet(user_id,active_uid,egg_pity_count,egg_pity_no_mythic_count,travel) VALUES(?,?,?,?,NULL)", (user_id, updated_meta[0], updated_meta[1], updated_meta[2]))
             elif uow.execute("UPDATE player_data.player_pet SET active_uid=?,egg_pity_count=?,egg_pity_no_mythic_count=? WHERE user_id=?", (*updated_meta, user_id)).rowcount != 1:
-                return PetHatchResult("state_changed")
+                raise DomainError("pet_meta_write_rejected", "pet metadata row count changed inside hatch transaction")
             uow.execute("INSERT INTO pet_hatch_operations(operation_id,payload,result_json) VALUES(?,?,?)", (operation_id, payload, result_json))
             return PetHatchResult("applied", cost, normalized, tuple(updated_meta), bag_limit)
 
@@ -454,6 +484,7 @@ class PetReleaseResult:
     status: str
     refund: int = 0
     released_uids: tuple[str, ...] = ()
+    reason: str = ""
 
     @property
     def succeeded(self) -> bool:
@@ -481,26 +512,32 @@ class PetReleaseSqlRepository:
                 return PetReleaseResult(SCHEMA_MISSING)
             old = uow.query_one("SELECT payload,refund,released_uids FROM pet_release_operations WHERE operation_id=?", (operation_id,))
             if old is not None:
-                return PetReleaseResult("duplicate" if str(old["payload"]) == payload else "state_changed", int(old["refund"]) if str(old["payload"]) == payload else 0, tuple(json.loads(old["released_uids"])) if str(old["payload"]) == payload else ())
+                return PetReleaseResult("duplicate" if str(old["payload"]) == payload else "state_changed", int(old["refund"]) if str(old["payload"]) == payload else 0, tuple(json.loads(old["released_uids"])) if str(old["payload"]) == payload else (), reason="" if str(old["payload"]) == payload else "operation_conflict")
             placeholders = ",".join("?" for _ in pets)
             uids = tuple(pet[0] for pet in pets)
             rows = uow.query_all(f"SELECT uid,COALESCE(total_exp,0) AS total_exp,COALESCE(is_active,0) AS is_active FROM player_data.player_pet_item WHERE user_id=? AND uid IN ({placeholders})", (user_id, *uids))
             current = tuple(sorted((str(row["uid"]), int(row["total_exp"]), int(row["is_active"])) for row in rows))
+            if len(current) != len(pets):
+                return PetReleaseResult("state_changed", reason="pet_missing")
+            if any(a[1] != b[1] for a, b in zip(current, pets)):
+                return PetReleaseResult("state_changed", reason="pet_total_exp_changed")
             if current != pets:
-                return PetReleaseResult("state_changed")
+                return PetReleaseResult("state_changed", reason="active_changed")
             if not allow_active and any(pet[2] for pet in pets):
                 return PetReleaseResult("active_pet")
             active_uids = tuple(pet[0] for pet in pets if pet[2])
             if active_uids:
                 meta = uow.query_one("SELECT active_uid FROM player_data.player_pet WHERE user_id=?", (user_id,))
-                if meta is None or str(meta["active_uid"] or "") != active_uids[0]:
-                    return PetReleaseResult("state_changed")
+                if meta is None:
+                    return PetReleaseResult("state_changed", reason="meta_missing")
+                if str(meta["active_uid"] or "") != active_uids[0]:
+                    return PetReleaseResult("state_changed", reason="active_changed")
             inventory = uow.query_one("SELECT COALESCE(goods_num,0) AS goods_num FROM back WHERE user_id=? AND goods_id=?", (user_id, refund_item))
             if (int(inventory["goods_num"]) if inventory else 0) + refund > max_goods:
                 return PetReleaseResult("inventory_full")
             deleted = uow.execute(f"DELETE FROM player_data.player_pet_item WHERE user_id=? AND uid IN ({placeholders})", (user_id, *uids)).rowcount
             if deleted != len(pets):
-                return PetReleaseResult("state_changed")
+                raise DomainError("pet_release_write_rejected", "pet row count changed inside release transaction")
             if active_uids and uow.execute("UPDATE player_data.player_pet SET active_uid=NULL,active=NULL WHERE user_id=? AND active_uid=?", (user_id, active_uids[0])).rowcount != 1:
                 raise RuntimeError("active pet metadata changed")
             if refund:
@@ -514,6 +551,7 @@ class PetFusionBreakthroughResult:
     status: str
     stars: int = 0
     exp: int = 0
+    reason: str = ""
 
     @property
     def succeeded(self) -> bool:
@@ -537,19 +575,27 @@ class PetFusionBreakthroughSqlRepository:
                 return PetFusionBreakthroughResult(SCHEMA_MISSING)
             old = uow.query_one("SELECT payload,stars,exp FROM pet_fusion_breakthrough_operations WHERE operation_id=?", (operation_id,))
             if old is not None:
-                return PetFusionBreakthroughResult("duplicate" if str(old["payload"]) == payload else "state_changed", int(old["stars"]) if str(old["payload"]) == payload else 0, int(old["exp"]) if str(old["payload"]) == payload else 0)
+                return PetFusionBreakthroughResult("duplicate" if str(old["payload"]) == payload else "state_changed", int(old["stars"]) if str(old["payload"]) == payload else 0, int(old["exp"]) if str(old["payload"]) == payload else 0, reason="" if str(old["payload"]) == payload else "operation_conflict")
             current = uow.query_one("SELECT uid,pet_id,stars,exp,total_exp,COALESCE(skill_id,''),is_active FROM player_pet_item WHERE user_id=? AND uid=?", (user_id, str(main[0])))
-            if current is None or tuple(current.values()) != main or int(current["is_active"]) != 1:
-                return PetFusionBreakthroughResult("state_changed")
+            if current is None:
+                return PetFusionBreakthroughResult("state_changed", reason="pet_missing")
+            if int(current["is_active"]) != 1:
+                return PetFusionBreakthroughResult("state_changed", reason="pet_inactive")
+            if tuple(current.values()) != main:
+                return PetFusionBreakthroughResult("state_changed", reason=_pet_snapshot_reason(tuple(current.values()), main))
             placeholders = ",".join("?" for _ in materials)
             uids = tuple(str(row[0]) for row in materials)
             rows = uow.query_all(f"SELECT uid,pet_id,stars,exp,total_exp,COALESCE(skill_id,''),is_active FROM player_pet_item WHERE user_id=? AND uid IN ({placeholders})", (user_id, *uids))
-            if tuple(sorted(tuple(row.values()) for row in rows)) != materials or any(int(row["is_active"]) for row in rows):
-                return PetFusionBreakthroughResult("state_changed")
+            if len(rows) != len(materials):
+                return PetFusionBreakthroughResult("state_changed", reason="material_missing")
+            if any(int(row["is_active"]) for row in rows):
+                return PetFusionBreakthroughResult("state_changed", reason="material_active")
+            if tuple(sorted(tuple(row.values()) for row in rows)) != materials:
+                return PetFusionBreakthroughResult("state_changed", reason="material_changed")
             if uow.execute(f"DELETE FROM player_pet_item WHERE user_id=? AND uid IN ({placeholders})", (user_id, *uids)).rowcount != len(materials):
-                return PetFusionBreakthroughResult("state_changed")
+                raise DomainError("pet_material_write_rejected", "material row count changed inside fusion transaction")
             if uow.execute("UPDATE player_pet_item SET stars=?,exp=? WHERE user_id=? AND uid=? AND stars=? AND exp=? AND is_active=1", (updated_stars, updated_exp, user_id, str(main[0]), int(main[2]), int(main[3]))).rowcount != 1:
-                return PetFusionBreakthroughResult("state_changed")
+                raise DomainError("pet_fusion_write_rejected", "main pet row count changed inside fusion transaction")
             uow.execute("INSERT INTO pet_fusion_breakthrough_operations(operation_id,payload,stars,exp) VALUES(?,?,?,?)", (operation_id, payload, updated_stars, updated_exp))
             return PetFusionBreakthroughResult("applied", updated_stars, updated_exp)
 
@@ -558,6 +604,7 @@ class PetFusionBreakthroughSqlRepository:
 class PetSkillRerollResult:
     status: str
     skill_id: str = ""
+    reason: str = ""
 
     @property
     def succeeded(self) -> bool:
@@ -581,17 +628,19 @@ class PetSkillRerollSqlRepository:
                 return PetSkillRerollResult(SCHEMA_MISSING)
             old = uow.query_one("SELECT payload,skill_id FROM pet_skill_reroll_operations WHERE operation_id=?", (operation_id,))
             if old is not None:
-                return PetSkillRerollResult("duplicate" if str(old["payload"]) == payload else "state_changed", str(old["skill_id"]) if str(old["payload"]) == payload else "")
+                return PetSkillRerollResult("duplicate" if str(old["payload"]) == payload else "state_changed", str(old["skill_id"]) if str(old["payload"]) == payload else "", reason="" if str(old["payload"]) == payload else "operation_conflict")
             pet = uow.query_one("SELECT uid,pet_id,stars,exp,total_exp,COALESCE(skill_id,'') AS skill_id,is_active FROM player_data.player_pet_item WHERE user_id=? AND uid=?", (user_id, str(expected_pet[0])))
-            if pet is None or tuple(pet.values()) != expected_pet:
-                return PetSkillRerollResult("state_changed")
+            if pet is None:
+                return PetSkillRerollResult("state_changed", reason="pet_missing")
+            if tuple(pet.values()) != expected_pet:
+                return PetSkillRerollResult("state_changed", reason=_pet_snapshot_reason(tuple(pet.values()), expected_pet))
             item = uow.query_one("SELECT goods_num FROM back WHERE user_id=? AND goods_id=?", (user_id, item_id))
             if item is None or int(item["goods_num"]) < 1:
                 return PetSkillRerollResult("item_missing")
             if uow.execute("UPDATE back SET goods_num=goods_num-1 WHERE user_id=? AND goods_id=? AND goods_num>=1", (user_id, item_id)).rowcount != 1:
-                return PetSkillRerollResult("state_changed")
+                raise DomainError("item_write_rejected", "item row count changed inside reroll transaction")
             if uow.execute("UPDATE player_data.player_pet_item SET skill_id=? WHERE user_id=? AND uid=? AND COALESCE(skill_id,'')=?", (new_skill_id, user_id, str(expected_pet[0]), str(expected_pet[5]))).rowcount != 1:
-                return PetSkillRerollResult("state_changed")
+                raise DomainError("pet_skill_write_rejected", "pet row count changed inside reroll transaction")
             uow.execute("INSERT INTO pet_skill_reroll_operations(operation_id,payload,skill_id) VALUES(?,?,?)", (operation_id, payload, new_skill_id))
             return PetSkillRerollResult("applied", new_skill_id)
 
@@ -600,6 +649,7 @@ class PetSkillRerollSqlRepository:
 class PetSkillReplaceResult:
     status: str
     skill_id: str = ""
+    reason: str = ""
 
     @property
     def succeeded(self) -> bool:
@@ -623,6 +673,8 @@ class PetSkillReplaceSqlRepository:
             separators=(",", ":"),
         )
         with DatabaseUnitOfWork(self.database, immediate=True) as uow:
+            if not operations_ready(uow, "pet_skill_replace_operations", REROLL_COLUMNS):
+                return PetSkillReplaceResult(SCHEMA_MISSING)
             old = uow.query_one(
                 "SELECT payload,skill_id FROM pet_skill_replace_operations WHERE operation_id=?",
                 (operation_id,),
@@ -631,20 +683,23 @@ class PetSkillReplaceSqlRepository:
                 return PetSkillReplaceResult(
                     "duplicate" if str(old["payload"]) == payload else "state_changed",
                     str(old["skill_id"]) if str(old["payload"]) == payload else "",
+                    reason="" if str(old["payload"]) == payload else "operation_conflict",
                 )
             pet = uow.query_one(
                 "SELECT COALESCE(skill_id,'') AS skill_id FROM player_pet_item WHERE user_id=? AND uid=?",
                 (user_id, uid),
             )
-            if pet is None or str(pet["skill_id"] or "") != expected_skill_id:
-                return PetSkillReplaceResult("state_changed")
+            if pet is None:
+                return PetSkillReplaceResult("state_changed", reason="pet_missing")
+            if str(pet["skill_id"] or "") != expected_skill_id:
+                return PetSkillReplaceResult("state_changed", reason="skill_changed")
             changed = uow.execute(
                 "UPDATE player_pet_item SET skill_id=?,updated_at=? "
                 "WHERE user_id=? AND uid=? AND COALESCE(skill_id,'')=?",
                 (new_skill_id, int(self.clock.now().timestamp()), user_id, uid, expected_skill_id),
             )
             if changed.rowcount != 1:
-                return PetSkillReplaceResult("state_changed")
+                raise DomainError("pet_skill_write_rejected", "pet row count changed inside skill replace transaction")
             uow.execute(
                 "INSERT INTO pet_skill_replace_operations(operation_id,payload,skill_id) VALUES(?,?,?)",
                 (operation_id, payload, new_skill_id),

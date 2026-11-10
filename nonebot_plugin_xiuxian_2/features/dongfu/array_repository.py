@@ -1,4 +1,6 @@
 from __future__ import annotations
+
+from ...core.errors import DomainError
 from dataclasses import dataclass
 from pathlib import Path
 from ...infrastructure.database import DatabaseUnitOfWork
@@ -7,6 +9,7 @@ from .operation_schema import operation_databases_ready, operation_schema_ready
 @dataclass(frozen=True)
 class DongfuArrayUpgradeResult:
     status:str; level:int=0
+    reason:str=""
     @property
     def succeeded(self): return self.status in {'upgraded','duplicate'}
 
@@ -19,14 +22,14 @@ class DongfuArrayUpgradeSqlRepository:
             uow.attach_database(self.player_database,'player_data')
             if not operation_schema_ready(uow, 'dongfu_array_upgrade_operations'): return DongfuArrayUpgradeResult('schema_missing')
             old=uow.query_one('SELECT payload,level FROM dongfu_array_upgrade_operations WHERE operation_id=?',(operation_id,))
-            if old is not None: return DongfuArrayUpgradeResult('duplicate',int(old['level'])) if str(old['payload'])==payload else DongfuArrayUpgradeResult('state_changed')
+            if old is not None: return DongfuArrayUpgradeResult('duplicate',int(old['level'])) if str(old['payload'])==payload else DongfuArrayUpgradeResult('state_changed', reason='operation_conflict')
             user=uow.query_one('SELECT stone FROM user_xiuxian WHERE user_id=?',(user_id,)); row=uow.query_one('SELECT built,array_level FROM player_data.dongfu_status WHERE user_id=?',(user_id,))
             if user is None: return DongfuArrayUpgradeResult('user_missing')
             if row is None or int(row['built'] or 0)!=1: return DongfuArrayUpgradeResult('dongfu_missing')
-            if int(row['array_level'] or 0)!=expected_level: return DongfuArrayUpgradeResult('state_changed')
+            if int(row['array_level'] or 0)!=expected_level: return DongfuArrayUpgradeResult('state_changed', reason='array_level_changed')
             if int(user['stone'] or 0)<stone_cost: return DongfuArrayUpgradeResult('stone_insufficient')
             if item_cost and (uow.query_one('SELECT goods_num FROM back WHERE user_id=? AND goods_id=? AND goods_num>=?',(user_id,item_id,item_cost)) is None): return DongfuArrayUpgradeResult('item_insufficient')
-            if uow.execute('UPDATE user_xiuxian SET stone=stone-? WHERE user_id=? AND stone>=?',(stone_cost,user_id,stone_cost)).rowcount!=1: return DongfuArrayUpgradeResult('state_changed')
-            if item_cost and uow.execute('UPDATE back SET goods_num=goods_num-? WHERE user_id=? AND goods_id=? AND goods_num>=?',(item_cost,user_id,item_id,item_cost)).rowcount!=1: return DongfuArrayUpgradeResult('state_changed')
-            if uow.execute('UPDATE player_data.dongfu_status SET array_level=? WHERE user_id=? AND array_level=?',(next_level,user_id,expected_level)).rowcount!=1: return DongfuArrayUpgradeResult('state_changed')
+            if uow.execute('UPDATE user_xiuxian SET stone=stone-? WHERE user_id=? AND stone>=?',(stone_cost,user_id,stone_cost)).rowcount!=1: raise DomainError("stone_write_rejected", 'array write count mismatch')
+            if item_cost and uow.execute('UPDATE back SET goods_num=goods_num-? WHERE user_id=? AND goods_id=? AND goods_num>=?',(item_cost,user_id,item_id,item_cost)).rowcount!=1: raise DomainError("item_write_rejected", 'array write count mismatch')
+            if uow.execute('UPDATE player_data.dongfu_status SET array_level=? WHERE user_id=? AND array_level=?',(next_level,user_id,expected_level)).rowcount!=1: raise DomainError("array_write_rejected", 'array write count mismatch')
             uow.execute('INSERT INTO dongfu_array_upgrade_operations(operation_id,payload,level) VALUES(?,?,?)',(operation_id,payload,next_level)); return DongfuArrayUpgradeResult('upgraded',next_level)

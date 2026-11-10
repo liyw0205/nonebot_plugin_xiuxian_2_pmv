@@ -6,6 +6,7 @@ from datetime import datetime
 from ..on_compat import on_command, on_regex
 from nonebot.params import CommandArg, RegexGroup
 from nonebot.log import logger
+from ..command_guard import result_failure
 from ..adapter_compat import (
     Bot,
     Message,
@@ -503,13 +504,13 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         await handle_send(bot, event, f"{item_info['name']}持有数量已达上限！")
         await tower_buy.finish()
     if purchase_status == "state_changed":
-        await handle_send(bot, event, "兑换未完成：活动进度已更新，请重新兑换，请重新兑换。")
+        await handle_send(bot, event, result_failure("通天塔兑换", purchase_data))
         await tower_buy.finish()
     if purchase_status == "user_missing":
         await handle_send(bot, event, "未找到道友数据，通天塔兑换失败！")
         await tower_buy.finish()
     if not purchase_outcome.ok:
-        await handle_send(bot, event, "通天塔兑换失败，请重试！")
+        await handle_send(bot, event, result_failure("通天塔兑换", purchase_data))
         await tower_buy.finish()
 
     msg = f"成功兑换{item_info['name']}×{purchase_quantity}，消耗{purchase_cost}积分！"

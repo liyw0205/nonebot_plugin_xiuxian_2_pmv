@@ -4,6 +4,7 @@ import asyncio
 from datetime import datetime
 from pathlib import Path
 from ..on_compat import on_command
+from ..command_guard import guard_command, result_failure
 from ..adapter_compat import (
     Bot,
     GROUP,
@@ -136,6 +137,7 @@ natal_awaken = on_command(
 
 
 @natal_awaken.handle(parameterless=[Cooldown(cd_time=5)])
+@guard_command("觉醒本命法宝")
 async def natal_awaken_handler(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, state: T_State):
     """
     处理觉醒本命法宝命令。
@@ -177,7 +179,7 @@ async def natal_awaken_handler(bot: Bot, event: GroupMessageEvent | PrivateMessa
         )
         awakened_data = awakened.data or {}
         awakened_status = str(awakened_data.get("status", awakened.code))
-        if awakened.replayed or awakened_status == "duplicate":
+        if awakened.ok and (awakened.replayed or awakened_status == "duplicate"):
             await handle_send(
                 bot, event,
                 f"恭喜！本命法宝觉醒成功！\n形态已固化，效果类型：{awakened_data.get('effect_type', 0)}\n该觉醒请求已经处理，无需重复提交。",
@@ -189,11 +191,10 @@ async def natal_awaken_handler(bot: Bot, event: GroupMessageEvent | PrivateMessa
                 "treasure_missing": "法宝数据结构尚未准备完成",
                 "schema_missing": "本命法宝数据尚未就绪，请稍后重试",
                 "already_awakened": "本命法宝已经觉醒",
-                "state_changed": "本命法宝操作未结算：法宝当前状态已更新",
             }
-            reason = failure_reasons.get(awakened_status, "觉醒事务未能完成")
+            reason = result_failure("觉醒", {**awakened_data, "status":awakened_status}, messages=failure_reasons)
             await handle_send(
-                bot, event, f"本命法宝觉醒失败：{reason}。",
+                bot, event, reason,
                 md_type="法宝", k1="法宝", v1="我的本命法宝", k2="帮助", v2="本命法宝帮助", k3="觉醒", v3="觉醒本命法宝"
             )
             await natal_awaken.finish()
@@ -227,6 +228,7 @@ natal_reawaken = on_command(
 
 
 @natal_reawaken.handle(parameterless=[Cooldown(cd_time=5)])
+@guard_command("重塑本命法宝")
 async def natal_reawaken_handler(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """
     处理重塑本命法宝命令。
@@ -279,12 +281,11 @@ async def natal_reawaken_handler(bot: Bot, event: GroupMessageEvent | PrivateMes
             "treasure_missing": "尚未觉醒本命法宝或法宝数据不完整",
             "item_insufficient": "神秘经书数量不足",
             "inventory_full": "神秘经书已达到背包上限",
-            "state_changed": "强化/洗练未结算：法宝当前状态已更新",
             "schema_missing": "本命法宝数据尚未就绪，请稍后重试",
         }
-        reason = failure_reasons.get(reawakened.status, "重塑事务未能完成")
+        reason = result_failure("重塑", reawakened, messages=failure_reasons)
         await handle_send(
-            bot, event, f"重塑失败：{reason}。",
+            bot, event, reason,
             md_type="法宝", k1="法宝", v1="我的本命法宝", k2="升阶", v2="本命法宝升阶", k3="铭刻", v3="铭刻道纹"
         )
         return
@@ -340,6 +341,7 @@ natal_upgrade = on_command(
 
 
 @natal_upgrade.handle(parameterless=[Cooldown(cd_time=5)])
+@guard_command("养成本命法宝")
 async def natal_upgrade_handler(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     isUser, user_info, msg = check_user(event)
     if not isUser:
@@ -412,7 +414,7 @@ async def natal_upgrade_handler(bot: Bot, event: GroupMessageEvent | PrivateMess
         max_exp_growth=MAX_EXP_GROWTH_PER_LEVEL,
     )
     training_data = training_outcome.data or {}
-    training = SimpleNamespace(**training_data, status=training_outcome.status, succeeded=training_outcome.ok)
+    training = SimpleNamespace(**{**training_data, "status":training_data.get("status", training_outcome.code or training_outcome.status), "succeeded":training_outcome.ok})
     if training.status == "stone_insufficient":
         msg = f"本次养成{training.exp_added}点经验需要{number_to(training.stone_cost)}灵石，你灵石不足！"
         await handle_send(bot, event, msg,
@@ -424,7 +426,7 @@ async def natal_upgrade_handler(bot: Bot, event: GroupMessageEvent | PrivateMess
                           md_type="法宝", k1="法宝", v1="我的本命法宝", k2="铭刻", v2="铭刻道纹", k3="升阶", v3="本命法宝升阶")
         return
     if not training.succeeded:
-        await handle_send(bot, event, "法宝养成未完成：法宝状态已更新，请重新养成。")
+        await handle_send(bot, event, result_failure("法宝养成", training, messages={"treasure_missing":"尚未觉醒法宝，请先觉醒。","exp_full":"法宝经验已满，请先升阶。","max_level":"法宝已到等级上限。"}))
         return
     nt._natal_data_cache = None
     if training.level > current_level:
@@ -446,6 +448,7 @@ natal_effect_upgrade = on_command(
 
 
 @natal_effect_upgrade.handle(parameterless=[Cooldown(cd_time=5)])
+@guard_command("本命法宝升阶")
 async def natal_effect_upgrade_handler(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     isUser, user_info, msg = check_user(event)
     if not isUser:
@@ -479,7 +482,7 @@ async def natal_effect_upgrade_handler(bot: Bot, event: GroupMessageEvent | Priv
         choice_seed=_natal_choice_seed(operation_id),
     )
     upgrade_data = upgrade_outcome.data or {}
-    upgrade = SimpleNamespace(**upgrade_data, status=upgrade_outcome.status, succeeded=upgrade_outcome.ok)
+    upgrade = SimpleNamespace(**{**upgrade_data, "status":upgrade_data.get("status", upgrade_outcome.code or upgrade_outcome.status), "succeeded":upgrade_outcome.ok})
     if upgrade.status == "duplicate" or upgrade.succeeded:
         nt._natal_data_cache = None
         effect_name = EFFECT_NAME_MAP.get(NatalEffectType(upgrade.effect_type), "未知效果")
@@ -490,8 +493,8 @@ async def natal_effect_upgrade_handler(bot: Bot, event: GroupMessageEvent | Priv
         await handle_send(bot, event, msg,
                           md_type="法宝", k1="法宝", v1="我的本命法宝", k2="铭刻", v2="铭刻道纹", k3="升阶", v3="本命法宝升阶")
     else:
-        reason = "所有效果已达最高等级" if upgrade.status == "all_maxed" else "法宝强化未完成：法宝状态已更新"
-        await handle_send(bot, event, f"效果升阶失败：{reason}。",
+        reason = result_failure("法宝升阶", upgrade, messages={"treasure_missing":"尚未觉醒法宝，请先觉醒。","max_level":"全部道纹已到等级上限。","all_maxed":"全部道纹已到等级上限。","item_insufficient":"神秘经书数量不足，请补足后再升阶。"})
+        await handle_send(bot, event, reason,
                           md_type="法宝", k1="升阶", v1="本命法宝升阶", k2="法宝", v2="我的本命法宝", k3="帮助", v3="本命法宝帮助")
 
 
@@ -505,6 +508,7 @@ natal_engrave = on_command(
 
 
 @natal_engrave.handle(parameterless=[Cooldown(cd_time=5)])
+@guard_command("铭刻道纹")
 async def natal_engrave_handler(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     isUser, user_info, msg = check_user(event)
     if not isUser:
@@ -576,11 +580,10 @@ async def natal_engrave_handler(bot: Bot, event: GroupMessageEvent | PrivateMess
             "slots_full": "效果槽位已满",
             "effect_exhausted": "没有可供铭刻的新道纹",
             "item_insufficient": "神秘经书数量不足",
-            "state_changed": "强化/洗练未结算：法宝当前状态已更新",
             "schema_missing": "本命法宝数据尚未就绪，请稍后重试",
         }
-        reason = failure_reasons.get(engraving.status, "铭刻事务未能完成")
-        await handle_send(bot, event, f"铭刻道纹失败：{reason}。",
+        reason = result_failure("铭刻", engraving, messages=failure_reasons)
+        await handle_send(bot, event, reason,
                           md_type="法宝", k1="铭刻", v1="铭刻道纹", k2="法宝", v2="我的本命法宝", k3="帮助", v3="本命法宝帮助")
     await natal_engrave.finish()
 
@@ -595,6 +598,7 @@ natal_forget = on_command(
 
 
 @natal_forget.handle(parameterless=[Cooldown(cd_time=5)])
+@guard_command("遗忘道纹")
 async def natal_forget_handler(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     isUser, user_info, msg = check_user(event)
     if not isUser:
@@ -654,11 +658,10 @@ async def natal_forget_handler(bot: Bot, event: GroupMessageEvent | PrivateMessa
             "last_effect": "本命法宝至少需要保留一个道纹",
             "item_insufficient": "神秘经书数量不足",
             "inventory_full": "神秘经书已达到背包上限",
-            "state_changed": "强化/洗练未结算：法宝当前状态已更新",
             "schema_missing": "本命法宝数据尚未就绪，请稍后重试",
         }
-        reason = failure_reasons.get(forgotten.status, "遗忘事务未能完成")
-        await handle_send(bot, event, f"遗忘道纹失败：{reason}。",
+        reason = result_failure("遗忘", forgotten, messages=failure_reasons)
+        await handle_send(bot, event, reason,
                           md_type="法宝", k1="遗忘", v1="遗忘道纹", k2="法宝", v2="我的本命法宝", k3="帮助", v3="本命法宝帮助")
     await natal_forget.finish()
 

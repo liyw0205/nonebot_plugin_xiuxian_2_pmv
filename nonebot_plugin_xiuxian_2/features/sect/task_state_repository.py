@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from ...infrastructure.database import DatabaseUnitOfWork
+from ...core.errors import DomainError
 
 
 def _dump_task_data(task_data: dict[str, Any]) -> str:
@@ -55,7 +56,7 @@ class SectTaskStateSqlRepository:
             str(row["name"]) for row in uow.query_all("PRAGMA table_info(sect_task_state)")
         }
         if table is None or not cls._REQUIRED_COLUMNS.issubset(columns):
-            raise RuntimeError("sect_task_state schema is not ready; run migrations first")
+            raise DomainError("schema_missing", "sect task schema is not ready")
 
     @classmethod
     def _assert_claim_schema_ready(cls, uow: DatabaseUnitOfWork) -> None:
@@ -69,7 +70,7 @@ class SectTaskStateSqlRepository:
             for row in uow.query_all("PRAGMA table_info(sect_task_claim_operations)")
         }
         if table is None or not cls._CLAIM_OPERATION_COLUMNS.issubset(columns):
-            raise RuntimeError("sect_task_claim_operations schema is not ready; run migrations first")
+            raise DomainError("schema_missing", "sect task claim schema is not ready")
 
     def assert_schema_ready(self) -> None:
         with DatabaseUnitOfWork(self.database, read_only=True) as uow:
@@ -189,7 +190,7 @@ class SectTaskStateSqlRepository:
             if user is None:
                 return {"status": "user_missing", "user_id": user_id, "sect_id": sect_id}
             if user["sect_id"] is None or int(user["sect_id"]) != sect_id:
-                return {"status": "sect_changed", "user_id": user_id, "sect_id": sect_id}
+                return {"status": "sect_changed", "reason": "user_missing" if user is None else "sect_changed", "user_id": user_id, "sect_id": sect_id}
             if int(user["sect_task"] or 0) >= daily_limit:
                 return {"status": "daily_limit", "user_id": user_id, "sect_id": sect_id}
             if uow.query_one("SELECT 1 AS present FROM sects WHERE sect_id=?", (sect_id,)) is None:
@@ -267,7 +268,7 @@ class SectTaskStateSqlRepository:
                 "SELECT sect_id,sect_task FROM user_xiuxian WHERE user_id=?", (user_id,)
             )
             if user is None or user["sect_id"] is None or int(user["sect_id"]) != sect_id:
-                return {"status": "sect_changed", "user_id": user_id, "sect_id": sect_id}
+                return {"status": "sect_changed", "reason": "user_missing" if user is None else "sect_changed", "user_id": user_id, "sect_id": sect_id}
             if int(user["sect_task"] or 0) >= daily_limit:
                 return {"status": "daily_limit", "user_id": user_id, "sect_id": sect_id}
             current = uow.query_one(
@@ -275,12 +276,12 @@ class SectTaskStateSqlRepository:
                 (user_id, period),
             )
             if current is None or str(current["status"]) != "accepted":
-                return {"status": "task_missing", "user_id": user_id, "sect_id": sect_id}
+                return {"status": "task_missing", "reason": "task_missing" if current is None else "task_resolved", "user_id": user_id, "sect_id": sect_id}
             if (
                 str(current["task_key"]) != expected_task_key
                 or _load_task_data(current["task_data"]) != expected_task_data
             ):
-                return {"status": "state_changed", "user_id": user_id, "sect_id": sect_id}
+                return {**{"status": "state_changed", "user_id": user_id, "sect_id": sect_id}, "reason": "task_key_changed" if str(current["task_key"]) != str(expected_task_key) else "task_contents_changed", "subject": ""}
 
             task_json = _dump_task_data(task_data)
             uow.execute(

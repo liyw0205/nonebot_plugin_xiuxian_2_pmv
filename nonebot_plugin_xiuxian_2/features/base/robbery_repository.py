@@ -1,4 +1,6 @@
 from __future__ import annotations
+from dataclasses import replace as _reason_replace
+from ...core.snapshot_reason import first_difference
 
 import json
 from dataclasses import dataclass, field
@@ -28,6 +30,8 @@ class BaseStoneRobberyResult:
     loser_balance: int = 0
     stamina_cost: int = 0
     robber_stamina: int = 0
+    reason: str = ""
+    subject: str = ""
 
     @property
     def succeeded(self) -> bool:
@@ -157,7 +161,7 @@ class BaseStoneRobberySqlRepository:
             if robber_id not in users or victim_id not in users:
                 return result("user_missing")
             if users[robber_id] != robber_snapshot or users[victim_id] != victim_snapshot:
-                return result("state_changed")
+                return _reason_replace(result("state_changed"), reason=first_difference(users[robber_id] if users[robber_id] != robber_snapshot else users[victim_id], robber_snapshot if users[robber_id] != robber_snapshot else victim_snapshot, ("hp_changed","mp_changed","stamina_changed","exp_changed","stone_changed")), subject=robber_id if users[robber_id] != robber_snapshot else victim_id)
             robber_hp = robber_snapshot[3] // 2 if robber_snapshot[0] is None else robber_snapshot[0]
             victim_hp = victim_snapshot[3] // 2 if victim_snapshot[0] is None else victim_snapshot[0]
             if robber_hp <= robber_snapshot[3] / 10:
@@ -194,7 +198,7 @@ class BaseStoneRobberySqlRepository:
                     if robber_changed.rowcount != 1 or victim_changed.rowcount != 1:
                         raise _StateChanged
             except _StateChanged:
-                return result("state_changed")
+                return _reason_replace(result("state_changed"), reason="robbery_write_rejected", subject=robber_id if robber_changed.rowcount != 1 else victim_id)
 
             loser_balance = victim_stone if loser_id == victim_id else robber_stone
             saved = {

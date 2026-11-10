@@ -1,9 +1,11 @@
-import json,tempfile,unittest
+import json,sqlite3,tempfile,unittest
 from pathlib import Path
 import nonebot
 nonebot.init()
 from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_buff.transaction_service import MentorGraduationService
 from tests.test_db_backend import db_backend
+from nonebot_plugin_xiuxian_2.core.errors import DomainError
+from nonebot_plugin_xiuxian_2.xiuxian.command_guard import failure_reply
 class Tests(unittest.TestCase):
  def test_partner_facade_defers_mentor_graduation_service_construction(self):
   from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_buff import partner
@@ -29,3 +31,16 @@ class Tests(unittest.TestCase):
   with db_backend.transaction(self.p) as c:c.execute("UPDATE mentor SET apprentice_ids='[\"a\"]' WHERE user_id='m'");c.execute("UPDATE mentor SET mentor_id='m' WHERE user_id='a'")
   with self.assertRaises(Exception):self.call('fail')
   with db_backend.connection(self.g) as c:self.assertEqual(20,c.execute("SELECT stone FROM user_xiuxian WHERE user_id='a'").fetchone()[0])
+ def test_each_reward_write_preserves_subject_and_rolls_back_everything(self):
+  def snapshot():
+   with sqlite3.connect(self.g) as g,sqlite3.connect(self.p) as p:return tuple(g.iterdump()),tuple(p.iterdump())
+  for uid,subject,label in (('m','mentor','师父'),('a','apprentice','徒弟')):
+   with self.subTest(subject=subject):
+    with db_backend.transaction(self.g) as c:c.execute("CREATE TRIGGER skip_reward BEFORE UPDATE ON user_xiuxian WHEN OLD.user_id='"+uid+"' BEGIN SELECT RAISE(IGNORE); END")
+    before=snapshot()
+    with self.assertRaises(DomainError) as caught:self.call('blocked-'+uid)
+    self.assertEqual((caught.exception.code,caught.exception.details['subject']),('mentor_stone_write_rejected',subject))
+    reply=failure_reply('出师',caught.exception)
+    self.assertIn(label,reply);self.assertIn('灵石',reply);self.assertNotIn('修为',reply)
+    self.assertEqual(snapshot(),before)
+    with db_backend.transaction(self.g) as c:c.execute('DROP TRIGGER skip_reward')

@@ -35,6 +35,7 @@ class XianshiPurchaseResult:
     quantity: int = 0
     total_cost: int = 0
     stamina_charged: int = 0
+    reason: str = ""
 
     @property
     def succeeded(self) -> bool:
@@ -118,7 +119,7 @@ class XianshiPurchaseSqlRepository:
                     or str(existing["stamina_operation_id"]) != stamina_operation_id
                     or int(existing["stamina_cost"]) != stamina_cost
                 ):
-                    return XianshiPurchaseResult("state_changed", listing_id, buyer_id)
+                    return XianshiPurchaseResult("state_changed", listing_id, buyer_id, reason="operation_conflict")
                 return self._from_row(existing, "duplicate")
 
             listing = uow.query_one(
@@ -178,7 +179,7 @@ class XianshiPurchaseSqlRepository:
                         str(stamina_operation["buyer_id"]) != buyer_id
                         or int(stamina_operation["stamina_cost"]) != stamina_cost
                     ):
-                        return replace(result, status="state_changed")
+                        return replace(result, status="state_changed", reason="operation_conflict")
                 else:
                     if not self._consume_stamina(uow, buyer_id, stamina_cost):
                         return replace(result, status="stamina_insufficient")

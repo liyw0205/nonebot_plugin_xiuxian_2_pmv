@@ -1,4 +1,5 @@
 from __future__ import annotations
+from dataclasses import replace as _reason_replace
 
 import json
 from contextlib import closing
@@ -21,6 +22,8 @@ class HeartDevilTribulationResult:
     devil_name: str = ""
     message: str = ""
     battle_messages: list = field(default_factory=list)
+    reason: str = ""
+    subject: str = ""
 
     @property
     def succeeded(self) -> bool:
@@ -151,9 +154,9 @@ class HeartDevilTribulationService:
                 )
                 if actual_rate != expected_rate or actual_count != expected_count:
                     conn.rollback()
-                    return HeartDevilTribulationResult(
+                    return _reason_replace(HeartDevilTribulationResult(
                         "state_changed", False, actual_rate, actual_count, False
-                    )
+                    ), reason="tribulation_rate_changed" if actual_rate != expected_rate else "heart_devil_count_changed", subject="")
                 if consume_destiny_pill:
                     consumed = conn.execute(
                         "UPDATE back SET goods_num=goods_num-1,"
@@ -184,9 +187,9 @@ class HeartDevilTribulationService:
                     )
                 elif changed.rowcount != 1:
                     conn.rollback()
-                    return HeartDevilTribulationResult(
+                    return _reason_replace(HeartDevilTribulationResult(
                         "state_changed", False, actual_rate, actual_count, False
-                    )
+                    ), reason="tribulation_write_rejected", subject="")
                 increment_stat(conn, user_id, "心魔劫次数", 1)
                 increment_stat(conn, user_id, "心魔劫成功" if successful else "心魔劫失败", 1)
                 if consume_destiny_pill:

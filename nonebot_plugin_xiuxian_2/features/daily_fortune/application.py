@@ -72,7 +72,7 @@ class DailyFortuneApplication:
                     previous = existing_operation.outcome()
                     if previous is not None:
                         return previous.replay()
-                    raise ConflictError("操作正在处理中")
+                    raise ConflictError("操作正在处理中", reason="operation_pending")
                 existing = self.repository.get(uow, request.user_id, fortune_date)
                 if existing is not None:
                     outcome = OperationOutcome.rejected(

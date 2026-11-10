@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any, Mapping
 
 from ...core.errors import DomainError, ValidationError
+from ...core.player_reasons import reason_text
 from ...core.result import OperationOutcome, ReplyPlan
 from ...infrastructure.database import DatabaseUnitOfWork, OperationLedger
 from ...infrastructure.observability import trace_context
@@ -63,10 +64,11 @@ class BankApplication:
                 data = _data(call())
                 status = str(data.get("status", "failed"))
                 normalized = {"status": status, **{key: data.get(key) for key in ("deposited", "withdrawn", "interest", "wallet_stone", "saved_stone", "saved_at", "cost", "bank_level")}}
+                normalized.update({key: data[key] for key in ("reason", "subject") if data.get(key)})
                 if status in {"applied", "duplicate"}:
                     outcome = OperationOutcome.applied(operation_id, action, data=normalized, granted={key: normalized[key] for key in ("interest", "deposited", "withdrawn") if normalized.get(key) is not None}, audit_category="bank")
                 else:
-                    outcome = OperationOutcome.rejected(operation_id, action, messages.get(status, "灵庄操作未完成。"), code=status, data=normalized, audit_category="bank")
+                    outcome = OperationOutcome.rejected(operation_id, action, reason_text(data.get("reason")) or messages.get(status, "灵庄操作未完成。"), code=status, data=normalized, audit_category="bank")
                 with DatabaseUnitOfWork(self.game_database, immediate=True) as uow:
                     self.ledger.finish(uow, outcome)
                 return outcome
