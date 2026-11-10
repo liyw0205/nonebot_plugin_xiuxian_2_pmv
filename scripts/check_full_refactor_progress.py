@@ -731,7 +731,7 @@ def _arena_owner_status(sources: dict[str, str]) -> dict[str, bool]:
             and expression("state_repository", "_weekly", "reset.isocalendar()[:2] != today.isocalendar()[:2]")
             and expression("application", "_execute", "action in {'arena.purchase', 'arena.settle'}")
             and expression("application", "_execute", "type(self.repository) is ArenaChallengePurchaseSqlRepository")
-            and expression("application", "_execute", "if not recoverable:\n    raise ConflictError('操作正在处理中')")
+            and expression("application", "_execute", "if not recoverable:\n    raise ConflictError('操作正在处理中', reason='operation_pending')")
             and "arena.010" in literals("plugin")
             and "apply_arena_purchase_receipt" in functions["migrations"]
             and not any(token in literals("repository") for token in ("CREATE TABLE", "ALTER TABLE"))
@@ -3866,7 +3866,8 @@ def _slice_status() -> dict[str, dict[str, object]]:
                 for token in (
                     "expected_saved_stone",
                     "expected_saved_at",
-                    'str(account["bank_level"]) != str(bank_level)',
+                    'current_level != str(bank_level)',
+                    '"reason": "bank_level_changed"',
                 )
             ),
             "request_time_legacy_bootstrap_removed": (

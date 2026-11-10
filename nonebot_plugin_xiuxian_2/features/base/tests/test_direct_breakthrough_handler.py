@@ -9,6 +9,7 @@ from unittest.mock import AsyncMock, Mock
 
 from ....infrastructure.database import DatabaseUnitOfWork, OutboxStore
 from ....compatibility.base_breakthrough_effects import LegacyDirectBreakthroughEffects
+from ....xiuxian.command_guard import result_failure
 from ...game_events.migrations import apply_game_event_statistics_player
 from ..application import BaseApplication
 from ..migrations import (
@@ -69,6 +70,7 @@ class DirectBreakthroughHandlerTests(unittest.IsolatedAsyncioTestCase):
         sql = SimpleNamespace(get_user_info_with_id=lambda _: dict(self.profile), get_root_rate=lambda *_: 1.5)
         self.namespace = dict(
             BaseApplication=BaseApplication,
+            result_failure=result_failure,
             direct_breakthrough_root_rate=lambda _: 1.5,
             Bot=object, GroupMessageEvent=object, PrivateMessageEvent=object,
             _direct_breakthrough_application_instance=None,

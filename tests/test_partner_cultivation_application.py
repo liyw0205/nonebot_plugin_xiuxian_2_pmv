@@ -4,6 +4,7 @@ import sqlite3
 import importlib
 import tempfile
 import unittest
+from nonebot_plugin_xiuxian_2.core.errors import DomainError
 from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
@@ -241,12 +242,13 @@ class PartnerCultivationApplicationTests(unittest.TestCase):
             with db_backend.transaction(player):
                 pass
             app = PartnerCultivationApplication(game, player)
-            with self.assertRaisesRegex(RuntimeError, "partner_cultivation_operations"):
+            with self.assertRaises(DomainError) as caught:
                 app.apply(
                     "missing", "a", "b", expected_exp_1=0, expected_exp_2=0,
                     exp_1=1, exp_2=1, used_count=1, power_1=0, power_2=0,
                     hp_1=0, mp_1=0, atk_1=0, hp_2=0, mp_2=0, atk_2=0,
                 )
+            self.assertEqual(caught.exception.code, "schema_missing")
             with db_backend.connection(game) as conn:
                 self.assertIsNone(conn.execute(
                     "SELECT 1 FROM sqlite_master WHERE name='partner_cultivation_operations'"

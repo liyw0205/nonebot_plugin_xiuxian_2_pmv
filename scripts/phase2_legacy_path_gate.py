@@ -33,6 +33,7 @@ _PLUGIN_MODULE_EXCLUSIONS = frozenset(
         "adapter_message_sender",
         "broadcast_manager",
         "command_disable",
+        "command_guard",
         "on_compat",
         "runtime",
         "xiuxian_config",

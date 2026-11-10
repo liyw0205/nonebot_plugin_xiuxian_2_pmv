@@ -6,6 +6,7 @@ import unittest
 from datetime import datetime
 from pathlib import Path
 
+from ....core.errors import DomainError
 from ....infrastructure.database import DatabaseUnitOfWork
 from ....plugin import build_migrations, migrations_for_database
 from ..application import SectApplication
@@ -136,8 +137,9 @@ class SectTaskStateRepositoryTests(unittest.TestCase):
         with sqlite3.connect(database):
             pass
         repository = SectTaskStateSqlRepository(database)
-        with self.assertRaisesRegex(RuntimeError, "run migrations first"):
+        with self.assertRaises(DomainError) as caught:
             repository.get_active_task("u", "2026-07-11")
+        self.assertEqual(caught.exception.code, "schema_missing")
         with sqlite3.connect(database) as connection:
             tables = connection.execute(
                 "SELECT name FROM sqlite_master WHERE type='table'"
@@ -149,10 +151,11 @@ class SectTaskStateRepositoryTests(unittest.TestCase):
         with DatabaseUnitOfWork(database, immediate=True) as uow:
             apply_sect_task_state(uow)
         repository = SectTaskStateSqlRepository(database)
-        with self.assertRaisesRegex(RuntimeError, "run migrations first"):
+        with self.assertRaises(DomainError) as caught:
             repository.claim_task(
                 "claim-op", "u", 7, "trial", {}, "2026-07-11", 3, "now"
             )
+        self.assertEqual(caught.exception.code, "schema_missing")
         with sqlite3.connect(database) as connection:
             tables = {
                 row[0]

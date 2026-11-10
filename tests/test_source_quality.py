@@ -2551,9 +2551,10 @@ class SourceQualityTests(unittest.TestCase):
         self.assertNotIn("sql_message.update_back_j(", handler)
         for status in (
             "treasure_missing", "slots_full", "effect_exhausted",
-            "item_insufficient", "state_changed",
+            "item_insufficient",
         ):
             self.assertIn(f'"{status}"', handler)
+        self.assertIn('result_failure("铭刻", engraving, messages=failure_reasons)', handler)
         service = (natal_root / "engraving_service.py").read_text(encoding="utf-8")
         self.assertIn("BEGIN IMMEDIATE", service)
         self.assertIn("ATTACH DATABASE", service)
@@ -2571,9 +2572,10 @@ class SourceQualityTests(unittest.TestCase):
         self.assertNotIn("sql_message.send_back(", handler)
         for status in (
             "treasure_missing", "effect_missing", "last_effect",
-            "item_insufficient", "inventory_full", "state_changed",
+            "item_insufficient", "inventory_full",
         ):
             self.assertIn(f'"{status}"', handler)
+        self.assertIn('result_failure("遗忘", forgotten, messages=failure_reasons)', handler)
         service = (natal_root / "forget_service.py").read_text(encoding="utf-8")
         self.assertIn("BEGIN IMMEDIATE", service)
         self.assertIn("ATTACH DATABASE", service)
@@ -2590,9 +2592,10 @@ class SourceQualityTests(unittest.TestCase):
         self.assertNotIn("sql_message.update_back_j(", handler)
         self.assertNotIn("sql_message.send_back(", handler)
         for status in (
-            "treasure_missing", "item_insufficient", "inventory_full", "state_changed",
+            "treasure_missing", "item_insufficient", "inventory_full",
         ):
             self.assertIn(f'"{status}"', handler)
+        self.assertIn('result_failure("重塑", reawakened, messages=failure_reasons)', handler)
         service = (natal_root / "reawaken_service.py").read_text(encoding="utf-8")
         self.assertIn("BEGIN IMMEDIATE", service)
         self.assertIn("ATTACH DATABASE", service)
@@ -2606,8 +2609,9 @@ class SourceQualityTests(unittest.TestCase):
         self.assertIn("natal_treasure_application.awaken(", handler)
         self.assertNotIn("_natal_awaken_service().awaken(", handler)
         self.assertNotIn("nt.awaken()", handler)
-        for status in ("treasure_missing", "already_awakened", "state_changed"):
+        for status in ("treasure_missing", "already_awakened"):
             self.assertIn(f'"{status}"', handler)
+        self.assertIn('result_failure("觉醒", {**awakened_data, "status":awakened_status}, messages=failure_reasons)', handler)
         service = (natal_root / "awaken_service.py").read_text(encoding="utf-8")
         self.assertIn("BEGIN IMMEDIATE", service)
         self.assertIn("natal_awaken_operations", service)
@@ -2918,8 +2922,8 @@ class SourceQualityTests(unittest.TestCase):
         self.assertNotIn("sql_message.update_ls(", handler)
         self.assertNotIn("sql_message.update_exp(", handler)
         self.assertNotIn("sql_message.send_back(", handler)
-        for status in ("inventory_full", "state_changed", "user_missing"):
-            self.assertIn(f'"{status}"', handler)
+        self.assertIn('"inventory_full"', handler)
+        self.assertIn('result_failure("宠物游历领奖", claim_result)', handler)
         service = (
             SOURCE_ROOT / "compatibility" / "legacy_pet_transactions.py"
         ).read_text(encoding="utf-8")

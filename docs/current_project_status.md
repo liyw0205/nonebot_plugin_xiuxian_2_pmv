@@ -10,6 +10,14 @@
 `tests/test_accessory_upgrade_application.py` 共 17 项、93 子测试通过。
 实现阶段的本地提交已完成，控制端接续审查、远程 CI 和正式发布；生产部署仍由用户更新。
 
+首轮完整 CI 跑 5,820 项，暴露旧扫描器排除项、源码契约与新原因传递不同步，以及隔离
+handler 测试缺少真实回复函数的依赖；宗门任务和双修迁移测试仍断言旧 RuntimeError。
+已同步生产加载器的 `command_guard` 排除项，门禁继续检查原因和原有事务归属；
+隔离测试加载真实 `result_failure`，缺表测试改为核对 `DomainError.code` 并保留无 DDL
+断言。未通过新增旧状态文案来迎合测试。受影响 9 文件共 356 项在隔离归档副本通过；
+副本含已提交的历史门禁资料，原工作区四个删除仍未恢复，日志
+`/tmp/xiuxian-reasons-ci-isolated-recheck.log`。完整 CI 须再次通过方可发布。
+
 本轮只收尾 develop 已有未提交修复及指定缺口，没有重新全量审计。已知拒绝从判定处
 保留具体 `reason` 和适用的 `subject`，经应用、持久回执、重放与命令回复到达玩家；
 保留既有 status/payload 和历史回执兼容，不调整奖励、概率、消耗与资格。
