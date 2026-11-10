@@ -5,6 +5,7 @@ import importlib
 import tempfile
 import unittest
 from nonebot_plugin_xiuxian_2.core.errors import DomainError
+from nonebot_plugin_xiuxian_2.core.numeric import normalize_user_row
 from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
@@ -150,6 +151,90 @@ class PartnerCultivationApplicationTests(unittest.TestCase):
         users, _, _, _ = self.state()
         self.assertGreaterEqual(float(users[0][2]), 1e20)
         self.assertEqual("state_changed", self.apply("stale", expected_used_count_1=1).status)
+
+    def numeric_snapshot(self, value, *, text_storage=False):
+        if text_storage:
+            with db_backend.transaction(self.game) as conn:
+                conn.execute("ALTER TABLE user_xiuxian RENAME TO old_users")
+                conn.execute(
+                    "CREATE TABLE user_xiuxian("
+                    "user_id TEXT PRIMARY KEY,exp TEXT,power INTEGER,hp INTEGER,"
+                    "mp INTEGER,atk INTEGER,level_up_rate INTEGER)"
+                )
+                conn.execute("INSERT INTO user_xiuxian SELECT * FROM old_users")
+                conn.execute("DROP TABLE old_users")
+        with db_backend.transaction(self.game) as conn:
+            conn.execute("UPDATE user_xiuxian SET exp=? WHERE user_id='b'", (value,))
+        with db_backend.connection(self.game) as conn:
+            raw = conn.execute("SELECT exp FROM user_xiuxian WHERE user_id='b'").fetchone()[0]
+        self.ensure_nonebot_initialized()
+        from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_buff.relation_utils import safe_int
+
+        return raw, safe_int(normalize_user_row({"exp": raw})["exp"])
+
+    def assert_numeric_snapshot_settles_once(self, value, *, text_storage=False):
+        raw, expected = self.numeric_snapshot(value, text_storage=text_storage)
+        gain = 10**20
+        kwargs = {"expected_exp_2": expected, "exp_2": gain}
+        self.assertEqual("applied", self.apply(**kwargs).status)
+        settled = self.state()
+        self.assertEqual("duplicate", self.apply(**kwargs).status)
+        self.assertEqual(settled, self.state())
+        users, usage, affection, statistics = settled
+        self.assertEqual(1100, int(float(users[0][1])))
+        self.assertEqual(int(float(raw) + float(gain)), int(float(users[1][1])))
+        self.assertEqual([2, 2], [row[1] for row in usage])
+        self.assertEqual([43, 24], [row[1] for row in affection])
+        self.assertEqual([2, 2], [row[1] for row in statistics])
+        with db_backend.connection(self.game) as conn:
+            self.assertEqual(1, conn.execute(
+                "SELECT COUNT(*) FROM partner_cultivation_operations"
+            ).fetchone()[0])
+
+    def test_unchanged_integer_snapshot_settles_once(self) -> None:
+        self.assert_numeric_snapshot_settles_once(2000)
+
+    def test_unchanged_oversized_real_snapshot_settles_once(self) -> None:
+        self.assert_numeric_snapshot_settles_once(1e29)
+
+    def test_unchanged_scientific_text_snapshot_settles_once(self) -> None:
+        self.assert_numeric_snapshot_settles_once(
+            "1.00000000000000000000000000001e29", text_storage=True
+        )
+
+    def test_changed_oversized_real_snapshot_still_rejects_the_target(self) -> None:
+        raw, expected = self.numeric_snapshot(1e29)
+        with db_backend.transaction(self.game) as conn:
+            conn.execute("UPDATE user_xiuxian SET exp=? WHERE user_id='b'", (raw + 1e20,))
+        before = self.state()
+        result = self.apply(expected_exp_2=expected)
+        self.assertEqual(("state_changed", "exp_changed", "b"),
+                         (result.status, result.reason, result.subject))
+        self.assertEqual(before, self.state())
+
+    def test_one_point_scientific_text_change_still_rejects(self) -> None:
+        _, expected = self.numeric_snapshot(
+            "1.00000000000000000000000000001e29", text_storage=True
+        )
+        with db_backend.transaction(self.game) as conn:
+            conn.execute("UPDATE user_xiuxian SET exp=? WHERE user_id='b'", (str(expected + 1),))
+        before = self.state()
+        result = self.apply(expected_exp_2=expected)
+        self.assertEqual(("state_changed", "exp_changed", "b"),
+                         (result.status, result.reason, result.subject))
+        self.assertEqual(before, self.state())
+
+    def test_relation_integer_parser_preserves_scientific_text_and_defaults(self) -> None:
+        self.ensure_nonebot_initialized()
+        from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_buff.relation_utils import safe_int
+
+        self.assertEqual(10**29 + 1, safe_int("1.00000000000000000000000000001e29"))
+        self.assertEqual(int(1e29), safe_int(1e29))
+        self.assertEqual(1230, safe_int("1.23e3"))
+        self.assertEqual(-12, safe_int("-12.9"))
+        for value in (None, "", "None", "null", "invalid", float("nan"), float("inf")):
+            with self.subTest(value=value):
+                self.assertEqual(7, safe_int(value, 7))
 
     def test_invite_expiry_protection_and_acceptance_share_the_transaction(self) -> None:
         with db_backend.transaction(self.player) as conn:

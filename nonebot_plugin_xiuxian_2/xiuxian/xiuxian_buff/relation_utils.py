@@ -1,6 +1,7 @@
 import json
 from datetime import datetime
 
+from ...core.numeric import as_int_like
 from ..xiuxian_config import convert_rank
 
 
@@ -17,25 +18,8 @@ def _is_none_like(value):
 
 
 def safe_int(value, default=0):
-    """Parse int-like values, including scientific TEXT from number_count."""
-    try:
-        if _is_none_like(value):
-            return default
-        if isinstance(value, bool):
-            return int(value)
-        if isinstance(value, int):
-            return value
-        if isinstance(value, float):
-            return int(value)
-        text = str(value).strip()
-        if not text:
-            return default
-        # scientific / decimal from overflow-normalized DB fields
-        if any(ch in text for ch in (".", "e", "E")):
-            return int(float(text))
-        return int(text)
-    except (ValueError, TypeError, OverflowError):
-        return default
+    """Use the same integer interpretation as normalized database snapshots."""
+    return as_int_like(value, default)
 
 
 def _normalize_id_list(value):

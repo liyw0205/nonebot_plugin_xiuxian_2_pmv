@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from ...core.errors import DomainError
+from ...core.numeric import as_int_like
 
 from ...infrastructure.database.attached_uow import AttachedDatabaseUnitOfWork
 
@@ -14,10 +14,8 @@ _PROTECTION_STATES = {"on", "off", "refusal"}
 
 
 def _integer_like(value) -> int:
-    try:
-        return int(Decimal(str(value or 0)))
-    except (InvalidOperation, TypeError, ValueError, OverflowError):
-        return 0
+    # Match user-row snapshots: float -> str -> Decimal changes large REAL values.
+    return as_int_like(value)
 
 
 def _sql_nonnegative(value):
