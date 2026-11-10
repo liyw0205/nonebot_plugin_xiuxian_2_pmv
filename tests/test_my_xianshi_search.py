@@ -129,7 +129,7 @@ class KeywordFilterTests(MyXianshiHarness):
         first = self._run("灵芝", rows)
         self.assertEqual(first["page"][1], "我的仙肆 灵芝 2")
         second = self._run("灵芝 2", rows)
-        self.assertEqual(second["page"][1], "我的仙肆 灵芝 3")
+        self.assertEqual(second["page"][1], "我的仙肆 灵芝 2")
 
     def test_no_match_uses_the_filtered_empty_notice(self) -> None:
         result = self._run("不存在", self.rows)
@@ -152,7 +152,7 @@ class BackwardCompatibilityTests(MyXianshiHarness):
         self.assertIn("第 2/2 页", result["joined"])
         self.assertIn("物品21", result["joined"])
         self.assertNotIn("筛选「", result["joined"])
-        self.assertEqual(result["page"][1], "我的仙肆 3")
+        self.assertEqual(result["page"][1], "我的仙肆 2")
         self.assertEqual(result["page"][0], "翻页")
         self.assertEqual(result["page"][-1], "2/2")
 
@@ -177,7 +177,9 @@ class BackwardCompatibilityTests(MyXianshiHarness):
 
 class SourceContractTests(unittest.TestCase):
     def test_handler_uses_the_shared_page_command(self) -> None:
-        self.assertIn('page_command("我的仙肆", keyword, current_page + 1)', TRADE_SRC)
+        self.assertIn(
+            'next_page_command("我的仙肆", keyword, current_page, total_pages)', TRADE_SRC
+        )
         self.assertNotIn('f"我的仙肆 {current_page + 1}"', TRADE_SRC)
 
     def test_handler_parses_keyword_and_page(self) -> None:

@@ -2,7 +2,26 @@
 
 最后核验：2026-11-10。本文是唯一活跃进度入口；旧重构文档仅作为历史记录，不再定义当前分支或禁止事项。
 
-## 已完成：账本结果日志自描述（v1.2.20）
+## 已完成：列表分页「下一页」统一钳制（随 v1.2.15 发布）
+
+`page_command` 只拼命令、不校验上界，于是同一仓库里并存两种写法：六处用了
+`min(page + 1, total_pages)`，其余十余处直接把 `page + 1` 交给它。未钳制的站点在兜底
+按钮上永远给出下一页：最后一页仍提示「发送『宗门商店 N+1』查看其他页（共 N 页）」，
+单页列表也提示「查看其他页（共 1 页）」，玩家点了原地不动。
+
+- `features/base/keyword_page.py` 新增 `next_page_command(command, keyword, page,
+  total_pages)`：非法入参按 1 处理，`total_pages <= 1` 时目标页恒为 1，否则
+  `min(page + 1, total_pages)`，最终仍由 `page_command` 拼串（关键词与页码格式不变）。
+- 替换全部未受保护站点：宗门成员查看（footer + 翻页按钮）、宗门商店（提示 + 按钮）、
+  我的仙肆（按钮）、宠物背包（三处文本/MD 链接）、饰品背包（三处）、我的背包/丹药背包/
+  药材背包/我的装备/药材背包详情（16 处 MD 与兜底按钮）。
+- 宗门成员查看与宗门商店的「查看其他页」提示改为仅 `total_pages > 1` 时输出，单页列表
+  不再自相矛盾。分页页大小、筛选、排序、按钮文案与写路径均未改动。
+- 测试：新增 `tests/test_next_page_command.py` 9 项（钳制语义、关键词保留、非法入参、
+  AST 合同禁止 `page_command(..., x + 1)`）；更新 `tests/test_my_xianshi_search.py`
+  与 `tests/test_list_search_pagination.py` 中断言旧缺陷的 4 处合同。受影响套件 87 项通过。
+
+## 已完成：账本结果日志自描述（随 v1.2.15 发布）
 
 live 日志（`/root/xiu2/xiu2.log` 11-10 06:40，01:09 部署之后）三行只有
 `operation outcome` 五个字：没有 action、status、operation_id、audit_category，无法判断

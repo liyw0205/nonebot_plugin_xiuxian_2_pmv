@@ -33,6 +33,7 @@ from ..xiuxian_config import XiuConfig, convert_rank
 from ...features.base.keyword_page import (
     empty_notice,
     matches_keyword,
+    next_page_command,
     page_command,
     parse_page_arg,
     parse_typed_page_arg,
@@ -1351,7 +1352,7 @@ async def my_xian_shop_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     
     msg_list.append(f"\n第 {current_page}/{total_pages} 页")
     msg_list.append("使用【我的仙肆 记录】查看最近成交")
-    page = ["翻页", page_command("我的仙肆", keyword, current_page + 1), "下架", "仙肆下架", "查看", "仙肆查看", f"{current_page}/{total_pages}"]
+    page = ["翻页", next_page_command("我的仙肆", keyword, current_page, total_pages), "下架", "仙肆下架", "查看", "仙肆查看", f"{current_page}/{total_pages}"]
     await send_msg_handler(bot, event, '我的仙肆', bot.self_id, msg_list, title=title, page=page)
     await my_xian_shop.finish()
 

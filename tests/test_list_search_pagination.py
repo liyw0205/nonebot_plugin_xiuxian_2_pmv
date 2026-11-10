@@ -170,24 +170,34 @@ class AccessoryRenderTests(unittest.TestCase):
 
 class SourceContractTests(unittest.TestCase):
     def test_pet_renderers_use_shared_page_command(self) -> None:
-        self.assertIn("from ...features.base.keyword_page import page_command", PET_SRC)
-        # 纯文本/分页文本路径用 page 变量，MD 与纯文本路径用 current_page
-        self.assertIn("page_command('宠物背包', keyword, page + 1)", PET_SRC)
-        self.assertIn('page_command("宠物背包", keyword, current_page + 1)', PET_SRC)
-        self.assertIn("page_command('宠物背包', keyword, current_page + 1)", PET_SRC)
+        self.assertIn(
+            "from ...features.base.keyword_page import next_page_command, page_command", PET_SRC
+        )
+        # 纯文本/分页文本路径用 page 变量，MD 与纯文本路径用 current_page；都经 next_page_command 钳制
+        self.assertIn("next_page_command('宠物背包', keyword, page, total_pages)", PET_SRC)
+        self.assertIn(
+            'next_page_command("宠物背包", keyword, current_page, total_pages)', PET_SRC
+        )
+        self.assertIn(
+            "next_page_command('宠物背包', keyword, current_page, total_pages)", PET_SRC
+        )
         self.assertNotIn('f"输入 宠物背包 {page + 1}', PET_SRC)
         self.assertNotIn('f"宠物背包 {current_page + 1}"', PET_SRC)
 
     def test_accessory_renderers_use_shared_page_command(self) -> None:
-        self.assertIn("from ...features.base.keyword_page import page_command", ACC_SRC)
-        self.assertEqual(ACC_SRC.count('page_command("饰品背包", keyword, current_page + 1)'), 3)
+        self.assertIn(
+            "from ...features.base.keyword_page import next_page_command, page_command", ACC_SRC
+        )
+        self.assertGreaterEqual(
+            ACC_SRC.count('next_page_command("饰品背包", keyword, current_page, total_pages)'), 3
+        )
         self.assertNotIn('f"饰品背包 {current_page + 1}"', ACC_SRC)
 
     def test_every_backpack_view_carries_keyword(self) -> None:
         for command in ("我的背包", "丹药背包", "药材背包", "我的装备", "药材背包详情"):
             with self.subTest(command=command):
                 self.assertIn(
-                    f'page_command("{command}", keyword, current_page + 1)', BACK_SRC
+                    f'next_page_command("{command}", keyword, current_page, total_pages)', BACK_SRC
                 )
                 self.assertNotIn(f'f"{command} {{current_page + 1}}"', BACK_SRC)
                 self.assertNotIn(f'f"{command} {{page + 1}}"', BACK_SRC)
@@ -197,13 +207,14 @@ class SourceContractTests(unittest.TestCase):
         for command in ("我的背包", "丹药背包", "药材背包"):
             with self.subTest(command=command):
                 self.assertEqual(
-                    BACK_SRC.count(f'next_cmd=page_command("{command}", keyword, current_page + 1)'),
+                    BACK_SRC.count(
+                        f'next_cmd=next_page_command("{command}", keyword, current_page, total_pages)'
+                    ),
                     2,
                 )
 
     def test_sect_shop_pagination_carries_keyword(self) -> None:
-        self.assertIn("page_command('宗门商店', keyword, page + 1)", SECT_SRC)
-        self.assertIn('page_command("宗门商店", keyword, page + 1)', SECT_SRC)
+        self.assertIn('next_page_command("宗门商店", keyword, page, total_pages)', SECT_SRC)
         self.assertNotIn('f"宗门商店 {page + 1}"', SECT_SRC)
         self.assertNotIn("宗门商店+页码", SECT_SRC)
 
@@ -212,7 +223,9 @@ class SourceContractTests(unittest.TestCase):
         self.assertIn("filter_sect_member_rows(userlist, keyword, position_titles)", SECT_SRC)
         self.assertIn('empty_notice(keyword, "宗门成员")', SECT_SRC)
         self.assertIn("count_sect_positions(sorted_users)", SECT_SRC)
-        self.assertIn('page_command("宗门成员查看", keyword, current_page + 1)', SECT_SRC)
+        self.assertIn(
+            'next_page_command("宗门成员查看", keyword, current_page, total_pages)', SECT_SRC
+        )
         self.assertNotIn("current_page = int(args.extract_plain_text()", SECT_SRC)
 
     def test_sect_member_help_documents_keyword(self) -> None:

@@ -86,6 +86,7 @@ from ...features.base.shop_limit import shop_limit_line
 from ...features.base.keyword_page import (
     empty_notice,
     matches_keyword,
+    next_page_command,
     page_command,
     parse_page_arg,
 )
@@ -1957,7 +1958,7 @@ async def sect_users_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
                 if current_page < total_pages:
                     next_link = _md_cmd_link(
                         "下一页",
-                        page_command("宗门成员查看", keyword, current_page + 1),
+                        next_page_command("宗门成员查看", keyword, current_page, total_pages),
                     )
                     md_lines.append(f"\n{next_link}")
                 else:
@@ -1981,9 +1982,9 @@ async def sect_users_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
                     one += f"快捷操作: 不可操作\n"
                 msg_list.append(one)
 
-            footer = f"发送'{page_command('宗门成员查看', keyword, current_page + 1)}'查看其他页（共{total_pages}页）"
-            msg_list.append(footer)
-            next_page_cmd = page_command("宗门成员查看", keyword, current_page + 1)
+            next_page_cmd = next_page_command("宗门成员查看", keyword, current_page, total_pages)
+            if total_pages > 1:
+                msg_list.append(f"发送'{next_page_cmd}'查看其他页（共{total_pages}页）")
 
             # 底部按钮：只有长老及以上才给管理入口
             if actor_is_elder_or_above:
@@ -3490,10 +3491,10 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
             f"{shop_limit_line(item_data['weekly_limit'], weekly_shop_progress.get(str(item_id), 0))}"
         )
     
-    msg_list.append(
-        f"提示：发送 {page_command('宗门商店', keyword, page + 1)} 查看其他页（共{total_pages}页）"
-    )
-    page = ["翻页", page_command("宗门商店", keyword, page + 1), "宗门", "我的宗门", "兑换", "宗门兑换", f"{page}/{total_pages}"]
+    next_shop_cmd = next_page_command("宗门商店", keyword, page, total_pages)
+    if total_pages > 1:
+        msg_list.append(f"提示：发送 {next_shop_cmd} 查看其他页（共{total_pages}页）")
+    page = ["翻页", next_shop_cmd, "宗门", "我的宗门", "兑换", "宗门兑换", f"{page}/{total_pages}"]
     await send_msg_handler(bot, event, "宗门商店", bot.self_id, msg_list, title=title, page=page)
     await sect_shop.finish()
 

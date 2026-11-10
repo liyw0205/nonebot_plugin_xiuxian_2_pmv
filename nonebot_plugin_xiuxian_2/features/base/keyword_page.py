@@ -18,6 +18,7 @@ __all__ = [
     "filter_lines",
     "filter_rows",
     "matches_keyword",
+    "next_page_command",
     "page_command",
     "parse_page_arg",
     "parse_typed_page_arg",
@@ -83,6 +84,27 @@ def page_command(command: str, keyword: str = "", page: int | str = 1) -> str:
     if query:
         return f"{base} {query} {number}"
     return f"{base} {number}"
+
+
+def next_page_command(command: str, keyword: str = "", page: int | str = 1, total_pages: int | str = 1) -> str:
+    """「下一页」命令，目标页钳制在 ``[1, total_pages]``。
+
+    旧写法直接传 ``page + 1``，于是最后一页会提示/按钮出一个不存在的页
+    （"共 N 页" 却让玩家去 N+1，单页列表还会提示"查看其他页"）。这里统一钳制：
+    ``total_pages <= 1`` 时目标页恒为 1，否则 ``min(page + 1, total_pages)``。
+    """
+    try:
+        current = int(page)
+    except (TypeError, ValueError):
+        current = 1
+    try:
+        total = int(total_pages)
+    except (TypeError, ValueError):
+        total = 1
+    total = max(1, total)
+    current = max(1, current)
+    target = 1 if total <= 1 else min(current + 1, total)
+    return page_command(command, keyword, target)
 
 
 def matches_keyword(fields: Iterable[Any], keyword: str) -> bool:
