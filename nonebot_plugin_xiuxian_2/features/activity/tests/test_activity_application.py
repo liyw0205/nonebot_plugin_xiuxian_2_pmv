@@ -149,8 +149,9 @@ class ActivityApplicationTest(unittest.TestCase):
                     "SELECT stone FROM user_xiuxian WHERE user_id='u'"
                 )["stone"])
 
-    def test_point_shop_started_operation_is_not_blindly_retried(self) -> None:
-        from ....core.errors import ConflictError
+    def test_point_shop_started_request_checks_identity_and_current_gate(self) -> None:
+        from ....core.errors import OperationConflictError
+        from ....xiuxian.xiuxian_activity import service
 
         with tempfile.TemporaryDirectory() as directory:
             database = f"{directory}/game.db"
@@ -166,12 +167,35 @@ class ActivityApplicationTest(unittest.TestCase):
                 database, repository=ActivityRepository(database)
             )
 
-            with self.assertRaisesRegex(ConflictError, "操作正在处理中"):
-                application.execute(
+            with (
+                patch.object(service, "load_config", return_value={}) as load_config,
+                patch.object(service, "activity_runtime_state", return_value={"ok": False, "reason": "活动已结束"}),
+            ):
+                for user_id, query in (("other", "補給"), ("u", "other")):
+                    with self.subTest(user_id=user_id, query=query):
+                        with self.assertRaises(OperationConflictError):
+                            application.execute(
+                                operation_id="activity:point-shop:u:started", user_id=user_id,
+                                payload={"action": "claim_point_shop_item", "query": query},
+                            )
+                load_config.assert_not_called()
+                outcome = application.execute(
                     operation_id="activity:point-shop:u:started",
                     user_id="u",
                     payload={"action": "claim_point_shop_item", "query": "補給"},
                 )
+                self.assertFalse(outcome.ok)
+                self.assertEqual("activity_unavailable", outcome.data["reason"])
+                self.assertEqual("活动已结束", outcome.message)
+                load_config.assert_called_once()
+                replay = application.execute(
+                    operation_id="activity:point-shop:u:started", user_id="u",
+                    payload={"action": "claim_point_shop_item", "query": "補給"},
+                )
+                self.assertTrue(replay.replayed)
+                self.assertFalse(replay.ok)
+                self.assertEqual(outcome.data, replay.data)
+                load_config.assert_called_once()
 
     def test_boss_item_action_uses_feature_settlement_repository(self) -> None:
         from unittest.mock import patch

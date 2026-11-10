@@ -439,7 +439,7 @@ class RefactorProgressTests(unittest.TestCase):
         self.assertTrue(points_shop["default_read_matchers_use_feature_read_model"])
         self.assertTrue(points_shop["default_purchase_uses_feature_owned_repository"])
         self.assertTrue(points_shop["purchase_assets_and_receipt_share_atomic_startup_schema"])
-        self.assertTrue(points_shop["historical_receipts_replay_without_started_retry"])
+        self.assertTrue(points_shop["historical_receipts_and_interrupted_requests_replay_safely"])
         dungeon_team = slices["dungeon_team"]
         self.assertTrue(dungeon_team["team_commands_application_owned"])
         self.assertTrue(dungeon_team["legacy_team_service_factories_removed"])

@@ -2,14 +2,14 @@
 
 最后核验：2026-11-11。本文是唯一活跃进度入口；旧重构文档仅作为历史记录，不再定义当前分支或禁止事项。
 
-## 当前阶段：活动兑换交付与中断恢复（正在推进）
+## 活动兑换交付与中断恢复（v1.2.21 交付 checkpoint）
 
 用户已恢复本阶段，承接 develop 的七个活动修改文件与新增兑换拒绝工具、回归文件。
-基线 main=develop=`29228686c148a0e657b0f8c8f55bcf964752c64e`；v1.2.20 已正式
+阶段起点 main=develop=`29228686c148a0e657b0f8c8f55bcf964752c64e`；v1.2.20 已正式
 发布并核验 project.tar.gz，数值兼容阶段归档，不重复审计。生产是否后续更新未知；
 本阶段不部署、不重启、不写真实玩家库、不发送 QQ 消息。
 
-冻结交付项（整体验收后才合 main）：
+完整交付范围（整体验收后才合 main）：
 
 1. 复核积分商店/集字真实消费者与已有回滚实现，复用原 30 类拒绝、6 个正常/重放
    子场景绿证据；新增恢复接线须另行验证，不以旧绿结果代替。
@@ -20,7 +20,7 @@
    旧缺字段回执、发送失败与 NoneBot 正常流程异常，不把发送失败当业务未提交。
 4. 隔离定向组及 architecture/inventory/compile/diff 门禁、领域与玩家文档；白名单
    普通提交推送 develop，最终精确 SHA CI 全绿后普通合 main/CI，再核实并发布
-   下一可用 bugfix（预期 v1.2.21）的正式 project.tar.gz，核验 tag/SHA/附件。
+   已核实未占用的 bugfix v1.2.21 正式 project.tar.gz，核验 tag/SHA/附件。
 
 checkpoint：原子拒绝矩阵已绿（`/tmp/xiuxian-redemption-green.log`）。新增恢复组
 初跑 4 项发现时窗缺结构化原因、集字坏回执通用异常、商店大数 REAL 回执投影误拒绝；
@@ -28,8 +28,19 @@ checkpoint：原子拒绝矩阵已绿（`/tmp/xiuxian-redemption-green.log`）�
 已覆盖 failed/started、旧回执、配置读取前恢复、身份/参数冲突、命令投递与完整回滚；
 隔离归档（HEAD+白名单补丁）13文件90 tests通过；收尾审查复现并修复回复漏责任方、
 旧兼容商店误拒新回执尾部文案，受影响7项与隔离命令合同13项通过。architecture、
-inventory门禁已通过，最终编译/差异检查后白名单提交develop并等待精确SHA CI；
-整阶段代码和本地验收就绪，尚未合 main/发布。本地状态记录
+inventory、编译和差异门禁已通过，12文件普通提交
+`ed9fc549149cdff690a63c16e203876351758342` 已推送develop。
+
+首轮完整CI run42910787957执行5919项，3失败：旧应用合同与进度扫描器仍要求商店
+started一律拒绝；旧测试意外执行真实load_config后又污染惰性构造断言。现已更新为
+身份冲突拒绝、无业务回执时当前门控、原结果重放的合同，并隔离测试配置读取；保留
+旧迁移/回执/完整回滚检查。隔离复测受影响4文件52项通过，日志
+`/tmp/xiuxian-redemption-ci-focused-recheck.log`，未删断言或跳过验证。
+
+此checkpoint冻结整阶段实现及本地验收；发布按本提交精确SHA的develop完整CI、
+普通合main及其CI、v1.2.21 tag质量门依次执行，不逐小提交同步main。正式交付状态
+以远端main、[v1.2.21 Release](https://github.com/liyw0205/nonebot_plugin_xiuxian_2_pmv/releases/tag/v1.2.21)
+及对应Actions为准。本地最终SHA/CI/附件核验记录
 `/tmp/xiuxian-redemption-delivery-status.md`。四个用户删除与本地辅助资料均不提交。
 
 ## 已交付：SQLite 历史数值兼容扩展（v1.2.20）

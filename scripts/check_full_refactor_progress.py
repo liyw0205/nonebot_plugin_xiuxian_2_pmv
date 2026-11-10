@@ -1422,6 +1422,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
     activity_collect_tests = (PACKAGE / "features" / "activity" / "tests" / "test_collect_exchange_repository.py").read_text(encoding="utf-8")
     activity_purchase_repository = (PACKAGE / "features" / "activity" / "point_shop_purchase_repository.py").read_text(encoding="utf-8")
     activity_purchase_tests = (PACKAGE / "features" / "activity" / "tests" / "test_point_shop_purchase_repository.py").read_text(encoding="utf-8")
+    activity_redemption_tests = (ROOT / "tests" / "test_activity_redemption_delivery.py").read_text(encoding="utf-8")
     activity_state_migration_tests = (ROOT / "tests" / "test_activity_state_migration.py").read_text(encoding="utf-8")
     migrated_application = (PACKAGE / "features" / "_migrated_application.py").read_text(encoding="utf-8")
     activity_application_tests = (PACKAGE / "features" / "activity" / "tests" / "test_activity_application.py").read_text(encoding="utf-8")
@@ -3542,9 +3543,14 @@ def _slice_status() -> dict[str, dict[str, object]]:
                 and "test_purchase_and_receipt_are_atomic_and_idempotent" in activity_purchase_tests
                 and "test_receipt_write_failure_rolls_back_points_and_rewards" in activity_purchase_tests
             ),
-            "historical_receipts_replay_without_started_retry": (
-                "retry_started_actions = frozenset({\"claim_collect_phrase\", \"claim_sign\"})" in activity_command_repository
-                and "test_point_shop_started_operation_is_not_blindly_retried" in activity_application_tests
+            "historical_receipts_and_interrupted_requests_replay_safely": (
+                "retry_started_actions = frozenset({\"claim_collect_phrase\", \"claim_sign\", \"claim_point_shop_item\"})" in activity_command_repository
+                and "def lookup_receipt(" in activity_purchase_repository
+                and "return self._decode_receipt(previous, user_id)" in activity_purchase_repository
+                and "test_point_shop_started_request_checks_identity_and_current_gate" in activity_application_tests
+                and "test_finish_interrupt_recovers_frozen_business_receipt_and_rejects_identity_reuse" in activity_redemption_tests
+                and "test_legacy_receipt_without_display_fields_recovers_before_config" in activity_redemption_tests
+                and "test_ignored_write_at_every_step_rolls_back_both_databases" in activity_redemption_tests
                 and "test_backfilled_purchase_receipt_replays_without_granting_assets_twice" in activity_state_migration_tests
                 and "apply_activity_state_legacy" in activity_state_migrations
                 and 'Migration("activity_state.002"' in plugin
