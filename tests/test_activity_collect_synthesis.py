@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
 from copy import deepcopy
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 import json
 from pathlib import Path
 import sqlite3
@@ -248,6 +248,22 @@ class CollectSynthesisTests(unittest.TestCase):
                 self.assertTrue(activity_config.activity_runtime_state(self.cfg, at_time=fixed)["ok"])
         with patch.object(activity_config, "_now_dt", return_value=datetime(2000, 1, 1)):
             self.assert_rejected(self.run_action("before"), "activity_not_started")
+
+    def test_bag_aware_clock_with_timed_activity_windows(self):
+        fixed = datetime(2026, 11, 12, 12, tzinfo=timezone.utc)
+        local = fixed.astimezone().replace(tzinfo=None)
+        window = {
+            "start_time": (local - timedelta(hours=1)).strftime("%Y-%m-%d %H:%M:%S"),
+            "end_time": (local + timedelta(hours=1)).strftime("%Y-%m-%d %H:%M:%S"),
+        }
+        self.cfg.update(window)
+        self.cfg["gameplay_activities"][0].update(window)
+        self.application.read_model.clock = SimpleNamespace(now=lambda: fixed)
+        self.assertIn("换字规则", self.application.read_model.collect_bag_guidance_text("u"))
+        self.cfg["gameplay_activities"][0]["end_time"] = window["start_time"]
+        expired = self.application.read_model.collect_bag_guidance_text("u")
+        self.assertIn("活动已结束", expired)
+        self.assertNotIn("换字规则", expired)
 
     def test_schema_missing_does_not_create_or_repair_tables(self):
         with sqlite3.connect(self.database) as conn:

@@ -32,9 +32,13 @@ def isolate_source():
         raise AssertionError("command diagnostics require a fresh process")
     source = Path(__file__).resolve().parents[1] / "nonebot_plugin_xiuxian_2"
     destination = tests._data_dir.parent / "command-source" / source.name
+    static_assets = {source / "xiuxian" / "xiuxian_activity" / "activity_config.json"}
 
     def ignore(directory, names):
-        return [name for name in names if name == "__pycache__" or not (Path(directory, name).is_dir() or name.endswith(".py"))]
+        return [name for name in names if name == "__pycache__" or not (
+            Path(directory, name).is_dir() or name.endswith(".py")
+            or Path(directory, name) in static_assets
+        )]
 
     shutil.copytree(source, destination, ignore=ignore)
     sys.path.insert(0, str(destination.parent))

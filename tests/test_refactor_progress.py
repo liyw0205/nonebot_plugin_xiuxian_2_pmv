@@ -2,10 +2,16 @@ from __future__ import annotations
 
 import unittest
 
-from scripts.check_full_refactor_progress import _parse_source, _slice_status, _walk
+from scripts.check_full_refactor_progress import _parse_source, _retry_actions_include, _slice_status, _walk
 
 
 class RefactorProgressTests(unittest.TestCase):
+    def test_retry_action_check_requires_members_and_allows_additional_actions(self):
+        source = 'self.retry_started_actions = frozenset({"new", "claim_sign", "claim_collect_phrase"})'
+        self.assertTrue(_retry_actions_include(source, "claim_collect_phrase", "claim_sign"))
+        self.assertFalse(_retry_actions_include(source, "claim_collect_phrase", "claim_point_shop_item"))
+        self.assertFalse(_retry_actions_include('note = "claim_sign"', "claim_sign"))
+
     def test_progress_ast_cache_reuses_immutable_source_traversals(self) -> None:
         _parse_source.cache_clear()
         _walk.cache_clear()

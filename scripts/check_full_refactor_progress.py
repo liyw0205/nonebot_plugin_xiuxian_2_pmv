@@ -74,6 +74,28 @@ _FOLDED_OPERATORS = {
 }
 
 
+def _retry_actions_include(source: str, *required: str) -> bool:
+    for node in _walk(_parse_source(source)):
+        if not isinstance(node, ast.Assign) or not any(
+            isinstance(target, ast.Attribute) and target.attr == "retry_started_actions"
+            and isinstance(target.value, ast.Name) and target.value.id == "self"
+            for target in node.targets
+        ):
+            continue
+        value = node.value
+        if not (
+            isinstance(value, ast.Call) and isinstance(value.func, ast.Name)
+            and value.func.id == "frozenset" and len(value.args) == 1
+        ):
+            return False
+        try:
+            actions = ast.literal_eval(value.args[0])
+        except (ValueError, TypeError):
+            return False
+        return isinstance(actions, (set, tuple, list)) and set(required) <= set(actions)
+    return False
+
+
 def _constant_value(node: ast.AST) -> object:
     """Fold a literal or arithmetic-on-literals expression, else return ``None``.
 
@@ -3498,7 +3520,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
                 and "test_receipt_failure_rolls_back_tokens_and_assets" in activity_collect_tests
             ),
             "started_exchange_retries_only_with_business_receipt_boundary": (
-                "retry_started_actions = frozenset({\"claim_collect_phrase\", \"claim_sign\"})" in activity_command_repository
+                _retry_actions_include(activity_command_repository, "claim_collect_phrase", "claim_sign")
                 and "retry_started_actions" in migrated_application
                 and "def lookup_receipt(" in activity_collect_repository
                 and "lookup_receipt(operation_id, uid)" in activity_service
@@ -3544,7 +3566,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
                 and "test_receipt_write_failure_rolls_back_points_and_rewards" in activity_purchase_tests
             ),
             "historical_receipts_and_interrupted_requests_replay_safely": (
-                "retry_started_actions = frozenset({\"claim_collect_phrase\", \"claim_sign\", \"claim_point_shop_item\"})" in activity_command_repository
+                _retry_actions_include(activity_command_repository, "claim_collect_phrase", "claim_sign", "claim_point_shop_item")
                 and "def lookup_receipt(" in activity_purchase_repository
                 and "return self._decode_receipt(previous, user_id)" in activity_purchase_repository
                 and "test_point_shop_started_request_checks_identity_and_current_gate" in activity_application_tests

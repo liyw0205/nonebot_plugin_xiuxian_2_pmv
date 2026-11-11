@@ -1540,7 +1540,7 @@ class ActivityReadModelApplication:
 
         uid = str(user_id)
         config = self._config()
-        now = self.clock.now()
+        now = self.clock.now().astimezone().replace(tzinfo=None)
         runtime = activity_runtime_state(config, at_time=now)
         activities = [
             activity
