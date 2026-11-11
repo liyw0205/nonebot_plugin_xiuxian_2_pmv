@@ -2,11 +2,11 @@
 
 最后核验：2026-11-12。本文是唯一活跃进度入口；旧重构文档仅作为历史记录，不再定义当前分支或禁止事项。
 
-## 当前活动任务：已注册指令自动化异常排查
+## 已注册指令自动化异常排查（v1.2.22 验收 checkpoint）
 
 2026-11-11 最新用户指令暂停活动中心及其他新功能，仅排查真实已注册指令并修复
-可复现 bug。当前 main=develop=`fc27d42a6ee1d01906781d789462beb1c39e077b`；
-v1.2.21 的 develop/main/tag CI 已绿。正式包逐 blob 收尾尚未执行，本轮不继续新功能。
+可复现 bug。阶段起点 main=develop=`fc27d42a6ee1d01906781d789462beb1c39e077b`
+（v1.2.21）；本阶段没有继续活动功能，也不推断当前生产版本。
 
 冻结范围：真实 NoneBot 注册/dispatch/handler 清单与隔离临时数据库、fixture、mock
 Bot/Event 自动触发；覆盖正常、未注册玩家、缺参数及关键前置状态。逐指令记录通过、
@@ -15,7 +15,9 @@ Bot/Event 自动触发；覆盖正常、未注册玩家、缺参数及关键前�
 基线仅运行一次，之后仅复测失败/受影响项；不要求用户逐条触发，不操作生产数据库、
 进程或真实 QQ，不部署，不改模型/配置。
 
-本轮 checkpoint（本地定向验证与门禁完成，提交/精确 SHA CI 待验）：
+本轮实现与本地验收已冻结，修复提交 `767148c59163fd435ae566e2b445ac2240819d7a`
+已普通推送develop，精确SHA完整CI [run43064046181](https://github.com/liyw0205/nonebot_plugin_xiuxian_2_pmv/actions/runs/43064046181)
+为success（测试、architecture、inventory、编译和diff均通过）。范围与证据：
 
 - 唯一基线672个 matcher×4场景=2688项；初始2251 pass/75 exception/362 blocked。
   修复及失败/受影响定向重试合并后2352 pass/336 blocked/0仍记录异常；逐指令清单
@@ -41,8 +43,12 @@ Bot/Event 自动触发；覆盖正常、未注册玩家、缺参数及关键前�
   inventory、全源编译及差异门禁均通过；没有恢复工作区缺失的legacy JSON。
 
 可复用执行与边界合同见 [已注册指令离线诊断](registered_command_diagnostics.md)。
-当前修复仅在 develop 工作树，提交/CI/main 状态以其后 checkpoint 为准；四项用户
-删除和本地辅助文档不暂存。活动中心及其他新功能保持暂停。
+本checkpoint提交只冻结验收与发布记录；以最终提交的精确SHA develop CI全绿为前提，
+普通合main并核验其CI后，通过既有tag工作流发布未占用的bugfix v1.2.22，核对
+tag/SHA及正式project.tar.gz。正式交付状态以远端main、对应Actions及
+[v1.2.22 Release](https://github.com/liyw0205/nonebot_plugin_xiuxian_2_pmv/releases/tag/v1.2.22)
+为准；本地核验记录 `/tmp/xiuxian-command-audit-status.md`。四项用户删除和本地辅助
+文档不提交。活动中心及其他新功能保持暂停，不自行开启下个功能阶段。
 
 ## 活动兑换交付与中断恢复（v1.2.21 交付 checkpoint，后续暂停）
 
