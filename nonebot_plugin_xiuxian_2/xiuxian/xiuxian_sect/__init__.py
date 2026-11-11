@@ -611,7 +611,7 @@ async def auto_handle_inactive_sect_owners():
 async def sect_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """宗门帮助"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
-    page = parse_page_arg(args.extract_plain_text())
+    page = parse_page_arg(args.extract_plain_text())["page"]
     msg, page, total_pages = paginate_text_blocks(__sect_help__, page, per_page=3)
     msg = f"{msg}\n\n翻页：宗门帮助 页码；管理：宗门管理。"
     button_kwargs = build_pagination_buttons(
@@ -2796,6 +2796,10 @@ async def sect_position_update_(bot: Bot, event: GroupMessageEvent | PrivateMess
         await sect_position_update.finish()
     
     user_id = user_info['user_id']
+
+    if not user_info.get("sect_id") or user_info.get("sect_position") is None:
+        await handle_send(bot, event, "道友还未加入一方宗门。", md_type="宗门", k1="加入", v1="宗门加入", k2="列表", v2="宗门列表")
+        await sect_position_update.finish()
     
     # 检查权限（长老及以上可以变更职位）
     position_zhanglao = [k for k, v in jsondata.sect_config_data().items() if v.get("title", "") == "长老"]

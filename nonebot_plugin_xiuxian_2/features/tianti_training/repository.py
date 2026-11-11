@@ -187,7 +187,7 @@ class TiantiProfileSqlReader:
 
     def __init__(self, player_database: str | Path, *, profile_reader: TiantiProfileReader | None = None) -> None:
         self.player_database = str(player_database)
-        self.profile = profile_reader or TiantiProfileReader(Path(player_database).parent / "xiuxian")
+        self.profile = profile_reader or TiantiProfileReader(Path(player_database).parent)
 
     def read(self, user_id: str) -> dict[str, Any]:
         fields = tuple(self.profile.default_data().keys())
@@ -327,7 +327,7 @@ class StoneTrainingSqlRepository:
         self.game_database = str(game_database)
         self.player_database = str(player_database)
         self._cap_provider = cap_provider
-        self._profile_reader = profile_reader or TiantiProfileReader(Path(player_database).parent / "xiuxian")
+        self._profile_reader = profile_reader or TiantiProfileReader(Path(player_database).parent)
 
     def train(self, operation_id: str, user_id: str, requested_stone: int) -> Any:
         operation_id, user_id = str(operation_id).strip(), str(user_id)
@@ -376,7 +376,7 @@ class TiantiMedicineBathSqlRepository:
     def __init__(self, game_database: str | Path, player_database: str | Path, *, spirit_vein_multiplier: Callable[[], float] | None = None, profile_reader: TiantiProfile | None = None) -> None:
         self.game_database = str(game_database)
         self.player_database = str(player_database)
-        self.profile = profile_reader or TiantiProfileReader(Path(player_database).parent / "xiuxian")
+        self.profile = profile_reader or TiantiProfileReader(Path(player_database).parent)
         self.spirit_vein_multiplier = spirit_vein_multiplier or (lambda: 1.0)
 
     def apply_bath(self, operation_id: str, user_id: str, consume_plan: Sequence[Mapping[str, Any]], effect: float, slot_name: str, started_at: datetime, duration_minutes: int, *, sect_fairyland_level: int = 0) -> Any:
@@ -444,7 +444,7 @@ class TiantiItemRewardSqlRepository:
     def __init__(self, game_database: str | Path, player_database: str | Path, *, profile_reader: TiantiProfile | None = None, spirit_vein_multiplier: Callable[[], float] | None = None) -> None:
         self.game_database = str(game_database)
         self.player_database = str(player_database)
-        self.profile = profile_reader or TiantiProfileReader(Path(player_database).parent / "xiuxian")
+        self.profile = profile_reader or TiantiProfileReader(Path(player_database).parent)
         self.spirit_vein_multiplier = spirit_vein_multiplier or (lambda: 1.0)
 
     def apply(self, operation_id: str, user_id: str, item_id: int, quantity: int, minutes: int, *, settled_at: datetime, sect_fairyland_level: int = 0) -> ItemRewardPersistenceResult:
@@ -502,7 +502,7 @@ class TiantiBreakthroughSqlRepository:
 
     def __init__(self, player_database: str | Path, *, profile_reader: TiantiProfileReader | None = None) -> None:
         self.player_database = str(player_database)
-        self.profile = profile_reader or TiantiProfileReader(Path(player_database).parent / "xiuxian")
+        self.profile = profile_reader or TiantiProfileReader(Path(player_database).parent)
 
     def ensure_profile(self, user_id: str) -> None:
         user_id = str(user_id)
@@ -568,7 +568,7 @@ class TiantiQiaoxueSqlRepository:
 
     def __init__(self, player_database: str | Path, *, profile_reader: TiantiProfileReader | None = None) -> None:
         self.player_database = str(player_database)
-        self.profile = profile_reader or TiantiProfileReader(Path(player_database).parent / "xiuxian")
+        self.profile = profile_reader or TiantiProfileReader(Path(player_database).parent)
 
     def open(self, operation_id: str, user_id: str, roll: int) -> Any:
         operation_id, user_id, roll = str(operation_id).strip(), str(user_id), int(roll)

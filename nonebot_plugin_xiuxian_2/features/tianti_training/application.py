@@ -343,6 +343,7 @@ class TiantiTrainingApplication:
                 "limit_reached": "当前炼体境界无法继续开窍。",
                 "hp_insufficient": "炼体气血不足，无法冲窍。",
                 "state_changed": "炼体状态已变化，请重新执行。",
+                "user_missing": "未找到炼体档案，暂时无法冲窍。",
             },
         )
 

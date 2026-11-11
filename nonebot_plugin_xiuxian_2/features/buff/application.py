@@ -14,6 +14,7 @@ from ...infrastructure.database import (
     OperationLedger,
     OutboxStore,
 )
+from ...infrastructure.database.ledger import request_hash
 from .._legacy_application import LegacyApplication
 from .repository import BuffRepository, LegacyBuffRepository
 from .rename_repository import BlessedSpotRenameSqlRepository
@@ -22,6 +23,7 @@ from .training_start_repository import NormalTrainingStartSqlRepository
 from .training_complete_repository import NormalTrainingCompleteSqlRepository
 from .closing_repository import ClosingSettlementSqlRepository
 from .stone_training_repository import StoneTrainingSqlRepository
+from .operation_schema import operations_ready, stone_training_ready
 from .pvp_repository import NormalPvpSqlRepository
 from .closing_enter_repository import ClosingEnterSqlRepository, ClosingEnterResult
 from .closing_reward import ClosingRewardCalculator, ClosingRewardSnapshot
@@ -58,7 +60,44 @@ class BuffApplication(LegacyApplication):
     def _action(self, action: str, *, operation_id: str, user_id: str, **kwargs: Any):
         return self._execute(operation_id=operation_id, user_id=user_id, action=f"buff.{action}", payload={"user_id": user_id, **kwargs}, call=lambda: self.repository.invoke(action, operation_id, user_id, **kwargs))
 
-    def open(self, *, operation_id: str, user_id: str, **kwargs: Any): return self._action("open", operation_id=operation_id, user_id=user_id, **kwargs)
+    def _asset_request(self, *, operation_id, user_id, action, kwargs, identity, table, extra, transient, call):
+        payload = {"user_id": user_id, **kwargs}
+        stable_payload = {key: value for key, value in payload.items() if key not in transient}
+        with DatabaseUnitOfWork(self.game_database, immediate=True) as uow:
+            tables = {row["name"] for row in uow.query_all("SELECT name FROM sqlite_master WHERE type='table'")}
+            existing = self.ledger.get(uow, operation_id, action) if "operation_ledger" in tables else None
+            receipt_ready = operations_ready(uow) if table == "blessed_spot_operations" else stone_training_ready(uow)
+            if receipt_ready:
+                suffix = " AND action='open'" if table == "blessed_spot_operations" else ""
+                receipt = uow.query_one(f"SELECT payload,result_json FROM {table} WHERE operation_id=?{suffix}", (operation_id,))
+                if receipt is not None:
+                    # Business receipts prove identity even for old ledger hashes
+                    # that included pre-write balances or the first wall clock.
+                    if json.loads(receipt["payload"]) != identity:
+                        raise OperationConflictError(operation_id, action)
+                    previous = existing.outcome() if existing is not None else None
+                    if previous is not None and previous.ok:
+                        return previous.replay()
+                    data = {**extra, **json.loads(receipt["result_json"]), "status": "duplicate"}
+                    recovered = OperationOutcome.applied(operation_id, action, data=data, audit_category="buff", clock=self.clock)
+                    if existing is None:
+                        self.ledger.begin(uow, operation_id, action, stable_payload)
+                    self.ledger.finish(uow, recovered)
+                    return recovered.replay()
+            # Unchanged historical refusals still replay their original outcome.
+            if existing is not None and existing.request_hash == request_hash(payload):
+                stable_payload = payload
+        return self._execute(operation_id=operation_id, user_id=user_id, action=action, payload=stable_payload, call=call)
+
+    def open(self, *, operation_id: str, user_id: str, **kwargs: Any):
+        if self._explicit_repository is not None:
+            return self._action("open", operation_id=operation_id, user_id=user_id, **kwargs)
+        return self._asset_request(
+            operation_id=operation_id, user_id=user_id, action="buff.open", kwargs=kwargs,
+            identity=[str(user_id), int(kwargs["stone_cost"]), str(kwargs["default_name"])],
+            table="blessed_spot_operations", extra={"user_id": str(user_id)}, transient={"harvest_time"},
+            call=lambda: self.repository.invoke("open", operation_id, user_id, **kwargs),
+        )
 
     @staticmethod
     def _closing_enter_ledger_ready(uow: AttachedDatabaseUnitOfWork) -> bool:
@@ -297,7 +336,12 @@ class BuffApplication(LegacyApplication):
             raise
     def stone_training(self, *, operation_id: str, user_id: str, **kwargs: Any):
         if self._explicit_repository is None:
-            return self._execute(operation_id=operation_id, user_id=user_id, action="buff.stone_training", payload={"user_id": user_id, **kwargs}, call=lambda: StoneTrainingSqlRepository(self.game_database, self.player_database).settle(operation_id, user_id, requested_stone=kwargs["requested_stone"], expected_exp=kwargs["expected_exp"], expected_stone=kwargs["expected_stone"], exp_cap=kwargs["exp_cap"], power_multiplier=kwargs["power_multiplier"]))
+            return self._asset_request(
+                operation_id=operation_id, user_id=user_id, action="buff.stone_training", kwargs=kwargs,
+                identity=[user_id, int(kwargs["requested_stone"]), int(kwargs["exp_cap"]), float(kwargs["power_multiplier"])],
+                table="stone_training_operations", extra={}, transient={"expected_exp", "expected_stone"},
+                call=lambda: StoneTrainingSqlRepository(self.game_database, self.player_database).settle(operation_id, user_id, **kwargs),
+            )
         return self._action("stone_training", operation_id=operation_id, user_id=user_id, **kwargs)
     def closing_settle(self, *, operation_id: str, user_id: str, **kwargs: Any):
         if self._explicit_repository is None:

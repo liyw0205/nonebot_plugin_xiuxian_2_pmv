@@ -323,13 +323,13 @@ async def blessed_spot_creat_(bot: Bot, event: GroupMessageEvent | PrivateMessag
     outcome = buff_application.open(
         operation_id=_blessed_spot_operation_id(event, "open", user_id),
         user_id=user_id,
-        cost=BLESSEDSPOTCOST,
-        name=default_name,
+        stone_cost=BLESSEDSPOTCOST,
+        default_name=default_name,
         harvest_time=harvest_time,
     )
     result = SimpleNamespace(**dict(outcome.data or {})); result.status = (outcome.data or {}).get("status", outcome.code or outcome.status); result.succeeded = outcome.ok
 
-    if result.status == "duplicate":
+    if result.succeeded and (result.status == "duplicate" or outcome.replayed):
         msg = (
             f"恭喜道友拥有了自己的洞天福地，请收集聚灵旗来提升洞天福地的等级吧~\n"
             f"默认名称为：{result.name}\n"
@@ -762,12 +762,15 @@ async def stone_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, a
     level_rate = _sql_message().get_root_rate(user_mes['root_type'], user_id)
     realm_rate = jsondata.level_data()[level]["spend"]
     stone_op_id = _stone_training_operation_id(event, user_id)
-    result = buff_application.stone_training(
+    outcome = buff_application.stone_training(
         operation_id=stone_op_id, user_id=str(user_id),
         requested_stone=stone_num, expected_exp=use_exp, expected_stone=use_stone,
         exp_cap=max_exp, power_multiplier=level_rate * realm_rate,
     )
-    if result.status == "duplicate":
+    result = SimpleNamespace(**dict(outcome.data or {}))
+    result.status = (outcome.data or {}).get("status", outcome.code or outcome.status)
+    result.succeeded = outcome.ok
+    if result.succeeded and (result.status == "duplicate" or outcome.replayed):
         msg = f"修炼结束，共增加修为：{result.exp_gain},消耗灵石：{result.stone_cost}\n该修炼请求已经处理，无需重复提交。"
     elif result.status == "stone_insufficient":
         msg = "你的灵石还不够呢，快去赚点灵石吧！"
@@ -1551,6 +1554,8 @@ async def daily_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 # 获取所有用户的 ID
 def get_all_user_ids():
     user_ids = []
+    if not PLAYERSDATA.exists():
+        return user_ids
     for user_dir in PLAYERSDATA.iterdir():
         if user_dir.is_dir():
             user_id = user_dir.name
@@ -1615,6 +1620,8 @@ async def migrate_data_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         
         partner_data = load_partner2(user_id)
         if partner_data:
+            from .partner import save_partner
+
             logger.info(f"更新道侣: {user_id}")
             save_partner(user_id, partner_data)
         from ..xiuxian_boss.boss_limit import boss_limit

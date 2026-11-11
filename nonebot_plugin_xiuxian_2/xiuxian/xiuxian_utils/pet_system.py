@@ -2423,7 +2423,7 @@ def prepare_pet_skill_reroll(user_id: str | int, uid: str | None = None, random_
         where, key, pet = ("active", None, data.get("active"))
 
     if not pet:
-        return None, None
+        return None, None, None
 
     new_skill = roll_replacement_pet_skill(
         pet,

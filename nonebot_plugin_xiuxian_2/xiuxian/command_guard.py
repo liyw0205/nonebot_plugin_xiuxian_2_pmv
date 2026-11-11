@@ -120,9 +120,15 @@ def _subject_label(subject) -> str:
     return {"visitor": "来访方", "target": "目标方", "source": "材料", "destination": "目标", "sender": "赠送方", "recipient": "接收方", "actor": "发起方", "challenger": "挑战者", "opponent": "对手", "sect": "宗门", "mentor": "师父", "apprentice": "徒弟"}.get(str(subject), "")
 
 
-def report_exception(action: str, exc: BaseException, *, phase: str = "处理或回复") -> str:
+def report_exception(action: str, exc: BaseException, *, phase: str = "处理或回复", event=None) -> str:
+    if event is None:
+        from .on_compat import _CURRENT_EVENT
+
+        event = _CURRENT_EVENT.get()
+    actor = str(event.get_user_id()) if event is not None and hasattr(event, "get_user_id") else "unknown"
+    subject = getattr(exc, "details", {}).get("subject", "actor")
     reference = uuid4().hex[:12]
-    logger.opt(exception=exc).error(f"[command] {action} phase={phase} reference={reference}")
+    logger.opt(exception=exc).error(f"[command] {action} actor={actor} subject={subject} phase={phase} reference={reference}")
     return failure_reply(action, exc, reference=reference)
 
 
@@ -151,7 +157,7 @@ def guard_command(
             except Exception as exc:  # noqa: BLE001 - answering is the point
                 bot = _argument(args, kwargs, 0, "bot")
                 event = _argument(args, kwargs, 1, "event")
-                reply = report_exception(action, exc)
+                reply = report_exception(action, exc, event=event)
                 sender = send
                 if sender is None:
                     from .xiuxian_utils.utils import handle_send
@@ -161,10 +167,8 @@ def guard_command(
                     await sender(bot, event, reply)
                 except (MatcherException, ProcessException):
                     raise
-                except Exception:  # noqa: BLE001 - delivery must not mask the original
-                    logger.opt(exception=True).error(
-                        f"[command] {action} failure reply was not delivered"
-                    )
+                except Exception as delivery_exc:  # noqa: BLE001 - retain both failures
+                    report_exception(action, delivery_exc, phase="失败回复投递", event=event)
                 return None
 
         return wrapper

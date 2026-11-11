@@ -545,7 +545,7 @@ async def do_work_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
         await handle_send(bot, event, msg)
         await do_work.finish()
         
-    mode = args[0]  # 刷新、终止、结算、接取等操作
+    mode = args[0] or "查看"  # 无子命令时使用帮助中约定的查看入口。
 
     def _offer_task_list(offer: dict | None) -> list:
         task_list = []

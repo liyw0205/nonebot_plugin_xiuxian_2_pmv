@@ -16,8 +16,9 @@ from ..adapter_compat import (
 )
 from ..xiuxian_utils.lay_out import assign_bot, assign_bot_group, Cooldown, CooldownIsolateLevel
 from nonebot.log import logger
-from ..command_guard import result_failure, guard_command
+from ..command_guard import result_failure, guard_command, report_exception
 from nonebot.params import CommandArg
+from nonebot.exception import MatcherException, ProcessException
 from nonebot.permission import SUPERUSER
 from ..xiuxian_utils.item_json import Items
 from ..xiuxian_utils.utils import (
@@ -59,6 +60,7 @@ from .auction_utils import (
     _format_user_auction_quota,
     bind_auction_repository,
     bind_auction_query_application,
+    bind_auction_queue_application,
 )
 from .transaction_service import (
     bind_auction_service_dependencies,
@@ -359,6 +361,7 @@ async def _place_auction_bid_with_application(
 
 bind_auction_repository(_auction_bid_repository, _auction_session_service)
 bind_auction_query_application(_auction_query_application)
+bind_auction_queue_application(_auction_queue_application)
 bind_auction_service_dependencies(
     items=items,
     sql_message=_sql_message,
@@ -642,8 +645,10 @@ def buy_xianshi_item_safely(
         stamina_cost=stamina_cost,
         max_goods_num=XiuConfig().max_goods_num,
     )
-    result = SimpleNamespace(**dict(outcome.data or {})); result.status = outcome.status; result.succeeded = outcome.ok
-    result.applied = result.status in {"applied", "duplicate"}
+    result = SimpleNamespace(**dict(outcome.data or {}))
+    result.status = (outcome.data or {}).get("status", outcome.code or outcome.status)
+    result.succeeded = outcome.ok
+    result.applied = outcome.ok and not outcome.replayed and result.status != "duplicate"
 
     messages = {
         "listing_missing": f"库存不足！{item_to_buy['name']} 已被其他道友购买。",
@@ -1594,9 +1599,10 @@ async def xian_buy_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, ar
                     {"仙肆售出次数": 1, "仙肆售出数量": trade_info['quantity'], "仙肆收入灵石": trade_info['total_cost']}
                 )
         await handle_send(bot, event, msg, md_type="交易", k1="购买", v1="仙肆购买", k2="查看", v2="仙肆查看", k3="我的", v3="我的仙肆")
+    except (MatcherException, ProcessException):
+        raise
     except Exception as e:
-        logger.error(f"仙肆购买出错: {e}")
-        msg = "购买过程中出现错误，请稍后再试！"
+        msg = report_exception("仙肆购买", e, event=event)
         await handle_send(bot, event, msg, md_type="交易", k1="购买", v1="仙肆购买", k2="查看", v2="仙肆查看", k3="我的", v3="我的仙肆")
     
     await xian_buy.finish()

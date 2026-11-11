@@ -45,7 +45,7 @@ class TiantiSettlementSqlRepository:
 
     def __init__(self, player_database: str, *, profile_reader: TiantiProfile | None = None, spirit_vein_multiplier: Callable[[], float] | None = None) -> None:
         self.player_database = str(player_database)
-        self.profile = profile_reader or TiantiProfileReader(Path(player_database).parent / "xiuxian")
+        self.profile = profile_reader or TiantiProfileReader(Path(player_database).parent)
         self.spirit_vein_multiplier = spirit_vein_multiplier or (lambda: 1.0)
 
     def settle(self, operation_id: str, user_id: str, settled_at: datetime, *, sect_fairyland_level: int = 0) -> Any:

@@ -15,7 +15,7 @@ from unittest.mock import Mock, patch
 import tests  # Establish isolated paths before importing plugin modules.
 import pytest
 
-from nonebot_plugin_xiuxian_2.core.errors import ConflictError
+from nonebot_plugin_xiuxian_2.core.errors import ConflictError, DomainError
 from nonebot_plugin_xiuxian_2.features.arena.application import ArenaApplication
 from nonebot_plugin_xiuxian_2.features.arena.migrations import (
     apply_arena_purchase,
@@ -133,7 +133,7 @@ def _handlers(context):
         "ArenaPurchaseResult", "ArenaChallengeSettlementResult",
     })
     namespace = _load(FACADE, {
-        **result_types, "re": re, "ConflictError": ConflictError, "logger": Mock(),
+        **result_types, "re": re, "ConflictError": ConflictError, "DomainError": DomainError, "logger": Mock(),
         "CommandArg": lambda: None, "assign_bot": assign_bot, "handle_send": send,
         "send_msg_handler": send_battle, "arena_application": context.application,
         "arena_opponent_application": context.opponents, "arena_profile_application": context.profiles,
@@ -152,6 +152,9 @@ def _handlers(context):
         "check_rank_requirement", "find_arena_opponent", "set_arena_opponent_cache",
         "get_arena_opponent_cache", "clear_arena_opponent_cache",
     })
+    from nonebot_plugin_xiuxian_2.xiuxian.command_guard import result_failure, report_exception
+
+    namespace.update(result_failure=result_failure, report_exception=report_exception)
 
     def run(handler, text="", *, event_id="event"):
         messages.clear()
@@ -220,7 +223,7 @@ def test_purchase_reused_event_with_changed_original_quantity_or_item_is_conflic
     with patch.object(context.opponents, "state", side_effect=AssertionError("conflict must precede state")):
         message = handlers.run("arena_buy_", changed, event_id="conflict")
     assert SUCCESS not in message
-    assert "\u51b2\u7a81" in message or "\u672a\u7ed3\u7b97" in message or "\u672a\u5b8c\u6210" in message
+    assert message == "竞技场兑换：该操作号已用于不同内容的请求，请发送一条新命令。"
     assert _purchase_state(context) == before
     assert _query(context.game, "SELECT COUNT(*) FROM arena_purchase_operations") == [(1,)]
 

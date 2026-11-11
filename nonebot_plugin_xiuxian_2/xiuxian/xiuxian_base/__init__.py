@@ -9,7 +9,7 @@ from typing import Any
 
 from nonebot.typing import T_State
 from ...paths import get_paths
-from ..command_guard import result_failure
+from ..command_guard import result_failure, report_exception
 from ...features.base.application import BaseApplication
 from ...infrastructure.clock import SystemClock
 from ...infrastructure.random_source import SystemRandom
@@ -552,7 +552,7 @@ def _format_season_rank_rows(title: str, rows, limit: int = 5) -> list[str]:
 
 
 def _get_sect_weekly_rank_fallback(limit: int = 5):
-    conn = getattr(sql_message, "conn", None)
+    conn = getattr(_sql_message(), "conn", None)
     if not conn or not getattr(conn, "table_exists", lambda _table: False)("sect_weekly_goal"):
         return None
 
@@ -639,7 +639,7 @@ def _append_global_rank_preview(lines: list[str]) -> None:
                 )
             )
     except Exception as exc:
-        logger.warning(f"赛季榜读取宗门周常排行失败：{exc}")
+        report_exception("赛季榜", exc, phase="读取宗门周常排行")
         lines.extend(["\n【宗门周常榜 前五】", "暂不可看"])
 
 
@@ -766,7 +766,9 @@ async def remaname_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, ar
             if not get_user_profile_by_name(user_name):
                 break
         outcome = base_application.rename(operation_id=operation_id, user_id=user_id, rename_kind="user", new_name=user_name, stone_cost=XiuConfig().remaname)
-        result = SimpleNamespace(**dict(outcome.data or {})); result.status = outcome.status; result.succeeded = outcome.ok
+        result = SimpleNamespace(**dict(outcome.data or {}))
+        result.status = (outcome.data or {}).get("status", outcome.code or outcome.status)
+        result.succeeded = outcome.ok
     else:
         # 检查名字长度（7个中文字符）
         if len(user_name) > 7:
@@ -776,7 +778,9 @@ async def remaname_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, ar
             
         msg = ""
         outcome = base_application.rename(operation_id=operation_id, user_id=user_id, rename_kind="user", new_name=user_name, item_id=20011)
-        result = SimpleNamespace(**dict(outcome.data or {})); result.status = outcome.status; result.succeeded = outcome.ok
+        result = SimpleNamespace(**dict(outcome.data or {}))
+        result.status = (outcome.data or {}).get("status", outcome.code or outcome.status)
+        result.succeeded = outcome.ok
     if result.status == "stone_insufficient":
         msg = f"修改道号需要消耗{XiuConfig().remaname}灵石，你的灵石不足！"
     elif result.status == "schema_missing":
@@ -823,7 +827,9 @@ async def root_rename_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
         await root_rename.finish()
 
     outcome = base_application.rename(operation_id=_player_rename_operation_id(event, "root", user_id), user_id=user_id, rename_kind="root", new_name=root_name, item_id=20025)
-    result = SimpleNamespace(**dict(outcome.data or {})); result.status = outcome.status; result.succeeded = outcome.ok
+    result = SimpleNamespace(**dict(outcome.data or {}))
+    result.status = (outcome.data or {}).get("status", outcome.code or outcome.status)
+    result.succeeded = outcome.ok
     if result.status == "item_missing":
         msg = "修改灵根名需要消耗1个灵根改名卡！"
     elif result.status == "unchanged":

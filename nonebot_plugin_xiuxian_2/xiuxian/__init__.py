@@ -5,6 +5,7 @@ from collections import deque
 
 from nonebot.plugin import PluginMetadata
 from nonebot.log import logger
+from nonebot.matcher import Matcher
 from nonebot.message import (
     IgnoredException,
     event_postprocessor,
@@ -710,6 +711,17 @@ async def arm_qq_interaction_ack(bot, event):
 async def ack_failed_qq_interaction(bot, event, exception):
     if is_interaction_event(event) and exception is not None:
         await complete_interaction_ack(bot, event, 0)
+
+
+@run_postprocessor
+async def log_failed_command(event, matcher: Matcher, exception):
+    if exception is None or "nonebot_plugin_xiuxian_2" not in (matcher.module_name or ""):
+        return
+    from .command_guard import report_exception
+    from .on_compat import _PRIMARY_COMMAND_NAMES
+
+    action = _PRIMARY_COMMAND_NAMES.get(type(matcher), matcher.module_name)
+    report_exception(action, exception, phase="未捕获异常", event=event)
 
 
 @event_postprocessor

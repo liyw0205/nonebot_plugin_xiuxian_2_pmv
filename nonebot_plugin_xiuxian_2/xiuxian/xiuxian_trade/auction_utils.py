@@ -8,6 +8,7 @@ from ..xiuxian_utils.utils import check_user, number_to
 auction_repository: Any = None
 auction_session_service: Any = None
 auction_query_application: Any = None
+auction_queue_application: Any = None
 
 
 def bind_auction_repository(
@@ -22,6 +23,11 @@ def bind_auction_repository(
 def bind_auction_query_application(application: Any) -> None:
     global auction_query_application
     auction_query_application = application
+
+
+def bind_auction_queue_application(application: Any) -> None:
+    global auction_queue_application
+    auction_queue_application = application
 
 
 def get_auction_status() -> Dict[str, Any]:
@@ -198,7 +204,8 @@ def _format_user_auction_quota(
         return ["我的上架: 未加入修仙或当前不可用，暂无个人额度信息。"]
 
     user_id = str(user_info["user_id"])
-    waiting_items = trade_manager.get_player_auction_items(user_id) or []
+    queue = auction_queue_application() if callable(auction_queue_application) else auction_queue_application
+    waiting_items = queue.get_player_items(user_id) or []
     waiting_count = len(waiting_items)
     current_count = sum(
         1

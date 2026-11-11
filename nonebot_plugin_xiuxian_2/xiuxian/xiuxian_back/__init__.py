@@ -310,6 +310,8 @@ def _backpack_repair_operation_id(event):
 
 
 def _backpack_repair_result(outcome):
+    if isinstance(outcome, BackpackRepairResult):
+        return outcome
     data = outcome.data or {}
     return BackpackRepairResult(
         status=str(data.get("status", outcome.code)),

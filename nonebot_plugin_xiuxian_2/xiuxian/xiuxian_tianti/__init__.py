@@ -3,6 +3,7 @@ import re
 import time
 from datetime import datetime
 from ..on_compat import on_command
+from ..command_guard import result_failure
 from nonebot.params import CommandArg
 from ..adapter_compat import Bot, Message, GroupMessageEvent, PrivateMessageEvent
 from ..xiuxian_utils.lay_out import assign_bot, Cooldown
@@ -750,6 +751,12 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         return
     if status == "hp_insufficient":
         await handle_send(bot, event, "炼体气血不足，无法冲窍。")
+        return
+    if status in {"user_missing", "state_changed"}:
+        await handle_send(bot, event, result_failure(
+            "冲窍", outcome,
+            messages={"user_missing": "未找到炼体档案，暂时无法冲窍。"},
+        ))
         return
     if outcome.replayed or status == "duplicate":
         qiaoxue = dict(result.get("qiaoxue") or {})

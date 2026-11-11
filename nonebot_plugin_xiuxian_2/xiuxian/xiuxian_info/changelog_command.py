@@ -3,8 +3,10 @@ from io import BytesIO
 from pathlib import Path
 
 from ..on_compat import on_command
+from ..command_guard import report_exception
 from nonebot.log import logger
 from nonebot.params import CommandArg
+from nonebot.exception import MatcherException, ProcessException
 
 from ..adapter_compat import Bot, GroupMessageEvent, Message, PrivateMessageEvent
 from ..xiuxian_utils.lay_out import assign_bot, Cooldown
@@ -89,9 +91,10 @@ async def changelog_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, a
             except Exception as e:
                 logger.warning(f"删除更新日志缓存图片失败: {e}")
 
+    except (MatcherException, ProcessException):
+        raise
     except Exception as e:
-        logger.exception("生成或发送更新日志图片时出错")
-        await handle_send(bot, event, f"生成更新日志图片时出错: {e}")
+        await handle_send(bot, event, report_exception("更新日志", e, event=event))
 
     await changelog.finish()
 
