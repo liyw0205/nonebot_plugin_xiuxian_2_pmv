@@ -1366,7 +1366,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     uid = str(user_info["user_id"])
     text = args.extract_plain_text().strip()
     parts = text.split()
-    if len(parts) < 2:
+    if len(parts) != 2:
         await handle_send(bot, event, "购买格式：购买种子 种子名 数量")
         return
 

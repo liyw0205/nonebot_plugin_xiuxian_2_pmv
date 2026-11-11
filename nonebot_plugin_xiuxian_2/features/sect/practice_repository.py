@@ -11,12 +11,16 @@ class SectPracticeSqlRepository:
     def upgrade(self, operation_id, user_id, sect_id, practice_type, expected_level, next_level, stone_cost, materials_cost) -> dict[str, Any]:
         operation_id,user_id,practice_type=str(operation_id).strip(),str(user_id),str(practice_type); sect_id,expected_level,next_level,stone_cost,materials_cost=int(sect_id),int(expected_level),int(next_level),max(int(stone_cost),0),max(int(materials_cost),0)
         if not operation_id: raise ValueError('operation_id must not be empty')
-        columns={'attack':'attack_practice','health':'health_practice','mana':'mana_practice'}
-        column=columns.get(practice_type)
-        if column is None:return {'status':'invalid_practice_type','user_id':user_id,'sect_id':sect_id,'practice_type':practice_type}
+        columns={'attack':('atkpractice', 'attack_practice'), 'health':('hppractice', 'health_practice'), 'mana':('mppractice', 'mana_practice')}
+        candidates = columns.get(practice_type)
+        if candidates is None:return {'status':'invalid_practice_type','user_id':user_id,'sect_id':sect_id,'practice_type':practice_type}
         with DatabaseUnitOfWork(self.database, immediate=True) as uow:
             if not table_ready(uow, "sect_practice_operations", PRACTICE_COLUMNS):
                 return {"status": SCHEMA_MISSING}
+            user_columns = {str(row["name"]) for row in uow.query_all('PRAGMA table_info("user_xiuxian")')}
+            column = next((name for name in candidates if name in user_columns), None)
+            if column is None:
+                return {"status": SCHEMA_MISSING, "reason": "sect_practice_columns_missing"}
             old=uow.query_one('SELECT practice_type,from_level,to_level,stone_cost,materials_cost FROM sect_practice_operations WHERE operation_id=?',(operation_id,))
             if old:return {'status':'duplicate','user_id':user_id,'sect_id':sect_id,'practice_type':str(old['practice_type']),'from_level':int(old['from_level']),'to_level':int(old['to_level']),'stone_cost':int(old['stone_cost']),'materials_cost':int(old['materials_cost'])}
             user=uow.query_one(f'SELECT sect_id,COALESCE({column},0) AS level FROM user_xiuxian WHERE user_id=?',(user_id,)); sect=uow.query_one('SELECT sect_owner,COALESCE(sect_materials,0) AS materials,COALESCE(sect_used_stone,0) AS stones FROM sects WHERE sect_id=?',(sect_id,))

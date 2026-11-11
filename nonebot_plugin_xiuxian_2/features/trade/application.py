@@ -145,6 +145,12 @@ class TradeApplication(LegacyApplication):
     ) -> list[dict[str, Any]]:
         return self.xianshi_query_repository.my_trades(user_id, limit=limit)
 
+    def xianshi_fast_plan(self, *, operation_id, user_id, names, quantities):
+        return self.xianshi_purchase_repository.fast_plan(
+            operation_id, user_id, names, quantities,
+            self.xianshi_get_items(),
+        )
+
     def guishi_get_orders(
         self,
         *,

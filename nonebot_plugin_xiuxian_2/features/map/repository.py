@@ -942,11 +942,15 @@ class MapSeedPurchaseSqlRepository:
     def purchase(self,operation_id:str,user_id:str,item_id:int,item_name:str,quantity:int,unit_cost:int,expected_stone:int,max_goods_num:int)->dict[str,Any]:
         operation_id,user_id,item_name=str(operation_id).strip(),str(user_id),str(item_name);item_id,quantity,unit_cost,expected_stone,max_goods_num=map(int,(item_id,quantity,unit_cost,expected_stone,max_goods_num))
         if not operation_id or quantity<=0 or min(item_id,unit_cost,expected_stone,max_goods_num)<0:raise ValueError('valid seed purchase required')
-        payload=json.dumps([user_id,item_id,item_name,quantity,unit_cost,expected_stone,max_goods_num],ensure_ascii=True,sort_keys=True)
+        payload=json.dumps([user_id,item_id,item_name,quantity,unit_cost],ensure_ascii=True,sort_keys=True)
         with DatabaseUnitOfWork(self.game_database,immediate=True) as uow:
             old=uow.query_one('SELECT payload,quantity,cost,stone,inventory FROM map_seed_purchase_operations WHERE operation_id=?',(operation_id,))
             if old:
-                return {'status':'duplicate','quantity':int(old['quantity']),'cost':int(old['cost']),'stone':as_int_like(old['stone']),'inventory':int(old['inventory'])} if str(old['payload'])==payload else {'status':'state_changed','quantity':0,'cost':0,'stone':expected_stone,'inventory':0}
+                try:
+                    old_identity = json.loads(str(old['payload']))[:5]
+                except (TypeError, ValueError, json.JSONDecodeError):
+                    old_identity = None
+                return {'status':'duplicate','quantity':int(old['quantity']),'cost':int(old['cost']),'stone':as_int_like(old['stone']),'inventory':int(old['inventory'])} if old_identity == [user_id,item_id,item_name,quantity,unit_cost] else {'status':'state_changed','quantity':0,'cost':0,'stone':expected_stone,'inventory':0}
             user=uow.query_one('SELECT stone FROM user_xiuxian WHERE user_id=?',(user_id,))
             if user is None:return {'status':'user_missing','quantity':0,'cost':0,'stone':expected_stone,'inventory':0}
             stone=as_int_like(user['stone'] or 0)

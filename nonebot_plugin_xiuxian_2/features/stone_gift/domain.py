@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date
+from decimal import Decimal
 
 
 RANK_NAMES = (
@@ -48,7 +49,8 @@ def calculate_amounts(gross_amount: int, fee_rate: float) -> tuple[int, int]:
         raise ValueError("gross_amount must be positive")
     if not 0 <= rate < 1:
         raise ValueError("fee_rate must be in [0, 1)")
-    fee = int(amount * rate)
+    numerator, denominator = Decimal(str(rate)).as_integer_ratio()
+    fee = amount * numerator // denominator
     return amount - fee, fee
 
 

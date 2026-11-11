@@ -43,14 +43,14 @@ class XianshiListingSqlRepository:
     @staticmethod
     def _fee(total_price: int) -> int:
         if total_price <= 5_000_000:
-            rate = 0.1
+            rate = 10
         elif total_price <= 10_000_000:
-            rate = 0.15
+            rate = 15
         elif total_price <= 20_000_000:
-            rate = 0.2
+            rate = 20
         else:
-            rate = 0.3
-        return int(total_price * rate)
+            rate = 30
+        return total_price * rate // 100
 
     @staticmethod
     def _listing_id(raw_id: str) -> str:

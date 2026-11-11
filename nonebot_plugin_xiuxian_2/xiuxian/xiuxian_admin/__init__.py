@@ -490,6 +490,10 @@ async def gm_command_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
     bot, _ = await assign_bot(bot=bot, event=event)
     
     plain_args = args.extract_plain_text().strip().split()
+    at_qq = get_at_user_id(args)
+    if len(plain_args) > (1 if at_qq else 2):
+        await handle_send(bot, event, "用法：神秘力量 数量 [all/道号/@目标]，请勿添加多余参数")
+        return
     if not plain_args:
         await handle_send(bot, event, "用法：神秘力量 数量 [all/道号]\n示例：神秘力量 10000\n神秘力量 -5000 all")
         return
@@ -757,15 +761,15 @@ async def ccll_command_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
 async def adjust_exp_command_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """修为调整 - 增加或减少玩家修为"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
-    give_qq = None  # 艾特的时候存到这里
+    give_qq = get_at_user_id(args)
     arg_list = args.extract_plain_text().split()
     
-    if not args or len(arg_list) < 2:
+    if len(arg_list) != (1 if give_qq else 2):
         msg = f"请输入正确指令！例如：修为调整 道号 修为"
         await handle_send(bot, event, msg)
         await adjust_exp_command.finish()
         
-    if len(arg_list) < 2:
+    if give_qq:
         exp_num = str(arg_list[0])  # 修为数量
         nick_name = None
     else:
@@ -783,9 +787,6 @@ async def adjust_exp_command_(bot: Bot, event: GroupMessageEvent | PrivateMessag
         await handle_send(bot, event, "修为调整数量不能为 0")
         await adjust_exp_command.finish()
 
-    # 遍历Message对象，寻找艾特信息
-    give_qq = get_at_user_id(args)
-    
     if nick_name:
         give_message = _sql_message().get_user_info_with_name(nick_name)
         if give_message:

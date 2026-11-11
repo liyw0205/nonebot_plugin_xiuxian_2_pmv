@@ -13,6 +13,7 @@ import ast
 import inspect
 import sqlite3
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
 import nonebot
@@ -22,7 +23,7 @@ nonebot.init()
 from nonebot.params import CommandArg
 from nonebot.exception import FinishedException
 
-from nonebot_plugin_xiuxian_2.core.errors import ConflictError, DomainError, ValidationError
+from nonebot_plugin_xiuxian_2.core.errors import ConflictError, DomainError, OperationConflictError, ValidationError
 from nonebot_plugin_xiuxian_2.xiuxian.command_guard import (
     BUSY_FAILURE_TEXT,
     CONFLICT_FAILURE_TEXT,
@@ -58,6 +59,35 @@ class _Recorder:
 
 
 class GuardUnitTests(unittest.IsolatedAsyncioTestCase):
+    async def test_explicit_operation_conflict_is_a_known_rejection(self):
+        recorder = _Recorder()
+
+        @guard_command("仙肆快速购买", send=recorder, known_rejections=("operation_conflict",))
+        async def handler(bot, event):
+            raise OperationConflictError("fixture", "trade.fast_purchase.plan")
+
+        with patch("nonebot_plugin_xiuxian_2.xiuxian.command_guard.report_exception") as reporter:
+            await handler(None, None)
+        reporter.assert_not_called()
+        self.assertIn("不同内容", recorder.calls[-1][2])
+
+    async def test_only_explicit_known_rejection_avoids_exception_reporting(self):
+        recorder = _Recorder()
+        known = DomainError("impart_rows_inconsistent", "historical state differs",
+                            {"reason": "impart_rows_stone_num", "subject": "actor"})
+
+        @guard_command("传承祈愿", send=recorder, known_rejections=("impart_rows_inconsistent",))
+        async def handler(bot, event):
+            raise known
+
+        with patch("nonebot_plugin_xiuxian_2.xiuxian.command_guard.report_exception", return_value="unexpected") as reporter:
+            await handler(None, None)
+            reporter.assert_not_called()
+            self.assertIn("历史思恋结晶", recorder.calls[-1][2])
+            known = DomainError("impart_rows_inconsistent", "invalid missing reason")
+            await handler(None, None)
+            reporter.assert_called_once()
+
     async def test_failure_sends_exactly_one_leak_free_reply(self) -> None:
         recorder = _Recorder()
 

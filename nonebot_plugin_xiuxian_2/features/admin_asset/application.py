@@ -6,11 +6,13 @@ from ...core.player_reasons import reason_text
 from collections.abc import Callable, Mapping
 from dataclasses import asdict, is_dataclass
 from pathlib import Path
+import json
 from typing import Any
 
-from ...core.errors import ConflictError, DomainError, ValidationError
+from ...core.errors import ConflictError, DomainError, OperationConflictError, ValidationError
 from ...core.result import OperationOutcome, ReplyPlan
 from ...infrastructure.database import DatabaseUnitOfWork, OperationLedger
+from ...infrastructure.database.ledger import request_hash
 from ...infrastructure.observability import trace_context
 from .domain import ItemGrantRequest, StoneAdjustmentRequest, StoneBatchAdjustmentRequest
 from .repository import AdminItemRepository, AdminStoneRepository, LegacyAdminItemRepository, LegacyAdminStoneRepository
@@ -42,6 +44,20 @@ class AdminAssetApplication:
         self.item_repository = item_repository
         self.ledger = ledger or OperationLedger()
 
+    def _begin_asset(self, uow, operation_id, action, payload, identity, table, receipt_identity):
+        existing = self.ledger.get(uow, operation_id, action)
+        present = uow.query_one("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (table,))
+        receipt = uow.query_one(f'SELECT payload FROM "{table}" WHERE operation_id=?', (operation_id,)) if present else None
+        if receipt is not None:
+            if json.loads(receipt["payload"]) != receipt_identity:
+                raise OperationConflictError(operation_id, action)
+            # A committed business receipt can recover historical hashes that
+            # included a balance/inventory snapshot, without repeating a write.
+            if existing is not None and existing.request_hash not in {request_hash(identity), request_hash(payload)}:
+                return identity, None
+        selected = payload if existing is not None and existing.request_hash == request_hash(payload) else identity
+        return selected, self.ledger.begin(uow, operation_id, action, selected)
+
     def adjust_stone(
         self,
         *,
@@ -64,7 +80,12 @@ class AdminAssetApplication:
         with trace_context(operation_id=request.operation_id, user_scope=request.user_id):
             try:
                 with DatabaseUnitOfWork(self.database, immediate=True) as uow:
-                    existing = self.ledger.begin(uow, request.operation_id, self.action, payload)
+                    payload, existing = self._begin_asset(
+                        uow, request.operation_id, self.action, payload,
+                        {key: payload[key] for key in ("operator_id", "user_id", "requested_delta")},
+                        "admin_stone_adjustment_operations",
+                        [request.operator_id, request.user_id, request.requested_delta],
+                    )
                     if existing is not None:
                         previous = existing.outcome()
                         if previous is not None:
@@ -369,12 +390,18 @@ class AdminAssetApplication:
         with trace_context(operation_id=request.operation_id, user_scope=request.user_id):
             try:
                 with DatabaseUnitOfWork(self.database, immediate=True) as uow:
-                    existing = self.ledger.begin(uow, request.operation_id, action, payload)
+                    payload, existing = self._begin_asset(
+                        uow, request.operation_id, action, payload,
+                        {key: payload[key] for key in ("operator_id", "user_id", "item_id", "quantity")},
+                        "admin_item_grant_operations",
+                        [request.operator_id, request.user_id, request.item_id, request.quantity],
+                    )
                     if existing is not None:
                         previous = existing.outcome()
                         if previous is not None:
                             return previous.replay()
-                        raise ConflictError("操作正在处理中")
+                        # A repository receipt recovers a commit interrupted
+                        # before the operation-ledger result was saved.
                 repository = self.item_repository or AdminItemSqlRepository(self.database)
                 raw = repository.grant(
                     request.operation_id, request.operator_id, request.user_id, request.item_id,

@@ -498,14 +498,14 @@ def get_xianshi_min_price(item_name: str) -> int | None:
 def get_fee_price(total_price: int) -> int:
     """根据总价计算仙肆手续费"""
     if total_price <= 5000000:
-        fee_rate = 0.1
+        fee_rate = 10
     elif total_price <= 10000000:
-        fee_rate = 0.15
+        fee_rate = 15
     elif total_price <= 20000000:
-        fee_rate = 0.2
+        fee_rate = 20
     else:
-        fee_rate = 0.3
-    single_fee = int(total_price * fee_rate)
+        fee_rate = 30
+    single_fee = total_price * fee_rate // 100
     return single_fee
 
 
@@ -736,18 +736,20 @@ async def xian_shop_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     user_id = user_info['user_id']
     args = args.extract_plain_text().split()
     
-    if len(args) < 2:
+    if not 2 <= len(args) <= 3:
         msg = "请输入正确指令！格式：仙肆上架 物品名称 价格 [数量]"
         await handle_send(bot, event, msg, md_type="交易", k1="上架", v1="仙肆上架", k2="查看", v2="仙肆查看", k3="购买", v3="仙肆购买")
         await xian_shop_add.finish()
     
     item_name = args[0]
     try:
-        price = max(int(args[1]), MIN_PRICE) # 价格不得低于最低限额
+        price = int(args[1])
         quantity = int(args[2]) if len(args) > 2 else 1
-        quantity = max(1, min(quantity, MAX_QUANTITY)) # 数量限制在1到最大值之间
+        if price <= 0 or not 1 <= quantity <= MAX_QUANTITY:
+            raise ValueError("price and quantity must be positive and within limits")
+        price = max(price, MIN_PRICE)
     except ValueError:
-        msg = "请输入有效的价格和数量！"
+        msg = f"价格必须为正整数，数量必须为1至{MAX_QUANTITY}的整数！"
         await handle_send(bot, event, msg, md_type="交易", k1="上架", v1=f"仙肆上架 {item_name}", k2="查看", v2="仙肆查看", k3="购买", v3="仙肆购买")
         await xian_shop_add.finish()
 
@@ -1545,15 +1547,19 @@ async def xian_buy_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, ar
     user_id = user_info['user_id']
     args = args.extract_plain_text().split()
     
-    if len(args) < 1:
-        msg = "请输入要购买的仙肆ID！"
+    if not 1 <= len(args) <= 2:
+        msg = "指令格式：仙肆购买 仙肆ID [数量]"
         await handle_send(bot, event, msg, md_type="交易", k1="购买", v1="仙肆购买", k2="查看", v2="仙肆查看", k3="我的", v3="我的仙肆")
         await xian_buy.finish()
     
     xianshi_id = args[0]
-    quantity_to_buy = int(args[1]) if len(args) > 1 else 1
-    if quantity_to_buy <= 0:
-        quantity_to_buy = 1 # 购买数量至少为1
+    try:
+        quantity_to_buy = int(args[1]) if len(args) > 1 else 1
+        if quantity_to_buy <= 0:
+            raise ValueError("quantity must be positive")
+    except ValueError:
+        await handle_send(bot, event, "购买数量必须为正整数！", md_type="交易")
+        await xian_buy.finish()
 
     operation_id = _xianshi_operation_id(event, xianshi_id)
     # 先走 operation：挂单售罄后同事件重放仍须回放首次结果，不能被“未找到”前置拦截。
@@ -1608,6 +1614,7 @@ async def xian_buy_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, ar
     await xian_buy.finish()
 
 @xianshi_fast_buy.handle(parameterless=[Cooldown(cd_time=0)])
+@guard_command("仙肆快速购买", known_rejections=("operation_conflict",))
 async def xianshi_fast_buy_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """仙肆快速购买 - 自动匹配最低价购买指定物品"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -1619,33 +1626,39 @@ async def xianshi_fast_buy_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     user_id = user_info['user_id']
     args = args.extract_plain_text().split()
     
-    if len(args) < 1:
+    if not 1 <= len(args) <= 2:
         msg = "指令格式：仙肆快速购买 物品名1,物品名2,... [数量1,数量2,...]\n" \
               "▶ 物品名：支持1-5个物品（可重复），用逗号分隔\n" \
-              "▶ 数量：可选，支持1-10个数量，用逗号分隔，没有数量默认每个物品买1个"
+              "▶ 数量：可选，用逗号分隔，数量不得多于物品名，省略的数量默认为1"
         await handle_send(bot, event, msg, md_type="交易", k1="购买", v1="仙肆快速购买", k2="查看", v2="仙肆查看", k3="我的", v3="我的仙肆")
         await xianshi_fast_buy.finish()
     
     # 解析物品名列表（允许重复且保留顺序）
     goods_names = args[0].split(",")
-    if len(goods_names) > 5:
+    if len(goods_names) > 5 or any(not name.strip() for name in goods_names):
         msg = "一次最多指定5个物品名（可重复）！"
         await handle_send(bot, event, msg, md_type="交易", k1="购买", v1="仙肆快速购买", k2="查看", v2="仙肆查看", k3="我的", v3="我的仙肆")
         await xianshi_fast_buy.finish()
     
     # 解析数量列表
     quantities_input = args[1] if len(args) > 1 else ""
-    quantities = quantities_input.split(",") if quantities_input else ["" for _ in goods_names]
-    quantities = [int(q) if q.isdigit() else 1 for q in quantities]
+    quantities = quantities_input.split(",") if quantities_input else []
+    if len(quantities) > len(goods_names) or any(not q.isdecimal() or int(q) <= 0 for q in quantities):
+        await handle_send(bot, event, "数量必须为正整数，且数量项不能多于物品名。")
+        return
+    quantities = [int(q) for q in quantities]
     
     # 确保数量列表长度不超过物品名列表长度，不足则补1
     if len(quantities) < len(goods_names):
         quantities.extend([1] * (len(goods_names) - len(quantities)))
-    elif len(quantities) > len(goods_names): # 数量列表过长则截断
-        quantities = quantities[:len(goods_names)]
+
+    stamina_operation_id = _xianshi_fast_purchase_stamina_operation_id(event, user_id)
 
     # 获取所有仙肆中的物品
-    all_xianshi_items = trade_application.xianshi_get_items()
+    all_xianshi_items = trade_application.xianshi_fast_plan(
+        operation_id=stamina_operation_id, user_id=user_id,
+        names=goods_names, quantities=quantities,
+    )
     if not all_xianshi_items:
         msg = "仙肆中没有物品可供购买！"
         await handle_send(bot, event, msg, md_type="交易", k1="购买", v1="仙肆快速购买", k2="查看", v2="仙肆查看", k3="我的", v3="我的仙肆")
@@ -1664,14 +1677,11 @@ async def xianshi_fast_buy_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     
     # 执行购买（严格按照输入顺序处理每个物品名）
     total_cost = 0
-    current_user_stone = user_info["stone"]
+    replay_cost = 0
     
     success_items = []
     failed_items = []
     seller_trade_summary = {}
-    stamina_operation_id = _xianshi_fast_purchase_stamina_operation_id(
-        event, user_id
-    )
     
     for i, target_item_name in enumerate(goods_names):
         target_quantity = quantities[i]
@@ -1684,11 +1694,6 @@ async def xianshi_fast_buy_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
         for item_data in available_target_items:
             if purchased_count >= target_quantity:
                 break # 达到目标购买数量
-            
-            # 检查用户是否有足够的灵石购买当前这个物品
-            if current_user_stone < item_data["price"]:
-                failed_items.append(f"{target_item_name}×{target_quantity - purchased_count}（灵石不足，跳过后续购买）")
-                break # 灵石不足，停止购买该物品
             
             try:
                 success, result_msg, trade_info = buy_xianshi_item_safely(
@@ -1707,9 +1712,10 @@ async def xianshi_fast_buy_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
                     failed_items.append(f"{item_data['name']}×1 ({result_msg})")
                     continue
                 if not trade_info["applied"]:
-                    failed_items.append(f"{item_data['name']}×1（请求已处理）")
+                    purchased_count += trade_info["quantity"]
+                    item_total_cost += trade_info["total_cost"]
+                    replay_cost += trade_info["total_cost"]
                     continue
-                current_user_stone -= item_data["price"]
                 seller_id = trade_info['seller_id']
                 purchased_count += 1
                 item_total_cost += item_data["price"]
@@ -1722,11 +1728,11 @@ async def xianshi_fast_buy_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
                 seller_summary["income"] += item_data["price"]
                 seller_summary["items"][item_data["name"]] = seller_summary["items"].get(item_data["name"], 0) + 1
                 
+            except (MatcherException, ProcessException):
+                raise
             except Exception as e:
-                logger.error(f"快速购买 {item_data['name']} (ID:{item_data['id']}) 时出错: {e}")
-                failed_items.append(f"{item_data['name']}×1 (购买失败)")
-                # 即使失败也继续尝试下一个物品
-                continue
+                failed_items.append(report_exception("仙肆快速购买", e, event=event))
+                break
         
         if purchased_count > 0:
             success_items.append(f"{target_item_name}×{purchased_count} ({number_to(item_total_cost)}灵石)")
@@ -1739,7 +1745,9 @@ async def xianshi_fast_buy_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     if success_items:
         msg_parts.append("成功购买：")
         msg_parts.extend(success_items)
-        msg_parts.append(f"总计花费：{number_to(total_cost)}灵石")
+        msg_parts.append(f"总计花费：{number_to(total_cost + replay_cost)}灵石")
+        if replay_cost:
+            msg_parts.append("已处理的购买已回放，不重复扣款或发货。")
     if failed_items:
         if success_items:
             msg_parts.append("\n购买失败：")

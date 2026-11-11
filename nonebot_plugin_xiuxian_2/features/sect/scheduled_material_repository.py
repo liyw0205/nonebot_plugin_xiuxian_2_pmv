@@ -69,10 +69,15 @@ class SectScheduledMaterialSqlRepository:
                 (sect_id,),
             )
             combat_power = sum(as_int_like(row["power"]) for row in members)
+            current_materials = as_int_like(
+                uow.query_one(
+                    "SELECT COALESCE(sect_materials,0) AS materials FROM sects WHERE sect_id=?",
+                    (sect_id,),
+                )["materials"]
+            )
             uow.execute(
-                "UPDATE sects SET sect_materials=CAST(COALESCE(sect_materials,0) AS REAL)+?,"
-                "combat_power=? WHERE sect_id=?",
-                (materials, combat_power, sect_id),
+                "UPDATE sects SET sect_materials=?,combat_power=? WHERE sect_id=?",
+                (str(current_materials + materials), str(combat_power), sect_id),
             )
             uow.execute(
                 "INSERT INTO sect_scheduled_material_grants "

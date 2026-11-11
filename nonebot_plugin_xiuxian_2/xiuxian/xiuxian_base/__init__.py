@@ -92,8 +92,8 @@ def _help_search_entries() -> list[dict]:
     """惰性构建一次帮助索引（650+ 命令，避免每次检索都重新扫 manifest）。"""
     global _HELP_SEARCH_ENTRIES
     if _HELP_SEARCH_ENTRIES is None:
-        # `__package__` 是 ...xiuxian_base，manifest 位于根包的 features/ 下。
-        root_package = _sys.modules[__package__.split(".")[0]]
+        # The plugin may be installed below src.plugins rather than at top level.
+        root_package = _sys.modules[__package__.rsplit(".", 2)[0]]
         _HELP_SEARCH_ENTRIES = build_entries(iter_feature_manifests(root_package))
     return _HELP_SEARCH_ENTRIES
 

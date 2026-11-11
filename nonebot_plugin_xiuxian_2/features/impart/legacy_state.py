@@ -1,6 +1,7 @@
 """Validate duplicated historical state without deleting or merging rows."""
 
 from ...core.errors import DomainError
+from ...core.numeric import as_int_like
 
 
 def state_row_count(uow, user_id, fields, *, schema="main"):
@@ -10,8 +11,8 @@ def state_row_count(uow, user_id, fields, *, schema="main"):
         f"SELECT * FROM {schema}.xiuxian_impart WHERE user_id=?", (user_id,)
     )
     for field in fields:
-        if len({int(row[field] or 0) for row in rows}) > 1:
-            raise DomainError("impart_rows_inconsistent", "historical impart rows disagree", {"reason": f"impart_rows_{field}"})
+        if len({as_int_like(row[field] or 0) for row in rows}) > 1:
+            raise DomainError("impart_rows_inconsistent", "historical impart rows disagree", {"reason": f"impart_rows_{field}", "subject": "actor"})
     return len(rows)
 
 

@@ -12,6 +12,11 @@ class _StateChanged(Exception):
     """Abort a compare-and-set mutation without turning it into a hard error."""
 
 
+class _DonationRejected(Exception):
+    def __init__(self, reason, subject):
+        self.reason, self.subject = reason, subject
+
+
 def weekly_shop_key(moment) -> str:
     """本周限购的周期键：与 `purchase` 写入 `sect_shop_weekly_purchases.week_key` 同源。"""
     return str(moment.strftime("%G-W%V"))
@@ -158,21 +163,53 @@ class SectRenameSqlRepository:
             if inventory+quantity>max_goods_num:return {"status":"inventory_full","contribution":contribution,"materials":materials,"purchased":purchased}
             contribution-=cost;materials-=cost;purchased+=quantity;uow.execute("UPDATE user_xiuxian SET sect_contribution=? WHERE user_id=?",(contribution,user_id));uow.execute("UPDATE sects SET sect_materials=? WHERE sect_id=?",(materials,sect_id));stamp=self.clock.now().isoformat();uow.execute("INSERT INTO back(user_id,goods_id,goods_name,goods_type,goods_num,create_time,update_time,bind_num) VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(user_id,goods_id) DO UPDATE SET goods_num=back.goods_num+excluded.goods_num,bind_num=COALESCE(back.bind_num,0)+excluded.goods_num,update_time=excluded.update_time",(user_id,item_id,str(item_name),str(item_type),quantity,stamp,stamp,quantity));uow.execute("INSERT INTO sect_shop_weekly_purchases(user_id,week_key,item_id,quantity) VALUES(?,?,?,?) ON CONFLICT(user_id,week_key,item_id) DO UPDATE SET quantity=excluded.quantity",(user_id,week_key,item_id,purchased));uow.execute("INSERT INTO sect_shop_purchase_operations(operation_id,payload,quantity,cost,contribution,materials,purchased) VALUES(?,?,?,?,?,?,?)",(operation_id,payload,quantity,cost,contribution,materials,purchased));return {"status":"applied","quantity":quantity,"cost":cost,"contribution":contribution,"materials":materials,"purchased":purchased}
     def donate(self, operation_id, user_id, sect_id, stone, materials):
-        operation_id,user_id=str(operation_id).strip(),str(user_id);sect_id,stone,materials=int(sect_id),int(stone),int(materials)
-        if stone<=0:return {"status":"invalid_amount","user_id":user_id,"sect_id":sect_id,"stone":stone,"materials":materials}
-        if materials<0:return {"status":"invalid_materials","user_id":user_id,"sect_id":sect_id,"stone":stone,"materials":materials}
+        operation_id, user_id = str(operation_id).strip(), str(user_id)
+        sect_id, stone, materials = int(sect_id), int(stone), int(materials)
+        data = {"user_id": user_id, "sect_id": sect_id, "stone": stone, "materials": materials}
+        if stone <= 0:
+            return {"status": "invalid_amount", **data}
+        if materials < 0:
+            return {"status": "invalid_materials", **data}
         with DatabaseUnitOfWork(self.database, immediate=True) as uow:
-            old=uow.query_one("SELECT stone,materials FROM sect_donation_operations WHERE operation_id=?",(operation_id,))
-            if old:return {"status":"duplicate","user_id":user_id,"sect_id":sect_id,"stone":old["stone"],"materials":old["materials"]}
-            user=uow.query_one("SELECT sect_id,stone FROM user_xiuxian WHERE user_id=?",(user_id,));sect=uow.query_one("SELECT sect_id FROM sects WHERE sect_id=?",(sect_id,))
-            if user is None:return {"status":"user_missing","user_id":user_id,"sect_id":sect_id,"stone":stone,"materials":materials}
-            if user["sect_id"] is None or int(user["sect_id"])!=sect_id:return {"status":"sect_changed","user_id":user_id,"sect_id":sect_id,"stone":stone,"materials":materials}
-            if as_int_like(user["stone"] or 0)<stone:return {"status":"stone_insufficient","user_id":user_id,"sect_id":sect_id,"stone":stone,"materials":materials}
-            if sect is None:return {"status":"sect_missing","user_id":user_id,"sect_id":sect_id,"stone":stone,"materials":materials}
-            updated=uow.execute("UPDATE user_xiuxian SET stone=stone-?,sect_contribution=COALESCE(sect_contribution,0)+? WHERE user_id=? AND sect_id=? AND xiuxian_int_cmp(stone,?)>=0",(stone,stone,user_id,sect_id,stone));sect_updated=uow.execute("UPDATE sects SET sect_used_stone=COALESCE(sect_used_stone,0)+?,sect_scale=COALESCE(sect_scale,0)+?,sect_materials=COALESCE(sect_materials,0)+? WHERE sect_id=?",(stone,stone,materials,sect_id))
-            if updated.rowcount!=1:return {"status":"user_changed","user_id":user_id,"sect_id":sect_id,"stone":stone,"materials":materials}
-            if sect_updated.rowcount!=1:return {"status":"sect_changed","user_id":user_id,"sect_id":sect_id,"stone":stone,"materials":materials}
-            uow.execute("INSERT INTO sect_donation_operations(operation_id,user_id,sect_id,stone,materials) VALUES(?,?,?,?,?)",(operation_id,user_id,sect_id,stone,materials));return {"status":"donated","user_id":user_id,"sect_id":sect_id,"stone":stone,"materials":materials}
+            old = uow.query_one("SELECT user_id,sect_id,stone,materials FROM sect_donation_operations WHERE operation_id=?", (operation_id,))
+            if old:
+                if (str(old["user_id"]), int(old["sect_id"]), as_int_like(old["stone"]), as_int_like(old["materials"])) != (user_id, sect_id, stone, materials):
+                    return {"status": "operation_conflict", "reason": "operation_conflict", **data}
+                return {"status": "duplicate", **data}
+            user = uow.query_one("SELECT sect_id,stone,COALESCE(sect_contribution,0) AS contribution FROM user_xiuxian WHERE user_id=?", (user_id,))
+            sect = uow.query_one("SELECT COALESCE(sect_used_stone,0) AS reserve,COALESCE(sect_scale,0) AS scale,COALESCE(sect_materials,0) AS materials FROM sects WHERE sect_id=?", (sect_id,))
+            if user is None:
+                return {"status": "user_missing", **data}
+            if user["sect_id"] is None or int(user["sect_id"]) != sect_id:
+                return {"status": "sect_changed", **data}
+            wallet, contribution = as_int_like(user["stone"]), as_int_like(user["contribution"])
+            if wallet < stone:
+                return {"status": "stone_insufficient", **data}
+            if sect is None:
+                return {"status": "sect_missing", **data}
+            reserve, scale, supply = (as_int_like(sect[key]) for key in ("reserve", "scale", "materials"))
+            try:
+                with uow.savepoint("sect_donation_complete"):
+                    updated = uow.execute(
+                        "UPDATE user_xiuxian SET stone=?,sect_contribution=? WHERE user_id=? AND sect_id=? AND xiuxian_int_cmp(stone,?)=0 AND xiuxian_int_cmp(COALESCE(sect_contribution,0),?)=0",
+                        (wallet - stone, contribution + stone, user_id, sect_id, wallet, contribution),
+                    )
+                    saved = uow.query_one("SELECT stone,sect_contribution FROM user_xiuxian WHERE user_id=?", (user_id,))
+                    if updated.rowcount != 1 or saved is None or tuple(as_int_like(saved[key]) for key in ("stone", "sect_contribution")) != (wallet - stone, contribution + stone):
+                        raise _DonationRejected("sect_donation_member_write_rejected", "actor")
+                    updated = uow.execute(
+                        "UPDATE sects SET sect_used_stone=?,sect_scale=?,sect_materials=? WHERE sect_id=? AND xiuxian_int_cmp(COALESCE(sect_used_stone,0),?)=0 AND xiuxian_int_cmp(COALESCE(sect_scale,0),?)=0 AND xiuxian_int_cmp(COALESCE(sect_materials,0),?)=0",
+                        (reserve + stone, scale + stone, supply + materials, sect_id, reserve, scale, supply),
+                    )
+                    saved = uow.query_one("SELECT sect_used_stone,sect_scale,sect_materials FROM sects WHERE sect_id=?", (sect_id,))
+                    if updated.rowcount != 1 or saved is None or tuple(as_int_like(saved[key]) for key in ("sect_used_stone", "sect_scale", "sect_materials")) != (reserve + stone, scale + stone, supply + materials):
+                        raise _DonationRejected("sect_donation_assets_write_rejected", "sect")
+                    receipt = uow.execute("INSERT INTO sect_donation_operations(operation_id,user_id,sect_id,stone,materials) VALUES(?,?,?,?,?)", (operation_id, user_id, sect_id, stone, materials))
+                    if receipt.rowcount != 1:
+                        raise _DonationRejected("sect_donation_receipt_write_rejected", "actor")
+            except _DonationRejected as exc:
+                return {"status": "write_rejected", "reason": exc.reason, "subject": exc.subject, **data}
+            return {"status": "donated", **data}
     def change_position(self, operation_id, actor_id, target_id, requested_position, position_limits, *, manager_max_position):
         operation_id, actor_id, target_id = str(operation_id).strip(), str(actor_id), str(target_id);requested_position=int(requested_position);manager_max_position=int(manager_max_position);limits={int(k):max(0,int(v)) for k,v in position_limits.items()}
         if requested_position not in limits:return {"status":"invalid_position","actor_id":actor_id,"target_id":target_id}

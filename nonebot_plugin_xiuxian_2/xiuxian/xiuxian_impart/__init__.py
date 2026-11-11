@@ -178,7 +178,7 @@ async def impart_pk_help_(
     await impart_pk_help.finish()
 
 @impart_draw.handle(parameterless=[Cooldown(cd_time=0)])
-@guard_command("传承祈愿")
+@guard_command("传承祈愿", known_rejections=("impart_rows_inconsistent", "impart_write_rejected"))
 async def impart_draw_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """传承祈愿"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -274,6 +274,7 @@ async def impart_draw_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
         new_wish=current_wish,
         exp_minutes=total_seclusion_time,
         cards=drawn_cards,
+        requested_pulls=times // 10,
         card_definitions=card_definitions,
         statistics_user_id=get_impersonating_target(user_id) or str(user_id),
         statistics={
@@ -335,7 +336,7 @@ async def impart_draw_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
     await impart_draw.finish()
 
 @impart_draw2.handle(parameterless=[Cooldown(cd_time=0)])
-@guard_command("传承抽卡")
+@guard_command("传承抽卡", known_rejections=("impart_rows_inconsistent", "impart_write_rejected"))
 async def impart_draw2_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """传承抽卡"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -838,7 +839,7 @@ async def impart_compose_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
 
 
 @impart_disassemble.handle(parameterless=[Cooldown(cd_time=0)])
-@guard_command("传承分解")
+@guard_command("传承分解", known_rejections=("impart_rows_inconsistent", "impart_write_rejected"))
 async def impart_disassemble_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     bot, _ = await assign_bot(bot=bot, event=event)
     is_user, user_info, msg = check_user(event)

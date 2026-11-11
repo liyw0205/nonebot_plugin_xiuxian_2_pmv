@@ -10,6 +10,7 @@ import re
 import time
 import unicodedata
 from functools import lru_cache
+from decimal import Decimal, InvalidOperation, localcontext
 from nonebot.log import logger
 from ...paths import get_paths
 from ...features.admin.impersonation_application import AdminImpersonationApplication
@@ -825,34 +826,36 @@ def number_to(num):
     ]
     
     try:
-        num = float(num)
-    except (TypeError, ValueError):
-        num = 0
+        num = Decimal(str(num))
+        if not num.is_finite():
+            num = Decimal(0)
+    except (InvalidOperation, TypeError, ValueError):
+        num = Decimal(0)
 
     # 处理负数
     is_negative = False
     if num < 0:
         is_negative = True
-        num = abs(num)
+        num = num.copy_abs()
 
     def convert(n, level):
         if level >= len(units) - 1 or n < 10000:
             return n, level
         return convert(n / 10000, level + 1)
 
-    num, level = convert(num, 0)
-    
-    # 特殊处理：当小数部分为0时显示整数，否则保留1-2位小数
-    if num == int(num):
-        formatted_num = str(int(num))
-    else:
-        # 先尝试保留1位小数
-        temp = round(num, 1)
-        if temp == int(temp):
-            formatted_num = str(int(temp))
+    with localcontext() as context:
+        context.prec = max(28, len(num.as_tuple().digits))
+        num, level = convert(num, 0)
+
+        # 特殊处理：当小数部分为0时显示整数，否则保留1-2位小数
+        if num == int(num):
+            formatted_num = str(int(num))
         else:
-            # 保留2位小数并去除末尾的0
-            formatted_num = "{0:.2f}".format(num).rstrip('0').rstrip('.')
+            temp = round(num, 1)
+            if temp == int(temp):
+                formatted_num = str(int(temp))
+            else:
+                formatted_num = "{0:.2f}".format(num).rstrip('0').rstrip('.')
     
     result = f"{formatted_num}{units[level]}"
     

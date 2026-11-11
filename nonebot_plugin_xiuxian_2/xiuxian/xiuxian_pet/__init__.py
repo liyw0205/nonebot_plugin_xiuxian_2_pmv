@@ -176,7 +176,7 @@ def _parse_feed_args(text: str):
         else:
             item_name = text.strip()
 
-    return item_name, max(1, count)
+    return item_name, count
 
 
 def _parse_egg_count(text: str):
@@ -238,6 +238,8 @@ def _format_egg_pity_rewards(rewards: list[dict]):
 
 def _parse_travel_args(text: str):
     parts = _split_args(text)
+    if len(parts) > 2:
+        return "", 0, "格式：宠物游历 [场景] [小时数]，请勿添加多余参数。"
     scene = parts[0] if parts else ""
     duration = 4
 
@@ -1531,6 +1533,9 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     item_name, count = _parse_feed_args(args.extract_plain_text())
     if not item_name:
         await handle_send(bot, event, "用法：宠物喂食 材料名 [数量]\n例如：宠物喂食 恒心草 10")
+        return
+    if count <= 0:
+        await handle_send(bot, event, "宠物喂食数量必须大于0！")
         return
 
     item_id, item_info = _resolve_item_name(item_name)

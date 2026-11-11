@@ -623,7 +623,7 @@ async def back_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 
 **使用与整理**
 - 使用+物品名 [数量]
-> 使用物品
+> 数量须为正整数，单次不超过背包单件上限；特殊道具用“道具使用”，数量1-100
 - 换装/卸装+装备名
 > 更换或卸下装备
 - 炼金+物品名 [数量]
@@ -676,6 +676,9 @@ async def goods_re_root_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         msg = "请输入要炼化的物品！"
         await handle_send(bot, event, msg, md_type="背包", k1="炼金", v1="炼金", k2="灵石", v2="灵石", k3="背包", v3="我的背包")
         await goods_re_root.finish()
+    if len(args) > 2:
+        await handle_send(bot, event, "格式：炼金 物品名 [数量]，请勿添加多余参数。")
+        return
         
     # 判断输入是ID还是名称
     item_name = args[0]
@@ -705,8 +708,9 @@ async def goods_re_root_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
                 await handle_send(bot, event, msg, md_type="背包", k1="炼金", v1="炼金", k2="灵石", v2="灵石", k3="背包", v3="我的背包")
                 await goods_re_root.finish()
             num = input_num
-    except ValueError: # 如果第二个参数不是有效数字，则默认为1
-            num = 1
+    except ValueError:
+        await handle_send(bot, event, "炼金数量必须为正整数！")
+        return
 
     price = get_recover(goods_id, num)
     if price <= 0: # 某些物品炼金价格可能为0或负数
@@ -1008,11 +1012,22 @@ async def use_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: M
         await use.finish()
 
     user_id = user_info['user_id']
+    # Some adapter/parser combinations expose only the first CommandArg segment;
+    # validate the raw command as well so trailing tokens cannot reach reward code.
+    raw_text = event.get_plaintext().strip()
+    raw_args = raw_text[len("使用"):].strip() if raw_text.startswith("使用") else ""
+    if len(raw_args.split()) > 2:
+        await handle_send(bot, event, "格式：使用 物品名 [数量]，请勿添加多余参数。")
+        return
     args = args.extract_plain_text().split()
     if not args:
         msg = "请输入要使用的物品名称！"
         await handle_send(bot, event, msg, md_type="背包", k1="使用", v1="使用", k2="存档", v2="我的修仙信息", k3="背包", v3="我的背包")
         await use.finish()
+
+    if len(args) > 2:
+        await handle_send(bot, event, "格式：使用 物品名 [数量]，请勿添加多余参数。")
+        return
 
     # 清理待确认缓存
     confirm_use_cache.discard(str(user_id))
@@ -1035,7 +1050,12 @@ async def use_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: M
                 await use.finish()
             num = requested
     except ValueError:
-        num = 1
+        await handle_send(bot, event, "使用数量必须为正整数！")
+        return
+
+    if num > int(XiuConfig().max_goods_num):
+        await handle_send(bot, event, f"单次使用数量不能超过{XiuConfig().max_goods_num}！")
+        return
 
     user_rank = convert_rank(user_info['level'])[0]
     goods_type = goods_info['type']
@@ -1057,17 +1077,24 @@ async def use_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: M
 
         package_rewards = []
         accessory_need = 0
-        for _ in range(num):
-            rewards, errors = _collect_package_rewards()
-            package_rewards.append(rewards)
-            all_msgs.extend(errors)
-            for rwd in rewards:
-                if rwd.get("type") != "饰品" or rwd.get("buff", None) is None:
-                    continue
-                try:
-                    accessory_need += max(0, int(rwd.get("amount", 1) or 1))
-                except Exception:
-                    accessory_need += 1
+        frozen = package_reward_application.lookup(_package_reward_operation_id(event, user_id, goods_id)) if package_reward_application else None
+        if frozen is not None:
+            # The receipt's rewards were already drawn; a replay must not draw again.
+            package_rewards = [[{"buff": reward.item_id, "name": reward.name,
+                                 "type": reward.item_type, "amount": reward.quantity}
+                                for reward in frozen["rewards"]]]
+        else:
+            for _ in range(num):
+                rewards, errors = _collect_package_rewards()
+                package_rewards.append(rewards)
+                all_msgs.extend(errors)
+                for rwd in rewards:
+                    if rwd.get("type") != "饰品" or rwd.get("buff", None) is None:
+                        continue
+                    try:
+                        accessory_need += max(0, int(rwd.get("amount", 1) or 1))
+                    except Exception:
+                        accessory_need += 1
 
         if accessory_need > 0:
             ok, owned, remaining = can_add_accessories(str(user_id), accessory_need)
@@ -1507,17 +1534,24 @@ async def use_item_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, ar
     if len(parts) > 1:
         try:
             quantity = int(parts[1])
-            quantity = max(1, min(quantity, 100))  # 限制使用数量1-100
         except ValueError:
             msg = "请输入有效的数量！"
             await handle_send(bot, event, msg, md_type="背包", k1="使用", v1="道具使用", k2="存档", v2="我的修ian信息", k3="背包", v3="我的背包")
             await use_item.finish()
+        if not 1 <= quantity <= 100:
+            await handle_send(bot, event, "道具使用数量范围为1-100，请重新输入。")
+            return
     
     # 检查背包物品
     goods_id, goods_info = items.get_data_by_item_name(item_name)
     if not goods_id:
         msg = f"物品 {item_name} 不存在，请检查名称是否正确！"
         await handle_send(bot, event, msg, md_type="背包", k1="使用", v1="道具使用", k2="存档", v2="我的修仙信息", k3="背包", v3="我的背包")
+        return
+
+    expected_parts = 3 if int(goods_id) == 20019 else 2
+    if len(parts) > expected_parts:
+        await handle_send(bot, event, "道具使用格式错误，请勿添加多余参数。")
         return
     
     # 检查是否是特殊道具
@@ -1564,7 +1598,10 @@ async def use_item_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, ar
     handler_func = ITEM_HANDLERS.get(goods_id, None)
     if handler_func:
         # 调用对应的处理函数
-        await handler_func(bot, event, goods_id, quantity)
+        if int(goods_id) == 20019:
+            await handler_func(bot, event, goods_id, quantity, target_item_name=parts[2] if len(parts) == 3 else "")
+        else:
+            await handler_func(bot, event, goods_id, quantity)
     else:
         msg = f"{item_name} 是特殊道具，但目前没有对应的使用方法！"
         await handle_send(bot, event, msg, md_type="背包", k1="使用", v1="道具使用", k2="存档", v2="我的修仙信息", k3="背包", v3="我的背包")
@@ -1708,30 +1745,19 @@ async def use_lottery_talisman(bot: Bot, event: GroupMessageEvent | PrivateMessa
     await handle_send(bot, event, result_msg)
     return
 
-async def use_unbind_charm(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, item_id: int, num: int):
+async def use_unbind_charm(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, item_id: int, num: int, *, target_item_name=""):
     """使用解绑符解除物品绑定状态"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
-    user_id = user_info["user_id"]
     if not isUser:
         await handle_send(bot, event, msg, md_type="我要修仙")
         return
-    
-    # 解析参数，获取要解绑的物品名称
-    args_text = event.get_plaintext().strip()
-    args_text = re.sub(r'^道具使用\s*', '', args_text).strip() # 移除指令前缀
-    
-    # 假设格式是 "道具使用 解绑符 <数量> <物品名>"
-    # 例如："道具使用 解绑符 1 天罪"
-    # parts[0] 是 "解绑符"， parts[1] 是数量， parts[2] 是物品名
-    parts = args_text.split()
-    
-    if len(parts) < 3: # 至少需要 "解绑符", "数量", "物品名"
+    user_id = user_info["user_id"]
+
+    if not target_item_name:
         msg = f"格式错误！正确格式：道具使用 解绑符 [数量] 物品名\n例如：道具使用 解绑符 1 天罪"
         await handle_send(bot, event, msg)
         return
-    
-    target_item_name = parts[2]  # 要解绑的物品名称
     
     # 检查要解绑的物品是否存在
     target_goods_id, target_goods_info = items.get_data_by_item_name(target_item_name)

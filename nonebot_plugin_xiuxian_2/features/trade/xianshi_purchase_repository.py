@@ -6,7 +6,8 @@ from pathlib import Path
 from typing import Literal, Mapping
 
 from ...infrastructure.clock import SystemClock
-from ...infrastructure.database import DatabaseUnitOfWork
+from ...infrastructure.database import DatabaseUnitOfWork, OperationLedger
+from ...core.result import OperationOutcome
 
 
 PurchaseStatus = Literal[
@@ -53,6 +54,36 @@ class XianshiPurchaseSqlRepository:
     def __init__(self, database: str | Path, *, clock: object | None = None) -> None:
         self.database = str(database)
         self.clock = clock or SystemClock()
+
+    def fast_plan(self, operation_id, buyer_id, names, quantities, listings):
+        """Freeze candidate identities before buying so a retry cannot buy later stock."""
+        buyer_id = str(buyer_id)
+        payload = {"buyer_id": buyer_id, "names": names, "quantities": quantities}
+        ledger, action = OperationLedger(clock=self.clock), "trade.fast_purchase.plan"
+        with DatabaseUnitOfWork(self.database, immediate=True) as uow:
+            previous = ledger.begin(uow, operation_id, action, payload)
+            if previous is not None and previous.outcome() is not None:
+                return previous.outcome().data["listings"]
+            # Receipts made before this fix remain authoritative on their first replay.
+            completed = uow.query_all(
+                "SELECT listing_id AS id,seller_id AS user_id,goods_id,name,goods_type AS type,"
+                "total_cost,quantity FROM xianshi_operations "
+                "WHERE buyer_id=? AND stamina_operation_id=? ORDER BY operation_id",
+                (buyer_id, operation_id),
+            )
+            for row in completed:
+                row["price"] = as_int_like(row.pop("total_cost")) // int(row["quantity"])
+            frozen = {str(row["id"]): row for row in completed}
+            frozen.update({str(row["id"]): row for row in listings if str(row["id"]) not in frozen})
+            candidates = sorted(
+                (dict(row) for row in frozen.values() if str(row["user_id"]) not in {buyer_id, "0"} and row["name"] in names),
+                key=lambda row: (as_int_like(row["price"]), str(row["id"])),
+            )
+            ledger.finish(uow, OperationOutcome.applied(operation_id, action, data={"listings": candidates}))
+            saved = ledger.get(uow, operation_id, action)
+            if saved is None or saved.outcome() is None:
+                raise RuntimeError("fast purchase candidate receipt was not saved")
+            return candidates
 
     @staticmethod
     def _consume_stamina(uow: DatabaseUnitOfWork, user_id: str, cost: int) -> bool:

@@ -95,6 +95,18 @@ class StoneGiftRepository:
         return result
 
     def transfer(
+        self, uow: DatabaseUnitOfWork, record: StoneGiftRecord, **policy: Any,
+    ) -> str:
+        try:
+            with uow.savepoint("stone_gift_complete"):
+                status = self._transfer(uow, record, **policy)
+                if status != "transferred":
+                    raise _TransferRejected(status)
+                return status
+        except _TransferRejected as exc:
+            return exc.status
+
+    def _transfer(
         self,
         uow: DatabaseUnitOfWork,
         record: StoneGiftRecord,
@@ -136,41 +148,59 @@ class StoneGiftRepository:
         recipient = uow.query_one("SELECT 1 AS present FROM user_xiuxian WHERE user_id = ?", (record.recipient_id,))
         if recipient is None:
             return "recipient_missing"
+        accounts = self.snapshot(uow, (record.sender_id, record.recipient_id))
+        for uid, subject in ((record.sender_id, "sender"), (record.recipient_id, "recipient")):
+            if accounts[uid]["rows"] != 1:
+                return TransferStatus("state_changed", "account_rows_inconsistent", subject)
+        sender_stone = accounts[record.sender_id]["stone"]
+        recipient_stone = accounts[record.recipient_id]["stone"]
+        if sender_stone < record.gross_amount:
+            return TransferStatus("stone_insufficient", "stone_insufficient", "sender")
+        expected = {record.sender_id: sender_stone - record.gross_amount,
+                    record.recipient_id: recipient_stone + record.net_amount}
         try:
             with uow.savepoint("stone_gift_assets"):
                 charged = uow.execute(
-                    "UPDATE user_xiuxian SET stone = CAST(COALESCE(stone, 0) AS REAL) - CAST(? AS REAL) "
-                    "WHERE user_id = ? AND xiuxian_int_cmp(COALESCE(stone, 0),?)>=0",
-                    (record.gross_amount, record.sender_id, record.gross_amount),
+                    "UPDATE user_xiuxian SET stone = ? "
+                    "WHERE user_id = ? AND xiuxian_int_cmp(COALESCE(stone, 0),?)=0",
+                    (expected[record.sender_id], record.sender_id, sender_stone),
                 )
                 if charged.rowcount != 1:
                     sender = uow.query_all("SELECT stone FROM user_xiuxian WHERE user_id=?", (record.sender_id,))
                     reason = "sender_missing" if not sender else "account_rows_inconsistent" if len(sender) != 1 else "stone_insufficient" if as_int_like(sender[0]["stone"] or 0) < record.gross_amount else "stone_write_rejected"
                     raise _TransferRejected(TransferStatus("stone_insufficient", reason, "sender"))
                 credited = uow.execute(
-                    "UPDATE user_xiuxian SET stone = CAST(COALESCE(stone, 0) AS REAL) + CAST(? AS REAL) WHERE user_id = ?",
-                    (record.net_amount, record.recipient_id),
+                    "UPDATE user_xiuxian SET stone = ? WHERE user_id = ? AND xiuxian_int_cmp(COALESCE(stone,0),?)=0",
+                    (expected[record.recipient_id], record.recipient_id, recipient_stone),
                 )
                 if credited.rowcount != 1:
                     raise _TransferRejected(TransferStatus("state_changed", "stone_write_rejected", "recipient"))
+                saved = self.snapshot(uow, (record.sender_id, record.recipient_id))
+                for uid, subject in ((record.sender_id, "sender"), (record.recipient_id, "recipient")):
+                    if saved[uid]["stone"] != expected[uid]:
+                        raise _TransferRejected(TransferStatus("state_changed", "stone_write_rejected", subject))
         except _TransferRejected as exc:
             return exc.status
         if transfer_date is not None:
             sent_initial = baseline_sent if not sender_limit_exists else 0
             received_initial = baseline_received if not recipient_limit_exists else 0
-            uow.execute(
+            sent_write = uow.execute(
                 "INSERT INTO stone_gift_limits(limit_date, user_id, sent_amount, received_amount) "
                 "VALUES (?, ?, ?, 0) ON CONFLICT(limit_date, user_id) DO UPDATE SET "
                 "sent_amount = sent_amount + excluded.sent_amount, updated_at = CURRENT_TIMESTAMP",
                 (transfer_date, record.sender_id, sent_initial + record.gross_amount),
             )
-            uow.execute(
+            if sent_write.rowcount != 1:
+                return TransferStatus("state_changed", "gift_send_limit_write_rejected", "sender")
+            received_write = uow.execute(
                 "INSERT INTO stone_gift_limits(limit_date, user_id, sent_amount, received_amount) "
                 "VALUES (?, ?, 0, ?) ON CONFLICT(limit_date, user_id) DO UPDATE SET "
                 "received_amount = received_amount + excluded.received_amount, updated_at = CURRENT_TIMESTAMP",
                 (transfer_date, record.recipient_id, received_initial + record.net_amount),
             )
-        uow.execute(
+            if received_write.rowcount != 1:
+                return TransferStatus("state_changed", "gift_receive_limit_write_rejected", "recipient")
+        receipt_write = uow.execute(
             "INSERT INTO stone_gift_operations(operation_id, sender_id, recipient_id, gross_amount, net_amount, fee_amount) "
             "VALUES (?, ?, ?, ?, ?, ?)",
             (
@@ -182,4 +212,6 @@ class StoneGiftRepository:
                 record.fee_amount,
             ),
         )
+        if receipt_write.rowcount != 1:
+            return TransferStatus("state_changed", "gift_receipt_write_rejected", "sender")
         return "transferred"

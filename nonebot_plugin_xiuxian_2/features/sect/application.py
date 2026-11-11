@@ -312,7 +312,7 @@ class SectApplication:
 
     def donate(self, *, operation_id: str, user_id: str, sect_id: int, stone: int, materials: int) -> OperationOutcome[dict[str, Any]]:
         payload = {"user_id": str(user_id), "sect_id": int(sect_id), "stone": int(stone), "materials": int(materials)}
-        return self._execute(operation_id=str(operation_id), user_id=str(user_id), action="sect.donate", payload=payload, call=lambda: self._repository().donate(operation_id, user_id, sect_id, stone, materials))
+        return self._execute(operation_id=str(operation_id), user_id=str(user_id), action="sect.donate", payload=payload, call=lambda: self._repository().donate(operation_id, user_id, sect_id, stone, materials), retry_started=True)
 
     def reset_daily_maintenance(self, business_date: str, maintenance_costs: Mapping[int, int]):
         return SectDailyMaintenanceSqlRepository(self.database).settle(business_date, dict(maintenance_costs))
@@ -393,7 +393,12 @@ class SectApplication:
                 raw = _data(call())
                 status = str(raw.get("status", "failed"))
                 data = {"status": status, **raw}
-                if status in {"applied", "joined", "learned", "duplicate"}:
+                success_status = {
+                    "sect.donate": "donated", "sect.rename": "renamed",
+                    "sect.position_change": "changed", "sect.kick": "kicked",
+                    "sect.leave": "left",
+                }.get(action)
+                if status in {"applied", "joined", "learned", "duplicate", success_status}:
                     outcome = OperationOutcome.applied(operation_id, action, data=data, audit_category="sect")
                 else:
                     outcome = OperationOutcome.rejected(operation_id, action, "宗门操作未完成。", code=status, data=data, audit_category="sect")

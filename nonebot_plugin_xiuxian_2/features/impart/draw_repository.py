@@ -126,7 +126,7 @@ class ImpartDrawSqlRepository:
             or cost <= 0
             or pulls <= 0
             or requested_pulls < pulls
-            or len(cards) != pulls
+            or len(cards) > pulls
             or new_wish < 0
         ):
             raise ValueError("invalid draw request")
@@ -311,6 +311,25 @@ class ImpartCrystalDrawSqlRepository:
         self.database = str(database)
         self.player_database = str(player_database)
 
+    @staticmethod
+    def _matches_request(payload, user_id, cost, pulls):
+        try:
+            prior = json.loads(str(payload))
+            if len(prior) not in {3, 4}:
+                return False
+            prior_user, prior_cost, prior_pulls = prior[:3]
+            if (str(prior_user), int(prior_cost)) != (str(user_id), int(cost)):
+                return False
+            if len(prior) == 4:
+                return prior[3] == "requested_pulls_v1" and int(prior_pulls) == int(pulls)
+            # Historical receipts stored won cards here. The crystal cost
+            # fixes the requested count even when a draw won fewer cards.
+            return int(prior_pulls) == int(pulls) or (
+                int(cost) == int(pulls) * 10 and 0 <= int(prior_pulls) <= int(pulls)
+            )
+        except (TypeError, ValueError, OverflowError):
+            return False
+
     def get_result(
         self, operation_id: str, user_id: str, cost: int, pulls: int
     ) -> ImpartCrystalDrawResult | None:
@@ -331,13 +350,7 @@ class ImpartCrystalDrawSqlRepository:
             )
             if old is None:
                 return None
-            try:
-                prior_user, prior_cost, prior_pulls = json.loads(str(old["payload"]))
-            except (TypeError, ValueError):
-                return ImpartCrystalDrawResult("schema_missing")
-            if (str(prior_user), int(prior_cost), int(prior_pulls)) != (
-                str(user_id), int(cost), int(pulls)
-            ):
+            if not self._matches_request(old["payload"], user_id, cost, pulls):
                 return ImpartCrystalDrawResult("operation_conflict")
             return ImpartCrystalDrawResult(
                 "duplicate",
@@ -360,22 +373,25 @@ class ImpartCrystalDrawSqlRepository:
         card_definitions: Mapping[str, Mapping[str, Any]],
         statistics_user_id: str | None = None,
         statistics: Mapping[str, int] | None = None,
+        requested_pulls: int | None = None,
     ) -> ImpartCrystalDrawResult:
         operation_id, user_id = str(operation_id).strip(), str(user_id).strip()
         expected_stone, expected_wish, cost, new_wish, exp_minutes = map(
             int, (expected_stone, expected_wish, cost, new_wish, exp_minutes)
         )
         cards = tuple(str(card).strip() for card in cards)
+        requested_pulls = len(cards) if requested_pulls is None else int(requested_pulls)
         definitions = dict(card_definitions)
         if (
             not operation_id
             or not user_id
             or cost <= 0
             or exp_minutes < 0
+            or requested_pulls < len(cards)
             or any(not card or card not in definitions for card in cards)
         ):
             raise ValueError("invalid crystal draw request")
-        payload = json.dumps([user_id, cost, len(cards)], ensure_ascii=True, separators=(",", ":"))
+        payload = json.dumps([user_id, cost, requested_pulls, "requested_pulls_v1"], ensure_ascii=True, separators=(",", ":"))
         with DatabaseUnitOfWork(self.database, immediate=True) as uow:
             uow.attach_database(self.player_database, "player_data")
             table = uow.query_one(
@@ -390,7 +406,7 @@ class ImpartCrystalDrawSqlRepository:
                 (operation_id,),
             )
             if old is not None:
-                if str(old["payload"]) != payload:
+                if not self._matches_request(old["payload"], user_id, cost, requested_pulls):
                     return ImpartCrystalDrawResult("operation_conflict")
                 return ImpartCrystalDrawResult(
                     "duplicate", int(old["wish"]), as_int_like(old["stone_num"]),

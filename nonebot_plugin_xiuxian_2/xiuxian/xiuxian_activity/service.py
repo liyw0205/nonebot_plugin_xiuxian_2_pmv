@@ -1149,7 +1149,7 @@ def _parse_shop_query(query: str) -> tuple[str, int]:
             quantity = int(parts[-1])
         except ValueError:
             return text, 1
-        return " ".join(parts[:-1]).strip(), max(1, quantity)
+        return " ".join(parts[:-1]).strip(), quantity
     return text, 1
 
 
@@ -1201,6 +1201,8 @@ def claim_point_shop_item(
                 return _redemption_rejection(replay.status, "兑换请求冲突，请重新发送", detailed_result)
             return True, replay.response
     target, quantity = _parse_shop_query(query)
+    if quantity <= 0:
+        return _redemption_rejection("invalid_amount", "活动购买数量必须为正整数", detailed_result)
     if not target:
         return _redemption_rejection("query_required", "请发送：活动购买 灵石补给", detailed_result)
 

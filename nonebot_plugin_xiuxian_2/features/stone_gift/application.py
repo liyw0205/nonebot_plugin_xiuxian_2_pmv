@@ -3,10 +3,11 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from ...core.errors import ConflictError, DomainError, ValidationError
+from ...core.errors import ConflictError, DomainError, OperationConflictError, ValidationError
 from ...core.result import OperationOutcome, ReplyPlan
 from ...core.player_reasons import reason_text
 from ...infrastructure.database import DatabaseUnitOfWork, OperationLedger
+from ...infrastructure.database.ledger import request_hash
 from ...infrastructure.observability import trace_context
 from ...infrastructure.clock import SystemClock
 from .domain import StoneGiftRecord, calculate_amounts, daily_cap, normalize_transfer_date, validate_daily_limit
@@ -113,42 +114,46 @@ class StoneGiftApplication:
                 "send_used": normalized_send_used,
                 "receive_used": normalized_receive_used,
             }
+            identity = {key: payload[key] for key in ("sender_id", "recipient_id", "gross_amount")}
             try:
                 # A transfer checks and increments daily limits alongside two
                 # balances; take the SQLite write lock before reading them.
                 with DatabaseUnitOfWork(self.database, immediate=True) as uow:
-                    existing = self.ledger.begin(uow, request.operation_id, self.action, payload)
-                    if existing is not None:
-                        previous = existing.outcome()
-                        if previous is not None:
-                            return previous.replay()
-                        raise ConflictError("操作正在处理中", reason="operation_pending")
-                    before = self.repository.snapshot(uow, (request.sender_id, request.recipient_id))
+                    existing = self.ledger.get(uow, request.operation_id, self.action)
                     legacy = self.repository.operation(uow, request.operation_id)
                     if legacy is not None:
-                        status = "transferred" if (legacy.sender_id == request.sender_id and legacy.recipient_id == request.recipient_id) else "state_changed"
-                        if status == "state_changed":
-                            outcome = OperationOutcome.rejected(
-                                request.operation_id,
-                                self.action,
-                                "操作参与方已变化",
-                                code="state_changed",
-                                before=before,
-                                after=before,
-                                audit_category="stone_gift",
-                            )
-                        else:
-                            outcome = OperationOutcome.applied(
-                                request.operation_id,
-                                self.action,
-                                data={"stone_gift": legacy.to_dict()},
-                                before=before,
-                                after=before,
-                                granted={"stone": legacy.net_amount},
-                                audit_category="stone_gift",
-                            )
+                        if (legacy.sender_id, legacy.recipient_id, legacy.gross_amount) != (
+                            request.sender_id, request.recipient_id, request.gross_amount
+                        ):
+                            raise OperationConflictError(request.operation_id, self.action)
+                        previous = existing.outcome() if existing is not None else None
+                        if previous is not None and previous.ok:
+                            return previous.replay()
+                    # Historical refusal hashes included policy snapshots. Keep
+                    # those hashes valid; new requests use only player inputs.
+                    if existing is None or existing.request_hash != request_hash(payload):
+                        payload = identity
+                    if legacy is None or existing is None:
+                        existing = self.ledger.begin(uow, request.operation_id, self.action, payload)
+                    if existing is not None:
+                        previous = existing.outcome()
+                        if previous is not None and legacy is None:
+                            return previous.replay()
+                        if legacy is None:
+                            raise ConflictError("操作正在处理中", reason="operation_pending")
+                    before = self.repository.snapshot(uow, (request.sender_id, request.recipient_id))
+                    if legacy is not None:
+                        outcome = OperationOutcome.applied(
+                            request.operation_id,
+                            self.action,
+                            data={"stone_gift": legacy.to_dict()},
+                            before=before,
+                            after=before,
+                            granted={"stone": legacy.net_amount},
+                            audit_category="stone_gift",
+                        )
                         self.ledger.finish(uow, outcome)
-                        return outcome.replay() if outcome.ok else outcome
+                        return outcome.replay()
                     record = StoneGiftRecord(
                         request.operation_id,
                         request.sender_id,
@@ -176,16 +181,21 @@ class StoneGiftApplication:
                             "schema_missing": ("赠送数据尚未就绪，请检查启动迁移。", "schema_missing"),
                         }
                         message, code = messages.get(status, ("转账失败", "rejected"))
-                        diagnostic = reason_text(getattr(status, "reason", ""))
+                        reason = getattr(status, "reason", "") or str(status)
+                        subject = getattr(status, "subject", "") or {
+                            "recipient_missing": "recipient", "receive_limit_reached": "recipient",
+                            "send_limit_reached": "sender", "stone_insufficient": "sender",
+                        }.get(str(status), "")
+                        diagnostic = reason_text(reason)
                         if diagnostic:
-                            label = {"sender": "赠送方", "recipient": "接收方"}.get(getattr(status, "subject", ""), "")
+                            label = {"sender": "赠送方", "recipient": "接收方"}.get(subject, "")
                             message = (label + "，" if label else "") + diagnostic
                         outcome = OperationOutcome.rejected(
                             request.operation_id,
                             self.action,
                             message,
                             code=code,
-                            data={"status": str(status), "reason": getattr(status, "reason", ""), "subject": getattr(status, "subject", "")},
+                            data={"status": str(status), "reason": reason, "subject": subject},
                             before=before,
                             after=before,
                             audit_category="stone_gift",

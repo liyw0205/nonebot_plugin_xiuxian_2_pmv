@@ -120,6 +120,17 @@ sect_task_history_application = SectTaskHistoryApplication(
 )
 
 
+def _parse_practice_count(raw: str, maximum: int) -> int | None:
+    """Parse optional upgrade count without silently rewriting invalid input."""
+    value = str(raw or "").strip()
+    if not value:
+        return 1
+    if not value.isdecimal():
+        return None
+    count = int(value)
+    return count if 0 < count <= maximum else None
+
+
 def _spirit_vein_tianti_multiplier() -> float:
     from ..xiuxian_world_events import get_spirit_vein_tianti_multiplier
 
@@ -1505,14 +1516,12 @@ async def upatkpractice_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         await upatkpractice.finish()
     user_id = user_info['user_id']
     sect_id = user_info['sect_id']
-    level_up_count = 1
     config_max_level = max(int(key) for key in LEVLECOST.keys())
     raw_args = args.extract_plain_text().strip()
-    try:
-        level_up_count = int(raw_args)
-        level_up_count = min(max(1, level_up_count), config_max_level)
-    except ValueError:
-        level_up_count = 1
+    level_up_count = _parse_practice_count(raw_args, config_max_level)
+    if level_up_count is None:
+        await handle_send(bot, event, "升级数量必须是正整数且不能超过单次上限。")
+        await upatkpractice.finish()
     if sect_id:
         sect_materials = int(sect_application.get_sect_info(sect_id)['sect_materials'])  # 当前资材
         useratkpractice = int(user_info['atkpractice'])  # 当前等级
@@ -1593,14 +1602,12 @@ async def uphppractice_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         await uphppractice.finish()
     user_id = user_info['user_id']
     sect_id = user_info['sect_id']
-    level_up_count = 1
     config_max_level = max(int(key) for key in LEVLECOST.keys())
     raw_args = args.extract_plain_text().strip()
-    try:
-        level_up_count = int(raw_args)
-        level_up_count = min(max(1, level_up_count), config_max_level)
-    except ValueError:
-        level_up_count = 1
+    level_up_count = _parse_practice_count(raw_args, config_max_level)
+    if level_up_count is None:
+        await handle_send(bot, event, "升级数量必须是正整数且不能超过单次上限。")
+        await uphppractice.finish()
     if sect_id:
         sect_materials = int(sect_application.get_sect_info(sect_id)['sect_materials'])  # 当前资材
         userhppractice = int(user_info['hppractice'])  # 当前等级
@@ -1681,14 +1688,12 @@ async def upmppractice_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         await upmppractice.finish()
     user_id = user_info['user_id']
     sect_id = user_info['sect_id']
-    level_up_count = 1
     config_max_level = max(int(key) for key in LEVLECOST.keys())
     raw_args = args.extract_plain_text().strip()
-    try:
-        level_up_count = int(raw_args)
-        level_up_count = min(max(1, level_up_count), config_max_level)
-    except ValueError:
-        level_up_count = 1
+    level_up_count = _parse_practice_count(raw_args, config_max_level)
+    if level_up_count is None:
+        await handle_send(bot, event, "升级数量必须是正整数且不能超过单次上限。")
+        await upmppractice.finish()
     if sect_id:
         sect_materials = int(sect_application.get_sect_info(sect_id)['sect_materials'])  # 当前资材
         usermppractice = int(user_info['mppractice'])  # 当前等级
@@ -2712,10 +2717,10 @@ async def sect_donate_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
         await sect_donate.finish()
 
     msg = args.extract_plain_text().strip()
-    donate_num = re.findall(r"\d+", msg)  # 捐献灵石数
+    donate_num = re.fullmatch(r"[0-9]+", msg)
 
-    if len(donate_num) > 0:
-        donate_stone = int(donate_num[0])
+    if donate_num and int(msg) > 0:
+        donate_stone = int(msg)
 
         if donate_stone > user_info['stone']:
             msg = f"道友的灵石数量小于欲捐献数量{donate_stone}，请检查"
@@ -3522,15 +3527,17 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
 
     user_id = user_info["user_id"]
     msg = args.extract_plain_text().strip()
-    shop_info = re.findall(r"(\d+)\s*(\d*)", msg)
-
-    if not shop_info:
+    shop_parts = msg.split()
+    if len(shop_parts) not in {1, 2} or not all(part.isdecimal() for part in shop_parts):
         msg = "请输入正确的商品编号！"
         await handle_send(bot, event, msg, md_type="宗门", k1="兑换", v1="宗门兑换", k2="宗门", v2="我的宗门", k3="商店", v3="宗门商店")
         await sect_buy.finish()
-
-    shop_id = shop_info[0][0]
-    quantity = int(shop_info[0][1]) if shop_info[0][1] else 1
+    shop_id = shop_parts[0]
+    quantity = int(shop_parts[1]) if len(shop_parts) == 2 else 1
+    if quantity <= 0:
+        msg = "兑换数量必须是正整数！"
+        await handle_send(bot, event, msg, md_type="宗门", k1="兑换", v1="宗门兑换", k2="宗门", v2="我的宗门", k3="商店", v3="宗门商店")
+        await sect_buy.finish()
 
     sect_info = sect_application.get_sect_info(sect_application.get_user_profile(user_id)['sect_id'])
     if not sect_info:

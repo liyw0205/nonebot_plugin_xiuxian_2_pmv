@@ -144,6 +144,7 @@ def guard_command(
     action: str,
     *,
     send: Callable[..., Awaitable[Any]] | None = None,
+    known_rejections: tuple[str, ...] = (),
 ) -> Callable[[Callable[..., Awaitable[Any]]], Callable[..., Awaitable[Any]]]:
     """Make ``action`` answer the player when its handler raises."""
 
@@ -157,7 +158,13 @@ def guard_command(
             except Exception as exc:  # noqa: BLE001 - answering is the point
                 bot = _argument(args, kwargs, 0, "bot")
                 event = _argument(args, kwargs, 1, "event")
-                reply = report_exception(action, exc, event=event)
+                known_code = "operation_conflict" if isinstance(exc, OperationConflictError) else getattr(exc, "code", "")
+                if isinstance(exc, DomainError) and known_code in known_rejections and (
+                    reason_text(exc.details.get("reason", "")) or reason_text(known_code)
+                ):
+                    reply = failure_reply(action, exc)
+                else:
+                    reply = report_exception(action, exc, event=event)
                 sender = send
                 if sender is None:
                     from .xiuxian_utils.utils import handle_send

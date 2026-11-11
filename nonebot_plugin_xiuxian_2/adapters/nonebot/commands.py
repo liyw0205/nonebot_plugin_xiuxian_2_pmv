@@ -154,6 +154,9 @@ def _build_sign_makeup(
 def _stone_arguments(args: Any) -> tuple[str, int] | tuple[None, None]:
     text = _plain_text(args)
     tokens = text.split()
+    mentioned = _at_user_id(args)
+    if mentioned and len(tokens) == 1 and re.fullmatch(r"[0-9]+", tokens[0]):
+        return mentioned, int(tokens[0])
     if len(tokens) < 2:
         return None, None
     amount_token = tokens[-1]
@@ -168,6 +171,8 @@ def _build_stone(context: CommandContext, application: Any, args: Any) -> ReplyP
     target, amount = _stone_arguments(args)
     if target is None or amount is None:
         return ReplyPlan("请输入正确的指令，例如：送灵石 少姜 600000", reference=True)
+    if amount <= 0:
+        return ReplyPlan("赠送数量必须大于0！", reference=True)
     recipient_id = _at_user_id(args) or target.lstrip("@")
     sender = application.resolve_user(context.user_id)
     recipient = application.resolve_user(recipient_id)
@@ -176,6 +181,8 @@ def _build_stone(context: CommandContext, application: Any, args: Any) -> ReplyP
     if recipient is None:
         return ReplyPlan("对方未踏入修仙界，不可赠送！", reference=True)
     recipient_id = str(recipient["user_id"])
+    if recipient_id == context.user_id:
+        return ReplyPlan("不能给自己赠送灵石！", reference=True)
     limits = application.read_limits(sender, recipient)
     plan = handle_stone_gift(
         application,
