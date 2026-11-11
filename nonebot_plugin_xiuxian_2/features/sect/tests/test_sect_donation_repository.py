@@ -11,5 +11,5 @@ class SectDonationRepositoryTests(unittest.TestCase):
   self.r=SectRenameSqlRepository(self.db)
  def tearDown(self):self.t.cleanup()
  def test_success_duplicate_and_insufficient(self):
-  a=self.r.donate('x','u',1,30,3);b=self.r.donate('x','u',1,99,9);c=self.r.donate('y','u',1,100,1);self.assertEqual(('donated','duplicate','stone_insufficient'),(a['status'],b['status'],c['status']))
+  a=self.r.donate('x','u',1,30,3);b=self.r.donate('x','u',1,99,9);c=self.r.donate('y','u',1,100,1);self.assertEqual(('donated','operation_conflict','stone_insufficient'),(a['status'],b['status'],c['status']))
 if __name__=='__main__':unittest.main()

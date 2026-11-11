@@ -122,13 +122,39 @@ class StoneGiftApplication:
                     existing = self.ledger.get(uow, request.operation_id, self.action)
                     legacy = self.repository.operation(uow, request.operation_id)
                     if legacy is not None:
-                        if (legacy.sender_id, legacy.recipient_id, legacy.gross_amount) != (
+                        if existing is not None:
+                            # The ledger keeps the exact request identity. Do
+                            # not compare a historical REAL projection to a
+                            # Python integer: SQLite may round that projection
+                            # beyond int64 while the request hash remains exact.
+                            valid_hashes = {request_hash(identity), request_hash(payload)}
+                            if existing.request_hash not in valid_hashes:
+                                # A pre-ledger deployment could leave a
+                                # committed legacy receipt beside a started
+                                # row whose hash included policy snapshots.
+                                # Recover that interrupted request from its
+                                # exact small-value legacy identity; an
+                                # applied row with a different hash remains a
+                                # strict operation conflict.
+                                legacy_identity = (
+                                    legacy.sender_id,
+                                    legacy.recipient_id,
+                                    legacy.gross_amount,
+                                )
+                                request_identity = (
+                                    request.sender_id,
+                                    request.recipient_id,
+                                    request.gross_amount,
+                                )
+                                if existing.status != "started" or legacy_identity != request_identity:
+                                    raise OperationConflictError(request.operation_id, self.action)
+                            previous = existing.outcome()
+                            if previous is not None:
+                                return previous.replay()
+                        elif (legacy.sender_id, legacy.recipient_id, legacy.gross_amount) != (
                             request.sender_id, request.recipient_id, request.gross_amount
                         ):
                             raise OperationConflictError(request.operation_id, self.action)
-                        previous = existing.outcome() if existing is not None else None
-                        if previous is not None and previous.ok:
-                            return previous.replay()
                     # Historical refusal hashes included policy snapshots. Keep
                     # those hashes valid; new requests use only player inputs.
                     if existing is None or existing.request_hash != request_hash(payload):
