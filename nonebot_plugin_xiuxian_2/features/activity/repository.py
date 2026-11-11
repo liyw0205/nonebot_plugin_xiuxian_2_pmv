@@ -10,6 +10,7 @@ from .boss_settlement_repository import ActivityBossSettlementSqlRepository
 from .point_shop_purchase_repository import ActivityPointShopPurchaseSqlRepository
 from .sign_settlement_repository import ActivitySignSettlementSqlRepository
 from .redemption import ActivityRedemptionRejected
+from .collect_synthesis_repository import ActivityCollectSynthesisSqlRepository
 
 
 class ActivityRepository(ServicePort):
@@ -20,6 +21,7 @@ class ActivityRepository(ServicePort):
             "claim_activity_pass_rewards": self._claim_pass,
             "claim_sign": self._claim_sign,
             "claim_collect_phrase": self._claim_collect,
+            "synthesize_collect_token": self._synthesize_collect,
             "claim_point_shop_item": self._claim_shop,
             "activity_boss.claim_boss_rewards": self._claim_boss,
             "activity_boss.fight_cooperative_boss": self._fight_boss,
@@ -31,9 +33,16 @@ class ActivityRepository(ServicePort):
         self.database = str(database)
         self.sign_settlement = ActivitySignSettlementSqlRepository(database)
         self.collect_exchange = ActivityCollectExchangeSqlRepository(database)
+        self.collect_synthesis = ActivityCollectSynthesisSqlRepository(database)
         self.point_shop_purchase = ActivityPointShopPurchaseSqlRepository(database)
         self.boss_settlement = ActivityBossSettlementSqlRepository(database)
-        self.retry_started_actions = frozenset({"claim_collect_phrase", "claim_sign", "claim_point_shop_item"})
+        self.retry_started_actions = frozenset({"claim_collect_phrase", "claim_sign", "claim_point_shop_item", "synthesize_collect_token"})
+
+    def _synthesize_collect(self, **kwargs: Any):
+        from .collect_synthesis import synthesize
+        return self._redeem(synthesize, self.collect_synthesis,
+            str(kwargs.get("operation_id", "")), str(kwargs.get("user_id", "")),
+            str(kwargs.get("query", "")))
 
     def _claim_all(self, **kwargs: Any):
         from ...compatibility.legacy_activity_claim_steps import build_legacy_activity_claim_runners

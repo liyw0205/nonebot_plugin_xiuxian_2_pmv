@@ -33,6 +33,32 @@ class RegisteredCommandDiagnosticsTests(unittest.IsolatedAsyncioTestCase):
                 self.snapshot.restore()
                 await self.command(name)
 
+    async def test_activity_collect_conversion_runs_registered_handler(self):
+        from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_activity import activity_config
+
+        config = activity_config._load_default_config()
+        key = config["gameplay_activities"][0]["key"]
+        with sqlite3.connect(self.context.paths.game_db) as conn:
+            conn.execute(
+                "INSERT INTO activity_collect_inventory(activity_key,user_id,word_char,count) "
+                "VALUES(?,'900001','福',6) ON CONFLICT(activity_key,user_id,word_char) DO UPDATE SET count=6",
+                (key,),
+            )
+        with patch.object(activity_config, "load_config", return_value=config):
+            result = await self.command("活动换字", text="活动换字 福 运")
+            self.assertIn("换字成功", "\n".join(result["replies"]))
+            replay = await self.command("活动换字", text="活动换字 福 运")
+            self.assertIn("换字成功", "\n".join(replay["replies"]))
+            denied = await self.command("活动换字", text="集字换字 福 运", number=900101)
+            self.assertIn("源字【福】不足", "\n".join(denied["replies"]))
+        with sqlite3.connect(self.context.paths.game_db) as conn:
+            tokens = dict(conn.execute(
+                "SELECT word_char,count FROM activity_collect_inventory WHERE activity_key=? AND user_id='900001'",
+                (key,),
+            ))
+            self.assertEqual({"福": 1, "运": 1}, tokens)
+            self.assertEqual(1, conn.execute("SELECT COUNT(*) FROM activity_collect_synthesis_operations").fetchone()[0])
+
     def update_player(self, **values):
         game = self.managers[0]
         game.conn.execute(

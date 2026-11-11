@@ -157,6 +157,7 @@
       "daily_drop_limit": 8,
       "rolls_per_record": 1,
       "pity_threshold": 6,
+      "synthesis": {"enabled": true, "cost": 5},
       "letters": [
         {
           "char": "福",

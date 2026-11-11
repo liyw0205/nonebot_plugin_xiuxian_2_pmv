@@ -1,6 +1,18 @@
 """Allowlisted business diagnostics; never render exception messages."""
 
 REASONS = {
+    "collect_synthesis_arguments": "格式：活动换字 源字 目标字 [活动名]，每次获得一张目标字牌。",
+    "collect_synthesis_same_token": "源字与目标字相同，请选择不同字牌。",
+    "collect_synthesis_activity_missing": "未找到指定集字活动，请查看活动背包中的活动名。",
+    "collect_synthesis_activity_ambiguous": "当前有多个集字活动，请在源字和目标字后指定活动名。",
+    "collect_synthesis_disabled": "该集字活动未开放换字，请通过原活动来源获取字牌。",
+    "collect_synthesis_token_unknown": "源字或目标字不在该活动字牌列表中，请查看活动背包。",
+    "collect_synthesis_tokens_insufficient": "指定源字不足以换字，请查看活动背包。",
+    "collect_synthesis_inventory_invalid": "字牌库存不是有效的非负整数，请联系管理员核对该字牌。",
+    "collect_synthesis_precision_insufficient": "字牌数量超出当前存档可精确保存的范围，本次换字已撤销，请联系管理员核对库存。",
+    "collect_synthesis_source_write_rejected": "源字扣除保存失败，本次换字已撤销，请联系管理员核对源字库存。",
+    "collect_synthesis_target_write_rejected": "目标字入库保存失败，本次换字已撤销，请联系管理员核对目标字库存。",
+    "collect_synthesis_receipt_write_rejected": "换字回执保存失败，本次换字已撤销，请联系管理员核对请求记录。",
     "arena_ticket_write_rejected": "竞技场挑战券使用记录保存失败，本次使用已撤销，请联系管理员核对背包和次数记录。",
     "arena_ticket_item_write_rejected": "竞技场挑战券扣除保存失败，本次使用已撤销，请联系管理员核对挑战券记录。",
     "arena_ticket_count_write_rejected": "竞技场挑战次数返还保存失败，本次使用已撤销，请联系管理员核对挑战次数记录。",

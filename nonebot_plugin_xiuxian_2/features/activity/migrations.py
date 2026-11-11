@@ -172,7 +172,15 @@ def apply_activity_event_receipts(uow: DatabaseUnitOfWork) -> None:
     )
 
 
+def apply_collect_synthesis(uow: DatabaseUnitOfWork) -> None:
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS activity_collect_synthesis_operations("
+        "operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,result_json TEXT NOT NULL,created_at TEXT NOT NULL)"
+    )
+
+
 __all__ = [
+    "apply_collect_synthesis",
     "apply_activity",
     "apply_activity_state_schema",
     "apply_activity_state_legacy",

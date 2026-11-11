@@ -1525,7 +1525,7 @@ class ActivityReadModelApplication:
         (capped at 4 entries) and `已兑换完` terminal states that drop the
         exchange command.
         """
-        from ...xiuxian.xiuxian_activity.activity_config import activity_state
+        from ...xiuxian.xiuxian_activity.activity_config import activity_runtime_state, activity_state
         from ...xiuxian.xiuxian_activity.activity_progress import (
             _phrase_need_counter,
         )
@@ -1536,11 +1536,15 @@ class ActivityReadModelApplication:
         )
         from ...xiuxian.xiuxian_activity.activity_utils import _as_int
         from .gameplay_progress import collect_pity_entries
+        from .collect_synthesis import synthesis_hints
 
         uid = str(user_id)
+        config = self._config()
+        now = self.clock.now()
+        runtime = activity_runtime_state(config, at_time=now)
         activities = [
             activity
-            for activity in get_gameplay_activities(self._config())
+            for activity in get_gameplay_activities(config)
             if activity.get("type") == "collect_words"
         ]
         lines = ["【活动背包】"]
@@ -1556,7 +1560,7 @@ class ActivityReadModelApplication:
         pity_state = state["pity"]
         for activity in activities:
             activity_key = str(activity["key"])
-            ok, reason = activity_state(activity)
+            ok, reason = activity_state(activity, at_time=now)
             phrases = _collect_phrases(activity)
             letters = _collect_letters(activity, phrases)
             inventory = {
@@ -1587,6 +1591,8 @@ class ActivityReadModelApplication:
             if not phrases:
                 lines.append("暂无兑换词组")
                 continue
+            if ok and runtime.get("ok") and "exchange" in set(runtime.get("features") or ()):
+                lines.extend(synthesis_hints(activity, inventory, claim_state))
             lines.append("可兑换词组：")
             for phrase in phrases:
                 need = _phrase_need_counter(phrase["phrase"])

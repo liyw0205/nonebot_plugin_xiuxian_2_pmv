@@ -1715,6 +1715,14 @@
       "permission": "user"
     },
     {
+      "aliases": [
+        "集字换字"
+      ],
+      "feature": "activity",
+      "name": "活动换字",
+      "permission": "user"
+    },
+    {
       "aliases": [],
       "feature": "activity",
       "name": "活动排行",
@@ -2814,6 +2822,7 @@
     "activity_collect_exchange_operations",
     "activity_collect_inventory",
     "activity_collect_pity_state",
+    "activity_collect_synthesis_operations",
     "activity_config_operations",
     "activity_config_state",
     "activity_event_operations",

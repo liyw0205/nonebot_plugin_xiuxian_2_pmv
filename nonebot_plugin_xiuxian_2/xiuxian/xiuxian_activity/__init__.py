@@ -35,6 +35,7 @@ activity_rank_cmd = on_command("活动排行", priority=10, block=True)
 activity_rank_claim_cmd = on_command("活动排行领取", aliases={"领取排行奖励"}, priority=10, block=True)
 activity_bag_cmd = on_command("活动背包", aliases={"活动字牌", "集字背包"}, priority=10, block=True)
 activity_exchange_cmd = on_command("活动兑换", aliases={"集字兑换"}, priority=10, block=True)
+activity_synthesis_cmd = on_command("活动换字", aliases={"集字换字"}, priority=10, block=True)
 activity_points_cmd = on_command("活动积分", aliases={"积分活动"}, priority=10, block=True)
 activity_shop_cmd = on_command("活动商店", aliases={"积分商店"}, priority=10, block=True)
 activity_buy_cmd = on_command("活动购买", aliases={"活动兑换商品", "活动商城兑换"}, priority=10, block=True)
@@ -396,6 +397,24 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     await handle_send(bot, event, reply)
 
 
+@activity_synthesis_cmd.handle(parameterless=[Cooldown(cd_time=0)])
+@guard_command("活动换字")
+async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
+    await assign_bot(bot=bot, event=event)
+    is_user, user_info, msg = await _ensure_user(event)
+    if not is_user:
+        await handle_send(bot, event, msg, md_type="我要修仙")
+        return
+    user_id = str(user_info["user_id"])
+    ok, text, data = _run_activity_action(
+        "synthesize_collect_token",
+        _activity_operation_id(event, "collect-synthesis", user_id),
+        user_id, query=args.extract_plain_text(),
+    )
+    reply = text if ok else result_failure("活动换字失败", data, messages={data["reason"]: text})
+    await handle_send(bot, event, reply, k1="背包", v1="活动背包")
+
+
 @activity_points_cmd.handle(parameterless=[Cooldown(cd_time=0)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     await assign_bot(bot=bot, event=event)
@@ -585,6 +604,8 @@ ACTIVITY_HELP = """
 > 用积分购买
 - 活动兑换 端午安康
 > 集字兑换示例
+- 活动换字 源字 目标字 [活动名] / 集字换字
+> 按活动背包规则消耗指定源字，定向获得一张缺字
 
 **首领**
 - 活动首领 / 活动首领排行

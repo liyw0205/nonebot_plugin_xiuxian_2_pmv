@@ -113,9 +113,17 @@ def _load_default_config() -> dict:
         return json.load(f)
 
 
+def _defaults_for_existing_config() -> dict:
+    defaults = _load_default_config()
+    # Backfilling old gameplay must not opt an existing installation into conversion.
+    for activity in defaults.get("gameplay_activities", []):
+        activity.pop("synthesis", None)
+    return defaults
+
+
 def _migrate_config(config: dict) -> tuple[dict, bool]:
     if config.get("template_type") == "festival_sign":
-        default_config = _load_default_config()
+        default_config = _defaults_for_existing_config()
         changed = False
         for key, default_value in (
             ("template_key", default_config.get("template_key", "festival_sign")),
@@ -146,7 +154,7 @@ def _migrate_config(config: dict) -> tuple[dict, bool]:
                 changed = True
         return config, changed
 
-    default_config = _load_default_config()
+    default_config = _defaults_for_existing_config()
     migrated = deepcopy(default_config)
     for key in ("enabled", "start_time", "end_time"):
         if key in config:
@@ -454,7 +462,7 @@ def activity_rank_config(config: dict | None = None) -> dict:
 
 def activity_runtime_state(config: dict | None = None, at_time: datetime | None = None) -> dict:
     cfg = config or load_config()
-    ok, reason = activity_state(cfg)
+    ok, reason = activity_state(cfg, at_time=at_time)
     if not ok:
         return {
             "ok": False,

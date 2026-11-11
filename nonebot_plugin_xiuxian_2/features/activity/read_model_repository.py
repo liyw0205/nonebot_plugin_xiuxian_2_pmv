@@ -278,7 +278,7 @@ class ActivityReadModelSqlRepository:
         return {
             "inventory": {
                 (str(row["activity_key"]), str(row["word_char"])): max(
-                    0, int(row["count"] or 0)
+                    0, as_int_like(row["count"], 0)
                 )
                 for row in inventory_rows
             },
