@@ -10,6 +10,7 @@ from nonebot_plugin_xiuxian_2.features.bank.migrations import apply_bank, apply_
 from nonebot_plugin_xiuxian_2.infrastructure.database import DatabaseUnitOfWork
 from nonebot_plugin_xiuxian_2.paths import configure_paths, get_paths
 from nonebot_plugin_xiuxian_2.plugin import build_migrations, shutdown, startup
+from tests.bootstrap import copy_static_data
 
 
 _BANK_003_ORIGINAL_CHECKSUM = "2f47b238159b04b6305e542e90b7f718b7e6bbcd131cd5ad7ccead41edf8d3b3"
@@ -21,7 +22,10 @@ class MigrationChecksumCompatibilityTests(unittest.TestCase):
             previous_data = get_paths().data
             try:
                 with tempfile.TemporaryDirectory() as directory:
-                    data_dir = Path(directory) / "data" / "xiuxian"
+                    data_dir = copy_static_data(
+                        Path(__file__).resolve().parents[1] / "data" / "xiuxian",
+                        Path(directory) / "data" / "xiuxian",
+                    )
                     context = build_runtime_context(data_dir=data_dir, legacy_startup=False)
                     game_database = context.database.path("game_db")
                     player_database = context.database.path("player_db")

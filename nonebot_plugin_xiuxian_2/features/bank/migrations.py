@@ -230,9 +230,17 @@ def apply_bank_legacy_accounts_exact(uow: DatabaseUnitOfWork) -> None:
     )
 
 
+apply_bank_legacy_accounts_v3 = apply_bank_legacy_accounts
+
+
+def apply_bank_legacy_accounts(uow: DatabaseUnitOfWork) -> None:
+    apply_bank_legacy_accounts_exact(uow)
+
+
 __all__ = [
     "apply_bank",
     "apply_bank_accounts",
     "apply_bank_legacy_accounts",
     "apply_bank_legacy_accounts_exact",
+    "apply_bank_legacy_accounts_v3",
 ]
