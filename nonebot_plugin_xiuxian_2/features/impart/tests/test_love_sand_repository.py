@@ -5,6 +5,8 @@ from pathlib import Path
 from ....infrastructure.database import DatabaseUnitOfWork
 from ..love_sand_repository import LoveSandSqlRepository
 from ..migrations import (
+    apply_impart_exact_crystal_balances,
+    apply_impart_exact_crystal_game_receipts,
     apply_impart_love_sand_operations,
     apply_impart_love_sand_player_statistics,
 )
@@ -28,6 +30,11 @@ class LoveSandRepositoryTests(unittest.TestCase):
                 c.execute("INSERT INTO xiuxian_impart VALUES('u',7)")
             with DatabaseUnitOfWork(game) as uow:
                 apply_impart_love_sand_operations(uow)
+                from ..migrations import apply_impart_exact_crystal_game_receipts
+
+                apply_impart_exact_crystal_game_receipts(uow)
+            with DatabaseUnitOfWork(impart) as uow:
+                apply_impart_exact_crystal_balances(uow)
             with DatabaseUnitOfWork(player) as uow:
                 apply_impart_love_sand_player_statistics(uow)
 
@@ -73,6 +80,7 @@ class LoveSandRepositoryTests(unittest.TestCase):
 
             with DatabaseUnitOfWork(game) as uow:
                 apply_impart_love_sand_operations(uow)
+                apply_impart_exact_crystal_game_receipts(uow)
             self.assertEqual(repository.apply("y", "u", 1, 1, 20, 1, 7).status, "schema_missing")
             with db_backend.connection(player) as c:
                 self.assertIsNone(
@@ -98,6 +106,7 @@ class LoveSandRepositoryTests(unittest.TestCase):
                 c.execute("INSERT INTO statistics VALUES('u',9)")
             with DatabaseUnitOfWork(game) as uow:
                 apply_impart_love_sand_operations(uow)
+                apply_impart_exact_crystal_game_receipts(uow)
             with DatabaseUnitOfWork(player) as uow:
                 apply_impart_love_sand_player_statistics(uow)
 
@@ -128,6 +137,9 @@ class LoveSandRepositoryTests(unittest.TestCase):
                     "CREATE TRIGGER fail_love_sand BEFORE INSERT ON love_sand_operations "
                     "BEGIN SELECT RAISE(ABORT,'failed'); END"
                 )
+                apply_impart_exact_crystal_game_receipts(uow)
+            with DatabaseUnitOfWork(impart) as uow:
+                apply_impart_exact_crystal_balances(uow)
             with DatabaseUnitOfWork(player) as uow:
                 apply_impart_love_sand_player_statistics(uow)
 

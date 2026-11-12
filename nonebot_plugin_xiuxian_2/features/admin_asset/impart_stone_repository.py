@@ -1,18 +1,21 @@
 from __future__ import annotations
 
-from ...core.numeric import as_int_like
+from ...core.numeric import as_int_like, crystal_precision_reason
+from ...core.errors import DomainError
+from ..impart.legacy_state import crystal_balance
 import json
 from dataclasses import dataclass
 from pathlib import Path
 
 from ...infrastructure.database import DatabaseUnitOfWork
-from ...core.errors import DomainError
 
 
 @dataclass(frozen=True)
 class AdminImpartStoneSnapshot:
     status: str
     stone: int | None = None
+    reason: str = ""
+    subject: str = ""
 
 
 @dataclass(frozen=True)
@@ -22,6 +25,7 @@ class AdminImpartStoneResult:
     final_stone: int = 0
     applied_delta: int = 0
     reason: str = ""
+    subject: str = ""
 
     @property
     def succeeded(self) -> bool:
@@ -43,12 +47,15 @@ class AdminImpartStoneSqlRepository:
         return (
             {"user_id"}.issubset(cls._columns(uow, "user_xiuxian"))
             and {
-                "operation_id", "payload", "previous_stone", "final_stone", "applied_delta"
+                "operation_id", "payload", "previous_stone", "final_stone", "applied_delta",
+                "previous_stone_exact", "final_stone_exact",
+                "previous_stone_precision_state", "final_stone_precision_state",
+                "applied_delta_exact", "applied_delta_precision_state",
             }.issubset(cls._columns(uow, "admin_impart_stone_operations"))
             and {
                 "user_id", "source", "action", "item_delta", "detail", "trace_id", "created_at"
             }.issubset(cls._columns(uow, "economy_log"))
-            and {"user_id", "stone_num"}.issubset(
+            and {"user_id", "stone_num", "stone_num_exact", "stone_num_precision_state"}.issubset(
                 cls._columns(uow, "xiuxian_impart", "impart_data")
             )
         )
@@ -64,16 +71,33 @@ class AdminImpartStoneSqlRepository:
             columns = self._columns(uow, "xiuxian_impart")
             if not {"user_id", "stone_num"}.issubset(columns):
                 return AdminImpartStoneSnapshot("schema_missing")
-            rows = uow.query_all(
-                "SELECT COALESCE(stone_num,0) AS stone_num "
-                "FROM xiuxian_impart WHERE user_id=?",
-                (user_id,),
-            )
+            if {"stone_num_exact", "stone_num_precision_state"}.issubset(columns):
+                rows = uow.query_all(
+                    "SELECT user_id,stone_num,stone_num_exact,stone_num_precision_state "
+                    "FROM xiuxian_impart WHERE user_id=?",
+                    (user_id,),
+                )
+            else:
+                rows = uow.query_all(
+                    "SELECT stone_num,typeof(stone_num) AS stone_num_storage_type "
+                    "FROM xiuxian_impart WHERE user_id=?",
+                    (user_id,),
+                )
             if len(rows) > 1:
-                return AdminImpartStoneSnapshot("invalid_state")
-            return AdminImpartStoneSnapshot(
-                "ok", as_int_like(rows[0]["stone_num"]) if rows else None
-            )
+                return AdminImpartStoneSnapshot(
+                    "invalid_state", reason="admin_impart_rows_duplicate", subject="target"
+                )
+            try:
+                stone = crystal_balance(rows[0], subject=user_id) if rows else None
+            except DomainError as exc:
+                if exc.code != "impart_crystal_precision_unavailable":
+                    raise
+                return AdminImpartStoneSnapshot(
+                    "precision_unavailable",
+                    reason=str(exc.details.get("reason") or "crystal_invalid_numeric_value"),
+                    subject="target",
+                )
+            return AdminImpartStoneSnapshot("ok", stone)
 
     def adjust(
         self,
@@ -111,50 +135,96 @@ class AdminImpartStoneSqlRepository:
                 return AdminImpartStoneResult("schema_missing")
 
             previous = uow.query_one(
-                "SELECT payload,previous_stone,final_stone,applied_delta "
+                "SELECT payload,previous_stone,final_stone,previous_stone_exact,"
+                "final_stone_exact,previous_stone_precision_state,"
+                "final_stone_precision_state,applied_delta,applied_delta_exact,"
+                "applied_delta_precision_state "
                 "FROM admin_impart_stone_operations WHERE operation_id=?",
                 (operation_id,),
             )
             if previous is not None:
                 if str(previous["payload"]) != payload:
                     return AdminImpartStoneResult("operation_conflict")
-                return AdminImpartStoneResult(
-                    "duplicate",
-                    as_int_like(previous["previous_stone"]),
-                    as_int_like(previous["final_stone"]),
-                    int(previous["applied_delta"]),
-                )
+                if (
+                    previous["previous_stone_precision_state"] != "exact"
+                    or previous["final_stone_precision_state"] != "exact"
+                    or previous["applied_delta_precision_state"] != "exact"
+                ):
+                    return AdminImpartStoneResult(
+                        "precision_unavailable",
+                        reason=crystal_precision_reason(
+                            next(
+                                state for state in (
+                                    previous["final_stone_precision_state"],
+                                    previous["previous_stone_precision_state"],
+                                    previous["applied_delta_precision_state"],
+                                ) if state != "exact"
+                            )
+                        ),
+                        subject="target",
+                    )
+                try:
+                    return AdminImpartStoneResult(
+                        "duplicate",
+                        crystal_balance(previous, subject="target", field="previous_stone"),
+                        crystal_balance(previous, subject="target", field="final_stone"),
+                        crystal_balance(previous, subject="target", field="applied_delta"),
+                    )
+                except DomainError as exc:
+                    if exc.code != "impart_crystal_precision_unavailable":
+                        raise
+                    return AdminImpartStoneResult(
+                        "precision_unavailable", reason=exc.details["reason"], subject="target"
+                    )
 
             if uow.query_one(
                 "SELECT 1 FROM user_xiuxian WHERE user_id=?", (user_id,)
             ) is None:
                 return AdminImpartStoneResult("user_missing")
             rows = uow.query_all(
-                "SELECT COALESCE(stone_num,0) AS stone_num "
+                "SELECT stone_num,stone_num_exact,stone_num_precision_state "
                 "FROM impart_data.xiuxian_impart WHERE user_id=?",
                 (user_id,),
             )
             if len(rows) > 1:
-                return AdminImpartStoneResult("invalid_state", reason="admin_impart_rows_duplicate")
-            actual_stone = as_int_like(rows[0]["stone_num"]) if rows else None
+                return AdminImpartStoneResult(
+                    "invalid_state", reason="admin_impart_rows_duplicate", subject="target"
+                )
+            try:
+                actual_stone = crystal_balance(rows[0], subject=user_id) if rows else None
+            except DomainError as exc:
+                if exc.code != "impart_crystal_precision_unavailable":
+                    raise
+                return AdminImpartStoneResult(
+                    "precision_unavailable",
+                    reason=str(exc.details.get("reason") or "crystal_invalid_numeric_value"),
+                    subject="target",
+                )
             if actual_stone != expected_stone:
                 current = int(actual_stone or 0)
-                return AdminImpartStoneResult("state_changed", current, current, reason="crystal_changed" if rows else "impart_missing")
+                return AdminImpartStoneResult(
+                    "state_changed", current, current,
+                    reason="crystal_changed" if rows else "impart_missing",
+                    subject="target",
+                )
 
             previous_stone = int(actual_stone or 0)
             final_stone = max(0, previous_stone + requested_delta)
             applied_delta = final_stone - previous_stone
             if actual_stone is None:
                 uow.execute(
-                    "INSERT INTO impart_data.xiuxian_impart(user_id,stone_num) "
-                    "VALUES(?,?)",
-                    (user_id, final_stone),
+                    "INSERT INTO impart_data.xiuxian_impart"
+                    "(user_id,stone_num,stone_num_exact,stone_num_precision_state) "
+                    "VALUES(?,?,?,'exact')",
+                    (user_id, final_stone, str(final_stone)),
                 )
             else:
                 changed = uow.execute(
-                    "UPDATE impart_data.xiuxian_impart SET stone_num=? "
-                    "WHERE user_id=? AND xiuxian_int_cmp(COALESCE(stone_num,0),?)=0",
-                    (final_stone, user_id, previous_stone),
+                    "UPDATE impart_data.xiuxian_impart SET stone_num=?,stone_num_exact=?,"
+                    "stone_num_precision_state='exact' WHERE user_id=? "
+                    "AND xiuxian_int_cmp(COALESCE(stone_num_exact,stone_num,0),?)=0 "
+                    "AND stone_num_precision_state='exact'",
+                    (final_stone, str(final_stone), user_id, previous_stone),
                 )
                 if changed.rowcount != 1:
                     raise DomainError("impart_write_rejected", "admin impart adjustment was not saved")
@@ -197,9 +267,11 @@ class AdminImpartStoneSqlRepository:
             )
             uow.execute(
                 "INSERT INTO admin_impart_stone_operations("
-                "operation_id,payload,previous_stone,final_stone,applied_delta) "
-                "VALUES(?,?,?,?,?)",
-                (operation_id, payload, previous_stone, final_stone, applied_delta),
+                "operation_id,payload,previous_stone,final_stone,applied_delta,"
+                "previous_stone_exact,final_stone_exact,applied_delta_exact) "
+                "VALUES(?,?,?,?,?,?,?,?)",
+                (operation_id, payload, previous_stone, final_stone, applied_delta,
+                 str(previous_stone), str(final_stone), str(applied_delta)),
             )
             return AdminImpartStoneResult(
                 "adjusted", previous_stone, final_stone, applied_delta

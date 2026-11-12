@@ -11,6 +11,7 @@ from ..migrations import (
     apply_impart_crystal_draw_operations,
     apply_impart_draw_operations,
     apply_impart_draw_player_statistics,
+    apply_impart_exact_crystal_balances,
 )
 
 
@@ -188,6 +189,7 @@ class ImpartApplicationTest(unittest.TestCase):
                     "operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,"
                     "card_quantity INTEGER NOT NULL,stone_quantity INTEGER NOT NULL)"
                 )
+                apply_impart_exact_crystal_balances(uow)
 
             app = ImpartApplication(database)
             first = app.disassemble(
@@ -297,6 +299,7 @@ class ImpartApplicationTest(unittest.TestCase):
                 )
                 apply_impart_crystal_draw_operations(uow)
                 apply_impart_card_operations(uow)
+                apply_impart_exact_crystal_balances(uow)
             with DatabaseUnitOfWork(player) as uow:
                 apply_impart_draw_player_statistics(uow)
 

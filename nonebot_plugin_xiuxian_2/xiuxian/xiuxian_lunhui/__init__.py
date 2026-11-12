@@ -32,6 +32,7 @@ from ...paths import get_paths
 from ...infrastructure.clock import SystemClock
 from ...infrastructure.ids import UUIDGenerator
 from ...features.lunhui.application import LunhuiApplication
+from ..command_guard import guard_command, result_failure
 
 xiuxian_impart = XIUXIAN_IMPART_BUFF()
 _player_data_manager_instance = None
@@ -336,6 +337,10 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     await handle_send(bot, event, "\n".join(lines), md_type="轮回", k1="功法", v1="回忆前世 主功法", k2="辅修", v2="回忆前世 辅修", k3="神通", v3="回忆前世 神通")
 
 @confirm_lunhui.handle(parameterless=[Cooldown(cd_time=0)])
+@guard_command(
+    "确认轮回",
+    known_rejections=("impart_crystal_precision_unavailable",),
+)
 async def confirm_lunhui_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """处理确认轮回"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -393,7 +398,12 @@ async def confirm_lunhui_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
         await handle_send(bot, event, msg, md_type="轮回", k1="修为", v1="我的修为", k2="存档", v2="我的修仙信息", k3="印记", v3="轮回印记")
         await confirm_lunhui.finish()
     if not result.succeeded:
-        await handle_send(bot, event, "轮回未执行：确认状态已更新，请重新进入轮回后再确认。", md_type="轮回")
+        msg = (
+            result_failure("轮回", result)
+            if result.status == "precision_unavailable"
+            else "轮回未执行：确认的角色状态与当前存档不一致，请重新查看后再确认。"
+        )
+        await handle_send(bot, event, msg, md_type="轮回")
         await confirm_lunhui.finish()
 
     msg = f"{original_msg}！\n轮回馈赠：{ROOT_RENAME_CARD_NAME} x1"

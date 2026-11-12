@@ -4,6 +4,7 @@ from pathlib import Path
 from ..battle_repository import ImpartBattleBatchSqlRepository
 from tests.test_db_backend import db_backend
 from ....infrastructure.database import DatabaseUnitOfWork
+from ...impart.migrations import apply_impart_exact_crystal_balances
 from ..migrations import (
     apply_impart_pk_impart_operations,
     apply_impart_pk_player_operations,
@@ -16,6 +17,7 @@ class ImpartBattleRepositoryTests(unittest.TestCase):
             with db_backend.transaction(impart) as c: c.execute('CREATE TABLE xiuxian_impart(user_id TEXT PRIMARY KEY,stone_num INTEGER)'); c.execute("INSERT INTO xiuxian_impart VALUES('a',0)"); c.execute("INSERT INTO xiuxian_impart VALUES('b',0)")
             with db_backend.transaction(player) as c: c.execute('CREATE TABLE impart_pk_state(user_id TEXT PRIMARY KEY,pk_num INTEGER,win_num INTEGER)'); c.execute("INSERT INTO impart_pk_state VALUES('a',3,0)"); c.execute("INSERT INTO impart_pk_state VALUES('b',3,0)")
             with DatabaseUnitOfWork(impart, immediate=True) as uow: apply_impart_pk_impart_operations(uow)
+            with DatabaseUnitOfWork(impart, immediate=True) as uow: apply_impart_exact_crystal_balances(uow)
             with DatabaseUnitOfWork(player, immediate=True) as uow: apply_impart_pk_player_operations(uow)
             repo=ImpartBattleBatchSqlRepository(impart,player); first=repo.settle('b','a',3,1,0,2,'b',3,0,1,2); dup=repo.settle('b','a',3,1,0,2,'b',3,0,1,2); self.assertEqual((first.status,dup.status),('applied','duplicate'))
 
@@ -32,6 +34,7 @@ class ImpartBattleRepositoryTests(unittest.TestCase):
                 conn.execute("INSERT INTO impart_project_members(user_id) VALUES('a')")
 
             with DatabaseUnitOfWork(impart, immediate=True) as uow: apply_impart_pk_impart_operations(uow)
+            with DatabaseUnitOfWork(impart, immediate=True) as uow: apply_impart_exact_crystal_balances(uow)
             with DatabaseUnitOfWork(player, immediate=True) as uow: apply_impart_pk_player_operations(uow)
             repo=ImpartBattleBatchSqlRepository(impart,player)
             failed=repo.settle('stale','a',2,0,1,10)

@@ -102,6 +102,10 @@ def sqlite_int_compare(left: Any, right: Any) -> int | None:
 def register_numeric_functions(connection: Any) -> None:
     connection.create_function("xiuxian_int_cmp", 2, sqlite_int_compare, deterministic=True)
     connection.create_function("xiuxian_int_text", 1, sqlite_int_text, deterministic=True)
+    connection.create_function("xiuxian_int_add", 2, _sqlite_int_add, deterministic=True)
+    connection.create_function("xiuxian_int_sub", 2, _sqlite_int_sub, deterministic=True)
+    connection.create_function("xiuxian_crystal_exact_text", 2, _crystal_exact_text, deterministic=True)
+    connection.create_function("xiuxian_crystal_precision_state", 2, _crystal_precision_state, deterministic=True)
     connection.create_collation("xiuxian_integer", lambda left, right: (int(left) > int(right)) - (int(left) < int(right)))
     connection.create_aggregate("xiuxian_int_sum", 1, _IntegerSum)
     connection.create_function("xiuxian_int_abs", 1, lambda value: str(abs(as_int_like(value))), deterministic=True)
@@ -127,6 +131,83 @@ def sqlite_int_text(value: Any) -> str | None:
     the existing int(REAL) semantics. NULL retains SQLite's usual sort order.
     """
     return None if value is None else str(as_int_like(value))
+
+
+def _legacy_crystal_value(value: Any, storage_type: Any) -> int | None:
+    """Interpret stored legacy values without pretending a rounded REAL is exact."""
+    if value is None:
+        return 0
+    kind = str(storage_type or "").lower()
+    if kind == "real":
+        try:
+            number = float(value)
+            # At the boundary itself, an adjacent integer may already have
+            # rounded to the same IEEE-754 value (for example 2**53 + 1).
+            if not number.is_integer() or abs(number) >= 2**53:
+                return None
+            return int(number)
+        except (TypeError, ValueError, OverflowError):
+            return None
+    try:
+        number = Decimal(str(value).strip())
+        if not number.is_finite() or number != number.to_integral_value():
+            return None
+        return int(number)
+    except (InvalidOperation, TypeError, ValueError, OverflowError):
+        return None
+
+
+def exact_crystal_integer(value: Any, storage_type: Any = None) -> int | None:
+    """Parse an exact legacy crystal value, rejecting ambiguous SQLite REALs."""
+    if storage_type is None:
+        storage_type = (
+            "null" if value is None else "integer" if isinstance(value, int)
+            else "real" if isinstance(value, float) else "text"
+        )
+    return _legacy_crystal_value(value, storage_type)
+
+
+def _strict_sql_integer(value: Any) -> int:
+    number = exact_crystal_integer(value)
+    if number is None:
+        raise ValueError("SQLite integer arithmetic requires an exact integer operand")
+    return number
+
+
+def _sqlite_int_add(left: Any, right: Any) -> str:
+    return str(_strict_sql_integer(left) + _strict_sql_integer(right))
+
+
+def _sqlite_int_sub(left: Any, right: Any) -> str:
+    return str(_strict_sql_integer(left) - _strict_sql_integer(right))
+
+
+def _crystal_exact_text(value: Any, storage_type: Any) -> str | None:
+    number = _legacy_crystal_value(value, storage_type)
+    return None if number is None else str(number)
+
+
+def _crystal_precision_state(value: Any, storage_type: Any) -> str:
+    kind = str(storage_type or "").lower()
+    if kind == "real":
+        try:
+            number = float(value)
+            if not number.is_integer():
+                return "invalid_numeric_value"
+            if abs(number) >= 2**53:
+                return "precision_lost_real"
+        except (TypeError, ValueError, OverflowError):
+            return "invalid_numeric_value"
+    elif _legacy_crystal_value(value, storage_type) is None:
+        return "invalid_numeric_value"
+    return "exact"
+
+
+def crystal_precision_reason(state: Any) -> str:
+    """Return a stable, actionable reason for an unusable legacy balance."""
+    if str(state or "") == "precision_lost_real":
+        return "crystal_precision_lost_real"
+    return "crystal_invalid_numeric_value"
 
 
 def _coerce_field(value: Any) -> Any:
@@ -232,4 +313,8 @@ __all__ = [
     "register_numeric_functions",
     "sqlite_int_compare",
     "sqlite_int_text",
+    "_crystal_exact_text",
+    "_crystal_precision_state",
+    "exact_crystal_integer",
+    "crystal_precision_reason",
 ]

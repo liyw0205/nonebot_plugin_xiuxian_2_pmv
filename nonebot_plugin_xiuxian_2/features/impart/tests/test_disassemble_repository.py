@@ -1,7 +1,9 @@
 import tempfile
 import unittest
 from pathlib import Path
+from ....infrastructure.database import DatabaseUnitOfWork
 from ..disassemble_repository import ImpartCardDisassembleSqlRepository
+from ..migrations import apply_impart_exact_crystal_balances
 from tests.test_db_backend import db_backend
 
 class ImpartCardDisassembleRepositoryTests(unittest.TestCase):
@@ -12,6 +14,8 @@ class ImpartCardDisassembleRepositoryTests(unittest.TestCase):
                 c.execute('CREATE TABLE impart_cards(user_id TEXT,card_name TEXT,quantity INTEGER,UNIQUE(user_id,card_name))'); c.execute("INSERT INTO impart_cards VALUES('u','A',3)")
                 c.execute('CREATE TABLE impart_card_disassemble_operations(operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,card_quantity INTEGER NOT NULL,stone_quantity INTEGER NOT NULL)')
                 c.execute('CREATE TABLE xiuxian_impart(user_id TEXT PRIMARY KEY,stone_num INTEGER,impart_two_exp REAL DEFAULT 0,impart_exp_up REAL DEFAULT 0,impart_atk_per REAL DEFAULT 0,impart_hp_per REAL DEFAULT 0,impart_mp_per REAL DEFAULT 0,boss_atk REAL DEFAULT 0,impart_know_per REAL DEFAULT 0,impart_burst_per REAL DEFAULT 0,impart_mix_per REAL DEFAULT 0,impart_reap_per REAL DEFAULT 0)'); c.execute("INSERT INTO xiuxian_impart(user_id,stone_num) VALUES('u',10)")
+            with DatabaseUnitOfWork(db) as uow:
+                apply_impart_exact_crystal_balances(uow)
             repo=ImpartCardDisassembleSqlRepository(db)
             first=repo.disassemble('d','u','A',2,3,10,2,{'A':{}}); duplicate=repo.disassemble('d','u','A',2,3,10,2,{'A':{}}); missing=repo.disassemble('m','u','A',2,1,14,2,{'A':{}})
             self.assertEqual((first.status,duplicate.status,missing.status),('applied','duplicate','card_missing'))

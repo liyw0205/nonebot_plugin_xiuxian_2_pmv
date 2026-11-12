@@ -116,6 +116,70 @@ def apply_impart_crystal_and_card_operations(uow: DatabaseUnitOfWork) -> None:
     apply_impart_card_operations(uow)
 
 
+def _apply_exact_integer_columns(uow: DatabaseUnitOfWork, table: str, fields: tuple[str, ...]) -> None:
+    present = uow.query_one(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (table,)
+    )
+    if present is None:
+        return
+    columns = {str(row[1]) for row in uow.execute(f'PRAGMA table_info("{table}")').fetchall()}
+    for field in fields:
+        exact_field = f"{field}_exact"
+        state_field = f"{field}_precision_state"
+        if field not in columns:
+            continue
+        if exact_field not in columns:
+            uow.execute(f'ALTER TABLE "{table}" ADD COLUMN "{exact_field}" TEXT')
+            columns.add(exact_field)
+        if state_field not in columns:
+            uow.execute(
+                f'ALTER TABLE "{table}" ADD COLUMN "{state_field}" '
+                "TEXT NOT NULL DEFAULT 'exact'"
+            )
+            columns.add(state_field)
+        uow.execute(
+            f'UPDATE "{table}" SET "{exact_field}"='
+            f'xiuxian_crystal_exact_text("{field}",typeof("{field}")), '
+            f'"{state_field}"=xiuxian_crystal_precision_state("{field}",typeof("{field}")) '
+            f'WHERE "{exact_field}" IS NULL AND "{state_field}"=\'exact\''
+        )
+
+
+def apply_impart_exact_crystal_game_receipts(uow: DatabaseUnitOfWork) -> None:
+    _apply_exact_integer_columns(uow, "love_sand_operations", ("stone_num",))
+    _apply_exact_integer_columns(
+        uow, "admin_impart_stone_operations",
+        ("previous_stone", "final_stone", "applied_delta"),
+    )
+
+
+def apply_impart_exact_crystal_balances(uow: DatabaseUnitOfWork) -> None:
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS impart_legacy_crystal_operations("
+        "operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,result_json TEXT NOT NULL)"
+    )
+    _apply_exact_integer_columns(uow, "xiuxian_impart", ("stone_num",))
+    _apply_exact_integer_columns(uow, "impart_crystal_draw_operations", ("stone_num",))
+    _apply_exact_integer_columns(uow, "impart_card_disassemble_operations", ("stone_quantity",))
+    columns = {
+        str(row[1])
+        for row in uow.execute('PRAGMA table_info("xiuxian_impart")').fetchall()
+    }
+    if not {"stone_num_exact", "stone_num_precision_state"}.issubset(columns):
+        return
+    uow.execute("DROP TRIGGER IF EXISTS impart_crystal_exact_insert")
+    uow.execute("DROP TRIGGER IF EXISTS impart_crystal_exact_legacy_update")
+    # Older application builds updated only the INTEGER-affinity column. Never
+    # let such a write leave a stale exact shadow that would look authoritative.
+    uow.execute(
+        "CREATE TRIGGER IF NOT EXISTS impart_crystal_exact_write_guard "
+        "BEFORE UPDATE OF stone_num ON xiuxian_impart "
+        "WHEN NEW.stone_num IS NOT OLD.stone_num "
+        "AND NEW.stone_num_exact IS OLD.stone_num_exact BEGIN "
+        "SELECT RAISE(ABORT,'crystal balance write requires exact shadow'); END"
+    )
+
+
 def apply_impart_draw_player_statistics(uow: DatabaseUnitOfWork) -> None:
     uow.execute("CREATE TABLE IF NOT EXISTS statistics(user_id TEXT PRIMARY KEY)")
     columns = {str(row[1]) for row in uow.execute("PRAGMA table_info(statistics)").fetchall()}
@@ -137,5 +201,7 @@ __all__ = [
     "apply_impart_crystal_draw_operations",
     "apply_impart_card_operations",
     "apply_impart_crystal_and_card_operations",
+    "apply_impart_exact_crystal_game_receipts",
+    "apply_impart_exact_crystal_balances",
     "apply_impart_draw_player_statistics",
 ]

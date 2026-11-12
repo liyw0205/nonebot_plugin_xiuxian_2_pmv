@@ -2,12 +2,14 @@ from __future__ import annotations
 
 import json
 import shutil
+import sqlite3
 from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 from ...infrastructure.database import DatabaseUnitOfWork
+from ..impart.legacy_state import crystal_progress_sum
 from .impart_stone_repository import (
     AdminImpartStoneResult,
     AdminImpartStoneSqlRepository,
@@ -158,7 +160,6 @@ class AdminImpartStoneBatchSqlRepository:
         if int(target_count["total"]) > 0:
             counts = uow.query_one(
                 "SELECT SUM(CASE WHEN status!='pending' THEN 1 ELSE 0 END) AS completed,"
-                "COALESCE(xiuxian_int_sum(applied_delta),0) AS applied_delta,"
                 "SUM(CASE WHEN status!='pending' AND applied_delta!=0 THEN 1 ELSE 0 END) "
                 "AS affected_users FROM admin_impart_stone_batch_targets "
                 "WHERE operation_id=?",
@@ -166,18 +167,26 @@ class AdminImpartStoneBatchSqlRepository:
             )
         else:
             counts = uow.query_one(
-                "SELECT COUNT(*) AS completed,COALESCE(xiuxian_int_sum(applied_delta),0) AS applied_delta,"
+                "SELECT COUNT(*) AS completed,"
                 "SUM(CASE WHEN applied_delta!=0 THEN 1 ELSE 0 END) AS affected_users "
                 "FROM admin_impart_stone_batch_progress WHERE operation_id=?",
                 (operation_id,),
             )
         completed = int(counts["completed"] or 0)
         affected_users = int(counts["affected_users"] or 0)
+        progress_table = (
+            "admin_impart_stone_batch_targets" if int(target_count["total"]) > 0
+            else "admin_impart_stone_batch_progress"
+        )
+        applied_delta = crystal_progress_sum(dict(row) for row in uow.execute(
+            f"SELECT user_id,applied_delta,result_json FROM {progress_table} WHERE operation_id=?",
+            (operation_id,),
+        ))
         return AdminImpartStoneBatchAdjustmentResult(
             status,
             int(operation["total"]),
             completed,
-            int(counts["applied_delta"] or 0),
+            applied_delta,
             affected_users,
             completed - affected_users,
         )
@@ -407,6 +416,8 @@ class AdminImpartStoneBatchSqlRepository:
                 "previous_stone": result.previous_stone,
                 "final_stone": result.final_stone,
                 "applied_delta": result.applied_delta,
+                "reason": result.reason,
+                "subject": result.subject,
             },
             ensure_ascii=True,
             sort_keys=True,
@@ -468,7 +479,9 @@ class AdminImpartStoneBatchSqlRepository:
                 if snapshot.status == "schema_missing":
                     return AdminImpartStoneBatchAdjustmentResult("not_ready")
                 if snapshot.status != "ok":
-                    result = AdminImpartStoneResult(snapshot.status)
+                    result = AdminImpartStoneResult(
+                        snapshot.status, reason=snapshot.reason, subject=snapshot.subject
+                    )
                     break
                 result = self.stone_repository.adjust(
                     f"admin-impart-stone-batch:{operation_id}:{user_id}",

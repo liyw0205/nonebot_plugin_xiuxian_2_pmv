@@ -335,7 +335,7 @@ async def impart_pk_list_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
     await impart_pk_list.finish()
 
 @impart_pk_now.handle(parameterless=[Cooldown(stamina_cost=3)])
-@guard_command("虚神界对决")
+@guard_command("虚神界对决", known_rejections=("impart_crystal_precision_unavailable", "impart_rows_inconsistent"))
 async def impart_pk_now_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """虚神界对决"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -626,7 +626,7 @@ async def impart_pk_now_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     await impart_pk_now.finish()
 
 @impart_pk_exp.handle(parameterless=[Cooldown(cd_time=0)])
-@guard_command("虚神界修炼")
+@guard_command("虚神界修炼", known_rejections=("impart_crystal_precision_unavailable",))
 async def impart_pk_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """虚神界修炼"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -763,7 +763,7 @@ async def impart_pk_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     await impart_pk_exp.finish()
 
 @impart_pk_info.handle(parameterless=[Cooldown(cd_time=0)])
-@guard_command("虚神界信息")
+@guard_command("虚神界信息", known_rejections=("impart_crystal_precision_unavailable",))
 async def impart_pk_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """虚神界信息"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -846,7 +846,7 @@ def get_rates_by_floor(floor):
     return rates
 
 @impart_pk_go.handle(parameterless=[Cooldown(cd_time=0)])
-@guard_command("虚神界探索")
+@guard_command("虚神界探索", known_rejections=("impart_crystal_precision_unavailable",))
 async def impart_pk_go_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """探索虚神界"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -1004,7 +1004,7 @@ async def impart_pk_go_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     await impart_pk_go.finish()
 
 @impart_pk_in_closing.handle(parameterless=[Cooldown(cd_time=0)])
-@guard_command("虚神界闭关")
+@guard_command("虚神界闭关", known_rejections=("impart_crystal_precision_unavailable",))
 async def impart_pk_in_closing_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """虚神界闭关"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -1043,7 +1043,7 @@ async def impart_pk_in_closing_(bot: Bot, event: GroupMessageEvent | PrivateMess
     await impart_pk_in_closing.finish()
         
 @impart_pk_out_closing.handle(parameterless=[Cooldown(cd_time=0)])
-@guard_command("虚神界出关")
+@guard_command("虚神界出关", known_rejections=("impart_crystal_precision_unavailable",))
 async def impart_pk_out_closing_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """虚神界出关"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)

@@ -13,6 +13,12 @@ nonebot.init()
 from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_admin.transaction_service import (
     AdminImpartStoneAdjustmentService,
 )
+from nonebot_plugin_xiuxian_2.features.admin_asset.migrations import apply_admin_impart_stone_operations
+from nonebot_plugin_xiuxian_2.features.impart.migrations import (
+    apply_impart_exact_crystal_balances,
+    apply_impart_exact_crystal_game_receipts,
+)
+from nonebot_plugin_xiuxian_2.infrastructure.database import DatabaseUnitOfWork
 from tests.test_db_backend import db_backend
 
 
@@ -39,6 +45,11 @@ def test_admin_impart_stone_commands_use_feature_application():
         source.index("async def ccll_command_") : source.index("@adjust_exp_command.handle")
     ]
     assert "get_all_user_id()" not in batch_handler
+    single_handler = source[
+        source.index("async def ccll_command_") : source.index("@adjust_exp_command.handle")
+    ]
+    assert 'snapshot.status == "precision_unavailable"' in single_handler
+    assert "elif result.succeeded:" in single_handler
 
 
 class AdminImpartStoneAdjustmentTests(unittest.TestCase):
@@ -53,6 +64,11 @@ class AdminImpartStoneAdjustmentTests(unittest.TestCase):
         with db_backend.transaction(self.impart_database) as conn:
             conn.execute("CREATE TABLE xiuxian_impart(user_id TEXT,stone_num INTEGER)")
             conn.execute("INSERT INTO xiuxian_impart VALUES('u',5)")
+        with DatabaseUnitOfWork(self.game_database) as uow:
+            apply_admin_impart_stone_operations(uow)
+            apply_impart_exact_crystal_game_receipts(uow)
+        with DatabaseUnitOfWork(self.impart_database) as uow:
+            apply_impart_exact_crystal_balances(uow)
         self.service = AdminImpartStoneAdjustmentService(
             self.game_database, self.impart_database
         )
@@ -138,8 +154,11 @@ class AdminImpartStoneAdjustmentTests(unittest.TestCase):
             self.adjust("conflict", requested_delta=1).status,
         )
         with db_backend.transaction(self.impart_database) as conn:
-            conn.execute("UPDATE xiuxian_impart SET stone_num=5")
-            conn.execute("INSERT INTO xiuxian_impart VALUES('u',5)")
+            conn.execute(
+                "UPDATE xiuxian_impart SET stone_num=5,stone_num_exact='5',"
+                "stone_num_precision_state='exact'"
+            )
+            conn.execute("INSERT INTO xiuxian_impart(user_id,stone_num) VALUES('u',5)")
         snapshot = self.service.snapshot("u")
         self.assertEqual(
             "invalid_state",

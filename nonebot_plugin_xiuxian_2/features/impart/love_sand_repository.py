@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from ...core.numeric import as_int_like
+from ...core.numeric import as_int_like, crystal_precision_reason
+from .legacy_state import crystal_balance, state_row_count, check_state_write
 import json
 from dataclasses import dataclass
 from pathlib import Path
@@ -75,16 +76,23 @@ class LoveSandSqlRepository:
                 return LoveSandResult("schema_missing")
 
             old = uow.query_one(
-                "SELECT payload,gained,stone_num,item_remaining "
+                "SELECT payload,gained,stone_num,stone_num_exact,"
+                "stone_num_precision_state,item_remaining "
                 "FROM love_sand_operations WHERE operation_id=?",
                 (operation_id,),
             )
             if old is not None:
                 status = "duplicate" if str(old["payload"]) == payload else "operation_conflict"
+                if status == "duplicate" and old["stone_num_precision_state"] != "exact":
+                    return LoveSandResult(
+                        "precision_unavailable",
+                        int(old["gained"]),
+                        reason=crystal_precision_reason(old["stone_num_precision_state"]),
+                    )
                 return LoveSandResult(
                     status,
                     int(old["gained"]),
-                    as_int_like(old["stone_num"]),
+                    crystal_balance(old, subject=user_id),
                     int(old["item_remaining"]),
                 )
 
@@ -94,7 +102,7 @@ class LoveSandSqlRepository:
                 (user_id, item_id),
             )
             impart = uow.query_one(
-                "SELECT stone_num FROM impart_data.xiuxian_impart WHERE user_id=?",
+                "SELECT * FROM impart_data.xiuxian_impart WHERE user_id=? LIMIT 1",
                 (user_id,),
             )
             if item is None:
@@ -103,13 +111,16 @@ class LoveSandSqlRepository:
                 return LoveSandResult("state_changed", reason="user_missing")
             if int(item["goods_num"]) != expected_item_count:
                 return LoveSandResult("state_changed", reason="item_changed")
-            if as_int_like(impart["stone_num"]) != expected_stone_num:
+            if crystal_balance(impart, subject=user_id) != expected_stone_num:
                 return LoveSandResult("state_changed", reason="crystal_changed")
             if expected_item_count < quantity:
                 return LoveSandResult("item_missing")
 
             remaining = expected_item_count - quantity
             stone_num = expected_stone_num + gained
+            state_count = state_row_count(
+                uow, user_id, ("stone_num",), schema="impart_data"
+            )
             consumed = uow.execute(
                 "UPDATE back SET goods_num=?,bind_num=? "
                 "WHERE user_id=? AND goods_id=? AND COALESCE(goods_num,0)=?",
@@ -123,10 +134,14 @@ class LoveSandSqlRepository:
             )
             if consumed.rowcount != 1:
                 return LoveSandResult("state_changed", reason="item_changed")
-            uow.execute(
-                "UPDATE impart_data.xiuxian_impart SET stone_num=? WHERE user_id=?",
-                (stone_num, user_id),
+            updated = uow.execute(
+                "UPDATE impart_data.xiuxian_impart SET stone_num=?,stone_num_exact=?,"
+                "stone_num_precision_state='exact' WHERE user_id=? "
+                "AND xiuxian_int_cmp(COALESCE(stone_num_exact,stone_num),?)=0 "
+                "AND stone_num_precision_state='exact'",
+                (stone_num, str(stone_num), user_id, expected_stone_num),
             )
+            check_state_write(updated, state_count)
 
             stat_fields = ",".join(f'"{column}"' for column in LOVE_SAND_STATISTICS_COLUMNS)
             stat_updates = ",".join(
@@ -141,8 +156,9 @@ class LoveSandSqlRepository:
             )
             uow.execute(
                 "INSERT INTO love_sand_operations "
-                "(operation_id,payload,gained,stone_num,item_remaining) VALUES(?,?,?,?,?)",
-                (operation_id, payload, gained, stone_num, remaining),
+                "(operation_id,payload,gained,stone_num,stone_num_exact,"
+                "stone_num_precision_state,item_remaining) VALUES(?,?,?,?,?,'exact',?)",
+                (operation_id, payload, gained, stone_num, str(stone_num), remaining),
             )
             return LoveSandResult("applied", gained, stone_num, remaining)
 

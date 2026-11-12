@@ -8,6 +8,11 @@ nonebot.init()
 from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_impart.transaction_service import CardComposeService
 from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_impart.transaction_service import CardDisassembleService
 from nonebot_plugin_xiuxian_2.features.impart.card_bonus import BONUS_FIELDS, refresh_card_bonuses
+from nonebot_plugin_xiuxian_2.features.impart.migrations import (
+    apply_impart_card_operations,
+    apply_impart_exact_crystal_balances,
+)
+from nonebot_plugin_xiuxian_2.infrastructure.database import DatabaseUnitOfWork
 from tests.test_db_backend import db_backend
 
 
@@ -22,6 +27,9 @@ class CardBonusRefreshTests(unittest.TestCase):
             conn.execute("INSERT INTO impart_cards VALUES (%s,%s,%s)", ("u", "攻击卡", 9))
             conn.execute("INSERT INTO impart_cards VALUES (%s,%s,%s)", ("u", "气血卡", 4))
             conn.execute("INSERT INTO xiuxian_impart VALUES (%s,%s,0,0,99,99,0,0,0,0,0,0)", ("u", 0))
+        with DatabaseUnitOfWork(self.db) as uow:
+            apply_impart_card_operations(uow)
+            apply_impart_exact_crystal_balances(uow)
         self.defs = {"攻击卡": {"type": "impart_atk_per", "vale": 0.1}, "气血卡": {"type": "impart_hp_per", "vale": 0.2}}
 
     def tearDown(self):

@@ -1,6 +1,8 @@
 from __future__ import annotations
 from dataclasses import replace as _reason_replace
 from ...core.snapshot_reason import first_difference
+from ...core.errors import DomainError
+from ...features.impart.legacy_state import crystal_balance, crystal_progress_sum
 
 import json
 from contextlib import closing
@@ -1991,6 +1993,8 @@ class AdminImpartStoneAdjustmentResult:
     previous_stone: int = 0
     final_stone: int = 0
     applied_delta: int = 0
+    reason: str = ""
+    subject: str = ""
 
     @property
     def succeeded(self) -> bool:
@@ -2015,7 +2019,11 @@ class AdminImpartStoneAdjustmentService:
             "CREATE TABLE IF NOT EXISTS admin_impart_stone_operations("
             "operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,"
             "previous_stone INTEGER NOT NULL,final_stone INTEGER NOT NULL,"
-            "applied_delta INTEGER NOT NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+            "applied_delta INTEGER NOT NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,"
+            "previous_stone_exact TEXT,final_stone_exact TEXT,applied_delta_exact TEXT,"
+            "previous_stone_precision_state TEXT NOT NULL DEFAULT 'exact',"
+            "final_stone_precision_state TEXT NOT NULL DEFAULT 'exact',"
+            "applied_delta_precision_state TEXT NOT NULL DEFAULT 'exact')"
         )
         conn.execute(
             "CREATE TABLE IF NOT EXISTS economy_log("
@@ -2060,10 +2068,26 @@ class AdminImpartStoneAdjustmentService:
             ):
                 return None
             rows = conn.execute(
-                "SELECT COALESCE(stone_num,0) FROM xiuxian_impart WHERE user_id=%s",
+                "SELECT user_id,stone_num,stone_num_exact,stone_num_precision_state,"
+                "typeof(stone_num) "
+                "FROM xiuxian_impart WHERE user_id=%s",
                 (user_id,),
             ).fetchall()
-            return int(rows[0][0]) if rows else None
+            if not rows or len(rows) != 1:
+                return None
+            try:
+                return crystal_balance(
+                    {
+                        "user_id": rows[0][0],
+                        "stone_num": rows[0][1],
+                        "stone_num_exact": rows[0][2],
+                        "stone_num_precision_state": rows[0][3],
+                        "stone_num_storage_type": rows[0][4],
+                    },
+                    subject=user_id,
+                )
+            except DomainError:
+                raise
 
     def adjust(
         self,
@@ -2103,7 +2127,10 @@ class AdminImpartStoneAdjustmentService:
                 conn.execute("BEGIN IMMEDIATE")
                 self._ensure_schema(conn)
                 previous = conn.execute(
-                    "SELECT payload,previous_stone,final_stone,applied_delta "
+                    "SELECT payload,previous_stone,final_stone,applied_delta,"
+                    "previous_stone_exact,final_stone_exact,"
+                    "previous_stone_precision_state,final_stone_precision_state,"
+                    "applied_delta_exact,applied_delta_precision_state "
                     "FROM admin_impart_stone_operations WHERE operation_id=%s",
                     (operation_id,),
                 ).fetchone()
@@ -2113,11 +2140,20 @@ class AdminImpartStoneAdjustmentService:
                         return AdminImpartStoneAdjustmentResult(
                             "operation_conflict"
                         )
+                    if previous[6] != "exact" or previous[7] != "exact" or previous[9] != "exact":
+                        return AdminImpartStoneAdjustmentResult(
+                            "precision_unavailable",
+                            reason=(
+                                "crystal_precision_lost_real"
+                                if "precision_lost_real" in {previous[6], previous[7], previous[9]}
+                                else "crystal_invalid_numeric_value"
+                            ),
+                        )
                     return AdminImpartStoneAdjustmentResult(
                         "duplicate",
-                        as_int_like(previous[1]),
-                        as_int_like(previous[2]),
-                        as_int_like(previous[3]),
+                        crystal_balance({"stone_num": previous[1], "stone_num_exact": previous[4]}, subject="target"),
+                        crystal_balance({"stone_num": previous[2], "stone_num_exact": previous[5]}, subject="target"),
+                        crystal_balance({"stone_num": previous[3], "stone_num_exact": previous[8]}, subject="target"),
                     )
 
                 if conn.execute(
@@ -2126,14 +2162,27 @@ class AdminImpartStoneAdjustmentService:
                     conn.rollback()
                     return AdminImpartStoneAdjustmentResult("user_missing")
                 rows = conn.execute(
-                    "SELECT COALESCE(stone_num,0) "
+                    "SELECT stone_num,stone_num_exact,stone_num_precision_state "
                     "FROM impart_data.xiuxian_impart WHERE user_id=%s",
                     (user_id,),
                 ).fetchall()
                 if len(rows) > 1:
                     conn.rollback()
                     return AdminImpartStoneAdjustmentResult("invalid_state")
-                actual_stone = as_int_like(rows[0][0]) if rows else None
+                if rows and rows[0][2] != "exact":
+                    conn.rollback()
+                    return AdminImpartStoneAdjustmentResult(
+                        "precision_unavailable",
+                        reason=(
+                            "crystal_precision_lost_real"
+                            if rows[0][2] == "precision_lost_real"
+                            else "crystal_invalid_numeric_value"
+                        ),
+                    )
+                actual_stone = (
+                    crystal_balance({"stone_num": rows[0][0], "stone_num_exact": rows[0][1]}, subject="target")
+                    if rows else None
+                )
                 if actual_stone != expected_stone:
                     conn.rollback()
                     current = int(actual_stone or 0)
@@ -2146,15 +2195,18 @@ class AdminImpartStoneAdjustmentService:
                 applied_delta = final_stone - previous_stone
                 if actual_stone is None:
                     conn.execute(
-                        "INSERT INTO impart_data.xiuxian_impart(user_id,stone_num) "
-                        "VALUES(%s,%s)",
-                        (user_id, final_stone),
+                        "INSERT INTO impart_data.xiuxian_impart"
+                        "(user_id,stone_num,stone_num_exact,stone_num_precision_state) "
+                        "VALUES(%s,%s,%s,'exact')",
+                        (user_id, final_stone, str(final_stone)),
                     )
                 else:
                     changed = conn.execute(
-                        "UPDATE impart_data.xiuxian_impart SET stone_num=%s "
-                        "WHERE user_id=%s AND xiuxian_int_cmp(COALESCE(stone_num,0),%s)=0",
-                        (final_stone, user_id, previous_stone),
+                        "UPDATE impart_data.xiuxian_impart SET stone_num=%s,"
+                        "stone_num_exact=%s,stone_num_precision_state='exact' "
+                        "WHERE user_id=%s AND xiuxian_int_cmp(COALESCE(stone_num_exact,stone_num,0),%s)=0 "
+                        "AND stone_num_precision_state='exact'",
+                        (final_stone, str(final_stone), user_id, previous_stone),
                     )
                     if changed.rowcount != 1:
                         conn.rollback()
@@ -2198,14 +2250,18 @@ class AdminImpartStoneAdjustmentService:
                 )
                 conn.execute(
                     "INSERT INTO admin_impart_stone_operations("
-                    "operation_id,payload,previous_stone,final_stone,applied_delta) "
-                    "VALUES(%s,%s,%s,%s,%s)",
+                    "operation_id,payload,previous_stone,final_stone,applied_delta,"
+                    "previous_stone_exact,final_stone_exact,applied_delta_exact) "
+                    "VALUES(%s,%s,%s,%s,%s,%s,%s,%s)",
                     (
                         operation_id,
                         payload,
                         previous_stone,
                         final_stone,
                         applied_delta,
+                        str(previous_stone),
+                        str(final_stone),
+                        str(applied_delta),
                     ),
                 )
                 conn.commit()
@@ -2293,18 +2349,25 @@ class AdminImpartStoneBatchAdjustmentService:
             (operation_id,),
         ).fetchone()
         counts = conn.execute(
-            "SELECT COUNT(*),COALESCE(xiuxian_int_sum(applied_delta),0),"
+            "SELECT COUNT(*),"
             "COALESCE(SUM(CASE WHEN applied_delta!=0 THEN 1 ELSE 0 END),0) "
             "FROM admin_impart_stone_batch_progress WHERE operation_id=%s",
             (operation_id,),
         ).fetchone()
         completed = int(counts[0])
-        affected_users = int(counts[2])
+        affected_users = int(counts[1])
+        applied_delta = crystal_progress_sum(
+            dict(zip(("user_id", "applied_delta", "result_json"), row))
+            for row in conn.execute(
+                "SELECT user_id,applied_delta,result_json FROM admin_impart_stone_batch_progress "
+                "WHERE operation_id=%s", (operation_id,),
+            )
+        )
         return AdminImpartStoneBatchAdjustmentResult(
             status,
             int(operation[0]),
             completed,
-            int(counts[1]),
+            applied_delta,
             affected_users,
             completed - affected_users,
         )

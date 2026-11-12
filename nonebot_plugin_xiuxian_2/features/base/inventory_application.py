@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from .inventory_repository import InventoryGrantResult, PlayerInventorySqlRepository
+from ...infrastructure.database import DatabaseUnitOfWork
 
 
 class PlayerInventoryApplication:
@@ -27,7 +28,9 @@ class PlayerInventoryApplication:
         bind_flag: int = 0,
         max_goods_num: int,
         require_full: bool = False,
+        uow: DatabaseUnitOfWork | None = None,
     ) -> InventoryGrantResult:
+        transaction = {"uow": uow} if uow is not None else {}
         return self.repository.grant(
             user_id,
             item_id,
@@ -37,6 +40,7 @@ class PlayerInventoryApplication:
             bind_flag=bind_flag,
             max_goods_num=max_goods_num,
             require_full=require_full,
+            **transaction,
         )
 
 

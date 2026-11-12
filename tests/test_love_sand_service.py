@@ -6,6 +6,12 @@ import nonebot
 nonebot.init()
 
 from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_impart.transaction_service import LoveSandUseService
+from nonebot_plugin_xiuxian_2.features.impart.migrations import (
+    apply_impart_exact_crystal_balances,
+    apply_impart_exact_crystal_game_receipts,
+    apply_impart_love_sand_operations,
+)
+from nonebot_plugin_xiuxian_2.infrastructure.database import DatabaseUnitOfWork
 from tests.test_db_backend import db_backend
 
 
@@ -25,6 +31,11 @@ class LoveSandUseServiceTests(unittest.TestCase):
         with db_backend.transaction(self.impart) as conn:
             conn.execute("CREATE TABLE xiuxian_impart(user_id TEXT PRIMARY KEY,stone_num INTEGER)")
             conn.execute("INSERT INTO xiuxian_impart VALUES (%s,%s)", ("u", 7))
+        with DatabaseUnitOfWork(self.game) as uow:
+            apply_impart_love_sand_operations(uow)
+            apply_impart_exact_crystal_game_receipts(uow)
+        with DatabaseUnitOfWork(self.impart) as uow:
+            apply_impart_exact_crystal_balances(uow)
         self.service = LoveSandUseService(self.game, self.impart, self.player)
 
     def tearDown(self): self.temp.cleanup()
@@ -41,7 +52,6 @@ class LoveSandUseServiceTests(unittest.TestCase):
 
     def test_operation_failure_rolls_back(self):
         with db_backend.transaction(self.game) as conn:
-            conn.execute("CREATE TABLE love_sand_operations(operation_id TEXT PRIMARY KEY,payload TEXT,gained INTEGER,stone_num INTEGER,item_remaining INTEGER)")
             conn.execute("CREATE TRIGGER fail_love_sand BEFORE INSERT ON love_sand_operations BEGIN SELECT RAISE(ABORT,'failed'); END")
         with self.assertRaises(db_backend.IntegrityError): self.service.apply("fail", "u", 20016, 1, 30, 3, 7)
         with db_backend.connection(self.game) as conn: self.assertEqual(conn.execute("SELECT goods_num FROM back").fetchone()[0], 3)

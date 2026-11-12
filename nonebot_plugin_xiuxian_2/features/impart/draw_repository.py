@@ -7,9 +7,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping
 
+from ...core.numeric import crystal_precision_reason
 from ...infrastructure.database import DatabaseUnitOfWork
 from .card_bonus import refresh_card_bonuses
-from .legacy_state import state_row_count, check_state_write
+from .legacy_state import crystal_balance, state_row_count, check_state_write
 
 
 @dataclass(frozen=True)
@@ -298,6 +299,7 @@ class ImpartCrystalDrawResult:
     new_cards: tuple[str, ...] = ()
     existing_cards: tuple[str, ...] = ()
     reason: str = ""
+    subject: str = ""
 
     @property
     def succeeded(self) -> bool:
@@ -344,7 +346,8 @@ class ImpartCrystalDrawSqlRepository:
             if table is None:
                 return None
             old = uow.query_one(
-                "SELECT payload,wish,stone_num,exp_day,cards_json "
+                "SELECT payload,wish,stone_num,stone_num_exact,"
+                "stone_num_precision_state,exp_day,cards_json "
                 "FROM impart_crystal_draw_operations WHERE operation_id=?",
                 (operation_id,),
             )
@@ -352,10 +355,16 @@ class ImpartCrystalDrawSqlRepository:
                 return None
             if not self._matches_request(old["payload"], user_id, cost, pulls):
                 return ImpartCrystalDrawResult("operation_conflict")
+            if old["stone_num_precision_state"] != "exact":
+                return ImpartCrystalDrawResult(
+                    "precision_unavailable",
+                    reason=crystal_precision_reason(old["stone_num_precision_state"]),
+                    subject=user_id,
+                )
             return ImpartCrystalDrawResult(
                 "duplicate",
                 int(old["wish"]),
-                as_int_like(old["stone_num"]),
+                crystal_balance(old, subject=user_id),
                 as_int_like(old["exp_day"]),
                 tuple(self._decode_cards(old["cards_json"])),
             )
@@ -401,31 +410,40 @@ class ImpartCrystalDrawSqlRepository:
             if table is None:
                 return ImpartCrystalDrawResult("schema_missing")
             old = uow.query_one(
-                "SELECT payload,wish,stone_num,exp_day,cards_json "
+                "SELECT payload,wish,stone_num,stone_num_exact,"
+                "stone_num_precision_state,exp_day,cards_json "
                 "FROM impart_crystal_draw_operations WHERE operation_id=?",
                 (operation_id,),
             )
             if old is not None:
                 if not self._matches_request(old["payload"], user_id, cost, requested_pulls):
                     return ImpartCrystalDrawResult("operation_conflict")
+                if old["stone_num_precision_state"] != "exact":
+                    return ImpartCrystalDrawResult(
+                        "precision_unavailable",
+                        reason=crystal_precision_reason(old["stone_num_precision_state"]),
+                        subject=user_id,
+                    )
                 return ImpartCrystalDrawResult(
-                    "duplicate", int(old["wish"]), as_int_like(old["stone_num"]),
+                    "duplicate", int(old["wish"]), crystal_balance(old, subject=user_id),
                     as_int_like(old["exp_day"]), tuple(self._decode_cards(old["cards_json"])),
                 )
             if not ImpartDrawSqlRepository._statistics_schema_ready(uow):
                 return ImpartCrystalDrawResult("schema_missing")
             state = uow.query_one(
-                "SELECT wish,stone_num,exp_day FROM xiuxian_impart WHERE user_id=?",
+                "SELECT wish,stone_num,stone_num_exact,stone_num_precision_state,exp_day "
+                "FROM xiuxian_impart WHERE user_id=?",
                 (user_id,),
             )
             if state is None:
                 return ImpartCrystalDrawResult("user_missing")
-            if as_int_like(state["stone_num"]) != expected_stone:
-                return ImpartCrystalDrawResult("state_changed", reason="crystal_changed")
+            actual_stone = crystal_balance(state, subject=user_id)
+            if actual_stone != expected_stone:
+                return ImpartCrystalDrawResult("state_changed", reason="crystal_changed", subject=user_id)
             if int(state["wish"]) != expected_wish:
-                return ImpartCrystalDrawResult("state_changed", reason="wish_changed")
+                return ImpartCrystalDrawResult("state_changed", reason="wish_changed", subject=user_id)
             if expected_stone < cost:
-                return ImpartCrystalDrawResult("stone_missing", reason="crystal_missing")
+                return ImpartCrystalDrawResult("stone_missing", reason="crystal_missing", subject=user_id)
             state_count = state_row_count(uow, user_id, ("stone_num", "wish", "exp_day"))
             existing_card_counts = ImpartDrawSqlRepository._card_counts(
                 uow, "main", user_id
@@ -437,9 +455,11 @@ class ImpartCrystalDrawSqlRepository:
             stone_num = expected_stone - cost
             exp_day = as_int_like(state["exp_day"] or 0) + exp_minutes
             changed = uow.execute(
-                "UPDATE xiuxian_impart SET stone_num=?,wish=?,exp_day=? WHERE user_id=? "
-                "AND xiuxian_int_cmp(stone_num,?)=0 AND wish=?",
-                (stone_num, new_wish, exp_day, user_id, expected_stone, expected_wish),
+                "UPDATE xiuxian_impart SET stone_num=?,stone_num_exact=?,"
+                "stone_num_precision_state='exact',wish=?,exp_day=? WHERE user_id=? "
+                "AND xiuxian_int_cmp(COALESCE(stone_num_exact,stone_num),?)=0 "
+                "AND stone_num_precision_state='exact' AND wish=?",
+                (stone_num, str(stone_num), new_wish, exp_day, user_id, expected_stone, expected_wish),
             )
             check_state_write(changed, state_count)
             for card_name, quantity in Counter(cards).items():
@@ -459,9 +479,11 @@ class ImpartCrystalDrawSqlRepository:
                 },
             )
             uow.execute(
-                "INSERT INTO impart_crystal_draw_operations(operation_id,payload,wish,stone_num,exp_day,cards_json) "
-                "VALUES(?,?,?,?,?,?)",
-                (operation_id, payload, new_wish, stone_num, exp_day, json.dumps(cards, ensure_ascii=False, separators=(",", ":"))),
+                "INSERT INTO impart_crystal_draw_operations(operation_id,payload,wish,stone_num,"
+                "stone_num_exact,stone_num_precision_state,exp_day,cards_json) "
+                "VALUES(?,?,?,?,?,'exact',?,?)",
+                (operation_id, payload, new_wish, stone_num, str(stone_num), exp_day,
+                 json.dumps(cards, ensure_ascii=False, separators=(",", ":"))),
             )
             return ImpartCrystalDrawResult(
                 "applied", new_wish, stone_num, exp_day, cards,

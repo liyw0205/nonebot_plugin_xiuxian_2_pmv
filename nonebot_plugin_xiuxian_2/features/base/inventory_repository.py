@@ -71,6 +71,7 @@ class PlayerInventorySqlRepository:
         bind_flag: int = 0,
         max_goods_num: int,
         require_full: bool = False,
+        uow: DatabaseUnitOfWork | None = None,
     ) -> InventoryGrantResult:
         user_id = str(user_id).strip()
         item_id, quantity, max_goods_num = int(item_id), int(quantity), int(max_goods_num)
@@ -83,66 +84,82 @@ class PlayerInventorySqlRepository:
         if not self.database.is_file():
             return self._result("schema_missing", user_id, item_id, requested)
 
-        with DatabaseUnitOfWork(self.database, immediate=True) as uow:
-            columns = self._columns(uow)
-            if not self.REQUIRED_COLUMNS.issubset(columns):
-                return self._result("schema_missing", user_id, item_id, requested)
-            if requested == 0:
-                return self._result("applied", user_id, item_id, requested)
-
-            row = uow.query_one(
-                "SELECT rowid AS _rowid,COALESCE(goods_num,0) AS goods_num "
-                "FROM back WHERE user_id=? AND goods_id=? ORDER BY rowid ASC LIMIT 1",
-                (user_id, item_id),
+        if uow is not None:
+            if uow.database.resolve() != self.database.resolve():
+                raise ValueError("inventory transaction belongs to a different database")
+            return self._grant_in_transaction(
+                uow, user_id, item_id, item_name, item_type, requested,
+                bind_flag, max_goods_num, require_full,
             )
-            current = max(int(row["goods_num"] or 0), 0) if row else 0
-            final = min(current + requested, max_goods_num)
-            applied = max(final - current, 0)
-            if require_full and applied < requested:
-                return self._result("inventory_full", user_id, item_id, requested, 0, current)
-            bind = 1 if int(bind_flag) == 1 else 0
-            updates = ["goods_name=?", "goods_type=?", "goods_num=?"]
-            params: list[Any] = [str(item_name), str(item_type), final]
-            if "update_time" in columns:
-                updates.append("update_time=CURRENT_TIMESTAMP")
-            if "bind_num" in columns:
-                current_bind = 0
-                if row is not None:
-                    bind_row = uow.query_one(
-                        "SELECT COALESCE(bind_num,0) AS bind_num FROM back WHERE rowid=?",
-                        (row["_rowid"],),
-                    )
-                    current_bind = max(int(bind_row["bind_num"] or 0), 0) if bind_row else 0
-                updates.append("bind_num=?")
-                params.append(min(final, current_bind + applied) if bind else min(current_bind, final))
+        with DatabaseUnitOfWork(self.database, immediate=True) as transaction:
+            return self._grant_in_transaction(
+                transaction, user_id, item_id, item_name, item_type, requested,
+                bind_flag, max_goods_num, require_full,
+            )
 
+    def _grant_in_transaction(
+        self, uow, user_id, item_id, item_name, item_type, requested,
+        bind_flag, max_goods_num, require_full,
+    ) -> InventoryGrantResult:
+        columns = self._columns(uow)
+        if not self.REQUIRED_COLUMNS.issubset(columns):
+            return self._result("schema_missing", user_id, item_id, requested)
+        if requested == 0:
+            return self._result("applied", user_id, item_id, requested)
+
+        row = uow.query_one(
+            "SELECT rowid AS _rowid,COALESCE(goods_num,0) AS goods_num "
+            "FROM back WHERE user_id=? AND goods_id=? ORDER BY rowid ASC LIMIT 1",
+            (user_id, item_id),
+        )
+        current = max(int(row["goods_num"] or 0), 0) if row else 0
+        final = min(current + requested, max_goods_num)
+        applied = max(final - current, 0)
+        if require_full and applied < requested:
+            return self._result("inventory_full", user_id, item_id, requested, 0, current)
+        bind = 1 if int(bind_flag) == 1 else 0
+        updates = ["goods_name=?", "goods_type=?", "goods_num=?"]
+        params: list[Any] = [str(item_name), str(item_type), final]
+        if "update_time" in columns:
+            updates.append("update_time=CURRENT_TIMESTAMP")
+        if "bind_num" in columns:
+            current_bind = 0
             if row is not None:
-                changed = uow.execute(
-                    "UPDATE back SET " + ",".join(updates) + " WHERE rowid=?",
-                    (*params, row["_rowid"]),
+                bind_row = uow.query_one(
+                    "SELECT COALESCE(bind_num,0) AS bind_num FROM back WHERE rowid=?",
+                    (row["_rowid"],),
                 )
-                if changed.rowcount != 1:
-                    return self._result("state_changed", user_id, item_id, requested, 0, current)
-            else:
-                insert_columns = ["user_id", "goods_id", "goods_name", "goods_type", "goods_num"]
-                values: list[Any] = [user_id, item_id, str(item_name), str(item_type), final]
-                if "create_time" in columns:
-                    insert_columns.append("create_time")
-                    values.append(None)
-                if "update_time" in columns:
-                    insert_columns.append("update_time")
-                    values.append(None)
-                if "bind_num" in columns:
-                    insert_columns.append("bind_num")
-                    values.append(final if bind else 0)
-                placeholders = ",".join("?" for _ in insert_columns)
-                changed = uow.execute(
-                    f"INSERT INTO back({','.join(insert_columns)}) VALUES({placeholders})",
-                    tuple(values),
-                )
-                if changed.rowcount != 1:
-                    return self._result("state_changed", user_id, item_id, requested, 0, current)
-            return self._result("applied", user_id, item_id, requested, applied, final)
+                current_bind = max(int(bind_row["bind_num"] or 0), 0) if bind_row else 0
+            updates.append("bind_num=?")
+            params.append(min(final, current_bind + applied) if bind else min(current_bind, final))
+
+        if row is not None:
+            changed = uow.execute(
+                "UPDATE back SET " + ",".join(updates) + " WHERE rowid=?",
+                (*params, row["_rowid"]),
+            )
+            if changed.rowcount != 1:
+                return self._result("state_changed", user_id, item_id, requested, 0, current)
+        else:
+            insert_columns = ["user_id", "goods_id", "goods_name", "goods_type", "goods_num"]
+            values: list[Any] = [user_id, item_id, str(item_name), str(item_type), final]
+            if "create_time" in columns:
+                insert_columns.append("create_time")
+                values.append(None)
+            if "update_time" in columns:
+                insert_columns.append("update_time")
+                values.append(None)
+            if "bind_num" in columns:
+                insert_columns.append("bind_num")
+                values.append(final if bind else 0)
+            placeholders = ",".join("?" for _ in insert_columns)
+            changed = uow.execute(
+                f"INSERT INTO back({','.join(insert_columns)}) VALUES({placeholders})",
+                tuple(values),
+            )
+            if changed.rowcount != 1:
+                return self._result("state_changed", user_id, item_id, requested, 0, current)
+        return self._result("applied", user_id, item_id, requested, applied, final)
 
 
 __all__ = ["InventoryGrantResult", "PlayerInventorySqlRepository"]

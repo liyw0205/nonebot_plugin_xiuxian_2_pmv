@@ -6,6 +6,8 @@ import nonebot
 nonebot.init()
 
 from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_lunhui.transaction_service import LunhuiSettlementService
+from nonebot_plugin_xiuxian_2.features.impart.migrations import apply_impart_exact_crystal_balances
+from nonebot_plugin_xiuxian_2.infrastructure.database import DatabaseUnitOfWork
 from tests.test_db_backend import db_backend
 
 
@@ -34,6 +36,8 @@ class LunhuiSettlementServiceTests(unittest.TestCase):
         with db_backend.transaction(self.impart) as conn:
             conn.execute("CREATE TABLE xiuxian_impart(user_id TEXT PRIMARY KEY,exp_day INTEGER,stone_num INTEGER)")
             conn.execute("INSERT INTO xiuxian_impart VALUES('u',12,250)")
+        with DatabaseUnitOfWork(self.impart) as uow:
+            apply_impart_exact_crystal_balances(uow)
         self.service = LunhuiSettlementService(self.game, self.player, self.impart)
         self.buffs = {"main_buff": 1, "sub_buff": 2, "sec_buff": 3, "effect1_buff": 4, "effect2_buff": 5}
 
@@ -72,3 +76,48 @@ class LunhuiSettlementServiceTests(unittest.TestCase):
             self.assertIsNone(conn.execute("SELECT 1 FROM back WHERE goods_id=20025").fetchone())
         with db_backend.connection(self.impart) as conn:
             self.assertEqual((12, 250), tuple(conn.execute("SELECT exp_day,stone_num FROM xiuxian_impart").fetchone()))
+
+    def test_unrecoverable_real_crystal_refuses_without_settlement_writes(self):
+        with db_backend.transaction(self.impart) as conn:
+            conn.execute("DROP TRIGGER impart_crystal_exact_write_guard")
+            conn.execute(
+                "UPDATE xiuxian_impart SET stone_num=CAST(%s AS REAL),"
+                "stone_num_exact=NULL,stone_num_precision_state='exact' WHERE user_id='u'",
+                (float(2**63),),
+            )
+        with DatabaseUnitOfWork(self.impart) as uow:
+            apply_impart_exact_crystal_balances(uow)
+        with db_backend.connection(self.game) as conn:
+            user_before = tuple(conn.execute(
+                "SELECT level,exp,stone,root_type,root_level FROM user_xiuxian WHERE user_id='u'"
+            ).fetchone())
+            items_before = tuple(tuple(row) for row in conn.execute(
+                "SELECT goods_id,goods_num FROM back ORDER BY goods_id"
+            ).fetchall())
+
+        result = self.call("unrecoverable")
+
+        self.assertEqual(
+            (result.status, result.reason, result.subject),
+            ("precision_unavailable", "crystal_precision_lost_real", "u"),
+        )
+        with db_backend.connection(self.game) as conn:
+            self.assertEqual(
+                tuple(conn.execute(
+                    "SELECT level,exp,stone,root_type,root_level FROM user_xiuxian WHERE user_id='u'"
+                ).fetchone()),
+                user_before,
+            )
+            self.assertEqual(
+                [tuple(row) for row in conn.execute(
+                    "SELECT goods_id,goods_num FROM back ORDER BY goods_id"
+                ).fetchall()],
+                list(items_before),
+            )
+            self.assertEqual(
+                0,
+                conn.execute(
+                    "SELECT COUNT(*) FROM sqlite_master WHERE type='table' "
+                    "AND name='lunhui_settlement_operations'"
+                ).fetchone()[0],
+            )

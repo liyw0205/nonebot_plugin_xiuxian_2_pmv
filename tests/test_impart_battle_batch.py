@@ -6,6 +6,8 @@ from pathlib import Path
 import nonebot
 nonebot.init()
 from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_impart_pk.transaction_service import ImpartBattleBatchService
+from nonebot_plugin_xiuxian_2.features.impart.migrations import apply_impart_exact_crystal_balances
+from nonebot_plugin_xiuxian_2.infrastructure.database import DatabaseUnitOfWork
 from tests.test_db_backend import db_backend
 
 
@@ -36,6 +38,8 @@ class ImpartBattleBatchTests(unittest.TestCase):
         self.tmp=tempfile.TemporaryDirectory(); root=Path(self.tmp.name); self.impart,self.player=root/"impart.db",root/"player.db"
         with db_backend.transaction(self.impart) as c:
             c.execute("CREATE TABLE xiuxian_impart(user_id TEXT PRIMARY KEY,stone_num INTEGER)"); c.execute("INSERT INTO xiuxian_impart VALUES(%s,%s),(%s,%s)",( "a",0,"b",5))
+        with DatabaseUnitOfWork(self.impart) as uow:
+            apply_impart_exact_crystal_balances(uow)
         self.service=ImpartBattleBatchService(self.impart,self.player); self.assertEqual(7,self.service.get_pk_num("a",7)); self.assertEqual(6,self.service.get_pk_num("b",6))
     def tearDown(self): self.tmp.cleanup()
     def state(self):
@@ -58,4 +62,32 @@ class ImpartBattleBatchTests(unittest.TestCase):
         with db_backend.transaction(self.impart) as c: c.execute("CREATE TRIGGER reject_batch BEFORE INSERT ON impart_battle_batch_operations BEGIN SELECT RAISE(ABORT,'reject'); END")
         with self.assertRaises(db_backend.IntegrityError): self.service.settle("fail","a",5,1,1,30)
         self.assertEqual(before,self.state())
+
+    def test_unrecoverable_real_balance_refuses_without_battle_settlement(self):
+        with db_backend.transaction(self.impart) as conn:
+            conn.execute("DROP TRIGGER impart_crystal_exact_write_guard")
+            conn.execute(
+                "UPDATE xiuxian_impart SET stone_num=CAST(%s AS REAL),"
+                "stone_num_exact=NULL,stone_num_precision_state='exact' WHERE user_id='a'",
+                (float(2**63),),
+            )
+        with DatabaseUnitOfWork(self.impart) as uow:
+            apply_impart_exact_crystal_balances(uow)
+        before = self.state()
+
+        result = self.service.settle("precision", "a", 7, 2, 0, 50)
+
+        self.assertEqual(
+            (result.status, result.reason, result.subject),
+            ("precision_unavailable", "crystal_precision_lost_real", "a"),
+        )
+        self.assertEqual(self.state(), before)
+        with db_backend.connection(self.impart) as conn:
+            self.assertEqual(
+                0,
+                conn.execute(
+                    "SELECT COUNT(*) FROM sqlite_master WHERE type='table' "
+                    "AND name='impart_battle_batch_operations'"
+                ).fetchone()[0],
+            )
 if __name__ == "__main__": unittest.main()

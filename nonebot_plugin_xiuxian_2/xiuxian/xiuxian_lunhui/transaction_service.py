@@ -5,6 +5,7 @@ from contextlib import closing
 from dataclasses import dataclass
 from pathlib import Path
 from threading import RLock
+from ...core.numeric import crystal_precision_reason
 from ..xiuxian_utils import db_backend
 
 @dataclass(frozen=True)
@@ -238,6 +239,8 @@ class LunhuiSettlementResult:
     stone: int = 0
     root_level: int = 0
     wishing_stones: int = 0
+    reason: str = ""
+    subject: str = ""
 
     @property
     def succeeded(self) -> bool:
@@ -418,10 +421,23 @@ class LunhuiSettlementService:
                 impart_exp_day = impart_stone = 0
                 if attached_impart:
                     impart = conn.execute(
-                        "SELECT COALESCE(exp_day,0),COALESCE(stone_num,0) FROM impart_data.xiuxian_impart WHERE user_id=%s",
+                        "SELECT COALESCE(exp_day,0),stone_num,stone_num_exact,"
+                        "stone_num_precision_state FROM impart_data.xiuxian_impart WHERE user_id=%s",
                         (user_id,),
                     ).fetchone()
-                    impart_exp_day, impart_stone = tuple(impart or (0, 0))
+                    impart_exp_day = int(impart[0]) if impart else 0
+                    if impart and impart[3] != "exact":
+                        conn.rollback()
+                        return LunhuiSettlementResult(
+                            "precision_unavailable",
+                            reason=crystal_precision_reason(impart[3]),
+                            subject=user_id,
+                        )
+                    from ...features.impart.legacy_state import crystal_balance
+
+                    impart_stone = crystal_balance({
+                        "stone_num": impart[1], "stone_num_exact": impart[2],
+                    }, subject=user_id) if impart else 0
                     if expected_impart_exp_day is not None and int(impart_exp_day) != int(expected_impart_exp_day):
                         conn.rollback(); return LunhuiSettlementResult("state_changed")
                     if expected_impart_stone is not None and int(impart_stone) != int(expected_impart_stone):
@@ -445,10 +461,17 @@ class LunhuiSettlementService:
                 conn.execute("UPDATE back SET all_num=0 WHERE user_id=%s AND goods_type='丹药'", (user_id,))
                 wishing_stones = int(impart_stone) // 100
                 if attached_impart:
-                    conn.execute(
-                        "UPDATE impart_data.xiuxian_impart SET exp_day=0,stone_num=%s WHERE user_id=%s",
-                        (0 if wishing_stones else int(impart_stone), user_id),
+                    retained_crystals = 0 if wishing_stones else int(impart_stone)
+                    changed_impart = conn.execute(
+                        "UPDATE impart_data.xiuxian_impart SET exp_day=0,stone_num=%s,"
+                        "stone_num_exact=%s,stone_num_precision_state='exact' WHERE user_id=%s "
+                        "AND stone_num_precision_state='exact' "
+                        "AND xiuxian_int_cmp(COALESCE(stone_num_exact,stone_num,0),%s)=0",
+                        (retained_crystals, str(retained_crystals), user_id, impart_stone),
                     )
+                    if changed_impart.rowcount != (1 if impart else 0):
+                        conn.rollback()
+                        return LunhuiSettlementResult("state_changed")
                 for item_id, item_name, quantity in (
                     (reward_id, reward_name, 1),
                     (20005, "祈愿石", wishing_stones),

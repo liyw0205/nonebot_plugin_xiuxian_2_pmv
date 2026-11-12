@@ -5,6 +5,8 @@ from contextlib import closing
 from dataclasses import dataclass, field
 from pathlib import Path
 from threading import RLock
+from ...core.errors import DomainError
+from ...features.impart.legacy_state import crystal_balance
 from ..xiuxian_utils import db_backend
 from .settlement_state import increment_stat, load_daily_state
 from ..xiuxian_utils.numeric_bind import as_int_like, number_count
@@ -798,6 +800,8 @@ class ImpartBattleBatchResult:
     status: str
     challenger_pk_num: int = 0
     opponent_pk_num: int | None = None
+    reason: str = ""
+    subject: str = ""
 
     @property
     def succeeded(self) -> bool:
@@ -941,12 +945,43 @@ class ImpartBattleBatchService:
                     elif int(row[0]) != expected_pk:
                         conn.rollback()
                         return ImpartBattleBatchResult("state_changed")
-                    impart = conn.execute(
-                        "SELECT 1 FROM xiuxian_impart WHERE user_id=%s", (user_id,)
-                    ).fetchone()
-                    if impart is None:
+                    impart_rows = conn.execute(
+                        "SELECT stone_num,stone_num_exact,stone_num_precision_state,"
+                        "typeof(stone_num) "
+                        "FROM xiuxian_impart WHERE user_id=%s", (user_id,)
+                    ).fetchall()
+                    if not impart_rows:
                         conn.rollback()
-                        return ImpartBattleBatchResult("user_missing")
+                        return ImpartBattleBatchResult(
+                            "user_missing", reason="impart_missing", subject=user_id
+                        )
+                    try:
+                        balances = {
+                            crystal_balance(
+                                {
+                                    "user_id": user_id,
+                                    "stone_num": row[0],
+                                    "stone_num_exact": row[1],
+                                    "stone_num_precision_state": row[2],
+                                    "stone_num_storage_type": row[3],
+                                },
+                                subject=user_id,
+                            )
+                            for row in impart_rows
+                        }
+                    except DomainError as exc:
+                        conn.rollback()
+                        return ImpartBattleBatchResult(
+                            "precision_unavailable",
+                            reason=str(exc.details.get("reason") or "crystal_invalid_numeric_value"),
+                            subject=user_id,
+                        )
+                    if len(balances) != 1:
+                        conn.rollback()
+                        return ImpartBattleBatchResult(
+                            "invalid_state", reason="impart_rows_stone_num", subject=user_id
+                        )
+                    stone = balances.pop()
                     changed = conn.execute(
                         "UPDATE player_data.impart_pk_state SET pk_num=pk_num-%s,win_num=win_num+%s "
                         "WHERE user_id=%s AND pk_num=%s AND pk_num>=%s",
@@ -955,10 +990,20 @@ class ImpartBattleBatchService:
                     if changed.rowcount != 1:
                         conn.rollback()
                         return ImpartBattleBatchResult("state_changed")
-                    conn.execute(
-                        "UPDATE xiuxian_impart SET stone_num=CAST(COALESCE(stone_num,0) AS REAL)+CAST(%s AS REAL) WHERE user_id=%s",
-                        (stones, user_id),
+                    rewarded = conn.execute(
+                        "UPDATE xiuxian_impart SET "
+                        "stone_num=xiuxian_int_add(COALESCE(stone_num_exact,stone_num,0),%s),"
+                        "stone_num_exact=xiuxian_int_add(COALESCE(stone_num_exact,stone_num,0),%s),"
+                        "stone_num_precision_state='exact' WHERE user_id=%s "
+                        "AND stone_num_precision_state='exact' "
+                        "AND xiuxian_int_cmp(COALESCE(stone_num_exact,stone_num,0),%s)=0",
+                        (stones, stones, user_id, stone),
                     )
+                    if rewarded.rowcount != len(impart_rows):
+                        conn.rollback()
+                        return ImpartBattleBatchResult(
+                            "state_changed", reason="crystal_changed", subject=user_id
+                        )
                     _increment_stat(conn, user_id, "虚神界对决次数", wins + losses)
                     _increment_stat(conn, user_id, "虚神界对决胜利", wins)
                     _increment_stat(conn, user_id, "虚神界对决失败", losses)

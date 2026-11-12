@@ -3641,6 +3641,11 @@ class XIUXIAN_IMPART_BUFF:
                 c = self.conn.cursor()
                 columns = ["user_id", *self._default_fields.keys()]
                 values = [user_id, *self._default_fields.values()]
+                if self.conn.column_exists("xiuxian_impart", "stone_num_exact") and self.conn.column_exists(
+                    "xiuxian_impart", "stone_num_precision_state"
+                ):
+                    columns.extend(("stone_num_exact", "stone_num_precision_state"))
+                    values.extend((str(self._default_fields["stone_num"]), "exact"))
                 placeholders = ", ".join(["%s"] * len(columns))
                 sql = (
                     "INSERT INTO xiuxian_impart "
@@ -3656,8 +3661,22 @@ class XIUXIAN_IMPART_BUFF:
         values = []
         for field, default in self._default_fields.items():
             if user_dict.get(field) in (None, ""):
-                updates.append(f"{_quote_ident(field)}=%s")
-                values.append(default)
+                if field == "stone_num" and {
+                    "stone_num_exact", "stone_num_precision_state"
+                }.issubset(user_dict):
+                    updates.extend(
+                        (
+                            '"stone_num"=%s',
+                            '"stone_num_exact"=%s',
+                            '"stone_num_precision_state"=\'exact\'',
+                        )
+                    )
+                    values.extend((default, str(default)))
+                    user_dict["stone_num_exact"] = str(default)
+                    user_dict["stone_num_precision_state"] = "exact"
+                else:
+                    updates.append(f"{_quote_ident(field)}=%s")
+                    values.append(default)
                 user_dict[field] = default
 
         if updates:
@@ -3685,6 +3704,9 @@ class XIUXIAN_IMPART_BUFF:
             if result:
                 columns = [column[0] for column in cur.description]
                 user_dict = dict(zip(columns, result))
+                from ...features.impart.legacy_state import crystal_balance
+
+                user_dict["stone_num"] = crystal_balance(user_dict, subject="actor")
                 return self._repair_user_impart_info(user_id, user_dict)
             else:
                 return None
@@ -3896,29 +3918,33 @@ class XIUXIAN_IMPART_BUFF:
             self._commit_write()
             return True
 
-    def update_stone_num(self, impart_num, user_id, type_):
+    def update_stone_num(self, impart_num, user_id, type_, operation_id=None):
         """更新结晶数量"""
-        with self._conn_lock:
-            if type_ == 1:
-                cur = self.conn.cursor()
-                sql = f"UPDATE xiuxian_impart SET stone_num=CAST(COALESCE(stone_num,0) AS REAL)+CAST(%s AS REAL) WHERE user_id=%s"
-                cur.execute(sql, (impart_num, user_id))
-                self._commit_write()
-                return True
-            if type_ == 2:
-                cur = self.conn.cursor()
-                sql = f"UPDATE xiuxian_impart SET stone_num=CAST(COALESCE(stone_num,0) AS REAL)-CAST(%s AS REAL) WHERE user_id=%s"
-                cur.execute(sql, (impart_num, user_id))
-                self._commit_write()
-                return True
+        from uuid import uuid4
+        from ...features.impart.legacy_crystal_repository import LegacyCrystalSqlRepository
+        from ...core.numeric import exact_crystal_integer
 
-    def update_impart_stone_all(self, impart_stone):
-        """所有用户增加结晶"""
+        amount = exact_crystal_integer(impart_num)
+        if amount is None or amount < 0 or type_ not in (1, 2):
+            raise ValueError("invalid crystal adjustment")
         with self._conn_lock:
-            cur = self.conn.cursor()
-            sql = "UPDATE xiuxian_impart SET stone_num=CAST(COALESCE(stone_num,0) AS REAL)+CAST(%s AS REAL)"
-            cur.execute(sql, (impart_stone,))
-            self._commit_write()
+            return LegacyCrystalSqlRepository(
+                self.db_file, self.database_path / "xiuxian.db"
+            ).change(str(operation_id or uuid4()), str(user_id), amount if type_ == 1 else -amount) > 0
+
+    def update_impart_stone_all(self, impart_stone, operation_id=None):
+        """所有用户增加结晶"""
+        from uuid import uuid4
+        from ...features.impart.legacy_crystal_repository import LegacyCrystalSqlRepository
+        from ...core.numeric import exact_crystal_integer
+
+        amount = exact_crystal_integer(impart_stone)
+        if amount is None or amount < 0:
+            raise ValueError("invalid crystal grant")
+        with self._conn_lock:
+            return LegacyCrystalSqlRepository(
+                self.db_file, self.database_path / "xiuxian.db"
+            ).change(str(operation_id or uuid4()), None, amount)
 
     def update_impart_lv(self, user_id, impart_lv):
         """更新虚神界等级"""
@@ -3947,7 +3973,11 @@ class XIUXIAN_IMPART_BUFF:
     def get_impart_rank(self):
         """获取虚神界等级排行榜"""
         with self._conn_lock:
-            sql = "SELECT user_id, impart_lv FROM xiuxian_impart WHERE impart_lv > 0 ORDER BY impart_lv DESC, xiuxian_int_text(stone_num) COLLATE xiuxian_integer DESC LIMIT 50"
+            crystal_column = (
+                "COALESCE(stone_num_exact,stone_num)"
+                if self.conn.column_exists("xiuxian_impart", "stone_num_exact") else "stone_num"
+            )
+            sql = f"SELECT user_id, impart_lv FROM xiuxian_impart WHERE impart_lv > 0 ORDER BY impart_lv DESC, xiuxian_int_text({crystal_column}) COLLATE xiuxian_integer DESC LIMIT 50"
             cur = self.conn.cursor()
             cur.execute(sql)
             result = cur.fetchall()
@@ -3987,37 +4017,17 @@ class XIUXIAN_IMPART_BUFF:
 
             self._commit_write()
 
-    def convert_stone_to_wishing_stone(self, user_id):
+    def convert_stone_to_wishing_stone(self, user_id, operation_id=None):
         """将思恋结晶转换为祈愿石（100:1），多余废弃"""
-        with self._conn_lock:
-            cur = self.conn.cursor()
-            sql = "SELECT stone_num FROM xiuxian_impart WHERE user_id=%s"
-            cur.execute(sql, (user_id,))
-            result = cur.fetchone()
-            if result is None:
-                return
-            stone_num = result[0]
-            if stone_num < 100:
-                return
-            wishing_stone_num = stone_num // 100
-            from ...features.base.inventory_application import PlayerInventoryApplication
+        from uuid import uuid4
+        from ...features.impart.legacy_crystal_repository import LegacyCrystalSqlRepository
 
-            grant = PlayerInventoryApplication(self.database_path).grant_item(
-                user_id,
-                20005,
-                "祈愿石",
-                "特殊道具",
-                wishing_stone_num,
-                bind_flag=1,
-                max_goods_num=int(XiuConfig().max_goods_num),
-                require_full=True,
+        with self._conn_lock:
+            return LegacyCrystalSqlRepository(
+                self.db_file, self.database_path / "xiuxian.db"
+            ).convert(
+                str(operation_id or uuid4()), str(user_id), int(XiuConfig().max_goods_num),
             )
-            if not grant.succeeded:
-                return grant
-            sql_update = "UPDATE xiuxian_impart SET stone_num=0 WHERE user_id=%s"
-            cur.execute(sql_update, (user_id,))
-            self._commit_write()
-            return grant
 
     def add_impart_exp_day(self, impart_num, user_id):
         """add impart_exp_day"""

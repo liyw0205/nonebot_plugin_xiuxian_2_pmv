@@ -3061,6 +3061,7 @@
     "impart_draw_operations",
     "impart_explore_operations",
     "impart_feature_migrations",
+    "impart_legacy_crystal_operations",
     "impart_pk_daily",
     "impart_pk_feature_migrations",
     "impart_pk_state",

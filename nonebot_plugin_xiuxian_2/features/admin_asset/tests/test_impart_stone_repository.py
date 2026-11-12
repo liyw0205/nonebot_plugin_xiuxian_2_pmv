@@ -7,7 +7,14 @@ from ....infrastructure.database import DatabaseUnitOfWork
 from ....plugin import build_migrations, migrations_for_database
 from ..application import AdminAssetApplication
 from ..impart_stone_repository import AdminImpartStoneSqlRepository
-from ..migrations import apply_admin_impart_stone_operations, apply_admin_stone_adjustment
+from ..migrations import (
+    apply_admin_impart_stone_operations,
+    apply_admin_stone_adjustment,
+)
+from ...impart.migrations import (
+    apply_impart_exact_crystal_balances,
+    apply_impart_exact_crystal_game_receipts,
+)
 from tests.test_db_backend import db_backend
 
 
@@ -21,9 +28,12 @@ class AdminImpartStoneRepositoryTests(unittest.TestCase):
         with DatabaseUnitOfWork(game) as uow:
             apply_admin_stone_adjustment(uow)
             apply_admin_impart_stone_operations(uow)
+            apply_impart_exact_crystal_game_receipts(uow)
         with db_backend.transaction(impart) as conn:
             conn.execute("CREATE TABLE xiuxian_impart(user_id TEXT,stone_num INTEGER)")
             conn.execute("INSERT INTO xiuxian_impart VALUES('u',8)")
+        with DatabaseUnitOfWork(impart) as uow:
+            apply_impart_exact_crystal_balances(uow)
         return game, impart
 
     def test_game_receipt_migration_is_game_owned_and_keeps_legacy_receipts(self):
@@ -54,6 +64,7 @@ class AdminImpartStoneRepositoryTests(unittest.TestCase):
                 )
             with DatabaseUnitOfWork(game) as uow:
                 apply_admin_impart_stone_operations(uow)
+                apply_impart_exact_crystal_game_receipts(uow)
             with db_backend.connection(game) as conn:
                 self.assertEqual(
                     conn.execute(
@@ -132,9 +143,51 @@ class AdminImpartStoneRepositoryTests(unittest.TestCase):
             self.assertEqual((stale.status, stale.previous_stone), ("state_changed", 8))
 
             with db_backend.transaction(impart) as conn:
-                conn.execute("INSERT INTO xiuxian_impart VALUES('u',8)")
+                conn.execute("INSERT INTO xiuxian_impart(user_id,stone_num) VALUES('u',8)")
             self.assertEqual(repo.snapshot("u").status, "invalid_state")
             self.assertEqual(repo.adjust("duplicate-user", "op", "u", 8, 2).status, "invalid_state")
+
+    def test_unrecoverable_real_snapshot_and_adjustment_are_specific_and_zero_write(self):
+        with tempfile.TemporaryDirectory() as temp:
+            game, impart = self._databases(temp)
+            with db_backend.transaction(impart) as conn:
+                conn.execute("DROP TRIGGER impart_crystal_exact_write_guard")
+                conn.execute(
+                    "UPDATE xiuxian_impart SET stone_num=CAST(%s AS REAL),"
+                    "stone_num_exact=NULL,stone_num_precision_state='exact' WHERE user_id='u'",
+                    (float(2**63),),
+                )
+            with DatabaseUnitOfWork(impart) as uow:
+                apply_impart_exact_crystal_balances(uow)
+            repo = AdminImpartStoneSqlRepository(game, impart)
+            before = self._precision_state(impart)
+
+            snapshot = repo.snapshot("u")
+            result = repo.adjust("unrecoverable", "op", "u", None, 5)
+
+            self.assertEqual(
+                (snapshot.status, snapshot.reason, snapshot.subject),
+                ("precision_unavailable", "crystal_precision_lost_real", "target"),
+            )
+            self.assertEqual(
+                (result.status, result.reason, result.subject),
+                ("precision_unavailable", "crystal_precision_lost_real", "target"),
+            )
+            self.assertEqual(self._precision_state(impart), before)
+            with db_backend.connection(game) as conn:
+                self.assertEqual(
+                    conn.execute("SELECT COUNT(*) FROM admin_impart_stone_operations").fetchone()[0],
+                    0,
+                )
+                self.assertEqual(conn.execute("SELECT COUNT(*) FROM economy_log").fetchone()[0], 0)
+
+    @staticmethod
+    def _precision_state(database):
+        with db_backend.connection(database) as conn:
+            return tuple(conn.execute(
+                "SELECT stone_num,typeof(stone_num),stone_num_exact,stone_num_precision_state "
+                "FROM xiuxian_impart WHERE user_id='u'"
+            ).fetchone())
 
     def test_missing_schema_and_files_are_not_created_or_repaired_on_request(self):
         with tempfile.TemporaryDirectory() as temp:

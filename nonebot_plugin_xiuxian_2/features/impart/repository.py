@@ -11,6 +11,7 @@ from .prayer_repository import ImpartPrayerSqlRepository
 from .compose_repository import ImpartCardComposeSqlRepository
 from .disassemble_repository import ImpartCardDisassembleSqlRepository
 from .draw_repository import ImpartCrystalDrawSqlRepository, ImpartDrawSqlRepository
+from .legacy_state import crystal_balance
 
 
 class ImpartRepository(ServicePort):
@@ -35,15 +36,27 @@ class ImpartRepository(ServicePort):
             ) is None:
                 raise DomainError("schema_missing", "impart base schema missing")
             if ensure and uow.query_one("SELECT 1 FROM xiuxian_impart WHERE user_id=?", (user_id,)) is None:
+                exact_columns = {
+                    str(row[1])
+                    for row in uow.execute("PRAGMA table_info(xiuxian_impart)").fetchall()
+                }
+                exact_ready = {
+                    "stone_num_exact", "stone_num_precision_state"
+                }.issubset(exact_columns)
+                exact_fields = ",stone_num_exact,stone_num_precision_state" if exact_ready else ""
+                exact_values = ",'0','exact'" if exact_ready else ""
                 uow.execute(
                     "INSERT OR IGNORE INTO xiuxian_impart("
                     "user_id,impart_hp_per,impart_atk_per,impart_mp_per,impart_exp_up,boss_atk,"
                     "impart_know_per,impart_burst_per,impart_mix_per,impart_reap_per,impart_two_exp,"
-                    "stone_num,impart_lv,impart_num,exp_day,wish) "
-                    "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                    f"stone_num,impart_lv,impart_num,exp_day,wish{exact_fields}) "
+                    f"VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?{exact_values})",
                     (user_id, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0),
                 )
-            return uow.query_one("SELECT * FROM xiuxian_impart WHERE user_id=?", (user_id,))
+            row = uow.query_one("SELECT * FROM xiuxian_impart WHERE user_id=?", (user_id,))
+            if row is not None:
+                row["stone_num"] = crystal_balance(row)
+            return row
 
     def cards(self, user_id: str) -> dict[str, int]:
         with DatabaseUnitOfWork(self.database, read_only=True) as uow:

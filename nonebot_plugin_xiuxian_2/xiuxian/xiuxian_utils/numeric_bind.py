@@ -29,8 +29,10 @@ Rules:
 
 Note: binding plain digits keeps the statement alive, but SQLite's
 NUMERIC/INTEGER affinity still stores a value beyond int64 as REAL (double,
-~15–17 significant digits).  That storage limit is unchanged and documented in
-``docs/features/base.md``.
+~15–17 significant digits). Crystal balances therefore use the TEXT shadow
+column ``stone_num_exact``; binding alone is not a precision strategy. Other
+legacy integer-affinity fields retain the historical REAL limitation documented
+in ``docs/features/base.md``.
 """
 
 from __future__ import annotations

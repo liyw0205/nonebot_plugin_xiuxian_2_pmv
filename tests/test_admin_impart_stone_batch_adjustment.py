@@ -11,6 +11,14 @@ nonebot.init()
 from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_admin.transaction_service import (
     AdminImpartStoneBatchAdjustmentService,
 )
+from nonebot_plugin_xiuxian_2.features.admin_asset.migrations import (
+    apply_admin_impart_stone_operations,
+)
+from nonebot_plugin_xiuxian_2.features.impart.migrations import (
+    apply_impart_exact_crystal_balances,
+    apply_impart_exact_crystal_game_receipts,
+)
+from nonebot_plugin_xiuxian_2.infrastructure.database import DatabaseUnitOfWork
 from tests.test_db_backend import db_backend
 
 
@@ -32,6 +40,11 @@ class AdminImpartStoneBatchAdjustmentTests(unittest.TestCase):
                 "INSERT INTO xiuxian_impart VALUES(%s,%s)",
                 (("1", 5), ("2", 1)),
             )
+        with DatabaseUnitOfWork(self.game_database) as uow:
+            apply_admin_impart_stone_operations(uow)
+            apply_impart_exact_crystal_game_receipts(uow)
+        with DatabaseUnitOfWork(self.impart_database) as uow:
+            apply_impart_exact_crystal_balances(uow)
         self.service = AdminImpartStoneBatchAdjustmentService(
             self.game_database, self.impart_database
         )
@@ -63,6 +76,13 @@ class AdminImpartStoneBatchAdjustmentTests(unittest.TestCase):
         )
         values.update(changes)
         return self.service.adjust(**values)
+
+    def test_large_batch_total_uses_exact_json_receipts(self):
+        huge = 10**45 + 123
+        result = self.adjust("huge-batch", requested_delta=huge)
+        self.assertEqual((result.completed, result.applied_delta), (2, huge * 2))
+        replay = self.adjust("huge-batch", requested_delta=huge)
+        self.assertEqual((replay.status, replay.applied_delta), ("duplicate", huge * 2))
 
     def test_batch_resumes_with_frozen_recipient_snapshot(self) -> None:
         first = self.adjust(

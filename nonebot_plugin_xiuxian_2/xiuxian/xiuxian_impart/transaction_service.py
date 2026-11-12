@@ -7,6 +7,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from threading import RLock
 
+from ...core.errors import DomainError
+from ...core.numeric import crystal_precision_reason
+from ...features.impart.legacy_state import crystal_balance
+
 from ..xiuxian_utils import db_backend
 
 @dataclass(frozen=True)
@@ -293,6 +297,8 @@ class CardDisassembleResult:
     status: str
     card_quantity: int = 0
     stone_quantity: int = 0
+    reason: str = ""
+    subject: str = ""
 
     @property
     def succeeded(self) -> bool:
@@ -313,16 +319,26 @@ class CardDisassembleService:
             conn.execute(
                 "CREATE TABLE IF NOT EXISTS impart_card_disassemble_operations ("
                 "operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,"
-                "card_quantity INTEGER NOT NULL,stone_quantity INTEGER NOT NULL)"
+                "card_quantity INTEGER NOT NULL,stone_quantity INTEGER NOT NULL,"
+                "stone_quantity_exact TEXT,stone_quantity_precision_state TEXT NOT NULL DEFAULT 'exact')"
             )
             old = conn.execute(
-                "SELECT card_quantity,stone_quantity FROM "
+                "SELECT card_quantity,stone_quantity,stone_quantity_exact,"
+                "stone_quantity_precision_state FROM "
                 "impart_card_disassemble_operations WHERE operation_id=%s",
                 (operation_id,),
             ).fetchone()
             if old is None:
                 return None
-            return CardDisassembleResult("duplicate", int(old[0]), int(old[1]))
+            if old[3] != "exact":
+                return CardDisassembleResult(
+                    "precision_unavailable",
+                    reason=crystal_precision_reason(old[3]),
+                    subject="actor",
+                )
+            return CardDisassembleResult("duplicate", int(old[0]), crystal_balance({
+                "stone_num": old[1], "stone_num_exact": old[2],
+            }, subject="actor"))
 
     def disassemble(
         self,
@@ -353,29 +369,69 @@ class CardDisassembleService:
                 conn.execute(
                     "CREATE TABLE IF NOT EXISTS impart_card_disassemble_operations ("
                     "operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,"
-                    "card_quantity INTEGER NOT NULL,stone_quantity INTEGER NOT NULL)"
+                    "card_quantity INTEGER NOT NULL,stone_quantity INTEGER NOT NULL,"
+                    "stone_quantity_exact TEXT,stone_quantity_precision_state TEXT NOT NULL DEFAULT 'exact')"
                 )
                 old = conn.execute(
-                    "SELECT payload,card_quantity,stone_quantity FROM "
+                    "SELECT payload,card_quantity,stone_quantity,stone_quantity_exact,"
+                    "stone_quantity_precision_state FROM "
                     "impart_card_disassemble_operations WHERE operation_id=%s",
                     (operation_id,),
                 ).fetchone()
                 if old:
                     conn.rollback()
                     status = "duplicate" if str(old[0]) == payload else "state_changed"
-                    return CardDisassembleResult(status, int(old[1]), int(old[2]))
+                    if status == "duplicate" and old[4] != "exact":
+                        return CardDisassembleResult(
+                            "precision_unavailable",
+                            reason=crystal_precision_reason(old[4]),
+                            subject=user_id,
+                        )
+                    return CardDisassembleResult(status, int(old[1]), crystal_balance({
+                        "stone_num": old[2], "stone_num_exact": old[3],
+                    }, subject=user_id))
                 card = conn.execute(
                     "SELECT quantity FROM impart_cards WHERE user_id=%s AND card_name=%s",
                     (user_id, card_name),
                 ).fetchone()
-                state = conn.execute(
-                    "SELECT stone_num FROM xiuxian_impart WHERE user_id=%s", (user_id,),
-                ).fetchone()
+                state_rows = conn.execute(
+                    "SELECT user_id,stone_num,stone_num_exact,stone_num_precision_state,"
+                    "typeof(stone_num) FROM xiuxian_impart WHERE user_id=%s",
+                    (user_id,),
+                ).fetchall()
                 card_quantity = int(card[0]) if card else 0
-                if state is None:
+                if not state_rows:
                     conn.rollback()
                     return CardDisassembleResult("user_missing", card_quantity)
-                stone_quantity = int(state[0] or 0)
+                try:
+                    balances = [
+                        crystal_balance(
+                            {
+                                "user_id": row[0],
+                                "stone_num": row[1],
+                                "stone_num_exact": row[2],
+                                "stone_num_precision_state": row[3],
+                                "stone_num_storage_type": row[4],
+                            },
+                            subject=user_id,
+                        )
+                        for row in state_rows
+                    ]
+                except DomainError as exc:
+                    conn.rollback()
+                    return CardDisassembleResult(
+                        "precision_unavailable",
+                        card_quantity,
+                        reason=str(exc.details.get("reason") or "crystal_invalid_numeric_value"),
+                        subject=user_id,
+                    )
+                if len(set(balances)) != 1:
+                    conn.rollback()
+                    return CardDisassembleResult(
+                        "state_changed", card_quantity, reason="impart_rows_stone_num",
+                        subject=user_id,
+                    )
+                stone_quantity = balances[0]
                 if (card_quantity, stone_quantity) != (
                     expected_card_quantity,
                     expected_stone_quantity,
@@ -392,11 +448,15 @@ class CardDisassembleService:
                     (quantity, user_id, card_name, card_quantity),
                 )
                 rewarded = conn.execute(
-                    "UPDATE xiuxian_impart SET stone_num=CAST(COALESCE(stone_num,0) AS REAL)+CAST(%s AS REAL) WHERE user_id=%s "
-                    "AND xiuxian_int_cmp(stone_num,%s)=0",
-                    (quantity * reward_per_card, user_id, stone_quantity),
+                    "UPDATE xiuxian_impart SET "
+                    "stone_num=xiuxian_int_add(COALESCE(stone_num_exact,stone_num,0),%s),"
+                    "stone_num_exact=xiuxian_int_add(COALESCE(stone_num_exact,stone_num,0),%s),"
+                    "stone_num_precision_state='exact' WHERE user_id=%s "
+                    "AND xiuxian_int_cmp(COALESCE(stone_num_exact,stone_num,0),%s)=0 "
+                    "AND stone_num_precision_state='exact'",
+                    (quantity * reward_per_card, quantity * reward_per_card, user_id, stone_quantity),
                 )
-                if consumed.rowcount != 1 or rewarded.rowcount != 1:
+                if consumed.rowcount != 1 or rewarded.rowcount != len(state_rows):
                     conn.rollback()
                     return CardDisassembleResult("state_changed")
                 new_card = card_quantity - quantity
@@ -404,8 +464,10 @@ class CardDisassembleService:
                 if card_definitions is not None:
                     refresh_card_bonuses(conn, user_id, card_definitions)
                 conn.execute(
-                    "INSERT INTO impart_card_disassemble_operations VALUES (%s,%s,%s,%s)",
-                    (operation_id, payload, new_card, new_stone),
+                    "INSERT INTO impart_card_disassemble_operations"
+                    "(operation_id,payload,card_quantity,stone_quantity,stone_quantity_exact,"
+                    "stone_quantity_precision_state) VALUES (%s,%s,%s,%s,%s,'exact')",
+                    (operation_id, payload, new_card, new_stone, str(new_stone)),
                 )
                 conn.commit()
                 return CardDisassembleResult("applied", new_card, new_stone)
@@ -419,6 +481,8 @@ class LoveSandUseResult:
     gained: int = 0
     stone_num: int = 0
     item_remaining: int = 0
+    reason: str = ""
+    subject: str = ""
 
     @property
     def succeeded(self):
@@ -437,15 +501,24 @@ class LoveSandUseService:
             conn.execute(
                 "CREATE TABLE IF NOT EXISTS love_sand_operations("
                 "operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,gained INTEGER NOT NULL,"
-                "stone_num INTEGER NOT NULL,item_remaining INTEGER NOT NULL)"
+                "stone_num INTEGER NOT NULL,item_remaining INTEGER NOT NULL,"
+                "stone_num_exact TEXT,stone_num_precision_state TEXT NOT NULL DEFAULT 'exact')"
             )
             old = conn.execute(
-                "SELECT gained,stone_num,item_remaining FROM love_sand_operations WHERE operation_id=%s",
+                "SELECT gained,stone_num,stone_num_exact,stone_num_precision_state,item_remaining "
+                "FROM love_sand_operations WHERE operation_id=%s",
                 (operation_id,),
             ).fetchone()
             if old is None:
                 return None
-            return LoveSandUseResult("duplicate", int(old[0]), int(old[1]), int(old[2]))
+            if old[3] != "exact":
+                return LoveSandUseResult(
+                    "precision_unavailable", int(old[0]),
+                    reason=crystal_precision_reason(old[3]), subject="actor",
+                )
+            return LoveSandUseResult("duplicate", int(old[0]), crystal_balance({
+                "stone_num": old[1], "stone_num_exact": old[2],
+            }, subject="actor"), int(old[4]))
 
     def apply(self, operation_id, user_id, item_id, quantity, gained, expected_item_count, expected_stone_num):
         operation_id, user_id = str(operation_id).strip(), str(user_id)
@@ -468,7 +541,8 @@ class LoveSandUseService:
                 conn.execute(
                     "CREATE TABLE IF NOT EXISTS love_sand_operations("
                     "operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,gained INTEGER NOT NULL,"
-                    "stone_num INTEGER NOT NULL,item_remaining INTEGER NOT NULL)"
+                    "stone_num INTEGER NOT NULL,item_remaining INTEGER NOT NULL,"
+                    "stone_num_exact TEXT,stone_num_precision_state TEXT NOT NULL DEFAULT 'exact')"
                 )
                 conn.execute("CREATE TABLE IF NOT EXISTS player_data.statistics(user_id TEXT PRIMARY KEY)")
                 for column in ("思恋流沙使用", "思恋结晶获取"):
@@ -479,35 +553,74 @@ class LoveSandUseService:
                     except db_backend.Error:
                         pass
                 old = conn.execute(
-                    "SELECT payload,gained,stone_num,item_remaining FROM love_sand_operations "
+                    "SELECT payload,gained,stone_num,stone_num_exact,"
+                    "stone_num_precision_state,item_remaining FROM love_sand_operations "
                     "WHERE operation_id=%s",
                     (operation_id,),
                 ).fetchone()
                 if old:
                     conn.rollback()
+                    if str(old[0]) == payload and old[4] != "exact":
+                        return LoveSandUseResult(
+                            "precision_unavailable", int(old[1]),
+                            reason=crystal_precision_reason(old[4]), subject=user_id,
+                        )
                     return LoveSandUseResult(
                         "duplicate" if str(old[0]) == payload else "operation_conflict",
                         int(old[1]),
-                        int(old[2]),
-                        int(old[3]),
+                        crystal_balance({"stone_num": old[2], "stone_num_exact": old[3]}, subject=user_id),
+                        int(old[5]),
                     )
                 item = conn.execute(
                     "SELECT COALESCE(goods_num,0),COALESCE(bind_num,0) FROM back "
                     "WHERE user_id=%s AND goods_id=%s",
                     (user_id, item_id),
                 ).fetchone()
-                impart = conn.execute(
-                    "SELECT stone_num FROM impart_data.xiuxian_impart WHERE user_id=%s",
+                impart_rows = conn.execute(
+                    "SELECT stone_num,stone_num_exact,stone_num_precision_state,"
+                    "typeof(stone_num) FROM "
+                    "impart_data.xiuxian_impart WHERE user_id=%s",
                     (user_id,),
-                ).fetchone()
+                ).fetchall()
+                if len(impart_rows) > 1:
+                    conn.rollback()
+                    return LoveSandUseResult(
+                        "state_changed", reason="impart_rows_stone_num", subject=user_id
+                    )
+                impart = impart_rows[0] if impart_rows else None
+                try:
+                    actual_stone = (
+                        crystal_balance(
+                            {
+                                "user_id": user_id,
+                                "stone_num": impart[0],
+                                "stone_num_exact": impart[1],
+                                "stone_num_precision_state": impart[2],
+                                "stone_num_storage_type": impart[3],
+                            },
+                            subject=user_id,
+                        )
+                        if impart else None
+                    )
+                except DomainError as exc:
+                    conn.rollback()
+                    return LoveSandUseResult(
+                        "precision_unavailable",
+                        reason=str(exc.details.get("reason") or "crystal_invalid_numeric_value"),
+                        subject=user_id,
+                    )
                 if (
                     not item
                     or not impart
                     or int(item[0]) != expected_item_count
-                    or int(impart[0]) != expected_stone_num
+                    or actual_stone != expected_stone_num
                 ):
                     conn.rollback()
-                    return LoveSandUseResult("state_changed")
+                    return LoveSandUseResult(
+                        "state_changed",
+                        reason="item_changed" if item and int(item[0]) != expected_item_count else "crystal_changed",
+                        subject=user_id,
+                    )
                 if expected_item_count < quantity:
                     conn.rollback()
                     return LoveSandUseResult("item_missing")
@@ -526,10 +639,16 @@ class LoveSandUseService:
                 if changed.rowcount != 1:
                     conn.rollback()
                     return LoveSandUseResult("state_changed")
-                conn.execute(
-                    "UPDATE impart_data.xiuxian_impart SET stone_num=%s WHERE user_id=%s",
-                    (stone_num, user_id),
+                updated = conn.execute(
+                    "UPDATE impart_data.xiuxian_impart SET stone_num=?,stone_num_exact=?,"
+                    "stone_num_precision_state='exact' WHERE user_id=? "
+                    "AND xiuxian_int_cmp(COALESCE(stone_num_exact,stone_num,0),?)=0 "
+                    "AND stone_num_precision_state='exact'",
+                    (stone_num, str(stone_num), user_id, expected_stone_num),
                 )
+                if updated.rowcount != 1:
+                    conn.rollback()
+                    return LoveSandUseResult("state_changed", reason="crystal_changed")
                 conn.execute(
                     'INSERT INTO player_data.statistics(user_id,"思恋流沙使用","思恋结晶获取") '
                     "VALUES (%s,%s,%s) ON CONFLICT(user_id) DO UPDATE SET "
@@ -538,8 +657,11 @@ class LoveSandUseService:
                     (user_id, quantity, gained),
                 )
                 conn.execute(
-                    "INSERT INTO love_sand_operations VALUES (%s,%s,%s,%s,%s)",
-                    (operation_id, payload, gained, stone_num, remaining),
+                    "INSERT INTO love_sand_operations"
+                    "(operation_id,payload,gained,stone_num,stone_num_exact,"
+                    "stone_num_precision_state,item_remaining) "
+                    "VALUES (%s,%s,%s,%s,%s,'exact',%s)",
+                    (operation_id, payload, gained, stone_num, str(stone_num), remaining),
                 )
                 conn.commit()
                 return LoveSandUseResult("applied", gained, stone_num, remaining)

@@ -178,7 +178,7 @@ async def impart_pk_help_(
     await impart_pk_help.finish()
 
 @impart_draw.handle(parameterless=[Cooldown(cd_time=0)])
-@guard_command("传承祈愿", known_rejections=("impart_rows_inconsistent", "impart_write_rejected"))
+@guard_command("传承祈愿", known_rejections=("impart_rows_inconsistent", "impart_write_rejected", "impart_crystal_precision_unavailable"))
 async def impart_draw_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """传承祈愿"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -210,6 +210,8 @@ async def impart_draw_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
     if prior is not None:
         if prior.status == "duplicate":
             await handle_send(bot, event, "道友的传承祈愿已完成，该请求已经处理，无需重复提交。")
+        elif prior.status == "precision_unavailable":
+            await handle_send(bot, event, result_failure("传承祈愿", prior))
         else:
             await handle_send(bot, event, "祈愿请求与已处理请求不一致，请重新发起。")
         return
@@ -336,7 +338,7 @@ async def impart_draw_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
     await impart_draw.finish()
 
 @impart_draw2.handle(parameterless=[Cooldown(cd_time=0)])
-@guard_command("传承抽卡", known_rejections=("impart_rows_inconsistent", "impart_write_rejected"))
+@guard_command("传承抽卡", known_rejections=("impart_rows_inconsistent", "impart_write_rejected", "impart_crystal_precision_unavailable"))
 async def impart_draw2_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """传承抽卡"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -488,7 +490,7 @@ async def impart_draw2_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     await handle_send(bot, event, summary_msg, md_type="传承", k1="抽卡", v1="传承抽卡", k2="背包", v2="传承背包", k3="卡图", v3="传承卡图")
     await impart_draw2.finish()
 
-@guard_command("使用祈愿石")
+@guard_command("使用祈愿石", known_rejections=("impart_crystal_precision_unavailable",))
 async def use_wishing_stone(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, item_id, quantity):
     """使用祈愿石"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -567,7 +569,7 @@ async def use_wishing_stone(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     await handle_send(bot, event, final_msg, md_type="传承", k1="再次", v1="道具使用 祈愿石", k2="背包", v2="传承背包", k3="卡图", v3="传承卡图")
     return
 
-@guard_command("使用思恋流沙")
+@guard_command("使用思恋流沙", known_rejections=("impart_crystal_precision_unavailable", "impart_rows_inconsistent", "impart_write_rejected"))
 async def use_love_sand(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, item_id, quantity):
     """使用思恋流沙"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -612,7 +614,7 @@ async def use_love_sand(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     return
 
 @impart_back.handle(parameterless=[Cooldown(cd_time=0)])
-@guard_command("传承背包")
+@guard_command("传承背包", known_rejections=("impart_crystal_precision_unavailable",))
 async def impart_back_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """传承背包"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -690,7 +692,7 @@ async def impart_back_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
     await send_msg_handler(bot, event, '传承背包', bot.self_id, l_msg, title=title, page=page)
 
 @re_impart_load.handle(parameterless=[Cooldown(cd_time=0)])
-@guard_command("加载传承数据")
+@guard_command("加载传承数据", known_rejections=("impart_crystal_precision_unavailable",))
 async def re_impart_load_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """加载传承数据"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -716,7 +718,7 @@ async def re_impart_load_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
 
 
 @impart_info.handle(parameterless=[Cooldown(cd_time=0)])
-@guard_command("传承信息")
+@guard_command("传承信息", known_rejections=("impart_crystal_precision_unavailable",))
 async def impart_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """传承信息"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -839,7 +841,7 @@ async def impart_compose_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
 
 
 @impart_disassemble.handle(parameterless=[Cooldown(cd_time=0)])
-@guard_command("传承分解", known_rejections=("impart_rows_inconsistent", "impart_write_rejected"))
+@guard_command("传承分解", known_rejections=("impart_rows_inconsistent", "impart_write_rejected", "impart_crystal_precision_unavailable"))
 async def impart_disassemble_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     bot, _ = await assign_bot(bot=bot, event=event)
     is_user, user_info, msg = check_user(event)

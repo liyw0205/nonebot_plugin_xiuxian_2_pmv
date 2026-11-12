@@ -727,6 +727,11 @@ async def ccll_command_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         if snapshot.status == "schema_missing":
             await handle_send(bot, event, "管理员传承石服务尚未就绪，请检查传承数据库和启动迁移。")
             return
+        if snapshot.status == "precision_unavailable":
+            await handle_send(
+                bot, event, result_failure("管理员传承石调整", snapshot)
+            )
+            return
         if snapshot.status == "invalid_state":
             await handle_send(bot, event, "该玩家的传承数据异常，请先修复数据。")
             return
@@ -738,22 +743,20 @@ async def ccll_command_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         )
         result = SimpleNamespace(**dict(outcome.data or {})); result.status = outcome.status; result.succeeded = outcome.ok
 
-        if result.status == "state_changed":
-            msg = "调整未完成：思恋结晶数量已更新，请重新执行。"
-        elif result.status == "operation_conflict":
+        if result.status == "operation_conflict":
             msg = "本次管理员传承操作与已记录事件冲突"
         elif result.status == "user_missing":
             msg = "该玩家已不存在"
         elif result.status == "schema_missing":
             msg = "管理员传承石服务尚未就绪，请检查传承数据库和启动迁移。"
-        elif result.status == "invalid_state":
-            msg = "该玩家的传承数据异常，请先修复数据"
-        else:
+        elif result.succeeded:
             action = "赠送" if result.applied_delta > 0 else "扣除"
             msg = (
                 f"成功{action}{number_to(abs(result.applied_delta))}枚思恋结晶"
                 f"给 {target_name}！当前余额 {number_to(result.final_stone)}"
             )
+        else:
+            msg = result_failure("管理员传承石调整", result)
 
     await handle_send(bot, event, msg)
 

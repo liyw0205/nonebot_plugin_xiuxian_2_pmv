@@ -15,6 +15,10 @@ from ..migrations import (
     apply_admin_impart_stone_operations,
     apply_admin_stone_adjustment,
 )
+from ....features.impart.migrations import (
+    apply_impart_exact_crystal_balances,
+    apply_impart_exact_crystal_game_receipts,
+)
 
 
 class AdminImpartStoneBatchRepositoryTests(unittest.TestCase):
@@ -32,12 +36,14 @@ class AdminImpartStoneBatchRepositoryTests(unittest.TestCase):
             apply_admin_stone_adjustment(uow)
             apply_admin_impart_stone_operations(uow)
             apply_admin_impart_stone_batch(uow)
+            apply_impart_exact_crystal_game_receipts(uow)
         with DatabaseUnitOfWork(self.impart) as uow:
             uow.execute("CREATE TABLE xiuxian_impart(user_id TEXT,stone_num INTEGER)")
             uow.executemany(
                 "INSERT INTO xiuxian_impart(user_id,stone_num) VALUES(?,?)",
                 (("a", 5), ("b", 1)),
             )
+            apply_impart_exact_crystal_balances(uow)
         self.repository = AdminImpartStoneBatchSqlRepository(self.game, self.impart)
 
     def tearDown(self) -> None:
@@ -54,6 +60,28 @@ class AdminImpartStoneBatchRepositoryTests(unittest.TestCase):
         return self.repository.adjust(
             operation_id, "admin", delta, **kwargs
         )
+
+    def test_large_batch_total_and_replay_use_exact_receipt_deltas(self):
+        huge = 10**45 + 123
+        result = self.adjust("huge-batch", delta=huge, chunk_size=10)
+        self.assertEqual((result.completed, result.applied_delta), (3, huge * 3))
+        with DatabaseUnitOfWork(self.impart, read_only=True) as uow:
+            balances = uow.query_all("SELECT user_id,stone_num_exact FROM xiuxian_impart ORDER BY user_id")
+        self.assertEqual([int(row["stone_num_exact"]) for row in balances], [huge + 5, huge + 1, huge])
+        replay = self.adjust("huge-batch", delta=huge, chunk_size=10)
+        self.assertEqual((replay.status, replay.applied_delta), ("duplicate", huge * 3))
+
+    def test_precision_refusal_retains_subject_and_reason_in_progress(self):
+        with DatabaseUnitOfWork(self.impart) as uow:
+            uow.execute("DROP TRIGGER impart_crystal_exact_write_guard")
+            uow.execute("UPDATE xiuxian_impart SET stone_num=CAST(? AS REAL),stone_num_exact=NULL WHERE user_id='a'", (float(2**63),))
+            apply_impart_exact_crystal_balances(uow)
+        result = self.adjust("precision-batch", chunk_size=10)
+        self.assertEqual((result.affected_users, result.skipped_users), (2, 1))
+        with DatabaseUnitOfWork(self.game, read_only=True) as uow:
+            row = uow.query_one("SELECT result_json FROM admin_impart_stone_batch_targets WHERE user_id='a'")
+        receipt = json.loads(row["result_json"])
+        self.assertEqual((receipt["reason"], receipt["subject"]), ("crystal_precision_lost_real", "target"))
 
     def test_roster_is_frozen_in_database_and_processed_in_chunks(self) -> None:
         first = self.adjust("frozen", chunk_size=1)
@@ -142,7 +170,10 @@ class AdminImpartStoneBatchRepositoryTests(unittest.TestCase):
                 "VALUES('legacy','a','adjusted',2,'{}')"
             )
         with DatabaseUnitOfWork(self.impart) as uow:
-            uow.execute("UPDATE xiuxian_impart SET stone_num=7 WHERE user_id='a'")
+            uow.execute(
+                "UPDATE xiuxian_impart SET stone_num=7,stone_num_exact='7',"
+                "stone_num_precision_state='exact' WHERE user_id='a'"
+            )
 
         result = self.adjust("legacy", chunk_size=10)
 
