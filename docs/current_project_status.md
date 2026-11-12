@@ -2,7 +2,7 @@
 
 最后核验：2026-11-13。本文是唯一活跃进度入口；旧重构文档仅作为历史记录，不再定义当前分支或禁止事项。
 
-## 货币精确比较与结算一致性（当前阶段）
+## 货币精确比较与结算一致性（v1.3.3 已交付）
 
 2026-11-12 新任务 CONTROL-20261112-MONEY：继续优先修 bug，不恢复新增玩法。
 基线 develop `28c85498c3b45d4f2323a8bcedb644942d45a7af`；v1.3.2 已正式发布且完整包
@@ -56,10 +56,23 @@ passed；活动事件及之前 dispatch 的 unittest 12 tests OK。各轮有覆�
 `43264055281` 全绿：6049 tests OK，编译、architecture、inventory 和 whitespace
 门禁均通过。首轮失败保留为证据，未重跑未变化的本地货币/参数基线。
 
-修正后的 develop 精确 SHA CI `43264055281` 全绿后，版本字段与公开说明已同步递增到
-未占用的 `v1.3.3`，准备按既有流程普通合入 main、核 main CI、创建 tag/Release 并
-完整核验 `project.tar.gz`。发布前不宣称正式交付。用户四项删除、两个参数文件修改
-和全部本地辅助资料均保留且未提交。没有部署、重启、真实库访问或 QQ 发送。
+正式交付 checkpoint：版本字段与公开说明同步递增为此前未占用的 `v1.3.3`，正式提交
+`aadba9309e38b9312c87e5021b75401c4392b078` 的 develop CI `43267658669`、普通
+快进合入 main 后的 CI `43269036610`、tag/Release 工作流 `43270259376` 均全绿，
+均为 6049 tests OK 与完整质量门禁。旧 main 历史 worktree 未修改，没有强推或移动旧 tag。
+
+[v1.3.3 Release](https://github.com/liyw0205/nonebot_plugin_xiuxian_2_pmv/releases/tag/v1.3.3)
+已正式发布，非 draft/prerelease；tag peeled SHA、Release target 和 main 均为上述
+正式提交，Release 说明与随包说明一致。`project.tar.gz` 完整下载后为 7327206 字节、
+3478 个文件，内容/类型/模式与该 SHA 的 `git archive` 逐文件一致，整包 SHA-256
+与 GitHub 资产 digest 一致：
+`bfd1f484b5fc1326413755f1a2a48abf2fb5bfcffa34ed6dc8a55a307def296e`。
+首轮下载超时保留半截文件；Range 续传成功后先核完整大小/digest，再验 gzip 和包，
+没有读取未完成包或持验证锁等待网络/CI。
+
+当前工作区仍为 develop，仅留本次交付 checkpoint，不为进度文档重复发布或自行追加目标。
+用户四项删除、两个参数文件修改和全部本地辅助资料均保留且未提交。没有部署、重启、
+真实库访问或 QQ 发送。生产未更新，失精度历史余额没有被恢复或自动覆盖。
 未实测真实 QQ 展示、未核对生产存档，不宣称所有指令参数或生产历史余额均正常。
 
 ## 传承祈愿结晶精度修复（v1.3.2 历史 checkpoint）
