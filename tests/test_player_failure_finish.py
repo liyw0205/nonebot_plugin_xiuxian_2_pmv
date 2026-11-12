@@ -17,6 +17,7 @@ from nonebot_plugin_xiuxian_2.features.impart.card_bonus import BONUS_FIELDS
 from nonebot_plugin_xiuxian_2.features.impart.migrations import (
     apply_impart_draw_operations, apply_impart_crystal_and_card_operations,
     apply_impart_draw_player_statistics,
+    apply_impart_exact_crystal_balances,
 )
 from nonebot_plugin_xiuxian_2.features.impart_pk.application import ImpartPkApplication
 from nonebot_plugin_xiuxian_2.features.impart_pk.migrations import apply_impart_pk_operations, apply_impart_pk_closing_statistics
@@ -54,7 +55,7 @@ class HistoricalImpartTests(unittest.TestCase):
             c.execute(f"CREATE TABLE xiuxian_impart(user_id TEXT,wish INTEGER,impart_num INTEGER,stone_num INTEGER,exp_day INTEGER,{columns})")
             c.executemany("INSERT INTO xiuxian_impart(user_id,wish,impart_num,stone_num,exp_day) VALUES('u',0,0,10,30)", [(), ()])
             c.executescript("CREATE TABLE impart_cards(user_id TEXT,card_name TEXT,quantity INTEGER,PRIMARY KEY(user_id,card_name)); INSERT INTO impart_cards VALUES('u','a',4);")
-        for path, migrations in ((self.game, (apply_impart_draw_operations, apply_impart_pk_operations)), (self.impart, (apply_impart_crystal_and_card_operations,)), (self.player, (apply_impart_draw_player_statistics, apply_impart_pk_closing_statistics))):
+        for path, migrations in ((self.game, (apply_impart_draw_operations, apply_impart_pk_operations)), (self.impart, (apply_impart_crystal_and_card_operations, apply_impart_exact_crystal_balances)), (self.player, (apply_impart_draw_player_statistics, apply_impart_pk_closing_statistics))):
             with DatabaseUnitOfWork(path) as uow:
                 if path == self.player:
                     uow.execute("CREATE TABLE statistics(user_id TEXT PRIMARY KEY)")
@@ -92,6 +93,7 @@ class HistoricalImpartTests(unittest.TestCase):
                 self.assertEqual(self.snapshot(), before)
                 with sqlite3.connect(self.impart) as c:
                     self.assertEqual(c.execute("SELECT wish,impart_num,stone_num,exp_day FROM xiuxian_impart").fetchall(), [expected, expected])
+                    self.assertEqual(c.execute("SELECT stone_num_exact,stone_num_precision_state FROM xiuxian_impart").fetchall(), [(str(expected[2]), "exact")] * 2)
                     self.assertEqual(c.execute("SELECT quantity FROM impart_cards").fetchone()[0], {"draw":5,"crystal":5,"split":3,"close":4}[name])
                 with sqlite3.connect(self.game) as c:
                     self.assertEqual(c.execute("SELECT stone,exp FROM user_xiuxian").fetchone(), (80,100) if name=="draw" else (100,120) if name=="close" else (100,100))
@@ -105,7 +107,10 @@ class HistoricalImpartTests(unittest.TestCase):
                 self.tearDownFixture()
                 self.setUp()
                 with sqlite3.connect(self.impart) as c:
-                    c.execute(f"UPDATE xiuxian_impart SET {field}={field}+1 WHERE rowid=2")
+                    if field == "stone_num":
+                        c.execute("UPDATE xiuxian_impart SET stone_num=stone_num+1,stone_num_exact='11' WHERE rowid=2")
+                    else:
+                        c.execute(f"UPDATE xiuxian_impart SET {field}={field}+1 WHERE rowid=2")
                 before = self.snapshot()
                 with self.assertRaises(DomainError) as caught:
                     self.act(name)

@@ -43,7 +43,13 @@ exception/blocked 均为 0。覆盖同请求并发、不同请求竞争旧快照
 一致历史镜像、payload 冲突、坏 exact/旧 REAL、批量精确总额和跨库回执故障回滚。
 旧 139 项与本轮重叠，不累计；唯一告警仍是既有 execute 兼容接口弃用。祈愿直接使用
 operation 表，既有 application ledger 断言不意外变化，不宣称为该指令新增了 ledger。
-当前尚未提交/推送、未跑本修复 SHA 的 CI、未发布；需继续整阶段开发交付门禁。
+修复已白名单普通提交并推送 develop：`78ac80f96f390b769285df5d2ea3b8208467bcc7`。
+该 SHA CI `43200763745` 执行 5992 项，9 个 error：三组旧测试夹具未运行精确余额/
+回执迁移，以及旧批量结果对象没有 reason 属性。当前补齐真实迁移及旧结果兼容，
+保留历史不一致、成功扣减和回滚断言，只复测四个失败模块与批量受影响项。
+复测结果 **52 passed、21 subtests passed**；历史多行成功链还增加 exact 余额/精度
+状态断言。不重跑未变化的 158 项和 dispatch 基线；待修正提交的精确 SHA 完整 CI。
+尚未合 main 或发布；前述本地绿结果不替代失败的完整 CI。
 
 白名单 archive 隔离副本的真实 dispatch 复核、architecture（包含 inventory check）、
 精确派生清单比较、受影响源编译与 diff 门禁已通过。首轮门禁失败仅来自隔离副本缺

@@ -8,6 +8,10 @@ import nonebot
 
 nonebot.init()
 
+from nonebot_plugin_xiuxian_2.features.impart.migrations import (
+    apply_impart_exact_crystal_balances,
+)
+from nonebot_plugin_xiuxian_2.infrastructure.database import DatabaseUnitOfWork
 from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_lunhui.transaction_service import (
     CultivationResetService,
     LunhuiRecallService,
@@ -266,6 +270,8 @@ class LunhuiTransactionOwnerRegressions(unittest.TestCase):
                 "CREATE TABLE xiuxian_impart(user_id TEXT PRIMARY KEY,exp_day INTEGER,stone_num INTEGER)"
             )
             conn.execute("INSERT INTO xiuxian_impart VALUES('u',12,250)")
+        with DatabaseUnitOfWork(self.impart) as uow:
+            apply_impart_exact_crystal_balances(uow)
         memory_fields = (
             "main_buff", "sub_buff", "sec_buff", "effect1_buff", "effect2_buff",
             "memory_level", "retrieved_main", "retrieved_sub", "retrieved_sec",

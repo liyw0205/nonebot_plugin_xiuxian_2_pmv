@@ -14,6 +14,9 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from nonebot_plugin_xiuxian_2.features.impart.migrations import (
+    apply_impart_exact_crystal_balances,
+)
 from nonebot_plugin_xiuxian_2.features.impart_pk.battle_repository import (
     ImpartBattleBatchSqlRepository,
 )
@@ -87,6 +90,7 @@ class Fixture:
         if impart:
             with DatabaseUnitOfWork(self.impart, immediate=True) as uow:
                 apply_impart_pk_impart_operations(uow)
+                apply_impart_exact_crystal_balances(uow)
         return self
 
     def tables(self, database: Path) -> set[str]:
