@@ -2,9 +2,12 @@ from __future__ import annotations
 
 import asyncio
 import inspect
+import traceback
 from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Awaitable, Callable
+
+from ..infrastructure.observability.events import emit
 
 
 class LifecyclePhase(str, Enum):
@@ -25,6 +28,10 @@ class LifecycleState:
     phase: LifecyclePhase
     started: tuple[str, ...] = ()
     error: str | None = None
+    failed_phase: LifecyclePhase | None = None
+    error_type: str | None = None
+    error_message: str | None = None
+    error_traceback: str | None = None
 
 
 Callback = Callable[[], Any | Awaitable[Any]]
@@ -54,10 +61,17 @@ class Lifecycle:
         self._state = LifecycleState(LifecyclePhase.NEW)
         self._lock = asyncio.Lock()
         self._active_phase: LifecyclePhase | None = None
+        self._startup_exception: Exception | None = None
 
     @property
     def state(self) -> LifecycleState:
         return self._state
+
+    def raise_startup_error(self) -> None:
+        if self._state.phase is LifecyclePhase.NOT_READY:
+            if self._startup_exception is not None:
+                raise self._startup_exception
+            raise RuntimeError(self._state.error or "xiuxian runtime is not ready")
 
     def register(
         self,
@@ -87,6 +101,7 @@ class Lifecycle:
             # Resources were drained by shutdown; the same composition can be
             # started again during a test or a controlled hot reload.
             self._state = LifecycleState(LifecyclePhase.NEW)
+        self._startup_exception = None
         try:
             for phase in self.ORDER:
                 if phase in self._completed:
@@ -101,9 +116,19 @@ class Lifecycle:
             self._state = LifecycleState(LifecyclePhase.READY, tuple(item.value for item in self._completed))
         except Exception as exc:
             error = f"{type(exc).__name__}: {exc}"
+            error_traceback = "".join(traceback.format_exception(type(exc), exc, exc.__traceback__))
             completed = tuple(item.value for item in self._completed)
             failed_phase = self._active_phase
             self._active_phase = None
+            self._startup_exception = exc
+            # Format the original traceback without Loguru's local-value diagnostics.
+            emit(
+                "ERROR",
+                f"xiuxian startup failed: phase={failed_phase.value if failed_phase else 'unknown'}\n{error_traceback}",
+                failed_phase=failed_phase.value if failed_phase else None,
+                error_type=type(exc).__name__,
+                error_message=str(exc),
+            )
             if failed_phase is not None:
                 callback = self._shutdown_callbacks.get(failed_phase)
                 if callback is not None:
@@ -112,7 +137,10 @@ class Lifecycle:
                     except Exception:
                         pass
             await self._shutdown()
-            self._state = LifecycleState(LifecyclePhase.NOT_READY, completed, error)
+            self._state = LifecycleState(
+                LifecyclePhase.NOT_READY, completed, error,
+                failed_phase, type(exc).__name__, str(exc), error_traceback,
+            )
         return self._state
 
     async def start(self) -> LifecycleState:
@@ -142,6 +170,10 @@ class Lifecycle:
             "phase": self._state.phase.value,
             "started": list(self._state.started),
             "error": self._state.error,
+            "failed_phase": self._state.failed_phase.value if self._state.failed_phase else None,
+            "error_type": self._state.error_type,
+            "error_message": self._state.error_message,
+            "error_traceback": self._state.error_traceback,
             "registered": [phase.value for phase in self.ORDER if phase in self._callbacks],
         }
 

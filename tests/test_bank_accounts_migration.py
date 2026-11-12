@@ -9,7 +9,7 @@ from unittest.mock import patch
 
 from nonebot_plugin_xiuxian_2.features.bank.migrations import (
     apply_bank_accounts,
-    apply_bank_legacy_accounts,
+    apply_bank_legacy_accounts_exact,
 )
 from nonebot_plugin_xiuxian_2.infrastructure.database import DatabaseUnitOfWork
 
@@ -49,7 +49,7 @@ class BankAccountsMigrationTests(unittest.TestCase):
             before = player.stat().st_size
 
             with DatabaseUnitOfWork(game) as uow:
-                apply_bank_legacy_accounts(uow)
+                apply_bank_legacy_accounts_exact(uow)
 
             with DatabaseUnitOfWork(game, read_only=True) as uow:
                 count = uow.query_one("SELECT COUNT(*) AS count FROM bank_accounts")["count"]
@@ -76,7 +76,7 @@ class BankAccountsMigrationTests(unittest.TestCase):
                 )
 
             with DatabaseUnitOfWork(game) as uow:
-                apply_bank_legacy_accounts(uow)
+                apply_bank_legacy_accounts_exact(uow)
 
             with DatabaseUnitOfWork(game, read_only=True) as uow:
                 account = uow.query_one(
@@ -97,7 +97,7 @@ class BankAccountsMigrationTests(unittest.TestCase):
 
             with self.assertRaisesRegex(RuntimeError, "bank account migration conflict: u"):
                 with DatabaseUnitOfWork(game) as uow:
-                    apply_bank_legacy_accounts(uow)
+                    apply_bank_legacy_accounts_exact(uow)
 
             with DatabaseUnitOfWork(game, read_only=True) as uow:
                 self.assertIsNone(
@@ -117,7 +117,7 @@ class BankAccountsMigrationTests(unittest.TestCase):
 
             with self.assertRaisesRegex(RuntimeError, "legacy bankinfo schema incomplete"):
                 with DatabaseUnitOfWork(game) as uow:
-                    apply_bank_legacy_accounts(uow)
+                    apply_bank_legacy_accounts_exact(uow)
 
     def test_low_disk_space_blocks_backfill_before_inserting_rows(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -134,7 +134,7 @@ class BankAccountsMigrationTests(unittest.TestCase):
             ):
                 with self.assertRaisesRegex(RuntimeError, "bank account migration needs about"):
                     with DatabaseUnitOfWork(game) as uow:
-                        apply_bank_legacy_accounts(uow)
+                        apply_bank_legacy_accounts_exact(uow)
 
             with DatabaseUnitOfWork(game, read_only=True) as uow:
                 self.assertEqual(uow.query_one("SELECT COUNT(*) AS count FROM bank_accounts")["count"], 0)

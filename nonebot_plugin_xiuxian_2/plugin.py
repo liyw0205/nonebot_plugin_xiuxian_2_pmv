@@ -180,7 +180,12 @@ from .features.arena.migrations import apply_arena, apply_arena_challenge_purcha
 from .features.auction.manifest import FEATURE as AUCTION_FEATURE
 from .features.auction.jobs import settle as auction_settle_job
 from .features.bank.manifest import FEATURE as BANK_FEATURE
-from .features.bank.migrations import apply_bank, apply_bank_accounts, apply_bank_legacy_accounts
+from .features.bank.migrations import (
+    apply_bank,
+    apply_bank_accounts,
+    apply_bank_legacy_accounts,
+    apply_bank_legacy_accounts_exact,
+)
 from .features.activity_reward.manifest import FEATURE as ACTIVITY_REWARD_FEATURE
 from .features.activity_reward.migrations import (
     apply_activity_claim_all,
@@ -394,6 +399,7 @@ def build_migrations() -> tuple[Migration, ...]:
         Migration("bank.001", "bank_feature_migrations", apply_bank),
         Migration("bank.002", "bank_accounts", apply_bank_accounts),
         Migration("bank.003", "bank_legacy_account_backfill", apply_bank_legacy_accounts),
+        Migration("bank.004", "bank_legacy_account_backfill_exact", apply_bank_legacy_accounts_exact),
         Migration("base.001", "base_feature_migrations", apply_base),
         Migration("base.002", "player_rename_operations", apply_base_player_rename_operations),
         Migration("base.003", "stone_contest_operations", apply_base_stone_contest_operations),
@@ -1610,6 +1616,8 @@ def install_driver_hooks(driver: Any) -> tuple[Any, Any]:
 
             context.message_gateway = NoneBotMessageGateway(delivery_service)
         state, readiness, context, lifecycle = await startup(context)
+        if state.phase is LifecyclePhase.NOT_READY:
+            lifecycle.raise_startup_error()
         holder.update(context=context, lifecycle=lifecycle, readiness=readiness)
         from .features.bank.clock import set_bank_clock
         holder["bank_clock_token"] = set_bank_clock(context.clock)
@@ -1621,8 +1629,6 @@ def install_driver_hooks(driver: Any) -> tuple[Any, Any]:
             )
         if any(key in context.services for key in ("bank_first_use_upgrade", "bank_first_use_interest", "bank_first_use_withdrawal")):
             register_bank_first_use_extended_matchers(driver, holder)
-        if state.phase is LifecyclePhase.NOT_READY:
-            raise RuntimeError(state.error or "xiuxian runtime is not ready")
 
     async def on_shutdown() -> None:
         lifecycle = holder.get("lifecycle")
