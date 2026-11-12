@@ -51,8 +51,16 @@ passed；活动事件及之前 dispatch 的 unittest 12 tests OK。各轮有覆�
 坏投影具体拒绝、实际缺省字段默认/坏金额零写、当前精确写入所有权报告，以及包相对
 导入与 source-file 兼容，不删除资产和拒绝断言。失败及受影响五模块 283 tests OK；
 新增安全 REAL 回执与两种 namespace 隔离读写/异常合同 2 tests OK。精确白名单 archive
-中的失败进度断言和 architecture 门禁通过，未恢复用户删除。下一项是修正 SHA CI。
-本阶段尚无 main 集成或新 Release；将按完整门禁继续交付。
+中的失败进度断言和 architecture 门禁通过，未恢复用户删除。修正提交
+`beb76fc4f72565323e04cf680fdeebb33af482bb` 已普通推送 develop，准确 SHA CI
+`43264055281` 全绿：6049 tests OK，编译、architecture、inventory 和 whitespace
+门禁均通过。首轮失败保留为证据，未重跑未变化的本地货币/参数基线。
+
+最新用户边界是 develop-only，暂不合 main 或发版；覆盖上文自动集成条件。本阶段
+代码修复及开发 CI 已完成，持久 goal 保持 active，main 集成/CI、递增版本和正式包
+仍未执行，不宣称阶段已正式发布。实际版本仍为 v1.3.2，main/tag/生产保持原样。
+仅更新 develop checkpoint，不用进度文档触发发布。用户四项删除、两个参数文件修改
+和全部本地辅助资料均保留且未提交。没有部署、重启、真实库访问或 QQ 发送。
 未实测真实 QQ 展示、未核对生产存档，不宣称所有指令参数或生产历史余额均正常。
 
 ## 传承祈愿结晶精度修复（v1.3.2 历史 checkpoint）
