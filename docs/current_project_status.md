@@ -49,7 +49,11 @@ operation 表，既有 application ledger 断言不意外变化，不宣称为�
 保留历史不一致、成功扣减和回滚断言，只复测四个失败模块与批量受影响项。
 复测结果 **52 passed、21 subtests passed**；历史多行成功链还增加 exact 余额/精度
 状态断言。不重跑未变化的 158 项和 dispatch 基线；待修正提交的精确 SHA 完整 CI。
-尚未合 main 或发布；前述本地绿结果不替代失败的完整 CI。
+修正提交 `51ed0a5d7c8236492545a2e4001c80f09551c1b9` 已普通推送 develop，
+精确 SHA CI `43202345100` 全绿（5992 项与架构、清单门禁）；首轮失败保留为历史
+证据。远端正式最新版本仍为 v1.3.1，重新确认 v1.3.2 tag/Release 未占用后，版本字段
+与正式说明递增到 v1.3.2。待发布提交精确 SHA 的 develop/main CI 和正式包核验；
+尚未合 main 或发布，不宣称生产存档已恢复。
 
 白名单 archive 隔离副本的真实 dispatch 复核、architecture（包含 inventory check）、
 精确派生清单比较、受影响源编译与 diff 门禁已通过。首轮门禁失败仅来自隔离副本缺
