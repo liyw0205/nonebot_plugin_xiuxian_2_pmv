@@ -56,10 +56,9 @@ passed；活动事件及之前 dispatch 的 unittest 12 tests OK。各轮有覆�
 `43264055281` 全绿：6049 tests OK，编译、architecture、inventory 和 whitespace
 门禁均通过。首轮失败保留为证据，未重跑未变化的本地货币/参数基线。
 
-最新用户边界是 develop-only，暂不合 main 或发版；覆盖上文自动集成条件。本阶段
-代码修复及开发 CI 已完成，持久 goal 保持 active，main 集成/CI、递增版本和正式包
-仍未执行，不宣称阶段已正式发布。实际版本仍为 v1.3.2，main/tag/生产保持原样。
-仅更新 develop checkpoint，不用进度文档触发发布。用户四项删除、两个参数文件修改
+修正后的 develop 精确 SHA CI `43264055281` 全绿后，版本字段与公开说明已同步递增到
+未占用的 `v1.3.3`，准备按既有流程普通合入 main、核 main CI、创建 tag/Release 并
+完整核验 `project.tar.gz`。发布前不宣称正式交付。用户四项删除、两个参数文件修改
 和全部本地辅助资料均保留且未提交。没有部署、重启、真实库访问或 QQ 发送。
 未实测真实 QQ 展示、未核对生产存档，不宣称所有指令参数或生产历史余额均正常。
 
