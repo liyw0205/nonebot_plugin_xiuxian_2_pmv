@@ -2130,7 +2130,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
                     "def settle_exp(",
                     "UPDATE user_xiuxian SET exp = ?",
                     "def settle_stone(",
-                    "UPDATE user_xiuxian SET stone = ?",
+                    "UPDATE user_xiuxian SET stone = xiuxian_int_store(",
                     "def claim_greeting(",
                     "interactive_greeting_claims",
                 )

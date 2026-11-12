@@ -233,18 +233,39 @@ def _strict_sql_integer(value: Any) -> int:
     return number
 
 
+def _domain_error_type():
+    try:
+        from .errors import DomainError
+        return DomainError
+    except ImportError:  # source-file loaders have no package namespace
+        import importlib.util
+        import sys
+        from pathlib import Path
+
+        path = Path(__file__).with_name("errors.py").resolve()
+        # Reuse the same exception class under either supported plugin namespace.
+        for name, module in tuple(sys.modules.items()):
+            if name.endswith(".core.errors") or name == "_xiuxian_core_errors":
+                source = getattr(module, "__file__", None)
+                if source and Path(source).resolve() == path:
+                    return module.DomainError
+        spec = importlib.util.spec_from_file_location("_xiuxian_core_errors", path)
+        if spec is None or spec.loader is None:
+            raise ImportError(f"Unable to load currency error contract: {path}")
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[spec.name] = module
+        spec.loader.exec_module(module)
+        return module.DomainError
+
+
 def require_exact_integer(value: Any, *, field: str, subject: str) -> int:
     """Read money without recovering an unknowable rounded historical value."""
     number = exact_crystal_integer(value)
     if number is not None:
         return number
-    try:
-        from .errors import DomainError
-    except ImportError:  # legacy source-file loaders have no package context
-        from nonebot_plugin_xiuxian_2.core.errors import DomainError
 
     reason = f"{field}_precision_lost_real" if isinstance(value, float) and isfinite(value) and abs(value) >= 2**53 else f"{field}_invalid_numeric_value"
-    raise DomainError("currency_precision_unavailable", "currency value is not an exact integer", {
+    raise _domain_error_type()("currency_precision_unavailable", "currency value is not an exact integer", {
         "reason": reason, "subject": str(subject), "field": field,
     })
 

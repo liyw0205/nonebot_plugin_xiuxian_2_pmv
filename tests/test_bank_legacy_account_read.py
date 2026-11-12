@@ -5,6 +5,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from nonebot_plugin_xiuxian_2.core.errors import DomainError
 from nonebot_plugin_xiuxian_2.features.bank.account_info_application import BankAccountInfoApplication
 
 
@@ -42,8 +43,8 @@ class BankLegacyAccountReadTests(unittest.TestCase):
 
     def test_partial_legacy_row_uses_existing_field_defaults_without_schema_changes(self) -> None:
         with sqlite3.connect(self.player_database) as connection:
-            connection.execute("CREATE TABLE bankinfo(user_id TEXT PRIMARY KEY, savestone TEXT, banklevel TEXT)")
-            connection.execute("INSERT INTO bankinfo VALUES('u', 'invalid', '3')")
+            connection.execute("CREATE TABLE bankinfo(user_id TEXT PRIMARY KEY, banklevel TEXT)")
+            connection.execute("INSERT INTO bankinfo VALUES('u', '3')")
         with sqlite3.connect(self.player_database) as connection:
             before = tuple(row[1] for row in connection.execute('PRAGMA table_info("bankinfo")'))
 
@@ -54,6 +55,24 @@ class BankLegacyAccountReadTests(unittest.TestCase):
             after = tuple(row[1] for row in connection.execute('PRAGMA table_info("bankinfo")'))
         self.assertEqual(after, before)
         self.assertEqual(self.application.legacy_record_status(user_id="u"), "present")
+
+    def test_invalid_existing_balance_is_not_defaulted_to_zero(self) -> None:
+        with sqlite3.connect(self.player_database) as connection:
+            connection.execute("CREATE TABLE bankinfo(user_id TEXT PRIMARY KEY, savestone, banklevel TEXT)")
+            connection.execute("INSERT INTO bankinfo VALUES('u', 0, '3')")
+        for value, reason in (("invalid", "saved_stone_invalid_numeric_value"),
+                              ("1e-2", "saved_stone_invalid_numeric_value"),
+                              (float(2**63), "saved_stone_precision_lost_real")):
+            with self.subTest(value=value):
+                with sqlite3.connect(self.player_database) as connection:
+                    connection.execute("UPDATE bankinfo SET savestone=?", (value,))
+                    before = tuple(connection.iterdump())
+                with self.assertRaises(DomainError) as caught:
+                    self.application.get_legacy_info(user_id="u", default_saved_at="now")
+                self.assertEqual((reason, "u"), (caught.exception.details["reason"], caught.exception.details["subject"]))
+                with sqlite3.connect(self.player_database) as connection:
+                    self.assertEqual(before, tuple(connection.iterdump()))
+                self.assertFalse(self.game_database.exists())
 
     def test_legacy_table_without_user_id_is_invalid_for_write_fallbacks(self) -> None:
         with sqlite3.connect(self.player_database) as connection:

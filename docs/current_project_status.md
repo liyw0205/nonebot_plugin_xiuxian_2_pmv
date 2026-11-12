@@ -44,7 +44,15 @@ passed；活动事件及之前 dispatch 的 unittest 12 tests OK。各轮有覆�
 清单失败来自隔离 Git 索引漏收原 tracked 的 ignored JSON，修正验证索引后通过，
 没有改清单、恢复用户删除或依赖用户未提交的参数文件修改。
 
-当前仍是未提交修复阶段，尚无本阶段新 CI/Release；将按上述完整门禁继续交付。
+白名单修复已普通提交并推送 develop：`ed6627c22971ce8191a54518784862cb415a1fb5`。
+该 SHA CI `43261554562` 跑完 6045 项，2 fail/2 error，未合 main：旧活动夹具以
+超 int64 参数写入 INTEGER 后已成为不安全 REAL，旧灵庄夹具把 `invalid` 当缺省零，
+进度报告匹配旧钱包 SQL，以及新增三处绝对包导入。现在分别验证安全 REAL 投影兼容/
+坏投影具体拒绝、实际缺省字段默认/坏金额零写、当前精确写入所有权报告，以及包相对
+导入与 source-file 兼容，不删除资产和拒绝断言。失败及受影响五模块 283 tests OK；
+新增安全 REAL 回执与两种 namespace 隔离读写/异常合同 2 tests OK。精确白名单 archive
+中的失败进度断言和 architecture 门禁通过，未恢复用户删除。下一项是修正 SHA CI。
+本阶段尚无 main 集成或新 Release；将按完整门禁继续交付。
 未实测真实 QQ 展示、未核对生产存档，不宣称所有指令参数或生产历史余额均正常。
 
 ## 传承祈愿结晶精度修复（v1.3.2 历史 checkpoint）

@@ -17,6 +17,7 @@ nonebot.init()
 
 from nonebot_plugin_xiuxian_2.core.errors import DomainError
 from nonebot_plugin_xiuxian_2.core.errors import OperationConflictError
+from nonebot_plugin_xiuxian_2.core.numeric import as_int_like, bind_sqlite_param
 from nonebot_plugin_xiuxian_2.features.activity.application import ActivityApplication
 from nonebot_plugin_xiuxian_2.features.activity.collect_exchange_repository import ActivityCollectExchangeSqlRepository
 from nonebot_plugin_xiuxian_2.features.activity.point_shop_purchase_repository import ActivityPointShopPurchaseSqlRepository
@@ -319,15 +320,52 @@ class ActivityRedemptionDeliveryTests(unittest.TestCase):
                             with sqlite3.connect(target) as conn:
                                 conn.execute("DROP TRIGGER reject_update")
 
-    def test_large_legacy_shop_receipt_does_not_reject_valid_real_projection(self):
+    def test_large_shop_balance_and_receipt_persist_exactly_and_replay(self):
         database, _, repo, _ = self.fixture("shop", "feature")
         cost = 10**29
         with DatabaseUnitOfWork(database) as uow:
-            uow.execute("UPDATE activity_point_balance SET points=?", (cost * 2,))
+            uow.execute("UPDATE activity_point_balance SET points=?", (bind_sqlite_param(cost * 2, exact=True),))
         result = repo.purchase("large", "u", "a", "i", 1, cost, 0, 0, self.rewards, 100)
         self.assertTrue(result.succeeded)
+        with DatabaseUnitOfWork(database, read_only=True) as uow:
+            self.assertEqual(cost, as_int_like(uow.query_one("SELECT points FROM activity_point_balance")["points"]))
+            receipt = uow.query_one("SELECT cost,points FROM activity_point_purchase_operations")
+            self.assertEqual((cost, cost), tuple(as_int_like(value) for value in receipt.values()))
         before = self.snapshot(database)
         self.assertEqual("duplicate", repo.lookup_receipt("large", "u").status)
+        self.assertEqual(before, self.snapshot(database))
+
+    def test_unrecoverable_shop_balance_and_receipt_refuse_without_writes(self):
+        database, _, repo, _ = self.fixture("shop", "feature")
+        with DatabaseUnitOfWork(database) as uow:
+            uow.execute("UPDATE activity_point_balance SET points=?", (float(10**29),))
+        before = self.snapshot(database)
+        with self.assertRaises(DomainError) as caught:
+            repo.purchase("bad", "u", "a", "i", 1, 100, 0, 0, self.rewards, 100)
+        self.assertEqual(("activity_points_precision_lost_real", "u"),
+                         (caught.exception.details["reason"], caught.exception.details["subject"]))
+        self.assertEqual(before, self.snapshot(database))
+        with DatabaseUnitOfWork(database) as uow:
+            uow.execute("UPDATE activity_point_balance SET points=1000")
+        self.assertTrue(repo.purchase("valid", "u", "a", "i", 1, 100, 0, 0, self.rewards, 100).succeeded)
+        with DatabaseUnitOfWork(database) as uow:
+            uow.execute("UPDATE activity_point_purchase_operations SET points=?", (float(10**29),))
+        before = self.snapshot(database)
+        with self.assertRaises(DomainError) as caught:
+            repo.lookup_receipt("valid", "u")
+        self.assertEqual("receipt_corrupt", caught.exception.details["reason"])
+        self.assertEqual(before, self.snapshot(database))
+
+    def test_safe_integer_real_receipt_projection_remains_compatible(self):
+        database, _, repo, _ = self.fixture("shop", "feature")
+        self.assertTrue(repo.purchase("safe", "u", "a", "i", 1, 100, 0, 0, self.rewards, 100).succeeded)
+        with DatabaseUnitOfWork(database, read_only=True) as uow:
+            previous = uow.query_one("SELECT * FROM activity_point_purchase_operations")
+        for field in ("quantity", "cost", "points", "personal_count", "total_count"):
+            previous[field] = float(previous[field])
+        before = self.snapshot(database)
+        result = repo._decode_receipt(previous, "u")
+        self.assertEqual(("duplicate", 100, 900), (result.status, result.cost, result.points))
         self.assertEqual(before, self.snapshot(database))
 
     def test_corrupt_collect_receipt_keeps_specific_reason_and_no_business_write(self):

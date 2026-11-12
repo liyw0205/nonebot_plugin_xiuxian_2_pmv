@@ -193,14 +193,12 @@ class EconomyRepository:
                     (numeric.bind_sqlite_param(after, exact=True), rowid, user_id,
                      numeric.bind_sqlite_param(before, exact=True)))
         if cur.rowcount != 1:
-            from nonebot_plugin_xiuxian_2.core.errors import DomainError
-            raise DomainError("stone_write_rejected", "stone snapshot write rejected",
+            raise numeric._domain_error_type()("stone_write_rejected", "stone snapshot write rejected",
                               {"reason": "stone_write_rejected", "subject": str(user_id)})
         cur.execute("SELECT stone FROM user_xiuxian WHERE rowid=%s", (rowid,))
         row = cur.fetchone()
         if row is None or numeric.require_exact_integer(row[0], field="stone", subject=str(user_id)) != after:
-            from nonebot_plugin_xiuxian_2.core.errors import DomainError
-            raise DomainError("stone_write_rejected", "stone persisted balance differs",
+            raise numeric._domain_error_type()("stone_write_rejected", "stone persisted balance differs",
                               {"reason": "stone_write_rejected", "subject": str(user_id)})
 
     def transfer_stones(
