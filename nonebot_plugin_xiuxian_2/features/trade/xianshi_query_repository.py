@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Any, Protocol
 
 from ...infrastructure.database import DatabaseUnitOfWork
+from ...core.numeric import require_exact_integer
 
 
 class XianshiQueryRepository(Protocol):
@@ -67,7 +68,7 @@ class XianshiQuerySqlRepository:
             sql = "SELECT * FROM xianshi_item"
             if filters:
                 sql += " WHERE " + " AND ".join(filters)
-            return uow.query_all(sql, params)
+            return [{**row, "price": require_exact_integer(row["price"], field="listing_price", subject=str(row["id"]))} for row in uow.query_all(sql, params)]
 
     def my_trades(self, user_id: str, *, limit: int = 5) -> list[dict[str, Any]]:
         """Read the player's recent Xianshi purchases and sales (read-only)."""

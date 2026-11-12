@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from ...core.numeric import as_int_like
+from ...core.numeric import as_int_like, bind_sqlite_param, require_exact_integer
+from ...core.errors import DomainError
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Literal, Mapping
@@ -38,6 +39,7 @@ class XianshiPurchaseResult:
     total_cost: int = 0
     stamina_charged: int = 0
     reason: str = ""
+    subject: str = ""
 
     @property
     def succeeded(self) -> bool:
@@ -74,7 +76,7 @@ class XianshiPurchaseSqlRepository:
             for row in completed:
                 row["price"] = as_int_like(row.pop("total_cost")) // int(row["quantity"])
             frozen = {str(row["id"]): row for row in completed}
-            frozen.update({str(row["id"]): row for row in listings if str(row["id"]) not in frozen})
+            frozen.update({str(row["id"]): {**row, "price": require_exact_integer(row["price"], field="listing_price", subject=str(row["id"]))} for row in listings if str(row["id"]) not in frozen})
             candidates = sorted(
                 (dict(row) for row in frozen.values() if str(row["user_id"]) not in {buyer_id, "0"} and row["name"] in names),
                 key=lambda row: (as_int_like(row["price"]), str(row["id"])),
@@ -109,7 +111,7 @@ class XianshiPurchaseSqlRepository:
             name=str(row["name"]),
             goods_type=str(row["goods_type"]),
             quantity=int(row["quantity"]),
-            total_cost=int(row["total_cost"]),
+            total_cost=require_exact_integer(row["total_cost"], field="purchase_receipt_cost", subject=str(row["buyer_id"])),
             stamina_charged=int(row["stamina_charged"]),
         )
 
@@ -166,7 +168,9 @@ class XianshiPurchaseSqlRepository:
             goods_id = int(listing["goods_id"])
             name = str(listing["name"])
             goods_type = str(listing["type"])
-            price = int(listing["price"])
+            price = require_exact_integer(listing["price"], field="listing_price", subject=listing_id)
+            if price < 0:
+                raise DomainError("currency_invalid_price", "listing price is negative", {"reason": "listing_price_negative", "subject": listing_id})
             stock = int(listing["quantity"])
             total_cost = price * quantity
             result = XianshiPurchaseResult(
@@ -179,18 +183,25 @@ class XianshiPurchaseSqlRepository:
             if stock != -1 and stock < quantity:
                 return replace(result, status="stock_insufficient")
 
-            buyer = uow.query_one(
+            buyers = uow.query_all(
                 "SELECT stone FROM user_xiuxian WHERE user_id=?", (buyer_id,)
             )
-            if buyer is None:
+            if not buyers:
                 return replace(result, status="buyer_missing")
-            if as_int_like(buyer["stone"] or 0) < total_cost:
+            if len(buyers) != 1:
+                return replace(result, status="state_changed", reason="account_rows_inconsistent", subject="buyer")
+            buyer_stone = require_exact_integer(buyers[0]["stone"], field="stone", subject="buyer")
+            if buyer_stone < total_cost:
                 return replace(result, status="stone_insufficient")
 
-            if seller_id != "0" and uow.query_one(
-                "SELECT 1 AS present FROM user_xiuxian WHERE user_id=?", (seller_id,)
-            ) is None:
-                return replace(result, status="seller_missing")
+            seller_stone = 0
+            if seller_id != "0":
+                sellers = uow.query_all("SELECT stone FROM user_xiuxian WHERE user_id=?", (seller_id,))
+                if not sellers:
+                    return replace(result, status="seller_missing")
+                if len(sellers) != 1:
+                    return replace(result, status="state_changed", reason="account_rows_inconsistent", subject="seller")
+                seller_stone = require_exact_integer(sellers[0]["stone"], field="stone", subject="seller")
 
             inventory = uow.query_one(
                 "SELECT goods_num FROM back WHERE user_id=? AND goods_id=?",
@@ -222,17 +233,18 @@ class XianshiPurchaseSqlRepository:
                     )
                     result = replace(result, stamina_charged=stamina_cost)
 
-            uow.execute(
-                "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)-CAST(? AS REAL) "
-                "WHERE user_id=?",
-                (total_cost, buyer_id),
-            )
+            settlements = [(buyer_id, buyer_stone, buyer_stone - total_cost, "buyer")]
             if seller_id != "0":
-                uow.execute(
-                    "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)+CAST(? AS REAL) "
-                    "WHERE user_id=?",
-                    (total_cost, seller_id),
+                settlements.append((seller_id, seller_stone, seller_stone + total_cost, "seller"))
+            for uid, before, after, subject in settlements:
+                changed = uow.execute(
+                    "UPDATE user_xiuxian SET stone=xiuxian_int_store(?,'stone','actor') WHERE user_id=? "
+                    "AND xiuxian_int_cmp(COALESCE(stone,0),?,1,'stone','actor')=0",
+                    (bind_sqlite_param(after, exact=True), uid, bind_sqlite_param(before, exact=True)),
                 )
+                saved = uow.query_one("SELECT stone FROM user_xiuxian WHERE user_id=?", (uid,))
+                if changed.rowcount != 1 or saved is None or require_exact_integer(saved["stone"], field="stone", subject=subject) != after:
+                    raise DomainError("stone_write_rejected", "Xianshi wallet settlement was not saved", {"reason": "stone_write_rejected", "subject": subject})
 
             if stock != -1:
                 if stock == quantity:
@@ -257,10 +269,10 @@ class XianshiPurchaseSqlRepository:
             uow.execute(
                 "INSERT INTO xianshi_operations(operation_id,listing_id,buyer_id,seller_id,goods_id,"
                 "name,goods_type,quantity,total_cost,stamina_operation_id,stamina_cost,stamina_charged) "
-                "VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
+                "VALUES(?,?,?,?,?,?,?,?,xiuxian_int_store(?,'stone','actor'),?,?,?)",
                 (
                     operation_id, listing_id, buyer_id, seller_id, goods_id, name,
-                    goods_type, quantity, total_cost, stamina_operation_id,
+                    goods_type, quantity, bind_sqlite_param(total_cost, exact=True), stamina_operation_id,
                     stamina_cost, result.stamina_charged,
                 ),
             )

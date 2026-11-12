@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from ...core.numeric import as_int_like
+from ...core.numeric import as_int_like, require_exact_integer
 import json
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -59,14 +59,14 @@ class GuishiOrderMatchSqlRepository:
                 normalized[str(key)] = int(value)
             except (TypeError, ValueError):
                 continue
-        return as_int_like(row.get("stored_stone") or 0), normalized
+        return require_exact_integer(row.get("stored_stone"), field="stored_stone", subject=user_id), normalized
 
     @staticmethod
     def _save_info(
         uow: DatabaseUnitOfWork, user_id: str, stored_stone: int, items: dict[str, int]
     ) -> None:
         uow.execute(
-            "INSERT INTO guishi_info(user_id,stored_stone,items) VALUES(?,?,?) "
+            "INSERT INTO guishi_info(user_id,stored_stone,items) VALUES(?,xiuxian_int_store(?,'stored_stone','actor'),?) "
             "ON CONFLICT(user_id) DO UPDATE SET stored_stone=excluded.stored_stone,"
             "items=excluded.items",
             (user_id, int(stored_stone), json.dumps(items, ensure_ascii=False, sort_keys=True)),

@@ -140,8 +140,8 @@ class SectShopPurchaseService:
                 contribution = _safe_int(contribution - cost)
                 materials = _safe_int(materials - cost)
                 purchased += quantity
-                conn.execute("UPDATE user_xiuxian SET sect_contribution=%s WHERE user_id=%s", (contribution, user_id))
-                conn.execute("UPDATE sects SET sect_materials=%s WHERE sect_id=%s", (materials, sect_id))
+                conn.execute("UPDATE user_xiuxian SET sect_contribution=xiuxian_int_store(%s,'sect_contribution','actor') WHERE user_id=%s", (contribution, user_id))
+                conn.execute("UPDATE sects SET sect_materials=xiuxian_int_store(%s,'sect_materials','actor') WHERE sect_id=%s", (materials, sect_id))
                 now = datetime.now()
                 conn.execute(
                     "INSERT INTO back (user_id, goods_id, goods_name, goods_type, goods_num, create_time, update_time, bind_num) "
@@ -157,7 +157,7 @@ class SectShopPurchaseService:
                 )
                 conn.execute(
                     "INSERT INTO sect_shop_purchase_operations "
-                    "(operation_id, payload, quantity, cost, contribution, materials, purchased) VALUES (%s, %s, %s, %s, %s, %s, %s)",
+                    "(operation_id, payload, quantity, cost, contribution, materials, purchased) VALUES(%s,%s,%s,xiuxian_int_store(%s,'stone','actor'),%s,%s,%s)",
                     (operation_id, payload, quantity, cost, contribution, materials, purchased),
                 )
                 conn.commit()

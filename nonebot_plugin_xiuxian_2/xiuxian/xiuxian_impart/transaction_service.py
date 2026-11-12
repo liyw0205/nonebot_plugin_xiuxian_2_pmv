@@ -130,8 +130,8 @@ class ImpartDrawService:
                     conn.rollback()
                     return ImpartDrawResult("limit_exceeded")
                 charged = conn.execute(
-                    "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)-CAST(%s AS REAL) "
-                    "WHERE user_id=%s AND xiuxian_int_cmp(COALESCE(stone,0),%s)>=0",
+                    "UPDATE user_xiuxian SET stone=xiuxian_int_store(xiuxian_int_sub(COALESCE(stone,0),%s,'stone','actor')) "
+                    "WHERE user_id=%s AND xiuxian_int_cmp(COALESCE(stone,0),%s,1,'stone','actor')>=0",
                     (cost, user_id, cost),
                 )
                 if charged.rowcount != 1:

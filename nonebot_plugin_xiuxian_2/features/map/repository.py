@@ -755,7 +755,7 @@ class MapResourceRewardSqlRepository:
                     return {"status": "inventory_full", "stone": 0, "rewards": ()}
             uow.execute("UPDATE player_data.map_daily_limit SET gather_count=?,resource_total_count=? WHERE user_id=?", (int(daily["gather_count"] or 0) + 1, int(daily["resource_total_count"] or 0) + 1, user_id))
             if stone:
-                uow.execute("UPDATE user_xiuxian SET stone=COALESCE(stone,0)+? WHERE user_id=?", (stone, user_id))
+                uow.execute("UPDATE user_xiuxian SET stone=xiuxian_int_store(xiuxian_int_add(COALESCE(stone,0),?,'stone','actor')) WHERE user_id=?", (stone, user_id))
             now = self.clock.now() if self.clock is not None else None
             now_value = now.isoformat() if now is not None else ""
             for item_id, amount in totals.items():
@@ -764,7 +764,7 @@ class MapResourceRewardSqlRepository:
             uow.execute("UPDATE player_data.map_interactive_actions SET status='completed',updated_at=? WHERE user_id=? AND action_id=? AND status='active'", (now_value or cooldown_until, user_id, action_id))
             uow.execute("INSERT INTO player_data.map_cooldown(user_id,gather_cd_until) VALUES(?,?) ON CONFLICT(user_id) DO UPDATE SET gather_cd_until=excluded.gather_cd_until", (user_id, cooldown_until))
             compact = tuple(sorted(totals.items()))
-            uow.execute("INSERT INTO map_resource_reward_operations(operation_id,payload,stone,rewards) VALUES(?,?,?,?)", (operation_id, payload, stone, json.dumps(compact)))
+            uow.execute("INSERT INTO map_resource_reward_operations(operation_id,payload,stone,rewards) VALUES(?,?,xiuxian_int_store(?,'stone','actor'),?)", (operation_id, payload, stone, json.dumps(compact)))
             return {"status": "applied", "stone": stone, "rewards": compact}
 
 
@@ -856,13 +856,13 @@ class MapExploreSettlementSqlRepository:
             uow.execute("UPDATE player_data.map_daily_limit SET explore_count=?,resource_total_count=? WHERE user_id=?", (int(daily_row["explore_count"] or 0) + 1, int(daily_row["resource_total_count"] or 0) + 1, user_id))
             uow.execute("UPDATE player_data.map_explore_status SET running=0,node_type='',node_name='',start_time='',duration_min=0,settlement='',max_duration_min=0,interval_min=0 WHERE user_id=?", (user_id,))
             if stone:
-                uow.execute("UPDATE user_xiuxian SET stone=COALESCE(stone,0)+? WHERE user_id=?", (stone, user_id))
+                uow.execute("UPDATE user_xiuxian SET stone=xiuxian_int_store(xiuxian_int_add(COALESCE(stone,0),?,'stone','actor')) WHERE user_id=?", (stone, user_id))
             now = self.clock.now().isoformat()
             for item_id, amount in totals.items():
                 name, item_type = metadata[item_id]
                 uow.execute("INSERT INTO back(user_id,goods_id,goods_name,goods_type,goods_num,create_time,update_time,bind_num) VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(user_id,goods_id) DO UPDATE SET goods_num=back.goods_num+excluded.goods_num,bind_num=COALESCE(back.bind_num,0)+excluded.bind_num,update_time=excluded.update_time", (user_id, item_id, name, item_type, amount, now, now, amount))
             compact = tuple(sorted(totals.items()))
-            uow.execute("INSERT INTO map_explore_settlement_operations(operation_id,payload,stone,rewards) VALUES(?,?,?,?)", (operation_id, payload, stone, json.dumps(compact)))
+            uow.execute("INSERT INTO map_explore_settlement_operations(operation_id,payload,stone,rewards) VALUES(?,?,xiuxian_int_store(?,'stone','actor'),?)", (operation_id, payload, stone, json.dumps(compact)))
             return {"status": "applied", "stone": stone, "rewards": compact}
 
 
@@ -900,11 +900,11 @@ class MapMissionClaimSqlRepository:
                 item=uow.query_one('SELECT COALESCE(goods_num,0) AS goods_num FROM back WHERE user_id=? AND goods_id=?',(user_id,item_id))
                 if (int(item['goods_num']) if item else 0)+amount>max_goods_num:return {'status':'inventory_full','stone':0,'rewards':()}
             uow.execute('UPDATE player_data.map_mission SET claimed=1 WHERE user_id=?',(user_id,))
-            if stone:uow.execute('UPDATE user_xiuxian SET stone=COALESCE(stone,0)+? WHERE user_id=?',(stone,user_id))
+            if stone:uow.execute('UPDATE user_xiuxian SET stone=xiuxian_int_store(xiuxian_int_add(COALESCE(stone,0),?,\'stone\',\'actor\')) WHERE user_id=?',(stone,user_id))
             now=self.clock.now().isoformat()
             for item_id,amount in totals.items():
                 name,item_type=meta[item_id];uow.execute('INSERT INTO back(user_id,goods_id,goods_name,goods_type,goods_num,create_time,update_time,bind_num) VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(user_id,goods_id) DO UPDATE SET goods_num=back.goods_num+excluded.goods_num,bind_num=COALESCE(back.bind_num,0)+excluded.bind_num,update_time=excluded.update_time',(user_id,item_id,name,item_type,amount,now,now,amount))
-            compact=tuple(sorted(totals.items()));uow.execute('INSERT INTO map_mission_claim_operations(operation_id,payload,stone,rewards) VALUES(?,?,?,?)',(operation_id,payload,stone,json.dumps(compact)))
+            compact=tuple(sorted(totals.items()));uow.execute('INSERT INTO map_mission_claim_operations(operation_id,payload,stone,rewards) VALUES(?,?,xiuxian_int_store(?,\'stone\',\'actor\'),?)',(operation_id,payload,stone,json.dumps(compact)))
             occurred_at = self.clock.now().isoformat()
             frozen_meta = {
                 "source": "map",
@@ -959,7 +959,7 @@ class MapSeedPurchaseSqlRepository:
             if stone<cost:return {'status':'stone_insufficient','quantity':0,'cost':0,'stone':stone,'inventory':0}
             row=uow.query_one('SELECT COALESCE(goods_num,0) AS goods_num FROM back WHERE user_id=? AND goods_id=?',(user_id,item_id));inventory=int(row['goods_num']) if row else 0
             if inventory+quantity>max_goods_num:return {'status':'inventory_full','quantity':0,'cost':0,'stone':stone,'inventory':inventory}
-            stone-=cost;inventory+=quantity;now=self.clock.now().isoformat();uow.execute('UPDATE user_xiuxian SET stone=? WHERE user_id=?',(stone,user_id));uow.execute("INSERT INTO back(user_id,goods_id,goods_name,goods_type,goods_num,create_time,update_time,bind_num) VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(user_id,goods_id) DO UPDATE SET goods_name=excluded.goods_name,goods_type=excluded.goods_type,goods_num=back.goods_num+excluded.goods_num,bind_num=COALESCE(back.bind_num,0)+excluded.bind_num,update_time=excluded.update_time",(user_id,item_id,item_name,'特殊物品',quantity,now,now,quantity));uow.execute('INSERT INTO map_seed_purchase_operations(operation_id,payload,quantity,cost,stone,inventory) VALUES(?,?,?,?,?,?)',(operation_id,payload,quantity,cost,stone,inventory));return {'status':'applied','quantity':quantity,'cost':cost,'stone':stone,'inventory':inventory}
+            stone-=cost;inventory+=quantity;now=self.clock.now().isoformat();uow.execute('UPDATE user_xiuxian SET stone=xiuxian_int_store(?,\'stone\',\'actor\') WHERE user_id=?',(stone,user_id));uow.execute("INSERT INTO back(user_id,goods_id,goods_name,goods_type,goods_num,create_time,update_time,bind_num) VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(user_id,goods_id) DO UPDATE SET goods_name=excluded.goods_name,goods_type=excluded.goods_type,goods_num=back.goods_num+excluded.goods_num,bind_num=COALESCE(back.bind_num,0)+excluded.bind_num,update_time=excluded.update_time",(user_id,item_id,item_name,'特殊物品',quantity,now,now,quantity));uow.execute('INSERT INTO map_seed_purchase_operations(operation_id,payload,quantity,cost,stone,inventory) VALUES(?,?,?,xiuxian_int_store(?,\'stone\',\'actor\'),xiuxian_int_store(?,\'stone\',\'actor\'),?)',(operation_id,payload,quantity,cost,stone,inventory));return {'status':'applied','quantity':quantity,'cost':cost,'stone':stone,'inventory':inventory}
 
 
 class MapDongfuBuildSqlRepository:
@@ -980,7 +980,7 @@ class MapDongfuBuildSqlRepository:
             if pos is None or tuple(str(pos[k]) for k in position)!=tuple(position.values()):return {'status':'state_changed','stone':stone}
             existing=uow.query_one('SELECT built FROM player_data.dongfu_status WHERE user_id=?',(user_id,))
             if existing is not None and int(existing['built'] or 0)==1:return {'status':'already_built','stone':stone}
-            remaining=stone-cost;uow.execute('UPDATE user_xiuxian SET stone=? WHERE user_id=?',(remaining,user_id));fields=('built','realm','heaven','node_id','node_name','node_type');uow.execute('INSERT INTO player_data.dongfu_status(user_id,'+','.join(fields)+') VALUES('+','.join(['?']*7)+') ON CONFLICT(user_id) DO UPDATE SET '+','.join(f'{k}=excluded.{k}' for k in fields),(user_id,*(dongfu.get(k,'') for k in fields)));uow.execute('INSERT INTO map_dongfu_build_operations(operation_id,payload,stone) VALUES(?,?,?)',(operation_id,payload,remaining));return {'status':'applied','stone':remaining}
+            remaining=stone-cost;uow.execute('UPDATE user_xiuxian SET stone=xiuxian_int_store(?,\'stone\',\'actor\') WHERE user_id=?',(remaining,user_id));fields=('built','realm','heaven','node_id','node_name','node_type');uow.execute('INSERT INTO player_data.dongfu_status(user_id,'+','.join(fields)+') VALUES('+','.join(['?']*7)+') ON CONFLICT(user_id) DO UPDATE SET '+','.join(f'{k}=excluded.{k}' for k in fields),(user_id,*(dongfu.get(k,'') for k in fields)));uow.execute('INSERT INTO map_dongfu_build_operations(operation_id,payload,stone) VALUES(?,?,xiuxian_int_store(?,\'stone\',\'actor\'))',(operation_id,payload,remaining));return {'status':'applied','stone':remaining}
 
 
 class MapCombatLifecycleQueryRepository:

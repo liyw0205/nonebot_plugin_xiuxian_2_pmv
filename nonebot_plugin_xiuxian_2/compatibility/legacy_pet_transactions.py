@@ -110,7 +110,7 @@ class PetTravelClaimService:
                 ).rowcount != 1:
                     conn.rollback()
                     return result("state_changed")
-                conn.execute("UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)+CAST(%s AS REAL), exp=CAST(COALESCE(exp,0) AS REAL)+CAST(%s AS REAL) WHERE user_id=%s", (stone, exp, user_id))
+                conn.execute("UPDATE user_xiuxian SET stone=xiuxian_int_store(xiuxian_int_add(COALESCE(stone,0),%s,'stone','actor')), exp=CAST(COALESCE(exp,0) AS REAL)+CAST(%s AS REAL) WHERE user_id=%s", (stone, exp, user_id))
                 now = datetime.now()
                 for item_id, name, item_type, amount in rewards:
                     conn.execute(
@@ -478,8 +478,8 @@ class PetHatchService:
                         return PetHatchResult("uid_conflict")
                     raise
                 stone_updated = conn.execute(
-                    "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)-CAST(%s AS REAL) "
-                    "WHERE user_id=%s AND xiuxian_int_cmp(COALESCE(stone,0),%s)=0",
+                    "UPDATE user_xiuxian SET stone=xiuxian_int_store(xiuxian_int_sub(COALESCE(stone,0),%s,'stone','actor')) "
+                    "WHERE user_id=%s AND xiuxian_int_cmp(COALESCE(stone,0),%s,1,'stone','actor')=0",
                     (cost, user_id, expected_stone),
                 )
                 if getattr(stone_updated, "rowcount", 1) == 0:

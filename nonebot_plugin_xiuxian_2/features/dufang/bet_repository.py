@@ -195,10 +195,10 @@ class DufangBetSqlRepository:
             wallet = as_int_like(user["stone"])
             if wallet < cost:
                 return DufangBetResult("stone_insufficient", wallet_stone=wallet)
-            if uow.execute("UPDATE user_xiuxian SET stone=stone-? WHERE user_id=? AND xiuxian_int_cmp(stone,?)>=0", (cost, user_id, cost)).rowcount != 1:
+            if uow.execute("UPDATE user_xiuxian SET stone=xiuxian_int_store(xiuxian_int_sub(stone,?,'stone','actor')) WHERE user_id=? AND xiuxian_int_cmp(stone,?,1,'stone','actor')>=0", (cost, user_id, cost)).rowcount != 1:
                 raise DomainError("stone_write_rejected", "dufang bet debit count mismatch")
-            uow.execute("INSERT INTO dufang_bets VALUES(?,?,?,?,?,NULL)", (operation_id, user_id, cost, "pending", placed_at))
-            uow.execute("INSERT INTO dufang_bet_operations VALUES(?,?,?,?,?,CURRENT_TIMESTAMP)", (operation_id, payload, cost, wallet - cost, operation_id))
+            uow.execute("INSERT INTO dufang_bets VALUES(?,?,xiuxian_int_store(?,'stone_amount','actor'),?,?,NULL)", (operation_id, user_id, cost, "pending", placed_at))
+            uow.execute("INSERT INTO dufang_bet_operations VALUES(?,?,xiuxian_int_store(?,'stone_amount','actor'),xiuxian_int_store(?,'stone','actor'),?,CURRENT_TIMESTAMP)", (operation_id, payload, cost, wallet - cost, operation_id))
             uow.execute(
                 "INSERT INTO dufang_bet_resolutions(operation_id,plan_json,created_at) VALUES(?,?,?)",
                 (operation_id, resolution_json, placed_at),

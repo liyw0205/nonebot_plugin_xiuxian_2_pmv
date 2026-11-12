@@ -76,7 +76,7 @@ class SectScheduledMaterialSqlRepository:
                 )["materials"]
             )
             uow.execute(
-                "UPDATE sects SET sect_materials=?,combat_power=? WHERE sect_id=?",
+                "UPDATE sects SET sect_materials=xiuxian_int_store(?,'sect_materials','actor'),combat_power=? WHERE sect_id=?",
                 (str(current_materials + materials), str(combat_power), sect_id),
             )
             uow.execute(

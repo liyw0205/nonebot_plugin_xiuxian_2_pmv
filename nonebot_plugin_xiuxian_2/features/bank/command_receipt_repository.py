@@ -3,7 +3,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from ...core.numeric import SQLITE_MAX_INT, SQLITE_MIN_INT, as_int_like
+from ...core.numeric import require_exact_integer
+from ...core.errors import DomainError
 from ...infrastructure.database import DatabaseUnitOfWork
 
 
@@ -37,21 +38,14 @@ class BankCommandReceiptRepository:
 
     @staticmethod
     def _stored_number(value):
-        number = as_int_like(value, -1)
+        number = require_exact_integer(value, field="bank_receipt", subject="actor")
         if isinstance(value, bool) or number < 0:
             raise ValueError("invalid stored receipt number")
         return number
 
     @staticmethod
     def _stored_matches(value, expected):
-        # INTEGER-affinity receipts historically round oversized integers to
-        # REAL. Identity still comes from the exact JSON payload, never REAL.
-        if isinstance(value, float) and not SQLITE_MIN_INT <= expected <= SQLITE_MAX_INT:
-            try:
-                expected = as_int_like(float(expected), -1)
-            except OverflowError:
-                return False
-        return not isinstance(value, bool) and as_int_like(value, None) == expected
+        return not isinstance(value, bool) and require_exact_integer(value, field="bank_receipt", subject="actor") == expected
 
     def _unified(self, row):
         payload = json.loads(row["payload"])
@@ -136,6 +130,10 @@ class BankCommandReceiptRepository:
                     if len(receipts) != 1:
                         return {"action": action, "status": "operation_conflict"}
                     receipt = receipts[0]
+        except DomainError as exc:
+            if exc.code != "currency_precision_unavailable":
+                raise
+            return {"action": action, "status": "receipt_invalid", **exc.details}
         except (ValueError, TypeError, KeyError):
             return {"action": action, "status": "receipt_invalid"}
         previous_user, previous_action, previous_amount, result = receipt

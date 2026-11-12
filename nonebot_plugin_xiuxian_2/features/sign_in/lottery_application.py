@@ -59,7 +59,7 @@ class LotteryApplication:
             after = before + deposit - prize
             wallet = as_int_like(user["stone"]) + prize
             if prize:
-                changed = uow.execute("UPDATE user_xiuxian SET stone=COALESCE(stone,0)+? WHERE user_id=?", (prize, user_id))
+                changed = uow.execute("UPDATE user_xiuxian SET stone=xiuxian_int_store(xiuxian_int_add(COALESCE(stone,0),?,'stone','actor')) WHERE user_id=?", (prize, user_id))
                 if changed.rowcount != 1:
                     raise RuntimeError("lottery wallet changed")
             participants = self.repository.participant_count(uow, day) + 1

@@ -9,7 +9,8 @@ from types import SimpleNamespace
 from threading import RLock
 from unittest.mock import patch
 
-from nonebot_plugin_xiuxian_2.core.numeric import as_int_like
+from nonebot_plugin_xiuxian_2.core.errors import DomainError
+from nonebot_plugin_xiuxian_2.core.numeric import as_int_like, bind_sqlite_param
 from nonebot_plugin_xiuxian_2.features.arena.state_repository import ArenaStateRepository
 from nonebot_plugin_xiuxian_2.features.arena.migrations import apply_arena_state
 from nonebot_plugin_xiuxian_2.features.boss.integral_repository import BossIntegralSqlRepository
@@ -62,15 +63,25 @@ class LegacyNumericReadModelsTests(unittest.TestCase):
         self.assertEqual(100000000000000000002, repository.get_integral('large').integral)
         self.assertEqual(1, repository.integral_rank('large').rank)
 
-    def test_boss_real_snapshot_above_int64_remains_usable(self):
+    def test_boss_unrecoverable_real_refuses_and_exact_large_balance_is_usable(self):
         with DatabaseUnitOfWork(self.player) as uow:
             uow.execute('CREATE TABLE boss_limit(user_id TEXT,integral INTEGER)')
             uow.execute('INSERT INTO boss_limit VALUES(?,?)', ('real', 1e29))
         repository = BossIntegralSqlRepository(self.player)
-        expected = as_int_like(1e29)
-        self.assertEqual(expected, repository.get_integral('real').integral)
-        result = repository.grant_integral('real', 10**28)
+        before = self.snapshot()
+        for action in (lambda: repository.get_integral('real'), lambda: repository.grant_integral('real', 10**28)):
+            with self.assertRaises(DomainError) as caught:
+                action()
+            self.assertEqual('boss_integral_precision_lost_real', caught.exception.details['reason'])
+            self.assertEqual('real', caught.exception.details['subject'])
+            self.assertEqual(before, self.snapshot())
+        expected = 10**29 + 1
+        with DatabaseUnitOfWork(self.player) as uow:
+            uow.execute('INSERT INTO boss_limit VALUES(?,?)', ('exact', bind_sqlite_param(expected, exact=True)))
+        self.assertEqual(expected, repository.get_integral('exact').integral)
+        result = repository.grant_integral('exact', 10**28)
         self.assertEqual(('applied', expected + 10**28), (result.status, result.value))
+        self.assertEqual(expected + 10**28, repository.get_integral('exact').integral)
 
     def test_boss_write_rejection_does_not_mutate_first_or_duplicate_rows(self):
         repository = self.boss()

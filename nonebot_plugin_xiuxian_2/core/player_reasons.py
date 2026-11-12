@@ -453,8 +453,32 @@ REASONS = {
     "hp_changed": "气血与发起时不一致，请查看当前气血后重新操作。",
     "mp_changed": "真元与发起时不一致，请查看当前真元后重新操作。",
     "legacy_rejection": "这条旧请求回执没有记录拒绝细项，请查询当前状态后发送一条新命令。",
+    "boss_purchase_receipt_invalid": "世界商店历史购买回执的请求、数量、扣费或余额投影不一致，未再次结算；请管理员核对该操作记录。",
 }
 
 
 def reason_text(code: str) -> str | None:
+    labels = {
+        "stone": "灵石余额", "saved_stone": "灵庄存款", "stored_stone": "鬼市托管灵石",
+        "listing_price": "仙肆价格", "activity_points": "活动积分", "training_points": "历练积分",
+        "tower_score": "通天塔积分", "arena_honor": "竞技场荣誉", "boss_integral": "世界积分",
+        "sect_contribution": "宗门贡献", "sect_materials": "宗门资材",
+        "sect_used_stone": "宗门灵石储备", "stone_amount": "灵石金额",
+        "stone_delta": "灵石流水", "exp_delta": "修为流水",
+        "sect_contribution_delta": "宗门贡献流水", "sect_scale_delta": "宗门规模流水",
+        "sect_materials_delta": "宗门资材流水", "ledger_delta": "历史资产流水",
+        "boss_receipt_cost": "世界商店扣费回执", "boss_receipt_integral": "世界商店余额回执",
+        "boss_receipt_request": "世界商店历史请求参数", "boss_receipt_quantity": "世界商店数量回执",
+        "boss_receipt_purchased": "世界商店限购回执", "boss_receipt_inventory": "世界商店库存回执",
+        "bank_receipt": "灵庄历史结算回执",
+        "admin_receipt_stone": "管理员调账余额回执",
+        "admin_receipt_delta": "管理员调账金额回执",
+        "purchase_receipt_cost": "仙肆购买扣费回执",
+        "training_receipt_points": "历练兑换余额回执",
+    }
+    for field, label in labels.items():
+        if code == field + "_precision_lost_real":
+            return label + "的历史 REAL 记录已无法确定精确整数，未结算；请管理员对照可信流水核查。"
+        if code == field + "_invalid_numeric_value":
+            return label + "记录不是有效整数，未结算；请管理员核查该字段。"
     return REASONS.get(str(code))

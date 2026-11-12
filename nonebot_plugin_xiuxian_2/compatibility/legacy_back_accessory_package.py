@@ -205,7 +205,7 @@ class AccessoryPackageService:
 
                 if stone_delta:
                     updated = conn.execute(
-                        "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)+CAST(%s AS REAL) "
+                        "UPDATE user_xiuxian SET stone=xiuxian_int_store(xiuxian_int_add(COALESCE(stone,0),%s,'stone','actor')) "
                         "WHERE user_id=%s AND stone+%s>=0",
                         (stone_delta, user_id, stone_delta),
                     )

@@ -121,8 +121,8 @@ class WorkAbortCleanupService:
                 remaining = stone - applied_penalty
                 if applied_penalty:
                     changed = conn.execute(
-                        "UPDATE user_xiuxian SET stone=%s WHERE user_id=%s "
-                        "AND xiuxian_int_cmp(COALESCE(stone,0),%s)=0",
+                        "UPDATE user_xiuxian SET stone=xiuxian_int_store(%s,'stone','actor') WHERE user_id=%s "
+                        "AND xiuxian_int_cmp(COALESCE(stone,0),%s,1,'stone','actor')=0",
                         (remaining, user_id, stone),
                     )
                     if changed.rowcount < 1:

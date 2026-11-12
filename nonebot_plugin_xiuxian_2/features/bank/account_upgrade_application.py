@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from ...core.numeric import as_int_like
+from ...core.numeric import as_int_like, require_exact_integer
 import json
 from pathlib import Path
 from typing import Any, Mapping
@@ -53,7 +53,7 @@ class BankUpgradeApplication:
             if current_level != str(expected_level):
                 return {"status": "state_changed", "reason": "bank_level_changed", "operation_id": operation_id}
             try:
-                decision = decide_upgrade(wallet=as_int_like(wallet["stone"] or 0), current_level=current_level, expected_level=str(expected_level), next_level=str(next_level), cost=int(cost))
+                decision = decide_upgrade(wallet=require_exact_integer(wallet["stone"], field="stone", subject=user_id), current_level=current_level, expected_level=str(expected_level), next_level=str(next_level), cost=int(cost))
             except ValueError as exc:
                 if str(exc) == "stone_insufficient":
                     return {"status": str(exc), "operation_id": operation_id}

@@ -207,14 +207,15 @@ class EconomyLedgerSqlRepository:
             return _empty_summary()
 
         def sum_expr(field: str) -> str:
-            return f'COALESCE(xiuxian_int_sum({_quote(field)}), 0)' if field in columns else "0"
+            context = f",'{field}','ledger'" if field != "exp_delta" else ""
+            return f"COALESCE(xiuxian_int_sum({_quote(field)}{context}), 0)" if field in columns else "0"
 
         stone_in = (
-            'COALESCE(xiuxian_int_sum(CASE WHEN xiuxian_int_cmp("stone_delta",0)>0 THEN "stone_delta" ELSE 0 END),0)'
+            'COALESCE(xiuxian_int_sum(CASE WHEN xiuxian_int_cmp("stone_delta",0,1,\'stone_delta\',\'ledger\')>0 THEN "stone_delta" ELSE 0 END,\'stone_delta\',\'ledger\'),0)'
             if "stone_delta" in columns else "0"
         )
         stone_out = (
-            'xiuxian_int_abs(COALESCE(xiuxian_int_sum(CASE WHEN xiuxian_int_cmp("stone_delta",0)<0 THEN "stone_delta" ELSE 0 END),0))'
+            'xiuxian_int_abs(COALESCE(xiuxian_int_sum(CASE WHEN xiuxian_int_cmp("stone_delta",0,1,\'stone_delta\',\'ledger\')<0 THEN "stone_delta" ELSE 0 END,\'stone_delta\',\'ledger\'),0))'
             if "stone_delta" in columns else "0"
         )
         unique_users = "COUNT(DISTINCT user_id)" if "user_id" in columns else "0"
@@ -243,10 +244,10 @@ class EconomyLedgerSqlRepository:
             return {"stone_in": "0", "stone_out": "0", "stone_net": "0", "gross_stone": "0"}
         stone = f'{alias}.{_quote("stone_delta")}' if alias else _quote("stone_delta")
         return {
-            "stone_in": f"COALESCE(xiuxian_int_sum(CASE WHEN xiuxian_int_cmp({stone},0)>0 THEN {stone} ELSE 0 END),0)",
-            "stone_out": f"xiuxian_int_abs(COALESCE(xiuxian_int_sum(CASE WHEN xiuxian_int_cmp({stone},0)<0 THEN {stone} ELSE 0 END),0))",
-            "stone_net": f"COALESCE(xiuxian_int_sum({stone}),0)",
-            "gross_stone": f"COALESCE(xiuxian_int_sum(xiuxian_int_abs({stone})),0)",
+            "stone_in": f"COALESCE(xiuxian_int_sum(CASE WHEN xiuxian_int_cmp({stone},0,1,'stone_delta','ledger')>0 THEN {stone} ELSE 0 END,'stone_delta','ledger'),0)",
+            "stone_out": f"xiuxian_int_abs(COALESCE(xiuxian_int_sum(CASE WHEN xiuxian_int_cmp({stone},0,1,'stone_delta','ledger')<0 THEN {stone} ELSE 0 END,'stone_delta','ledger'),0))",
+            "stone_net": f"COALESCE(xiuxian_int_sum({stone},'stone_delta','ledger'),0)",
+            "gross_stone": f"COALESCE(xiuxian_int_sum(xiuxian_int_abs({stone},'stone_delta','ledger')),0)",
         }
 
     @staticmethod

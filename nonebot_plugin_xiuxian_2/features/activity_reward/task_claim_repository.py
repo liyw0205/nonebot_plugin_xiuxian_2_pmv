@@ -324,7 +324,7 @@ class ActivityTaskClaimRepository:
                     now = self.clock.now().isoformat()
                     if int(request["stone"]):
                         changed = uow.execute(
-                            "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)+? WHERE user_id=?",
+                            "UPDATE user_xiuxian SET stone=xiuxian_int_store(xiuxian_int_add(COALESCE(stone,0),?,'stone','actor')) WHERE user_id=?",
                             (int(request["stone"]), request["user_id"]),
                         )
                         if changed.rowcount != 1:

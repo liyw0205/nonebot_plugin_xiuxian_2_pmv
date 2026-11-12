@@ -6,7 +6,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from ...core.numeric import SQLITE_MAX_INT, SQLITE_MIN_INT, as_int_like
+from ...core.numeric import as_int_like, bind_sqlite_param, require_exact_integer, exact_crystal_integer
 from ...infrastructure.database import DatabaseUnitOfWork
 from ._operation_payload import operation_payload_matches
 from .redemption import ActivityRedemptionRejected, require_redemption_write
@@ -37,14 +37,7 @@ class ActivityPointShopPurchaseSqlRepository:
 
     @staticmethod
     def _projection_matches(value, expected: int) -> bool:
-        # Exact request identity stays in JSON; legacy INTEGER-affinity
-        # projections can round oversized values to REAL on storage.
-        if isinstance(value, float) and not SQLITE_MIN_INT <= expected <= SQLITE_MAX_INT:
-            try:
-                expected = as_int_like(float(expected), None)
-            except OverflowError:
-                return False
-        return expected is not None and as_int_like(value, None) == expected
+        return exact_crystal_integer(value) == expected
 
     @staticmethod
     def _decode_receipt(previous, user_id: str) -> ActivityPointShopPurchaseResult:
@@ -54,7 +47,7 @@ class ActivityPointShopPurchaseSqlRepository:
                 raise ValueError("invalid purchase payload")
             if str(payload[0]) != str(user_id):
                 return ActivityPointShopPurchaseResult("operation_conflict")
-            values = tuple(as_int_like(previous[key], None) for key in (
+            values = tuple(exact_crystal_integer(previous[key]) for key in (
                 "quantity", "cost", "points", "personal_count", "total_count"
             ))
             if any(value is None for value in values):
@@ -205,7 +198,7 @@ class ActivityPointShopPurchaseSqlRepository:
                 "WHERE activity_key=? AND user_id=?",
                 (activity_key, user_id),
             )
-            current_points = int((balance or {}).get("points") or 0)
+            current_points = require_exact_integer((balance or {}).get("points"), field="activity_points", subject=user_id)
             if current_points < cost:
                 return ActivityPointShopPurchaseResult(
                     "points_insufficient", points=current_points
@@ -242,6 +235,8 @@ class ActivityPointShopPurchaseSqlRepository:
             )["count"]
             if not player_rows:
                 return ActivityPointShopPurchaseResult("user_missing")
+            wallet = uow.query_one("SELECT stone FROM user_xiuxian WHERE user_id=?", (user_id,))
+            current_stone = require_exact_integer(wallet["stone"], field="stone", subject=user_id) if stone else 0
             for item_id, _, _, amount in item_rows:
                 inventory = uow.query_one(
                     "SELECT COALESCE(goods_num,0) AS goods_num FROM back "
@@ -261,12 +256,14 @@ class ActivityPointShopPurchaseSqlRepository:
             total_count += quantity
             now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             changed = uow.execute(
-                "UPDATE activity_point_balance SET points=CAST(COALESCE(points,0) AS REAL)-"
-                "CAST(? AS REAL) "
-                "WHERE activity_key=? AND user_id=? AND points>=?",
-                (cost, activity_key, user_id, cost),
+                "UPDATE activity_point_balance SET points=? "
+                "WHERE activity_key=? AND user_id=? AND xiuxian_int_cmp(points,?,1)=0",
+                (bind_sqlite_param(points, exact=True), activity_key, user_id, bind_sqlite_param(current_points, exact=True)),
             )
             require_redemption_write(changed, "activity_points_write_rejected")
+            saved = uow.query_one("SELECT points FROM activity_point_balance WHERE activity_key=? AND user_id=?", (activity_key, user_id))
+            if saved is None or require_exact_integer(saved["points"], field="activity_points", subject=user_id) != points:
+                raise ActivityRedemptionRejected("activity_points_write_rejected")
             changed = uow.execute(
                 "INSERT INTO activity_point_purchase(activity_key,user_id,item_key,count,update_time) "
                 "VALUES(?,?,?,?,?) ON CONFLICT(activity_key,user_id,item_key) DO UPDATE SET "
@@ -276,11 +273,14 @@ class ActivityPointShopPurchaseSqlRepository:
             require_redemption_write(changed, "activity_purchase_write_rejected")
             if stone:
                 changed = uow.execute(
-                    "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)+? "
-                    "WHERE user_id=?",
-                    (stone, user_id),
+                    "UPDATE user_xiuxian SET stone=xiuxian_int_store(?,'stone','actor') "
+                    "WHERE user_id=? AND xiuxian_int_cmp(COALESCE(stone,0),?,1,'stone','actor')=0",
+                    (bind_sqlite_param(current_stone + stone, exact=True), user_id, bind_sqlite_param(current_stone, exact=True)),
                 )
                 require_redemption_write(changed, "activity_reward_stone_write_rejected", expected=player_rows)
+                saved = uow.query_one("SELECT stone FROM user_xiuxian WHERE user_id=?", (user_id,))
+                if saved is None or require_exact_integer(saved["stone"], field="stone", subject=user_id) != current_stone + stone:
+                    raise ActivityRedemptionRejected("activity_reward_stone_write_rejected")
             for item_id, name, item_type, amount in item_rows:
                 changed = uow.execute(
                     "INSERT INTO back(user_id,goods_id,goods_name,goods_type,goods_num,"
@@ -299,8 +299,8 @@ class ActivityPointShopPurchaseSqlRepository:
                     operation_id,
                     payload,
                     quantity,
-                    cost,
-                    points,
+                    bind_sqlite_param(cost, exact=True),
+                    bind_sqlite_param(points, exact=True),
                     personal_count,
                     total_count,
                 ),

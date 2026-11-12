@@ -162,7 +162,7 @@ class TowerStateService:
                     conn.execute(
                         "INSERT INTO tower("
                         "user_id,current_floor,max_floor,score,weekly_purchases) "
-                        "VALUES(%s,%s,%s,%s,%s)",
+                        "VALUES(%s,%s,%s,xiuxian_int_store(%s,'tower_score','actor'),%s)",
                         (
                             user_id,
                             state["current_floor"],
@@ -597,12 +597,12 @@ class TowerSettlementService:
                         return result("state_changed")
                 if player is None:
                     conn.execute(
-                        "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)+CAST(%s AS REAL), exp=CAST(COALESCE(exp,0) AS REAL)+CAST(%s AS REAL) WHERE user_id=%s",
+                        "UPDATE user_xiuxian SET stone=xiuxian_int_store(xiuxian_int_add(COALESCE(stone,0),%s,'stone','actor')), exp=CAST(COALESCE(exp,0) AS REAL)+CAST(%s AS REAL) WHERE user_id=%s",
                         (stone, exp, user_id),
                     )
                 else:
                     conn.execute(
-                        "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)+CAST(%s AS REAL), exp=CAST(COALESCE(exp,0) AS REAL)+CAST(%s AS REAL), hp=%s, mp=%s, user_stamina=user_stamina-%s WHERE user_id=%s",
+                        "UPDATE user_xiuxian SET stone=xiuxian_int_store(xiuxian_int_add(COALESCE(stone,0),%s,'stone','actor')), exp=CAST(COALESCE(exp,0) AS REAL)+CAST(%s AS REAL), hp=%s, mp=%s, user_stamina=user_stamina-%s WHERE user_id=%s",
                         (stone, exp, final_hp, final_mp, stamina_cost, user_id),
                     )
                 now = datetime.now()

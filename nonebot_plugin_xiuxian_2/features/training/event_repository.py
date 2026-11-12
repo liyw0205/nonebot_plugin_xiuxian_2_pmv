@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from ...core.numeric import as_int_like
+from ...core.numeric import as_int_like, require_exact_integer, bind_sqlite_param
 
 from ...core.errors import DomainError
 from ...core.player_reasons import reason_text
@@ -33,6 +33,8 @@ class TrainingEventSqlRepository:
 
     @staticmethod
     def _state_value(field: str, value: Any) -> str:
+        if field == "points":
+            return bind_sqlite_param(require_exact_integer(value, field="training_points", subject="actor"), exact=True)
         if field == "weekly_purchases":
             raw = value
             if isinstance(raw, str):
@@ -57,7 +59,10 @@ class TrainingEventSqlRepository:
                     actual_value = {}
                 if actual_value == wanted:
                     continue
-            elif field in {"progress", "points", "completed", "max_progress"}:
+            elif field == "points":
+                if require_exact_integer(actual, field="training_points", subject="actor") == require_exact_integer(wanted, field="training_points", subject="actor"):
+                    continue
+            elif field in {"progress", "completed", "max_progress"}:
                 if as_int_like(actual) == as_int_like(wanted):
                     continue
             elif str(actual) == str(wanted):
@@ -487,7 +492,7 @@ class TrainingEventSqlRepository:
             if changed.rowcount != 1:
                 raise DomainError("training_event_write_rejected", "training event was not saved")
             assets = uow.execute(
-                "UPDATE user_xiuxian SET stone=COALESCE(stone,0)+?,exp=COALESCE(exp,0)+?,"
+                "UPDATE user_xiuxian SET stone=xiuxian_int_store(xiuxian_int_add(COALESCE(stone,0),?,'stone','actor')),exp=COALESCE(exp,0)+?,"
                 "hp=COALESCE(hp,0)+? WHERE user_id=?",
                 (stone_delta, exp_delta, hp_delta, user_id),
             )

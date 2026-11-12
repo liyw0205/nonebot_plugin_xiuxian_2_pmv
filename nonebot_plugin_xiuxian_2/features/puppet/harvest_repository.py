@@ -234,8 +234,8 @@ class PuppetHarvestSqlRepository:
                 return PuppetHarvestResult("harvest_time_changed", user_id, stone_cost=stone_cost)
 
             deducted = uow.execute(
-                "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)-CAST(? AS REAL) "
-                "WHERE user_id=? AND xiuxian_int_cmp(stone,?)>=0 AND puppet_status=1",
+                "UPDATE user_xiuxian SET stone=xiuxian_int_store(xiuxian_int_sub(COALESCE(stone,0),?,'stone','actor')) "
+                "WHERE user_id=? AND xiuxian_int_cmp(stone,?,1,'stone','actor')>=0 AND puppet_status=1",
                 (stone_cost, user_id, stone_cost),
             )
             if deducted.rowcount != 1:

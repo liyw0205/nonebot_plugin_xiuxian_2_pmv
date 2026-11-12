@@ -2014,7 +2014,7 @@ class MentorGraduationService:
                     subject = next(uid for uid, expected in ((mentor_id, values[0]), (apprentice_id, values[1])) if actual.get(uid) != expected)
                     return result("state_changed", "user_missing" if subject not in actual else "stone_changed", subject)
                 for uid, expected, reward in ((mentor_id, values[0], values[3]), (apprentice_id, values[1], values[2])):
-                    if conn.execute("UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)+CAST(%s AS REAL) WHERE user_id=%s AND xiuxian_int_cmp(stone,%s)=0", (reward, uid, expected)).rowcount != 1:
+                    if conn.execute("UPDATE user_xiuxian SET stone=xiuxian_int_store(xiuxian_int_add(COALESCE(stone,0),%s,'stone','actor')) WHERE user_id=%s AND xiuxian_int_cmp(stone,%s,1,'stone','actor')=0", (reward, uid, expected)).rowcount != 1:
                         conn.rollback()
                         raise DomainError("mentor_stone_write_rejected", "mentor graduation balance write did not affect one user", {"subject": "mentor" if uid == mentor_id else "apprentice"})
                     increment_stat(conn, uid, "灵石获取", reward)
@@ -2223,8 +2223,8 @@ class BlessedSpotService:
                     conn.rollback()
                     return BlessedSpotResult("stone_insufficient", user_id, stone_cost)
                 changed = conn.execute(
-                    "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)-CAST(%s AS REAL),blessed_spot_flag=1,blessed_spot_name=%s "
-                    "WHERE user_id=%s AND xiuxian_int_cmp(stone,%s)>=0 AND COALESCE(blessed_spot_flag,0)=0",
+                    "UPDATE user_xiuxian SET stone=xiuxian_int_store(xiuxian_int_sub(COALESCE(stone,0),%s,'stone','actor')),blessed_spot_flag=1,blessed_spot_name=%s "
+                    "WHERE user_id=%s AND xiuxian_int_cmp(stone,%s,1,'stone','actor')>=0 AND COALESCE(blessed_spot_flag,0)=0",
                     (stone_cost, default_name, user_id, stone_cost),
                 )
                 if changed.rowcount != 1:
@@ -2297,7 +2297,7 @@ class BlessedSpotService:
                 if _as_int_like_num(user[0]) < stone_cost:
                     conn.rollback()
                     return BlessedSpotResult("stone_insufficient", user_id, stone_cost, previous_level=current, current_level=current)
-                conn.execute("UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)-CAST(%s AS REAL) WHERE user_id=%s AND xiuxian_int_cmp(stone,%s)>=0", (stone_cost, user_id, stone_cost))
+                conn.execute("UPDATE user_xiuxian SET stone=xiuxian_int_store(xiuxian_int_sub(COALESCE(stone,0),%s,'stone','actor')) WHERE user_id=%s AND xiuxian_int_cmp(stone,%s,1,'stone','actor')>=0", (stone_cost, user_id, stone_cost))
                 changed = conn.execute(f"UPDATE player_data.mix_elixir_info SET {db_backend.quote_ident('灵田数量')}=%s WHERE user_id=%s AND CAST({db_backend.quote_ident('灵田数量')} AS INTEGER)=%s", (str(current + 1), user_id, current))
                 if changed.rowcount != 1:
                     conn.rollback()
@@ -2430,9 +2430,9 @@ class ClosingSettlementService:
                 changed = conn.execute(
                     "UPDATE user_xiuxian SET "
                     "exp=CAST(COALESCE(exp,0) AS REAL)+CAST(%s AS REAL),"
-                    "stone=CAST(COALESCE(stone,0) AS REAL)-CAST(%s AS REAL),"
+                    "stone=xiuxian_int_store(xiuxian_int_sub(COALESCE(stone,0),%s,'stone','actor')),"
                     "hp=%s,mp=%s,atk=%s,power=%s "
-                    "WHERE user_id=%s AND xiuxian_int_cmp(stone,%s)>=0",
+                    "WHERE user_id=%s AND xiuxian_int_cmp(stone,%s,1,'stone','actor')>=0",
                     (exp_gain, stone_cost, hp, mp, atk, power, user_id, stone_cost),
                 )
                 # 坏时间只按 type 清；正常时间仍带 create_time 防并发
@@ -2650,7 +2650,7 @@ class NormalTrainingLifecycleService:
                     hp_gain, mp_gain = max(0, new_hp - old_hp), max(0, new_mp - old_mp)
                     changed = conn.execute(
                         "UPDATE user_xiuxian SET exp=%s,hp=%s,mp=%s,atk=%s,power=ROUND(%s*%s,0) "
-                        "WHERE user_id=%s AND xiuxian_int_cmp(COALESCE(exp,0),%s)=0 AND xiuxian_int_cmp(COALESCE(stone,0),%s)=0",
+                        "WHERE user_id=%s AND xiuxian_int_cmp(COALESCE(exp,0),%s)=0 AND xiuxian_int_cmp(COALESCE(stone,0),%s,1,'stone','actor')=0",
                         (new_exp, new_hp, new_mp, expected_exp // 10, new_exp, power_multiplier,
                          user_id, expected_exp, expected_stone),
                     )
@@ -2659,7 +2659,7 @@ class NormalTrainingLifecycleService:
                     self._increment_training_task(conn, user_id, task_period)
                 else:
                     changed = conn.execute(
-                        "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)+CAST(%s AS REAL) WHERE user_id=%s AND xiuxian_int_cmp(COALESCE(exp,0),%s)=0 AND xiuxian_int_cmp(COALESCE(stone,0),%s)=0",
+                        "UPDATE user_xiuxian SET stone=xiuxian_int_store(xiuxian_int_add(COALESCE(stone,0),%s,'stone','actor')) WHERE user_id=%s AND xiuxian_int_cmp(COALESCE(exp,0),%s)=0 AND xiuxian_int_cmp(COALESCE(stone,0),%s,1,'stone','actor')=0",
                         (stone_gain, user_id, expected_exp, expected_stone),
                     )
                     increment_stat(conn, user_id, "凡人挖矿次数", 1)
@@ -3010,8 +3010,8 @@ class StoneTrainingSettlementService:
                     conn.rollback()
                     return StoneTrainingResult("stone_insufficient", exp_gain, stone_cost)
                 changed = conn.execute(
-                    "UPDATE user_xiuxian SET exp=CAST(COALESCE(exp,0) AS REAL)+CAST(%s AS REAL),stone=CAST(COALESCE(stone,0) AS REAL)-CAST(%s AS REAL),power=ROUND((exp+%s)*%s,0) "
-                    "WHERE user_id=%s AND xiuxian_int_cmp(exp,%s)=0 AND xiuxian_int_cmp(stone,%s)=0 AND xiuxian_int_cmp(stone,%s)>=0",
+                    "UPDATE user_xiuxian SET exp=CAST(COALESCE(exp,0) AS REAL)+CAST(%s AS REAL),stone=xiuxian_int_store(xiuxian_int_sub(COALESCE(stone,0),%s,'stone','actor')),power=ROUND((exp+%s)*%s,0) "
+                    "WHERE user_id=%s AND xiuxian_int_cmp(exp,%s)=0 AND xiuxian_int_cmp(stone,%s,1,'stone','actor')=0 AND xiuxian_int_cmp(stone,%s,1,'stone','actor')>=0",
                     (exp_gain, stone_cost, exp_gain, power_multiplier, user_id, expected_exp, expected_stone, stone_cost),
                 )
                 if changed.rowcount != 1:

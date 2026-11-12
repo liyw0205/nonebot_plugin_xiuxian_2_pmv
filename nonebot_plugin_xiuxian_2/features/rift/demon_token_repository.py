@@ -214,7 +214,7 @@ class RiftDemonTokenBattleSqlRepository:
                 return RiftDemonTokenBattleResult("item_missing")
 
             uow.execute(
-                "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)+CAST(? AS REAL),exp=?,hp=?,mp=? WHERE user_id=?",
+                "UPDATE user_xiuxian SET stone=xiuxian_int_store(xiuxian_int_add(COALESCE(stone,0),?,'stone','actor')),exp=?,hp=?,mp=? WHERE user_id=?",
                 (delta[0], max(0, expected[1] + delta[1]), max(1, expected[2] + delta[2]), max(1, expected[3] + delta[3]), user_id),
             )
             now = self.clock.now().isoformat()

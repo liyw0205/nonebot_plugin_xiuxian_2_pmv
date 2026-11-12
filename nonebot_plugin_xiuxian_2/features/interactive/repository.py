@@ -103,12 +103,12 @@ class InteractiveRepository:
         final_stone = expected_stone
         if granted:
             final_stone += reward
-            changed = uow.execute("UPDATE user_xiuxian SET stone = ? WHERE user_id = ? AND xiuxian_int_cmp(COALESCE(stone,0),?)=0", (final_stone, user_id, expected_stone))
+            changed = uow.execute("UPDATE user_xiuxian SET stone = xiuxian_int_store(?,'stone','actor') WHERE user_id = ? AND xiuxian_int_cmp(COALESCE(stone,0),?,1,'stone','actor')=0", (final_stone, user_id, expected_stone))
             if changed.rowcount != 1:
                 raise DomainError("stone_write_rejected", "interactive stone write count mismatch")
             uow.execute("INSERT INTO interactive_stone_daily_claims(user_id,business_date,operation_id,stone_reward) VALUES (?,?,?,?)", (user_id, day, operation_id, reward))
             self._checkpoint("after_claim")
-        uow.execute("INSERT INTO interactive_stone_daily_reward_operations(operation_id,payload,granted,stone_reward,stone) VALUES (?,?,?,?,?)", (operation_id, payload, int(granted), reward, final_stone))
+        uow.execute("INSERT INTO interactive_stone_daily_reward_operations(operation_id,payload,granted,stone_reward,stone) VALUES(?,?,?,?,xiuxian_int_store(?,'stone','actor'))", (operation_id, payload, int(granted), reward, final_stone))
         self._checkpoint("after_operation")
         return StoneRewardResult("applied", granted, reward, final_stone)
 

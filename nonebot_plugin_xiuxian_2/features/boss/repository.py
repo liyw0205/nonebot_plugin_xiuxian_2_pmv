@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Any, Protocol
-from ...core.numeric import as_int_like
+from ...core.numeric import as_int_like, bind_sqlite_param, require_exact_integer
 from ...core.errors import DomainError
 
 import json
@@ -129,13 +129,40 @@ class BossPurchaseSqlRepository:
     def purchase(self,operation_id,user_id,item_id,item_name,item_type,quantity,unit_cost,weekly_limit,expected_integral,expected_weekly_purchases,max_goods_num,today=None):
         operation_id,user_id,item_name,item_type=str(operation_id).strip(),str(user_id),str(item_name),str(item_type);item_id,quantity,unit_cost,weekly_limit,expected_integral,max_goods_num=map(int,(item_id,quantity,unit_cost,weekly_limit,expected_integral,max_goods_num));today=today or self.clock.now().date();weekly=self._weekly(expected_weekly_purchases,today);payload=json.dumps([user_id,item_id,item_name,item_type,quantity,unit_cost,weekly_limit,max_goods_num],ensure_ascii=True,sort_keys=True,separators=(",",":"))
         if not operation_id or quantity<=0 or min(item_id,unit_cost,weekly_limit,expected_integral,max_goods_num)<0:raise ValueError("valid boss purchase required")
-        def result(status,integral=expected_integral,purchased=0,inventory=0):
-            ok=status in {"applied","duplicate"};return {"status":status,"quantity":quantity if ok else 0,"cost":quantity*unit_cost if ok else 0,"integral":int(integral),"purchased":int(purchased),"inventory":int(inventory)}
+        def result(status,integral=expected_integral,purchased=0,inventory=0,reason=""):
+            ok=status in {"applied","duplicate"};return {"status":status,"reason":reason or ("" if ok else status),"subject":user_id,"quantity":quantity if ok else 0,"cost":quantity*unit_cost if ok else 0,"integral":int(integral),"purchased":int(purchased),"inventory":int(inventory)}
         with DatabaseUnitOfWork(self.game_database,immediate=True) as uow:
             uow.attach_database(self.player_database,"player_data");old=uow.query_one("SELECT payload,quantity,cost,integral,purchased,inventory FROM boss_purchase_operations WHERE operation_id=?",(operation_id,))
             if old:
-                if str(old["payload"])!=payload:return result("state_changed")
-                return {"status":"duplicate","quantity":int(old["quantity"]),"cost":int(old["cost"]),"integral":as_int_like(old["integral"]),"purchased":int(old["purchased"]),"inventory":int(old["inventory"])}
+                def corrupt():
+                    return DomainError("boss_receipt_corrupt", "boss purchase receipt is inconsistent", {"reason": "boss_purchase_receipt_invalid", "subject": user_id})
+                try:
+                    saved_payload = json.loads(str(old["payload"]))
+                except (TypeError, ValueError) as exc:
+                    raise corrupt() from exc
+                saved_request = saved_payload.get("request") if isinstance(saved_payload, dict) else saved_payload
+                if not isinstance(saved_request, list) or len(saved_request) != 8:raise corrupt()
+                for index in (1, 4, 5, 6, 7):
+                    saved_request[index] = require_exact_integer(saved_request[index], field="boss_receipt_request", subject=user_id)
+                if saved_request != json.loads(payload):return result("state_changed", reason="operation_conflict")
+                values = {key: require_exact_integer(old[key], field=f"boss_receipt_{key}", subject=user_id)
+                          for key in ("quantity", "cost", "integral", "purchased", "inventory")}
+                if any(value < 0 for value in values.values()):raise corrupt()
+                if isinstance(saved_payload, dict) and "_rejection" in saved_payload:
+                    rejection = saved_payload["_rejection"]
+                    if (not isinstance(rejection, dict) or rejection.get("status") not in {
+                        "user_missing", "state_changed", "limit_reached", "integral_insufficient", "inventory_full"
+                    } or not rejection.get("reason") or rejection.get("subject") != user_id
+                        or values["quantity"] != 0 or values["cost"] != 0
+                        or any(type(rejection.get(key)) is not int or rejection[key] != value for key, value in values.items())):
+                        raise corrupt()
+                    return dict(rejection)
+                if isinstance(saved_payload, dict):raise corrupt()
+                if values["quantity"] == 0:
+                    if values["cost"] != 0:raise corrupt()
+                    return result("state_changed", reason="legacy_rejection")
+                if values["quantity"] != quantity or values["cost"] != quantity * unit_cost:raise corrupt()
+                return {"status":"duplicate","reason":"","subject":user_id,**values}
             if uow.query_one("SELECT 1 AS ok FROM user_xiuxian WHERE user_id=?",(user_id,)) is None:return self._record(uow,operation_id,payload,result("user_missing"))
             integral=uow.query_one("SELECT COALESCE(integral,0) AS integral FROM player_data.boss_limit WHERE user_id=?",(user_id,));boss_columns={str(row[1]) for row in uow.execute("PRAGMA player_data.table_info(boss)").fetchall()}
             if "weekly_purchases" in boss_columns:
@@ -148,7 +175,7 @@ class BossPurchaseSqlRepository:
                 boss = weekly_row or {"weekly": "{}"}
             if integral is None:return self._record(uow,operation_id,payload,result("state_changed"))
             current=self._weekly(boss["weekly"],today)
-            if as_int_like(integral["integral"])!=expected_integral or current!=weekly:return self._record(uow,operation_id,payload,result("state_changed"))
+            if require_exact_integer(integral["integral"], field="boss_integral", subject=user_id)!=expected_integral or current!=weekly:return self._record(uow,operation_id,payload,result("state_changed", reason="boss_integral_changed" if require_exact_integer(integral["integral"],field="boss_integral",subject=user_id)!=expected_integral else "weekly_purchase_changed"))
             purchased=int(weekly.get(str(item_id),0) or 0)
             if purchased+quantity>weekly_limit:return self._record(uow,operation_id,payload,result("limit_reached",purchased=purchased))
             cost=quantity*unit_cost
@@ -156,9 +183,12 @@ class BossPurchaseSqlRepository:
             item=uow.query_one("SELECT COALESCE(goods_num,0) AS n FROM back WHERE user_id=? AND goods_id=?",(user_id,item_id));inventory=int(item["n"]) if item else 0
             if inventory+quantity>max_goods_num:return self._record(uow,operation_id,payload,result("inventory_full",purchased=purchased,inventory=inventory))
             new_integral,new_purchased,new_inventory=expected_integral-cost,purchased+quantity,inventory+quantity;weekly[str(item_id)]=new_purchased
-            changed = uow.execute("UPDATE player_data.boss_limit SET integral=? WHERE user_id=? AND xiuxian_int_cmp(COALESCE(integral,0),?)=0", (new_integral,user_id,expected_integral))
+            changed = uow.execute("UPDATE player_data.boss_limit SET integral=xiuxian_int_store(?,'boss_integral','actor') WHERE user_id=? AND xiuxian_int_cmp(COALESCE(integral,0),?,1,'boss_integral','actor')=0", (bind_sqlite_param(new_integral,exact=True),user_id,bind_sqlite_param(expected_integral,exact=True)))
             if changed.rowcount != 1:
                 raise DomainError("boss_integral_write_rejected", "boss integral write did not affect one row")
+            saved = uow.query_one("SELECT integral FROM player_data.boss_limit WHERE user_id=?", (user_id,))
+            if saved is None or require_exact_integer(saved["integral"], field="boss_integral", subject=user_id) != new_integral:
+                raise DomainError("boss_integral_write_rejected", "boss integral purchase did not persist exactly", {"reason": "boss_integral_write_rejected", "subject": user_id})
             if weekly_table == "boss":
                 uow.execute("INSERT INTO player_data.boss(user_id,weekly_purchases) VALUES(?,?) ON CONFLICT(user_id) DO UPDATE SET weekly_purchases=excluded.weekly_purchases",(user_id,json.dumps(weekly,ensure_ascii=True)))
             else:
@@ -167,7 +197,9 @@ class BossPurchaseSqlRepository:
 
     @staticmethod
     def _record(uow,operation_id,payload,result):
-        uow.execute("INSERT INTO boss_purchase_operations(operation_id,payload,quantity,cost,integral,purchased,inventory) VALUES(?,?,?,?,?,?,?)",(operation_id,payload,result["quantity"],result["cost"],result["integral"],result["purchased"],result["inventory"]));return result
+        if result["status"] not in {"applied", "duplicate"}:
+            payload = json.dumps({"request": json.loads(payload), "_rejection": result}, ensure_ascii=True, separators=(",", ":"))
+        uow.execute("INSERT INTO boss_purchase_operations(operation_id,payload,quantity,cost,integral,purchased,inventory) VALUES(?,?,?,xiuxian_int_store(?,'stone','actor'),xiuxian_int_store(?,'boss_integral','actor'),?,?)",(operation_id,payload,result["quantity"],bind_sqlite_param(result["cost"],exact=True),bind_sqlite_param(result["integral"],exact=True),result["purchased"],result["inventory"]));return result
 
 
 __all__ = [

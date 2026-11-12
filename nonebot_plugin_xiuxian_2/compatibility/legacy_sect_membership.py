@@ -582,9 +582,9 @@ class SectMembershipService:
                     conn.rollback()
                     return result("card_insufficient", current_name)
                 renamed = conn.execute(
-                    "UPDATE sects SET sect_name=%s, sect_used_stone=CAST(COALESCE(sect_used_stone,0) AS REAL)-CAST(%s AS REAL) "
+                    "UPDATE sects SET sect_name=%s, sect_used_stone=xiuxian_int_store(xiuxian_int_sub(COALESCE(sect_used_stone,0),%s,'sect_used_stone','actor')) "
                     "WHERE sect_id=%s AND sect_owner=%s AND sect_name=%s "
-                    "AND xiuxian_int_cmp(COALESCE(sect_used_stone, 0),%s)>=0",
+                    "AND xiuxian_int_cmp(COALESCE(sect_used_stone, 0),%s,1,'sect_used_stone','actor')>=0",
                     (new_name, stone_cost, sect_id, actor_id, current_name, stone_cost),
                 )
                 if renamed.rowcount != 1:
@@ -1075,7 +1075,7 @@ class SectMembershipService:
                     conn.rollback()
                     return SectNameRefresh("already_member", user_id, stone_cost)
                 charged = conn.execute(
-                    "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)-CAST(%s AS REAL) WHERE user_id=%s AND sect_id IS NULL AND xiuxian_int_cmp(stone,%s)>=0",
+                    "UPDATE user_xiuxian SET stone=xiuxian_int_store(xiuxian_int_sub(COALESCE(stone,0),%s,'stone','actor')) WHERE user_id=%s AND sect_id IS NULL AND xiuxian_int_cmp(stone,%s,1,'stone','actor')>=0",
                     (stone_cost, user_id, stone_cost),
                 )
                 if charged.rowcount != 1:
@@ -1152,8 +1152,8 @@ class SectMembershipService:
                 user_update = conn.execute(
                     """
                     UPDATE user_xiuxian
-                    SET sect_id=%s, sect_position=%s, stone=CAST(COALESCE(stone,0) AS REAL)-CAST(%s AS REAL)
-                    WHERE user_id=%s AND sect_id IS NULL AND xiuxian_int_cmp(stone,%s)>=0
+                    SET sect_id=%s, sect_position=%s, stone=xiuxian_int_store(xiuxian_int_sub(COALESCE(stone,0),%s,'stone','actor'))
+                    WHERE user_id=%s AND sect_id IS NULL AND xiuxian_int_cmp(stone,%s,1,'stone','actor')>=0
                     """,
                     (sect_id, owner_position, stone_cost, user_id, stone_cost),
                 )
@@ -1361,7 +1361,7 @@ class SectMembershipService:
                     SET {cost_column}={cost_column}-%s,
                         exp=CAST(COALESCE(exp,0) AS REAL)+CAST(%s AS REAL),
                         sect_task=COALESCE(sect_task, 0)+1,
-                        sect_contribution=CAST(COALESCE(sect_contribution,0) AS REAL)+CAST(%s AS REAL)
+                        sect_contribution=xiuxian_int_store(xiuxian_int_add(COALESCE(sect_contribution,0),%s,'sect_contribution','actor'))
                     WHERE user_id=%s AND sect_id=%s AND xiuxian_int_cmp({cost_column},%s)>=0
                     """,
                     (cost, exp_reward, sect_reward, user_id, sect_id, cost),
@@ -1369,9 +1369,9 @@ class SectMembershipService:
                 sect_update = conn.execute(
                     """
                     UPDATE sects
-                    SET sect_used_stone=CAST(COALESCE(sect_used_stone,0) AS REAL)+CAST(%s AS REAL),
+                    SET sect_used_stone=xiuxian_int_store(xiuxian_int_add(COALESCE(sect_used_stone,0),%s,'sect_used_stone','actor')),
                         sect_scale=CAST(COALESCE(sect_scale,0) AS REAL)+CAST(%s AS REAL),
-                        sect_materials=CAST(COALESCE(sect_materials,0) AS REAL)+CAST(%s AS REAL)
+                        sect_materials=xiuxian_int_store(xiuxian_int_add(COALESCE(sect_materials,0),%s,'sect_materials','actor'))
                     WHERE sect_id=%s
                     """,
                     (sect_reward, sect_reward, materials_reward, sect_id),
@@ -1395,7 +1395,7 @@ class SectMembershipService:
                     INSERT INTO sect_task_settlement_operations (
                         operation_id, user_id, sect_id, period, cost_type, cost,
                         exp_reward, sect_reward, materials_reward
-                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    ) VALUES(%s,%s,%s,%s,%s,xiuxian_int_store(%s,'stone','actor'),%s,%s,%s)
                     """,
                     (operation_id, user_id, sect_id, period, cost_type, cost,
                      exp_reward, sect_reward, materials_reward),
@@ -1456,18 +1456,18 @@ class SectMembershipService:
                 user_update = conn.execute(
                     """
                     UPDATE user_xiuxian
-                    SET stone=CAST(COALESCE(stone,0) AS REAL)-CAST(%s AS REAL),
-                        sect_contribution=CAST(COALESCE(sect_contribution,0) AS REAL)+CAST(%s AS REAL)
-                    WHERE user_id=%s AND sect_id=%s AND xiuxian_int_cmp(stone,%s)>=0
+                    SET stone=xiuxian_int_store(xiuxian_int_sub(COALESCE(stone,0),%s,'stone','actor')),
+                        sect_contribution=xiuxian_int_store(xiuxian_int_add(COALESCE(sect_contribution,0),%s,'sect_contribution','actor'))
+                    WHERE user_id=%s AND sect_id=%s AND xiuxian_int_cmp(stone,%s,1,'stone','actor')>=0
                     """,
                     (stone, stone, user_id, sect_id, stone),
                 )
                 sect_update = conn.execute(
                     """
                     UPDATE sects
-                    SET sect_used_stone=CAST(COALESCE(sect_used_stone,0) AS REAL)+CAST(%s AS REAL),
+                    SET sect_used_stone=xiuxian_int_store(xiuxian_int_add(COALESCE(sect_used_stone,0),%s,'sect_used_stone','actor')),
                         sect_scale=CAST(COALESCE(sect_scale,0) AS REAL)+CAST(%s AS REAL),
-                        sect_materials=CAST(COALESCE(sect_materials,0) AS REAL)+CAST(%s AS REAL)
+                        sect_materials=xiuxian_int_store(xiuxian_int_add(COALESCE(sect_materials,0),%s,'sect_materials','actor'))
                     WHERE sect_id=%s
                     """,
                     (stone, stone, materials, sect_id),
@@ -1483,7 +1483,7 @@ class SectMembershipService:
                     """
                     INSERT INTO sect_donation_operations (
                         operation_id, user_id, sect_id, stone, materials
-                    ) VALUES (%s, %s, %s, %s, %s)
+                    ) VALUES(%s,%s,%s,xiuxian_int_store(%s,'stone','actor'),%s)
                     """,
                     (operation_id, user_id, sect_id, stone, materials),
                 )
@@ -1565,7 +1565,7 @@ class SectMembershipService:
                     conn.execute(
                         """
                         UPDATE sects
-                        SET sect_materials=CAST(COALESCE(sect_materials,0) AS REAL)-CAST(%s AS REAL)
+                        SET sect_materials=xiuxian_int_store(xiuxian_int_sub(COALESCE(sect_materials,0),%s,'sect_materials','actor'))
                         WHERE sect_id=%s
                         """,
                         (materials_cost, sect_id),
@@ -1655,7 +1655,7 @@ class SectMembershipService:
                 conn.execute(
                     """
                     UPDATE sects
-                    SET sect_materials=CAST(COALESCE(sect_materials,0) AS REAL)+CAST(%s AS REAL),
+                    SET sect_materials=xiuxian_int_store(xiuxian_int_add(COALESCE(sect_materials,0),%s,'sect_materials','actor')),
                         combat_power=%s
                     WHERE sect_id=%s
                     """,
@@ -1899,12 +1899,12 @@ class SectMembershipService:
                     )
 
                 updated = conn.execute(
-                    "UPDATE sects SET sect_used_stone=CAST(COALESCE(sect_used_stone,0) AS REAL)-CAST(%s AS REAL), "
-                    "sect_materials=CAST(COALESCE(sect_materials,0) AS REAL)-CAST(%s AS REAL), sect_fairyland=%s "
+                    "UPDATE sects SET sect_used_stone=xiuxian_int_store(xiuxian_int_sub(COALESCE(sect_used_stone,0),%s,'sect_used_stone','actor')), "
+                    "sect_materials=xiuxian_int_store(xiuxian_int_sub(COALESCE(sect_materials,0),%s,'sect_materials','actor')), sect_fairyland=%s "
                     "WHERE sect_id=%s AND sect_owner=%s "
                     "AND COALESCE(sect_fairyland, 0)=%s "
-                    "AND xiuxian_int_cmp(COALESCE(sect_used_stone, 0),%s)>=0 "
-                    "AND xiuxian_int_cmp(COALESCE(sect_materials, 0),%s)>=0",
+                    "AND xiuxian_int_cmp(COALESCE(sect_used_stone, 0),%s,1,'sect_used_stone','actor')>=0 "
+                    "AND xiuxian_int_cmp(COALESCE(sect_materials, 0),%s,1,'sect_materials','actor')>=0",
                     (
                         stone_cost,
                         materials_cost,
@@ -2043,11 +2043,11 @@ class SectMembershipService:
                     )
 
                 updated = conn.execute(
-                    "UPDATE sects SET sect_used_stone=CAST(COALESCE(sect_used_stone,0) AS REAL)-CAST(%s AS REAL), "
+                    "UPDATE sects SET sect_used_stone=xiuxian_int_store(xiuxian_int_sub(COALESCE(sect_used_stone,0),%s,'sect_used_stone','actor')), "
                     "sect_scale=CAST(COALESCE(sect_scale,0) AS REAL)-CAST(%s AS REAL), elixir_room_level=%s "
                     "WHERE sect_id=%s AND sect_owner=%s "
                     "AND COALESCE(elixir_room_level, 0)=%s "
-                    "AND xiuxian_int_cmp(COALESCE(sect_used_stone, 0),%s)>=0 "
+                    "AND xiuxian_int_cmp(COALESCE(sect_used_stone, 0),%s,1,'sect_used_stone','actor')>=0 "
                     "AND xiuxian_int_cmp(COALESCE(sect_scale, 0),%s)>=0",
                     (
                         stone_cost,
@@ -2190,12 +2190,12 @@ class SectMembershipService:
                     return result("materials_insufficient")
 
                 updated = conn.execute(
-                    f"UPDATE sects SET sect_used_stone=CAST(COALESCE(sect_used_stone,0) AS REAL)-CAST(%s AS REAL), "
-                    f"sect_materials=CAST(COALESCE(sect_materials,0) AS REAL)-CAST(%s AS REAL), {column}=%s "
+                    f"UPDATE sects SET sect_used_stone=xiuxian_int_store(xiuxian_int_sub(COALESCE(sect_used_stone,0),%s,'sect_used_stone','actor')), "
+                    f"sect_materials=xiuxian_int_store(xiuxian_int_sub(COALESCE(sect_materials,0),%s,'sect_materials','actor')), {column}=%s "
                     "WHERE sect_id=%s AND sect_owner=%s "
                     f"AND COALESCE({column}, '')=%s "
-                    "AND xiuxian_int_cmp(COALESCE(sect_used_stone, 0),%s)>=0 "
-                    "AND xiuxian_int_cmp(COALESCE(sect_materials, 0),%s)>=0",
+                    "AND xiuxian_int_cmp(COALESCE(sect_used_stone, 0),%s,1,'sect_used_stone','actor')>=0 "
+                    "AND xiuxian_int_cmp(COALESCE(sect_materials, 0),%s,1,'sect_materials','actor')>=0",
                     (
                         stone_cost,
                         materials_cost,
@@ -2326,11 +2326,11 @@ class SectMembershipService:
                     return result("materials_insufficient", current_level, next_level)
 
                 conn.execute(
-                    f"UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)-CAST(%s AS REAL), {column}=%s WHERE user_id=%s",
+                    f"UPDATE user_xiuxian SET stone=xiuxian_int_store(xiuxian_int_sub(COALESCE(stone,0),%s,'stone','actor')), {column}=%s WHERE user_id=%s",
                     (stone_cost, next_level, user_id),
                 )
                 conn.execute(
-                    "UPDATE sects SET sect_materials=CAST(COALESCE(sect_materials,0) AS REAL)-CAST(%s AS REAL) WHERE sect_id=%s",
+                    "UPDATE sects SET sect_materials=xiuxian_int_store(xiuxian_int_sub(COALESCE(sect_materials,0),%s,'sect_materials','actor')) WHERE sect_id=%s",
                     (materials_cost, sect_id),
                 )
                 conn.execute(

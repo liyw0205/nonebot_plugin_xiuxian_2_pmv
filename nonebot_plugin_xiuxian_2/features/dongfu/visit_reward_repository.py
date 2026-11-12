@@ -47,5 +47,5 @@ class DongfuVisitRewardSqlRepository:
             if uow.query_one('SELECT 1 FROM user_xiuxian WHERE user_id=?',(visitor_id,)) is None: return DongfuVisitRewardResult('user_missing')
             visitor=uow.query_one('SELECT built FROM player_data.dongfu_status WHERE user_id=?',(visitor_id,)); target=uow.query_one('SELECT built FROM player_data.dongfu_status WHERE user_id=?',(target_id,))
             if visitor is None or int(visitor['built'] or 0)!=1 or target is None or int(target['built'] or 0)!=1: return DongfuVisitRewardResult('dongfu_changed', reason='dongfu_missing', subject='visitor' if visitor is None or int(visitor['built'] or 0)!=1 else 'target')
-            if uow.execute('UPDATE user_xiuxian SET stone=COALESCE(stone,0)+? WHERE user_id=?',(gain,visitor_id)).rowcount!=1: raise DomainError("stone_write_rejected", 'visit reward write count mismatch')
+            if uow.execute('UPDATE user_xiuxian SET stone=xiuxian_int_store(xiuxian_int_add(COALESCE(stone,0),?,\'stone\',\'actor\')) WHERE user_id=?',(gain,visitor_id)).rowcount!=1: raise DomainError("stone_write_rejected", 'visit reward write count mismatch')
             uow.execute('INSERT INTO dongfu_visit_reward_operations(operation_id,payload,gain) VALUES(?,?,?)',(operation_id,payload,gain)); return DongfuVisitRewardResult('rewarded',gain)

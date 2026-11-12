@@ -4,6 +4,7 @@ import math
 from datetime import datetime, timezone
 
 from dataclasses import dataclass
+from decimal import Decimal
 
 
 @dataclass(frozen=True)
@@ -44,7 +45,9 @@ def calculate_interest(*, saved_stone: int, saved_at: str, settled_at: datetime,
     if elapsed < 0:
         raise ValueError("settlement time precedes account time")
     hours = round(elapsed / 3600, 2)
-    return int(saved_stone * hours * rate), hours
+    hours_num, hours_den = Decimal(str(hours)).as_integer_ratio()
+    rate_num, rate_den = Decimal(str(rate)).as_integer_ratio()
+    return saved_stone * hours_num * rate_num // (hours_den * rate_den), hours
 
 
 __all__ = ["BankInterestDecision", "calculate_interest", "decide_interest"]

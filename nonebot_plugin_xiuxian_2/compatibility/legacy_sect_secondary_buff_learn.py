@@ -118,7 +118,7 @@ class SectSecBuffLearnService:
 
                 materials_left = materials - materials_cost
                 sect_update = conn.execute(
-                    "UPDATE sects SET sect_materials=%s WHERE sect_id=%s AND xiuxian_int_cmp(sect_materials,%s)=0 AND secbuff=%s",
+                    "UPDATE sects SET sect_materials=xiuxian_int_store(%s,'sect_materials','actor') WHERE sect_id=%s AND xiuxian_int_cmp(sect_materials,%s,1,'sect_materials','actor')=0 AND secbuff=%s",
                     (materials_left, sect_id, materials, str(expected_catalog)),
                 )
                 buff_update = conn.execute(

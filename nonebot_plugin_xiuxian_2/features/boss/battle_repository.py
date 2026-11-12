@@ -359,7 +359,7 @@ class WorldBossBattleSettlementSqlRepository:
             exp = int(expected_exp) + int(exp_reward)
             count = int(expected_battle_count) + 1
             integral = int(expected_total_integral) + int(integral_reward)
-            if uow.execute("UPDATE user_xiuxian SET user_stamina=?,hp=?,mp=?,exp=?,stone=? WHERE user_id=? AND user_stamina=? AND xiuxian_int_cmp(hp,?)=0 AND xiuxian_int_cmp(mp,?)=0 AND xiuxian_int_cmp(exp,?)=0 AND xiuxian_int_cmp(stone,?)=0", (stamina, max(1, int(final_hp)), max(1, int(final_mp)), exp, stone, user_id, expected_stamina, expected_hp, expected_mp, expected_exp, expected_stone)).rowcount != 1:
+            if uow.execute("UPDATE user_xiuxian SET user_stamina=?,hp=?,mp=?,exp=?,stone=xiuxian_int_store(?,'stone','actor') WHERE user_id=? AND user_stamina=? AND xiuxian_int_cmp(hp,?)=0 AND xiuxian_int_cmp(mp,?)=0 AND xiuxian_int_cmp(exp,?)=0 AND xiuxian_int_cmp(stone,?,1,'stone','actor')=0", (stamina, max(1, int(final_hp)), max(1, int(final_mp)), exp, stone, user_id, expected_stamina, expected_hp, expected_mp, expected_exp, expected_stone)).rowcount != 1:
                 raise RuntimeError("player state changed")
             if uow.execute("UPDATE user_cd SET last_check_info_time=? WHERE user_id=? AND last_check_info_time=?", (str(checked_at), user_id, str(expected_checked_at))).rowcount != 1:
                 raise RuntimeError("cooldown changed")
@@ -368,8 +368,8 @@ class WorldBossBattleSettlementSqlRepository:
             elif uow.execute("UPDATE player_data.boss SET boss_stone=?,boss_integral=?,boss_battle_count=? WHERE user_id=? AND xiuxian_int_cmp(COALESCE(boss_stone,0),?)=0 AND xiuxian_int_cmp(COALESCE(boss_integral,0),?)=0 AND xiuxian_int_cmp(COALESCE(boss_battle_count,0),?)=0", (int(expected_daily_stone) + int(stone_reward), int(expected_daily_integral) + int(integral_reward), count, user_id, expected_daily_stone, expected_daily_integral, expected_battle_count)).rowcount != 1:
                 raise RuntimeError("boss state changed")
             if total is None:
-                uow.execute("INSERT INTO player_data.boss_limit(user_id,integral) VALUES (?,?)", (user_id, integral))
-            elif uow.execute("UPDATE player_data.boss_limit SET integral=? WHERE user_id=? AND xiuxian_int_cmp(COALESCE(integral,0),?)=0", (integral, user_id, expected_total_integral)).rowcount != 1:
+                uow.execute("INSERT INTO player_data.boss_limit(user_id,integral) VALUES(?,xiuxian_int_store(?,'boss_integral','actor'))", (user_id, integral))
+            elif uow.execute("UPDATE player_data.boss_limit SET integral=xiuxian_int_store(?,'boss_integral','actor') WHERE user_id=? AND xiuxian_int_cmp(COALESCE(integral,0),?,1,'boss_integral','actor')=0", (integral, user_id, expected_total_integral)).rowcount != 1:
                 raise RuntimeError("boss integral changed")
             if quantity:
                 stamp = self.clock.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -389,7 +389,7 @@ class WorldBossBattleSettlementSqlRepository:
             self._record_tasks(uow, user_id, str(daily_period), str(weekly_period))
             lines = self._apply_activity_damage(uow, user_id, int(actual_damage), activity_bosses, activity_prefix) if activity_bosses and self.activity_database else []
             boss_hp = int(settled_bosses[boss_index].get("气血", 0)) if 0 <= boss_index < len(settled_bosses) else 0
-            uow.execute("INSERT INTO world_boss_battle_operations(operation_id,payload,boss_hp,stamina,battle_count,stone,exp,integral,activity_lines) VALUES(?,?,?,?,?,?,?,?,?)", (operation_id, payload, boss_hp, stamina, count, stone, exp, integral, self._json(lines)))
+            uow.execute("INSERT INTO world_boss_battle_operations(operation_id,payload,boss_hp,stamina,battle_count,stone,exp,integral,activity_lines) VALUES(?,?,?,?,?,xiuxian_int_store(?,'stone','actor'),?,xiuxian_int_store(?,'boss_integral','actor'),?)", (operation_id, payload, boss_hp, stamina, count, stone, exp, integral, self._json(lines)))
             return self._result("applied", expected_stamina=expected_stamina, expected_battle_count=expected_battle_count, expected_stone=expected_stone, expected_exp=expected_exp, expected_integral=expected_total_integral, boss_hp=boss_hp, stamina=stamina, battle_count=count, stone=stone, exp=exp, integral=integral, activity_lines=tuple(lines))
 
 

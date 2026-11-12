@@ -2,10 +2,12 @@ import random
 import time
 from copy import deepcopy
 from datetime import datetime
+from decimal import Decimal
 
 from nonebot.log import logger
 
 from ...core.errors import OperationConflictError
+from ...core.numeric import require_exact_integer
 from ...infrastructure.database import request_hash
 from ...paths import get_paths
 from ...infrastructure.ids import UUIDGenerator
@@ -321,6 +323,7 @@ def record_activity_event(
     conn.row_factory = db_backend.Row
     messages: list[str] = []
     try:
+        conn.execute("BEGIN IMMEDIATE")
         cur = conn.cursor()
         if replayable:
             payload_hash = request_hash({
@@ -360,14 +363,15 @@ def record_activity_event(
                 for rule in activity.get("event_rules") or []:
                     if rule.get("event") != event:
                         continue
-                    points = int(max(0, _as_int(rule.get("points"), 0)) * times * multiplier)
+                    numerator, denominator = Decimal(str(multiplier)).as_integer_ratio()
+                    points = max(0, _as_int(rule.get("points"), 0)) * times * numerator // denominator
                     if points <= 0:
                         continue
                     daily_limit = max(0, _as_int(rule.get("daily_limit"), 0))
                     if daily_limit > 0:
                         cur.execute(
                             """
-                            SELECT COALESCE(xiuxian_int_sum(points), 0) AS count
+                            SELECT COALESCE(xiuxian_int_sum(points,'activity_points','actor'), 0) AS count
                             FROM activity_point_event_log
                             WHERE activity_key=%s AND user_id=%s AND event_key=%s AND record_date=%s
                             """,
@@ -387,10 +391,10 @@ def record_activity_event(
                         INSERT INTO activity_point_balance (
                             activity_key, user_id, points, total_points, update_time
                         )
-                        VALUES (%s, %s, %s, %s, %s)
+                        VALUES(%s,%s,xiuxian_int_store(%s,'activity_points','actor'),xiuxian_int_store(%s,'activity_points','actor'),%s)
                         ON CONFLICT(activity_key, user_id) DO UPDATE SET
-                            points = activity_point_balance.points + excluded.points,
-                            total_points = activity_point_balance.total_points + excluded.total_points,
+                            points = xiuxian_int_store(xiuxian_int_add(activity_point_balance.points,excluded.points,'activity_points','actor')),
+                            total_points = xiuxian_int_store(xiuxian_int_add(activity_point_balance.total_points,excluded.total_points,'activity_points','actor')),
                             update_time = excluded.update_time
                         """,
                         (activity["key"], uid, points, points, ts),
@@ -400,7 +404,7 @@ def record_activity_event(
                         INSERT INTO activity_point_event_log (
                             activity_key, user_id, event_key, points, record_date, create_time
                         )
-                        VALUES (%s, %s, %s, %s, %s, %s)
+                        VALUES(%s,%s,%s,xiuxian_int_store(%s,'activity_points','actor'),%s,%s)
                         """,
                         (activity["key"], uid, event, points, event_today, ts),
                     )
@@ -691,8 +695,8 @@ def _get_point_balance(cur, activity_key: str, user_id: str) -> dict[str, int]:
     if not row:
         return {"points": 0, "total_points": 0}
     return {
-        "points": max(0, _as_int(row["points"])),
-        "total_points": max(0, _as_int(row["total_points"])),
+        "points": max(0, require_exact_integer(row["points"], field="activity_points", subject=str(user_id))),
+        "total_points": max(0, require_exact_integer(row["total_points"], field="activity_points", subject=str(user_id))),
     }
 
 
@@ -1291,8 +1295,8 @@ def _activity_data_counts(cur, activity_key: str, activity_type: str) -> dict:
             """
             SELECT
                 COUNT(*) AS user_count,
-                COALESCE(xiuxian_int_sum(points), 0) AS current_points,
-                COALESCE(xiuxian_int_sum(total_points), 0) AS total_points
+                COALESCE(xiuxian_int_sum(points,'activity_points','activity'), 0) AS current_points,
+                COALESCE(xiuxian_int_sum(total_points,'activity_points','activity'), 0) AS total_points
             FROM activity_point_balance
             WHERE activity_key=%s
             """,
@@ -1547,7 +1551,8 @@ def get_activity_data_overview(
                     SELECT user_id, points, total_points, update_time
                     FROM activity_point_balance
                     WHERE activity_key=%s
-                    ORDER BY total_points DESC, points DESC, update_time ASC
+                    ORDER BY xiuxian_int_text(total_points,'activity_points','actor') COLLATE xiuxian_integer DESC,
+                             xiuxian_int_text(points,'activity_points','actor') COLLATE xiuxian_integer DESC, update_time ASC
                     LIMIT %s
                     """,
                     (activity["key"], row_limit),
@@ -1747,6 +1752,7 @@ def adjust_activity_points(activity_key: str, user_id: str, amount: int) -> dict
     conn = db_backend.connect(DB_PATH)
     conn.row_factory = db_backend.Row
     try:
+        conn.execute("BEGIN IMMEDIATE")
         cur = conn.cursor()
         balance = _get_point_balance(cur, key, uid)
         next_points = max(0, balance["points"] + delta)
@@ -1756,7 +1762,7 @@ def adjust_activity_points(activity_key: str, user_id: str, amount: int) -> dict
             INSERT INTO activity_point_balance (
                 activity_key, user_id, points, total_points, update_time
             )
-            VALUES (%s, %s, %s, %s, %s)
+            VALUES(%s,%s,xiuxian_int_store(%s,'activity_points','actor'),xiuxian_int_store(%s,'activity_points','actor'),%s)
             ON CONFLICT(activity_key, user_id) DO UPDATE SET
                 points = excluded.points,
                 total_points = excluded.total_points,

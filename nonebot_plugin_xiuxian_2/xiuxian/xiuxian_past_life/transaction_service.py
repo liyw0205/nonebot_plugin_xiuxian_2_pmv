@@ -751,7 +751,7 @@ class PastLifeFinalSettlementService:
                 })
 
                 conn.execute(
-                    "UPDATE user_xiuxian SET exp=CAST(COALESCE(exp,0) AS REAL)+CAST(%s AS REAL),stone=CAST(COALESCE(stone,0) AS REAL)+CAST(%s AS REAL) "
+                    "UPDATE user_xiuxian SET exp=CAST(COALESCE(exp,0) AS REAL)+CAST(%s AS REAL),stone=xiuxian_int_store(xiuxian_int_add(COALESCE(stone,0),%s,'stone','actor')) "
                     "WHERE user_id=%s",
                     (exp_reward, stone_reward, user_id),
                 )

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from ...core.numeric import as_int_like
+from ...core.numeric import as_int_like, require_exact_integer
 from ...core.errors import DomainError
 
 import json
@@ -119,13 +119,14 @@ class DufangPayoutSqlRepository:
             if user is None:
                 return DufangPayoutResult("user_missing")
             actual_gain = gain if outcome == "win" else 0
-            actual_loss = min(requested_loss, as_int_like(user["stone"])) if outcome == "loss" else 0
-            wallet = as_int_like(user["stone"]) + actual_gain - actual_loss
+            balance = require_exact_integer(user["stone"], field="stone", subject=user_id)
+            actual_loss = min(requested_loss, balance) if outcome == "loss" else 0
+            wallet = balance + actual_gain - actual_loss
             if uow.execute("UPDATE dufang_bets SET status=?,settled_at=? WHERE bet_id=? AND status='pending'", (outcome, str(settled_at), bet_id)).rowcount != 1:
                 raise DomainError("bet_receipt_write_rejected", "dufang payout status write count mismatch")
-            if uow.execute("UPDATE user_xiuxian SET stone=? WHERE user_id=?", (wallet, user_id)).rowcount != 1:
+            if uow.execute("UPDATE user_xiuxian SET stone=xiuxian_int_store(?,'stone','actor') WHERE user_id=?", (wallet, user_id)).rowcount != 1:
                 raise RuntimeError("dufang payout user state changed")
-            uow.execute("INSERT INTO dufang_payout_operations VALUES(?,?,?,?,?,CURRENT_TIMESTAMP)", (operation_id, payload, wallet, actual_gain, actual_loss))
+            uow.execute("INSERT INTO dufang_payout_operations VALUES(?,?,xiuxian_int_store(?,'stone','actor'),xiuxian_int_store(?,'stone_amount','actor'),xiuxian_int_store(?,'stone_amount','actor'),CURRENT_TIMESTAMP)", (operation_id, payload, wallet, actual_gain, actual_loss))
             append_player_outbox(
                 uow,
                 operation_id=operation_id,

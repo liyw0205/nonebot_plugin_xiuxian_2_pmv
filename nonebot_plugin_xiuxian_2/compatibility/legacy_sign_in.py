@@ -86,7 +86,7 @@ class SignInService:
                     return SignInResult("already_signed", user_id)
                 stone = int(self._randint(stone_lower, stone_upper))
                 updated = conn.execute(
-                    "UPDATE user_xiuxian SET is_sign=1, stone=CAST(COALESCE(stone,0) AS REAL)+CAST(%s AS REAL) "
+                    "UPDATE user_xiuxian SET is_sign=1, stone=xiuxian_int_store(xiuxian_int_add(COALESCE(stone,0),%s,'stone','actor')) "
                     "WHERE user_id=%s AND CAST(COALESCE(is_sign,0) AS INTEGER)=0",
                     (stone, user_id),
                 )
@@ -94,7 +94,7 @@ class SignInService:
                     conn.rollback()
                     return SignInResult("already_signed", user_id)
                 conn.execute(
-                    "INSERT INTO sign_in_operations(operation_id,user_id,stone) VALUES (%s,%s,%s)",
+                    "INSERT INTO sign_in_operations(operation_id,user_id,stone) VALUES(%s,%s,xiuxian_int_store(%s,'stone','actor'))",
                     (operation_id, user_id, stone),
                 )
                 conn.commit()

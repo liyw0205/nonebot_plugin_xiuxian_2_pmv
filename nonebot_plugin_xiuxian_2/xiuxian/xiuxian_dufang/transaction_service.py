@@ -101,8 +101,8 @@ class DufangBetService:
                     "shared_profit INTEGER, shared_loss INTEGER, received_profit INTEGER, received_loss INTEGER, last_update TEXT)"
                 )
                 charged = conn.execute(
-                    "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)-CAST(%s AS REAL) "
-                    "WHERE user_id=%s AND xiuxian_int_cmp(COALESCE(stone,0),%s)>=0",
+                    "UPDATE user_xiuxian SET stone=xiuxian_int_store(xiuxian_int_sub(COALESCE(stone,0),%s,'stone','actor')) "
+                    "WHERE user_id=%s AND xiuxian_int_cmp(COALESCE(stone,0),%s,1,'stone','actor')>=0",
                     (cost, user_id, cost),
                 )
                 if charged.rowcount != 1:
@@ -203,7 +203,7 @@ class DufangPayoutService:
                 actual_gain = gain if outcome == "win" else 0
                 actual_loss = min(requested_loss, wallet) if outcome == "loss" else 0
                 wallet = wallet + actual_gain - actual_loss
-                conn.execute("UPDATE user_xiuxian SET stone=%s WHERE user_id=%s", (wallet, user_id))
+                conn.execute("UPDATE user_xiuxian SET stone=xiuxian_int_store(%s,'stone','actor') WHERE user_id=%s", (wallet, user_id))
                 field, amount = ("profit", actual_gain) if outcome == "win" else ("loss", actual_loss)
                 conn.execute(f"UPDATE player_data.unseal_data SET {db_backend.quote_ident(field)}=COALESCE({db_backend.quote_ident(field)},0)+%s,last_update=%s WHERE user_id=%s", (amount, settled_at, user_id))
                 if conn.execute("UPDATE dufang_bets SET status=%s,settled_at=%s WHERE bet_id=%s AND status=%s", (outcome, settled_at, bet_id, "pending")).rowcount != 1:
@@ -500,7 +500,7 @@ class DufangShareSettlementService:
 
                     stone_delta = actual_amount if frozen_event_type == "profit" else -actual_amount
                     changed = conn.execute(
-                        "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)+CAST(%s AS REAL) WHERE user_id=%s",
+                        "UPDATE user_xiuxian SET stone=xiuxian_int_store(xiuxian_int_add(COALESCE(stone,0),%s,'stone','actor')) WHERE user_id=%s",
                         (stone_delta, target_id),
                     )
                     if changed.rowcount != 1:
@@ -540,7 +540,7 @@ class DufangShareSettlementService:
                     conn.execute(
                         "INSERT INTO economy_log("
                         "user_id,source,action,stone_delta,item_delta,detail,trace_id,created_at) "
-                        "VALUES(%s,'dufang',%s,%s,'[]',%s,%s,%s)",
+                        "VALUES(%s,'dufang',%s,xiuxian_int_store(%s,'stone_delta','actor'),'[]',%s,%s,%s)",
                         (
                             target_id,
                             f"dufang_share_{frozen_event_type}",
@@ -551,14 +551,14 @@ class DufangShareSettlementService:
                         ),
                     )
                     conn.execute(
-                        "UPDATE dufang_share_progress SET status='applied',actual_amount=%s,"
-                        "wallet_stone=%s,updated_at=%s WHERE operation_id=%s AND target_id=%s "
+                        "UPDATE dufang_share_progress SET status='applied',actual_amount=xiuxian_int_store(%s,'stone_amount','actor'),"
+                        "wallet_stone=xiuxian_int_store(%s,'stone','actor'),updated_at=%s WHERE operation_id=%s AND target_id=%s "
                         "AND status='pending'",
                         (actual_amount, wallet_stone, occurred_at, operation_id, target_id),
                     )
                     conn.execute(
                         "UPDATE dufang_share_operations SET completed=completed+1,"
-                        "total_amount=total_amount+%s,"
+                        "total_amount=xiuxian_int_store(xiuxian_int_add(total_amount,%s,'stone_amount','actor')),"
                         "status=CASE WHEN completed+1>=total THEN 'completed' ELSE 'running' END,"
                         "updated_at=%s WHERE operation_id=%s",
                         (actual_amount, occurred_at, operation_id),

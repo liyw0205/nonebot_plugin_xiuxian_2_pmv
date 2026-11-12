@@ -146,7 +146,7 @@ class DongfuInfiltrateFailureSqlRepository:
                 )
                 stone_update = uow.execute(
                     "UPDATE user_xiuxian SET "
-                    "stone=MAX(CAST(COALESCE(stone,0) AS REAL)-CAST(? AS REAL),0) "
+                    "stone=xiuxian_int_nonneg(xiuxian_int_sub(COALESCE(stone,0),?,'stone','actor')) "
                     "WHERE user_id=?",
                     (loss, visitor_id),
                 )

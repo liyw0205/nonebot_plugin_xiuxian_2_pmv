@@ -100,7 +100,7 @@ class AlchemySqlRepository:
                     return result("item_insufficient")
 
             granted = uow.execute(
-                "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)+CAST(? AS REAL) WHERE user_id=?",
+                "UPDATE user_xiuxian SET stone=xiuxian_int_store(xiuxian_int_add(COALESCE(stone,0),?,'stone','actor')) WHERE user_id=?",
                 (reward_stone, user_id),
             )
             if granted.rowcount != 1:

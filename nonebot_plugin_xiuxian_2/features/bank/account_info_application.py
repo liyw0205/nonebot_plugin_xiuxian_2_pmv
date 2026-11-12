@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from ...core.numeric import as_int_like
+from ...core.numeric import as_int_like, require_exact_integer
 import json
 import sqlite3
 from pathlib import Path
@@ -42,10 +42,7 @@ class BankAccountInfoApplication:
             # 历史行可能只有 active 标记、没有时间；用调用方给的默认时间，
             # 避免把空串直接交给利息计算。
             savetime = str(default_saved_at)
-        try:
-            savestone = int(savestone)
-        except Exception:
-            savestone = 0
+        savestone = require_exact_integer(savestone, field="saved_stone", subject=user_id)
         return {
             "savestone": savestone,
             "savetime": str(savetime),
@@ -126,14 +123,14 @@ class BankAccountInfoApplication:
         if account is None:
             return {
                 "status": "account_missing", "user_id": user_id,
-                "wallet_stone": as_int_like(wallet["stone"] or 0), "saved_stone": 0,
+                "wallet_stone": require_exact_integer(wallet["stone"] or 0, field="stone", subject=user_id), "saved_stone": 0,
                 "bank_level": "1", "updated_at": "",
             }
         return {
             "status": "ok",
             "user_id": user_id,
-            "wallet_stone": as_int_like(wallet["stone"] or 0),
-            "saved_stone": as_int_like(account["saved_stone"]),
+            "wallet_stone": require_exact_integer(wallet["stone"] or 0, field="stone", subject=user_id),
+            "saved_stone": require_exact_integer(account["saved_stone"], field="saved_stone", subject=user_id),
             "bank_level": str(account["bank_level"]),
             "updated_at": str(account["updated_at"]),
         }

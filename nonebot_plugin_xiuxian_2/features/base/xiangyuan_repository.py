@@ -127,7 +127,7 @@ class XiangyuanSqlRepository:
             for receiver in gift.get("receivers", ()):
                 conn.execute(
                     "INSERT OR IGNORE INTO xiangyuan_receivers "
-                    "(group_id,gift_id,user_id,stone,items) VALUES (?,?,?,?,?)",
+                    "(group_id,gift_id,user_id,stone,items) VALUES(?,?,?,xiuxian_int_store(?,'stone','actor'),?)",
                     (group_id, gift_id, str(receiver), 0, "[]"),
                 )
         next_id = max(int(data.get("last_id", 1) or 1), largest_id + 1)
@@ -203,7 +203,7 @@ class XiangyuanSqlRepository:
                 gift_id = int(conn.execute(
                     "SELECT next_gift_id FROM xiangyuan_groups WHERE group_id=?", (group_id,)
                 ).fetchone()[0])
-                conn.execute("UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)-CAST(? AS REAL) WHERE user_id=?", (stone, giver_id))
+                conn.execute("UPDATE user_xiuxian SET stone=xiuxian_int_store(xiuxian_int_sub(COALESCE(stone,0),?,'stone','actor')) WHERE user_id=?", (stone, giver_id))
                 for goods_id, _, _, quantity in item_rows:
                     conn.execute(
                         "UPDATE back SET goods_num=goods_num-?,update_time=? WHERE user_id=? AND goods_id=?",
@@ -316,7 +316,7 @@ class XiangyuanSqlRepository:
                     if (int(current[0]) if current else 0) + amount > max_goods_num:
                         conn.rollback()
                         return XiangyuanClaimResult("inventory_full", gift_id=gift_id)
-                conn.execute("UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)+CAST(? AS REAL) WHERE user_id=?", (stone_reward, user_id))
+                conn.execute("UPDATE user_xiuxian SET stone=xiuxian_int_store(xiuxian_int_add(COALESCE(stone,0),?,'stone','actor')) WHERE user_id=?", (stone_reward, user_id))
                 back_columns = {str(row[1]) for row in conn.execute("PRAGMA table_info(back)").fetchall()}
                 now = self._now()
                 for item_id, name, amount in awarded:
@@ -347,7 +347,7 @@ class XiangyuanSqlRepository:
                     (received, remaining_stone, group_id, gift_id),
                 )
                 conn.execute(
-                    "INSERT INTO xiangyuan_receivers (group_id,gift_id,user_id,stone,items) VALUES (?,?,?,?,?)",
+                    "INSERT INTO xiangyuan_receivers (group_id,gift_id,user_id,stone,items) VALUES(?,?,?,xiuxian_int_store(?,'stone','actor'),?)",
                     (group_id, gift_id, user_id, stone_reward, json.dumps(awarded, ensure_ascii=True)),
                 )
                 conn.execute(
@@ -447,7 +447,7 @@ class XiangyuanSqlRepository:
                         raise ValueError("user_missing")
                     if remaining_stone > 0:
                         conn.execute(
-                            "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)+CAST(? AS REAL) WHERE user_id=?",
+                            "UPDATE user_xiuxian SET stone=xiuxian_int_store(xiuxian_int_add(COALESCE(stone,0),?,'stone','actor')) WHERE user_id=?",
                             (remaining_stone, str(giver_id)),
                         )
                         refund_stone += remaining_stone

@@ -44,7 +44,7 @@ class DungeonExploreOperationService:
     # Canonical cross-database settlement statements. The implementation
     # expands numeric casts for SQLite compatibility while preserving the
     # repository contract used by adapters.
-    _PLAYER_REWARD_SQL = "UPDATE user_xiuxian SET hp=%s,mp=%s,stone=stone+%s,exp=exp+%s"
+    _PLAYER_REWARD_SQL = "UPDATE user_xiuxian SET hp=%s,mp=%s,stone=xiuxian_int_store(xiuxian_int_add(stone,%s,'stone','actor')),exp=exp+%s"
     _DUNGEON_STATUS_SQL = "UPDATE player_data.player_dungeon_status SET current_layer=%s,dungeon_status=%s"
 
     TABLE = "dungeon_explore_operations"
@@ -599,7 +599,7 @@ class DungeonExploreOperationService:
                 for member in members:
                     member_id = str(member["user_id"])
                     conn.execute(
-                        "UPDATE user_xiuxian SET hp=%s,mp=%s,stone=CAST(COALESCE(stone,0) AS REAL)+CAST(%s AS REAL),exp=CAST(COALESCE(exp,0) AS REAL)+CAST(%s AS REAL) "
+                        "UPDATE user_xiuxian SET hp=%s,mp=%s,stone=xiuxian_int_store(xiuxian_int_add(COALESCE(stone,0),%s,'stone','actor')),exp=CAST(COALESCE(exp,0) AS REAL)+CAST(%s AS REAL) "
                         "WHERE user_id=%s",
                         (
                             int(member.get("final_hp", member["expected"]["hp"])),

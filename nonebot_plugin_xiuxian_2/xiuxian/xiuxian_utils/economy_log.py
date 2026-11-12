@@ -15,6 +15,7 @@ from ...infrastructure.database.economy import (
 )
 from .json_store import safe_json_dumps as _json_dumps
 from .xiuxian2_handle import XiuxianDateManage
+from ...core.numeric import bind_sqlite_param, require_exact_integer
 
 
 def _to_int(value: Any, default: int = 0) -> int:
@@ -93,11 +94,11 @@ def log_economy_change(
             sect_id_int,
             str(source),
             str(action),
-            _to_int(stone_delta),
-            _to_int(exp_delta),
-            _to_int(sect_contribution_delta),
-            _to_int(sect_scale_delta),
-            _to_int(sect_materials_delta),
+            bind_sqlite_param(require_exact_integer(stone_delta, field="stone_delta", subject=user_id_text or "ledger"), exact=True),
+            bind_sqlite_param(require_exact_integer(exp_delta, field="exp_delta", subject=user_id_text or "ledger"), exact=True),
+            bind_sqlite_param(require_exact_integer(sect_contribution_delta, field="sect_contribution_delta", subject=user_id_text or "ledger"), exact=True),
+            bind_sqlite_param(require_exact_integer(sect_scale_delta, field="sect_scale_delta", subject=user_id_text or "ledger"), exact=True),
+            bind_sqlite_param(require_exact_integer(sect_materials_delta, field="sect_materials_delta", subject=user_id_text or "ledger"), exact=True),
             item_delta_text,
             detail_text,
             None if trace_id in (None, "") else str(trace_id),
@@ -121,6 +122,9 @@ def log_economy_change(
             row = cur.fetchone()
             expected = values[:12]
             actual = tuple(row[index] for index in range(1, 13)) if row else None
+            if actual is not None:
+                actual = actual[:4] + tuple(require_exact_integer(v, field="ledger_delta", subject=user_id_text or "ledger") for v in actual[4:9]) + actual[9:]
+                expected = expected[:4] + tuple(require_exact_integer(v, field="ledger_delta", subject=user_id_text or "ledger") for v in expected[4:9]) + expected[9:]
             if actual != expected:
                 raise ValueError(f"economy event id payload conflict: {event_id_text}")
         else:

@@ -40,14 +40,14 @@ class XianshiPlanListingSqlRepository:
     @staticmethod
     def _fee(total_price: int) -> int:
         if total_price <= 5_000_000:
-            rate = 0.1
+            rate = 10
         elif total_price <= 10_000_000:
-            rate = 0.15
+            rate = 15
         elif total_price <= 20_000_000:
-            rate = 0.2
+            rate = 20
         else:
-            rate = 0.3
-        return int(total_price * rate)
+            rate = 30
+        return total_price * rate // 100
 
     @staticmethod
     def _listing_id(raw_id: str) -> str:
@@ -173,8 +173,8 @@ class XianshiPlanListingSqlRepository:
             if stamina_update.rowcount != 1:
                 raise RuntimeError("xianshi plan stamina snapshot changed")
             stone_update = uow.execute(
-                "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)-CAST(? AS REAL) "
-                "WHERE user_id=? AND xiuxian_int_cmp(COALESCE(stone,0),?)>=0",
+                "UPDATE user_xiuxian SET stone=xiuxian_int_store(xiuxian_int_sub(COALESCE(stone,0),?,'stone','actor')) "
+                "WHERE user_id=? AND xiuxian_int_cmp(COALESCE(stone,0),?,1,'stone','actor')>=0",
                 (fee, seller_id, fee),
             )
             if stone_update.rowcount != 1:
@@ -212,7 +212,7 @@ class XianshiPlanListingSqlRepository:
                         uow.execute(
                             "INSERT INTO xianshi_item"
                             "(id,user_id,goods_id,name,type,price,quantity) "
-                            "VALUES(?,?,?,?,?,?,1)",
+                            "VALUES(?,?,?,?,?,xiuxian_int_store(?,'stone','actor'),1)",
                             (
                                 listing_id,
                                 seller_id,
@@ -230,7 +230,7 @@ class XianshiPlanListingSqlRepository:
             uow.execute(
                 "INSERT INTO xianshi_plan_listing_operations "
                 "(operation_id,seller_id,listing_plan,listed_quantity,fee_charged,"
-                "stamina_cost) VALUES(?,?,?,?,?,?)",
+                "stamina_cost) VALUES(?,?,?,?,xiuxian_int_store(?,'stone','actor'),?)",
                 (operation_id, seller_id, plan_text, listed, fee, stamina_cost),
             )
             return self._result(

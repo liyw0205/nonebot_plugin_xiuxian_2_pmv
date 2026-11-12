@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from ...core.numeric import as_int_like
+from ...core.numeric import as_int_like, require_exact_integer
 import json
 from pathlib import Path
 from typing import Any, Mapping
@@ -62,7 +62,7 @@ class BankInterestApplication:
                     return {"status": "state_changed", "reason": "bank_saved_at_changed", "operation_id": operation_id}
             if current_level != str(bank_level):
                 return {"status": "state_changed", "reason": "bank_level_changed", "operation_id": operation_id}
-            decision = decide_interest(wallet=as_int_like(wallet["stone"] or 0), interest=int(interest), settled_at=str(settled_at))
+            decision = decide_interest(wallet=require_exact_integer(wallet["stone"], field="stone", subject=user_id), interest=int(interest), settled_at=str(settled_at))
             if account is None:
                 self.repository.create_account(
                     uow,

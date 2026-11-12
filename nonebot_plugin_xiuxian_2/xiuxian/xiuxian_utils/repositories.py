@@ -118,50 +118,21 @@ class EconomyRepository:
 
     def update_stones(self, user_id, amount, operation, log_context=None) -> None:
         numeric_bind = _numeric_bind()
-        as_int_like, number_count = numeric_bind.as_int_like, numeric_bind.number_count
-
-        # amount may exceed SQLite INTEGER; bind layer also guards, but abs(int())
-        # would OverflowError before execute.
-        amount = number_count(abs(as_int_like(amount)))
-        if isinstance(amount, str):
-            # still bindable; for delta math use as_int_like
-            amount_int = as_int_like(amount)
-        else:
-            amount_int = int(amount)
-        if amount_int <= 0 and operation in (1, 2):
-            # zero no-op for economy; keep legacy behaviour of still executing for 0
-            pass
-        current_stones = None
+        exact = numeric_bind._core_numeric.require_exact_integer
+        amount_int = abs(exact(amount, field="stone_amount", subject=str(user_id)))
         stone_delta = 0
-
+        if operation not in (1, 2):
+            return
         with self._connection() as conn:
             cur = conn.cursor()
-            if log_context:
-                cur.execute(
-                    "SELECT stone FROM user_xiuxian WHERE user_id=%s",
-                    (user_id,),
-                )
-                row = cur.fetchone()
-                if row:
-                    current_stones = as_int_like(row[0])
-
-            if operation == 1:
-                cur.execute(
-                    "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)+CAST(%s AS REAL) WHERE user_id=%s",
-                    (amount, user_id),
-                )
-                if cur.rowcount > 0:
-                    stone_delta = amount_int
-            elif operation == 2:
-                cur.execute(
-                    "UPDATE user_xiuxian SET stone=MAX(CAST(COALESCE(stone,0) AS REAL)-CAST(%s AS REAL), 0) WHERE user_id=%s",
-                    (amount, user_id),
-                )
-                if cur.rowcount > 0:
-                    stone_delta = -min(
-                        current_stones if current_stones is not None else amount_int,
-                        amount_int,
-                    )
+            if not conn.in_transaction:
+                cur.execute("BEGIN IMMEDIATE")
+            cur.execute("SELECT rowid,stone FROM user_xiuxian WHERE user_id=%s", (user_id,))
+            rows = [(row[0], exact(row[1], field="stone", subject=str(user_id))) for row in cur.fetchall()]
+            for rowid, before in rows:
+                after = before + amount_int if operation == 1 else max(before - amount_int, 0)
+                self._write_stones(cur, rowid, user_id, before, after)
+                stone_delta += after - before
             conn.commit()
 
         if log_context and stone_delta:
@@ -180,32 +151,23 @@ class EconomyRepository:
 
     def try_update_stones(self, user_id, amount, operation, log_context=None) -> bool:
         numeric_bind = _numeric_bind()
-        as_int_like, number_count = numeric_bind.as_int_like, numeric_bind.number_count
-
-        amount = number_count(abs(as_int_like(amount)))
-        amount_int = as_int_like(amount)
+        exact = numeric_bind._core_numeric.require_exact_integer
+        amount_int = abs(exact(amount, field="stone_amount", subject=str(user_id)))
         if amount_int <= 0:
             return True
-
+        if operation not in (1, 2):
+            return False
         with self._connection() as conn:
             cur = conn.cursor()
-            if operation == 1:
-                cur.execute(
-                    "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)+CAST(%s AS REAL) WHERE user_id=%s",
-                    (amount, user_id),
-                )
-            elif operation == 2:
-                cur.execute(
-                    """
-                    UPDATE user_xiuxian
-                    SET stone=CAST(COALESCE(stone,0) AS REAL)-CAST(%s AS REAL)
-                    WHERE user_id=%s AND xiuxian_int_cmp(COALESCE(stone,0),%s)>=0
-                    """,
-                    (amount, user_id, amount),
-                )
-            else:
+            if not conn.in_transaction:
+                cur.execute("BEGIN IMMEDIATE")
+            cur.execute("SELECT rowid,stone FROM user_xiuxian WHERE user_id=%s", (user_id,))
+            rows = [(row[0], exact(row[1], field="stone", subject=str(user_id))) for row in cur.fetchall()]
+            if not rows or (operation == 2 and any(before < amount_int for _, before in rows)):
                 return False
-            success = cur.rowcount > 0
+            for rowid, before in rows:
+                self._write_stones(cur, rowid, user_id, before, before + amount_int if operation == 1 else before - amount_int)
+            success = True
             conn.commit()
 
         if log_context and success:
@@ -223,6 +185,24 @@ class EconomyRepository:
             )
         return success
 
+    @staticmethod
+    def _write_stones(cur, rowid, user_id, before, after):
+        numeric = _numeric_bind()._core_numeric
+        cur.execute("UPDATE user_xiuxian SET stone=xiuxian_int_store(%s,'stone','actor') WHERE rowid=%s AND user_id=%s "
+                    "AND xiuxian_int_cmp(COALESCE(stone,0),%s,1,'stone','actor')=0",
+                    (numeric.bind_sqlite_param(after, exact=True), rowid, user_id,
+                     numeric.bind_sqlite_param(before, exact=True)))
+        if cur.rowcount != 1:
+            from nonebot_plugin_xiuxian_2.core.errors import DomainError
+            raise DomainError("stone_write_rejected", "stone snapshot write rejected",
+                              {"reason": "stone_write_rejected", "subject": str(user_id)})
+        cur.execute("SELECT stone FROM user_xiuxian WHERE rowid=%s", (rowid,))
+        row = cur.fetchone()
+        if row is None or numeric.require_exact_integer(row[0], field="stone", subject=str(user_id)) != after:
+            from nonebot_plugin_xiuxian_2.core.errors import DomainError
+            raise DomainError("stone_write_rejected", "stone persisted balance differs",
+                              {"reason": "stone_write_rejected", "subject": str(user_id)})
+
     def transfer_stones(
         self,
         operation_id: str,
@@ -232,10 +212,8 @@ class EconomyRepository:
     ) -> bool:
         """Atomically transfer stones; repeated operation IDs are no-ops."""
         numeric_bind = _numeric_bind()
-        as_int_like, number_count = numeric_bind.as_int_like, numeric_bind.number_count
-
-        amount = number_count(abs(as_int_like(amount)))
-        amount_int = as_int_like(amount)
+        exact = numeric_bind._core_numeric.require_exact_integer
+        amount_int = abs(exact(amount, field="stone_amount", subject=str(sender_id)))
         if amount_int <= 0 or str(sender_id) == str(recipient_id):
             return False
 
@@ -244,28 +222,28 @@ class EconomyRepository:
             if not schema.operations_ready(conn):
                 return False
             cur = conn.cursor()
+            if not conn.in_transaction:
+                cur.execute("BEGIN IMMEDIATE")
             cur.execute(
                 "SELECT operation_id FROM economy_operations WHERE operation_id=%s",
                 (operation_id,),
             )
             if cur.fetchone() is not None:
                 return False
-            cur.execute(
-                """
-                UPDATE user_xiuxian
-                SET stone=CAST(COALESCE(stone,0) AS REAL)-CAST(%s AS REAL)
-                WHERE user_id=%s AND xiuxian_int_cmp(COALESCE(stone,0),%s)>=0
-                """,
-                (amount, sender_id, amount),
-            )
-            if cur.rowcount != 1:
+            accounts = {}
+            for uid in (sender_id, recipient_id):
+                cur.execute("SELECT rowid,stone FROM user_xiuxian WHERE user_id=%s", (uid,))
+                rows = cur.fetchall()
+                if len(rows) != 1:
+                    if uid == recipient_id and not rows:
+                        raise ValueError("recipient does not exist")
+                    return False
+                accounts[uid] = (rows[0][0], exact(rows[0][1], field="stone", subject=str(uid)))
+            if accounts[sender_id][1] < amount_int:
                 return False
-            cur.execute(
-                "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)+CAST(%s AS REAL) WHERE user_id=%s",
-                (amount, recipient_id),
-            )
-            if cur.rowcount != 1:
-                raise ValueError("recipient does not exist")
+            for uid, delta in ((sender_id, -amount_int), (recipient_id, amount_int)):
+                rowid, before = accounts[uid]
+                self._write_stones(cur, rowid, uid, before, before + delta)
             cur.execute(
                 "INSERT INTO economy_operations (operation_id, operation_type) VALUES (%s, %s)",
                 (operation_id, "stone_transfer"),

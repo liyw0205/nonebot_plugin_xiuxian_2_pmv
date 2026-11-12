@@ -104,15 +104,15 @@ class StoneGiftService:
                     conn.rollback()
                     return result("recipient_missing")
                 charged = conn.execute(
-                    "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)-CAST(%s AS REAL) "
-                    "WHERE user_id=%s AND xiuxian_int_cmp(COALESCE(stone, 0),%s)>=0",
+                    "UPDATE user_xiuxian SET stone=xiuxian_int_store(xiuxian_int_sub(COALESCE(stone,0),%s,'stone','actor')) "
+                    "WHERE user_id=%s AND xiuxian_int_cmp(COALESCE(stone, 0),%s,1,'stone','actor')>=0",
                     (gross_amount, sender_id, gross_amount),
                 )
                 if charged.rowcount != 1:
                     conn.rollback()
                     return result("stone_insufficient")
                 credited = conn.execute(
-                    "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)+CAST(%s AS REAL) WHERE user_id=%s",
+                    "UPDATE user_xiuxian SET stone=xiuxian_int_store(xiuxian_int_add(COALESCE(stone,0),%s,'stone','actor')) WHERE user_id=%s",
                     (net_amount, recipient_id),
                 )
                 if credited.rowcount != 1:
@@ -120,7 +120,7 @@ class StoneGiftService:
                     return result("state_changed")
                 conn.execute(
                     "INSERT INTO stone_gift_operations(operation_id, sender_id, recipient_id, gross_amount, net_amount, fee_amount) "
-                    "VALUES (%s, %s, %s, %s, %s, %s)",
+                    "VALUES(%s,%s,%s,xiuxian_int_store(%s,'stone','actor'),xiuxian_int_store(%s,'stone','actor'),xiuxian_int_store(%s,'stone','actor'))",
                     (operation_id, sender_id, recipient_id, gross_amount, net_amount, fee_amount),
                 )
                 conn.commit()

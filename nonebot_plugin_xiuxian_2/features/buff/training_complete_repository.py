@@ -116,14 +116,14 @@ class NormalTrainingCompleteSqlRepository:
             hp_gain, mp_gain = max(0, new_hp - as_int_like(user["hp"])), max(0, new_mp - as_int_like(user["mp"]))
             changed = uow.execute(
                 "UPDATE user_xiuxian SET exp=?,hp=?,mp=?,atk=?,power=ROUND(?*?,0) "
-                "WHERE user_id=? AND xiuxian_int_cmp(COALESCE(exp,0),?)=0 AND xiuxian_int_cmp(COALESCE(stone,0),?)=0",
+                "WHERE user_id=? AND xiuxian_int_cmp(COALESCE(exp,0),?)=0 AND xiuxian_int_cmp(COALESCE(stone,0),?,1,'stone','actor')=0",
                 (new_exp, new_hp, new_mp, expected_exp // 10, new_exp, multiplier,
                  saved_user_id, expected_exp, expected_stone),
             )
         else:
             changed = uow.execute(
-                "UPDATE user_xiuxian SET stone=COALESCE(stone,0)+? "
-                "WHERE user_id=? AND xiuxian_int_cmp(COALESCE(exp,0),?)=0 AND xiuxian_int_cmp(COALESCE(stone,0),?)=0",
+                "UPDATE user_xiuxian SET stone=xiuxian_int_store(xiuxian_int_add(COALESCE(stone,0),?,'stone','actor')) "
+                "WHERE user_id=? AND xiuxian_int_cmp(COALESCE(exp,0),?)=0 AND xiuxian_int_cmp(COALESCE(stone,0),?,1,'stone','actor')=0",
                 (stone_gain, saved_user_id, expected_exp, expected_stone),
             )
         if changed.rowcount != 1:

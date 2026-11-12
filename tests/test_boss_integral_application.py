@@ -1,3 +1,4 @@
+import ast
 import sqlite3
 from pathlib import Path
 
@@ -143,6 +144,10 @@ def test_boss_integral_read_handlers_use_feature_snapshot() -> None:
     assert text.count("boss_integral_application.get_integral(user_id)") == 3
     assert "get_user_boss_fight_info" not in text
     assert "save_user_boss_fight_info" not in text
-    assert "from .boss_limit import DAILY_BATTLE_COUNT" in text
+    assert any(
+        isinstance(node, ast.ImportFrom) and node.module == "boss_limit"
+        and any(alias.name == "DAILY_BATTLE_COUNT" for alias in node.names)
+        for node in ast.walk(ast.parse(text))
+    )
     assert "player_data_manager" not in text
     assert text.count('if integral_snapshot.status == "schema_missing":') == 1

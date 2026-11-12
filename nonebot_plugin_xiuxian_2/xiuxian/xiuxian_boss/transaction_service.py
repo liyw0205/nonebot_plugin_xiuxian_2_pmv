@@ -160,7 +160,7 @@ class BossPurchaseService:
                 new_inventory = inventory + quantity
                 weekly[str(item_id)] = new_purchased
                 if conn.execute(
-                    "UPDATE player_data.boss_limit SET integral=%s WHERE user_id=%s AND xiuxian_int_cmp(COALESCE(integral, 0),%s)=0",
+                    "UPDATE player_data.boss_limit SET integral=xiuxian_int_store(%s,'boss_integral','actor') WHERE user_id=%s AND xiuxian_int_cmp(COALESCE(integral, 0),%s,1,'boss_integral','actor')=0",
                     (new_integral, user_id, expected_integral),
                 ).rowcount != 1:
                     raise DomainError("boss_integral_write_rejected", "boss integral write did not affect one row")
@@ -581,7 +581,7 @@ class WorldBossBattleSettlementService:
                 count = int(expected_battle_count) + 1
                 integral = int(expected_total_integral) + int(integral_reward)
                 conn.execute(
-                    "UPDATE user_xiuxian SET user_stamina=%s,hp=%s,mp=%s,exp=%s,stone=%s WHERE user_id=%s",
+                    "UPDATE user_xiuxian SET user_stamina=%s,hp=%s,mp=%s,exp=%s,stone=xiuxian_int_store(%s,'stone','actor') WHERE user_id=%s",
                     (stamina, max(1, int(final_hp)), max(1, int(final_mp)), exp, stone, user_id),
                 )
                 conn.execute("UPDATE user_cd SET last_check_info_time=%s WHERE user_id=%s", (str(checked_at), user_id))
@@ -593,7 +593,7 @@ class WorldBossBattleSettlementService:
                      int(expected_daily_integral) + int(integral_reward), count),
                 )
                 conn.execute(
-                    "INSERT INTO player_data.boss_limit(user_id,integral) VALUES (%s,%s) "
+                    "INSERT INTO player_data.boss_limit(user_id,integral) VALUES(%s,xiuxian_int_store(%s,'boss_integral','actor')) "
                     "ON CONFLICT(user_id) DO UPDATE SET integral=excluded.integral", (user_id, integral),
                 )
                 if quantity:
@@ -626,7 +626,7 @@ class WorldBossBattleSettlementService:
                 )
                 conn.execute(
                     "INSERT INTO world_boss_battle_operations(operation_id,payload,boss_hp,stamina,battle_count,stone,exp,"
-                    "integral,activity_lines) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)",
+                    "integral,activity_lines) VALUES(%s,%s,%s,%s,%s,xiuxian_int_store(%s,'stone','actor'),%s,xiuxian_int_store(%s,'boss_integral','actor'),%s)",
                     (operation_id, payload, boss_hp, stamina, count, stone, exp, integral, self._json(lines)),
                 )
                 conn.commit()
@@ -1614,7 +1614,7 @@ class BossRewardService:
                     if (int(item[0]) if item else 0) + item_quantity > max_goods_num:
                         conn.rollback(); return rejected("inventory_full", user[0])
                 total_exp, wallet = expected_exp + exp, int(user[0]) + stone
-                if conn.execute("UPDATE user_xiuxian SET stone=%s,exp=%s WHERE user_id=%s AND xiuxian_int_cmp(COALESCE(stone,0),%s)=0 AND xiuxian_int_cmp(COALESCE(exp,0),%s)=0",
+                if conn.execute("UPDATE user_xiuxian SET stone=xiuxian_int_store(%s,'stone','actor'),exp=%s WHERE user_id=%s AND xiuxian_int_cmp(COALESCE(stone,0),%s,1,'stone','actor')=0 AND xiuxian_int_cmp(COALESCE(exp,0),%s)=0",
                                 (wallet, total_exp, user_id, int(user[0]), expected_exp)).rowcount != 1:
                     conn.rollback(); return rejected("state_changed", user[0])
                 daily_stone, daily_integral, total_integral = (expected_daily_stone + stone,
@@ -1625,9 +1625,9 @@ class BossRewardService:
                 else:
                     conn.execute("UPDATE player_data.boss SET boss_stone=%s,boss_integral=%s WHERE user_id=%s", (daily_stone, daily_integral, user_id))
                 if total is None:
-                    conn.execute("INSERT INTO player_data.boss_limit (user_id,integral) VALUES (%s,%s)", (user_id, total_integral))
+                    conn.execute("INSERT INTO player_data.boss_limit (user_id,integral) VALUES(%s,xiuxian_int_store(%s,'boss_integral','actor'))", (user_id, total_integral))
                 else:
-                    conn.execute("UPDATE player_data.boss_limit SET integral=%s WHERE user_id=%s", (total_integral, user_id))
+                    conn.execute("UPDATE player_data.boss_limit SET integral=xiuxian_int_store(%s,'boss_integral','actor') WHERE user_id=%s", (total_integral, user_id))
                 if item_quantity:
                     now, bound = datetime.now(), item_quantity if item_bind else 0
                     conn.execute("INSERT INTO back (user_id,goods_id,goods_name,goods_type,goods_num,create_time,update_time,bind_num) VALUES (%s,%s,%s,%s,%s,%s,%s,%s) ON CONFLICT (user_id,goods_id) DO UPDATE SET goods_num=back.goods_num+EXCLUDED.goods_num,bind_num=COALESCE(back.bind_num,0)+EXCLUDED.bind_num,update_time=EXCLUDED.update_time",

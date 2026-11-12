@@ -145,8 +145,8 @@ class PlayerRenameService:
                         return result("item_missing", previous_name)
                 elif stone_cost:
                     charged = conn.execute(
-                        "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)-CAST(%s AS REAL) "
-                        "WHERE user_id=%s AND xiuxian_int_cmp(stone,%s)>=0",
+                        "UPDATE user_xiuxian SET stone=xiuxian_int_store(xiuxian_int_sub(COALESCE(stone,0),%s,'stone','actor')) "
+                        "WHERE user_id=%s AND xiuxian_int_cmp(stone,%s,1,'stone','actor')>=0",
                         (stone_cost, user_id, stone_cost),
                     )
                     if charged.rowcount != 1:

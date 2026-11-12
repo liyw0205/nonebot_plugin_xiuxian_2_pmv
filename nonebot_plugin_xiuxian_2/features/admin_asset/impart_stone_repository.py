@@ -269,7 +269,7 @@ class AdminImpartStoneSqlRepository:
                 "INSERT INTO admin_impart_stone_operations("
                 "operation_id,payload,previous_stone,final_stone,applied_delta,"
                 "previous_stone_exact,final_stone_exact,applied_delta_exact) "
-                "VALUES(?,?,?,?,?,?,?,?)",
+                "VALUES(?,?,xiuxian_int_store(?,'stone','actor'),xiuxian_int_store(?,'stone','actor'),xiuxian_int_store(?,'stone','actor'),?,?,?)",
                 (operation_id, payload, previous_stone, final_stone, applied_delta,
                  str(previous_stone), str(final_stone), str(applied_delta)),
             )

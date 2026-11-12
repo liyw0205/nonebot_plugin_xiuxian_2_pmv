@@ -137,7 +137,7 @@ class AccessoryPackageGameRepository:
             raise DomainError("package_consume_write_rejected", "accessory package consumption was not saved")
         if stone_delta:
             changed = uow.execute(
-                "UPDATE user_xiuxian SET stone = CAST(stone AS REAL) + ? WHERE user_id = ? AND CAST(stone AS REAL) + ? >= 0",
+                "UPDATE user_xiuxian SET stone = xiuxian_int_store(xiuxian_int_add(stone,?,'stone','actor')) WHERE user_id = ? AND xiuxian_int_cmp(xiuxian_int_add(stone,?,'stone','actor'),0,1)>=0",
                 (stone_delta, request.user_id, stone_delta),
             )
             if changed.rowcount != 1:
@@ -186,7 +186,7 @@ class AccessoryPackageGameRepository:
         if package is None:
             return False
         uow.execute(
-            "UPDATE user_xiuxian SET stone = ? WHERE user_id = ?",
+            "UPDATE user_xiuxian SET stone = xiuxian_int_store(?,'stone','actor') WHERE user_id = ?",
             (before.get("stone"), user_id),
         )
         self._restore_item(uow, user_id, package_id, package)

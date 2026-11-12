@@ -218,17 +218,17 @@ class SectWeeklyRewardClaimService:
                     for key in ("stone", "exp", "sect_contribution", "sect_scale", "sect_materials", "boss_integral")
                 }
                 conn.execute(
-                    "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)+CAST(%s AS REAL),exp=CAST(COALESCE(exp,0) AS REAL)+CAST(%s AS REAL),"
-                    "sect_contribution=CAST(COALESCE(sect_contribution,0) AS REAL)+CAST(%s AS REAL) WHERE user_id=%s",
+                    "UPDATE user_xiuxian SET stone=xiuxian_int_store(xiuxian_int_add(COALESCE(stone,0),%s,'stone','actor')),exp=CAST(COALESCE(exp,0) AS REAL)+CAST(%s AS REAL),"
+                    "sect_contribution=xiuxian_int_store(xiuxian_int_add(COALESCE(sect_contribution,0),%s,'sect_contribution','actor')) WHERE user_id=%s",
                     (totals["stone"], totals["exp"], totals["sect_contribution"], user_id),
                 )
                 conn.execute(
                     "UPDATE sects SET sect_scale=CAST(COALESCE(sect_scale,0) AS REAL)+CAST(%s AS REAL),"
-                    "sect_materials=CAST(COALESCE(sect_materials,0) AS REAL)+CAST(%s AS REAL) WHERE sect_id=%s",
+                    "sect_materials=xiuxian_int_store(xiuxian_int_add(COALESCE(sect_materials,0),%s,'sect_materials','actor')) WHERE sect_id=%s",
                     (totals["sect_scale"], totals["sect_materials"], sect_id),
                 )
                 conn.execute(
-                    "INSERT INTO player_data.boss_limit(user_id,integral) VALUES(%s,%s) "
+                    "INSERT INTO player_data.boss_limit(user_id,integral) VALUES(%s,xiuxian_int_store(%s,'boss_integral','actor')) "
                     "ON CONFLICT(user_id) DO UPDATE SET integral=COALESCE(integral,0)+EXCLUDED.integral",
                     (user_id, totals["boss_integral"]),
                 )

@@ -67,13 +67,13 @@ class CombatSettlementSqlRepository:
             uow.execute("UPDATE player_data.map_daily_limit SET combat_count=?,resource_total_count=? WHERE user_id=?", (int(daily["combat_count"] or 0) + 1, int(daily["resource_total_count"] or 0) + 1, user_id))
             uow.execute("UPDATE player_data.map_combat_settlement SET snapshot=? WHERE user_id=?", ("", user_id))
             if stone:
-                uow.execute("UPDATE user_xiuxian SET stone=COALESCE(stone,0)+? WHERE user_id=?", (stone, user_id))
+                uow.execute("UPDATE user_xiuxian SET stone=xiuxian_int_store(xiuxian_int_add(COALESCE(stone,0),?,'stone','actor')) WHERE user_id=?", (stone, user_id))
             now = self.clock.now()
             for item_id, amount in totals.items():
                 name, item_type = metadata[item_id]
                 uow.execute("INSERT INTO back (user_id,goods_id,goods_name,goods_type,goods_num,create_time,update_time,bind_num) VALUES (?,?,?,?,?,?,?,?) ON CONFLICT(user_id,goods_id) DO UPDATE SET goods_num=back.goods_num+excluded.goods_num,bind_num=COALESCE(back.bind_num,0)+excluded.bind_num,update_time=excluded.update_time", (user_id, item_id, name, item_type, amount, now, now, amount))
             compact = tuple(sorted(totals.items()))
-            uow.execute("INSERT INTO map_combat_settlement_operations(operation_id,payload,stone,rewards) VALUES(?,?,?,?)", (operation_id, payload, stone, json.dumps(compact)))
+            uow.execute("INSERT INTO map_combat_settlement_operations(operation_id,payload,stone,rewards) VALUES(?,?,xiuxian_int_store(?,'stone','actor'),?)", (operation_id, payload, stone, json.dumps(compact)))
             return {"status": "applied", "stone": stone, "rewards": compact}
 
 

@@ -135,15 +135,15 @@ class BegRepository:
 
         final_stone = expected_stone + stone_reward
         changed = uow.execute(
-            "UPDATE user_xiuxian SET stone = ?,is_beg = 1 "
-            "WHERE user_id = ? AND xiuxian_int_cmp(COALESCE(stone,0),?)=0 AND COALESCE(is_beg,0) = 0",
+            "UPDATE user_xiuxian SET stone = xiuxian_int_store(?,'stone','actor'),is_beg = 1 "
+            "WHERE user_id = ? AND xiuxian_int_cmp(COALESCE(stone,0),?,1,'stone','actor')=0 AND COALESCE(is_beg,0) = 0",
             (final_stone, user_id, expected_stone),
         )
         if changed.rowcount < 1:
             return BegDailyRewardResult("state_changed", reason="beg_daily_write_rejected")
         self._checkpoint("after_user_update")
         uow.execute(
-            "INSERT INTO beg_daily_reward_operations(operation_id,payload,stone_reward,stone) VALUES (?,?,?,?)",
+            "INSERT INTO beg_daily_reward_operations(operation_id,payload,stone_reward,stone) VALUES(?,?,?,xiuxian_int_store(?,'stone','actor'))",
             (operation_id, payload, stone_reward, final_stone),
         )
         self._checkpoint("after_operation")
@@ -202,7 +202,7 @@ class BegRepository:
                 return NoviceGiftClaimResult("inventory_full")
 
         changed = uow.execute(
-            "UPDATE user_xiuxian SET stone = CAST(COALESCE(stone,0) AS REAL) + CAST(? AS REAL),is_novice = 1 "
+            "UPDATE user_xiuxian SET stone = xiuxian_int_store(xiuxian_int_add(COALESCE(stone,0),?,'stone','actor')),is_novice = 1 "
             "WHERE user_id = ? AND COALESCE(is_novice,0) = 0 AND create_time = ?",
             (stone, user_id, user["create_time"]),
         )
@@ -222,7 +222,7 @@ class BegRepository:
             )
         self._checkpoint("after_rewards")
         uow.execute(
-            "INSERT INTO novice_gift_claim_operations(operation_id,payload,stone) VALUES (?,?,?)",
+            "INSERT INTO novice_gift_claim_operations(operation_id,payload,stone) VALUES(?,?,xiuxian_int_store(?,'stone','actor'))",
             (operation_id, payload, stone),
         )
         return NoviceGiftClaimResult("applied", stone)

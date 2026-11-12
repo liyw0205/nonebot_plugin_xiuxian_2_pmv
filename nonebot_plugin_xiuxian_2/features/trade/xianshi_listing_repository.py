@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from ...core.numeric import as_int_like
+from ...core.numeric import as_int_like, bind_sqlite_param, require_exact_integer
+from ...core.errors import DomainError
 
 from dataclasses import dataclass
 from pathlib import Path
@@ -148,7 +149,8 @@ class XianshiListingSqlRepository:
                     "stamina_insufficient", operation_id, seller_id, goods_id, name,
                     goods_type, price, quantity,
                 )
-            if as_int_like(player["stone"]) < fee:
+            wallet = require_exact_integer(player["stone"], field="stone", subject="seller")
+            if wallet < fee:
                 return self._result(
                     "stone_insufficient", operation_id, seller_id, goods_id, name,
                     goods_type, price, quantity,
@@ -173,12 +175,15 @@ class XianshiListingSqlRepository:
                 if stamina.rowcount != 1:
                     raise RuntimeError("xianshi listing stamina snapshot changed")
             changed_stone = uow.execute(
-                "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)-CAST(? AS REAL) "
-                "WHERE user_id=? AND xiuxian_int_cmp(COALESCE(stone,0),?)>=0",
-                (fee, seller_id, fee),
+                "UPDATE user_xiuxian SET stone=xiuxian_int_store(?,'stone','actor') "
+                "WHERE user_id=? AND xiuxian_int_cmp(COALESCE(stone,0),?,1,'stone','actor')=0",
+                (bind_sqlite_param(wallet - fee, exact=True), seller_id, bind_sqlite_param(wallet, exact=True)),
             )
             if changed_stone.rowcount != 1:
                 raise RuntimeError("xianshi listing stone snapshot changed")
+            saved = uow.query_one("SELECT stone FROM user_xiuxian WHERE user_id=?", (seller_id,))
+            if saved is None or require_exact_integer(saved["stone"], field="stone", subject="seller") != wallet - fee:
+                raise DomainError("stone_write_rejected", "Xianshi listing fee did not persist exactly", {"reason": "stone_write_rejected", "subject": "seller"})
             stock = uow.execute(
                 "UPDATE back SET goods_num=COALESCE(goods_num,0)-?,update_time=?,action_time=? "
                 "WHERE user_id=? AND goods_id=? AND "
@@ -205,8 +210,8 @@ class XianshiListingSqlRepository:
                         continue
                     uow.execute(
                         "INSERT INTO xianshi_item(id,user_id,goods_id,name,type,price,quantity) "
-                        "VALUES(?,?,?,?,?,?,1)",
-                        (listing_id, seller_id, goods_id, name, goods_type, price),
+                        "VALUES(?,?,?,?,?,xiuxian_int_store(?,'stone','actor'),1)",
+                        (listing_id, seller_id, goods_id, name, goods_type, bind_sqlite_param(price, exact=True)),
                     )
                     break
                 else:
@@ -215,10 +220,10 @@ class XianshiListingSqlRepository:
             uow.execute(
                 "INSERT INTO xianshi_listing_operations "
                 "(operation_id,seller_id,goods_id,name,goods_type,price,requested_quantity,"
-                "listed_quantity,fee_charged,stamina_cost) VALUES(?,?,?,?,?,?,?,?,?,?)",
+                "listed_quantity,fee_charged,stamina_cost) VALUES(?,?,?,?,?,xiuxian_int_store(?,'stone','actor'),?,?,xiuxian_int_store(?,'stone','actor'),?)",
                 (
-                    operation_id, seller_id, goods_id, name, goods_type, price,
-                    quantity, quantity, fee, stamina_cost,
+                    operation_id, seller_id, goods_id, name, goods_type, bind_sqlite_param(price, exact=True),
+                    quantity, quantity, bind_sqlite_param(fee, exact=True), stamina_cost,
                 ),
             )
             return self._result(
@@ -278,7 +283,7 @@ class XianshiListingSqlRepository:
                     continue
                 uow.execute(
                     "INSERT INTO xianshi_item(id,user_id,goods_id,name,type,price,quantity) "
-                    "VALUES(?,?,?,?,?,?,?)",
+                    "VALUES(?,?,?,?,?,xiuxian_int_store(?,'stone','actor'),?)",
                     (listing_id, "0", goods_id, name, goods_type, price, quantity),
                 )
                 break
@@ -288,7 +293,7 @@ class XianshiListingSqlRepository:
             uow.execute(
                 "INSERT INTO xianshi_listing_operations "
                 "(operation_id,seller_id,goods_id,name,goods_type,price,requested_quantity,"
-                "listed_quantity,fee_charged,stamina_cost) VALUES(?,?,?,?,?,?,?,?,?,0)",
+                "listed_quantity,fee_charged,stamina_cost) VALUES(?,?,?,?,?,xiuxian_int_store(?,'stone','actor'),?,?,xiuxian_int_store(?,'stone','actor'),0)",
                 (
                     operation_id,
                     "0",

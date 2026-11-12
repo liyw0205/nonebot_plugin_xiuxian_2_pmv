@@ -165,9 +165,9 @@ class ClosingSettlementSqlRepository:
                 return ClosingSettlementResult("stone_insufficient")
 
             changed = uow.execute(
-                "UPDATE user_xiuxian SET exp=COALESCE(exp,0)+?,stone=COALESCE(stone,0)-?,"
+                "UPDATE user_xiuxian SET exp=COALESCE(exp,0)+?,stone=xiuxian_int_store(xiuxian_int_sub(COALESCE(stone,0),?,'stone','actor')),"
                 "hp=?,mp=?,atk=?,power=? WHERE rowid=(SELECT rowid FROM user_xiuxian "
-                "WHERE user_id=? ORDER BY rowid LIMIT 1) AND xiuxian_int_cmp(stone,?)>=0",
+                "WHERE user_id=? ORDER BY rowid LIMIT 1) AND xiuxian_int_cmp(stone,?,1,'stone','actor')>=0",
                 (values[0], values[1], values[2], values[3], values[4], values[5], user_id, values[1]),
             )
             if is_blank_cd_time(cd["create_time"]) or is_blank_cd_time(expected_create_time):

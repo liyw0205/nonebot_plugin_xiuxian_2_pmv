@@ -505,7 +505,7 @@ class MixelixirHarvestLevelUpgradeService:
 
                 conn.execute(
                     "INSERT INTO mixelixir_harvest_level_upgrade_operations "
-                    "(operation_id,payload,cost,wallet_stone,level,experience) VALUES (%s,%s,%s,%s,%s,%s)",
+                    "(operation_id,payload,cost,wallet_stone,level,experience) VALUES(%s,%s,xiuxian_int_store(%s,'stone','actor'),xiuxian_int_store(%s,'stone','actor'),%s,%s)",
                     (operation_id, payload, cost, current_stone, next_level, remaining_experience),
                 )
                 conn.commit()
@@ -687,7 +687,7 @@ class MixelixirFireControlUpgradeService:
 
                 conn.execute(
                     "INSERT INTO mixelixir_fire_control_upgrade_operations "
-                    "(operation_id,payload,cost,wallet_stone,level,experience) VALUES (%s,%s,%s,%s,%s,%s)",
+                    "(operation_id,payload,cost,wallet_stone,level,experience) VALUES(%s,%s,xiuxian_int_store(%s,'stone','actor'),xiuxian_int_store(%s,'stone','actor'),%s,%s)",
                     (operation_id, payload, cost, current_stone, next_level, remaining_experience),
                 )
                 conn.commit()

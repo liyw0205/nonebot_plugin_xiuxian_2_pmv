@@ -175,11 +175,11 @@ class StoneContestService:
                     return self._result("payer_empty", payer_id, receiver_id, requested_amount)
 
                 charged = conn.execute(
-                    "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)-CAST(%s AS REAL) WHERE user_id=%s AND xiuxian_int_cmp(stone,%s)>=0",
+                    "UPDATE user_xiuxian SET stone=xiuxian_int_store(xiuxian_int_sub(COALESCE(stone,0),%s,'stone','actor')) WHERE user_id=%s AND xiuxian_int_cmp(stone,%s,1,'stone','actor')>=0",
                     (transferred, payer_id, transferred),
                 )
                 credited = conn.execute(
-                    "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)+CAST(%s AS REAL) WHERE user_id=%s",
+                    "UPDATE user_xiuxian SET stone=xiuxian_int_store(xiuxian_int_add(COALESCE(stone,0),%s,'stone','actor')) WHERE user_id=%s",
                     (transferred, receiver_id),
                 )
                 if charged.rowcount != 1 or credited.rowcount != 1:
@@ -296,13 +296,13 @@ class StoneContestService:
                     return current_result("payer_empty", thief_stamina=thief_stamina)
 
                 charged = conn.execute(
-                    "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)-CAST(%s AS REAL) "
-                    "WHERE user_id=%s AND xiuxian_int_cmp(COALESCE(stone,0),%s)=0 AND xiuxian_int_cmp(stone,%s)>=0",
+                    "UPDATE user_xiuxian SET stone=xiuxian_int_store(xiuxian_int_sub(COALESCE(stone,0),%s,'stone','actor')) "
+                    "WHERE user_id=%s AND xiuxian_int_cmp(COALESCE(stone,0),%s,1,'stone','actor')=0 AND xiuxian_int_cmp(stone,%s,1,'stone','actor')>=0",
                     (transferred, payer_id, payer_stone, transferred),
                 )
                 credited = conn.execute(
-                    "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)+CAST(%s AS REAL) "
-                    "WHERE user_id=%s AND xiuxian_int_cmp(COALESCE(stone,0),%s)=0",
+                    "UPDATE user_xiuxian SET stone=xiuxian_int_store(xiuxian_int_add(COALESCE(stone,0),%s,'stone','actor')) "
+                    "WHERE user_id=%s AND xiuxian_int_cmp(COALESCE(stone,0),%s,1,'stone','actor')=0",
                     (transferred, receiver_id, receiver_stone),
                 )
                 stamina = conn.execute(

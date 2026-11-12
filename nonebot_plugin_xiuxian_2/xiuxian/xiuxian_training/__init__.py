@@ -6,6 +6,8 @@ from datetime import datetime, timedelta
 from ..on_compat import on_command, on_regex
 from nonebot.log import logger
 from nonebot.params import CommandArg, RegexGroup
+from nonebot.exception import MatcherException, ProcessException
+from ..command_guard import guard_command, report_exception, result_failure
 from ..adapter_compat import Bot, Message, GroupMessageEvent, PrivateMessageEvent
 from nonebot.permission import SUPERUSER
 from ..xiuxian_utils.lay_out import assign_bot, Cooldown
@@ -330,6 +332,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     await training_shop.finish()
 
 @training_buy.handle(parameterless=[Cooldown(cd_time=0)])
+@guard_command("历练兑换", known_rejections=("currency_precision_unavailable",))
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """兑换历练商店物品"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -392,9 +395,10 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
             max_goods_num=XiuConfig().max_goods_num,
             bind_flag=1,
         )
-    except Exception:
-        logger.exception("历练兑换事务失败 user_id={} item_id={}", user_id, shop_id)
-        await handle_send(bot, event, "历练兑换失败：结算过程异常。", md_type="历练")
+    except (MatcherException, ProcessException):
+        raise
+    except Exception as exc:
+        await handle_send(bot, event, report_exception("历练兑换", exc, event=event), md_type="历练")
         await training_buy.finish()
     if purchase_result.status == "points_insufficient":
         await handle_send(bot, event, "兑换失败：成就点不足。", md_type="历练")
@@ -406,7 +410,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         await handle_send(bot, event, f"{item_info['name']}持有数量已达上限！", md_type="历练")
         await training_buy.finish()
     if purchase_result.status in {"state_changed", "user_missing"}:
-        await handle_send(bot, event, "兑换未完成：活动进度已更新，请重新兑换，请重新兑换。", md_type="历练")
+        await handle_send(bot, event, result_failure("历练兑换", purchase_result), md_type="历练")
         await training_buy.finish()
     
     msg = f"成功兑换{item_info['name']}×{quantity}，消耗{total_cost}成就点！"

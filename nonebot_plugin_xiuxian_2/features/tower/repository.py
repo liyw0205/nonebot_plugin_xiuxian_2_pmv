@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from ...core.errors import DomainError
-from ...core.numeric import as_int_like, sqlite_int_compare
+from ...core.numeric import as_int_like, sqlite_int_compare, bind_sqlite_param, require_exact_integer
 
 from pathlib import Path
 from typing import Any, Mapping, Protocol, Sequence
@@ -84,9 +84,9 @@ class TowerPurchaseSqlRepository(LegacyTowerRepository):
             for item_id,_,_,amount in rewards:
                 row=uow.query_one("SELECT COALESCE(goods_num,0) AS n FROM back WHERE user_id=? AND goods_id=?",(user_id,item_id))
                 if (int(row["n"]) if row else 0)+amount>max_goods_num:return self._record_settlement(uow,operation_id,payload,result("inventory_full"))
-            if challenge_succeeded:uow.execute("UPDATE player_data.tower SET current_floor=?,max_floor=?,score=? WHERE user_id=?",(floor,max(expected["max_floor"],floor),expected["score"]+score,user_id))
-            if player is None:uow.execute("UPDATE user_xiuxian SET stone=COALESCE(stone,0)+?,exp=COALESCE(exp,0)+? WHERE user_id=?",(stone,exp,user_id))
-            else:uow.execute("UPDATE user_xiuxian SET stone=COALESCE(stone,0)+?,exp=COALESCE(exp,0)+?,hp=?,mp=?,user_stamina=user_stamina-? WHERE user_id=?",(stone,exp,max(1,int(final_hp)),max(1,int(final_mp)),stamina_cost,user_id))
+            if challenge_succeeded:uow.execute("UPDATE player_data.tower SET current_floor=?,max_floor=?,score=xiuxian_int_store(?,'tower_score','actor') WHERE user_id=?",(floor,max(expected["max_floor"],floor),expected["score"]+score,user_id))
+            if player is None:uow.execute("UPDATE user_xiuxian SET stone=xiuxian_int_store(xiuxian_int_add(COALESCE(stone,0),?,'stone','actor')),exp=COALESCE(exp,0)+? WHERE user_id=?",(stone,exp,user_id))
+            else:uow.execute("UPDATE user_xiuxian SET stone=xiuxian_int_store(xiuxian_int_add(COALESCE(stone,0),?,'stone','actor')),exp=COALESCE(exp,0)+?,hp=?,mp=?,user_stamina=user_stamina-? WHERE user_id=?",(stone,exp,max(1,int(final_hp)),max(1,int(final_mp)),stamina_cost,user_id))
             stamp=self._date(self.clock.now()).isoformat()
             for item_id,name,item_type,amount in rewards:uow.execute("INSERT INTO back(user_id,goods_id,goods_name,goods_type,goods_num,create_time,update_time,bind_num) VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(user_id,goods_id) DO UPDATE SET goods_num=back.goods_num+excluded.goods_num,bind_num=COALESCE(back.bind_num,0)+excluded.bind_num,update_time=excluded.update_time",(user_id,item_id,name,item_type,amount,stamp,stamp,amount))
             return self._record_settlement(uow,operation_id,payload,result("applied"))
@@ -136,7 +136,8 @@ class TowerPurchaseSqlRepository(LegacyTowerRepository):
             tower=uow.query_one("SELECT COALESCE(score,0) AS score,COALESCE(weekly_purchases,'{}') AS weekly FROM player_data.tower WHERE user_id=?",(user_id,))
             if tower is None:return self._record(uow,operation_id,payload,result("state_changed", reason="tower_missing"))
             current_weekly=self._weekly(tower["weekly"],today)
-            if as_int_like(tower["score"])!=expected_score or current_weekly!=weekly:return self._record(uow,operation_id,payload,result("state_changed", reason="tower_score_changed" if as_int_like(tower["score"])!=expected_score else "weekly_purchase_changed"))
+            current_score = require_exact_integer(tower["score"], field="tower_score", subject=user_id)
+            if current_score!=expected_score or current_weekly!=weekly:return self._record(uow,operation_id,payload,result("state_changed", reason="tower_score_changed" if current_score!=expected_score else "weekly_purchase_changed"))
             purchased=int(weekly.get(str(item_id),0) or 0)
             if purchased+quantity>weekly_limit:return self._record(uow,operation_id,payload,result("limit_reached",purchased=purchased))
             cost=quantity*unit_cost
@@ -144,15 +145,18 @@ class TowerPurchaseSqlRepository(LegacyTowerRepository):
             item=uow.query_one("SELECT COALESCE(goods_num,0) AS goods_num FROM back WHERE user_id=? AND goods_id=?",(user_id,item_id));inventory=int(item["goods_num"]) if item else 0
             if inventory+quantity>max_goods_num:return self._record(uow,operation_id,payload,result("inventory_full",purchased=purchased,inventory=inventory))
             new_score,new_purchased,new_inventory=expected_score-cost,purchased+quantity,inventory+quantity;weekly[str(item_id)]=new_purchased
-            updated=uow.execute("UPDATE player_data.tower SET score=?,weekly_purchases=? WHERE user_id=? AND xiuxian_int_cmp(COALESCE(score,0),?)=0",(new_score,json.dumps(weekly,ensure_ascii=True),user_id,expected_score))
+            updated=uow.execute("UPDATE player_data.tower SET score=xiuxian_int_store(?,'tower_score','actor'),weekly_purchases=? WHERE user_id=? AND xiuxian_int_cmp(COALESCE(score,0),?,1,'tower_score','actor')=0",(bind_sqlite_param(new_score,exact=True),json.dumps(weekly,ensure_ascii=True),user_id,bind_sqlite_param(expected_score,exact=True)))
             if updated.rowcount!=1:raise DomainError("tower_purchase_write_rejected", "tower purchase write count mismatch")
+            saved = uow.query_one("SELECT score FROM player_data.tower WHERE user_id=?", (user_id,))
+            if saved is None or require_exact_integer(saved["score"], field="tower_score", subject=user_id) != new_score:
+                raise DomainError("tower_purchase_write_rejected", "tower score purchase did not persist exactly", {"reason": "tower_purchase_write_rejected", "subject": user_id})
             stamp=self._date(today).isoformat();uow.execute("INSERT INTO back(user_id,goods_id,goods_name,goods_type,goods_num,create_time,update_time,bind_num) VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(user_id,goods_id) DO UPDATE SET goods_name=excluded.goods_name,goods_type=excluded.goods_type,goods_num=back.goods_num+excluded.goods_num,bind_num=COALESCE(back.bind_num,0)+excluded.bind_num,update_time=excluded.update_time",(user_id,item_id,item_name,item_type,quantity,stamp,stamp,quantity if bind_flag else 0));return self._record(uow,operation_id,payload,result("applied",new_score,new_purchased,new_inventory))
 
     @staticmethod
     def _record(uow, operation_id, payload, result):
         if result["status"] not in {"applied", "duplicate"}:
             payload = json.dumps({"request":json.loads(payload), "_rejection":result}, ensure_ascii=True, separators=(",",":"))
-        uow.execute("INSERT INTO tower_purchase_operations(operation_id,payload,quantity,cost,score,purchased,inventory) VALUES(?,?,?,?,?,?,?)",(operation_id,payload,result["quantity"],result["cost"],result["score"],result["purchased"],result["inventory"]));return result
+        uow.execute("INSERT INTO tower_purchase_operations(operation_id,payload,quantity,cost,score,purchased,inventory) VALUES(?,?,?,xiuxian_int_store(?,'stone','actor'),xiuxian_int_store(?,'tower_score','actor'),?,?)",(operation_id,payload,result["quantity"],bind_sqlite_param(result["cost"],exact=True),bind_sqlite_param(result["score"],exact=True),result["purchased"],result["inventory"]));return result
 
 
 __all__ = ["LegacyTowerRepository", "TowerPurchaseSqlRepository", "TowerRepository"]

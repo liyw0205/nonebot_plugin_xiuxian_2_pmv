@@ -12,7 +12,7 @@ from nonebot.log import logger
 from ...paths import get_paths
 
 from . import db_backend
-from ...core.numeric import as_int_like, sqlite_int_compare
+from ...core.numeric import as_int_like, sqlite_int_compare, require_exact_integer, bind_sqlite_param
 
 
 DATABASE = get_paths().data
@@ -45,8 +45,20 @@ _INTEGER_FIELDS = {
                        *(f"effect{i}_{kind}" for i in range(1, 4) for kind in ("type", "level"))},
 }
 
+_MONEY_FIELDS = {
+    "bankinfo": {"savestone": "saved_stone"},
+    "boss": {"integral": "boss_integral"},
+    "boss_limit": {"integral": "boss_integral"},
+    "training": {"points": "training_points"},
+    "tower": {"score": "tower_score"},
+    "arena": {"honor_points": "arena_honor", "total_honor_earned": "arena_honor"},
+}
+
 
 def _decode_field(table, field, value):
+    money = _MONEY_FIELDS.get(table, {}).get(field)
+    if money and value is not None:
+        return require_exact_integer(value, field=money, subject="actor")
     if field in _INTEGER_FIELDS.get(table, ()) and value is not None:
         if sqlite_int_compare(value, value) is not None:
             return as_int_like(value)
@@ -178,13 +190,16 @@ class PlayerDataManager:
             logger.warning(f"不支持的数据类型: {data_type} 已设置为默认类型：TEXT")
             data_type = 'TEXT'
 
-        self._ensure_table_exists(table_name)
-        self._ensure_field_exists(table_name, field, data_type)
-
-        if isinstance(value, (dict, list)):
+        money = _MONEY_FIELDS.get(table_name, {}).get(field)
+        if money:
+            value = bind_sqlite_param(require_exact_integer(value, field=money, subject=str(user_id)), exact=True)
+        elif isinstance(value, (dict, list)):
             value = json.dumps(value, ensure_ascii=False)
         else:
             value = str(value)
+
+        self._ensure_table_exists(table_name)
+        self._ensure_field_exists(table_name, field, data_type)
 
         with self._conn_lock:
             cursor = self._get_cursor()
@@ -357,13 +372,16 @@ class PlayerDataManager:
             logger.warning(f"<yellow>Unsupported data type: {data_type}. Defaulting to TEXT.</yellow>")
             data_type = 'TEXT'
 
-        self._ensure_table_exists(table_name)
-        self._ensure_field_exists(table_name, field, data_type=data_type)
-
-        if isinstance(value, (dict, list)):
+        money = _MONEY_FIELDS.get(table_name, {}).get(field)
+        if money:
+            value = bind_sqlite_param(require_exact_integer(value, field=money, subject="batch"), exact=True)
+        elif isinstance(value, (dict, list)):
             value = json.dumps(value, ensure_ascii=False)
         else:
             value = str(value)
+
+        self._ensure_table_exists(table_name)
+        self._ensure_field_exists(table_name, field, data_type=data_type)
 
         with self._conn_lock:
             cursor = self._get_cursor()

@@ -142,7 +142,7 @@ class GuishiBaitanSqlRepository:
                     uow.execute(
                         "INSERT INTO guishi_trade.guishi_item("
                         "id,user_id,item_id,item_name,item_type,price,quantity) "
-                        "VALUES(?,?,?,?,?,?,?)",
+                        "VALUES(?,?,?,?,?,xiuxian_int_store(?,'stone','actor'),?)",
                         (candidate, user_id, item_id, item_name, "baitan", price, quantity),
                     )
                     order_id = candidate
@@ -162,7 +162,7 @@ class GuishiBaitanSqlRepository:
             if operation_id:
                 uow.execute(
                     "INSERT INTO guishi_trade.guishi_order_create_operations("
-                    "operation_id,payload,order_id,order_type,amount) VALUES(?,?,?,?,?)",
+                    "operation_id,payload,order_id,order_type,amount) VALUES(?,?,?,?,xiuxian_int_store(?,'stone','actor'))",
                     (operation_id, payload, order_id, "baitan", quantity),
                 )
             return GuishiBaitanCreateResult("created", order_id, quantity)

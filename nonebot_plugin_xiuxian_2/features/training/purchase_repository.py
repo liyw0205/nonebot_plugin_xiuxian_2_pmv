@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from datetime import date, datetime
 from pathlib import Path
 from typing import Any, Mapping
-from ...core.numeric import as_int_like
+from ...core.numeric import as_int_like, bind_sqlite_param, require_exact_integer
 from ...core.errors import DomainError
 
 from ...infrastructure.database.attached_uow import AttachedDatabaseUnitOfWork
@@ -261,7 +261,7 @@ class TrainingPurchaseSqlRepository:
                     "duplicate",
                     int(previous["quantity"]),
                     int(previous["cost"]),
-                    as_int_like(previous["points"]),
+                    require_exact_integer(previous["points"], field="training_receipt_points", subject=user_id),
                     int(previous["purchased"]),
                     int(previous["inventory"]),
                 )
@@ -282,7 +282,8 @@ class TrainingPurchaseSqlRepository:
             if training is None:
                 return self._result("state_changed", quantity, unit_cost, points=expected_points)
             current_weekly = _normalize_weekly(training["weekly"], today)
-            if as_int_like(training["points"]) != expected_points or current_weekly != weekly:
+            current_points = require_exact_integer(training["points"], field="training_points", subject=user_id)
+            if current_points != expected_points or current_weekly != weekly:
                 return self._result("state_changed", quantity, unit_cost, points=expected_points)
             purchased = int(weekly.get(str(item_id), 0))
             if purchased + quantity > weekly_limit:
@@ -313,11 +314,14 @@ class TrainingPurchaseSqlRepository:
             weekly_json = json.dumps(weekly, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
             changed = uow.execute(
                 "UPDATE player_data.training SET points=?,weekly_purchases=? "
-                "WHERE user_id=? AND xiuxian_int_cmp(COALESCE(points,0),?)=0",
-                (points, weekly_json, user_id, expected_points),
+                "WHERE user_id=? AND xiuxian_int_cmp(COALESCE(points,0),?,1)=0",
+                (bind_sqlite_param(points, exact=True), weekly_json, user_id, bind_sqlite_param(expected_points, exact=True)),
             )
             if changed.rowcount != 1:
                 raise DomainError("training_points_write_rejected", "training points write did not affect one row")
+            saved = uow.query_one("SELECT points FROM player_data.training WHERE user_id=?", (user_id,))
+            if saved is None or require_exact_integer(saved["points"], field="training_points", subject=user_id) != points:
+                raise DomainError("training_points_write_rejected", "training points did not persist exactly", {"reason": "training_points_write_rejected", "subject": user_id})
 
             timestamp = self.clock.now().isoformat(sep=" ", timespec="seconds")
             if inventory_row is None:
@@ -357,8 +361,8 @@ class TrainingPurchaseSqlRepository:
 
             uow.execute(
                 "INSERT INTO training_purchase_operations"
-                "(operation_id,payload,quantity,cost,points,purchased,inventory) VALUES(?,?,?,?,?,?,?)",
-                (operation_id, payload, quantity, cost, points, purchased, inventory),
+                "(operation_id,payload,quantity,cost,points,purchased,inventory) VALUES(?,?,?,xiuxian_int_store(?,'stone','actor'),xiuxian_int_store(?,'training_points','actor'),?,?)",
+                (operation_id, payload, quantity, bind_sqlite_param(cost, exact=True), bind_sqlite_param(points, exact=True), purchased, inventory),
             )
             return TrainingPurchaseResult("applied", quantity, cost, points, purchased, inventory)
 

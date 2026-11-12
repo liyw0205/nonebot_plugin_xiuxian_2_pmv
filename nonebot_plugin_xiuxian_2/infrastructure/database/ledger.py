@@ -168,6 +168,17 @@ class OperationLedger:
         )
         return None
 
+    def release_unsettled(self, uow: DatabaseUnitOfWork, reservation: OperationRecord) -> None:
+        """Release only a new reservation whose business transaction rolled back."""
+        changed = uow.execute(
+            "DELETE FROM operation_ledger WHERE operation_id=? AND action=? AND request_hash=? "
+            "AND status='started' AND result_json IS NULL AND created_at=? AND updated_at=?",
+            (reservation.operation_id, reservation.action, reservation.request_hash,
+             reservation.created_at, reservation.updated_at),
+        )
+        if changed.rowcount != 1:
+            raise OperationConflictError(reservation.operation_id, reservation.action)
+
     def finish(self, uow: DatabaseUnitOfWork, outcome: OperationOutcome[Any]) -> None:
         encoded = json.dumps(outcome.to_dict(), ensure_ascii=False, sort_keys=True, default=str)
         uow.execute(

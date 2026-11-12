@@ -113,10 +113,10 @@ class SectFairylandSqlRepository:
 
             changed = uow.execute(
                 "UPDATE sects SET sect_fairyland=?,"
-                "sect_used_stone=CAST(COALESCE(sect_used_stone,0) AS REAL)-CAST(? AS REAL),"
-                "sect_materials=CAST(COALESCE(sect_materials,0) AS REAL)-CAST(? AS REAL) "
+                "sect_used_stone=xiuxian_int_store(xiuxian_int_sub(COALESCE(sect_used_stone,0),?,'sect_used_stone','actor')),"
+                "sect_materials=xiuxian_int_store(xiuxian_int_sub(COALESCE(sect_materials,0),?,'sect_materials','actor')) "
                 "WHERE sect_id=? AND sect_owner=? AND COALESCE(sect_fairyland,0)=? "
-                "AND xiuxian_int_cmp(COALESCE(sect_used_stone,0),?)>=0 AND xiuxian_int_cmp(COALESCE(sect_materials,0),?)>=0",
+                "AND xiuxian_int_cmp(COALESCE(sect_used_stone,0),?,1,'sect_used_stone','actor')>=0 AND xiuxian_int_cmp(COALESCE(sect_materials,0),?,1,'sect_materials','actor')>=0",
                 (
                     next_level,
                     stone_cost,

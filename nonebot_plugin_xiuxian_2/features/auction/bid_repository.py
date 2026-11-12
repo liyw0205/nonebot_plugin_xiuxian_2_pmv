@@ -100,8 +100,8 @@ class AuctionBidSqlRepository:
             if debit <= 0:
                 return AuctionBidWriteResult("bid_too_low", operation_id, auction_id, bidder_id)
             if uow.execute(
-                "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)-CAST(? AS REAL) "
-                "WHERE user_id=? AND xiuxian_int_cmp(stone,?)>=0",
+                "UPDATE user_xiuxian SET stone=xiuxian_int_store(xiuxian_int_sub(COALESCE(stone,0),?,'stone','actor')) "
+                "WHERE user_id=? AND xiuxian_int_cmp(stone,?,1,'stone','actor')>=0",
                 (debit, bidder_id, debit),
             ).rowcount != 1:
                 return AuctionBidWriteResult("stone_insufficient", operation_id, auction_id, bidder_id)
@@ -109,7 +109,7 @@ class AuctionBidSqlRepository:
             refunded_bidder, refunded_amount = ("", 0)
             if previous_bidder and previous_bidder != bidder_id:
                 if uow.execute(
-                    "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)+CAST(? AS REAL) "
+                    "UPDATE user_xiuxian SET stone=xiuxian_int_store(xiuxian_int_add(COALESCE(stone,0),?,'stone','actor')) "
                     "WHERE user_id=?",
                     (previous_amount, previous_bidder),
                 ).rowcount != 1:

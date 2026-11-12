@@ -244,7 +244,7 @@ class ActivityCollectExchangeSqlRepository:
 
             if stone:
                 changed = uow.execute(
-                    "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)+? "
+                    "UPDATE user_xiuxian SET stone=xiuxian_int_store(xiuxian_int_add(COALESCE(stone,0),?,'stone','actor')) "
                     "WHERE user_id=?",
                     (stone, user_id),
                 )

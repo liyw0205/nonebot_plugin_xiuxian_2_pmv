@@ -117,7 +117,7 @@ class BankUpgradeService:
                 ).fetchone()
                 if account is None:
                     conn.execute(
-                        "INSERT INTO player_data.bankinfo (user_id, savestone, savetime, banklevel) VALUES (%s, %s, %s, %s)",
+                        "INSERT INTO player_data.bankinfo (user_id, savestone, savetime, banklevel) VALUES(%s,xiuxian_int_store(%s,'saved_stone','actor'),%s,%s)",
                         (user_id, 0, "", expected_level),
                     )
                     account = (expected_level,)
@@ -127,7 +127,7 @@ class BankUpgradeService:
 
                 wallet_stone = as_int_like(user[0]) - cost
                 charged = conn.execute(
-                    "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)-CAST(%s AS REAL) WHERE user_id=%s AND xiuxian_int_cmp(stone,%s)>=0",
+                    "UPDATE user_xiuxian SET stone=xiuxian_int_store(xiuxian_int_sub(COALESCE(stone,0),%s,'stone','actor')) WHERE user_id=%s AND xiuxian_int_cmp(stone,%s,1,'stone','actor')>=0",
                     (cost, user_id, cost),
                 )
                 updated = conn.execute(
@@ -267,7 +267,7 @@ class BankInterestService:
                 ).fetchone()
                 if account is None:
                     conn.execute(
-                        "INSERT INTO player_data.bankinfo (user_id, savestone, savetime, banklevel) VALUES (%s, %s, %s, %s)",
+                        "INSERT INTO player_data.bankinfo (user_id, savestone, savetime, banklevel) VALUES(%s,xiuxian_int_store(%s,'saved_stone','actor'),%s,%s)",
                         (user_id, expected_saved_stone, expected_saved_at, bank_level),
                     )
                     account = (expected_saved_stone, expected_saved_at, bank_level)
@@ -279,11 +279,11 @@ class BankInterestService:
 
                 wallet_stone = as_int_like(user[0]) + interest
                 credited = conn.execute(
-                    "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)+CAST(%s AS REAL) WHERE user_id=%s", (interest, user_id)
+                    "UPDATE user_xiuxian SET stone=xiuxian_int_store(xiuxian_int_add(COALESCE(stone,0),%s,'stone','actor')) WHERE user_id=%s", (interest, user_id)
                 )
                 updated = conn.execute(
                     "UPDATE player_data.bankinfo SET savetime=%s WHERE user_id=%s "
-                    "AND xiuxian_int_cmp(COALESCE(savestone, 0),%s)=0 AND COALESCE(savetime, '')=%s AND banklevel=%s",
+                    "AND xiuxian_int_cmp(COALESCE(savestone, 0),%s,1,'saved_stone','actor')=0 AND COALESCE(savetime, '')=%s AND banklevel=%s",
                     (settled_at, user_id, expected_saved_stone, expected_saved_at, bank_level),
                 )
                 if credited.rowcount != 1 or updated.rowcount != 1:

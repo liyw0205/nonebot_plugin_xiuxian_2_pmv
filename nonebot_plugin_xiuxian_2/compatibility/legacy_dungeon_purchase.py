@@ -159,7 +159,7 @@ class DungeonPurchaseService:
         conn.execute(
             "INSERT INTO dungeon_purchase_operations("
             "operation_id,payload,result_status,quantity,cost,stone,inventory,response) "
-            "VALUES(%s,%s,%s,%s,%s,%s,%s,%s)",
+            "VALUES(%s,%s,%s,%s,xiuxian_int_store(%s,'stone','actor'),xiuxian_int_store(%s,'stone','actor'),%s,%s)",
             (
                 operation_id,
                 payload,
@@ -322,8 +322,8 @@ class DungeonPurchaseService:
                 new_inventory = inventory + quantity
                 new_bound = bound + (quantity if bind_flag else 0)
                 changed = conn.execute(
-                    "UPDATE user_xiuxian SET stone=%s "
-                    "WHERE user_id=%s AND xiuxian_int_cmp(COALESCE(stone,0),%s)=0",
+                    "UPDATE user_xiuxian SET stone=xiuxian_int_store(%s,'stone','actor') "
+                    "WHERE user_id=%s AND xiuxian_int_cmp(COALESCE(stone,0),%s,1,'stone','actor')=0",
                     (new_stone, user_id, expected_stone),
                 )
                 if changed.rowcount != 1:

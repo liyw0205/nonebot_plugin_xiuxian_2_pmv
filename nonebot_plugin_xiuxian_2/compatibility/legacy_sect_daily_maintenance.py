@@ -123,7 +123,7 @@ class SectDailyResetMaintenanceService:
                     elif materials >= cost:
                         status = "charged"
                         conn.execute(
-                            "UPDATE sects SET sect_materials=CAST(COALESCE(sect_materials,0) AS REAL)-CAST(%s AS REAL) "
+                            "UPDATE sects SET sect_materials=xiuxian_int_store(xiuxian_int_sub(COALESCE(sect_materials,0),%s,'sect_materials','actor')) "
                             "WHERE sect_id=%s AND elixir_room_level=%s",
                             (cost, sect_id, room_level),
                         )

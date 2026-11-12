@@ -526,7 +526,7 @@ class AdminStoneAdjustmentService:
                 final_stone = max(0, expected_stone + requested_delta)
                 applied_delta = final_stone - expected_stone
                 changed = conn.execute(
-                    "UPDATE user_xiuxian SET stone=%s WHERE user_id=%s AND xiuxian_int_cmp(COALESCE(stone,0),%s)=0",
+                    "UPDATE user_xiuxian SET stone=xiuxian_int_store(%s,'stone','actor') WHERE user_id=%s AND xiuxian_int_cmp(COALESCE(stone,0),%s,1,'stone','actor')=0",
                     (final_stone, user_id, expected_stone),
                 )
                 if changed.rowcount != 1:
@@ -547,7 +547,7 @@ class AdminStoneAdjustmentService:
                 )
                 conn.execute(
                     "INSERT INTO economy_log(user_id,source,action,stone_delta,item_delta,detail,trace_id,created_at) "
-                    "VALUES(%s,'admin',%s,%s,'[]',%s,%s,CURRENT_TIMESTAMP)",
+                    "VALUES(%s,'admin',%s,xiuxian_int_store(%s,'stone_delta','actor'),'[]',%s,%s,CURRENT_TIMESTAMP)",
                     (
                         user_id,
                         "admin_stone_add" if applied_delta > 0 else "admin_stone_cost",
@@ -558,7 +558,7 @@ class AdminStoneAdjustmentService:
                 )
                 conn.execute(
                     "INSERT INTO admin_stone_adjustment_operations("
-                    "operation_id,payload,previous_stone,final_stone,applied_delta) VALUES(%s,%s,%s,%s,%s)",
+                    "operation_id,payload,previous_stone,final_stone,applied_delta) VALUES(%s,%s,xiuxian_int_store(%s,'stone','actor'),xiuxian_int_store(%s,'stone','actor'),xiuxian_int_store(%s,'stone','actor'))",
                     (operation_id, payload, expected_stone, final_stone, applied_delta),
                 )
                 conn.commit()
@@ -2252,7 +2252,7 @@ class AdminImpartStoneAdjustmentService:
                     "INSERT INTO admin_impart_stone_operations("
                     "operation_id,payload,previous_stone,final_stone,applied_delta,"
                     "previous_stone_exact,final_stone_exact,applied_delta_exact) "
-                    "VALUES(%s,%s,%s,%s,%s,%s,%s,%s)",
+                    "VALUES(%s,%s,xiuxian_int_store(%s,'stone','actor'),xiuxian_int_store(%s,'stone','actor'),xiuxian_int_store(%s,'stone','actor'),%s,%s,%s)",
                     (
                         operation_id,
                         payload,

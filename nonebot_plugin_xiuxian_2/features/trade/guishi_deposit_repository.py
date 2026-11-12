@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from ...core.numeric import as_int_like
+from ...core.numeric import as_int_like, bind_sqlite_param, require_exact_integer
+from ...core.errors import DomainError
 import json
 from dataclasses import dataclass
 from pathlib import Path
@@ -118,16 +119,17 @@ class GuishiDepositSqlRepository:
                 )
 
             player = uow.query_one(
-                "SELECT 1 AS present FROM user_xiuxian WHERE user_id=?", (user_id,)
+                "SELECT stone FROM user_xiuxian WHERE user_id=?", (user_id,)
             )
             if player is None:
                 return GuishiDepositResult("user_missing", user_id, amount)
+            wallet = require_exact_integer(player["stone"], field="stone", subject=user_id)
             stored = uow.query_one(
                 "SELECT COALESCE(stored_stone,0) AS stored_stone "
                 "FROM guishi_trade.guishi_info WHERE user_id=?",
                 (user_id,),
             )
-            stored_balance = as_int_like(stored["stored_stone"]) if stored is not None else 0
+            stored_balance = require_exact_integer(stored["stored_stone"], field="stored_stone", subject=user_id) if stored is not None else 0
             # A rejected deposit must not persist a normalization that the old
             # transaction would have rolled back with the rejected request.
             stored_balance = min(stored_balance, self.STORED_CAP)
@@ -136,26 +138,29 @@ class GuishiDepositSqlRepository:
                     "stored_cap_exceeded", user_id, amount, stored_balance
                 )
 
+            if wallet < amount:
+                return GuishiDepositResult("stone_insufficient", user_id, amount, stored_balance)
             charged = uow.execute(
                 "UPDATE user_xiuxian "
-                "SET stone=CAST(COALESCE(stone,0) AS REAL)-CAST(? AS REAL) "
-                "WHERE user_id=? AND xiuxian_int_cmp(COALESCE(stone,0),?)>=0",
-                (amount, user_id, amount),
+                "SET stone=xiuxian_int_store(?,'stone','actor') "
+                "WHERE user_id=? AND xiuxian_int_cmp(COALESCE(stone,0),?,1,'stone','actor')=0",
+                (bind_sqlite_param(wallet - amount, exact=True), user_id, bind_sqlite_param(wallet, exact=True)),
             )
             if charged.rowcount != 1:
-                return GuishiDepositResult(
-                    "stone_insufficient", user_id, amount, stored_balance
-                )
+                raise DomainError("stone_write_rejected", "Guishi deposit wallet write rejected", {"reason": "stone_write_rejected", "subject": user_id})
+            saved = uow.query_one("SELECT stone FROM user_xiuxian WHERE user_id=?", (user_id,))
+            if saved is None or require_exact_integer(saved["stone"], field="stone", subject=user_id) != wallet - amount:
+                raise DomainError("stone_write_rejected", "Guishi deposit wallet did not persist exactly", {"reason": "stone_write_rejected", "subject": user_id})
             new_balance = stored_balance + amount
             uow.execute(
                 "INSERT INTO guishi_trade.guishi_info(user_id,stored_stone,items) "
-                "VALUES(?,?, '{}') ON CONFLICT(user_id) DO UPDATE SET "
+                "VALUES(?,xiuxian_int_store(?,'stored_stone','actor'),'{}') ON CONFLICT(user_id) DO UPDATE SET "
                 "stored_stone=excluded.stored_stone",
                 (user_id, new_balance),
             )
             uow.execute(
                 "INSERT INTO trade_guishi_deposit_operations("
-                "operation_id,payload,user_id,amount,stored_balance) VALUES(?,?,?,?,?)",
+                "operation_id,payload,user_id,amount,stored_balance) VALUES(?,?,?,xiuxian_int_store(?,'stone','actor'),?)",
                 (operation_id, payload, user_id, amount, new_balance),
             )
             return GuishiDepositResult("completed", user_id, amount, new_balance)

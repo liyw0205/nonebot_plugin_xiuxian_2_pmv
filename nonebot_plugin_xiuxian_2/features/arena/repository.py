@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from ...core.numeric import as_int_like, sqlite_int_compare
+from ...core.numeric import as_int_like, sqlite_int_compare, bind_sqlite_param, require_exact_integer
 from ...core.errors import DomainError
 from pathlib import Path
 from datetime import date
@@ -301,7 +301,7 @@ class ArenaChallengePurchaseSqlRepository(LegacyArenaRepository):
             if user is None or arena is None:
                 return record(uow, "user_missing")
             weekly, _ = ArenaStateRepository._weekly(arena["weekly"], business_date)
-            if as_int_like(arena["honor"]) != expected_honor:
+            if require_exact_integer(arena["honor"], field="arena_honor", subject=user_id) != expected_honor:
                 return record(uow, "state_changed", reason="honor_changed")
             if weekly.get(str(item_id), 0) != expected_weekly_purchases.get(str(item_id), 0):
                 return record(uow, "state_changed", reason="weekly_purchase_changed")
@@ -320,11 +320,14 @@ class ArenaChallengePurchaseSqlRepository(LegacyArenaRepository):
             honor, purchased, inventory = expected_honor - cost, purchased + quantity, inventory + quantity
             weekly[str(item_id)] = purchased
             updated = uow.execute(
-                "UPDATE player_data.arena SET honor_points=?,weekly_purchases=? WHERE user_id=? AND xiuxian_int_cmp(COALESCE(honor_points,0),?)=0",
-                (honor, json.dumps(weekly, ensure_ascii=True), user_id, expected_honor),
+                "UPDATE player_data.arena SET honor_points=xiuxian_int_store(?,'arena_honor','actor'),weekly_purchases=? WHERE user_id=? AND xiuxian_int_cmp(COALESCE(honor_points,0),?,1,'arena_honor','actor')=0",
+                (bind_sqlite_param(honor, exact=True), json.dumps(weekly, ensure_ascii=True), user_id, bind_sqlite_param(expected_honor, exact=True)),
             )
             if updated.rowcount != 1:
                 raise DomainError("arena_honor_write_rejected", "arena honor write did not affect one row")
+            saved = uow.query_one("SELECT honor_points FROM player_data.arena WHERE user_id=?", (user_id,))
+            if saved is None or require_exact_integer(saved["honor_points"], field="arena_honor", subject=user_id) != honor:
+                raise DomainError("arena_honor_write_rejected", "arena honor did not persist exactly", {"reason": "arena_honor_write_rejected", "subject": user_id})
             uow.execute(
                 "INSERT INTO back(user_id,goods_id,goods_name,goods_type,goods_num,create_time,update_time,bind_num) "
                 "VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(user_id,goods_id) DO UPDATE SET "
@@ -341,8 +344,8 @@ class ArenaChallengePurchaseSqlRepository(LegacyArenaRepository):
     @staticmethod
     def _record_purchase(uow, operation_id, payload, result):
         uow.execute(
-            "INSERT INTO arena_purchase_operations(operation_id,payload,quantity,cost,honor_points,purchased,inventory,status,result_json) VALUES(?,?,?,?,?,?,?,?,?)",
-            (operation_id, payload, result["quantity"], result["cost"], result["honor_points"], result["purchased"], result["inventory"], result["status"], json.dumps(result, ensure_ascii=True, sort_keys=True)),
+            "INSERT INTO arena_purchase_operations(operation_id,payload,quantity,cost,honor_points,purchased,inventory,status,result_json) VALUES(?,?,?,xiuxian_int_store(?,'stone','actor'),xiuxian_int_store(?,'arena_honor','actor'),?,?,?,?)",
+            (operation_id, payload, result["quantity"], bind_sqlite_param(result["cost"], exact=True), bind_sqlite_param(result["honor_points"], exact=True), result["purchased"], result["inventory"], result["status"], json.dumps(result, ensure_ascii=True, sort_keys=True)),
         )
         return result
     def purchase_challenges(self, operation_id, user_id, amount, unit_cost, daily_limit, expected_stone, expected_bought, expected_extra, expected_last_buy_date, today=None) -> dict[str, Any]:
@@ -385,7 +388,7 @@ class ArenaChallengePurchaseSqlRepository(LegacyArenaRepository):
             if expected_stone < cost:
                 return self._record(uow, operation_id, payload, self._result("stone_insufficient", 0, 0, expected_stone, expected_bought, expected_extra))
             new_stone, new_bought, new_extra = expected_stone - cost, expected_bought + real_amount, expected_extra + real_amount
-            uow.execute("UPDATE user_xiuxian SET stone=? WHERE user_id=? AND xiuxian_int_cmp(COALESCE(stone,0),?)=0", (new_stone, user_id, expected_stone))
+            uow.execute("UPDATE user_xiuxian SET stone=xiuxian_int_store(?,'stone','actor') WHERE user_id=? AND xiuxian_int_cmp(COALESCE(stone,0),?,1,'stone','actor')=0", (new_stone, user_id, expected_stone))
             uow.execute("UPDATE player_data.arena SET daily_challenge_buys=?,daily_extra_challenges=?,last_buy_date=? WHERE user_id=?", (new_bought, new_extra, today_str, user_id))
             return self._record(uow, operation_id, payload, self._result("applied", real_amount, cost, new_stone, new_bought, new_extra))
 
@@ -397,7 +400,7 @@ class ArenaChallengePurchaseSqlRepository(LegacyArenaRepository):
     def _record(uow, operation_id, payload, result):
         if result["status"] not in {"applied", "duplicate"}:
             payload = json.dumps({"_payload": payload, "_rejection": result}, ensure_ascii=True, separators=(",", ":"))
-        uow.execute("INSERT INTO arena_challenge_purchase_operations(operation_id,payload,amount,cost,stone,bought,extra) VALUES(?,?,?,?,?,?,?)", (operation_id, payload, result["amount"], result["cost"], result["stone"], result["bought"], result["extra"]))
+        uow.execute("INSERT INTO arena_challenge_purchase_operations(operation_id,payload,amount,cost,stone,bought,extra) VALUES(?,?,?,xiuxian_int_store(?,'stone','actor'),xiuxian_int_store(?,'stone','actor'),?,?)", (operation_id, payload, result["amount"], result["cost"], result["stone"], result["bought"], result["extra"]))
         return result
 
 

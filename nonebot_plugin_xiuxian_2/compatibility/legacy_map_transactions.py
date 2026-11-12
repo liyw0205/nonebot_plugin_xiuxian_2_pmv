@@ -79,7 +79,7 @@ class SeedPurchaseService:
                 stone -= cost
                 inventory += quantity
                 now = datetime.now()
-                conn.execute("UPDATE user_xiuxian SET stone=%s WHERE user_id=%s", (stone, user_id))
+                conn.execute("UPDATE user_xiuxian SET stone=xiuxian_int_store(%s,'stone','actor') WHERE user_id=%s", (stone, user_id))
                 conn.execute(
                     "INSERT INTO back (user_id,goods_id,goods_name,goods_type,goods_num,create_time,update_time,bind_num) "
                     "VALUES (%s,%s,%s,%s,%s,%s,%s,%s) "
@@ -89,7 +89,7 @@ class SeedPurchaseService:
                     (user_id, item_id, item_name, "特殊物品", quantity, now, now, quantity),
                 )
                 conn.execute(
-                    "INSERT INTO map_seed_purchase_operations (operation_id,payload,quantity,cost,stone,inventory) VALUES (%s,%s,%s,%s,%s,%s)",
+                    "INSERT INTO map_seed_purchase_operations (operation_id,payload,quantity,cost,stone,inventory) VALUES(%s,%s,%s,xiuxian_int_store(%s,'stone','actor'),xiuxian_int_store(%s,'stone','actor'),%s)",
                     (operation_id, payload, quantity, cost, stone, inventory),
                 )
                 conn.commit()
@@ -174,7 +174,7 @@ class MapDongfuBuildService:
                     return MapDongfuBuildResult("already_built", stone)
 
                 remaining = stone - cost
-                conn.execute("UPDATE user_xiuxian SET stone=%s WHERE user_id=%s", (remaining, user_id))
+                conn.execute("UPDATE user_xiuxian SET stone=xiuxian_int_store(%s,'stone','actor') WHERE user_id=%s", (remaining, user_id))
                 conn.execute(
                     "INSERT INTO player_data.dongfu_status (user_id," + ",".join(f'"{key}"' for key in dongfu) + ") "
                     "VALUES (" + ",".join(["%s"] * (len(dongfu) + 1)) + ") ON CONFLICT(user_id) DO UPDATE SET "
@@ -182,7 +182,7 @@ class MapDongfuBuildService:
                     (user_id, *dongfu.values()),
                 )
                 conn.execute(
-                    "INSERT INTO map_dongfu_build_operations (operation_id,payload,stone) VALUES (%s,%s,%s)",
+                    "INSERT INTO map_dongfu_build_operations (operation_id,payload,stone) VALUES(%s,%s,xiuxian_int_store(%s,'stone','actor'))",
                     (operation_id, payload, remaining),
                 )
                 conn.commit()
@@ -1640,7 +1640,7 @@ class MapCombatSettlementService:
                 )
                 conn.execute("UPDATE player_data.map_combat_settlement SET snapshot=%s WHERE user_id=%s", ("", user_id))
                 if stone:
-                    conn.execute("UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)+CAST(%s AS REAL) WHERE user_id=%s", (stone, user_id))
+                    conn.execute("UPDATE user_xiuxian SET stone=xiuxian_int_store(xiuxian_int_add(COALESCE(stone,0),%s,'stone','actor')) WHERE user_id=%s", (stone, user_id))
                 now = datetime.now()
                 for item_id, amount in totals.items():
                     name, item_type = metadata[item_id]
@@ -1651,7 +1651,7 @@ class MapCombatSettlementService:
                     )
                 compact = tuple(sorted(totals.items()))
                 conn.execute(
-                    "INSERT INTO map_combat_settlement_operations (operation_id,payload,stone,rewards) VALUES (%s,%s,%s,%s)",
+                    "INSERT INTO map_combat_settlement_operations (operation_id,payload,stone,rewards) VALUES(%s,%s,xiuxian_int_store(%s,'stone','actor'),%s)",
                     (operation_id, payload, stone, json.dumps(compact)),
                 )
                 conn.commit()
@@ -2033,7 +2033,7 @@ class MapExploreSettlementService:
                     (*clear_values.values(), user_id),
                 )
                 if stone:
-                    conn.execute("UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)+CAST(%s AS REAL) WHERE user_id=%s", (stone, user_id))
+                    conn.execute("UPDATE user_xiuxian SET stone=xiuxian_int_store(xiuxian_int_add(COALESCE(stone,0),%s,'stone','actor')) WHERE user_id=%s", (stone, user_id))
                 now = datetime.now()
                 for item_id, amount in totals.items():
                     name, item_type = metadata[item_id]
@@ -2046,7 +2046,7 @@ class MapExploreSettlementService:
                     )
                 compact_rewards = tuple(sorted(totals.items()))
                 conn.execute(
-                    "INSERT INTO map_explore_settlement_operations (operation_id,payload,stone,rewards) VALUES (%s,%s,%s,%s)",
+                    "INSERT INTO map_explore_settlement_operations (operation_id,payload,stone,rewards) VALUES(%s,%s,xiuxian_int_store(%s,'stone','actor'),%s)",
                     (operation_id, payload, stone, json.dumps(compact_rewards)),
                 )
                 conn.commit()
@@ -2139,7 +2139,7 @@ class MapMissionClaimService:
 
                 conn.execute("UPDATE player_data.map_mission SET claimed=%s WHERE user_id=%s", (1, user_id))
                 if stone:
-                    conn.execute("UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)+CAST(%s AS REAL) WHERE user_id=%s", (stone, user_id))
+                    conn.execute("UPDATE user_xiuxian SET stone=xiuxian_int_store(xiuxian_int_add(COALESCE(stone,0),%s,'stone','actor')) WHERE user_id=%s", (stone, user_id))
                 now = datetime.now()
                 for item_id, amount in totals.items():
                     name, item_type = metadata[item_id]
@@ -2152,7 +2152,7 @@ class MapMissionClaimService:
                     )
                 compact_rewards = tuple(sorted(totals.items()))
                 conn.execute(
-                    "INSERT INTO map_mission_claim_operations (operation_id,payload,stone,rewards) VALUES (%s,%s,%s,%s)",
+                    "INSERT INTO map_mission_claim_operations (operation_id,payload,stone,rewards) VALUES(%s,%s,xiuxian_int_store(%s,'stone','actor'),%s)",
                     (operation_id, payload, stone, json.dumps(compact_rewards)),
                 )
                 conn.commit()
@@ -2304,7 +2304,7 @@ class MapResourceRewardService:
                     (int(daily[1] or 0) + 1, int(daily[2] or 0) + 1, user_id),
                 )
                 if stone:
-                    conn.execute("UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)+CAST(%s AS REAL) WHERE user_id=%s", (stone, user_id))
+                    conn.execute("UPDATE user_xiuxian SET stone=xiuxian_int_store(xiuxian_int_add(COALESCE(stone,0),%s,'stone','actor')) WHERE user_id=%s", (stone, user_id))
                 now = datetime.now()
                 for item_id, amount in totals.items():
                     name, item_type = metadata[item_id]
@@ -2331,7 +2331,7 @@ class MapResourceRewardService:
                     )
                 compact_rewards = tuple(sorted(totals.items()))
                 conn.execute(
-                    "INSERT INTO map_resource_reward_operations (operation_id,payload,stone,rewards) VALUES (%s,%s,%s,%s)",
+                    "INSERT INTO map_resource_reward_operations (operation_id,payload,stone,rewards) VALUES(%s,%s,xiuxian_int_store(%s,'stone','actor'),%s)",
                     (operation_id, payload, stone, json.dumps(compact_rewards)),
                 )
                 conn.commit()

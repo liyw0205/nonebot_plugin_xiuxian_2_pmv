@@ -4,6 +4,7 @@ import json
 import shutil
 from dataclasses import dataclass
 from pathlib import Path
+from ...core.numeric import require_exact_integer, bind_sqlite_param
 
 from ...infrastructure.database import DatabaseUnitOfWork
 
@@ -13,7 +14,7 @@ class AdminStoneBatchAdjustmentResult:
     status: str
     total: int = 0
     completed: int = 0
-    applied_delta: float = 0
+    applied_delta: int = 0
     affected_users: int = 0
     skipped_users: int = 0
 
@@ -95,7 +96,7 @@ class AdminStoneBatchSqlRepository:
             status,
             int(row["total"]),
             int(row["completed"]),
-            float(row["applied_delta"]),
+            require_exact_integer(row["applied_delta"], field="stone_delta", subject="batch"),
             int(row["affected_users"]),
             int(row["skipped_users"]),
         )
@@ -113,7 +114,7 @@ class AdminStoneBatchSqlRepository:
                     return None
                 row = uow.query_one(
                     "SELECT operation_id FROM admin_stone_batch_operations "
-                    "WHERE operator_id=? AND requested_delta=? AND status='running' "
+                    "WHERE operator_id=? AND xiuxian_int_cmp(requested_delta,?,1,'stone_amount','actor')=0 AND status='running' "
                     "ORDER BY created_at DESC,rowid DESC LIMIT 1",
                     (request["operator_id"], request["requested_delta"]),
                 )
@@ -150,7 +151,7 @@ class AdminStoneBatchSqlRepository:
             if previous is None:
                 running = uow.query_one(
                     "SELECT operation_id FROM admin_stone_batch_operations "
-                    "WHERE operator_id=? AND requested_delta=? AND status='running' "
+                    "WHERE operator_id=? AND xiuxian_int_cmp(requested_delta,?,1,'stone_amount','actor')=0 AND status='running' "
                     "ORDER BY created_at DESC,rowid DESC LIMIT 1",
                     (request["operator_id"], request["requested_delta"]),
                 )
@@ -173,7 +174,7 @@ class AdminStoneBatchSqlRepository:
                 uow.execute(
                     "INSERT INTO admin_stone_batch_operations("
                     "operation_id,operator_id,requested_delta,payload,total,status) "
-                    "VALUES(?,?,?,?,?,?)",
+                    "VALUES(?,?,xiuxian_int_store(?,'stone','actor'),?,?,?)",
                     (
                         operation_id,
                         request["operator_id"],
@@ -211,12 +212,12 @@ class AdminStoneBatchSqlRepository:
                 return self._result(uow, operation_id, "progress_corrupt")
 
             applied_users = skipped_users = 0
-            applied_delta = 0.0
+            applied_delta = 0
             delta = int(request["requested_delta"])
             for target in pending:
                 user_id = str(target["user_id"])
                 row = uow.query_one(
-                    "SELECT CAST(COALESCE(stone,0) AS REAL) AS stone "
+                    "SELECT COALESCE(stone,0) AS stone "
                     "FROM user_xiuxian WHERE user_id=?",
                     (user_id,),
                 )
@@ -229,9 +230,9 @@ class AdminStoneBatchSqlRepository:
                     skipped_users += 1
                     continue
 
-                previous_stone = float(row["stone"] or 0)
+                previous_stone = require_exact_integer(row["stone"], field="stone", subject=user_id)
                 changed = uow.execute(
-                    "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)+CAST(? AS REAL) "
+                    "UPDATE user_xiuxian SET stone=xiuxian_int_store(xiuxian_int_add(COALESCE(stone,0),?,'stone','actor')) "
                     "WHERE user_id=?",
                     (delta, user_id),
                 )
@@ -246,9 +247,9 @@ class AdminStoneBatchSqlRepository:
                 final_stone = previous_stone + delta
                 uow.execute(
                     "UPDATE admin_stone_batch_progress SET status='applied',previous_stone=?,"
-                    "final_stone=?,applied_delta=?,updated_at=CURRENT_TIMESTAMP "
+                    "final_stone=xiuxian_int_store(?,'stone','actor'),applied_delta=xiuxian_int_store(?,'stone_delta','actor'),updated_at=CURRENT_TIMESTAMP "
                     "WHERE operation_id=? AND user_id=?",
-                    (previous_stone, final_stone, delta, operation_id, user_id),
+                    (bind_sqlite_param(previous_stone, exact=True), bind_sqlite_param(final_stone, exact=True), bind_sqlite_param(delta, exact=True), operation_id, user_id),
                 )
                 applied_users += 1
                 applied_delta += delta
@@ -257,7 +258,7 @@ class AdminStoneBatchSqlRepository:
             status = "completed" if completed >= total else "running"
             uow.execute(
                 "UPDATE admin_stone_batch_operations SET completed=?,"
-                "applied_delta=applied_delta+?,affected_users=affected_users+?,"
+                "applied_delta=xiuxian_int_store(xiuxian_int_add(applied_delta,?,'stone_delta','actor')),affected_users=affected_users+?,"
                 "skipped_users=skipped_users+?,status=?,updated_at=CURRENT_TIMESTAMP "
                 "WHERE operation_id=?",
                 (

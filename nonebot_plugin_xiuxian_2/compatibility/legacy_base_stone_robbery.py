@@ -195,20 +195,20 @@ class StoneRobberySettlementService:
                     victim_stone += transferred_amount
 
                 robber_changed = conn.execute(
-                    "UPDATE user_xiuxian SET hp=%s,mp=%s,user_stamina=%s,stone=%s "
+                    "UPDATE user_xiuxian SET hp=%s,mp=%s,user_stamina=%s,stone=xiuxian_int_store(%s,'stone','actor') "
                     "WHERE user_id=%s AND xiuxian_int_cmp(hp,%s)=0 AND xiuxian_int_cmp(mp,%s)=0 "
                     "AND COALESCE(user_stamina,0)=%s AND xiuxian_int_cmp(COALESCE(exp,0),%s)=0 "
-                    "AND xiuxian_int_cmp(COALESCE(stone,0),%s)=0",
+                    "AND xiuxian_int_cmp(COALESCE(stone,0),%s,1,'stone','actor')=0",
                     (
                         robber_final[0], robber_final[1], robber_snapshot[2] - stamina_cost,
                         robber_stone, robber_id, *robber_snapshot,
                     ),
                 )
                 victim_changed = conn.execute(
-                    "UPDATE user_xiuxian SET hp=%s,mp=%s,stone=%s "
+                    "UPDATE user_xiuxian SET hp=%s,mp=%s,stone=xiuxian_int_store(%s,'stone','actor') "
                     "WHERE user_id=%s AND xiuxian_int_cmp(hp,%s)=0 AND xiuxian_int_cmp(mp,%s)=0 "
                     "AND COALESCE(user_stamina,0)=%s AND xiuxian_int_cmp(COALESCE(exp,0),%s)=0 "
-                    "AND xiuxian_int_cmp(COALESCE(stone,0),%s)=0",
+                    "AND xiuxian_int_cmp(COALESCE(stone,0),%s,1,'stone','actor')=0",
                     (
                         victim_final[0], victim_final[1], victim_stone,
                         victim_id, *victim_snapshot,

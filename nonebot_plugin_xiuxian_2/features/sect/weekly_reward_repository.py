@@ -271,19 +271,19 @@ class SectWeeklyRewardSqlRepository:
                 for field in ("stone", "exp", "sect_contribution", "sect_scale", "sect_materials", "boss_integral")
             }
             uow.execute(
-                "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)+CAST(? AS REAL),"
+                "UPDATE user_xiuxian SET stone=xiuxian_int_store(xiuxian_int_add(COALESCE(stone,0),?,'stone','actor')),"
                 "exp=CAST(COALESCE(exp,0) AS REAL)+CAST(? AS REAL),"
-                "sect_contribution=CAST(COALESCE(sect_contribution,0) AS REAL)+CAST(? AS REAL) WHERE user_id=?",
+                "sect_contribution=xiuxian_int_store(xiuxian_int_add(COALESCE(sect_contribution,0),?,'sect_contribution','actor')) WHERE user_id=?",
                 (totals["stone"], totals["exp"], totals["sect_contribution"], user_id),
             )
             uow.execute(
                 "UPDATE sects SET sect_scale=CAST(COALESCE(sect_scale,0) AS REAL)+CAST(? AS REAL),"
-                "sect_materials=CAST(COALESCE(sect_materials,0) AS REAL)+CAST(? AS REAL) WHERE sect_id=?",
+                "sect_materials=xiuxian_int_store(xiuxian_int_add(COALESCE(sect_materials,0),?,'sect_materials','actor')) WHERE sect_id=?",
                 (totals["sect_scale"], totals["sect_materials"], sect_id),
             )
             uow.execute(
-                "INSERT INTO player_data.boss_limit(user_id,integral) VALUES(?,?) "
-                "ON CONFLICT(user_id) DO UPDATE SET integral=COALESCE(integral,0)+excluded.integral",
+                "INSERT INTO player_data.boss_limit(user_id,integral) VALUES(?,xiuxian_int_store(?,'boss_integral','actor')) "
+                "ON CONFLICT(user_id) DO UPDATE SET integral=xiuxian_int_store(xiuxian_int_add(COALESCE(integral,0),excluded.integral,'boss_integral','actor'))",
                 (user_id, totals["boss_integral"]),
             )
 

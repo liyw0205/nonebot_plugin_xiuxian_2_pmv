@@ -113,7 +113,7 @@ class TowerStateRepository:
                 return result
             state = self._default(today)
             uow.execute(
-                "INSERT INTO tower(user_id,current_floor,max_floor,score,weekly_purchases) VALUES(?,?,?,?,?)",
+                "INSERT INTO tower(user_id,current_floor,max_floor,score,weekly_purchases) VALUES(?,?,?,xiuxian_int_store(?,'tower_score','actor'),?)",
                 (
                     user_id,
                     state["current_floor"],

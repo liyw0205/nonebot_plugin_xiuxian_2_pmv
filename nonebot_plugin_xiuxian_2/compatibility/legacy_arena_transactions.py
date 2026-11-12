@@ -424,7 +424,7 @@ class ArenaPurchaseService:
                 honor_points, purchased, inventory = expected_honor - cost, purchased + quantity, inventory + quantity
                 weekly[str(item_id)] = purchased
                 if conn.execute(
-                    "UPDATE player_data.arena SET honor_points=%s, weekly_purchases=%s WHERE user_id=%s AND xiuxian_int_cmp(COALESCE(honor_points, 0),%s)=0",
+                    "UPDATE player_data.arena SET honor_points=xiuxian_int_store(%s,'arena_honor','actor'), weekly_purchases=%s WHERE user_id=%s AND xiuxian_int_cmp(COALESCE(honor_points, 0),%s,1,'arena_honor','actor')=0",
                     (honor_points, json.dumps(weekly, ensure_ascii=False), user_id, expected_honor),
                 ).rowcount != 1:
                     raise DomainError("arena_honor_write_rejected", "arena honor write did not affect one row")
@@ -510,7 +510,7 @@ class ArenaChallengePurchaseService:
                 if expected_stone < cost:
                     conn.rollback(); return ArenaChallengePurchaseResult("stone_insufficient", 0, 0, expected_stone, expected_bought, expected_extra)
                 stone, bought, extra = expected_stone - cost, expected_bought + real_amount, expected_extra + real_amount
-                conn.execute("UPDATE user_xiuxian SET stone=%s WHERE user_id=%s", (stone, user_id))
+                conn.execute("UPDATE user_xiuxian SET stone=xiuxian_int_store(%s,'stone','actor') WHERE user_id=%s", (stone, user_id))
                 conn.execute("UPDATE player_data.arena SET daily_challenge_buys=%s,daily_extra_challenges=%s,last_buy_date=%s WHERE user_id=%s", (bought, extra, expected_last_buy_date, user_id))
                 conn.execute("INSERT INTO arena_challenge_purchase_operations VALUES (%s,%s,%s,%s,%s,%s,%s)", (operation_id, payload, real_amount, cost, stone, bought, extra))
                 conn.commit(); return ArenaChallengePurchaseResult("applied", real_amount, cost, stone, bought, extra)
@@ -1609,8 +1609,8 @@ class ArenaSeasonRewardService:
                         conn.rollback(); return result("inventory_full")
                 honor_points, total_honor = expected_honor + total_reward, expected_total_honor + total_reward
                 if conn.execute(
-                    "UPDATE player_data.arena SET honor_points=%s,total_honor_earned=%s WHERE user_id=%s "
-                    "AND xiuxian_int_cmp(COALESCE(score,0),%s)=0 AND COALESCE(rank,'')=%s AND xiuxian_int_cmp(COALESCE(honor_points,0),%s)=0 "
+                    "UPDATE player_data.arena SET honor_points=xiuxian_int_store(%s,'arena_honor','actor'),total_honor_earned=xiuxian_int_store(%s,'arena_honor','actor') WHERE user_id=%s "
+                    "AND xiuxian_int_cmp(COALESCE(score,0),%s)=0 AND COALESCE(rank,'')=%s AND xiuxian_int_cmp(COALESCE(honor_points,0),%s,1,'arena_honor','actor')=0 "
                     "AND xiuxian_int_cmp(COALESCE(total_honor_earned,0),%s)=0",
                     (honor_points, total_honor, user_id, expected_score, expected_rank, expected_honor, expected_total_honor),
                 ).rowcount != 1:
@@ -1632,7 +1632,7 @@ class ArenaSeasonRewardService:
                 conn.execute(
                     "INSERT INTO arena_season_reward_operations "
                     "(operation_id,payload,season_key,user_id,honor,honor_points,total_honor_earned) "
-                    "VALUES (%s,%s,%s,%s,%s,%s,%s)",
+                    "VALUES(%s,%s,%s,%s,%s,xiuxian_int_store(%s,'arena_honor','actor'),%s)",
                     (operation_id, payload, season_key, user_id, total_reward, honor_points, total_honor),
                 )
                 conn.commit()

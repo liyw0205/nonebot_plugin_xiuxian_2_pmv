@@ -376,7 +376,7 @@ class LotterySettlementService:
 
                 if prize > 0:
                     updated = conn.execute(
-                        "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)+CAST(%s AS REAL) WHERE user_id=%s",
+                        "UPDATE user_xiuxian SET stone=xiuxian_int_store(xiuxian_int_add(COALESCE(stone,0),%s,'stone','actor')) WHERE user_id=%s",
                         (prize, user_id),
                     )
                     if updated.rowcount != 1:
@@ -421,7 +421,7 @@ class LotterySettlementService:
                     "INSERT INTO lottery_settlement_operations("
                     "operation_id,user_id,user_name,business_date,deposit_amount,lottery_number,"
                     "prize_tier,prize_amount,pool_before,pool_after,participant_count,"
-                    "wallet_stone,created_at) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
+                    "wallet_stone,created_at) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,xiuxian_int_store(%s,'stone','actor'),%s)",
                     (
                         operation_id,
                         user_id,

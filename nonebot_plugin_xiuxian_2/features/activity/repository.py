@@ -37,6 +37,8 @@ class ActivityRepository(ServicePort):
         self.point_shop_purchase = ActivityPointShopPurchaseSqlRepository(database)
         self.boss_settlement = ActivityBossSettlementSqlRepository(database)
         self.retry_started_actions = frozenset({"claim_collect_phrase", "claim_sign", "claim_point_shop_item", "synthesize_collect_token"})
+        # These consumers refuse before writes or roll back their whole UoW.
+        self.precision_atomic_actions = frozenset({"claim_point_shop_item"})
 
     def _synthesize_collect(self, **kwargs: Any):
         from .collect_synthesis import synthesize

@@ -88,7 +88,7 @@ class MixelixirFireControlUpgradeSqlRepository:
                 )
                 if changed.rowcount != 1:
                     return MixelixirFireControlUpgradeResult("state_changed")
-                uow.execute("INSERT INTO mixelixir_fire_control_upgrade_operations(operation_id,payload,cost,wallet_stone,level,experience) VALUES(?,?,?,?,?,?)", (operation_id, payload, cost, current_stone, next_level, remaining))
+                uow.execute("INSERT INTO mixelixir_fire_control_upgrade_operations(operation_id,payload,cost,wallet_stone,level,experience) VALUES(?,?,xiuxian_int_store(?,'stone','actor'),xiuxian_int_store(?,'stone','actor'),?,?)", (operation_id, payload, cost, current_stone, next_level, remaining))
                 return MixelixirFireControlUpgradeResult("applied", cost, current_stone, next_level, remaining)
             finally:
                 pass

@@ -16,7 +16,8 @@ from ..adapter_compat import (
 )
 from ..xiuxian_utils.lay_out import assign_bot, assign_bot_group, Cooldown, CooldownIsolateLevel
 from nonebot.log import logger
-from ..command_guard import result_failure, guard_command, report_exception
+from ..command_guard import result_failure, guard_command, report_exception, failure_reply
+from ...core.errors import DomainError
 from nonebot.params import CommandArg
 from nonebot.exception import MatcherException, ProcessException
 from nonebot.permission import SUPERUSER
@@ -1536,6 +1537,7 @@ async def xian_shop_remove_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     await xian_shop_remove.finish()
 
 @xian_buy.handle(parameterless=[Cooldown(cd_time=0)])
+@guard_command("仙肆购买", known_rejections=("currency_precision_unavailable",))
 async def xian_buy_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """仙肆购买 - 根据仙肆ID购买物品"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -1607,6 +1609,10 @@ async def xian_buy_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, ar
         await handle_send(bot, event, msg, md_type="交易", k1="购买", v1="仙肆购买", k2="查看", v2="仙肆查看", k3="我的", v3="我的仙肆")
     except (MatcherException, ProcessException):
         raise
+    except DomainError as exc:
+        if exc.code != "currency_precision_unavailable":
+            raise
+        await handle_send(bot, event, failure_reply("仙肆购买", exc), md_type="交易")
     except Exception as e:
         msg = report_exception("仙肆购买", e, event=event)
         await handle_send(bot, event, msg, md_type="交易", k1="购买", v1="仙肆购买", k2="查看", v2="仙肆查看", k3="我的", v3="我的仙肆")

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from ...core.numeric import as_int_like
+from ...core.numeric import as_int_like, require_exact_integer
 from typing import Any
 
 from ...infrastructure.database import DatabaseUnitOfWork
@@ -45,13 +45,13 @@ class SignInRepository:
         return {
             "rows": len(rows),
             "signed_rows": sum(int(row["is_sign"] or 0) for row in rows),
-            "stone": sum(as_int_like(row["stone"] or 0) for row in rows),
+            "stone": sum(require_exact_integer(row["stone"], field="stone", subject=user_id) for row in rows),
         }
 
     def apply(self, uow: DatabaseUnitOfWork, user_id: str, stone: int) -> int:
         cursor = uow.execute(
             "UPDATE user_xiuxian SET is_sign = 1, "
-            "stone = CAST(COALESCE(stone, 0) AS REAL) + CAST(? AS REAL) "
+            "stone = xiuxian_int_store(xiuxian_int_add(COALESCE(stone, 0),?,'stone','actor')) "
             "WHERE user_id = ? AND CAST(COALESCE(is_sign, 0) AS INTEGER) = 0",
             (stone, user_id),
         )
@@ -59,7 +59,7 @@ class SignInRepository:
 
     def insert_operation(self, uow: DatabaseUnitOfWork, record: SignInRecord) -> None:
         uow.execute(
-            "INSERT INTO sign_in_operations(operation_id, user_id, stone) VALUES (?, ?, ?)",
+            "INSERT INTO sign_in_operations(operation_id, user_id, stone) VALUES(?,?,xiuxian_int_store(?,'stone','actor'))",
             (record.operation_id, record.user_id, record.stone),
         )
 
@@ -89,14 +89,14 @@ class SignInRepository:
             "WHERE user_id = ? LIMIT 1",
             (str(user_id),),
         )
-        return as_int_like(row["stone"] or 0) if row else None
+        return require_exact_integer(row["stone"], field="stone", subject=user_id) if row else None
 
     def charge_stone(self, uow: DatabaseUnitOfWork, user_id: str, cost: int) -> int:
         """Deduct ``cost`` from one player row; never allows a negative balance."""
 
         cursor = uow.execute(
-            "UPDATE user_xiuxian SET stone = CAST(COALESCE(stone, 0) AS REAL) - ? "
-            "WHERE user_id = ? AND xiuxian_int_cmp(COALESCE(stone, 0),?)>=0",
+            "UPDATE user_xiuxian SET stone = xiuxian_int_store(xiuxian_int_sub(COALESCE(stone, 0),?,'stone','actor')) "
+            "WHERE user_id = ? AND xiuxian_int_cmp(COALESCE(stone, 0),?,1,'stone','actor')>=0",
             (int(cost), str(user_id), int(cost)),
         )
         return int(cursor.rowcount)
@@ -116,7 +116,7 @@ class SignInRepository:
 
         cursor = uow.execute(
             "INSERT OR IGNORE INTO sign_in_daily"
-            "(user_id,business_date,stone,operation_id,source) VALUES(?,?,?,?,?)",
+            "(user_id,business_date,stone,operation_id,source) VALUES(?,?,xiuxian_int_store(?,'stone','actor'),?,?)",
             (str(user_id), str(business_date), 0, str(operation_id), "makeup"),
         )
         return int(cursor.rowcount) == 1
@@ -159,7 +159,7 @@ class SignInRepository:
             return False
         cursor = uow.execute(
             "INSERT OR IGNORE INTO sign_in_daily"
-            "(user_id,business_date,stone,operation_id) VALUES(?,?,?,?)",
+            "(user_id,business_date,stone,operation_id) VALUES(?,?,xiuxian_int_store(?,'stone','actor'),?)",
             (str(user_id), str(business_date), int(stone), str(operation_id)),
         )
         if int(cursor.rowcount) != 1:

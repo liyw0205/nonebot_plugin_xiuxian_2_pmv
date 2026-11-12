@@ -96,10 +96,10 @@ class WorldEventClaimSqlRepository:
                     'INSERT INTO player_data.statistics(user_id,"魔修入侵领奖") VALUES(?,1)',
                     (user_id,),
                 )
-            uow.execute("UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)+CAST(? AS REAL), exp=CAST(COALESCE(exp,0) AS REAL)+CAST(? AS REAL) WHERE user_id=?", (stone_param, exp_param, user_id))
+            uow.execute("UPDATE user_xiuxian SET stone=xiuxian_int_store(xiuxian_int_add(COALESCE(stone,0),?,'stone','actor')), exp=CAST(COALESCE(exp,0) AS REAL)+CAST(? AS REAL) WHERE user_id=?", (stone_param, exp_param, user_id))
             for item_id, name, item_type, amount in rewards:
                 uow.execute("INSERT INTO back(user_id,goods_id,goods_name,goods_type,goods_num,create_time,update_time,bind_num) VALUES(?,?,?,?,?,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP,?) ON CONFLICT(user_id,goods_id) DO UPDATE SET goods_num=back.goods_num+excluded.goods_num,bind_num=COALESCE(back.bind_num,0)+excluded.goods_num,update_time=excluded.update_time", (user_id, item_id, name, item_type, amount, amount))
-            uow.execute("INSERT INTO demon_claim_operations(operation_id,payload,stone,exp) VALUES(?,?,?,?)", (operation_id, payload, stone_param, exp_param))
+            uow.execute("INSERT INTO demon_claim_operations(operation_id,payload,stone,exp) VALUES(?,?,xiuxian_int_store(?,'stone','actor'),?)", (operation_id, payload, stone_param, exp_param))
             return self._result("applied", stone, applied_exp)
 
 

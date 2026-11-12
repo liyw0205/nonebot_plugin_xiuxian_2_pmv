@@ -115,7 +115,7 @@ class StoneItemRewardService:
                      (quantity, user_id, item_id, quantity)),
                 )
                 granted = conn.execute(
-                    "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)+CAST(%s AS REAL) WHERE user_id=%s",
+                    "UPDATE user_xiuxian SET stone=xiuxian_int_store(xiuxian_int_add(COALESCE(stone,0),%s,'stone','actor')) WHERE user_id=%s",
                     (sum(fixed_rewards), user_id),
                 )
                 if consumed.rowcount != 1:

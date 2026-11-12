@@ -1,4 +1,5 @@
 from __future__ import annotations
+from ...core.numeric import require_exact_integer, bind_sqlite_param
 
 from pathlib import Path
 from typing import Any
@@ -160,8 +161,8 @@ class ActivityAdminDataSqlRepository:
                 }
                 if activity_type == "event_points":
                     stats = uow.query_one(
-                        "SELECT COUNT(*) AS user_count,COALESCE(xiuxian_int_sum(points),0) AS current_points,"
-                        "COALESCE(xiuxian_int_sum(total_points),0) AS total_points FROM activity_point_balance "
+                        "SELECT COUNT(*) AS user_count,COALESCE(xiuxian_int_sum(points,'activity_points','actor'),0) AS current_points,"
+                        "COALESCE(xiuxian_int_sum(total_points,'activity_points','actor'),0) AS total_points FROM activity_point_balance "
                         "WHERE activity_key=?",
                         (key,),
                     ) or {}
@@ -178,7 +179,7 @@ class ActivityAdminDataSqlRepository:
                     }
                     row["top_users"] = uow.query_all(
                         "SELECT user_id,points,total_points,update_time FROM activity_point_balance "
-                        "WHERE activity_key=? ORDER BY total_points DESC,points DESC,update_time ASC LIMIT ?",
+                        "WHERE activity_key=? ORDER BY xiuxian_int_text(total_points,'activity_points','actor') COLLATE xiuxian_integer DESC,xiuxian_int_text(points,'activity_points','actor') COLLATE xiuxian_integer DESC,update_time ASC LIMIT ?",
                         (key, row_limit),
                     )
                     named_groups.append(row["top_users"])
@@ -480,13 +481,14 @@ class ActivityAdminDataSqlRepository:
                 "WHERE activity_key=? AND user_id=?",
                 (activity_key, user_id),
             ) or {}
-            points = max(0, int(row.get("points") or 0) + amount)
-            total_points = max(0, int(row.get("total_points") or 0)) + max(0, amount)
+            amount = require_exact_integer(amount, field="activity_points", subject=user_id)
+            points = max(0, require_exact_integer(row.get("points"), field="activity_points", subject=user_id) + amount)
+            total_points = max(0, require_exact_integer(row.get("total_points"), field="activity_points", subject=user_id)) + max(0, amount)
             uow.execute(
                 "INSERT INTO activity_point_balance(activity_key,user_id,points,total_points,update_time) "
-                "VALUES(?,?,?,?,?) ON CONFLICT(activity_key,user_id) DO UPDATE SET "
+                "VALUES(?,?,xiuxian_int_store(?,'activity_points','actor'),xiuxian_int_store(?,'activity_points','actor'),?) ON CONFLICT(activity_key,user_id) DO UPDATE SET "
                 "points=excluded.points,total_points=excluded.total_points,update_time=excluded.update_time",
-                (activity_key, user_id, points, total_points, timestamp),
+                (activity_key, user_id, bind_sqlite_param(points, exact=True), bind_sqlite_param(total_points, exact=True), timestamp),
             )
         return {"points": points, "total_points": total_points}
 

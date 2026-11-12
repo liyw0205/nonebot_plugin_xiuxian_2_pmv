@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from ...core.numeric import as_int_like
+from ...core.numeric import as_int_like, bind_sqlite_param, require_exact_integer
+from ...core.errors import DomainError
 
 from ...infrastructure.database import DatabaseUnitOfWork
 from ..base.ranking_position import PersonalRank
@@ -133,7 +134,7 @@ class BossIntegralSqlRepository:
             )
         if row is None:
             return BossIntegralSnapshot("user_missing", user_id)
-        return BossIntegralSnapshot("found", user_id, as_int_like(row["integral"]))
+        return BossIntegralSnapshot("found", user_id, require_exact_integer(row["integral"], field="boss_integral", subject=user_id))
 
     def grant_integral(self, user_id: str, amount: int) -> BossIntegralMutation:
         user_id = str(user_id).strip()
@@ -155,15 +156,18 @@ class BossIntegralSqlRepository:
             )
             if row is None:
                 return self._result("user_missing", user_id, amount)
-            current = as_int_like(row["value"])
+            current = require_exact_integer(row["value"], field="boss_integral", subject=user_id)
             target = current + amount
             changed = uow.execute(
-                "UPDATE boss_limit SET integral=? WHERE rowid=? AND user_id=? "
-                "AND xiuxian_int_cmp(COALESCE(integral,0),?)=0",
-                (target, row["_rowid"], user_id, current),
+                "UPDATE boss_limit SET integral=xiuxian_int_store(?,'boss_integral','actor') WHERE rowid=? AND user_id=? "
+                "AND xiuxian_int_cmp(COALESCE(integral,0),?,1,'boss_integral','actor')=0",
+                (bind_sqlite_param(target, exact=True), row["_rowid"], user_id, bind_sqlite_param(current, exact=True)),
             )
             if changed.rowcount != 1:
                 return self._result("state_changed", user_id, amount, 0, current)
+            saved = uow.query_one("SELECT integral FROM boss_limit WHERE rowid=?", (row["_rowid"],))
+            if saved is None or require_exact_integer(saved["integral"], field="boss_integral", subject=user_id) != target:
+                raise DomainError("boss_integral_write_rejected", "boss integral grant did not persist exactly", {"reason": "boss_integral_write_rejected", "subject": user_id})
             return self._result("applied", user_id, amount, amount, target)
 
 

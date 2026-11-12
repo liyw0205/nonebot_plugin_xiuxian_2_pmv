@@ -25,7 +25,7 @@ from ...features.work.admin_refresh_reset_application import WorkAdminRefreshRes
 from nonebot.typing import T_State
 from nonebot.permission import SUPERUSER
 from nonebot.log import logger
-from ..command_guard import result_failure, report_exception
+from ..command_guard import result_failure, report_exception, guard_command
 from ...bootstrap.legacy import register_legacy_startup
 from nonebot.params import CommandArg
 from nonebot import require, get_bot
@@ -485,6 +485,7 @@ async def admin_rename_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
 
 # GM加灵石
 @gm_command.handle(parameterless=[Cooldown(cd_time=0)])
+@guard_command("神秘力量", known_rejections=("operation_conflict",))
 async def gm_command_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """神秘力量 [数量] [目标]"""
     bot, _ = await assign_bot(bot=bot, event=event)

@@ -137,14 +137,14 @@ class SectTaskSettlementSqlRepository:
             user_update = uow.execute(
                 f"UPDATE user_xiuxian SET {column}={column}-?,"
                 "exp=COALESCE(exp,0)+?,sect_task=COALESCE(sect_task,0)+1,"
-                "sect_contribution=COALESCE(sect_contribution,0)+? "
+                "sect_contribution=xiuxian_int_store(xiuxian_int_add(COALESCE(sect_contribution,0),?,'sect_contribution','actor')) "
                 f"WHERE user_id=? AND sect_id=? AND xiuxian_int_cmp({column},?)>=0",
                 (cost, exp_reward, sect_reward, user_id, sect_id, cost),
             )
             sect_update = uow.execute(
-                "UPDATE sects SET sect_used_stone=COALESCE(sect_used_stone,0)+?,"
+                "UPDATE sects SET sect_used_stone=xiuxian_int_store(xiuxian_int_add(COALESCE(sect_used_stone,0),?,'sect_used_stone','actor')),"
                 "sect_scale=COALESCE(sect_scale,0)+?,"
-                "sect_materials=COALESCE(sect_materials,0)+? WHERE sect_id=?",
+                "sect_materials=xiuxian_int_store(xiuxian_int_add(COALESCE(sect_materials,0),?,'sect_materials','actor')) WHERE sect_id=?",
                 (sect_reward, sect_reward, materials_reward, sect_id),
             )
             task_update = uow.execute(
@@ -159,7 +159,7 @@ class SectTaskSettlementSqlRepository:
             uow.execute(
                 "INSERT INTO sect_task_settlement_operations("
                 "operation_id,user_id,sect_id,period,cost_type,cost,exp_reward,"
-                "sect_reward,materials_reward) VALUES(?,?,?,?,?,?,?,?,?)",
+                "sect_reward,materials_reward) VALUES(?,?,?,?,?,xiuxian_int_store(?,'stone','actor'),?,?,?)",
                 (operation_id, user_id, sect_id, period, cost_type, cost, exp_reward, sect_reward, materials_reward),
             )
             return {"status": "settled", **base}

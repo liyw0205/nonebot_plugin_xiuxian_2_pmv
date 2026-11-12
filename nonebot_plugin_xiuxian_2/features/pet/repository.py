@@ -304,7 +304,7 @@ class PetTravelClaimSqlRepository:
                     return PetTravelClaimResult("inventory_full")
             if uow.execute("UPDATE player_data.player_pet SET travel=NULL WHERE user_id=? AND travel=?", (user_id, meta["travel"])).rowcount != 1:
                 return PetTravelClaimResult("state_changed", reason="travel_changed")
-            uow.execute("UPDATE user_xiuxian SET stone=COALESCE(stone,0)+?,exp=COALESCE(exp,0)+? WHERE user_id=?", (stone, exp, user_id))
+            uow.execute("UPDATE user_xiuxian SET stone=xiuxian_int_store(xiuxian_int_add(COALESCE(stone,0),?,'stone','actor')),exp=COALESCE(exp,0)+? WHERE user_id=?", (stone, exp, user_id))
             for item_id, name, item_type, amount in rewards:
                 uow.execute(
                     "INSERT INTO back(user_id,goods_id,goods_name,goods_type,goods_num,bind_num) VALUES(?,?,?,?,?,?) "
@@ -470,7 +470,7 @@ class PetHatchSqlRepository:
                 if "player_pet_item.user_id" in str(exc):
                     return PetHatchResult(UID_CONFLICT)
                 raise
-            if uow.execute("UPDATE user_xiuxian SET stone=stone-? WHERE user_id=? AND xiuxian_int_cmp(stone,?)=0", (cost, user_id, expected_stone)).rowcount != 1:
+            if uow.execute("UPDATE user_xiuxian SET stone=xiuxian_int_store(xiuxian_int_sub(stone,?,'stone','actor')) WHERE user_id=? AND xiuxian_int_cmp(stone,?,1,'stone','actor')=0", (cost, user_id, expected_stone)).rowcount != 1:
                 raise DomainError("stone_write_rejected", "stone row count changed inside hatch transaction")
             if meta is None:
                 uow.execute("INSERT INTO player_data.player_pet(user_id,active_uid,egg_pity_count,egg_pity_no_mythic_count,travel) VALUES(?,?,?,?,NULL)", (user_id, updated_meta[0], updated_meta[1], updated_meta[2]))

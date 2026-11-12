@@ -193,7 +193,7 @@ class TrainingStateService:
                     conn.execute(
                         "INSERT INTO training("
                         "user_id,progress,last_time,points,completed,max_progress,last_event,weekly_purchases) "
-                        "VALUES(%s,%s,%s,%s,%s,%s,%s,%s)",
+                        "VALUES(%s,%s,%s,xiuxian_int_store(%s,'training_points','actor'),%s,%s,%s,%s)",
                         (
                             user_id,
                             state["progress"],
@@ -314,8 +314,8 @@ class TrainingEventService:
                         conn.rollback(); return TrainingEventResult("inventory_full")
                 if wanted[0] + stone_delta < 0 or wanted[1] + exp_delta < 0 or wanted[2] + hp_delta < 0:
                     conn.rollback(); return TrainingEventResult("resource_missing")
-                conn.execute("UPDATE player_data.training SET progress=%s,last_time=%s,points=%s,completed=%s,max_progress=%s,last_event=%s,weekly_purchases=%s WHERE user_id=%s", tuple(self._value(k, state[k]) for k in self._FIELDS) + (user_id,))
-                conn.execute("UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)+CAST(%s AS REAL),exp=CAST(COALESCE(exp,0) AS REAL)+CAST(%s AS REAL),hp=CAST(COALESCE(hp,0) AS REAL)+CAST(%s AS REAL) WHERE user_id=%s", (stone_delta, exp_delta, hp_delta, user_id))
+                conn.execute("UPDATE player_data.training SET progress=%s,last_time=%s,points=xiuxian_int_store(%s,'training_points','actor'),completed=%s,max_progress=%s,last_event=%s,weekly_purchases=%s WHERE user_id=%s", tuple(self._value(k, state[k]) for k in self._FIELDS) + (user_id,))
+                conn.execute("UPDATE user_xiuxian SET stone=xiuxian_int_store(xiuxian_int_add(COALESCE(stone,0),%s,'stone','actor')),exp=CAST(COALESCE(exp,0) AS REAL)+CAST(%s AS REAL),hp=CAST(COALESCE(hp,0) AS REAL)+CAST(%s AS REAL) WHERE user_id=%s", (stone_delta, exp_delta, hp_delta, user_id))
                 now = datetime.now()
                 for item_id, name, item_type, amount in rewards:
                     if amount > 0:
@@ -394,8 +394,8 @@ class TrainingCompletionService:
                     if (int(row[0]) if row else 0) + amount > max_goods_num:
                         conn.rollback()
                         return TrainingCompletionResult("inventory_full")
-                conn.execute("UPDATE player_data.training SET progress=%s,last_time=%s,points=%s,completed=%s,max_progress=%s,last_event=%s,weekly_purchases=%s WHERE user_id=%s", tuple(state_value(key, updated[key]) for key in self._STATE_FIELDS) + (user_id,))
-                conn.execute("UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)+CAST(%s AS REAL), exp=CAST(COALESCE(exp,0) AS REAL)+CAST(%s AS REAL) WHERE user_id=%s", (stone, exp, user_id))
+                conn.execute("UPDATE player_data.training SET progress=%s,last_time=%s,points=xiuxian_int_store(%s,'training_points','actor'),completed=%s,max_progress=%s,last_event=%s,weekly_purchases=%s WHERE user_id=%s", tuple(state_value(key, updated[key]) for key in self._STATE_FIELDS) + (user_id,))
+                conn.execute("UPDATE user_xiuxian SET stone=xiuxian_int_store(xiuxian_int_add(COALESCE(stone,0),%s,'stone','actor')), exp=CAST(COALESCE(exp,0) AS REAL)+CAST(%s AS REAL) WHERE user_id=%s", (stone, exp, user_id))
                 now = datetime.now()
                 for item_id, name, item_type, amount in rewards:
                     conn.execute("INSERT INTO back (user_id,goods_id,goods_name,goods_type,goods_num,create_time,update_time,bind_num) VALUES (%s,%s,%s,%s,%s,%s,%s,%s) ON CONFLICT(user_id,goods_id) DO UPDATE SET goods_num=back.goods_num+EXCLUDED.goods_num, bind_num=COALESCE(back.bind_num,0)+EXCLUDED.goods_num, update_time=EXCLUDED.update_time", (user_id,item_id,name,item_type,amount,now,now,amount))
@@ -512,7 +512,7 @@ class TrainingPurchaseService:
                 points, purchased, inventory = expected_points - cost, purchased + quantity, inventory + quantity
                 weekly[str(item_id)] = purchased
                 if conn.execute(
-                    "UPDATE player_data.training SET points=%s, weekly_purchases=%s WHERE user_id=%s AND xiuxian_int_cmp(COALESCE(points, 0),%s)=0",
+                    "UPDATE player_data.training SET points=xiuxian_int_store(%s,'training_points','actor'), weekly_purchases=%s WHERE user_id=%s AND xiuxian_int_cmp(COALESCE(points, 0),%s,1,'training_points','actor')=0",
                     (points, json.dumps(weekly, ensure_ascii=False), user_id, expected_points),
                 ).rowcount != 1:
                     raise DomainError("training_points_write_rejected", "training points write did not affect one row")

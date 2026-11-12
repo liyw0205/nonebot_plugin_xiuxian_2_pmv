@@ -148,8 +148,8 @@ class WorkAbortCleanupSqlRepository:
             remaining = stone - applied_penalty
             if applied_penalty:
                 changed = uow.execute(
-                    "UPDATE user_xiuxian SET stone=? WHERE user_id=? "
-                    "AND xiuxian_int_cmp(COALESCE(stone,0),?)=0",
+                    "UPDATE user_xiuxian SET stone=xiuxian_int_store(?,'stone','actor') WHERE user_id=? "
+                    "AND xiuxian_int_cmp(COALESCE(stone,0),?,1,'stone','actor')=0",
                     (remaining, user_id, stone),
                 )
                 if changed.rowcount < 1:

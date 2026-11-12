@@ -247,9 +247,9 @@ class ArenaSeasonRewardRepository:
                     return self._result("inventory_full", 0, expected_honor, expected_total_honor)
             honor_points, total_honor = expected_honor + total_reward, expected_total_honor + total_reward
             changed = uow.execute(
-                "UPDATE player_data.arena SET honor_points=?,total_honor_earned=? WHERE user_id=? "
-                "AND xiuxian_int_cmp(COALESCE(score,0),?)=0 AND COALESCE(rank,'')=? AND xiuxian_int_cmp(COALESCE(honor_points,0),?)=0 "
-                "AND xiuxian_int_cmp(COALESCE(total_honor_earned,0),?)=0",
+                "UPDATE player_data.arena SET honor_points=xiuxian_int_store(?,'arena_honor','actor'),total_honor_earned=xiuxian_int_store(?,'arena_honor','actor') WHERE user_id=? "
+                "AND xiuxian_int_cmp(COALESCE(score,0),?)=0 AND COALESCE(rank,'')=? AND xiuxian_int_cmp(COALESCE(honor_points,0),?,1,'arena_honor','actor')=0 "
+                "AND xiuxian_int_cmp(COALESCE(total_honor_earned,0),?,1,'arena_honor','actor')=0",
                 (honor_points, total_honor, user_id, expected_score, str(expected_rank), expected_honor, expected_total_honor),
             )
             if changed.rowcount != 1:
@@ -271,7 +271,7 @@ class ArenaSeasonRewardRepository:
             uow.execute(
                 "INSERT INTO arena_season_reward_operations "
                 "(operation_id,payload,season_key,user_id,honor,honor_points,total_honor_earned) "
-                "VALUES(?,?,?,?,?,?,?)",
+                "VALUES(?,?,?,?,?,xiuxian_int_store(?,'arena_honor','actor'),?)",
                 (operation_id, payload, season_key, user_id, total_reward, honor_points, total_honor),
             )
             return self._result("applied", total_reward, honor_points, total_honor)

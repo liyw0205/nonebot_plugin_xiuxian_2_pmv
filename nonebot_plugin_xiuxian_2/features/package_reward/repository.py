@@ -96,8 +96,8 @@ class PackageRewardRepository:
 
         if stone_delta:
             changed = uow.execute(
-                "UPDATE user_xiuxian SET stone = CAST(COALESCE(stone, 0) AS REAL) + CAST(? AS REAL) "
-                "WHERE user_id = ? AND xiuxian_int_cmp(COALESCE(stone,0),?)>=0",
+                "UPDATE user_xiuxian SET stone = xiuxian_int_store(xiuxian_int_add(COALESCE(stone, 0),?,'stone','actor')) "
+                "WHERE user_id = ? AND xiuxian_int_cmp(COALESCE(stone,0),?,1,'stone','actor')>=0",
                 (stone_delta, user_id, -stone_delta),
             )
             if changed.rowcount != 1:

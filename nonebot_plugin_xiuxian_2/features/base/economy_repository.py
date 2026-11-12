@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
-from ...core.numeric import as_int_like
+from ...core.numeric import as_int_like, bind_sqlite_param, require_exact_integer
 from ...infrastructure.database import DatabaseUnitOfWork
 
 
@@ -81,7 +81,10 @@ class PlayerEconomySqlRepository:
         expected_value: int | None = None,
     ) -> EconomyMutationResult:
         user_id = str(user_id).strip()
-        amount = int(amount)
+        money = field in {"stone", "sect_contribution"}
+        amount = require_exact_integer(amount, field=field, subject=user_id) if money else int(amount)
+        if money and expected_value is not None:
+            expected_value = require_exact_integer(expected_value, field=field, subject=user_id)
         if not user_id or amount < 0 or (cap is not None and int(cap) < 0):
             return self._result("invalid", user_id, amount)
         if amount == 0:
@@ -99,17 +102,24 @@ class PlayerEconomySqlRepository:
             )
             if row is None:
                 return self._result("user_missing", user_id, amount)
-            current = as_int_like(row["value"])
+            current = require_exact_integer(row["value"], field=field, subject=user_id) if money else as_int_like(row["value"])
             if expected_value is not None and current != int(expected_value):
                 return self._result("state_changed", user_id, amount, 0, current)
             target = current + amount
             if cap is not None:
                 target = min(target, int(cap))
             applied = max(0, target - current)
+            guard = (
+                f'xiuxian_int_cmp(COALESCE("{field}",0),?,1,?,?)=0'
+                if money else f'xiuxian_int_cmp(COALESCE("{field}",0),?)=0'
+            )
+            parameters = (bind_sqlite_param(target, exact=True) if money else target,
+                          row["_rowid"], user_id, current)
+            if money:
+                parameters += (field, user_id)
             changed = uow.execute(
                 f"UPDATE user_xiuxian SET \"{field}\"=? WHERE rowid=? "
-                f"AND user_id=? AND xiuxian_int_cmp(COALESCE(\"{field}\",0),?)=0",
-                (target, row["_rowid"], user_id, current),
+                f"AND user_id=? AND {guard}", parameters,
             )
             if changed.rowcount != 1:
                 return self._result("state_changed", user_id, amount, 0, current)

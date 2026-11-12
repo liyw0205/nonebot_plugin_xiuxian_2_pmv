@@ -26,7 +26,7 @@ class SectCreationSqlRepository:
             if uow.query_one('SELECT sect_id FROM sects WHERE sect_name=?',(sect_name,)):return {'status':'name_exists',**base}
             uow.execute('INSERT INTO sects(sect_name,sect_owner,sect_scale,sect_used_stone,join_open,closed,combat_power) VALUES(?,?,0,0,1,0,0)',(sect_name,user_id)); created=uow.query_one('SELECT sect_id FROM sects WHERE sect_owner=? AND sect_name=?',(user_id,sect_name))
             if created is None: raise DomainError('sect_creation_write_rejected', 'sect creation was not saved')
-            sect_id=int(created['sect_id']); changed=uow.execute('UPDATE user_xiuxian SET sect_id=?,sect_position=?,stone=stone-? WHERE user_id=? AND sect_id IS NULL AND xiuxian_int_cmp(stone,?)>=0',(sect_id,owner_position,stone_cost,user_id,stone_cost))
+            sect_id=int(created['sect_id']); changed=uow.execute('UPDATE user_xiuxian SET sect_id=?,sect_position=?,stone=xiuxian_int_store(xiuxian_int_sub(stone,?,\'stone\',\'actor\')) WHERE user_id=? AND sect_id IS NULL AND xiuxian_int_cmp(stone,?,1,\'stone\',\'actor\')>=0',(sect_id,owner_position,stone_cost,user_id,stone_cost))
             if changed.rowcount!=1:
                 raise DomainError('sect_member_write_rejected', 'sect membership was not saved')
             uow.execute('INSERT INTO sect_creation_operations(operation_id,user_id,sect_id,sect_name,stone_cost) VALUES(?,?,?,?,?)',(operation_id,user_id,sect_id,sect_name,stone_cost))

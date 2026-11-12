@@ -345,7 +345,7 @@ class CompensationRewardClaimSqlRepository:
                     continue
                 if item["type"] == "stone":
                     updated = uow.execute(
-                        "UPDATE user_xiuxian SET stone=COALESCE(stone,0)+? "
+                        "UPDATE user_xiuxian SET stone=xiuxian_int_store(xiuxian_int_add(COALESCE(stone,0),?,'stone','actor')) "
                         "WHERE user_id=?",
                         (quantity, user_id),
                     )

@@ -1,7 +1,8 @@
 from typing import Any, Tuple
 
 from ...paths import get_paths
-from ...core.errors import ConflictError
+from ...core.errors import ConflictError, DomainError
+from ..command_guard import guard_command, failure_reply, report_exception
 from ...features.bank.command_application import BankCommandApplication, BANK_COMMAND_PATTERN
 from ...features.bank.command_replies import render_bank_reply
 from ...infrastructure.ids import UUIDGenerator
@@ -55,6 +56,7 @@ __bank_help__ = """
 
 
 @bank.handle(parameterless=[Cooldown(cd_time=0)])
+@guard_command("灵庄")
 async def bank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Tuple[Any, ...] = RegexGroup()):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
@@ -76,9 +78,13 @@ async def bank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: 
     except ConflictError:
         await handle_send(bot, event, "请求冲突，本次灵庄操作未结算。", md_type="灵庄")
         return
+    except DomainError as exc:
+        if exc.code != "currency_precision_unavailable":
+            raise
+        await handle_send(bot, event, failure_reply("灵庄", exc), md_type="灵庄")
+        return
     except Exception as exc:
-        logger.warning("bank command failed: {}", type(exc).__name__)
-        await handle_send(bot, event, "灵庄服务异常，暂时无法确认本次结果，请稍后核查账户状态。", md_type="灵庄")
+        await handle_send(bot, event, report_exception("灵庄", exc, event=event), md_type="灵庄")
         return
 
     if is_help:

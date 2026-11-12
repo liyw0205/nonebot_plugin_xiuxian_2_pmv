@@ -552,8 +552,8 @@ class ActivityReadModelSqlRepository:
         "points": (
             "activity_point_balance",
             "SELECT {name}b.user_id,b.total_points AS value FROM activity_point_balance b {join}"
-            "WHERE b.activity_key=? AND b.total_points>0 "
-            "ORDER BY b.total_points DESC,b.points DESC,b.user_id ASC LIMIT ?",
+            "WHERE b.activity_key=? AND xiuxian_int_cmp(b.total_points,0,1,'activity_points','actor')>0 "
+            "ORDER BY xiuxian_int_text(b.total_points,'activity_points','actor') COLLATE xiuxian_integer DESC,xiuxian_int_text(b.points,'activity_points','actor') COLLATE xiuxian_integer DESC,b.user_id ASC LIMIT ?",
         ),
         "collect": (
             "activity_collect_inventory",
@@ -573,10 +573,10 @@ class ActivityReadModelSqlRepository:
             "activity_point_balance",
             "SELECT b.total_points AS value,b.points AS tie FROM activity_point_balance b "
             "WHERE b.activity_key=? AND b.user_id=?",
-            "SELECT COUNT(*) AS better FROM activity_point_balance b WHERE b.activity_key=? AND b.total_points>0 "
-            "AND (b.total_points>? OR (b.total_points=? AND b.points>?) "
-            "OR (b.total_points=? AND b.points=? AND b.user_id<?))",
-            "SELECT COUNT(*) AS total FROM activity_point_balance b WHERE b.activity_key=? AND b.total_points>0",
+            "SELECT COUNT(*) AS better FROM activity_point_balance b WHERE b.activity_key=? AND xiuxian_int_cmp(b.total_points,0,1,'activity_points','actor')>0 "
+            "AND (xiuxian_int_cmp(b.total_points,?,1,'activity_points','actor')>0 OR (xiuxian_int_cmp(b.total_points,?,1,'activity_points','actor')=0 AND xiuxian_int_cmp(b.points,?,1,'activity_points','actor')>0) "
+            "OR (xiuxian_int_cmp(b.total_points,?,1,'activity_points','actor')=0 AND xiuxian_int_cmp(b.points,?,1,'activity_points','actor')=0 AND b.user_id<?))",
+            "SELECT COUNT(*) AS total FROM activity_point_balance b WHERE b.activity_key=? AND xiuxian_int_cmp(b.total_points,0,1,'activity_points','actor')>0",
         ),
         "pass": (
             "activity_pass_balance",

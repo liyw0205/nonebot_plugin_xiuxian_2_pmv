@@ -72,7 +72,7 @@ class MixelixirHarvestLevelUpgradeSqlRepository:
                 changed = uow.execute("UPDATE player_data.mix_elixir_info SET \"收取等级\"=?,\"炼丹经验\"=? WHERE user_id=? AND xiuxian_int_cmp(\"收取等级\",?)=0 AND xiuxian_int_cmp(\"炼丹经验\",?)=0", (str(next_level), str(remaining), user_id, expected_level, expected_experience))
                 if changed.rowcount != 1:
                     return MixelixirHarvestLevelUpgradeResult("state_changed")
-                uow.execute("INSERT INTO mixelixir_harvest_level_upgrade_operations(operation_id,payload,cost,wallet_stone,level,experience) VALUES(?,?,?,?,?,?)", (operation_id, payload, cost, current_stone, next_level, remaining))
+                uow.execute("INSERT INTO mixelixir_harvest_level_upgrade_operations(operation_id,payload,cost,wallet_stone,level,experience) VALUES(?,?,xiuxian_int_store(?,'stone','actor'),xiuxian_int_store(?,'stone','actor'),?,?)", (operation_id, payload, cost, current_stone, next_level, remaining))
                 return MixelixirHarvestLevelUpgradeResult("applied", cost, current_stone, next_level, remaining)
             finally:
                 pass

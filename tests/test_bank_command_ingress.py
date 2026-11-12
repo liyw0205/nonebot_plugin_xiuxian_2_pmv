@@ -12,7 +12,8 @@ from unittest.mock import Mock, patch
 import tests  # Establish isolated paths before importing plugin modules.
 import pytest
 
-from nonebot_plugin_xiuxian_2.core.errors import ConflictError
+from nonebot_plugin_xiuxian_2.core.errors import ConflictError, DomainError
+from nonebot_plugin_xiuxian_2.xiuxian.command_guard import failure_reply, report_exception
 from nonebot_plugin_xiuxian_2.features.bank.account_application import BankDepositApplication
 from nonebot_plugin_xiuxian_2.features.bank.account_info_application import BankAccountInfoApplication
 from nonebot_plugin_xiuxian_2.features.bank.account_interest_application import BankInterestApplication
@@ -87,6 +88,9 @@ def _handler(context):
         raise _Finished
 
     namespace = {
+        "DomainError": DomainError,
+        "failure_reply": failure_reply,
+        "report_exception": report_exception,
         "assign_bot": assign_bot, "check_user": lambda event: (True, {"user_id": "u"}, ""),
         "handle_send": send, "send_help_message": send_help,
         "bank": SimpleNamespace(finish=finish), "bank_command_application": context.application,

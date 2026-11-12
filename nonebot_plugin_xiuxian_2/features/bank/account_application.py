@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from ...core.numeric import as_int_like
+from ...core.numeric import as_int_like, require_exact_integer
 import json
 from pathlib import Path
 from typing import Any, Mapping
@@ -60,7 +60,7 @@ class BankDepositApplication:
                         return {"status": "state_changed", "reason": reason, "operation_id": operation_id}
             saved = 0 if snapshot is None else as_int_like(snapshot["saved_stone"])
             try:
-                decision = decide_deposit(wallet=as_int_like(wallet["stone"] or 0), saved=saved, amount=int(amount), interest=int(interest), limit=int(limit))
+                decision = decide_deposit(wallet=require_exact_integer(wallet["stone"], field="stone", subject=user_id), saved=saved, amount=int(amount), interest=int(interest), limit=int(limit))
             except ValueError as exc:
                 if str(exc) in {"stone_insufficient", "limit_exceeded"}:
                     return {"status": str(exc), "operation_id": operation_id}

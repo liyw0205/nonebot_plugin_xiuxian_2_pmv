@@ -71,7 +71,7 @@ class NatalTrainingSqlRepository:
                 new_level += 1
                 new_exp -= current_max_exp
                 new_max_exp = max_exp_base + new_level * max_exp_growth if new_level < max_level else current_max_exp
-            if uow.execute("UPDATE user_xiuxian SET stone=stone-? WHERE user_id=? AND xiuxian_int_cmp(stone,?)>=0", (stone_cost, user_id, stone_cost)).rowcount != 1:
+            if uow.execute("UPDATE user_xiuxian SET stone=xiuxian_int_store(xiuxian_int_sub(stone,?,'stone','actor')) WHERE user_id=? AND xiuxian_int_cmp(stone,?,1,'stone','actor')>=0", (stone_cost, user_id, stone_cost)).rowcount != 1:
                 raise DomainError("stone_write_rejected", "natal treasure write count mismatch")
             if uow.execute("UPDATE player_data.natal_treasure SET level=?,exp=?,max_exp=? WHERE user_id=?", (new_level, new_exp, new_max_exp, user_id)).rowcount != 1:
                 raise DomainError("treasure_training_write_rejected", "natal treasure write count mismatch")

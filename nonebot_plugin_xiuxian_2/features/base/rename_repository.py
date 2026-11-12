@@ -99,7 +99,7 @@ class BaseRenameSqlRepository:
                 if changed.rowcount != 1:
                     return BaseRenameResult("item_missing", user_id, rename_kind, new_name, old)
             elif int(stone_cost) > 0:
-                changed = uow.execute("UPDATE user_xiuxian SET stone=stone-? WHERE user_id=? AND xiuxian_int_cmp(COALESCE(stone,0),?)>=0", (int(stone_cost), user_id, int(stone_cost)))
+                changed = uow.execute("UPDATE user_xiuxian SET stone=xiuxian_int_store(xiuxian_int_sub(stone,?,'stone','actor')) WHERE user_id=? AND xiuxian_int_cmp(COALESCE(stone,0),?,1,'stone','actor')>=0", (int(stone_cost), user_id, int(stone_cost)))
                 if changed.rowcount != 1:
                     return BaseRenameResult("stone_insufficient", user_id, rename_kind, new_name, old)
             uow.execute(f"UPDATE user_xiuxian SET {column}=? WHERE user_id=? AND COALESCE({column},'')=?", (new_name, user_id, old))

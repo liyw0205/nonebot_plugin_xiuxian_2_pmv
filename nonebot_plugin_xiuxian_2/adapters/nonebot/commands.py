@@ -17,7 +17,7 @@ from nonebot.exception import MatcherException, ProcessException
 
 from ...core.errors import DomainError
 from ...core.result import ReplyPlan
-from ...xiuxian.command_guard import report_exception, result_failure
+from ...xiuxian.command_guard import report_exception, result_failure, failure_reply
 from .context import CommandContext, context_from_event
 
 
@@ -397,6 +397,10 @@ def register_migrated_matchers(driver: Any, holder: dict[str, Any]) -> tuple[typ
             plan = _build_stone(context, runtime.services["stone_gift"], args)
         except (MatcherException, ProcessException):
             raise
+        except DomainError as exc:
+            if exc.code != "currency_precision_unavailable":
+                raise
+            plan = ReplyPlan(failure_reply("赠送灵石", exc), reference=True)
         except Exception as exc:
             plan = ReplyPlan(report_exception("赠送灵石", exc), reference=True)
         return await _send(holder, event, bot, plan)

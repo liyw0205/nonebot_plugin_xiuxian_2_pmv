@@ -141,7 +141,7 @@ class LegacyGuishiStoneService:
                     stored_balance = self.STORED_CAP
                     conn.execute(
                         "INSERT INTO guishi_trade.guishi_info (user_id, stored_stone, items) "
-                        "VALUES (%s, %s, '{}') ON CONFLICT (user_id) "
+                        "VALUES(%s,xiuxian_int_store(%s,'stored_stone','actor'),'{}') ON CONFLICT (user_id) "
                         "DO UPDATE SET stored_stone=EXCLUDED.stored_stone",
                         (user_id, stored_balance),
                     )
@@ -154,8 +154,8 @@ class LegacyGuishiStoneService:
                             stored_balance=stored_balance,
                         )
                     charged = conn.execute(
-                        "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)-CAST(%s AS REAL) "
-                        "WHERE user_id=%s AND xiuxian_int_cmp(COALESCE(stone, 0),%s)>=0",
+                        "UPDATE user_xiuxian SET stone=xiuxian_int_store(xiuxian_int_sub(COALESCE(stone,0),%s,'stone','actor')) "
+                        "WHERE user_id=%s AND xiuxian_int_cmp(COALESCE(stone, 0),%s,1,'stone','actor')>=0",
                         (amount, user_id, amount),
                     )
                     if charged.rowcount != 1:
@@ -176,21 +176,21 @@ class LegacyGuishiStoneService:
                     actual_amount = amount - fee
                     new_balance = stored_balance - amount
                     conn.execute(
-                        "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)+CAST(%s AS REAL) "
+                        "UPDATE user_xiuxian SET stone=xiuxian_int_store(xiuxian_int_add(COALESCE(stone,0),%s,'stone','actor')) "
                         "WHERE user_id=%s",
                         (actual_amount, user_id),
                     )
 
                 conn.execute(
                     "INSERT INTO guishi_trade.guishi_info (user_id, stored_stone, items) "
-                    "VALUES (%s, %s, '{}') ON CONFLICT (user_id) "
+                    "VALUES(%s,xiuxian_int_store(%s,'stored_stone','actor'),'{}') ON CONFLICT (user_id) "
                     "DO UPDATE SET stored_stone=EXCLUDED.stored_stone",
                     (user_id, new_balance),
                 )
                 conn.execute(
                     "INSERT INTO guishi_stone_operations "
                     "(operation_id, operation_type, user_id, amount, fee, actual_amount, stored_balance) "
-                    "VALUES (%s, %s, %s, %s, %s, %s, %s)",
+                    "VALUES(%s,%s,%s,xiuxian_int_store(%s,'stone','actor'),%s,%s,%s)",
                     (operation_id, operation_type, user_id, amount, fee, actual_amount, new_balance),
                 )
                 conn.commit()

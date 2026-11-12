@@ -206,12 +206,12 @@ class AuctionSettlementSqlRepository:
                     earnings = 0 if is_system else final_price - fee
                     if not is_system:
                         uow.execute(
-                            "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)+CAST(? AS REAL) WHERE user_id=?",
+                            "UPDATE user_xiuxian SET stone=xiuxian_int_store(xiuxian_int_add(COALESCE(stone,0),?,'stone','actor')) WHERE user_id=?",
                             (earnings, seller_id),
                         )
                     for bidder_id, locked in bids.items():
                         if bidder_id != winner_id and uow.execute(
-                            "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)+CAST(? AS REAL) WHERE user_id=?",
+                            "UPDATE user_xiuxian SET stone=xiuxian_int_store(xiuxian_int_add(COALESCE(stone,0),?,'stone','actor')) WHERE user_id=?",
                             (locked, bidder_id),
                         ).rowcount != 1:
                             raise _SettlementRejected(

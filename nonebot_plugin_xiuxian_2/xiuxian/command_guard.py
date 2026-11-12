@@ -117,10 +117,12 @@ def result_failure(action: str, result, *, messages: dict[str, str] | None = Non
 
 
 def _subject_label(subject) -> str:
-    return {"visitor": "来访方", "target": "目标方", "source": "材料", "destination": "目标", "sender": "赠送方", "recipient": "接收方", "actor": "发起方", "challenger": "挑战者", "opponent": "对手", "sect": "宗门", "mentor": "师父", "apprentice": "徒弟"}.get(str(subject), "")
+    return {"visitor": "来访方", "target": "目标方", "source": "材料", "destination": "目标", "sender": "赠送方", "recipient": "接收方", "buyer": "购买方", "seller": "出售方", "actor": "发起方", "challenger": "挑战者", "opponent": "对手", "sect": "宗门", "mentor": "师父", "apprentice": "徒弟"}.get(str(subject), "")
 
 
 def report_exception(action: str, exc: BaseException, *, phase: str = "处理或回复", event=None) -> str:
+    if isinstance(exc, DomainError) and exc.code == "currency_precision_unavailable" and reason_text(exc.details.get("reason", "")):
+        return failure_reply(action, exc)
     if event is None:
         from .on_compat import _CURRENT_EVENT
 
@@ -159,7 +161,7 @@ def guard_command(
                 bot = _argument(args, kwargs, 0, "bot")
                 event = _argument(args, kwargs, 1, "event")
                 known_code = "operation_conflict" if isinstance(exc, OperationConflictError) else getattr(exc, "code", "")
-                if isinstance(exc, DomainError) and known_code in known_rejections and (
+                if isinstance(exc, DomainError) and (known_code in known_rejections or known_code == "currency_precision_unavailable") and (
                     reason_text(exc.details.get("reason", "")) or reason_text(known_code)
                 ):
                     reply = failure_reply(action, exc)

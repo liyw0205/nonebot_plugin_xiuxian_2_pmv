@@ -55,7 +55,7 @@ class DatabaseUnitOfWork:
             self.database.parent.mkdir(parents=True, exist_ok=True)
             self.connection = sqlite3.connect(self.database, timeout=self.timeout)
         try:
-            register_numeric_functions(self.connection)
+            self._numeric_functions = register_numeric_functions(self.connection)
             self.connection.row_factory = sqlite3.Row
             # busy_timeout must be in effect before any statement that could
             # block on another connection's lock.
@@ -128,19 +128,21 @@ class DatabaseUnitOfWork:
     def execute(self, sql: str, params: Any = ()) -> sqlite3.Cursor:
         # Central overflow guard: the raw driver aborts the whole transaction on
         # any int outside int64, so every statement binds normalized params.
-        return self._conn().execute(sql, adapt_sqlite_params(params))
+        return self._numeric_functions.run(self._conn().execute, sql, adapt_sqlite_params(params))
 
     def executemany(self, sql: str, params: Any) -> sqlite3.Cursor:
-        return self._conn().executemany(
+        return self._numeric_functions.run(self._conn().executemany,
             sql, (adapt_sqlite_params(row) for row in params)
         )
 
     def query_one(self, sql: str, params: Any = ()) -> Mapping[str, Any] | None:
-        row = self.execute(sql, params).fetchone()
+        cursor = self.execute(sql, params)
+        row = self._numeric_functions.run(cursor.fetchone)
         return dict(row) if row is not None else None
 
     def query_all(self, sql: str, params: Any = ()) -> list[Mapping[str, Any]]:
-        return [dict(row) for row in self.execute(sql, params).fetchall()]
+        cursor = self.execute(sql, params)
+        return [dict(row) for row in self._numeric_functions.run(cursor.fetchall)]
 
     def attach_database(self, database: str | Path, schema: str, *, read_only: bool = False) -> None:
         """Attach a catalogued secondary database to this transaction."""

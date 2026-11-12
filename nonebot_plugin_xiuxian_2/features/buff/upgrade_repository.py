@@ -53,7 +53,7 @@ class BlessedSpotUpgradeSqlRepository:
                     return BlessedSpotUpgradeResult("max_level", user_id, previous_level=current, current_level=current)
                 if as_int_like(user["stone"]) < stone_cost:
                     return BlessedSpotUpgradeResult("stone_insufficient", user_id, stone_cost, current, current)
-                charged = uow.execute("UPDATE user_xiuxian SET stone=stone-? WHERE user_id=? AND xiuxian_int_cmp(stone,?)>=0", (stone_cost, user_id, stone_cost))
+                charged = uow.execute("UPDATE user_xiuxian SET stone=xiuxian_int_store(xiuxian_int_sub(stone,?,'stone','actor')) WHERE user_id=? AND xiuxian_int_cmp(stone,?,1,'stone','actor')>=0", (stone_cost, user_id, stone_cost))
                 if charged.rowcount != 1:
                     raise DomainError("stone_write_rejected", "blessed field debit was not saved")
                 changed = uow.execute("UPDATE player_data.mix_elixir_info SET \"灵田数量\"=? WHERE user_id=? AND CAST(\"灵田数量\" AS INTEGER)=?", (str(current + 1), user_id, current))

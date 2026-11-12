@@ -1,6 +1,7 @@
 import shutil
 from pathlib import Path
 
+from ...core.numeric import require_exact_integer
 from ...infrastructure.database import DatabaseUnitOfWork
 
 
@@ -85,32 +86,33 @@ def apply_bank_legacy_accounts(uow: DatabaseUnitOfWork) -> None:
                         user_id = str(row["user_id"] or "").strip()
                         if not user_id:
                             raise RuntimeError("legacy bankinfo row has an empty user_id")
-                        saved_stone = int(row["savestone"] or 0)
                         bank_level = str(row["banklevel"] or "1")
                         updated_at = str(row["savetime"] or "")
                         existing = uow.query_one(
                             "SELECT saved_stone,bank_level,updated_at FROM bank_accounts WHERE user_id=?",
                             (user_id,),
                         )
+                        if existing is not None and uow.query_one(
+                            "SELECT 1 AS present FROM bank_account_operations WHERE user_id=? LIMIT 1",
+                            (user_id,),
+                        ) is not None:
+                            # A receipt proves the game authority advanced past this source.
+                            retained_rows += 1
+                            continue
+                        saved_stone = require_exact_integer(row["savestone"], field="saved_stone", subject=user_id)
                         imported = (saved_stone, bank_level, updated_at)
                         if existing is None:
                             uow.execute(
                                 "INSERT INTO bank_accounts(user_id,saved_stone,bank_level,updated_at) "
-                                "VALUES(?,?,?,?)",
+                                "VALUES(?,xiuxian_int_store(?,'saved_stone','actor'),?,?)",
                                 (user_id, *imported),
                             )
                             imported_rows += 1
                         elif (
-                            int(existing["saved_stone"]),
+                            require_exact_integer(existing["saved_stone"], field="saved_stone", subject=user_id),
                             str(existing["bank_level"]),
                             str(existing["updated_at"]),
                         ) == imported:
-                            retained_rows += 1
-                        elif uow.query_one(
-                            "SELECT 1 AS present FROM bank_account_operations WHERE user_id=? LIMIT 1",
-                            (user_id,),
-                        ) is not None:
-                            # A game-db receipt proves this account has advanced past its legacy snapshot.
                             retained_rows += 1
                         else:
                             raise RuntimeError(f"bank account migration conflict: {user_id}")

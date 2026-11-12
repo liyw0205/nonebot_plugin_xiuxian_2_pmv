@@ -164,10 +164,10 @@ class BaseRootRerollSqlRepository:
 
             changed = uow.execute(
                 "UPDATE user_xiuxian SET root=?,root_type=?,"
-                "stone=CAST(COALESCE(stone,0) AS REAL)-CAST(? AS REAL),"
+                "stone=xiuxian_int_store(xiuxian_int_sub(COALESCE(stone,0),?,'stone','actor')),"
                 "power=round(exp * ? * ?,0) "
                 "WHERE rowid=? AND user_id=? AND root IS ? AND root_type IS ? "
-                "AND root_level IS ? AND level IS ? AND xiuxian_int_cmp(exp,?)=0 AND xiuxian_int_cmp(power,?)=0 AND xiuxian_int_cmp(stone,?)=0",
+                "AND root_level IS ? AND level IS ? AND xiuxian_int_cmp(exp,?)=0 AND xiuxian_int_cmp(power,?)=0 AND xiuxian_int_cmp(stone,?,1,'stone','actor')=0",
                 (
                     root, root_type, stone_cost, root_rate, level_spend, row["_rowid"], user_id,
                     row["root"], row["root_type"], row["root_level"], row["level"],

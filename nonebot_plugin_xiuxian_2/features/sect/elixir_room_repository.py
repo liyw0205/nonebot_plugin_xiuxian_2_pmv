@@ -25,7 +25,7 @@ class SectElixirRoomSqlRepository:
             if int(sect['level'])!=expected_level:return {'status':'level_changed','reason':'sect_elixir_level_changed',**base}
             if as_int_like(sect['stones'])<stone_cost:return {'status':'stone_insufficient','reason':'sect_stone_insufficient',**base}
             if as_int_like(sect['scale'])<scale_cost:return {'status':'scale_insufficient',**base}
-            changed=uow.execute('UPDATE sects SET elixir_room_level=?,sect_used_stone=sect_used_stone-?,sect_scale=sect_scale-? WHERE sect_id=? AND sect_owner=? AND COALESCE(elixir_room_level,0)=? AND xiuxian_int_cmp(COALESCE(sect_used_stone,0),?)>=0 AND xiuxian_int_cmp(COALESCE(sect_scale,0),?)>=0',(next_level,stone_cost,scale_cost,sect_id,actor_id,expected_level,stone_cost,scale_cost))
+            changed=uow.execute('UPDATE sects SET elixir_room_level=?,sect_used_stone=xiuxian_int_store(xiuxian_int_sub(sect_used_stone,?,\'sect_used_stone\',\'actor\')),sect_scale=sect_scale-? WHERE sect_id=? AND sect_owner=? AND COALESCE(elixir_room_level,0)=? AND xiuxian_int_cmp(COALESCE(sect_used_stone,0),?,1,\'sect_used_stone\',\'actor\')>=0 AND xiuxian_int_cmp(COALESCE(sect_scale,0),?)>=0',(next_level,stone_cost,scale_cost,sect_id,actor_id,expected_level,stone_cost,scale_cost))
             if changed.rowcount!=1: raise DomainError('sect_elixir_write_rejected','elixir room write count mismatch')
             uow.execute('INSERT INTO sect_elixir_room_operations(operation_id,actor_id,sect_id,from_level,to_level,stone_cost,scale_cost) VALUES(?,?,?,?,?,?,?)',(operation_id,actor_id,sect_id,expected_level,next_level,stone_cost,scale_cost))
             return {'status':'upgraded',**base}

@@ -539,6 +539,7 @@ class TradeApplication(LegacyApplication):
             operation_id=operation_id,
             user_id=user_id,
             action="trade.purchase",
+            zero_write_rejections=("currency_precision_unavailable",),
             payload={"user_id": user_id, "listing_id": listing_id, "quantity": quantity, **kwargs},
             call=lambda: self.xianshi_purchase_repository.purchase(
                 operation_id, user_id, listing_id, quantity,

@@ -124,7 +124,7 @@ class GuishiQiugouSqlRepository:
                     uow.execute(
                         "INSERT INTO guishi_item("
                         "id,user_id,item_id,item_name,item_type,price,quantity) "
-                        "VALUES(?,?,?,?,?,?,?)",
+                        "VALUES(?,?,?,?,?,xiuxian_int_store(?,'stone','actor'),?)",
                         (
                             candidate,
                             user_id,
@@ -149,8 +149,8 @@ class GuishiQiugouSqlRepository:
                 raise RuntimeError("failed to allocate guishi order id")
 
             charged = uow.execute(
-                "UPDATE guishi_info SET stored_stone=CAST(COALESCE(stored_stone,0) AS REAL)-CAST(? AS REAL) "
-                "WHERE user_id=? AND xiuxian_int_cmp(COALESCE(stored_stone,0),?)>=0",
+                "UPDATE guishi_info SET stored_stone=xiuxian_int_store(xiuxian_int_sub(COALESCE(stored_stone,0),?,'stored_stone','actor')) "
+                "WHERE user_id=? AND xiuxian_int_cmp(COALESCE(stored_stone,0),?,1,'stored_stone','actor')>=0",
                 (total_cost, user_id, total_cost),
             )
             if charged.rowcount != 1:
@@ -158,7 +158,7 @@ class GuishiQiugouSqlRepository:
             if operation_id:
                 uow.execute(
                     "INSERT INTO guishi_order_create_operations("
-                    "operation_id,payload,order_id,order_type,amount) VALUES(?,?,?,?,?)",
+                    "operation_id,payload,order_id,order_type,amount) VALUES(?,?,?,?,xiuxian_int_store(?,'stone','actor'))",
                     (operation_id, payload, order_id, "qiugou", total_cost),
                 )
             return GuishiQiugouCreateResult("created", order_id, total_cost)

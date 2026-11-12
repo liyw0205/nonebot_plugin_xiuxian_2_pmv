@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from ...core.numeric import as_int_like
+from ...core.numeric import as_int_like, require_exact_integer
 import json
 from dataclasses import dataclass
 from pathlib import Path
@@ -137,8 +137,8 @@ class DufangShareSqlRepository:
                     str(row["target_id"]),
                     str(row["target_name"]),
                     recipient_status,
-                    int(row["actual_amount"]),
-                    as_int_like(row["wallet_stone"]),
+                    require_exact_integer(row["actual_amount"], field="stone_amount", subject=str(row["target_id"])),
+                    require_exact_integer(row["wallet_stone"], field="stone", subject=str(row["target_id"])),
                 )
             )
         return DufangShareSettlementResult(
@@ -150,7 +150,7 @@ class DufangShareSqlRepository:
             int(operation["bonus_percent"]),
             int(operation["total"]),
             int(operation["completed"]),
-            int(operation["total_amount"]),
+            require_exact_integer(operation["total_amount"], field="stone_amount", subject="batch"),
             tuple(recipients),
         )
 
@@ -204,7 +204,7 @@ class DufangShareSqlRepository:
                 uow.execute(
                     "INSERT INTO dufang_share_operations("
                     "operation_id,source_id,event_type,event_title,event_description,effect_amount,"
-                    "bonus_percent,total,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)",
+                    "bonus_percent,total,created_at,updated_at) VALUES(?,?,?,?,?,xiuxian_int_store(?,'stone_amount','actor'),?,?,?,?)",
                     (
                         operation_id, source_id, event_type, event_title, event_description,
                         effect_amount, bonus_percent, len(normalized), occurred_at, occurred_at,
@@ -275,14 +275,14 @@ class DufangShareSqlRepository:
                     )
                     continue
 
-                previous_stone = as_int_like(target["stone"])
+                previous_stone = require_exact_integer(target["stone"], field="stone", subject=target_id)
                 actual_amount = (
                     frozen_amount if frozen_type == "profit" else min(frozen_amount, previous_stone)
                 )
                 if actual_amount <= 0:
                     changed = uow.execute(
                         "UPDATE dufang_share_progress SET status='skipped',reason='zero_balance',"
-                        "wallet_stone=?,updated_at=? WHERE operation_id=? AND target_id=? AND status='pending'",
+                        "wallet_stone=xiuxian_int_store(?,'stone','actor'),updated_at=? WHERE operation_id=? AND target_id=? AND status='pending'",
                         (previous_stone, occurred_at, operation_id, target_id),
                     ).rowcount
                     if changed != 1:
@@ -297,7 +297,7 @@ class DufangShareSqlRepository:
 
                 stone_delta = actual_amount if frozen_type == "profit" else -actual_amount
                 if uow.execute(
-                    "UPDATE user_xiuxian SET stone=COALESCE(stone,0)+? WHERE user_id=?",
+                    "UPDATE user_xiuxian SET stone=xiuxian_int_store(xiuxian_int_add(COALESCE(stone,0),?,'stone','actor')) WHERE user_id=?",
                     (stone_delta, target_id),
                 ).rowcount != 1:
                     raise RuntimeError("sharing target state changed")
@@ -316,18 +316,18 @@ class DufangShareSqlRepository:
                 )
                 uow.execute(
                     "INSERT INTO economy_log(user_id,source,action,stone_delta,item_delta,detail,trace_id,created_at) "
-                    "VALUES(?,'dufang',?,?,'[]',?,?,?)",
+                    "VALUES(?,'dufang',?,xiuxian_int_store(?,'stone_delta','actor'),'[]',?,?,?)",
                     (target_id, f"dufang_share_{frozen_type}", stone_delta, detail, operation_id, occurred_at),
                 )
                 changed = uow.execute(
-                    "UPDATE dufang_share_progress SET status='applied',actual_amount=?,wallet_stone=?,updated_at=? "
+                    "UPDATE dufang_share_progress SET status='applied',actual_amount=xiuxian_int_store(?,'stone_amount','actor'),wallet_stone=xiuxian_int_store(?,'stone','actor'),updated_at=? "
                     "WHERE operation_id=? AND target_id=? AND status='pending'",
                     (actual_amount, wallet_stone, occurred_at, operation_id, target_id),
                 ).rowcount
                 if changed != 1:
                     raise RuntimeError("sharing progress state changed")
                 uow.execute(
-                    "UPDATE dufang_share_operations SET completed=completed+1,total_amount=total_amount+?,"
+                    "UPDATE dufang_share_operations SET completed=completed+1,total_amount=xiuxian_int_store(xiuxian_int_add(total_amount,?,'stone_amount','actor')),"
                     "status=CASE WHEN completed+1>=total THEN 'completed' ELSE 'running' END,updated_at=? "
                     "WHERE operation_id=?",
                     (actual_amount, occurred_at, operation_id),
@@ -391,20 +391,20 @@ class DufangShareSqlRepository:
                         raise RuntimeError("sharing player receipt conflicts with frozen progress")
                     continue
                 player_uow.execute(
-                    f"INSERT INTO unseal_data(user_id,{received_field},last_update) VALUES(?,?,?) "
+                    f"INSERT INTO unseal_data(user_id,{received_field},last_update) VALUES(?,xiuxian_int_store(?,'stone_amount','actor'),?) "
                     f"ON CONFLICT(user_id) DO UPDATE SET {received_field}="
-                    f"COALESCE({received_field},0)+excluded.{received_field},last_update=excluded.last_update",
+                    f"xiuxian_int_store(xiuxian_int_add(COALESCE({received_field},0),excluded.{received_field},'stone_amount','actor')),last_update=excluded.last_update",
                     (target_id, amount, updated_at),
                 )
                 player_uow.execute(
-                    f"INSERT INTO unseal_data(user_id,{shared_field},last_update) VALUES(?,?,?) "
+                    f"INSERT INTO unseal_data(user_id,{shared_field},last_update) VALUES(?,xiuxian_int_store(?,'stone_amount','actor'),?) "
                     f"ON CONFLICT(user_id) DO UPDATE SET {shared_field}="
-                    f"COALESCE({shared_field},0)+excluded.{shared_field},last_update=excluded.last_update",
+                    f"xiuxian_int_store(xiuxian_int_add(COALESCE({shared_field},0),excluded.{shared_field},'stone_amount','actor')),last_update=excluded.last_update",
                     (source_id, amount, updated_at),
                 )
                 player_uow.execute(
                     "INSERT INTO dufang_share_player_receipts("
-                    "operation_id,target_id,source_id,event_type,amount,updated_at) VALUES(?,?,?,?,?,?)",
+                    "operation_id,target_id,source_id,event_type,amount,updated_at) VALUES(?,?,?,?,xiuxian_int_store(?,'stone_amount','actor'),?)",
                     (operation_id, target_id, source_id, event_type, amount, updated_at),
                 )
 

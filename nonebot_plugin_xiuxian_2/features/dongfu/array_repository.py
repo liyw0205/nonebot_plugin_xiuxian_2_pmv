@@ -30,7 +30,7 @@ class DongfuArrayUpgradeSqlRepository:
             if int(row['array_level'] or 0)!=expected_level: return DongfuArrayUpgradeResult('state_changed', reason='array_level_changed')
             if as_int_like(user['stone'] or 0)<stone_cost: return DongfuArrayUpgradeResult('stone_insufficient')
             if item_cost and (uow.query_one('SELECT goods_num FROM back WHERE user_id=? AND goods_id=? AND goods_num>=?',(user_id,item_id,item_cost)) is None): return DongfuArrayUpgradeResult('item_insufficient')
-            if uow.execute('UPDATE user_xiuxian SET stone=stone-? WHERE user_id=? AND xiuxian_int_cmp(stone,?)>=0',(stone_cost,user_id,stone_cost)).rowcount!=1: raise DomainError("stone_write_rejected", 'array write count mismatch')
+            if uow.execute('UPDATE user_xiuxian SET stone=xiuxian_int_store(xiuxian_int_sub(stone,?,\'stone\',\'actor\')) WHERE user_id=? AND xiuxian_int_cmp(stone,?,1,\'stone\',\'actor\')>=0',(stone_cost,user_id,stone_cost)).rowcount!=1: raise DomainError("stone_write_rejected", 'array write count mismatch')
             if item_cost and uow.execute('UPDATE back SET goods_num=goods_num-? WHERE user_id=? AND goods_id=? AND goods_num>=?',(item_cost,user_id,item_id,item_cost)).rowcount!=1: raise DomainError("item_write_rejected", 'array write count mismatch')
             if uow.execute('UPDATE player_data.dongfu_status SET array_level=? WHERE user_id=? AND array_level=?',(next_level,user_id,expected_level)).rowcount!=1: raise DomainError("array_write_rejected", 'array write count mismatch')
             uow.execute('INSERT INTO dongfu_array_upgrade_operations(operation_id,payload,level) VALUES(?,?,?)',(operation_id,payload,next_level)); return DongfuArrayUpgradeResult('upgraded',next_level)

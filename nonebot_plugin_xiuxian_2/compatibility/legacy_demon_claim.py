@@ -146,7 +146,7 @@ class DemonClaimService:
                 )
                 conn.execute(
                     "UPDATE user_xiuxian SET "
-                    "stone=CAST(COALESCE(stone,0) AS REAL)+CAST(%s AS REAL), "
+                    "stone=xiuxian_int_store(xiuxian_int_add(COALESCE(stone,0),%s,'stone','actor')), "
                     "exp=CAST(COALESCE(exp,0) AS REAL)+CAST(%s AS REAL) "
                     "WHERE user_id=%s",
                     (stone_bind, exp_bind, user_id),
@@ -164,7 +164,7 @@ class DemonClaimService:
                     )
                 conn.execute(
                     "INSERT INTO demon_claim_operations(operation_id,payload,stone,exp) "
-                    "VALUES (%s,%s,%s,%s)",
+                    "VALUES(%s,%s,xiuxian_int_store(%s,'stone','actor'),%s)",
                     (operation_id, payload, stone_bind, exp_bind),
                 )
                 conn.commit()

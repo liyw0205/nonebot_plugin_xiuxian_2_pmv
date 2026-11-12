@@ -188,13 +188,13 @@ class BaseStoneRobberySqlRepository:
             try:
                 with uow.savepoint("stone_robbery_assets"):
                     robber_changed = uow.execute(
-                        "UPDATE user_xiuxian SET hp=?,mp=?,user_stamina=?,stone=? WHERE user_id=? AND xiuxian_int_cmp(hp,?)=0 AND xiuxian_int_cmp(mp,?)=0 "
-                        "AND COALESCE(user_stamina,0)=? AND xiuxian_int_cmp(COALESCE(exp,0),?)=0 AND xiuxian_int_cmp(COALESCE(stone,0),?)=0",
+                        "UPDATE user_xiuxian SET hp=?,mp=?,user_stamina=?,stone=xiuxian_int_store(?,'stone','actor') WHERE user_id=? AND xiuxian_int_cmp(hp,?)=0 AND xiuxian_int_cmp(mp,?)=0 "
+                        "AND COALESCE(user_stamina,0)=? AND xiuxian_int_cmp(COALESCE(exp,0),?)=0 AND xiuxian_int_cmp(COALESCE(stone,0),?,1,'stone','actor')=0",
                         (robber_final[0], robber_final[1], robber_snapshot[2] - stamina_cost, robber_stone, robber_id, *robber_snapshot),
                     )
                     victim_changed = uow.execute(
-                        "UPDATE user_xiuxian SET hp=?,mp=?,stone=? WHERE user_id=? AND xiuxian_int_cmp(hp,?)=0 AND xiuxian_int_cmp(mp,?)=0 "
-                        "AND COALESCE(user_stamina,0)=? AND xiuxian_int_cmp(COALESCE(exp,0),?)=0 AND xiuxian_int_cmp(COALESCE(stone,0),?)=0",
+                        "UPDATE user_xiuxian SET hp=?,mp=?,stone=xiuxian_int_store(?,'stone','actor') WHERE user_id=? AND xiuxian_int_cmp(hp,?)=0 AND xiuxian_int_cmp(mp,?)=0 "
+                        "AND COALESCE(user_stamina,0)=? AND xiuxian_int_cmp(COALESCE(exp,0),?)=0 AND xiuxian_int_cmp(COALESCE(stone,0),?,1,'stone','actor')=0",
                         (victim_final[0], victim_final[1], victim_stone, victim_id, *victim_snapshot),
                     )
                     if robber_changed.rowcount != 1 or victim_changed.rowcount != 1:

@@ -463,7 +463,7 @@ class ActivitySignSettlementService:
                 )
                 if stone:
                     conn.execute(
-                        f"UPDATE {game_prefix}user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)+CAST(%s AS REAL) "
+                        f"UPDATE {game_prefix}user_xiuxian SET stone=xiuxian_int_store(xiuxian_int_add(COALESCE(stone,0),%s,'stone','actor')) "
                         "WHERE user_id=%s",
                         (stone, user_id),
                     )
@@ -723,8 +723,8 @@ class ActivityPointShopPurchaseService:
                 total_count += quantity
                 now = datetime.now()
                 changed = conn.execute(
-                    "UPDATE activity_point_balance SET points=CAST(COALESCE(points,0) AS REAL)-CAST(%s AS REAL),update_time=%s "
-                    "WHERE activity_key=%s AND user_id=%s AND points >= %s",
+                    "UPDATE activity_point_balance SET points=xiuxian_int_store(xiuxian_int_sub(COALESCE(points,0),%s,'activity_points','actor')),update_time=%s "
+                    "WHERE activity_key=%s AND user_id=%s AND xiuxian_int_cmp(points,%s,1,'activity_points','actor')>=0",
                     (cost, now, activity_key, user_id, cost),
                 )
                 require_redemption_write(changed, "activity_points_write_rejected")
@@ -736,7 +736,7 @@ class ActivityPointShopPurchaseService:
                 )
                 require_redemption_write(changed, "activity_purchase_write_rejected")
                 if stone:
-                    changed = conn.execute(f"UPDATE {game_prefix}user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)+CAST(%s AS REAL) WHERE user_id=%s", (stone, user_id))
+                    changed = conn.execute(f"UPDATE {game_prefix}user_xiuxian SET stone=xiuxian_int_store(xiuxian_int_add(COALESCE(stone,0),%s,'stone','actor')) WHERE user_id=%s", (stone, user_id))
                     require_redemption_write(changed, "activity_reward_stone_write_rejected", expected=player_rows)
                 for item_id, name, item_type, amount in item_rows:
                     changed = conn.execute(
@@ -749,7 +749,7 @@ class ActivityPointShopPurchaseService:
                     require_redemption_write(changed, "activity_reward_item_write_rejected")
                 changed = conn.execute(
                     "INSERT INTO activity_point_purchase_operations(operation_id,payload,quantity,cost,points,personal_count,total_count) "
-                    "VALUES (%s,%s,%s,%s,%s,%s,%s)",
+                    "VALUES(%s,%s,%s,xiuxian_int_store(%s,'stone','actor'),xiuxian_int_store(%s,'activity_points','actor'),%s,%s)",
                     (operation_id, payload, quantity, cost, points, personal_count, total_count),
                 )
                 require_redemption_write(changed, "activity_redemption_receipt_write_rejected")
@@ -939,7 +939,7 @@ class ActivityCollectExchangeService:
 
                 if stone:
                     changed = conn.execute(
-                        f"UPDATE {game_prefix}user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)+CAST(%s AS REAL) WHERE user_id=%s",
+                        f"UPDATE {game_prefix}user_xiuxian SET stone=xiuxian_int_store(xiuxian_int_add(COALESCE(stone,0),%s,'stone','actor')) WHERE user_id=%s",
                         (stone, user_id),
                     )
                     require_redemption_write(changed, "activity_reward_stone_write_rejected", expected=player_rows)
@@ -1373,7 +1373,7 @@ class BossRewardClaimService:
                 return "inventory_full"
         stone = sum(row[4] for row in rewards if row[0] == "stone")
         if stone:
-            conn.execute("UPDATE game_data.user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)+CAST(%s AS REAL) WHERE user_id=%s", (stone, user_id))
+            conn.execute("UPDATE game_data.user_xiuxian SET stone=xiuxian_int_store(xiuxian_int_add(COALESCE(stone,0),%s,'stone','actor')) WHERE user_id=%s", (stone, user_id))
         for kind, item_id, name, item_type, amount in rewards:
             if kind != "item":
                 continue

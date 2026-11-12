@@ -31,8 +31,11 @@ Note: binding plain digits keeps the statement alive, but SQLite's
 NUMERIC/INTEGER affinity still stores a value beyond int64 as REAL (double,
 ~15–17 significant digits). Crystal balances therefore use the TEXT shadow
 column ``stone_num_exact``; binding alone is not a precision strategy. Other
-legacy integer-affinity fields retain the historical REAL limitation documented
-in ``docs/features/base.md``.
+money writers use ``xiuxian_int_store`` / ``bind_sqlite_param(exact=True)``:
+int64 stays INTEGER, larger integers are ASCII digit BLOBs that bypass affinity.
+The existing numeric readers decode these values. Ambiguous historical REAL
+money is refused, never recovered by guessing; non-money legacy fields retain
+their documented historical storage limitation.
 """
 
 from __future__ import annotations
@@ -88,6 +91,8 @@ def number_count(num: Any):
     读路径 as_int_like / format_plain_number 兼容历史科学计数法 TEXT。
     """
     try:
+        if isinstance(num, (bytes, bytearray, memoryview)):
+            num = bytes(num).decode("ascii")
         if isinstance(num, bool):
             return int(num)
         if isinstance(num, int):
@@ -369,6 +374,8 @@ def format_plain_number(value: Any) -> str:
     """
     if value is None:
         return ""
+    if isinstance(value, (bytes, bytearray, memoryview)):
+        value = bytes(value).decode("ascii")
     if isinstance(value, bool):
         return str(int(value))
     if isinstance(value, int):
@@ -428,6 +435,8 @@ def _semantic_leaf(value: Any) -> Any:
     """Normalize a single leaf for payload/state equality (int/str num, plain digits)."""
     if value is None:
         return None
+    if isinstance(value, (bytes, bytearray, memoryview)):
+        value = bytes(value).decode("ascii")
     if isinstance(value, bool):
         return int(value)
     if isinstance(value, int):

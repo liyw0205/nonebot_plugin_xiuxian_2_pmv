@@ -112,7 +112,7 @@ class DungeonPurchaseSqlRepository(LegacyDungeonRepository):
             item=uow.query_one("SELECT COALESCE(goods_num,0) AS goods_num,COALESCE(bind_num,0) AS bind_num FROM back WHERE user_id=? AND goods_id=?",(user_id,item_id));inventory,bound=(int(item["goods_num"]),int(item["bind_num"])) if item else (0,0)
             if inventory<0 or bound<0 or bound>inventory:return self._record(uow,operation_id,payload,self._result("state_changed",quantity,cost,stone,inventory,item_name,reason="inventory_invalid"))
             if inventory+quantity>max_goods:return self._record(uow,operation_id,payload,self._result("inventory_full",quantity,cost,stone,inventory,item_name))
-            new_stone,new_inventory=stone-cost,inventory+quantity;now=self.clock.now().isoformat();uow.execute("UPDATE user_xiuxian SET stone=? WHERE user_id=? AND xiuxian_int_cmp(COALESCE(stone,0),?)=0",(new_stone,user_id,expected_stone));uow.execute("INSERT INTO back(user_id,goods_id,goods_name,goods_type,goods_num,create_time,update_time,bind_num) VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(user_id,goods_id) DO UPDATE SET goods_name=excluded.goods_name,goods_type=excluded.goods_type,goods_num=back.goods_num+excluded.goods_num,bind_num=COALESCE(back.bind_num,0)+excluded.bind_num,update_time=excluded.update_time",(user_id,item_id,item_name,item_type,quantity,now,now,quantity if bind_flag else 0));return self._record(uow,operation_id,payload,self._result("applied",quantity,cost,new_stone,new_inventory,item_name))
+            new_stone,new_inventory=stone-cost,inventory+quantity;now=self.clock.now().isoformat();uow.execute("UPDATE user_xiuxian SET stone=xiuxian_int_store(?,'stone','actor') WHERE user_id=? AND xiuxian_int_cmp(COALESCE(stone,0),?,1,'stone','actor')=0",(new_stone,user_id,expected_stone));uow.execute("INSERT INTO back(user_id,goods_id,goods_name,goods_type,goods_num,create_time,update_time,bind_num) VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(user_id,goods_id) DO UPDATE SET goods_name=excluded.goods_name,goods_type=excluded.goods_type,goods_num=back.goods_num+excluded.goods_num,bind_num=COALESCE(back.bind_num,0)+excluded.bind_num,update_time=excluded.update_time",(user_id,item_id,item_name,item_type,quantity,now,now,quantity if bind_flag else 0));return self._record(uow,operation_id,payload,self._result("applied",quantity,cost,new_stone,new_inventory,item_name))
 
     @staticmethod
     def _receipt_reason(status, response):
@@ -129,7 +129,7 @@ class DungeonPurchaseSqlRepository(LegacyDungeonRepository):
 
     @staticmethod
     def _record(uow:DatabaseUnitOfWork,operation_id:str,payload:str,result:dict[str,Any])->dict[str,Any]:
-        uow.execute("INSERT INTO dungeon_purchase_operations(operation_id,payload,result_status,quantity,cost,stone,inventory,response) VALUES(?,?,?,?,?,?,?,?)",(operation_id,payload,result["status"],result["quantity"],result["cost"],result["stone"],result["inventory"],result["response"]));return result
+        uow.execute("INSERT INTO dungeon_purchase_operations(operation_id,payload,result_status,quantity,cost,stone,inventory,response) VALUES(?,?,?,?,xiuxian_int_store(?,'stone','actor'),xiuxian_int_store(?,'stone','actor'),?,?)",(operation_id,payload,result["status"],result["quantity"],result["cost"],result["stone"],result["inventory"],result["response"]));return result
 
 
 class DungeonSessionSqlRepository(DungeonPurchaseSqlRepository):
@@ -583,7 +583,7 @@ class DungeonSessionSqlRepository(DungeonPurchaseSqlRepository):
             now = SystemClock().now().isoformat()
             for member in plan["members"]:
                 member_id = str(member["user_id"])
-                uow.execute("UPDATE user_xiuxian SET hp=?,mp=?,stone=COALESCE(stone,0)+?,exp=COALESCE(exp,0)+? WHERE user_id=?", (int(member.get("final_hp", member["expected"]["hp"])), int(member.get("final_mp", member["expected"]["mp"])), as_int_like(member.get("stone_delta", 0)), as_int_like(member.get("exp_delta", 0)), member_id))
+                uow.execute("UPDATE user_xiuxian SET hp=?,mp=?,stone=xiuxian_int_store(xiuxian_int_add(COALESCE(stone,0),?,'stone','actor')),exp=COALESCE(exp,0)+? WHERE user_id=?", (int(member.get("final_hp", member["expected"]["hp"])), int(member.get("final_mp", member["expected"]["mp"])), as_int_like(member.get("stone_delta", 0)), as_int_like(member.get("exp_delta", 0)), member_id))
                 for item in member.get("items", []):
                     amount = int(item["amount"])
                     uow.execute("INSERT INTO back(user_id,goods_id,goods_name,goods_type,goods_num,create_time,update_time,bind_num) VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(user_id,goods_id) DO UPDATE SET goods_num=back.goods_num+excluded.goods_num,bind_num=COALESCE(back.bind_num,0)+excluded.bind_num,update_time=excluded.update_time", (member_id, int(item["id"]), str(item["name"]), str(item["type"]), amount, now, now, amount))

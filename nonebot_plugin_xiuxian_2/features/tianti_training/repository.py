@@ -361,7 +361,7 @@ class StoneTrainingSqlRepository:
             decision = decide_stone_training(old_hp=int(data["tianti_hp"]), requested_stone=requested_stone, hp_cap=cap)
             if decision.status == "at_cap":
                 return StoneTrainingPersistenceResult("at_cap", user_id, requested_stone, 0, 0, int(data["tianti_hp"]))
-            charged = uow.execute("UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)-? WHERE user_id=? AND xiuxian_int_cmp(COALESCE(stone,0),?)>=0", (decision.stone_cost, user_id, decision.stone_cost))
+            charged = uow.execute("UPDATE user_xiuxian SET stone=xiuxian_int_store(xiuxian_int_sub(COALESCE(stone,0),?,'stone','actor')) WHERE user_id=? AND xiuxian_int_cmp(COALESCE(stone,0),?,1,'stone','actor')>=0", (decision.stone_cost, user_id, decision.stone_cost))
             if charged.rowcount != 1:
                 raise DomainError("stone_write_rejected", "tianti training debit was not saved")
             data["tianti_hp"] = decision.new_hp

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from ...core.numeric import as_int_like
+from ...core.numeric import as_int_like, bind_sqlite_param, require_exact_integer
 import json
 from pathlib import Path
 
@@ -62,9 +62,9 @@ class AdminStoneSqlRepository:
                 return AdminStoneResult(
                     "duplicate",
                     user_id,
-                    as_int_like(previous["previous_stone"]),
-                    as_int_like(previous["final_stone"]),
-                    int(previous["applied_delta"]),
+                    require_exact_integer(previous["previous_stone"], field="admin_receipt_stone", subject=user_id),
+                    require_exact_integer(previous["final_stone"], field="admin_receipt_stone", subject=user_id),
+                    require_exact_integer(previous["applied_delta"], field="admin_receipt_delta", subject=user_id),
                 )
 
             old_feature_table = uow.query_one(
@@ -103,17 +103,20 @@ class AdminStoneSqlRepository:
             row = uow.query_one("SELECT COALESCE(stone,0) AS stone FROM user_xiuxian WHERE user_id=?", (user_id,))
             if row is None:
                 return AdminStoneResult("user_missing", user_id)
-            current = as_int_like(row["stone"])
+            current = require_exact_integer(row["stone"], field="stone", subject=user_id)
             if current != int(expected_stone):
                 return AdminStoneResult("state_changed", user_id, current, current, 0, reason="stone_changed")
             final = max(0, current + requested_delta)
             applied_delta = final - current
             changed = uow.execute(
-                "UPDATE user_xiuxian SET stone=? WHERE user_id=? AND xiuxian_int_cmp(COALESCE(stone,0),?)=0",
-                (final, user_id, current),
+                "UPDATE user_xiuxian SET stone=xiuxian_int_store(?,'stone','actor') WHERE user_id=? AND xiuxian_int_cmp(COALESCE(stone,0),?,1,'stone','actor')=0",
+                (bind_sqlite_param(final, exact=True), user_id, bind_sqlite_param(current, exact=True)),
             )
             if changed.rowcount != 1:
                 raise DomainError("stone_write_rejected", "admin stone adjustment was not saved")
+            saved = uow.query_one("SELECT stone FROM user_xiuxian WHERE user_id=?", (user_id,))
+            if saved is None or require_exact_integer(saved["stone"], field="stone", subject=user_id) != final:
+                raise DomainError("stone_write_rejected", "admin stone adjustment did not persist exactly", {"reason": "stone_write_rejected", "subject": user_id})
             detail = json.dumps(
                 {
                     "operator_id": operator_id,
@@ -132,15 +135,15 @@ class AdminStoneSqlRepository:
                 (
                     user_id,
                     "admin_stone_add" if applied_delta > 0 else "admin_stone_cost",
-                    applied_delta,
+                    bind_sqlite_param(applied_delta, exact=True),
                     detail,
                     operation_id,
                 ),
             )
             uow.execute(
                 "INSERT INTO admin_stone_adjustment_operations("
-                "operation_id,payload,previous_stone,final_stone,applied_delta) VALUES(?,?,?,?,?)",
-                (operation_id, payload, current, final, applied_delta),
+                "operation_id,payload,previous_stone,final_stone,applied_delta) VALUES(?,?,xiuxian_int_store(?,'stone','actor'),xiuxian_int_store(?,'stone','actor'),xiuxian_int_store(?,'stone','actor'))",
+                (operation_id, payload, bind_sqlite_param(current, exact=True), bind_sqlite_param(final, exact=True), bind_sqlite_param(applied_delta, exact=True)),
             )
             return AdminStoneResult("adjusted", user_id, current, final, applied_delta)
 

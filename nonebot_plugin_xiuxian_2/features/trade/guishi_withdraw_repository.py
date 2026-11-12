@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from ...core.numeric import as_int_like
+from ...core.numeric import as_int_like, bind_sqlite_param, require_exact_integer
 from ...core.errors import DomainError
 
 import json
@@ -128,16 +128,17 @@ class GuishiWithdrawSqlRepository:
                 return GuishiWithdrawResult("weekend_closed", user_id, amount)
 
             player = uow.query_one(
-                "SELECT 1 AS present FROM user_xiuxian WHERE user_id=?", (user_id,)
+                "SELECT stone FROM user_xiuxian WHERE user_id=?", (user_id,)
             )
             if player is None:
                 return GuishiWithdrawResult("user_missing", user_id, amount)
+            wallet = require_exact_integer(player["stone"], field="stone", subject=user_id)
             stored = uow.query_one(
                 "SELECT COALESCE(stored_stone,0) AS stored_stone "
                 "FROM guishi_trade.guishi_info WHERE user_id=?",
                 (user_id,),
             )
-            stored_balance = as_int_like(stored["stored_stone"]) if stored is not None else 0
+            stored_balance = require_exact_integer(stored["stored_stone"], field="stored_stone", subject=user_id) if stored is not None else 0
             effective_balance = min(stored_balance, self.STORED_CAP)
             if effective_balance < amount:
                 return GuishiWithdrawResult(
@@ -150,25 +151,28 @@ class GuishiWithdrawSqlRepository:
                 with uow.savepoint("withdraw_credit"):
                     credited = uow.execute(
                         "UPDATE user_xiuxian "
-                        "SET stone=CAST(COALESCE(stone,0) AS REAL)+CAST(? AS REAL) "
-                        "WHERE user_id=?",
-                        (actual_amount, user_id),
+                        "SET stone=xiuxian_int_store(?,'stone','actor') "
+                        "WHERE user_id=? AND xiuxian_int_cmp(COALESCE(stone,0),?,1,'stone','actor')=0",
+                        (bind_sqlite_param(wallet + actual_amount, exact=True), user_id, bind_sqlite_param(wallet, exact=True)),
                     )
                     if credited.rowcount != 1:
                         raise DomainError("stone_write_rejected", "withdraw player credit count mismatch")
+                    saved = uow.query_one("SELECT stone FROM user_xiuxian WHERE user_id=?", (user_id,))
+                    if saved is None or require_exact_integer(saved["stone"], field="stone", subject=user_id) != wallet + actual_amount:
+                        raise DomainError("stone_write_rejected", "withdraw player credit did not persist exactly")
             except DomainError as exc:
                 return GuishiWithdrawResult("state_changed", user_id, amount, reason=exc.code)
             new_balance = effective_balance - amount
             uow.execute(
                 "INSERT INTO guishi_trade.guishi_info(user_id,stored_stone,items) "
-                "VALUES(?,?, '{}') ON CONFLICT(user_id) DO UPDATE SET "
+                "VALUES(?,xiuxian_int_store(?,'stored_stone','actor'),'{}') ON CONFLICT(user_id) DO UPDATE SET "
                 "stored_stone=excluded.stored_stone",
                 (user_id, new_balance),
             )
             uow.execute(
                 "INSERT INTO trade_guishi_withdraw_operations("
                 "operation_id,payload,user_id,amount,fee,actual_amount,stored_balance) "
-                "VALUES(?,?,?,?,?,?,?)",
+                "VALUES(?,?,?,xiuxian_int_store(?,'stone','actor'),?,?,?)",
                 (operation_id, payload, user_id, amount, fee, actual_amount, new_balance),
             )
             return GuishiWithdrawResult(

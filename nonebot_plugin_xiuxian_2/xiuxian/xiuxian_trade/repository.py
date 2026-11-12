@@ -9,6 +9,8 @@ from threading import RLock
 from typing import Literal
 
 from ..xiuxian_utils import db_backend
+from ...core.numeric import bind_sqlite_param, require_exact_integer
+from ...core.errors import DomainError
 
 
 def get_fee_price(total_price: int) -> int:
@@ -413,7 +415,7 @@ class TradeRepository:
                         """
                         INSERT INTO xianshi_item (
                             id, user_id, goods_id, name, type, price, quantity
-                        ) VALUES (%s, %s, %s, %s, %s, %s, %s)
+                        ) VALUES(%s,%s,%s,%s,%s,xiuxian_int_store(%s,'stone','actor'),%s)
                         """,
                         (
                             listing_id,
@@ -421,7 +423,7 @@ class TradeRepository:
                             int(goods_id),
                             str(name),
                             str(goods_type),
-                            int(price),
+                            bind_sqlite_param(int(price), exact=True),
                             int(quantity),
                         ),
                     )
@@ -557,8 +559,8 @@ class TradeRepository:
                         conn.rollback()
                         return result("stamina_insufficient")
                     stone_update = conn.execute(
-                        "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)-CAST(%s AS REAL) "
-                        "WHERE user_id=%s AND xiuxian_int_cmp(COALESCE(stone, 0),%s)>=0",
+                        "UPDATE user_xiuxian SET stone=xiuxian_int_store(xiuxian_int_sub(COALESCE(stone,0),%s,'stone','actor')) "
+                        "WHERE user_id=%s AND xiuxian_int_cmp(COALESCE(stone, 0),%s,1,'stone','actor')>=0",
                         (fee_charged, seller_id, fee_charged),
                     )
                     if stone_update.rowcount <= 0:
@@ -591,7 +593,7 @@ class TradeRepository:
                                 """
                                 INSERT INTO xianshi_item (
                                     id, user_id, goods_id, name, type, price, quantity
-                                ) VALUES (%s, %s, %s, %s, %s, %s, %s)
+                                ) VALUES(%s,%s,%s,%s,%s,xiuxian_int_store(%s,'stone','actor'),%s)
                                 """,
                                 (
                                     listing_id,
@@ -754,8 +756,8 @@ class TradeRepository:
                         conn.rollback()
                         return result("stamina_insufficient")
                     stone_update = conn.execute(
-                        "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)-CAST(%s AS REAL) "
-                        "WHERE user_id=%s AND xiuxian_int_cmp(COALESCE(stone, 0),%s)>=0",
+                        "UPDATE user_xiuxian SET stone=xiuxian_int_store(xiuxian_int_sub(COALESCE(stone,0),%s,'stone','actor')) "
+                        "WHERE user_id=%s AND xiuxian_int_cmp(COALESCE(stone, 0),%s,1,'stone','actor')>=0",
                         (fee_charged, seller_id, fee_charged),
                     )
                     if stone_update.rowcount <= 0:
@@ -793,7 +795,7 @@ class TradeRepository:
                                     """
                                     INSERT INTO xianshi_item (
                                         id, user_id, goods_id, name, type, price, quantity
-                                    ) VALUES (%s, %s, %s, %s, %s, %s, %s)
+                                    ) VALUES(%s,%s,%s,%s,%s,xiuxian_int_store(%s,'stone','actor'),%s)
                                     """,
                                     (
                                         listing_id,
@@ -822,7 +824,7 @@ class TradeRepository:
                 conn.execute(
                     "INSERT INTO xianshi_plan_listing_operations "
                     "(operation_id, seller_id, listing_plan, listed_quantity, fee_charged, "
-                    "stamina_cost) VALUES (%s, %s, %s, %s, %s, %s)",
+                    "stamina_cost) VALUES(%s,%s,%s,%s,xiuxian_int_store(%s,'stone','actor'),%s)",
                     (
                         operation_id,
                         seller_id,
@@ -1327,10 +1329,9 @@ class TradeRepository:
                     conn.execute(
                         """
                         INSERT INTO guishi_info (user_id, stored_stone, items)
-                        VALUES (%s, %s, '{}')
+                        VALUES(%s,xiuxian_int_store(%s,'stored_stone','actor'),'{}')
                         ON CONFLICT (user_id) DO UPDATE
-                        SET stored_stone=COALESCE(guishi_info.stored_stone, 0)
-                                         + EXCLUDED.stored_stone
+                        SET stored_stone=xiuxian_int_store(xiuxian_int_add(COALESCE(guishi_info.stored_stone,0),EXCLUDED.stored_stone,'stored_stone','actor'))
                         """,
                         (user_id, refund_stone),
                     )
@@ -1449,7 +1450,7 @@ class TradeRepository:
                             INSERT INTO guishi_item (
                                 id, user_id, item_id, item_name, item_type,
                                 price, quantity
-                            ) VALUES (%s, %s, %s, %s, %s, %s, %s)
+                            ) VALUES(%s,%s,%s,%s,%s,xiuxian_int_store(%s,'stone','actor'),%s)
                             """,
                             (
                                 order_id,
@@ -1474,13 +1475,13 @@ class TradeRepository:
                     raise RuntimeError("failed to allocate guishi order id")
 
                 conn.execute(
-                    "UPDATE guishi_info SET stored_stone=CAST(COALESCE(stored_stone,0) AS REAL)-CAST(%s AS REAL) WHERE user_id=%s",
+                    "UPDATE guishi_info SET stored_stone=xiuxian_int_store(xiuxian_int_sub(COALESCE(stored_stone,0),%s,'stored_stone','actor')) WHERE user_id=%s",
                     (total_cost, user_id),
                 )
                 if operation_id:
                     conn.execute(
                         "INSERT INTO guishi_order_create_operations "
-                        "(operation_id, payload, order_id, order_type, amount) VALUES (%s, %s, %s, %s, %s)",
+                        "(operation_id, payload, order_id, order_type, amount) VALUES(%s,%s,%s,%s,xiuxian_int_store(%s,'stone','actor'))",
                         (operation_id, payload, order_id, "qiugou", total_cost),
                     )
                 conn.commit()
@@ -1564,7 +1565,7 @@ class TradeRepository:
                             """
                             INSERT INTO guishi_trade.guishi_item (
                                 id, user_id, item_id, item_name, item_type, price, quantity
-                            ) VALUES (%s, %s, %s, %s, %s, %s, %s)
+                            ) VALUES(%s,%s,%s,%s,%s,xiuxian_int_store(%s,'stone','actor'),%s)
                             """,
                             (order_id, user_id, item_id, item_name, "baitan", price, quantity),
                         )
@@ -1581,7 +1582,7 @@ class TradeRepository:
                 if operation_id:
                     conn.execute(
                         "INSERT INTO guishi_trade.guishi_order_create_operations "
-                        "(operation_id, payload, order_id, order_type, amount) VALUES (%s, %s, %s, %s, %s)",
+                        "(operation_id, payload, order_id, order_type, amount) VALUES(%s,%s,%s,%s,xiuxian_int_store(%s,'stone','actor'))",
                         (operation_id, payload, order_id, "baitan", quantity),
                     )
                 conn.commit()
@@ -1604,14 +1605,14 @@ class TradeRepository:
             items = json.loads(row[1] or "{}")
         except (TypeError, ValueError, json.JSONDecodeError):
             items = {}
-        return int(row[0] or 0), items if isinstance(items, dict) else {}
+        return require_exact_integer(row[0], field="stored_stone", subject=str(user_id)), items if isinstance(items, dict) else {}
 
     @staticmethod
     def _save_guishi_info(conn, user_id, stored_stone, items) -> None:
         conn.execute(
             """
             INSERT INTO guishi_info (user_id, stored_stone, items)
-            VALUES (%s, %s, %s)
+            VALUES(%s,xiuxian_int_store(%s,'stored_stone','actor'),%s)
             ON CONFLICT (user_id) DO UPDATE
             SET stored_stone=EXCLUDED.stored_stone, items=EXCLUDED.items
             """,
@@ -1960,12 +1961,12 @@ class TradeRepository:
                 debit = bid_price - current_bids.get(bidder_id,0)
                 if debit <= 0:
                     conn.rollback(); return AuctionBid("bid_too_low",auction_id,bidder_id)
-                changed = conn.execute("UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)-CAST(%s AS REAL) WHERE user_id=%s AND xiuxian_int_cmp(stone,%s)>=0", (debit,bidder_id,debit))
+                changed = conn.execute("UPDATE user_xiuxian SET stone=xiuxian_int_store(xiuxian_int_sub(COALESCE(stone,0),%s,'stone','actor')) WHERE user_id=%s AND xiuxian_int_cmp(stone,%s,1,'stone','actor')>=0", (debit,bidder_id,debit))
                 if changed.rowcount != 1:
                     conn.rollback(); return AuctionBid("stone_insufficient",auction_id,bidder_id)
                 refunded_bidder, refunded_amount = "",0
                 if previous_bidder and previous_bidder != bidder_id:
-                    if conn.execute("UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)+CAST(%s AS REAL) WHERE user_id=%s", (previous_amount,previous_bidder)).rowcount != 1:
+                    if conn.execute("UPDATE user_xiuxian SET stone=xiuxian_int_store(xiuxian_int_add(COALESCE(stone,0),%s,'stone','actor')) WHERE user_id=%s", (previous_amount,previous_bidder)).rowcount != 1:
                         conn.rollback(); return AuctionBid("participant_missing",auction_id,bidder_id)
                     refunded_bidder, refunded_amount = previous_bidder, previous_amount
                 new_bids = {bidder_id:bid_price}
@@ -2198,13 +2199,13 @@ class TradeRepository:
                     )
                     if not is_system:
                         conn.execute(
-                            "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)+CAST(%s AS REAL) WHERE user_id=%s",
+                            "UPDATE user_xiuxian SET stone=xiuxian_int_store(xiuxian_int_add(COALESCE(stone,0),%s,'stone','actor')) WHERE user_id=%s",
                             (seller_earnings, seller_id),
                         )
                     for bidder_id, locked_price in bids.items():
                         if bidder_id != winner_id:
                             refund = conn.execute(
-                                "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)+CAST(%s AS REAL) WHERE user_id=%s",
+                                "UPDATE user_xiuxian SET stone=xiuxian_int_store(xiuxian_int_add(COALESCE(stone,0),%s,'stone','actor')) WHERE user_id=%s",
                                 (int(locked_price), bidder_id),
                             )
                             if refund.rowcount == 0:
@@ -2383,7 +2384,7 @@ class TradeRepository:
                 goods_id = int(listing[1])
                 name = str(listing[2])
                 goods_type = str(listing[3])
-                price = int(listing[4])
+                price = require_exact_integer(listing[4], field="listing_price", subject=listing_id)
                 stock = int(listing[5])
                 total_cost = price * quantity
                 result = XianshiPurchase(
@@ -2410,15 +2411,18 @@ class TradeRepository:
                 if buyer is None:
                     conn.rollback()
                     return replace(result, status="buyer_missing")
-                if int(buyer[0] or 0) < total_cost:
+                buyer_stone = require_exact_integer(buyer[0], field="stone", subject="buyer")
+                if buyer_stone < total_cost:
                     conn.rollback()
                     return replace(result, status="stone_insufficient")
 
                 if seller_id != "0":
-                    cur.execute("SELECT 1 FROM user_xiuxian WHERE user_id=%s", (seller_id,))
-                    if cur.fetchone() is None:
+                    cur.execute("SELECT stone FROM user_xiuxian WHERE user_id=%s", (seller_id,))
+                    seller = cur.fetchone()
+                    if seller is None:
                         conn.rollback()
                         return replace(result, status="seller_missing")
+                    seller_stone = require_exact_integer(seller[0], field="stone", subject="seller")
 
                 cur.execute(
                     "SELECT goods_num FROM back WHERE user_id=%s AND goods_id=%s",
@@ -2456,14 +2460,26 @@ class TradeRepository:
                         result = replace(result, stamina_charged=stamina_cost)
 
                 cur.execute(
-                    "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)-CAST(%s AS REAL) WHERE user_id=%s",
-                    (total_cost, buyer_id),
+                    "UPDATE user_xiuxian SET stone=xiuxian_int_store(%s,'stone','actor') WHERE user_id=%s AND xiuxian_int_cmp(COALESCE(stone,0),%s,1,'stone','actor')=0",
+                    (bind_sqlite_param(buyer_stone - total_cost, exact=True), buyer_id, bind_sqlite_param(buyer_stone, exact=True)),
                 )
+                if cur.rowcount != 1:
+                    raise DomainError("stone_write_rejected", "Xianshi buyer settlement rejected", {"reason": "stone_write_rejected", "subject": "buyer"})
                 if seller_id != "0":
                     cur.execute(
-                        "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)+CAST(%s AS REAL) WHERE user_id=%s",
-                        (total_cost, seller_id),
+                        "UPDATE user_xiuxian SET stone=xiuxian_int_store(%s,'stone','actor') WHERE user_id=%s AND xiuxian_int_cmp(COALESCE(stone,0),%s,1,'stone','actor')=0",
+                        (bind_sqlite_param(seller_stone + total_cost, exact=True), seller_id, bind_sqlite_param(seller_stone, exact=True)),
                     )
+                    if cur.rowcount != 1:
+                        raise DomainError("stone_write_rejected", "Xianshi seller settlement rejected", {"reason": "stone_write_rejected", "subject": "seller"})
+                expected = [(buyer_id, buyer_stone - total_cost, "buyer")]
+                if seller_id != "0":
+                    expected.append((seller_id, seller_stone + total_cost, "seller"))
+                for uid, balance, subject in expected:
+                    cur.execute("SELECT stone FROM user_xiuxian WHERE user_id=%s", (uid,))
+                    saved = cur.fetchone()
+                    if saved is None or require_exact_integer(saved[0], field="stone", subject=subject) != balance:
+                        raise DomainError("stone_write_rejected", "Xianshi wallet did not persist the settlement", {"reason": "stone_write_rejected", "subject": subject})
 
                 if stock != -1:
                     if stock == quantity:
@@ -2495,7 +2511,7 @@ class TradeRepository:
                         operation_id, listing_id, buyer_id, seller_id, goods_id,
                         name, goods_type, quantity, total_cost,
                         stamina_operation_id, stamina_cost, stamina_charged
-                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    ) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,xiuxian_int_store(%s,'stone','actor'),%s,%s,%s)
                     """,
                     (
                         operation_id,
@@ -2506,7 +2522,7 @@ class TradeRepository:
                         name,
                         goods_type,
                         quantity,
-                        total_cost,
+                        bind_sqlite_param(total_cost, exact=True),
                         stamina_operation_id,
                         stamina_cost,
                         result.stamina_charged,

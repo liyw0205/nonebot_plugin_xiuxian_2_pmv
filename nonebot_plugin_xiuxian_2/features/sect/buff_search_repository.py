@@ -33,7 +33,7 @@ class SectBuffSearchSqlRepository:
             if as_int_like(sect['stones'])<stone_cost:return {'status':'stone_insufficient','reason':'sect_stone_insufficient',**base}
             if as_int_like(sect['materials'])<materials_cost:return {'status':'materials_insufficient',**base}
             if column is None: return {'status':'invalid_buff_type',**base}
-            changed=uow.execute(f'UPDATE sects SET {column}=?,sect_used_stone=sect_used_stone-?,sect_materials=sect_materials-? WHERE sect_id=? AND sect_owner=? AND xiuxian_int_cmp(COALESCE(sect_used_stone,0),?)>=0 AND xiuxian_int_cmp(COALESCE(sect_materials,0),?)>=0',(new_value,stone_cost,materials_cost,sect_id,actor_id,stone_cost,materials_cost))
+            changed=uow.execute(f'UPDATE sects SET {column}=?,sect_used_stone=xiuxian_int_store(xiuxian_int_sub(sect_used_stone,?,\'sect_used_stone\',\'actor\')),sect_materials=xiuxian_int_store(xiuxian_int_sub(sect_materials,?,\'sect_materials\',\'actor\')) WHERE sect_id=? AND sect_owner=? AND xiuxian_int_cmp(COALESCE(sect_used_stone,0),?,1,\'sect_used_stone\',\'actor\')>=0 AND xiuxian_int_cmp(COALESCE(sect_materials,0),?,1,\'sect_materials\',\'actor\')>=0',(new_value,stone_cost,materials_cost,sect_id,actor_id,stone_cost,materials_cost))
             if changed.rowcount!=1: raise DomainError('sect_catalog_write_rejected','buff search write count mismatch')
             uow.execute('INSERT INTO sect_buff_search_operations(operation_id,actor_id,sect_id,buff_type,previous_value,new_value,stone_cost,materials_cost) VALUES(?,?,?,?,?,?,?,?)',(operation_id,actor_id,sect_id,buff_type,previous_value,new_value,stone_cost,materials_cost))
             return {'status':'applied',**base}

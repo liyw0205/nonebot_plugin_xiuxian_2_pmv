@@ -85,20 +85,25 @@ class LegacyApplication:
         payload: Mapping[str, Any],
         call: Callable[[], Any],
         success_statuses: frozenset[str] | None = None,
+        zero_write_rejections: tuple[str, ...] = (),
     ) -> OperationOutcome[dict[str, Any]]:
         operation_id = str(operation_id).strip()
         user_id = str(user_id).strip()
         if not operation_id or not user_id:
             raise ValidationError("operation_id and user_id are required")
         with trace_context(operation_id=operation_id, user_scope=user_id):
+            reservation = None
             try:
                 with DatabaseUnitOfWork(self.database, immediate=True) as uow:
+                    prior = self.ledger.get(uow, operation_id, action) if zero_write_rejections else None
                     existing = self.ledger.begin(uow, operation_id, action, dict(payload))
                     if existing is not None:
                         previous = existing.outcome()
                         if previous is not None:
                             return previous.replay()
                         raise ConflictError("操作正在处理中", reason="operation_pending")
+                    if zero_write_rejections and prior is None:
+                        reservation = self.ledger.get(uow, operation_id, action)
                 execute_callback = getattr(self.repository, "execute_callback", None)
                 if callable(execute_callback):
                     raw = result_data(execute_callback(operation_id, user_id, action, payload, call))
@@ -130,7 +135,10 @@ class LegacyApplication:
                 with DatabaseUnitOfWork(self.database, immediate=True) as uow:
                     self.ledger.finish(uow, outcome)
                 return outcome
-            except DomainError:
+            except DomainError as exc:
+                if reservation is not None and exc.code in zero_write_rejections:
+                    with DatabaseUnitOfWork(self.database, immediate=True) as uow:
+                        self.ledger.release_unsettled(uow, reservation)
                 raise
             except Exception as exc:
                 self.ledger.record_failure(self.database, operation_id, action, dict(payload), str(exc))

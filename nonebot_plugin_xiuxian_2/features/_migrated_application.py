@@ -66,12 +66,15 @@ class MigratedFeatureApplication:
         ledger_request = dict(ledger_payload or request)
         ledger_request["user_id"] = user_id
         ledger_action = f"{self.feature}.{action}"
+        precision_atomic = action in getattr(self.repository, "precision_atomic_actions", ())
         with trace_context(operation_id=operation_id, user_scope=user_id):
+            reservation = None
             try:
                 # Legacy services open their own SQLite connections.  Keep the
                 # ledger reservation short so those connections never contend
                 # with the reservation transaction itself.
                 with DatabaseUnitOfWork(self.database, immediate=True) as uow:
+                    prior = self.ledger.get(uow, operation_id, ledger_action) if precision_atomic else None
                     existing = self.ledger.begin(uow, operation_id, ledger_action, ledger_request)
                     if existing is not None:
                         previous = existing.outcome()
@@ -94,6 +97,8 @@ class MigratedFeatureApplication:
                             )
                         if existing is not None:
                             raise ConflictError("操作正在处理中", reason="operation_pending")
+                    if precision_atomic and prior is None:
+                        reservation = self.ledger.get(uow, operation_id, ledger_action)
                 raw = _result_data(self.repository.execute(operation_id, user_id, action, request))
                 status = str(raw.get("status", "failed")).casefold()
                 raw.setdefault("status", status)
@@ -113,7 +118,10 @@ class MigratedFeatureApplication:
                 with DatabaseUnitOfWork(self.database, immediate=True) as uow:
                     self.ledger.finish(uow, outcome)
                 return outcome
-            except DomainError:
+            except DomainError as exc:
+                if reservation is not None and exc.code == "currency_precision_unavailable":
+                    with DatabaseUnitOfWork(self.database, immediate=True) as uow:
+                        self.ledger.release_unsettled(uow, reservation)
                 raise
             except Exception as exc:
                 self.ledger.record_failure(self.database, operation_id, ledger_action, ledger_request, str(exc))

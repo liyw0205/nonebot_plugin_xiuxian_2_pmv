@@ -45,7 +45,7 @@ class StoneTrainingSqlRepository:
                 return StoneTrainingResult("exp_capped")
             if expected_stone < stone_cost:
                 return StoneTrainingResult("stone_insufficient", exp_gain, stone_cost)
-            changed = uow.execute("UPDATE user_xiuxian SET exp=exp+?,stone=stone-?,power=ROUND((exp+?)*?,0) WHERE user_id=? AND xiuxian_int_cmp(exp,?)=0 AND xiuxian_int_cmp(stone,?)>=0", (exp_gain, stone_cost, exp_gain, float(power_multiplier), user_id, expected_exp, stone_cost))
+            changed = uow.execute("UPDATE user_xiuxian SET exp=exp+?,stone=xiuxian_int_store(xiuxian_int_sub(stone,?,'stone','actor')),power=ROUND((exp+?)*?,0) WHERE user_id=? AND xiuxian_int_cmp(exp,?)=0 AND xiuxian_int_cmp(stone,?,1,'stone','actor')>=0", (exp_gain, stone_cost, exp_gain, float(power_multiplier), user_id, expected_exp, stone_cost))
             if changed.rowcount != 1:
                 raise DomainError("stone_training_write_rejected", "stone training write count mismatch")
             power_row = uow.query_one("SELECT power FROM user_xiuxian WHERE user_id=?", (user_id,))

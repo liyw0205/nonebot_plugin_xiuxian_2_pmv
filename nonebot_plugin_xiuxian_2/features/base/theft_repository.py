@@ -197,13 +197,13 @@ class BaseStoneTheftSqlRepository:
             try:
                 with uow.savepoint("stone_theft_assets"):
                     charged = uow.execute(
-                        "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)-? "
-                        "WHERE user_id=? AND xiuxian_int_cmp(COALESCE(stone,0),?)=0 AND xiuxian_int_cmp(stone,?)>=0",
+                        "UPDATE user_xiuxian SET stone=xiuxian_int_store(xiuxian_int_sub(COALESCE(stone,0),?,'stone','actor')) "
+                        "WHERE user_id=? AND xiuxian_int_cmp(COALESCE(stone,0),?,1,'stone','actor')=0 AND xiuxian_int_cmp(stone,?,1,'stone','actor')>=0",
                         (transferred, payer_id, payer_stone, transferred),
                     )
                     credited = uow.execute(
-                        "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)+? "
-                        "WHERE user_id=? AND xiuxian_int_cmp(COALESCE(stone,0),?)=0",
+                        "UPDATE user_xiuxian SET stone=xiuxian_int_store(xiuxian_int_add(COALESCE(stone,0),?,'stone','actor')) "
+                        "WHERE user_id=? AND xiuxian_int_cmp(COALESCE(stone,0),?,1,'stone','actor')=0",
                         (transferred, receiver_id, receiver_stone),
                     )
                     stamina = uow.execute(

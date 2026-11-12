@@ -450,7 +450,7 @@ class LunhuiSettlementService:
                 retained_stone = min(actual[2], 100_000_000)
                 practices = "atkpractice=0,hppractice=0,mppractice=0," if root_key != 0 else ""
                 conn.execute(
-                    "UPDATE user_xiuxian SET level='江湖好手',exp=100,stone=%s,level_up_rate=0,"
+                    "UPDATE user_xiuxian SET level='江湖好手',exp=100,stone=xiuxian_int_store(%s,'stone','actor'),level_up_rate=0,"
                     f"{practices}root=%s,root_type=%s,root_level=%s,power=0,hp=50,mp=100,atk=10 WHERE user_id=%s",
                     (retained_stone, root_name, root_type, new_root_level, user_id),
                 )
@@ -492,7 +492,7 @@ class LunhuiSettlementService:
                     _increment_stat(conn, user_id, "无限轮回次数" if root_key in {0, 9} else "普通轮回次数")
                 conn.execute(
                     "INSERT INTO lunhui_settlement_operations(operation_id,payload,stone,root_level,wishing_stones) "
-                    "VALUES(%s,%s,%s,%s,%s)",
+                    "VALUES(%s,%s,xiuxian_int_store(%s,'stone','actor'),%s,%s)",
                     (operation_id, payload, retained_stone, new_root_level, wishing_stones),
                 )
                 conn.commit()

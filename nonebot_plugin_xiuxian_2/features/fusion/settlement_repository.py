@@ -186,8 +186,8 @@ class FusionService:
                     if stone_cost > 0:
                         charged = conn.execute(
                             "UPDATE user_xiuxian "
-                            "SET stone=CAST(COALESCE(stone,0) AS REAL)-CAST(%s AS REAL) "
-                            "WHERE user_id=%s AND xiuxian_int_cmp(COALESCE(stone,0),%s)>=0",
+                            "SET stone=xiuxian_int_store(xiuxian_int_sub(COALESCE(stone,0),%s,'stone','actor')) "
+                            "WHERE user_id=%s AND xiuxian_int_cmp(COALESCE(stone,0),%s,1,'stone','actor')>=0",
                             (stone_cost, user_id, stone_cost),
                         )
                         if charged.rowcount != 1:
@@ -348,8 +348,8 @@ class FusionService:
                 if total_stone > 0:
                     charged = conn.execute(
                         "UPDATE user_xiuxian "
-                        "SET stone=CAST(COALESCE(stone,0) AS REAL)-CAST(%s AS REAL) "
-                        "WHERE user_id=%s AND xiuxian_int_cmp(COALESCE(stone,0),%s)>=0",
+                        "SET stone=xiuxian_int_store(xiuxian_int_sub(COALESCE(stone,0),%s,'stone','actor')) "
+                        "WHERE user_id=%s AND xiuxian_int_cmp(COALESCE(stone,0),%s,1,'stone','actor')>=0",
                         (total_stone, user_id, total_stone),
                     )
                     if charged.rowcount != 1:

@@ -155,7 +155,7 @@ class GuishiOrderCancelSqlRepository:
             refunded_stone *= max(int(order["price"] or 0), 0)
             if refunded_stone:
                 uow.execute(
-                    "INSERT INTO guishi_info(user_id,stored_stone,items) VALUES(?,?,?) "
+                    "INSERT INTO guishi_info(user_id,stored_stone,items) VALUES(?,xiuxian_int_store(?,'stored_stone','actor'),?) "
                     "ON CONFLICT(user_id) DO UPDATE SET stored_stone=COALESCE(guishi_info.stored_stone,0)+excluded.stored_stone",
                     (owner, refunded_stone, "{}"),
                 )

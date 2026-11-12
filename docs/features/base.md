@@ -108,7 +108,7 @@ NoneBot 和 Web 只负责输入输出转换。
 关闭开关可回退旧基础玩法；旧数值算法暂不复制。
 
 ## 高境界整数存储边界（已知限制）
-`user_xiuxian.exp/power/hp/mp/atk` 与 `sects.sect_materials/combat_power` 为 SQLite NUMERIC 亲和列，
+`user_xiuxian.exp/power/hp/mp/atk` 与 `sects.combat_power` 为 SQLite NUMERIC 亲和列，
 只保证 64 位整数（≤ 9,223,372,036,854,775,807）的精确存储。境界表最高一境（`至高`）的战力为
 `10^29`，超出该范围后 SQLite 只能以 REAL（双精度，约 15–17 位有效数字）保存，更低位会被舍入；
 这是历史存储口径，本次运行期修复不改表结构、不做压缩或截断。
@@ -116,6 +116,14 @@ NoneBot 和 Web 只负责输入输出转换。
 `OverflowError` 中止整个事务），因此高境界结算不再失败，但超过 64 位的**持久化精度以 REAL 为准**；
 结算回执与操作表 `result_json` 中记录的仍是本次计算出的完整整数。
 若后续需要 64 位以上的精确持久化，需单独设计（独立精确列或整表迁移），不在本次运行期修复范围。
+
+货币不沿用上述 REAL 限制。灵石、灵庄存款、鬼市寄存、宗门贡献/资材、世界积分、
+历练积分、通天塔积分、竞技场荣誉和活动积分使用现有精确整数读写：int64 内保留
+INTEGER，超范围以 ASCII 整数 BLOB 绕过 SQLite affinity，比较、扣增、CAS、排序和
+流水汇总使用整数 UDF。旧 INTEGER、精确科学计数 TEXT 和绝对值小于 `2**53` 的整数
+REAL 可精确读取；不安全 REAL、非整数或非法记录保留具体字段原因并拒绝结算，不猜测余额。
+结晶仍以既有 `stone_num_exact TEXT` 为 authority，真实镜像分歧不会自动合并或覆盖。
+未读取生产玩家库，以上不代表历史失精度数据已恢复；这类记录须用可信备份/流水在隔离副本核对。
 
 ## Manifest 清单
 - `command: 修炼`

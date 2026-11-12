@@ -108,7 +108,7 @@ class TrainingStateRepository:
             state = self._default(today)
             uow.execute(
                 "INSERT INTO training(user_id,progress,last_time,points,completed,max_progress,last_event,weekly_purchases) "
-                "VALUES(?,?,?,?,?,?,?,?)",
+                "VALUES(?,?,?,xiuxian_int_store(?,'training_points','actor'),?,?,?,?)",
                 (
                     user_id, 0, None, 0, 0, 0, "",
                     json.dumps(state["weekly_purchases"], ensure_ascii=True, sort_keys=True),

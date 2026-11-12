@@ -58,7 +58,7 @@ class SectDailyMaintenanceSqlRepository:
                 elif level not in costs: status = "level_unsupported"
                 elif materials >= cost:
                     status = "charged"
-                    uow.execute("UPDATE sects SET sect_materials=sect_materials-? WHERE sect_id=? AND elixir_room_level=?", (cost, sid, level))
+                    uow.execute("UPDATE sects SET sect_materials=xiuxian_int_store(xiuxian_int_sub(sect_materials,?,'sect_materials','actor')) WHERE sect_id=? AND elixir_room_level=?", (cost, sid, level))
                 else:
                     target = max(level - 1, 0)
                     status = "disabled" if target == 0 else "downgraded"

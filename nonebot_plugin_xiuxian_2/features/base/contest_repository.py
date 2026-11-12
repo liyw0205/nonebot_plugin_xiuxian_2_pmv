@@ -165,13 +165,13 @@ class BaseStoneContestSqlRepository:
             try:
                 with uow.savepoint("stone_contest_assets"):
                     charged = uow.execute(
-                        "UPDATE user_xiuxian SET stone=stone-? WHERE user_id=? "
-                        "AND xiuxian_int_cmp(COALESCE(stone,0),?)=0 AND xiuxian_int_cmp(COALESCE(stone,0),?)>=0",
+                        "UPDATE user_xiuxian SET stone=xiuxian_int_store(xiuxian_int_sub(stone,?,'stone','actor')) WHERE user_id=? "
+                        "AND xiuxian_int_cmp(COALESCE(stone,0),?,1,'stone','actor')=0 AND xiuxian_int_cmp(COALESCE(stone,0),?,1,'stone','actor')>=0",
                         (transferred, payer_id, payer_balance, transferred),
                     )
                     credited = uow.execute(
-                        "UPDATE user_xiuxian SET stone=stone+? WHERE user_id=? "
-                        "AND xiuxian_int_cmp(COALESCE(stone,0),?)=0",
+                        "UPDATE user_xiuxian SET stone=xiuxian_int_store(xiuxian_int_add(stone,?,'stone','actor')) WHERE user_id=? "
+                        "AND xiuxian_int_cmp(COALESCE(stone,0),?,1,'stone','actor')=0",
                         (transferred, receiver_id, receiver_balance),
                     )
                     if charged.rowcount != 1 or credited.rowcount != 1:

@@ -219,35 +219,40 @@ class SQLiteCursor:
         self.close()
 
     def execute(self, sql: str, params: Any = None):
-        self._cursor.execute(_convert_sql(sql), _adapt_params(params))
+        self.connection._numeric_functions.run(self._cursor.execute, _convert_sql(sql), _adapt_params(params))
         return self
 
     def executemany(self, sql: str, seq_of_params: Iterable[Any]):
-        self._cursor.executemany(
+        self.connection._numeric_functions.run(self._cursor.executemany,
             _convert_sql(sql),
             (_adapt_params(params) for params in seq_of_params),
         )
         return self
 
     def fetchone(self):
-        return self._cursor.fetchone()
+        return self.connection._numeric_functions.run(self._cursor.fetchone)
 
     def fetchall(self):
-        return self._cursor.fetchall()
+        return self.connection._numeric_functions.run(self._cursor.fetchall)
 
     def __iter__(self):
         return iter(self._cursor)
 
 
 class SQLiteConnection:
-    def __init__(self, raw: sqlite3.Connection, db_path: Path):
+    def __init__(self, raw: sqlite3.Connection, db_path: Path, numeric_functions=None):
         self._raw = raw
         self.db_path = db_path
         self._pk_cache: dict[str, list[str]] = {}
+        self._numeric_functions = numeric_functions or register_numeric_functions(raw)
 
     @property
     def row_factory(self):
         return self._raw.row_factory
+
+    @property
+    def in_transaction(self):
+        return self._raw.in_transaction
 
     @row_factory.setter
     def row_factory(self, value):
@@ -315,13 +320,13 @@ def connect(database: str | Path, *args, **kwargs) -> SQLiteConnection:
     db_path = Path(database)
     db_path.parent.mkdir(parents=True, exist_ok=True)
     raw = sqlite3.connect(db_path, *args, **kwargs)
-    register_numeric_functions(raw)
+    numeric_functions = register_numeric_functions(raw)
     raw.execute("PRAGMA journal_mode=WAL")
     raw.execute("PRAGMA busy_timeout=30000")
     raw.execute("PRAGMA synchronous=NORMAL")
     raw.create_function("LEAST", -1, _least)
     raw.create_function("GREATEST", -1, _greatest)
-    return SQLiteConnection(raw, db_path)
+    return SQLiteConnection(raw, db_path, numeric_functions)
 
 
 def connect_readonly(database: str | Path, *args, **kwargs) -> SQLiteConnection:
@@ -330,11 +335,11 @@ def connect_readonly(database: str | Path, *args, **kwargs) -> SQLiteConnection:
     uri = f"{db_path.resolve().as_uri()}?mode=ro"
     kwargs.pop("uri", None)
     raw = sqlite3.connect(uri, *args, uri=True, **kwargs)
-    register_numeric_functions(raw)
+    numeric_functions = register_numeric_functions(raw)
     raw.execute("PRAGMA busy_timeout=30000")
     raw.create_function("LEAST", -1, _least)
     raw.create_function("GREATEST", -1, _greatest)
-    return SQLiteConnection(raw, db_path)
+    return SQLiteConnection(raw, db_path, numeric_functions)
 
 
 @contextmanager

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from ...core.numeric import as_int_like
+from ...core.numeric import as_int_like, bind_sqlite_param, require_exact_integer
 from pathlib import Path
 from typing import Any, Mapping, Protocol
 
@@ -106,7 +106,7 @@ class SectRenameSqlRepository:
             left=materials-materials_cost
             try:
                 with uow.savepoint("sect_secondary_apply"):
-                    sa=uow.execute("UPDATE sects SET sect_materials=? WHERE sect_id=? AND xiuxian_int_cmp(sect_materials,?)=0 AND secbuff=?",(left,sect_id,materials,str(expected_catalog)))
+                    sa=uow.execute("UPDATE sects SET sect_materials=xiuxian_int_store(?,'sect_materials','actor') WHERE sect_id=? AND xiuxian_int_cmp(sect_materials,?,1,'sect_materials','actor')=0 AND secbuff=?",(left,sect_id,materials,str(expected_catalog)))
                     ba=uow.execute("UPDATE BuffInfo SET sec_buff=? WHERE user_id=? AND COALESCE(sec_buff,0)<>?",(buff_id,user_id,buff_id))
                     if sa.rowcount!=1 or ba.rowcount!=1:
                         raise _StateChanged
@@ -135,7 +135,7 @@ class SectRenameSqlRepository:
             left=materials-materials_cost
             try:
                 with uow.savepoint("sect_mainbuff_apply"):
-                    sa=uow.execute("UPDATE sects SET sect_materials=? WHERE sect_id=? AND xiuxian_int_cmp(sect_materials,?)=0 AND mainbuff=?",(left,sect_id,materials,str(expected_catalog)))
+                    sa=uow.execute("UPDATE sects SET sect_materials=xiuxian_int_store(?,'sect_materials','actor') WHERE sect_id=? AND xiuxian_int_cmp(sect_materials,?,1,'sect_materials','actor')=0 AND mainbuff=?",(left,sect_id,materials,str(expected_catalog)))
                     ba=uow.execute("UPDATE BuffInfo SET main_buff=? WHERE user_id=? AND COALESCE(main_buff,0)<>?",(buff_id,user_id,buff_id))
                     if sa.rowcount!=1 or ba.rowcount!=1:
                         raise _StateChanged
@@ -149,10 +149,11 @@ class SectRenameSqlRepository:
             old=uow.query_one("SELECT payload,quantity,cost,contribution,materials,purchased FROM sect_shop_purchase_operations WHERE operation_id=?",(operation_id,))
             if old:
                 if str(old["payload"])!=payload:return {**{"status":"state_changed"}, "reason": "operation_conflict", "subject": ""}
-                return {"status":"duplicate","quantity":old["quantity"],"cost":old["cost"],"contribution":old["contribution"],"materials":old["materials"],"purchased":old["purchased"]}
+                return {"status":"duplicate", **{key: require_exact_integer(old[key], field=f"sect_receipt_{key}", subject=user_id) for key in ("quantity", "cost", "contribution", "materials", "purchased")}}
             user=uow.query_one("SELECT sect_id,COALESCE(sect_contribution,0) AS contribution FROM user_xiuxian WHERE user_id=?",(user_id,));sect=uow.query_one("SELECT COALESCE(sect_materials,0) AS materials,COALESCE(closed,0) AS closed FROM sects WHERE sect_id=?",(sect_id,))
             if user is None or sect is None or int(user["sect_id"] or 0)!=sect_id:return {"status":"membership_changed", "reason":"user_missing" if user is None else "sect_missing" if sect is None else "sect_changed"}
-            contribution,materials=as_int_like(user["contribution"] or 0),as_int_like(sect["materials"] or 0)
+            contribution = require_exact_integer(user["contribution"], field="sect_contribution", subject=user_id)
+            materials = require_exact_integer(sect["materials"], field="sect_materials", subject="sect")
             if int(sect["closed"]):return {"status":"sect_closed","contribution":contribution,"materials":materials}
             row=uow.query_one("SELECT quantity FROM sect_shop_weekly_purchases WHERE user_id=? AND week_key=? AND item_id=?",(user_id,week_key,item_id));purchased=int(row["quantity"]) if row else legacy_purchased
             if purchased+quantity>weekly_limit:return {"status":"limit_reached","contribution":contribution,"materials":materials,"purchased":purchased}
@@ -161,7 +162,23 @@ class SectRenameSqlRepository:
             if materials<cost:return {"status":"materials_insufficient","contribution":contribution,"materials":materials,"purchased":purchased}
             item=uow.query_one("SELECT COALESCE(goods_num,0) AS n FROM back WHERE user_id=? AND goods_id=?",(user_id,item_id));inventory=int(item["n"]) if item else 0
             if inventory+quantity>max_goods_num:return {"status":"inventory_full","contribution":contribution,"materials":materials,"purchased":purchased}
-            contribution-=cost;materials-=cost;purchased+=quantity;uow.execute("UPDATE user_xiuxian SET sect_contribution=? WHERE user_id=?",(contribution,user_id));uow.execute("UPDATE sects SET sect_materials=? WHERE sect_id=?",(materials,sect_id));stamp=self.clock.now().isoformat();uow.execute("INSERT INTO back(user_id,goods_id,goods_name,goods_type,goods_num,create_time,update_time,bind_num) VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(user_id,goods_id) DO UPDATE SET goods_num=back.goods_num+excluded.goods_num,bind_num=COALESCE(back.bind_num,0)+excluded.goods_num,update_time=excluded.update_time",(user_id,item_id,str(item_name),str(item_type),quantity,stamp,stamp,quantity));uow.execute("INSERT INTO sect_shop_weekly_purchases(user_id,week_key,item_id,quantity) VALUES(?,?,?,?) ON CONFLICT(user_id,week_key,item_id) DO UPDATE SET quantity=excluded.quantity",(user_id,week_key,item_id,purchased));uow.execute("INSERT INTO sect_shop_purchase_operations(operation_id,payload,quantity,cost,contribution,materials,purchased) VALUES(?,?,?,?,?,?,?)",(operation_id,payload,quantity,cost,contribution,materials,purchased));return {"status":"applied","quantity":quantity,"cost":cost,"contribution":contribution,"materials":materials,"purchased":purchased}
+            before_contribution, before_materials = contribution, materials
+            contribution -= cost
+            materials -= cost
+            purchased += quantity
+            member_write = uow.execute("UPDATE user_xiuxian SET sect_contribution=xiuxian_int_store(?,'sect_contribution','actor') WHERE user_id=? AND sect_id=? AND xiuxian_int_cmp(sect_contribution,?,1,'sect_contribution','actor')=0", (bind_sqlite_param(contribution, exact=True), user_id, sect_id, bind_sqlite_param(before_contribution, exact=True)))
+            sect_write = uow.execute("UPDATE sects SET sect_materials=xiuxian_int_store(?,'sect_materials','actor') WHERE sect_id=? AND xiuxian_int_cmp(sect_materials,?,1,'sect_materials','actor')=0", (bind_sqlite_param(materials, exact=True), sect_id, bind_sqlite_param(before_materials, exact=True)))
+            saved_member = uow.query_one("SELECT sect_contribution FROM user_xiuxian WHERE user_id=?", (user_id,))
+            saved_sect = uow.query_one("SELECT sect_materials FROM sects WHERE sect_id=?", (sect_id,))
+            if member_write.rowcount != 1 or saved_member is None or require_exact_integer(saved_member["sect_contribution"], field="sect_contribution", subject=user_id) != contribution:
+                raise DomainError("sect_contribution_write_rejected", "sect shop contribution did not persist exactly", {"reason": "sect_contribution_write_rejected", "subject": user_id})
+            if sect_write.rowcount != 1 or saved_sect is None or require_exact_integer(saved_sect["sect_materials"], field="sect_materials", subject="sect") != materials:
+                raise DomainError("sect_materials_write_rejected", "sect shop materials did not persist exactly", {"reason": "sect_materials_write_rejected", "subject": "sect"})
+            stamp = self.clock.now().isoformat()
+            uow.execute("INSERT INTO back(user_id,goods_id,goods_name,goods_type,goods_num,create_time,update_time,bind_num) VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(user_id,goods_id) DO UPDATE SET goods_num=back.goods_num+excluded.goods_num,bind_num=COALESCE(back.bind_num,0)+excluded.goods_num,update_time=excluded.update_time",(user_id,item_id,str(item_name),str(item_type),quantity,stamp,stamp,quantity))
+            uow.execute("INSERT INTO sect_shop_weekly_purchases(user_id,week_key,item_id,quantity) VALUES(?,?,?,?) ON CONFLICT(user_id,week_key,item_id) DO UPDATE SET quantity=excluded.quantity",(user_id,week_key,item_id,purchased))
+            uow.execute("INSERT INTO sect_shop_purchase_operations(operation_id,payload,quantity,cost,contribution,materials,purchased) VALUES(?,?,?,xiuxian_int_store(?,'stone','actor'),?,?,?)",(operation_id,payload,quantity,bind_sqlite_param(cost,exact=True),bind_sqlite_param(contribution,exact=True),bind_sqlite_param(materials,exact=True),purchased))
+            return {"status":"applied","quantity":quantity,"cost":cost,"contribution":contribution,"materials":materials,"purchased":purchased}
     def donate(self, operation_id, user_id, sect_id, stone, materials):
         operation_id, user_id = str(operation_id).strip(), str(user_id)
         sect_id, stone, materials = int(sect_id), int(stone), int(materials)
@@ -191,20 +208,20 @@ class SectRenameSqlRepository:
             try:
                 with uow.savepoint("sect_donation_complete"):
                     updated = uow.execute(
-                        "UPDATE user_xiuxian SET stone=?,sect_contribution=? WHERE user_id=? AND sect_id=? AND xiuxian_int_cmp(stone,?)=0 AND xiuxian_int_cmp(COALESCE(sect_contribution,0),?)=0",
+                        "UPDATE user_xiuxian SET stone=xiuxian_int_store(?,'stone','actor'),sect_contribution=xiuxian_int_store(?,'sect_contribution','actor') WHERE user_id=? AND sect_id=? AND xiuxian_int_cmp(stone,?,1,'stone','actor')=0 AND xiuxian_int_cmp(COALESCE(sect_contribution,0),?,1,'sect_contribution','actor')=0",
                         (wallet - stone, contribution + stone, user_id, sect_id, wallet, contribution),
                     )
                     saved = uow.query_one("SELECT stone,sect_contribution FROM user_xiuxian WHERE user_id=?", (user_id,))
                     if updated.rowcount != 1 or saved is None or tuple(as_int_like(saved[key]) for key in ("stone", "sect_contribution")) != (wallet - stone, contribution + stone):
                         raise _DonationRejected("sect_donation_member_write_rejected", "actor")
                     updated = uow.execute(
-                        "UPDATE sects SET sect_used_stone=?,sect_scale=?,sect_materials=? WHERE sect_id=? AND xiuxian_int_cmp(COALESCE(sect_used_stone,0),?)=0 AND xiuxian_int_cmp(COALESCE(sect_scale,0),?)=0 AND xiuxian_int_cmp(COALESCE(sect_materials,0),?)=0",
+                        "UPDATE sects SET sect_used_stone=xiuxian_int_store(?,'sect_used_stone','actor'),sect_scale=?,sect_materials=xiuxian_int_store(?,'sect_materials','actor') WHERE sect_id=? AND xiuxian_int_cmp(COALESCE(sect_used_stone,0),?,1,'sect_used_stone','actor')=0 AND xiuxian_int_cmp(COALESCE(sect_scale,0),?)=0 AND xiuxian_int_cmp(COALESCE(sect_materials,0),?,1,'sect_materials','actor')=0",
                         (reserve + stone, scale + stone, supply + materials, sect_id, reserve, scale, supply),
                     )
                     saved = uow.query_one("SELECT sect_used_stone,sect_scale,sect_materials FROM sects WHERE sect_id=?", (sect_id,))
                     if updated.rowcount != 1 or saved is None or tuple(as_int_like(saved[key]) for key in ("sect_used_stone", "sect_scale", "sect_materials")) != (reserve + stone, scale + stone, supply + materials):
                         raise _DonationRejected("sect_donation_assets_write_rejected", "sect")
-                    receipt = uow.execute("INSERT INTO sect_donation_operations(operation_id,user_id,sect_id,stone,materials) VALUES(?,?,?,?,?)", (operation_id, user_id, sect_id, stone, materials))
+                    receipt = uow.execute("INSERT INTO sect_donation_operations(operation_id,user_id,sect_id,stone,materials) VALUES(?,?,?,xiuxian_int_store(?,'stone','actor'),?)", (operation_id, user_id, sect_id, stone, materials))
                     if receipt.rowcount != 1:
                         raise _DonationRejected("sect_donation_receipt_write_rejected", "actor")
             except _DonationRejected as exc:
@@ -318,7 +335,7 @@ class SectRenameSqlRepository:
             if card is None or int(card["goods_num"] or 0) <= 0 or int(card["bind_num"] or 0) <= 0:
                 return {"status": "card_insufficient"}
             previous_name = str(sect["sect_name"])
-            uow.execute("UPDATE sects SET sect_name=?,sect_used_stone=sect_used_stone-? WHERE sect_id=? AND sect_owner=?", (new_name, cost, sect_id, actor_id))
+            uow.execute("UPDATE sects SET sect_name=?,sect_used_stone=xiuxian_int_store(xiuxian_int_sub(sect_used_stone,?,'sect_used_stone','actor')) WHERE sect_id=? AND sect_owner=?", (new_name, cost, sect_id, actor_id))
             uow.execute("UPDATE back SET goods_num=goods_num-1,bind_num=bind_num-1 WHERE user_id=? AND goods_id=?", (actor_id, card_id))
             uow.execute("INSERT INTO sect_rename_operations(operation_id,payload,previous_name,new_name) VALUES(?,?,?,?)", (operation_id, payload, previous_name, new_name))
             return {"status": "renamed", "previous_name": previous_name, "new_name": new_name}
