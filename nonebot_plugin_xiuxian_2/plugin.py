@@ -184,7 +184,7 @@ from .features.bank.migrations import (
     apply_bank,
     apply_bank_accounts,
     apply_bank_legacy_accounts_exact,
-    apply_bank_legacy_accounts_v3,
+    apply_bank_legacy_accounts_v3 as apply_bank_legacy_accounts,
 )
 from .features.activity_reward.manifest import FEATURE as ACTIVITY_REWARD_FEATURE
 from .features.activity_reward.migrations import (
@@ -398,7 +398,7 @@ def build_migrations() -> tuple[Migration, ...]:
         Migration("back.017", "accessory_transaction_operations", apply_accessory_affix_operations),
         Migration("bank.001", "bank_feature_migrations", apply_bank),
         Migration("bank.002", "bank_accounts", apply_bank_accounts),
-        Migration("bank.003", "bank_legacy_account_backfill", apply_bank_legacy_accounts_v3),
+        Migration("bank.003", "bank_legacy_account_backfill", apply_bank_legacy_accounts),
         Migration("bank.004", "bank_legacy_account_backfill_exact", apply_bank_legacy_accounts_exact),
         Migration("base.001", "base_feature_migrations", apply_base),
         Migration("base.002", "player_rename_operations", apply_base_player_rename_operations),
