@@ -1601,11 +1601,8 @@ def install_driver_hooks(driver: Any) -> tuple[Any, Any]:
         return existing
     holder: dict[str, Any] = {"context": None, "lifecycle": None}
 
-    # Matchers are wired once, before startup, but resolve applications only
-    # after the lifecycle has assembled repositories and migrations.
+    # Matchers are wired only after startup has assembled all dependencies.
     from .adapters.nonebot import register_migrated_matchers, register_bank_first_use_extended_matchers, register_bank_first_use_matcher
-
-    register_migrated_matchers(driver, holder)
 
     async def on_startup() -> None:
         data_dir = getattr(getattr(driver, "config", None), "xiuxian_data_dir", None)
@@ -1619,6 +1616,7 @@ def install_driver_hooks(driver: Any) -> tuple[Any, Any]:
         if state.phase is LifecyclePhase.NOT_READY:
             lifecycle.raise_startup_error()
         holder.update(context=context, lifecycle=lifecycle, readiness=readiness)
+        register_migrated_matchers(driver, holder)
         from .features.bank.clock import set_bank_clock
         holder["bank_clock_token"] = set_bank_clock(context.clock)
         if context.services.get("bank_first_use") is not None:
