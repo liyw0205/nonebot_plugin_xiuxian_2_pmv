@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import tempfile
+import traceback
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
@@ -40,10 +41,16 @@ class StartupFailureVisibilityTests(unittest.TestCase):
             self.assertEqual(exported["error_type"], "FileNotFoundError")
             self.assertIn(str(missing_resource), exported["error_traceback"] or "")
 
-            with self.assertRaises(FileNotFoundError) as raised:
+            try:
                 lifecycle.raise_startup_error()
-            self.assertIs(raised.exception, original)
-            self.assertIn(str(missing_resource), str(raised.exception))
+            except FileNotFoundError as raised:
+                self.assertIs(raised, original)
+                self.assertIn(str(missing_resource), str(raised))
+                raised_traceback = "".join(traceback.format_exception(raised))
+            else:
+                self.fail("startup failure was not re-raised")
+        self.assertIn("ensure_repositories", raised_traceback)
+        self.assertIn(str(missing_resource), raised_traceback)
 
     def test_driver_hook_reraises_before_bank_clock_and_optional_matchers(self) -> None:
         lifecycle = Lifecycle()

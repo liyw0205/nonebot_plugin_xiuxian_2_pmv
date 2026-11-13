@@ -5,6 +5,7 @@ import inspect
 import traceback
 from dataclasses import dataclass
 from enum import Enum
+from types import TracebackType
 from typing import Any, Awaitable, Callable
 
 from ..infrastructure.observability.events import emit
@@ -62,6 +63,7 @@ class Lifecycle:
         self._lock = asyncio.Lock()
         self._active_phase: LifecyclePhase | None = None
         self._startup_exception: Exception | None = None
+        self._startup_traceback: TracebackType | None = None
 
     @property
     def state(self) -> LifecycleState:
@@ -70,7 +72,7 @@ class Lifecycle:
     def raise_startup_error(self) -> None:
         if self._state.phase is LifecyclePhase.NOT_READY:
             if self._startup_exception is not None:
-                raise self._startup_exception
+                raise self._startup_exception.with_traceback(self._startup_traceback)
             raise RuntimeError(self._state.error or "xiuxian runtime is not ready")
 
     def register(
@@ -102,6 +104,7 @@ class Lifecycle:
             # started again during a test or a controlled hot reload.
             self._state = LifecycleState(LifecyclePhase.NEW)
         self._startup_exception = None
+        self._startup_traceback = None
         try:
             for phase in self.ORDER:
                 if phase in self._completed:
@@ -121,6 +124,7 @@ class Lifecycle:
             failed_phase = self._active_phase
             self._active_phase = None
             self._startup_exception = exc
+            self._startup_traceback = exc.__traceback__
             # Format the original traceback without Loguru's local-value diagnostics.
             emit(
                 "ERROR",
