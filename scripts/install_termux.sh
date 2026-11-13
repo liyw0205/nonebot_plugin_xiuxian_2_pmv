@@ -523,7 +523,7 @@ validate_deployment() {
 
     [[ -f "$plugin_dir/__init__.py" ]] || return 1
     ! grep -R -n -E "(^|[[:space:]])(from|import)[[:space:]]+nonebot_plugin_xiuxian_2([[:space:].]|$)" \
-        --include="*.py" "$plugin_dir" > /dev/null
+        --include="*.py" --exclude-dir=tests "$plugin_dir" > /dev/null
 }
 
 write_pyproject() {

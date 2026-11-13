@@ -191,7 +191,7 @@ class InstallerScriptTests(unittest.TestCase):
                 result = subprocess.run(["bash", "-c", command], cwd=ROOT, env=env)
                 self.assertNotEqual(result.returncode, 0)
 
-    def _run_validate_deployment(self, plugin_dir: Path, extra_files: dict[str, str]) -> int:
+    def _run_validate_deployment(self, installer: str, extra_files: dict[str, str]) -> int:
         with tempfile.TemporaryDirectory() as temp:
             directory = Path(temp)
             staged = directory / "src" / "plugins" / "nonebot_plugin_xiuxian_2"
@@ -202,34 +202,35 @@ class InstallerScriptTests(unittest.TestCase):
             command = (
                 "set -u; DIR=" + self._quote(directory) + "; "
                 "export XIUXIAN_INSTALLER_LIBRARY_ONLY=1; "
-                f"source {self._quote(SCRIPTS / 'install.sh')}; "
+                f"source {self._quote(SCRIPTS / installer)}; "
                 "if validate_deployment; then exit 0; else exit 1; fi"
             )
             result = subprocess.run(["bash", "-c", command], cwd=ROOT, capture_output=True, text=True)
             return result.returncode
 
     def test_validate_deployment_allows_tests_fixtures_and_flags_runtime_imports(self) -> None:
-        fixture = (
-            "SCRIPT = '''\n"
-            "from nonebot_plugin_xiuxian_2.plugin import build_migrations\n"
-            "'''\n"
+        fixture = (ROOT / "nonebot_plugin_xiuxian_2/features/buff/tests/test_closing_repository.py").read_text(
+            encoding="utf-8"
         )
-        self.assertEqual(
-            0,
-            self._run_validate_deployment(
-                Path("."),
-                {"features/buff/tests/test_closing_repository.py": fixture},
-            ),
-            "tests/ fixtures importing the package absolutely must not block deploy",
-        )
-        self.assertEqual(
-            1,
-            self._run_validate_deployment(
-                Path("."),
-                {"features/buff/repository.py": "from nonebot_plugin_xiuxian_2.plugin import x\n"},
-            ),
-            "runtime absolute imports must still fail validate_deployment",
-        )
+        runtime_module = "from nonebot_plugin_xiuxian_2.plugin import x\n"
+        for installer in ("install.sh", "install_termux.sh"):
+            with self.subTest(installer=installer):
+                self.assertEqual(
+                    0,
+                    self._run_validate_deployment(
+                        installer,
+                        {"features/buff/tests/test_closing_repository.py": fixture},
+                    ),
+                    "the shipped recursive tests fixture must not block deploy",
+                )
+                self.assertEqual(
+                    1,
+                    self._run_validate_deployment(
+                        installer,
+                        {"features/buff/repository.py": runtime_module},
+                    ),
+                    "runtime absolute imports must still fail validate_deployment",
+                )
 
     @staticmethod
     def _quote(path: Path) -> str:
