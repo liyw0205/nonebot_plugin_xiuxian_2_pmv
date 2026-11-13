@@ -108,21 +108,28 @@ async def real_refusal(probe):
     probe.evidence.update(reason="crystal_precision_lost_real", zero_business_write=True)
 
 
-@case("crystal-divergent-refusal", "传承祈愿", "合法次数 2", "同角色历史镜像余额100/99", "原始具体不一致拒绝，零写", group="crystal-exact", outcome="rejection")
+@case("crystal-divergent-refusal", "传承祈愿", "合法次数 67", "同角色历史镜像余额670/650", "单行读取为670但信息与祈愿都具体拒绝，零写", group="crystal-exact", outcome="rejection")
 async def divergent(probe):
     from nonebot_plugin_xiuxian_2.infrastructure.database import DatabaseUnitOfWork
+    from nonebot_plugin_xiuxian_2.features.impart.repository import ImpartRepository
 
-    seed_balance(probe, 100, mirror=True)
+    seed_balance(probe, 670, mirror=True)
     with DatabaseUnitOfWork(probe.context.paths.impart_db) as uow:
-        uow.execute("UPDATE xiuxian_impart SET stone_num=99,stone_num_exact='99' WHERE id=(SELECT MAX(id) FROM xiuxian_impart)")
+        uow.execute("UPDATE xiuxian_impart SET stone_num=650,stone_num_exact='650' WHERE id=(SELECT MAX(id) FROM xiuxian_impart)")
+    single_row_read = ImpartRepository(probe.context.paths.impart_db).state("900001")
+    assert single_row_read["stone_num"] == 670, single_row_read
     before = snapshot(probe)
     info = await probe.command("传承信息", "传承信息")
     assert "同一角色的历史思恋结晶余额不一致" in info, info
+    assert "> 670颗" not in info, info
     assert snapshot(probe) == before
-    reply = await probe.command("传承祈愿", "传承祈愿 2")
+    reply = await probe.command("传承祈愿", "传承祈愿67")
     assert "同一角色的历史思恋结晶余额不一致" in reply, reply
     assert snapshot(probe) == before
-    probe.evidence.update(reason="impart_rows_stone_num", zero_business_write=True)
+    probe.evidence.update(
+        reason="impart_rows_stone_num", legacy_single_row_read=670,
+        divergent_rows=[670, 650], zero_business_write=True,
+    )
 
 
 @case("crystal-receipt-refusal", "传承祈愿", "相同事件合法次数 2", "旧回执余额REAL不可恢复", "不得冒充重复成功或payload冲突", group="crystal-exact", outcome="rejection")
