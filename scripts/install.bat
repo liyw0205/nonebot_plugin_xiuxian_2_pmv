@@ -302,8 +302,9 @@ if exist "%DIR%\tmp\nonebot_plugin_xiuxian_2" (
         pause >nul
         goto zhuye
     )
-    findstr /S /R /C:"from nonebot_plugin_xiuxian_2" /C:"import nonebot_plugin_xiuxian_2" "%DIR%\xiu2\src\plugins\nonebot_plugin_xiuxian_2\*.py" >nul
-    if not errorlevel 1 (
+    set "XIUXIAN_PLUGIN_DIR=%DIR%\xiu2\src\plugins\nonebot_plugin_xiuxian_2"
+    python -c "import os,pathlib,re,sys; root=pathlib.Path(os.environ['XIUXIAN_PLUGIN_DIR']); pattern=re.compile(r'(^|\s)(from|import)\s+nonebot_plugin_xiuxian_2([\s.]|$)'); files=(p for p in root.rglob('*.py') if not any(part.lower()=='tests' for part in p.relative_to(root).parts)); bad=[f'{p}:{i}' for p in files for i,line in enumerate(p.read_text(encoding='utf-8',errors='ignore').splitlines(),1) if pattern.search(line)]; print('\n'.join(bad)); sys.exit(bool(bad))"
+    if errorlevel 1 (
         echo 部署代码仍包含不兼容 src.plugins 命名空间的绝对导入，已停止更新。
         pause >nul
         goto zhuye
