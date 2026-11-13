@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from ...core.errors import DomainError
 from ...core.numeric import as_int_like, crystal_precision_reason
 from .legacy_state import crystal_balance, effective_state_row, effective_state_row_id
 import json

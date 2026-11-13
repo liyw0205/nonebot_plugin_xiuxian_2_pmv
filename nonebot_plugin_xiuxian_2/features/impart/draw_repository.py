@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping
 
+from ...core.errors import DomainError
 from ...core.numeric import crystal_precision_reason
 from ...infrastructure.database import DatabaseUnitOfWork
 from .card_bonus import refresh_card_bonuses

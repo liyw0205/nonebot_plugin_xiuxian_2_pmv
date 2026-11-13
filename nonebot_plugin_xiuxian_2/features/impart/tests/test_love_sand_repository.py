@@ -2,6 +2,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from ....core.errors import DomainError
 from ....infrastructure.database import DatabaseUnitOfWork
 from ..love_sand_repository import LoveSandSqlRepository
 from ..migrations import (
@@ -14,7 +15,7 @@ from tests.test_db_backend import db_backend
 
 
 class LoveSandRepositoryTests(unittest.TestCase):
-    def test_apply_replay_and_state_conflict(self):
+    def test_apply_replay_state_conflict_and_rejected_row_rollback(self):
         with tempfile.TemporaryDirectory() as temp:
             game, impart, player = (Path(temp) / name for name in ("game.db", "impart.db", "player.db"))
             with db_backend.transaction(game) as c:
@@ -53,6 +54,23 @@ class LoveSandRepositoryTests(unittest.TestCase):
                     tuple(c.execute('SELECT "思恋流沙使用","思恋结晶获取" FROM statistics').fetchone()),
                     (1, 20),
                 )
+            with DatabaseUnitOfWork(impart) as uow:
+                uow.execute(
+                    "CREATE TRIGGER reject_effective BEFORE UPDATE ON xiuxian_impart "
+                    "WHEN OLD.rowid=1 BEGIN SELECT RAISE(IGNORE); END"
+                )
+            def snapshot():
+                result = []
+                for database in (game, impart, player):
+                    with DatabaseUnitOfWork(database, read_only=True) as uow:
+                        result.append(tuple(uow.connection.iterdump()))
+                return result
+
+            before = snapshot()
+            with self.assertRaises(DomainError) as caught:
+                repository.apply("rejected-row", "u", 1, 1, 20, 2, 27)
+            self.assertEqual(caught.exception.code, "impart_write_rejected")
+            self.assertEqual(snapshot(), before)
 
     def test_missing_migrations_do_not_create_request_schema(self):
         with tempfile.TemporaryDirectory() as temp:
