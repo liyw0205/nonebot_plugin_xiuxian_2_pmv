@@ -26,8 +26,18 @@ class ImpartApplication(MigratedFeatureApplication):
             ),
         )
 
-    def state(self, user_id: str, *, ensure: bool = False):
-        return self.repository.state(user_id, ensure=ensure)
+    def state(
+        self,
+        user_id: str,
+        *,
+        ensure: bool = False,
+        validate_crystal_consistency: bool = False,
+    ):
+        return self.repository.state(
+            user_id,
+            ensure=ensure,
+            validate_crystal_consistency=validate_crystal_consistency,
+        )
 
     def cards(self, user_id: str) -> dict[str, int]:
         return self.repository.cards(user_id)

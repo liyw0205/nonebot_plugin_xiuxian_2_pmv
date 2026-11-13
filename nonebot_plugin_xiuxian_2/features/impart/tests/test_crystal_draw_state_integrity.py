@@ -157,6 +157,18 @@ class ImpartCrystalDrawStateIntegrityTests(unittest.TestCase):
             [("0", "exact")],
         )
 
+    def test_state_read_rejects_divergent_historical_crystal_balances(self) -> None:
+        self._add_mirror("actor", stone_num=99)
+
+        with self.assertRaises(DomainError) as caught:
+            self.app.state("actor", validate_crystal_consistency=True)
+
+        self.assertEqual(caught.exception.code, "impart_rows_inconsistent")
+        self.assertEqual(
+            caught.exception.details,
+            {"reason": "impart_rows_stone_num", "subject": "actor"},
+        )
+
     def test_same_operation_rejects_changed_payload_or_character_without_writes(self) -> None:
         self.assertEqual(self._draw("payload-conflict").status, "applied")
         after_once = self._snapshot()

@@ -52,8 +52,17 @@ impart_application = ImpartApplication(
 )
 runtime_ids = UUIDGenerator()
 
-def _impart_state(user_id: str, *, ensure: bool = False):
-    return impart_application.state(str(user_id), ensure=True)
+def _impart_state(
+    user_id: str,
+    *,
+    ensure: bool = False,
+    validate_crystal_consistency: bool = False,
+):
+    return impart_application.state(
+        str(user_id),
+        ensure=True,
+        validate_crystal_consistency=validate_crystal_consistency,
+    )
 
 
 def _rank_success(state: dict) -> bool:
@@ -718,7 +727,10 @@ async def re_impart_load_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
 
 
 @impart_info.handle(parameterless=[Cooldown(cd_time=0)])
-@guard_command("传承信息", known_rejections=("impart_crystal_precision_unavailable",))
+@guard_command(
+    "传承信息",
+    known_rejections=("impart_crystal_precision_unavailable", "impart_rows_inconsistent"),
+)
 async def impart_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """传承信息"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -727,7 +739,7 @@ async def impart_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
         await handle_send(bot, event, msg, md_type="我要修仙")
         return
     user_id = user_info["user_id"]
-    impart_data_draw = _impart_state(user_id)
+    impart_data_draw = _impart_state(user_id, validate_crystal_consistency=True)
     if impart_data_draw is None:
         await handle_send(
             bot, event, "传承角色资料初始化未完成，请联系管理员检查初始化记录。"

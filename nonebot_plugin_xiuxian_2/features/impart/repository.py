@@ -11,7 +11,7 @@ from .prayer_repository import ImpartPrayerSqlRepository
 from .compose_repository import ImpartCardComposeSqlRepository
 from .disassemble_repository import ImpartCardDisassembleSqlRepository
 from .draw_repository import ImpartCrystalDrawSqlRepository, ImpartDrawSqlRepository
-from .legacy_state import crystal_balance
+from .legacy_state import crystal_balance, state_row_count
 
 
 class ImpartRepository(ServicePort):
@@ -27,7 +27,13 @@ class ImpartRepository(ServicePort):
         self.game_database = str(game_database or database)
         self.player_database = str(player_database or database)
 
-    def state(self, user_id: str, *, ensure: bool = False) -> dict | None:
+    def state(
+        self,
+        user_id: str,
+        *,
+        ensure: bool = False,
+        validate_crystal_consistency: bool = False,
+    ) -> dict | None:
         user_id = str(user_id)
         with DatabaseUnitOfWork(self.database, immediate=ensure, read_only=not ensure) as uow:
             if uow.query_one(
@@ -55,6 +61,8 @@ class ImpartRepository(ServicePort):
                 )
             row = uow.query_one("SELECT * FROM xiuxian_impart WHERE user_id=?", (user_id,))
             if row is not None:
+                if validate_crystal_consistency:
+                    state_row_count(uow, user_id, ("stone_num",))
                 row["stone_num"] = crystal_balance(row)
             return row
 

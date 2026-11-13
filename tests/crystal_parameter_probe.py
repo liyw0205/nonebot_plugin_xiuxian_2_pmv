@@ -60,6 +60,32 @@ async def normal(probe):
     await successful_prayer(probe, 100, False)
 
 
+@case("crystal-670-prayer-67", "传承祈愿", "合法次数 67", "真实迁移库，余额670", "精确扣除670并返回0", group="crystal-exact")
+async def sixty_seven_pulls(probe):
+    seed_balance(probe, 670)
+    text = await probe.command("传承祈愿", "传承祈愿 67", number=920067)
+    assert "消耗思恋结晶：670颗" in text, text
+    assert "剩余思恋结晶：0颗" in text, text
+    balances = probe.rows(
+        probe.context.paths.impart_db,
+        "SELECT stone_num,stone_num_exact,stone_num_precision_state "
+        "FROM xiuxian_impart WHERE user_id='900001'",
+    )
+    assert balances == [(0, "0", "exact")], balances
+    receipts = probe.rows(
+        probe.context.paths.impart_db,
+        "SELECT stone_num,stone_num_exact,stone_num_precision_state "
+        "FROM impart_crystal_draw_operations",
+    )
+    assert receipts == [(0, "0", "exact")], receipts
+    stats = probe.rows(
+        probe.context.paths.player_db,
+        'SELECT "传承祈愿次数","思恋结晶消耗" FROM statistics WHERE user_id=\'900001\'',
+    )
+    assert stats == [(67, 670)], stats
+    probe.evidence.update(exact_debit=670, exact_remaining="0", requested_pulls=67)
+
+
 @case("crystal-large-mirrors", "传承祈愿", "合法次数 2", "两个一致镜像，10**45+123精确余额", "两镜像各扣20而非合并余额", group="crystal-exact")
 async def large(probe):
     await successful_prayer(probe, 10**45 + 123, True)
@@ -90,6 +116,9 @@ async def divergent(probe):
     with DatabaseUnitOfWork(probe.context.paths.impart_db) as uow:
         uow.execute("UPDATE xiuxian_impart SET stone_num=99,stone_num_exact='99' WHERE id=(SELECT MAX(id) FROM xiuxian_impart)")
     before = snapshot(probe)
+    info = await probe.command("传承信息", "传承信息")
+    assert "同一角色的历史思恋结晶余额不一致" in info, info
+    assert snapshot(probe) == before
     reply = await probe.command("传承祈愿", "传承祈愿 2")
     assert "同一角色的历史思恋结晶余额不一致" in reply, reply
     assert snapshot(probe) == before
@@ -119,8 +148,8 @@ def main():
     install_boundary(tests._data_dir)
     result = asyncio.run(execute(SimpleNamespace(group=["crystal-exact"], case=None,
         retry_from=None, inventory_only=False, base_sha="crystal-exact-regression"), lambda value: None))
-    assert result["summary"] == {"pass": 5}, result["results"]
-    print("Crystal dispatch: 2 success paths, 3 exact refusals; zero exceptions/blocked")
+    assert result["summary"] == {"pass": 6}, result["results"]
+    print("Crystal dispatch: 3 success paths, 3 exact refusals; zero exceptions/blocked")
 
 
 if __name__ == "__main__":
