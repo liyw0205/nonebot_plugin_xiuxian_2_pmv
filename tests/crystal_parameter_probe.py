@@ -63,7 +63,7 @@ async def normal(probe):
 @case("crystal-670-prayer-67", "传承祈愿", "合法次数 67", "真实迁移库，余额670", "精确扣除670并返回0", group="crystal-exact")
 async def sixty_seven_pulls(probe):
     seed_balance(probe, 670)
-    text = await probe.command("传承祈愿", "传承祈愿 67", number=920067)
+    text = await probe.command("传承祈愿", "传承祈愿67", number=920067)
     assert "消耗思恋结晶：670颗" in text, text
     assert "剩余思恋结晶：0颗" in text, text
     balances = probe.rows(
