@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 from types import SimpleNamespace
+from unittest.mock import patch
 
 import tests
 from tests.parameter_probe import case, execute, install_boundary, isolate_source
@@ -63,6 +64,10 @@ async def normal(probe):
 @case("crystal-670-prayer-67", "传承祈愿", "合法次数 67", "真实迁移库，余额670", "精确扣除670并返回0", group="crystal-exact")
 async def sixty_seven_pulls(probe):
     seed_balance(probe, 670)
+    before = snapshot(probe)
+    info = await probe.command("传承信息", "传承信息")
+    assert "> 670颗" in info, info
+    assert snapshot(probe) == before
     text = await probe.command("传承祈愿", "传承祈愿67", number=920067)
     assert "消耗思恋结晶：670颗" in text, text
     assert "剩余思恋结晶：0颗" in text, text
@@ -83,6 +88,11 @@ async def sixty_seven_pulls(probe):
         'SELECT "传承祈愿次数","思恋结晶消耗" FROM statistics WHERE user_id=\'900001\'',
     )
     assert stats == [(67, 670)], stats
+    once = snapshot(probe)
+    info = await probe.command("传承信息", "传承信息")
+    assert "> 0颗" in info and snapshot(probe) == once, info
+    replay = await probe.command("传承祈愿", "传承祈愿67", number=920067)
+    assert "已经处理" in replay and snapshot(probe) == once, replay
     probe.evidence.update(exact_debit=670, exact_remaining="0", requested_pulls=67)
 
 
@@ -112,23 +122,36 @@ async def real_refusal(probe):
 async def divergent(probe):
     from nonebot_plugin_xiuxian_2.infrastructure.database import DatabaseUnitOfWork
     from nonebot_plugin_xiuxian_2.features.impart.repository import ImpartRepository
+    from nonebot_plugin_xiuxian_2.xiuxian import xiuxian_impart as module
 
     seed_balance(probe, 670, mirror=True)
-    with DatabaseUnitOfWork(probe.context.paths.impart_db) as uow:
-        uow.execute("UPDATE xiuxian_impart SET stone_num=650,stone_num_exact='650' WHERE id=(SELECT MAX(id) FROM xiuxian_impart)")
-    single_row_read = ImpartRepository(probe.context.paths.impart_db).state("900001")
-    assert single_row_read["stone_num"] == 670, single_row_read
-    before = snapshot(probe)
-    info = await probe.command("传承信息", "传承信息")
-    assert "同一角色的历史思恋结晶余额不一致" in info, info
-    assert "> 670颗" not in info, info
-    assert snapshot(probe) == before
-    reply = await probe.command("传承祈愿", "传承祈愿67")
-    assert "同一角色的历史思恋结晶余额不一致" in reply, reply
-    assert snapshot(probe) == before
+    for index, balances in enumerate(((670, 650), (650, 670))):
+        with DatabaseUnitOfWork(probe.context.paths.impart_db) as uow:
+            rows = uow.query_all("SELECT id FROM xiuxian_impart WHERE user_id='900001' ORDER BY id")
+            assert len(rows) == len(balances), rows
+            for row, balance in zip(rows, balances):
+                uow.execute(
+                    "UPDATE xiuxian_impart SET stone_num=?,stone_num_exact=? WHERE id=?",
+                    (balance, str(balance), row["id"]),
+                )
+        single_row_read = ImpartRepository(probe.context.paths.impart_db).state("900001")
+        assert single_row_read["stone_num"] == balances[0], single_row_read
+        before = snapshot(probe)
+        info = await probe.command("传承信息", "传承信息")
+        assert "同一角色的历史思恋结晶余额不一致" in info, info
+        assert "> 670颗" not in info and snapshot(probe) == before, info
+        with patch.object(
+            module.impart_application, "card_definitions",
+            wraps=module.impart_application.card_definitions,
+        ) as definitions:
+            reply = await probe.command("传承祈愿", "传承祈愿67", number=920070 + index)
+        assert "同一角色的历史思恋结晶余额不一致" in reply, reply
+        definitions.assert_not_called()
+        assert snapshot(probe) == before
     probe.evidence.update(
         reason="impart_rows_stone_num", legacy_single_row_read=670,
-        divergent_rows=[670, 650], zero_business_write=True,
+        divergent_rows=[670, 650], both_row_orders_checked=True,
+        rejected_before_draw_preparation=True, zero_business_write=True,
     )
 
 

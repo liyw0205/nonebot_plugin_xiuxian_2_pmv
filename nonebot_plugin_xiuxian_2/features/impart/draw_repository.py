@@ -430,6 +430,7 @@ class ImpartCrystalDrawSqlRepository:
                 )
             if not ImpartDrawSqlRepository._statistics_schema_ready(uow):
                 return ImpartCrystalDrawResult("schema_missing")
+            state_count = state_row_count(uow, user_id, ("stone_num", "wish", "exp_day"))
             state = uow.query_one(
                 "SELECT wish,stone_num,stone_num_exact,stone_num_precision_state,exp_day "
                 "FROM xiuxian_impart WHERE user_id=?",
@@ -444,7 +445,6 @@ class ImpartCrystalDrawSqlRepository:
                 return ImpartCrystalDrawResult("state_changed", reason="wish_changed", subject=user_id)
             if expected_stone < cost:
                 return ImpartCrystalDrawResult("stone_missing", reason="crystal_missing", subject=user_id)
-            state_count = state_row_count(uow, user_id, ("stone_num", "wish", "exp_day"))
             existing_card_counts = ImpartDrawSqlRepository._card_counts(
                 uow, "main", user_id
             )

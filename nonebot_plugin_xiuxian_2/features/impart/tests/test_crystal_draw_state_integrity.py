@@ -304,6 +304,22 @@ class ImpartCrystalDrawStateIntegrityTests(unittest.TestCase):
         self.assertEqual(self._snapshot(), before)
         self.assertEqual(self.app.crystal_draw_result("divergent-prayer", "actor", 20, 2), None)
 
+    def test_history_is_validated_before_snapshot_or_affordability_checks(self) -> None:
+        self._add_mirror("actor", stone_num=99)
+        before = self._snapshot()
+        for index, (expected, cost) in enumerate(((99, 20), (100, 670))):
+            with self.subTest(expected=expected, cost=cost):
+                with self.assertRaises(DomainError) as caught:
+                    self._draw(
+                        f"history-before-eligibility-{index}",
+                        expected_stone=expected,
+                        cost=cost,
+                    )
+                self.assertEqual(caught.exception.code, "impart_rows_inconsistent")
+                self.assertEqual(caught.exception.details,
+                                 {"reason": "impart_rows_stone_num", "subject": "actor"})
+                self.assertEqual(self._snapshot(), before)
+
     def test_receipt_write_failure_rolls_back_balance_cards_and_statistics(self) -> None:
         with DatabaseUnitOfWork(self.impart) as uow:
             uow.execute(
