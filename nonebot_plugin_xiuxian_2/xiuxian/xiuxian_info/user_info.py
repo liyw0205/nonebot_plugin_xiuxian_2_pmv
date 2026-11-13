@@ -14,6 +14,8 @@ from ..xiuxian_utils.utils import (
 )
 from ..xiuxian_utils.lay_out import assign_bot, Cooldown
 from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage, OtherSet, UserBuffDate
+from ...features.sect.sect_info_repository import SectInfoSqlRepository
+from ...paths import get_paths
 from ..xiuxian_utils.data_source import jsondata
 from .draw_user_info import draw_user_info_img, draw_user_info_img_with_default_bg
 from ..xiuxian_config import XiuConfig
@@ -63,9 +65,13 @@ async def get_user_xiuxian_info(user_id):
     realm_rate = jsondata.level_data()[user_info['level']]["spend"]
     sect_id = user_info['sect_id']
     if sect_id:
-        sect_info = _sql_message().get_sect_info(sect_id)
-        sectmsg = sect_info['sect_name']
-        sectzw = jsondata.sect_config_data()[f"{user_info['sect_position']}"]["title"]
+        sectmsg = SectInfoSqlRepository(get_paths().game_db).get_name_by_id(sect_id)
+        sectmsg = sectmsg if sectmsg is not None else "宗门记录不存在"
+        positions = jsondata.sect_config_data()
+        position = user_info.get("sect_position")
+        position_data = positions.get(str(position)) if position is not None else None
+        sectzw = position_data.get("title") if isinstance(position_data, dict) else None
+        sectzw = sectzw if sectzw is not None else "宗门职位未登记"
     else:
         sectmsg = f"无宗门"
         sectzw = f"无"

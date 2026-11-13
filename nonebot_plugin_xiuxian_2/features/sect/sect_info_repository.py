@@ -19,6 +19,15 @@ class SectInfoSqlRepository:
             )
             return normalize_sect_row(row)
 
+    def get_name_by_id(self, sect_id: int | str) -> str | None:
+        """Read display identity without loading unrelated treasury balances."""
+        with DatabaseUnitOfWork(self.database, read_only=True) as uow:
+            row = uow.query_one(
+                "SELECT sect_name FROM sects WHERE sect_id=?",
+                (sect_id,),
+            )
+            return row["sect_name"] if row else None
+
     def get_id_by_name(self, sect_name: str) -> int | str | None:
         with DatabaseUnitOfWork(self.database, read_only=True) as uow:
             row = uow.query_one(
