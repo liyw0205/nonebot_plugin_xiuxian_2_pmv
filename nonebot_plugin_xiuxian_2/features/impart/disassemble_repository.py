@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from ...infrastructure.database import DatabaseUnitOfWork
 from .card_bonus import refresh_card_bonuses
-from .legacy_state import crystal_balance, state_row_count, check_state_write
+from .legacy_state import crystal_balance, effective_state_row, effective_state_row_id
 
 @dataclass(frozen=True)
 class CardDisassembleResult:
@@ -36,16 +36,16 @@ class ImpartCardDisassembleSqlRepository:
                         subject=user_id,
                     )
                 return CardDisassembleResult('duplicate',int(old['card_quantity']),crystal_balance(old, subject=user_id, field='stone_quantity'))
-            card=uow.query_one('SELECT quantity FROM impart_cards WHERE user_id=? AND card_name=?',(user_id,card_name)); state=uow.query_one('SELECT * FROM xiuxian_impart WHERE user_id=? LIMIT 1',(user_id,)); card_quantity=0 if card is None else int(card['quantity'])
+            card=uow.query_one('SELECT quantity FROM impart_cards WHERE user_id=? AND card_name=?',(user_id,card_name)); state=effective_state_row(uow, user_id); card_quantity=0 if card is None else int(card['quantity'])
             if state is None: return CardDisassembleResult('user_missing',card_quantity)
             stone_quantity=crystal_balance(state, subject=user_id)
             if card_quantity != expected_card_quantity: return CardDisassembleResult('state_changed',card_quantity,stone_quantity,reason='card_changed')
             if stone_quantity != expected_stone_quantity: return CardDisassembleResult('state_changed',card_quantity,stone_quantity,reason='crystal_changed')
             if card_quantity-quantity<1: return CardDisassembleResult('card_missing',card_quantity,stone_quantity)
-            state_count = state_row_count(uow, user_id, ("stone_num",))
             if uow.execute('UPDATE impart_cards SET quantity=quantity-? WHERE user_id=? AND card_name=? AND quantity=?',(quantity,user_id,card_name,card_quantity)).rowcount!=1: raise DomainError("card_write_rejected", 'card row count changed inside disassemble transaction')
             new_stone=stone_quantity+quantity*reward_per_card
-            check_state_write(uow.execute("UPDATE xiuxian_impart SET stone_num=?,stone_num_exact=?,stone_num_precision_state='exact' WHERE user_id=? AND xiuxian_int_cmp(COALESCE(stone_num_exact,stone_num),?)=0 AND stone_num_precision_state='exact'",(new_stone,str(new_stone),user_id,stone_quantity)), state_count)
+            changed = uow.execute("UPDATE xiuxian_impart SET stone_num=?,stone_num_exact=?,stone_num_precision_state='exact' WHERE rowid=? AND user_id=? AND xiuxian_int_cmp(COALESCE(stone_num_exact,stone_num),?)=0 AND stone_num_precision_state='exact'",(new_stone,str(new_stone),effective_state_row_id(state),user_id,stone_quantity))
+            if changed.rowcount != 1: raise DomainError("impart_write_rejected", "effective impart row changed inside disassemble transaction")
             new_card=card_quantity-quantity
             if card_definitions is not None: refresh_card_bonuses(uow.connection,user_id,card_definitions,schema='main')
             uow.execute("INSERT INTO impart_card_disassemble_operations(operation_id,payload,card_quantity,stone_quantity,stone_quantity_exact,stone_quantity_precision_state) VALUES(?,?,?,?,?,'exact')",(operation_id,payload,new_card,new_stone,str(new_stone))); return CardDisassembleResult('applied',new_card,new_stone)

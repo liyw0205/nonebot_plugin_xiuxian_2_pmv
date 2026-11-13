@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from ...core.numeric import as_int_like, crystal_precision_reason
-from .legacy_state import crystal_balance, state_row_count, check_state_write
+from .legacy_state import crystal_balance, effective_state_row, effective_state_row_id
 import json
 from dataclasses import dataclass
 from pathlib import Path
@@ -101,10 +101,7 @@ class LoveSandSqlRepository:
                 "FROM back WHERE user_id=? AND goods_id=?",
                 (user_id, item_id),
             )
-            impart = uow.query_one(
-                "SELECT * FROM impart_data.xiuxian_impart WHERE user_id=? LIMIT 1",
-                (user_id,),
-            )
+            impart = effective_state_row(uow, user_id, schema="impart_data")
             if item is None:
                 return LoveSandResult("state_changed", reason="item_missing")
             if impart is None:
@@ -118,9 +115,6 @@ class LoveSandSqlRepository:
 
             remaining = expected_item_count - quantity
             stone_num = expected_stone_num + gained
-            state_count = state_row_count(
-                uow, user_id, ("stone_num",), schema="impart_data"
-            )
             consumed = uow.execute(
                 "UPDATE back SET goods_num=?,bind_num=? "
                 "WHERE user_id=? AND goods_id=? AND COALESCE(goods_num,0)=?",
@@ -136,12 +130,13 @@ class LoveSandSqlRepository:
                 return LoveSandResult("state_changed", reason="item_changed")
             updated = uow.execute(
                 "UPDATE impart_data.xiuxian_impart SET stone_num=?,stone_num_exact=?,"
-                "stone_num_precision_state='exact' WHERE user_id=? "
+                "stone_num_precision_state='exact' WHERE rowid=? AND user_id=? "
                 "AND xiuxian_int_cmp(COALESCE(stone_num_exact,stone_num),?)=0 "
                 "AND stone_num_precision_state='exact'",
-                (stone_num, str(stone_num), user_id, expected_stone_num),
+                (stone_num, str(stone_num), effective_state_row_id(impart), user_id, expected_stone_num),
             )
-            check_state_write(updated, state_count)
+            if updated.rowcount != 1:
+                raise DomainError("impart_write_rejected", "effective impart row changed inside love sand transaction")
 
             stat_fields = ",".join(f'"{column}"' for column in LOVE_SAND_STATISTICS_COLUMNS)
             stat_updates = ",".join(

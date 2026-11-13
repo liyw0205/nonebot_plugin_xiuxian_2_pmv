@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from ...infrastructure.database import DatabaseUnitOfWork
 from .migrations import operations_ready
-from ..impart.legacy_state import crystal_balance, state_row_count, check_state_write
+from ..impart.legacy_state import crystal_balance
 
 @dataclass(frozen=True)
 class ImpartBattleResult:
@@ -33,16 +33,17 @@ class ImpartBattleBatchSqlRepository:
             for uid,expected_pk,wins,losses,stones in participants:
                 row=uow.query_one('SELECT pk_num FROM player_data.impart_pk_state WHERE user_id=?',(uid,));
                 if row is not None and int(row['pk_num'])!=expected_pk: return ImpartBattleResult('state_changed', reason='pk_count_changed', subject=uid)
-                impart_row=uow.query_one('SELECT * FROM xiuxian_impart WHERE user_id=? LIMIT 1',(uid,))
+                impart_row=uow.query_one('SELECT rowid AS state_row_id,* FROM xiuxian_impart WHERE user_id=? ORDER BY rowid ASC LIMIT 1',(uid,))
                 if impart_row is not None:
                     crystal_balance(impart_row)
                 if uow.query_one('SELECT 1 FROM xiuxian_impart WHERE user_id=?',(uid,)) is None: return ImpartBattleResult('user_missing', reason='impart_missing', subject=uid)
             for uid,expected_pk,wins,losses,stones in participants:
                 uow.execute('INSERT OR IGNORE INTO player_data.impart_pk_state(user_id,pk_num,win_num) VALUES(?,?,0)',(uid,expected_pk))
                 if uow.execute('UPDATE player_data.impart_pk_state SET pk_num=pk_num-?,win_num=win_num+? WHERE user_id=? AND pk_num=? AND pk_num>=?',(losses,wins,uid,expected_pk,losses)).rowcount!=1: raise DomainError("impart_pk_battle_write_rejected", 'battle participant write count mismatch')
-                state_count=state_row_count(uow,uid,('stone_num',))
-                stone=crystal_balance(uow.query_one('SELECT * FROM xiuxian_impart WHERE user_id=? LIMIT 1',(uid,)))
-                changed_stones=uow.execute("UPDATE xiuxian_impart SET stone_num=xiuxian_int_add(COALESCE(stone_num_exact,stone_num,0),?),stone_num_exact=xiuxian_int_add(COALESCE(stone_num_exact,stone_num,0),?),stone_num_precision_state='exact' WHERE user_id=? AND stone_num_precision_state='exact' AND xiuxian_int_cmp(COALESCE(stone_num_exact,stone_num,0),?)=0",(stones,stones,uid,stone))
-                check_state_write(changed_stones,state_count); remaining_pk=expected_pk-losses; remaining.append(remaining_pk)
+                state = uow.query_one('SELECT rowid AS state_row_id,* FROM xiuxian_impart WHERE user_id=? ORDER BY rowid ASC LIMIT 1',(uid,))
+                stone=crystal_balance(state, subject=uid)
+                changed_stones=uow.execute("UPDATE xiuxian_impart SET stone_num=xiuxian_int_add(COALESCE(stone_num_exact,stone_num,0),?),stone_num_exact=xiuxian_int_add(COALESCE(stone_num_exact,stone_num,0),?),stone_num_precision_state='exact' WHERE rowid=? AND user_id=? AND stone_num_precision_state='exact' AND xiuxian_int_cmp(COALESCE(stone_num_exact,stone_num,0),?)=0",(stones,stones,state['state_row_id'],uid,stone))
+                if changed_stones.rowcount != 1: raise DomainError("impart_write_rejected", "effective impart row changed inside battle transaction")
+                remaining_pk=expected_pk-losses; remaining.append(remaining_pk)
                 if remaining_pk<=0 and has_membership: uow.execute('DELETE FROM player_data.impart_project_members WHERE user_id=?',(uid,))
             saved=[remaining[0],remaining[1] if len(remaining)>1 else None]; uow.execute('INSERT INTO impart_battle_batch_operations(operation_id,payload,result_json) VALUES(?,?,?)',(operation_id,payload,json.dumps(saved,separators=(',',':')))); return ImpartBattleResult('applied',*saved)

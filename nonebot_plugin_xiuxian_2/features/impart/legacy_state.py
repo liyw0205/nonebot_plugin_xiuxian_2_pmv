@@ -5,6 +5,32 @@ from ...core.errors import DomainError
 from ...core.numeric import as_int_like, crystal_precision_reason, exact_crystal_integer
 
 
+def effective_state_row(uow, user_id, *, schema="main"):
+    """Return the legacy-compatible current row without merging duplicate history.
+
+    Older schemas have no unique constraint on ``user_id``.  The original
+    ``SELECT ... WHERE user_id=?`` therefore resolved to the earliest SQLite
+    row, which is the row that contains the player's established progression;
+    later default rows are historical initialization duplicates.  Make that
+    compatibility rule explicit and expose its row id to every writer.
+    """
+    if schema not in {"main", "impart_data"}:
+        raise ValueError("invalid impart schema")
+    return uow.query_one(
+        f"SELECT rowid AS state_row_id, * FROM {schema}.xiuxian_impart "
+        "WHERE user_id=? ORDER BY rowid ASC LIMIT 1",
+        (str(user_id),),
+    )
+
+
+def effective_state_row_id(row):
+    """Read the stable row identifier returned by :func:`effective_state_row`."""
+    value = row.get("state_row_id") if row is not None else None
+    if value is None:
+        raise DomainError("impart_write_rejected", "effective impart row has no stable id")
+    return int(value)
+
+
 def crystal_balance(row, *, subject=None, field="stone_num"):
     if field != "stone_num":
         row = {

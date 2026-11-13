@@ -40,6 +40,11 @@ _SKIP_LOCKED_RE = re.compile(
     flags=re.IGNORECASE,
 )
 _SET_LOCAL_RE = re.compile(r"^\s*SET\s+LOCAL\b.*$", flags=re.IGNORECASE | re.DOTALL)
+_IMPART_UPDATE_RE = re.compile(
+    r"^\s*UPDATE\s+(?P<table>(?:[A-Za-z_][\w]*\.)?xiuxian_impart)\s+SET\s+(?:(?!\bWHERE\b).)+?\s+"
+    r"(?P<predicate>WHERE\s+user_id\s*=\s*(?P<placeholder>%s|\?))(?=\s|;|$)",
+    flags=re.IGNORECASE | re.DOTALL,
+)
 
 
 def _log_info(message: str):
@@ -153,6 +158,33 @@ def _convert_sql(sql: str) -> str:
     )
 
 
+def _scope_effective_impart_update(sql: str) -> str:
+    """Keep legacy ``user_id`` writes on the established row only.
+
+    Historical SQLite databases can contain duplicate ``user_id`` rows.  The
+    first row is the compatibility state selected by the read boundary; a
+    bare ``WHERE user_id`` update would otherwise mutate every historical
+    copy.  This narrowly rewrites only impart table updates and preserves the
+    original parameter list.
+    """
+    sql = str(sql or "")
+    code = "".join(text if is_code else " " * len(text) for is_code, text in _sql_segments(sql))
+    match = _IMPART_UPDATE_RE.search(code)
+    if match is None:
+        return sql
+    table = match.group("table")
+    placeholder = match.group("placeholder")
+    return (
+        sql[:match.start("predicate")]
+        + "WHERE rowid=(SELECT rowid FROM "
+        + table
+        + " WHERE user_id="
+        + placeholder
+        + " ORDER BY rowid LIMIT 1)"
+        + sql[match.end("predicate"):]
+    )
+
+
 def _adapt_param(value: Any) -> Any:
     # Central SQLite INTEGER overflow guard for ALL transaction_service writes.
     # Oversized Python ints are bound as plain decimal digits since 636cab6e
@@ -219,10 +251,12 @@ class SQLiteCursor:
         self.close()
 
     def execute(self, sql: str, params: Any = None):
+        sql = _scope_effective_impart_update(sql)
         self.connection._numeric_functions.run(self._cursor.execute, _convert_sql(sql), _adapt_params(params))
         return self
 
     def executemany(self, sql: str, seq_of_params: Iterable[Any]):
+        sql = _scope_effective_impart_update(sql)
         self.connection._numeric_functions.run(self._cursor.executemany,
             _convert_sql(sql),
             (_adapt_params(params) for params in seq_of_params),

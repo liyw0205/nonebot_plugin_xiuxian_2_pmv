@@ -138,6 +138,99 @@ class DatabaseHelperTests(unittest.TestCase):
         self.assertEqual(added, ["select"])
         self.assertTrue(db_backend.column_exists(self.database, "odd table", "select"))
 
+    def test_legacy_impart_updates_scope_to_effective_row(self) -> None:
+        db_backend.execute_write(
+            self.database,
+            "CREATE TABLE xiuxian_impart (user_id TEXT, stone_num INTEGER)",
+        )
+        with db_backend.transaction(self.database) as conn:
+            conn.execute("INSERT INTO xiuxian_impart VALUES (%s,%s)", ("u", 670))
+            conn.execute("INSERT INTO xiuxian_impart VALUES (%s,%s)", ("u", 460))
+            changed = conn.execute(
+                "UPDATE xiuxian_impart SET stone_num=stone_num-10 WHERE user_id=%s",
+                ("u",),
+            )
+            self.assertEqual(changed.rowcount, 1)
+        self.assertEqual(
+            db_backend.query_all(
+                self.database,
+                "SELECT stone_num FROM xiuxian_impart WHERE user_id=%s ORDER BY rowid",
+                ("u",),
+            ),
+            [{"stone_num": 660}, {"stone_num": 460}],
+        )
+
+    def test_legacy_impart_update_preserves_parameters_for_qualified_and_batch_sql(self) -> None:
+        attached = Path(self.temp_dir.name) / "impart.sqlite3"
+        db_backend.execute_write(
+            attached,
+            "CREATE TABLE xiuxian_impart (user_id TEXT, stone_num INTEGER)",
+        )
+        with db_backend.transaction(self.database) as conn:
+            conn.execute("ATTACH DATABASE %s AS impart_data", (str(attached),))
+            conn.execute("CREATE TABLE xiuxian_impart (user_id TEXT, stone_num INTEGER)")
+            for database in ("main", "impart_data"):
+                conn.executemany(
+                    f"INSERT INTO {database}.xiuxian_impart VALUES (?, ?)",
+                    (("u", 670), ("u", 460), ("v", 100), ("v", 30)),
+                )
+            changed = conn.execute(
+                "UPDATE impart_data.xiuxian_impart SET stone_num=stone_num-? "
+                "WHERE user_id = ? AND stone_num = ?",
+                (10, "u", 670),
+            )
+            self.assertEqual(changed.rowcount, 1)
+            stale = conn.execute(
+                "UPDATE impart_data.xiuxian_impart SET stone_num=stone_num-? "
+                "WHERE user_id=? AND stone_num=?",
+                (10, "u", 460),
+            )
+            self.assertEqual(stale.rowcount, 0)
+            changed_many = conn.executemany(
+                "UPDATE xiuxian_impart SET stone_num=stone_num-? WHERE user_id=? AND stone_num=?",
+                ((10, "u", 670), (10, "u", 460), (3, "v", 100)),
+            )
+            self.assertEqual(changed_many.rowcount, 2)
+        self.assertEqual(
+            db_backend.query_all(
+                self.database,
+                "SELECT stone_num FROM xiuxian_impart ORDER BY rowid",
+            ),
+            [{"stone_num": 660}, {"stone_num": 460}, {"stone_num": 97}, {"stone_num": 30}],
+        )
+
+        self.assertEqual(
+            db_backend.query_all(
+                attached,
+                "SELECT stone_num FROM xiuxian_impart ORDER BY rowid",
+            ),
+            [{"stone_num": 660}, {"stone_num": 460}, {"stone_num": 100}, {"stone_num": 30}],
+        )
+
+    def test_impart_rewrite_preserves_literals_comments_and_explicit_row_ids(self) -> None:
+        statements = (
+            "SELECT 'UPDATE xiuxian_impart SET stone_num=1 WHERE user_id=?'",
+            "-- UPDATE xiuxian_impart SET stone_num=1 WHERE user_id=?\nSELECT 1",
+            "/* UPDATE xiuxian_impart SET stone_num=1 WHERE user_id=? */ SELECT 1",
+            "UPDATE another_table SET note='WHERE user_id=?' WHERE user_id=?",
+            "UPDATE xiuxian_impart SET stone_num=? WHERE rowid=? AND user_id=?",
+            "UPDATE xiuxian_impart SET stone_num=? WHERE rowid=(SELECT MIN(rowid) "
+            "FROM xiuxian_impart WHERE user_id=? GROUP BY user_id)",
+        )
+        for statement in statements:
+            with self.subTest(statement=statement):
+                self.assertEqual(db_backend._scope_effective_impart_update(statement), statement)
+        statement = (
+            "UPDATE xiuxian_impart SET note='WHERE user_id=?',stone_num=? "
+            "WHERE user_id=? AND stone_num=?;"
+        )
+        self.assertEqual(
+            db_backend._scope_effective_impart_update(statement),
+            "UPDATE xiuxian_impart SET note='WHERE user_id=?',stone_num=? "
+            "WHERE rowid=(SELECT rowid FROM xiuxian_impart WHERE user_id=? "
+            "ORDER BY rowid LIMIT 1) AND stone_num=?;",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

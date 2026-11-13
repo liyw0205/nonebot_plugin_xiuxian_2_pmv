@@ -37,17 +37,22 @@ def refresh_card_bonuses(
     bonuses = calculate_card_bonuses(cards, definitions)
     assignments = ", ".join(f'"{field}"=?' for field in BONUS_FIELDS)
     values = [bonuses[field] for field in BONUS_FIELDS]
-    updated = connection.execute(
-        f"UPDATE {safe_schema}.xiuxian_impart SET {assignments} WHERE user_id=?",
-        (*values, str(user_id)),
-    )
-    if updated.rowcount == 0:
+    state_row = connection.execute(
+        f"SELECT rowid FROM {safe_schema}.xiuxian_impart "
+        "WHERE user_id=? ORDER BY rowid ASC LIMIT 1",
+        (str(user_id),),
+    ).fetchone()
+    if state_row is None:
         # 该玩家还没有 xiuxian_impart 行（例如只建了主用户表就抽卡/祈愿）。
         # 没有行可写、也就没有加成可刷新；跳过而不是抛异常让整条指令失败。
         return bonuses
-    if updated.rowcount < 0:
+    updated = connection.execute(
+        f"UPDATE {safe_schema}.xiuxian_impart SET {assignments} "
+        "WHERE rowid=? AND user_id=?",
+        (*values, int(state_row[0]), str(user_id)),
+    )
+    if updated.rowcount != 1:
         raise ValueError("invalid impart card bonus update")
-    # Legacy schemas may duplicate users; each row gets the same bonus projection.
     return bonuses
 
 

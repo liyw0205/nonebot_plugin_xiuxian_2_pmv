@@ -72,23 +72,19 @@ class AdminImpartStoneSqlRepository:
             if not {"user_id", "stone_num"}.issubset(columns):
                 return AdminImpartStoneSnapshot("schema_missing")
             if {"stone_num_exact", "stone_num_precision_state"}.issubset(columns):
-                rows = uow.query_all(
+                row = uow.query_one(
                     "SELECT user_id,stone_num,stone_num_exact,stone_num_precision_state "
-                    "FROM xiuxian_impart WHERE user_id=?",
+                    "FROM xiuxian_impart WHERE user_id=? ORDER BY rowid ASC LIMIT 1",
                     (user_id,),
                 )
             else:
-                rows = uow.query_all(
+                row = uow.query_one(
                     "SELECT stone_num,typeof(stone_num) AS stone_num_storage_type "
-                    "FROM xiuxian_impart WHERE user_id=?",
+                    "FROM xiuxian_impart WHERE user_id=? ORDER BY rowid ASC LIMIT 1",
                     (user_id,),
                 )
-            if len(rows) > 1:
-                return AdminImpartStoneSnapshot(
-                    "invalid_state", reason="admin_impart_rows_duplicate", subject="target"
-                )
             try:
-                stone = crystal_balance(rows[0], subject=user_id) if rows else None
+                stone = crystal_balance(row, subject=user_id) if row is not None else None
             except DomainError as exc:
                 if exc.code != "impart_crystal_precision_unavailable":
                     raise
@@ -181,17 +177,13 @@ class AdminImpartStoneSqlRepository:
                 "SELECT 1 FROM user_xiuxian WHERE user_id=?", (user_id,)
             ) is None:
                 return AdminImpartStoneResult("user_missing")
-            rows = uow.query_all(
-                "SELECT stone_num,stone_num_exact,stone_num_precision_state "
-                "FROM impart_data.xiuxian_impart WHERE user_id=?",
+            row = uow.query_one(
+                "SELECT rowid AS state_row_id,stone_num,stone_num_exact,stone_num_precision_state "
+                "FROM impart_data.xiuxian_impart WHERE user_id=? ORDER BY rowid ASC LIMIT 1",
                 (user_id,),
             )
-            if len(rows) > 1:
-                return AdminImpartStoneResult(
-                    "invalid_state", reason="admin_impart_rows_duplicate", subject="target"
-                )
             try:
-                actual_stone = crystal_balance(rows[0], subject=user_id) if rows else None
+                actual_stone = crystal_balance(row, subject=user_id) if row is not None else None
             except DomainError as exc:
                 if exc.code != "impart_crystal_precision_unavailable":
                     raise
@@ -204,7 +196,7 @@ class AdminImpartStoneSqlRepository:
                 current = int(actual_stone or 0)
                 return AdminImpartStoneResult(
                     "state_changed", current, current,
-                    reason="crystal_changed" if rows else "impart_missing",
+                    reason="crystal_changed" if row is not None else "impart_missing",
                     subject="target",
                 )
 
@@ -221,10 +213,10 @@ class AdminImpartStoneSqlRepository:
             else:
                 changed = uow.execute(
                     "UPDATE impart_data.xiuxian_impart SET stone_num=?,stone_num_exact=?,"
-                    "stone_num_precision_state='exact' WHERE user_id=? "
+                    "stone_num_precision_state='exact' WHERE rowid=? AND user_id=? "
                     "AND xiuxian_int_cmp(COALESCE(stone_num_exact,stone_num,0),?)=0 "
                     "AND stone_num_precision_state='exact'",
-                    (final_stone, str(final_stone), user_id, previous_stone),
+                    (final_stone, str(final_stone), row["state_row_id"], user_id, previous_stone),
                 )
                 if changed.rowcount != 1:
                     raise DomainError("impart_write_rejected", "admin impart adjustment was not saved")

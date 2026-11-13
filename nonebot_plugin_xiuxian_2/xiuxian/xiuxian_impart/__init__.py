@@ -225,9 +225,10 @@ async def impart_draw_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
             await handle_send(bot, event, "祈愿请求与已处理请求不一致，请重新发起。")
         return
 
-    impart_data_draw = _impart_state(
-        user_id, ensure=True, validate_crystal_consistency=True
-    )
+    # The legacy table can contain later default initialization rows.  The
+    # repository selects the established row explicitly; a full-history
+    # consistency audit is reserved for callers that need reconciliation.
+    impart_data_draw = _impart_state(user_id, ensure=True)
     if impart_data_draw is None:
         await handle_send(bot, event, "传承角色资料初始化未完成，请联系管理员检查初始化记录。")
         return
@@ -741,7 +742,7 @@ async def impart_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
         await handle_send(bot, event, msg, md_type="我要修仙")
         return
     user_id = user_info["user_id"]
-    impart_data_draw = _impart_state(user_id, validate_crystal_consistency=True)
+    impart_data_draw = _impart_state(user_id)
     if impart_data_draw is None:
         await handle_send(
             bot, event, "传承角色资料初始化未完成，请联系管理员检查初始化记录。"
