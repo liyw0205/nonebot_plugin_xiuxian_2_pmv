@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import shlex
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -48,6 +49,7 @@ class InstallerScriptTests(unittest.TestCase):
         self.assertIn("^v[0-9]+\\.[0-9]+\\.[0-9]+$", workflow)
         self.assertIn("workflow_dispatch 必须提供 tag_name", workflow)
         self.assertIn("project.tar.gz", workflow)
+        self.assertIn('git archive --format=tar.gz --output=project.tar.gz "$GITHUB_SHA"', workflow)
         # The quality job audits real tags via released_tags(); a shallow
         # checkout never receives them, so it must fetch full history + tags.
         self.assertIn("fetch-depth: 0", workflow)
@@ -59,6 +61,24 @@ class InstallerScriptTests(unittest.TestCase):
         self.assertNotIn("nonebot_plugin_xiuxian_2_pmv_file", readme)
         self.assertNotIn("nonebot_plugin_xiuxian_2_pmv_file", termux)
         self.assertIn("DEFAULT_PROJECT_NAME=\"xiu2\"", (SCRIPTS / "install.sh").read_text(encoding="utf-8"))
+
+    def test_managed_update_entrypoints_fetch_current_installers(self) -> None:
+        linux = (SCRIPTS / "install.sh").read_text(encoding="utf-8")
+        termux = (SCRIPTS / "install_termux.sh").read_text(encoding="utf-8")
+        readme = (ROOT / "README.md").read_text(encoding="utf-8")
+        docs = (ROOT / "docs" / "installation.md").read_text(encoding="utf-8")
+
+        self.assertIn(
+            'curl -fsSL "https://raw.githubusercontent.com/$REPO_OWNER/$REPO_NAME/main/scripts/install.sh"',
+            linux,
+        )
+        self.assertIn(
+            'curl -fsSL "https://raw.githubusercontent.com/$REPO_OWNER/$REPO_NAME/main/scripts/install_termux.sh"',
+            termux,
+        )
+        self.assertIn("main/scripts/install.bat", readme)
+        self.assertIn("bash /root/install.sh update", docs)
+        self.assertIn("已保存的批处理文件不会由 `project.tar.gz` 自动更新", docs)
 
     def test_linux_and_termux_installers_share_lifecycle_and_option_contract(self) -> None:
         actions = ("install", "update", "uninstall", "start", "stop", "restart", "status", "logs", "login")
@@ -170,6 +190,41 @@ class InstallerScriptTests(unittest.TestCase):
                 )
                 subprocess.run(["bash", "-c", command], check=True, cwd=ROOT)
 
+    def test_release_update_layout_excludes_test_fixture_but_rejects_runtime_import(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            temp_path = Path(temp)
+            archive = temp_path / "project.tar.gz"
+            subprocess.run(
+                ["git", "archive", "--format=tar.gz", f"--output={archive}", "HEAD"],
+                check=True,
+                cwd=ROOT,
+            )
+            release_source = temp_path / "release-source"
+            release_source.mkdir()
+            subprocess.run(["tar", "-xzf", str(archive), "-C", str(release_source)], check=True)
+
+            for installer in ("install.sh", "install_termux.sh"):
+                with self.subTest(installer=installer):
+                    deployment = temp_path / installer / "deployment"
+                    extracted = temp_path / installer / "extracted"
+                    fixture = extracted / "nonebot_plugin_xiuxian_2/features/buff/tests/test_closing_repository.py"
+                    runtime_module = extracted / "nonebot_plugin_xiuxian_2/features/buff/repository.py"
+                    command = (
+                        "set -e; export XIUXIAN_INSTALLER_LIBRARY_ONLY=1; "
+                        f"source {self._quote(release_source / 'scripts' / installer)}; "
+                        f"DIR={self._quote(deployment)}; "
+                        f"mkdir -p {self._quote(deployment / 'src/plugins')}; "
+                        f"extract_release_resource {self._quote(archive)} {self._quote(extracted)} >/dev/null; "
+                        f"test -f {self._quote(fixture)}; "
+                        f"replace_plugin_source {self._quote(extracted / 'nonebot_plugin_xiuxian_2')}; "
+                        "validate_deployment; "
+                        f"printf '%s\\n' {self._quote('from nonebot_plugin_xiuxian_2.plugin import x')} "
+                        f"> {self._quote(runtime_module)}; "
+                        f"replace_plugin_source {self._quote(extracted / 'nonebot_plugin_xiuxian_2')}; "
+                        "if validate_deployment; then exit 81; fi"
+                    )
+                    subprocess.run(["bash", "-c", command], check=True, cwd=ROOT, capture_output=True, text=True)
+
     def test_invalid_archive_fails_before_deployment(self) -> None:
         for name in ("install.sh", "install_termux.sh"):
             with self.subTest(installer=name), tempfile.TemporaryDirectory() as temp:
@@ -231,6 +286,47 @@ class InstallerScriptTests(unittest.TestCase):
                     ),
                     "runtime absolute imports must still fail validate_deployment",
                 )
+
+    def test_windows_validate_deployment_excludes_nested_tests_only(self) -> None:
+        source = (SCRIPTS / "install.bat").read_text(encoding="utf-8")
+        scanner_line = next(
+            line.strip()
+            for line in source.splitlines()
+            if line.strip().startswith('python -c "') and "XIUXIAN_PLUGIN_DIR" in line
+        )
+        self.assertTrue(scanner_line.endswith('"'))
+        validator = scanner_line[len('python -c "') : -1]
+        self.assertIn("if errorlevel 1 (", source[source.index(scanner_line) :])
+        self.assertNotIn("if not errorlevel 1 (", source[source.index(scanner_line) :])
+        self.assertIn("部署代码仍包含不兼容 src.plugins 命名空间的绝对导入", source)
+
+        with tempfile.TemporaryDirectory() as temp:
+            plugin_dir = Path(temp) / "src/plugins/nonebot_plugin_xiuxian_2"
+            fixture = plugin_dir / "features/buff/tests/test_closing_repository.py"
+            fixture.parent.mkdir(parents=True)
+            fixture.write_text("from nonebot_plugin_xiuxian_2.plugin import x\n", encoding="utf-8")
+            env = os.environ | {"XIUXIAN_PLUGIN_DIR": str(plugin_dir)}
+            accepted = subprocess.run(
+                [sys.executable, "-c", validator],
+                cwd=ROOT,
+                env=env,
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(0, accepted.returncode, accepted.stdout + accepted.stderr)
+
+            runtime_module = plugin_dir / "features/buff/repository.py"
+            runtime_module.parent.mkdir(parents=True, exist_ok=True)
+            runtime_module.write_text("from nonebot_plugin_xiuxian_2.plugin import x\n", encoding="utf-8")
+            rejected = subprocess.run(
+                [sys.executable, "-c", validator],
+                cwd=ROOT,
+                env=env,
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(1, rejected.returncode)
+            self.assertIn("repository.py", rejected.stdout)
 
     @staticmethod
     def _quote(path: Path) -> str:

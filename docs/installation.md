@@ -83,7 +83,10 @@ curl -fsSL https://raw.githubusercontent.com/liyw0205/nonebot_plugin_xiuxian_2_p
 ```bash
 curl -fsSL https://raw.githubusercontent.com/liyw0205/nonebot_plugin_xiuxian_2_pmv/main/scripts/install.sh \
   | bash -s -- update
+xiu2 update
 ```
+
+Release workflow 会把仓库打成 `project.tar.gz`，但部署更新只替换插件、数据和依赖文件，不会更新服务器上单独保存的安装脚本。Linux 管理命令 `xiu2 update` 每次会下载 `main` 上的最新安装器；手动运行本地 `bash /root/install.sh update` 则仍使用该文件的旧版本。若保留本地脚本，更新前需从上述官方 raw-main 地址重新下载；也可直接使用 `curl | bash -s -- update`。
 
 常用管理命令：
 
@@ -148,6 +151,8 @@ xiu2 update-deps
 termux-wake-lock
 ```
 
+Termux 的 `xiu2 update` 每次会下载 `main` 上的最新安装器。本机保存的 `install_termux.sh` 不会随插件 Release 更新；手动运行前请从上方官方 raw-main 地址重新下载。
+
 若使用 proot 容器，进入容器后使用 Linux 安装脚本，不要在容器中执行原生 Termux 脚本。
 
 ## Windows
@@ -155,6 +160,8 @@ termux-wake-lock
 一键脚本：
 
 https://raw.githubusercontent.com/liyw0205/nonebot_plugin_xiuxian_2_pmv/main/scripts/install.bat
+
+Windows 更新时请重新下载该 raw-main 地址的最新 `install.bat` 再运行。已保存的批处理文件不会由 `project.tar.gz` 自动更新。
 
 需要 Python 3.11、Git 和可用的 NoneBot 环境。详细配置格式见 [配置与环境变量](configuration.md)。
 
