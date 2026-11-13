@@ -2,12 +2,13 @@ from __future__ import annotations
 
 import asyncio
 import tempfile
+import traceback
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
-from nonebot_plugin_xiuxian_2.bootstrap import Lifecycle, LifecyclePhase
+from nonebot_plugin_xiuxian_2.bootstrap import Lifecycle, LifecyclePhase, LifecycleState
 from nonebot_plugin_xiuxian_2.plugin import install_driver_hooks
 
 
@@ -40,10 +41,16 @@ class StartupFailureVisibilityTests(unittest.TestCase):
             self.assertEqual(exported["error_type"], "FileNotFoundError")
             self.assertIn(str(missing_resource), exported["error_traceback"] or "")
 
-            with self.assertRaises(FileNotFoundError) as raised:
+            try:
                 lifecycle.raise_startup_error()
-            self.assertIs(raised.exception, original)
-            self.assertIn(str(missing_resource), str(raised.exception))
+            except FileNotFoundError as raised:
+                self.assertIs(raised, original)
+                self.assertIn(str(missing_resource), str(raised))
+                raised_traceback = "".join(traceback.format_exception(raised))
+            else:
+                self.fail("startup failure was not re-raised")
+        self.assertIn("ensure_repositories", raised_traceback)
+        self.assertIn(str(missing_resource), raised_traceback)
 
     def test_driver_hook_reraises_before_bank_clock_and_optional_matchers(self) -> None:
         lifecycle = Lifecycle()
@@ -78,10 +85,42 @@ class StartupFailureVisibilityTests(unittest.TestCase):
                 asyncio.run(on_startup())
 
         self.assertIs(raised.exception, original)
-        self.assertTrue(register_migrated.called)
+        register_migrated.assert_not_called()
         register_first_use.assert_not_called()
         register_extended.assert_not_called()
         set_bank_clock.assert_not_called()
+
+    def test_driver_hook_registers_migrated_matchers_only_after_ready(self) -> None:
+        lifecycle = Lifecycle()
+        state = LifecycleState(LifecyclePhase.READY)
+        context = SimpleNamespace(
+            message_gateway=SimpleNamespace(sender=object()),
+            services={},
+            clock=object(),
+            settings={},
+        )
+        driver = SimpleNamespace(
+            config=SimpleNamespace(xiuxian_data_dir="/isolated/data"),
+            on_startup=lambda callback: None,
+            on_shutdown=lambda callback: None,
+        )
+
+        with (
+            patch("nonebot_plugin_xiuxian_2.adapters.nonebot.register_migrated_matchers") as register_migrated,
+            patch("nonebot_plugin_xiuxian_2.adapters.nonebot.register_bank_first_use_matcher") as register_first_use,
+            patch("nonebot_plugin_xiuxian_2.adapters.nonebot.register_bank_first_use_extended_matchers") as register_extended,
+            patch("nonebot_plugin_xiuxian_2.features.bank.clock.set_bank_clock") as set_bank_clock,
+            patch("nonebot_plugin_xiuxian_2.plugin.build_runtime_context", return_value=context),
+            patch("nonebot_plugin_xiuxian_2.plugin.startup", new=AsyncMock(return_value=(state, object(), context, lifecycle))),
+        ):
+            on_startup, _on_shutdown = install_driver_hooks(driver)
+            asyncio.run(on_startup())
+
+        register_migrated.assert_called_once()
+        self.assertIs(register_migrated.call_args.args[1]["context"], context)
+        register_first_use.assert_not_called()
+        register_extended.assert_not_called()
+        set_bank_clock.assert_called_once_with(context.clock)
 
 
 if __name__ == "__main__":
