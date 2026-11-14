@@ -188,6 +188,7 @@ class XiuxianDateManage:
             run_core_migrations(self.database_path)
         except Exception as e:
             logger.warning(f"修仙数据库迁移检查失败：{e}")
+            raise
 
     def _check_data(self):
         """检查数据完整性"""

@@ -80,7 +80,9 @@ def _ensure_core_indexes(conn):
     ):
         _create_index(conn, index_name, table_name, columns)
 
-    # user_id 唯一：防止身外化身/伪装/并发注册写出重复 openid 行
+
+def _ensure_user_xiuxian_unique_index(conn):
+    """Install the identity constraint only after the duplicate migration runs."""
     if conn.table_exists("user_xiuxian"):
         conn.execute(
             """
@@ -171,6 +173,7 @@ def run_core_migrations(database: str | Path = CORE_DB) -> list[str]:
             applied.append(version)
 
         _ensure_core_indexes(conn)
+        _ensure_user_xiuxian_unique_index(conn)
 
     if applied:
         logger.info(f"[xiuxian-db] 已应用数据库迁移：{', '.join(applied)}")
