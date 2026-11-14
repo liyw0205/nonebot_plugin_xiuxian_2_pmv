@@ -21,6 +21,9 @@ def seed_balance(probe, value, *, mirror=False):
             "WHERE user_id=?", (value, str(value), "900001"),
         )
         if mirror:
+            # Startup reconciliation installs this guard. Drop it only in this
+            # isolated fixture so the command path can inspect legacy duplicates.
+            uow.execute("DROP INDEX IF EXISTS xiuxian_impart_user_id_unique")
             fields = [str(row[1]) for row in uow.execute("PRAGMA table_info(xiuxian_impart)") if row[1] != "id"]
             columns = ",".join('"' + field + '"' for field in fields)
             uow.execute(f"INSERT INTO xiuxian_impart({columns}) SELECT {columns} FROM xiuxian_impart WHERE user_id=?", ("900001",))
