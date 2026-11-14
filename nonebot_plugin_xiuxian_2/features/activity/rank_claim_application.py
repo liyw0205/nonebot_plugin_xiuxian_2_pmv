@@ -59,7 +59,22 @@ class ActivityRankClaimApplication:
 
         return list(send_reward_to_user(user_id, parse_reward(reward_text)) or [])
 
-    def claim(self, user_id: str, *, query: str = "") -> tuple[bool, str]:
+    @staticmethod
+    def _result(ok: bool, text: str, reason: str | None, detailed: bool):
+        if not detailed:
+            return bool(ok), str(text)
+        result = {"status": "applied" if ok else "rejected", "message": str(text)}
+        if reason:
+            result.update(reason=str(reason), subject="actor")
+        return result
+
+    def claim(
+        self,
+        user_id: str,
+        *,
+        query: str = "",
+        detailed_result: bool = False,
+    ):
         from ...xiuxian.xiuxian_activity.activity_config import (
             _activity_config_key,
             _runtime_feature_refusal,
@@ -72,22 +87,29 @@ class ActivityRankClaimApplication:
         config = self._config()
         ok, reason = activity_state(config)
         if not ok:
-            return False, reason or "活动未开放"
+            return self._result(False, reason or "活动未开放", "activity_unavailable", detailed_result)
         refusal = _runtime_feature_refusal(config, "claim", "活动领奖")
         if refusal:
-            return False, refusal
+            return self._result(False, refusal, "claim_stage_closed", detailed_result)
 
         rank_config = activity_rank_config(config)
         boards = rank_config["boards"]
         rewards = rank_config["rewards"]
         if not rewards:
-            return False, "当前活动未配置排行奖励"
+            return self._result(
+                False, "当前活动未配置排行奖励", "rank_rewards_unconfigured", detailed_result
+            )
 
         target = _clean_text(query)
         if target:
             board = board_by_query(boards, target)
             if board is None:
-                return False, f"未找到榜单【{target}】\n可用榜单：{board_labels(boards)}"
+                return self._result(
+                    False,
+                    f"未找到榜单【{target}】\n可用榜单：{board_labels(boards)}",
+                    "rank_board_missing",
+                    detailed_result,
+                )
             boards = [board]
 
         activity_key = _activity_config_key(config)
@@ -131,14 +153,31 @@ class ActivityRankClaimApplication:
 
         if not lines:
             if already:
-                return False, "排行奖励已领取：" + "、".join(already)
+                return self._result(
+                    False, "排行奖励已领取：" + "、".join(already), "rank_rewards_claimed", detailed_result
+                )
             if not_reached:
-                return False, "未达到排行奖励名次：" + "、".join(not_reached)
+                return self._result(
+                    False,
+                    "未达到排行奖励名次：" + "、".join(not_reached),
+                    "rank_not_reached",
+                    detailed_result,
+                )
             if unranked:
-                return False, "你尚未上榜，无法领取排行奖励：" + "、".join(unranked)
+                return self._result(
+                    False,
+                    "你尚未上榜，无法领取排行奖励：" + "、".join(unranked),
+                    "rank_unranked",
+                    detailed_result,
+                )
             if without_tier:
-                return False, "该榜单未配置排行奖励：" + "、".join(without_tier)
-            return False, "没有可领取的排行奖励"
+                return self._result(
+                    False,
+                    "该榜单未配置排行奖励：" + "、".join(without_tier),
+                    "rank_tier_missing",
+                    detailed_result,
+                )
+            return self._result(False, "没有可领取的排行奖励", "no_rank_rewards", detailed_result)
 
         self.claims.record_claims(
             uid, activity_key, recorded, timestamp=now.strftime(TIMESTAMP_FMT)
@@ -146,7 +185,7 @@ class ActivityRankClaimApplication:
         out = ["活动排行奖励领取成功：", *lines]
         if already:
             out.append("已领取：" + "、".join(already))
-        return True, "\n".join(out)
+        return self._result(True, "\n".join(out), None, detailed_result)
 
 
 __all__ = ["ActivityRankClaimApplication"]
