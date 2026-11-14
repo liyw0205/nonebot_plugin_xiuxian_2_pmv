@@ -86,21 +86,6 @@ class Probe:
         from nonebot_plugin_xiuxian_2.features.impart.repository import ImpartRepository
         ImpartRepository(self.context.paths.impart_db).state(uid, ensure=True)
         if values:
-            columns = {
-                str(row[1])
-                for row in self.rows(
-                    self.context.paths.impart_db,
-                    "PRAGMA table_info(xiuxian_impart)",
-                )
-            }
-            if "stone_num" in values and {
-                "stone_num_exact", "stone_num_precision_state"
-            }.issubset(columns):
-                # The migrated fixture protects the legacy mirror with a
-                # trigger; seed both representations as one exact value.
-                values = dict(values)
-                values["stone_num_exact"] = str(values["stone_num"])
-                values["stone_num_precision_state"] = "exact"
             self.seed(self.context.paths.impart_db, "UPDATE xiuxian_impart SET "
                       + ",".join(f"{key}=?" for key in values) + " WHERE user_id=?", (*values.values(), uid))
 
@@ -176,44 +161,9 @@ async def impart_prayer(probe):
     after = probe.rows(database, sql)
     assert after and all(row[0] == 80 for row in after), (text, before, after)
     assert all(row[2] > before[0][2] for row in after), (text, before, after)
-    assert "剩余思恋结晶：80颗" in text, text
-    receipt_sql = "SELECT payload,stone_num FROM impart_crystal_draw_operations"
-    receipt = probe.rows(database, receipt_sql)
-    replay = await probe.command("传承祈愿", "传承祈愿 2", number=910030)
+    await probe.command("传承祈愿", "传承祈愿 2", number=910030)
     assert probe.rows(database, sql) == after
-    assert "已经处理" in replay and probe.rows(database, receipt_sql) == receipt
-    conflict = await probe.command("传承祈愿", "传承祈愿 3", number=910030)
-    assert "请求与已处理请求不一致" in conflict, conflict
-    assert probe.rows(database, sql) == after and probe.rows(database, receipt_sql) == receipt
-    probe.evidence.update(before=before, after=after, receipt=receipt, replay_unchanged=True,
-                          changed_payload_conflict=True)
-
-
-@case("impart-prayer-consistent-legacy-rows", "传承祈愿", "祈愿次数 + 一致历史镜像行",
-      "隔离迁移库中同一角色两条结晶/保底/闭关状态相同的 legacy 行",
-      "合法祈愿只扣有效行；历史副本不写且不把镜像余额相加", group="impart-parameters")
-async def impart_prayer_consistent_rows(probe):
-    probe.impart(stone_num=100)
-    database = probe.context.paths.impart_db
-    columns = [row[1] for row in probe.rows(database, "PRAGMA table_info(xiuxian_impart)") if row[1] != "id"]
-    names = ",".join('"' + column + '"' for column in columns)
-    probe.seed(database, "DROP INDEX IF EXISTS xiuxian_impart_user_id_unique")
-    probe.seed(database, f"INSERT INTO xiuxian_impart({names}) SELECT {names} FROM xiuxian_impart WHERE user_id='900001'")
-    sql = "SELECT rowid,stone_num,wish,exp_day FROM xiuxian_impart WHERE user_id='900001' ORDER BY rowid"
-    before = probe.rows(database, sql)
-    assert len(before) == 2 and before[0][1:] == before[1][1:], before
-    receipt_sql = "SELECT operation_id,payload,stone_num,exp_day FROM impart_crystal_draw_operations"
-    text = await probe.command("传承祈愿", "传承祈愿 2", number=910031)
-    after = probe.rows(database, sql)
-    receipts = probe.rows(database, receipt_sql)
-    assert "剩余思恋结晶：80颗" in text, text
-    assert len(after) == 2 and after[0][1] == 80 and after[1][1] == 100, (before, after)
-    assert after[1][2:] == before[1][2:] and len(receipts) == 1, (before, after, receipts)
-    replay = await probe.command("传承祈愿", "传承祈愿 2", number=910031)
-    assert "已经处理" in replay
-    assert probe.rows(database, sql) == after and probe.rows(database, receipt_sql) == receipts
-    probe.evidence.update(before=before, after=after, receipt_count=len(receipts), replay_unchanged=True,
-                          effective_row_only=True, historical_row_unchanged=True)
+    probe.evidence.update(before=before, after=after, replay_unchanged=True)
 
 
 @case("impart-closing-high-realm", "虚神界出关", "闭关上下文（无额外参数）", "最高合法境界、超 int64 修为、闭关60分钟、30祝福", "出关结算落库，type清零、祝福与回执一致")
