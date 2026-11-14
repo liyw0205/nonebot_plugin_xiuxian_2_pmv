@@ -22,6 +22,9 @@ from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_activity import (
     activity_config,
     service,
 )
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_activity.activity_views import (
+    _format_activity_task,
+)
 from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_activity.activity_storage import (
     resolve_daohao_batch,
 )
@@ -64,6 +67,11 @@ class ActivityReadModelTests(unittest.TestCase):
 
     def tearDown(self) -> None:
         self.temp.cleanup()
+
+    def test_activity_task_without_reward_uses_user_facing_empty_state(self) -> None:
+        text = _format_activity_task({"name": "签到", "target": 1})
+        self.assertIn("奖励：暂无奖励", text)
+        self.assertNotIn("待补", text)
 
     def test_overview_reuses_one_connection_and_batched_user_progress(self) -> None:
         statements = []

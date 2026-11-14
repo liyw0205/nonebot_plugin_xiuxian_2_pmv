@@ -65,7 +65,7 @@ def _format_activity_task(task: dict) -> str:
     name = str(task.get("name") or task.get("key") or "活动任务")
     desc = str(task.get("description") or task.get("desc") or "").strip()
     target = _as_int(task.get("target"), 1)
-    reward = str(task.get("reward") or "奖励待补")
+    reward = str(task.get("reward") or "暂无奖励")
     event_text = _activity_event_text(task.get("events"))
     suffix = f"，事件：{event_text}" if event_text else ""
     if desc:
