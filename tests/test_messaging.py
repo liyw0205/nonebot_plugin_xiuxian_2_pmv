@@ -103,6 +103,12 @@ class MessageResultTests(unittest.TestCase):
             self.assertIn("%E4%BC%A0%E6%89%BF%E7%A5%88%E6%84%BF%2067", rendered)
             self.assertNotIn("command=我的背包 2&筛选", rendered)
 
+    def test_page_links_preserve_host_command_prefix_without_inventing_one(self) -> None:
+        for command, encoded in (("/状态", "%2F%E7%8A%B6%E6%80%81"), ("状态", "%E7%8A%B6%E6%80%81")):
+            with self.subTest(command=command):
+                rendered = build_native_page_text(["查看", command])
+                self.assertIn(f"command={encoded}", rendered)
+
     def test_delivery_error_accepts_traceback_assignment(self) -> None:
         error = DeliveryError("retryable", True, TimeoutError("send timeout"))
         try:

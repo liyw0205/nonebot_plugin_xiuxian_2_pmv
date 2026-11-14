@@ -173,7 +173,7 @@ class DeliveryFallbackTests(unittest.IsolatedAsyncioTestCase):
     """Real `reply_enhanced` policy: capability gate + plain fallback."""
 
     async def test_onebot_bot_receives_plain_text_for_group_and_private(self) -> None:
-        for scene in ("group", "private"):
+        for scene in ("group", "private", "channel_group", "channel_private"):
             with self.subTest(scene=scene):
                 delivery = _RecordingMessageDelivery()
                 gateway = NoneBotMessageGateway(delivery)

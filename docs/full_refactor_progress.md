@@ -6,8 +6,7 @@
 状态：2026-10-10 C1-C4 技术收口完成、待发布；当前发布 P7 独立受阻。
 唯一执行入口：[重构有限收口协议](refactor_slice_execution_protocol.md)。
 固定目标：[refactor-closeout-v1](refactor_closeout_scope_v1.md)。
-完整旧账本：[历史进度](archive/refactor-2026-10-09/full_refactor_progress.md)，
-历史方案：[历史协议](archive/refactor-2026-10-09/refactor_slice_execution_protocol.md)。
+历史快照已从正式文档目录移除；需要追溯时使用 Git 历史，不把旧过程记录当作当前执行依据。
 历史“权威状态”“下一片”“自动继续”等文字均不驱动当前执行。
 
 当前结果：八项 collection、两项 Dongfu 旧断言及全量揭示的必要失败已修复，
@@ -348,7 +347,7 @@ runner、JUnit/JSON/日志及 compileall 的专属 pycache。结果已归纳于�
 
 ## 本轮文档整理
 
-两份旧文档按停止时原始字节归档，SHA256 见[归档说明](archive/refactor-2026-10-09/README.md)。
+旧过程文档不作为发布资产；历史版本请通过 Git 提交和 tag 追溯。
 本轮只调整执行入口、状态、固定清单和文档导航；源码、门禁、JSON、
 运行数据及已有用户改动均不由文档整理修改。
 静态检查通过：7 份入口/导航文档的 48 个本地链接、10 个旧 source-contract token、

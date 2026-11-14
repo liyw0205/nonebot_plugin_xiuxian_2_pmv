@@ -55,7 +55,7 @@ Web 侧权限集中在一张表：`xiuxian/xiuxian_web/access.py:13` 定义 `Web
 
 `application.py`、`repository.py`、`schemas.py`、`web.py`、`jobs.py`、`commands.py` 都不导入 Flask、NoneBot、requests、tarfile，provider 以 Protocol 注入，测试塞一个 FakeProvider 就能跑完整更新流；`UpdateManager` 侧的副作用则是实打实的（`download_xiuxian_data.py:1-20` 的 requests、wget、tarfile、tempfile、sqlite3），下载还会先测代理再回落直连（`:303-311`、`:330`），临时目录只在系统 temp 根下（`:300`、`:340-342`），清理时再做一次越界校验（`:869-874`）。
 
-两条与呈现和门禁相关的既有事实：release 元数据必须以文本渲染（`templates/update.html:307` 的 `createTextNode`），以及 `scripts/check_full_refactor_progress.py:3044-3082` 的 `updater_owner` 字面量契约段，钉住了 status 命令走 application、三条 Web 路由走 application、资产预检与备份顺序、文本渲染，以及若干测试函数名（键分别在 `:3045`、`:3051`、`:3059`、`:3067`、`:3074`）。`/api/v1/**` 属 `runtime_web`，与本切片没有委托关系。
+两条与呈现和门禁相关的既有事实：release 元数据必须以文本渲染（`templates/update.html:307` 的 `createTextNode`），并由更新器回归测试固定 status 命令、三条 Web 路由、资产预检与备份顺序。`/api/v1/**` 属 `runtime_web`，与本切片没有委托关系。
 
 ## 测试与手工验收
 
