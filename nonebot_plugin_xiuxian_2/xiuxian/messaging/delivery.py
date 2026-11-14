@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import asyncio
+import re
 from typing import Any
+from urllib.parse import parse_qs
 
 from ..adapter_compat import (
     get_chat_scene,
@@ -22,6 +24,40 @@ from .reliability import (
     classify_delivery_error,
     is_msg_seq_conflict,
 )
+
+
+_INLINE_COMMAND_LINK_RE = re.compile(
+    r"\[([^\]\r\n]+)\]\(mqqapi://aio/inlinecmd\?([^\)\r\n]+)\)"
+)
+
+
+def _strip_keyboard_duplicate_links(
+    markdown: str,
+    rows: list[list[tuple[str, str]]],
+) -> str:
+    """Remove a full inline-command row when the same actions are keyboard buttons."""
+    targets = {(str(label), str(command)) for row in rows for label, command in row}
+    if not targets:
+        return markdown
+
+    lines: list[str] = []
+    for line in str(markdown or " ").split("\r"):
+        matches = list(_INLINE_COMMAND_LINK_RE.finditer(line))
+        if not matches:
+            lines.append(line)
+            continue
+        pairs = []
+        for match in matches:
+            command = parse_qs(match.group(2), keep_blank_values=True).get("command", [""])[0]
+            pairs.append((match.group(1), command))
+        if pairs and all(pair in targets for pair in pairs):
+            remainder = _INLINE_COMMAND_LINK_RE.sub("", line)
+            remainder = remainder.replace("|", "").replace("---", "").strip()
+            if not remainder:
+                continue
+        lines.append(line)
+
+    return "\r".join(lines).strip("\r") or " "
 
 
 class MessageDeliveryService:
@@ -301,7 +337,8 @@ class MessageDeliveryService:
 
             rows = keyboard_rows or []
             if rows and capabilities.keyboard:
-                message = MessageSegment.markdown_keyboard(bot, markdown or " ", rows)
+                markdown = _strip_keyboard_duplicate_links(markdown or " ", rows)
+                message = MessageSegment.markdown_keyboard(bot, markdown, rows)
             else:
                 message = MessageSegment.markdown(
                     bot,

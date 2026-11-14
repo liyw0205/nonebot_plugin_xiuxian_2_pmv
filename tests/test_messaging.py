@@ -287,6 +287,71 @@ class DeliveryServiceTests(unittest.IsolatedAsyncioTestCase):
             include_reference=False,
         )
 
+    async def test_keyboard_removes_duplicate_inline_command_row(self) -> None:
+        service = MessageDeliveryService()
+        bot = SimpleNamespace(self_id="bot-1")
+        event = object()
+        markdown_segment = object()
+        markdown = (
+            "详情\r\r"
+            "[查看](mqqapi://aio/inlinecmd?command=%E6%88%91%E7%9A%84%E8%83%8C%E5%8C%85%202&enter=false&reply=false) | "
+            "[下一页](mqqapi://aio/inlinecmd?command=%E4%B8%8B%E4%B8%80%E9%A1%B5&enter=false&reply=false)"
+        )
+        with (
+            patch(
+                "nonebot_plugin_xiuxian_2.xiuxian.messaging.delivery.is_qq_bot",
+                return_value=True,
+            ),
+            patch(
+                "nonebot_plugin_xiuxian_2.xiuxian.adapter_compat.MessageSegment.markdown_keyboard",
+                return_value=markdown_segment,
+            ) as build_segment,
+            patch.object(
+                service,
+                "reply",
+                new=AsyncMock(return_value=SendResult("message-help", None, {})),
+            ),
+        ):
+            await service.reply_enhanced(
+                bot,
+                event,
+                markdown=markdown,
+                fallback_text="详情\n查看 | 下一页",
+                keyboard_rows=[[('查看', '我的背包 2'), ('下一页', '下一页')]],
+            )
+
+        self.assertEqual("详情", build_segment.call_args.args[1])
+
+    async def test_keyboard_build_failure_falls_back_to_plain_text(self) -> None:
+        registry = QQCapabilityRegistry({"bot-1": {"keyboard": True}})
+        service = MessageDeliveryService(capabilities=registry)
+        bot = SimpleNamespace(self_id="bot-1")
+        event = object()
+        with (
+            patch(
+                "nonebot_plugin_xiuxian_2.xiuxian.messaging.delivery.is_qq_bot",
+                return_value=True,
+            ),
+            patch(
+                "nonebot_plugin_xiuxian_2.xiuxian.adapter_compat.MessageSegment.markdown_keyboard",
+                side_effect=RuntimeError("keyboard unavailable"),
+            ),
+            patch.object(
+                service,
+                "reply",
+                new=AsyncMock(return_value=SendResult("message-fallback", None, {})),
+            ) as reply,
+        ):
+            await service.reply_enhanced(
+                bot,
+                event,
+                markdown="**状态**",
+                fallback_text="状态",
+                keyboard_rows=[[('查看', '/状态')]],
+            )
+
+        reply.assert_awaited_once_with(bot, event, "状态", include_reference=False)
+
     async def test_qq_sender_maps_source_message_to_adapter_reply_id(self) -> None:
         bot = SimpleNamespace(
             send_to_c2c=AsyncMock(return_value={"id": "message-0"})
