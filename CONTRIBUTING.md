@@ -35,6 +35,12 @@ python -m unittest tests.test_qq_adapter_contracts -v
 
 ## 发布
 
+已经发布的迁移版本、名称和 checksum 必须保持不变；修复或新增迁移行为使用新版本，
+不得通过改写历史记录绕过 checksum 校验。`tests/fixtures/published_migration_checksums_v1_3_5.json`
+冻结该正式版本的中央和 attached 迁移，`tests/test_published_migration_checksum_contract.py`
+验证历史兼容、新版本只执行一次、事务回滚和持有写锁时的并发幂等。快照之后新增的迁移
+应作为独立版本验证，不得加入旧快照或重新计算旧 checksum。
+
 `main` 分支推送会运行 Quality 工作流。发布工作流使用当前提交生成源码归档，不应包含本地
 部署配置或测试凭据。真实 Bot 冒烟测试只读取 Git 忽略的本地配置，不打印任何凭据或标识。
 
