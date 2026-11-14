@@ -25,6 +25,9 @@ from nonebot_plugin_xiuxian_2.adapters.nonebot.gateway import (
 from nonebot_plugin_xiuxian_2.core.result import INTENT_MARKDOWN, ReplyPlan
 from nonebot_plugin_xiuxian_2.xiuxian.messaging.delivery import MessageDeliveryService
 from nonebot_plugin_xiuxian_2.xiuxian.qq_compat.capabilities import QQCapabilityRegistry
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_utils.utils import (
+    _extract_markdown_keyboard_buttons,
+)
 
 SIGN_TEXT = (
     "**修仙签到**\n"
@@ -325,6 +328,23 @@ class PlainFallbackTests(unittest.TestCase):
         self.assertIn("修仙签到", text)
         self.assertIn("| 12 | 13✓ | 14✓ | 15· | 16 | 17 | 18 |", text)
         self.assertIn("本月已签 2 天｜连续 2 天", text)
+
+
+class KeyboardPresentationTests(unittest.TestCase):
+    def test_inline_commands_move_to_keyboard_without_duplicate_blue_links(self) -> None:
+        markdown = (
+            "详情\r\r"
+            "[查看](mqqapi://aio/inlinecmd?command=%E6%88%91%E7%9A%84%E8%83%8C%E5%8C%85%202&enter=false&reply=false) | "
+            "[下一页](mqqapi://aio/inlinecmd?command=%E4%B8%8B%E4%B8%80%E9%A1%B5&enter=false&reply=false)"
+        )
+        content, rows = _extract_markdown_keyboard_buttons(markdown)
+
+        self.assertEqual("详情", content)
+        self.assertEqual(
+            [[("查看", "我的背包 2"), ("下一页", "下一页")]],
+            rows,
+        )
+        self.assertNotIn("mqqapi://aio/inlinecmd", content)
 
 
 if __name__ == "__main__":

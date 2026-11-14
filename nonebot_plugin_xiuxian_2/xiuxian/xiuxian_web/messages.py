@@ -768,7 +768,7 @@ def api_messages_media_proxy():
     content_type = guess_image_mimetype(data)
     proxy_resp = Response(data, mimetype=content_type)
     proxy_resp.headers["Cache-Control"] = "private, max-age=300"
-    # 调试可见：当天 rkey 是否已缓存
+    # 暴露当天缓存标识，便于定位媒体代理是否命中缓存
     day_rkey = get_day_rkey()
     if day_rkey:
         proxy_resp.headers["X-QQ-RKey-Day"] = day_rkey[:16]

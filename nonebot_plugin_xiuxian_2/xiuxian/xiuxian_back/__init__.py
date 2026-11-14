@@ -1434,7 +1434,7 @@ async def use_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: M
         msg = get_use_jlq_msg(user_id, goods_id)
 
     else:
-        msg = "该类型物品调试中，未开启使用！"
+        msg = "该类型物品暂不支持使用。"
 
     await handle_send(bot, event, msg, md_type="背包", k1="使用", v1="使用", k2="存档", v2="我的修仙信息", k3="背包", v3="我的背包")
     await use.finish()
