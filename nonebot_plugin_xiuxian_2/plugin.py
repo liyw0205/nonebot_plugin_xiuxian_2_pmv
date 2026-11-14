@@ -1014,7 +1014,8 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
 
     def ensure_migrations() -> None:
         for spec in context.database.specs():
-            with DatabaseUnitOfWork(spec.path) as uow:
+            # Lock before reading migration history so concurrent starters cannot upgrade stale snapshots.
+            with DatabaseUnitOfWork(spec.path, immediate=True) as uow:
                 runner = MigrationRunner(
                     migrations_for_database(migration_runner.migrations, spec.key),
                     clock=context.clock,
