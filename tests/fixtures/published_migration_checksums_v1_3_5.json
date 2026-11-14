@@ -1,0 +1,1649 @@
+{
+  "baseline": "v1.3.5",
+  "migrations": [
+    {
+      "checksum": "55d1fcd31b8fc0f5f7fc088b399663b73d3ff282afcb1c8ed28f94d2b4cf7495",
+      "name": "accessory_package_operations",
+      "version": "accessory_package.001"
+    },
+    {
+      "checksum": "68f3612aeaf3c402477f5aa8e2eb5964e770b5ee195489a21c79bca98faffa3f",
+      "name": "activity_reward_feature_migrations",
+      "version": "activity_reward.001"
+    },
+    {
+      "checksum": "144a5cbf5c3eb3219da71b9ae3514846d2727fa2d4a7258021401d3bbbd3643e",
+      "name": "activity_claim_all_operations",
+      "version": "activity_reward.002"
+    },
+    {
+      "checksum": "8db63b721bf5a1c2ece9475eec5dbcda279b69a55acf3473d2b760b9597f7dc4",
+      "name": "activity_claim_all_legacy_receipts",
+      "version": "activity_reward.003"
+    },
+    {
+      "checksum": "15e1d43d538bb5e0586e6abff73c24a4430f02e3b953eafd17720757130c70f9",
+      "name": "activity_task_reward_claims",
+      "version": "activity_reward.004"
+    },
+    {
+      "checksum": "cb1fa0e63785a65443edc23ff8083c01c150c74e61ba04f71a1cc62fd281cd0e",
+      "name": "activity_task_reward_legacy_receipts",
+      "version": "activity_reward.005"
+    },
+    {
+      "checksum": "d3fec03f6481c7625eda129bf02bbcde2b1ad53a5f404bde11e49c85ab7cb20c",
+      "name": "activity_pass_reward_claims",
+      "version": "activity_reward.006"
+    },
+    {
+      "checksum": "9c4877b03c44477548609bdd015f944b0c8b7b17c240e71ff53a1ddd7df182cb",
+      "name": "activity_pass_reward_legacy_receipts",
+      "version": "activity_reward.007"
+    },
+    {
+      "checksum": "350b60b1ae48cb936e4be0a46bb48caf4e3c276e536b8eb98f5ad3b087d10482",
+      "name": "activity_boss_milestone_reward_claims",
+      "version": "activity_reward.008"
+    },
+    {
+      "checksum": "325c721d28a4878b125f1b927c1daf97965dcaf6225a0f7b406dd8b6666f338a",
+      "name": "activity_boss_milestone_legacy_receipts",
+      "version": "activity_reward.009"
+    },
+    {
+      "checksum": "70d0049a33c8dbb774fba1ea4a3e484d9f4bb1b09ca5d8eaa55310c145c85d16",
+      "name": "activity_boss_rank_reward_claims",
+      "version": "activity_reward.010"
+    },
+    {
+      "checksum": "1b33e070fe037feb5f780917414b73ed93fe9ef29d7b2983c278ba62f8bb4524",
+      "name": "activity_boss_rank_legacy_receipts",
+      "version": "activity_reward.011"
+    },
+    {
+      "checksum": "acf406bc3a14e8583e1a927f40d982d29d90c0fde132e6d64ec8e095dc46f4f1",
+      "name": "activity_state_schema",
+      "version": "activity_state.001"
+    },
+    {
+      "checksum": "4cea50157b33cc2b417329461680b889c810d39c85fa2d3b9048310895fab94d",
+      "name": "activity_state_legacy_backfill",
+      "version": "activity_state.002"
+    },
+    {
+      "checksum": "73a0479dca50446082bf84a51b11e2f884538d9b9b6b8e296b52f2d3edb6df20",
+      "name": "activity_event_receipts",
+      "version": "activity_state.003"
+    },
+    {
+      "checksum": "dc61b60fe469e5b8f81cf69c303d7f48e2f53af0a39768cf2ee6867150a91fe5",
+      "name": "activity_collect_synthesis_operations",
+      "version": "activity_state.004"
+    },
+    {
+      "checksum": "0579a8c7f62e3bd57463d1b87db58d76f129d77fbb7bf5d580a2cebdfa0c696b",
+      "name": "admin_asset_feature_migrations",
+      "version": "admin_asset.001"
+    },
+    {
+      "checksum": "1c6112233d5fba088ae3ef81d1c969e814f7521d51aa016e40ed118fe39c0464",
+      "name": "admin_stone_adjustment_operations",
+      "version": "admin_asset.002"
+    },
+    {
+      "checksum": "e4f847cc1f17046f3c0dea83b3b4e975a080fea4bfd4c39eaf75e76dad94fc79",
+      "name": "admin_stone_batch_adjustment_operations",
+      "version": "admin_asset.003"
+    },
+    {
+      "checksum": "0e67aded53a08c76e33a61c1e0f7e2f6b1fecf122aed2c8f942872d8e36ca29b",
+      "name": "admin_exp_adjustment_operations",
+      "version": "admin_asset.004"
+    },
+    {
+      "checksum": "1f9dfac79b07fdf9ce573e00e2be9fb0a8839275b11a45d60172476a0410fc35",
+      "name": "admin_item_destroy_operations",
+      "version": "admin_asset.005"
+    },
+    {
+      "checksum": "1467f8a6de011225ae8824db031a4d96c7eeeef3ad05d52f4c2add30efa7d703",
+      "name": "admin_item_grant_operations",
+      "version": "admin_asset.006"
+    },
+    {
+      "checksum": "92e09820be67f9d0c76404bde7ed7f711f71d4d7015e7dc9fab77c069a7a696c",
+      "name": "admin_level_root_change_operations",
+      "version": "admin_asset.007"
+    },
+    {
+      "checksum": "4245c76b9d729a9642a7cf30a1cfa9e4c0743233b305c5f33762145156e45b53",
+      "name": "admin_impart_stone_operations",
+      "version": "admin_asset.008"
+    },
+    {
+      "checksum": "11632c0c3e4a78d63322d356f13f4285b98635b8bcae8875909f40b621ebbd6c",
+      "name": "admin_accessory_operations",
+      "version": "admin_asset.009"
+    },
+    {
+      "checksum": "14a9b9e0ef3c3c7fdcb1b760ae33f34b63982ca6a730be4c16c92e9251cb959b",
+      "name": "admin_accessory_batch_operations",
+      "version": "admin_asset.010"
+    },
+    {
+      "checksum": "ca857abeca70307746731a0e0aaec75e9b7a5ac471919639c0abd1d31c807118",
+      "name": "admin_impart_stone_batch_operations",
+      "version": "admin_asset.011"
+    },
+    {
+      "checksum": "46fc1e1b1dfeef40872b7e54e29bcb8b711683d515e9e597a20f1581c46d9c22",
+      "name": "admin_item_batch_operations",
+      "version": "admin_asset.012"
+    },
+    {
+      "checksum": "7f92bc6c0f1f5c106dd82a2983e4e6143b26b560142005e2e17fa3f7936f952a",
+      "name": "admin_exp_batch_adjustment_operations",
+      "version": "admin_asset.013"
+    },
+    {
+      "checksum": "8f0e54433fffbdf71d4b75f81e065bd79f93255f79cfc46fef5538d3e48adfbe",
+      "name": "arena_feature_migrations",
+      "version": "arena.001"
+    },
+    {
+      "checksum": "4b2ffb361a4aa69e58acb03a10abc906934bde5736cbbbe387b324a9aeb47171",
+      "name": "arena_challenge_purchase_operations",
+      "version": "arena.002"
+    },
+    {
+      "checksum": "e4514c24bd00c51c8bd356210dfcc38cce142730fd5d6ec69a6370ec24c8a096",
+      "name": "arena_purchase_operations",
+      "version": "arena.003"
+    },
+    {
+      "checksum": "8aabcf70afc9ccfc38aaeb6b5505182edc10beb1b10315449cfaa7681de51796",
+      "name": "arena_challenge_ticket_operations",
+      "version": "arena.004"
+    },
+    {
+      "checksum": "294a12b64f39040b7296876fbaa25b511761e92cbcb0d90445eb046fe1864b22",
+      "name": "arena_challenge_settlement_operations",
+      "version": "arena.005"
+    },
+    {
+      "checksum": "c8e24c21780f3cf11dd773224fede071ad42d22ed6649ed01bbc7c115645f86e",
+      "name": "arena_weekly_rank_reduction_operations",
+      "version": "arena.006"
+    },
+    {
+      "checksum": "68bf239dfc655761d8f425d2f192e1e20df8ed5d7cbca8768fb2a194760dca03",
+      "name": "arena_season_reward_operations",
+      "version": "arena.007"
+    },
+    {
+      "checksum": "a195f747bcf5885cad206a5d3115271b99fb1c5305ef6f23651caaccdbb1d127",
+      "name": "arena_daily_reward_player_schema",
+      "version": "arena.008"
+    },
+    {
+      "checksum": "e044988eb4fd3808f5bc23511f36cea6802e9178411b91e089928f6a2ed703ae",
+      "name": "arena_state_operations",
+      "version": "arena.009"
+    },
+    {
+      "checksum": "c44e8f1d9958cd2e47280cadfc044b13bdc32855eb1a93b78b33c0dcd4eb5151",
+      "name": "arena_purchase_receipt",
+      "version": "arena.010"
+    },
+    {
+      "checksum": "efd79b69eacd8aa90c79dee1d410ea2c80c627c71d18e61f6ef5e9385b38d2f0",
+      "name": "auction_feature_migrations",
+      "version": "auction.001"
+    },
+    {
+      "checksum": "853d73ef4a9d0faa4cbc408b866f315b231c70b99c993a5e6439c262bedbe870",
+      "name": "auction_session_settlement_schema",
+      "version": "auction.002"
+    },
+    {
+      "checksum": "32126227564b82898526cd1db31b686dfc01b0f808a22ee34e5b328cf5509684",
+      "name": "auction_queue_operations",
+      "version": "auction.003"
+    },
+    {
+      "checksum": "fbf7e10ba4380fc59235eb5f56b82566febdf22def9dafbeecfda80a39dbc2da",
+      "name": "auction_player_upload",
+      "version": "auction.004"
+    },
+    {
+      "checksum": "722e21be07806db21db77cf7ef61898726ad053410f596fb096a2e549443b2d3",
+      "name": "auction_bid_operations",
+      "version": "auction.005"
+    },
+    {
+      "checksum": "8c411640802cd116bedfc380be850cf020c44016513572ea93b7672ad8cd92ac",
+      "name": "auction_bid_statistics_projection",
+      "version": "auction.006"
+    },
+    {
+      "checksum": "c1b51ffdf2a58ef98f89f327bd76f3535f2e5529d8d2a45b6071fd9449b91810",
+      "name": "auction_settlement_game_effect_receipts",
+      "version": "auction.007"
+    },
+    {
+      "checksum": "ffdd488842acba26257d712682edb3849d4ea1f23c3675d06727d2955d812fde",
+      "name": "auction_settlement_statistics_projection",
+      "version": "auction.008"
+    },
+    {
+      "checksum": "e03b376e07b36a0eb274488b4ab9c46da5c41364db2f1da8a5de4bac3f4e74d4",
+      "name": "auction_pending_delivery",
+      "version": "auction.009"
+    },
+    {
+      "checksum": "e560bdb49055c181375093cce8faf590faf78c444a3c9f804a7d77a2080dcdb3",
+      "name": "back_feature_migrations",
+      "version": "back.001"
+    },
+    {
+      "checksum": "c7e6326c44c0a809dd945370f6de4093e25f23232a2d6743435ac43518fc3cb6",
+      "name": "alchemy_operations",
+      "version": "back.002"
+    },
+    {
+      "checksum": "87a6875e8265c031c717bb87b5b70a66fd4233355b887dd016a0f33314782856",
+      "name": "unbind_item_operations",
+      "version": "back.003"
+    },
+    {
+      "checksum": "8cf1dba5a1407f214e060a7fd59f7c981c59875b7f3402855356f2433bc92184",
+      "name": "cultivation_item_operations",
+      "version": "back.004"
+    },
+    {
+      "checksum": "f66176d7b7d0c5efb78bb089429c602240a6e962c71452cc08a79ea71ff28a35",
+      "name": "skill_learning_operations",
+      "version": "back.005"
+    },
+    {
+      "checksum": "368968b65154a5e9d52e659b483418e92c4cb2a5865d57fe4ad9fe778da73e94",
+      "name": "lottery_talisman_operations",
+      "version": "back.006"
+    },
+    {
+      "checksum": "08dd5621ecf96ee3eaa4dab92389ddab70c4f17c9f1a0ef6c9a4067473fa5183",
+      "name": "stone_item_reward_operations",
+      "version": "back.007"
+    },
+    {
+      "checksum": "53c1598c1e135a6c1f5f5c5dd7e0f8cd26f6df036494067fbdda2a709afe6ae0",
+      "name": "three_cultivation_pill_operations",
+      "version": "back.008"
+    },
+    {
+      "checksum": "a956a1d9498e5c688593625dd39bd69285ecb044630d90b5c624283748961821",
+      "name": "breakthrough_rate_item_operations",
+      "version": "back.009"
+    },
+    {
+      "checksum": "85e3637e4b5c7a7121ace23f9df500511a831d5ccdb7fd87ba44483f649525c4",
+      "name": "recovery_item_operations",
+      "version": "back.010"
+    },
+    {
+      "checksum": "85ff89ec648804d16ac93f52a28dba3e3d9e89a068702753a94658a5ddae2c90",
+      "name": "permanent_atk_item_operations",
+      "version": "back.011"
+    },
+    {
+      "checksum": "1c3ee5289f1d4644b95292d200f985f44ba20e96dd9620f36606fa5d14958fde",
+      "name": "blessed_flag_replace_operations",
+      "version": "back.012"
+    },
+    {
+      "checksum": "112583b5cab25787919c7d2a11e7e954d821c6d59fe5d01663b13655d12fd70c",
+      "name": "equipment_operations",
+      "version": "back.013"
+    },
+    {
+      "checksum": "78ad24cbf979fdfa574d3cfc5835aa34b4bbdcc1b2ddb1f2960afb56557069d0",
+      "name": "backpack_repair_tasks",
+      "version": "back.014"
+    },
+    {
+      "checksum": "073f8425119c3301e74b0f71b68d2f72c8c4fe8202c79b897e88c8b464d9c0c8",
+      "name": "batch_pet_egg_use_operations",
+      "version": "back.015"
+    },
+    {
+      "checksum": "66623dfe8df327807e422cb9ef49ee4a2dec6d12da507ca54d5219b70e71d27a",
+      "name": "back_item_use_operations",
+      "version": "back.016"
+    },
+    {
+      "checksum": "6e41ffa374e38777a42241369e32893416b7f7d7be7ad0d5a2d62f5062f172e5",
+      "name": "accessory_transaction_operations",
+      "version": "back.017"
+    },
+    {
+      "checksum": "f5a2c7c6de42ac7426e575995f38575118510d686e683f027117402e989c771c",
+      "name": "bank_feature_migrations",
+      "version": "bank.001"
+    },
+    {
+      "checksum": "65704b0c7c36894f60d33107653a1ff9e0907d03533cf12bc92233216e3cfa8f",
+      "name": "bank_accounts",
+      "version": "bank.002"
+    },
+    {
+      "checksum": "2f47b238159b04b6305e542e90b7f718b7e6bbcd131cd5ad7ccead41edf8d3b3",
+      "name": "bank_legacy_account_backfill",
+      "version": "bank.003"
+    },
+    {
+      "checksum": "d5c338a6d2c7f22f4981266f93362438bb08c00f04e8fb3f8d1976a905ad3735",
+      "name": "bank_legacy_account_backfill_exact",
+      "version": "bank.004"
+    },
+    {
+      "checksum": "b6eb74e0185beab0bf4ecef53c716d4727aca402455ac945a622cec88f66388e",
+      "name": "base_feature_migrations",
+      "version": "base.001"
+    },
+    {
+      "checksum": "7b8e51277b07329be3dc5b8da9a205b24a9e5ace5f8ddad552d2a6c9a3859987",
+      "name": "player_rename_operations",
+      "version": "base.002"
+    },
+    {
+      "checksum": "363dac10b62faa4654c84020061913c71e76e938a2cc063f9b74c053640a6f9c",
+      "name": "stone_contest_operations",
+      "version": "base.003"
+    },
+    {
+      "checksum": "79703f9677c9ce754030537a2796718b0cf6d5d6d3aa8c05edafcee9a7aa5867",
+      "name": "stone_robbery_operations",
+      "version": "base.004"
+    },
+    {
+      "checksum": "63e4c94f51b94cf26c981d9124f2f7180a8fd524ebbaa705e487fdbe03367c61",
+      "name": "stone_robbery_player_statistics",
+      "version": "base.005"
+    },
+    {
+      "checksum": "92c36fa8cff84e5fd4f65a6c35d3b5a06fb1855e8c26d14d9c9547b3371baf5a",
+      "name": "xiangyuan_projection",
+      "version": "base.006"
+    },
+    {
+      "checksum": "629433ad849c4f5a2416d31556c2a5f671a8633d6da22d4e1854bdc0b66a1c92",
+      "name": "xiangyuan_player_limits",
+      "version": "base.007"
+    },
+    {
+      "checksum": "acfc23121252d94d28bf1951114da58ab3857c41ee76526e48560a7eacefc856",
+      "name": "player_root_reroll_operations",
+      "version": "base.008"
+    },
+    {
+      "checksum": "faa2d7b6cfe3ab0e1be66d5137169dd953ce92c6d03e864f923c4dbaa088907a",
+      "name": "direct_breakthrough_operations",
+      "version": "base.009"
+    },
+    {
+      "checksum": "ee10f3c18f19bca74dc2032ad891ce492706b1806f914e6159e7dd8f341484b7",
+      "name": "direct_breakthrough_plans",
+      "version": "base.010"
+    },
+    {
+      "checksum": "3a79c68f8dad5926118ad75745ab86ff9644246c65ff2e1d0c58363330ecae92",
+      "name": "direct_breakthrough_player",
+      "version": "base.011"
+    },
+    {
+      "checksum": "da55ae061a38528a11477b794ec013fff201bfe713d0d41fda8ec65ea7174c02",
+      "name": "player_stamina_operations",
+      "version": "base.012"
+    },
+    {
+      "checksum": "a990d0496407401e4b84d8abc7a602e9288770259cf3e672138c4b4b08ce109d",
+      "name": "beg_feature_migrations",
+      "version": "beg.001"
+    },
+    {
+      "checksum": "2d611643cf2aeaf8ef40c8aeb132f264df3ce77c648558b0ad12dff11e6669af",
+      "name": "boss_feature_migrations",
+      "version": "boss.001"
+    },
+    {
+      "checksum": "a342e84390653c7e145f67b07dc78bebca5cf5ce0d2e14fa8ed60c085771ea7f",
+      "name": "boss_purchase_operations",
+      "version": "boss.002"
+    },
+    {
+      "checksum": "8a7ad69a55d8f078ce99dbf23c3ab908301614c15a76690af7859b25d32e384b",
+      "name": "world_boss_battle_operations",
+      "version": "boss.003"
+    },
+    {
+      "checksum": "c182eb83a5a61f604a5fa7fa3dea43968573fed41292366033cacc403ee57cef",
+      "name": "world_boss_player_schema",
+      "version": "boss.004"
+    },
+    {
+      "checksum": "012dd3403ad46cdf772355a958005713974007b22a20f53794b244e1dd0f4dfe",
+      "name": "world_boss_full_refresh_player_schema",
+      "version": "boss.005"
+    },
+    {
+      "checksum": "6e2aa2e39c09ce5d6c00609c317622b53283b73e8fd50977341a93d847dc8cba",
+      "name": "world_boss_battle_player_schema",
+      "version": "boss.006"
+    },
+    {
+      "checksum": "100b6467447582eac1ac3e514465a5757fa61891b52f9416ede0be056fb61a5a",
+      "name": "world_boss_punishment_operations",
+      "version": "boss.007"
+    },
+    {
+      "checksum": "6a169ad1550f3c166d548940a07b6e7f885c755f876f896a3c158b903ec80e1d",
+      "name": "buff_feature_migrations",
+      "version": "buff.001"
+    },
+    {
+      "checksum": "628820229689c6a7a163c7c88038b9df421343354fed14c7d4c11da2c8d34086",
+      "name": "partner_token_operations",
+      "version": "buff.002"
+    },
+    {
+      "checksum": "9b2752e021c56b3d96523dfa82575b812592ff3cf80808abda9d2866802f6b4e",
+      "name": "partner_two_exp_usage",
+      "version": "buff.003"
+    },
+    {
+      "checksum": "59cca6936dd03cc12e2d9fb3e3806e53692c791a32d33f29d97c6cc46aefe266",
+      "name": "partner_cultivation_operations",
+      "version": "buff.004"
+    },
+    {
+      "checksum": "6fb26bc4f04ed81043739226fa6db755f4d7cdeb60f46d480f8766b8c7a14693",
+      "name": "partner_cultivation_player_schema",
+      "version": "buff.005"
+    },
+    {
+      "checksum": "9ae05484b0109f6c8b07ce269b6cb221f2a857a3bd910fbcf62671bb07c306fc",
+      "name": "normal_pvp_operations",
+      "version": "buff.006"
+    },
+    {
+      "checksum": "3fad5e86bd27cefe9118f39e3e3d94895d33f34e06a490e6bcda15298a7bdb3a",
+      "name": "normal_pvp_player_statistics",
+      "version": "buff.007"
+    },
+    {
+      "checksum": "64a7b6e39b264e55a1abcdf181d5720a1a1347d5bcd69b2298ccf5fc61b6fee0",
+      "name": "closing_settlement_outbox",
+      "version": "buff.008"
+    },
+    {
+      "checksum": "41ca97f64a1bf89eed5878097bf0b413e764e5c4733c3ba1747d79440eefb68b",
+      "name": "closing_effects_player_statistics",
+      "version": "buff.009"
+    },
+    {
+      "checksum": "64e9058448b311565b9022efb22b9874b972416c4634402db9c223add6c76d83",
+      "name": "normal_training_operations",
+      "version": "buff.010"
+    },
+    {
+      "checksum": "f1d7154b8c60911e0c11e0ab8cabdb4bca95be07cdd0fa23ab9703a2ef856c10",
+      "name": "normal_training_player_statistics",
+      "version": "buff.011"
+    },
+    {
+      "checksum": "ca7c72aea5e80711cf42a68a99282f816da1b99d032f67a6ff34b6d3d1d1f08f",
+      "name": "closing_enter_operations",
+      "version": "buff.012"
+    },
+    {
+      "checksum": "429699339643f3109cd5a0e9a7147e0bfa701755284590c8914a8c47e7655dd1",
+      "name": "closing_enter_player_statistics",
+      "version": "buff.013"
+    },
+    {
+      "checksum": "6c54cab1f68ce1df476492e31084bb93cbc9ccd616c4dd075bdea98383905c22",
+      "name": "blessed_spot_operations",
+      "version": "buff.014"
+    },
+    {
+      "checksum": "2dc4c8ff456770c8fa05442432506b1a81ebda574ef05177a9d4fd1ab9ffb9be",
+      "name": "stone_training_operations",
+      "version": "buff.015"
+    },
+    {
+      "checksum": "3d50754716d23c8f2fedbfdb2fe62220e04fe50084442f3338484a5512012a7c",
+      "name": "mentor_dissolution_operations",
+      "version": "buff.016"
+    },
+    {
+      "checksum": "338fe0deaa64015b92e5f1a86fa8e3265b264a60048b81dcedc1a4d557a1001e",
+      "name": "mentor_dissolution_player_schema",
+      "version": "buff.017"
+    },
+    {
+      "checksum": "de3db059849a311e61a075a77c9e5f976d8f72805879ed329603f3e85c9eafd5",
+      "name": "combat_settlement_feature_migrations",
+      "version": "combat_settlement.001"
+    },
+    {
+      "checksum": "0da026466a5c7325bf1cb76680007b0afb1daf64724061dec084880d61fc469c",
+      "name": "map_combat_settlement_operations",
+      "version": "combat_settlement.002"
+    },
+    {
+      "checksum": "92c5ab60c8c7100993165a0c4a8b8f910a4d687c141caa40c2687d75e7970992",
+      "name": "map_dao_battle_operations",
+      "version": "combat_settlement.003"
+    },
+    {
+      "checksum": "0f92c267e3c8d8f1bf68860442bb6a656d08ca2f930529e30adc828987d69ba6",
+      "name": "dao_battle_record",
+      "version": "combat_settlement.004"
+    },
+    {
+      "checksum": "0836f034e5c8cdf6f318857b28a9ff2012b222c39b4165e8350c54809421efd2",
+      "name": "daily_fortune_claims",
+      "version": "daily_fortune.001"
+    },
+    {
+      "checksum": "c9789e79a9ec82322c5a98369501ecf36a96b520673b139868e798ebc7968c8f",
+      "name": "dongfu_infiltrate_success_operations",
+      "version": "dongfu.002"
+    },
+    {
+      "checksum": "6b31672716fb48b77d3f052e889e3cce59a1d9ec2c96a60e803f7f30a6e14d31",
+      "name": "dongfu_infiltrate_failure_operations",
+      "version": "dongfu.003"
+    },
+    {
+      "checksum": "7635ab1ee5f73c0749943e385a18db8937d87740728fe7e5f697e266c0d53f05",
+      "name": "dongfu_action_operations",
+      "version": "dongfu.004"
+    },
+    {
+      "checksum": "55d84044e4b3133858128e3377ad2d476c4b1606424f3ff14c153ad9a2424783",
+      "name": "dongfu_event_replay_plans",
+      "version": "dongfu.005"
+    },
+    {
+      "checksum": "9553cdf48fa67a919d9dd0ad05f552320b6a57ed4fa34c7db5bc13d92549bb8b",
+      "name": "dungeon_feature_migrations",
+      "version": "dungeon.001"
+    },
+    {
+      "checksum": "f3d5abd4a5636f298785371267cfe5350b2c8d9ef88f35cae305bd87e936610a",
+      "name": "dungeon_purchase_operations",
+      "version": "dungeon.002"
+    },
+    {
+      "checksum": "57233b17a79cfa40968dadb1ad83773230556ab8a2b9a53122e6c057a0e02904",
+      "name": "dungeon_session_operations",
+      "version": "dungeon.003"
+    },
+    {
+      "checksum": "dee3dab604ac54c3f303e3e46f9ab7a394eb132f441b747b26a8ea1ea9ba4af2",
+      "name": "dungeon_explore_operations",
+      "version": "dungeon.004"
+    },
+    {
+      "checksum": "cc1230ee9d43cf70522f72612ae3d47062f0081c6e7df133a2457777202956b7",
+      "name": "dungeon_team_operations",
+      "version": "dungeon.005"
+    },
+    {
+      "checksum": "bc3723edecfa226975b0062c09b566ecc51cdffc64a82f1952aef8b98758281d",
+      "name": "dungeon_team_state_schema",
+      "version": "dungeon.006"
+    },
+    {
+      "checksum": "df384811542265cad83157b0edf037692235f14952d9dec2894823692dc9f18f",
+      "name": "dungeon_explore_player_state_schema",
+      "version": "dungeon.007"
+    },
+    {
+      "checksum": "45a74f58c70276996fa2c8c19ebd96a0932cdc3eb3f2a948ce25a598c81e2930",
+      "name": "dungeon_explore_resolution_intent",
+      "version": "dungeon.008"
+    },
+    {
+      "checksum": "69de85a040c1c0aa6a4c3c867552e39c36804429f25988455460048e8c32689c",
+      "name": "dungeon_team_members_index",
+      "version": "dungeon.009"
+    },
+    {
+      "checksum": "eced0280d97c7afd4ca5324c70026fe28b1be19c3276c6f222e0892f83ffbe38",
+      "name": "dungeon_team_invite_expiry",
+      "version": "dungeon.010"
+    },
+    {
+      "checksum": "1583f04e68409700bbeab52dd2b80b60d4260818963dc24c1ee1cce082459660",
+      "name": "economy_ledger_read_indexes",
+      "version": "economy_ledger.001"
+    },
+    {
+      "checksum": "7c88305730e19c6175830aab10da622b4d98516f2651c50bc78fb2036864b3b9",
+      "name": "economy_log_canonical_schema",
+      "version": "economy_ledger.002"
+    },
+    {
+      "checksum": "a358bc62a5fbaba39c978b9f77c453855625b14c42713364c55c4ac96bfc7ebe",
+      "name": "economy_operations",
+      "version": "economy_ledger.003"
+    },
+    {
+      "checksum": "2775c84d65e34c3fa444cb4b6d34bfd88f873c0ae196cec7fd591173d2e4e0a8",
+      "name": "fusion_operation_tables",
+      "version": "fusion.002"
+    },
+    {
+      "checksum": "fe78b4c2392f35415191375dfec198bff70ef6eb87f82ad69f7dce8611b1ee15",
+      "name": "game_event_statistics_projection",
+      "version": "game_events.001"
+    },
+    {
+      "checksum": "369b356bd15217c7f1b17ae2eba5d1af3a186cace42bddbc314dec84590e559b",
+      "name": "illusion_feature_migrations",
+      "version": "illusion.001"
+    },
+    {
+      "checksum": "bc23e5856e6c4059dd7073ab809f86e0a16d04445357ac9edb9bffb88654221c",
+      "name": "illusion_feature_state_projection",
+      "version": "illusion.002"
+    },
+    {
+      "checksum": "4409cf1e837c492aa44bf22594746081215ec9fe4b543deedf63040a57a44116",
+      "name": "impart_prayer_operations",
+      "version": "impart.002"
+    },
+    {
+      "checksum": "6b75f614dfb6ac017dae244937e8e839cdbf520d2b92ab476adbf5763dd74e04",
+      "name": "impart_prayer_player_statistics",
+      "version": "impart.003"
+    },
+    {
+      "checksum": "3866a539d20a8b525dac22e69394d0ae175149b1c4ff0f2608e824404e047073",
+      "name": "love_sand_operations",
+      "version": "impart.004"
+    },
+    {
+      "checksum": "71ff75e42fd4ad8a7a290ac36b137a39e7f111394684c16ab0b88aed4750c990",
+      "name": "love_sand_player_statistics",
+      "version": "impart.005"
+    },
+    {
+      "checksum": "cb0bac27c7d1104076e1153912260d7f30f8378f60b8b76291bb5f9f8d8bdff5",
+      "name": "impart_draw_operations",
+      "version": "impart.006"
+    },
+    {
+      "checksum": "b44359f0a0ec6377fa47111b58cb197911a35261ccc306ec8cf826e4faf90a04",
+      "name": "impart_crystal_and_card_operations",
+      "version": "impart.007"
+    },
+    {
+      "checksum": "c288c23d7c9928d04e24f7b47eac50189b1c7727ee207fcb5247f77992dfee7c",
+      "name": "impart_draw_player_statistics",
+      "version": "impart.008"
+    },
+    {
+      "checksum": "ff16320abdac2f03d79081b5d420db77030cb200fc49594b57d75eff02497258",
+      "name": "impart_base_schema",
+      "version": "impart.009"
+    },
+    {
+      "checksum": "4108ede79ce1d2d294d62d89af615f6de8f033dba3df3269c8c649ffec7c42f8",
+      "name": "impart_exact_crystal_game_receipts",
+      "version": "impart.010"
+    },
+    {
+      "checksum": "604a4d561ac858f134a265b276987d1426d783bf68c793623ad24b5de0dfaa06",
+      "name": "impart_exact_crystal_balances",
+      "version": "impart.011"
+    },
+    {
+      "checksum": "36302ba0934361a79a58da8e6df204837c6ab15bf1ecafa48230e06778ad44cc",
+      "name": "impart_pk_operations",
+      "version": "impart_pk.002"
+    },
+    {
+      "checksum": "c6db33744f1b7fa1a4c6f77fd43926d64dc571a7cfe6b6c46fb38ed96ea39ae3",
+      "name": "impart_pk_player_operations",
+      "version": "impart_pk.003"
+    },
+    {
+      "checksum": "df0a2fa0a98a6e6f0c1caa8cc60487981edba3c5e8bd3a090d734423b376bbe4",
+      "name": "impart_pk_impart_operations",
+      "version": "impart_pk.004"
+    },
+    {
+      "checksum": "313151109f1f41890f501c2e19fa34e10b48ebbcf1987c2bc5992eba8dbebcc0",
+      "name": "impart_pk_closing_statistics",
+      "version": "impart_pk.005"
+    },
+    {
+      "checksum": "5040ccdbaff110c00b510187e8e720308e30f782af549f2e06cf5ac92ba32ad4",
+      "name": "impart_pk_impart_statistics",
+      "version": "impart_pk.006"
+    },
+    {
+      "checksum": "f329e17c3a25d8f2d1a28ce4f12befa192588bd0d719c668d04f97773de55e60",
+      "name": "avatar_player_identity_and_receipts",
+      "version": "info.avatar.001"
+    },
+    {
+      "checksum": "b56364b500bba9fa9baa07334fdfd6144746b76409ef582dc15a672e041ae42e",
+      "name": "avatar_initialization_plans",
+      "version": "info.avatar.002"
+    },
+    {
+      "checksum": "d8f08f46f1929f82bc96b650ae565ce7007308518aa2842f52e91b67680cdec0",
+      "name": "interactive_feature_migrations",
+      "version": "interactive.001"
+    },
+    {
+      "checksum": "f51d915b08a4cc256bd6b724bcb6455f1deeb27f29c4947ed9ec732789a1d648",
+      "name": "legacy_activity_001_migrations",
+      "version": "legacy.activity.001"
+    },
+    {
+      "checksum": "8d189a94f11f78a05d4c0ce07dcaf7f6f16a31b3601da728239ec6bcc24ad3f2",
+      "name": "legacy_admin_001_migrations",
+      "version": "legacy.admin.001"
+    },
+    {
+      "checksum": "dd9c6c93070dd1cddc10b1b5de681694f4be9ce2813e575da55a56df7f6a2105",
+      "name": "legacy_admin_002_migrations",
+      "version": "legacy.admin.002"
+    },
+    {
+      "checksum": "fd5c0a1cb1ee427ecdf5a204cbc1f0a905f73bac67ccee83a352000d5b25d3cb",
+      "name": "legacy_admin_003_migrations",
+      "version": "legacy.admin.003"
+    },
+    {
+      "checksum": "e8d96d04895e7adf8f4332e71bd003be0120590d0e9575dc69c913cb0216d4d6",
+      "name": "legacy_admin_004_migrations",
+      "version": "legacy.admin.004"
+    },
+    {
+      "checksum": "bed05a3099d54be90446f64e17a7b93aab9d3b412203b3d34a0c88241202e9bb",
+      "name": "legacy_admin_005_migrations",
+      "version": "legacy.admin.005"
+    },
+    {
+      "checksum": "3e1eec8ed115d052067cd2ad6b9bd7fe792bd8aecd56f234b334f34e05e136da",
+      "name": "legacy_admin_006_migrations",
+      "version": "legacy.admin.006"
+    },
+    {
+      "checksum": "d8f943a540612d449efbf65fd207bff1bc5aa32cca5e52d38e7246a87d46fe69",
+      "name": "legacy_admin_007_migrations",
+      "version": "legacy.admin.007"
+    },
+    {
+      "checksum": "503e3335c5a1a1e76290c831cf06b5afb7a1f0b26c42cadc7bb0b47623b04ba0",
+      "name": "legacy_admin_008_migrations",
+      "version": "legacy.admin.008"
+    },
+    {
+      "checksum": "a40685bd9dc5d8747963e3e81e540d5271ce83cc73628a91c3214ccf2487dcbe",
+      "name": "legacy_compensation_001_migrations",
+      "version": "legacy.compensation.001"
+    },
+    {
+      "checksum": "51f4994ff4706ef4179ab9edabae6982784f48c915f07067607ddb6eac97b2ad",
+      "name": "legacy_compensation_002_migrations",
+      "version": "legacy.compensation.002"
+    },
+    {
+      "checksum": "f01a7852ba96a1b11ef49fd31373bd229ac53b7d4089077a99733f95650f6d78",
+      "name": "legacy_compensation_003_migrations",
+      "version": "legacy.compensation.003"
+    },
+    {
+      "checksum": "ac31483047031dcc1e22818173eacf73de540ca41e073c3ec55555eabd7e5b18",
+      "name": "legacy_compensation_004_migrations",
+      "version": "legacy.compensation.004"
+    },
+    {
+      "checksum": "7e2b9fd45bfedbbcfc727f38f07de4843f36ac39a56a78efb0400608e33fb77c",
+      "name": "legacy_compensation_005_migrations",
+      "version": "legacy.compensation.005"
+    },
+    {
+      "checksum": "59e9c0f771ba09c8edfe8acae7aeeca3b2af293639025815e075d029441bbc34",
+      "name": "legacy_compensation_006_migrations",
+      "version": "legacy.compensation.006"
+    },
+    {
+      "checksum": "28ffcedc231dbbc8cd066f129b1473ec5a563db940589aedff8048de16c999e4",
+      "name": "legacy_compensation_007_migrations",
+      "version": "legacy.compensation.007"
+    },
+    {
+      "checksum": "021a120b49c13346c4d8b1f3c40a276ce69af3e67d81b6b0a4474449dda6bcd2",
+      "name": "legacy_dongfu_001_migrations",
+      "version": "legacy.dongfu.001"
+    },
+    {
+      "checksum": "3df22187f3dcf51bfffbb076fbfa58d88f2888aa9df0c8e9b080bd365a8794aa",
+      "name": "legacy_dufang_001_migrations",
+      "version": "legacy.dufang.001"
+    },
+    {
+      "checksum": "abfb6fd9b873d3581bace1175427ad5eaae8bbdbac3d5f58c6dbce5b98d5bacf",
+      "name": "legacy_dufang_002_migrations",
+      "version": "legacy.dufang.002"
+    },
+    {
+      "checksum": "c96c2a780787dcee940717c134c90c2e11a0529edde49443984263c8d739b7ce",
+      "name": "legacy_dufang_003_migrations",
+      "version": "legacy.dufang.003"
+    },
+    {
+      "checksum": "7edbbc28c8b52e05502da269bfe635f58886f6beccb14527a44c2dd5ae3b665d",
+      "name": "legacy_dufang_004_migrations",
+      "version": "legacy.dufang.004"
+    },
+    {
+      "checksum": "e294735c476e6b2254a7aea5709f6b48ff482c5a5a607a0f18d34b960ef71dc3",
+      "name": "legacy_dufang_005_migrations",
+      "version": "legacy.dufang.005"
+    },
+    {
+      "checksum": "b3e948e1685d169b29e02a378993ab93e15b6c2e3f37552621b0d28eeda1f86a",
+      "name": "legacy_dufang_006_migrations",
+      "version": "legacy.dufang.006"
+    },
+    {
+      "checksum": "77bd1b68f96519254d4d49a4589a2f4582e903e0c2dc5cc50e8a50effadb2d58",
+      "name": "legacy_dufang_007_migrations",
+      "version": "legacy.dufang.007"
+    },
+    {
+      "checksum": "9e46281c71031bce0f19475c5ee46480533ba8a921ad19e52a8c588b0f1ea43d",
+      "name": "legacy_entertainment_001_migrations",
+      "version": "legacy.entertainment.001"
+    },
+    {
+      "checksum": "32098489f45d7fd1da0e1263f200af5aa3351acb95b392c108617630128968fa",
+      "name": "legacy_entertainment_002_migrations",
+      "version": "legacy.entertainment.002"
+    },
+    {
+      "checksum": "cbee9627cd9f87816bc19e020d5204f9bfcc6674adbe7723cfc0342fd74724e2",
+      "name": "legacy_entertainment_003_migrations",
+      "version": "legacy.entertainment.003"
+    },
+    {
+      "checksum": "291eb12ecf161fe5a8bce45dcc5f05665a62a569ecebbea39169ded1fa48ca7b",
+      "name": "legacy_entertainment_004_migrations",
+      "version": "legacy.entertainment.004"
+    },
+    {
+      "checksum": "5d2586bca3db710bd8b41e364102dc20d67cb9a95ec503aacdfe40ee315e512b",
+      "name": "legacy_fusion_001_migrations",
+      "version": "legacy.fusion.001"
+    },
+    {
+      "checksum": "ab945e58753df438f62a35efc7a42f0f055247a93cbd1223fbeb49702447ce9c",
+      "name": "legacy_illusion_001_migrations",
+      "version": "legacy.illusion.001"
+    },
+    {
+      "checksum": "2b9830ffa80298249a2121940260d1381c9e9ee8bc6c6fc2891b3fff9a5ecd4d",
+      "name": "legacy_impart_001_migrations",
+      "version": "legacy.impart.001"
+    },
+    {
+      "checksum": "d960974fcec857c28e00c5a338cb86440d433c1835e13db1a23055b1f2724a11",
+      "name": "legacy_impart_pk_001_migrations",
+      "version": "legacy.impart_pk.001"
+    },
+    {
+      "checksum": "4a07f78e3e00e32197259c827440f2745a7f204413362b1fde5bef18f505165c",
+      "name": "legacy_info_001_migrations",
+      "version": "legacy.info.001"
+    },
+    {
+      "checksum": "2b39f9b733cf6689b5cb810299202786a50c16d14dcdc44f7dd0c3f7814d9e46",
+      "name": "legacy_lunhui_001_migrations",
+      "version": "legacy.lunhui.001"
+    },
+    {
+      "checksum": "d9b72802a9eadfe2233fa0de9bb927aab3e2ebfb381a5c386d18ec65e3026d29",
+      "name": "legacy_past_life_001_migrations",
+      "version": "legacy.past_life.001"
+    },
+    {
+      "checksum": "918c6a67be5cf9344e9277a09f5df45341abf9c0705d3436c8923499362482ef",
+      "name": "legacy_simulator_001_migrations",
+      "version": "legacy.simulator.001"
+    },
+    {
+      "checksum": "a8b66e680731a115cd1b868d7dae49e97d05a2eb33a00d37c6d8420c4f6199ea",
+      "name": "legacy_status_001_migrations",
+      "version": "legacy.status.001"
+    },
+    {
+      "checksum": "5692a07bef847db13b0fc1c89d73a15b059332d692d07610d7f8f40a73a763b3",
+      "name": "legacy_tasks_001_migrations",
+      "version": "legacy.tasks.001"
+    },
+    {
+      "checksum": "f533e1fe673f67babbceb543c3168994510315a3e2bb9f2b16dc82cc098d6101",
+      "name": "legacy_tianti_001_migrations",
+      "version": "legacy.tianti.001"
+    },
+    {
+      "checksum": "186e1a9e621ea8ceff7d9076892bb7acc3fd452612909692e62eecbb7629d845",
+      "name": "legacy_training_001_migrations",
+      "version": "legacy.training.001"
+    },
+    {
+      "checksum": "007318f9756d2c81864b4f7da92b743a34b75bc3cf03ca3e068f966c6eb0a0ca",
+      "name": "lottery_feature_migrations",
+      "version": "lottery.001"
+    },
+    {
+      "checksum": "b832bfebdb6dc7c545be376373bd854110020f52a28acc3d0321fbf74da0d120",
+      "name": "lottery_audit",
+      "version": "lottery.002"
+    },
+    {
+      "checksum": "4fbf59b62be3bfa6b117feb78aa1881b21cef2e0b771b780d30968664d3af3dd",
+      "name": "map_feature_migrations",
+      "version": "map.001"
+    },
+    {
+      "checksum": "90aa68cc278032fc1a0a767b97f7901f9e0081b8aad5f5c457b4b5139e1cdb7e",
+      "name": "map_movement_operations",
+      "version": "map.002"
+    },
+    {
+      "checksum": "1515ec72c8483a317407f87037b5ca1addd55a73f3bb9ac1ba0a0f4e2533a87b",
+      "name": "map_home_return_operations",
+      "version": "map.003"
+    },
+    {
+      "checksum": "1043576b840ad792a39228e7d06cf17f6932d98c70da0a485511497eacb604bf",
+      "name": "map_interactive_start_operations",
+      "version": "map.004"
+    },
+    {
+      "checksum": "d5193c8a2c79d0d8805feaebd8ba79ef15d1b377ebf40bce3f94beb7a28dc040",
+      "name": "map_interactive_player",
+      "version": "map.005"
+    },
+    {
+      "checksum": "991b3cfeed921a86a69dc8d05c7710a01ad1b425c4c1c7616648fdfbfd60bc34",
+      "name": "map_resource_reward_operations",
+      "version": "map.006"
+    },
+    {
+      "checksum": "f5ff3604a66b9a6d79b8538b8b00b2d95a665267ecdfb7db51411dcc153ee3a3",
+      "name": "map_explore_start_operations",
+      "version": "map.007"
+    },
+    {
+      "checksum": "eb2991291edd44bd04cadf02a46f6f6bbc3f3b360244aa3d948af2880442faab",
+      "name": "map_explore_player",
+      "version": "map.008"
+    },
+    {
+      "checksum": "0250121761c3fdbc2dec1d7ab07fb9d2a72dd69c8b5b6bb7eda5c3d91b87816b",
+      "name": "map_explore_settlement_operations",
+      "version": "map.009"
+    },
+    {
+      "checksum": "9351891c0780000c69813cc37d79aa03d94745bc26c38ef7b1519a1421ba33ae",
+      "name": "map_mission_claim_operations",
+      "version": "map.010"
+    },
+    {
+      "checksum": "3fb27f1b4e984d84e0170803c8bb7e94f82b0040ac90cf871aaa88ee2b734a75",
+      "name": "map_seed_purchase_operations",
+      "version": "map.011"
+    },
+    {
+      "checksum": "7224ebb6967fec483e85f35efa482a510e084dd1e3b9ed06f088499faf32db26",
+      "name": "map_dongfu_build_operations",
+      "version": "map.012"
+    },
+    {
+      "checksum": "eab0487d8af7810c8d5ce64340f0c70d1783450fb90ef943448cda628a8c87a8",
+      "name": "map_dongfu_player",
+      "version": "map.013"
+    },
+    {
+      "checksum": "b15515ac4ec3609c1993b6c3a4c62061f0df9d7a02608eabf75a401cdfc88bd2",
+      "name": "map_combat_start_operations",
+      "version": "map.014"
+    },
+    {
+      "checksum": "7f6dc3ac8af03aa821393d12512ab21b4965554de11572b99e27e7a58d2139af",
+      "name": "map_combat_player",
+      "version": "map.015"
+    },
+    {
+      "checksum": "e7dc14f2af08a6b2ce18f02268bf8a58145eca2f27173d3d13617e60d85549d5",
+      "name": "map_combat_plan_operations",
+      "version": "map.016"
+    },
+    {
+      "checksum": "926ff19d836bf75c8827f0f7ecd02dba7e38071aad1aea558014a17a09928c6c",
+      "name": "map_dongfu_status_schema",
+      "version": "map.017"
+    },
+    {
+      "checksum": "5a20f7f2d60b61eed50061ad8b8c7cfc7d90b58718f57d0cf998c5fb98dd819d",
+      "name": "map_player_state_schema",
+      "version": "map.018"
+    },
+    {
+      "checksum": "45ac6f4614e0403b1d9a4341d19a5d723527c478193be1793894087bbd6a398c",
+      "name": "message_store_schema",
+      "version": "message.001"
+    },
+    {
+      "checksum": "12fd7d6eddde8efbcb8ee6e06ffa2d4ba337467da8a8cd87876a1112999dcf71",
+      "name": "mixelixir_feature_migrations",
+      "version": "mixelixir.001"
+    },
+    {
+      "checksum": "40d9761b1d37dad2327d5d7e379acc4ed4832fd6088495825ac0941a05a7e68f",
+      "name": "mixelixir_refine_claim",
+      "version": "mixelixir.002"
+    },
+    {
+      "checksum": "44cb0fcae7f7b62275482f83e19577a28b6d2e5917acb25e453ff04b66563881",
+      "name": "mixelixir_refine_claim_player",
+      "version": "mixelixir.003"
+    },
+    {
+      "checksum": "8aefdc260abb1aef025afd6e14df5d0dda203952c94b2ff7e21dc15f91e5b460",
+      "name": "mixelixir_operations",
+      "version": "mixelixir.004"
+    },
+    {
+      "checksum": "0cfb5fbf52472298cf56975bdfb1f7f6b15a8eb18be186c92ca2a935956f36c3",
+      "name": "natal_treasure_feature_migrations",
+      "version": "natal_treasure.001"
+    },
+    {
+      "checksum": "a70f3b94dcba1c986759e3e463a5b7dbcb9db6b2e89d76755a76ec2e271d4674",
+      "name": "natal_treasure_operations",
+      "version": "natal_treasure.002"
+    },
+    {
+      "checksum": "45f1bf3e674db76c1926b3731ef39956db14e713dba912d5da34220aafae3734",
+      "name": "natal_treasure_player_operations",
+      "version": "natal_treasure.003"
+    },
+    {
+      "checksum": "ae815cbe666cc11889a74498886b1220a99337de7af69ac4fbab49c89ab7fc66",
+      "name": "package_reward_operations",
+      "version": "package_reward.001"
+    },
+    {
+      "checksum": "ae41304bb433cb559280a5ccb4779d6757df3f9d97300f2ad211ddde5d884402",
+      "name": "past_life_player_operations",
+      "version": "past_life.002"
+    },
+    {
+      "checksum": "decd40ab92c721e02edd663bc4ac3a8857a450dba3359d7619546f6ef72a7c2b",
+      "name": "past_life_game_receipts",
+      "version": "past_life.003"
+    },
+    {
+      "checksum": "63c5f87e051c0e36704f1a358b7e63f427c2fa93b4f7d20e8026f4199dcf3daf",
+      "name": "pet_feature_migrations",
+      "version": "pet.001"
+    },
+    {
+      "checksum": "f6a96610d88e0d2489c08093cfe7e83d9a670d8b29cdc1a915cff6a5731aee07",
+      "name": "pet_hatch_operations",
+      "version": "pet.002"
+    },
+    {
+      "checksum": "ba2a8db94114c3dddc929092edbc6eb8aa038dd65746bf0dc7cfbd67263558a0",
+      "name": "pet_skill_replace_operations",
+      "version": "pet.003"
+    },
+    {
+      "checksum": "ffcddb45298ed6290139a40d60f71d8dca865d406dd6a2f7064546071b34ca48",
+      "name": "pet_travel_claim_operations",
+      "version": "pet.004"
+    },
+    {
+      "checksum": "64848ad8dde502d2a204ccb0da2aa9c8ec7b2c17a4306c28fff9babd18fe8148",
+      "name": "pet_player_operation_receipts",
+      "version": "pet.005"
+    },
+    {
+      "checksum": "a404f85cc01230a9a7c9629df610a1226f3e2fa9c22d43639e4a276a1bc3cba4",
+      "name": "pet_game_operation_receipts",
+      "version": "pet.006"
+    },
+    {
+      "checksum": "f4cc49dc985f08e3f4a0741a7cc51708c0dc969574a76e89506fc6fa2379910c",
+      "name": "operation_ledger_outbox",
+      "version": "platform.001"
+    },
+    {
+      "checksum": "6e229d35e1d6a08e8972f8eef0e58613aa8aac3803dbd8fee5b26abc6a0fa863",
+      "name": "puppet_feature_migrations",
+      "version": "puppet.001"
+    },
+    {
+      "checksum": "62b5b12ca6021c217da49a42506929070e00d59570cfbe90c67c6dbae99284fb",
+      "name": "puppet_status_column",
+      "version": "puppet.002"
+    },
+    {
+      "checksum": "ac8270d1b4eba67305a10e05d06b369122599eee9b55066a93d964911e9d6e30",
+      "name": "puppet_operations",
+      "version": "puppet.003"
+    },
+    {
+      "checksum": "15e51b8b3e71abfa2f1f64ef9a0ae9acdfb403d00541db2c7e283243c7e60c96",
+      "name": "rift_feature_migrations",
+      "version": "rift.001"
+    },
+    {
+      "checksum": "6e3192fa81b4710eac42b00b8344dd89cabb2da254d4a188ec0566e8967d9ff6",
+      "name": "rift_demon_token_battle_operations",
+      "version": "rift.002"
+    },
+    {
+      "checksum": "e88c94ef0d457325bde84f0c32ba693ff2d288ac0382838659f6f562b30c3c18",
+      "name": "rift_demon_token_player_schema",
+      "version": "rift.003"
+    },
+    {
+      "checksum": "4a8117fff4d0af59354b448d58a4e78f4b240a4e21be10ce0de49f0f64655e59",
+      "name": "rift_speedup_operations",
+      "version": "rift.004"
+    },
+    {
+      "checksum": "f3dc7fb186b9f89aff5a24374a51391e367db273cce9386e5ee2b8c48f6420b7",
+      "name": "rift_world_generation",
+      "version": "rift.005"
+    },
+    {
+      "checksum": "93bf212565f82ed9c423e223160e23177bd80f263e4d6f23b74f66dc4cc72cf4",
+      "name": "rift_termination_operations",
+      "version": "rift.006"
+    },
+    {
+      "checksum": "5b6563e9d949ac6b3d035e8abf686c0107d51c57fbf9d4b054a6e19c819a2ef2",
+      "name": "rift_key_event_operations",
+      "version": "rift.007"
+    },
+    {
+      "checksum": "3c3ee100c145a8ec2536b6b8942349bd412d219e67631c9aba05921ad075e085",
+      "name": "rift_settlement_operations",
+      "version": "rift.008"
+    },
+    {
+      "checksum": "4fbf10f13e3468f490ff87fafc32d09ba668d211cbc5cdcb5a4b93913c1e185f",
+      "name": "rift_entry_schema",
+      "version": "rift.009"
+    },
+    {
+      "checksum": "b6fcf4f4db216cec262d97c7ccba3b2f7ee598a1de9753e901bb1f598ada5eed",
+      "name": "season_rank_player_leaderboard",
+      "version": "season_rank.001"
+    },
+    {
+      "checksum": "364843c50ae90cc475535ae3cbd43634b465049a8e223a490d3e909e872da8cc",
+      "name": "sect_feature_migrations",
+      "version": "sect.001"
+    },
+    {
+      "checksum": "e1ca6bb9bfa3a33ee87859c1a4f0f984bf233949b421eb80b451f45bd284d971",
+      "name": "sect_rename_operations",
+      "version": "sect.002"
+    },
+    {
+      "checksum": "a886e6a0d16d47d3b6791fa3d76eefa7aec772a0ac08d8441cc2d8188d58cd7f",
+      "name": "sect_member_join_operations",
+      "version": "sect.003"
+    },
+    {
+      "checksum": "875336adbd5b75e20075c0ef977dbca809de568da2cc489d439c059bdb97adf3",
+      "name": "sect_member_removal_operations",
+      "version": "sect.004"
+    },
+    {
+      "checksum": "90ba1140a5fd452a9ccfa81a359336b1c590377757f7d9bd92ff2bafe7bf6fe8",
+      "name": "sect_position_change_operations",
+      "version": "sect.005"
+    },
+    {
+      "checksum": "026cc815bca6a0f6833f212ee19309b5b45095398d5b9cfd39e13b89112a8e7e",
+      "name": "sect_donation_operations",
+      "version": "sect.006"
+    },
+    {
+      "checksum": "7c2530e0b1fafab4366b87c9d1ba5f1bad3299aa09a04509d8b3e7dbc2f458c0",
+      "name": "sect_shop_purchase_operations",
+      "version": "sect.007"
+    },
+    {
+      "checksum": "73be4c8616167433665eb01df6fcb8ddab0d24abd38ca220ca95a96c4d0e2b49",
+      "name": "sect_mainbuff_learn_operations",
+      "version": "sect.008"
+    },
+    {
+      "checksum": "bfd10f593207f460517eb33303c8dba9048e79c15ce086ccda0fcf3cd5e000d7",
+      "name": "sect_secbuff_learn_operations",
+      "version": "sect.009"
+    },
+    {
+      "checksum": "402ac26d5a20aae811fae5408463119e1f60514cf8c8678ad91d0daa8a5cb857",
+      "name": "sect_elixir_claim_operations",
+      "version": "sect.010"
+    },
+    {
+      "checksum": "ce4440de1f9d00a852f705f2b83420ce9d6bd2cab7fdde571416a63fecc51a1d",
+      "name": "sect_weekly_reward_operations",
+      "version": "sect.011"
+    },
+    {
+      "checksum": "2c22bce12b63ae7507f56cb288302bd34fdfde4ba114689412b4eb2aed6f9156",
+      "name": "sect_weekly_reward_player_schema",
+      "version": "sect.012"
+    },
+    {
+      "checksum": "b9d5ae513a6421bab05d4518f9add01d8ebad449000013b8221ccdd96fa3c02a",
+      "name": "sect_manual_disband_operations",
+      "version": "sect.013"
+    },
+    {
+      "checksum": "9db9d30dbfd2bcae47ac43ac67de869fd6c759dcb72b7f80a59e809e7b536a21",
+      "name": "sect_fairyland_upgrade_operations",
+      "version": "sect.014"
+    },
+    {
+      "checksum": "81766366fed0c62bf06b584a501a6d51f0fa898915c8e831d47f1844f2faddd6",
+      "name": "sect_scheduled_material_grants",
+      "version": "sect.015"
+    },
+    {
+      "checksum": "3665f86fd89a6a3c157cac439981a7f9754489012b02ec404d7361266610dc19",
+      "name": "sect_task_state",
+      "version": "sect.016"
+    },
+    {
+      "checksum": "bf599a5e458c168c9a410384f062643c1af00146de625fb809a0f157273cd0fa",
+      "name": "sect_task_claim_operations",
+      "version": "sect.017"
+    },
+    {
+      "checksum": "9cabb221c6145b76da65ee0aa91e12115df1885619f4828fd666a4ec9c9b29b7",
+      "name": "sect_task_settlement_operations",
+      "version": "sect.018"
+    },
+    {
+      "checksum": "b32e5b3a432c5e8e94b19f3b69a661f206df9472a0e9c3d517be5f4c48660e28",
+      "name": "sect_operation_receipts",
+      "version": "sect.019"
+    },
+    {
+      "checksum": "d68611bc30ef5f0810207821e3f08690b96a75bc7c86c780b1c9cf4df7df7042",
+      "name": "sect_fairyland_feature_migrations",
+      "version": "sect_fairyland.001"
+    },
+    {
+      "checksum": "0859800f66a6083801a9f5e776f4561fce1e72eaebe3e6fc07dac69d938afd93",
+      "name": "sect_fairyland_claim_player_schema",
+      "version": "sect_fairyland.002"
+    },
+    {
+      "checksum": "26bd8a00d4fc5aa454855296c10569368595f1eaf73948b4ad89732355a807b6",
+      "name": "sign_in_operations",
+      "version": "sign_in.001"
+    },
+    {
+      "checksum": "4cd4ebf84c2f48aa3baa45e2ea123927501b507c9004e9555a6c8c94af5e8977",
+      "name": "sign_in_statistics_events",
+      "version": "sign_in.002"
+    },
+    {
+      "checksum": "bc5836089b04859db6970aab0abfbd9c5247065cec92f73279672dec322b1d4a",
+      "name": "sign_in_task_events",
+      "version": "sign_in.003"
+    },
+    {
+      "checksum": "cbdf0a247e3f2f68678c9a40a44840586c296728cde5d2e0d61095c5f891490b",
+      "name": "sign_in_daily_receipts",
+      "version": "sign_in.004"
+    },
+    {
+      "checksum": "3b800c9ddc6e14eeee2c95c2433b59236a59557bb9b02bff7ed1d656edd282f9",
+      "name": "sign_in_daily_makeup_source",
+      "version": "sign_in.005"
+    },
+    {
+      "checksum": "08206d2ef942b70fa908f101f95a1474f3d00dddd33d5172272b3a474060a5c4",
+      "name": "stone_gift_operations",
+      "version": "stone_gift.001"
+    },
+    {
+      "checksum": "431d9b82c283a49e714258c6bba0d846a3cd63b561850a250acef68e109d7749",
+      "name": "stone_gift_limits",
+      "version": "stone_gift.002"
+    },
+    {
+      "checksum": "85680e97ac3dfb5f6a85dd147ef24915e69afaca2dd7449aa50c56757dcb5586",
+      "name": "task_progress_schema",
+      "version": "tasks.001"
+    },
+    {
+      "checksum": "7fda14b03b57f3df66278938a93176a529284dc30d2e9175893cc14864546c46",
+      "name": "task_reward_claim_schema",
+      "version": "tasks.002"
+    },
+    {
+      "checksum": "d8223efbd8070fe1ec2aec5f2243eff24e16b92de74385cf476fa6111502c930",
+      "name": "task_reward_claim_recovery_schema",
+      "version": "tasks.003"
+    },
+    {
+      "checksum": "614ee889703ad041ed3a64969e8a4b6b00b189a32ca2e32aab6b812daba2b6a8",
+      "name": "task_reward_claim_player_schema",
+      "version": "tasks.004"
+    },
+    {
+      "checksum": "510ef01653395a3087f9b5de30bf4e3849e1e292e691d6d4bc948f240f9d1004",
+      "name": "tianti_settlement_feature_migrations",
+      "version": "tianti_settlement.001"
+    },
+    {
+      "checksum": "5e042bb544c208089385be65e97d722c6da80d06276b01aae670fedf1e7de56f",
+      "name": "tianti_settlement_operations",
+      "version": "tianti_settlement.002"
+    },
+    {
+      "checksum": "66cd4982ff0039246c88ae2137eb45cabb49d62a7b8fb7c112e80e74d32e1994",
+      "name": "tianti_training_feature_migrations",
+      "version": "tianti_training.001"
+    },
+    {
+      "checksum": "9d93cd805bbfc1e8fd2347214a267c340ba15d475d6b853a95586af18871311b",
+      "name": "tianti_stone_training_operations",
+      "version": "tianti_training.002"
+    },
+    {
+      "checksum": "a2c792596d7ab16bf8b44c3f1a31c046a1ce6571392db1854dc11565b9d44f2e",
+      "name": "tianti_player_info",
+      "version": "tianti_training.003"
+    },
+    {
+      "checksum": "f73c4c3fec552717a31c3e13669569fcb9b8b64d50d2fd57f0c7dc8699f52ad4",
+      "name": "tianti_breakthrough_operations",
+      "version": "tianti_training.004"
+    },
+    {
+      "checksum": "6b9827200655194eb7eabe679b1d3ec896c46df8c962372c059d764c0dcb6324",
+      "name": "tianti_qiaoxue_operations",
+      "version": "tianti_training.005"
+    },
+    {
+      "checksum": "c860b54abe9e908cf51ff56f6b636a592d5ec1c24a1dbd46599bb0c374bdab9e",
+      "name": "tianti_medicine_bath_operations",
+      "version": "tianti_training.006"
+    },
+    {
+      "checksum": "0d55bc1ab8589ceea8f95aefe3c472d85986e061a04ffbd80e6597c5f5837005",
+      "name": "tianti_item_reward_operations",
+      "version": "tianti_training.007"
+    },
+    {
+      "checksum": "a4c9eec2159dd2ce06958d2458feae2604d439e90f95e2981a4446bfdce59748",
+      "name": "training_state_operations",
+      "version": "tianti_training.008"
+    },
+    {
+      "checksum": "869432c45157432d89ebcc15d8a9c4fa50bbfbb0608438ceae636c1cf56dcd32",
+      "name": "title_feature_migrations",
+      "version": "title.001"
+    },
+    {
+      "checksum": "27374cf9e13f0998d9b73157f2091f55ca3bbcca32546a8e39d99fc7e806d0a1",
+      "name": "title_schema",
+      "version": "title.002"
+    },
+    {
+      "checksum": "8468a203894418c5f20d1118f92eb9796ace4b317c2df3c3e4c2a623f05920f3",
+      "name": "tower_feature_migrations",
+      "version": "tower.001"
+    },
+    {
+      "checksum": "d90b2e4776b7a5a9a474ee42eaf3679c82fee50702bb447bb9721325bf7d6572",
+      "name": "tower_purchase_operations",
+      "version": "tower.002"
+    },
+    {
+      "checksum": "5cdbeeeca31d4ccb581c3962a02733601c3c9c6c8e1c15c2fef778378c0724e1",
+      "name": "tower_settlement_operations",
+      "version": "tower.003"
+    },
+    {
+      "checksum": "211b323ad971d3a452c1fb08e63d8ee19f4e70545f46696a7a28cbd8c7e4cd9e",
+      "name": "tower_state_operations",
+      "version": "tower.004"
+    },
+    {
+      "checksum": "dca7765b86fd3a425efa3e1af17e1bdda8ccaaa3591f20503d1c4163dcf71feb",
+      "name": "trade_feature_migrations",
+      "version": "trade.001"
+    },
+    {
+      "checksum": "8f40eadd0424b555565a9508dfd1262e04a2f40b98c79de891a6ff2660c002db",
+      "name": "trade_guishi_deposit_operations",
+      "version": "trade.002"
+    },
+    {
+      "checksum": "7a7807466b554981fdc34e8d0994e20139c1a7d0bd3688dde351e91fef4475f1",
+      "name": "guishi_info",
+      "version": "trade.003"
+    },
+    {
+      "checksum": "eb268aed7b90b013bec11c1efcc770a7567db6b1e07e1e59cb9e3997212059fe",
+      "name": "trade_guishi_withdraw_operations",
+      "version": "trade.004"
+    },
+    {
+      "checksum": "8f806a57399d82d6e8eb5ac3ea0a5eb5908c3792d31a43470e6c4e54285ba747",
+      "name": "guishi_order_create_operations",
+      "version": "trade.005"
+    },
+    {
+      "checksum": "41d7065b7cba77dcaa49c60ed5448f09d97709606affb8c55d1e05c37db681c2",
+      "name": "guishi_order_cancel_operations",
+      "version": "trade.006"
+    },
+    {
+      "checksum": "a0dccaf94feec5e1da5f922755b9c4d007bf5ba087beae53eac3dff6fae011e7",
+      "name": "guishi_match_operations",
+      "version": "trade.007"
+    },
+    {
+      "checksum": "ac0e257ae004605fcb9b78e2b2cbc61defe5a329058319d034bae23074a0b220",
+      "name": "guishi_expired_order_operations",
+      "version": "trade.008"
+    },
+    {
+      "checksum": "bb0197196cf4825649bb5b906175661141f06f0dc0ae82ecdde8969ef5e98e1c",
+      "name": "guishi_take_item_operations",
+      "version": "trade.009"
+    },
+    {
+      "checksum": "e0b6743d03450ccab593c226cc9a5bd46a694d793ca48223cd388dc2869cf02b",
+      "name": "xianshi_listing_operations",
+      "version": "trade.010"
+    },
+    {
+      "checksum": "4e2c5ef37e8db7cd5a4f9650cb1cc9843a9a7d14521ec9890df140afd9e9d077",
+      "name": "xianshi_plan_listing_operations",
+      "version": "trade.011"
+    },
+    {
+      "checksum": "dc196722c723b93e16781a4b75b8474287a168fa40f7b9b1ac87aa8e98f62da2",
+      "name": "xianshi_removal_operations",
+      "version": "trade.012"
+    },
+    {
+      "checksum": "528a2cb7aba71b06d360e4edbe72c05d75748520e4f94cb3ea887ff7682f0407",
+      "name": "xianshi_operations",
+      "version": "trade.013"
+    },
+    {
+      "checksum": "606b4a4181c218de204e9e21e53a2f7b13685d0a8dedacb15f829e3a9852a270",
+      "name": "xianshi_watchlist",
+      "version": "trade.014"
+    },
+    {
+      "checksum": "61d6cfd5805f6ae9bd803ba689cf8f8a817262c90c50a057a1ae54f577b53148",
+      "name": "training_event_operations",
+      "version": "training.001"
+    },
+    {
+      "checksum": "1af29dc514ce59e59372051a708736bb2919b9cc4e76e5bac5e0109da4109ae5",
+      "name": "training_event_player_schema",
+      "version": "training.002"
+    },
+    {
+      "checksum": "d55b8c8edb03e9eb43e2dd4980096799565baacfe67ad4eb767c77e6db72f919",
+      "name": "training_purchase_operations",
+      "version": "training.003"
+    },
+    {
+      "checksum": "116b16b61a5117def91d5c963dd358d4ee15a8d6d99bb234eb0ee20fa456720e",
+      "name": "training_reset_operations",
+      "version": "training.004"
+    },
+    {
+      "checksum": "c5c010f5d8772480b49fb4d3cafcc228b4d51ebc5c3a858156e0680c4f49f6d2",
+      "name": "training_event_resolutions",
+      "version": "training.005"
+    },
+    {
+      "checksum": "7744472babf976a9eef0dc1a37a57c8936dbff2430b138244f0ec3d194a73529",
+      "name": "training_leaderboard_indexes",
+      "version": "training.006"
+    },
+    {
+      "checksum": "b2b2eec3a44a3179831bfe4be59c785b30b9e74798b07e8707e5fe922dacc182",
+      "name": "work_feature_migrations",
+      "version": "work.001"
+    },
+    {
+      "checksum": "71a06f06b6a401edbfcdcb5124777c715a9db6504373ff40421341d7bfa88148",
+      "name": "work_daily_refresh_reset_operations",
+      "version": "work.002"
+    },
+    {
+      "checksum": "8bbcef1b9ed7d2d58b32ff80bca70478fa320703af36832edba4628284f1922f",
+      "name": "work_item_use_operations",
+      "version": "work.003"
+    },
+    {
+      "checksum": "30cc8498603d57cabab48c7b6a86afbf64d0c87dbcd9179968946374911839f4",
+      "name": "work_offer_snapshots",
+      "version": "work.004"
+    },
+    {
+      "checksum": "cf706de72796b42dbf75a9df22c82b98794d61ee3302d6c90374343509e6cf52",
+      "name": "work_refresh_operations",
+      "version": "work.005"
+    },
+    {
+      "checksum": "8c62967928cf51f4a0bf74fc94f7378ae7535e492e8cdfa27320d43d83e38f44",
+      "name": "work_abort_cleanup_operations",
+      "version": "work.006"
+    },
+    {
+      "checksum": "dfaba46b9d4e9410462a5e64936c1c13fe5b2a664a584813fd3f2047721fd450",
+      "name": "work_claim_operations",
+      "version": "work.007"
+    },
+    {
+      "checksum": "819a75cc5fc030283079fd164ef6c547fde81b6476a82e38d7ff64cc582a364f",
+      "name": "work_settlement_operations",
+      "version": "work.008"
+    },
+    {
+      "checksum": "56cea3a7732fbfd9f58dcf8cfdc6c251cb6b41fcd0e7c893d83a8e5c32defe83",
+      "name": "world_events_feature_migrations",
+      "version": "world_events.001"
+    },
+    {
+      "checksum": "9e196eb7823a9a62c65ff7a565bbe90a393be1268081fc346f07e53d917afddc",
+      "name": "world_events_player_attack_settlement",
+      "version": "world_events.002"
+    },
+    {
+      "checksum": "804be6cc1fa455066554e539f1d0af5bfd01b3b04c80c7272dea86f7b43bef6e",
+      "name": "demon_claim_operations",
+      "version": "world_events.003"
+    },
+    {
+      "checksum": "f75ebd73e631a61c1114f1750cf08055428b82ade91cf99371599b251cfe8e26",
+      "name": "demon_event_lifecycle_operations",
+      "version": "world_events.004"
+    },
+    {
+      "checksum": "52f6c5df49d66cde6c2c2b3520261958432f8ea8d3bbf1978f07953551a37ab6",
+      "name": "demon_wave_refresh_operations",
+      "version": "world_events.005"
+    },
+    {
+      "checksum": "9e81b70e3fdb26da747827abdc215aa46b17a259a93d5e99b963f995710e9106",
+      "name": "spirit_vein_lifecycle_operations",
+      "version": "world_events.006"
+    },
+    {
+      "checksum": "59ecc622fc8703f4d0f2ffe2b24a151039cf819672f18b053c0d78ffbaf56803",
+      "name": "demon_claim_statistics",
+      "version": "world_events.007"
+    }
+  ],
+  "attached_migrations": [
+    {
+      "checksum": "3e2c81299f2380bca08c70088a68bde5aaadd64c75dfc087e10a7583a2675ccf",
+      "checksum_helper_sha256": "17da742bfee93a82b433248f6b2c2e137034643d1279c4b28acc09776d04c107",
+      "implementation_sha256": "044e5e8214f087e5a9a26d64f939c80382b69bda139f474a7a99590eb0a422a7",
+      "name": "player_accessory",
+      "version": "accessory_package.player_data.001"
+    },
+    {
+      "checksum": "f15961422cc488113a78305db113858d1160519225e237b68d1b04b7c0da9cac",
+      "checksum_helper_sha256": null,
+      "implementation_sha256": "eae6d07eca8cac9a6b301f040d5f225ae481ae0c6a4a9cddb8522b7284786bf4",
+      "name": "accessory_package_operations",
+      "version": "accessory_package.player_data.002"
+    },
+    {
+      "checksum": "630740c760716eb897f768e35ddf8ba22ccaca3e543f86e2080f0f85fd6cf09f",
+      "checksum_helper_sha256": null,
+      "implementation_sha256": "f0b52a844de1b581d5392449305830d3b4752cc927d1ca64f8e1872603fa5272",
+      "name": "accessory_presets",
+      "version": "accessory_package.player_data.003"
+    }
+  ],
+  "source_sha": "b94a81710126d1161cc233e1ac2fe8cf4c04428d"
+}
