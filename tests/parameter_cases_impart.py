@@ -98,21 +98,56 @@ def register(case):
         probe.evidence.update(card=name, inventory_unchanged=True)
 
     @case("impart-prayer-inconsistent-history", "传承祈愿", "合法次数 + 历史重复结晶不一致",
-          "两条历史传承记录仅结晶余额不同，有足够资源", "明确历史结晶记录拒绝，所有历史行/卡/资产不变",
-          group="impart-parameters", outcome="rejection")
+          "两条历史传承记录仅结晶余额不同，有足够资源", "只结算最小有效行，历史副本整行不变并写入回执",
+          group="impart-parameters")
     async def divergent(probe):
         probe.impart(stone_num=100)
         database = probe.context.paths.impart_db
         columns = [row[1] for row in probe.rows(database, "PRAGMA table_info(xiuxian_impart)") if row[1] != "id"]
         names = ",".join('"' + column + '"' for column in columns)
+        # Recreate the legacy duplicate state after startup reconciliation so
+        # the live command can exercise its effective-row compatibility contract.
+        probe.seed(database, "DROP INDEX IF EXISTS xiuxian_impart_user_id_unique")
         probe.seed(database, f"INSERT INTO xiuxian_impart({names}) SELECT {names} FROM xiuxian_impart WHERE user_id='900001'")
-        probe.seed(database, "UPDATE xiuxian_impart SET stone_num=101 WHERE rowid=(SELECT MAX(rowid) FROM xiuxian_impart)")
-        before = probe.rows(database, "SELECT * FROM xiuxian_impart ORDER BY rowid")
+        probe.seed(
+            database,
+            "UPDATE xiuxian_impart SET stone_num=101,stone_num_exact='101',"
+            "stone_num_precision_state='exact' "
+            "WHERE rowid=(SELECT MAX(rowid) FROM xiuxian_impart)",
+        )
+        state_sql = (
+            "SELECT rowid,stone_num,stone_num_exact,stone_num_precision_state,wish,exp_day "
+            "FROM xiuxian_impart ORDER BY rowid"
+        )
+        before = probe.rows(database, state_sql)
+        full_rows_sql = "SELECT * FROM xiuxian_impart WHERE user_id='900001' ORDER BY rowid"
+        full_rows_before = probe.rows(database, full_rows_sql)
+        stats_before = probe.rows(probe.context.paths.player_db,
+                                  'SELECT "传承祈愿次数","思恋结晶消耗" '
+                                  "FROM statistics WHERE user_id='900001'")
+        cards_before = cards(probe)
+        receipt_sql = "SELECT * FROM impart_crystal_draw_operations"
+        receipts_before = probe.rows(database, receipt_sql)
         text = await probe.command("传承祈愿", "传承祈愿 2")
-        assert "历史" in text and "结晶" in text, text
-        assert probe.rows(database, "SELECT * FROM xiuxian_impart ORDER BY rowid") == before
-        assert not cards(probe) and not probe.rows(database, "SELECT * FROM impart_crystal_draw_operations")
-        probe.evidence.update(reason="impart_rows_stone_num", historical_rows_unchanged=True, no_receipt=True)
+        after = probe.rows(database, state_sql)
+        full_rows_after = probe.rows(database, full_rows_sql)
+        assert "剩余思恋结晶：80颗" in text, text
+        assert len(after) == 2 and after[0][1:4] == (80, "80", "exact"), (before, after)
+        assert after[1] == before[1], (before, after)
+        assert full_rows_after[1] == full_rows_before[1], (full_rows_before, full_rows_after)
+        assert probe.rows(database, receipt_sql) != receipts_before
+        assert len(probe.rows(database, receipt_sql)) == len(receipts_before) + 1
+        stats_after = probe.rows(
+            probe.context.paths.player_db,
+            'SELECT "传承祈愿次数","思恋结晶消耗" '
+            "FROM statistics WHERE user_id='900001'",
+        )
+        assert stats_after == [(2, 20)] and stats_after != stats_before, (stats_before, stats_after)
+        assert cards(probe) == cards_before
+        probe.evidence.update(effective_row_debited=True, historical_row_unchanged=True,
+                              cards_before=cards_before, receipt_written=True,
+                              statistics_before=stats_before, statistics_after=stats_after,
+                              statistics_written=True)
 
     for command in ("传承祈愿", "传承抽卡", "传承分解"):
         for label, value in (("zero", "0"), ("negative", "-2"), ("format", "two"), ("extra", "2 extra")):
@@ -126,7 +161,17 @@ def register(case):
                     before = probe.rows(database, "SELECT * FROM xiuxian_impart ORDER BY rowid")
                     argument = f"{name} {value}" if command == "传承分解" else value
                     text = await probe.command(command, command + " " + argument)
-                    assert any(token in text for token in ("次数", "格式", "无效")), text
+                    expected = {
+                        "传承祈愿": "传承祈愿次数必须为正整数，例如：传承祈愿 2。",
+                        "传承抽卡": "传承抽卡次数必须为正整数，例如：传承抽卡 2。",
+                    }.get(command)
+                    if expected is None:
+                        expected = (
+                            "传承卡名或数量无效！"
+                            if value == "0"
+                            else "格式：传承分解 卡名 &#91;数量&#93;"
+                        )
+                    assert expected in text, (expected, text)
                     assert probe.rows(database, "SELECT * FROM xiuxian_impart ORDER BY rowid") == before
                     assert dict(cards(probe)) == {name: 4}
                     assert probe.rows(probe.context.paths.game_db, "SELECT stone FROM user_xiuxian WHERE user_id='900001'") == [(100_000_000,)]
