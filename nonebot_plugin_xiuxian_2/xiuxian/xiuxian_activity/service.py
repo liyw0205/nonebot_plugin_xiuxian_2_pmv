@@ -608,6 +608,27 @@ def _redemption_rejection(reason: str, message: str, detailed: bool):
     return False, message
 
 
+def _activity_result(
+    ok: bool,
+    text: str,
+    reason: str | None = None,
+    *,
+    detailed: bool = False,
+    subject: str = "actor",
+    **extra,
+):
+    """Keep legacy tuple callers while exposing a durable rejection contract."""
+    if not detailed:
+        return bool(ok), str(text)
+    result = {"status": "applied" if ok else "rejected", "message": str(text)}
+    if reason:
+        result["reason"] = str(reason)
+    if not ok:
+        result["subject"] = str(subject)
+    result.update(extra)
+    return result
+
+
 def claim_collect_phrase(
     user_id: str,
     query: str,
@@ -914,23 +935,38 @@ def _select_claimable_tasks(
     return selected
 
 
-def claim_activity_tasks(user_id: str, query: str = "", operation_id: str | None = None) -> tuple[bool, str]:
+def claim_activity_tasks(
+    user_id: str,
+    query: str = "",
+    operation_id: str | None = None,
+    *,
+    detailed_result: bool = False,
+):
     uid = str(user_id)
     if operation_id:
         previous = _activity_task_claim_application().get_result(operation_id, uid)
         if previous is not None:
             if not previous.succeeded:
-                return False, "领取请求冲突，请重新发送"
+                return _activity_result(
+                    False, "领取请求冲突，请重新发送", "operation_conflict", detailed=detailed_result
+                )
             lines = ["活动任务奖励领取成功："]
             for name, reward_text in previous.rewards:
                 lines.append(f"- {name}：{reward_text or '暂无奖励'}")
-            return True, "\n".join(lines)
+            return _activity_result(True, "\n".join(lines), detailed=detailed_result)
     cfg = load_config()
     runtime = activity_runtime_state(cfg)
     if not runtime.get("ok"):
-        return False, runtime.get("reason") or "活动未开放"
+        return _activity_result(
+            False, runtime.get("reason") or "活动未开放", "activity_unavailable", detailed=detailed_result
+        )
     if "claim" not in set(runtime.get("features") or []):
-        return False, f"当前阶段【{runtime.get('stage_name', '活动阶段')}】不开放活动领奖"
+        return _activity_result(
+            False,
+            f"当前阶段【{runtime.get('stage_name', '活动阶段')}】不开放活动领奖",
+            "claim_stage_closed",
+            detailed=detailed_result,
+        )
     activity_key = _activity_config_key(cfg)
     conn = db_backend.connect_readonly(DB_PATH)
     conn.row_factory = db_backend.Row
@@ -939,14 +975,21 @@ def claim_activity_tasks(user_id: str, query: str = "", operation_id: str | None
         cur = conn.cursor()
         claimable = _select_claimable_tasks(cur, cfg, uid, query)
         if not claimable:
-            return False, "当前没有可领取的活动任务奖励"
+            return _activity_result(
+                False, "当前没有可领取的活动任务奖励", "no_claimable_task_rewards", detailed=detailed_result
+            )
         tasks = []
         for task, scope_type, scope_key, target in claimable:
             reward_text = _clean_text(task.get("reward"))
             try:
                 reward_items = parse_reward(reward_text)
             except Exception as e:
-                return False, f"任务【{task['name']}】奖励配置错误：{e}"
+                return _activity_result(
+                    False,
+                    f"任务【{task['name']}】奖励配置错误：{e}",
+                    "task_reward_invalid",
+                    detailed=detailed_result,
+                )
             tasks.append((task["key"], scope_type, scope_key, target, reward_text, reward_items, task["name"]))
     finally:
         conn.close()
@@ -962,11 +1005,16 @@ def claim_activity_tasks(user_id: str, query: str = "", operation_id: str | None
             "claim_in_progress": "任务奖励正在处理中，请稍后重试",
             "operation_conflict": "领取请求冲突，请重新发送",
         }
-        return False, messages.get(result.status, "当前没有可领取的活动任务奖励")
+        return _activity_result(
+            False,
+            messages.get(result.status, "当前没有可领取的活动任务奖励"),
+            result.status or "task_claim_failed",
+            detailed=detailed_result,
+        )
     lines = ["活动任务奖励领取成功："]
     for name, reward_text in result.rewards:
         lines.append(f"- {name}：{reward_text or '暂无奖励'}")
-    return True, "\n".join(lines)
+    return _activity_result(True, "\n".join(lines), detailed=detailed_result)
 
 
 def build_activity_pass_text(user_id: str) -> str:
@@ -1041,7 +1089,13 @@ def build_activity_pass_text(user_id: str) -> str:
         conn.close()
 
 
-def claim_activity_pass_rewards(user_id: str, query: str = "", operation_id: str | None = None) -> tuple[bool, str]:
+def claim_activity_pass_rewards(
+    user_id: str,
+    query: str = "",
+    operation_id: str | None = None,
+    *,
+    detailed_result: bool = False,
+):
     uid = str(user_id)
     claim_application = _activity_pass_claim_application()
     if operation_id:
@@ -1057,20 +1111,32 @@ def claim_activity_pass_rewards(user_id: str, query: str = "", operation_id: str
                     "claim_in_progress": "战令奖励正在处理中，请稍后重试",
                     "operation_conflict": "领取请求冲突，请重新发送",
                 }
-                return False, messages.get(previous.status, "当前没有可领取的活动战令奖励")
+                return _activity_result(
+                    False,
+                    messages.get(previous.status, "当前没有可领取的活动战令奖励"),
+                    previous.status or "pass_claim_failed",
+                    detailed=detailed_result,
+                )
             lines = ["活动战令奖励领取成功："]
             for level, name, reward_text in previous.rewards:
                 lines.append(f"- Lv.{level} {name}：{reward_text or '暂无奖励'}")
-            return True, "\n".join(lines)
+            return _activity_result(True, "\n".join(lines), detailed=detailed_result)
     cfg = load_config()
     runtime = activity_runtime_state(cfg)
     if not runtime.get("ok"):
-        return False, runtime.get("reason") or "活动未开放"
+        return _activity_result(
+            False, runtime.get("reason") or "活动未开放", "activity_unavailable", detailed=detailed_result
+        )
     if "claim" not in set(runtime.get("features") or []):
-        return False, f"当前阶段【{runtime.get('stage_name', '活动阶段')}】不开放活动领奖"
+        return _activity_result(
+            False,
+            f"当前阶段【{runtime.get('stage_name', '活动阶段')}】不开放活动领奖",
+            "claim_stage_closed",
+            detailed=detailed_result,
+        )
     pass_cfg = _activity_pass_config(cfg)
     if not pass_cfg.get("enabled"):
-        return False, "活动战令未开启"
+        return _activity_result(False, "活动战令未开启", "pass_disabled", detailed=detailed_result)
     activity_key = _activity_config_key(cfg)
     target_text = _clean_text(query)
     target_level = _as_int(target_text, 0) if target_text.isdigit() else 0
@@ -1107,10 +1173,17 @@ def claim_activity_pass_rewards(user_id: str, query: str = "", operation_id: str
                 reward_items = parse_reward(reward_text)
             except Exception as e:
                 conn.rollback()
-                return False, f"战令Lv.{level}奖励配置错误：{e}"
+                return _activity_result(
+                    False,
+                    f"战令Lv.{level}奖励配置错误：{e}",
+                    "pass_reward_invalid",
+                    detailed=detailed_result,
+                )
             reward_jobs.append({"level": level, "name": reward.get("name"), "reward": reward_text, "reward_items": reward_items})
         if not reward_jobs:
-            return False, "当前没有可领取的活动战令奖励"
+            return _activity_result(
+                False, "当前没有可领取的活动战令奖励", "no_claimable_pass_rewards", detailed=detailed_result
+            )
     finally:
         conn.close()
 
@@ -1119,14 +1192,29 @@ def claim_activity_pass_rewards(user_id: str, query: str = "", operation_id: str
         balance["level"], reward_jobs, XiuConfig().max_goods_num,
     )
     if not result.succeeded:
-        return False, {"inventory_full":"背包空间不足，奖励未领取","user_missing":"角色不存在","state_changed":"战令领奖未完成：战令进度已更新，请重新查询战令","operation_conflict":"领取请求冲突，请重新发送"}.get(result.status,"活动战令奖励已领取")
+        return _activity_result(
+            False,
+            {
+                "inventory_full": "背包空间不足，奖励未领取",
+                "user_missing": "角色不存在",
+                "state_changed": "战令领奖未完成：战令进度已更新，请重新查询战令",
+                "operation_conflict": "领取请求冲突，请重新发送",
+            }.get(result.status, "活动战令奖励已领取"),
+            result.status or "pass_claim_failed",
+            detailed=detailed_result,
+        )
     lines = ["活动战令奖励领取成功："]
     for level, name, reward_text in result.rewards:
         lines.append(f"- Lv.{level} {name}：{reward_text or '暂无奖励'}")
-    return True, "\n".join(lines)
+    return _activity_result(True, "\n".join(lines), detailed=detailed_result)
 
 
-def claim_activity_rewards(user_id: str, operation_id: str | None = None) -> tuple[bool, str]:
+def claim_activity_rewards(
+    user_id: str,
+    operation_id: str | None = None,
+    *,
+    detailed_result: bool = False,
+):
     uid = str(user_id)
     operation_id = operation_id or f"activity:claim-all:{uid}:{runtime_ids.new_id()}"
     from ...compatibility.legacy_activity_claim_steps import build_legacy_activity_claim_runners
@@ -1140,7 +1228,19 @@ def claim_activity_rewards(user_id: str, operation_id: str | None = None) -> tup
         logger.warning(
             f"活动总领奖可重试失败 operation_id={operation_id} user_id={uid}: {result.text}"
         )
-    return result.ok, result.text
+    reason = None
+    if not result.ok:
+        reason = "claim_all_retryable" if result.status == "retryable_failure" else "no_claimable_activity_rewards"
+    return _activity_result(
+        result.ok,
+        result.text,
+        reason,
+        detailed=detailed_result,
+        steps=[
+            {"name": step.name, "ok": step.ok, "text": step.text}
+            for step in result.steps
+        ],
+    )
 
 
 def _parse_shop_query(query: str) -> tuple[str, int]:
@@ -1923,13 +2023,21 @@ def claim_sign(
     operation_id: str | None = None,
     *,
     settlement_repository=None,
-) -> tuple[bool, str]:
+    detailed_result: bool = False,
+):
     cfg = load_config()
     runtime = activity_runtime_state(cfg)
     if not runtime.get("ok"):
-        return False, runtime.get("reason") or "活动未开放"
+        return _activity_result(
+            False, runtime.get("reason") or "活动未开放", "activity_unavailable", detailed=detailed_result
+        )
     if "sign" not in set(runtime.get("features") or []):
-        return False, f"当前阶段【{runtime.get('stage_name', '活动阶段')}】不开放活动签到"
+        return _activity_result(
+            False,
+            f"当前阶段【{runtime.get('stage_name', '活动阶段')}】不开放活动签到",
+            "sign_stage_closed",
+            detailed=detailed_result,
+        )
 
     uid = str(user_id)
     today = today_str()
@@ -1954,7 +2062,7 @@ def claim_sign(
             f"累计签到：{previous.sign_days} 天",
             "该签到请求已经处理，无需重复提交。",
         ]
-        return True, "\n".join(lines)
+        return _activity_result(True, "\n".join(lines), detailed=detailed_result)
 
     conn = db_backend.connect(DB_PATH)
     conn.row_factory = db_backend.Row
@@ -1978,7 +2086,12 @@ def claim_sign(
             daily_reward_items = parse_reward(daily_reward_text)
             milestone_reward_items = parse_reward(milestone_reward_text)
         except Exception as e:
-            return False, f"活动奖励配置错误：{e}"
+            return _activity_result(
+                False,
+                f"活动奖励配置错误：{e}",
+                "sign_reward_invalid",
+                detailed=detailed_result,
+            )
 
     finally:
         conn.close()
@@ -1996,9 +2109,20 @@ def claim_sign(
             f"累计签到：{result.sign_days} 天",
             "该签到请求已经处理，无需重复提交。",
         ]
-        return True, "\n".join(lines)
+        return _activity_result(True, "\n".join(lines), detailed=detailed_result)
     if not result.succeeded:
-        return False, {"already_signed":"今日已经领取过活动签到","inventory_full":"背包空间不足，奖励未领取","user_missing":"角色不存在","state_changed":"签到未完成：签到状态已更新，请重新签到","operation_conflict":"签到请求冲突，请重新发送"}.get(result.status,"活动签到失败")
+        return _activity_result(
+            False,
+            {
+                "already_signed": "今日已经领取过活动签到",
+                "inventory_full": "背包空间不足，奖励未领取",
+                "user_missing": "角色不存在",
+                "state_changed": "签到未完成：签到状态已更新，请重新签到",
+                "operation_conflict": "签到请求冲突，请重新发送",
+            }.get(result.status, "活动签到失败"),
+            result.status or "sign_failed",
+            detailed=detailed_result,
+        )
     daily_msg, milestone_msg = [], []
     sign_days = result.sign_days
 
@@ -2027,7 +2151,7 @@ def claim_sign(
         if milestone_reward_text or milestone_reward.get("name"):
             title = str(milestone_reward.get("name") or f"累计{sign_days}天奖励")
             log_lines.append(_format_reward_result(title, milestone_reward_text, milestone_msg))
-    return True, "\n".join(lines)
+    return _activity_result(True, "\n".join(lines), detailed=detailed_result)
 
 
 def _append_gameplay_summary(lines: list[str], cfg: dict, *, detail: bool) -> None:

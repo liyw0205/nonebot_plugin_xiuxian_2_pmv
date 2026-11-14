@@ -66,6 +66,16 @@ def _run_activity_action(action: str, operation_id: str, user_id: str, **payload
     return outcome.ok, message, data
 
 
+def _activity_action_reply(action: str, ok: bool, text: str, data: dict) -> str:
+    """Render a rejection without dropping its persisted reason or subject."""
+    if ok:
+        return text
+    reason = str(data.get("reason") or "").strip()
+    if not reason:
+        return f"{action}：{text}"
+    return result_failure(action, data, messages={reason: text})
+
+
 async def _ensure_user(event) -> tuple[bool, dict | None, str]:
     is_user, user_info, msg = check_user(event)
     return is_user, user_info, msg
@@ -164,13 +174,13 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         await handle_send(bot, event, msg, md_type="我要修仙")
         return
     uid = str(user_info["user_id"])
-    ok, text, _ = _run_activity_action(
+    ok, text, data = _run_activity_action(
         "claim_stage_rewards",
         _activity_operation_id(event, "stage-claim", uid),
         uid,
         query=args.extract_plain_text(),
     )
-    await handle_send(bot, event, text if ok else text)
+    await handle_send(bot, event, _activity_action_reply("活动阶段领取失败", ok, text, data))
 
 
 @activity_rewards_cmd.handle(parameterless=[Cooldown(cd_time=0)])
@@ -203,12 +213,12 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         return
 
     user_id = str(user_info["user_id"])
-    ok, text, _ = _run_activity_action(
+    ok, text, data = _run_activity_action(
         "claim_activity_rewards",
         _activity_operation_id(event, "claim-all", user_id),
         user_id,
     )
-    await handle_send(bot, event, text if ok else f"活动领取失败：{text}")
+    await handle_send(bot, event, _activity_action_reply("活动领取失败", ok, text, data))
 
 
 @activity_tasks_cmd.handle(parameterless=[Cooldown(cd_time=0)])
@@ -239,13 +249,13 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         return
 
     user_id = str(user_info["user_id"])
-    ok, text, _ = _run_activity_action(
+    ok, text, data = _run_activity_action(
         "claim_activity_tasks",
         _activity_operation_id(event, "task-claim", user_id),
         user_id,
         query=args.extract_plain_text(),
     )
-    await handle_send(bot, event, text if ok else f"活动任务领取失败：{text}")
+    await handle_send(bot, event, _activity_action_reply("活动任务领取失败", ok, text, data))
 
 
 @activity_pass_cmd.handle(parameterless=[Cooldown(cd_time=0)])
@@ -269,13 +279,13 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         return
 
     user_id = str(user_info["user_id"])
-    ok, text, _ = _run_activity_action(
+    ok, text, data = _run_activity_action(
         "claim_activity_pass_rewards",
         _activity_operation_id(event, "pass-claim", user_id),
         user_id,
         query=args.extract_plain_text(),
     )
-    await handle_send(bot, event, text if ok else f"活动战令领取失败：{text}")
+    await handle_send(bot, event, _activity_action_reply("活动战令领取失败", ok, text, data))
 
 
 @activity_gameplay_cmd.handle(parameterless=[Cooldown(cd_time=0)])
@@ -305,12 +315,12 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         return
 
     user_id = str(user_info["user_id"])
-    ok, text, _ = _run_activity_action(
+    ok, text, data = _run_activity_action(
         "claim_sign",
         _activity_operation_id(event, "sign", user_id),
         user_id,
     )
-    await handle_send(bot, event, text if ok else f"活动签到失败：{text}")
+    await handle_send(bot, event, _activity_action_reply("活动签到失败", ok, text, data))
 
 
 @activity_rank_cmd.handle(parameterless=[Cooldown(cd_time=0)])
@@ -341,13 +351,13 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         await handle_send(bot, event, msg, md_type="我要修仙")
         return
     uid = str(user_info["user_id"])
-    ok, text, _ = _run_activity_action(
+    ok, text, data = _run_activity_action(
         "claim_rank_rewards",
         _activity_operation_id(event, "rank-claim", uid),
         uid,
         query=args.extract_plain_text(),
     )
-    await handle_send(bot, event, text if ok else text)
+    await handle_send(bot, event, _activity_action_reply("活动排行领取失败", ok, text, data))
 
 
 @activity_bag_cmd.handle(parameterless=[Cooldown(cd_time=0)])
@@ -391,10 +401,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         user_id,
         query=args.extract_plain_text(),
     )
-    reply = text if ok else f"活动兑换失败：{text}"
-    if not ok and data.get("reason"):
-        reply = result_failure("活动兑换失败", data, messages={data["reason"]: text})
-    await handle_send(bot, event, reply)
+    await handle_send(bot, event, _activity_action_reply("活动兑换失败", ok, text, data))
 
 
 @activity_synthesis_cmd.handle(parameterless=[Cooldown(cd_time=0)])
@@ -411,7 +418,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         _activity_operation_id(event, "collect-synthesis", user_id),
         user_id, query=args.extract_plain_text(),
     )
-    reply = text if ok else result_failure("活动换字失败", data, messages={data["reason"]: text})
+    reply = _activity_action_reply("活动换字失败", ok, text, data)
     await handle_send(bot, event, reply, k1="背包", v1="活动背包")
 
 
@@ -468,10 +475,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         user_id,
         query=args.extract_plain_text(),
     )
-    reply = text if ok else f"活动购买失败：{text}"
-    if not ok and data.get("reason"):
-        reply = result_failure("活动购买失败", data, messages={data["reason"]: text})
-    await handle_send(bot, event, reply)
+    await handle_send(bot, event, _activity_action_reply("活动购买失败", ok, text, data))
 
 
 @activity_boss_cmd.handle(parameterless=[Cooldown(cd_time=0)])

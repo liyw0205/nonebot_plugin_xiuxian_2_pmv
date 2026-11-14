@@ -70,12 +70,13 @@ class ActivityApplicationTest(unittest.TestCase):
                     payload={"action": "claim_sign"},
                 ).ok)
 
-            tasks.assert_called_once_with("u", "", "activity:task-claim:u:1")
-            pass_claim.assert_called_once_with("u", "", "activity:pass-claim:u:2")
+            tasks.assert_called_once_with("u", "", "activity:task-claim:u:1", detailed_result=True)
+            pass_claim.assert_called_once_with("u", "", "activity:pass-claim:u:2", detailed_result=True)
             boss.assert_called_once_with("u", "进度", "activity:boss-claim:u:3")
             sign.assert_called_once()
             self.assertEqual("u", sign.call_args.args[0])
             self.assertEqual("activity:sign:u:4", sign.call_args.args[1])
+            self.assertTrue(sign.call_args.kwargs["detailed_result"])
             self.assertEqual(database, str(sign.call_args.kwargs["settlement_repository"].database))
 
     def test_point_shop_action_uses_feature_repository(self) -> None:

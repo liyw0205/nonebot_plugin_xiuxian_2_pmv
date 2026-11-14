@@ -60,7 +60,22 @@ class ActivityStageClaimApplication:
 
         return list(send_reward_to_user(user_id, parse_reward(reward_text)) or [])
 
-    def claim(self, user_id: str, *, query: str = "") -> tuple[bool, str]:
+    @staticmethod
+    def _result(ok: bool, text: str, reason: str | None, detailed: bool):
+        if not detailed:
+            return bool(ok), str(text)
+        result = {"status": "applied" if ok else "rejected", "message": str(text)}
+        if reason:
+            result.update(reason=str(reason), subject="actor")
+        return result
+
+    def claim(
+        self,
+        user_id: str,
+        *,
+        query: str = "",
+        detailed_result: bool = False,
+    ):
         from ...xiuxian.xiuxian_activity.activity_config import (
             _activity_config_key,
             _runtime_feature_refusal,
@@ -72,16 +87,16 @@ class ActivityStageClaimApplication:
         config = self._config()
         ok, reason = activity_state(config)
         if not ok:
-            return False, reason or "活动未开放"
+            return self._result(False, reason or "活动未开放", "activity_unavailable", detailed_result)
         refusal = _runtime_feature_refusal(config, "claim", "活动领奖")
         if refusal:
-            return False, refusal
+            return self._result(False, refusal, "claim_stage_closed", detailed_result)
 
         now = self.clock.now().astimezone().replace(tzinfo=None)
         timeline = stage_timeline(config, now)
         ended = timeline["ended"]
         if not ended:
-            return False, "当前没有已结束的活动阶段"
+            return self._result(False, "当前没有已结束的活动阶段", "no_ended_stage_rewards", detailed_result)
 
         activity_key = _activity_config_key(config)
         windows = [(stage["key"], *stage_window_bounds(stage)) for stage in ended]
@@ -97,14 +112,20 @@ class ActivityStageClaimApplication:
                 if target in row["key"] or target in row["name"]
             ]
             if not rows:
-                return False, f"没有可领取的阶段奖励：{target}"
+                return self._result(
+                    False, f"没有可领取的阶段奖励：{target}", "stage_target_missing", detailed_result
+                )
 
         if not rows:
             if not any(stage["reward_rows"] for stage in ended):
-                return False, "已结束阶段没有配置奖励"
+                return self._result(
+                    False, "已结束阶段没有配置奖励", "stage_rewards_unconfigured", detailed_result
+                )
             if not participated:
-                return False, "你在已结束阶段没有参与记录"
-            return False, "阶段奖励已领取"
+                return self._result(
+                    False, "你在已结束阶段没有参与记录", "stage_not_participant", detailed_result
+                )
+            return self._result(False, "阶段奖励已领取", "stage_rewards_claimed", detailed_result)
 
         lines = ["活动阶段奖励领取成功："]
         recorded: list[tuple[str, str]] = []
@@ -122,7 +143,7 @@ class ActivityStageClaimApplication:
         self.claims.record_claims(
             uid, activity_key, recorded, timestamp=now.strftime(TIMESTAMP_FMT)
         )
-        return True, "\n".join(lines)
+        return self._result(True, "\n".join(lines), None, detailed_result)
 
 
 __all__ = ["ActivityStageClaimApplication"]

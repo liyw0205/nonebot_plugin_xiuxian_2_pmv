@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import inspect
 from ...core.numeric import as_int_like
 from pathlib import Path
 from typing import Any
@@ -40,6 +41,28 @@ class ActivityRepository(ServicePort):
         # These consumers refuse before writes or roll back their whole UoW.
         self.precision_atomic_actions = frozenset({"claim_point_shop_item"})
 
+    @staticmethod
+    def _call_detailed(call, *args: Any, **kwargs: Any):
+        """Pass structured-result opt-in without breaking legacy service ports."""
+        detailed = kwargs.pop("detailed_result", True)
+        if not detailed:
+            return call(*args, **kwargs)
+        target = getattr(call, "side_effect", None)
+        if not callable(target):
+            target = call
+        try:
+            parameters = inspect.signature(target).parameters.values()
+        except (TypeError, ValueError):
+            parameters = ()
+        supports_keyword = any(
+            parameter.name == "detailed_result"
+            or parameter.kind is inspect.Parameter.VAR_KEYWORD
+            for parameter in parameters
+        )
+        if parameters and not supports_keyword:
+            return call(*args, **kwargs)
+        return call(*args, detailed_result=True, **kwargs)
+
     def _synthesize_collect(self, **kwargs: Any):
         from .collect_synthesis import synthesize
         return self._redeem(synthesize, self.collect_synthesis,
@@ -49,25 +72,49 @@ class ActivityRepository(ServicePort):
     def _claim_all(self, **kwargs: Any):
         from ...compatibility.legacy_activity_claim_steps import build_legacy_activity_claim_runners
         from ..activity_reward.claim_all_application import ActivityClaimAllApplication
-
         user_id = str(kwargs.get("user_id", ""))
         result = ActivityClaimAllApplication(self.database).run(
-            str(kwargs.get("operation_id", "")), user_id,
+            str(kwargs.get("operation_id", "")),
+            user_id,
             build_legacy_activity_claim_runners(user_id),
         )
         if result.status == "retryable_failure":
-            raise RuntimeError(result.text)
-        return result.ok, result.text
+            return {
+                "status": "rejected",
+                "reason": "claim_all_retryable",
+                "subject": "actor",
+                "message": result.text,
+                "steps": [
+                    {"name": step.name, "ok": step.ok, "text": step.text}
+                    for step in result.steps
+                ],
+            }
+        return {
+            "status": "applied" if result.ok else "rejected",
+            "reason": None if result.ok else "no_claimable_activity_rewards",
+            "subject": "actor",
+            "message": result.text,
+            "steps": [
+                {"name": step.name, "ok": step.ok, "text": step.text}
+                for step in result.steps
+            ],
+        }
 
     def _claim_tasks(self, **kwargs: Any):
         from ...xiuxian.xiuxian_activity.service import claim_activity_tasks
-        return claim_activity_tasks(str(kwargs.get("user_id", "")), str(kwargs.get("query", "")), str(kwargs.get("operation_id", "")))
+        return self._call_detailed(
+            claim_activity_tasks,
+            str(kwargs.get("user_id", "")),
+            str(kwargs.get("query", "")),
+            str(kwargs.get("operation_id", "")),
+        )
 
     def _claim_stage(self, **kwargs: Any):
         from .stage_claim_application import ActivityStageClaimApplication
         return ActivityStageClaimApplication(self.database).claim(
             str(kwargs.get("user_id", "")),
             query=str(kwargs.get("query", "")),
+            detailed_result=True,
         )
 
     def _claim_rank(self, **kwargs: Any):
@@ -75,15 +122,22 @@ class ActivityRepository(ServicePort):
         return ActivityRankClaimApplication(self.database).claim(
             str(kwargs.get("user_id", "")),
             query=str(kwargs.get("query", "")),
+            detailed_result=True,
         )
 
     def _claim_pass(self, **kwargs: Any):
         from ...xiuxian.xiuxian_activity.service import claim_activity_pass_rewards
-        return claim_activity_pass_rewards(str(kwargs.get("user_id", "")), str(kwargs.get("query", "")), str(kwargs.get("operation_id", "")))
+        return self._call_detailed(
+            claim_activity_pass_rewards,
+            str(kwargs.get("user_id", "")),
+            str(kwargs.get("query", "")),
+            str(kwargs.get("operation_id", "")),
+        )
 
     def _claim_sign(self, **kwargs: Any):
         from ...xiuxian.xiuxian_activity.service import claim_sign
-        return claim_sign(
+        return self._call_detailed(
+            claim_sign,
             str(kwargs.get("user_id", "")),
             str(kwargs.get("operation_id", "")),
             settlement_repository=self.sign_settlement,
@@ -112,7 +166,7 @@ class ActivityRepository(ServicePort):
     @staticmethod
     def _redeem(call, *args, **kwargs):
         try:
-            return call(*args, **kwargs)
+            return ActivityRepository._call_detailed(call, *args, **kwargs)
         except ActivityRedemptionRejected as exc:
             # Transaction owners have already rolled back before this boundary.
             return {"status": "rejected", **exc.details, "message": exc.message}
