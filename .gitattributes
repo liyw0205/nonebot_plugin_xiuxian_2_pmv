@@ -1,0 +1,13 @@
+# Keep CI provenance inputs in Git while excluding internal process records from
+# release archives. User installation, configuration, gameplay, and contributor
+# documentation remain part of the published project archive.
+docs/adapter-upstream-review.md export-ignore
+docs/current_project_status.md export-ignore
+docs/refactor_baseline.md export-ignore
+docs/refactor_closeout_scope_v1.md export-ignore
+docs/refactor_inventory.json export-ignore
+docs/refactor_phase2_legacy_path_items.json export-ignore
+docs/refactor_phase2_legacy_paths.json export-ignore
+docs/full_refactor_progress.md export-ignore
+docs/refactor_slice_execution_protocol.md export-ignore
+docs/archive/refactor-2026-10-09/ export-ignore

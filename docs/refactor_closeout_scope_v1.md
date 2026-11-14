@@ -3,7 +3,7 @@
 冻结日期：2026-10-09。执行入口：[有限收口协议](refactor_slice_execution_protocol.md)。
 2026-10-10 授权补充：C3 必需测试修复和本地交付的提交推送属于当前收口，不新增玩法范围。
 本清单覆盖当前批次整合和已证实待核验问题，不是新的玩法迁移分母。
-状态维护在[当前进度](full_refactor_progress.md)，历史证据见[归档](archive/refactor-2026-10-09/README.md)。
+状态维护在[当前进度](full_refactor_progress.md)；历史版本请通过 Git 提交和 tag 追溯。
 
 ## 冻结基线
 

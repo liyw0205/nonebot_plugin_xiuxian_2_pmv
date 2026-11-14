@@ -1,7 +1,8 @@
-# 修仙插件全面重构与新功能接入规范
+# 修仙插件架构与功能接入规范
 
-> 当前执行以[有限收口协议](refactor_slice_execution_protocol.md)及[固定清单](refactor_closeout_scope_v1.md)为准，状态见[当前进度](full_refactor_progress.md)。本篇保存架构与验收契约，不驱动逐玩法循环。旧 `v1.1.0` 的 P0-P7 通过是历史发布结果，不能替代当前重构发布的 P7；Phase 2 通过不代表全部重构完成。
-> 适用范围：`nonebot_plugin_xiuxian_2_pmv`；当前收口分支为 `refactor/full-bottom-layer`。
+> 本篇面向贡献者，说明分层边界、迁移兼容、消息适配和功能接入的验收约定。
+> 它不记录发布进度、临时任务或本地审查结果；当前分支与发布流程以
+> `CONTRIBUTING.md` 和仓库工作流为准。
 > 目标：在不一次性重写全部玩法、不丢失现有玩家数据的前提下，建立可测试、可回滚、可扩展的后端与 Web 结构。
 
 ## 1. 为什么要重构
@@ -647,7 +648,7 @@ PR 描述必须包含：影响 feature、数据迁移、兼容入口、权限变
 - `nonebot_plugin_xiuxian_2/compatibility/scheduler.py`：旧 APScheduler decorator/add_job 声明通过延迟桥收集，组合根在 `jobs` 生命周期阶段统一激活；导入旧玩法包不再修改 live scheduler，任务 handler 仍保留在兼容包一个发布周期。
 - `tests/__init__.py`、`tests/bootstrap.py` 和 `tests/conftest.py`：在 unittest/pytest 导入与执行边界设置隔离数据目录，叠加静态资源并排除数据库及运行态文件，避免测试触碰部署目录。
 - `nonebot_plugin_xiuxian_2/adapters/web/blueprints/pages.py`：新 Web factory 提供 `/login`、`/`、`/logout` 会话流程；管理员 ID 优先读取 `XIUXIAN_WEB_ADMIN_IDS`，未配置时兼容 `SUPERUSERS`。
-- `scripts/check_architecture.py`：CI 可执行的跨层导入守门；`docs/refactor_baseline.md` 和 `requirements.lock` 固定 P0 基线。
+- `scripts/check_architecture.py`：CI 可执行的跨层导入守门；`docs/refactor_baseline.md` 和 `requirements.lock` 固定质量基线。
 - `.github/workflows/main.yml`：main/PR/正式标签共用只读质量门禁，执行锁定依赖安装、两种 unittest 收集、compileall、架构守门、清单校验和空白检查；正式发布 job 显式依赖 quality 通过。
 - `scripts/export_refactor_inventory.py` 与 `docs/refactor_inventory.json`：可重放记录命令、Web URL、数据库表、JSON 资产和定时任务清单；架构守门会拒绝过期清单。
 
@@ -667,7 +668,7 @@ PR 描述必须包含：影响 feature、数据迁移、兼容入口、权限变
 - `features/_legacy_feature.py` 的通用兼容仓储也统一发出 `DeprecationWarning` 并记录 `feature:<key>` 命中，避免未包装的旧玩法 application 绕过 P7 观测。
 - `features/_service_port.py` 的 `execute_callback` 为已预组装参数的旧事务提供显式端口；迁移 application 优先通过该端口执行，避免 callback 直接越过 repository，同时保留可观测的兼容命中记录。
 - `scripts/check_architecture.py` 已提供可独立调用的门禁：核心层导入、feature 直连数据库、生命周期 hook、Web 权限、manifest ID、迁移版本、资产操作号、运行时文件、legacy 命令 AST/manifest 与迁移别名、兼容仓储占位结果和旧入口 application 边界检查。
-- 门禁口径（2026-10-09 校准，之前“所有检查均为绿色”的记录与命令输出不符，已作废）：feature 层只在“自行打开 SQLite 连接”或“导入 NoneBot/Flask”时报错，仅使用 `sqlite3` 异常与上限常量、连接由共享 `DatabaseUnitOfWork` 提供的 repository 不再算违规；资产写方法必须带 `operation_id`，名称含 `claim/purchase/grant/settle/transfer/withdraw/deposit` 的只读 facade 方法改为在模块内显式声明 `READ_ONLY_METHODS`，门禁再用结构证据核验（出现写 SQL、`immediate=True` UoW 或 ledger `begin/finish/commit/connect` 即失败）；旧入口检查接受 `features.<x>.command_application`/`avatar_application`/`profile_application` 等真实 facade 模块与 `_xxx_application().method()` 惰性工厂调用形式。上限类常量迁入 `features/<x>/schemas.py` 之后，进度门禁不得再断言消费模块源码里出现该常量的定义文本：必须用 `check_full_refactor_progress._schema_constant_bound()` 一类的结构证据，同时核验「`schemas.py` 单点声明且折叠后的值等于门禁钉住的值」+「消费模块 `from .schemas import` 该名字」+「模块体内实际引用」，且算术表达式（如 `16 * 1024 * 1024`）要自行折叠，不能依赖 `ast.literal_eval`。
-- 门禁仍红≠通过：`check_feature_contracts` 报告的 7 个 feature 目录垂直切片缺件（缺 `manifest.py/schemas.py/migrations.py/commands.py/web.py/jobs.py` 与 `docs/features/<name>.md`，另有 `plugin_config/qq_bind/group_lifecycle` 3 个目录缺 `tests/test_*.py`，`group_lifecycle` 连 `tests/` 目录与包 `__init__.py` 都没有）和 P7 真实发布周期证据是当前明确 backlog，按 owner 分批关闭，见 `docs/full_refactor_progress.md`。feature 层手工建连已于 2026-10-09 清零：`check_feature_connections()` 返回空列表，任何新增直连或 NoneBot/Flask 导入会同时被门禁和 `tests/architecture/test_architecture_gate_checks.py` 的全树不变量拦住；缺库必须走 `DatabaseUnitOfWork(..., require_exists=True)`，不得在 feature 内自行拼 `sqlite3.connect` URI。
+- 门禁要求 feature 层不得自行打开 SQLite 或导入 NoneBot/Flask；连接必须由共享 `DatabaseUnitOfWork` 提供。资产写方法必须带 `operation_id`，只读 facade 通过模块内的 `READ_ONLY_METHODS` 明确声明并由结构证据核验。旧入口检查接受真实 facade 模块与惰性工厂调用形式；上限类常量集中在 `features/<x>/schemas.py`，门禁同时核验单点声明、消费方导入和实际引用。
+- `check_feature_contracts`、`check_feature_connections()` 和 `tests/architecture/test_architecture_gate_checks.py` 共同验证 feature 目录结构与跨层依赖；新增 feature 必须补齐对应的 manifest、schemas、迁移、入口和测试。缺库必须走 `DatabaseUnitOfWork(..., require_exists=True)`，不得在 feature 内自行拼 `sqlite3.connect` URI。
 - `scripts/recovery_smoke.py` 覆盖完整迁移清单（含 legacy slice），会执行备份、恢复、迁移和对账；当前恢复演练结果为零未处理 operation/outbox/dead event。
 - `ReconcileService.run` 支持按 action 注册补偿处理器，能够实际收敛 `failed/needs_reconcile` 操作和 outbox 事件；`JobExecutor.run_sync` 可安全从 Flask/CLI 或已有事件循环调用。

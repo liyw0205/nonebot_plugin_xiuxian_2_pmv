@@ -46,7 +46,8 @@ Web API 保留 `/api/v1/arena/purchase`、`/challenge-purchase`、`/settle`，�
 
 本组新增 `tests/test_arena_command_ingress.py`、`features/arena/tests/test_opponent_application.py` 和 `tests/test_arena_progress_contract.py`，并补充回执、迁移及恢复测试。进度门禁从真实源码验证 owner、重放先行、原始数量、共享缓存和恢复范围，并以变异用例检查回退。
 
-主线程隔离验收：聚焦 67 项、扩大回归 197 项通过，另有 38 个 subtest；arena 源码门禁全 true、冻结完整性错误为空。具体耗时、首轮失败原因及后续队列见 `docs/full_refactor_progress.md`。没有线上性能实测。
+隔离验收覆盖命令、仓储和结算回归；线上性能不在本地测试范围内，部署前应按
+`docs/installation.md` 的隔离验证步骤复核。
 
 ## 用户流程
 

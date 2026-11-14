@@ -8,7 +8,7 @@
 本文件作为已交付范围的边界记录，不代表正在执行旧 goal。唯一执行入口。
 执行范围：[refactor-closeout-v1 固定清单](refactor_closeout_scope_v1.md)。
 状态与验收结果写入[当前进度](full_refactor_progress.md)，架构契约见
-[架构规范](refactor_architecture.md)，旧记录见[历史归档](archive/refactor-2026-10-09/README.md)。
+[架构规范](refactor_architecture.md)。旧过程记录不作为当前执行依据。
 
 ## 目标与停止条件
 
