@@ -7,10 +7,15 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping
 
+from ...core.errors import DomainError
 from ...core.numeric import crystal_precision_reason
 from ...infrastructure.database import DatabaseUnitOfWork
 from .card_bonus import refresh_card_bonuses
-from .legacy_state import crystal_balance, state_row_count, check_state_write
+from .legacy_state import (
+    crystal_balance,
+    effective_state_row,
+    effective_state_row_id,
+)
 
 
 @dataclass(frozen=True)
@@ -174,10 +179,7 @@ class ImpartDrawSqlRepository:
                 "SELECT COALESCE(stone,0) AS stone FROM user_xiuxian WHERE user_id=?",
                 (user_id,),
             )
-            state = uow.query_one(
-                "SELECT wish,impart_num FROM impart_data.xiuxian_impart WHERE user_id=?",
-                (user_id,),
-            )
+            state = effective_state_row(uow, user_id, schema="impart_data")
             cards_table = uow.query_one(
                 "SELECT 1 AS present FROM impart_data.sqlite_master "
                 "WHERE type='table' AND name='impart_cards'"
@@ -197,8 +199,6 @@ class ImpartDrawSqlRepository:
             if expected_count + pulls > 100:
                 return ImpartDrawResult("limit_exceeded")
 
-            state_count = state_row_count(uow, user_id, ("wish", "impart_num"), schema="impart_data")
-
             existing_card_counts = self._card_counts(uow, "impart_data", user_id)
             new_cards = tuple(
                 dict.fromkeys(card for card in cards if card not in existing_card_counts)
@@ -214,10 +214,12 @@ class ImpartDrawSqlRepository:
                 return ImpartDrawResult("state_changed", reason="stone_changed")
             changed = uow.execute(
                 "UPDATE impart_data.xiuxian_impart SET wish=?,impart_num=impart_num+? "
-                "WHERE user_id=?",
-                (new_wish, pulls, user_id),
+                "WHERE rowid=? AND user_id=? AND wish=? AND impart_num=?",
+                (new_wish, pulls, effective_state_row_id(state), user_id,
+                 expected_wish, expected_count),
             )
-            check_state_write(changed, state_count)
+            if changed.rowcount != 1:
+                raise DomainError("impart_write_rejected", "effective impart row changed inside draw transaction")
             for card_name, quantity in Counter(cards).items():
                 uow.execute(
                     "INSERT INTO impart_data.impart_cards(user_id,card_name,quantity) "
@@ -430,12 +432,7 @@ class ImpartCrystalDrawSqlRepository:
                 )
             if not ImpartDrawSqlRepository._statistics_schema_ready(uow):
                 return ImpartCrystalDrawResult("schema_missing")
-            state_count = state_row_count(uow, user_id, ("stone_num", "wish", "exp_day"))
-            state = uow.query_one(
-                "SELECT wish,stone_num,stone_num_exact,stone_num_precision_state,exp_day "
-                "FROM xiuxian_impart WHERE user_id=?",
-                (user_id,),
-            )
+            state = effective_state_row(uow, user_id)
             if state is None:
                 return ImpartCrystalDrawResult("user_missing")
             actual_stone = crystal_balance(state, subject=user_id)
@@ -456,12 +453,14 @@ class ImpartCrystalDrawSqlRepository:
             exp_day = as_int_like(state["exp_day"] or 0) + exp_minutes
             changed = uow.execute(
                 "UPDATE xiuxian_impart SET stone_num=?,stone_num_exact=?,"
-                "stone_num_precision_state='exact',wish=?,exp_day=? WHERE user_id=? "
+                "stone_num_precision_state='exact',wish=?,exp_day=? WHERE rowid=? AND user_id=? "
                 "AND xiuxian_int_cmp(COALESCE(stone_num_exact,stone_num),?)=0 "
                 "AND stone_num_precision_state='exact' AND wish=?",
-                (stone_num, str(stone_num), new_wish, exp_day, user_id, expected_stone, expected_wish),
+                (stone_num, str(stone_num), new_wish, exp_day,
+                 effective_state_row_id(state), user_id, expected_stone, expected_wish),
             )
-            check_state_write(changed, state_count)
+            if changed.rowcount != 1:
+                raise DomainError("impart_write_rejected", "effective impart row changed inside crystal draw transaction")
             for card_name, quantity in Counter(cards).items():
                 uow.execute(
                     "INSERT INTO impart_cards(user_id,card_name,quantity) VALUES(?,?,?) "

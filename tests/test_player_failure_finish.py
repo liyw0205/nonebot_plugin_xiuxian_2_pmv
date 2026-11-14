@@ -14,6 +14,7 @@ from nonebot.exception import FinishedException
 from nonebot_plugin_xiuxian_2.core.errors import DomainError
 from nonebot_plugin_xiuxian_2.features.impart.application import ImpartApplication
 from nonebot_plugin_xiuxian_2.features.impart.card_bonus import BONUS_FIELDS
+from nonebot_plugin_xiuxian_2.features.impart.legacy_state import state_row_count
 from nonebot_plugin_xiuxian_2.features.impart.migrations import (
     apply_impart_draw_operations, apply_impart_crystal_and_card_operations,
     apply_impart_draw_player_statistics,
@@ -87,13 +88,16 @@ class HistoricalImpartTests(unittest.TestCase):
                 if name != "draw":
                     self.tearDownFixture()
                     self.setUp()
+                with sqlite3.connect(self.impart) as c:
+                    history = c.execute("SELECT * FROM xiuxian_impart WHERE rowid=2").fetchone()
                 self.assertEqual(self.act(name).status, "applied")
                 before = self.snapshot()
                 self.assertEqual(self.act(name).status, "duplicate")
                 self.assertEqual(self.snapshot(), before)
                 with sqlite3.connect(self.impart) as c:
-                    self.assertEqual(c.execute("SELECT wish,impart_num,stone_num,exp_day FROM xiuxian_impart").fetchall(), [expected, expected])
-                    self.assertEqual(c.execute("SELECT stone_num_exact,stone_num_precision_state FROM xiuxian_impart").fetchall(), [(str(expected[2]), "exact")] * 2)
+                    self.assertEqual(c.execute("SELECT wish,impart_num,stone_num,exp_day FROM xiuxian_impart ORDER BY rowid").fetchall(), [expected, (0,0,10,30)])
+                    self.assertEqual(c.execute("SELECT stone_num_exact,stone_num_precision_state FROM xiuxian_impart ORDER BY rowid").fetchall(), [(str(expected[2]), "exact"), ("10", "exact")])
+                    self.assertEqual(c.execute("SELECT * FROM xiuxian_impart WHERE rowid=2").fetchone(), history)
                     self.assertEqual(c.execute("SELECT quantity FROM impart_cards").fetchone()[0], {"draw":5,"crystal":5,"split":3,"close":4}[name])
                 with sqlite3.connect(self.game) as c:
                     self.assertEqual(c.execute("SELECT stone,exp FROM user_xiuxian").fetchone(), (80,100) if name=="draw" else (100,120) if name=="close" else (100,100))
@@ -101,7 +105,7 @@ class HistoricalImpartTests(unittest.TestCase):
     def tearDownFixture(self):
         self.temp.cleanup()
 
-    def test_inconsistent_history_names_field_and_rolls_back_every_database(self):
+    def test_history_audit_names_conflict_without_blocking_effective_row_settlement(self):
         for name, field in (("draw","wish"),("crystal","stone_num"),("split","stone_num"),("close","exp_day")):
             with self.subTest(action=name):
                 self.tearDownFixture()
@@ -111,26 +115,45 @@ class HistoricalImpartTests(unittest.TestCase):
                         c.execute("UPDATE xiuxian_impart SET stone_num=stone_num+1,stone_num_exact='11' WHERE rowid=2")
                     else:
                         c.execute(f"UPDATE xiuxian_impart SET {field}={field}+1 WHERE rowid=2")
+                    history = c.execute("SELECT * FROM xiuxian_impart WHERE rowid=2").fetchone()
                 before = self.snapshot()
                 with self.assertRaises(DomainError) as caught:
-                    self.act(name)
+                    with DatabaseUnitOfWork(self.impart, read_only=True) as uow:
+                        state_row_count(uow, "u", (field,))
+                self.assertEqual(caught.exception.code, "impart_rows_inconsistent")
+                self.assertEqual(caught.exception.details, {"reason": f"impart_rows_{field}", "subject": "u"})
                 reply = failure_reply(name, caught.exception)
                 self.assertIn("历史", reply)
                 self.assertNotIn("定位号", reply)
                 self.assertEqual(before, self.snapshot())
+                self.assertEqual(self.act(name).status, "applied")
+                with sqlite3.connect(self.impart) as c:
+                    self.assertEqual(c.execute("SELECT * FROM xiuxian_impart WHERE rowid=2").fetchone(), history)
 
-    def test_partial_historical_write_rolls_back_assets_and_cards(self):
+    def test_rejected_effective_row_write_rolls_back_assets_and_cards(self):
         for name in ("draw", "crystal", "split", "close"):
             with self.subTest(action=name):
                 self.tearDownFixture()
                 self.setUp()
                 with sqlite3.connect(self.impart) as c:
-                    c.execute("CREATE TRIGGER skip_second BEFORE UPDATE ON xiuxian_impart WHEN OLD.rowid=2 BEGIN SELECT RAISE(IGNORE); END")
+                    c.execute("CREATE TRIGGER reject_effective BEFORE UPDATE ON xiuxian_impart WHEN OLD.rowid=1 BEGIN SELECT RAISE(IGNORE); END")
                 before = self.snapshot()
                 with self.assertRaises(DomainError) as caught:
                     self.act(name)
                 self.assertEqual(caught.exception.code, "impart_write_rejected")
                 self.assertEqual(before, self.snapshot())
+
+    def test_historical_row_write_trigger_is_not_entered(self):
+        for name in ("draw", "crystal", "split", "close"):
+            with self.subTest(action=name):
+                self.tearDownFixture()
+                self.setUp()
+                with sqlite3.connect(self.impart) as c:
+                    c.execute("CREATE TRIGGER protect_history BEFORE UPDATE ON xiuxian_impart WHEN OLD.rowid=2 BEGIN SELECT RAISE(ABORT,'historical row must not be updated'); END")
+                    history = c.execute("SELECT * FROM xiuxian_impart WHERE rowid=2").fetchone()
+                self.assertEqual(self.act(name).status, "applied")
+                with sqlite3.connect(self.impart) as c:
+                    self.assertEqual(c.execute("SELECT * FROM xiuxian_impart WHERE rowid=2").fetchone(), history)
 
 
 class MentorHandlerFailureTests(unittest.IsolatedAsyncioTestCase):

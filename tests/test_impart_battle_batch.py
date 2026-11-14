@@ -90,4 +90,19 @@ class ImpartBattleBatchTests(unittest.TestCase):
                     "AND name='impart_battle_batch_operations'"
                 ).fetchone()[0],
             )
+
+    def test_divergent_history_is_not_rewarded_or_used_as_balance(self):
+        with db_backend.transaction(self.impart) as conn:
+            conn.execute("DROP TABLE xiuxian_impart")
+            conn.execute("CREATE TABLE xiuxian_impart(user_id TEXT,stone_num INTEGER)")
+            conn.executemany("INSERT INTO xiuxian_impart VALUES(?,?)", [("a", 670), ("a", 460), ("a", 310)])
+        with DatabaseUnitOfWork(self.impart) as uow:
+            apply_impart_exact_crystal_balances(uow)
+        result = self.service.settle("history", "a", 7, 2, 0, 50)
+        self.assertEqual(result.status, "applied")
+        with db_backend.connection(self.impart) as conn:
+            self.assertEqual(
+                [tuple(row) for row in conn.execute("SELECT stone_num,stone_num_exact FROM xiuxian_impart ORDER BY rowid")],
+                [(720, "720"), (460, "460"), (310, "310")],
+            )
 if __name__ == "__main__": unittest.main()

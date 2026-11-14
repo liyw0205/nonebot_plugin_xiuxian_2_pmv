@@ -11,7 +11,7 @@ from .prayer_repository import ImpartPrayerSqlRepository
 from .compose_repository import ImpartCardComposeSqlRepository
 from .disassemble_repository import ImpartCardDisassembleSqlRepository
 from .draw_repository import ImpartCrystalDrawSqlRepository, ImpartDrawSqlRepository
-from .legacy_state import crystal_balance, state_row_count
+from .legacy_state import crystal_balance, effective_state_row, state_row_count
 
 
 class ImpartRepository(ServicePort):
@@ -59,7 +59,7 @@ class ImpartRepository(ServicePort):
                     f"VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?{exact_values})",
                     (user_id, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0),
                 )
-            row = uow.query_one("SELECT * FROM xiuxian_impart WHERE user_id=?", (user_id,))
+            row = effective_state_row(uow, user_id)
             if row is not None:
                 if validate_crystal_consistency:
                     state_row_count(uow, user_id, ("stone_num",))

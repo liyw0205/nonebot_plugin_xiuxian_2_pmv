@@ -16,3 +16,9 @@ class T(unittest.TestCase):
  def tearDown(self): self.t.cleanup()
  def test_draw(self): self.assertEqual(self.s.draw('o','u',100,0,0,20,10,2,['a']).status,'applied'); self.assertEqual(self.s.draw('o','u',100,0,0,20,10,2,['a']).status,'duplicate')
  def test_stale(self): self.assertEqual(self.s.draw('x','u',99,0,0,20,10,1,[]).status,'state_changed')
+ def test_duplicate_history_is_not_updated(self):
+  with db_backend.transaction(self.i) as c:
+   c.execute("INSERT INTO xiuxian_impart VALUES('u',55,66)")
+  self.assertEqual(self.s.draw('duplicate','u',100,0,0,20,10,2,['a']).status,'applied')
+  with db_backend.connection(self.i) as c:
+   self.assertEqual([tuple(row) for row in c.execute('SELECT wish,impart_num FROM xiuxian_impart ORDER BY rowid')],[(10,2),(55,66)])

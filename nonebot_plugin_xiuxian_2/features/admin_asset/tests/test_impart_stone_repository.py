@@ -135,7 +135,7 @@ class AdminImpartStoneRepositoryTests(unittest.TestCase):
             self.assertEqual((outcome.status, outcome.ok), ("adjusted", True))
             self.assertEqual(outcome.data["final_stone"], 4)
 
-    def test_snapshot_cas_and_duplicate_user_rows_fail_closed(self):
+    def test_snapshot_and_cas_use_only_effective_row_with_divergent_history(self):
         with tempfile.TemporaryDirectory() as temp:
             game, impart = self._databases(temp)
             repo = AdminImpartStoneSqlRepository(game, impart)
@@ -143,9 +143,26 @@ class AdminImpartStoneRepositoryTests(unittest.TestCase):
             self.assertEqual((stale.status, stale.previous_stone), ("state_changed", 8))
 
             with db_backend.transaction(impart) as conn:
-                conn.execute("INSERT INTO xiuxian_impart(user_id,stone_num) VALUES('u',8)")
-            self.assertEqual(repo.snapshot("u").status, "invalid_state")
-            self.assertEqual(repo.adjust("duplicate-user", "op", "u", 8, 2).status, "invalid_state")
+                conn.execute("UPDATE xiuxian_impart SET stone_num=670,stone_num_exact='670' WHERE user_id='u'")
+                conn.executemany(
+                    "INSERT INTO xiuxian_impart(user_id,stone_num,stone_num_exact) VALUES('u',?,?)",
+                    [(460, "460"), (310, "310")],
+                )
+            snapshot = repo.snapshot("u")
+            self.assertEqual((snapshot.status, snapshot.stone), ("ok", 670))
+            stale = repo.adjust("history-cas", "op", "u", 460, 2)
+            self.assertEqual((stale.status, stale.reason), ("state_changed", "crystal_changed"))
+            result = repo.adjust("duplicate-user", "op", "u", 670, 2)
+            self.assertEqual((result.status, result.previous_stone, result.final_stone), ("adjusted", 670, 672))
+            with db_backend.connection(impart) as conn:
+                self.assertEqual(
+                    [tuple(row) for row in conn.execute("SELECT stone_num,stone_num_exact FROM xiuxian_impart ORDER BY rowid")],
+                    [(672, "672"), (460, "460"), (310, "310")],
+                )
+            self.assertEqual(repo.adjust("duplicate-user", "op", "u", 670, 2).status, "duplicate")
+            with db_backend.connection(game) as conn:
+                self.assertEqual(conn.execute("SELECT COUNT(*) FROM admin_impart_stone_operations").fetchone()[0], 1)
+                self.assertEqual(conn.execute("SELECT COUNT(*) FROM economy_log").fetchone()[0], 1)
 
     def test_unrecoverable_real_snapshot_and_adjustment_are_specific_and_zero_write(self):
         with tempfile.TemporaryDirectory() as temp:

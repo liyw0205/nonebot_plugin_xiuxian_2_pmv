@@ -2,7 +2,11 @@
 
 ## 用户流程
 
-管理员在旧控制台的“消息”页发一条消息：选适配器与场景（群/私聊/频道群/频道私聊），选普通或 markdown 模式，可带文本、媒体 URL、上传文件或直接选一张贴纸，并可引用/回复某条历史消息，再决定是否主动发送（`active_send`）。请求进入本切片后先做参数收敛与合法性判定，再依次解析 bot、解析引用目标、解析贴纸路径、必要时落盘上传文件，最后把真正的投递交给传输端口。本切片拥有的是 Web 发送策略，适配器调用与历史消息读写都是外部 owner。
+管理员在旧控制台的“消息”页发一条消息：选择适配器与场景（群/私聊/频道群/频道私聊），
+选择普通或 Markdown 模式，可带文本、媒体 URL、上传文件或贴纸，也可以引用/回复历史消息，
+最后决定是否主动发送（`active_send`）。请求会先校验参数，再解析 Bot、引用目标和贴纸路径，
+必要时保存上传文件，随后交给适配器投递。这里负责 Web 发送规则；适配器调用和历史消息
+记录由对应的消息传输与日志模块完成。
 
 ## 命令与别名
 
@@ -10,11 +14,12 @@
 
 ## Web API
 
-`web.py` 的 `ROUTES` 为空，本 owner 只有旧模块注册的这一条，权限 `xiuxian/xiuxian_web/access.py:106` 的 `WebPermission.MESSAGE`，POST 需 CSRF：
+`web.py` 的 `ROUTES` 为空；当前实际入口仍由旧 Web 模块注册，权限为
+`xiuxian/xiuxian_web/access.py:106` 的 `WebPermission.MESSAGE`，POST 需要 CSRF：
 
 - `POST /api/messages/send` → `WebMessageSendApplication.send`（注册点 `xiuxian/xiuxian_web/messages.py:487`，JSON 与 multipart 在 `:494-499` 分流，`:501-503` 经 `_message_send_application().send` 进入本切片，工厂在 `:69-82` 注入 11 个端口）
 
-同文件的兄弟 `/api/messages/*` 不归本 owner：历史与撤回走 `logs` 切片，群备注/会话置顶/配置走 `admin` 切片，`/api/messages/broadcast*` 仍走 legacy `xiuxian/broadcast_manager`。新适配器侧 `GET /api/v1/messages` 与 `/messages`（`adapters/web/blueprints/messages.py`）目前只返回空列表和模板，没有委托任何 feature 方法，不能当作本切片的替身表面。
+同文件的兄弟 `/api/messages/*` 由其他模块负责：历史与撤回走日志模块，群备注、会话置顶和配置走管理模块，`/api/messages/broadcast*` 仍由兼容广播模块处理。新适配器侧 `GET /api/v1/messages` 与 `/messages`（`adapters/web/blueprints/messages.py`）目前只提供列表页面和模板，不是该发送接口的替代入口。
 
 ## 数据模型与迁移
 
@@ -34,7 +39,11 @@
 
 ## 适配器差异
 
-适配器差异集中在三处，全部经端口隔离：OneBot V11 才走 markdown 直发分支并写 `xiuxian/adapter_message_records.py` 的发送记录；QQ 侧的引用需要把 `REFIDX` 令牌换回真实消息 id，失败时降级为普通发送；主动发送在 QQ 上依赖 `send_group_forward_msg`/`send_private_forward_msg` 的聊天记录节点。切片不导入 Flask，`send_application.py` 只依赖注入端口与 `xiuxian/messaging` 的请求模型。实现文件仍是 `send_application.py`，`application.py` 只做门面再导出并有身份断言测试：Phase 2 冻结账本把 `POST /api/messages/send` 的证据与调用图锚在 `send_application.py` 上，账本条目重新对齐之前不能移动实现，否则门禁的源码绑定会整片失效。
+适配器差异集中在三处，全部经端口隔离：OneBot V11 的 Markdown 主动发送使用合并转发，
+普通发送使用对应的 `send_group_msg`/`send_private_msg`；QQ 的 Markdown 使用原生消息段，
+引用需要把 `REFIDX` 令牌换回真实消息 ID，失败时降级为普通发送；QQ 主动发送使用
+`send_to_group`/`send_to_c2c` 等适配器接口。实现文件是 `send_application.py`，
+`application.py` 只做兼容门面；这些边界由单元测试和适配器契约测试覆盖。
 
 ## 测试与手工验收
 

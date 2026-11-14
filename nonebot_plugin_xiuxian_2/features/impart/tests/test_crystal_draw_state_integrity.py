@@ -121,7 +121,7 @@ class ImpartCrystalDrawStateIntegrityTests(unittest.TestCase):
                 ),
             )
 
-    def test_consistent_legacy_mirrors_settle_once_without_adding_balances(self) -> None:
+    def test_consistent_legacy_mirrors_settle_only_the_effective_row(self) -> None:
         self._add_mirror("actor", stone_num="100")
         before = self._state("actor")
         other_before = self._state("other")
@@ -133,7 +133,7 @@ class ImpartCrystalDrawStateIntegrityTests(unittest.TestCase):
         self.assertEqual((result.status, result.stone_num), ("applied", 80))
         after = self._state("actor")
         self.assertEqual(len(after), 2)
-        self.assertEqual([row[1:] for row in after], [(80, 9, 65), (80, 9, 65)])
+        self.assertEqual([row[1:] for row in after], [(80, 9, 65), (100, 7, 5)])
         self.assertEqual(self._state("other"), other_before)
         self.assertEqual(len(self._rows(self.impart, "SELECT * FROM impart_crystal_draw_operations")), 1)
         self.assertEqual(self._rows(self.impart, "SELECT user_id,card_name,quantity FROM impart_cards"),
@@ -223,7 +223,7 @@ class ImpartCrystalDrawStateIntegrityTests(unittest.TestCase):
             self.impart,
             "SELECT stone_num_exact FROM xiuxian_impart WHERE user_id='actor' ORDER BY rowid",
         )
-        self.assertEqual([int(row[0]) for row in exact_rows], [expected, expected])
+        self.assertEqual([int(row[0]) for row in exact_rows], [expected, huge])
         receipt = self._rows(
             self.impart,
             "SELECT stone_num_exact FROM impart_crystal_draw_operations WHERE operation_id=?",
@@ -291,34 +291,28 @@ class ImpartCrystalDrawStateIntegrityTests(unittest.TestCase):
             self.app.crystal_draw_result("unrecoverable-real", "actor", 20, 2)
         )
 
-    def test_divergent_history_returns_specific_reason_and_rolls_back_everything(self) -> None:
+    def test_divergent_history_targets_effective_row_and_keeps_audit_rejection(self) -> None:
         self._add_mirror("actor", stone_num=99)
         before = self._snapshot()
 
+        result = self._draw("divergent-prayer")
+        self.assertEqual((result.status, result.stone_num), ("applied", 80))
+        after = self._state("actor")
+        self.assertEqual([row[1:] for row in after], [(80, 9, 65), (99, 7, 5)])
+        self.assertNotEqual(self._snapshot(), before)
         with self.assertRaises(DomainError) as caught:
-            self._draw("divergent-prayer")
-
+            self.app.state("actor", validate_crystal_consistency=True)
         self.assertEqual(caught.exception.code, "impart_rows_inconsistent")
         self.assertEqual(caught.exception.details,
                          {"reason": "impart_rows_stone_num", "subject": "actor"})
-        self.assertEqual(self._snapshot(), before)
-        self.assertEqual(self.app.crystal_draw_result("divergent-prayer", "actor", 20, 2), None)
 
-    def test_history_is_validated_before_snapshot_or_affordability_checks(self) -> None:
+    def test_history_audit_remains_specific_for_divergent_rows(self) -> None:
         self._add_mirror("actor", stone_num=99)
-        before = self._snapshot()
-        for index, (expected, cost) in enumerate(((99, 20), (100, 670))):
-            with self.subTest(expected=expected, cost=cost):
-                with self.assertRaises(DomainError) as caught:
-                    self._draw(
-                        f"history-before-eligibility-{index}",
-                        expected_stone=expected,
-                        cost=cost,
-                    )
-                self.assertEqual(caught.exception.code, "impart_rows_inconsistent")
-                self.assertEqual(caught.exception.details,
-                                 {"reason": "impart_rows_stone_num", "subject": "actor"})
-                self.assertEqual(self._snapshot(), before)
+        with self.assertRaises(DomainError) as caught:
+            self.app.state("actor", validate_crystal_consistency=True)
+        self.assertEqual(caught.exception.code, "impart_rows_inconsistent")
+        self.assertEqual(caught.exception.details,
+                         {"reason": "impart_rows_stone_num", "subject": "actor"})
 
     def test_receipt_write_failure_rolls_back_balance_cards_and_statistics(self) -> None:
         with DatabaseUnitOfWork(self.impart) as uow:

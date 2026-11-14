@@ -6,6 +6,8 @@ import unittest
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from threading import Barrier
+from threading import RLock
+from types import SimpleNamespace
 
 from ....core.errors import DomainError
 from ....infrastructure.database import DatabaseUnitOfWork
@@ -63,37 +65,37 @@ class LegacyCrystalWriterTests(unittest.TestCase):
 
     def test_huge_all_grant_debit_replay_and_payload_conflict(self):
         huge = 10**45 + 123
-        self.assertEqual(self.repo.change("all-grant", None, huge), 3)
-        self.assertEqual(self.balance("actor"), [huge + 250] * 2)
+        self.assertEqual(self.repo.change("all-grant", None, huge), 2)
+        self.assertEqual(self.balance("actor"), [huge + 250, 250])
         self.assertEqual(self.balance("other"), [huge + 300])
         once = self.snapshot()
-        self.assertEqual(self.repo.change("all-grant", None, huge), 3)
+        self.assertEqual(self.repo.change("all-grant", None, huge), 2)
         self.assertEqual(self.snapshot(), once)
         with self.assertRaises(DomainError) as caught:
             self.repo.change("all-grant", None, huge + 1)
         self.assertEqual(caught.exception.details["reason"], "operation_conflict")
         self.assertEqual(self.snapshot(), once)
-        self.assertEqual(self.repo.change("actor-debit", "actor", -20), 2)
-        self.assertEqual(self.balance("actor"), [huge + 230] * 2)
+        self.assertEqual(self.repo.change("actor-debit", "actor", -20), 1)
+        self.assertEqual(self.balance("actor"), [huge + 230, 250])
 
-    def test_bulk_bad_precision_and_divergent_history_are_zero_write(self):
-        for real, reason, subject in (
-            (False, "impart_rows_stone_num", "actor"),
-            (True, "crystal_precision_lost_real", "other"),
-        ):
-            with self.subTest(reason=reason):
-                # Each branch starts from a separately migrated fixture.
-                fixture = LegacyCrystalWriterTests()
-                fixture.setUp()
-                try:
-                    fixture.corrupt(real=real)
-                    before = fixture.snapshot()
-                    with self.assertRaises(DomainError) as caught:
-                        fixture.repo.change("bad-all", None, 10)
-                    self.assertEqual(caught.exception.details, {"reason": reason, "subject": subject})
-                    self.assertEqual(fixture.snapshot(), before)
-                finally:
-                    fixture.doCleanups()
+    def test_bulk_targets_effective_row_and_rejects_unrecoverable_precision(self):
+        self.corrupt()
+        before = self.balance("actor")
+        self.assertEqual(self.repo.change("divergent", "actor", 10), 1)
+        self.assertEqual(self.balance("actor"), [259, 250])
+        self.assertNotEqual(self.balance("actor"), before)
+
+        fixture = LegacyCrystalWriterTests()
+        fixture.setUp()
+        try:
+            fixture.corrupt(real=True)
+            before = fixture.snapshot()
+            with self.assertRaises(DomainError) as caught:
+                fixture.repo.change("bad-all", None, 10)
+            self.assertEqual(caught.exception.details, {"reason": "crystal_precision_lost_real", "subject": "other"})
+            self.assertEqual(fixture.snapshot(), before)
+        finally:
+            fixture.doCleanups()
 
     def test_overdraft_is_specific_and_zero_write(self):
         before = self.snapshot()
@@ -118,7 +120,7 @@ class LegacyCrystalWriterTests(unittest.TestCase):
             barrier.wait(timeout=10)
             results = [future.result(timeout=20) for future in futures]
         self.assertTrue(all(r.succeeded and r.applied == 2 for r in results))
-        self.assertEqual(self.balance("actor"), [0, 0])
+        self.assertEqual(self.balance("actor"), [0, 250])
         self.assertEqual(self.balance("other"), [300])
         with DatabaseUnitOfWork(self.game, read_only=True) as uow:
             self.assertEqual(tuple(uow.execute("SELECT goods_num,bind_num FROM back").fetchone()), (2, 2))
@@ -143,16 +145,34 @@ class LegacyCrystalWriterTests(unittest.TestCase):
     def test_conversion_divergent_mirrors_and_real_reject_without_item_grant(self):
         self.corrupt()
         before = self.snapshot()
-        with self.assertRaises(DomainError) as caught:
-            self.repo.convert("bad-convert", "actor", 100)
-        self.assertEqual(caught.exception.details["reason"], "impart_rows_stone_num")
-        self.assertEqual(self.snapshot(), before)
+        result = self.repo.convert("bad-convert", "actor", 100)
+        self.assertTrue(result.succeeded)
+        self.assertEqual(self.balance("actor"), [0, 250])
+        self.assertNotEqual(self.snapshot(), before)
         self.corrupt(real=True)
         before = self.snapshot()
         with self.assertRaises(DomainError) as caught:
             self.repo.convert("real-convert", "other", 100)
         self.assertEqual(caught.exception.details["reason"], "crystal_precision_lost_real")
         self.assertEqual(self.snapshot(), before)
+
+    def test_legacy_attribute_and_bulk_writes_leave_historical_rows_unchanged(self):
+        from ....xiuxian.xiuxian_utils import db_backend
+        from ....xiuxian.xiuxian_utils.xiuxian2_handle import XIUXIAN_IMPART_BUFF
+
+        with db_backend.transaction(self.impart) as conn:
+            conn.execute("UPDATE xiuxian_impart SET impart_lv=5,impart_num=7")
+        with db_backend.connection(self.impart) as conn:
+            manager = SimpleNamespace(conn=conn, _conn_lock=RLock(), _commit_write=conn.commit)
+            XIUXIAN_IMPART_BUFF.add_impart_hp_per(manager, 0.1, "actor")
+            XIUXIAN_IMPART_BUFF.update_all_users_impart_lv(manager, 2, 1)
+            XIUXIAN_IMPART_BUFF.update_all_users_impart_lv(manager, 1, 2)
+            rows = conn.execute("SELECT impart_hp_per,impart_lv,impart_num FROM xiuxian_impart ORDER BY rowid").fetchall()
+            self.assertEqual([tuple(row) for row in rows], [(0.1, 6, 7), (0, 5, 7), (0, 6, 7)])
+            XIUXIAN_IMPART_BUFF.impart_lv_reset(manager)
+            XIUXIAN_IMPART_BUFF.impart_num_reset(manager)
+            rows = conn.execute("SELECT impart_lv,impart_num FROM xiuxian_impart ORDER BY rowid").fetchall()
+            self.assertEqual([tuple(row) for row in rows], [(0, 0), (5, 7), (0, 0)])
 
 
 if __name__ == "__main__":

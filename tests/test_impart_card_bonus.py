@@ -51,25 +51,26 @@ class CardBonusRefreshTests(unittest.TestCase):
         self.assertTrue(result.succeeded)
         self.assertEqual(self.bonuses(), (0.2, 0.2))
 
-    def test_legacy_duplicate_player_rows_are_all_refreshed(self):
+    def test_legacy_duplicate_player_rows_refresh_only_effective_row(self):
         bonus_columns = ",".join(f'"{field}" REAL' for field in BONUS_FIELDS)
         with db_backend.transaction(self.db) as conn:
             conn.execute("DROP TABLE xiuxian_impart")
             conn.execute(
                 f"CREATE TABLE xiuxian_impart(user_id TEXT,stone_num INTEGER,{bonus_columns})"
             )
-            conn.executemany(
-                "INSERT INTO xiuxian_impart(user_id,stone_num) VALUES(%s,%s)",
-                [("u", 0), ("u", 1)],
+            conn.execute("INSERT INTO xiuxian_impart(user_id,stone_num) VALUES(%s,%s)", ("u", 0))
+            conn.execute(
+                "INSERT INTO xiuxian_impart(user_id,stone_num,impart_atk_per,impart_hp_per) VALUES(%s,%s,%s,%s)",
+                ("u", 1, 0.7, 0.9),
             )
             refresh_card_bonuses(conn, "u", self.defs, schema="main")
             rows = conn.execute(
-                "SELECT impart_atk_per,impart_hp_per FROM xiuxian_impart WHERE user_id=%s",
+                "SELECT impart_atk_per,impart_hp_per FROM xiuxian_impart WHERE user_id=%s ORDER BY rowid",
                 ("u",),
             ).fetchall()
 
         self.assertEqual(
-            [tuple(map(float, row)) for row in rows], [(0.2, 0.2), (0.2, 0.2)]
+            [tuple(map(float, row)) for row in rows], [(0.2, 0.2), (0.7, 0.9)]
         )
 
     def test_bonus_failure_rolls_back_card_change(self):

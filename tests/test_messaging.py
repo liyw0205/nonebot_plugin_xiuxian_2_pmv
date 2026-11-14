@@ -38,6 +38,11 @@ from nonebot_plugin_xiuxian_2.xiuxian.qq_compat import (
 )
 from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_utils.message_markdown import (
     build_help_native_markdown,
+    generate_command,
+)
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_utils.utils import (
+    build_native_page_text,
+    generate_page_param,
 )
 
 
@@ -77,6 +82,27 @@ def test_delivery_facade_uses_lazy_proxy_compatibility_boundary() -> None:
 
 
 class MessageResultTests(unittest.TestCase):
+    def test_legacy_page_links_encode_the_complete_command(self) -> None:
+        fragment = generate_command(
+            "查看",
+            status="end",
+            command="我的背包 2&筛选=稀有",
+        )
+        self.assertIn(
+            "command=%E6%88%91%E7%9A%84%E8%83%8C%E5%8C%85%202%26%E7%AD%9B%E9%80%89%3D%E7%A8%80%E6%9C%89",
+            fragment,
+        )
+        self.assertNotIn("command=我的背包 2&筛选", fragment)
+
+    def test_template_and_native_page_paths_keep_encoded_commands(self) -> None:
+        page = ["查看", "我的背包 2&筛选=稀有", "下一页", "传承祈愿 67"]
+        template = generate_page_param(page)
+        native = build_native_page_text(page)
+        for rendered in (str(template), native):
+            self.assertIn("%E6%88%91%E7%9A%84%E8%83%8C%E5%8C%85%202%26", rendered)
+            self.assertIn("%E4%BC%A0%E6%89%BF%E7%A5%88%E6%84%BF%2067", rendered)
+            self.assertNotIn("command=我的背包 2&筛选", rendered)
+
     def test_delivery_error_accepts_traceback_assignment(self) -> None:
         error = DeliveryError("retryable", True, TimeoutError("send timeout"))
         try:

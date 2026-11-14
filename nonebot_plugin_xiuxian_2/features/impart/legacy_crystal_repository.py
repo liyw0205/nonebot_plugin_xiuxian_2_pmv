@@ -8,7 +8,7 @@ from ...core.errors import DomainError
 from ...infrastructure.database import DatabaseUnitOfWork
 from ..base.inventory_application import PlayerInventoryApplication
 from ..base.inventory_repository import InventoryGrantResult
-from .legacy_state import check_state_write, crystal_balance, state_row_count
+from .legacy_state import crystal_balance, effective_state_row, effective_state_row_id
 
 
 class LegacyCrystalSqlRepository:
@@ -54,8 +54,7 @@ class LegacyCrystalSqlRepository:
             ]
             states = []
             for uid in users:
-                count = state_row_count(uow, uid, ("stone_num",))
-                row = uow.query_one("SELECT * FROM xiuxian_impart WHERE user_id=?", (uid,))
+                row = effective_state_row(uow, uid)
                 if row is None:
                     continue
                 previous = crystal_balance(row, subject=uid)
@@ -64,19 +63,20 @@ class LegacyCrystalSqlRepository:
                         "stone_missing", "crystal debit exceeds exact balance",
                         {"reason": "crystal_missing", "subject": uid},
                     )
-                states.append((uid, count, previous))
+                states.append((uid, effective_state_row_id(row), previous))
             total = 0
-            for uid, count, previous in states:
+            for uid, row_id, previous in states:
                 final = previous + int(delta)
                 changed = uow.execute(
                     "UPDATE xiuxian_impart SET stone_num=?,stone_num_exact=?,"
-                    "stone_num_precision_state='exact' WHERE user_id=? "
+                    "stone_num_precision_state='exact' WHERE rowid=? AND user_id=? "
                     "AND stone_num_precision_state='exact' "
                     "AND xiuxian_int_cmp(COALESCE(stone_num_exact,stone_num,0),?)=0",
-                    (final, str(final), uid, previous),
+                    (final, str(final), row_id, uid, previous),
                 )
-                check_state_write(changed, count)
-                total += count
+                if changed.rowcount != 1:
+                    raise DomainError("impart_write_rejected", "effective impart row changed inside crystal change transaction")
+                total += 1
             self._save(uow, "main", operation_id, payload, {"rows": total})
             return total
 
@@ -87,10 +87,7 @@ class LegacyCrystalSqlRepository:
             replay = self._replay(uow, "impart_data", operation_id, payload)
             if replay is not None:
                 return InventoryGrantResult(**replay)
-            count = state_row_count(uow, user_id, ("stone_num",), schema="impart_data")
-            row = uow.query_one(
-                "SELECT * FROM impart_data.xiuxian_impart WHERE user_id=?", (str(user_id),)
-            )
+            row = effective_state_row(uow, user_id, schema="impart_data")
             if row is None:
                 return None
             previous = crystal_balance(row, subject=user_id)
@@ -104,11 +101,12 @@ class LegacyCrystalSqlRepository:
                 return grant
             changed = uow.execute(
                 "UPDATE impart_data.xiuxian_impart SET stone_num=0,stone_num_exact='0',"
-                "stone_num_precision_state='exact' WHERE user_id=? "
+                "stone_num_precision_state='exact' WHERE rowid=? AND user_id=? "
                 "AND stone_num_precision_state='exact' "
                 "AND xiuxian_int_cmp(COALESCE(stone_num_exact,stone_num,0),?)=0",
-                (str(user_id), previous),
+                (effective_state_row_id(row), str(user_id), previous),
             )
-            check_state_write(changed, count)
+            if changed.rowcount != 1:
+                raise DomainError("impart_write_rejected", "effective impart row changed inside crystal conversion transaction")
             self._save(uow, "impart_data", operation_id, payload, asdict(grant))
             return grant

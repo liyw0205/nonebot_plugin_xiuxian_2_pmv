@@ -36,8 +36,15 @@ def refresh_card_bonuses(conn, user_id, definitions):
     bonuses = calculate_card_bonuses(cards, definitions)
     assignments = ",".join(f"{field}=%s" for field in BONUS_FIELDS)
     values = [bonuses[field] for field in BONUS_FIELDS]
+    row = conn.execute(
+        "SELECT rowid FROM xiuxian_impart WHERE user_id=%s ORDER BY rowid ASC LIMIT 1",
+        (str(user_id),),
+    ).fetchone()
+    if row is None:
+        raise ValueError("impart user is missing")
     updated = conn.execute(
-        f"UPDATE xiuxian_impart SET {assignments} WHERE user_id=%s", (*values, str(user_id))
+        f"UPDATE xiuxian_impart SET {assignments} WHERE rowid=%s AND user_id=%s",
+        (*values, int(row[0]), str(user_id)),
     )
     if updated.rowcount != 1:
         raise ValueError("impart user is missing")

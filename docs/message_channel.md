@@ -13,8 +13,9 @@ QQ 支持的 Markdown 语法（表格、代码块、公式、行内命令等）�
 | 真 MD 卡 | `handle_send` / `handle_send_md` | 状态、结果、日常、签到 | 可用 `**`、`---`、手写 `>` | 可用状态 emoji |
 | 代码框 / shell | `send_msg_handler` | 列表、背包、帮助列表 | **不解析** `>`，不要靠 `>` 缩小 | 可有 emoji，但别指望排版 |
 
-迁移切片只在 `ReplyPlan.intent="markdown"` 时才走 Markdown 投递：非 QQ Bot、缺少 markdown 能力
-或发送失败会回退同一份文案的纯文本（回退原因记日志），媒体段与默认 `plain` 计划仍走 `reply`。
+迁移切片只在 `ReplyPlan.intent="markdown"` 时才走 Markdown 投递：非 QQ Bot 或缺少 Markdown 能力
+会按能力门控回退同一份文案的纯文本；构造或发送失败会记录 warning 后回退。媒体段与默认
+`plain` 计划仍走 `reply`。
 
 配置：`XiuConfig().markdown_status` 仅运行配置，不入库。
 

@@ -114,13 +114,15 @@ class ImpartDrawService:
                     "SELECT COALESCE(stone,0) FROM user_xiuxian WHERE user_id=%s", (user_id,)
                 ).fetchone()
                 state = conn.execute(
-                    "SELECT wish,impart_num FROM impart_data.xiuxian_impart WHERE user_id=%s",
+                    "SELECT rowid AS state_row_id,wish,impart_num "
+                    "FROM impart_data.xiuxian_impart WHERE user_id=%s "
+                    "ORDER BY rowid ASC LIMIT 1",
                     (user_id,),
                 ).fetchone()
                 if user is None or state is None:
                     conn.rollback()
                     return ImpartDrawResult("state_changed")
-                if int(user[0]) != expected_stone or tuple(map(int, state)) != (expected_wish, expected_count):
+                if int(user[0]) != expected_stone or tuple(map(int, state[1:])) != (expected_wish, expected_count):
                     conn.rollback()
                     return ImpartDrawResult("state_changed")
                 if expected_stone < cost:
@@ -138,8 +140,9 @@ class ImpartDrawService:
                     conn.rollback()
                     return ImpartDrawResult("state_changed")
                 conn.execute(
-                    "UPDATE impart_data.xiuxian_impart SET wish=%s,impart_num=impart_num+%s WHERE user_id=%s",
-                    (new_wish, pulls, user_id),
+                    "UPDATE impart_data.xiuxian_impart SET wish=%s,impart_num=impart_num+%s "
+                    "WHERE rowid=%s AND user_id=%s",
+                    (new_wish, pulls, state[0], user_id),
                 )
                 for card_name, quantity in Counter(cards).items():
                     conn.execute(
@@ -394,29 +397,27 @@ class CardDisassembleService:
                     "SELECT quantity FROM impart_cards WHERE user_id=%s AND card_name=%s",
                     (user_id, card_name),
                 ).fetchone()
-                state_rows = conn.execute(
-                    "SELECT user_id,stone_num,stone_num_exact,stone_num_precision_state,"
-                    "typeof(stone_num) FROM xiuxian_impart WHERE user_id=%s",
+                state_row = conn.execute(
+                    "SELECT rowid AS state_row_id,user_id,stone_num,stone_num_exact,"
+                    "stone_num_precision_state,typeof(stone_num) FROM xiuxian_impart "
+                    "WHERE user_id=%s ORDER BY rowid ASC LIMIT 1",
                     (user_id,),
-                ).fetchall()
+                ).fetchone()
                 card_quantity = int(card[0]) if card else 0
-                if not state_rows:
+                if state_row is None:
                     conn.rollback()
                     return CardDisassembleResult("user_missing", card_quantity)
                 try:
-                    balances = [
-                        crystal_balance(
-                            {
-                                "user_id": row[0],
-                                "stone_num": row[1],
-                                "stone_num_exact": row[2],
-                                "stone_num_precision_state": row[3],
-                                "stone_num_storage_type": row[4],
-                            },
-                            subject=user_id,
-                        )
-                        for row in state_rows
-                    ]
+                    stone_quantity = crystal_balance(
+                        {
+                            "user_id": state_row[1],
+                            "stone_num": state_row[2],
+                            "stone_num_exact": state_row[3],
+                            "stone_num_precision_state": state_row[4],
+                            "stone_num_storage_type": state_row[5],
+                        },
+                        subject=user_id,
+                    )
                 except DomainError as exc:
                     conn.rollback()
                     return CardDisassembleResult(
@@ -425,13 +426,6 @@ class CardDisassembleService:
                         reason=str(exc.details.get("reason") or "crystal_invalid_numeric_value"),
                         subject=user_id,
                     )
-                if len(set(balances)) != 1:
-                    conn.rollback()
-                    return CardDisassembleResult(
-                        "state_changed", card_quantity, reason="impart_rows_stone_num",
-                        subject=user_id,
-                    )
-                stone_quantity = balances[0]
                 if (card_quantity, stone_quantity) != (
                     expected_card_quantity,
                     expected_stone_quantity,
@@ -451,12 +445,12 @@ class CardDisassembleService:
                     "UPDATE xiuxian_impart SET "
                     "stone_num=xiuxian_int_add(COALESCE(stone_num_exact,stone_num,0),%s),"
                     "stone_num_exact=xiuxian_int_add(COALESCE(stone_num_exact,stone_num,0),%s),"
-                    "stone_num_precision_state='exact' WHERE user_id=%s "
+                    "stone_num_precision_state='exact' WHERE rowid=%s AND user_id=%s "
                     "AND xiuxian_int_cmp(COALESCE(stone_num_exact,stone_num,0),%s)=0 "
                     "AND stone_num_precision_state='exact'",
-                    (quantity * reward_per_card, quantity * reward_per_card, user_id, stone_quantity),
+                    (quantity * reward_per_card, quantity * reward_per_card, state_row[0], user_id, stone_quantity),
                 )
-                if consumed.rowcount != 1 or rewarded.rowcount != len(state_rows):
+                if consumed.rowcount != 1 or rewarded.rowcount != 1:
                     conn.rollback()
                     return CardDisassembleResult("state_changed")
                 new_card = card_quantity - quantity
@@ -576,27 +570,21 @@ class LoveSandUseService:
                     "WHERE user_id=%s AND goods_id=%s",
                     (user_id, item_id),
                 ).fetchone()
-                impart_rows = conn.execute(
-                    "SELECT stone_num,stone_num_exact,stone_num_precision_state,"
-                    "typeof(stone_num) FROM "
-                    "impart_data.xiuxian_impart WHERE user_id=%s",
+                impart = conn.execute(
+                    "SELECT rowid AS state_row_id,stone_num,stone_num_exact,"
+                    "stone_num_precision_state,typeof(stone_num) FROM "
+                    "impart_data.xiuxian_impart WHERE user_id=%s ORDER BY rowid ASC LIMIT 1",
                     (user_id,),
-                ).fetchall()
-                if len(impart_rows) > 1:
-                    conn.rollback()
-                    return LoveSandUseResult(
-                        "state_changed", reason="impart_rows_stone_num", subject=user_id
-                    )
-                impart = impart_rows[0] if impart_rows else None
+                ).fetchone()
                 try:
                     actual_stone = (
                         crystal_balance(
                             {
                                 "user_id": user_id,
-                                "stone_num": impart[0],
-                                "stone_num_exact": impart[1],
-                                "stone_num_precision_state": impart[2],
-                                "stone_num_storage_type": impart[3],
+                                "stone_num": impart[1],
+                                "stone_num_exact": impart[2],
+                                "stone_num_precision_state": impart[3],
+                                "stone_num_storage_type": impart[4],
                             },
                             subject=user_id,
                         )
@@ -641,10 +629,10 @@ class LoveSandUseService:
                     return LoveSandUseResult("state_changed")
                 updated = conn.execute(
                     "UPDATE impart_data.xiuxian_impart SET stone_num=?,stone_num_exact=?,"
-                    "stone_num_precision_state='exact' WHERE user_id=? "
+                    "stone_num_precision_state='exact' WHERE rowid=? AND user_id=? "
                     "AND xiuxian_int_cmp(COALESCE(stone_num_exact,stone_num,0),?)=0 "
                     "AND stone_num_precision_state='exact'",
-                    (stone_num, str(stone_num), user_id, expected_stone_num),
+                    (stone_num, str(stone_num), impart[0], user_id, expected_stone_num),
                 )
                 if updated.rowcount != 1:
                     conn.rollback()

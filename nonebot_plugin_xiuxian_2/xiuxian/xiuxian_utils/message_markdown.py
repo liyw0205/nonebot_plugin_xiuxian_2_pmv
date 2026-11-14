@@ -19,9 +19,11 @@ def generate_command(msg, status=None, command=None, msg2=None):
     :return: 生成的命令字符串
     """
     if status == 'start':
-        return f"{msg}](mqqapi://aio/inlinecmd?command={command}&enter=false&reply=false){msg2}["
+        encoded_command = quote(str(command if command is not None else msg), safe="")
+        return f"{msg}](mqqapi://aio/inlinecmd?command={encoded_command}&enter=false&reply=false){msg2}["
     elif status == 'end':
-        return f"{msg}](mqqapi://aio/inlinecmd?command={command}&enter=false&reply=false){msg2}"
+        encoded_command = quote(str(command if command is not None else msg), safe="")
+        return f"{msg}](mqqapi://aio/inlinecmd?command={encoded_command}&enter=false&reply=false){msg2}"
     else:
         return f"[{msg}"
 

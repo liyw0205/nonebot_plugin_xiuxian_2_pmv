@@ -3636,10 +3636,23 @@ class XIUXIAN_IMPART_BUFF:
         """在数据库中创建用户并初始化"""
         user_id = str(user_id)
         with self._conn_lock:
-            if self.create_user(user_id):
-                pass
-            else:
+            # Legacy databases do not constrain user_id.  Recheck under the
+            # SQLite write lock so concurrent readers cannot create duplicate
+            # default rows for a player.
+            started = False
+            try:
+                if not self.conn.in_transaction:
+                    self.conn.execute("BEGIN IMMEDIATE")
+                    started = True
                 c = self.conn.cursor()
+                c.execute(
+                    "SELECT 1 FROM xiuxian_impart WHERE user_id=%s LIMIT 1",
+                    (user_id,),
+                )
+                if c.fetchone():
+                    if started:
+                        self.conn.commit()
+                    return
                 columns = ["user_id", *self._default_fields.keys()]
                 values = [user_id, *self._default_fields.values()]
                 if self.conn.column_exists("xiuxian_impart", "stone_num_exact") and self.conn.column_exists(
@@ -3654,7 +3667,12 @@ class XIUXIAN_IMPART_BUFF:
                     f"VALUES({placeholders})"
                 )
                 c.execute(sql, tuple(values))
-                self._commit_write()
+                if started:
+                    self.conn.commit()
+            except Exception:
+                if started:
+                    self.conn.rollback()
+                raise
 
     def _repair_user_impart_info(self, user_id: str, user_dict: dict) -> dict:
         """补齐旧库或异常空数据，避免传承/虚神界入口误报未知错误。"""
@@ -3682,8 +3700,11 @@ class XIUXIAN_IMPART_BUFF:
 
         if updates:
             cur = self.conn.cursor()
-            sql = f"UPDATE xiuxian_impart SET {', '.join(updates)} WHERE user_id=%s"
-            cur.execute(sql, tuple(values + [user_id]))
+            row_id = user_dict.get("state_row_id")
+            if row_id is None:
+                raise RuntimeError("legacy impart row has no stable id")
+            sql = f"UPDATE xiuxian_impart SET {', '.join(updates)} WHERE rowid=%s AND user_id=%s"
+            cur.execute(sql, tuple(values + [int(row_id), user_id]))
             self._commit_write()
 
         return user_dict
@@ -3693,7 +3714,7 @@ class XIUXIAN_IMPART_BUFF:
         user_id = str(user_id)
         with self._conn_lock:
             cur = self.conn.cursor()
-            sql = f"select * from xiuxian_impart WHERE user_id=%s"
+            sql = f"select rowid AS state_row_id, * from xiuxian_impart WHERE user_id=%s ORDER BY rowid ASC LIMIT 1"
             cur.execute(sql, (user_id,))
             result = cur.fetchone()
             if not result:
@@ -3958,7 +3979,7 @@ class XIUXIAN_IMPART_BUFF:
     def impart_lv_reset(self):
         """重置所有用户虚神界等级"""
         with self._conn_lock:
-            sql = f"UPDATE xiuxian_impart SET impart_lv=0"
+            sql = "UPDATE xiuxian_impart SET impart_lv=0 WHERE rowid IN (SELECT MIN(rowid) FROM xiuxian_impart GROUP BY user_id)"
             cur = self.conn.cursor()
             cur.execute(sql)
             self._commit_write()
@@ -3966,7 +3987,7 @@ class XIUXIAN_IMPART_BUFF:
     def impart_num_reset(self):
         """重置所有用户传承抽卡次数"""
         with self._conn_lock:
-            sql = f"UPDATE xiuxian_impart SET impart_num=0"
+            sql = "UPDATE xiuxian_impart SET impart_num=0 WHERE rowid IN (SELECT MIN(rowid) FROM xiuxian_impart GROUP BY user_id)"
             cur = self.conn.cursor()
             cur.execute(sql)
             self._commit_write()
@@ -4001,6 +4022,7 @@ class XIUXIAN_IMPART_BUFF:
                     ELSE impart_lv + %s 
                 END 
                 WHERE impart_lv >= 0
+                AND rowid IN (SELECT MIN(rowid) FROM xiuxian_impart GROUP BY user_id)
                 """
                 cur.execute(sql, (num, num))
             elif operation == 2:
@@ -4011,6 +4033,7 @@ class XIUXIAN_IMPART_BUFF:
                     ELSE impart_lv - %s 
                 END 
                 WHERE impart_lv > 0
+                AND rowid IN (SELECT MIN(rowid) FROM xiuxian_impart GROUP BY user_id)
                 """
                 cur.execute(sql, (num, num))
             else:

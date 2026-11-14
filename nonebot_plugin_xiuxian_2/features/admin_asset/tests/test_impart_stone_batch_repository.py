@@ -83,6 +83,21 @@ class AdminImpartStoneBatchRepositoryTests(unittest.TestCase):
         receipt = json.loads(row["result_json"])
         self.assertEqual((receipt["reason"], receipt["subject"]), ("crystal_precision_lost_real", "target"))
 
+    def test_batch_adjusts_one_effective_row_per_user_without_rewriting_history(self):
+        with DatabaseUnitOfWork(self.impart) as uow:
+            uow.execute("UPDATE xiuxian_impart SET stone_num=670,stone_num_exact='670' WHERE user_id='a'")
+            uow.executemany(
+                "INSERT INTO xiuxian_impart(user_id,stone_num,stone_num_exact) VALUES('a',?,?)",
+                [(460, "460"), (310, "310")],
+            )
+        result = self.adjust("divergent-batch", chunk_size=10)
+        self.assertEqual((result.affected_users, result.skipped_users, result.applied_delta), (3, 0, 6))
+        with DatabaseUnitOfWork(self.impart, read_only=True) as uow:
+            rows = uow.query_all("SELECT stone_num_exact FROM xiuxian_impart WHERE user_id='a' ORDER BY rowid")
+        self.assertEqual([row["stone_num_exact"] for row in rows], ["672", "460", "310"])
+        replay = self.adjust("divergent-batch", chunk_size=10)
+        self.assertEqual((replay.status, replay.applied_delta), ("duplicate", 6))
+
     def test_roster_is_frozen_in_database_and_processed_in_chunks(self) -> None:
         first = self.adjust("frozen", chunk_size=1)
         self.assertEqual((first.status, first.total, first.completed), ("applied", 3, 1))

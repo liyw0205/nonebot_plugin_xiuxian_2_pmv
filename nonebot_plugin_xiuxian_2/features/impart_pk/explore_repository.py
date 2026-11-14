@@ -23,7 +23,7 @@ class ImpartExploreSqlRepository:
             if not operations_ready(uow,'impart_explore_operations'): return ImpartExploreResult('schema_missing')
             old=uow.query_one('SELECT payload,result_json FROM impart_explore_operations WHERE operation_id=?',(operation_id,))
             if old is not None: return ImpartExploreResult('duplicate',*json.loads(old['result_json'])) if str(old['payload'])==payload else ImpartExploreResult('operation_conflict')
-            impart=uow.query_one('SELECT exp_day,impart_lv FROM impart_data.xiuxian_impart WHERE user_id=?',(user_id,)); daily=uow.query_one('SELECT impart_num FROM player_data.impart_pk_daily WHERE user_id=?',(user_id,))
+            impart=uow.query_one('SELECT rowid AS state_row_id,exp_day,impart_lv FROM impart_data.xiuxian_impart WHERE user_id=? ORDER BY rowid ASC LIMIT 1',(user_id,)); daily=uow.query_one('SELECT impart_num FROM player_data.impart_pk_daily WHERE user_id=?',(user_id,))
             if impart is None: return ImpartExploreResult('state_changed', reason='impart_missing')
             if daily is None: return ImpartExploreResult('state_changed', reason='daily_missing')
             if as_int_like(impart['exp_day'] or 0)!=expected_exp_day: return ImpartExploreResult('state_changed', reason='impart_time_changed')
@@ -31,5 +31,6 @@ class ImpartExploreSqlRepository:
             if int(daily['impart_num'] or 0)!=expected_impart_num: return ImpartExploreResult('state_changed', reason='explore_count_changed')
             if expected_exp_day<time_cost: return ImpartExploreResult('time_insufficient')
             new_exp_day,new_num=expected_exp_day-time_cost,expected_impart_num-1
-            uow.execute('UPDATE impart_data.xiuxian_impart SET exp_day=?,impart_lv=? WHERE user_id=?',(new_exp_day,new_impart_lv,user_id)); uow.execute('UPDATE player_data.impart_pk_daily SET impart_num=? WHERE user_id=?',(new_num,user_id))
+            if uow.execute('UPDATE impart_data.xiuxian_impart SET exp_day=?,impart_lv=? WHERE rowid=? AND user_id=?',(new_exp_day,new_impart_lv,impart['state_row_id'],user_id)).rowcount != 1: return ImpartExploreResult('state_changed', reason='impart_time_changed')
+            uow.execute('UPDATE player_data.impart_pk_daily SET impart_num=? WHERE user_id=?',(new_num,user_id))
             saved=[new_exp_day,new_impart_lv,new_num]; uow.execute('INSERT INTO impart_explore_operations(operation_id,payload,result_json) VALUES(?,?,?)',(operation_id,payload,json.dumps(saved,separators=(',',':')))); return ImpartExploreResult('applied',*saved)
