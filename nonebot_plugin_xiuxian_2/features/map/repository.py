@@ -273,7 +273,7 @@ class MapStatusSqlQueryRepository:
         user_id = str(user_id).strip()
         if not user_id:
             return None
-        with DatabaseUnitOfWork(self.player_database) as uow:
+        with DatabaseUnitOfWork(self.player_database, read_only=True) as uow:
             columns = {str(row["name"]) for row in uow.query_all("PRAGMA table_info(map_status)")}
             if not columns:
                 return None

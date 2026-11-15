@@ -271,6 +271,32 @@ def test_runtime_requires_complete_import_marker(tmp_path: Path, marker_change: 
         assert uow.query_one("SELECT is_ban FROM user_xiuxian WHERE user_id='u'")["is_ban"] == 0
 
 
+def test_runtime_schema_cache_rechecks_mutable_import_marker(tmp_path: Path) -> None:
+    database = tmp_path / "game.db"
+    _players(database, migrated=True)
+    repository = AdminBlackhouseSqlRepository(database)
+
+    assert repository.snapshot("u") is False
+    with DatabaseUnitOfWork(database) as uow:
+        uow.execute("DELETE FROM admin_blackhouse_imports")
+
+    with pytest.raises(RuntimeError, match="schema_missing"):
+        repository.snapshot("u")
+
+
+def test_runtime_schema_cache_invalidates_after_ddl_change(tmp_path: Path) -> None:
+    database = tmp_path / "game.db"
+    _players(database, migrated=True)
+    repository = AdminBlackhouseSqlRepository(database)
+
+    assert repository.snapshot("u") is False
+    with DatabaseUnitOfWork(database) as uow:
+        uow.execute("ALTER TABLE admin_blackhouse_users DROP COLUMN reason")
+
+    with pytest.raises(RuntimeError, match="schema_missing"):
+        repository.snapshot("u")
+
+
 def test_ignored_import_marker_rolls_back_membership_and_cannot_report_success(tmp_path: Path) -> None:
     database = tmp_path / "game.db"
     _players(database, migrated=True)

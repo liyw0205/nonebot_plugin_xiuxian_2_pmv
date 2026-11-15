@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 from dataclasses import dataclass
 from pathlib import Path
 from threading import RLock
-from typing import Any
+from typing import Any, ClassVar
 
 from ...infrastructure.database import DatabaseUnitOfWork
 
@@ -33,6 +34,8 @@ class AdminBlackhouseSqlRepository:
         },
         "admin_blackhouse_imports": {"import_key", "imported_at"},
     }
+    _schema_cache: ClassVar[dict[tuple[str, int], bool]] = {}
+    _schema_cache_lock: ClassVar[RLock] = RLock()
 
     def __init__(self, database: str | Path, *, lock: RLock | None = None) -> None:
         self.database = Path(database)
@@ -81,12 +84,42 @@ class AdminBlackhouseSqlRepository:
             ("legacy_json_and_is_ban_v1",),
         ) is not None
 
+    @classmethod
+    def _cached_schema_ready(cls, uow: DatabaseUnitOfWork, database: Path) -> bool:
+        """Reuse validated DDL while rechecking the mutable import marker."""
+        row = uow.query_one("PRAGMA schema_version")
+        try:
+            schema_version = int(row["schema_version"]) if row is not None else -1
+        except (KeyError, TypeError, ValueError):
+            schema_version = -1
+        key = (str(database.resolve()), schema_version)
+        with cls._schema_cache_lock:
+            cached = cls._schema_cache.get(key)
+        if cached:
+            try:
+                marker = uow.query_one(
+                    "SELECT 1 AS present FROM admin_blackhouse_imports WHERE import_key=?",
+                    ("legacy_json_and_is_ban_v1",),
+                )
+            except sqlite3.DatabaseError:
+                marker = None
+            if marker is not None:
+                return True
+            with cls._schema_cache_lock:
+                cls._schema_cache.pop(key, None)
+            return False
+        if not cls._schema_ready(uow):
+            return False
+        with cls._schema_cache_lock:
+            cls._schema_cache[key] = True
+        return True
+
     def snapshot(self, user_id: Any) -> bool:
         user_id = self._identifier(user_id, "user id")
         if not self.database.is_file():
             raise RuntimeError("schema_missing")
         with self.lock, DatabaseUnitOfWork(self.database, read_only=True) as uow:
-            if not self._schema_ready(uow):
+            if not self._cached_schema_ready(uow, self.database):
                 raise RuntimeError("schema_missing")
             return uow.query_one(
                 "SELECT 1 AS present FROM admin_blackhouse_users WHERE user_id=?",
@@ -100,7 +133,7 @@ class AdminBlackhouseSqlRepository:
         if not self.database.is_file():
             raise RuntimeError("schema_missing")
         with self.lock, DatabaseUnitOfWork(self.database, read_only=True) as uow:
-            if not self._schema_ready(uow):
+            if not self._cached_schema_ready(uow, self.database):
                 raise RuntimeError("schema_missing")
             return [
                 {

@@ -76,6 +76,33 @@ def test_display_handler_awaits_bounded_application_and_preserves_messages(users
     )
 
 
+def test_nearby_command_preserves_reply_without_nested_event_loop():
+    env = load_handler("nearby_users_cmd", None)
+    user = {"user_id": "me", "user_name": "my-name", "power": 10}
+
+    def check_user(event):
+        return True, user, ""
+
+    def load_map_data():
+        return {}
+
+    def get_map_status(user_id, map_data):
+        return POSITION
+
+    async def nearby_display(**kwargs):
+        assert kwargs == POSITION | {"exclude_user_id": "me", "random_source": env["runtime_random"]}
+        return [{"user_id": "first", "user_name": "target", "level": "level"}]
+
+    env["check_user"] = check_user
+    env["_load_map_data"] = load_map_data
+    env["_get_player_map_status"] = get_map_status
+    env["map_application"].nearby_display = nearby_display
+
+    asyncio.run(env["_"]("bot", object()))
+
+    assert env["handle_send"].await_args.args[2] == "【附近道友】\n- target（level）"
+
+
 def test_application_awaits_feature_selector_with_injected_rng(nearby, monkeypatch):
     source, result = object(), [{"user_id": "first"}]
     query = AsyncMock(return_value=result)
