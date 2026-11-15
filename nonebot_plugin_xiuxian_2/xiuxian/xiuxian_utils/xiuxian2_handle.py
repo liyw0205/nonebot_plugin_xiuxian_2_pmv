@@ -1433,15 +1433,39 @@ class XiuxianDateManage:
             cur.execute(sql, (price,))
             self._commit_write()
 
+    def _get_numeric_rank(self, user_id, column):
+        if column not in {"exp", "stone"}:
+            raise ValueError(f"unsupported numeric rank column: {column}")
+        value = f'xiuxian_int_text("{column}") COLLATE xiuxian_integer'
+        sql = f"""
+            WITH target AS (
+                SELECT {value} AS value
+                FROM user_xiuxian
+                WHERE user_id=%s
+            )
+            SELECT CASE
+                WHEN target.value IS NULL THEN 1 + (
+                    SELECT COUNT(DISTINCT {value})
+                    FROM user_xiuxian
+                    WHERE {value} IS NOT NULL
+                )
+                ELSE 1 + (
+                    SELECT COUNT(DISTINCT {value})
+                    FROM user_xiuxian
+                    WHERE {value} > target.value
+                )
+            END AS rank_value
+            FROM target
+        """
+        return self._read_query(sql, (user_id,), one=True)
+
     def get_exp_rank(self, user_id):
         """修为排行"""
-        sql = "SELECT rank_value FROM (SELECT user_id, exp, dense_rank() OVER (ORDER BY xiuxian_int_text(exp) COLLATE xiuxian_integer DESC) AS rank_value FROM user_xiuxian) AS ranked_users WHERE user_id=%s"
-        return self._read_query(sql, (user_id,), one=True)
+        return XiuxianDateManage._get_numeric_rank(self, user_id, "exp")
 
     def get_stone_rank(self, user_id):
         """灵石排行"""
-        sql = "SELECT rank_value FROM (SELECT user_id, stone, dense_rank() OVER (ORDER BY xiuxian_int_text(stone) COLLATE xiuxian_integer DESC) AS rank_value FROM user_xiuxian) AS ranked_users WHERE user_id=%s"
-        return self._read_query(sql, (user_id,), one=True)
+        return XiuxianDateManage._get_numeric_rank(self, user_id, "stone")
 
     def get_ls_rank(self):
         """灵石排行榜"""

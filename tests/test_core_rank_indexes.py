@@ -68,6 +68,36 @@ class CoreRankIndexTests(unittest.TestCase):
             self.assertEqual((2,), XiuxianDateManage.get_exp_rank(handle, "tie-a"))
             self.assertEqual((1,), XiuxianDateManage.get_stone_rank(handle, "tie-a"))
 
+    def test_numeric_rank_range_query_preserves_ties_and_nulls(self):
+        run_core_migrations(self.database)
+        with db_backend.transaction(self.database) as conn:
+            conn.execute(
+                "INSERT INTO user_xiuxian(user_id, exp, stone) VALUES(%s, %s, %s)",
+                ("null-exp", None, "0"),
+            )
+            handle = type("RankHandle", (), {})()
+            handle._read_query = lambda sql, params=None, **kwargs: tuple(
+                conn.execute(sql, params or ()).fetchone()
+            )
+            self.assertEqual((1,), XiuxianDateManage.get_exp_rank(handle, "leader"))
+            self.assertEqual((2,), XiuxianDateManage.get_exp_rank(handle, "tie-a"))
+            self.assertEqual((3,), XiuxianDateManage.get_exp_rank(handle, "viewer"))
+            self.assertEqual((5,), XiuxianDateManage.get_exp_rank(handle, "null-exp"))
+
+            plan = [
+                str(row[3])
+                for row in conn.execute(
+                    "EXPLAIN QUERY PLAN "
+                    "WITH target AS (SELECT xiuxian_int_text(\"exp\") COLLATE xiuxian_integer AS value "
+                    "FROM user_xiuxian WHERE user_id=%s) "
+                    "SELECT 1 + COUNT(DISTINCT xiuxian_int_text(\"exp\") COLLATE xiuxian_integer) "
+                    "FROM user_xiuxian, target "
+                    "WHERE xiuxian_int_text(\"exp\") COLLATE xiuxian_integer > target.value",
+                    ("viewer",),
+                ).fetchall()
+            ]
+        self.assertTrue(any("idx_user_xiuxian_exp_numeric_rank" in item for item in plan))
+
     def test_legacy_non_numeric_text_does_not_block_index_migration(self):
         run_core_migrations(self.database)
         with db_backend.connection(self.database) as conn:

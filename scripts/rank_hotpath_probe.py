@@ -2,7 +2,7 @@
 
 The fixture must already exist.  This probe never generates users and keeps the
 legacy two-query variant as a runtime-only comparison against the checked-in
-combined query.
+range-count query.
 """
 
 from __future__ import annotations
@@ -25,12 +25,39 @@ from contextlib import contextmanager
 
 REQUESTS = 20
 COMMAND = "我的修仙信息"
-COMBINED_RANK_SQL = (
-    "SELECT exp_rank, stone_rank FROM (SELECT rowid AS rank_rowid, user_id, "
-    "dense_rank() OVER (ORDER BY xiuxian_int_text(exp) COLLATE xiuxian_integer DESC) AS exp_rank, "
-    "dense_rank() OVER (ORDER BY xiuxian_int_text(stone) COLLATE xiuxian_integer DESC) AS stone_rank "
-    "FROM user_xiuxian) AS ranked_users WHERE user_id=%s ORDER BY rank_rowid LIMIT 1"
-)
+
+
+def _legacy_rank_sql(column: str) -> str:
+    return (
+        "SELECT rank_value FROM (SELECT user_id, "
+        f'{column}, dense_rank() OVER (ORDER BY xiuxian_int_text("{column}") '
+        "COLLATE xiuxian_integer DESC) AS rank_value FROM user_xiuxian) "
+        "AS ranked_users WHERE user_id=%s"
+    )
+
+
+def _range_rank_sql(column: str) -> str:
+    value = f'xiuxian_int_text("{column}") COLLATE xiuxian_integer'
+    return f"""
+        WITH target AS (
+            SELECT {value} AS value
+            FROM user_xiuxian
+            WHERE user_id=%s
+        )
+        SELECT CASE
+            WHEN target.value IS NULL THEN 1 + (
+                SELECT COUNT(DISTINCT {value})
+                FROM user_xiuxian
+                WHERE {value} IS NOT NULL
+            )
+            ELSE 1 + (
+                SELECT COUNT(DISTINCT {value})
+                FROM user_xiuxian
+                WHERE {value} > target.value
+            )
+        END AS rank_value
+        FROM target
+    """
 
 
 def _percentile(values: list[float], percentile: float) -> float:
@@ -108,33 +135,26 @@ async def _run_variant(probe, entry, game, snapshot, *, legacy: bool) -> dict:
     original_read = manager_type._read_query
     rank_sql = []
     rank_total_ms = 0.0
-    candidate_cache = {}
 
-    if not legacy:
-        def combined_exp(self, user_id):
-            row = self._read_query(COMBINED_RANK_SQL, (user_id,), one=True)
-            if row is None:
-                return None
-            candidate_cache[(id(self), str(user_id))] = row
-            return (row[0],)
+    if legacy:
+        def legacy_exp(self, user_id):
+            return self._read_query(_legacy_rank_sql("exp"), (user_id,), one=True)
 
-        def combined_stone(self, user_id):
-            row = candidate_cache.pop((id(self), str(user_id)), None)
-            if row is None:
-                row = self._read_query(COMBINED_RANK_SQL, (user_id,), one=True)
-            if row is None:
-                return None
-            return (row[1],)
+        def legacy_stone(self, user_id):
+            return self._read_query(_legacy_rank_sql("stone"), (user_id,), one=True)
 
-        manager_type.get_exp_rank = combined_exp
-        manager_type.get_stone_rank = combined_stone
+        manager_type.get_exp_rank = legacy_exp
+        manager_type.get_stone_rank = legacy_stone
 
     def traced_read(self, sql, params=None, **kwargs):
         nonlocal rank_total_ms
         started = time.perf_counter()
         result = original_read(self, sql, params, **kwargs)
         elapsed_ms = (time.perf_counter() - started) * 1000
-        if "dense_rank() OVER" in str(sql):
+        sql_text = str(sql)
+        if "xiuxian_int_text" in sql_text and (
+            "dense_rank() OVER" in sql_text or "COUNT(DISTINCT" in sql_text
+        ):
             rank_total_ms += elapsed_ms
             rank_sql.append({"sql": " ".join(str(sql).split()), "elapsed_ms": round(elapsed_ms, 3)})
         return result
@@ -171,7 +191,7 @@ async def _run_variant(probe, entry, game, snapshot, *, legacy: bool) -> dict:
 
     values = [item["latency_ms"] for item in samples]
     return {
-        "variant": "before_legacy_two_rank_reads" if legacy else "after_combined_rank_read",
+        "variant": "before_legacy_two_rank_reads" if legacy else "after_range_rank_read",
         "requests": len(samples),
         "samples": samples,
         "p50_ms": _percentile(values, 0.50),
@@ -219,7 +239,8 @@ async def _probe(args: argparse.Namespace) -> dict:
             "explain": {
                 "exp_rank": _rank_explain(game.conn, exp_sql),
                 "stone_rank": _rank_explain(game.conn, stone_sql),
-                "combined": _rank_explain(game.conn, COMBINED_RANK_SQL),
+                "range_exp_rank": _rank_explain(game.conn, _range_rank_sql("exp")),
+                "range_stone_rank": _rank_explain(game.conn, _range_rank_sql("stone")),
             },
         }
         result["before"] = await _run_variant(probe, entry, game, snapshot, legacy=True)
