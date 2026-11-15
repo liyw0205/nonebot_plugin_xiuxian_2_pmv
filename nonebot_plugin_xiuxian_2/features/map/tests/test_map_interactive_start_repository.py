@@ -72,7 +72,8 @@ class MapInteractiveStartRepositoryTests(unittest.TestCase):
     def test_stale_cooldown_snapshot_rejected(self):
         with db_backend.transaction(self.player) as conn:
             conn.execute("UPDATE map_cooldown SET gather_cd_until='2026-09-15 12:00:30' WHERE user_id='u'")
-        self.assertEqual("state_changed", self.call(expected_cooldown="")["status"])
+        result = self.call(expected_cooldown="")
+        self.assertEqual(("state_changed", "cooldown_changed", "actor"), (result["status"], result["reason"], result["subject"]))
         with db_backend.connection(self.game) as conn:
             self.assertEqual(12, conn.execute("SELECT user_stamina FROM user_xiuxian").fetchone()[0])
 
@@ -110,6 +111,7 @@ class MapInteractiveStartRepositoryTests(unittest.TestCase):
             )
         result = self.call()
         self.assertEqual("already_running", result["status"])
+        self.assertEqual("action_changed", result["reason"])
         self.assertEqual("old", result["action"]["action_id"])
         with db_backend.connection(self.game) as conn:
             self.assertEqual(12, conn.execute("SELECT user_stamina FROM user_xiuxian").fetchone()[0])

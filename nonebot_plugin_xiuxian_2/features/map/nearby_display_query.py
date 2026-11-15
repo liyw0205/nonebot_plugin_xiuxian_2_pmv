@@ -26,7 +26,30 @@ async def select_nearby_display(
     selected = []
     eligible_count = 0
     after = None
+
+    def finish() -> list[dict[str, Any]]:
+        if eligible_count > DISPLAY_LIMIT:
+            return [user for _, user in random_source.sample(selected, len(selected))]
+        selected.sort(key=lambda entry: entry[0])
+        return [user for _, user in selected]
+
     try:
+        if getattr(repository, "optimized", False) and hasattr(repository, "candidates"):
+            processed = 0
+            with repository.candidates((0, 0), position, exclude_user_id) as candidates:
+                for candidate in candidates:
+                    cursor = (processed, processed)
+                    eligible_count += 1
+                    if len(selected) < DISPLAY_LIMIT:
+                        selected.append((cursor, candidate))
+                    else:
+                        slot = random_source.randint(1, eligible_count)
+                        if slot <= DISPLAY_LIMIT:
+                            selected[slot - 1] = (cursor, candidate)
+                    processed += 1
+                    if processed % 32 == 0:
+                        await asyncio.sleep(0)
+            return finish()
         upper_rowids = repository.upper_rowids()
         if upper_rowids is None:
             return []
@@ -66,11 +89,7 @@ async def select_nearby_display(
             await asyncio.sleep(0)
     except MapCandidateReadError:
         return []
-    if eligible_count > DISPLAY_LIMIT:
-        selected = random_source.sample(selected, len(selected))
-    else:
-        selected.sort(key=lambda entry: entry[0])
-    return [user for _, user in selected]
+    return finish()
 
 
 __all__ = ["select_nearby_display"]

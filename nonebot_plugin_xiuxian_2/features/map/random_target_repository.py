@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from ...core.numeric import as_int_like
+from ...core.numeric import require_exact_integer
 from pathlib import Path
 from typing import Any
 
@@ -97,7 +97,7 @@ class MapRandomTargetSqlQueryRepository:
                 "user_id": str(row["user_id"]),
                 "user_name": str(row["user_name"] or ""),
                 "level": str(row["level"] or ""),
-                "power": as_int_like(row["power"] or 0),
+                "power": require_exact_integer(row["power"] if row["power"] is not None else 0, field="power", subject="target"),
             }
         except Exception as exc:
             raise MapCandidateReadError("candidate state unavailable") from exc

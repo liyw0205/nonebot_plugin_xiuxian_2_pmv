@@ -160,7 +160,11 @@ class MapApplication(LegacyApplication):
         random_source,
     ) -> list[dict[str, Any]]:
         return await select_nearby_display(
-            MapNearbyDisplaySqlQueryRepository(self.player_database, self.game_database),
+            MapNearbyDisplaySqlQueryRepository(
+                self.player_database,
+                self.game_database,
+                optimized=True,
+            ),
             realm=realm, heaven=heaven, node_id=node_id,
             exclude_user_id=exclude_user_id, random_source=random_source,
         )

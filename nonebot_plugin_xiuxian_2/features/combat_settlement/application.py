@@ -98,10 +98,14 @@ class CombatSettlementApplication:
                         "user_missing": "未找到修仙数据，节点战斗未结算。",
                         "not_ready": "战斗结算服务尚未就绪。",
                     }
+                    if data.get("reason") == "position_changed" and data.get("subject") == "target":
+                        message = "对方已离开当前节点，论道未结算。"
+                    else:
+                        message = reason_text(data.get("reason")) or messages.get(status, "节点战斗未结算。")
                     outcome = OperationOutcome.rejected(
                         request.operation_id,
                         self.action,
-                        reason_text(data.get("reason")) or messages.get(status, "节点战斗未结算。"),
+                        message,
                         code=status,
                         data=data,
                         audit_category="combat_settlement",
@@ -134,7 +138,10 @@ class CombatSettlementApplication:
                 if status in {"applied", "duplicate"}:
                     outcome = OperationOutcome.applied(str(operation_id), "combat.dao_battle", data=data, audit_category="combat_settlement")
                 else:
-                    message = reason_text(data.get("reason")) or {"position_changed": "所在节点与发起论道时不一致，请查看当前位置。", "user_missing": "未找到论道玩家。"}.get(status, "论道记录需要核对，请联系管理员。")
+                    if data.get("reason") == "position_changed" and data.get("subject") == "target":
+                        message = "对方已离开当前节点，论道未结算。"
+                    else:
+                        message = reason_text(data.get("reason")) or {"position_changed": "所在节点与发起论道时不一致，请查看当前位置。", "user_missing": "未找到论道玩家。"}.get(status, "论道记录需要核对，请联系管理员。")
                     outcome = OperationOutcome.rejected(str(operation_id), "combat.dao_battle", message, code=status, data=data, audit_category="combat_settlement")
                 with DatabaseUnitOfWork(self.player_database, immediate=True) as uow:
                     self.ledger.finish(uow, outcome)

@@ -40,10 +40,10 @@ class CombatSettlementSqlRepository:
             previous = uow.query_one("SELECT payload,stone,rewards FROM map_combat_settlement_operations WHERE operation_id=?", (operation_id,))
             if previous:
                 if str(previous["payload"]) != payload:
-                    return {"status": "state_changed", "reason": "operation_conflict", "stone": 0, "rewards": ()}
+                    return {"status": "state_changed", "reason": "operation_conflict", "subject": "actor", "stone": 0, "rewards": ()}
                 return {"status": "duplicate", "stone": as_int_like(previous["stone"]), "rewards": tuple(tuple(map(int, value)) for value in json.loads(str(previous["rewards"]))) }
             if uow.query_one("SELECT 1 FROM user_xiuxian WHERE user_id=?", (user_id,)) is None:
-                return {"status": "user_missing", "stone": 0, "rewards": ()}
+                return {"status": "user_missing", "reason": "user_missing", "subject": "actor", "stone": 0, "rewards": ()}
             daily = uow.query_one("SELECT date,combat_count,resource_total_count FROM player_data.map_daily_limit WHERE user_id=?", (user_id,))
             stored = uow.query_one("SELECT snapshot FROM player_data.map_combat_settlement WHERE user_id=?", (user_id,))
             if daily is None or (str(daily["date"]), str(daily["combat_count"]), str(daily["resource_total_count"])) != (expected["date"], expected.get("combat_count", "0"), expected.get("resource_total_count", "0")) or stored is None or str(stored["snapshot"] or "") != snapshot:
@@ -52,9 +52,9 @@ class CombatSettlementSqlRepository:
                     actual = (str(daily["date"]), str(daily["combat_count"]), str(daily["resource_total_count"]))
                     wanted = (expected["date"], expected.get("combat_count", "0"), expected.get("resource_total_count", "0"))
                     reason = first_difference(actual, wanted, ("combat_date_changed", "combat_count_changed", "combat_resource_count_changed")) if actual != wanted else "combat_snapshot_missing" if stored is None else "combat_snapshot_changed"
-                return {"status": "state_changed", "reason": reason, "stone": 0, "rewards": ()}
+                return {"status": "state_changed", "reason": reason, "subject": "actor", "stone": 0, "rewards": ()}
             if int(daily["combat_count"] or 0) >= daily_limit:
-                return {"status": "limit_reached", "stone": 0, "rewards": ()}
+                return {"status": "limit_reached", "reason": "limit_reached", "subject": "actor", "stone": 0, "rewards": ()}
             totals: dict[int, int] = {}
             metadata: dict[int, tuple[str, str]] = {}
             for item_id, name, item_type, amount in rewards:
@@ -63,7 +63,7 @@ class CombatSettlementSqlRepository:
             for item_id, amount in totals.items():
                 row = uow.query_one("SELECT COALESCE(goods_num,0) AS goods_num FROM back WHERE user_id=? AND goods_id=?", (user_id, item_id))
                 if (int(row["goods_num"]) if row else 0) + amount > max_goods_num:
-                    return {"status": "inventory_full", "stone": 0, "rewards": ()}
+                    return {"status": "inventory_full", "reason": "inventory_full", "subject": "actor", "stone": 0, "rewards": ()}
             uow.execute("UPDATE player_data.map_daily_limit SET combat_count=?,resource_total_count=? WHERE user_id=?", (int(daily["combat_count"] or 0) + 1, int(daily["resource_total_count"] or 0) + 1, user_id))
             uow.execute("UPDATE player_data.map_combat_settlement SET snapshot=? WHERE user_id=?", ("", user_id))
             if stone:

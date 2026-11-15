@@ -109,14 +109,15 @@ class MissionRepositoryTests(unittest.TestCase):
     def test_incomplete(self):
         with DatabaseUnitOfWork(self.player) as uow:
             uow.execute("UPDATE map_daily_limit SET gather_count=4")
-        self.assertEqual("not_completed", self.claim("incomplete", {"date": "2026-09-15", "gather_count": 4})["status"])
+        result = self.claim("incomplete", {"date": "2026-09-15", "gather_count": 4})
+        self.assertEqual(("not_completed", "not_completed", "actor"), (result["status"], result["reason"], result["subject"]))
 
     def test_stale(self):
         result = self.repository.claim(
             "stale", "u", {**self.mission, "settlement": "bad"}, self.daily,
             "gather_count", 0, [], 99,
         )
-        self.assertEqual("state_changed", result["status"])
+        self.assertEqual(("state_changed", "mission_changed"), (result["status"], result["reason"]))
 
 
 if __name__ == "__main__":

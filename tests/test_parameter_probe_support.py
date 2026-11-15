@@ -1,4 +1,8 @@
 import unittest
+import subprocess
+import sys
+from pathlib import Path
+import tempfile
 from types import SimpleNamespace
 
 from tests.parameter_exception_watch import watch_handler_catches
@@ -49,6 +53,24 @@ class ParameterNumberDisplayTests(unittest.TestCase):
         self.assertTrue(positive.endswith("极无量大"))
         self.assertEqual(number_to(-(10 ** 350 + 123)), "-" + positive)
         self.assertEqual(number_to("inf"), "0")
+
+
+class ParameterProbeEntrypointTests(unittest.TestCase):
+    def test_direct_script_entrypoint_bootstraps_repository_root(self):
+        root = Path(__file__).resolve().parents[1]
+        with tempfile.TemporaryDirectory() as directory:
+            report = Path(directory) / "inventory.json"
+            completed = subprocess.run(
+                [sys.executable, str(root / "tests" / "parameter_probe.py"),
+                 "--inventory-only", "--report", str(report)],
+                cwd=root,
+                capture_output=True,
+                text=True,
+                timeout=60,
+            )
+            self.assertEqual(completed.returncode, 0, completed.stderr + completed.stdout)
+            self.assertTrue(report.exists())
+            self.assertGreater(len(report.read_text(encoding="utf-8")), 100)
 
 
 if __name__ == "__main__":

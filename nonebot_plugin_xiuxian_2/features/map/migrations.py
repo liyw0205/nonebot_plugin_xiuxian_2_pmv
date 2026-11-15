@@ -180,6 +180,30 @@ def apply_map_player_state_schema(uow: DatabaseUnitOfWork) -> None:
                 uow.execute(f'ALTER TABLE "{table}" ADD COLUMN "{field}" {declaration}')
 
 
+def apply_map_nearby_game_index(uow: DatabaseUnitOfWork) -> None:
+    """Index the text-normalized profile ID used by nearby-player joins."""
+    present = uow.query_one(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name='user_xiuxian'"
+    )
+    if present is not None:
+        uow.execute(
+            "CREATE INDEX IF NOT EXISTS map_nearby_profile_text_uid "
+            "ON user_xiuxian(CAST(user_id AS TEXT))"
+        )
+
+
+def apply_map_nearby_player_index(uow: DatabaseUnitOfWork) -> None:
+    """Index the high-cardinality map position used by nearby scans."""
+    present = uow.query_one(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name='map_status'"
+    )
+    if present is not None:
+        uow.execute(
+            "CREATE INDEX IF NOT EXISTS map_nearby_position_text_uid "
+            "ON map_status(realm,heaven,node_id,CAST(user_id AS TEXT))"
+        )
+
+
 __all__ = [
     "apply_map",
     "apply_map_combat_plan",
@@ -197,6 +221,8 @@ __all__ = [
     "apply_map_mission_claim",
     "apply_map_movement",
     "apply_map_player_state_schema",
+    "apply_map_nearby_game_index",
+    "apply_map_nearby_player_index",
     "apply_map_resource_reward",
     "apply_map_seed_purchase",
 ]

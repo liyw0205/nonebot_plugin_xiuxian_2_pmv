@@ -48,9 +48,20 @@ class MapResourceRewardRepositoryTests(unittest.TestCase):
             self.assertEqual(12, conn.execute("SELECT stone FROM user_xiuxian").fetchone()[0])
 
     def test_inventory_rejection_does_not_change_state(self):
-        self.assertEqual("inventory_full", self.call(max_goods_num=1)["status"])
+        result = self.call(max_goods_num=1)
+        self.assertEqual(("inventory_full", "inventory_full", "actor"), (result["status"], result["reason"], result["subject"]))
         with db_backend.transaction(self.game) as conn:
             self.assertEqual(5, conn.execute("SELECT stone FROM user_xiuxian").fetchone()[0])
+
+    def test_operation_and_daily_rejections_keep_specific_reason(self):
+        self.assertEqual("applied", self.call("conflict")["status"])
+        conflict = self.call("conflict", max_goods_num=1)
+        self.assertEqual(("state_changed", "operation_conflict"), (conflict["status"], conflict["reason"]))
+        self.setUp()
+        with db_backend.transaction(self.player) as conn:
+            conn.execute("UPDATE map_daily_limit SET gather_count=9 WHERE user_id='u'")
+        daily = self.call("daily")
+        self.assertEqual(("state_changed", "daily_changed"), (daily["status"], daily["reason"]))
 
 
 if __name__ == "__main__":

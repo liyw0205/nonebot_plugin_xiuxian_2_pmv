@@ -15,6 +15,12 @@ import traceback
 from types import ModuleType
 from unittest.mock import AsyncMock, patch
 
+# A script invocation puts ``tests/`` on sys.path[0], so the repository root
+# must be restored before importing the test package used by the probe.
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
 import tests
 from tests.command_probe import (
     FixtureSnapshot, ProbeBlocked, install_boundary, inventory, isolate_source,

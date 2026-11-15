@@ -31,11 +31,12 @@ class MapExploreSettlementRepositoryTests(unittest.TestCase):
         with db_backend.connection(self.game) as c: self.assertEqual(12,c.execute('SELECT stone FROM user_xiuxian').fetchone()[0])
         with db_backend.connection(self.player) as c: self.assertEqual(0,c.execute('SELECT running FROM map_explore_status').fetchone()[0])
     def test_inventory_rejection_preserves_state(self):
-        self.assertEqual('inventory_full',self.call(cap=1)['status'])
+        result = self.call(cap=1)
+        self.assertEqual(('inventory_full', 'inventory_full', 'actor'), (result['status'], result['reason'], result['subject']))
         with db_backend.connection(self.game) as c: self.assertEqual(5,c.execute('SELECT stone FROM user_xiuxian').fetchone()[0])
     def test_stale_state_rejected(self):
         result = self.repo.settle('s', 'u', dict(self.state, node_name='旧'), self.daily, 5, 7, [], 99)
-        self.assertEqual('state_changed', result['status'])
+        self.assertEqual(('state_changed', 'explore_changed'), (result['status'], result['reason']))
 
 
 if __name__=='__main__': unittest.main()
