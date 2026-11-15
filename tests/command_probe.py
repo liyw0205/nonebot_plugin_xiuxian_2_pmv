@@ -99,7 +99,7 @@ def install_boundary(root: Path) -> None:
     sys.addaudithook(audit)
 
 
-async def prepare():
+async def prepare(*, seed: bool = True):
     import nonebot
 
     nonebot.init(command_start={"", "/"}, superusers={"900003"}, log_level="ERROR")
@@ -131,10 +131,11 @@ async def prepare():
     from nonebot_plugin_xiuxian_2.adapters.nonebot.commands import register_migrated_matchers
 
     register_migrated_matchers(nonebot.get_driver(), closure["holder"])
-    for uid, name in (("900001", "诊断道友"), ("900002", "诊断对手"), ("900003", "诊断管理")):
-        game.create_user(uid, "金", "天灵根", 1000, "2026-11-11 00:00:00", name)
-    game.conn.execute("UPDATE user_xiuxian SET stone=1000000, exp=100000, hp=1000, mp=1000, atk=100, user_stamina=100")
-    game.conn.commit()
+    if seed:
+        for uid, name in (("900001", "诊断道友"), ("900002", "诊断对手"), ("900003", "诊断管理")):
+            game.create_user(uid, "金", "天灵根", 1000, "2026-11-11 00:00:00", name)
+        game.conn.execute("UPDATE user_xiuxian SET stone=1000000, exp=100000, hp=1000, mp=1000, atk=100, user_stamina=100")
+        game.conn.commit()
     from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_utils import pet_system
 
     pet_system._ensure_pet_storage()

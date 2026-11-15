@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+PYTHON=${XIUXIAN_TEST_PYTHON:-/home/nonebot-shared-venv/bin/python}
+LOCK=/tmp/nonebot-project-validation.lock
+
+if [[ ! -x "$PYTHON" ]]; then
+    printf 'development Python is missing: %s\n' "$PYTHON" >&2
+    exit 2
+fi
+
+usage() {
+    printf 'usage: %s correctness FIXTURE SMOKE_REPORT | performance FIXTURE REPORT\n' "$0" >&2
+}
+
+case ${1:-} in
+    correctness)
+        [[ $# -eq 3 ]] || { usage; exit 2; }
+        exec flock -w 600 "$LOCK" /bin/bash -c '
+            set -euo pipefail
+            root=$1
+            python=$2
+            fixture=$3
+            report=$4
+            cd "$root"
+            "$python" -m pytest -q \
+                tests/test_core_rank_indexes.py \
+                tests/test_info_user_lazy_reader.py \
+                tests/test_info_frozen_command_owner.py::InfoFrozenCommandOwnerTests::test_text_and_image_handlers_share_the_same_projection
+            "$python" "$root/scripts/rank_hotpath_probe.py" \
+                --fixture "$fixture" --report "$report" --smoke
+        ' _ "$ROOT" "$PYTHON" "$2" "$3"
+        ;;
+    performance)
+        [[ $# -eq 3 ]] || { usage; exit 2; }
+        exec flock -w 600 "$LOCK" "$PYTHON" "$ROOT/scripts/rank_hotpath_probe.py" --fixture "$2" --report "$3"
+        ;;
+    *)
+        usage
+        exit 2
+        ;;
+esac
