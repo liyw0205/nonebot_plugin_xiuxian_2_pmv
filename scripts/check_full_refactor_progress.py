@@ -3987,7 +3987,13 @@ def _slice_status() -> dict[str, dict[str, object]]:
                 and "exclude_user_id=uid, random_source=runtime_random" in map_display_handler
                 and "async def nearby_display(" in map_application
                 and "return await select_nearby_display(" in map_application
-                and "MapNearbyDisplaySqlQueryRepository(self.player_database, self.game_database)" in map_application
+                and "MapNearbyDisplaySqlQueryRepository(" in map_application
+                and "self.player_database" in map_application
+                and "self.game_database" in map_application
+                and (
+                    "optimized=True" in map_application
+                    or "MapNearbyDisplaySqlQueryRepository(self.player_database, self.game_database)" in map_application
+                )
             ),
             "nearby_display_unique_uid_seek_and_first_pair": (
                 "class MapNearbyDisplaySqlQueryRepository(MapRandomTargetSqlQueryRepository)" in map_display_repository
