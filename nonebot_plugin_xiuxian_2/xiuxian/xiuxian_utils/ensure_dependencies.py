@@ -39,12 +39,23 @@ _TERMUX_SKIP_PACKAGES = frozenset(
 )
 
 _DEFAULT_INDEX = "https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple"
+_DEFAULT_LINUX_VENV = Path("/home/nonebot-shared-venv")
 _ENSURE_RAN = False
 
 
 def _is_termux() -> bool:
     prefix = os.environ.get("PREFIX", "/data/data/com.termux/files/usr")
     return os.path.isdir(prefix) and os.path.isfile(os.path.join(prefix, "bin", "pkg"))
+
+
+def get_configured_venv_path() -> Path:
+    """Return the documented Linux venv or the native Termux default."""
+    override = os.environ.get("XIUXIAN_VENV_PATH", "").strip()
+    if override:
+        return Path(override).expanduser()
+    if _is_termux():
+        return Path(os.environ.get("HOME", str(Path.home()))) / "myenv"
+    return _DEFAULT_LINUX_VENV
 
 
 def _log_info(msg: str) -> None:
@@ -265,12 +276,15 @@ def ensure_plugin_dependencies(*, force: bool = False) -> None:
 
 
 def get_runtime_python_hint() -> str:
-    """供状态/调试：当前解释器与常见 venv 路径提示。"""
+    """供状态/调试：当前解释器与配置 venv 的可复现状态提示。"""
     parts = [f"executable={sys.executable}", f"prefix={sys.prefix}"]
-    home = Path.home()
-    for venv in (home / "myenv", Path("/root/myenv")):
-        py = venv / "bin" / "python"
-        if py.is_file():
-            parts.append(f"install_venv={venv}")
-            break
+    venv = get_configured_venv_path()
+    python = venv / "bin" / "python"
+    parts.append(f"configured_venv={venv}")
+    parts.append(f"configured_python={python}")
+    parts.append(f"configured_venv_status={'ready' if python.is_file() else 'missing'}")
+    if not python.is_file():
+        parts.append(
+            "configured_venv_hint=python3 -m venv PATH or set XIUXIAN_VENV_PATH/--venv"
+        )
     return "; ".join(parts)

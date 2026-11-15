@@ -24,7 +24,9 @@ DEFAULT_PROJECT_NAME="xiu2"
 
 TERMUX_HOME="${HOME:-/data/data/com.termux/files/home}"
 TERMUX_PREFIX="${PREFIX:-/data/data/com.termux/files/usr}"
-VENV_PATH="${VENV_PATH:-$TERMUX_HOME/myenv}"
+# Termux keeps its native default; explicit XIUXIAN_VENV_PATH/legacy VENV_PATH
+# and --venv remain available without borrowing the Linux shared environment.
+VENV_PATH="${XIUXIAN_VENV_PATH:-${VENV_PATH:-$TERMUX_HOME/myenv}}"
 SOURCE_MODE="release"
 SOURCE_DIR=""
 MIRROR_MODE="auto"
@@ -140,7 +142,7 @@ usage() {
 用法: $0 [install|update|uninstall|start|stop|restart|status|logs|login] [--target PATH] [选项]
 
 默认安装到: $TERMUX_HOME/$DEFAULT_PROJECT_NAME
-默认虚拟环境: $VENV_PATH
+默认虚拟环境: $VENV_PATH（可用 XIUXIAN_VENV_PATH 或 --venv 覆盖）
 选项: --source-mode release|source --source PATH --mirror auto|direct|accelerated|custom
       --mirror-url URL --target PATH --venv PATH --yes
 EOF
@@ -328,8 +330,12 @@ upgrade_python_dependencies() {
     local python_cmd="$VENV_PATH/bin/python"
 
     if [[ ! -x "$python_cmd" ]]; then
-        ui_print red "未检测到虚拟环境 Python：$python_cmd"
-        ui_print yellow "请先完成安装，或确认 VENV_PATH 指向正确虚拟环境。"
+        ui_print red "未找到可执行的虚拟环境 Python：$python_cmd"
+        if [[ -e "$VENV_PATH" ]]; then
+            ui_print yellow "路径存在但不是可用虚拟环境；请修复它，或使用 XIUXIAN_VENV_PATH=PATH / --venv PATH 指定其它环境。不会删除现有环境。"
+        else
+            ui_print yellow "路径不存在；请先执行 python -m venv $VENV_PATH，或使用 XIUXIAN_VENV_PATH=PATH / --venv PATH 指定已有环境。不会删除旧环境。"
+        fi
         return 1
     fi
     show_status "检测虚拟环境 $VENV_PATH" "success"
@@ -678,13 +684,23 @@ install_release_files() {
 }
 
 create_venv() {
-    if [[ ! -x "$VENV_PATH/bin/python" ]]; then
-        show_progress "创建 Python 虚拟环境"
-        python -m venv --system-site-packages "$VENV_PATH" || return 1
-        show_status "创建 Python 虚拟环境" "success"
-    else
+    if [[ -x "$VENV_PATH/bin/python" ]]; then
         show_status "检测已有 Python 虚拟环境" "success"
+        return 0
     fi
+    if [[ -e "$VENV_PATH" ]]; then
+        ui_print red "虚拟环境路径存在但不可用：$VENV_PATH"
+        ui_print yellow "请修复 $VENV_PATH/bin/python，或使用 XIUXIAN_VENV_PATH=PATH / --venv PATH；不会删除现有环境。"
+        return 1
+    fi
+    show_progress "创建 Python 虚拟环境 $VENV_PATH"
+    python -m venv --system-site-packages "$VENV_PATH" || {
+        ui_print red "无法创建 Python 虚拟环境：$VENV_PATH"
+        ui_print yellow "请先安装 Termux Python，或准备可用环境后用 XIUXIAN_VENV_PATH=PATH / --venv PATH 重试。"
+        return 1
+    }
+    [[ -x "$VENV_PATH/bin/python" ]] || { ui_print red "创建后仍未找到可执行的虚拟环境 Python：$VENV_PATH/bin/python"; return 1; }
+    show_status "创建 Python 虚拟环境" "success"
 }
 
 write_env_files() {
@@ -731,7 +747,13 @@ if [[ -f "$DIR/runtime.env" ]]; then
     source "$DIR/runtime.env"
     set +a
 fi
-source "$VENV_PATH/bin/activate"
+VENV_RUNTIME_PATH="\${XIUXIAN_VENV_PATH:-$VENV_PATH}"
+if [[ ! -x "\$VENV_RUNTIME_PATH/bin/python" ]]; then
+    echo "错误：未找到可执行的虚拟环境 Python：\$VENV_RUNTIME_PATH/bin/python" >&2
+    echo "请先创建该环境，或设置 XIUXIAN_VENV_PATH=PATH / --venv PATH；不会删除现有环境。" >&2
+    exit 1
+fi
+source "\$VENV_RUNTIME_PATH/bin/activate"
 cd "$DIR" || exit 1
 exec nb run
 EOF
@@ -741,7 +763,7 @@ EOF
 
 PROJECT_NAME="$PROJECT_NAME"
 DIR="$DIR"
-VENV_PATH="$VENV_PATH"
+VENV_PATH="\${XIUXIAN_VENV_PATH:-$VENV_PATH}"
 START_PATH="$START_PATH"
 PROJECT_DIR="\$DIR"
 VENV_DIR="\$VENV_PATH"
@@ -820,13 +842,18 @@ run_installer() {
 
 case "\$ACTION" in
     start)
+        if [[ ! -x "\$VENV_DIR/bin/python" ]]; then
+            echo "错误：未找到可执行的虚拟环境 Python：\$VENV_DIR/bin/python" >&2
+            echo "请先创建该环境，或设置 XIUXIAN_VENV_PATH=PATH / --venv PATH；不会删除现有环境。" >&2
+            exit 1
+        fi
         mkdir -p "\$DIR/logs"
         if screen -list | grep -q "\\b\${PROJECT_NAME}\\b"; then
             echo "\$PROJECT_NAME 已在后台运行"
         else
             termux-wake-lock >/dev/null 2>&1 || true
             echo "正在后台启动 \$PROJECT_NAME..."
-            screen -U -dmS "\$PROJECT_NAME" -L -Logfile "\$DIR/\${PROJECT_NAME}.log" "$TERMUX_PREFIX/bin/bash" "\$START_PATH"
+            XIUXIAN_VENV_PATH="\$VENV_DIR" screen -U -dmS "\$PROJECT_NAME" -L -Logfile "\$DIR/\${PROJECT_NAME}.log" "$TERMUX_PREFIX/bin/bash" "\$START_PATH"
             echo "已后台启动，使用 '\$PROJECT_NAME status' 查看日志或管理"
         fi
         ;;
@@ -867,6 +894,11 @@ case "\$ACTION" in
         if [[ "\$YES" == 1 ]]; then run_installer "\$ACTION" --yes; else run_installer "\$ACTION"; fi
         ;;
     update-deps|deps|upgrade-deps)
+        if [[ ! -x "\$VENV_DIR/bin/python" ]]; then
+            echo "错误：未找到可执行的虚拟环境 Python：\$VENV_DIR/bin/python" >&2
+            echo "请先创建该环境，或设置 XIUXIAN_VENV_PATH=PATH / --venv PATH；不会删除现有环境。" >&2
+            exit 1
+        fi
         curl -fsSL https://raw.githubusercontent.com/$REPO_OWNER/$REPO_NAME/main/scripts/install_termux.sh | bash -s -- update-deps --target "\$PROJECT_DIR" --venv "\$VENV_DIR"
         ;;
     format)

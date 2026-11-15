@@ -42,4 +42,4 @@
 
 ## 测试与手工验收
 
-运行 `.venv/bin/pytest -q tests/test_logs_routes.py nonebot_plugin_xiuxian_2/features/logs/tests -p no:cacheprovider`，应覆盖匿名拒绝、参数透传、用户合并、消息历史、文件目录/read/tail 与撤回。手工确认管理员页面可加载、缺少日志文件时返回空结果而不创建数据库。
+运行 `PYTHON_BIN="${XIUXIAN_VENV_PATH:-/home/nonebot-shared-venv}/bin/python"` 后的 `$PYTHON_BIN -m pytest -q tests/test_logs_routes.py nonebot_plugin_xiuxian_2/features/logs/tests -p no:cacheprovider`，应覆盖匿名拒绝、参数透传、用户合并、消息历史、文件目录/read/tail 与撤回。手工确认管理员页面可加载、缺少日志文件时返回空结果而不创建数据库。
