@@ -162,6 +162,6 @@ XIUXIAN_SKIP_AUTO_PIP=1
 手动安装：
 
 ```bash
-source "${XIUXIAN_VENV_PATH:-/home/nonebot-shared-venv}/bin/activate"
+source "${XIUXIAN_VENV_PATH:-/root/myenv}/bin/activate"
 python -m pip install -r requirements.txt
 ```

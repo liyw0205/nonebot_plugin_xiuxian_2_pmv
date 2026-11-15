@@ -39,7 +39,7 @@ _TERMUX_SKIP_PACKAGES = frozenset(
 )
 
 _DEFAULT_INDEX = "https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple"
-_DEFAULT_LINUX_VENV = Path("/home/nonebot-shared-venv")
+_DEFAULT_LINUX_VENV = Path("/root/myenv")
 _ENSURE_RAN = False
 
 

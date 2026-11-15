@@ -93,12 +93,11 @@ class InstallerScriptTests(unittest.TestCase):
         linux = (SCRIPTS / "install.sh").read_text(encoding="utf-8")
         termux = (SCRIPTS / "install_termux.sh").read_text(encoding="utf-8")
 
-        self.assertIn('DEFAULT_VENV_PATH="/home/nonebot-shared-venv"', linux)
+        self.assertIn('DEFAULT_VENV_PATH="/root/myenv"', linux)
         self.assertIn('VENV_PATH="${XIUXIAN_VENV_PATH:-${VENV_PATH:-$DEFAULT_VENV_PATH}}"', linux)
         self.assertIn('VENV_RUNTIME_PATH="\\${XIUXIAN_VENV_PATH:-$VENV_PATH}"', linux)
         self.assertIn('VENV_DIR="\\${XIUXIAN_VENV_PATH:-$VENV_PATH}"', linux)
         self.assertIn('XIUXIAN_VENV_PATH="\\$VENV_DIR" screen', linux)
-        self.assertNotIn('/root/myenv', linux)
         self.assertNotIn('.venv/bin', linux)
 
         self.assertIn('VENV_PATH="${XIUXIAN_VENV_PATH:-${VENV_PATH:-$TERMUX_HOME/myenv}}"', termux)

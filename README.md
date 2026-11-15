@@ -170,12 +170,12 @@ data/xiuxian/
 
 ## 依赖与更新
 
-启动时会按根目录 `requirements.txt` 检查缺失依赖。Linux 安装器默认使用
-`/home/nonebot-shared-venv`；可用 `XIUXIAN_VENV_PATH` 或安装器的 `--venv PATH`
-覆盖（`--venv` 优先）。手动更新：
+启动时会按根目录 `requirements.txt` 检查缺失依赖。Linux 安装/运行默认使用
+`/root/myenv`；可用 `XIUXIAN_VENV_PATH` 或安装器的 `--venv PATH` 覆盖（`--venv`
+优先）。本机开发测试使用共享解释器 `/home/nonebot-shared-venv/bin/python`。手动更新：
 
 ```bash
-source "${XIUXIAN_VENV_PATH:-/home/nonebot-shared-venv}/bin/activate"
+source "${XIUXIAN_VENV_PATH:-/root/myenv}/bin/activate"
 python -m pip install -r requirements.txt
 ```
 

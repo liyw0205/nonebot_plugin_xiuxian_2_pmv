@@ -30,8 +30,8 @@ CURRENT_PROJECT_VERSION="unknown" # 用于备份文件名的版本号
 XIUXIAN_CONFIG_PATH_REL="src/plugins/nonebot_plugin_xiuxian_2/xiuxian/xiuxian_config.py"
 XIUXIAN_CONFIG_PATH_ABS="" # 运行时会根据 $DIR 赋值
 
-# Python 虚拟环境路径。命令行 --venv 优先于 XIUXIAN_VENV_PATH，环境变量优先于默认值。
-DEFAULT_VENV_PATH="/home/nonebot-shared-venv"
+# Linux 安装/运行默认保持历史环境；命令行 --venv 优先于显式环境变量。
+DEFAULT_VENV_PATH="/root/myenv"
 VENV_PATH="${XIUXIAN_VENV_PATH:-${VENV_PATH:-$DEFAULT_VENV_PATH}}"
 
 # 需要直接通过 pip 拉取当前索引最新版本的核心依赖。
@@ -802,7 +802,7 @@ usage() {
   --mirror auto|direct|accelerated|custom
   --mirror-url URL              custom 镜像前缀
   --target PATH                 安装目录
-  --venv PATH                   Python 虚拟环境目录（默认 /home/nonebot-shared-venv；也可由 XIUXIAN_VENV_PATH 指定）
+  --venv PATH                   Python 虚拟环境目录（默认 /root/myenv；也可由 XIUXIAN_VENV_PATH 指定）
   --yes                         确认卸载
   --help                        显示帮助
 EOF
