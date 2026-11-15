@@ -66,6 +66,40 @@ def _create_index(conn, index_name: str, table_name: str, columns: list[str]):
     )
 
 
+def _create_numeric_rank_index(
+    conn,
+    index_name: str,
+    table_name: str,
+    column_name: str,
+):
+    """Create a numeric ordering index without making startup depend on old data."""
+    if not conn.table_exists(table_name):
+        return
+
+    available = {name.lower() for name in conn.column_names(table_name)}
+    if column_name.lower() not in available:
+        return
+
+    expression = (
+        f"xiuxian_int_text({db_backend.quote_ident(column_name)}) "
+        "COLLATE xiuxian_integer"
+    )
+    try:
+        conn.execute(
+            f"""
+            CREATE INDEX IF NOT EXISTS {db_backend.quote_ident(index_name)}
+            ON {db_backend.quote_ident(table_name)} ({expression})
+            """
+        )
+    except Exception as exc:
+        # A legacy value may make a user-defined numeric function reject an
+        # index build.  Keep startup usable and retain the exact scope/reason.
+        logger.warning(
+            f"[xiuxian-db] 跳过数值排行索引 {index_name}："
+            f"table={table_name}, column={column_name}, error={exc}"
+        )
+
+
 def _ensure_core_indexes(conn):
     """热点表索引：幂等执行，不依赖迁移版本。"""
     for index_name, table_name, columns in (
@@ -79,6 +113,19 @@ def _ensure_core_indexes(conn):
         ("idx_buffinfo_user_id", "buffinfo", ["user_id"]),
     ):
         _create_index(conn, index_name, table_name, columns)
+
+    _create_numeric_rank_index(
+        conn,
+        "idx_user_xiuxian_exp_numeric_rank",
+        "user_xiuxian",
+        "exp",
+    )
+    _create_numeric_rank_index(
+        conn,
+        "idx_user_xiuxian_stone_numeric_rank",
+        "user_xiuxian",
+        "stone",
+    )
 
 
 def _ensure_user_xiuxian_unique_index(conn):
