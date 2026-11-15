@@ -2,12 +2,19 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
+from contextvars import ContextVar
 from uuid import uuid4
 
 from nonebot.log import logger
 
 from ..features.admin.application import AdminApplication
 from ..paths import get_paths
+
+
+_PRIMED_STATUS: ContextVar[dict[str, bool] | None] = ContextVar(
+    "xiuxian_primed_blackhouse_status", default=None,
+)
 
 
 def _application() -> AdminApplication:
@@ -27,6 +34,39 @@ def is_user_blackhoused(user_id: str | None) -> bool:
     except Exception as exc:
         logger.warning("blackhouse lookup failed closed: {}", type(exc).__name__)
         return True
+
+
+def is_users_blackhoused(user_ids: Iterable[str | None]) -> dict[str, bool]:
+    normalized = tuple(dict.fromkeys(
+        _normalize_user_id(user_id) for user_id in user_ids
+        if _normalize_user_id(user_id)
+    ))
+    if not normalized:
+        return {}
+    cache = _PRIMED_STATUS.get() or {}
+    known = {user_id: cache[user_id] for user_id in normalized if user_id in cache}
+    if known:
+        _PRIMED_STATUS.set({key: value for key, value in cache.items() if key not in known})
+    missing = tuple(user_id for user_id in normalized if user_id not in known)
+    if not missing:
+        return known
+    try:
+        known.update(_application().blackhouse_statuses(missing))
+        return {user_id: bool(known.get(user_id, True)) for user_id in normalized}
+    except Exception as exc:
+        logger.warning("blackhouse batch lookup failed closed: {}", type(exc).__name__)
+        return {user_id: True for user_id in normalized}
+
+
+def prime_user_blackhouse_status(user_id: str | None) -> bool:
+    normalized = _normalize_user_id(user_id)
+    if not normalized:
+        return False
+    status = is_user_blackhoused(normalized)
+    cache = dict(_PRIMED_STATUS.get() or {})
+    cache[normalized] = status
+    _PRIMED_STATUS.set(cache)
+    return status
 
 
 def list_blackhoused_users() -> list[dict[str, str]]:

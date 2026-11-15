@@ -379,8 +379,8 @@ class AvatarIdentityResolutionTests(unittest.TestCase):
             with patch.object(utils, "get_user_profile", side_effect=get_profile):
                 with patch.object(utils, "_sql_message", return_value=SqlMessage()):
                     with patch(
-                        "nonebot_plugin_xiuxian_2.xiuxian.blackhouse.is_user_blackhoused",
-                        return_value=False,
+                        "nonebot_plugin_xiuxian_2.xiuxian.blackhouse.is_users_blackhoused",
+                        return_value={"impersonated-id": False, "real-id": False},
                     ):
                         utils._impersonating_users["real-id"] = "impersonated-id"
                         try:
@@ -416,8 +416,8 @@ class AvatarIdentityResolutionTests(unittest.TestCase):
                 return_value={"user_id": "avatar-id", "is_ban": 0},
             ):
                 with patch(
-                    "nonebot_plugin_xiuxian_2.xiuxian.blackhouse.is_user_blackhoused",
-                    return_value=False,
+                    "nonebot_plugin_xiuxian_2.xiuxian.blackhouse.is_users_blackhoused",
+                    return_value={"avatar-id": False, "real-id": False},
                 ):
                     is_user, profile, message = utils.check_user("real-id")
 

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
 from threading import RLock
@@ -128,6 +129,31 @@ class AdminBlackhouseSqlRepository:
 
     def is_banned(self, user_id: Any) -> bool:
         return self.snapshot(user_id)
+
+    def statuses(self, user_ids: Iterable[Any]) -> dict[str, bool]:
+        """Read several blacklist memberships in one validated read transaction."""
+        normalized: list[str] = []
+        seen: set[str] = set()
+        for value in user_ids:
+            user_id = self._identifier(value, "user id")
+            if user_id not in seen:
+                normalized.append(user_id)
+                seen.add(user_id)
+        if not normalized:
+            return {}
+        if not self.database.is_file():
+            raise RuntimeError("schema_missing")
+        with self.lock, DatabaseUnitOfWork(self.database, read_only=True) as uow:
+            if not self._cached_schema_ready(uow, self.database):
+                raise RuntimeError("schema_missing")
+            placeholders = ",".join("?" for _ in normalized)
+            rows = uow.query_all(
+                "SELECT user_id FROM admin_blackhouse_users "
+                f"WHERE user_id IN ({placeholders})",
+                tuple(normalized),
+            )
+        present = {str(row["user_id"]) for row in rows}
+        return {user_id: user_id in present for user_id in normalized}
 
     def list_banned(self) -> list[dict[str, str]]:
         if not self.database.is_file():

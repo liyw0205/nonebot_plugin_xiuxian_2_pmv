@@ -40,12 +40,12 @@ class PlayerProfileReadContractTest(unittest.TestCase):
             patch.object(utils, "_player_avatar", return_value=avatar),
             patch.object(utils, "get_impersonating_target", return_value=None),
             patch.object(utils, "get_user_profile", return_value=profile),
-            patch.object(blackhouse, "is_user_blackhoused", return_value=False) as lookup,
+            patch.object(blackhouse, "is_users_blackhoused", return_value={"same-user": False}) as lookup,
         ):
             result = utils.check_user("same-user")
 
         self.assertEqual(result, (True, profile, ""))
-        lookup.assert_called_once_with("same-user")
+        lookup.assert_called_once_with(("same-user",))
 
     def test_check_user_still_checks_original_identity_when_avatar_differs(self) -> None:
         from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_utils import utils
@@ -60,8 +60,8 @@ class PlayerProfileReadContractTest(unittest.TestCase):
             patch.object(utils, "get_user_profile", return_value=profile),
             patch.object(
                 blackhouse,
-                "is_user_blackhoused",
-                side_effect=(False, True),
+                "is_users_blackhoused",
+                return_value={"active-avatar": False, "main-account": True},
             ) as lookup,
         ):
             result = utils.check_user("main-account")
@@ -70,7 +70,7 @@ class PlayerProfileReadContractTest(unittest.TestCase):
         self.assertIn("小黑屋", result[2])
         self.assertEqual(
             [call.args[0] for call in lookup.call_args_list],
-            ["active-avatar", "main-account"],
+            [("active-avatar", "main-account")],
         )
 
     def test_base_handlers_use_profile_reader_for_lookup_only(self) -> None:

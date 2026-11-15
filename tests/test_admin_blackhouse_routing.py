@@ -3,6 +3,7 @@ from __future__ import annotations
 import __future__
 import ast
 import asyncio
+from contextvars import ContextVar
 import re
 from pathlib import Path
 from types import SimpleNamespace
@@ -43,11 +44,13 @@ def application(tmp_path):
 def _facade(application):
     return _load_functions(ROOT / "blackhouse.py", (
         "_application", "_normalize_user_id", "is_user_blackhoused",
+        "is_users_blackhoused", "prime_user_blackhouse_status",
         "list_blackhoused_users", "ban_user", "unban_user",
     ), {
         "AdminApplication": AdminApplication,
         "get_paths": lambda: SimpleNamespace(game_db=application.database),
         "logger": Mock(), "uuid4": uuid4,
+        "_PRIMED_STATUS": ContextVar("test_primed_blackhouse_status", default=None),
     })
 
 
@@ -61,7 +64,8 @@ def _route(application, *, lookup=None):
     ), {
         "_MATCHER_ROUTES": {admin: object(), game: object()},
         "_COMMAND_SUBMODULES": {}, "_COMMAND_DISABLE_EXEMPT_SUBMODULE": "xiuxian_admin",
-        "is_user_blackhoused": lookup or _facade(application)["is_user_blackhoused"],
+        "prime_user_blackhouse_status": lookup or _facade(application)["prime_user_blackhouse_status"],
+        "is_users_blackhoused": _facade(application)["is_users_blackhoused"],
         "logger": Mock(),
     })
     return namespace["_filter_blackhoused_matchers"], (admin, game, unregistered)

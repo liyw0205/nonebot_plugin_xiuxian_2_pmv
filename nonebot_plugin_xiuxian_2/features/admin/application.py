@@ -132,6 +132,9 @@ class AdminApplication(MigratedFeatureApplication):
     def is_user_blackhoused(self, user_id: str) -> bool:
         return self.blackhouse_repository.is_banned(user_id)
 
+    def blackhouse_statuses(self, user_ids: list[str] | tuple[str, ...]) -> dict[str, bool]:
+        return self.blackhouse_repository.statuses(user_ids)
+
     def list_blackhoused_users(self) -> list[dict[str, str]]:
         return self.blackhouse_repository.list_banned()
 

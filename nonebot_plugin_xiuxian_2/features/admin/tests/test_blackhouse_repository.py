@@ -297,6 +297,40 @@ def test_runtime_schema_cache_invalidates_after_ddl_change(tmp_path: Path) -> No
         repository.snapshot("u")
 
 
+def test_statuses_reads_distinct_ids_in_one_read_only_uow(tmp_path: Path, monkeypatch) -> None:
+    database = tmp_path / "game.db"
+    _players(database, migrated=True)
+    with DatabaseUnitOfWork(database) as uow:
+        uow.execute(
+            "INSERT INTO admin_blackhouse_users(user_id,name,reason) VALUES(?,?,?)",
+            ("banned", "Banned", "test"),
+        )
+    repository = AdminBlackhouseSqlRepository(database)
+    entered = []
+    original_enter = DatabaseUnitOfWork.__enter__
+
+    def tracked_enter(uow):
+        entered.append(uow.read_only)
+        return original_enter(uow)
+
+    monkeypatch.setattr(DatabaseUnitOfWork, "__enter__", tracked_enter)
+    assert repository.statuses(("u", "banned", "u")) == {
+        "u": False,
+        "banned": True,
+    }
+    assert entered == [True]
+
+
+def test_statuses_preserves_schema_missing_boundary(tmp_path: Path) -> None:
+    database = tmp_path / "game.db"
+    _players(database, migrated=True)
+    with DatabaseUnitOfWork(database) as uow:
+        uow.execute("DELETE FROM admin_blackhouse_imports")
+
+    with pytest.raises(RuntimeError, match="schema_missing"):
+        AdminBlackhouseSqlRepository(database).statuses(("u", "original"))
+
+
 def test_ignored_import_marker_rolls_back_membership_and_cannot_report_success(tmp_path: Path) -> None:
     database = tmp_path / "game.db"
     _players(database, migrated=True)

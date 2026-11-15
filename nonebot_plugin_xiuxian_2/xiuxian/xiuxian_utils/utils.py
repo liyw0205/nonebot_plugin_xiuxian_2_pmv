@@ -425,13 +425,28 @@ def check_user(event_or_user_id: Union[GroupMessageEvent, PrivateMessageEvent, s
     isUser = True
 
     # 检查是否被关小黑屋（全局名单优先，兼容旧 is_ban）
-    from ..blackhouse import is_user_blackhoused
+    try:
+        from ..blackhouse import is_users_blackhoused
+    except ImportError:
+        # Keep isolated legacy consumers that only expose the single-ID API.
+        from ..blackhouse import is_user_blackhoused
 
+        def is_users_blackhoused(user_ids):
+            return {
+                str(user_id): is_user_blackhoused(user_id)
+                for user_id in user_ids
+            }
+
+    blackhouse_statuses = is_users_blackhoused(
+        (user_id_to_check, original_user_id)
+        if user_id_to_check != original_user_id
+        else (user_id_to_check,)
+    )
     if (
-        is_user_blackhoused(user_id_to_check)
+        blackhouse_statuses.get(user_id_to_check, True)
         or (
             user_id_to_check != original_user_id
-            and is_user_blackhoused(original_user_id)
+            and blackhouse_statuses.get(original_user_id, True)
         )
         or user_info.get('is_ban', 0) == 1
     ):
