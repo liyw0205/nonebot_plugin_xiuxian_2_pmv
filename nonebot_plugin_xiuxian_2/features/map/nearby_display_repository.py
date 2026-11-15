@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 from collections.abc import Iterator
-from typing import Any
+from typing import Any, Callable
 
 from ...core.numeric import require_exact_integer
 from ...infrastructure.database import DatabaseUnitOfWork
@@ -71,6 +71,71 @@ class MapNearbyDisplaySqlQueryRepository(MapRandomTargetSqlQueryRepository):
             if isinstance(exc, MapCandidateReadError):
                 raise
             raise MapCandidateReadError("display stream unavailable") from exc
+
+    @contextmanager
+    def candidates_for_user(
+        self,
+        user_id: str,
+        exclude_user_id: str,
+        status_validator: Callable[[dict[str, str]], bool],
+    ) -> Iterator[tuple[dict[str, str], Iterator[dict[str, Any]]] | None]:
+        """Read a canonical actor position and candidates in one read transaction."""
+        try:
+            with DatabaseUnitOfWork(self.player_database, read_only=True) as uow:
+                row = uow.query_one(
+                    "SELECT realm,heaven,node_id FROM map_status WHERE user_id=?",
+                    (str(user_id),),
+                )
+                if row is None:
+                    yield None
+                    return
+                status = {
+                    "realm": str(row["realm"] or ""),
+                    "heaven": str(row["heaven"] or ""),
+                    "node_id": str(row["node_id"] or ""),
+                }
+                if not all(status.values()) or not status_validator(status):
+                    yield None
+                    return
+                position = (status["realm"], status["heaven"], status["node_id"])
+                scope, params = self._scope((0, 0), position, str(exclude_user_id))
+                scope = scope.replace(
+                    "AND map.rowid<=? AND profile.rowid<=? ", "",
+                )
+                params = (*params[:4], *params[6:])
+                sql = (
+                    "SELECT CAST(map.user_id AS TEXT) AS user_id,"
+                    "profile.user_name,profile.level,profile.power "
+                    + scope
+                    + "ORDER BY CAST(map.user_id AS TEXT) COLLATE BINARY ASC"
+                )
+                uow.attach_database(
+                    f"{self.game_database.resolve().as_uri()}?mode=ro", "game_data"
+                )
+                cursor = uow.execute(sql, params)
+
+                def rows() -> Iterator[dict[str, Any]]:
+                    while True:
+                        batch = cursor.fetchmany(256)
+                        if not batch:
+                            return
+                        for candidate in batch:
+                            yield {
+                                "user_id": str(candidate["user_id"]),
+                                "user_name": str(candidate["user_name"] or ""),
+                                "level": str(candidate["level"] or ""),
+                                "power": require_exact_integer(
+                                    candidate["power"] if candidate["power"] is not None else 0,
+                                    field="power",
+                                    subject="target",
+                                ),
+                            }
+
+                yield status, rows()
+        except Exception as exc:
+            if isinstance(exc, MapCandidateReadError):
+                raise
+            raise MapCandidateReadError("display actor stream unavailable") from exc
 
     @staticmethod
     def _scope(upper_rowids, position, exclude_user_id):

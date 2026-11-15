@@ -284,6 +284,26 @@ def test_runtime_schema_cache_rechecks_mutable_import_marker(tmp_path: Path) -> 
         repository.snapshot("u")
 
 
+def test_runtime_schema_cache_combines_marker_and_membership_read(tmp_path: Path, monkeypatch) -> None:
+    database = tmp_path / "game.db"
+    _players(database, migrated=True)
+    repository = AdminBlackhouseSqlRepository(database)
+    statements = []
+    original = DatabaseUnitOfWork.execute
+
+    def tracked(uow, sql, params=()):
+        statements.append(sql)
+        return original(uow, sql, params)
+
+    monkeypatch.setattr(DatabaseUnitOfWork, "execute", tracked)
+    assert repository.snapshot("u") is False
+    statements.clear()
+    assert repository.snapshot("u") is False
+    assert sum("admin_blackhouse_imports" in sql for sql in statements) == 1
+    assert sum("admin_blackhouse_users" in sql for sql in statements) == 1
+    assert sum("EXISTS(" in sql for sql in statements) == 1
+
+
 def test_runtime_schema_cache_invalidates_after_ddl_change(tmp_path: Path) -> None:
     database = tmp_path / "game.db"
     _players(database, migrated=True)

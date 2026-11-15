@@ -6,7 +6,8 @@ import json
 import sqlite3
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from threading import RLock
+from typing import Any, ClassVar
 
 from ...core.errors import OperationConflictError
 from ...infrastructure.clock import SystemClock
@@ -46,6 +47,8 @@ class AvatarStateSqlRepository:
         "request_hash",
         "created_at",
     }
+    _schema_cache: ClassVar[dict[tuple[str, int], bool]] = {}
+    _schema_cache_lock: ClassVar[RLock] = RLock()
 
     def __init__(self, database: str | Path, *, clock: Any | None = None) -> None:
         self.database = Path(database)
@@ -77,12 +80,33 @@ class AvatarStateSqlRepository:
             )
         )
 
+    @classmethod
+    def _schema_cache_key(cls, uow: DatabaseUnitOfWork, database: Path) -> tuple[str, int]:
+        row = uow.query_one("PRAGMA schema_version")
+        try:
+            schema_version = int(row["schema_version"]) if row is not None else -1
+        except (KeyError, TypeError, ValueError):
+            schema_version = -1
+        return str(database.resolve()), schema_version
+
+    @classmethod
+    def _cached_schema_ready(cls, uow: DatabaseUnitOfWork, database: Path) -> bool:
+        key = cls._schema_cache_key(uow, database)
+        with cls._schema_cache_lock:
+            cached = cls._schema_cache.get(key)
+        if cached is not None:
+            return cached
+        ready = cls._schema_ready(uow)
+        with cls._schema_cache_lock:
+            cls._schema_cache[key] = ready
+        return ready
+
     def get_avatar_info(self, user_id: str) -> dict[str, Any]:
         if not self.database.is_file():
             return {}
         try:
             with DatabaseUnitOfWork(self.database, read_only=True) as uow:
-                if not self._schema_ready(uow):
+                if not self._cached_schema_ready(uow, self.database):
                     return {}
                 row = uow.query_one("SELECT * FROM avatar WHERE user_id=? LIMIT 1", (str(user_id),))
         except sqlite3.DatabaseError:
@@ -104,7 +128,7 @@ class AvatarStateSqlRepository:
             return None
         try:
             with DatabaseUnitOfWork(self.database, read_only=True) as uow:
-                if not self._schema_ready(uow):
+                if not self._cached_schema_ready(uow, self.database):
                     return None
                 row = uow.query_one(
                     "SELECT active_id, main_id FROM avatar WHERE user_id=? LIMIT 1",
@@ -176,14 +200,14 @@ class AvatarStateSqlRepository:
             return AvatarStateResult("schema_missing")
         try:
             with DatabaseUnitOfWork(self.database, read_only=True) as uow:
-                ready = self._schema_ready(uow)
+                ready = self._cached_schema_ready(uow, self.database)
         except sqlite3.DatabaseError:
             return AvatarStateResult("schema_missing")
         if not ready:
             return AvatarStateResult("schema_missing")
 
         with DatabaseUnitOfWork(self.database, immediate=True) as uow:
-            if not self._schema_ready(uow):
+            if not self._cached_schema_ready(uow, self.database):
                 return AvatarStateResult("schema_missing")
             receipt = uow.query_one(
                 "SELECT request_hash, result_json FROM avatar_operation_receipts "

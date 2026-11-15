@@ -63,6 +63,40 @@ def test_application_nearby_display_returns_unique_users_without_full_list(nearb
     source.sample.assert_not_called()
 
 
+def test_application_nearby_display_for_user_reuses_actor_read_transaction(nearby, monkeypatch):
+    _, player, game = nearby
+    connections = track_connections(monkeypatch)
+    source = SimpleNamespace(randint=Mock(), sample=Mock())
+    result = asyncio.run(MapApplication(game, player).nearby_display_for_user(
+        user_id="me",
+        exclude_user_id="me",
+        status_validator=lambda status: status == POSITION,
+        random_source=source,
+    ))
+    assert result == (
+        POSITION,
+        [
+            {"user_id": "first", "user_name": "target", "level": "first-level", "power": 20},
+            {"user_id": "second", "user_name": "target", "level": "second-level", "power": 30},
+        ],
+    )
+    assert len(connections) == 1
+    assert_closed(connections)
+    source.randint.assert_not_called()
+    source.sample.assert_not_called()
+
+
+def test_application_nearby_display_for_user_falls_back_for_noncanonical_status(nearby):
+    _, player, game = nearby
+    result = asyncio.run(MapApplication(game, player).nearby_display_for_user(
+        user_id="me",
+        exclude_user_id="me",
+        status_validator=lambda status: False,
+        random_source=SimpleNamespace(),
+    ))
+    assert result is None
+
+
 @pytest.mark.parametrize("users", ([], [{"user_id": "first", "user_name": "target", "level": "level"}]))
 def test_display_handler_awaits_bounded_application_and_preserves_messages(users):
     env = load_handler("nearby_users_cmd", None)

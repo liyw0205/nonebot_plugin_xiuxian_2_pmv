@@ -3,7 +3,8 @@ from __future__ import annotations
 from ...core.numeric import as_int_like, require_exact_integer
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Any, Protocol
+from threading import RLock
+from typing import Any, ClassVar, Protocol
 import json
 from ...infrastructure.database import DatabaseUnitOfWork, OutboxStore
 from .schema import (
@@ -266,15 +267,38 @@ class MapProjectionSqlWriteRepository:
 
 
 class MapStatusSqlQueryRepository:
+    _columns_cache: ClassVar[dict[tuple[str, int], frozenset[str]]] = {}
+    _columns_cache_lock: ClassVar[RLock] = RLock()
+
     def __init__(self, player_database: str | Path) -> None:
         self.player_database = str(player_database)
+
+    @classmethod
+    def _columns(cls, uow: DatabaseUnitOfWork, database: str) -> frozenset[str]:
+        row = uow.query_one("PRAGMA schema_version")
+        try:
+            schema_version = int(row["schema_version"]) if row is not None else -1
+        except (KeyError, TypeError, ValueError):
+            schema_version = -1
+        key = (str(Path(database).resolve()), schema_version)
+        with cls._columns_cache_lock:
+            cached = cls._columns_cache.get(key)
+        if cached is not None:
+            return cached
+        columns = frozenset(
+            str(item["name"])
+            for item in uow.query_all("PRAGMA table_info(map_status)")
+        )
+        with cls._columns_cache_lock:
+            cls._columns_cache[key] = columns
+        return columns
 
     def get(self, user_id: str) -> dict[str, Any] | None:
         user_id = str(user_id).strip()
         if not user_id:
             return None
         with DatabaseUnitOfWork(self.player_database, read_only=True) as uow:
-            columns = {str(row["name"]) for row in uow.query_all("PRAGMA table_info(map_status)")}
+            columns = self._columns(uow, self.player_database)
             if not columns:
                 return None
             visited_field = ",visited_nodes" if "visited_nodes" in columns else ""

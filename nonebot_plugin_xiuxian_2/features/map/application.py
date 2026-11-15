@@ -12,7 +12,7 @@ from ..combat_settlement.application import CombatSettlementApplication
 from ...core.result import OperationOutcome
 from ...infrastructure.database import DatabaseUnitOfWork
 from .schemas import MapNearbyTargetResult
-from .nearby_display_query import select_nearby_display
+from .nearby_display_query import select_nearby_display, select_nearby_display_for_user
 from .nearby_display_repository import MapNearbyDisplaySqlQueryRepository
 from .random_target_query import select_random_nearby_target
 from .random_target_repository import MapRandomTargetSqlQueryRepository
@@ -167,6 +167,26 @@ class MapApplication(LegacyApplication):
             ),
             realm=realm, heaven=heaven, node_id=node_id,
             exclude_user_id=exclude_user_id, random_source=random_source,
+        )
+
+    async def nearby_display_for_user(
+        self,
+        *,
+        user_id: str,
+        exclude_user_id: str,
+        status_validator,
+        random_source,
+    ):
+        return await select_nearby_display_for_user(
+            MapNearbyDisplaySqlQueryRepository(
+                self.player_database,
+                self.game_database,
+                optimized=True,
+            ),
+            user_id=user_id,
+            exclude_user_id=exclude_user_id,
+            status_validator=status_validator,
+            random_source=random_source,
         )
 
     def interactive_start(self, *, operation_id: str, user_id: str, **kwargs: Any):
