@@ -162,6 +162,89 @@ def test_take_handler_uses_local_weekend_boundary(now, weekend):
     assert ("仅在周六和周日" in reply) is not weekend
 
 
+@pytest.mark.parametrize(
+    ("reason", "subject", "expected", "label"),
+    (("guishi_take_storage_write_rejected", "buyer", "暂存扣除保存失败", "本人账户"),
+     ("guishi_take_inventory_write_rejected", "buyer", "背包写入失败", "本人账户"),
+     ("guishi_take_receipt_write_rejected", "buyer", "取物回执保存失败", "本人账户"),
+     ("guishi_storage_quantity_invalid", "item:1002", "数量不是有效", "暂存物品ID:1002"),
+     ("guishi_storage_duplicate", "buyer", "重复物品编号", "本人账户"),
+     ("guishi_take_receipt_invalid", "buyer", "历史回执的物品编号或数量不合法", "本人账户"),
+     ("inventory_invalid", "item:1001", "背包总数或绑定数记录不合法", "herb")),
+)
+@pytest.mark.parametrize(
+    ("onebot", "markdown", "send_fails"),
+    ((True, True, False), (False, False, False), (False, True, False), (False, True, True)),
+)
+def test_take_rejections_keep_specific_cause_and_subject_in_adapter_reply(reason, subject, expected, label,
+                                                                        onebot, markdown, send_fails):
+    from nonebot_plugin_xiuxian_2.features.trade.guishi_take_repository import GuishiStoredItemTakeResult
+    result = GuishiStoredItemTakeResult('state_changed', 'buyer', 1001, 'herb', '药材', 3, reason, subject)
+    captured = AsyncMock()
+    event = SimpleNamespace(message_id='take', get_user_id=lambda: 'buyer')
+    with patch.object(trade, 'assign_bot', new=AsyncMock(return_value=(object(), None))), patch.object(
+        trade, 'check_user', return_value=(True, {'user_id': 'buyer'}, '')
+    ), patch.object(trade.items, 'get_data_by_item_name', return_value=(1001, {'name': 'herb', 'type': '药材'})), patch.object(
+        trade.trade_application, 'guishi_take_stored_item', return_value=result
+    ), patch.object(trade, 'record_trade_event') as recorded, patch.object(trade, 'handle_send', captured):
+        with pytest.raises(FinishedException):
+            asyncio.run(trade.guishi_take_item_(object(), event, SimpleNamespace(extract_plain_text=lambda: 'herb')))
+        recorded.assert_not_called()
+    reply = captured.call_args.args[2]
+    assert expected in reply and label in reply
+    if reason.endswith('_write_rejected'):
+        assert '本次取物已撤销' in reply
+    bot = SimpleNamespace(adapter=SimpleNamespace(get_name=lambda: 'OneBot V11' if onebot else 'QQ'))
+    config = SimpleNamespace(markdown_status=markdown, markdown_id2='', markdown_button_status=False,
+                             at_sender=False, message_optimization=False, img=False)
+    plain = AsyncMock()
+    md = AsyncMock(side_effect=RuntimeError('send failed') if send_fails else None)
+    with patch.object(utils, 'XiuConfig', return_value=config), patch.object(
+        utils, 'get_chat_scene', return_value='group'
+    ), patch.object(utils, 'is_group_event', return_value=True), patch.object(
+        utils, 'get_real_id_async', new=AsyncMock(return_value='')
+    ), patch.object(utils, '_send_event_message', plain), patch.object(utils, '_send_markdown_or_keyboard', md):
+        asyncio.run(utils.handle_send(bot, event, reply, **captured.call_args.kwargs))
+    if onebot or not markdown or send_fails:
+        plain.assert_awaited_once()
+        assert plain.call_args.kwargs['message'] == reply
+    else:
+        plain.assert_not_awaited()
+        md.assert_awaited_once()
+        rendered = md.call_args.args[2]
+        assert expected in rendered and label in rendered
+        assert '鬼市取物品' in rendered and 'mqqapi://aio/inlinecmd' in rendered
+
+
+def test_take_unknown_failure_replies_and_failed_reply_is_not_swallowed():
+    error = RuntimeError('isolated take fault')
+    delivery_error = RuntimeError('isolated delivery fault')
+    captured = AsyncMock()
+    event = SimpleNamespace(message_id='take', get_user_id=lambda: 'buyer')
+    with patch.object(trade, 'assign_bot', new=AsyncMock(return_value=(object(), None))), patch.object(
+        trade, 'check_user', return_value=(True, {'user_id': 'buyer'}, '')
+    ), patch.object(trade.items, 'get_data_by_item_name', return_value=(1001, {'name': 'herb', 'type': '药材'})), patch.object(
+        trade.trade_application, 'guishi_take_stored_item', side_effect=error
+    ) as take, patch.object(trade, 'record_trade_event') as recorded, patch.object(trade, 'handle_send', captured), patch.object(
+        trade, 'report_exception', return_value='查询结果（定位号：take-test）'
+    ) as reported:
+        args = (object(), event, SimpleNamespace(extract_plain_text=lambda: 'herb'))
+        with pytest.raises(FinishedException):
+            asyncio.run(trade.guishi_take_item_(*args))
+        assert captured.call_args.args[2] == '查询结果（定位号：take-test）'
+        assert reported.call_args.args[1] is error
+        captured.side_effect = delivery_error
+        with pytest.raises(RuntimeError) as caught:
+            asyncio.run(trade.guishi_take_item_(*args))
+        assert caught.value is delivery_error
+        reported.reset_mock()
+        take.side_effect = FinishedException()
+        with pytest.raises(FinishedException):
+            asyncio.run(trade.guishi_take_item_(*args))
+        reported.assert_not_called()
+        recorded.assert_not_called()
+
+
 @pytest.mark.parametrize("status", ("operation_conflict", "qiugou_invalid", "baitan_invalid"))
 def test_matching_failure_result_reaches_scheduler_without_completion_log(status):
     want = {"id": "want", "user_id": "buyer", "item_name": "herb", "price": 20,

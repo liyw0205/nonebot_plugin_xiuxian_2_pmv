@@ -18,7 +18,7 @@ from nonebot_plugin_xiuxian_2.plugin import build_migrations, migrations_for_dat
 
 class FixedClock:
     def now(self) -> datetime:
-        return datetime(2026, 9, 24, 12, 34, 56, tzinfo=timezone.utc)
+        return datetime(2026, 9, 26, 12, 34, 56, tzinfo=timezone.utc)
 
 
 class GuishiStoredItemTakeRepositoryTests(unittest.TestCase):

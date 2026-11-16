@@ -583,7 +583,7 @@ def _guishi_take_item_operation_id(event, user_id, goods_id):
         getattr(event, "message_id", "") or getattr(event, "id", "") or ""
     ).strip()
     if event_id:
-        return f"guishi-item-take:{event_id}:{user_id}:{goods_id}"
+        return f"guishi-item-take:{event_id}:{user_id}"
     timestamp = runtime_clock.now().strftime("%Y%m%d%H%M%S%f")
     return f"guishi-item-take:{user_id}:{goods_id}:{timestamp}"
 
@@ -2512,18 +2512,12 @@ async def guishi_take_item_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
         await handle_send(bot, event, msg, md_type="我要修仙")
         await guishi_take_item.finish()
     
-    # 检查是否是周末
-    today = _trade_business_now().weekday()
-    if today not in [5, 6]:  # 5 是周六，6 是周日
-        msg = "鬼市取物品功能仅在周六和周日开放！"
-        await handle_send(bot, event, msg)
-        await guishi_take_item.finish()
-
     user_id = user_info['user_id']
     goods_name = args.extract_plain_text().strip()
 
     if not goods_name:
-        msg = "请输入要取出的物品名称！"
+        msg = ("请输入要取出的物品名称！" if _trade_business_now().weekday() in [5, 6]
+               else "鬼市取物品功能仅在周六和周日开放！")
         await handle_send(bot, event, msg, md_type="交易", k1="取物品", v1="鬼市取物品", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
         await guishi_take_item.finish()
     
@@ -2534,14 +2528,23 @@ async def guishi_take_item_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
         await handle_send(bot, event, msg, md_type="交易", k1="取物品", v1="鬼市取物品", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
         await guishi_take_item.finish()
     
-    result = trade_application.guishi_take_stored_item(
-        operation_id=_guishi_take_item_operation_id(event, user_id, goods_id),
-        user_id=user_id,
-        goods_id=goods_id,
-        item_name=item_info['name'],
-        goods_type=item_info['type'],
-        max_goods_num=XiuConfig().max_goods_num,
-    )
+    try:
+        result = trade_application.guishi_take_stored_item(
+            operation_id=_guishi_take_item_operation_id(event, user_id, goods_id),
+            user_id=user_id,
+            goods_id=goods_id,
+            item_name=item_info['name'],
+            goods_type=item_info['type'],
+            max_goods_num=XiuConfig().max_goods_num,
+        )
+    except (MatcherException, ProcessException):
+        raise
+    except Exception as exc:
+        await handle_send(bot, event, report_exception("鬼市取物", exc, event=event))
+        await guishi_take_item.finish()
+    if result.status == "weekend_closed":
+        await handle_send(bot, event, "鬼市取物品功能仅在周六和周日开放！")
+        await guishi_take_item.finish()
     if result.status == "item_missing":
         msg = f"您没有暂存物品 {goods_name}！"
         await handle_send(bot, event, msg, md_type="交易", k1="取物品", v1="鬼市取物品", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
@@ -2551,7 +2554,12 @@ async def guishi_take_item_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
         await handle_send(bot, event, msg, md_type="交易", k1="取物品", v1="鬼市取物品", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
         await guishi_take_item.finish()
     if not result.succeeded:
-        msg = result_failure("鬼市取物", result, messages={"user_missing":"未找到鬼市账户，请先打开鬼市信息。", "item_missing":"鬼市暂存中没有该物品，请查看鬼市暂存后重新选择。"})
+        subjects = {str(user_id): "本人账户", f"item:{goods_id}": item_info['name']}
+        subject = str(getattr(result, "subject", ""))
+        if subject.startswith("item:") and subject not in subjects:
+            key = subject[5:]
+            subjects[subject] = f"暂存物品ID:{key}" if key.isdecimal() and len(key) <= 20 else "暂存物品"
+        msg = result_failure("鬼市取物", result, subjects=subjects, messages={"user_missing":"未找到鬼市账户，请先打开鬼市信息。", "item_missing":"鬼市暂存中没有该物品，请查看鬼市暂存后重新选择。"})
         await handle_send(bot, event, msg, md_type="交易", k1="取物品", v1="鬼市取物品", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
         await guishi_take_item.finish()
 

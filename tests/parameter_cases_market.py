@@ -215,17 +215,14 @@ def register(case):
         group="market-guishi-parameters",
     )
     async def guishi_match_take(probe):
-        module = trade_module()
+        from tests.parameter_cases_guishi import setup
+        module, clock, application = setup(probe)
         item_id, name = herb(probe, "900002")
         probe.player(stone=100_000_000)
         probe.player("900002", stone=100_000_000)
         price = module.MIN_PRICE * 10
         database = probe.context.paths.trade_db
-        with patch.object(
-            module,
-            "runtime_clock",
-            FixedClock(datetime(2026, 11, 21, 13, 0, tzinfo=timezone.utc)),
-        ):
+        with patch.object(module, "runtime_clock", clock), patch.object(module, "trade_application", application):
             text = await probe.command("鬼市存灵石", "鬼市存灵石 20000000", number=960001)
             assert "成功存入" in text, text
             text = await probe.command(

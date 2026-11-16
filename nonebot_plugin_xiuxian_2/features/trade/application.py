@@ -576,6 +576,7 @@ class TradeApplication(LegacyApplication):
             item_name=item_name,
             goods_type=goods_type,
             max_goods_num=max_goods_num,
+            take_open=withdrawal_is_open(business_time(self.clock.now(), self.business_timezone)),
         )
 
     def enqueue(self, *, operation_id: str, user_id: str, **kwargs: Any): return self._action("enqueue", operation_id=operation_id, user_id=user_id, **kwargs)
