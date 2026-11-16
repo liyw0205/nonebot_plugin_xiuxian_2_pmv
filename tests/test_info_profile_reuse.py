@@ -54,6 +54,7 @@ class InfoProfileReuseTests(unittest.IsolatedAsyncioTestCase):
         buff.get_user_armor_buff_data.return_value = None
 
         jsondata = user_info.jsondata
+        level_rate_reader = Mock(return_value={"江湖好手": 0})
         with (
             patch.object(user_info, "get_user_profile") as get_profile,
             patch.object(user_info, "_sql_message", return_value=manager),
@@ -71,7 +72,7 @@ class InfoProfileReuseTests(unittest.IsolatedAsyncioTestCase):
             ) as title_display,
             patch.object(jsondata, "level_data", return_value={"江湖好手": {"spend": 1}}),
             patch.object(jsondata, "sect_config_data", return_value={}),
-            patch.object(jsondata, "level_rate_data", return_value={"江湖好手": 0}),
+            patch.object(jsondata, "level_rate_data", level_rate_reader),
         ):
             natal.return_value.exists.return_value = False
             detail, text = await user_info.get_user_xiuxian_info(
@@ -80,6 +81,8 @@ class InfoProfileReuseTests(unittest.IsolatedAsyncioTestCase):
 
         get_profile.assert_not_called()
         title_display.assert_called_once_with("u-1", title_id="title-1")
+        level_rate_reader.assert_called_once_with()
+        buff.get_user_main_buff_data.assert_called_once_with()
         player_attributes.assert_called_once_with(
             "u-1", buff_data_provider=buff, base_provider=ANY
         )

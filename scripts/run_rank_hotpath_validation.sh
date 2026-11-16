@@ -11,7 +11,7 @@ if [[ ! -x "$PYTHON" ]]; then
 fi
 
 usage() {
-    printf 'usage: %s correctness FIXTURE SMOKE_REPORT | performance FIXTURE REPORT | profile FIXTURE REPORT | base-profile FIXTURE REPORT | buff-profile FIXTURE REPORT | title-profile FIXTURE REPORT | state-profile FIXTURE REPORT\n' "$0" >&2
+    printf 'usage: %s correctness FIXTURE SMOKE_REPORT | performance FIXTURE REPORT | profile FIXTURE REPORT | config-profile FIXTURE REPORT | base-profile FIXTURE REPORT | buff-profile FIXTURE REPORT | title-profile FIXTURE REPORT | state-profile FIXTURE REPORT\n' "$0" >&2
 }
 
 case ${1:-} in
@@ -26,6 +26,7 @@ case ${1:-} in
             cd "$root"
             tests=(
                 tests/test_core_rank_indexes.py
+                tests/test_rank_hotpath_probe_contract.py
                 nonebot_plugin_xiuxian_2/features/info/tests/test_player_attribute_application.py
                 tests/test_info_user_lazy_reader.py
                 tests/test_info_profile_reuse.py
@@ -45,6 +46,10 @@ case ${1:-} in
     profile)
         [[ $# -eq 3 ]] || { usage; exit 2; }
         exec flock -w 600 "$LOCK" "$PYTHON" "$ROOT/scripts/rank_hotpath_probe.py" --fixture "$2" --report "$3" --profile-reuse
+        ;;
+    config-profile)
+        [[ $# -eq 3 ]] || { usage; exit 2; }
+        exec flock -w 600 "$LOCK" "$PYTHON" "$ROOT/scripts/rank_hotpath_probe.py" --fixture "$2" --report "$3" --config-reuse
         ;;
     base-profile)
         [[ $# -eq 3 ]] || { usage; exit 2; }

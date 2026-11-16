@@ -96,6 +96,7 @@ async def get_user_xiuxian_info(
 
     level_rate = _sql_message().get_root_rate(user_info['root_type'], user_id)
     realm_rate = jsondata.level_data()[user_info['level']]["spend"]
+    level_rate_data = jsondata.level_rate_data()
     sect_id = user_info['sect_id']
     if sect_id:
         sectmsg = SectInfoSqlRepository(get_paths().game_db).get_name_by_id(sect_id)
@@ -191,7 +192,7 @@ async def get_user_xiuxian_info(
     if user_armor_data is not None:
         armor_name = f"{user_armor_data['name']}({user_armor_data['level']})"
 
-    main_rate_buff = user_buff_data.get_user_main_buff_data()
+    main_rate_buff = user_main_buff_date
     update_last_check_info_time(user_id)
     leveluprate = int(user_info['level_up_rate'])
     number = main_rate_buff["number"] if main_rate_buff is not None else 0
@@ -217,7 +218,7 @@ async def get_user_xiuxian_info(
         "灵石": f"{number_to(user_info['stone'])}",
         "战力": f"{number_to(int(user_info['exp'] * level_rate * realm_rate))}",
         "灵根": f"{user_info['root']}({user_info['root_type']}+{int(level_rate * 100)}%)",
-        "突破状态": f"{exp_meg}概率：{jsondata.level_rate_data()[user_info['level']] + leveluprate + number}%",
+        "突破状态": f"{exp_meg}概率：{level_rate_data[user_info['level']] + leveluprate + number}%",
         "修炼等级": f"攻修{user_info['atkpractice']}级，元血{user_info['hppractice']}级，灵海{user_info['mppractice']}级",
         "攻击力": f"{number_to(final_atk)}",
         "所在宗门": sectmsg,
@@ -248,7 +249,7 @@ async def get_user_xiuxian_info(
 灵石: {number_to(user_info['stone'])}
 战力: {number_to(int(user_info['exp'] * level_rate * realm_rate))}
 灵根: {user_info['root']}({user_info['root_type']}+{int(level_rate * 100)}%)
-突破状态: {exp_meg}概率：{jsondata.level_rate_data()[user_info['level']] + leveluprate + number}%
+突破状态: {exp_meg}概率：{level_rate_data[user_info['level']] + leveluprate + number}%
 攻击力: {number_to(final_atk)}
 攻修等级: {user_info['atkpractice']}级
 元血等级: {user_info['hppractice']}级

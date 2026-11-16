@@ -26,13 +26,21 @@ from unittest.mock import patch
 import tests
 
 _boundary_denials = ContextVar("probe_boundary_denials", default=None)
+_SOURCE_MARKER = ".rank-hotpath-source"
 
 
-def isolate_source():
+def isolate_source() -> Path:
     if "nonebot_plugin_xiuxian_2" in sys.modules:
         raise AssertionError("command diagnostics require a fresh process")
     source = Path(__file__).resolve().parents[1] / "nonebot_plugin_xiuxian_2"
-    destination = tests._data_dir.parent / "command-source" / source.name
+    source_copy = tests._data_dir.parent / "command-source"
+    if source_copy.exists():
+        marker = source_copy / _SOURCE_MARKER
+        if marker.is_file():
+            shutil.rmtree(source_copy)
+        else:
+            raise AssertionError(f"refusing to remove unowned command source: {source_copy}")
+    destination = source_copy / source.name
     static_assets = {source / "xiuxian" / "xiuxian_activity" / "activity_config.json"}
 
     def ignore(directory, names):
@@ -41,8 +49,49 @@ def isolate_source():
             or Path(directory, name) in static_assets
         )]
 
-    shutil.copytree(source, destination, ignore=ignore)
+    source_copy.mkdir(parents=True)
+    (source_copy / _SOURCE_MARKER).write_text("rank hotpath probe source\n", encoding="ascii")
+    try:
+        shutil.copytree(source, destination, ignore=ignore)
+    except Exception:
+        shutil.rmtree(source_copy)
+        raise
     sys.path.insert(0, str(destination.parent))
+    required = destination / "xiuxian" / "xiuxian_info"
+    if not (required / "__init__.py").is_file() or not (required / "user_info.py").is_file():
+        raise RuntimeError(f"fixture command source is incomplete: {required}")
+    return destination
+
+
+def _import_info_from_fixture(source_root: Path):
+    """Import the required command package and reject a suppressed partial load."""
+    module_name = "nonebot_plugin_xiuxian_2.xiuxian.xiuxian_info"
+    try:
+        module = importlib.import_module(module_name)
+    except Exception as exc:
+        context = (
+            f"{module_name} import failed; cwd={Path.cwd()}; "
+            f"source_root={source_root}; sys.path={sys.path[:6]}"
+        )
+        raise RuntimeError(context) from exc
+
+    module_file = getattr(module, "__file__", None)
+    if not module_file or not Path(module_file).resolve().is_relative_to(source_root.resolve()):
+        raise RuntimeError(
+            f"{module_name} resolved outside fixture source: {module_file}; "
+            f"source_root={source_root}; sys.path={sys.path[:6]}"
+        )
+    missing = [
+        name for name in (
+            "xiuxian_message", "xiuxian_message_", "xiuxian_message_img", "xiuxian_message_img_",
+        ) if not hasattr(module, name)
+    ]
+    if missing:
+        raise RuntimeError(
+            f"{module_name} loaded partially; missing={missing}; "
+            f"source_root={source_root}; module_file={module_file}"
+        )
+    return module
 
 
 class ProbeBlocked(RuntimeError):
@@ -105,17 +154,8 @@ async def prepare(*, seed: bool = True):
 
     nonebot.init(command_start={"", "/"}, superusers={"900003"}, log_level="ERROR")
     import nonebot_plugin_xiuxian_2
-    try:
-        # NoneBot's plugin manager logs and suppresses import failures.  A
-        # benchmark must fail with the original traceback instead of treating
-        # a partially registered fixture as a valid command path.
-        importlib.import_module(
-            "nonebot_plugin_xiuxian_2.xiuxian.xiuxian_info"
-        )
-    except Exception as exc:
-        raise RuntimeError(
-            "benchmark fixture failed to import xiuxian_info; see chained traceback"
-        ) from exc
+    source_root = Path(tests._data_dir).parent / "command-source" / "nonebot_plugin_xiuxian_2"
+    _import_info_from_fixture(source_root)
     from nonebot_plugin_xiuxian_2.bootstrap.context import build_runtime_context
     from nonebot_plugin_xiuxian_2.plugin import startup
     from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_utils.xiuxian2_handle import (

@@ -88,6 +88,33 @@ def _write_failure_report(report: Path, fixture: Path, exc: BaseException) -> No
     report.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 
+def _validate_comparison(result: dict) -> dict:
+    """Mark incomplete comparisons invalid instead of treating them as data."""
+    failures = []
+    for side in ("before", "after"):
+        variant = result.get(side)
+        if not isinstance(variant, dict):
+            failures.append(f"{side} result is missing")
+            continue
+        if variant.get("requests") != REQUESTS:
+            failures.append(
+                f"{side} requests={variant.get('requests')!r}, expected {REQUESTS}"
+            )
+        if variant.get("error_rate") != 0:
+            failures.append(f"{side} error_rate={variant.get('error_rate')!r}")
+        if not variant.get("reply_sha256"):
+            failures.append(f"{side} has no reply digest")
+    if not failures:
+        before_sha = result["before"].get("reply_sha256")
+        after_sha = result["after"].get("reply_sha256")
+        if before_sha != after_sha:
+            failures.append(f"reply digest mismatch: before={before_sha!r} after={after_sha!r}")
+    result["status"] = "failed" if failures else "pass"
+    if failures:
+        result["failure_reasons"] = failures
+    return result
+
+
 @contextmanager
 def _fixture_context(fixture: Path, report: Path):
     """Prepare an isolated import boundary and always remove probe-owned files."""
@@ -98,9 +125,20 @@ def _fixture_context(fixture: Path, report: Path):
     _validate_report(fixture, report)
     source_copy = fixture / "data" / "command-source"
     if source_copy.exists():
-        raise SystemExit(f"refusing to remove existing command-source: {source_copy}")
+        marker = source_copy / ".rank-hotpath-source"
+        if marker.is_file():
+            shutil.rmtree(source_copy)
+        else:
+            raise SystemExit(f"refusing to remove unowned command-source: {source_copy}")
     temp_dir = data_dir / ".rank-hotpath-tmp"
+    temp_marker = temp_dir / ".rank-hotpath-temp"
+    if temp_dir.exists():
+        if temp_marker.is_file():
+            shutil.rmtree(temp_dir)
+        else:
+            raise SystemExit(f"refusing to remove unowned benchmark temp directory: {temp_dir}")
     temp_dir.mkdir(parents=True)
+    temp_marker.write_text("rank hotpath probe temp\n", encoding="ascii")
 
     # tempfile caches the system directory, so set both values before importing
     # tests.command_probe or any plugin module that can allocate a temp file.
@@ -252,7 +290,7 @@ async def _run_profile_variant(
         return original_manager_read(self, sql, params, **kwargs)
 
     if legacy:
-        async def legacy_info(user_id, *, user_info=None):
+        async def legacy_info(user_id, *, user_info=None, equipped_title_id=None):
             return await original_info(user_id)
 
         info_module.get_user_xiuxian_info = legacy_info
@@ -364,7 +402,120 @@ async def _profile_probe(args: argparse.Namespace) -> dict:
             for name in ("xiuxian.db", "xiuxian.db-wal", "xiuxian.db-shm")
         }
         result["rss_mb"] = round(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024, 3)
+        _validate_comparison(result)
         report.write_text(json.dumps(result, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        if result["status"] != "pass":
+            raise RuntimeError(f"profile comparison failed: {result['failure_reasons']}")
+        return result
+
+
+async def _run_config_variant(
+    probe, entry, game, snapshot, info_module, *, legacy: bool
+) -> dict:
+    """Compare one request-local config snapshot with the former reread."""
+    snapshot.restore()
+    original_info = info_module.get_user_xiuxian_info
+    original_level_rates = info_module.jsondata.level_rate_data
+    counters = {"level_rate_reads": 0}
+
+    def traced_level_rates():
+        counters["level_rate_reads"] += 1
+        return original_level_rates()
+
+    if legacy:
+        async def legacy_info(user_id, *, user_info=None, equipped_title_id=None):
+            result = await original_info(
+                user_id, user_info=user_info, equipped_title_id=equipped_title_id
+            )
+            # The pre-snapshot implementation reread this file for the second
+            # rendered representation in the same command.
+            info_module.jsondata.level_rate_data()
+            return result
+
+    info_module.jsondata.level_rate_data = traced_level_rates
+    if legacy:
+        info_module.get_user_xiuxian_info = legacy_info
+    samples = []
+    try:
+        for number in range(1, REQUESTS + 1):
+            before = counters["level_rate_reads"]
+            started = time.perf_counter()
+            result = await probe.run_case(
+                entry,
+                "missing",
+                number,
+                actor="900001",
+                input_text=COMMAND,
+                timeout=8,
+            )
+            elapsed_ms = (time.perf_counter() - started) * 1000
+            reply = "".join(result.get("replies") or [])
+            samples.append(
+                {
+                    "latency_ms": round(elapsed_ms, 3),
+                    "status": result.get("status"),
+                    "reply_bytes": len(reply.encode("utf-8")),
+                    "reply_sha256": hashlib.sha256(reply.encode("utf-8")).hexdigest(),
+                    "errors": result.get("errors", []),
+                    "blocked": result.get("blocked", []),
+                    "level_rate_reads": counters["level_rate_reads"] - before,
+                }
+            )
+    finally:
+        info_module.get_user_xiuxian_info = original_info
+        info_module.jsondata.level_rate_data = original_level_rates
+
+    values = [item["latency_ms"] for item in samples]
+    return {
+        "variant": "before_duplicate_level_rate_read" if legacy else "after_request_level_rate_snapshot",
+        "requests": len(samples),
+        "samples": samples,
+        "p50_ms": _percentile(values, 0.50),
+        "p95_ms": _percentile(values, 0.95),
+        "p99_ms": _percentile(values, 0.99),
+        "error_rate": sum(
+            bool(item["status"] != "pass" or item["errors"] or item["blocked"])
+            for item in samples
+        ) / len(samples),
+        "reply_bytes": sorted({item["reply_bytes"] for item in samples}),
+        "reply_sha256": sorted({item["reply_sha256"] for item in samples}),
+        "level_rate_reads": sum(item["level_rate_reads"] for item in samples),
+    }
+
+
+async def _config_probe(args: argparse.Namespace) -> dict:
+    fixture = args.fixture.resolve()
+    report = args.report.resolve()
+    with _fixture_context(fixture, report) as probe:
+        _, managers = await probe.prepare(seed=False)
+        game = managers[0]
+        if game.conn.execute(
+            "SELECT 1 FROM user_xiuxian WHERE user_id=%s LIMIT 1", ("900001",)
+        ).fetchone() is None:
+            raise SystemExit("fixture is missing required actor user_id=900001")
+        entry = next(item for item in probe.inventory() if item["command"] == COMMAND)
+        snapshot = probe.FixtureSnapshot(probe.tests._data_dir, managers)
+        info_module = importlib.import_module(
+            "nonebot_plugin_xiuxian_2.xiuxian.xiuxian_info.user_info"
+        )
+        result = {
+            "command": COMMAND,
+            "entry": "live matcher/handler via tests.command_probe.run_case",
+            "fixture": str(fixture),
+            "users": game.conn.execute("SELECT COUNT(*) FROM user_xiuxian").fetchone()[0],
+        }
+        result["before"] = await _run_config_variant(
+            probe, entry, game, snapshot, info_module, legacy=True
+        )
+        result["after"] = await _run_config_variant(
+            probe, entry, game, snapshot, info_module, legacy=False
+        )
+        snapshot.restore()
+        result["rss_mb"] = round(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024, 3)
+        _validate_comparison(result)
+        report.write_text(json.dumps(result, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        if result["status"] != "pass":
+            raise RuntimeError(f"config comparison failed: {result['failure_reasons']}")
         return result
 
 
@@ -494,7 +645,10 @@ async def _base_probe(args: argparse.Namespace) -> dict:
             for name in ("xiuxian.db", "xiuxian.db-wal", "xiuxian.db-shm")
         }
         result["rss_mb"] = round(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024, 3)
+        _validate_comparison(result)
         report.write_text(json.dumps(result, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        if result["status"] != "pass":
+            raise RuntimeError(f"base comparison failed: {result['failure_reasons']}")
         return result
 
 
@@ -709,7 +863,10 @@ async def _state_probe(args: argparse.Namespace) -> dict:
             for name in ("xiuxian.db", "xiuxian.db-wal", "xiuxian.db-shm")
         }
         result["rss_mb"] = round(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024, 3)
+        _validate_comparison(result)
         report.write_text(json.dumps(result, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        if result["status"] != "pass":
+            raise RuntimeError(f"state comparison failed: {result['failure_reasons']}")
         return result
 
 
@@ -858,7 +1015,10 @@ async def _buff_probe(args: argparse.Namespace) -> dict:
             for name in ("xiuxian.db", "xiuxian.db-wal", "xiuxian.db-shm")
         }
         result["rss_mb"] = round(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024, 3)
+        _validate_comparison(result)
         report.write_text(json.dumps(result, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        if result["status"] != "pass":
+            raise RuntimeError(f"buff comparison failed: {result['failure_reasons']}")
         return result
 
 
@@ -1005,7 +1165,10 @@ async def _title_probe(args: argparse.Namespace) -> dict:
             for name in ("player.db", "player.db-wal", "player.db-shm")
         }
         result["rss_mb"] = round(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024, 3)
+        _validate_comparison(result)
         report.write_text(json.dumps(result, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        if result["status"] != "pass":
+            raise RuntimeError(f"title comparison failed: {result['failure_reasons']}")
         return result
 
 
@@ -1047,7 +1210,10 @@ async def _probe(args: argparse.Namespace) -> dict:
         result["after"] = await _run_variant(probe, entry, game, snapshot, legacy=False)
         snapshot.restore()
         result["rss_mb"] = round(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024, 3)
+        _validate_comparison(result)
         report.write_text(json.dumps(result, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        if result["status"] != "pass":
+            raise RuntimeError(f"rank comparison failed: {result['failure_reasons']}")
         return result
 
 
@@ -1164,18 +1330,21 @@ def main() -> int:
     parser.add_argument("--report", type=Path, required=True)
     parser.add_argument("--smoke", action="store_true", help="run one live command without performance sampling")
     parser.add_argument("--profile-reuse", action="store_true", help="compare duplicate versus reused profile reads")
+    parser.add_argument("--config-reuse", action="store_true", help="compare duplicate versus request-local config reads")
     parser.add_argument("--base-reuse", action="store_true", help="compare duplicate versus reused base attribute reads")
     parser.add_argument("--buff-reuse", action="store_true", help="compare duplicate versus per-request BuffInfo reads")
     parser.add_argument("--title-reuse", action="store_true", help="compare duplicate versus reused title state reads")
     parser.add_argument("--state-reuse", action="store_true", help="compare duplicate versus reused 我的状态 reads")
     args = parser.parse_args()
-    if sum(bool(value) for value in (args.smoke, args.profile_reuse, args.base_reuse, args.buff_reuse, args.title_reuse, args.state_reuse)) > 1:
+    if sum(bool(value) for value in (args.smoke, args.profile_reuse, args.config_reuse, args.base_reuse, args.buff_reuse, args.title_reuse, args.state_reuse)) > 1:
         parser.error("probe modes cannot be combined")
     result = asyncio.run(
         _smoke(args)
         if args.smoke
         else _profile_probe(args)
         if args.profile_reuse
+        else _config_probe(args)
+        if args.config_reuse
         else _base_probe(args)
         if args.base_reuse
         else _buff_probe(args)
@@ -1189,6 +1358,8 @@ def main() -> int:
     if args.smoke:
         print(json.dumps(result, ensure_ascii=False))
     elif args.profile_reuse:
+        print(json.dumps({key: result[key] for key in ("fixture", "users", "before", "after", "rss_mb")}, ensure_ascii=False))
+    elif args.config_reuse:
         print(json.dumps({key: result[key] for key in ("fixture", "users", "before", "after", "rss_mb")}, ensure_ascii=False))
     elif args.base_reuse:
         print(json.dumps({key: result[key] for key in ("fixture", "users", "before", "after", "rss_mb")}, ensure_ascii=False))
