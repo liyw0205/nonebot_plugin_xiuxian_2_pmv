@@ -699,17 +699,8 @@ def _ensure_daily_state() -> dict:
     period = _current_period()
     is_manual = bool(_to_int(state.get("manual"), 0))
     if _is_auto_window():
-        if state.get("period") == period and is_manual and state.get("status") == "finished":
-            return state
         if state.get("status") != "active" or state.get("period") != period:
-            operation_id = f"demon-lifecycle:auto-start:{period}"
-            replay = demon_event_lifecycle_application.replay(operation_id)
-            if replay is not None:
-                return replay.state or state
-            target = _build_active_state(period)
-            result = demon_event_lifecycle_application.transition(operation_id, EVENT_KEY, "auto_start", state, target)
-            _require_transition_applied(result, operation_id)
-            return result.state or state
+            return _start_auto_demon_invasion()
     elif state.get("status") == "active" and not is_manual:
         operation_id = f"demon-lifecycle:auto-finish:{state.get('event_id')}"
         replay = demon_event_lifecycle_application.replay(operation_id)
@@ -1020,11 +1011,20 @@ def _sum_reward_contribution(state: dict, records: list[tuple[str, dict]]) -> tu
 
 def _start_auto_demon_invasion() -> dict:
     period = _current_period()
+    expected = _load_state()
+    if expected.get("period") == period and (
+        expected.get("status") == "active"
+        or (expected.get("status") == "finished" and _to_int(expected.get("manual"), 0))
+    ):
+        return expected
     operation_id = f"demon-lifecycle:auto-start:{period}"
     replay = demon_event_lifecycle_application.replay(operation_id)
     if replay is not None:
-        return replay.state or _load_state()
-    expected = _load_state()
+        _require_transition_applied(replay, operation_id)
+        if expected.get("event_id") != (replay.state or {}).get("event_id"):
+            raise RuntimeError(f"世界事件状态变更失败：operation_id={operation_id} status=state_changed")
+        # A receipt proves the start happened; its snapshot is not current state.
+        return expected
     target = _build_active_state(period)
     result = demon_event_lifecycle_application.transition(operation_id, EVENT_KEY, "auto_start", expected, target)
     _require_transition_applied(result, operation_id)
@@ -1086,7 +1086,10 @@ async def demon_invasion_schedule_job():
     with _state_lock:
         if now.hour == EVENT_START_HOUR:
             state = _start_auto_demon_invasion()
-            log_text = f"每日魔修入侵已自动开启，本期生成{len(state.get('bosses', {}))}个境界魔修。"
+            if state.get("status") == "active":
+                log_text = f"每日魔修入侵已自动开启，本期生成{len(state.get('bosses', {}))}个境界魔修。"
+            else:
+                log_text = "每日魔修入侵开启检查完成，保留本期已结束状态。"
         elif now.hour == EVENT_END_HOUR:
             _, finished = _finish_auto_demon_invasion()
             log_text = "每日魔修入侵已自动结束。" if finished else "每日魔修入侵结束检查完成，当前无进行中的入侵。"

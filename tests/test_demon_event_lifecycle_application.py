@@ -4,6 +4,7 @@ import sqlite3
 import pytest
 
 from nonebot_plugin_xiuxian_2.features.world_events.application import DemonEventLifecycleApplication
+from nonebot_plugin_xiuxian_2.features.world_events.event_state import read_event_state
 from nonebot_plugin_xiuxian_2.features.world_events.migrations import (
     apply_world_events_lifecycle,
     apply_world_events_player,
@@ -95,6 +96,61 @@ def test_lifecycle_application_can_start_from_an_unpersisted_idle_snapshot(tmp_p
     assert result.status == "applied" and result.state == target
     with DatabaseUnitOfWork(db, read_only=True) as uow:
         assert uow.query_one("SELECT COUNT(*) AS n FROM world_event_state")["n"] == 1
+
+
+@pytest.mark.parametrize("manual", (0, 1))
+def test_auto_rollover_recovers_previous_active_period_atomically(tmp_path, manual):
+    db = tmp_path / "player.db"
+    expected = active_state(manual=manual)
+    apply_schema(db, expected)
+    target = dict(
+        active_state("demon_invasion:2026-07-15"), period="2026-07-15",
+        started_at="2026-07-15 18:00:00", ends_at="2026-07-15 22:00:00",
+    )
+    app = DemonEventLifecycleApplication(db)
+    with DatabaseUnitOfWork(db) as uow:
+        uow.execute(
+            "CREATE TRIGGER reject_rollover BEFORE INSERT ON demon_event_lifecycle_operations "
+            "BEGIN SELECT RAISE(ABORT, 'isolated rollover receipt failure'); END"
+        )
+    with pytest.raises(Exception, match="isolated rollover receipt failure"):
+        app.transition("new-day", "global", "auto_start", expected, target)
+    with DatabaseUnitOfWork(db, read_only=True) as uow:
+        assert read_event_state(uow, "global") == expected
+        assert uow.query_one("SELECT COUNT(*) AS n FROM demon_event_lifecycle_operations")["n"] == 0
+    with DatabaseUnitOfWork(db) as uow:
+        uow.execute("DROP TRIGGER reject_rollover")
+    result = app.transition("new-day", "global", "auto_start", expected, target)
+    assert result.status == "applied" and result.state == target
+    assert app.transition("new-day", "global", "auto_start", expected, target) == result
+    with DatabaseUnitOfWork(db, read_only=True) as uow:
+        assert read_event_state(uow, "global") == target
+        assert uow.query_one("SELECT COUNT(*) AS n FROM demon_event_lifecycle_operations")["n"] == 1
+        assert uow.query_all("PRAGMA integrity_check") == [{"integrity_check": "ok"}]
+
+
+@pytest.mark.parametrize(
+    ("action", "period", "event_type", "manual"),
+    (
+        ("auto_start", "2026-07-14", "demon_invasion", 0),
+        ("auto_start", "2026-07-13", "demon_invasion", 0),
+        ("auto_start", "invalid", "demon_invasion", 0),
+        ("auto_start", "2026-07-15", "spirit_vein", 0),
+        ("auto_start", "2026-07-15", "demon_invasion", 1),
+        ("manual_start", "2026-07-15", "demon_invasion", 1),
+    ),
+)
+def test_auto_rollover_does_not_weaken_same_period_or_manual_start_guards(tmp_path, action, period, event_type, manual):
+    db = tmp_path / "player.db"
+    expected = active_state()
+    apply_schema(db, expected)
+    target = dict(active_state(f"demon_invasion:{period}", manual), period=period, event_type=event_type)
+    app = DemonEventLifecycleApplication(db)
+    result = app.transition("rejected-rollover", "global", action, expected, target)
+    assert result.status == "invalid_transition"
+    with DatabaseUnitOfWork(db, read_only=True) as uow:
+        assert read_event_state(uow, "global") == expected
+        assert uow.query_one("SELECT COUNT(*) AS n FROM demon_event_lifecycle_operations")["n"] == 0
 
 
 def test_lifecycle_application_preserves_manual_finish_snapshot_and_rejects_stale_state(tmp_path):

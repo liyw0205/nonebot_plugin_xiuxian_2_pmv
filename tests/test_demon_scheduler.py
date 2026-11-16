@@ -48,7 +48,7 @@ def _active_state(period: str = "2026-11-17") -> dict:
     return {
         "active": 1,
         "status": "active",
-        "event_id": "demon_invasion:2026-11-17",
+        "event_id": f"demon_invasion:{period}",
         "event_type": "demon_invasion",
         "name": "魔修入侵",
         "period": period,
@@ -63,8 +63,8 @@ def _active_state(period: str = "2026-11-17") -> dict:
         },
         "participants": {},
         "claimed": {},
-        "started_at": "2026-11-17 18:00:00",
-        "ends_at": "2026-11-17 22:00:00",
+        "started_at": f"{period} 18:00:00",
+        "ends_at": f"{period} 22:00:00",
         "last_result": "",
     }
 
@@ -272,13 +272,25 @@ def test_demon_schedule_drives_isolated_sqlite_state_and_replays(tmp_path) -> No
     assert operation_count == 2
 
 
-@pytest.mark.parametrize("schema_ready", (True, False))
-def test_scheduler_drives_persistence_attack_and_close_or_reports_start_failure(tmp_path, schema_ready):
+@pytest.mark.parametrize(
+    ("schema_ready", "entry"),
+    ((True, "scheduled"), (False, "scheduled"), (True, "late_start"), (True, "previous_active")),
+)
+def test_scheduler_drives_persistence_attack_and_close_or_reports_start_failure(tmp_path, schema_ready, entry):
     database = tmp_path / "player.db"
     with DatabaseUnitOfWork(database, immediate=True) as uow:
         apply_world_events_player(uow)
         if schema_ready:
             apply_world_events_lifecycle(uow)
+    lifecycle = DemonEventLifecycleApplication(database)
+    previous_count = int(entry == "previous_active")
+    if previous_count:
+        previous = _active_state("2026-11-16")
+        previous["participants"] = {"old-contribution": {"damage": 17}}
+        assert lifecycle.transition(
+            "demon-lifecycle:auto-start:2026-11-16", world_events.EVENT_KEY,
+            "auto_start", None, previous,
+        ).status == "applied"
 
     class SqlStateManager:
         def get_fields(self, event_key, table):
@@ -290,7 +302,7 @@ def test_scheduler_drives_persistence_attack_and_close_or_reports_start_failure(
         scheduler = AsyncIOScheduler(timezone=EVENT_TZ)
         events = asyncio.Queue()
         scheduler.add_listener(events.put_nowait, EVENT_JOB_EXECUTED | EVENT_JOB_ERROR)
-        clock = SimpleNamespace(moment=_utc(10))
+        clock = SimpleNamespace(moment=_utc(10) if entry == "scheduled" else _utc(11))
         boss = {
             "wave": 1, "boss_hp": 1_000_000, "boss_max_hp": 1_000_000,
             "battle_hp": 100, "battle_max_hp": 100, "reward_multiplier": 1.0,
@@ -311,7 +323,7 @@ def test_scheduler_drives_persistence_attack_and_close_or_reports_start_failure(
         with patch.object(world_events, "scheduler", scheduler), patch.object(
             world_events, "_now", side_effect=lambda: clock.moment
         ), patch.object(world_events, "_player_data_manager", return_value=SqlStateManager()), patch.object(
-            world_events, "demon_event_lifecycle_application", DemonEventLifecycleApplication(database)
+            world_events, "demon_event_lifecycle_application", lifecycle
         ), patch.object(world_events, "demon_attack_application", DemonAttackApplication(database)), patch.object(
             world_events, "_create_all_bosses", return_value={"练气境": boss}
         ), patch.object(world_events, "assign_bot", new=AsyncMock(return_value=(bot, None))), patch.object(
@@ -325,8 +337,17 @@ def test_scheduler_drives_persistence_attack_and_close_or_reports_start_failure(
             world_events, "log_message"
         ), patch.object(world_events, "logger") as logger:
             try:
-                started = await fire()
-                assert started.job_id == "demon_invasion_schedule"
+                if entry == "scheduled":
+                    started = await fire()
+                    assert started.job_id == "demon_invasion_schedule"
+                else:
+                    # A process first started at 19:00 has no missed 18:00 cron run.
+                    job = scheduler.add_job(
+                        world_events.demon_invasion_schedule_job, "cron", hour="18,22",
+                        id="late-start-cron",
+                    )
+                    assert job.trigger.get_next_fire_time(None, clock.moment) == _utc(14)
+                    scheduler.remove_job(job.id)
                 if not schema_ready:
                     assert started.code == EVENT_JOB_ERROR
                     assert "schema_missing" in str(started.exception)
@@ -336,13 +357,9 @@ def test_scheduler_drives_persistence_attack_and_close_or_reports_start_failure(
                     fight.assert_not_awaited()
                     return
 
-                assert started.code == EVENT_JOB_EXECUTED
-                assert (await fire()).code == EVENT_JOB_EXECUTED
-                with DatabaseUnitOfWork(database, read_only=True) as uow:
-                    state = read_event_state(uow, world_events.EVENT_KEY)
-                    assert state["status"] == "active"
-                    assert state["started_at"] == "2026-11-17 18:00:00"
-                    assert uow.query_one("SELECT COUNT(*) AS n FROM demon_event_lifecycle_operations")["n"] == 1
+                if entry == "scheduled":
+                    assert started.code == EVENT_JOB_EXECUTED
+                    assert (await fire()).code == EVENT_JOB_EXECUTED
 
                 clock.moment = _utc(11)
                 with pytest.raises(FinishedException):
@@ -350,6 +367,15 @@ def test_scheduler_drives_persistence_attack_and_close_or_reports_start_failure(
                 reply = sender.call_args.args[2]
                 assert "本次贡献：1万" in reply
                 assert "没有正在进行" not in reply
+                with DatabaseUnitOfWork(database, read_only=True) as uow:
+                    state = read_event_state(uow, world_events.EVENT_KEY)
+                    assert state["status"] == "active"
+                    assert state["period"] == "2026-11-17"
+                    assert state["started_at"] == "2026-11-17 18:00:00"
+                    assert uow.query_one("SELECT COUNT(*) AS n FROM demon_event_lifecycle_operations")["n"] == 1 + previous_count
+                    assert "old-contribution" not in state["participants"]
+                if previous_count:
+                    assert lifecycle.replay("demon-lifecycle:auto-start:2026-11-16").state == previous
                 with pytest.raises(FinishedException):
                     await world_events.attack_demon_invasion_(bot, event)
                 assert "讨伐已结算（重放）" in sender.call_args.args[2]
@@ -367,7 +393,7 @@ def test_scheduler_drives_persistence_attack_and_close_or_reports_start_failure(
                     assert state["status"] == "finished"
                     assert state["bosses"]["练气境"]["boss_hp"] == 990_000
                     assert state["participants"]["练气境:1:u"]["attacks"] == 1
-                    assert uow.query_one("SELECT COUNT(*) AS n FROM demon_event_lifecycle_operations")["n"] == 2
+                    assert uow.query_one("SELECT COUNT(*) AS n FROM demon_event_lifecycle_operations")["n"] == 2 + previous_count
                     assert uow.query_one("SELECT COUNT(*) AS n FROM demon_attack_settlement_operations")["n"] == 1
                     assert uow.query_one(
                         'SELECT "魔修入侵参与" AS attacks,"魔修入侵伤害" AS damage FROM statistics WHERE user_id=?',
@@ -379,6 +405,43 @@ def test_scheduler_drives_persistence_attack_and_close_or_reports_start_failure(
                     scheduler.shutdown(wait=False)
 
     asyncio.run(run())
+
+
+@pytest.mark.parametrize("manual", (False, True))
+def test_demon_start_replay_keeps_persisted_finish_instead_of_old_active_snapshot(tmp_path, manual):
+    database = tmp_path / "player.db"
+    with DatabaseUnitOfWork(database, immediate=True) as uow:
+        apply_world_events_player(uow)
+        apply_world_events_lifecycle(uow)
+    lifecycle = DemonEventLifecycleApplication(database)
+    active = _active_state()
+    assert lifecycle.transition(
+        "demon-lifecycle:auto-start:2026-11-17", world_events.EVENT_KEY, "auto_start", None, active
+    ).status == "applied"
+    finished = dict(active, status="finished", active=0, manual=int(manual))
+    assert lifecycle.transition(
+        "close-before-retry", world_events.EVENT_KEY,
+        "manual_finish" if manual else "auto_finish", active, finished,
+    ).status == "applied"
+
+    class SqlStateManager:
+        def get_fields(self, event_key, table):
+            with DatabaseUnitOfWork(database, read_only=True) as uow:
+                return read_event_state(uow, event_key) or {}
+
+    with patch.object(world_events, "scheduler", SimpleNamespace(timezone=EVENT_TZ)), patch.object(
+        world_events, "_now", return_value=_utc(10)
+    ), patch.object(world_events, "_player_data_manager", return_value=SqlStateManager()), patch.object(
+        world_events, "demon_event_lifecycle_application", lifecycle
+    ), patch.object(world_events, "logger") as logger:
+        assert world_events._ensure_daily_state() == finished
+        assert world_events._start_auto_demon_invasion() == finished
+        asyncio.run(world_events.demon_invasion_schedule_job())
+        assert not any("已自动开启" in str(call) for call in logger.info.call_args_list)
+    with DatabaseUnitOfWork(database, read_only=True) as uow:
+        assert read_event_state(uow, world_events.EVENT_KEY) == finished
+        assert uow.query_one("SELECT COUNT(*) AS n FROM demon_event_lifecycle_operations")["n"] == 2
+        assert uow.query_all("PRAGMA integrity_check") == [{"integrity_check": "ok"}]
 
 
 def test_spirit_vein_trigger_slot_uses_scheduler_business_date() -> None:
