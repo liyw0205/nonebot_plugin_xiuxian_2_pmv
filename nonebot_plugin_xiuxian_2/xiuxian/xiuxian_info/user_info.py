@@ -12,6 +12,7 @@ from ..xiuxian_utils.utils import (
     check_user, get_user_profile, get_player_attributes, get_msg_pic, handle_send, number_to,
     handle_pic_send, handle_pic_msg_send, update_last_check_info_time,
 )
+from ..xiuxian_utils.numeric_bind import as_int_like
 from ..xiuxian_utils.lay_out import assign_bot, Cooldown
 from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage, OtherSet, UserBuffDate
 from ...features.sect.sect_info_repository import SectInfoSqlRepository
@@ -44,6 +45,23 @@ def _sql_message():
         _sql_message_instance = XiuxianDateManage()
     return _sql_message_instance
 
+
+def _base_attributes_from_profile(user_info):
+    """Build the attribute input from the profile already checked by the handler."""
+    return {
+        "user_id": user_info["user_id"],
+        "nickname": user_info["user_name"],
+        "level": user_info["level"],
+        "exp": as_int_like(user_info.get("exp")),
+        "stone": as_int_like(user_info.get("stone")),
+        "base_hp": as_int_like(user_info.get("hp")),
+        "base_mp": as_int_like(user_info.get("mp")),
+        "base_atk": as_int_like(user_info.get("atk")),
+        "atkpractice": as_int_like(user_info.get("atkpractice")),
+        "hppractice": as_int_like(user_info.get("hppractice")),
+        "mppractice": as_int_like(user_info.get("mppractice")),
+    }
+
 async def get_user_xiuxian_info(
     user_id, *, user_info=None, equipped_title_id=_TITLE_ID_UNSET
 ):
@@ -69,7 +87,11 @@ async def get_user_xiuxian_info(
     user_buff_data = UserBuffDate(user_id)
 
     # 统一属性口径；动态属性和信息展示共享本次命令的只读 Buff 快照。
-    final_attr = get_player_attributes(user_id, buff_data_provider=user_buff_data)
+    final_attr = get_player_attributes(
+        user_id,
+        buff_data_provider=user_buff_data,
+        base_provider=lambda _user_id: _base_attributes_from_profile(user_info),
+    )
     final_atk = final_attr["final_atk"] if final_attr else user_info['atk']
 
     level_rate = _sql_message().get_root_rate(user_info['root_type'], user_id)

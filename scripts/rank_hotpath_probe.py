@@ -367,6 +367,136 @@ async def _profile_probe(args: argparse.Namespace) -> dict:
         return result
 
 
+async def _run_base_variant(probe, entry, game, snapshot, info_module, *, legacy: bool) -> dict:
+    """Compare the legacy base-attribute profile read with the checked snapshot."""
+    snapshot.restore()
+    manager_type = type(game)
+    original_attributes = info_module.get_player_attributes
+    original_user_read = manager_type.get_user_info_with_id
+    original_manager_read = manager_type._read_query
+    counters = {"base_reads": 0, "base_sql": [], "manager_read": 0}
+
+    def traced_user_read(manager, user_id):
+        counters["base_reads"] += 1
+        return original_user_read(manager, user_id)
+
+    def traced_manager_read(manager, sql, params=None, **kwargs):
+        counters["manager_read"] += 1
+        normalized = " ".join(str(sql).split())
+        if "SELECT * FROM user_xiuxian" in normalized:
+            counters["base_sql"].append(normalized)
+        return original_manager_read(manager, sql, params, **kwargs)
+
+    if legacy:
+        def legacy_attributes(user_id, **providers):
+            providers.pop("base_provider", None)
+            return original_attributes(user_id, **providers)
+
+        info_module.get_player_attributes = legacy_attributes
+    manager_type.get_user_info_with_id = traced_user_read
+    manager_type._read_query = traced_manager_read
+    samples = []
+    try:
+        for number in range(1, REQUESTS + 1):
+            before = {
+                "base_reads": counters["base_reads"],
+                "base_sql": len(counters["base_sql"]),
+                "manager_read": counters["manager_read"],
+            }
+            started = time.perf_counter()
+            result = await probe.run_case(
+                entry,
+                "missing",
+                number,
+                actor="900001",
+                input_text=COMMAND,
+                timeout=8,
+            )
+            elapsed_ms = (time.perf_counter() - started) * 1000
+            reply = "".join(result.get("replies") or [])
+            samples.append(
+                {
+                    "latency_ms": round(elapsed_ms, 3),
+                    "status": result.get("status"),
+                    "reply_bytes": len(reply.encode("utf-8")),
+                    "reply_sha256": hashlib.sha256(reply.encode("utf-8")).hexdigest(),
+                    "errors": result.get("errors", []),
+                    "blocked": result.get("blocked", []),
+                    "base_reads": counters["base_reads"] - before["base_reads"],
+                    "base_sql": len(counters["base_sql"]) - before["base_sql"],
+                    "manager_read": counters["manager_read"] - before["manager_read"],
+                }
+            )
+    finally:
+        info_module.get_player_attributes = original_attributes
+        manager_type.get_user_info_with_id = original_user_read
+        manager_type._read_query = original_manager_read
+
+    values = [item["latency_ms"] for item in samples]
+    return {
+        "variant": "before_legacy_base_profile_read" if legacy else "after_checked_base_snapshot",
+        "requests": len(samples),
+        "samples": samples,
+        "p50_ms": _percentile(values, 0.50),
+        "p95_ms": _percentile(values, 0.95),
+        "p99_ms": _percentile(values, 0.99),
+        "error_rate": sum(
+            bool(item["status"] != "pass" or item["errors"] or item["blocked"])
+            for item in samples
+        ) / len(samples),
+        "reply_bytes": sorted({item["reply_bytes"] for item in samples}),
+        "reply_sha256": sorted({item["reply_sha256"] for item in samples}),
+        "base_reads": sum(item["base_reads"] for item in samples),
+        "base_sql_count": sum(item["base_sql"] for item in samples),
+        "manager_read": sum(item["manager_read"] for item in samples),
+        "base_sql": counters["base_sql"],
+    }
+
+
+async def _base_probe(args: argparse.Namespace) -> dict:
+    fixture = args.fixture.resolve()
+    report = args.report.resolve()
+    with _fixture_context(fixture, report) as probe:
+        _, managers = await probe.prepare(seed=False)
+        game = managers[0]
+        if game.conn.execute("SELECT 1 FROM user_xiuxian WHERE user_id=%s LIMIT 1", ("900001",)).fetchone() is None:
+            raise SystemExit("fixture is missing required actor user_id=900001")
+        entry = next(item for item in probe.inventory() if item["command"] == COMMAND)
+        snapshot = probe.FixtureSnapshot(probe.tests._data_dir, managers)
+        info_module = importlib.import_module(
+            "nonebot_plugin_xiuxian_2.xiuxian.xiuxian_info.user_info"
+        )
+        data_dir = fixture / "data" / "xiuxian"
+        result = {
+            "command": COMMAND,
+            "entry": "live matcher/handler via tests.command_probe.run_case",
+            "fixture": str(fixture),
+            "users": game.conn.execute("SELECT COUNT(*) FROM user_xiuxian").fetchone()[0],
+            "pragma": {
+                name: game.conn.execute(f"PRAGMA {name}").fetchone()[0]
+                for name in ("journal_mode", "synchronous", "cache_size")
+            },
+            "database_files_before": {
+                name: (data_dir / name).stat().st_size if (data_dir / name).exists() else 0
+                for name in ("xiuxian.db", "xiuxian.db-wal", "xiuxian.db-shm")
+            },
+        }
+        result["before"] = await _run_base_variant(
+            probe, entry, game, snapshot, info_module, legacy=True
+        )
+        result["after"] = await _run_base_variant(
+            probe, entry, game, snapshot, info_module, legacy=False
+        )
+        snapshot.restore()
+        result["database_files_after"] = {
+            name: (data_dir / name).stat().st_size if (data_dir / name).exists() else 0
+            for name in ("xiuxian.db", "xiuxian.db-wal", "xiuxian.db-shm")
+        }
+        result["rss_mb"] = round(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024, 3)
+        report.write_text(json.dumps(result, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        return result
+
+
 async def _run_buff_variant(
     probe,
     entry,
@@ -766,16 +896,19 @@ def main() -> int:
     parser.add_argument("--report", type=Path, required=True)
     parser.add_argument("--smoke", action="store_true", help="run one live command without performance sampling")
     parser.add_argument("--profile-reuse", action="store_true", help="compare duplicate versus reused profile reads")
+    parser.add_argument("--base-reuse", action="store_true", help="compare duplicate versus reused base attribute reads")
     parser.add_argument("--buff-reuse", action="store_true", help="compare duplicate versus per-request BuffInfo reads")
     parser.add_argument("--title-reuse", action="store_true", help="compare duplicate versus reused title state reads")
     args = parser.parse_args()
-    if sum(bool(value) for value in (args.smoke, args.profile_reuse, args.buff_reuse, args.title_reuse)) > 1:
+    if sum(bool(value) for value in (args.smoke, args.profile_reuse, args.base_reuse, args.buff_reuse, args.title_reuse)) > 1:
         parser.error("probe modes cannot be combined")
     result = asyncio.run(
         _smoke(args)
         if args.smoke
         else _profile_probe(args)
         if args.profile_reuse
+        else _base_probe(args)
+        if args.base_reuse
         else _buff_probe(args)
         if args.buff_reuse
         else _title_probe(args)
@@ -785,6 +918,8 @@ def main() -> int:
     if args.smoke:
         print(json.dumps(result, ensure_ascii=False))
     elif args.profile_reuse:
+        print(json.dumps({key: result[key] for key in ("fixture", "users", "before", "after", "rss_mb")}, ensure_ascii=False))
+    elif args.base_reuse:
         print(json.dumps({key: result[key] for key in ("fixture", "users", "before", "after", "rss_mb")}, ensure_ascii=False))
     elif args.buff_reuse:
         print(json.dumps({key: result[key] for key in ("fixture", "users", "before", "after", "rss_mb")}, ensure_ascii=False))

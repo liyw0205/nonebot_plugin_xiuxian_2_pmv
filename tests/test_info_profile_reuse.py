@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import unittest
-from unittest.mock import Mock, patch
+from unittest.mock import ANY, Mock, patch
 
 
 def _user_info_module():
@@ -80,7 +80,25 @@ class InfoProfileReuseTests(unittest.IsolatedAsyncioTestCase):
 
         get_profile.assert_not_called()
         title_display.assert_called_once_with("u-1", title_id="title-1")
-        player_attributes.assert_called_once_with("u-1", buff_data_provider=buff)
+        player_attributes.assert_called_once_with(
+            "u-1", buff_data_provider=buff, base_provider=ANY
+        )
+        self.assertEqual(
+            {
+                "user_id": "u-1",
+                "nickname": "测试道友",
+                "level": "江湖好手",
+                "exp": 100,
+                "stone": 200,
+                "base_hp": 0,
+                "base_mp": 0,
+                "base_atk": 30,
+                "atkpractice": 1,
+                "hppractice": 2,
+                "mppractice": 3,
+            },
+            player_attributes.call_args.kwargs["base_provider"]("u-1"),
+        )
         self.assertEqual(detail["道号"], "测试道友")
         self.assertIn("修为排行: 第1位", text)
 
