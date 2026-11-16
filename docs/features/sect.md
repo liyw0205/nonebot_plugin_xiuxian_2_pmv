@@ -139,6 +139,11 @@ sect_fairyland,sect_materials,mainbuff,secbuff,elixir_room_level`。
 ## 定时任务
 
 宗门日常重置和任务刷新由兼容生命周期统一调度，使用稳定 job ID。
+不活跃维护逐宗检查解散、继承、封闭结果；缺迁移、请求冲突和未识别结果保留
+`status/action/sect_id` 并使任务失败，已处理或正常竞争仍按具体原因跳过。批次可继续
+处理其他宗门，末尾汇总异常并保留原异常链；存在失败时不记录“处理完成”，也不宣称
+其他宗门已回滚。日重置的 `schema_missing` / `operation_conflict` 同样向调度器抛错，
+不再丢成属性异常或正常返回。受影响失败/恢复/部分成功与回执由隔离真实 SQLite 验证。
 
 ## 配置项
 

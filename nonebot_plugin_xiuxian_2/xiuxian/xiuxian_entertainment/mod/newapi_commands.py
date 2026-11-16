@@ -261,8 +261,41 @@ def _run_manual_checkin_for_target(
     return _run_checkin_for_target(qq_id, target, source="manual")
 
 
+class ScheduledAutoCheckinError(RuntimeError):
+    def __init__(self, completed: int, failures: list[tuple[int, str, str]]) -> None:
+        self.completed = completed
+        self.failures = tuple(failures)
+        subjects = "; ".join(f"account_id={account_id} reason={reason}" for account_id, reason, _ in failures)
+        # Keep remote details for diagnosis without logging arbitrary response text or credentials.
+        super().__init__(f"NewAPI 自动签到部分失败：completed={completed} {subjects}")
+
+
+def _scheduled_checkin_failures(account_id: int, data: dict[str, Any]) -> list[tuple[int, str, str]]:
+    failures = []
+    if data.get("_error"):
+        reason = "base_url_missing" if data["_error"] == "未配置接口地址" else "request_failed"
+        failures.append((account_id, reason, str(data["_error"])))
+    else:
+        inner = data.get("data") if isinstance(data.get("data"), dict) else {}
+        success = data.get("success")
+        if success is None:
+            success = inner.get("success")
+        message = str(data.get("message") or inner.get("message") or "")
+        already_signed = any(term in message for term in ("已签到", "已经签到")) or any(
+            term in message.lower() for term in ("already signed in", "already checked in")
+        )
+        if success not in (True, "true", 1) and not already_signed:
+            reason = "remote_rejected" if success in (False, "false", 0) else "invalid_response"
+            failures.append((account_id, reason, message))
+    if data.get("_history_warning"):
+        failures.append((account_id, "history_write_failed", str(data["_history_warning"])))
+    return failures
+
+
 async def run_scheduled_auto_checkins() -> int:
     n = 0
+    failures = []
+    first_exception = None
     after_account_id = 0
     while True:
         page = await run_blocking_io(
@@ -274,18 +307,26 @@ async def run_scheduled_auto_checkins() -> int:
         if not page:
             break
         after_account_id = page[-1][0]
-        for _account_id, qq_key, target in page:
+        for account_id, qq_key, target in page:
             try:
-                await run_blocking_io(
+                _, data = await run_blocking_io(
                     _run_checkin_for_target,
                     qq_key,
                     target,
                     source="auto",
                     timeout=55,
                 )
-                n += 1
-            except Exception:
-                continue
+                rejected = _scheduled_checkin_failures(account_id, data)
+                if rejected:
+                    failures.extend(rejected)
+                else:
+                    n += 1
+            except Exception as exc:
+                failures.append((account_id, "exception", type(exc).__name__))
+                if first_exception is None:
+                    first_exception = exc
+    if failures:
+        raise ScheduledAutoCheckinError(n, failures) from first_exception
     return n
 
 

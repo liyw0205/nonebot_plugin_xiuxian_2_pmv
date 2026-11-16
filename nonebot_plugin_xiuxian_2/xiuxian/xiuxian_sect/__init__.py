@@ -396,12 +396,12 @@ async def resetusertask():
         int(level): room_config["level_up_cost"]["建设度"]
         for level, room_config in config["宗门丹房参数"]["elixir_room_level"].items()
     }
-    result = sect_application.reset_daily_maintenance(
-        runtime_clock.now().date().isoformat(), maintenance_costs
+    business_date = runtime_clock.now().date().isoformat()
+    result = sect_application.reset_daily_maintenance(business_date, maintenance_costs)
+    _require_sect_scheduled_result(
+        result, "daily_reset", f"business_date={business_date}",
+        {"applied", "duplicate"},
     )
-    if result.status == "operation_conflict":
-        logger.error("宗门每日重置 operation 配置冲突，本次未执行")
-        return
     if result.status == "applied":
         for outcome in result.outcomes:
             if outcome.status in {"downgraded", "disabled"}:
@@ -415,6 +415,12 @@ async def resetusertask():
         logger.opt(colors=True).info(
             f"<green>已原子重置 {result.user_count} 名用户的宗门任务和丹药次数，并完成全部丹房维护</green>"
         )
+
+def _require_sect_scheduled_result(result, action: str, subject: str, accepted: set[str]) -> None:
+    status = result.get("status") if isinstance(result, dict) else getattr(result, "status", None)
+    if status not in accepted:
+        raise RuntimeError(f"宗门定时操作失败：action={action} {subject} status={status or 'invalid_result'}")
+
 
 # 定时任务自动检测并处理宗门状态
 async def auto_handle_inactive_sect_owners():
@@ -446,7 +452,7 @@ async def auto_handle_inactive_sect_owners():
                 # 获取宗门详细信息
                 sect_info = sect_application.get_inactive_owner_sect_state(sect_id)
                 if not sect_info:
-                    logger.error(f"获取宗门详细信息失败，跳过处理")
+                    logger.info(f"宗门维护跳过：sect_id={sect_id} status=sect_missing")
                     continue
                     
                 # ===== 第一阶段：优先处理已封闭山门的宗门 =====
@@ -470,6 +476,11 @@ async def auto_handle_inactive_sect_owners():
                             expected_active_candidate_ids=(),
                             checked_at=maintenance_checked_at,
                             inactivity_days=auto_change_sect_owner_cd,
+                        )
+                        _require_sect_scheduled_result(
+                            disbanded, "disband_empty", f"sect_id={sect_id}",
+                            {"disbanded", "duplicate", "sect_missing", "sect_changed", "members_changed",
+                             "candidates_changed", "condition_changed"},
                         )
                         logger.info(
                             f"宗门 {sect_name}(ID:{sect_id}) 自动解散结果：{disbanded.status}"
@@ -511,6 +522,11 @@ async def auto_handle_inactive_sect_owners():
                             checked_at=maintenance_checked_at,
                             inactivity_days=auto_change_sect_owner_cd,
                         )
+                        _require_sect_scheduled_result(
+                            disbanded, "disband_no_successor", f"sect_id={sect_id}",
+                            {"disbanded", "duplicate", "sect_missing", "sect_changed", "members_changed",
+                             "candidates_changed", "condition_changed"},
+                        )
                         logger.info(
                             f"宗门 {sect_name}(ID:{sect_id}) 自动解散结果：{disbanded.status}"
                         )
@@ -535,6 +551,11 @@ async def auto_handle_inactive_sect_owners():
                         eligible_user_ids=tuple(
                             str(candidate['user_id']) for candidate in active_candidates
                         ),
+                    )
+                    _require_sect_scheduled_result(
+                        result, "inherit", f"sect_id={sect_id}",
+                        {"inherited", "duplicate", "actor_missing", "actor_without_sect", "sect_changed",
+                         "sect_missing", "not_closed", "ineligible", "higher_priority"},
                     )
                     if result.applied:
                         logger.info(f"宗门【{sect_name}】继承完成：新宗主：{new_owner['user_name']}")
@@ -585,6 +606,11 @@ async def auto_handle_inactive_sect_owners():
                         checked_at=maintenance_checked_at,
                         inactivity_days=auto_change_sect_owner_cd,
                     )
+                    _require_sect_scheduled_result(
+                        disbanded, "disband_sole_owner", f"sect_id={sect_id}",
+                        {"disbanded", "duplicate", "sect_missing", "sect_changed", "members_changed",
+                         "candidates_changed", "condition_changed"},
+                    )
                     logger.info(
                         f"宗门 {sect_name}(ID:{sect_id}) 自动解散结果：{disbanded.status}"
                     )
@@ -593,7 +619,7 @@ async def auto_handle_inactive_sect_owners():
                 # 获取宗主信息
                 user_info = sect_application.get_inactive_owner_user_profile(owner_id)
                 if not user_info:
-                    logger.error(f"获取宗主信息失败：{owner_id}")
+                    logger.info(f"宗门维护跳过：sect_id={sect_id} actor_id={owner_id} status=actor_missing")
                     continue
                     
                 logger.info(f"检测到不活跃宗主：{user_info['user_name']} 已离线 {offline_days} 天")
@@ -603,6 +629,11 @@ async def auto_handle_inactive_sect_owners():
                     owner_id,
                     expected_sect_id=sect_id,
                 )
+                _require_sect_scheduled_result(
+                    result, "close", f"sect_id={sect_id}",
+                    {"closed", "duplicate", "actor_missing", "actor_without_sect", "sect_changed",
+                     "sect_missing", "already_closed", "not_owner"},
+                )
                 if result.applied:
                     logger.info(f"宗门【{sect_name}】处理完成：原宗主 {user_info['user_name']} 已降为长老")
                 else:
@@ -611,17 +642,17 @@ async def auto_handle_inactive_sect_owners():
                     )
                 
             except Exception as e:
-                logger.error(f"处理宗门 {sect_id} 时发生错误：{str(e)}")
+                logger.exception(f"处理宗门 {sect_id} 时发生错误：{str(e)}")
                 failures.append(e)
                 continue
                 
     except Exception as e:
-        logger.error(f"定时任务执行出错：{str(e)}")
+        logger.exception(f"定时任务执行出错：{str(e)}")
         failures.append(e)
-    finally:
-        logger.info("✅ 宗门状态检测处理完成")
     if failures:
-        raise RuntimeError(f"宗门状态检测失败：{len(failures)} 个宗门处理异常") from failures[0]
+        reasons = "; ".join(str(failure) for failure in failures)
+        raise RuntimeError(f"宗门状态检测失败：{len(failures)} 个异常；{reasons}") from failures[0]
+    logger.info("宗门状态检测处理完成")
 
 @sect_help.handle(parameterless=[Cooldown(cd_time=0)])
 async def sect_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
