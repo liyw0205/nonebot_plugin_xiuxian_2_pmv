@@ -5,8 +5,9 @@ import json
 import secrets
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Protocol
+from typing import Any, Protocol
 
+from ...infrastructure.clock import SystemClock
 from ...infrastructure.database import DatabaseUnitOfWork
 
 
@@ -44,9 +45,11 @@ class GuishiQiugouSqlRepository:
         trade_database: str | Path,
         *,
         order_ids: OrderIdGenerator | None = None,
+        clock: Any | None = None,
     ) -> None:
         self.trade_database = str(trade_database)
         self.order_ids = order_ids or GuishiOrderIdGenerator()
+        self.clock = clock or SystemClock()
 
     @staticmethod
     def _payload(
@@ -158,8 +161,8 @@ class GuishiQiugouSqlRepository:
             if operation_id:
                 uow.execute(
                     "INSERT INTO guishi_order_create_operations("
-                    "operation_id,payload,order_id,order_type,amount) VALUES(?,?,?,?,xiuxian_int_store(?,'stone','actor'))",
-                    (operation_id, payload, order_id, "qiugou", total_cost),
+                    "operation_id,payload,order_id,order_type,amount,created_at) VALUES(?,?,?,?,xiuxian_int_store(?,'stone','actor'),?)",
+                    (operation_id, payload, order_id, "qiugou", total_cost, self.clock.now().isoformat()),
                 )
             return GuishiQiugouCreateResult("created", order_id, total_cost)
 

@@ -16,13 +16,11 @@ class GuishiParameterDispatchTests(unittest.TestCase):
                 cwd=Path(__file__).resolve().parents[1], text=True,
                 capture_output=True, timeout=120,
             )
-            self.assertEqual(
-                result.returncode, 0,
-                result.stdout + result.stderr + (report.read_text(encoding="utf-8") if report.exists() else ""),
-            )
-            evidence = json.loads(report.read_text(encoding="utf-8"))
-            self.assertEqual({"pass": 4}, evidence["summary"], evidence["results"])
-            self.assertEqual({"success": 3, "rejection": 1}, evidence["outcomes"])
+            evidence = json.loads(report.read_text(encoding="utf-8")) if report.exists() else {}
+            failures = [row for row in evidence.get("results", []) if row["status"] != "pass"]
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr + json.dumps(failures, ensure_ascii=False))
+            self.assertEqual({"pass": 6}, evidence["summary"], evidence["results"])
+            self.assertEqual({"success": 5, "rejection": 1}, evidence["outcomes"])
             self.assertTrue(all(row["calls"] and row["evidence"] for row in evidence["results"]))
 
 

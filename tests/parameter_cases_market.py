@@ -1,4 +1,5 @@
 """Bank subcommands and actual multi-argument market consumers."""
+import asyncio
 from datetime import datetime, timezone
 import json
 from unittest.mock import patch
@@ -358,19 +359,24 @@ def register(case):
     @case(
         "guishi-stall-scheduled-return-real",
         "鬼市摆摊",
-        "本地21:00摆摊 -> 次日08:00自动退回",
+        "本地凌晨01:00摆摊 -> 当天08:00自动退回",
         "真实药材库存、无求购，应用与任务都指向隔离迁移库",
         "任务回调删除未售摊位、原子退回库存并写清理回执，重复执行零额外写入",
         group="market-guishi-parameters",
     )
     async def guishi_stall_scheduled_return(probe):
         from nonebot_plugin_xiuxian_2.infrastructure.database import DatabaseUnitOfWork
+        from nonebot_plugin_xiuxian_2.features.trade.application import TradeApplication
 
         module = trade_module()
         item_id, name = herb(probe, "900002")
         price = module.MIN_PRICE * 10
-        clock = FixedClock(datetime(2026, 11, 21, 13, tzinfo=timezone.utc))
-        with patch.object(module, "runtime_clock", clock):
+        clock = FixedClock(datetime(2026, 11, 21, 17, tzinfo=timezone.utc))
+        application = TradeApplication(
+            probe.context.paths.game_db, probe.context.paths.trade_db, clock=clock,
+            business_timezone=module._trade_scheduler_timezone(),
+        )
+        with patch.object(module, "runtime_clock", clock), patch.object(module, "trade_application", application):
             text = await probe.command(
                 "鬼市摆摊", f"鬼市摆摊  {name}  {price}  3  ", actor="900002", number=963001
             )
@@ -378,6 +384,8 @@ def register(case):
             assert probe.managers[0].goods_num("900002", item_id) == 7
             rows = module.trade_application.guishi_get_orders(user_id="900002", order_type="baitan")
             assert len(rows) == 1 and rows[0]["quantity"] == 3, rows
+            text = await probe.command("鬼市信息", actor="900002", number=963002)
+            assert "截止：11-22 08:00" in text and "剩余 7小时0分" in text, text
             clock.moment = datetime(2026, 11, 22, 0, tzinfo=timezone.utc)
             await module.clear_expired_baitan_orders_job()
             assert not module.trade_application.guishi_get_orders(user_id="900002", order_type="baitan")
@@ -397,3 +405,109 @@ def register(case):
                 with DatabaseUnitOfWork(database, read_only=True) as uow:
                     assert uow.query_all("PRAGMA integrity_check") == [{"integrity_check": "ok"}]
         probe.evidence.update(order_id=rows[0]["id"], returned=3, scheduler_replayed=True)
+
+    @case(
+        "guishi-local-deadline-info-sweep-real", "鬼市信息",
+        "求购冻结 -> 本地07:59信息 -> 08:00实际调度退款 -> 信息重读",
+        "真实命令建单、注入UTC时钟，调度器和应用共用业务时区",
+        "未到期零写、到点实际退未成交款且只退一次，创建锚点保持原样",
+        group="market-guishi-parameters",
+    )
+    async def guishi_local_deadline(probe):
+        from apscheduler.events import EVENT_JOB_ERROR, EVENT_JOB_EXECUTED
+        from apscheduler.schedulers.asyncio import AsyncIOScheduler
+        from nonebot_plugin_xiuxian_2.features.trade.application import TradeApplication
+        from nonebot_plugin_xiuxian_2.infrastructure.database import DatabaseUnitOfWork
+
+        module = trade_module()
+        _, name = herb(probe)
+        probe.player(stone=100_000_000)
+        database = probe.context.paths.trade_db
+        clock = FixedClock(datetime(2026, 11, 21, 13, tzinfo=timezone.utc))
+        application = TradeApplication(
+            probe.context.paths.game_db, database, clock=clock,
+            business_timezone=module._trade_scheduler_timezone(),
+        )
+        with patch.object(module, "runtime_clock", clock), patch.object(module, "trade_application", application):
+            await probe.command("鬼市存灵石", "鬼市存灵石 20000000", number=964001)
+            reply = await probe.command("鬼市求购", f"鬼市求购 {name} {module.MIN_PRICE * 10} 2", number=964002)
+            assert "成功发布求购订单" in reply, reply
+            anchors = probe.rows(database, "SELECT order_id,created_at FROM guishi_order_create_operations")
+            assert len(anchors) == 1 and anchors[0][1] == "2026-11-21T13:00:00+00:00", anchors
+            clock.moment = datetime(2026, 11, 21, 23, 59, tzinfo=timezone.utc)
+            reply = await probe.command("鬼市信息", number=964003)
+            assert "到期：11-22 08:00（剩余 1分）" in reply, reply
+            assert probe.rows(database, "SELECT stored_stone FROM guishi_info WHERE user_id='900001'") == [(8_000_000,)]
+            assert probe.rows(database, "SELECT COUNT(*) FROM guishi_order_cancel_operations") == [(0,)]
+
+            clock.moment = datetime(2026, 11, 22, 0, tzinfo=timezone.utc)
+            scheduler = AsyncIOScheduler(timezone=application.business_timezone)
+            outcome = asyncio.get_running_loop().create_future()
+
+            def completed(event):
+                if not outcome.done():
+                    outcome.set_result(event)
+
+            scheduler.add_listener(completed, EVENT_JOB_EXECUTED | EVENT_JOB_ERROR)
+            scheduler.add_job(module.clear_expired_baitan_orders_job, "date", id="clear_expired_baitan_orders")
+            try:
+                scheduler.start()
+                outcome_event = await asyncio.wait_for(outcome, timeout=3)
+                assert outcome_event.code == EVENT_JOB_EXECUTED, outcome_event.exception
+            finally:
+                if scheduler.running:
+                    scheduler.shutdown(wait=False)
+            assert probe.rows(database, "SELECT stored_stone FROM guishi_info WHERE user_id='900001'") == [(20_000_000,)]
+            assert probe.rows(database, "SELECT COUNT(*) FROM guishi_item") == [(0,)]
+            receipts = probe.rows(database, "SELECT order_id,refunded_stone FROM guishi_order_cancel_operations")
+            assert receipts == [(anchors[0][0], 12_000_000)], receipts
+            reply = await probe.command("鬼市信息", number=964004)
+            assert "账户余额：2000万" in reply and "求购列表" not in reply, reply
+            await module.clear_expired_baitan_orders_job()
+            assert probe.rows(database, "SELECT order_id,refunded_stone FROM guishi_order_cancel_operations") == receipts
+            assert probe.rows(database, "SELECT order_id,created_at FROM guishi_order_create_operations") == anchors
+            for path in (probe.context.paths.game_db, database):
+                with DatabaseUnitOfWork(path, read_only=True) as uow:
+                    assert uow.query_all("PRAGMA integrity_check") == [{"integrity_check": "ok"}]
+        probe.evidence.update(order_id=anchors[0][0], local_deadline="11-22 08:00", refunded=12_000_000, actual_scheduler=True)
+
+    @case(
+        "guishi-local-weekend-withdraw-real", "鬼市取灵石",
+        "本地周五23:59拒绝 -> 周六00:00取款 -> 周一旧请求回放/新请求拒绝",
+        "真实存款和充足余额，命令应用使用注入UTC时钟与调度业务时区",
+        "跨日边界不误判，手续费与钱包/账户/回执精确一致，重复请求不重复扣增",
+        group="market-guishi-parameters",
+    )
+    async def guishi_local_weekend_withdraw(probe):
+        from nonebot_plugin_xiuxian_2.features.trade.application import TradeApplication
+
+        module = trade_module()
+        probe.player(stone=100_000_000)
+        database = probe.context.paths.trade_db
+        game = probe.context.paths.game_db
+        clock = FixedClock(datetime(2026, 11, 20, 15, 59, tzinfo=timezone.utc))
+        application = TradeApplication(
+            game, database, clock=clock, business_timezone=module._trade_scheduler_timezone(),
+        )
+        with patch.object(module, "runtime_clock", clock), patch.object(module, "trade_application", application):
+            await probe.command("鬼市存灵石", "鬼市存灵石 20000000", number=965001)
+            before = balances(probe)
+            accounts = probe.rows(database, "SELECT * FROM guishi_info")
+            reply = await probe.command("鬼市取灵石", "鬼市取灵石 5000000", number=965002)
+            assert "仅在周六和周日" in reply, reply
+            assert before == balances(probe) and accounts == probe.rows(database, "SELECT * FROM guishi_info")
+            assert probe.rows(game, "SELECT COUNT(*) FROM trade_guishi_withdraw_operations") == [(0,)]
+            clock.moment = datetime(2026, 11, 20, 16, tzinfo=timezone.utc)
+            reply = await probe.command("鬼市取灵石", "鬼市取灵石 5000000", number=965002)
+            assert "成功取出 500万" in reply and "扣除100万" in reply and "实际到账 400万" in reply, reply
+            assert probe.rows(game, "SELECT stone FROM user_xiuxian WHERE user_id='900001'") == [(84_000_000,)]
+            assert probe.rows(database, "SELECT stored_stone FROM guishi_info WHERE user_id='900001'") == [(15_000_000,)]
+            after = balances(probe), probe.rows(database, "SELECT * FROM guishi_info")
+            clock.moment = datetime(2026, 11, 22, 16, tzinfo=timezone.utc)
+            reply = await probe.command("鬼市取灵石", "鬼市取灵石 5000000", number=965002)
+            assert "成功取出 500万" in reply, reply
+            reply = await probe.command("鬼市取灵石", "鬼市取灵石 1000000", number=965003)
+            assert "仅在周六和周日" in reply, reply
+            assert after == (balances(probe), probe.rows(database, "SELECT * FROM guishi_info"))
+            assert probe.rows(game, "SELECT amount,fee,actual_amount FROM trade_guishi_withdraw_operations") == [(5_000_000, 1_000_000, 4_000_000)]
+        probe.evidence.update(weekend_boundary=True, fee=1_000_000, credited=4_000_000, replay_unchanged=True)

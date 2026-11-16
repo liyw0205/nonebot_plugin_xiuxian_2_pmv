@@ -172,9 +172,16 @@ feature-owned session/settlement repositories。
 ## 定时任务
 场次调度继续由兼容 scheduler 管理。
 
-鬼市摆摊窗口和周末取物判断将 UTC `SystemClock` 投影到 APScheduler 的业务时区
+鬼市摆摊窗口、周末存货/灵石取回和订单到期将 UTC `SystemClock` 投影到 APScheduler 的业务时区
 （默认 `Asia/Shanghai`）；摆摊窗口为本地 `[20:00, 次日08:00)`，本地 08:00
 即关闭。存储时间和历史 operation 锚点不因此重写。
+
+`TradeApplication.business_timezone` 由 legacy、runtime 和 Web fallback 注入 scheduler
+时区；独立构造默认 `Asia/Shanghai`，测试或其他嵌入调用可以显式传 UTC。创建回执由
+应用注入时钟取时，与背包更新时间保持一致，避免数据库当前时间绕过固定时钟。
+求购按创建的本地日期推算「次日08:00」：凌晨00:01创建仍是下一日08:00到期；
+摊位则截止于下一次08:00清理，凌晨摊位当天08:00结束。信息页和实际退款使用同一
+业务时间规则。旧 SQLite 无偏移时间按 UTC 解析后投影，ISO 偏移也保留瞬间语义。
 
 自动撮合遇到 `operation_conflict`、无效订单类型或其他非预期结果时保留具体 status
 与订单定位并向调度器抛错，不再跳过后记录“交易处理完成”。订单已消失、已完成或
@@ -186,6 +193,8 @@ feature-owned session/settlement repositories。
 物品。两段都是静默的（任务没有 bot/event 上下文，不发群消息），退款与清理结果
 只写日志。求购到期同时在 `鬼市信息` 的本人访问期收敛，因此玩家不必等下一次
 任务就能看到冻结灵石回到余额。
+信息页到期取消遇到已知失败时返回订单定位和具体拒绝原因，不继续展示为正常账户；
+不能据此宣称其他订单没有退款，已提交的成功处理仍保留。
 ## 配置项
 `trade_enabled`。
 ## 适配器差异
@@ -201,13 +210,13 @@ Web/命令不直接连接 trade_db。
 
 鬼市生命周期已知限制：
 
-- 到期锚点只来自 `guishi_order_create_operations`。早于本功能创建的历史订单
+- 求购到期锚点只来自 `guishi_order_create_operations`。早于本功能创建的历史求购订单
   没有该行，因此**不会自动到期**，只能手动 `鬼市取消求购` 或管理员 `清空鬼市`；
   渲染显示 `到期：未知（历史订单）`。这是有意的 fail-safe：宁可不清理，也不猜
   时间误删玩家订单。
-- 到期小时沿用既有 `GUISHI_BAITAN_END_HOUR` 与模块内 UTC `runtime_clock` 口径
-  与 UTC 创建锚点。它与已修复的摆摊/周末取物业务时区仍有差异；历史到期语义须在
-  后续隔离数据切片中验证，当前不能宣称整个鬼市的时区已统一。
+- 到期小时沿用 `GUISHI_BAITAN_END_HOUR`，按 scheduler 的业务日期解释；历史锚点
+  本身不变。没有锚点的旧摊位仍会在既有08:00清理中退回，信息页显示截止未知。
+  尚未做线上历史订单对照或真实 QQ 展示，不以隔离数据回归冒充生产观察。
 - `price_refund` 只补「买家按求购价冻结、按摆摊价成交」的差价，不改变价格闸门
   （摆摊价高于求购价仍然不成交）、部分成交语义或手续费。
 - legacy `TradeRepository.match_guishi_orders` 保留原语义供兼容测试使用，默认
@@ -222,11 +231,15 @@ Web/命令不直接连接 trade_db。
 | 鬼市存款 → 求购 → 摆摊即时撮合 → 周末取物 | 真实 dispatch/DI/handler、隔离 game/trade DB，核对冻结/收入/暂存/库存/取物重放 | 创建消息重放与不同 payload 冲突、并发命令和全量数量边界 |
 | 鬼市取消求购 | 真实订单取消退款、回执和同消息重复取消零额外退款 | 非本人订单、部分成交后取消的真实 handler 参数链 |
 | 鬼市求购/摆摊非法参数 | 足额账户与真实物品下验证缺参、最低价、非法数字和多余参数拒绝，资产/订单/回执零写 | 默认数量、历史数量截断规则与更多价格边界 |
-| 未售鬼市摆摊自动退回 | 真实摆摊命令 → 清理回调 → 库存/清理回执重读，重复任务幂等，两库 integrity_check | 历史订单到期时区/过期锚点迁移 |
+| 未售鬼市摆摊自动退回 | 真实凌晨摆摊 → 信息截止与本轮08:00对齐 → 清理回调 → 库存/回执重读，重复任务幂等，两库 integrity_check | 线上历史订单对照 |
+| 鬼市信息/求购到期退款 | 真实命令建单和锚点，07:59展示剩余1分、08:00实际 APScheduler退款、信息重读和重复任务；历史UTC锚点/本地跨日/缺锚点/并发退款/回滚 | 更多历史订单形态和线上观察 |
+| 鬼市取灵石 | 真实命令固定到本地周六零点与周一边界，核对手续费/钱包/账户/回执、周一旧请求回放和新请求拒绝；runtime与Web fallback注入同一scheduler时区 | 数额/账户上限的更多真实命令参数边界 |
 | 鬼市任务注册/触发/失败状态 | live APScheduler 注册、08:00 cron 边界、独立 APScheduler 实际执行/错误事件，正常竞争跳过 | 线上运行观察、真实客户端展示 |
-| 鬼市信息/收摊/取灵石、拍卖玩家链 | 既有 repository/application 测试 | 本轮未新增真实命令链，不标为已覆盖 |
+| 鬼市收摊、拍卖玩家链 | 既有 repository/application 测试 | 本轮未新增真实命令链，不标为已覆盖 |
 
-四条鬼市参数场景由 `tests/test_guishi_parameter_dispatch.py` 接入 unittest CI。
+六条鬼市参数场景由 `tests/test_guishi_parameter_dispatch.py` 接入 unittest CI。
+`tests/test_guishi_business_time.py` 验证历史 UTC/ISO 锚点、本地日期/月年边界、凌晨摊位、
+本地周末、UTC显式配置、Web真实请求、创建时钟故障回滚和同到期竞争只退款一次。
 `tests/test_guishi_schedule.py` 覆盖本地窗口/周末边界、已知失败、实际调度和真实
 `handle_send` 的 OneBot 文本、QQ Markdown 蓝字与发送失败降级短合同；共享业务链
 只执行一次。CI 另执行魔修、鬼市和同类任务的定向 pytest 组。

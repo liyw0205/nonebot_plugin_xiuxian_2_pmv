@@ -1326,6 +1326,8 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
                 random_source=context.random,
             ),
         }
+        from .compatibility.scheduler import scheduler_bridge
+
         context.services.update({
             "natal_treasure": NatalTreasureApplication(str(context.database.path("player_db")), str(context.database.path("game_db"))),
             "buff": BuffApplication(
@@ -1345,6 +1347,7 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
                 str(context.database.path("game_db")),
                 str(context.database.path("trade_db")),
                 clock=context.clock,
+                business_timezone=getattr(scheduler_bridge(), "timezone", None),
                 ids=context.ids,
                 random_source=context.random,
                 auction_settlement=context.services["auction_settlement"],

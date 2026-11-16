@@ -288,7 +288,8 @@ class GuishiQiugouExpiryServiceTests(unittest.TestCase):
         self._add_qiugou("expired", price=10, quantity=4)
         moment = datetime(2026, 3, 6, 12, 0, tzinfo=timezone.utc)
         application = TradeApplication(
-            self.game_database, self.trade_database, clock=_FixedClock(moment)
+            self.game_database, self.trade_database, clock=_FixedClock(moment),
+            business_timezone=timezone.utc,
         )
 
         results = application.guishi_expire_qiugou()

@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 from pathlib import Path
+from datetime import tzinfo
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from .._legacy_application import LegacyApplication
 from ...core.errors import ValidationError
@@ -15,6 +17,7 @@ from .guishi_cancel_repository import GuishiOrderCancelSqlRepository
 from .guishi_deposit_repository import GuishiDepositSqlRepository
 from .guishi_baitan_repository import GuishiBaitanSqlRepository
 from .guishi_stone_rules import withdrawal_is_open
+from .guishi_lifecycle import DEFAULT_GUISHI_TIMEZONE, business_time
 from .guishi_withdraw_repository import GuishiWithdrawSqlRepository
 from .guishi_qiugou_repository import GuishiQiugouSqlRepository
 from .guishi_match_repository import GuishiOrderMatchSqlRepository
@@ -41,6 +44,7 @@ class TradeApplication(LegacyApplication):
         *,
         repository: TradeFeatureRepository | None = None,
         clock: Any | None = None,
+        business_timezone: tzinfo | str | None = None,
         ids: Any | None = None,
         random_source: Any | None = None,
         auction_queue: Any | None = None,
@@ -54,6 +58,10 @@ class TradeApplication(LegacyApplication):
         self.game_database = str(game_database)
         self.trade_database = str(trade_database)
         self.clock = clock or SystemClock()
+        self.business_timezone = (
+            ZoneInfo(business_timezone) if isinstance(business_timezone, str)
+            else business_timezone or DEFAULT_GUISHI_TIMEZONE
+        )
         self.ids = ids or UUIDGenerator()
         self.random_source = random_source or SystemRandom()
         self.auction_max_user_items = max(int(auction_max_user_items), 1)
@@ -84,7 +92,7 @@ class TradeApplication(LegacyApplication):
         self.guishi_withdraw_repository = GuishiWithdrawSqlRepository(
             self.game_database, self.trade_database
         )
-        self.guishi_qiugou_repository = GuishiQiugouSqlRepository(self.trade_database)
+        self.guishi_qiugou_repository = GuishiQiugouSqlRepository(self.trade_database, clock=self.clock)
         self.guishi_order_match_repository = GuishiOrderMatchSqlRepository(self.trade_database)
         self.guishi_expired_order_repository = GuishiExpiredOrderSqlRepository(
             self.game_database, self.trade_database, clock=self.clock
@@ -93,6 +101,7 @@ class TradeApplication(LegacyApplication):
             self.trade_database,
             cancel=self.guishi_order_cancel_repository.cancel_qiugou,
             clock=self.clock,
+            business_timezone=self.business_timezone,
         )
         self.guishi_listing_fill_service = GuishiListingFillService(
             self.trade_database,
@@ -100,7 +109,7 @@ class TradeApplication(LegacyApplication):
             clock=self.clock,
         )
         self.guishi_order_status_service = GuishiOrderStatusService(
-            self.trade_database, clock=self.clock
+            self.trade_database, clock=self.clock, business_timezone=self.business_timezone
         )
         self.guishi_stored_item_take_repository = GuishiStoredItemTakeSqlRepository(
             self.game_database, self.trade_database, clock=self.clock
@@ -384,7 +393,7 @@ class TradeApplication(LegacyApplication):
             operation_id=operation_id,
             user_id=user_id,
             amount=amount,
-            withdrawal_open=withdrawal_is_open(self.clock.now()),
+            withdrawal_open=withdrawal_is_open(business_time(self.clock.now(), self.business_timezone)),
         )
 
     def guishi_qiugou(

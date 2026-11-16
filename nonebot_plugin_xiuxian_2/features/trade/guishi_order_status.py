@@ -8,7 +8,7 @@ the pure renderer in :mod:`guishi_order_view`.
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, tzinfo
 from pathlib import Path
 from typing import Any
 
@@ -29,10 +29,12 @@ class GuishiOrderStatusService:
         *,
         clock: Any | None = None,
         end_hour: int = DEFAULT_GUISHI_END_HOUR,
+        business_timezone: tzinfo | None = None,
     ) -> None:
         self.trade_database = str(trade_database)
         self.clock = clock or SystemClock()
         self.end_hour = int(end_hour)
+        self.business_timezone = business_timezone
 
     @staticmethod
     def _table_exists(uow: DatabaseUnitOfWork, table: str) -> bool:
@@ -95,10 +97,12 @@ class GuishiOrderStatusService:
                 baitan.append(order)
         return {
             "qiugou": order_status_lines(
-                qiugou, anchors, now=moment, end_hour=self.end_hour
+                qiugou, anchors, now=moment, end_hour=self.end_hour,
+                business_timezone=self.business_timezone,
             ),
             "baitan": order_status_lines(
-                baitan, anchors, now=moment, end_hour=self.end_hour
+                baitan, anchors, now=moment, end_hour=self.end_hour,
+                business_timezone=self.business_timezone,
             ),
         }
 

@@ -111,12 +111,6 @@ runtime_clock = SystemClock()
 runtime_random = SystemRandom()
 _sql_message_instance = None
 _trade_manager_instance = None
-trade_application = TradeApplication(
-    get_paths().game_db,
-    get_paths().trade_db,
-    clock=runtime_clock,
-    ids=runtime_ids,
-)
 xianshi_market_application = XianshiMarketApplication(
     get_paths().game_db,
     clock=runtime_clock,
@@ -153,6 +147,15 @@ def _trade_business_now(value: datetime | None = None) -> datetime:
     if current.tzinfo is None:
         current = current.replace(tzinfo=timezone.utc)
     return current.astimezone(_trade_scheduler_timezone())
+
+
+trade_application = TradeApplication(
+    get_paths().game_db,
+    get_paths().trade_db,
+    clock=runtime_clock,
+    ids=runtime_ids,
+    business_timezone=_trade_scheduler_timezone(),
+)
 
 
 def _sql_message():
@@ -2360,7 +2363,7 @@ async def guishi_baitan_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
             _record_guishi_match_event(fill, buyer_name, seller_name)
         msg += "成交灵石已进入鬼市账户，可用 鬼市取灵石 取出。\n"
 
-    msg += f"⚠️ 请在次日{GUISHI_BAITAN_END_HOUR}点前收摊；未售出的物品会退回背包，背包已满时保留摊位。"
+    msg += f"⚠️ 请在本轮{GUISHI_BAITAN_END_HOUR}点结束前收摊；未售出的物品会退回背包，背包已满时保留摊位。"
     record_trade_event(
         user_id,
         "鬼市摆摊",
@@ -2510,7 +2513,15 @@ async def guishi_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
     user_id = user_info['user_id']
 
     # 访问期收敛：先让本人到期的求购自动取消并退还灵石，再展示余额与订单。
-    trade_application.guishi_expire_qiugou(user_id=user_id)
+    expired_qiugou = trade_application.guishi_expire_qiugou(user_id=user_id)
+    for result in expired_qiugou:
+        if not result.cancelled and result.status != "order_missing":
+            await handle_send(
+                bot, event,
+                result_failure(f"求购订单 {result.order_id} 到期处理未完成", result),
+                md_type="交易", k1="信息", v1="鬼市信息",
+            )
+            await guishi_info.finish()
 
     # 获取用户的鬼市账户信息
     stored_stone, stored_items = trade_application.guishi_get_account(user_id)

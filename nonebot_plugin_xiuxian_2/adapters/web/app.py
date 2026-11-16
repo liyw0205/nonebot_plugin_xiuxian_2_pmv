@@ -430,6 +430,7 @@ def create_app(
         app.register_blueprint(back_blueprint(back, permission=has_permission))
     if any(feature.key == "trade" for feature in registry.features):
         from ...features.trade.application import TradeApplication
+        from ...compatibility.scheduler import scheduler_bridge
         from ...features.auction.settlement import AuctionSettlementApplication
         from ...compatibility.auction_settlement_effects import LegacyAuctionSettlementEffects
 
@@ -445,6 +446,7 @@ def create_app(
             str(context.database.path("game_db")),
             str(context.database.path("trade_db")),
             clock=context.clock,
+            business_timezone=getattr(scheduler_bridge(), "timezone", None),
             ids=context.ids,
             random_source=context.random,
             auction_settlement=auction_settlement,

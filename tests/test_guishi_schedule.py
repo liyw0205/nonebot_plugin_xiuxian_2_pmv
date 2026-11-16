@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from datetime import datetime, timezone
+import tempfile
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 from zoneinfo import ZoneInfo
@@ -24,6 +25,8 @@ from nonebot_plugin_xiuxian_2.features.trade.guishi_expired_repository import Gu
 from nonebot_plugin_xiuxian_2.features.trade.guishi_match_repository import GuishiMatchResult
 from nonebot_plugin_xiuxian_2.compatibility.legacy_jobs import _TARGETS
 from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_utils import utils
+from nonebot_plugin_xiuxian_2.bootstrap import build_runtime_context
+from nonebot_plugin_xiuxian_2.plugin import shutdown, startup
 
 
 BUSINESS_TZ = ZoneInfo("Asia/Shanghai")
@@ -54,6 +57,28 @@ def test_guishi_jobs_are_registered_on_live_scheduler() -> None:
         assert scheduler.get_job(job_id) is not None
     trigger = scheduler.get_job("clear_expired_baitan_orders").trigger
     assert trigger.get_next_fire_time(None, _utc(17, 23, 59)) == _utc(18, 0)
+
+
+def test_runtime_trade_application_receives_the_scheduler_business_timezone():
+    async def run():
+        with tempfile.TemporaryDirectory() as directory, patch(
+            "nonebot_plugin_xiuxian_2.compatibility.scheduler.scheduler_bridge",
+            return_value=SimpleNamespace(timezone=timezone.utc),
+        ):
+            state, _readiness, context, lifecycle = await startup(
+                build_runtime_context(data_dir=directory, legacy_startup=False)
+            )
+            try:
+                assert state.phase.value in {"ready", "not_ready"}
+                application = context.services["trade"]
+                assert application.clock is context.clock
+                assert application.business_timezone is timezone.utc
+                assert application.guishi_qiugou_expiry_service.business_timezone is timezone.utc
+                assert application.guishi_order_status_service.business_timezone is timezone.utc
+            finally:
+                await shutdown(lifecycle)
+
+    asyncio.run(run())
 
 
 @pytest.mark.parametrize(
@@ -159,6 +184,22 @@ def test_expiry_cancel_failure_result_reaches_scheduler():
     with patch.object(trade.trade_application, "guishi_expire_qiugou", return_value=[failure]):
         with pytest.raises(RuntimeError, match="want.*operation_conflict"):
             asyncio.run(trade.clear_expired_baitan_orders_job())
+
+
+def test_info_handler_reports_expiry_rejection_without_showing_a_normal_account():
+    failure = GuishiOrderCancelResult("operation_conflict", "want")
+    sender = AsyncMock()
+    with patch.object(trade, "assign_bot", new=AsyncMock(return_value=(object(), None))), patch.object(
+        trade, "check_user", return_value=(True, {"user_id": "buyer"}, "")
+    ), patch.object(trade.trade_application, "guishi_expire_qiugou", return_value=[failure]), patch.object(
+        trade.trade_application, "guishi_get_account"
+    ) as account, patch.object(trade, "handle_send", sender):
+        with pytest.raises(FinishedException):
+            asyncio.run(trade.guishi_info_(object(), object(), SimpleNamespace(extract_plain_text=lambda: "")))
+    reply = sender.call_args.args[2]
+    assert "want" in reply and "到期处理未完成" in reply
+    assert "不同内容的请求" in reply
+    account.assert_not_called()
 
 
 def test_stall_cleanup_failure_result_reaches_scheduler():

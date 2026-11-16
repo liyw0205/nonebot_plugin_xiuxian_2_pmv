@@ -116,6 +116,7 @@ class GuishiBaitanSqlRepository:
             if inventory is None or int(inventory["goods_num"]) - int(inventory["state"]) < quantity:
                 return GuishiBaitanCreateResult("stock_insufficient", quantity=quantity)
 
+            created_at = self.clock.now().isoformat()
             updated = uow.execute(
                 "UPDATE back SET goods_num=goods_num-?, "
                 "bind_num=MIN(COALESCE(bind_num,0),goods_num-?), update_time=? "
@@ -124,7 +125,7 @@ class GuishiBaitanSqlRepository:
                 (
                     quantity,
                     quantity,
-                    self.clock.now().isoformat(),
+                    created_at,
                     user_id,
                     item_id,
                     quantity,
@@ -162,8 +163,8 @@ class GuishiBaitanSqlRepository:
             if operation_id:
                 uow.execute(
                     "INSERT INTO guishi_trade.guishi_order_create_operations("
-                    "operation_id,payload,order_id,order_type,amount) VALUES(?,?,?,?,xiuxian_int_store(?,'stone','actor'))",
-                    (operation_id, payload, order_id, "baitan", quantity),
+                    "operation_id,payload,order_id,order_type,amount,created_at) VALUES(?,?,?,?,xiuxian_int_store(?,'stone','actor'),?)",
+                    (operation_id, payload, order_id, "baitan", quantity, created_at),
                 )
             return GuishiBaitanCreateResult("created", order_id, quantity)
 
