@@ -66,15 +66,20 @@ class InfoProfileReuseTests(unittest.IsolatedAsyncioTestCase):
             patch.object(user_info, "load_mentor", return_value={"mentor_id": None, "apprentice_ids": []}),
             patch.object(user_info, "update_last_check_info_time"),
             patch.object(user_info, "NatalTreasure") as natal,
-            patch.object(user_info, "get_equipped_title_display", return_value=""),
+            patch.object(
+                user_info, "get_equipped_title_display", return_value=""
+            ) as title_display,
             patch.object(jsondata, "level_data", return_value={"江湖好手": {"spend": 1}}),
             patch.object(jsondata, "sect_config_data", return_value={}),
             patch.object(jsondata, "level_rate_data", return_value={"江湖好手": 0}),
         ):
             natal.return_value.exists.return_value = False
-            detail, text = await user_info.get_user_xiuxian_info("u-1", user_info=profile)
+            detail, text = await user_info.get_user_xiuxian_info(
+                "u-1", user_info=profile, equipped_title_id="title-1"
+            )
 
         get_profile.assert_not_called()
+        title_display.assert_called_once_with("u-1", title_id="title-1")
         player_attributes.assert_called_once_with("u-1", buff_data_provider=buff)
         self.assertEqual(detail["道号"], "测试道友")
         self.assertIn("修为排行: 第1位", text)
@@ -131,6 +136,22 @@ class BuffProjectionReuseTests(unittest.TestCase):
             self.assertEqual({"main_buff": 2}, second.BuffInfo)
 
         self.assertEqual(2, handle.get_user_buff.call_count)
+
+
+class TitleProjectionReuseTests(unittest.TestCase):
+    def test_explicit_title_snapshot_skips_state_query(self):
+        from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_title import title_data
+
+        with (
+            patch.object(title_data, "get_user_equipped_title") as state_reader,
+            patch.object(title_data, "get_title_by_id", return_value={"name": "快照称号"}),
+        ):
+            self.assertEqual(
+                "快照称号",
+                title_data.get_equipped_title_display("u-1", title_id="301"),
+            )
+
+        state_reader.assert_not_called()
 
 
 if __name__ == "__main__":

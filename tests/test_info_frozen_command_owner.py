@@ -94,6 +94,7 @@ class InfoFrozenCommandOwnerTests(unittest.TestCase):
         self.assertIn("get_player_attributes(user_id", source)
         self.assertIn("update_last_check_info_time(user_id)", source)
         self.assertIn("get_equipped_title_display(user_id)", source)
+        self.assertIn("equipped_title_id=title_id", source)
         for legacy_reader in (
             "_sql_message().get_exp_rank(",
             "_sql_message().get_root_rate(",

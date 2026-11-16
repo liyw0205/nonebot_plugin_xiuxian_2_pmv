@@ -23,6 +23,7 @@ TITLE_JSONPATH = READPATH / "修炼物品" / "称号.json"
 _TITLE_CACHE: Dict[str, dict] = {}
 _TITLE_CONDITION_KEY_CACHE: Set[str] = set()
 _UNKNOWN_CONDITION_KEYS_LOGGED: Set[str] = set()
+_TITLE_ID_UNSET = object()
 
 
 def load_title_data() -> Dict[str, dict]:
@@ -596,12 +597,16 @@ def unequip_title(user_id: str) -> Tuple[bool, str]:
     return True, f"成功卸下称号【{name}】！"
 
 
-def get_equipped_title_display(user_id: str) -> str:
+def get_equipped_title_display(user_id: str, *, title_id=_TITLE_ID_UNSET) -> str:
     """
     获取用户当前装备称号的显示名称
     如果没有装备称号，返回空字符串
     """
-    equipped_id = get_user_equipped_title(user_id)
+    equipped_id = (
+        get_user_equipped_title(user_id)
+        if title_id is _TITLE_ID_UNSET
+        else title_id
+    )
     if not equipped_id:
         return ""
     title_data = get_title_by_id(equipped_id)

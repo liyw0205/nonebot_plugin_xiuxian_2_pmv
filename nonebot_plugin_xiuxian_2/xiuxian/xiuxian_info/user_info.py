@@ -35,6 +35,7 @@ xiuxian_message = on_command("我的修仙信息", aliases={"我的存档", "存
 xiuxian_message_img = on_command("我的修仙信息图片版", aliases={"我的存档图片版", "存档图片版", "修仙信息图片版"}, priority=23, block=True)
 
 _sql_message_instance = None
+_TITLE_ID_UNSET = object()
 
 
 def _sql_message():
@@ -43,7 +44,9 @@ def _sql_message():
         _sql_message_instance = XiuxianDateManage()
     return _sql_message_instance
 
-async def get_user_xiuxian_info(user_id, *, user_info=None):
+async def get_user_xiuxian_info(
+    user_id, *, user_info=None, equipped_title_id=_TITLE_ID_UNSET
+):
     """获取用户修仙信息的公共函数。
 
     Command handlers already load and validate the effective profile in
@@ -178,7 +181,10 @@ async def get_user_xiuxian_info(user_id, *, user_info=None):
         natal_name_level = f"{natal_data.get('name', '未知法宝')} (Lv.{natal_data.get('level', 0)})"
 
     # ===== 获取称号信息 =====
-    title_name = get_equipped_title_display(user_id)
+    if equipped_title_id is _TITLE_ID_UNSET:
+        title_name = get_equipped_title_display(user_id)
+    else:
+        title_name = get_equipped_title_display(user_id, title_id=equipped_title_id)
 
     DETAIL_MAP = {
         "ID": f"{user_id}",
@@ -254,8 +260,9 @@ async def xiuxian_message_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
         await handle_send(bot, event, msg, md_type="我要修仙")
         await xiuxian_message.finish()
 
+    title_id = get_user_equipped_title(user_info["user_id"])
     detail_map, text_msg = await get_user_xiuxian_info(
-        user_info["user_id"], user_info=user_info
+        user_info["user_id"], user_info=user_info, equipped_title_id=title_id
     )
 
     if XiuConfig().user_info_image:
@@ -357,7 +364,6 @@ async def xiuxian_message_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
         return "\r".join(md_lines)
 
     # 获取称号信息
-    title_id = get_user_equipped_title(user_info["user_id"])
     title_url = ""
     title_name = ""
 
@@ -419,9 +425,10 @@ async def xiuxian_message_img_(bot: Bot, event: GroupMessageEvent | PrivateMessa
     if not isUser:
         await handle_send(bot, event, msg, md_type="我要修仙")
         await xiuxian_message_img.finish()
-    
+
+    title_id = get_user_equipped_title(user_info["user_id"])
     detail_map, _ = await get_user_xiuxian_info(
-        user_info['user_id'], user_info=user_info
+        user_info['user_id'], user_info=user_info, equipped_title_id=title_id
     )
     equipped_title_name = detail_map.get("称号", "")
     if equipped_title_name == "无":

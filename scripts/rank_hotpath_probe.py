@@ -516,6 +516,153 @@ async def _buff_probe(args: argparse.Namespace) -> dict:
         return result
 
 
+async def _run_title_variant(
+    probe,
+    entry,
+    game,
+    snapshot,
+    info_module,
+    title_package,
+    uow_module,
+    *,
+    legacy: bool,
+) -> dict:
+    """Compare the live title snapshot with the former duplicate state read."""
+    snapshot.restore()
+    manager_type = type(game)
+    original_info = info_module.get_user_xiuxian_info
+    original_get_state = title_package.title_application.get_state
+    original_uow_execute = uow_module.DatabaseUnitOfWork.execute
+    counters = {"title_state_reads": 0, "title_sql": [], "uow_execute": 0}
+
+    def traced_get_state(user_id):
+        counters["title_state_reads"] += 1
+        return original_get_state(user_id)
+
+    def traced_uow_execute(unit, sql, params=()):
+        counters["uow_execute"] += 1
+        normalized = " ".join(str(sql).split())
+        if "FROM title" in normalized:
+            counters["title_sql"].append(normalized)
+        return original_uow_execute(unit, sql, params)
+
+    if legacy:
+        async def legacy_info(user_id, *, user_info=None, equipped_title_id=None):
+            # Keep the checked profile, but discard the handler's title snapshot
+            # to reproduce the pre-optimization second title read.
+            return await original_info(user_id, user_info=user_info)
+
+        info_module.get_user_xiuxian_info = legacy_info
+    title_package.title_application.get_state = traced_get_state
+    uow_module.DatabaseUnitOfWork.execute = traced_uow_execute
+    samples = []
+    try:
+        for number in range(1, REQUESTS + 1):
+            before = {
+                "title_state_reads": counters["title_state_reads"],
+                "uow_execute": counters["uow_execute"],
+                "title_sql": len(counters["title_sql"]),
+            }
+            started = time.perf_counter()
+            result = await probe.run_case(
+                entry,
+                "missing",
+                number,
+                actor="900001",
+                input_text=COMMAND,
+                timeout=8,
+            )
+            elapsed_ms = (time.perf_counter() - started) * 1000
+            reply = "".join(result.get("replies") or [])
+            samples.append(
+                {
+                    "latency_ms": round(elapsed_ms, 3),
+                    "status": result.get("status"),
+                    "reply_bytes": len(reply.encode("utf-8")),
+                    "reply_sha256": hashlib.sha256(reply.encode("utf-8")).hexdigest(),
+                    "errors": result.get("errors", []),
+                    "blocked": result.get("blocked", []),
+                    "title_state_reads": counters["title_state_reads"] - before["title_state_reads"],
+                    "title_sql": len(counters["title_sql"]) - before["title_sql"],
+                    "uow_execute": counters["uow_execute"] - before["uow_execute"],
+                }
+            )
+    finally:
+        info_module.get_user_xiuxian_info = original_info
+        title_package.title_application.get_state = original_get_state
+        uow_module.DatabaseUnitOfWork.execute = original_uow_execute
+
+    values = [item["latency_ms"] for item in samples]
+    return {
+        "variant": "before_duplicate_title_state_read" if legacy else "after_reused_title_snapshot",
+        "requests": len(samples),
+        "samples": samples,
+        "p50_ms": _percentile(values, 0.50),
+        "p95_ms": _percentile(values, 0.95),
+        "p99_ms": _percentile(values, 0.99),
+        "error_rate": sum(
+            bool(item["status"] != "pass" or item["errors"] or item["blocked"])
+            for item in samples
+        ) / len(samples),
+        "reply_bytes": sorted({item["reply_bytes"] for item in samples}),
+        "reply_sha256": sorted({item["reply_sha256"] for item in samples}),
+        "title_state_reads": sum(item["title_state_reads"] for item in samples),
+        "title_sql_count": sum(item["title_sql"] for item in samples),
+        "uow_execute": sum(item["uow_execute"] for item in samples),
+        "title_sql": counters["title_sql"],
+    }
+
+
+async def _title_probe(args: argparse.Namespace) -> dict:
+    fixture = args.fixture.resolve()
+    report = args.report.resolve()
+    with _fixture_context(fixture, report) as probe:
+        _, managers = await probe.prepare(seed=False)
+        game = managers[0]
+        if game.conn.execute("SELECT 1 FROM user_xiuxian WHERE user_id=%s LIMIT 1", ("900001",)).fetchone() is None:
+            raise SystemExit("fixture is missing required actor user_id=900001")
+        entry = next(item for item in probe.inventory() if item["command"] == COMMAND)
+        snapshot = probe.FixtureSnapshot(probe.tests._data_dir, managers)
+        info_module = importlib.import_module(
+            "nonebot_plugin_xiuxian_2.xiuxian.xiuxian_info.user_info"
+        )
+        title_package = importlib.import_module(
+            "nonebot_plugin_xiuxian_2.xiuxian.xiuxian_title"
+        )
+        uow_module = importlib.import_module(
+            "nonebot_plugin_xiuxian_2.infrastructure.database.uow"
+        )
+        data_dir = fixture / "data" / "xiuxian"
+        result = {
+            "command": COMMAND,
+            "entry": "live matcher/handler via tests.command_probe.run_case",
+            "fixture": str(fixture),
+            "users": game.conn.execute("SELECT COUNT(*) FROM user_xiuxian").fetchone()[0],
+            "pragma": {
+                name: game.conn.execute(f"PRAGMA {name}").fetchone()[0]
+                for name in ("journal_mode", "synchronous", "cache_size")
+            },
+            "database_files_before": {
+                name: (data_dir / name).stat().st_size if (data_dir / name).exists() else 0
+                for name in ("player.db", "player.db-wal", "player.db-shm")
+            },
+        }
+        result["before"] = await _run_title_variant(
+            probe, entry, game, snapshot, info_module, title_package, uow_module, legacy=True
+        )
+        result["after"] = await _run_title_variant(
+            probe, entry, game, snapshot, info_module, title_package, uow_module, legacy=False
+        )
+        snapshot.restore()
+        result["database_files_after"] = {
+            name: (data_dir / name).stat().st_size if (data_dir / name).exists() else 0
+            for name in ("player.db", "player.db-wal", "player.db-shm")
+        }
+        result["rss_mb"] = round(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024, 3)
+        report.write_text(json.dumps(result, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        return result
+
+
 async def _probe(args: argparse.Namespace) -> dict:
     fixture = args.fixture.resolve()
     report = args.report.resolve()
@@ -620,9 +767,10 @@ def main() -> int:
     parser.add_argument("--smoke", action="store_true", help="run one live command without performance sampling")
     parser.add_argument("--profile-reuse", action="store_true", help="compare duplicate versus reused profile reads")
     parser.add_argument("--buff-reuse", action="store_true", help="compare duplicate versus per-request BuffInfo reads")
+    parser.add_argument("--title-reuse", action="store_true", help="compare duplicate versus reused title state reads")
     args = parser.parse_args()
-    if sum(bool(value) for value in (args.smoke, args.profile_reuse, args.buff_reuse)) > 1:
-        parser.error("--smoke, --profile-reuse and --buff-reuse cannot be combined")
+    if sum(bool(value) for value in (args.smoke, args.profile_reuse, args.buff_reuse, args.title_reuse)) > 1:
+        parser.error("probe modes cannot be combined")
     result = asyncio.run(
         _smoke(args)
         if args.smoke
@@ -630,6 +778,8 @@ def main() -> int:
         if args.profile_reuse
         else _buff_probe(args)
         if args.buff_reuse
+        else _title_probe(args)
+        if args.title_reuse
         else _probe(args)
     )
     if args.smoke:
@@ -637,6 +787,8 @@ def main() -> int:
     elif args.profile_reuse:
         print(json.dumps({key: result[key] for key in ("fixture", "users", "before", "after", "rss_mb")}, ensure_ascii=False))
     elif args.buff_reuse:
+        print(json.dumps({key: result[key] for key in ("fixture", "users", "before", "after", "rss_mb")}, ensure_ascii=False))
+    elif args.title_reuse:
         print(json.dumps({key: result[key] for key in ("fixture", "users", "before", "after", "rss_mb")}, ensure_ascii=False))
     else:
         print(json.dumps({key: result[key] for key in ("fixture", "users", "before", "after", "rss_mb")}, ensure_ascii=False))

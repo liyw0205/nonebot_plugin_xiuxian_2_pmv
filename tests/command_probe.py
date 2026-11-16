@@ -12,6 +12,7 @@ from contextlib import AsyncExitStack
 from contextvars import ContextVar
 from copy import deepcopy
 import inspect
+import importlib
 import json
 import os
 from pathlib import Path
@@ -104,6 +105,17 @@ async def prepare(*, seed: bool = True):
 
     nonebot.init(command_start={"", "/"}, superusers={"900003"}, log_level="ERROR")
     import nonebot_plugin_xiuxian_2
+    try:
+        # NoneBot's plugin manager logs and suppresses import failures.  A
+        # benchmark must fail with the original traceback instead of treating
+        # a partially registered fixture as a valid command path.
+        importlib.import_module(
+            "nonebot_plugin_xiuxian_2.xiuxian.xiuxian_info"
+        )
+    except Exception as exc:
+        raise RuntimeError(
+            "benchmark fixture failed to import xiuxian_info; see chained traceback"
+        ) from exc
     from nonebot_plugin_xiuxian_2.bootstrap.context import build_runtime_context
     from nonebot_plugin_xiuxian_2.plugin import startup
     from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_utils.xiuxian2_handle import (
