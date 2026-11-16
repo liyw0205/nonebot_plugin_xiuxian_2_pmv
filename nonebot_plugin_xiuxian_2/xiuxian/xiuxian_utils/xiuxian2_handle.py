@@ -4295,11 +4295,13 @@ def final_user_data(user_data, columns):
     user_dict["atk"] = as_int_like(final_attr["final_atk"])
     return user_dict
 
-def get_base_attributes(user_id: str | int) -> dict | None:
-    """获取基础属性（不吃任何buff）"""
+def get_base_attributes(user_id: str | int, *, user_info: dict | None = None) -> dict | None:
+    """获取基础属性（不吃任何buff），可复用调用方已校验的用户快照。"""
     from .numeric_bind import as_int_like
 
-    user = sql_message.get_user_info_with_id(user_id)
+    user = user_info
+    if user is None or str(user.get("user_id")) != str(user_id):
+        user = sql_message.get_user_info_with_id(user_id)
     if not user:
         return None
 

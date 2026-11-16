@@ -26,6 +26,7 @@ from contextlib import contextmanager
 
 REQUESTS = 20
 COMMAND = "我的修仙信息"
+STATE_COMMAND = "我的状态"
 
 
 def _legacy_rank_sql(column: str) -> str:
@@ -497,6 +498,199 @@ async def _base_probe(args: argparse.Namespace) -> dict:
         return result
 
 
+async def _run_state_variant(
+    probe,
+    entry,
+    game,
+    snapshot,
+    state_module,
+    uow_module,
+    *,
+    legacy: bool,
+) -> dict:
+    """Compare the live 我的状态 path with its former duplicate reads."""
+    snapshot.restore()
+    manager_type = type(game)
+    original_check_user = state_module.check_user
+    original_base = state_module.get_base_attributes
+    original_attributes = state_module.get_player_attributes
+    original_user_read = manager_type.get_user_info_with_id
+    original_buff_read = manager_type.get_user_buff_info
+    original_manager_read = manager_type._read_query
+    original_uow_execute = uow_module.DatabaseUnitOfWork.execute
+    counters = {
+        "user_reads": 0,
+        "buff_reads": 0,
+        "manager_read": 0,
+        "uow_execute": 0,
+        "sql_categories": {"user": 0, "buff": 0, "other": 0},
+    }
+
+    def traced_user_read(manager, user_id):
+        counters["user_reads"] += 1
+        return original_user_read(manager, user_id)
+
+    def traced_buff_read(manager, user_id):
+        counters["buff_reads"] += 1
+        return original_buff_read(manager, user_id)
+
+    def traced_manager_read(manager, sql, params=None, **kwargs):
+        counters["manager_read"] += 1
+        normalized = " ".join(str(sql).split()).lower()
+        if "user_xiuxian" in normalized:
+            counters["sql_categories"]["user"] += 1
+        elif "buffinfo" in normalized:
+            counters["sql_categories"]["buff"] += 1
+        else:
+            counters["sql_categories"]["other"] += 1
+        return original_manager_read(manager, sql, params, **kwargs)
+
+    def traced_uow_execute(unit, sql, params=()):
+        counters["uow_execute"] += 1
+        return original_uow_execute(unit, sql, params)
+
+    if legacy:
+        def legacy_check_user(event):
+            result = original_check_user(event)
+            if result[0] and result[1]:
+                state_module._sql_message().get_user_info_with_id(result[1]["user_id"])
+            return result
+
+        def legacy_base(user_id, **kwargs):
+            return original_base(user_id)
+
+        def legacy_attributes(user_id, **providers):
+            providers.pop("base_provider", None)
+            providers.pop("buff_data_provider", None)
+            return original_attributes(user_id, **providers)
+
+        state_module.check_user = legacy_check_user
+        state_module.get_base_attributes = legacy_base
+        state_module.get_player_attributes = legacy_attributes
+
+    manager_type.get_user_info_with_id = traced_user_read
+    manager_type.get_user_buff_info = traced_buff_read
+    manager_type._read_query = traced_manager_read
+    uow_module.DatabaseUnitOfWork.execute = traced_uow_execute
+    samples = []
+    try:
+        for number in range(1, REQUESTS + 1):
+            before = {
+                "user_reads": counters["user_reads"],
+                "buff_reads": counters["buff_reads"],
+                "manager_read": counters["manager_read"],
+                "uow_execute": counters["uow_execute"],
+                "sql_categories": dict(counters["sql_categories"]),
+            }
+            started = time.perf_counter()
+            result = await probe.run_case(
+                entry,
+                "missing",
+                number,
+                actor="900001",
+                input_text=STATE_COMMAND,
+                timeout=8,
+            )
+            elapsed_ms = (time.perf_counter() - started) * 1000
+            reply = "".join(result.get("replies") or [])
+            samples.append(
+                {
+                    "latency_ms": round(elapsed_ms, 3),
+                    "status": result.get("status"),
+                    "reply_bytes": len(reply.encode("utf-8")),
+                    "reply_sha256": hashlib.sha256(reply.encode("utf-8")).hexdigest(),
+                    "errors": result.get("errors", []),
+                    "blocked": result.get("blocked", []),
+                    "user_reads": counters["user_reads"] - before["user_reads"],
+                    "buff_reads": counters["buff_reads"] - before["buff_reads"],
+                    "manager_read": counters["manager_read"] - before["manager_read"],
+                    "uow_execute": counters["uow_execute"] - before["uow_execute"],
+                    "sql_categories": {
+                        key: counters["sql_categories"][key] - before["sql_categories"][key]
+                        for key in counters["sql_categories"]
+                    },
+                }
+            )
+    finally:
+        state_module.check_user = original_check_user
+        state_module.get_base_attributes = original_base
+        state_module.get_player_attributes = original_attributes
+        manager_type.get_user_info_with_id = original_user_read
+        manager_type.get_user_buff_info = original_buff_read
+        manager_type._read_query = original_manager_read
+        uow_module.DatabaseUnitOfWork.execute = original_uow_execute
+
+    values = [item["latency_ms"] for item in samples]
+    return {
+        "variant": "before_duplicate_state_reads" if legacy else "after_reused_state_snapshots",
+        "requests": len(samples),
+        "samples": samples,
+        "p50_ms": _percentile(values, 0.50),
+        "p95_ms": _percentile(values, 0.95),
+        "p99_ms": _percentile(values, 0.99),
+        "error_rate": sum(
+            bool(item["status"] != "pass" or item["errors"] or item["blocked"])
+            for item in samples
+        ) / len(samples),
+        "reply_bytes": sorted({item["reply_bytes"] for item in samples}),
+        "reply_sha256": sorted({item["reply_sha256"] for item in samples}),
+        "user_reads": sum(item["user_reads"] for item in samples),
+        "buff_reads": sum(item["buff_reads"] for item in samples),
+        "manager_read": sum(item["manager_read"] for item in samples),
+        "uow_execute": sum(item["uow_execute"] for item in samples),
+        "sql_categories": counters["sql_categories"],
+    }
+
+
+async def _state_probe(args: argparse.Namespace) -> dict:
+    fixture = args.fixture.resolve()
+    report = args.report.resolve()
+    with _fixture_context(fixture, report) as probe:
+        _, managers = await probe.prepare(seed=False)
+        game = managers[0]
+        if game.conn.execute(
+            "SELECT 1 FROM user_xiuxian WHERE user_id=%s LIMIT 1", ("900001",)
+        ).fetchone() is None:
+            raise SystemExit("fixture is missing required actor user_id=900001")
+        entry = next(item for item in probe.inventory() if item["command"] == STATE_COMMAND)
+        snapshot = probe.FixtureSnapshot(probe.tests._data_dir, managers)
+        state_module = importlib.import_module(
+            "nonebot_plugin_xiuxian_2.xiuxian.xiuxian_buff"
+        )
+        uow_module = importlib.import_module(
+            "nonebot_plugin_xiuxian_2.infrastructure.database.uow"
+        )
+        data_dir = fixture / "data" / "xiuxian"
+        result = {
+            "command": STATE_COMMAND,
+            "entry": "live matcher/handler via tests.command_probe.run_case",
+            "fixture": str(fixture),
+            "users": game.conn.execute("SELECT COUNT(*) FROM user_xiuxian").fetchone()[0],
+            "pragma": {
+                name: game.conn.execute(f"PRAGMA {name}").fetchone()[0]
+                for name in ("journal_mode", "synchronous", "cache_size")
+            },
+            "database_files_before": {
+                name: (data_dir / name).stat().st_size if (data_dir / name).exists() else 0
+                for name in ("xiuxian.db", "xiuxian.db-wal", "xiuxian.db-shm")
+            },
+        }
+        result["before"] = await _run_state_variant(
+            probe, entry, game, snapshot, state_module, uow_module, legacy=True
+        )
+        result["after"] = await _run_state_variant(
+            probe, entry, game, snapshot, state_module, uow_module, legacy=False
+        )
+        snapshot.restore()
+        result["database_files_after"] = {
+            name: (data_dir / name).stat().st_size if (data_dir / name).exists() else 0
+            for name in ("xiuxian.db", "xiuxian.db-wal", "xiuxian.db-shm")
+        }
+        result["rss_mb"] = round(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024, 3)
+        report.write_text(json.dumps(result, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        return result
+
+
 async def _run_buff_variant(
     probe,
     entry,
@@ -847,12 +1041,14 @@ async def _smoke(args: argparse.Namespace) -> dict:
         image_entry = next(
             item for item in probe.inventory() if item["command"] == "我的修仙信息图片版"
         )
+        state_entry = next(item for item in probe.inventory() if item["command"] == STATE_COMMAND)
         snapshot = probe.FixtureSnapshot(probe.tests._data_dir, managers)
         cases = []
         for number, label, case_entry, input_text in (
             (1, "text", entry, COMMAND),
             (2, "alias", entry, "我的存档"),
             (3, "image", image_entry, "我的修仙信息图片版"),
+            (4, "state", state_entry, STATE_COMMAND),
         ):
             snapshot.restore()
             result = await probe.run_case(
@@ -899,8 +1095,9 @@ def main() -> int:
     parser.add_argument("--base-reuse", action="store_true", help="compare duplicate versus reused base attribute reads")
     parser.add_argument("--buff-reuse", action="store_true", help="compare duplicate versus per-request BuffInfo reads")
     parser.add_argument("--title-reuse", action="store_true", help="compare duplicate versus reused title state reads")
+    parser.add_argument("--state-reuse", action="store_true", help="compare duplicate versus reused 我的状态 reads")
     args = parser.parse_args()
-    if sum(bool(value) for value in (args.smoke, args.profile_reuse, args.base_reuse, args.buff_reuse, args.title_reuse)) > 1:
+    if sum(bool(value) for value in (args.smoke, args.profile_reuse, args.base_reuse, args.buff_reuse, args.title_reuse, args.state_reuse)) > 1:
         parser.error("probe modes cannot be combined")
     result = asyncio.run(
         _smoke(args)
@@ -913,6 +1110,8 @@ def main() -> int:
         if args.buff_reuse
         else _title_probe(args)
         if args.title_reuse
+        else _state_probe(args)
+        if args.state_reuse
         else _probe(args)
     )
     if args.smoke:
@@ -924,6 +1123,8 @@ def main() -> int:
     elif args.buff_reuse:
         print(json.dumps({key: result[key] for key in ("fixture", "users", "before", "after", "rss_mb")}, ensure_ascii=False))
     elif args.title_reuse:
+        print(json.dumps({key: result[key] for key in ("fixture", "users", "before", "after", "rss_mb")}, ensure_ascii=False))
+    elif args.state_reuse:
         print(json.dumps({key: result[key] for key in ("fixture", "users", "before", "after", "rss_mb")}, ensure_ascii=False))
     else:
         print(json.dumps({key: result[key] for key in ("fixture", "users", "before", "after", "rss_mb")}, ensure_ascii=False))

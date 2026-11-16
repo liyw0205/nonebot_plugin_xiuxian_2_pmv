@@ -936,11 +936,16 @@ async def mind_state_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await handle_send(bot, event, msg)
         await mind_state.finish()
 
-    user_info = _sql_message().get_user_info_with_id(user_id)
+    user_info = user_msg
     current_status = load_player_user(user_id)
 
-    base_attr = get_base_attributes(user_id)
-    final_attr = get_player_attributes(user_id)
+    user_buff_data = UserBuffDate(user_id)
+    base_attr = get_base_attributes(user_id, user_info=user_info)
+    final_attr = get_player_attributes(
+        user_id,
+        base_provider=lambda _user_id: base_attr,
+        buff_data_provider=user_buff_data,
+    )
 
     if not base_attr or not final_attr:
         msg = "属性读取失败，请稍后再试。"
@@ -956,7 +961,6 @@ async def mind_state_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 
     level_rate = _sql_message().get_root_rate(user_info['root_type'], user_id)
     realm_rate = jsondata.level_data()[user_info['level']]["spend"]
-    user_buff_data = UserBuffDate(user_id)
     user_blessed_spot_data = user_buff_data.BuffInfo['blessed_spot'] * 0.5 if user_buff_data.BuffInfo else 0
     main_buff_data = user_buff_data.get_user_main_buff_data()
 
