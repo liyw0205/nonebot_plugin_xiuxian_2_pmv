@@ -104,13 +104,16 @@ xiu2 update-deps
 xiu2 format [log_file]
 ```
 
-Linux / Termux 安装器统一接受 `--source-mode release|source`、`--source PATH`、`--mirror auto|direct|accelerated|custom`、`--target PATH` 和 `--venv PATH`。自定义镜像前缀使用 `--mirror-url URL`。例如：
+Linux / Termux 安装器统一接受 `--source-mode release|source`、`--source PATH`、`--mirror auto|direct|accelerated|custom`、`--target PATH` 和 `--venv PATH`。自定义镜像前缀使用 `--mirror-url URL`。Linux 安装/运行默认虚拟环境为 `/root/myenv`；`XIUXIAN_VENV_PATH` 可覆盖默认，命令行 `--venv PATH` 优先于环境变量。Termux 默认仍为 `$HOME/myenv`，不使用 Linux 共享路径。本机开发测试使用 `/home/nonebot-shared-venv/bin/python`，不改变安装运行环境。例如：
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/liyw0205/nonebot_plugin_xiuxian_2_pmv/main/scripts/install.sh \
   | bash -s -- install --source-mode release --mirror accelerated \
-      --target "$HOME/xiuxian" --venv "$HOME/myenv"
+      --target "$HOME/xiuxian"
 ```
+
+需要使用其它 Linux 安装环境时，可设置 `XIUXIAN_VENV_PATH=/path/to/venv`，或显式追加
+`--venv /path/to/venv`；路径不存在时安装器会给出创建提示，不会删除旧环境。
 
 checkout 模式从本地 Git `HEAD` 打包，只接受没有已跟踪未提交改动的 checkout。`uninstall` 会删除安装目录及其中的数据，需要显式 `--yes`；先备份数据和配置。`login` 输出 QQ 官方机器人绑定面板地址，OneBot 登录仍由 NapCat 等客户端完成。
 

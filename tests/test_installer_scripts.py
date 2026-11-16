@@ -89,6 +89,23 @@ class InstallerScriptTests(unittest.TestCase):
                 for token in (*actions, *options):
                     self.assertIn(token, source)
 
+    def test_linux_venv_defaults_and_generated_runtime_overrides(self) -> None:
+        linux = (SCRIPTS / "install.sh").read_text(encoding="utf-8")
+        termux = (SCRIPTS / "install_termux.sh").read_text(encoding="utf-8")
+
+        self.assertIn('DEFAULT_VENV_PATH="/root/myenv"', linux)
+        self.assertIn('VENV_PATH="${XIUXIAN_VENV_PATH:-${VENV_PATH:-$DEFAULT_VENV_PATH}}"', linux)
+        self.assertIn('VENV_RUNTIME_PATH="\\${XIUXIAN_VENV_PATH:-$VENV_PATH}"', linux)
+        self.assertIn('VENV_DIR="\\${XIUXIAN_VENV_PATH:-$VENV_PATH}"', linux)
+        self.assertIn('XIUXIAN_VENV_PATH="\\$VENV_DIR" screen', linux)
+        self.assertNotIn('.venv/bin', linux)
+
+        self.assertIn('VENV_PATH="${XIUXIAN_VENV_PATH:-${VENV_PATH:-$TERMUX_HOME/myenv}}"', termux)
+        self.assertIn('VENV_RUNTIME_PATH="\\${XIUXIAN_VENV_PATH:-$VENV_PATH}"', termux)
+        self.assertIn('VENV_PATH="\\${XIUXIAN_VENV_PATH:-$VENV_PATH}"', termux)
+        self.assertIn('XIUXIAN_VENV_PATH="\\$VENV_DIR" screen', termux)
+        self.assertNotIn('.venv/bin', termux)
+
     def test_login_routes_to_qq_bind_panel_and_onebot_auth_is_optional(self) -> None:
         for name in ("install.sh", "install_termux.sh"):
             source = (SCRIPTS / name).read_text(encoding="utf-8")

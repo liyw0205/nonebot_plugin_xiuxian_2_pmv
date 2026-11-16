@@ -680,6 +680,15 @@ def _get_player_map_status(user_id: str, map_data: dict):
     return _init_player_map_status(user_id, map_data)
 
 
+def _is_canonical_map_status(status: dict[str, str], map_data: dict) -> bool:
+    realm, heaven, node_id = (status.get(key, "") for key in ("realm", "heaven", "node_id"))
+    if realm not in _all_realms(map_data):
+        return False
+    if heaven not in map_data.get(realm, {}).get("heavens", {}):
+        return False
+    return _find_node_by_id(map_data, realm, heaven, node_id) is not None
+
+
 def _init_player_map_status(user_id: str, map_data: dict, *, random_source=None):
     random_source = random_source or runtime_random
     realm = random_source.choice(_all_realms(map_data))
@@ -1221,13 +1230,25 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         return
 
     uid = str(user_info["user_id"])
-    map_data = _load_map_data()
-    st = _get_player_map_status(uid, map_data)
 
-    users = await map_application.nearby_display(
-        realm=st["realm"], heaven=st["heaven"], node_id=st["node_id"],
-        exclude_user_id=uid, random_source=runtime_random,
-    )
+    map_data = _load_map_data()
+    combined_query = getattr(map_application, "nearby_display_for_user", None)
+    combined = None
+    if callable(combined_query):
+        combined = await combined_query(
+            user_id=uid,
+            exclude_user_id=uid,
+            status_validator=lambda status: _is_canonical_map_status(status, map_data),
+            random_source=runtime_random,
+        )
+    if combined is None:
+        st = _get_player_map_status(uid, map_data)
+        users = await map_application.nearby_display(
+            realm=st["realm"], heaven=st["heaven"], node_id=st["node_id"],
+            exclude_user_id=uid, random_source=runtime_random,
+        )
+    else:
+        st, users = combined
     if not users:
         await handle_send(bot, event, "附近暂无其他道友。")
         return

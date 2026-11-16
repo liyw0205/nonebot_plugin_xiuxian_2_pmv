@@ -930,22 +930,29 @@ async def mind_state_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     user_id = user_msg['user_id']
     update_last_check_info_time(user_id)
 
-    player_data = _sql_message().get_player_data(user_id)
-    if not player_data:
-        msg = "获取用户状态信息失败！"
-        await handle_send(bot, event, msg)
-        await mind_state.finish()
-
-    user_info = _sql_message().get_user_info_with_id(user_id)
+    user_info = user_msg
     current_status = load_player_user(user_id)
 
-    base_attr = get_base_attributes(user_id)
-    final_attr = get_player_attributes(user_id)
+    user_buff_data = UserBuffDate(user_id)
+    base_attr = get_base_attributes(user_id, user_info=user_info)
+    final_attr = get_player_attributes(
+        user_id,
+        base_provider=lambda _user_id: base_attr,
+        buff_data_provider=user_buff_data,
+    )
 
     if not base_attr or not final_attr:
         msg = "属性读取失败，请稍后再试。"
         await handle_send(bot, event, msg)
         await mind_state.finish()
+
+    # The checked profile and final projection already contain every field this
+    # status view displays; avoid rebuilding the full dynamic player object.
+    player_data = {
+        "道号": user_info["user_name"],
+        "气血": final_attr["current_hp"],
+        "真元": final_attr["current_mp"],
+    }
 
     status_map = {
         "on": "🔓 开启",
@@ -956,7 +963,6 @@ async def mind_state_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 
     level_rate = _sql_message().get_root_rate(user_info['root_type'], user_id)
     realm_rate = jsondata.level_data()[user_info['level']]["spend"]
-    user_buff_data = UserBuffDate(user_id)
     user_blessed_spot_data = user_buff_data.BuffInfo['blessed_spot'] * 0.5 if user_buff_data.BuffInfo else 0
     main_buff_data = user_buff_data.get_user_main_buff_data()
 

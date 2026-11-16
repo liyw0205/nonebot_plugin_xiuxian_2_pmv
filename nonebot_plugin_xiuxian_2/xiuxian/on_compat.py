@@ -27,7 +27,7 @@ from nonebot.plugin.on import (
 from nonebot.rule import TrieRule
 
 from ..bootstrap.legacy import register_legacy_startup
-from .blackhouse import is_user_blackhoused
+from .blackhouse import is_users_blackhoused, prime_user_blackhouse_status
 from .command_disable import (
     disabled_command_keys_for_route,
     is_command_disabled,
@@ -391,9 +391,11 @@ def _filter_blackhoused_matchers(
     if not blocked:
         return candidates
     uid = _event_user_id(event)
-    if not uid or not is_user_blackhoused(uid):
+    if not uid or not prime_user_blackhouse_status(uid):
         return candidates
     logger.info("[修仙 小黑屋] 用户 {} 指令已全局封禁", uid)
+    # A blocked request has no handler to consume the primed status.
+    is_users_blackhoused((uid,))
     return [matcher for matcher in candidates if matcher not in blocked]
 
 

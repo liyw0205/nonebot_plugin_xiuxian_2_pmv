@@ -59,8 +59,9 @@ Web 侧权限集中在一张表：`xiuxian/xiuxian_web/access.py:13` 定义 `Web
 
 ## 测试与手工验收
 
-- `./.venv/bin/python -B -m unittest discover -s nonebot_plugin_xiuxian_2/features/updater/tests -t . -q`
-- `./.venv/bin/python -B -m pytest -p no:cacheprovider nonebot_plugin_xiuxian_2/features/updater/tests -q`
+- `PYTHON_BIN="${XIUXIAN_VENV_PATH:-/home/nonebot-shared-venv}/bin/python"`
+- `$PYTHON_BIN -B -m unittest discover -s nonebot_plugin_xiuxian_2/features/updater/tests -t . -q`
+- `$PYTHON_BIN -B -m pytest -p no:cacheprovider nonebot_plugin_xiuxian_2/features/updater/tests -q`
 
 本目录 `__init__.py` 齐备，两条命令收到的是同一批 unittest 用例。`test_application.py` 覆盖 tag 校验、只读委托与 `check_update` 判定、preflight 失败停在备份之前、错误资产被拒、备份顺序与首败即停、透传已验证资产与精确 tag 并清理归档、配置恢复失败仍算更新成功、解包失败仍清理归档、锁非阻塞且跨实例共享、provider 抛错仍释放锁。`test_manager_adapter.py` 覆盖 preflight 要求官方资产、拒绝非官方下载地址、下载失败删除临时目录、坏归档不写版本也不建目标目录、版本标记记录请求的 tag，以及三组备份兼容方法委托给各自 owner。`test_slice_contract.py` 是切片契约 8 例：三个值只在 `schemas.py` 声明一次、`UpdateProvider` 只在 `repository.py` 声明一次、`COMMANDS/ROUTES/JOBS/MIGRATIONS` 全空且 `LEGACY_ROUTES` 恰为那 3 条、manifest 的 `key/test_tag/owner` 与 `migration_version is None`、委托目标确实是 `UpdateApplication` 上的可调用方法、tag 守卫接受线上真实 tag 而拒绝带路径的输入、列表默认条数取声明值、资产名正是拒绝规则本身。
 

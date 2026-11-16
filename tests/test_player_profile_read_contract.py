@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import unittest
 from pathlib import Path
+from unittest.mock import Mock, patch
 
 
 class PlayerProfileReadContractTest(unittest.TestCase):
@@ -16,6 +17,62 @@ class PlayerProfileReadContractTest(unittest.TestCase):
         repository = (root / "nonebot_plugin_xiuxian_2" / "features" / "info" / "profile_repository.py").read_text(encoding="utf-8")
         self.assertIn("read_only=True", repository)
 
+    def test_map_status_lookup_uses_read_only_boundary(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        repository = (
+            root / "nonebot_plugin_xiuxian_2" / "features" / "map" / "repository.py"
+        ).read_text(encoding="utf-8")
+        start = repository.index("class MapStatusSqlQueryRepository:")
+        end = repository.index("class MapStatusSqlWriteRepository:", start)
+        self.assertIn(
+            "DatabaseUnitOfWork(self.player_database, read_only=True)",
+            repository[start:end],
+        )
+
+    def test_check_user_reads_blackhouse_once_for_same_effective_identity(self) -> None:
+        from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_utils import utils
+        from nonebot_plugin_xiuxian_2.xiuxian import blackhouse
+
+        avatar = Mock()
+        avatar.get_active_user_id.return_value = "same-user"
+        profile = {"user_id": "same-user", "is_ban": 0}
+        with (
+            patch.object(utils, "_player_avatar", return_value=avatar),
+            patch.object(utils, "get_impersonating_target", return_value=None),
+            patch.object(utils, "get_user_profile", return_value=profile),
+            patch.object(blackhouse, "is_users_blackhoused", return_value={"same-user": False}) as lookup,
+        ):
+            result = utils.check_user("same-user")
+
+        self.assertEqual(result, (True, profile, ""))
+        lookup.assert_called_once_with(("same-user",))
+
+    def test_check_user_still_checks_original_identity_when_avatar_differs(self) -> None:
+        from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_utils import utils
+        from nonebot_plugin_xiuxian_2.xiuxian import blackhouse
+
+        avatar = Mock()
+        avatar.get_active_user_id.return_value = "active-avatar"
+        profile = {"user_id": "active-avatar", "is_ban": 0}
+        with (
+            patch.object(utils, "_player_avatar", return_value=avatar),
+            patch.object(utils, "get_impersonating_target", return_value=None),
+            patch.object(utils, "get_user_profile", return_value=profile),
+            patch.object(
+                blackhouse,
+                "is_users_blackhoused",
+                return_value={"active-avatar": False, "main-account": True},
+            ) as lookup,
+        ):
+            result = utils.check_user("main-account")
+
+        self.assertFalse(result[0])
+        self.assertIn("小黑屋", result[2])
+        self.assertEqual(
+            [call.args[0] for call in lookup.call_args_list],
+            [("active-avatar", "main-account")],
+        )
+
     def test_base_handlers_use_profile_reader_for_lookup_only(self) -> None:
         root = Path(__file__).resolve().parents[1]
         source = (root / "nonebot_plugin_xiuxian_2" / "xiuxian" / "xiuxian_base" / "__init__.py").read_text(encoding="utf-8")
@@ -29,7 +86,8 @@ class PlayerProfileReadContractTest(unittest.TestCase):
         source = (root / "nonebot_plugin_xiuxian_2" / "xiuxian" / "xiuxian_info" / "user_info.py").read_text(encoding="utf-8")
         self.assertGreaterEqual(source.count("get_user_profile("), 4)
         self.assertNotIn("_sql_message().get_user_real_info", source)
-        self.assertIn("get_player_attributes(user_id)", source)
+        self.assertIn("get_player_attributes(\n        user_id,", source)
+        self.assertIn("base_provider=", source)
 
     def test_dynamic_attribute_reads_use_feature_application_boundary(self) -> None:
         root = Path(__file__).resolve().parents[1]

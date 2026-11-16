@@ -282,6 +282,29 @@ class PlayerAvatarApplicationTests(unittest.TestCase):
             self.assertFalse(database.exists())
             self.assertFalse(database.parent.exists())
 
+    def test_active_id_schema_metadata_is_cached_and_invalidated_by_ddl(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="avatar-schema-cache-") as temp_dir:
+            database = Path(temp_dir) / "player.db"
+            self._database(database)
+            repository = AvatarStateSqlRepository(database)
+            statements = []
+            original = DatabaseUnitOfWork.execute
+
+            def tracked(uow, sql, params=()):
+                statements.append(sql)
+                return original(uow, sql, params)
+
+            with patch.object(DatabaseUnitOfWork, "execute", tracked):
+                self.assertEqual(repository.get_active_id("main"), "main")
+                statements.clear()
+                self.assertEqual(repository.get_active_id("main"), "main")
+
+            self.assertEqual(sum("sqlite_master" in sql for sql in statements), 0)
+            self.assertEqual(sum("table_info" in sql for sql in statements), 0)
+            with DatabaseUnitOfWork(database) as uow:
+                uow.execute("ALTER TABLE avatar DROP COLUMN create_time")
+            self.assertIsNone(repository.get_active_id("main"))
+
     def test_player_migration_preserves_legacy_avatar_row(self) -> None:
         with tempfile.TemporaryDirectory(prefix="avatar-migration-") as temp_dir:
             database = Path(temp_dir) / "player.db"
@@ -379,8 +402,8 @@ class AvatarIdentityResolutionTests(unittest.TestCase):
             with patch.object(utils, "get_user_profile", side_effect=get_profile):
                 with patch.object(utils, "_sql_message", return_value=SqlMessage()):
                     with patch(
-                        "nonebot_plugin_xiuxian_2.xiuxian.blackhouse.is_user_blackhoused",
-                        return_value=False,
+                        "nonebot_plugin_xiuxian_2.xiuxian.blackhouse.is_users_blackhoused",
+                        return_value={"impersonated-id": False, "real-id": False},
                     ):
                         utils._impersonating_users["real-id"] = "impersonated-id"
                         try:
@@ -416,8 +439,8 @@ class AvatarIdentityResolutionTests(unittest.TestCase):
                 return_value={"user_id": "avatar-id", "is_ban": 0},
             ):
                 with patch(
-                    "nonebot_plugin_xiuxian_2.xiuxian.blackhouse.is_user_blackhoused",
-                    return_value=False,
+                    "nonebot_plugin_xiuxian_2.xiuxian.blackhouse.is_users_blackhoused",
+                    return_value={"avatar-id": False, "real-id": False},
                 ):
                     is_user, profile, message = utils.check_user("real-id")
 

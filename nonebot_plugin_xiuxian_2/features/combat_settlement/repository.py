@@ -93,10 +93,23 @@ class DaoBattleSqlRepository:
             uow.attach_database(self.game_database, "game_data")
             previous = uow.query_one("SELECT payload FROM map_dao_battle_operations WHERE operation_id=?", (operation_id,))
             if previous:
-                return {"status": "duplicate"} if str(previous["payload"]) == payload else {"status": "state_changed", "reason": "operation_conflict"}
+                return (
+                    {"status": "duplicate"}
+                    if str(previous["payload"]) == payload
+                    else {
+                        "status": "state_changed",
+                        "reason": "operation_conflict",
+                        "subject": "actor",
+                    }
+                )
             users = uow.query_all("SELECT user_id FROM game_data.user_xiuxian WHERE user_id IN (?,?)", (challenger_id, target_id))
-            if {str(row["user_id"]) for row in users} != {challenger_id, target_id}:
-                return {"status": "user_missing", "subject": "challenger" if challenger_id not in {str(row["user_id"]) for row in users} else "target"}
+            present = {str(row["user_id"]) for row in users}
+            if present != {challenger_id, target_id}:
+                return {
+                    "status": "user_missing",
+                    "reason": "user_missing",
+                    "subject": "challenger" if challenger_id not in present else "target",
+                }
             rows = uow.query_all("SELECT user_id,realm,heaven,node_id FROM map_status WHERE user_id IN (?,?)", (challenger_id, target_id))
             current = {str(row["user_id"]): (str(row["realm"]), str(row["heaven"]), str(row["node_id"])) for row in rows}
             expected = (position["realm"], position["heaven"], position["node_id"])

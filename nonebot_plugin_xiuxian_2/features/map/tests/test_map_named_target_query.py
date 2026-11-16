@@ -301,7 +301,7 @@ def load_handler(command, result):
     )
     user = {"user_id": "me", "user_name": "my-name", "power": 10}
     environment = dict(
-        CommandArg=lambda: None, assign_bot=AsyncMock(return_value=("bot", None)),
+        asyncio=asyncio, CommandArg=lambda: None, assign_bot=AsyncMock(return_value=("bot", None)),
         check_user=Mock(return_value=(True, user, "")), _load_map_data=Mock(return_value={}),
         _get_player_map_status=Mock(return_value=POSITION), map_application=application,
         _get_all_in_same_node=Mock(side_effect=AssertionError("named command must not read a list")),

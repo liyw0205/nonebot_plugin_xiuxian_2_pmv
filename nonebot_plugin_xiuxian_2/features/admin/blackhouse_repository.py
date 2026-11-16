@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import json
+import sqlite3
+from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
 from threading import RLock
-from typing import Any
+from typing import Any, ClassVar
 
 from ...infrastructure.database import DatabaseUnitOfWork
 
@@ -33,6 +35,8 @@ class AdminBlackhouseSqlRepository:
         },
         "admin_blackhouse_imports": {"import_key", "imported_at"},
     }
+    _schema_cache: ClassVar[dict[tuple[str, int], bool]] = {}
+    _schema_cache_lock: ClassVar[RLock] = RLock()
 
     def __init__(self, database: str | Path, *, lock: RLock | None = None) -> None:
         self.database = Path(database)
@@ -81,26 +85,114 @@ class AdminBlackhouseSqlRepository:
             ("legacy_json_and_is_ban_v1",),
         ) is not None
 
+    @classmethod
+    def _cached_schema_ready(cls, uow: DatabaseUnitOfWork, database: Path) -> bool:
+        """Reuse validated DDL while rechecking the mutable import marker."""
+        key = cls._schema_cache_key(uow, database)
+        with cls._schema_cache_lock:
+            cached = cls._schema_cache.get(key)
+        if cached:
+            try:
+                marker = uow.query_one(
+                    "SELECT 1 AS present FROM admin_blackhouse_imports WHERE import_key=?",
+                    ("legacy_json_and_is_ban_v1",),
+                )
+            except sqlite3.DatabaseError:
+                marker = None
+            if marker is not None:
+                return True
+            with cls._schema_cache_lock:
+                cls._schema_cache.pop(key, None)
+            return False
+        if not cls._schema_ready(uow):
+            return False
+        with cls._schema_cache_lock:
+            cls._schema_cache[key] = True
+        return True
+
+    @classmethod
+    def _schema_cache_key(cls, uow: DatabaseUnitOfWork, database: Path) -> tuple[str, int]:
+        row = uow.query_one("PRAGMA schema_version")
+        try:
+            schema_version = int(row["schema_version"]) if row is not None else -1
+        except (KeyError, TypeError, ValueError):
+            schema_version = -1
+        return str(database.resolve()), schema_version
+
+    @classmethod
+    def _cached_snapshot(
+        cls,
+        uow: DatabaseUnitOfWork,
+        database: Path,
+        user_id: str,
+    ) -> bool:
+        """Read the marker and membership atomically after schema validation."""
+        key = cls._schema_cache_key(uow, database)
+        with cls._schema_cache_lock:
+            cached = cls._schema_cache.get(key)
+        if not cached:
+            if not cls._schema_ready(uow):
+                raise RuntimeError("schema_missing")
+            with cls._schema_cache_lock:
+                cls._schema_cache[key] = True
+            return bool(
+                uow.query_one(
+                    "SELECT 1 AS present FROM admin_blackhouse_users WHERE user_id=?",
+                    (user_id,),
+                )
+            )
+        row = uow.query_one(
+            "SELECT EXISTS(SELECT 1 FROM admin_blackhouse_imports "
+            "WHERE import_key=?) AS marker, "
+            "EXISTS(SELECT 1 FROM admin_blackhouse_users WHERE user_id=?) AS present",
+            ("legacy_json_and_is_ban_v1", user_id),
+        )
+        if row is None or int(row.get("marker") or 0) != 1:
+            with cls._schema_cache_lock:
+                cls._schema_cache.pop(key, None)
+            raise RuntimeError("schema_missing")
+        return bool(int(row.get("present") or 0))
+
     def snapshot(self, user_id: Any) -> bool:
         user_id = self._identifier(user_id, "user id")
         if not self.database.is_file():
             raise RuntimeError("schema_missing")
         with self.lock, DatabaseUnitOfWork(self.database, read_only=True) as uow:
-            if not self._schema_ready(uow):
-                raise RuntimeError("schema_missing")
-            return uow.query_one(
-                "SELECT 1 AS present FROM admin_blackhouse_users WHERE user_id=?",
-                (user_id,),
-            ) is not None
+            return self._cached_snapshot(uow, self.database, user_id)
 
     def is_banned(self, user_id: Any) -> bool:
         return self.snapshot(user_id)
+
+    def statuses(self, user_ids: Iterable[Any]) -> dict[str, bool]:
+        """Read several blacklist memberships in one validated read transaction."""
+        normalized: list[str] = []
+        seen: set[str] = set()
+        for value in user_ids:
+            user_id = self._identifier(value, "user id")
+            if user_id not in seen:
+                normalized.append(user_id)
+                seen.add(user_id)
+        if not normalized:
+            return {}
+        if not self.database.is_file():
+            raise RuntimeError("schema_missing")
+        with self.lock, DatabaseUnitOfWork(self.database, read_only=True) as uow:
+            if not self._cached_schema_ready(uow, self.database):
+                raise RuntimeError("schema_missing")
+            placeholders = ",".join("?" for _ in normalized)
+            rows = uow.query_all(
+                "SELECT user_id FROM admin_blackhouse_users "
+                f"WHERE user_id IN ({placeholders})",
+                tuple(normalized),
+            )
+        present = {str(row["user_id"]) for row in rows}
+        return {user_id: user_id in present for user_id in normalized}
 
     def list_banned(self) -> list[dict[str, str]]:
         if not self.database.is_file():
             raise RuntimeError("schema_missing")
         with self.lock, DatabaseUnitOfWork(self.database, read_only=True) as uow:
-            if not self._schema_ready(uow):
+            if not self._cached_schema_ready(uow, self.database):
                 raise RuntimeError("schema_missing")
             return [
                 {

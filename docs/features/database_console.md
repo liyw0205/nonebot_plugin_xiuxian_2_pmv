@@ -63,7 +63,7 @@
 
 ## 测试与手工验收
 
-`./.venv/bin/python -B -m unittest discover -s nonebot_plugin_xiuxian_2/features/database_console/tests -t . -q` 与 `./.venv/bin/python -B -m pytest -p no:cacheprovider nonebot_plugin_xiuxian_2/features/database_console/tests -q` 跑同一批用例：两条命令都跑同一目录的两个 unittest 文件：`test_application.py` 覆盖 `impart_cards` 组合主键的下划线切分、空筛选必须拒绝且不落到 `execute`、`add` 操作的绑定值；`test_slice_contract.py` 断言分页与区间边界只在 `schemas.py` 一处定义、四个表面为空、`LEGACY_ROUTES` 与清单一致且每条 target 都是真实公开方法、`per_page` 在下任何查询前先被夹到 `MAX_TABLE_PAGE_SIZE`。
+`PYTHON_BIN="${XIUXIAN_VENV_PATH:-/home/nonebot-shared-venv}/bin/python"` 后，用 `$PYTHON_BIN -B -m unittest discover -s nonebot_plugin_xiuxian_2/features/database_console/tests -t . -q` 与 `$PYTHON_BIN -B -m pytest -p no:cacheprovider nonebot_plugin_xiuxian_2/features/database_console/tests -q` 跑同一批用例：两条命令都跑同一目录的两个 unittest 文件：`test_application.py` 覆盖 `impart_cards` 组合主键的下划线切分、空筛选必须拒绝且不落到 `execute`、`add` 操作的绑定值；`test_slice_contract.py` 断言分页与区间边界只在 `schemas.py` 一处定义、四个表面为空、`LEGACY_ROUTES` 与清单一致且每条 target 都是真实公开方法、`per_page` 在下任何查询前先被夹到 `MAX_TABLE_PAGE_SIZE`。
 
 根级相关测试：`tests/test_operations_console_slice_manifests.py`（注册表与文档契约：要求本文出现标题、九个小节标题、以及四条委托的 path 与 target，并禁止本切片与 `runtime_web` 双声明同一路径）、`tests/test_web_database_batch_edit_guard.py`（空或空白筛选必须零执行且不建连接、单字段与全字段 `LIKE` 绑定、`apply_to_all` 时无 `WHERE`）、`tests/test_web_auth.py:123` 的 `test_every_web_endpoint_declares_permission`、`tests/test_db_backend.py`（`%s` 到 `?` 的改写与 `execute_sql` 的返回形状）。
 

@@ -48,4 +48,4 @@ application/repository 保持框架无关；Flask adapter 负责管理员鉴权�
 
 ## 测试与手工验收
 
-运行 `.venv/bin/pytest -q tests/test_economy_ledger_web.py nonebot_plugin_xiuxian_2/features/economy_ledger/tests -p no:cacheprovider`，应覆盖匿名拒绝、管理员分页、兼容重定向、CSV 14 列和查询异常。手工检查同一筛选条件的页面与 CSV 行数一致。
+运行 `PYTHON_BIN="${XIUXIAN_VENV_PATH:-/home/nonebot-shared-venv}/bin/python"` 后的 `$PYTHON_BIN -m pytest -q tests/test_economy_ledger_web.py nonebot_plugin_xiuxian_2/features/economy_ledger/tests -p no:cacheprovider`，应覆盖匿名拒绝、管理员分页、兼容重定向、CSV 14 列和查询异常。手工检查同一筛选条件的页面与 CSV 行数一致。

@@ -92,4 +92,45 @@ async def select_nearby_display(
     return finish()
 
 
-__all__ = ["select_nearby_display"]
+async def select_nearby_display_for_user(
+    repository,
+    *,
+    user_id: str,
+    exclude_user_id: str,
+    status_validator,
+    random_source,
+) -> tuple[dict[str, str], list[dict[str, Any]]] | None:
+    """Combine the actor-position and nearby read transaction for the hot command."""
+    try:
+        with repository.candidates_for_user(
+            user_id, exclude_user_id, status_validator,
+        ) as snapshot:
+            if snapshot is None:
+                return None
+            status, candidates = snapshot
+            selected: list[tuple[int, dict[str, Any]]] = []
+            eligible_count = 0
+            processed = 0
+            for candidate in candidates:
+                eligible_count += 1
+                cursor = (processed, processed)
+                if len(selected) < DISPLAY_LIMIT:
+                    selected.append((cursor[0], candidate))
+                else:
+                    slot = random_source.randint(1, eligible_count)
+                    if slot <= DISPLAY_LIMIT:
+                        selected[slot - 1] = (cursor[0], candidate)
+                processed += 1
+                if processed % 32 == 0:
+                    await asyncio.sleep(0)
+            if eligible_count > DISPLAY_LIMIT:
+                users = [user for _, user in random_source.sample(selected, len(selected))]
+            else:
+                selected.sort(key=lambda entry: entry[0])
+                users = [user for _, user in selected]
+            return status, users
+    except MapCandidateReadError:
+        return None
+
+
+__all__ = ["select_nearby_display", "select_nearby_display_for_user"]

@@ -3291,6 +3291,7 @@
     "stone_item_reward_operations",
     "stone_robbery_operations",
     "stone_training_operations",
+    "target",
     "task_progress_event_operations",
     "task_reward_claim_operations",
     "task_reward_claim_player_operations",

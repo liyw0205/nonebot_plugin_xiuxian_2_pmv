@@ -56,8 +56,9 @@
 
 本切片的 tests 混着两种风格，两条命令都要跑：`test_scheduler_application.py` 是 pytest 函数式（`@pytest.mark.parametrize`），`unittest` 的 loader 只认 `TestCase`，收不到它；`test_slice_contract.py` 是 unittest，两种收法都能拿到。
 
-- `./.venv/bin/python -B -m pytest -p no:cacheprovider nonebot_plugin_xiuxian_2/features/scheduler/tests -q`
-- `./.venv/bin/python -B -m unittest discover -s tests -q`
+- `PYTHON_BIN="${XIUXIAN_VENV_PATH:-/home/nonebot-shared-venv}/bin/python"`
+- `$PYTHON_BIN -B -m pytest -p no:cacheprovider nonebot_plugin_xiuxian_2/features/scheduler/tests -q`
+- `$PYTHON_BIN -B -m unittest discover -s tests -q`
 
 pytest 那条覆盖 5 个用例的参数与返回值透传、以及 manager 异常原样上抛；unittest 那条在本目录收到切片契约 7 例（常量单一来源、`SchedulerAdminManager` 只在 `repository.py` 声明一次、`COMMANDS/ROUTES/JOBS/MIGRATIONS` 全空且 `LEGACY_ROUTES` 恰为那 5 条、manifest 的 `key/test_tag/owner` 与 `migration_version is None`、委托目标确实是 `SchedulerAdminApplication` 上的可调用方法、`_load_store()` 以声明的版本号落盘、`interval` 序列化不会写出 0 秒），在根级收到的相关测试是 `tests/test_scheduler_job_manager.py`（unittest，8 例：启停与改计划落盘、暂停态下手动执行、reschedule 保持 disabled、非法 trigger 被拒、手动 run 如实回报成功与失败、同一 job 二次排队被拒、未知 run_id 被拒）与 `tests/test_scheduler_facade_lazy_reader.py`（unittest，2 例：门面延迟构造）。另有 `tests/test_web_scheduler_routes.py`（pytest 函数式，4 例）覆盖旧路由的管理员门禁、`enabled` 布尔校验、成功与错误信封、queued DTO 与 404 契约，需单独用 pytest 跑。
 

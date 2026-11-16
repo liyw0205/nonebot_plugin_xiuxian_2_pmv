@@ -12,6 +12,7 @@ from ..xiuxian_utils.utils import (
     check_user, get_user_profile, get_player_attributes, get_msg_pic, handle_send, number_to,
     handle_pic_send, handle_pic_msg_send, update_last_check_info_time,
 )
+from ..xiuxian_utils.numeric_bind import as_int_like
 from ..xiuxian_utils.lay_out import assign_bot, Cooldown
 from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage, OtherSet, UserBuffDate
 from ...features.sect.sect_info_repository import SectInfoSqlRepository
@@ -35,6 +36,7 @@ xiuxian_message = on_command("我的修仙信息", aliases={"我的存档", "存
 xiuxian_message_img = on_command("我的修仙信息图片版", aliases={"我的存档图片版", "存档图片版", "修仙信息图片版"}, priority=23, block=True)
 
 _sql_message_instance = None
+_TITLE_ID_UNSET = object()
 
 
 def _sql_message():
@@ -43,9 +45,34 @@ def _sql_message():
         _sql_message_instance = XiuxianDateManage()
     return _sql_message_instance
 
-async def get_user_xiuxian_info(user_id):
-    """获取用户修仙信息的公共函数"""
-    user_info = get_user_profile(user_id)
+
+def _base_attributes_from_profile(user_info):
+    """Build the attribute input from the profile already checked by the handler."""
+    return {
+        "user_id": user_info["user_id"],
+        "nickname": user_info["user_name"],
+        "level": user_info["level"],
+        "exp": as_int_like(user_info.get("exp")),
+        "stone": as_int_like(user_info.get("stone")),
+        "base_hp": as_int_like(user_info.get("hp")),
+        "base_mp": as_int_like(user_info.get("mp")),
+        "base_atk": as_int_like(user_info.get("atk")),
+        "atkpractice": as_int_like(user_info.get("atkpractice")),
+        "hppractice": as_int_like(user_info.get("hppractice")),
+        "mppractice": as_int_like(user_info.get("mppractice")),
+    }
+
+async def get_user_xiuxian_info(
+    user_id, *, user_info=None, equipped_title_id=_TITLE_ID_UNSET
+):
+    """获取用户修仙信息的公共函数。
+
+    Command handlers already load and validate the effective profile in
+    ``check_user``. Reuse that snapshot when it belongs to the same user;
+    standalone callers keep the historical read-through behavior.
+    """
+    if user_info is None or str(user_info.get("user_id")) != str(user_id):
+        user_info = get_user_profile(user_id)
     user_name = user_info['user_name']
 
     user_num = user_info['id']
@@ -57,12 +84,19 @@ async def get_user_xiuxian_info(user_id):
     if not user_name:
         user_name = f"无名氏(发送修仙改名+道号更新)"
 
-    # 统一属性口径
-    final_attr = get_player_attributes(user_id)
+    user_buff_data = UserBuffDate(user_id)
+
+    # 统一属性口径；动态属性和信息展示共享本次命令的只读 Buff 快照。
+    final_attr = get_player_attributes(
+        user_id,
+        buff_data_provider=user_buff_data,
+        base_provider=lambda _user_id: _base_attributes_from_profile(user_info),
+    )
     final_atk = final_attr["final_atk"] if final_attr else user_info['atk']
 
     level_rate = _sql_message().get_root_rate(user_info['root_type'], user_id)
     realm_rate = jsondata.level_data()[user_info['level']]["spend"]
+    level_rate_data = jsondata.level_rate_data()
     sect_id = user_info['sect_id']
     if sect_id:
         sectmsg = SectInfoSqlRepository(get_paths().game_db).get_name_by_id(sect_id)
@@ -127,7 +161,6 @@ async def get_user_xiuxian_info(user_id):
         apprentice_info += f"等{len(apprentice_names)}人"
     relationship_info = f"道侣：{partner_info}；师父：{mentor_info}；徒弟：{apprentice_info}"
 
-    user_buff_data = UserBuffDate(user_id)
     user_main_buff_date = user_buff_data.get_user_main_buff_data()
     user_sub_buff_date = user_buff_data.get_user_sub_buff_data()
     user_sec_buff_date = user_buff_data.get_user_sec_buff_data()
@@ -159,7 +192,7 @@ async def get_user_xiuxian_info(user_id):
     if user_armor_data is not None:
         armor_name = f"{user_armor_data['name']}({user_armor_data['level']})"
 
-    main_rate_buff = UserBuffDate(user_id).get_user_main_buff_data()
+    main_rate_buff = user_main_buff_date
     update_last_check_info_time(user_id)
     leveluprate = int(user_info['level_up_rate'])
     number = main_rate_buff["number"] if main_rate_buff is not None else 0
@@ -171,7 +204,10 @@ async def get_user_xiuxian_info(user_id):
         natal_name_level = f"{natal_data.get('name', '未知法宝')} (Lv.{natal_data.get('level', 0)})"
 
     # ===== 获取称号信息 =====
-    title_name = get_equipped_title_display(user_id)
+    if equipped_title_id is _TITLE_ID_UNSET:
+        title_name = get_equipped_title_display(user_id)
+    else:
+        title_name = get_equipped_title_display(user_id, title_id=equipped_title_id)
 
     DETAIL_MAP = {
         "ID": f"{user_id}",
@@ -182,7 +218,7 @@ async def get_user_xiuxian_info(user_id):
         "灵石": f"{number_to(user_info['stone'])}",
         "战力": f"{number_to(int(user_info['exp'] * level_rate * realm_rate))}",
         "灵根": f"{user_info['root']}({user_info['root_type']}+{int(level_rate * 100)}%)",
-        "突破状态": f"{exp_meg}概率：{jsondata.level_rate_data()[user_info['level']] + leveluprate + number}%",
+        "突破状态": f"{exp_meg}概率：{level_rate_data[user_info['level']] + leveluprate + number}%",
         "修炼等级": f"攻修{user_info['atkpractice']}级，元血{user_info['hppractice']}级，灵海{user_info['mppractice']}级",
         "攻击力": f"{number_to(final_atk)}",
         "所在宗门": sectmsg,
@@ -213,7 +249,7 @@ async def get_user_xiuxian_info(user_id):
 灵石: {number_to(user_info['stone'])}
 战力: {number_to(int(user_info['exp'] * level_rate * realm_rate))}
 灵根: {user_info['root']}({user_info['root_type']}+{int(level_rate * 100)}%)
-突破状态: {exp_meg}概率：{jsondata.level_rate_data()[user_info['level']] + leveluprate + number}%
+突破状态: {exp_meg}概率：{level_rate_data[user_info['level']] + leveluprate + number}%
 攻击力: {number_to(final_atk)}
 攻修等级: {user_info['atkpractice']}级
 元血等级: {user_info['hppractice']}级
@@ -247,7 +283,10 @@ async def xiuxian_message_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
         await handle_send(bot, event, msg, md_type="我要修仙")
         await xiuxian_message.finish()
 
-    detail_map, text_msg = await get_user_xiuxian_info(user_info["user_id"])
+    title_id = get_user_equipped_title(user_info["user_id"])
+    detail_map, text_msg = await get_user_xiuxian_info(
+        user_info["user_id"], user_info=user_info, equipped_title_id=title_id
+    )
 
     if XiuConfig().user_info_image:
         await xiuxian_message_img_(bot, event)
@@ -348,7 +387,6 @@ async def xiuxian_message_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
         return "\r".join(md_lines)
 
     # 获取称号信息
-    title_id = get_user_equipped_title(user_info["user_id"])
     title_url = ""
     title_name = ""
 
@@ -410,8 +448,11 @@ async def xiuxian_message_img_(bot: Bot, event: GroupMessageEvent | PrivateMessa
     if not isUser:
         await handle_send(bot, event, msg, md_type="我要修仙")
         await xiuxian_message_img.finish()
-    
-    detail_map, _ = await get_user_xiuxian_info(user_info['user_id'])
+
+    title_id = get_user_equipped_title(user_info["user_id"])
+    detail_map, _ = await get_user_xiuxian_info(
+        user_info['user_id'], user_info=user_info, equipped_title_id=title_id
+    )
     equipped_title_name = detail_map.get("称号", "")
     if equipped_title_name == "无":
         equipped_title_name = ""

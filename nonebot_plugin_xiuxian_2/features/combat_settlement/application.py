@@ -5,7 +5,7 @@ from ...core.player_reasons import reason_text
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
-from ...core.errors import ConflictError, DomainError, ValidationError
+from ...core.errors import ConflictError, DomainError, OperationConflictError, ValidationError
 from ...core.result import OperationOutcome, ReplyPlan
 from ...infrastructure.database import DatabaseUnitOfWork, OperationLedger
 from ...infrastructure.observability import trace_context
@@ -126,7 +126,25 @@ class CombatSettlementApplication:
         with trace_context(operation_id=str(operation_id), user_scope=str(challenger_id)):
             try:
                 with DatabaseUnitOfWork(self.player_database, immediate=True) as uow:
-                    existing = self.ledger.begin(uow, str(operation_id), "combat.dao_battle", payload)
+                    try:
+                        existing = self.ledger.begin(uow, str(operation_id), "combat.dao_battle", payload)
+                    except OperationConflictError:
+                        # The original receipt belongs to the first payload and
+                        # must remain immutable; report the conflicting retry
+                        # without overwriting it or creating a second audit row.
+                        data = {
+                            "status": "state_changed",
+                            "reason": "operation_conflict",
+                            "subject": "actor",
+                        }
+                        return OperationOutcome.rejected(
+                            str(operation_id),
+                            "combat.dao_battle",
+                            reason_text("operation_conflict") or "该操作号已用于不同内容的请求，请发送一条新命令。",
+                            code="operation_conflict",
+                            data=data,
+                            audit_category="combat_settlement",
+                        )
                     if existing is not None:
                         previous = existing.outcome()
                         if previous is not None:

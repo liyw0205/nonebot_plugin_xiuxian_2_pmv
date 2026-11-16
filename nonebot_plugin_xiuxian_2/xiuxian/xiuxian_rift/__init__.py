@@ -1176,7 +1176,11 @@ async def _use_rift_speedup(
             operation_id=operation_id, user_id=str(user_id),
             item_id=item_id, remaining_ratio=remaining_ratio,
         )
-        result = SimpleNamespace(**dict(outcome.data or {}), status=outcome.status, succeeded=outcome.ok)
+        result_data = dict(outcome.data or {})
+        # The application status is authoritative even when legacy payload data
+        # contains a stale status field from the repository result.
+        result_data.update(status=outcome.status, succeeded=outcome.ok)
+        result = SimpleNamespace(**result_data)
     except Exception as exc:
         logger.opt(exception=exc).error("秘境加速事务执行失败")
         await handle_send(bot, event, "秘境加速失败：请求未生效。")

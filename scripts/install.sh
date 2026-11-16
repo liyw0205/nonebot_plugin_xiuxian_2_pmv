@@ -30,8 +30,9 @@ CURRENT_PROJECT_VERSION="unknown" # 用于备份文件名的版本号
 XIUXIAN_CONFIG_PATH_REL="src/plugins/nonebot_plugin_xiuxian_2/xiuxian/xiuxian_config.py"
 XIUXIAN_CONFIG_PATH_ABS="" # 运行时会根据 $DIR 赋值
 
-# Python 虚拟环境路径
-VENV_PATH="/root/myenv" # 默认虚拟环境路径
+# Linux 安装/运行默认保持历史环境；命令行 --venv 优先于显式环境变量。
+DEFAULT_VENV_PATH="/root/myenv"
+VENV_PATH="${XIUXIAN_VENV_PATH:-${VENV_PATH:-$DEFAULT_VENV_PATH}}"
 
 # 需要直接通过 pip 拉取当前索引最新版本的核心依赖。
 # 不通过 nb-cli 安装适配器，避免 nb-cli 的适配器版本映射落后于 PyPI。
@@ -167,8 +168,12 @@ upgrade_python_dependencies() {
     local python_cmd="$VENV_PATH/bin/python"
 
     if [[ ! -x "$python_cmd" ]]; then
-        ui_print "red" "未检测到虚拟环境 Python：$python_cmd"
-        ui_print "yellow" "请先完成安装，或确认 VENV_PATH 指向正确虚拟环境。"
+        ui_print "red" "未找到可执行的虚拟环境 Python：$python_cmd"
+        if [[ -e "$VENV_PATH" ]]; then
+            ui_print "yellow" "路径存在但不是可用虚拟环境；请修复它，或使用 XIUXIAN_VENV_PATH=PATH / --venv PATH 指定其它环境。不会删除现有环境。"
+        else
+            ui_print "yellow" "路径不存在；请先执行 python3 -m venv $VENV_PATH，或使用 XIUXIAN_VENV_PATH=PATH / --venv PATH 指定已有环境。不会删除旧环境。"
+        fi
         return 1
     fi
     show_status "检测虚拟环境 $VENV_PATH" "success"
@@ -208,6 +213,30 @@ upgrade_python_dependencies() {
 
     print_installed_dependency_versions "$python_cmd"
     return 0
+}
+
+ensure_install_venv() {
+    local python_cmd="$VENV_PATH/bin/python"
+    if [[ -x "$python_cmd" ]]; then
+        show_status "复用 Python 虚拟环境 $VENV_PATH" "success"
+        return 0
+    fi
+    if [[ -e "$VENV_PATH" ]]; then
+        ui_print "red" "虚拟环境路径存在但不可用：$VENV_PATH"
+        ui_print "yellow" "请修复 $python_cmd，或使用 XIUXIAN_VENV_PATH=PATH / --venv PATH；不会删除现有环境。"
+        return 1
+    fi
+    show_progress "创建 Python 虚拟环境 $VENV_PATH"
+    python3 -m venv "$VENV_PATH" > /dev/null 2>&1 || {
+        ui_print "red" "无法创建 Python 虚拟环境：$VENV_PATH"
+        ui_print "yellow" "请安装 python3-venv，或先准备可用环境后用 XIUXIAN_VENV_PATH=PATH / --venv PATH 重试。"
+        return 1
+    }
+    [[ -x "$python_cmd" ]] || {
+        ui_print "red" "创建后仍未找到可执行的虚拟环境 Python：$python_cmd"
+        return 1
+    }
+    show_status "创建 Python 虚拟环境" "success"
 }
 
 # 检查 bc，如果不存在则退回 awk
@@ -773,7 +802,7 @@ usage() {
   --mirror auto|direct|accelerated|custom
   --mirror-url URL              custom 镜像前缀
   --target PATH                 安装目录
-  --venv PATH                   Python 虚拟环境目录（默认 /root/myenv）
+  --venv PATH                   Python 虚拟环境目录（默认 /root/myenv；也可由 XIUXIAN_VENV_PATH 指定）
   --yes                         确认卸载
   --help                        显示帮助
 EOF
@@ -1156,9 +1185,7 @@ show_status "验证部署代码" "success"
 
 # --- 虚拟环境和 Bot 配置 (仅限 install 模式) ---
 if [[ "$ACTION" == "install" ]]; then
-    show_progress "创建 Python 虚拟环境"
-    python3 -m venv "$VENV_PATH" > /dev/null 2>&1
-    [ $? -eq 0 ] && show_status "创建 Python 虚拟环境" "success" || { show_status "创建 Python 虚拟环境" "failure"; exit 127; }
+    ensure_install_venv || exit 127
 
     # 创建启动脚本
     cat <<EOF > "/bin/${PROJECT_NAME}_start"
@@ -1203,7 +1230,13 @@ CRON_EOF
 chmod 644 "/etc/cron.d/${PROJECT_NAME}_logrotate"
 fi
 
-source "$VENV_PATH/bin/activate"
+VENV_RUNTIME_PATH="\${XIUXIAN_VENV_PATH:-$VENV_PATH}"
+if [ ! -x "\$VENV_RUNTIME_PATH/bin/python" ]; then
+    echo "错误：未找到可执行的虚拟环境 Python: \$VENV_RUNTIME_PATH/bin/python" >&2
+    echo "请先创建该环境，或设置 XIUXIAN_VENV_PATH=PATH / --venv PATH；不会删除现有环境。" >&2
+    exit 1
+fi
+source "\$VENV_RUNTIME_PATH/bin/activate"
 cd "$DIR" || exit 1
 exec nb run
 EOF
@@ -1253,7 +1286,7 @@ EOF
     # 创建管理脚本
     cat <<EOF > "/bin/$PROJECT_NAME"
 PROJECT_DIR="$DIR"
-VENV_DIR="$VENV_PATH"
+VENV_DIR="\${XIUXIAN_VENV_PATH:-$VENV_PATH}"
 SOURCE_MODE="release"
 SOURCE_DIR=""
 MIRROR_MODE="auto"
@@ -1336,6 +1369,11 @@ fi
 
 case "\$ACTION" in
     start)
+        if [ ! -x "\$VENV_DIR/bin/python" ]; then
+            echo "错误：未找到可执行的虚拟环境 Python: \$VENV_DIR/bin/python" >&2
+            echo "请先创建该环境，或设置 XIUXIAN_VENV_PATH=PATH / --venv PATH；不会删除现有环境。" >&2
+            exit 1
+        fi
         if [ ! -d "\$PROJECT_DIR/logs" ]; then
             mkdir -p "\$PROJECT_DIR/logs"
         fi
@@ -1368,7 +1406,7 @@ CRON_EOF
             echo "$PROJECT_NAME 已在后台运行"
         else
             echo "正在后台启动 $PROJECT_NAME..."
-            screen -U -dmS "$PROJECT_NAME" -L -Logfile "\$LOG_FILE" bash -c '${PROJECT_NAME}_start'
+            XIUXIAN_VENV_PATH="\$VENV_DIR" screen -U -dmS "$PROJECT_NAME" -L -Logfile "\$LOG_FILE" bash -c '${PROJECT_NAME}_start'
             echo "已后台启动，使用 '$PROJECT_NAME status' 查看日志或管理"
         fi
         ;;
@@ -1411,7 +1449,8 @@ CRON_EOF
     update-deps|deps|upgrade-deps)
         PYTHON_BIN="\$VENV_DIR/bin/python"
         if [ ! -x "\$PYTHON_BIN" ]; then
-            echo "错误：未找到虚拟环境 Python: \$PYTHON_BIN"
+            echo "错误：未找到可执行的虚拟环境 Python: \$PYTHON_BIN" >&2
+            echo "请先创建该环境，或设置 XIUXIAN_VENV_PATH=PATH / --venv PATH；不会删除现有环境。" >&2
             exit 1
         fi
         "\$PYTHON_BIN" -m pip config set global.index-url https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple >/dev/null 2>&1 || true
@@ -1486,7 +1525,7 @@ EOF
     setup_logrotate_and_cron || exit 127
 
 else # ACTION == "update" 模式下
-    upgrade_python_dependencies || show_status "更新 Python 依赖" "failure"
+    upgrade_python_dependencies || { show_status "更新 Python 依赖" "failure"; exit 127; }
 
     if [[ ! -f "$DIR/.env.dev" ]]; then
         ui_print "yellow" "未找到 $DIR/.env.dev，将创建默认配置。"

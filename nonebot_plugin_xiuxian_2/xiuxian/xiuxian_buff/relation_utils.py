@@ -1,5 +1,5 @@
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 
 from ...core.numeric import as_int_like
 from ..xiuxian_config import convert_rank
@@ -73,7 +73,9 @@ def _parse_datetime(value):
     if _is_none_like(value):
         return None
     try:
-        return datetime.strptime(str(value), "%Y-%m-%d %H:%M:%S")
+        # Legacy relation fields are stored as naive UTC wall-clock text;
+        # normalize them to the same aware UTC frame as SystemClock.
+        return datetime.strptime(str(value), "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
     except (ValueError, TypeError):
         return None
 
