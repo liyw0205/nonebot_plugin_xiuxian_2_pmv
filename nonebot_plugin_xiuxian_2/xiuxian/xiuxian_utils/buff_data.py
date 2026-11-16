@@ -52,11 +52,16 @@ class UserBuffDate:
     def __init__(self, user_id):
         """用户Buff数据"""
         self.user_id = user_id
+        self._buff_info_loaded = False
+        self._buff_info = None
 
     @property
     def BuffInfo(self):
         """获取最新的 Buff 信息"""
-        return _handle_module().get_user_buff(self.user_id)
+        if not self._buff_info_loaded:
+            self._buff_info = _handle_module().get_user_buff(self.user_id)
+            self._buff_info_loaded = True
+        return self._buff_info
 
     def get_user_main_buff_data(self):
         """获取用户主功法数据"""

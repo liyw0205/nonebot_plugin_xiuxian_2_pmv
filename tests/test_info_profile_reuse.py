@@ -86,5 +86,49 @@ class InfoProfileReuseTests(unittest.IsolatedAsyncioTestCase):
         get_profile.assert_called_once_with("u-1")
 
 
+class BuffProjectionReuseTests(unittest.TestCase):
+    def test_buff_info_is_loaded_once_per_projection_instance(self):
+        from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_utils import buff_data
+
+        handle = Mock()
+        handle.get_user_buff.return_value = {
+            "main_buff": 7,
+            "sub_buff": 0,
+            "sec_buff": 0,
+            "effect1_buff": 0,
+            "effect2_buff": 0,
+            "faqi_buff": 0,
+            "armor_buff": 0,
+        }
+        item = Mock()
+        item.get_data_by_item_id.return_value = {"name": "主功法", "level": 1}
+        with patch.object(buff_data, "_handle_module", return_value=handle), patch.object(
+            handle, "items", item, create=True
+        ):
+            projection = buff_data.UserBuffDate("u-1")
+            self.assertEqual("主功法", projection.get_user_main_buff_data()["name"])
+            self.assertIsNone(projection.get_user_sub_buff_data())
+            self.assertEqual("主功法", projection.get_user_main_buff_data()["name"])
+
+        handle.get_user_buff.assert_called_once_with("u-1")
+
+    def test_new_projection_instance_reads_latest_buff_snapshot(self):
+        from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_utils import buff_data
+
+        handle = Mock()
+        handle.get_user_buff.side_effect = [
+            {"main_buff": 1},
+            {"main_buff": 2},
+        ]
+        with patch.object(buff_data, "_handle_module", return_value=handle):
+            first = buff_data.UserBuffDate("u-1")
+            second = buff_data.UserBuffDate("u-1")
+            self.assertEqual({"main_buff": 1}, first.BuffInfo)
+            self.assertEqual({"main_buff": 1}, first.BuffInfo)
+            self.assertEqual({"main_buff": 2}, second.BuffInfo)
+
+        self.assertEqual(2, handle.get_user_buff.call_count)
+
+
 if __name__ == "__main__":
     unittest.main()

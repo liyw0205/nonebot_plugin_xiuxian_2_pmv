@@ -165,7 +165,7 @@ async def get_user_xiuxian_info(user_id, *, user_info=None):
     if user_armor_data is not None:
         armor_name = f"{user_armor_data['name']}({user_armor_data['level']})"
 
-    main_rate_buff = UserBuffDate(user_id).get_user_main_buff_data()
+    main_rate_buff = user_buff_data.get_user_main_buff_data()
     update_last_check_info_time(user_id)
     leveluprate = int(user_info['level_up_rate'])
     number = main_rate_buff["number"] if main_rate_buff is not None else 0
