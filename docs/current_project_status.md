@@ -2,10 +2,46 @@
 
 最后核验：2026-11-17。本文是唯一活跃进度入口；旧重构文档仅作为历史记录，不再定义当前分支或禁止事项。
 
+## 鬼市同类定时任务与真实参数链（develop checkpoint）
+
+本轮起点 `develop/origin/develop=042eb03b`，继续本地 `.codex-goal.md` 的完整目标，
+优先收口定时任务伪正常；未扩展性能优化。魔修修复继续保留在 develop，未合 main。
+重新按当前 live matcher 与参数场景建立矩阵（见 `docs/features/trade.md`），当前
+市场参数基线 23 项通过；鬼市原有 repository 证据不冒充真实命令参数覆盖。
+
+同类审计确认鬼市摆摊与周末取物也直接读取 UTC 小时/星期，和 Asia/Shanghai
+调度器不一致；现投影到 scheduler 时区，真实 handler 覆盖本地 `[20:00,次日08:00)`
+和周末跨日边界。自动撮合、求购到期取消、摆摊清理将 operation 冲突/无效类型等
+失败结果向调度器抛错，保留具体 status 与订单定位；正常幂等、订单竞争和背包满保留。
+求购/摆摊多余参数现在明确格式拒绝，不再忽略后结算。
+
+真实注册命令组新增四条可重放场景：存款/冻结/撮合/暂存取回，求购取消退款，非法
+参数零写，未售摊位自动退回与重复任务幂等。核对隔离 SQLite 的双边余额、库存、
+订单、取物/取消/清理回执及两库 integrity_check。定时/命令/OneBot/QQ 组合
+**51 passed**；源码合同另 **6 passed**；此前交易受影响组 **67 passed** 与其有
+重叠，均不累计。新增 cron 注册断言与 integrity_check 后仅复验受影响两项。
+独立内存 APScheduler 验证成功/失败分别产生执行/错误事件；QQ 只验证共享回复的
+Markdown 蓝字及降级合同，没有真实消息。CI 原先 unittest discover 不执行 pytest
+函数，现增加限定定时任务步骤，四条参数链通过 unittest 包装进入既有 CI。
+
+最终复核又补齐魔修连续链：真实内存 APScheduler 触发开启 → 隔离 SQLite 持久化 →
+19:00 真实讨伐 handler/application 结算 → 同消息回放 → 22:00 调度关闭并拒绝新讨伐。
+核对 BOSS 扣血、参与次数/伤害统计、永久回执与 integrity_check；战斗计算和消息发送
+使用 mock，状态读取/生命周期/讨伐结算使用真实 repository。缺生命周期迁移时实际
+产生 EVENT_JOB_ERROR，保留 schema_missing，且没有开启成功日志或活动状态写入。
+魔修 live cron 也核对本地 18:00/22:00 和波次末次边界；最新魔修组 **18 passed**，
+与上述组合重叠不累计。复用未变化的交易/消息和 architecture 绿基线。
+
+G2 保持进行中：鬼市历史到期锚点与取灵石仍有 UTC 口径、创建请求 payload 冲突与
+并发/部分成交取消参数链、鬼市信息/收摊/其他玩家组均待后续完整切片；本轮不宣称
+所有交易或时区已收口。保留冻结 JSON 用户删除与 Phase 2 gate blocker，
+`.codex-goal.md` 仅本地。本地受影响门禁已通过，仅白名单普通提交/推送 develop；不合 main、
+不发布、不访问 `/root/xiu2` 数据库、不重启线上、不发送真实 QQ。
+
 ## 定时任务伪正常与魔修入侵时区修复（develop checkpoint）
 
 2026-11-17 优先处理定时任务“日志失败但调度器收到成功”的问题，不扩展性能优化。
-现状基线为 `develop`/`origin/develop=0d3d8146`；工作区保留用户删除的
+该轮代码基线为 `fbbb8b63`，文档 checkpoint 为 `042eb03b`；工作区保留用户删除的
 `docs/refactor_phase2_legacy_path_items.json`，不恢复、不提交。根因是 APScheduler 使用
 `Asia/Shanghai` 而 `SystemClock` 提供 UTC：魔修开启、结束、业务日期、波次槽位和
 `讨伐魔修` 状态判断原先直接读取 UTC 小时，导致本地有效窗口被判为未开启。
@@ -27,7 +63,8 @@ NewAPI 自动签到、体力恢复和宗门不活跃维护；失败保留 traceb
 operation ID、道具扣减、回执和回复文本。未运行全量测试、真实 QQ/OneBot WebSocket、
 生产库或线上服务，未部署、未重启、未发送真实消息。
 
-白名单普通提交 `c29bb71d`、`fbbb8b63` 已推送 `develop`；未合入 `main`、未创建 Release。Phase 2
+白名单普通提交 `c29bb71d`、`fbbb8b63` 及文档 checkpoint `0d3d8146`、`042eb03b`
+已推送 `develop`；未合入 `main`、未创建 Release。Phase 2
 冻结清单缺失仍是独立 blocker，不能以本轮定时任务或 G1 focused 通过替代。
 
 本 checkpoint 仅允许在受影响门禁完成后普通提交并推送 `develop`；`.codex-goal.md`、

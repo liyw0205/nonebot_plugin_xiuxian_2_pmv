@@ -172,6 +172,15 @@ feature-owned session/settlement repositories。
 ## 定时任务
 场次调度继续由兼容 scheduler 管理。
 
+鬼市摆摊窗口和周末取物判断将 UTC `SystemClock` 投影到 APScheduler 的业务时区
+（默认 `Asia/Shanghai`）；摆摊窗口为本地 `[20:00, 次日08:00)`，本地 08:00
+即关闭。存储时间和历史 operation 锚点不因此重写。
+
+自动撮合遇到 `operation_conflict`、无效订单类型或其他非预期结果时保留具体 status
+与订单定位并向调度器抛错，不再跳过后记录“交易处理完成”。订单已消失、已完成或
+不再可撮合属于正常竞争跳过；到期取消/清理也只容忍订单已消失，冲突会抛错。
+背包已满仍警告并保留摊位。任务不发真实 QQ 消息。
+
 `clear_expired_baitan_orders_job`（每日 `GUISHI_BAITAN_END_HOUR` 点，job id 未改）
 现在按同一顺序做两件事：先全服求购到期取消退款，再清理超时摆摊并退还未售出
 物品。两段都是静默的（任务没有 bot/event 上下文，不发群消息），退款与清理结果
@@ -197,12 +206,31 @@ Web/命令不直接连接 trade_db。
   渲染显示 `到期：未知（历史订单）`。这是有意的 fail-safe：宁可不清理，也不猜
   时间误删玩家订单。
 - 到期小时沿用既有 `GUISHI_BAITAN_END_HOUR` 与模块内 UTC `runtime_clock` 口径
-  （与既有摆摊窗口/任务一致），本次不改摆摊窗口的时区语义。
+  与 UTC 创建锚点。它与已修复的摆摊/周末取物业务时区仍有差异；历史到期语义须在
+  后续隔离数据切片中验证，当前不能宣称整个鬼市的时区已统一。
 - `price_refund` 只补「买家按求购价冻结、按摆摊价成交」的差价，不改变价格闸门
   （摆摊价高于求购价仍然不成交）、部分成交语义或手续费。
 - legacy `TradeRepository.match_guishi_orders` 保留原语义供兼容测试使用，默认
   路径已停用（进度门禁 `legacy_guishi_matching_disabled`），新语义只由 feature
   路径承担。
+
+## 参数与任务回归矩阵（2026-11-17）
+
+| 入口/路径 | 当前证据 | 仍待覆盖 |
+| --- | --- | --- |
+| 灵庄、仙肆上架/购买/下架/查看/我的仙肆/行情/关注 | 当前 live matcher 参数组 23 项通过 | 非本组别名、快速链和更多边界沿用既有独立用例 |
+| 鬼市存款 → 求购 → 摆摊即时撮合 → 周末取物 | 真实 dispatch/DI/handler、隔离 game/trade DB，核对冻结/收入/暂存/库存/取物重放 | 创建消息重放与不同 payload 冲突、并发命令和全量数量边界 |
+| 鬼市取消求购 | 真实订单取消退款、回执和同消息重复取消零额外退款 | 非本人订单、部分成交后取消的真实 handler 参数链 |
+| 鬼市求购/摆摊非法参数 | 足额账户与真实物品下验证缺参、最低价、非法数字和多余参数拒绝，资产/订单/回执零写 | 默认数量、历史数量截断规则与更多价格边界 |
+| 未售鬼市摆摊自动退回 | 真实摆摊命令 → 清理回调 → 库存/清理回执重读，重复任务幂等，两库 integrity_check | 历史订单到期时区/过期锚点迁移 |
+| 鬼市任务注册/触发/失败状态 | live APScheduler 注册、08:00 cron 边界、独立 APScheduler 实际执行/错误事件，正常竞争跳过 | 线上运行观察、真实客户端展示 |
+| 鬼市信息/收摊/取灵石、拍卖玩家链 | 既有 repository/application 测试 | 本轮未新增真实命令链，不标为已覆盖 |
+
+四条鬼市参数场景由 `tests/test_guishi_parameter_dispatch.py` 接入 unittest CI。
+`tests/test_guishi_schedule.py` 覆盖本地窗口/周末边界、已知失败、实际调度和真实
+`handle_send` 的 OneBot 文本、QQ Markdown 蓝字与发送失败降级短合同；共享业务链
+只执行一次。CI 另执行魔修、鬼市和同类任务的定向 pytest 组。
+这些均为隔离库与 mock transport 证据，未验证真实 QQ/WebSocket 或线上数据。
 
 ## Manifest 清单
 - `route: POST /api/v1/trade/deposit`

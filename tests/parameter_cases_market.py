@@ -1,10 +1,22 @@
 """Bank subcommands and actual multi-argument market consumers."""
+from datetime import datetime, timezone
+import json
+from unittest.mock import patch
+
 from tests.parameter_cases_assets import balances, backpack
 
 
 def trade_module():
     from nonebot_plugin_xiuxian_2.xiuxian import xiuxian_trade
     return xiuxian_trade
+
+
+class FixedClock:
+    def __init__(self, moment):
+        self.moment = moment
+
+    def now(self):
+        return self.moment
 
 
 def herb(probe, uid="900001"):
@@ -189,3 +201,199 @@ def register(case):
             case("market-" + command + "-reject-" + label, command, "实际对象 " + label,
                  "实际挂单、真实库存和充分资源，不能以无对象遮挡错误参数", "明确参数/数量拒绝，资产/库存/挂单不变",
                  group="market-parameters", outcome="rejection")(build(command, value))
+
+    @case(
+        "guishi-order-match-take-real",
+        "鬼市求购",
+        "物品名 价格 数量 -> 摆摊撮合 -> 周末取回",
+        "买卖双方有真实钱包/背包，鬼市账户由命令创建，固定到本地周六21:00",
+        "求购冻结灵石、摆摊即时撮合、物品暂存、取回和重复消息均落隔离SQLite",
+        group="market-guishi-parameters",
+    )
+    async def guishi_match_take(probe):
+        module = trade_module()
+        item_id, name = herb(probe, "900002")
+        probe.player(stone=100_000_000)
+        probe.player("900002", stone=100_000_000)
+        price = module.MIN_PRICE * 10
+        database = probe.context.paths.trade_db
+        with patch.object(
+            module,
+            "runtime_clock",
+            FixedClock(datetime(2026, 11, 21, 13, 0, tzinfo=timezone.utc)),
+        ):
+            text = await probe.command("鬼市存灵石", "鬼市存灵石 20000000", number=960001)
+            assert "成功存入" in text, text
+            text = await probe.command(
+                "鬼市求购", f"鬼市求购 {name} {price} 2", number=960002
+            )
+            assert "成功发布求购订单" in text, text
+            order = probe.rows(
+                database,
+                "SELECT id,quantity,filled_quantity FROM guishi_item "
+                "WHERE user_id='900001' AND item_type='qiugou'",
+            )
+            assert len(order) == 1 and order[0][1:] == (2, 0), (text, order)
+            text = await probe.command(
+                "鬼市摆摊", f"鬼市摆摊 {name} {price} 2", actor="900002", number=960003
+            )
+            assert "成功摆摊" in text and "求购成交" in text, text
+            buyer_account = probe.rows(
+                database, "SELECT stored_stone,items FROM guishi_info WHERE user_id='900001'"
+            )[0]
+            seller_account = probe.rows(
+                database, "SELECT stored_stone,items FROM guishi_info WHERE user_id='900002'"
+            )[0]
+            assert buyer_account[0] == 8_000_000
+            assert json.loads(buyer_account[1]) == {str(item_id): 2}
+            assert seller_account[0] == 12_000_000
+            assert probe.rows(database, "SELECT COUNT(*) FROM guishi_item")[0][0] == 0
+            assert probe.managers[0].goods_num("900002", item_id) == 8
+            text = await probe.command("鬼市取物品", f"鬼市取物品 {name}", number=960004)
+            assert "成功取出" in text, text
+            assert probe.managers[0].goods_num("900001", item_id) == 2
+            account = probe.rows(
+                database, "SELECT stored_stone,items FROM guishi_info WHERE user_id='900001'"
+            )[0]
+            assert account[0] == 8_000_000 and json.loads(account[1]) == {}
+            await probe.command("鬼市取物品", f"鬼市取物品 {name}", number=960004)
+            assert probe.managers[0].goods_num("900001", item_id) == 2
+            assert probe.rows(
+                probe.context.paths.game_db,
+                "SELECT COUNT(*) FROM guishi_take_item_operations",
+            )[0][0] == 1
+        probe.evidence.update(
+            item_id=item_id,
+            price=price,
+            buyer_stone=8_000_000,
+            seller_stone=12_000_000,
+            matched_quantity=2,
+            take_replayed=True,
+        )
+
+    @case(
+        "guishi-order-cancel-refund-real",
+        "鬼市取消求购",
+        "订单ID -> 重复取消",
+        "隔离鬼市账户有足够冻结灵石且订单未撮合",
+        "取消只退未成交金额，删除订单并写操作回执，重复请求不重复退款",
+        group="market-guishi-parameters",
+    )
+    async def guishi_cancel_refund(probe):
+        module = trade_module()
+        item_id, name = herb(probe)
+        probe.player(stone=100_000_000)
+        price = module.MIN_PRICE * 10
+        database = probe.context.paths.trade_db
+        text = await probe.command("鬼市存灵石", "鬼市存灵石 20000000", number=961001)
+        assert "成功存入" in text, text
+        await probe.command("鬼市求购", f"鬼市求购 {name} {price} 2", number=961002)
+        order_id = probe.rows(
+            database,
+            "SELECT id FROM guishi_item WHERE user_id='900001' AND item_type='qiugou'",
+        )[0][0]
+        frozen = probe.rows(
+            database, "SELECT stored_stone FROM guishi_info WHERE user_id='900001'"
+        )[0][0]
+        text = await probe.command(
+            "鬼市取消求购", f"鬼市取消求购 {order_id}", number=961003
+        )
+        assert "成功取消求购" in text and "1200万" in text, text
+        assert probe.rows(database, "SELECT COUNT(*) FROM guishi_item")[0][0] == 0
+        assert probe.rows(
+            database, "SELECT stored_stone FROM guishi_info WHERE user_id='900001'"
+        )[0][0] == frozen + price * 2
+        await probe.command("鬼市取消求购", f"鬼市取消求购 {order_id}", number=961003)
+        assert probe.rows(
+            database, "SELECT stored_stone FROM guishi_info WHERE user_id='900001'"
+        )[0][0] == frozen + price * 2
+        assert probe.rows(database, "SELECT COUNT(*) FROM guishi_order_cancel_operations")[0][0] == 1
+        probe.evidence.update(order_id=order_id, refunded=price * 2, replay_unchanged=True)
+
+    @case(
+        "guishi-parameter-boundaries",
+        "鬼市求购",
+        "空白/最低价/非法数字/多余参数",
+        "真实物品、背包和足额鬼市账户，所有非法参数必须在订单写入前拒绝",
+        "格式、价格和参数数量拒绝，钱包、背包、订单和操作回执零写",
+        group="market-guishi-parameters",
+        outcome="rejection",
+    )
+    async def guishi_parameter_boundaries(probe):
+        module = trade_module()
+        _, name = herb(probe)
+        price = module.MIN_PRICE * 10
+        probe.player(stone=100_000_000)
+        await probe.command("鬼市存灵石", "鬼市存灵石 20000000", number=962200)
+        before = balances(probe), backpack(probe)
+        database = probe.context.paths.trade_db
+        accounts = probe.rows(database, "SELECT * FROM guishi_info ORDER BY user_id")
+        inputs = (
+            ("鬼市求购", "指令格式"),
+            (f"鬼市求购 {name} {price - 1}", "价格过低"),
+            (f"鬼市求购 {name} abc", "有效的价格"),
+            (f"鬼市求购 {name} {price} 1 extra", "指令格式"),
+        )
+        for index, (text, marker) in enumerate(inputs, 962000):
+            reply = await probe.command("鬼市求购", text, number=index)
+            assert marker in reply, (text, reply)
+        with patch.object(
+            module,
+            "runtime_clock",
+            FixedClock(datetime(2026, 11, 21, 13, 0, tzinfo=timezone.utc)),
+        ):
+            reply = await probe.command(
+                "鬼市摆摊",
+                f"鬼市摆摊 {name} {price} 1 extra",
+                actor="900001",
+                number=962100,
+            )
+            assert "指令格式" in reply, reply
+        assert before == (balances(probe), backpack(probe))
+        assert accounts == probe.rows(database, "SELECT * FROM guishi_info ORDER BY user_id")
+        assert probe.rows(database, "SELECT COUNT(*) FROM guishi_item")[0][0] == 0
+        assert probe.rows(database, "SELECT COUNT(*) FROM guishi_order_create_operations")[0][0] == 0
+        probe.evidence.update(inputs=len(inputs), assets_unchanged=True, no_order_operations=True)
+
+    @case(
+        "guishi-stall-scheduled-return-real",
+        "鬼市摆摊",
+        "本地21:00摆摊 -> 次日08:00自动退回",
+        "真实药材库存、无求购，应用与任务都指向隔离迁移库",
+        "任务回调删除未售摊位、原子退回库存并写清理回执，重复执行零额外写入",
+        group="market-guishi-parameters",
+    )
+    async def guishi_stall_scheduled_return(probe):
+        from nonebot_plugin_xiuxian_2.infrastructure.database import DatabaseUnitOfWork
+
+        module = trade_module()
+        item_id, name = herb(probe, "900002")
+        price = module.MIN_PRICE * 10
+        clock = FixedClock(datetime(2026, 11, 21, 13, tzinfo=timezone.utc))
+        with patch.object(module, "runtime_clock", clock):
+            text = await probe.command(
+                "鬼市摆摊", f"鬼市摆摊  {name}  {price}  3  ", actor="900002", number=963001
+            )
+            assert "成功摆摊" in text, text
+            assert probe.managers[0].goods_num("900002", item_id) == 7
+            rows = module.trade_application.guishi_get_orders(user_id="900002", order_type="baitan")
+            assert len(rows) == 1 and rows[0]["quantity"] == 3, rows
+            clock.moment = datetime(2026, 11, 22, 0, tzinfo=timezone.utc)
+            await module.clear_expired_baitan_orders_job()
+            assert not module.trade_application.guishi_get_orders(user_id="900002", order_type="baitan")
+            assert probe.managers[0].goods_num("900002", item_id) == 10
+            receipts = probe.rows(
+                probe.context.paths.trade_db,
+                "SELECT order_id,refunded_quantity FROM guishi_expired_order_operations",
+            )
+            assert receipts == [(rows[0]["id"], 3)], receipts
+            await module.clear_expired_baitan_orders_job()
+            assert probe.managers[0].goods_num("900002", item_id) == 10
+            assert receipts == probe.rows(
+                probe.context.paths.trade_db,
+                "SELECT order_id,refunded_quantity FROM guishi_expired_order_operations",
+            )
+            for database in (probe.context.paths.game_db, probe.context.paths.trade_db):
+                with DatabaseUnitOfWork(database, read_only=True) as uow:
+                    assert uow.query_all("PRAGMA integrity_check") == [{"integrity_check": "ok"}]
+        probe.evidence.update(order_id=rows[0]["id"], returned=3, scheduler_replayed=True)

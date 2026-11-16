@@ -2,7 +2,8 @@ import asyncio
 import re
 import time
 from types import SimpleNamespace
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 from nonebot import require
 from .. import DRIVER
 from ..on_compat import on_command
@@ -130,6 +131,28 @@ _auction_pending_application_instance = None
 _auction_query_application_instance = None
 scheduler = require("nonebot_plugin_apscheduler").scheduler # 全局调度器，用于鬼市
 auction_scheduler = require("nonebot_plugin_apscheduler").scheduler # 独立的拍卖调度器，避免冲突
+
+
+def _trade_scheduler_timezone():
+    """Return the scheduler timezone used by trade's wall-clock windows."""
+    configured = getattr(scheduler, "timezone", None)
+    if configured is None:
+        return timezone.utc
+    if isinstance(configured, str):
+        try:
+            return ZoneInfo(configured)
+        except (KeyError, ValueError):
+            logger.warning("交易调度器时区无效，回退 UTC：{}", configured)
+            return timezone.utc
+    return configured
+
+
+def _trade_business_now(value: datetime | None = None) -> datetime:
+    """Project the UTC runtime clock into the scheduler's business timezone."""
+    current = value or runtime_clock.now()
+    if current.tzinfo is None:
+        current = current.replace(tzinfo=timezone.utc)
+    return current.astimezone(_trade_scheduler_timezone())
 
 
 def _sql_message():
@@ -2076,7 +2099,7 @@ async def guishi_qiugou_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     user_id = user_info['user_id']
     args = args.extract_plain_text().split()
     
-    if len(args) < 2:
+    if len(args) < 2 or len(args) > 3:
         msg = "指令格式：鬼市求购 物品名称 价格 [数量]\n数量不填默认为1"
         await handle_send(bot, event, msg, md_type="交易", k1="求购", v1="鬼市求购", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
         await guishi_qiugou.finish()
@@ -2207,7 +2230,7 @@ async def guishi_baitan_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         await guishi_baitan.finish()
     
     # 检查摆摊时间
-    now = runtime_clock.now()
+    now = _trade_business_now()
     current_hour = now.hour
     
     # 判断是否在允许摆摊的时间段 (20:00-23:59 或 00:00-07:59)
@@ -2234,7 +2257,7 @@ async def guishi_baitan_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     user_id = user_info['user_id']
     args = args.extract_plain_text().split()
     
-    if len(args) < 2:
+    if len(args) < 2 or len(args) > 3:
         msg = "指令格式：鬼市摆摊 物品名称 价格 [数量]\n数量不填默认为1"
         await handle_send(bot, event, msg, md_type="交易", k1="摆摊", v1="鬼市摆摊", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
         await guishi_baitan.finish()
@@ -2422,7 +2445,7 @@ async def guishi_take_item_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
         await guishi_take_item.finish()
     
     # 检查是否是周末
-    today = runtime_clock.now().weekday()
+    today = _trade_business_now().weekday()
     if today not in [5, 6]:  # 5 是周六，6 是周日
         msg = "鬼市取物品功能仅在周六和周日开放！"
         await handle_send(bot, event, msg)
@@ -2660,7 +2683,12 @@ async def process_guishi_transactions(user_id: str = None) -> str:
                     transaction_log += f"求购订单 {qiugou_order_id} 已完成，已移除。\n"
                 break
             if not result.matched:
-                continue
+                if result.status in {"order_missing", "baitan_completed", "not_matchable"}:
+                    continue
+                raise RuntimeError(
+                    f"鬼市撮合失败：qiugou_order_id={qiugou_order_id} "
+                    f"baitan_order_id={baitan_order_id} status={result.status}"
+                )
 
             qiugou_user_info = _sql_message().get_user_info_with_id(result.buyer_id)
             baitan_user_info = _sql_message().get_user_info_with_id(result.seller_id)
@@ -2714,6 +2742,11 @@ async def clear_expired_baitan_orders_job():
     同时让到期的求购订单自动取消并把未成交灵石退回鬼市账户。"""
     expired_qiugou = trade_application.guishi_expire_qiugou()
     if expired_qiugou:
+        for result in expired_qiugou:
+            if not result.cancelled and result.status != "order_missing":
+                raise RuntimeError(
+                    f"鬼市求购到期取消失败：order_id={result.order_id} status={result.status}"
+                )
         refunded_by_user = {}
         for result in expired_qiugou:
             if result.applied and result.refunded_stone > 0:
@@ -2759,7 +2792,11 @@ async def clear_expired_baitan_orders_job():
             )
             continue
         if not result.cleared:
-            continue
+            if result.status == "order_missing":
+                continue
+            raise RuntimeError(
+                f"鬼市摆摊清理失败：order_id={order['id']} status={result.status}"
+            )
         if result.refunded_quantity > 0:
             user_info = _sql_message().get_user_info_with_id(result.user_id)
             user_name = user_info['user_name'] if user_info else f"用户{result.user_id}"

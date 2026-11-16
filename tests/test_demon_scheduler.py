@@ -9,6 +9,8 @@ from zoneinfo import ZoneInfo
 
 import nonebot
 import pytest
+from apscheduler.events import EVENT_JOB_ERROR, EVENT_JOB_EXECUTED
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 nonebot.init()
 try:
@@ -22,6 +24,7 @@ from nonebot.exception import FinishedException
 from nonebot_plugin_xiuxian_2.compatibility.legacy_jobs import _TARGETS
 from nonebot_plugin_xiuxian_2.bootstrap import build_runtime_context
 from nonebot_plugin_xiuxian_2.features.world_events.application import DemonEventLifecycleApplication
+from nonebot_plugin_xiuxian_2.features.world_events.attack_application import DemonAttackApplication
 from nonebot_plugin_xiuxian_2.features.world_events.event_state import read_event_state
 from nonebot_plugin_xiuxian_2.features.world_events.migrations import (
     apply_world_events_lifecycle,
@@ -80,6 +83,13 @@ def test_demon_jobs_are_declared_and_registered_on_live_scheduler() -> None:
     real_scheduler = getattr(bridge, "_scheduler", bridge)
     assert real_scheduler.get_job("demon_invasion_schedule") is not None
     assert real_scheduler.get_job("demon_invasion_refresh_schedule") is not None
+    lifecycle_trigger = real_scheduler.get_job("demon_invasion_schedule").trigger
+    assert lifecycle_trigger.get_next_fire_time(None, _utc(9, 59)) == _utc(10)
+    assert lifecycle_trigger.get_next_fire_time(_utc(10), _utc(10)) == _utc(14)
+    refresh_trigger = real_scheduler.get_job("demon_invasion_refresh_schedule").trigger
+    assert refresh_trigger.get_next_fire_time(None, _utc(13, 31)) == datetime(
+        2026, 11, 18, 10, 30, tzinfo=timezone.utc
+    )
     assert _TARGETS["spirit_vein_schedule"] == (
         "xiuxian.xiuxian_world_events",
         "spirit_vein_schedule_job",
@@ -158,6 +168,115 @@ def test_demon_schedule_drives_isolated_sqlite_state_and_replays(tmp_path) -> No
     assert state["status"] == "finished"
     assert state["active"] == 0
     assert operation_count == 2
+
+
+@pytest.mark.parametrize("schema_ready", (True, False))
+def test_scheduler_drives_persistence_attack_and_close_or_reports_start_failure(tmp_path, schema_ready):
+    database = tmp_path / "player.db"
+    with DatabaseUnitOfWork(database, immediate=True) as uow:
+        apply_world_events_player(uow)
+        if schema_ready:
+            apply_world_events_lifecycle(uow)
+
+    class SqlStateManager:
+        def get_fields(self, event_key, table):
+            assert table == world_events.EVENT_TABLE
+            with DatabaseUnitOfWork(database, read_only=True) as uow:
+                return read_event_state(uow, event_key) or {}
+
+    async def run():
+        scheduler = AsyncIOScheduler(timezone=EVENT_TZ)
+        events = asyncio.Queue()
+        scheduler.add_listener(events.put_nowait, EVENT_JOB_EXECUTED | EVENT_JOB_ERROR)
+        clock = SimpleNamespace(moment=_utc(10))
+        boss = {
+            "wave": 1, "boss_hp": 1_000_000, "boss_max_hp": 1_000_000,
+            "battle_hp": 100, "battle_max_hp": 100, "reward_multiplier": 1.0,
+        }
+        fight = AsyncMock(return_value=(
+            [], "群友赢了", {}, [{"player": {"team_id": 0, "user_id": "u", "total_dmg": 1}}]
+        ))
+        sender = AsyncMock()
+        bot = SimpleNamespace(self_id="test-bot")
+        event = SimpleNamespace(message_id="attack-1")
+
+        async def fire():
+            scheduler.add_job(world_events.demon_invasion_schedule_job, "date", id="demon_invasion_schedule")
+            if not scheduler.running:
+                scheduler.start()
+            return await asyncio.wait_for(events.get(), timeout=3)
+
+        with patch.object(world_events, "scheduler", scheduler), patch.object(
+            world_events, "_now", side_effect=lambda: clock.moment
+        ), patch.object(world_events, "_player_data_manager", return_value=SqlStateManager()), patch.object(
+            world_events, "demon_event_lifecycle_application", DemonEventLifecycleApplication(database)
+        ), patch.object(world_events, "demon_attack_application", DemonAttackApplication(database)), patch.object(
+            world_events, "_create_all_bosses", return_value={"练气境": boss}
+        ), patch.object(world_events, "assign_bot", new=AsyncMock(return_value=(bot, None))), patch.object(
+            world_events, "check_user", return_value=(True, {"user_id": "u", "hp": 100,
+                                                           "exp": 100, "level": "练气境"}, "")
+        ), patch.object(world_events, "check_user_type", return_value=(True, "")), patch.object(
+            world_events, "update_last_check_info_time"
+        ), patch.object(world_events, "Boss_fight", fight), patch.object(
+            world_events, "send_msg_handler", new=AsyncMock()
+        ), patch.object(world_events, "handle_send", sender), patch.object(
+            world_events, "log_message"
+        ), patch.object(world_events, "logger") as logger:
+            try:
+                started = await fire()
+                assert started.job_id == "demon_invasion_schedule"
+                if not schema_ready:
+                    assert started.code == EVENT_JOB_ERROR
+                    assert "schema_missing" in str(started.exception)
+                    with DatabaseUnitOfWork(database, read_only=True) as uow:
+                        assert read_event_state(uow, world_events.EVENT_KEY) is None
+                    assert not any("已自动开启" in str(call) for call in logger.info.call_args_list)
+                    fight.assert_not_awaited()
+                    return
+
+                assert started.code == EVENT_JOB_EXECUTED
+                assert (await fire()).code == EVENT_JOB_EXECUTED
+                with DatabaseUnitOfWork(database, read_only=True) as uow:
+                    state = read_event_state(uow, world_events.EVENT_KEY)
+                    assert state["status"] == "active"
+                    assert state["started_at"] == "2026-11-17 18:00:00"
+                    assert uow.query_one("SELECT COUNT(*) AS n FROM demon_event_lifecycle_operations")["n"] == 1
+
+                clock.moment = _utc(11)
+                with pytest.raises(FinishedException):
+                    await world_events.attack_demon_invasion_(bot, event)
+                reply = sender.call_args.args[2]
+                assert "本次贡献：1万" in reply
+                assert "没有正在进行" not in reply
+                with pytest.raises(FinishedException):
+                    await world_events.attack_demon_invasion_(bot, event)
+                assert "讨伐已结算（重放）" in sender.call_args.args[2]
+                fight.assert_awaited_once()
+
+                clock.moment = _utc(14)
+                assert (await fire()).code == EVENT_JOB_EXECUTED
+                event.message_id = "attack-after-close"
+                with pytest.raises(FinishedException):
+                    await world_events.attack_demon_invasion_(bot, event)
+                assert "没有正在进行" in sender.call_args.args[2]
+                fight.assert_awaited_once()
+                with DatabaseUnitOfWork(database, read_only=True) as uow:
+                    state = read_event_state(uow, world_events.EVENT_KEY)
+                    assert state["status"] == "finished"
+                    assert state["bosses"]["练气境"]["boss_hp"] == 990_000
+                    assert state["participants"]["练气境:1:u"]["attacks"] == 1
+                    assert uow.query_one("SELECT COUNT(*) AS n FROM demon_event_lifecycle_operations")["n"] == 2
+                    assert uow.query_one("SELECT COUNT(*) AS n FROM demon_attack_settlement_operations")["n"] == 1
+                    assert uow.query_one(
+                        'SELECT "魔修入侵参与" AS attacks,"魔修入侵伤害" AS damage FROM statistics WHERE user_id=?',
+                        ("u",),
+                    ) == {"attacks": 1, "damage": 10_000}
+                    assert uow.query_all("PRAGMA integrity_check") == [{"integrity_check": "ok"}]
+            finally:
+                if scheduler.running:
+                    scheduler.shutdown(wait=False)
+
+    asyncio.run(run())
 
 
 def test_spirit_vein_trigger_slot_uses_scheduler_business_date() -> None:
